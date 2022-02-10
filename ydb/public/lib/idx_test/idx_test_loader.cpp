@@ -244,9 +244,9 @@ public:
                     const auto& status = result.Status;
                     if (status.GetStatus() == EStatus::PRECONDITION_FAILED) {
                         // Client emulated status
-                        return result.Tx->Commit().Apply([](const auto& future) {
-                            return NThreading::MakeFuture<TStatus>(future.GetValue());
-                        });
+                        return result.Tx->Commit().Apply([](const auto& future) { 
+                            return NThreading::MakeFuture<TStatus>(future.GetValue()); 
+                        }); 
                     } else if (status.GetStatus() == EStatus::SUCCESS) {
                         // start upsert
                         const auto& program = Programs_[0];
@@ -552,7 +552,7 @@ private:
 
             if (i == Programs_.size()) {
                 return in.GetTransaction()->Commit()
-                    .Apply([this, err](TAsyncCommitTransactionResult future) {
+                    .Apply([this, err](TAsyncCommitTransactionResult future) { 
                         auto result = future.ExtractValue();
                         if (err && (result.GetStatus() != EStatus::ABORTED)) {
                             with_lock(Mtx_) {

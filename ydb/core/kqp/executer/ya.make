@@ -1,11 +1,11 @@
-LIBRARY()
-
-OWNER(
-    spuchin
-    g:kikimr
-)
-
-SRCS(
+LIBRARY() 
+ 
+OWNER( 
+    spuchin 
+    g:kikimr 
+) 
+ 
+SRCS( 
     kqp_data_executer.cpp
     kqp_scan_executer.cpp
     kqp_executer_impl.cpp
@@ -18,11 +18,11 @@ SRCS(
     kqp_shards_resolver.cpp
     kqp_result_channel.cpp
     kqp_table_resolver.cpp
-    kqp_tasks_graph.cpp
-    kqp_tasks_validate.cpp
-)
-
-PEERDIR(
+    kqp_tasks_graph.cpp 
+    kqp_tasks_validate.cpp 
+) 
+ 
+PEERDIR( 
     library/cpp/actors/core
     ydb/core/actorlib_impl
     ydb/core/base
@@ -38,8 +38,8 @@ PEERDIR(
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/runtime
     ydb/library/yql/dq/tasks
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
 
 END()

@@ -5,7 +5,7 @@
 namespace NKikimr::NKqp {
 
 using namespace NYql;
-using namespace NYql::NDq;
+using namespace NYql::NDq; 
 
 namespace {
 
@@ -37,7 +37,7 @@ void UpdateMinMax(NDqProto::TDqStatsMinMax* minMax, ui64 value) noexcept {
     } else {
         minMax->SetMin(std::min(minMax->GetMin(), value));
     }
-    minMax->SetMax(std::max(minMax->GetMax(), value));
+    minMax->SetMax(std::max(minMax->GetMax(), value)); 
 }
 
 NDqProto::TDqStageStats* GetOrCreateStageStats(const NYql::NDqProto::TDqTaskStats& taskStats,
@@ -60,7 +60,7 @@ NDqProto::TDqStageStats* GetOrCreateStageStats(const NYql::NDqProto::TDqTaskStat
     newStage->SetStageGuid(stageProto.GetStageGuid());
     newStage->SetProgram(stageProto.GetProgramAst());
     return newStage;
-}
+} 
 
 NDqProto::TDqTableAggrStats* GetOrCreateTableAggrStats(NDqProto::TDqStageStats* stage, const TString& tablePath) {
     for(auto& table : *stage->MutableTables()) {
@@ -71,9 +71,9 @@ NDqProto::TDqTableAggrStats* GetOrCreateTableAggrStats(NDqProto::TDqStageStats* 
     auto table = stage->AddTables();
     table->SetTablePath(tablePath);
     return table;
-}
+} 
 
-} // anonymous namespace
+} // anonymous namespace 
 
 void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProto::TDqComputeActorStats&& stats) {
 //    Cerr << (TStringBuilder() << "::AddComputeActorStats " << stats.DebugString() << Endl);
@@ -135,16 +135,16 @@ void TQueryExecutionStats::AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&
 
     Result->SetCpuTimeUs(Result->GetCpuTimeUs() + cpuUs);
 }
-
+ 
 void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStats&& stats,
     NKikimrQueryStats::TTxStats&& txStats)
 {
 //    Cerr << (TStringBuilder() << "::AddDatashardStats " << stats.DebugString() << ", " << txStats.DebugString() << Endl);
-
+ 
     ui64 datashardCpuTimeUs = 0;
     for (const auto& perShard : txStats.GetPerShardStats()) {
         AffectedShards.emplace(perShard.GetShardId());
-
+ 
         datashardCpuTimeUs += perShard.GetCpuTimeUsec();
         UpdateAggr(ExtraStats.MutableShardsCpuTimeUs(), perShard.GetCpuTimeUsec());
     }

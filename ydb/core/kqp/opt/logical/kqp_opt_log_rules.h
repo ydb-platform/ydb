@@ -9,7 +9,7 @@
  * This file contains declaration of all rule functions for logical optimizer
  */
 
-namespace NKikimr::NKqp::NOpt {
+namespace NKikimr::NKqp::NOpt { 
 
 NYql::NNodes::TExprBase KqpPushPredicateToReadTable(NYql::NNodes::TExprBase node, NYql::TExprContext &ctx,
     const TKqpOptimizeContext &kqpCtx);
@@ -43,9 +43,9 @@ NYql::NNodes::TExprBase KqpRewriteTopSortOverIndexRead(const NYql::NNodes::TExpr
 NYql::NNodes::TExprBase KqpRewriteTakeOverIndexRead(const NYql::NNodes::TExprBase& node, NYql::TExprContext&,
     const TKqpOptimizeContext& kqpCtx);
 
-NYql::NNodes::TExprBase KqpDeleteOverLookup(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
-    const TKqpOptimizeContext &kqpCtx);
-
-NYql::NNodes::TExprBase KqpExcessUpsertInputColumns(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx);
-
-} // namespace NKikimr::NKqp::NOpt
+NYql::NNodes::TExprBase KqpDeleteOverLookup(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, 
+    const TKqpOptimizeContext &kqpCtx); 
+ 
+NYql::NNodes::TExprBase KqpExcessUpsertInputColumns(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx); 
+ 
+} // namespace NKikimr::NKqp::NOpt 

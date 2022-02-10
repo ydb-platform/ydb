@@ -40,7 +40,7 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
             Reply.Reset(new TEvKesus::TEvAttachSessionResult(
                 Record.GetProxyGeneration(),
                 Record.GetSessionId(),
-                Ydb::StatusIds::BAD_SESSION,
+                Ydb::StatusIds::BAD_SESSION, 
                 proxy ? "ProxyGeneration mismatch" : "Proxy is not registered"));
             return true;
         }
@@ -57,7 +57,7 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
                 Reply.Reset(new TEvKesus::TEvAttachSessionResult(
                     Record.GetProxyGeneration(),
                     Record.GetSessionId(),
-                    Ydb::StatusIds::SESSION_EXPIRED,
+                    Ydb::StatusIds::SESSION_EXPIRED, 
                     "Session does not exist"));
                 return true;
             }
@@ -66,7 +66,7 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
                 Reply.Reset(new TEvKesus::TEvAttachSessionResult(
                     Record.GetProxyGeneration(),
                     Record.GetSessionId(),
-                    Ydb::StatusIds::BAD_SESSION,
+                    Ydb::StatusIds::BAD_SESSION, 
                     "Attach request is out of sequence"));
                 return true;
             }
@@ -165,7 +165,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
             new TEvKesus::TEvAttachSessionResult(
                 record.GetProxyGeneration(),
                 record.GetSessionId(),
-                Ydb::StatusIds::BAD_SESSION,
+                Ydb::StatusIds::BAD_SESSION, 
                 proxy ? "ProxyGeneration mismatch" : "Proxy is not registered"),
             0, ev->Cookie);
         return;
@@ -176,7 +176,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
             new TEvKesus::TEvAttachSessionResult(
                 record.GetProxyGeneration(),
                 record.GetSessionId(),
-                Ydb::StatusIds::BAD_REQUEST,
+                Ydb::StatusIds::BAD_REQUEST, 
                 "Session timeout is out of range"),
             0, ev->Cookie);
         return;
@@ -213,7 +213,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
                 new TEvKesus::TEvAttachSessionResult(
                     record.GetProxyGeneration(),
                     record.GetSessionId(),
-                    Ydb::StatusIds::SESSION_EXPIRED,
+                    Ydb::StatusIds::SESSION_EXPIRED, 
                     "Session does not exist"),
                 0, ev->Cookie);
             return;
@@ -224,7 +224,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
                 new TEvKesus::TEvAttachSessionResult(
                     record.GetProxyGeneration(),
                     record.GetSessionId(),
-                    Ydb::StatusIds::BAD_SESSION,
+                    Ydb::StatusIds::BAD_SESSION, 
                     "Attach request is out of sequence"),
                 0, ev->Cookie);
             return;

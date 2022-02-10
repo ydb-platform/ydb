@@ -44,7 +44,7 @@ TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TP
         return node;
     }
 
-    if (!IsDqPureExpr(take.Count())) {
+    if (!IsDqPureExpr(take.Count())) { 
         return node;
     }
 

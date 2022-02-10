@@ -647,7 +647,7 @@ protected:
     TRuntimeNode BuildLogical(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& args);
     TRuntimeNode BuildBinaryLogical(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode BuildMinMax(const std::string_view& callableName, const TRuntimeNode* data, size_t size);
-
+ 
 private:
     TRuntimeNode BuildWideFilter(const std::string_view& callableName, TRuntimeNode flow, const TNarrowLambda& handler);
 

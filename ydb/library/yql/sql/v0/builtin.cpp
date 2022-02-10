@@ -1080,7 +1080,7 @@ private:
         auto key = Args[0];
         auto inNode = Args[1];
         auto hints = Args[2];
-
+ 
         if (!key->Init(ctx, src)) {
             return false;
         }
@@ -1105,7 +1105,7 @@ private:
                                                                       << "perhaps you should remove "
                                                                       << parenKind << "parenthesis here";
             }
-        }
+        } 
 
         if (inNode->GetSource() || inNode->IsSelect()) {
             TVector<TNodePtr> hintElements;
@@ -1125,7 +1125,7 @@ private:
             key,
             hints
         };
-
+ 
         return TCallNode::DoInit(ctx, src);
     }
 
@@ -1161,7 +1161,7 @@ private:
     void DoUpdateState() const override {
         TCallNode::DoUpdateState();
         State.Set(ENodeState::Aggregated, false/*!RunConfig || RunConfig->IsAggregated()*/);
-        State.Set(ENodeState::Const, true /* FIXME: To avoid CheckAggregationLevel issue for non-const TypeOf. */);
+        State.Set(ENodeState::Const, true /* FIXME: To avoid CheckAggregationLevel issue for non-const TypeOf. */); 
     }
 
 private:
@@ -1382,7 +1382,7 @@ public:
         : INode(pos)
         , Module(module)
         , Name(name)
-        , Args(args)
+        , Args(args) 
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
@@ -1442,7 +1442,7 @@ public:
     }
 
     TNodePtr DoClone() const override {
-        return new TCallableNode(Pos, Module, Name, Args);
+        return new TCallableNode(Pos, Module, Name, Args); 
     }
 
 private:
@@ -1453,7 +1453,7 @@ private:
 };
 
 TNodePtr BuildCallable(TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args) {
-    return new TCallableNode(pos, module, name, args);
+    return new TCallableNode(pos, module, name, args); 
 }
 
 TNodePtr BuildUdf(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args) {

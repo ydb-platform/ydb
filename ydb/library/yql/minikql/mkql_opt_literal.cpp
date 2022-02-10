@@ -213,16 +213,16 @@ TRuntimeNode OptimizeFlatMap(TCallable& callable, const TTypeEnvironment& env) {
     const auto listType = static_cast<TListType*>(returnType);
     const auto newItemInput = callable.GetInput(2);
     if (listType->GetItemType()->IsVoid() && newItemInput.HasValue()) {
-        if (newItemInput.GetStaticType()->IsList()) {
-            TListLiteral* list = AS_VALUE(TListLiteral, newItemInput);
-            if (list->GetItemsCount() == 0) {
-                return TRuntimeNode(env.GetListOfVoid(), true);
-            }
-        } else {
-            TOptionalLiteral* opt = AS_VALUE(TOptionalLiteral, newItemInput);
-            if (!opt->HasItem()) {
-                return TRuntimeNode(env.GetListOfVoid(), true);
-            }
+        if (newItemInput.GetStaticType()->IsList()) { 
+            TListLiteral* list = AS_VALUE(TListLiteral, newItemInput); 
+            if (list->GetItemsCount() == 0) { 
+                return TRuntimeNode(env.GetListOfVoid(), true); 
+            } 
+        } else { 
+            TOptionalLiteral* opt = AS_VALUE(TOptionalLiteral, newItemInput); 
+            if (!opt->HasItem()) { 
+                return TRuntimeNode(env.GetListOfVoid(), true); 
+            } 
         }
     }
 
@@ -279,37 +279,37 @@ TRuntimeNode OptimizeNth(TCallable& callable, const TTypeEnvironment& env) {
     return TRuntimeNode(&callable, false);
 }
 
-TRuntimeNode OptimizeExtend(TCallable& callable, const TTypeEnvironment& env) {
-    auto returnType = callable.GetType()->GetReturnType();
-    if (!returnType->IsList()) {
-        return TRuntimeNode(&callable, false);
-    }
-
-    auto itemType = static_cast<TListType*>(returnType)->GetItemType();
-    if (!itemType->IsVoid()) {
-        return TRuntimeNode(&callable, false);
-    }
-
-    for (ui32 i = 0; i < callable.GetInputsCount(); ++i) {
-        auto seq = callable.GetInput(i);
-        auto seqType = seq.GetStaticType();
-
-        MKQL_ENSURE(seqType->IsList(), "Expected list type in extend");
-        MKQL_ENSURE(static_cast<TListType*>(seqType)->GetItemType()->IsVoid(), "Expected list of void");
-
-        if (!seq.HasValue()) {
-            return TRuntimeNode(&callable, false);
-        }
-
-        TListLiteral* listValue = AS_VALUE(TListLiteral, seq);
-        if (listValue->GetItemsCount() != 0) {
-            return TRuntimeNode(&callable, false);
-        }
-    }
-
-    return TRuntimeNode(env.GetListOfVoid(), true);
-}
-
+TRuntimeNode OptimizeExtend(TCallable& callable, const TTypeEnvironment& env) { 
+    auto returnType = callable.GetType()->GetReturnType(); 
+    if (!returnType->IsList()) { 
+        return TRuntimeNode(&callable, false); 
+    } 
+ 
+    auto itemType = static_cast<TListType*>(returnType)->GetItemType(); 
+    if (!itemType->IsVoid()) { 
+        return TRuntimeNode(&callable, false); 
+    } 
+ 
+    for (ui32 i = 0; i < callable.GetInputsCount(); ++i) { 
+        auto seq = callable.GetInput(i); 
+        auto seqType = seq.GetStaticType(); 
+ 
+        MKQL_ENSURE(seqType->IsList(), "Expected list type in extend"); 
+        MKQL_ENSURE(static_cast<TListType*>(seqType)->GetItemType()->IsVoid(), "Expected list of void"); 
+ 
+        if (!seq.HasValue()) { 
+            return TRuntimeNode(&callable, false); 
+        } 
+ 
+        TListLiteral* listValue = AS_VALUE(TListLiteral, seq); 
+        if (listValue->GetItemsCount() != 0) { 
+            return TRuntimeNode(&callable, false); 
+        } 
+    } 
+ 
+    return TRuntimeNode(env.GetListOfVoid(), true); 
+} 
+ 
 struct TOptimizationFuncMapFiller {
     THashMap<TString, TCallableVisitFunc> Map;
     TCallableVisitFuncProvider Provider;
@@ -328,7 +328,7 @@ struct TOptimizationFuncMapFiller {
         Map["Coalesce"] = &OptimizeCoalesce;
         Map["Exists"] = &OptimizeExists;
         Map["Nth"] = &OptimizeNth;
-        Map["Extend"] = &OptimizeExtend;
+        Map["Extend"] = &OptimizeExtend; 
 
         Provider = [&](TInternName name) {
             auto it = Map.find(name.Str());

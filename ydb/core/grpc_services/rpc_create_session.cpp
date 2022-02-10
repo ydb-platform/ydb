@@ -13,19 +13,19 @@ namespace NKikimr {
 namespace NGRpcService {
 
 using namespace NActors;
-using namespace Ydb;
+using namespace Ydb; 
 using namespace NKqp;
 
-class TCreateSessionRPC : public TRpcKqpRequestActor<TCreateSessionRPC, TEvCreateSessionRequest> {
-    using TBase = TRpcKqpRequestActor<TCreateSessionRPC, TEvCreateSessionRequest>;
-
+class TCreateSessionRPC : public TRpcKqpRequestActor<TCreateSessionRPC, TEvCreateSessionRequest> { 
+    using TBase = TRpcKqpRequestActor<TCreateSessionRPC, TEvCreateSessionRequest>; 
+ 
 public:
     TCreateSessionRPC(IRequestOpCtx* msg)
-        : TBase(msg) {}
+        : TBase(msg) {} 
 
     void Bootstrap(const TActorContext& ctx) {
-        TBase::Bootstrap(ctx);
-
+        TBase::Bootstrap(ctx); 
+ 
         Become(&TCreateSessionRPC::StateWork);
 
         auto now = TInstant::Now();
@@ -47,30 +47,30 @@ public:
 
         CreateSessionImpl();
     }
-
+ 
 private:
     void CreateSessionImpl() {
-        const auto traceId = Request().GetTraceId();
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
+        const auto traceId = Request().GetTraceId(); 
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>(); 
 
         ev->Record.SetDeadlineUs(Request().GetDeadline().MicroSeconds());
 
-        if (traceId) {
-            ev->Record.SetTraceId(traceId.GetRef());
-        }
+        if (traceId) { 
+            ev->Record.SetTraceId(traceId.GetRef()); 
+        } 
 
-        SetDatabase(ev, Request());
-
+        SetDatabase(ev, Request()); 
+ 
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release());
-    }
-
+    } 
+ 
     void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
             HFunc(TEvents::TEvWakeup, Handle);
             // Overide default forget action which terminate this actor on client disconnect
             hFunc(TRpcServices::TEvForgetOperation, HandleForget);
-            default: TBase::StateWork(ev, ctx);
+            default: TBase::StateWork(ev, ctx); 
         }
     }
 
@@ -108,12 +108,12 @@ private:
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
         if (record.GetResourceExhausted()) {
-            Request().ReplyWithRpcStatus(grpc::StatusCode::RESOURCE_EXHAUSTED, record.GetError());
+            Request().ReplyWithRpcStatus(grpc::StatusCode::RESOURCE_EXHAUSTED, record.GetError()); 
             Die(ctx);
             return;
         }
 
-        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) { 
             const auto& kqpResponse = record.GetResponse();
             Ydb::Table::CreateSessionResult result;
             if (ClientLost) {
@@ -125,7 +125,7 @@ private:
                 return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
             }
         } else {
-            return OnQueryResponseError(record, ctx);
+            return OnQueryResponseError(record, ctx); 
         }
     }
 private:

@@ -1,98 +1,98 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-
+ 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
-
-namespace NKikimr {
-namespace NKqp {
-
-using namespace NYdb;
-using namespace NYdb::NTable;
-
-static TParams BuildPureTableParams(TTableClient& client) {
-    return client.GetParamsBuilder()
-        .AddParam("$rows")
-            .BeginList()
-            .AddListItem()
-                .BeginStruct()
-                    .AddMember("Row").Uint32(1)
-                    .AddMember("Value").String("Value1")
-                .EndStruct()
-            .AddListItem()
-                .BeginStruct()
-                    .AddMember("Row").Uint32(2)
-                    .AddMember("Value").String("Value4")
-                .EndStruct()
-            .AddListItem()
-                .BeginStruct()
-                    .AddMember("Row").Uint32(3)
-                    .AddMember("Value").String("Value4")
-                .EndStruct()
-            .AddListItem()
-                .BeginStruct()
-                    .AddMember("Row").Uint32(4)
-                    .AddMember("Value").String("Value10")
-                .EndStruct()
-            .EndList()
-        .Build()
-    .Build();
-}
-
-static void CreateSampleTables(TSession session) {
-    UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
+ 
+namespace NKikimr { 
+namespace NKqp { 
+ 
+using namespace NYdb; 
+using namespace NYdb::NTable; 
+ 
+static TParams BuildPureTableParams(TTableClient& client) { 
+    return client.GetParamsBuilder() 
+        .AddParam("$rows") 
+            .BeginList() 
+            .AddListItem() 
+                .BeginStruct() 
+                    .AddMember("Row").Uint32(1) 
+                    .AddMember("Value").String("Value1") 
+                .EndStruct() 
+            .AddListItem() 
+                .BeginStruct() 
+                    .AddMember("Row").Uint32(2) 
+                    .AddMember("Value").String("Value4") 
+                .EndStruct() 
+            .AddListItem() 
+                .BeginStruct() 
+                    .AddMember("Row").Uint32(3) 
+                    .AddMember("Value").String("Value4") 
+                .EndStruct() 
+            .AddListItem() 
+                .BeginStruct() 
+                    .AddMember("Row").Uint32(4) 
+                    .AddMember("Value").String("Value10") 
+                .EndStruct() 
+            .EndList() 
+        .Build() 
+    .Build(); 
+} 
+ 
+static void CreateSampleTables(TSession session) { 
+    UNIT_ASSERT(session.ExecuteSchemeQuery(R"( 
         CREATE TABLE `/Root/Join1_1` (
-            Key Int32,
-            Fk21 Int32,
-            Fk22 String,
-            Value String,
-            PRIMARY KEY (Key)
-        );
+            Key Int32, 
+            Fk21 Int32, 
+            Fk22 String, 
+            Value String, 
+            PRIMARY KEY (Key) 
+        ); 
         CREATE TABLE `/Root/Join1_2` (
-            Key1 Int32,
-            Key2 String,
-            Fk3 String,
-            Value String,
-            PRIMARY KEY (Key1, Key2)
-        );
+            Key1 Int32, 
+            Key2 String, 
+            Fk3 String, 
+            Value String, 
+            PRIMARY KEY (Key1, Key2) 
+        ); 
         CREATE TABLE `/Root/Join1_3` (
-            Key String,
-            Value Int32,
-            PRIMARY KEY (Key)
-        );
-    )").GetValueSync().IsSuccess());
-
-     UNIT_ASSERT(session.ExecuteDataQuery(R"(
+            Key String, 
+            Value Int32, 
+            PRIMARY KEY (Key) 
+        ); 
+    )").GetValueSync().IsSuccess()); 
+ 
+     UNIT_ASSERT(session.ExecuteDataQuery(R"( 
         PRAGMA kikimr.UseNewEngine = "true";
 
         REPLACE INTO `/Root/Join1_1` (Key, Fk21, Fk22, Value) VALUES
-            (1, 101, "One", "Value1"),
-            (2, 102, "Two", "Value1"),
-            (3, 103, "One", "Value2"),
-            (4, 104, "Two", "Value2"),
-            (5, 105, "One", "Value3"),
-            (6, 106, "Two", "Value3"),
-            (7, 107, "One", "Value4"),
-            (8, 108, "One", "Value5");
-
+            (1, 101, "One", "Value1"), 
+            (2, 102, "Two", "Value1"), 
+            (3, 103, "One", "Value2"), 
+            (4, 104, "Two", "Value2"), 
+            (5, 105, "One", "Value3"), 
+            (6, 106, "Two", "Value3"), 
+            (7, 107, "One", "Value4"), 
+            (8, 108, "One", "Value5"); 
+ 
         REPLACE INTO `/Root/Join1_2` (Key1, Key2, Fk3, Value) VALUES
-            (101, "One",   "Name1", "Value21"),
-            (101, "Two",   "Name1", "Value22"),
-            (101, "Three", "Name3", "Value23"),
-            (102, "One",   "Name2", "Value24"),
-            (103, "One",   "Name1", "Value25"),
-            (104, "One",   "Name3", "Value26"),
-            (105, "One",   "Name2", "Value27"),
-            (105, "Two",   "Name4", "Value28"),
-            (106, "One",   "Name3", "Value29"),
+            (101, "One",   "Name1", "Value21"), 
+            (101, "Two",   "Name1", "Value22"), 
+            (101, "Three", "Name3", "Value23"), 
+            (102, "One",   "Name2", "Value24"), 
+            (103, "One",   "Name1", "Value25"), 
+            (104, "One",   "Name3", "Value26"), 
+            (105, "One",   "Name2", "Value27"), 
+            (105, "Two",   "Name4", "Value28"), 
+            (106, "One",   "Name3", "Value29"), 
             (108, "One",    NULL,   "Value31"),
             (109, "Four",   NULL,   "Value41");
-
+ 
         REPLACE INTO `/Root/Join1_3` (Key, Value) VALUES
-            ("Name1", 1001),
-            ("Name2", 1002),
-            ("Name4", 1004);
-    )", TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
-}
-
+            ("Name1", 1001), 
+            ("Name2", 1002), 
+            ("Name4", 1004); 
+    )", TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess()); 
+} 
+ 
 static void CreateRightSemiJoinSampleTables(TSession& session) {
     UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
         CREATE TABLE `/Root/RSJ_SimpleKey_1` (
@@ -179,36 +179,36 @@ static TDataQueryResult ExecQuery(TSession& session, const TString& query, const
 
 static TParams NoParams = TParamsBuilder().Build();
 
-Y_UNIT_TEST_SUITE(KqpJoin) {
+Y_UNIT_TEST_SUITE(KqpJoin) { 
     Y_UNIT_TEST_NEW_ENGINE(IdxLookupLeftPredicate) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        CreateSampleTables(session);
-
-        NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
-
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        CreateSampleTables(session); 
+ 
+        NYdb::NTable::TExecDataQuerySettings execSettings; 
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic); 
+ 
         auto result = session.ExecuteDataQuery(Q_(R"(
             SELECT * FROM `/Root/Join1_1` AS t1
             INNER JOIN `/Root/Join1_2` AS t2
             ON t1.Fk21 = t2.Key1 AND t1.Fk22 = t2.Key2
             WHERE t1.Value = 'Value3' AND t2.Value IS NOT NULL
         )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
-
-        CompareYson(R"([[[105];["One"];[5];["Value3"];["Name2"];[105];["One"];["Value27"]]])",
-            FormatResultSetYson(result.GetResultSet(0)));
-
-        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
+        UNIT_ASSERT(result.IsSuccess()); 
+ 
+        CompareYson(R"([[[105];["One"];[5];["Value3"];["Name2"];[105];["One"];["Value27"]]])", 
+            FormatResultSetYson(result.GetResultSet(0))); 
+ 
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats()); 
+ 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), kikimr.IsUsingSnapshotReads() && !UseNewEngine ? 2 : 3);
-
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Join1_1");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 8);
-
+ 
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Join1_1"); 
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 8); 
+ 
         ui32 index = 1;
         if (UseNewEngine) {
             UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
@@ -218,41 +218,41 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/Join1_2");
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 1);
-    }
-
+    } 
+ 
     Y_UNIT_TEST_NEW_ENGINE(IdxLookupPartialLeftPredicate) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        CreateSampleTables(session);
-
-        NYdb::NTable::TExecDataQuerySettings execSettings;
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
-
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        CreateSampleTables(session); 
+ 
+        NYdb::NTable::TExecDataQuerySettings execSettings; 
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic); 
+ 
         auto result = session.ExecuteDataQuery(Q_(R"(
             SELECT * FROM `/Root/Join1_1` AS t1
             INNER JOIN `/Root/Join1_2` AS t2
-            ON t1.Fk21 == t2.Key1
-            WHERE t1.Value == "Value3";
+            ON t1.Fk21 == t2.Key1 
+            WHERE t1.Value == "Value3"; 
         )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
-
-        CompareYson(R"([
-            [[105];["One"];[5];["Value3"];["Name2"];[105];["One"];["Value27"]];
-            [[105];["One"];[5];["Value3"];["Name4"];[105];["Two"];["Value28"]];
-            [[106];["Two"];[6];["Value3"];["Name3"];[106];["One"];["Value29"]]
-        ])", FormatResultSetYson(result.GetResultSet(0)));
-
-        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT(result.IsSuccess()); 
+ 
+        CompareYson(R"([ 
+            [[105];["One"];[5];["Value3"];["Name2"];[105];["One"];["Value27"]]; 
+            [[105];["One"];[5];["Value3"];["Name4"];[105];["Two"];["Value28"]]; 
+            [[106];["Two"];[6];["Value3"];["Name3"];[106];["One"];["Value29"]] 
+        ])", FormatResultSetYson(result.GetResultSet(0))); 
+ 
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats()); 
         Cerr << stats.DebugString() << Endl;
-
+ 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), kikimr.IsUsingSnapshotReads() && !UseNewEngine ? 2 : 3);
-
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Join1_1");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 8);
-
+ 
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Join1_1"); 
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 8); 
+ 
         ui32 index = 1;
         if (UseNewEngine) {
             UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
@@ -262,8 +262,8 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/Join1_2");
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 3);
-    }
-
+    } 
+ 
     Y_UNIT_TEST_NEW_ENGINE(IdxLookupPartialWithTempTable) {
         TKikimrRunner kikimr(SyntaxV1Settings());
         auto db = kikimr.GetTableClient();
@@ -302,25 +302,25 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(LeftJoinWithNull) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr; 
         auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        CreateSampleTables(session);
-
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        CreateSampleTables(session); 
+ 
         auto result = session.ExecuteDataQuery(Q_(R"(
             SELECT * FROM `/Root/Join1_1` AS t1
             INNER JOIN `/Root/Join1_2` AS t2
-            ON t1.Fk21 == t2.Key1 AND t1.Fk22 == t2.Key2
+            ON t1.Fk21 == t2.Key1 AND t1.Fk22 == t2.Key2 
             LEFT JOIN `/Root/Join1_3` AS t3
-            ON t2.Fk3 = t3.Key
-            WHERE t1.Value == "Value5" AND t2.Value == "Value31";
+            ON t2.Fk3 = t3.Key 
+            WHERE t1.Value == "Value5" AND t2.Value == "Value31"; 
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
-
-        CompareYson(R"([[[108];["One"];[8];["Value5"];#;[108];["One"];["Value31"];#;#]])",
-            FormatResultSetYson(result.GetResultSet(0)));
-    }
+        UNIT_ASSERT(result.IsSuccess()); 
+ 
+        CompareYson(R"([[[108];["One"];[8];["Value5"];#;[108];["One"];["Value31"];#;#]])", 
+            FormatResultSetYson(result.GetResultSet(0))); 
+    } 
 
     // join on not key column => Full Scan
     Y_UNIT_TEST_NEW_ENGINE(RightSemiJoin_FullScan) {
@@ -725,49 +725,49 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     Y_UNIT_TEST_NEW_ENGINE(RightTableValuePredicate) {
         TestInnerJoinWithPredicate<UseNewEngine>("r.Value = \"Payload2\"", "[[[105];[5];[\"Payload2\"];[105]]]");
     }
-
+ 
     Y_UNIT_TEST_NEW_ENGINE(JoinAggregateSingleRow) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        CreateSampleTables(session);
-
-        auto params = db.GetParamsBuilder()
-            .AddParam("$key1")
-                .Int32(101)
-                .Build()
-            .AddParam("$key2")
-                .String("Two")
-                .Build()
-            .Build();
-
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        CreateSampleTables(session); 
+ 
+        auto params = db.GetParamsBuilder() 
+            .AddParam("$key1") 
+                .Int32(101) 
+                .Build() 
+            .AddParam("$key2") 
+                .String("Two") 
+                .Build() 
+            .Build(); 
+ 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            DECLARE $key1 AS Int32;
-            DECLARE $key2 AS String;
-
-            SELECT
-                j2.Key2 AS Key,
-                SOME(j2.Value),
-                SOME(j3.Value)
+            DECLARE $key1 AS Int32; 
+            DECLARE $key2 AS String; 
+ 
+            SELECT 
+                j2.Key2 AS Key, 
+                SOME(j2.Value), 
+                SOME(j3.Value) 
             FROM `/Root/Join1_2` AS j2
             LEFT JOIN `/Root/Join1_3` AS j3
-            ON j3.Key = j2.Fk3
-            WHERE j2.Key1 = $key1 AND j2.Key2 = $key2
-            GROUP BY j2.Key2;
+            ON j3.Key = j2.Fk3 
+            WHERE j2.Key1 = $key1 AND j2.Key2 = $key2 
+            GROUP BY j2.Key2; 
         )"), TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        CompareYson(R"([[["Two"];["Value22"];[1001]]])",
-            FormatResultSetYson(result.GetResultSet(0)));
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+ 
+        CompareYson(R"([[["Two"];["Value22"];[1001]]])", 
+            FormatResultSetYson(result.GetResultSet(0))); 
+    } 
+ 
     Y_UNIT_TEST_NEW_ENGINE(JoinAggregate) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateSampleTables(session);
-
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        CreateSampleTables(session); 
+ 
         {
             auto result = session.ExecuteDataQuery(Q_(R"(
                 SELECT t1.Value, SUM(t3.Value)
@@ -779,7 +779,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 GROUP BY t1.Value;
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
+ 
             CompareYson(R"([[["Value1"];[3004]];[["Value2"];[1001]];[["Value3"];[2006]];[["Value5"];#]])",
                 FormatResultSetYson(result.GetResultSet(0)));
         }
@@ -799,40 +799,40 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             CompareYson(R"([[["Value1"];[3004]];[["Value2"];[1001]];[["Value3"];[2006]]])",
                 FormatResultSetYson(result.GetResultSet(0)));
         }
-    }
-
+    } 
+ 
     Y_UNIT_TEST_NEW_ENGINE(JoinConvert) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateSampleTables(session);
-
-        UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        CreateSampleTables(session); 
+ 
+        UNIT_ASSERT(session.ExecuteSchemeQuery(R"( 
             CREATE TABLE `/Root/Join1_3_ui64` (
-                Key String,
-                Value Int64,
-                PRIMARY KEY (Key)
-            );
-        )").GetValueSync().IsSuccess());
-
+                Key String, 
+                Value Int64, 
+                PRIMARY KEY (Key) 
+            ); 
+        )").GetValueSync().IsSuccess()); 
+ 
         UNIT_ASSERT(session.ExecuteDataQuery(Q_(R"(
             REPLACE INTO `/Root/Join1_3_ui64` (Key, Value) VALUES
-                ("Name1", 108);
+                ("Name1", 108); 
         )"), TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
-
+ 
         auto result = session.ExecuteDataQuery(Q_(R"(
             SELECT t1.Value, t2.Value, t3.Value FROM `/Root/Join1_1` AS t1
             INNER JOIN `/Root/Join1_2` AS t2
-            ON t1.Fk21 == t2.Key1 AND t1.Fk22 == t2.Key2
+            ON t1.Fk21 == t2.Key1 AND t1.Fk22 == t2.Key2 
             LEFT JOIN `/Root/Join1_3_ui64` AS t3
-            ON t2.Key1 = t3.Value
-            WHERE t1.Value == "Value5";
+            ON t2.Key1 = t3.Value 
+            WHERE t1.Value == "Value5"; 
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        CompareYson(R"([[["Value5"];["Value31"];[108]]])",
-            FormatResultSetYson(result.GetResultSet(0)));
-    }
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+ 
+        CompareYson(R"([[["Value5"];["Value31"];[108]]])", 
+            FormatResultSetYson(result.GetResultSet(0))); 
+    } 
 
     Y_UNIT_TEST_NEW_ENGINE(ExclusionJoin) {
         TKikimrRunner kikimr;
@@ -976,78 +976,78 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             [[2];#;#]
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
-
-    Y_UNIT_TEST_NEW_ENGINE(JoinLeftPureInner) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteDataQuery(Q1_(R"(
-            DECLARE $rows AS List<Struct<Row: Uint32, Value: String>>;
-
-            SELECT COUNT(*)
-            FROM AS_TABLE($rows) AS tl
-            INNER JOIN Join1 AS tr
-            ON tl.Value = tr.Value;
-        )"), TTxControl::BeginTx().CommitTx(), BuildPureTableParams(db)).GetValueSync();
-
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[5u]])", FormatResultSetYson(result.GetResultSet(0)));
-    }
-
-    Y_UNIT_TEST_NEW_ENGINE(JoinLeftPureFull) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteDataQuery(Q1_(R"(
-            DECLARE $rows AS List<Struct<Row: Uint32, Value: String>>;
-
-            SELECT COUNT(*)
-            FROM AS_TABLE($rows) AS tl
-            FULL JOIN Join1 AS tr
-            ON tl.Value = tr.Value;
-        )"), TTxControl::BeginTx().CommitTx(), BuildPureTableParams(db)).GetValueSync();
-
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[11u]])", FormatResultSetYson(result.GetResultSet(0)));
-    }
-
-    Y_UNIT_TEST_NEW_ENGINE(JoinLeftPureExclusion) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteDataQuery(Q1_(R"(
-            DECLARE $rows AS List<Struct<Row: Uint32, Value: String>>;
-
-            SELECT COUNT(*)
-            FROM AS_TABLE($rows) AS tl
-            EXCLUSION JOIN Join1 AS tr
-            ON tl.Value = tr.Value;
-        )"), TTxControl::BeginTx().CommitTx(), BuildPureTableParams(db)).GetValueSync();
-
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[6u]])", FormatResultSetYson(result.GetResultSet(0)));
-    }
-
-    Y_UNIT_TEST_NEW_ENGINE(JoinLeftPureCross) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteDataQuery(Q1_(R"(
-            DECLARE $rows AS List<Struct<Row: Uint32, Value: String>>;
-
-            SELECT COUNT(*)
-            FROM AS_TABLE($rows) AS tl
-            CROSS JOIN Join1 AS tr;
-        )"), TTxControl::BeginTx().CommitTx(), BuildPureTableParams(db)).GetValueSync();
-
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[36u]])", FormatResultSetYson(result.GetResultSet(0)));
-    }
-}
-
+ 
+    Y_UNIT_TEST_NEW_ENGINE(JoinLeftPureInner) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        auto result = session.ExecuteDataQuery(Q1_(R"( 
+            DECLARE $rows AS List<Struct<Row: Uint32, Value: String>>; 
+ 
+            SELECT COUNT(*) 
+            FROM AS_TABLE($rows) AS tl 
+            INNER JOIN Join1 AS tr 
+            ON tl.Value = tr.Value; 
+        )"), TTxControl::BeginTx().CommitTx(), BuildPureTableParams(db)).GetValueSync(); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        CompareYson(R"([[5u]])", FormatResultSetYson(result.GetResultSet(0))); 
+    } 
+ 
+    Y_UNIT_TEST_NEW_ENGINE(JoinLeftPureFull) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        auto result = session.ExecuteDataQuery(Q1_(R"( 
+            DECLARE $rows AS List<Struct<Row: Uint32, Value: String>>; 
+ 
+            SELECT COUNT(*) 
+            FROM AS_TABLE($rows) AS tl 
+            FULL JOIN Join1 AS tr 
+            ON tl.Value = tr.Value; 
+        )"), TTxControl::BeginTx().CommitTx(), BuildPureTableParams(db)).GetValueSync(); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        CompareYson(R"([[11u]])", FormatResultSetYson(result.GetResultSet(0))); 
+    } 
+ 
+    Y_UNIT_TEST_NEW_ENGINE(JoinLeftPureExclusion) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        auto result = session.ExecuteDataQuery(Q1_(R"( 
+            DECLARE $rows AS List<Struct<Row: Uint32, Value: String>>; 
+ 
+            SELECT COUNT(*) 
+            FROM AS_TABLE($rows) AS tl 
+            EXCLUSION JOIN Join1 AS tr 
+            ON tl.Value = tr.Value; 
+        )"), TTxControl::BeginTx().CommitTx(), BuildPureTableParams(db)).GetValueSync(); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        CompareYson(R"([[6u]])", FormatResultSetYson(result.GetResultSet(0))); 
+    } 
+ 
+    Y_UNIT_TEST_NEW_ENGINE(JoinLeftPureCross) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        auto result = session.ExecuteDataQuery(Q1_(R"( 
+            DECLARE $rows AS List<Struct<Row: Uint32, Value: String>>; 
+ 
+            SELECT COUNT(*) 
+            FROM AS_TABLE($rows) AS tl 
+            CROSS JOIN Join1 AS tr; 
+        )"), TTxControl::BeginTx().CommitTx(), BuildPureTableParams(db)).GetValueSync(); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        CompareYson(R"([[36u]])", FormatResultSetYson(result.GetResultSet(0))); 
+    } 
+} 
+ 
 } // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr 

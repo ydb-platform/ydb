@@ -9,34 +9,34 @@
 
 #include <library/cpp/logger/backend.h>
 
-////////////////////////////////////////////////////////////////////////////////
-
-namespace NYdb {
+//////////////////////////////////////////////////////////////////////////////// 
+ 
+namespace NYdb { 
 
 class TDriver;
 class TGRpcConnectionsImpl;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Represents configuration of YDB driver
-class TDriverConfig {
+//! Represents configuration of YDB driver 
+class TDriverConfig { 
     friend class TDriver;
-
+ 
 public:
     //! Connection string format: "<protocol>://<hostname:port>/?database=<database-path>",
     //! where "<protocol>://" can be "grpc://" or "grpcs://" or be absent, "<hostname:port>" is endpoint,
     //! "/?database=<database-path>" is optional
     TDriverConfig(const TStringType& connectionString = "");
-    //! Endpoint to initiate connections with Ydb cluster,
+    //! Endpoint to initiate connections with Ydb cluster, 
     //! client will connect to others nodes according to client loadbalancing
     TDriverConfig& SetEndpoint(const TStringType& endpoint);
     //! Set number of network threads, default: 2
-    TDriverConfig& SetNetworkThreadsNum(size_t sz);
+    TDriverConfig& SetNetworkThreadsNum(size_t sz); 
     //! Set number of client pool threads, if 0 adaptive thread pool will be used.
     //! NOTE: in case of no zero value it is possible to get deadlock if all threads
     //! of this pool is blocked somewhere in user code.
     //! default: 0
-    TDriverConfig& SetClientThreadsNum(size_t sz);
+    TDriverConfig& SetClientThreadsNum(size_t sz); 
     //! Warning: not recommended to change
     //! Set max number of queued responses. 0 - no limit
     //! There is a queue to perform async calls to user code,
@@ -46,7 +46,7 @@ public:
     //! Note: set of this limit can cause deadlock in some case of using async interface
     //! This value doesn't make sense if SetClientThreadsNum is 0
     //! default: 0
-    TDriverConfig& SetMaxClientQueueSize(size_t sz);
+    TDriverConfig& SetMaxClientQueueSize(size_t sz); 
     //! Enable Ssl.
     //! caCerts  - The buffer containing the PEM encoding of the server root certificates.
     //!            If this parameter is empty, the default roots will be used.
@@ -60,10 +60,10 @@ public:
     //! Set behaviour of discovery routine
     //! See EDiscoveryMode enum comments
     //! default: EDiscoveryMode::Sync
-    TDriverConfig& SetDiscoveryMode(EDiscoveryMode discoveryMode);
+    TDriverConfig& SetDiscoveryMode(EDiscoveryMode discoveryMode); 
     //! Max number of requests in queue waiting for discovery if "Async" mode chosen
     //! default: 100
-    TDriverConfig& SetMaxQueuedRequests(size_t sz);
+    TDriverConfig& SetMaxQueuedRequests(size_t sz); 
     //! Limit using of memory for grpc buffer pool. 0 means disabled.
     //! If enabled the size must be greater than size of recieved message.
     //! default: 0
@@ -116,9 +116,9 @@ private:
 //! Represents connection pool to the database
 class TDriver {
     friend std::shared_ptr<TGRpcConnectionsImpl> CreateInternalInterface(const TDriver);
-
+ 
 public:
-    TDriver(const TDriverConfig& config);
+    TDriver(const TDriverConfig& config); 
 
     //! Cancel all currently running and future requests
     //! This method is useful to make sure there are no new asynchronous
@@ -134,4 +134,4 @@ private:
     std::shared_ptr<TGRpcConnectionsImpl> Impl_;
 };
 
-} // namespace NYdb
+} // namespace NYdb 

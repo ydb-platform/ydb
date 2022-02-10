@@ -11,7 +11,7 @@ enum class ESource {
 };
 
 template <ESource Source, typename TGetTransformer, typename TFinish>
-class TDataProposalsInspector : public TGraphTransformerBase {
+class TDataProposalsInspector : public TGraphTransformerBase { 
 public:
     TDataProposalsInspector(const TTypeAnnotationContext& types, TGetTransformer getTransformer,
         TFinish finish)
@@ -21,7 +21,7 @@ public:
     {}
 
 private:
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final { 
         HasRepeats = false;
         if (Source == ESource::DataSource || Source == ESource::All) {
             for (auto& x : Types.DataSources) {
@@ -53,9 +53,9 @@ private:
 
         if (NewRoots.empty()) {
             if (HasRepeats) {
-                return TStatus::Repeat;
-            }
-
+                return TStatus::Repeat; 
+            } 
+ 
             Finish(ctx);
             return TStatus::Ok;
         }
@@ -64,20 +64,20 @@ private:
         return TStatus(TStatus::Repeat, true);
     }
 
-    void Rewind() final {
-        if (Source == ESource::DataSource || Source == ESource::All) {
-            for (auto& x : Types.DataSources) {
-                GetTransformer(x.Get()).Rewind();
-            }
-        }
-
-        if (Source == ESource::DataSink || Source == ESource::All) {
-            for (auto& x : Types.DataSinks) {
-                GetTransformer(x.Get()).Rewind();
-            }
-        }
-    }
-
+    void Rewind() final { 
+        if (Source == ESource::DataSource || Source == ESource::All) { 
+            for (auto& x : Types.DataSources) { 
+                GetTransformer(x.Get()).Rewind(); 
+            } 
+        } 
+ 
+        if (Source == ESource::DataSink || Source == ESource::All) { 
+            for (auto& x : Types.DataSinks) { 
+                GetTransformer(x.Get()).Rewind(); 
+            } 
+        } 
+    } 
+ 
     TStatus HandleProvider(IDataProvider* provider, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         TExprNode::TPtr newRoot;
         TStatus status = GetTransformer(provider).Transform(input, newRoot, ctx);
@@ -97,7 +97,7 @@ private:
         return status;
     }
 
-    NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
+    NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final { 
         TVector<NThreading::TFuture<void>> futures;
         for (auto& x : PendingProviders) {
             futures.push_back(GetTransformer(x).GetAsyncFuture(input));
@@ -106,7 +106,7 @@ private:
         return WaitExceptionOrAll(futures);
     }
 
-    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
+    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final { 
         for (auto& x : PendingProviders) {
             TExprNode::TPtr newRoot;
             TStatus status = GetTransformer(x).ApplyAsyncChanges(input, newRoot, ctx);
@@ -124,9 +124,9 @@ private:
         bool hasRepeats = HasRepeats;
         HasRepeats = false;
         if (NewRoots.empty()) {
-            return hasRepeats
-                ? TStatus::Repeat
-                : TStatus::Ok;
+            return hasRepeats 
+                ? TStatus::Repeat 
+                : TStatus::Ok; 
         }
 
         ChooseRoot(std::move(input), output);
@@ -360,9 +360,9 @@ TAutoPtr<IGraphTransformer> CreateTableMetadataLoader(const TTypeAnnotationConte
         types,
         [](IDataProvider* provider) -> IGraphTransformer& {
             return provider->GetLoadTableMetadataTransformer();
-        },
-        [](TExprContext& ctx) {
-            ctx.Step.Done(TExprStep::LoadTablesMetadata);
+        }, 
+        [](TExprContext& ctx) { 
+            ctx.Step.Done(TExprStep::LoadTablesMetadata); 
         }
     );
 }
@@ -376,15 +376,15 @@ TAutoPtr<IGraphTransformer> CreateCompositeFinalizingTransformer(const TTypeAnno
     );
 }
 
-TAutoPtr<IGraphTransformer> CreatePlanInfoTransformer(const TTypeAnnotationContext& types) {
-    return CreateDataProposalsInspector<ESource::DataSink>(
-        types,
-        [](IDataProvider* provider) -> IGraphTransformer& {
-            return provider->GetPlanInfoTransformer();
-        }
-    );
-}
-
+TAutoPtr<IGraphTransformer> CreatePlanInfoTransformer(const TTypeAnnotationContext& types) { 
+    return CreateDataProposalsInspector<ESource::DataSink>( 
+        types, 
+        [](IDataProvider* provider) -> IGraphTransformer& { 
+            return provider->GetPlanInfoTransformer(); 
+        } 
+    ); 
+} 
+ 
 TAutoPtr<IGraphTransformer> CreateRecaptureDataProposalsInspector(const TTypeAnnotationContext& types, const TString& provider) {
     return CreateSpecificDataProposalsInspector<ESource::DataSink>(
         types,

@@ -1,25 +1,25 @@
 #include "grpc_request_proxy.h"
 
 #include "rpc_calls.h"
-#include "rpc_scheme_base.h"
+#include "rpc_scheme_base.h" 
 #include "rpc_common.h"
 
 namespace NKikimr {
 namespace NGRpcService {
 
 using namespace NActors;
-using namespace Ydb;
+using namespace Ydb; 
 
-class TDropTableRPC : public TRpcSchemeRequestActor<TDropTableRPC, TEvDropTableRequest> {
-    using TBase = TRpcSchemeRequestActor<TDropTableRPC, TEvDropTableRequest>;
-
+class TDropTableRPC : public TRpcSchemeRequestActor<TDropTableRPC, TEvDropTableRequest> { 
+    using TBase = TRpcSchemeRequestActor<TDropTableRPC, TEvDropTableRequest>; 
+ 
 public:
     TDropTableRPC(IRequestOpCtx* msg)
-        : TBase(msg) {}
+        : TBase(msg) {} 
 
     void Bootstrap(const TActorContext &ctx) {
-        TBase::Bootstrap(ctx);
-
+        TBase::Bootstrap(ctx); 
+ 
         SendProposeRequest(ctx);
         Become(&TDropTableRPC::StateWork);
     }

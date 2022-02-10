@@ -11,10 +11,10 @@ ids {
   severity: S_INFO
 }
 ids {
-  code: SUCCESS
-  severity: S_INFO
-}
-ids {
+  code: SUCCESS 
+  severity: S_INFO 
+} 
+ids { 
   code: WARNING
   severity: S_WARNING
 }
@@ -120,136 +120,136 @@ ids {
   severity: S_WARNING
 }
 ids {
-  code: CORE_GC_NODES_LIMIT_EXCEEDED
-  severity: S_ERROR
-}
-ids {
-  code: CORE_GC_STRINGS_LIMIT_EXCEEDED
-  severity: S_ERROR
-}
-ids {
+  code: CORE_GC_NODES_LIMIT_EXCEEDED 
+  severity: S_ERROR 
+} 
+ids { 
+  code: CORE_GC_STRINGS_LIMIT_EXCEEDED 
+  severity: S_ERROR 
+} 
+ids { 
   code: KIKIMR_LOCKS_INVALIDATED
   severity: S_ERROR
-  format: "Transaction locks invalidated."
+  format: "Transaction locks invalidated." 
 }
 ids {
-  code: KIKIMR_LOCKS_ACQUIRE_FAILURE
-  severity: S_ERROR
-  format: "Failed to acquire transaction locks."
-}
-ids {
-  code: KIKIMR_SCHEME_ERROR
-  severity: S_ERROR
-  format: "Incorrect scheme found while performing Kikimr operation."
-}
-ids {
-  code: KIKIMR_COMPILE_ERROR
-  severity: S_ERROR
-  format: "Error while compiling Kikimr program."
-}
-ids {
-  code: KIKIMR_TEMPORARILY_UNAVAILABLE
-  severity: S_ERROR
-  format: "Kikimr cluster or one of its subsystems was unavailable."
-}
-ids {
-  code: KIKIMR_OVERLOADED
-  severity: S_ERROR
-  format: "Kikimr cluster or one of its subsystems is overloaded."
-}
-ids {
-  code: KIKIMR_BAD_OPERATION
-  severity: S_ERROR
-  format: "Bad operation."
-}
-ids {
-  code: KIKIMR_MIXED_SCHEME_DATA_TX
-  severity: S_ERROR
-  format: "Can't mix scheme and data operations in single Kikimr transaction. Use COMMIT statement to indicate end of transaction between scheme and data operations."
-}
-ids {
-  code: KIKIMR_MULTIPLE_SCHEME_MODIFICATIONS
-  severity: S_ERROR
-  format: "Multiple simultaneous modifications of Kikimr scheme element."
-}
-ids {
-  code: KIKIMR_OPERATION_ABORTED
-  severity: S_ERROR
-  format: "Operation aborted."
-}
-ids {
-  code: KIKIMR_CONSTRAINT_VIOLATION
-  severity: S_ERROR
-  format: "Constraint violation in Kikimr operation."
-}
-ids {
-  code: KIKIMR_RESULT_UNAVAILABLE
-  severity: S_ERROR
-  format: "Result of Kikimr query didn't meet requirements and isn't available"
-}
-ids {
-  code: KIKIMR_TOO_MANY_TRANSACTIONS
-  severity: S_ERROR
-  format: "Exceeded maximum allowed number of active transactions"
-}
-ids {
-  code: KIKIMR_TRANSACTION_NOT_FOUND
-  severity: S_ERROR
-  format: "Transaction not found"
-}
-ids {
-  code: KIKIMR_PRAGMA_NOT_SUPPORTED
-  severity: S_ERROR
-  format: "Pragma not supported in current context."
-}
-ids {
-  code: KIKIMR_BAD_REQUEST
-  severity: S_ERROR
-  format: "Bad request."
-}
-ids {
-  code: KIKIMR_ACCESS_DENIED
-  severity: S_ERROR
-  format: "Access denied."
-}
-ids {
-  code: KIKIMR_QUERY_INVALIDATED
-  severity: S_ERROR
-  format: "Query invalidated."
-}
-ids {
-  code: KIKIMR_TIMEOUT
-  severity: S_ERROR
-  format: "Operation timeout."
-}
-ids {
-  code: KIKIMR_OPERATION_CANCELLED
-  severity: S_ERROR
-  format: "Operation cancelled."
-}
-ids {
-  code: KIKIMR_UNAUTHENTICATED
-  severity: S_ERROR
-  format: "The request does not have valid authentication credentials."
-}
-ids {
-  code: KIKIMR_UNIMPLEMENTED
-  severity: S_ERROR
-  format: "Operation is not implemented or not supported."
-}
-ids {
-  code: KIKIMR_READ_MODIFIED_TABLE
-  severity: S_WARNING
-}
-ids {
-  code: KIKIMR_OPERATION_REVERTED
-  severity: S_WARNING
-}
-ids {
-  code: KIKIMR_UPDATE_TABLE_WITH_DELETES
-  severity: S_WARNING
-}
-ids {
+  code: KIKIMR_LOCKS_ACQUIRE_FAILURE 
+  severity: S_ERROR 
+  format: "Failed to acquire transaction locks." 
+} 
+ids { 
+  code: KIKIMR_SCHEME_ERROR 
+  severity: S_ERROR 
+  format: "Incorrect scheme found while performing Kikimr operation." 
+} 
+ids { 
+  code: KIKIMR_COMPILE_ERROR 
+  severity: S_ERROR 
+  format: "Error while compiling Kikimr program." 
+} 
+ids { 
+  code: KIKIMR_TEMPORARILY_UNAVAILABLE 
+  severity: S_ERROR 
+  format: "Kikimr cluster or one of its subsystems was unavailable." 
+} 
+ids { 
+  code: KIKIMR_OVERLOADED 
+  severity: S_ERROR 
+  format: "Kikimr cluster or one of its subsystems is overloaded." 
+} 
+ids { 
+  code: KIKIMR_BAD_OPERATION 
+  severity: S_ERROR 
+  format: "Bad operation." 
+} 
+ids { 
+  code: KIKIMR_MIXED_SCHEME_DATA_TX 
+  severity: S_ERROR 
+  format: "Can't mix scheme and data operations in single Kikimr transaction. Use COMMIT statement to indicate end of transaction between scheme and data operations." 
+} 
+ids { 
+  code: KIKIMR_MULTIPLE_SCHEME_MODIFICATIONS 
+  severity: S_ERROR 
+  format: "Multiple simultaneous modifications of Kikimr scheme element." 
+} 
+ids { 
+  code: KIKIMR_OPERATION_ABORTED 
+  severity: S_ERROR 
+  format: "Operation aborted." 
+} 
+ids { 
+  code: KIKIMR_CONSTRAINT_VIOLATION 
+  severity: S_ERROR 
+  format: "Constraint violation in Kikimr operation." 
+} 
+ids { 
+  code: KIKIMR_RESULT_UNAVAILABLE 
+  severity: S_ERROR 
+  format: "Result of Kikimr query didn't meet requirements and isn't available" 
+} 
+ids { 
+  code: KIKIMR_TOO_MANY_TRANSACTIONS 
+  severity: S_ERROR 
+  format: "Exceeded maximum allowed number of active transactions" 
+} 
+ids { 
+  code: KIKIMR_TRANSACTION_NOT_FOUND 
+  severity: S_ERROR 
+  format: "Transaction not found" 
+} 
+ids { 
+  code: KIKIMR_PRAGMA_NOT_SUPPORTED 
+  severity: S_ERROR 
+  format: "Pragma not supported in current context." 
+} 
+ids { 
+  code: KIKIMR_BAD_REQUEST 
+  severity: S_ERROR 
+  format: "Bad request." 
+} 
+ids { 
+  code: KIKIMR_ACCESS_DENIED 
+  severity: S_ERROR 
+  format: "Access denied." 
+} 
+ids { 
+  code: KIKIMR_QUERY_INVALIDATED 
+  severity: S_ERROR 
+  format: "Query invalidated." 
+} 
+ids { 
+  code: KIKIMR_TIMEOUT 
+  severity: S_ERROR 
+  format: "Operation timeout." 
+} 
+ids { 
+  code: KIKIMR_OPERATION_CANCELLED 
+  severity: S_ERROR 
+  format: "Operation cancelled." 
+} 
+ids { 
+  code: KIKIMR_UNAUTHENTICATED 
+  severity: S_ERROR 
+  format: "The request does not have valid authentication credentials." 
+} 
+ids { 
+  code: KIKIMR_UNIMPLEMENTED 
+  severity: S_ERROR 
+  format: "Operation is not implemented or not supported." 
+} 
+ids { 
+  code: KIKIMR_READ_MODIFIED_TABLE 
+  severity: S_WARNING 
+} 
+ids { 
+  code: KIKIMR_OPERATION_REVERTED 
+  severity: S_WARNING 
+} 
+ids { 
+  code: KIKIMR_UPDATE_TABLE_WITH_DELETES 
+  severity: S_WARNING 
+} 
+ids { 
   code: KIKIMR_WRONG_INDEX_USAGE
   severity: S_WARNING
 }
@@ -259,11 +259,11 @@ ids {
   format: "Operation with grpc context failed"
 }
 ids {
-  code: KIKIMR_OPERATION_STATE_UNKNOWN
-  severity: S_ERROR
-  format: "State of operation is unknown."
-}
-ids {
+  code: KIKIMR_OPERATION_STATE_UNKNOWN 
+  severity: S_ERROR 
+  format: "State of operation is unknown." 
+} 
+ids { 
   code: KIKIMR_INDEX_IS_NOT_READY
   severity: S_ERROR
 }
@@ -272,11 +272,11 @@ ids {
   severity: S_ERROR
 }
 ids {
-  code: KIKIMR_SCHEME_MISMATCH
-  severity: S_ERROR
-  format: "Scheme mismatch found while executing query."
-}
-ids {
+  code: KIKIMR_SCHEME_MISMATCH 
+  severity: S_ERROR 
+  format: "Scheme mismatch found while executing query." 
+} 
+ids { 
   code: KIKIMR_PRECONDITION_FAILED
   severity: S_ERROR
 }

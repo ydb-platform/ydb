@@ -12,25 +12,25 @@ namespace NGRpcService {
 
 using namespace NActors;
 using namespace NConsole;
-using namespace Ydb;
+using namespace Ydb; 
 
 template <typename TRequest, typename TCmsRequest, typename TCmsResponse>
-class TCmsRPC : public TRpcOperationRequestActor<TCmsRPC<TRequest, TCmsRequest, TCmsResponse>, TRequest> {
+class TCmsRPC : public TRpcOperationRequestActor<TCmsRPC<TRequest, TCmsRequest, TCmsResponse>, TRequest> { 
     using TThis = TCmsRPC<TRequest, TCmsRequest, TCmsResponse>;
-    using TBase = TRpcOperationRequestActor<TThis, TRequest>;
+    using TBase = TRpcOperationRequestActor<TThis, TRequest>; 
 
     TActorId CmsPipe;
 
 public:
     TCmsRPC(TRequest* msg)
-        : TBase(msg)
+        : TBase(msg) 
     {
     }
 
     void Bootstrap(const TActorContext &ctx)
     {
-        TBase::Bootstrap(ctx);
-
+        TBase::Bootstrap(ctx); 
+ 
         auto dinfo = AppData(ctx)->DomainsInfo;
         auto domain = dinfo->Domains.begin()->second;
         ui32 group = dinfo->GetDefaultStateStorageGroup(domain->DomainUid);
@@ -80,7 +80,7 @@ private:
     template<typename T>
     void Handle(T& ev, const TActorContext& ctx)
     {
-        auto& response = ev->Get()->Record.GetResponse();
+        auto& response = ev->Get()->Record.GetResponse(); 
         TProtoResponseHelper::SendProtoResponse(response, response.operation().status(), this->Request_);
         Die(ctx);
     }
@@ -111,14 +111,14 @@ private:
             Undelivered(ctx);
     }
 
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
         switch (ev->GetTypeRewrite()) {
             HFunc(TCmsResponse, Handle);
             CFunc(TEvTabletPipe::EvClientDestroyed, Undelivered);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvConsole::TEvOperationCompletionNotification, Handle);
             HFunc(TEvConsole::TEvNotifyOperationCompletionResponse, Handle);
-            default: TBase::StateFuncBase(ev, ctx);
+            default: TBase::StateFuncBase(ev, ctx); 
         }
     }
 

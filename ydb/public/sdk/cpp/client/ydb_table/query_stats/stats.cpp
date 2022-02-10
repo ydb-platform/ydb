@@ -19,29 +19,29 @@ TQueryStats::TQueryStats(const Ydb::TableStats::QueryStats& proto) {
     Impl_->Proto = proto;
 }
 
-TString TQueryStats::ToString(bool withPlan) const {
-    auto proto = Impl_->Proto;
-
-    if (!withPlan) {
-        proto.clear_query_plan();
-        proto.clear_query_ast();
-    }
-
+TString TQueryStats::ToString(bool withPlan) const { 
+    auto proto = Impl_->Proto; 
+ 
+    if (!withPlan) { 
+        proto.clear_query_plan(); 
+        proto.clear_query_ast(); 
+    } 
+ 
     TString res;
-    ::google::protobuf::TextFormat::PrintToString(proto, &res);
+    ::google::protobuf::TextFormat::PrintToString(proto, &res); 
     return res;
 }
 
-TMaybe<TString> TQueryStats::GetPlan() const {
-    auto proto = Impl_->Proto;
-
-    if (proto.query_plan().empty()) {
-        return {};
-    }
-
-    return proto.query_plan();
-}
-
+TMaybe<TString> TQueryStats::GetPlan() const { 
+    auto proto = Impl_->Proto; 
+ 
+    if (proto.query_plan().empty()) { 
+        return {}; 
+    } 
+ 
+    return proto.query_plan(); 
+} 
+ 
 TDuration TQueryStats::GetTotalDuration() const {
     return TDuration::MicroSeconds(Impl_->Proto.total_duration_us());
 }

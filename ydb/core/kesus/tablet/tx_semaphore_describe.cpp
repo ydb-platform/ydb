@@ -38,7 +38,7 @@ struct TKesusTablet::TTxSemaphoreDescribe : public TTxBase {
             if (!proxy || proxy->Generation != Record.GetProxyGeneration()) {
                 Reply.Reset(new TEvKesus::TEvDescribeSemaphoreResult(
                     Record.GetProxyGeneration(),
-                    Ydb::StatusIds::BAD_SESSION,
+                    Ydb::StatusIds::BAD_SESSION, 
                     proxy ? "ProxyGeneration mismatch" : "Proxy is not registered"));
                 return true;
             }
@@ -51,14 +51,14 @@ struct TKesusTablet::TTxSemaphoreDescribe : public TTxBase {
             if (!session || session->OwnerProxy != proxy) {
                 Reply.Reset(new TEvKesus::TEvDescribeSemaphoreResult(
                     Record.GetProxyGeneration(),
-                    session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED,
+                    session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED, 
                     session ? "Session not attached" : "Session does not exist"));
                 return true;
             }
         } else if (Record.GetWatchData() || Record.GetWatchOwners()) {
             Reply.Reset(new TEvKesus::TEvDescribeSemaphoreResult(
                 Record.GetProxyGeneration(),
-                Ydb::StatusIds::BAD_REQUEST,
+                Ydb::StatusIds::BAD_REQUEST, 
                 "Watches cannot be used without an active session"));
             return true;
         } else {
@@ -71,7 +71,7 @@ struct TKesusTablet::TTxSemaphoreDescribe : public TTxBase {
         if (!semaphore) {
             Reply.Reset(new TEvKesus::TEvDescribeSemaphoreResult(
                 Record.GetProxyGeneration(),
-                Ydb::StatusIds::NOT_FOUND,
+                Ydb::StatusIds::NOT_FOUND, 
                 TStringBuilder() << "Semaphore not found"));
             return true;
         }

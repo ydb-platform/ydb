@@ -94,24 +94,24 @@ message TYtGatewayConfig {
 message THostPort {
     required string Host = 1;
     required uint32 Port = 2;
-    optional uint64 TotalTimeoutMs = 3;
+    optional uint64 TotalTimeoutMs = 3; 
 }
 
-message TKikimrGrpcData {
-    repeated string Locators = 1;
-    optional uint64 TimeoutMs = 2;
-    optional uint64 MaxMessageSizeBytes = 3;
-    optional uint32 MaxInFlight = 4;
-    optional bool EnableEndpointDiscovery = 5;
+message TKikimrGrpcData { 
+    repeated string Locators = 1; 
+    optional uint64 TimeoutMs = 2; 
+    optional uint64 MaxMessageSizeBytes = 3; 
+    optional uint32 MaxInFlight = 4; 
+    optional bool EnableEndpointDiscovery = 5; 
     optional bool UseLegacyApi = 6;
-}
-
+} 
+ 
 message TKikimrClusterConfig {
     optional string Name = 1;
     optional bool Default = 2 [default = false];
     repeated THostPort MessageBus = 3;
-    optional TKikimrGrpcData Grpc = 4;
-    optional string Database = 5;
+    optional TKikimrGrpcData Grpc = 4; 
+    optional string Database = 5; 
     optional uint32 TvmId = 6 [default = 0];
     optional string Token = 7;
     optional string ProxyUrl = 8;

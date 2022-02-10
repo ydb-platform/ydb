@@ -160,7 +160,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
             return nullptr;
         }
         return pgmBuilder.NewVariantType(underlyingType);
-    }
+    } 
 
     case ETypeAnnotationKind::Stream: {
         auto stream = annotation.Cast<TStreamExprType>();

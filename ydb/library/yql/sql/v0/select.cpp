@@ -4,7 +4,7 @@
 #include "context.h"
 
 #include <ydb/library/yql/utils/yql_panic.h>
-
+ 
 #include <library/cpp/charset/ci_string.h>
 
 using namespace NYql;
@@ -212,71 +212,71 @@ TSourcePtr BuildFakeSource(TPosition pos) {
     return new TFakeSource(pos);
 }
 
-class TNodeSource: public ISource {
-public:
-    TNodeSource(TPosition pos, const TNodePtr& node)
-        : ISource(pos)
-        , Node(node)
-    {
-        YQL_ENSURE(Node);
+class TNodeSource: public ISource { 
+public: 
+    TNodeSource(TPosition pos, const TNodePtr& node) 
+        : ISource(pos) 
+        , Node(node) 
+    { 
+        YQL_ENSURE(Node); 
         FakeSource = BuildFakeSource(pos);
-    }
-
-    void AllColumns() final {
-        UseAllColumns = true;
-    }
-
-    TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) final {
+    } 
+ 
+    void AllColumns() final { 
+        UseAllColumns = true; 
+    } 
+ 
+    TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) final { 
         Y_UNUSED(ctx);
-        if (UseAllColumns) {
-            return true;
-        }
-
-        if (column.IsAsterisk()) {
-            AllColumns();
-        } else {
-            Columns.push_back(*column.GetColumnName());
-        }
-
-        return true;
-    }
-
-    TNodePtr Build(TContext& ctx) final  {
+        if (UseAllColumns) { 
+            return true; 
+        } 
+ 
+        if (column.IsAsterisk()) { 
+            AllColumns(); 
+        } else { 
+            Columns.push_back(*column.GetColumnName()); 
+        } 
+ 
+        return true; 
+    } 
+ 
+    TNodePtr Build(TContext& ctx) final  { 
         ctx.PushBlockShortcuts();
         if (!Node->Init(ctx, FakeSource.Get())) {
             return {};
-        }
-
+        } 
+ 
         Node = ctx.GroundBlockShortcutsForExpr(Node);
-        auto nodeAst = AstNode(Node);
-
-        if (UseAllColumns) {
-            return nodeAst;
-        } else {
-            auto members = Y();
-            for (auto& column : Columns) {
-                members = L(members, BuildQuotedAtom(Pos, column));
-            }
-
+        auto nodeAst = AstNode(Node); 
+ 
+        if (UseAllColumns) { 
+            return nodeAst; 
+        } else { 
+            auto members = Y(); 
+            for (auto& column : Columns) { 
+                members = L(members, BuildQuotedAtom(Pos, column)); 
+            } 
+ 
             return Y(ctx.UseUnordered(*this) ? "OrderedMap" : "Map", nodeAst, BuildLambda(Pos, Y("row"), Y("SelectMembers", "row", Q(members))));
-        }
-    }
-
-    TPtr DoClone() const final {
-        return new TNodeSource(Pos, Node);
-    }
-
-private:
-    TNodePtr Node;
+        } 
+    } 
+ 
+    TPtr DoClone() const final { 
+        return new TNodeSource(Pos, Node); 
+    } 
+ 
+private: 
+    TNodePtr Node; 
     TSourcePtr FakeSource;
-    TVector<TString> Columns;
-    bool UseAllColumns = false;
-};
-
-TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node) {
-    return new TNodeSource(pos, node);
-}
-
+    TVector<TString> Columns; 
+    bool UseAllColumns = false; 
+}; 
+ 
+TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node) { 
+    return new TNodeSource(pos, node); 
+} 
+ 
 class IProxySource: public ISource {
 protected:
     IProxySource(TPosition pos, ISource* src)
@@ -1051,7 +1051,7 @@ public:
         TWinSpecs& winSpecs,
         THoppingWindowSpecPtr hoppingWindowSpec,
         const TVector<TNodePtr>& terms,
-        bool distinct,
+        bool distinct, 
         const TVector<TNodePtr>& without,
         bool stream,
         const TWriteSettings& settings
@@ -1962,7 +1962,7 @@ TSourcePtr BuildSelectCore(
     TWinSpecs&& winSpecs,
     THoppingWindowSpecPtr hoppingWindowSpec,
     TVector<TNodePtr>&& terms,
-    bool distinct,
+    bool distinct, 
     TVector<TNodePtr>&& without,
     bool stream,
     const TWriteSettings& settings

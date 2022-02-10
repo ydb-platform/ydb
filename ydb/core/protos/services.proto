@@ -105,7 +105,7 @@ enum EServiceKikimr {
 
     // MINIKQL section
     MINIKQL_ENGINE = 340;
-    KQP_TASKS_RUNNER = 341;
+    KQP_TASKS_RUNNER = 341; 
 
     // JOBRUNNER section - deprecated, left for compatibility with existing logger configuration
     JOBRUNNER = 350;
@@ -121,7 +121,7 @@ enum EServiceKikimr {
     KWCALC_PROXY_WORKER = 363; // deprecated, left for compatibility reasons
     YQL_EXECUTION = 364;
     YAMR_PROXY = 365;
-    YQL_KIKIMR_PROXY = 366;
+    YQL_KIKIMR_PROXY = 366; 
 
     // TRIGGER section
     TRIGGER = 370;
@@ -191,7 +191,7 @@ enum EServiceKikimr {
     HEALTH = 500;
 
     MEMORY_PROFILER = 510;
-
+ 
     DATASHARD_BACKUP = 522;
 
     CMS = 523;
@@ -204,22 +204,22 @@ enum EServiceKikimr {
     CMS_CONFIGS = 528;
     CMS_CLUSTER = 529;
 
-    KQP_PROXY = 530;
-    KQP_WORKER = 531;
-    KQP_GATEWAY = 532;
-    KQP_YQL = 533;
-    KQP_EXECUTER = 534;
-    KQP_COMPUTE = 535;
-    KQP_SLOW_LOG = 536;
-    KQP_COMPILE_SERVICE = 537;
-    KQP_COMPILE_ACTOR = 538;
+    KQP_PROXY = 530; 
+    KQP_WORKER = 531; 
+    KQP_GATEWAY = 532; 
+    KQP_YQL = 533; 
+    KQP_EXECUTER = 534; 
+    KQP_COMPUTE = 535; 
+    KQP_SLOW_LOG = 536; 
+    KQP_COMPILE_SERVICE = 537; 
+    KQP_COMPILE_ACTOR = 538; 
     KQP_RESOURCE_MANAGER = 539;
     KQP_BLOBS_STORAGE = 541;
-    KQP_COMPILE_REQUEST = 542;
+    KQP_COMPILE_REQUEST = 542; 
     KQP_NODE = 543;
     KQP_LOAD_TEST = 544;
     KQP_SESSION = 545;
-
+ 
     TABLET_RESOURCE_BROKER = 540;
 
     // KESUS section
@@ -798,11 +798,11 @@ message TActivity {
         SCHEME_BOARD_INFO_REQUESTER_ACTOR = 479;
         METERING_WRITER_ACTOR = 480;
         SEQUENCE_PROXY_SERVICE = 481;
-        KQP_TABLE_SCAN_PROXY = 482;
-        KQP_TABLE_RESOLVER = 483;
-        KQP_RESULT_CHANNEL_PROXY = 484;
-        KQP_SHARDS_RESOLVER = 485;
-        KQP_COMPILE_REQUEST = 486;
+        KQP_TABLE_SCAN_PROXY = 482; 
+        KQP_TABLE_RESOLVER = 483; 
+        KQP_RESULT_CHANNEL_PROXY = 484; 
+        KQP_SHARDS_RESOLVER = 485; 
+        KQP_COMPILE_REQUEST = 486; 
         BS_DEFRAG = 487;
         BS_DEFRAG_QUANTUM = 488;
         KQP_LITERAL_EXECUTER_ACTOR = 489;

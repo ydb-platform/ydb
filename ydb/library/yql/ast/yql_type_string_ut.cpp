@@ -498,9 +498,9 @@ Y_UNIT_TEST_SUITE(TTypeString)
     }
 
     Y_UNIT_TEST(ParseTagged) {
-        TestOk("Tagged<Uint32, IdTag>", "(TaggedType (DataType 'Uint32) 'IdTag)");
-    }
-
+        TestOk("Tagged<Uint32, IdTag>", "(TaggedType (DataType 'Uint32) 'IdTag)"); 
+    } 
+ 
     Y_UNIT_TEST(ParseEmptyTuple) {
         TestOk("Tuple<>", "(TupleType)");
     }

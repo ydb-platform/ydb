@@ -14,62 +14,62 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-class TLocalDbSchemeResolver : public NYql::IDbSchemeResolver {
-public:
+class TLocalDbSchemeResolver : public NYql::IDbSchemeResolver { 
+public: 
     TLocalDbSchemeResolver(const NTable::TScheme& scheme, ui64 tabletId)
-        : Scheme(scheme)
-        , TabletId(tabletId) {}
-
+        : Scheme(scheme) 
+        , TabletId(tabletId) {} 
+ 
     virtual NThreading::TFuture<TTableResults> ResolveTables(const TVector<TTable>& tables) override {
-        TTableResults results;
-        results.reserve(tables.size());
-
-        for (auto& table : tables) {
+        TTableResults results; 
+        results.reserve(tables.size()); 
+ 
+        for (auto& table : tables) { 
             TTableResult result(TTableResult::Ok);
 
-            const ui32* tableId = Scheme.TableNames.FindPtr(table.TableName);
+            const ui32* tableId = Scheme.TableNames.FindPtr(table.TableName); 
             if (!tableId) {
                 result = TTableResult(TTableResult::Error, "Unknown table " + table.TableName);
             } else {
                 const auto *tableInfo = Scheme.Tables.FindPtr(*tableId);
                 Y_VERIFY(tableInfo);
-
+ 
                 result.KeyColumnCount = tableInfo->KeyColumns.size();
                 result.Table = table;
                 result.TableId = new TTableId(TabletId, *tableId);
-
+ 
                 for (const auto& column : table.ColumnNames) {
                     const ui32* columnId = tableInfo->ColumnNames.FindPtr(column);
                     if (!columnId) {
                         result = TTableResult(TTableResult::Error, "Unknown column " + table.TableName + ":" + column);
                         break;
                     }
-
+ 
                     const auto *columnInfo = tableInfo->Columns.FindPtr(*columnId);
                     Y_VERIFY(columnInfo);
-
+ 
                     auto insertResult = result.Columns.insert(std::make_pair(column, IDbSchemeResolver::TTableResult::TColumn
-                    {*columnId, (i32)columnInfo->KeyOrder, columnInfo->PType, 0}));
+                    {*columnId, (i32)columnInfo->KeyOrder, columnInfo->PType, 0})); 
                     Y_VERIFY(insertResult.second);
                 }
-            }
-
-            results.push_back(result);
-        }
-
-        return NThreading::MakeFuture<TTableResults>(results);
-    }
-
+            } 
+ 
+            results.push_back(result); 
+        } 
+ 
+        return NThreading::MakeFuture<TTableResults>(results); 
+    } 
+ 
     virtual void ResolveTables(const TVector<TTable>& tables, NActors::TActorId responseTo) override {
-        Y_UNUSED(tables);
-        Y_UNUSED(responseTo);
-        Y_FAIL("Not implemented for local resolve.");
-    }
-private:
+        Y_UNUSED(tables); 
+        Y_UNUSED(responseTo); 
+        Y_FAIL("Not implemented for local resolve."); 
+    } 
+private: 
     const NTable::TScheme& Scheme;
-    const ui64 TabletId;
-};
-
+    const ui64 TabletId; 
+}; 
+ 
 class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     ui64 TabletId = Max<ui64>();
     const TActorId Sender;
@@ -109,30 +109,30 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
             return true;
         }
 
-        if (SourceProgram.Params.Text) {
-            ProgramCompileResult = new NYql::TMiniKQLCompileResult();
+        if (SourceProgram.Params.Text) { 
+            ProgramCompileResult = new NYql::TMiniKQLCompileResult(); 
 
-            NYql::TExprContainer::TPtr expr  = new NYql::TExprContainer();
-            NYql::TMiniKQLCompileResult parseResult;
-            if (!ParseProgram(SourceProgram.Params.Text, parseResult.Errors, *expr)) {
-                ProgramCompileResult->Errors.AddIssues(parseResult.Errors);
-                return false;
-            }
+            NYql::TExprContainer::TPtr expr  = new NYql::TExprContainer(); 
+            NYql::TMiniKQLCompileResult parseResult; 
+            if (!ParseProgram(SourceProgram.Params.Text, parseResult.Errors, *expr)) { 
+                ProgramCompileResult->Errors.AddIssues(parseResult.Errors); 
+                return false; 
+            } 
 
             TAlignedPagePoolCounters counters(appData->Counters, "local_tx");
             TScopedAlloc alloc(counters, appData->FunctionRegistry->SupportsSizedAllocators());
             TTypeEnvironment typeEnv(alloc);
             auto future = ConvertToMiniKQL(expr, appData->FunctionRegistry, &typeEnv, nullptr);
-            future.Wait();
-            NYql::TConvertResult compileResult = future.GetValue();
+            future.Wait(); 
+            NYql::TConvertResult compileResult = future.GetValue(); 
 
-            if (!compileResult.Errors.Empty()) {
-                ProgramCompileResult->Errors.AddIssues(compileResult.Errors);
-                return false;
+            if (!compileResult.Errors.Empty()) { 
+                ProgramCompileResult->Errors.AddIssues(compileResult.Errors); 
+                return false; 
             }
-        }
-
-        return true;
+        } 
+ 
+        return true; 
     }
 
     bool PrepareProgram(TTransactionContext &txc, const TAppData *appData) {
@@ -145,29 +145,29 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
         // so we must prepare program
         ProgramCompileResult = new NYql::TMiniKQLCompileResult();
 
-        NYql::TExprContainer::TPtr expr  = new NYql::TExprContainer();
-        NYql::TMiniKQLCompileResult parseResult;
-        if (!ParseProgram(SourceProgram.Program.Text, parseResult.Errors, *expr)) {
-            ProgramCompileResult->Errors.AddIssues(parseResult.Errors);
-            return false;
-        }
-
+        NYql::TExprContainer::TPtr expr  = new NYql::TExprContainer(); 
+        NYql::TMiniKQLCompileResult parseResult; 
+        if (!ParseProgram(SourceProgram.Program.Text, parseResult.Errors, *expr)) { 
+            ProgramCompileResult->Errors.AddIssues(parseResult.Errors); 
+            return false; 
+        } 
+ 
         TAlignedPagePoolCounters counters(appData->Counters, "local_tx");
         TScopedAlloc alloc(counters, appData->FunctionRegistry->SupportsSizedAllocators());
         TTypeEnvironment typeEnv(alloc);
         TLocalDbSchemeResolver dbResolver(txc.DB.GetScheme(), TabletId);
         const auto unguard = Unguard(alloc);
         auto future = ConvertToMiniKQL(expr, appData->FunctionRegistry, &typeEnv, &dbResolver);
-        future.Wait();
-        NYql::TConvertResult compileResult = future.GetValue();
+        future.Wait(); 
+        NYql::TConvertResult compileResult = future.GetValue(); 
         if (!compileResult.Errors.Empty()) {
-            ProgramCompileResult->Errors.AddIssues(compileResult.Errors);
+            ProgramCompileResult->Errors.AddIssues(compileResult.Errors); 
             return false;
         }
-
+ 
         ProgramCompileResult->CompiledProgram = SerializeRuntimeNode(compileResult.Node, typeEnv);
-        SerializedMiniKQLProgram = ProgramCompileResult->CompiledProgram;
-        return true;
+        SerializedMiniKQLProgram = ProgramCompileResult->CompiledProgram; 
+        return true; 
     }
 
     void ClearResponse() {
@@ -261,8 +261,8 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
 
             for (auto &key : proxyEngine->GetDbKeys()) {
                 key->Status = TKeyDesc::EStatus::Ok;
-                key->Partitions.push_back(TKeyDesc::TPartitionInfo(TabletId));
-
+                key->Partitions.push_back(TKeyDesc::TPartitionInfo(TabletId)); 
+ 
                 for (const auto &x : key->Columns) {
                     key->ColumnInfos.push_back({x.Column, x.ExpectedType, 0, TKeyDesc::EStatus::Ok}); // type-check
                 }
@@ -327,7 +327,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                     return MakeResponse(engine.Get(), ctx);
 
                 const TString shardEngineReply = engine->GetShardReply(TabletId);
-                proxyEngine->AddShardReply(TabletId, shardEngineReply);
+                proxyEngine->AddShardReply(TabletId, shardEngineReply); 
                 proxyEngine->FinalizeOriginReplies(TabletId);
             }
 

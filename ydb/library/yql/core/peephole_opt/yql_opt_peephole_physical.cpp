@@ -574,20 +574,20 @@ TExprNode::TPtr PeepHoleDictFromKeysToDict(const TExprNode::TPtr& node, TExprCon
 
     return Build<TCoToDict>(ctx, callable.Pos())
         .List(list)
-        .KeySelector()
-            .Args({"item"})
-            .Body("item")
-            .Build()
-        .PayloadSelector()
-            .Args({"item"})
+        .KeySelector() 
+            .Args({"item"}) 
+            .Body("item") 
+            .Build() 
+        .PayloadSelector() 
+            .Args({"item"}) 
             .Body<TCoVoid>().Build()
-            .Build()
-        .Settings()
-            .Add().Build("One")
-            .Add().Build("Hashed")
-            .Build()
-        .Done()
-        .Ptr();
+            .Build() 
+        .Settings() 
+            .Add().Build("One") 
+            .Add().Build("Hashed") 
+            .Build() 
+        .Done() 
+        .Ptr(); 
 }
 
 TExprNode::TPtr ExpandEquiJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -1928,7 +1928,7 @@ IGraphTransformer::TStatus PeepHoleCommonStage(const TExprNode::TPtr& input, TEx
 IGraphTransformer::TStatus PeepHoleFinalStage(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TExprContext& ctx, TTypeAnnotationContext& types, bool* hasNonDeterministicFunctions,
     const TPeepHoleOptimizerMap& optimizers, const TNonDeterministicOptimizerMap& nonDetOptimizers)
-{
+{ 
     TOptimizeExprSettings settings(&types);
     settings.CustomInstantTypeTransformer = types.CustomInstantTypeTransformer.Get();
 

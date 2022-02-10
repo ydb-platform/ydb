@@ -568,28 +568,28 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->ChildrenSize(), 1);
         UNIT_ASSERT_EQUAL(res->Child(1)->Child(0), res->Head().Child(0));
     }
-
+ 
     Y_UNIT_TEST(TestApplyPartialLambdaArgAsRoot) {
-        TExprContext ctx;
+        TExprContext ctx; 
         auto lambda = ctx.Builder(TPositionHandle())
-            .Lambda()
-                .Param("x")
-                .Callable("Func1")
-                    .Callable(0, "Func2")
-                        .Atom(0, "ABC")
-                        .Arg(1, "x")
-                    .Seal()
-                .Seal()
-            .Seal()
-            .Build();
-
+            .Lambda() 
+                .Param("x") 
+                .Callable("Func1") 
+                    .Callable(0, "Func2") 
+                        .Atom(0, "ABC") 
+                        .Arg(1, "x") 
+                    .Seal() 
+                .Seal() 
+            .Seal() 
+            .Build(); 
+ 
         auto res = ctx.Builder(TPositionHandle())
-            .Lambda()
-                .Param("y")
+            .Lambda() 
+                .Param("y") 
                 .ApplyPartial(lambda->HeadPtr(), lambda->Child(1)->HeadPtr()).With(0, "y").Seal()
-            .Seal()
-            .Build();
-
+            .Seal() 
+            .Build(); 
+ 
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::Lambda);
         UNIT_ASSERT_VALUES_EQUAL(res->ChildrenSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments);
@@ -597,31 +597,31 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Argument);
         UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "y");
         UNIT_ASSERT_EQUAL(res->Child(1)->Child(1), res->Head().Child(0));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestApplyPartialLambdaArgInContainer) {
-        TExprContext ctx;
+        TExprContext ctx; 
         auto lambda = ctx.Builder(TPositionHandle())
-            .Lambda()
-                .Param("x")
-                .Callable("Func1")
-                    .Callable(0, "Func2")
-                        .Atom(0, "ABC")
-                        .Arg(1, "x")
-                    .Seal()
-                .Seal()
-            .Seal()
-            .Build();
-
+            .Lambda() 
+                .Param("x") 
+                .Callable("Func1") 
+                    .Callable(0, "Func2") 
+                        .Atom(0, "ABC") 
+                        .Arg(1, "x") 
+                    .Seal() 
+                .Seal() 
+            .Seal() 
+            .Build(); 
+ 
         auto res = ctx.Builder(TPositionHandle())
-            .Lambda()
-                .Param("y")
-                .Callable("Func3")
+            .Lambda() 
+                .Param("y") 
+                .Callable("Func3") 
                     .ApplyPartial(0, lambda->HeadPtr(), lambda->Child(1)->HeadPtr()).With(0, "y").Seal()
-                .Seal()
-            .Seal()
-            .Build();
-
+                .Seal() 
+            .Seal() 
+            .Build(); 
+ 
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::Lambda);
         UNIT_ASSERT_VALUES_EQUAL(res->ChildrenSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::Arguments);
@@ -629,35 +629,35 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Type(), TExprNode::Argument);
         UNIT_ASSERT_VALUES_EQUAL(res->Head().Head().Content(), "y");
         UNIT_ASSERT_EQUAL(res->Child(1)->Head().Child(1), res->Head().Child(0));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestApplyOuterArg) {
-        TExprContext ctx;
+        TExprContext ctx; 
         auto ast = ctx.Builder(TPositionHandle())
-            .Lambda()
-                .Param("x")
-                .Callable("Func1")
-                    .Atom(0, "p1")
-                    .Lambda(1)
-                        .Callable("Func2")
-                            .Atom(0, "ABC")
-                            .Arg(1, "x")
-                        .Seal()
-                    .Seal()
-                .Seal()
-            .Seal()
-            .Build();
-
+            .Lambda() 
+                .Param("x") 
+                .Callable("Func1") 
+                    .Atom(0, "p1") 
+                    .Lambda(1) 
+                        .Callable("Func2") 
+                            .Atom(0, "ABC") 
+                            .Arg(1, "x") 
+                        .Seal() 
+                    .Seal() 
+                .Seal() 
+            .Seal() 
+            .Build(); 
+ 
         auto res1 = ctx.Builder(TPositionHandle())
-            .Lambda()
-                .Param("y")
-                .Callable("Func3")
+            .Lambda() 
+                .Param("y") 
+                .Callable("Func3") 
                     .ApplyPartial(0, nullptr, ast->Child(1)->Child(1)->ChildPtr(1))
                     .WithNode(*ast->Head().Child(0), "y").Seal()
-                .Seal()
-            .Seal()
-            .Build();
-
+                .Seal() 
+            .Seal() 
+            .Build(); 
+ 
         UNIT_ASSERT_VALUES_EQUAL(res1->Type(), TExprNode::Lambda);
         UNIT_ASSERT_VALUES_EQUAL(res1->ChildrenSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(res1->Head().Type(), TExprNode::Arguments);
@@ -665,26 +665,26 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(res1->Head().Head().Type(), TExprNode::Argument);
         UNIT_ASSERT_VALUES_EQUAL(res1->Head().Head().Content(), "y");
         UNIT_ASSERT_EQUAL(res1->Child(1)->Head().Child(1), res1->Head().Child(0));
-
+ 
         auto atom = ctx.Builder(TPositionHandle())
-            .Atom("const")
-            .Build();
-
+            .Atom("const") 
+            .Build(); 
+ 
         auto res2 = ctx.Builder(TPositionHandle())
-            .Lambda()
-                .Callable("Func3")
+            .Lambda() 
+                .Callable("Func3") 
                     .ApplyPartial(0, nullptr, ast->Child(1)->Child(1)->ChildPtr(1))
                     .WithNode(ast->Head().Head(), TExprNode::TPtr(atom)).Seal()
-                .Seal()
-            .Seal()
-            .Build();
-
+                .Seal() 
+            .Seal() 
+            .Build(); 
+ 
         UNIT_ASSERT_VALUES_EQUAL(res2->Type(), TExprNode::Lambda);
         UNIT_ASSERT_VALUES_EQUAL(res2->ChildrenSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(res2->Head().Type(), TExprNode::Arguments);
         UNIT_ASSERT_VALUES_EQUAL(res2->Head().ChildrenSize(), 0);
         UNIT_ASSERT_EQUAL(res2->Child(1)->Head().ChildPtr(1), atom);
-    }
+    } 
 }
 
 } // namespace NYql

@@ -14,7 +14,7 @@ TLockInfo::TLockInfo(TLockLocker * locker, ui64 lockId)
     : Locker(locker)
     , LockId(lockId)
     , Counter(locker->IncCounter())
-    , CreationTime(TAppData::TimeProvider->Now())
+    , CreationTime(TAppData::TimeProvider->Now()) 
 {}
 
 TLockInfo::~TLockInfo() {
@@ -240,13 +240,13 @@ void TLockLocker::RemoveOneLock(ui64 lockTxId) {
     auto it = Locks.find(lockTxId);
     if (it != Locks.end()) {
         TLockInfo::TPtr txLock = it->second;
-
-        TDuration lifetime = TAppData::TimeProvider->Now() - txLock->GetCreationTime();
-        if (Self->TabletCounters) {
+ 
+        TDuration lifetime = TAppData::TimeProvider->Now() - txLock->GetCreationTime(); 
+        if (Self->TabletCounters) { 
             Self->IncCounter(COUNTER_LOCKS_LIFETIME, lifetime);
             Self->IncCounter(COUNTER_LOCKS_REMOVED);
-        }
-
+        } 
+ 
         if (!txLock->IsShardLock()) {
             for (const TPathId& tableId : txLock->GetAffectedTables()) {
                 Tables[tableId]->RemoveLock(txLock);
@@ -318,11 +318,11 @@ void TLockLocker::ScheduleLockCleanup(ui64 lockId, const TRowVersion& at) {
         CleanupPending.push_back(lockId);
     }
 
-    if (Self->TabletCounters) {
+    if (Self->TabletCounters) { 
         Self->IncCounter(COUNTER_LOCKS_BROKEN);
-    }
-}
-
+    } 
+} 
+ 
 // TLockLocker.TLockLimiter
 
 TLockInfo::TPtr TLockLocker::TLockLimiter::TryAddLock(ui64 lockId) {
@@ -337,10 +337,10 @@ TLockInfo::TPtr TLockLocker::TLockLimiter::TryAddLock(ui64 lockId) {
         if (oldest.Value() >= forgetTime)
             return nullptr;
 
-        if (Parent->Self->TabletCounters) {
+        if (Parent->Self->TabletCounters) { 
             Parent->Self->IncCounter(COUNTER_LOCKS_EVICTED);
-        }
-
+        } 
+ 
         Parent->RemoveOneLock(oldest.Key()); // erase LocksQueue inside
     }
 
@@ -384,10 +384,10 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
         }
     }
 
-    if (!Update->Erases.empty() && Self->TabletCounters) {
+    if (!Update->Erases.empty() && Self->TabletCounters) { 
         Self->IncCounter(COUNTER_LOCKS_ERASED, Update->Erases.size());
-    }
-
+    } 
+ 
     for (ui64 lockId : Update->Erases) {
         Y_VERIFY(!Update->HasLocks(), "Can't erase and set locks in one Tx");
         if (breakVersion)
@@ -440,24 +440,24 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
         counter = TLock::ErrorTooMuch;
     }
 
-    if (Self->TabletCounters) {
+    if (Self->TabletCounters) { 
         Self->IncCounter(COUNTER_LOCKS_ACTIVE_PER_SHARD, LocksCount());
         Self->IncCounter(COUNTER_LOCKS_BROKEN_PER_SHARD, BrokenLocksCount());
         if (Update->ShardLock) {
             Self->IncCounter(COUNTER_LOCKS_WHOLE_SHARD);
         }
-
+ 
         if (TLock::IsError(counter)) {
             if (TLock::IsBroken(counter)) {
                 Self->IncCounter(COUNTER_LOCKS_REJECT_BROKEN);
             } else {
                 Self->IncCounter(COUNTER_LOCKS_REJECTED);
             }
-        } else {
+        } else { 
             Self->IncCounter(COUNTER_LOCKS_ACQUIRED);
-        }
-    }
-
+        } 
+    } 
+ 
     // We have to tell client that there were some locks (even if we don't set them)
     TVector<TLock> out;
     out.reserve(Update->AffectedTables.size());

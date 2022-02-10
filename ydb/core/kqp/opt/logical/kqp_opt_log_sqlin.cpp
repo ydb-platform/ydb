@@ -7,7 +7,7 @@
 
 #include <ydb/library/yql/core/common_opt/yql_co_sqlin.h>
 
-namespace NKikimr::NKqp::NOpt {
+namespace NKikimr::NKqp::NOpt { 
 
 using namespace NYql;
 using namespace NYql::NDq;
@@ -145,4 +145,4 @@ TExprBase KqpRewriteSqlInToEquiJoin(const TExprBase& node, TExprContext& ctx, co
     return node;
 }
 
-} // namespace NKikimr::NKqp::NOpt
+} // namespace NKikimr::NKqp::NOpt 

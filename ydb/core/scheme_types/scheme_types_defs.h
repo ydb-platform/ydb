@@ -17,7 +17,7 @@ namespace NScheme {
 const ui32 MaxKeyValueSize = 4096;
 
 ////////////////////////////////////////////////////////
-template<typename T, typename TDerived, TTypeId TypeId_, const char* Name_>
+template<typename T, typename TDerived, TTypeId TypeId_, const char* Name_> 
 class TTypedType : public IType {
 public:
     //
@@ -41,7 +41,7 @@ public:
 
     // IType interface
     const char* GetName() const override {
-        return Name_;
+        return Name_; 
     }
 
     static constexpr ui32 GetFixedSize() {
@@ -52,9 +52,9 @@ public:
         return TRawTypeValue((void*)&value, sizeof(T), TypeId);
     }
 
-    static const char* TypeName() {
-        return Name_;
-    }
+    static const char* TypeName() { 
+        return Name_; 
+    } 
 };
 
 ////////////////////////////////////////////////////////
@@ -246,7 +246,7 @@ class TInterval : public IIntegerTypeWithKeyString<i64, NTypeIds::Interval, NNam
     xx(String4k, TSmallBoundedString, __VA_ARGS__) \
     xx(String2m, TLargeBoundedString, __VA_ARGS__) \
     xx(Utf8, TUtf8, __VA_ARGS__) \
-    xx(Yson, TYson, __VA_ARGS__) \
+    xx(Yson, TYson, __VA_ARGS__) \ 
     xx(Json, TJson, __VA_ARGS__) \
     xx(JsonDocument, TJsonDocument, __VA_ARGS__) \
     xx(Decimal, TDecimal, __VA_ARGS__) \
@@ -266,18 +266,18 @@ static inline bool IsValidMinikqlTypeId(TTypeId typeId) {
 }
 
 static inline ::TString GetTypeName(TTypeId typeId) {
-    #define getTypeName(v, t, ...) if (NTypeIds::v == typeId) return t::TypeName();
-    KIKIMR_FOREACH_MINIKQL_TYPE(getTypeName)
-    #undef getTypeName
+    #define getTypeName(v, t, ...) if (NTypeIds::v == typeId) return t::TypeName(); 
+    KIKIMR_FOREACH_MINIKQL_TYPE(getTypeName) 
+    #undef getTypeName 
     return ::TString("UnknownType(" + ToString(typeId) + ")");
-}
+} 
 
-static inline bool TryGetTypeName(TTypeId typeId, ::TString& typeName) {
-    #define getTypeName(v, t, ...) if (NTypeIds::v == typeId) { typeName = t::TypeName(); return true; }
-    KIKIMR_FOREACH_MINIKQL_TYPE(getTypeName)
-    #undef getTypeName
-    return false;
-}
-
+static inline bool TryGetTypeName(TTypeId typeId, ::TString& typeName) { 
+    #define getTypeName(v, t, ...) if (NTypeIds::v == typeId) { typeName = t::TypeName(); return true; } 
+    KIKIMR_FOREACH_MINIKQL_TYPE(getTypeName) 
+    #undef getTypeName 
+    return false; 
+} 
+ 
 } // namespace NScheme
 } // namespace NKikimr

@@ -589,7 +589,7 @@ private:
         if (flags & FlagStarted) {
             Y_VERIFY(Status);
             if (Counters) {
-                Counters->FinishProcessing(0, 0, Status->ok(), 0, TDuration::Seconds(RequestTimer.Passed()));
+                Counters->FinishProcessing(0, 0, Status->ok(), 0, TDuration::Seconds(RequestTimer.Passed())); 
             }
             DecRequest();
             flags = Flags.load(std::memory_order_acquire);

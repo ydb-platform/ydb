@@ -5,55 +5,55 @@
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
 #include <ydb/library/aclib/aclib.h>
 
-#include <util/string/subst.h>
+#include <util/string/subst.h> 
 #include <util/system/valgrind.h>
-
+ 
 #include "kicli.h"
 
 using namespace NKikimr;
 
-namespace {
+namespace { 
 
-Tests::TServer StartupKikimr(NMsgBusProxy::TMsgBusClientConfig& clientConfig,
-    const TAutoPtr<TLogBackend> logBackend = {})
-{
-    TPortManager pm;
-    const ui32 port = pm.GetPort(12001);
+Tests::TServer StartupKikimr(NMsgBusProxy::TMsgBusClientConfig& clientConfig, 
+    const TAutoPtr<TLogBackend> logBackend = {}) 
+{ 
+    TPortManager pm; 
+    const ui32 port = pm.GetPort(12001); 
     auto settings = Tests::TServerSettings(port);
     settings.SetLogBackend(logBackend);
     settings.SetEnableSystemViews(false);
     Tests::TServer Server(settings);
     Tests::TClient Client(settings);
     Client.InitRootScheme();
-    clientConfig = Client.GetClientConfig();
-    return Server;
-}
+    clientConfig = Client.GetClientConfig(); 
+    return Server; 
+} 
 
-Tests::TServer StartupKikimr(NGRpcProxy::TGRpcClientConfig& clientConfig,
+Tests::TServer StartupKikimr(NGRpcProxy::TGRpcClientConfig& clientConfig, 
                              const TAutoPtr<TLogBackend> logBackend = {},
                              const NKikimrConfig::TAppConfig &config = {})
-{
-    TPortManager pm;
-    const ui32 msgbusPort = pm.GetPort(12001);
-    const ui32 grpcPort = pm.GetPort(12002);
-
+{ 
+    TPortManager pm; 
+    const ui32 msgbusPort = pm.GetPort(12001); 
+    const ui32 grpcPort = pm.GetPort(12002); 
+ 
     auto settings = Tests::TServerSettings(msgbusPort);
     settings.SetLogBackend(logBackend);
     settings.AppConfig.CopyFrom(config);
     settings.SetEnableSystemViews(false);
     settings.SetEnableMvcc(false);
-
+ 
     Tests::TServer Server(settings);
-    Server.EnableGRpc(grpcPort);
-
+    Server.EnableGRpc(grpcPort); 
+ 
     Tests::TClient Client(settings);
     Client.InitRootScheme();
 
     clientConfig.Locator = "[::1]:" + ToString(grpcPort);
-
-    return Server;
-}
-
+ 
+    return Server; 
+} 
+ 
 struct TTestEnvironment {
     NMsgBusProxy::TMsgBusClientConfig ClientConfig;
     Tests::TServer Server;
@@ -61,7 +61,7 @@ struct TTestEnvironment {
     NKikimr::NClient::TSchemaObject DC;
     NKikimr::NClient::TSchemaObject Zoo;
     NKikimr::NClient::TSchemaObject Animals;
-
+ 
     TTestEnvironment(const std::initializer_list<NKikimr::NClient::TColumn>& columns = {
                 NClient::TKeyColumn("Id", NClient::TType::Uint64),
                 NClient::TColumn("Species", NClient::TType::Utf8),
@@ -591,12 +591,12 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
         auto updateQuery = kikimr.Query(
                         "("
-                        "(let id (Parameter 'ID (DataType 'Uint64)))"
+                        "(let id (Parameter 'ID (DataType 'Uint64)))" 
                         "(let row '('('Id id)))"
                         "(let sp (Parameter 'SPECIES (DataType 'Utf8)))"
                         "(let nm (Parameter 'NAME (DataType 'Utf8)))"
                         "(let ds (Parameter 'DESCRIPTION (DataType 'Utf8)))"
-                        "(let wt (Parameter 'WEIGHT (DataType 'Int64)))"
+                        "(let wt (Parameter 'WEIGHT (DataType 'Int64)))" 
                         "(let myUpd '("
                         "  '('Species sp)"
                         "  '('Name nm)"
@@ -609,11 +609,11 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                         ")").SyncPrepare().GetQuery();
         auto selectQuery = kikimr.Query(
                     "("
-                    "(let il (Parameter 'ITEMSLIMIT (DataType 'Uint64)))"
-                    "(let bl (Parameter 'BYTESLIMIT (DataType 'Uint64)))"
+                    "(let il (Parameter 'ITEMSLIMIT (DataType 'Uint64)))" 
+                    "(let bl (Parameter 'BYTESLIMIT (DataType 'Uint64)))" 
                     "(let range '('IncFrom '('Id (Uint64 '1) (Void))))"
                     "(let select '('Species 'Name 'Weight 'Description))"
-                    "(let options '('('ItemsLimit il) '('BytesLimit bl)))"
+                    "(let options '('('ItemsLimit il) '('BytesLimit bl)))" 
                     "(let pgmReturn (AsList"
                     "    (SetResult 'myRes (Member (SelectRange '/dc-1/Zoo/Animals range select options) 'List))"
                     "))"
@@ -635,10 +635,10 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                 TParameter("WEIGHT", (i64)500)
                             );
 
-        auto result = selectQuery.SyncExecute(
-                                TParameter("ITEMSLIMIT", (ui64)10),
-                                TParameter("BYTESLIMIT", (ui64)10000)
-                            );
+        auto result = selectQuery.SyncExecute( 
+                                TParameter("ITEMSLIMIT", (ui64)10), 
+                                TParameter("BYTESLIMIT", (ui64)10000) 
+                            ); 
         auto value = result.GetValue();
 
         UNIT_ASSERT_VALUES_EQUAL(value["myRes"].Size(), 2);
@@ -659,11 +659,11 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
         auto updateQuery = kikimr.Query(
                         "("
-                        "(let id (Parameter 'ID (DataType 'Uint64)))"
+                        "(let id (Parameter 'ID (DataType 'Uint64)))" 
                         "(let row '('('Id id)))"
                         "(let sp (Parameter 'SPECIES (DataType 'Utf8)))"
                         "(let nm (Parameter 'NAME (DataType 'Utf8)))"
-                        "(let wt (Parameter 'WEIGHT (DataType 'Int64)))"
+                        "(let wt (Parameter 'WEIGHT (DataType 'Int64)))" 
                         "(let myUpd '("
                         "  '('Species sp)"
                         "  '('Name nm)"
@@ -870,7 +870,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                         "(let row '('('Id (Uint64 '1))))"
                         "(let s (Parameter 'SPECIES (DataType 'String)))"
                         "(let n (Parameter 'NAME (DataType 'String)))"
-                        "(let w (Parameter 'WEIGHT (DataType 'Int64)))"
+                        "(let w (Parameter 'WEIGHT (DataType 'Int64)))" 
                         "(let myUpd '("
                         "  '('Species s)"
                         "  '('Name n)"
@@ -893,7 +893,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                         "(let row '('('Id (Uint64 '2))))"
                         "(let s (Parameter 'SPECIES (DataType 'String)))"
                         "(let n (Parameter 'NAME (DataType 'String)))"
-                        "(let w (Parameter 'WEIGHT (DataType 'Int64)))"
+                        "(let w (Parameter 'WEIGHT (DataType 'Int64)))" 
                         "(let myUpd '("
                         "  '('Species s)"
                         "  '('Name n)"
@@ -993,7 +993,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                         "(let row '('('Id (Uint64 '1))))"
                         "(let s (Parameter 'SPECIES (DataType 'String)))"
                         "(let n (Parameter 'NAME (DataType 'String)))"
-                        "(let w (Parameter 'WEIGHT (DataType 'Int64)))"
+                        "(let w (Parameter 'WEIGHT (DataType 'Int64)))" 
                         "(let myUpd '("
                         "  '('Species s)"
                         "  '('Name n)"
@@ -1016,7 +1016,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
         auto updateQuery = kikimr.Query(
                     "(\n"
-                    "(let id (Parameter 'ID (DataType 'Uint64)))\n"
+                    "(let id (Parameter 'ID (DataType 'Uint64)))\n" 
                     "(let row '('('Id id)))\n"
                     "(let an_type (StructType '('SPECIES (DataType 'Utf8)) '('NAME (DataType 'Utf8)) '('WEIGHT (DataType 'Int64))))\n"
                     "(let an (Parameter 'ANIMAL an_type))\n"
@@ -1077,7 +1077,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
         auto updateQuery = kikimr.Query(
                     "(\n"
-                    "(let id (Parameter 'ID (DataType 'Uint64)))\n"
+                    "(let id (Parameter 'ID (DataType 'Uint64)))\n" 
                     "(let row '('('Id id)))\n"
                     "(let an_type (StructType '('SPECIES (DataType 'Utf8)) '('NAME (DataType 'Utf8)) '('WEIGHT (DataType 'Int64))))\n"
                     "(let an (Parameter 'ANIMAL an_type))\n"
@@ -1134,7 +1134,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
         auto updateQuery = kikimr.Query(R"___(
                                         (
-                                        (let id (Parameter 'ID (DataType 'Uint64)))
+                                        (let id (Parameter 'ID (DataType 'Uint64))) 
                                         (let row '('('Id id)))
                                         (let an_type (StructType '('SPECIES (DataType 'Utf8)) '('NAME (DataType 'Utf8)) '('WEIGHT (DataType 'Int64))))
                                         (let an_opt_type (OptionalType an_type))
@@ -1218,7 +1218,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
         auto updateQuery = kikimr.Query(R"___(
                                         (
-                                        (let id (Parameter 'ID (DataType 'Uint64)))
+                                        (let id (Parameter 'ID (DataType 'Uint64))) 
                                         (let row '('('Id id)))
                                         (let an_type (StructType '('SPECIES (DataType 'Utf8)) '('NAME (DataType 'Utf8)) '('WEIGHT (DataType 'Int64))))
                                         (let an_opt_type (OptionalType an_type))
@@ -1631,9 +1631,9 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         auto query = kikimr.Query(R"___(
                                   # Check 3 tables and write if none of 3 rows already exists
                                   (
-                                  (let h1 (Parameter 'H1_PARAM (DataType 'Uint64)))
-                                  (let h2 (Parameter 'H2_PARAM (DataType 'Uint64)))
-                                  (let h3 (Parameter 'H3_PARAM (DataType 'Uint64)))
+                                  (let h1 (Parameter 'H1_PARAM (DataType 'Uint64))) 
+                                  (let h2 (Parameter 'H2_PARAM (DataType 'Uint64))) 
+                                  (let h3 (Parameter 'H3_PARAM (DataType 'Uint64))) 
                                   (let row1 '('('Hash h1)))
                                   (let row2 '('('Hash h2)))
                                   (let row3 '('('Hash h3)))
@@ -1646,19 +1646,19 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                   (let keyH3Exists (Exists res3))
                                   (let anyExists (Or keyH1Exists (Or keyH2Exists keyH3Exists)))
                                   (let pgmReturn (If anyExists
-                                      (block '(
+                                      (block '( 
                                           (let list (List (ListType (VoidType))))
                                           (let list (Append list (SetResult 'anyExists anyExists)))
                                           (return list)
-                                      ))
-                                      (block '(
+                                      )) 
+                                      (block '( 
                                           (let list (List (ListType (VoidType))))
                                           (let list (Append list (UpdateRow '/dc-1/Example/Table1 row1 '())))
                                           (let list (Append list (UpdateRow '/dc-1/Example/Table2 row2 '())))
                                           (let list (Append list (UpdateRow '/dc-1/Example/Table3 row3 '())))
                                           (let list (Append list (SetResult 'anyExists anyExists)))
                                           (return list)
-                                      ))
+                                      )) 
                                   ))
                                   (return pgmReturn)
                                   )
@@ -1707,9 +1707,9 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
         auto readQuery = kikimr.Query(R"___(
                                       (
-                                      (let h1 (Parameter 'H1_PARAM (DataType 'Uint64)))
-                                      (let h2 (Parameter 'H2_PARAM (DataType 'Uint64)))
-                                      (let h3 (Parameter 'H3_PARAM (DataType 'Uint64)))
+                                      (let h1 (Parameter 'H1_PARAM (DataType 'Uint64))) 
+                                      (let h2 (Parameter 'H2_PARAM (DataType 'Uint64))) 
+                                      (let h3 (Parameter 'H3_PARAM (DataType 'Uint64))) 
 
                                       # Read data and versions from the DB
                                       (let row1 '('('Hash h1)))
@@ -1730,7 +1730,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                       )___").SyncPrepare().GetQuery();
 
         auto updateQuery = kikimr.Query(R"___(
-                                        # Check 3 tables and write if none of 3 row versions have changed since they were read
+                                        # Check 3 tables and write if none of 3 row versions have changed since they were read 
                                         (
                                         # Helper function to extract column value and substitute non-existing
                                         # row or NULL value with the provided default value
@@ -1739,18 +1739,18 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                                     (lambda '(r) (block '(
                                                        (return (Member r name))
                                                     )))
-                                                    (block '(
+                                                    (block '( 
                                                        (return (Just defaultVal))
-                                                    ))
+                                                    )) 
                                                 ))
                                                 (let e2 (Coalesce e1 defaultVal))
                                                 (return e2)
                                             ))
                                         ))
 
-                                        (let h1 (Parameter 'H1_PARAM (DataType 'Uint64)))
-                                        (let h2 (Parameter 'H2_PARAM (DataType 'Uint64)))
-                                        (let h3 (Parameter 'H3_PARAM (DataType 'Uint64)))
+                                        (let h1 (Parameter 'H1_PARAM (DataType 'Uint64))) 
+                                        (let h2 (Parameter 'H2_PARAM (DataType 'Uint64))) 
+                                        (let h3 (Parameter 'H3_PARAM (DataType 'Uint64))) 
 
                                         (let d1 (Parameter 'D1_PARAM (DataType 'Utf8)))
                                         (let d2 (Parameter 'D2_PARAM (DataType 'Utf8)))
@@ -1769,35 +1769,35 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                         (let rv3 (Apply ExtractVal res3 'Version (Uint64 '0)))
 
                                         # Get old versions from the parameters
-                                        (let v1 (Parameter 'V1_PARAM (DataType 'Uint64)))
-                                        (let v2 (Parameter 'V2_PARAM (DataType 'Uint64)))
-                                        (let v3 (Parameter 'V3_PARAM (DataType 'Uint64)))
+                                        (let v1 (Parameter 'V1_PARAM (DataType 'Uint64))) 
+                                        (let v2 (Parameter 'V2_PARAM (DataType 'Uint64))) 
+                                        (let v3 (Parameter 'V3_PARAM (DataType 'Uint64))) 
                                         (let v1 (Coalesce v1 (Uint64 '0)))
                                         (let v2 (Coalesce v2 (Uint64 '0)))
                                         (let v3 (Coalesce v3 (Uint64 '0)))
 
                                         ### Check versions ###
                                         (let predicate (Bool 'True))
-                                        (let predicate (And predicate (Equal rv1 v1)))
-                                        (let predicate (And predicate (Equal rv2 v2)))
-                                        (let predicate (And predicate (Equal rv2 v3)))
+                                        (let predicate (And predicate (Equal rv1 v1))) 
+                                        (let predicate (And predicate (Equal rv2 v2))) 
+                                        (let predicate (And predicate (Equal rv2 v3))) 
 
 
                                         ### If versions are not changed -- do writes ###
                                         (let pgmReturn (If predicate
-                                            (block '(
+                                            (block '( 
                                             (let list (List (ListType (VoidType))))
                                                 (let list (Append list (UpdateRow '/dc-1/Example/Table1 row1 '('('Version (Increment v1))'('Data d1)))))
                                                 (let list (Append list (UpdateRow '/dc-1/Example/Table2 row2 '('('Version (Increment v2))'('Data d2)))))
                                                 (let list (Append list (UpdateRow '/dc-1/Example/Table3 row3 '('('Version (Increment v3))'('Data d3)))))
                                                 (let list (Append list (SetResult 'myRes (Utf8 '"Updated"))))
                                                 (return list)
-                                            ))
-                                            (block '(
+                                            )) 
+                                            (block '( 
                                                 (let emptyList (List (ListType (VoidType))))
                                                 (let emptyList (Append emptyList (SetResult 'myRes (Utf8 '"Version mismatch"))))
                                                 (return emptyList)
-                                            ))
+                                            )) 
                                         ))
                                         ######
 
@@ -1852,9 +1852,9 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
         auto readQuery = kikimr.Query(R"___(
                                       (
-                                      (let h1 (Parameter 'H1_PARAM (DataType 'Uint64)))
-                                      (let h2 (Parameter 'H2_PARAM (DataType 'Uint64)))
-                                      (let h3 (Parameter 'H3_PARAM (DataType 'Uint64)))
+                                      (let h1 (Parameter 'H1_PARAM (DataType 'Uint64))) 
+                                      (let h2 (Parameter 'H2_PARAM (DataType 'Uint64))) 
+                                      (let h3 (Parameter 'H3_PARAM (DataType 'Uint64))) 
 
                                       # Read data and versions from the DB
                                       (let row1 '('('Hash h1)))
@@ -1884,18 +1884,18 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                                     (lambda '(r) (block '(
                                                        (return (Member r name))
                                                     )))
-                                                    (block '(
+                                                    (block '( 
                                                        (return (Just defaultVal))
-                                                    ))
+                                                    )) 
                                                 ))
                                                 (let e2 (Coalesce e1 defaultVal))
                                                 (return e2)
                                             ))
                                         ))
 
-                                        (let h1 (Parameter 'H1_PARAM (DataType 'Uint64)))
-                                        (let h2 (Parameter 'H2_PARAM (DataType 'Uint64)))
-                                        (let h3 (Parameter 'H3_PARAM (DataType 'Uint64)))
+                                        (let h1 (Parameter 'H1_PARAM (DataType 'Uint64))) 
+                                        (let h2 (Parameter 'H2_PARAM (DataType 'Uint64))) 
+                                        (let h3 (Parameter 'H3_PARAM (DataType 'Uint64))) 
 
                                         (let d1 (Parameter 'D1_PARAM (DataType 'String)))
                                         (let d2 (Parameter 'D2_PARAM (DataType 'String)))
@@ -1914,35 +1914,35 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                         (let rv3 (Apply ExtractVal res3 'Version (Uint64 '0)))
 
                                         # Get old versions from the parameters
-                                        (let v1 (Parameter 'V1_PARAM (DataType 'Uint64)))
-                                        (let v2 (Parameter 'V2_PARAM (DataType 'Uint64)))
-                                        (let v3 (Parameter 'V3_PARAM (DataType 'Uint64)))
+                                        (let v1 (Parameter 'V1_PARAM (DataType 'Uint64))) 
+                                        (let v2 (Parameter 'V2_PARAM (DataType 'Uint64))) 
+                                        (let v3 (Parameter 'V3_PARAM (DataType 'Uint64))) 
                                         (let v1 (Coalesce v1 (Uint64 '0)))
                                         (let v2 (Coalesce v2 (Uint64 '0)))
                                         (let v3 (Coalesce v3 (Uint64 '0)))
 
                                         ### Check versions ###
                                         (let predicate (Bool 'True))
-                                        (let predicate (And predicate (Equal rv1 v1)))
-                                        (let predicate (And predicate (Equal rv2 v2)))
-                                        (let predicate (And predicate (Equal rv2 v3)))
+                                        (let predicate (And predicate (Equal rv1 v1))) 
+                                        (let predicate (And predicate (Equal rv2 v2))) 
+                                        (let predicate (And predicate (Equal rv2 v3))) 
 
 
                                         ### If versions are not changed -- do writes ###
                                         (let pgmReturn (If predicate
-                                            (block '(
+                                            (block '( 
                                             (let list (List (ListType (VoidType))))
                                                 (let list (Append list (UpdateRow '/dc-1/Example/Table1 row1 '('('Version (Increment v1))'('Data d1)))))
                                                 (let list (Append list (UpdateRow '/dc-1/Example/Table2 row2 '('('Version (Increment v2))'('Data d2)))))
                                                 (let list (Append list (UpdateRow '/dc-1/Example/Table3 row3 '('('Version (Increment v3))'('Data d3)))))
                                                 (let list (Append list (SetResult 'myRes (Utf8 '"Updated"))))
                                                 (return list)
-                                            ))
-                                            (block '(
+                                            )) 
+                                            (block '( 
                                                 (let emptyList (List (ListType (VoidType))))
                                                 (let emptyList (Append emptyList (SetResult 'myRes (Utf8 '"Version mismatch"))))
                                                 (return emptyList)
-                                            ))
+                                            )) 
                                         ))
                                         ######
 
@@ -1984,66 +1984,66 @@ Y_UNIT_TEST_SUITE(ClientLib) {
     }
 
     Y_UNIT_TEST(TestParameterTypes) {
-        using namespace NClient;
-        NMsgBusProxy::TMsgBusClientConfig clientConfig;
-        Tests::TServer server = StartupKikimr(clientConfig);
-        NClient::TKikimr kikimr(clientConfig);
-
-        auto query = kikimr.Query(R"___(
-            (
-            (let pb (Parameter 'PB (DataType 'Bool)))
+        using namespace NClient; 
+        NMsgBusProxy::TMsgBusClientConfig clientConfig; 
+        Tests::TServer server = StartupKikimr(clientConfig); 
+        NClient::TKikimr kikimr(clientConfig); 
+ 
+        auto query = kikimr.Query(R"___( 
+            ( 
+            (let pb (Parameter 'PB (DataType 'Bool))) 
             (let pui8 (Parameter 'PUI8 (DataType 'Uint8)))
-            (let pi32 (Parameter 'PI32 (DataType 'Int32)))
-            (let pui32 (Parameter 'PUI32 (DataType 'Uint32)))
-            (let pi64 (Parameter 'PI64 (DataType 'Int64)))
-            (let pui64 (Parameter 'PUI64 (DataType 'Uint64)))
-            (let pf (Parameter 'PF (DataType 'Float)))
-            (let pd (Parameter 'PD (DataType 'Double)))
+            (let pi32 (Parameter 'PI32 (DataType 'Int32))) 
+            (let pui32 (Parameter 'PUI32 (DataType 'Uint32))) 
+            (let pi64 (Parameter 'PI64 (DataType 'Int64))) 
+            (let pui64 (Parameter 'PUI64 (DataType 'Uint64))) 
+            (let pf (Parameter 'PF (DataType 'Float))) 
+            (let pd (Parameter 'PD (DataType 'Double))) 
             (let ps (Parameter 'PS (DataType 'String)))
             (let pu (Parameter 'PU (DataType 'Utf8)))
-            (return (AsList
-                (SetResult 'rb pb)
-                (SetResult 'rui8 pui8)
-                (SetResult 'ri32 pi32)
-                (SetResult 'rui32 pui32)
-                (SetResult 'ri64 pi64)
-                (SetResult 'rui64 pui64)
-                (SetResult 'rf pf)
-                (SetResult 'rd pd)
-                (SetResult 'rs ps)
-                (SetResult 'ru pu)
-            ))
-            )
-        )___").SyncPrepare().GetQuery();
-
-        TParameters parameters;
-
-        parameters["PB"] = true;
-        parameters["PUI8"] = (ui8)1;
-        parameters["PI32"] = (i32)-2;
-        parameters["PUI32"] = (ui32)3;
-        parameters["PI64"] = (i64)-4;
-        parameters["PUI64"] = (ui64)5;
-        parameters["PF"] = (float)6.5;
-        parameters["PD"] = (double)7.5;
-        parameters["PS"].Bytes("Str1");
-        parameters["PU"] = "Str2";
-
-        auto result = query.SyncExecute(parameters);
-        UNIT_ASSERT_EQUAL(result.GetStatus(), NMsgBusProxy::MSTATUS_OK);
-        auto value = result.GetValue();
-        UNIT_ASSERT_EQUAL((bool)value["rb"], true);
-        UNIT_ASSERT_EQUAL((ui8)value["rui8"], 1);
-        UNIT_ASSERT_EQUAL((i32)value["ri32"], -2);
-        UNIT_ASSERT_EQUAL((ui32)value["rui32"], 3);
-        UNIT_ASSERT_EQUAL((i64)value["ri64"], -4);
-        UNIT_ASSERT_EQUAL((ui64)value["rui64"], 5);
-        UNIT_ASSERT_EQUAL((float)value["rf"], 6.5);
-        UNIT_ASSERT_EQUAL((double)value["rd"], 7.5);
+            (return (AsList 
+                (SetResult 'rb pb) 
+                (SetResult 'rui8 pui8) 
+                (SetResult 'ri32 pi32) 
+                (SetResult 'rui32 pui32) 
+                (SetResult 'ri64 pi64) 
+                (SetResult 'rui64 pui64) 
+                (SetResult 'rf pf) 
+                (SetResult 'rd pd) 
+                (SetResult 'rs ps) 
+                (SetResult 'ru pu) 
+            )) 
+            ) 
+        )___").SyncPrepare().GetQuery(); 
+ 
+        TParameters parameters; 
+ 
+        parameters["PB"] = true; 
+        parameters["PUI8"] = (ui8)1; 
+        parameters["PI32"] = (i32)-2; 
+        parameters["PUI32"] = (ui32)3; 
+        parameters["PI64"] = (i64)-4; 
+        parameters["PUI64"] = (ui64)5; 
+        parameters["PF"] = (float)6.5; 
+        parameters["PD"] = (double)7.5; 
+        parameters["PS"].Bytes("Str1"); 
+        parameters["PU"] = "Str2"; 
+ 
+        auto result = query.SyncExecute(parameters); 
+        UNIT_ASSERT_EQUAL(result.GetStatus(), NMsgBusProxy::MSTATUS_OK); 
+        auto value = result.GetValue(); 
+        UNIT_ASSERT_EQUAL((bool)value["rb"], true); 
+        UNIT_ASSERT_EQUAL((ui8)value["rui8"], 1); 
+        UNIT_ASSERT_EQUAL((i32)value["ri32"], -2); 
+        UNIT_ASSERT_EQUAL((ui32)value["rui32"], 3); 
+        UNIT_ASSERT_EQUAL((i64)value["ri64"], -4); 
+        UNIT_ASSERT_EQUAL((ui64)value["rui64"], 5); 
+        UNIT_ASSERT_EQUAL((float)value["rf"], 6.5); 
+        UNIT_ASSERT_EQUAL((double)value["rd"], 7.5); 
         UNIT_ASSERT_EQUAL((TString)value["rs"], "Str1");
         UNIT_ASSERT_EQUAL((TString)value["ru"], "Str2");
-    }
-
+    } 
+ 
 //    Y_UNIT_TEST(Wrongdoing1) {
 //        using namespace NClient;
 //        TString type = R"___(
@@ -2136,7 +2136,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 //        Y_UNUSED(result);
 //    }
 }
-
+ 
 NKikimrTxUserProxy::TKeyRange MakeRange(const TVector<TString> from, const TVector<TString> to,
                                         bool fromInclusive, bool toInclusive)
 {

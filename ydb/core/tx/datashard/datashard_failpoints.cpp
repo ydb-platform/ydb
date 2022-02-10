@@ -4,6 +4,6 @@ namespace NKikimr {
 namespace NDataShard {
 
 TCancelTxFailPoint gCancelTxFailPoint;
-TSkipRepliesFailPoint gSkipRepliesFailPoint;
+TSkipRepliesFailPoint gSkipRepliesFailPoint; 
 
 }}

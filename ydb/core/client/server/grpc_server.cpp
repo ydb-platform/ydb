@@ -74,7 +74,7 @@ public:
         , StateFunc(&TSimpleRequest::RequestDone)
         , RequestSize(0)
         , ResponseSize(0)
-        , ResponseStatus(0)
+        , ResponseStatus(0) 
         , InProgress_(false)
     {
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] created request Name# %s", this, Name);
@@ -86,8 +86,8 @@ public:
             if (!Server->IsShuttingDown()) {
                 LOG_ERROR(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] request destroyed with InProgress state Name# %s", this, Name);
             }
-            Counters->FinishProcessing(RequestSize, ResponseSize, false, ResponseStatus,
-                TDuration::Seconds(RequestTimer.Passed()));
+            Counters->FinishProcessing(RequestSize, ResponseSize, false, ResponseStatus, 
+                TDuration::Seconds(RequestTimer.Passed())); 
             Server->DecRequest();
         }
     }
@@ -131,7 +131,7 @@ public:
     //! Send reply.
     void Reply(const NKikimrClient::TResponse& resp) override {
         if (const TOut *x = dynamic_cast<const TOut *>(&resp)) {
-            Finish(*x, 0);
+            Finish(*x, 0); 
         } else {
             ReplyError(resp.GetErrorReason());
         }
@@ -139,7 +139,7 @@ public:
 
     void Reply(const NKikimrClient::TBsTestLoadResponse& resp) override {
         if (const TOut *x = dynamic_cast<const TOut *>(&resp)) {
-            Finish(*x, 0);
+            Finish(*x, 0); 
         } else {
             ReplyError("request failed");
         }
@@ -147,7 +147,7 @@ public:
 
     void Reply(const NKikimrClient::TJSON& resp) override {
         try {
-            Finish(dynamic_cast<const TOut&>(resp), 0);
+            Finish(dynamic_cast<const TOut&>(resp), 0); 
         } catch (const std::bad_cast&) {
             Y_FAIL("unexpected response type generated");
         }
@@ -155,7 +155,7 @@ public:
 
     void Reply(const NKikimrClient::TNodeRegistrationResponse& resp) override {
         try {
-            Finish(dynamic_cast<const TOut&>(resp), 0);
+            Finish(dynamic_cast<const TOut&>(resp), 0); 
         } catch (const std::bad_cast&) {
             Y_FAIL("unexpected response type generated");
         }
@@ -163,7 +163,7 @@ public:
 
     void Reply(const NKikimrClient::TCmsResponse& resp) override {
         try {
-            Finish(dynamic_cast<const TOut&>(resp), 0);
+            Finish(dynamic_cast<const TOut&>(resp), 0); 
         } catch (const std::bad_cast&) {
             Y_FAIL("unexpected response type generated");
         }
@@ -171,7 +171,7 @@ public:
 
     void Reply(const NKikimrClient::TSqsResponse& resp) override {
         try {
-            Finish(dynamic_cast<const TOut&>(resp), 0);
+            Finish(dynamic_cast<const TOut&>(resp), 0); 
         } catch (const std::bad_cast&) {
             Y_FAIL("unexpected response type generated");
         }
@@ -179,7 +179,7 @@ public:
 
     void Reply(const NKikimrClient::TS3ListingResponse& resp) override {
         try {
-            Finish(dynamic_cast<const TOut&>(resp), 0);
+            Finish(dynamic_cast<const TOut&>(resp), 0); 
         } catch (const std::bad_cast&) {
             Y_FAIL("unexpected response type generated");
         }
@@ -187,7 +187,7 @@ public:
 
     void Reply(const NKikimrClient::TConsoleResponse& resp) override {
         try {
-            Finish(dynamic_cast<const TOut&>(resp), 0);
+            Finish(dynamic_cast<const TOut&>(resp), 0); 
         } catch (const std::bad_cast&) {
             Y_FAIL("unexpected response type generated");
         }
@@ -197,7 +197,7 @@ public:
     void ReplyError(const TString& reason) override {
         TOut resp;
         GenerateErrorResponse(resp, reason);
-        Finish(resp, 0);
+        Finish(resp, 0); 
     }
 
     static void GenerateErrorResponse(NKikimrClient::TResponse& resp, const TString& reason) {
@@ -232,7 +232,7 @@ public:
     }
 
     static void GenerateErrorResponse(NKikimrClient::TConsoleResponse& resp, const TString& reason) {
-        resp.MutableStatus()->SetCode(Ydb::StatusIds::GENERIC_ERROR);
+        resp.MutableStatus()->SetCode(Ydb::StatusIds::GENERIC_ERROR); 
         resp.MutableStatus()->SetReason(reason);
     }
 
@@ -249,7 +249,7 @@ private:
         return static_cast<IQueueEvent*>(this);
     }
 
-    void Finish(const TOut& resp, ui32 status) {
+    void Finish(const TOut& resp, ui32 status) { 
         auto makeResponseString = [&] {
             TString x;
             google::protobuf::TextFormat::Printer printer;
@@ -260,7 +260,7 @@ private:
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] issuing response Name# %s data# %s peer# %s", this,
             Name, makeResponseString().data(), Context.peer().c_str());
         ResponseSize = resp.ByteSize();
-        ResponseStatus = status;
+        ResponseStatus = status; 
         StateFunc = &TSimpleRequest::FinishDone;
         Writer->Finish(resp, Status::OK, GetGRpcTag());
     }
@@ -328,8 +328,8 @@ private:
     bool FinishDone(bool ok) {
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] finished request Name# %s ok# %s peer# %s", this,
             Name, ok ? "true" : "false", Context.peer().c_str());
-        Counters->FinishProcessing(RequestSize, ResponseSize, ok, ResponseStatus,
-            TDuration::Seconds(RequestTimer.Passed()));
+        Counters->FinishProcessing(RequestSize, ResponseSize, ok, ResponseStatus, 
+            TDuration::Seconds(RequestTimer.Passed())); 
         Server->DecRequest();
         InProgress_ = false;
 
@@ -359,7 +359,7 @@ private:
     TIn Request;
     ui32 RequestSize;
     ui32 ResponseSize;
-    ui32 ResponseStatus;
+    ui32 ResponseStatus; 
     THPTimer RequestTimer;
 
     TMaybe<NMsgBusProxy::TBusMessageContext> BusContext;
@@ -436,7 +436,7 @@ void TGRpcService::SetupIncomingRequests() {
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, ctx->GetPeer()); \
             ACTION; \
         }, &NKikimrClient::TGRpcServer::AsyncService::Request ## NAME, \
-        *ActorSystem, #NAME, getCounterBlock("legacy", #NAME)))->Start();
+        *ActorSystem, #NAME, getCounterBlock("legacy", #NAME)))->Start(); 
 
 #define ADD_ACTOR_REQUEST(NAME, TYPE, MTYPE) \
     ADD_REQUEST(NAME, TYPE, TResponse, { \

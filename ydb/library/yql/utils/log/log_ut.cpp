@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
 {
     Y_UNIT_TEST(Format) {
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out); 
         YqlLogger().UpdateProcInfo("my_proc");
 
         TString message = "some performance info";
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
 
     Y_UNIT_TEST(Levels) {
         TStringStream out;
-        YqlLoggerScope logger(&out); // default log level INFO
+        YqlLoggerScope logger(&out); // default log level INFO 
 
         YQL_LOG(FATAL) << "fatal message";
         YQL_LOG(ERROR) << "error message";
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
 
     Y_UNIT_TEST(Components) {
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out); 
 
         YQL_CLOG(INFO, Default) << "default message";
         YQL_CLOG(INFO, Core) << "core message";
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
 
     Y_UNIT_TEST(Conditional) {
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out); 
 
         YQL_LOG_IF(INFO, true) << "default info message";
         YQL_LOG_IF(INFO, false) << "must not be logged";
@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
 
     Y_UNIT_TEST(Contexts) {
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out); 
 
         UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "");
         YQL_LOG(INFO) << "level0 - begin";
@@ -282,7 +282,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
 
     Y_UNIT_TEST(ContextOverride) {
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out); 
 
         UNIT_ASSERT_STRINGS_EQUAL(CurrentLogContextPath(), "");
         {
@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
 
     Y_UNIT_TEST(Profiling) {
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out); 
 
         {
             YQL_PROFILE_SCOPE(INFO, "scope1");
@@ -411,7 +411,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
 
     Y_UNIT_TEST(ProfilingFuncs) {
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out); 
 
         Func1(1, 2);
         Func2(1, 2);
@@ -451,14 +451,14 @@ Y_UNIT_TEST_SUITE(TLogTest)
         size_t limit = 0;
         {
             TStringStream out;
-            YqlLoggerScope logger(&out);
+            YqlLoggerScope logger(&out); 
             YqlLogger().UpdateProcInfo("proc");
             YQL_CLOG(INFO, Core) << "message1";
             limit = out.Str().length() * 2 - 7; // Not more than 2 log lines
         }
 
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out); 
         YqlLogger().UpdateProcInfo("proc");
         YqlLogger().SetMaxLogLimit(limit);
 
@@ -493,14 +493,14 @@ Y_UNIT_TEST_SUITE(TLogTest)
         size_t limit = 0;
         {
             TStringStream out;
-            YqlLoggerScope logger(&out);
+            YqlLoggerScope logger(&out); 
             YqlLogger().UpdateProcInfo("proc");
             YQL_CLOG(INFO, Core) << "message1";
             limit = out.Str().length() * 2 - 7; // Not more than 2 log lines
         }
 
         TStringStream out;
-        YqlLoggerScope logger(&out);
+        YqlLoggerScope logger(&out); 
         YqlLogger().UpdateProcInfo("proc");
         YqlLogger().SetMaxLogLimit(limit);
 

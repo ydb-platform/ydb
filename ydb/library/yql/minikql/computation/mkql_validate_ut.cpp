@@ -33,8 +33,8 @@ NUdf::TUnboxedValue ToUnboxedValue(const T& val) {
 
 NUdf::TUnboxedValue ToUnboxedValue(const TString& val) {
     return MakeString(val);
-}
-
+} 
+ 
 NUdf::TUnboxedValue ToUnboxedValue(const NUdf::IBoxedValuePtr& val) {
     return NUdf::TUnboxedValuePod(NUdf::IBoxedValuePtr(val));
 }

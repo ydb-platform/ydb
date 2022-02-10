@@ -114,33 +114,33 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Tagged>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
         if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
-        }
-
+        } 
+ 
         if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
         auto underlyingType = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
         if (!EnsureInspectableType(input->Child(0)->Pos(), *underlyingType, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
         auto tag = input->Child(1)->Content();
-
+ 
         auto taggedType = ctx.Expr.MakeType<TTaggedExprType>(underlyingType, tag);
         if (!taggedType->Validate(input->Pos(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
         input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(taggedType));
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    template <>
+        return IGraphTransformer::TStatus::Ok; 
+    } 
+ 
+    template <> 
     IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Error>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 4, ctx.Expr)) {
@@ -898,10 +898,10 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        // TODO: Collect type annotation directly from AST.
+        // TODO: Collect type annotation directly from AST. 
         auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(ctx.Types);
         auto typeTransformer = CreateTypeAnnotationTransformer(callableTransformer, ctx.Types);
-        if (InstantTransform(*typeTransformer, exprRoot, ctx.Expr) != IGraphTransformer::TStatus::Ok) {
+        if (InstantTransform(*typeTransformer, exprRoot, ctx.Expr) != IGraphTransformer::TStatus::Ok) { 
             return IGraphTransformer::TStatus::Error;
         }
 

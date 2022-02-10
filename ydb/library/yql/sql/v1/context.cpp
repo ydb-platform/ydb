@@ -3,11 +3,11 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/utils/yql_paths.h>
-
-#include <util/folder/pathsplit.h>
+ 
+#include <util/folder/pathsplit.h> 
 #include <util/string/join.h>
 #include <util/stream/null.h>
-
+ 
 #ifdef GetMessage
 #undef GetMessage
 #endif
@@ -16,14 +16,14 @@ using namespace NYql;
 
 namespace NSQLTranslationV1 {
 
-namespace {
-
+namespace { 
+ 
 TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferredAtom& path) {
     Y_UNUSED(ctx);
-    if (prefixPath.empty()) {
+    if (prefixPath.empty()) { 
         return path.Build();
-    }
-
+    } 
+ 
     if (path.GetLiteral()) {
         return BuildQuotedAtom(path.Build()->GetPos(), BuildTablePath(prefixPath, *path.GetLiteral()));
     }
@@ -31,14 +31,14 @@ TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferre
     auto pathNode = path.Build();
     pathNode = new TCallNodeImpl(pathNode->GetPos(), "String", { pathNode });
     auto prefixNode = BuildLiteralRawString(pathNode->GetPos(), TString(prefixPath));
-
+ 
     TNodePtr buildPathNode = new TCallNodeImpl(pathNode->GetPos(), "BuildTablePath", { prefixNode, pathNode });
-
+ 
     TDeferredAtom result;
     MakeTableFromExpression(ctx, buildPathNode, result);
     return result.Build();
-}
-
+} 
+ 
 typedef bool TContext::*TPragmaField;
 
 THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
@@ -63,17 +63,17 @@ THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
     {"AnsiInForEmptyOrNullableItemsCollections", &TContext::AnsiInForEmptyOrNullableItemsCollections},
 };
 
-} // namespace
-
+} // namespace 
+ 
 TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
                    TIssues& issues)
     : ClusterMapping(settings.ClusterMapping)
-    , PathPrefix(settings.PathPrefix)
-    , ClusterPathPrefixes(settings.ClusterPathPrefixes)
-    , Settings(settings)
+    , PathPrefix(settings.PathPrefix) 
+    , ClusterPathPrefixes(settings.ClusterPathPrefixes) 
+    , Settings(settings) 
     , Pool(new TMemoryPool(4096))
     , Issues(issues)
-    , IncrementMonCounterFunction(settings.IncrementCounter)
+    , IncrementMonCounterFunction(settings.IncrementCounter) 
     , HasPendingErrors(false)
     , DqEngineEnable(Settings.DqDefaultAuto->Allow())
     , AnsiQuotedIdentifiers(settings.AnsiLexer)
@@ -190,7 +190,7 @@ IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TP
         }
     }
 
-    Issues.AddIssue(TIssue(pos, TString()));
+    Issues.AddIssue(TIssue(pos, TString())); 
     auto& curIssue = Issues.back();
     curIssue.Severity = severity;
     curIssue.IssueCode = code;
@@ -199,47 +199,47 @@ IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TP
 }
 
 bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
-    if (arg.Defined()) {
+    if (arg.Defined()) { 
         if (*arg == YtProviderName
             || *arg == KikimrProviderName
             || *arg == RtmrProviderName
             )
-        {
-            ProviderPathPrefixes[*arg] = value;
-            return true;
-        }
-
+        { 
+            ProviderPathPrefixes[*arg] = value; 
+            return true; 
+        } 
+ 
         TString normalizedClusterName;
         if (!GetClusterProvider(*arg, normalizedClusterName)) {
             Error() << "Unknown cluster or provider: " << *arg;
-            IncrementMonCounter("sql_errors", "BadPragmaValue");
-            return false;
-        }
-
+            IncrementMonCounter("sql_errors", "BadPragmaValue"); 
+            return false; 
+        } 
+ 
         ClusterPathPrefixes[normalizedClusterName] = value;
-    } else {
-        PathPrefix = value;
-    }
-
-    return true;
-}
-
+    } else { 
+        PathPrefix = value; 
+    } 
+ 
+    return true; 
+} 
+ 
 TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path) {
     auto* clusterPrefix = cluster.GetLiteral() ? ClusterPathPrefixes.FindPtr(*cluster.GetLiteral()) : nullptr;
-    if (clusterPrefix && !clusterPrefix->empty()) {
-        return AddTablePathPrefix(*this, *clusterPrefix, path);
-    } else {
+    if (clusterPrefix && !clusterPrefix->empty()) { 
+        return AddTablePathPrefix(*this, *clusterPrefix, path); 
+    } else { 
         auto* providerPrefix = ProviderPathPrefixes.FindPtr(service);
-        if (providerPrefix && !providerPrefix->empty()) {
-            return AddTablePathPrefix(*this, *providerPrefix, path);
+        if (providerPrefix && !providerPrefix->empty()) { 
+            return AddTablePathPrefix(*this, *providerPrefix, path); 
         } else if (!PathPrefix.empty()) {
-            return AddTablePathPrefix(*this, PathPrefix, path);
-        }
-
+            return AddTablePathPrefix(*this, PathPrefix, path); 
+        } 
+ 
         return path.Build();
-    }
-}
-
+    } 
+} 
+ 
 TNodePtr TContext::UniversalAlias(const TString& baseName, TNodePtr&& node) {
     auto alias = MakeName(baseName);
     UniversalAliases.emplace(alias, node);
@@ -494,13 +494,13 @@ TString TTranslation::PushNamedNode(TPosition namePos, const TString& name, cons
     if (mapIt == Ctx.Scoped->NamedNodes.end()) {
         auto result = Ctx.Scoped->NamedNodes.insert(std::make_pair(resultName, TDeque<TNodeWithUsageInfoPtr>()));
         Y_VERIFY_DEBUG(result.second);
-        mapIt = result.first;
+        mapIt = result.first; 
     }
-
+ 
     mapIt->second.push_front(MakeIntrusive<TNodeWithUsageInfo>(node, namePos, Ctx.ScopeLevel));
     return resultName;
-}
-
+} 
+ 
 TString TTranslation::PushNamedNode(NYql::TPosition namePos, const TString &name, NSQLTranslationV1::TNodePtr node) {
     return PushNamedNode(namePos, name, [node](const TString&) { return node; });
 }
@@ -521,7 +521,7 @@ void TTranslation::PopNamedNode(const TString& name) {
         Ctx.Warning(top->NamePos, TIssuesIds::YQL_UNUSED_SYMBOL) << "Symbol " << name << " is not used";
     }
     mapIt->second.pop_front();
-    if (mapIt->second.empty()) {
+    if (mapIt->second.empty()) { 
         Ctx.Scoped->NamedNodes.erase(mapIt);
     }
 }

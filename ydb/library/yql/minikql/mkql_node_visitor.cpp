@@ -308,7 +308,7 @@ void TExploringNodeVisitor::Visit(TTypeType& node) {
 }
 
 void TExploringNodeVisitor::Visit(TVoidType& node) {
-    AddChildNode(&node, *node.GetType());
+    AddChildNode(&node, *node.GetType()); 
 }
 
 void TExploringNodeVisitor::Visit(TNullType& node) {
@@ -324,66 +324,66 @@ void TExploringNodeVisitor::Visit(TEmptyDictType& node) {
 }
 
 void TExploringNodeVisitor::Visit(TDataType& node) {
-    AddChildNode(&node, *node.GetType());
+    AddChildNode(&node, *node.GetType()); 
 }
 
 void TExploringNodeVisitor::Visit(TStructType& node) {
-    AddChildNode(&node, *node.GetType());
+    AddChildNode(&node, *node.GetType()); 
     for (ui32 i = 0, e = node.GetMembersCount(); i < e; ++i) {
-        AddChildNode(&node, *node.GetMemberType(i));
+        AddChildNode(&node, *node.GetMemberType(i)); 
     }
 }
 
 void TExploringNodeVisitor::Visit(TListType& node) {
-    AddChildNode(&node, *node.GetType());
-    AddChildNode(&node, *node.GetItemType());
+    AddChildNode(&node, *node.GetType()); 
+    AddChildNode(&node, *node.GetItemType()); 
 }
 
 void TExploringNodeVisitor::Visit(TOptionalType& node) {
-    AddChildNode(&node, *node.GetType());
-    AddChildNode(&node, *node.GetItemType());
+    AddChildNode(&node, *node.GetType()); 
+    AddChildNode(&node, *node.GetItemType()); 
 }
 
 void TExploringNodeVisitor::Visit(TDictType& node) {
-    AddChildNode(&node, *node.GetType());
-    AddChildNode(&node, *node.GetKeyType());
-    AddChildNode(&node, *node.GetPayloadType());
+    AddChildNode(&node, *node.GetType()); 
+    AddChildNode(&node, *node.GetKeyType()); 
+    AddChildNode(&node, *node.GetPayloadType()); 
 }
 
 void TExploringNodeVisitor::Visit(TCallableType& node) {
-    AddChildNode(&node, *node.GetType());
-    AddChildNode(&node, *node.GetReturnType());
+    AddChildNode(&node, *node.GetType()); 
+    AddChildNode(&node, *node.GetReturnType()); 
     for (ui32 i = 0, e = node.GetArgumentsCount(); i < e; ++i) {
-        AddChildNode(&node, *node.GetArgumentType(i));
+        AddChildNode(&node, *node.GetArgumentType(i)); 
     }
 
     if (node.GetPayload()) {
-        AddChildNode(&node, *node.GetPayload());
+        AddChildNode(&node, *node.GetPayload()); 
     }
 }
 
 void TExploringNodeVisitor::Visit(TAnyType& node) {
-    AddChildNode(&node, *node.GetType());
+    AddChildNode(&node, *node.GetType()); 
 }
 
 void TExploringNodeVisitor::Visit(TTupleType& node) {
-    AddChildNode(&node, *node.GetType());
+    AddChildNode(&node, *node.GetType()); 
     for (ui32 i = 0, e = node.GetElementsCount(); i < e; ++i) {
-        AddChildNode(&node, *node.GetElementType(i));
+        AddChildNode(&node, *node.GetElementType(i)); 
     }
 }
 
 void TExploringNodeVisitor::Visit(TResourceType& node) {
-    AddChildNode(&node, *node.GetType());
+    AddChildNode(&node, *node.GetType()); 
 }
 
 void TExploringNodeVisitor::Visit(TVariantType& node) {
-    AddChildNode(&node, *node.GetType());
-    AddChildNode(&node, *node.GetUnderlyingType());
+    AddChildNode(&node, *node.GetType()); 
+    AddChildNode(&node, *node.GetUnderlyingType()); 
 }
 
 void TExploringNodeVisitor::Visit(TVoid& node) {
-    AddChildNode(&node, *node.GetType());
+    AddChildNode(&node, *node.GetType()); 
 }
 
 void TExploringNodeVisitor::Visit(TNull& node) {
@@ -399,71 +399,71 @@ void TExploringNodeVisitor::Visit(TEmptyDict& node) {
 }
 
 void TExploringNodeVisitor::Visit(TDataLiteral& node) {
-    AddChildNode(&node, *node.GetType());
+    AddChildNode(&node, *node.GetType()); 
 }
 
 void TExploringNodeVisitor::Visit(TStructLiteral& node) {
-    AddChildNode(&node, *node.GetType());
+    AddChildNode(&node, *node.GetType()); 
     for (ui32 i = 0, e = node.GetValuesCount(); i < e; ++i) {
-        AddChildNode(&node, *node.GetValue(i).GetNode());
+        AddChildNode(&node, *node.GetValue(i).GetNode()); 
     }
 }
 
 void TExploringNodeVisitor::Visit(TListLiteral& node) {
-    AddChildNode(&node, *node.GetType());
+    AddChildNode(&node, *node.GetType()); 
     for (ui32 i = 0; i < node.GetItemsCount(); ++i) {
         AddChildNode(&node, *node.GetItems()[i].GetNode());
     }
 }
 
 void TExploringNodeVisitor::Visit(TOptionalLiteral& node) {
-    AddChildNode(&node, *node.GetType());
+    AddChildNode(&node, *node.GetType()); 
     if (node.HasItem()) {
-        AddChildNode(&node, *node.GetItem().GetNode());
+        AddChildNode(&node, *node.GetItem().GetNode()); 
     }
 }
 
 void TExploringNodeVisitor::Visit(TDictLiteral& node) {
-    AddChildNode(&node, *node.GetType());
+    AddChildNode(&node, *node.GetType()); 
     for (ui32 i = 0, e = node.GetItemsCount(); i < e; ++i) {
         auto item = node.GetItem(i);
-        AddChildNode(&node, *item.first.GetNode());
-        AddChildNode(&node, *item.second.GetNode());
+        AddChildNode(&node, *item.first.GetNode()); 
+        AddChildNode(&node, *item.second.GetNode()); 
     }
 }
 
 void TExploringNodeVisitor::Visit(TCallable& node) {
-    AddChildNode(&node, *node.GetType());
+    AddChildNode(&node, *node.GetType()); 
     for (ui32 i = 0, e = node.GetInputsCount(); i < e; ++i) {
-        AddChildNode(&node, *node.GetInput(i).GetNode());
+        AddChildNode(&node, *node.GetInput(i).GetNode()); 
     }
 
     if (node.HasResult())
-        AddChildNode(&node, *node.GetResult().GetNode());
+        AddChildNode(&node, *node.GetResult().GetNode()); 
 }
 
 void TExploringNodeVisitor::Visit(TAny& node) {
-    AddChildNode(&node, *node.GetType());
+    AddChildNode(&node, *node.GetType()); 
     if (node.HasItem()) {
         AddChildNode(&node, *node.GetItem().GetNode());
     }
 }
 
 void TExploringNodeVisitor::Visit(TTupleLiteral& node) {
-    AddChildNode(&node, *node.GetType());
+    AddChildNode(&node, *node.GetType()); 
     for (ui32 i = 0, e = node.GetValuesCount(); i < e; ++i) {
-        AddChildNode(&node, *node.GetValue(i).GetNode());
+        AddChildNode(&node, *node.GetValue(i).GetNode()); 
     }
 }
 
 void TExploringNodeVisitor::Visit(TVariantLiteral& node) {
-    AddChildNode(&node, *node.GetType());
-    AddChildNode(&node, *node.GetItem().GetNode());
+    AddChildNode(&node, *node.GetType()); 
+    AddChildNode(&node, *node.GetItem().GetNode()); 
 }
 
 void TExploringNodeVisitor::Visit(TStreamType& node) {
-    AddChildNode(&node, *node.GetType());
-    AddChildNode(&node, *node.GetItemType());
+    AddChildNode(&node, *node.GetType()); 
+    AddChildNode(&node, *node.GetItemType()); 
 }
 
 void TExploringNodeVisitor::Visit(TFlowType& node) {
@@ -481,41 +481,41 @@ void TExploringNodeVisitor::Visit(TBlockType& node) {
     AddChildNode(&node, *node.GetItemType());
 }
 
-void TExploringNodeVisitor::AddChildNode(TNode* parent, TNode& child) {
-    Stack->push_back(&child);
-
-    if (BuildConsumersMap) {
-        if (parent != nullptr) {
-            ConsumersMap[&child].push_back(parent);
-        } else {
-            ConsumersMap[&child] = {};
-        }
-    }
+void TExploringNodeVisitor::AddChildNode(TNode* parent, TNode& child) { 
+    Stack->push_back(&child); 
+ 
+    if (BuildConsumersMap) { 
+        if (parent != nullptr) { 
+            ConsumersMap[&child].push_back(parent); 
+        } else { 
+            ConsumersMap[&child] = {}; 
+        } 
+    } 
 }
 
 void TExploringNodeVisitor::Clear() {
     NodeList.clear();
     Stack = nullptr;
-    ConsumersMap.clear();
+    ConsumersMap.clear(); 
 }
 
 void TExploringNodeVisitor::Walk(TNode* root, const TTypeEnvironment& env, const std::vector<TNode*>& terminalNodes,
-    bool buildConsumersMap, size_t nodesCountHint)
-{
-    BuildConsumersMap = buildConsumersMap;
-
+    bool buildConsumersMap, size_t nodesCountHint) 
+{ 
+    BuildConsumersMap = buildConsumersMap; 
+ 
     Clear();
-
-    if (BuildConsumersMap && nodesCountHint) {
-        ConsumersMap.reserve(nodesCountHint);
-    }
-
+ 
+    if (BuildConsumersMap && nodesCountHint) { 
+        ConsumersMap.reserve(nodesCountHint); 
+    } 
+ 
     Stack = &env.GetNodeStack();
     Stack->clear();
-    AddChildNode(nullptr, *root);
+    AddChildNode(nullptr, *root); 
     while (!Stack->empty()) {
         auto node = Stack->back();
-
+ 
         if (node->GetCookie() == 0) {
             node->SetCookie(IS_NODE_ENTERED);
 
@@ -546,13 +546,13 @@ const std::vector<TNode*>& TExploringNodeVisitor::GetNodes() {
     return NodeList;
 }
 
-const TExploringNodeVisitor::TNodesVec& TExploringNodeVisitor::GetConsumerNodes(TNode& node) {
-    Y_VERIFY(BuildConsumersMap);
+const TExploringNodeVisitor::TNodesVec& TExploringNodeVisitor::GetConsumerNodes(TNode& node) { 
+    Y_VERIFY(BuildConsumersMap); 
     const auto consumers = ConsumersMap.find(&node);
     Y_VERIFY(consumers != ConsumersMap.cend());
     return consumers->second;
-}
-
+} 
+ 
 template <bool InPlace>
 TRuntimeNode SinglePassVisitCallablesImpl(TRuntimeNode root, TExploringNodeVisitor& explorer,
     const TCallableVisitFuncProvider& funcProvider, const TTypeEnvironment& env, bool& wereChanges)

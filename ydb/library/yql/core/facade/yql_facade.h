@@ -46,7 +46,7 @@ public:
 
     void AddUserDataTable(const TUserDataTable& userDataTable);
     void AddCredentialsTable(TCredentialTablePtr credentialTable);
-    void SetUserCredentials(const TUserCredentials& userCredentials);
+    void SetUserCredentials(const TUserCredentials& userCredentials); 
     void SetGatewaysConfig(const TGatewaysConfig* gatewaysConfig);
     void SetModules(IModuleResolver::TPtr modules);
     void SetUdfResolver(IUdfResolver::TPtr udfResolver);
@@ -72,7 +72,7 @@ private:
     TVector<TDataProviderInitializer> DataProvidersInit_;
     TUserDataTable UserDataTable_;
     TVector<TCredentialTablePtr> CredentialTables_;
-    TUserCredentials UserCredentials_;
+    TUserCredentials UserCredentials_; 
     const TGatewaysConfig* GatewaysConfig_;
     IModuleResolver::TPtr Modules_;
     IUdfResolver::TPtr UdfResolver_;
@@ -98,7 +98,7 @@ public:
 
     bool ParseYql();
     bool ParseSql();
-    bool ParseSql(const NSQLTranslation::TTranslationSettings& settings);
+    bool ParseSql(const NSQLTranslation::TTranslationSettings& settings); 
 
     bool Compile(const TString& username);
 
@@ -177,7 +177,7 @@ public:
     }
 
     void Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanPlan = false);
-
+ 
     inline void PrintErrorsTo(IOutputStream& out) const {
         if (ExprCtx_) {
             ExprCtx_->IssueManager.GetIssues().PrintWithProgramTo(out, Filename_, SourceCode_);
@@ -205,16 +205,16 @@ public:
         return ResultProviderConfig_->CommittedResults;
     }
 
-    TMaybe<TString> GetQueryAst();
-    TMaybe<TString> GetQueryPlan();
-
+    TMaybe<TString> GetQueryAst(); 
+    TMaybe<TString> GetQueryPlan(); 
+ 
     void SetDiagnosticFormat(NYson::EYsonFormat format) {
         DiagnosticFormat_ = format;
     }
 
-    TMaybe<TString> GetDiagnostics();
+    TMaybe<TString> GetDiagnostics(); 
     IGraphTransformer::TStatistics GetRawDiagnostics();
-
+ 
     TMaybe<TString> GetTasksInfo();
 
     TMaybe<TString> GetStatistics(bool totalOnly = false);
@@ -226,7 +226,7 @@ public:
 
     inline IOutputStream* ExprStream() const { return ExprStream_; }
     inline IOutputStream* PlanStream() const { return PlanStream_; }
-
+ 
     NYson::EYsonFormat GetResultFormat() const { return ResultFormat_; }
     NYson::EYsonFormat GetOutputFormat() const { return OutputFormat_; }
 
@@ -301,7 +301,7 @@ private:
         const TVector<TDataProviderInitializer>& dataProvidersInit,
         const TUserDataTable& userDataTable,
         const TVector<TCredentialTablePtr>& credentialTables,
-        const TUserCredentials& userCredentials,
+        const TUserCredentials& userCredentials, 
         const IModuleResolver::TPtr& modules,
         const IUdfResolver::TPtr& udfResolver,
         const TUdfIndex::TPtr& udfIndex,
@@ -317,17 +317,17 @@ private:
     TTypeAnnotationContextPtr BuildTypeAnnotationContext(const TString& username);
     TTypeAnnotationContextPtr GetAnnotationContext() const;
     TTypeAnnotationContextPtr ProvideAnnotationContext(const TString& username);
-    bool CollectUsedClusters();
-
+    bool CollectUsedClusters(); 
+ 
     NThreading::TFuture<void> OpenSession(const TString& username);
 
     void CleanupLastSession();
     void CloseLastSession();
 
-    TFutureStatus RemoteKikimrValidate(const TString& cluster);
-    TFutureStatus RemoteKikimrOptimize(const TString& cluster, const IPipelineConfigurator* pipelineConf);
-    TFutureStatus RemoteKikimrRun(const TString& cluster, const IPipelineConfigurator* pipelineConf);
-
+    TFutureStatus RemoteKikimrValidate(const TString& cluster); 
+    TFutureStatus RemoteKikimrOptimize(const TString& cluster, const IPipelineConfigurator* pipelineConf); 
+    TFutureStatus RemoteKikimrRun(const TString& cluster, const IPipelineConfigurator* pipelineConf); 
+ 
     bool FillParseResult(NYql::TAstParseResult&& astRes, NYql::TWarningRules* warningRules = nullptr);
     TString GetSessionId() const;
     TString TakeSessionId();
@@ -343,7 +343,7 @@ private:
     TVector<TDataProviderInfo> DataProviders_;
     TYqlOperationOptions OperationOptions_;
     TVector<TCredentialTablePtr> CredentialTables_;
-    TUserCredentials UserCredentials_;
+    TUserCredentials UserCredentials_; 
     const IUdfResolver::TPtr UdfResolver_;
     const TUdfIndex::TPtr UdfIndex_;
     const TUdfIndexPackageSet::TPtr UdfIndexPackageSet_;
@@ -352,7 +352,7 @@ private:
     const TGatewaysConfig* GatewaysConfig_;
     TString Filename_;
     TString SourceCode_;
-    ESourceSyntax SourceSyntax_;
+    ESourceSyntax SourceSyntax_; 
     ui16 SyntaxVersion_;
 
     TAstNode* AstRoot_;
@@ -376,9 +376,9 @@ private:
     bool UseTableMetaFromGraph_ = false;
     TMaybe<TSet<TString>> UsedClusters_;
     TMaybe<TSet<TString>> UsedProviders_;
-    TMaybe<TString> ExternalQueryAst_;
-    TMaybe<TString> ExternalQueryPlan_;
-    TMaybe<TString> ExternalDiagnostics_;
+    TMaybe<TString> ExternalQueryAst_; 
+    TMaybe<TString> ExternalQueryPlan_; 
+    TMaybe<TString> ExternalDiagnostics_; 
 
     IOutputStream* ExprStream_ = nullptr;
     IOutputStream* PlanStream_ = nullptr;

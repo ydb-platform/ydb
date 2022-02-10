@@ -1,17 +1,17 @@
 #include "accessor.h"
-
+ 
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
-namespace NYdb {
-
-const Ydb::Type& TProtoAccessor::GetProto(const TType& type) {
-    return type.GetProto();
-}
-
-const Ydb::Value& TProtoAccessor::GetProto(const TValue& value) {
-    return value.GetProto();
-}
-
+namespace NYdb { 
+ 
+const Ydb::Type& TProtoAccessor::GetProto(const TType& type) { 
+    return type.GetProto(); 
+} 
+ 
+const Ydb::Value& TProtoAccessor::GetProto(const TValue& value) { 
+    return value.GetProto(); 
+} 
+ 
 // exports & imports
 template <typename TProtoSettings>
 typename TProtoSettings::Scheme TProtoAccessor::GetProto(ES3Scheme value) {
@@ -127,4 +127,4 @@ NImport::EImportProgress TProtoAccessor::FromProto(Ydb::Import::ImportProgress::
     }
 }
 
-} // namespace NYdb
+} // namespace NYdb 

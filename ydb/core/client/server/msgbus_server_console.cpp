@@ -192,7 +192,7 @@ public:
     void Handle(TEvConsole::TEvGetConfigResponse::TPtr &ev, const TActorContext &ctx) noexcept
     {
         auto &rec = ev->Get()->Record;
-        Response.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
+        Response.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS); 
         Response.MutableGetConfigResponse()->CopyFrom(rec);
         SendReplyAndDie(ctx);
     }
@@ -230,7 +230,7 @@ public:
     void Handle(TEvConsole::TEvListTenantsResponse::TPtr &ev, const TActorContext &ctx) noexcept
     {
         auto &rec = ev->Get()->Record;
-        Response.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
+        Response.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS); 
         Response.MutableListTenantsResponse()->CopyFrom(rec);
         SendReplyAndDie(ctx);
     }
@@ -279,7 +279,7 @@ public:
     }
 
     void Undelivered(const TActorContext &ctx) {
-        ReplyWithErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "Console is unavailable", ctx);
+        ReplyWithErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "Console is unavailable", ctx); 
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) noexcept
@@ -306,10 +306,10 @@ public:
 
     void ReplyWithErrorAndDie(const TString &error, const TActorContext &ctx)
     {
-        ReplyWithErrorAndDie(Ydb::StatusIds::GENERIC_ERROR, error, ctx);
+        ReplyWithErrorAndDie(Ydb::StatusIds::GENERIC_ERROR, error, ctx); 
     }
 
-    void ReplyWithErrorAndDie(Ydb::StatusIds::StatusCode code, const TString &error,
+    void ReplyWithErrorAndDie(Ydb::StatusIds::StatusCode code, const TString &error, 
                               const TActorContext &ctx)
     {
         Response.MutableStatus()->SetCode(code);

@@ -25,7 +25,7 @@ public:
     {
     }
 
-    bool Error(Ydb::StatusIds::StatusCode code, const TString &error,
+    bool Error(Ydb::StatusIds::StatusCode code, const TString &error, 
                const TActorContext &ctx)
     {
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "Cannot create tenant: " << error);
@@ -61,7 +61,7 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        Ydb::StatusIds::StatusCode code;
+        Ydb::StatusIds::StatusCode code; 
         TString error;
 
         auto &rec = Request->Get()->Record.GetRequest();

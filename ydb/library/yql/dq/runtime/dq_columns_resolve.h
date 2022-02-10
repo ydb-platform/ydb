@@ -21,7 +21,7 @@ struct TSortColumnInfo : public TColumnInfo {
     {}
 };
 
-TMaybe<TColumnInfo> FindColumnInfo(const NKikimr::NMiniKQL::TType* type, TStringBuf column);
+TMaybe<TColumnInfo> FindColumnInfo(const NKikimr::NMiniKQL::TType* type, TStringBuf column); 
 TColumnInfo GetColumnInfo(const NKikimr::NMiniKQL::TType* type, TStringBuf column);
 
 template<typename TList>

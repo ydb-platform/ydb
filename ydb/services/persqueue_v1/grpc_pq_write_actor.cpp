@@ -539,7 +539,7 @@ void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
     parameters["$Topic"] = TopicConverter->GetClientsideName();
     parameters["$SourceId"] = EscapedSourceId;
     ev->Record.MutableRequest()->MutableParameters()->Swap(&parameters);
-    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release()); 
     State = ES_WAIT_TABLE_REQUEST_1;
 }
 
@@ -579,14 +579,14 @@ void TWriteSessionActor::Handle(TEvPersQueue::TEvGetPartitionIdForWriteResponse:
 void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const TActorContext &ctx) {
     auto& record = ev->Get()->Record.GetRef();
 
-    if (record.GetYdbStatus() == Ydb::StatusIds::ABORTED) {
+    if (record.GetYdbStatus() == Ydb::StatusIds::ABORTED) { 
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " messageGroupId "
             << SourceId << " escaped " << EscapedSourceId << " discover partition race, retrying");
         DiscoverPartition(ctx);
         return;
     }
 
-    if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+    if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) { 
         TStringBuilder errorReason;
         errorReason << "internal error in kqp Marker# PQ50 : " <<  record;
         if (State == EState::ES_INITED) {
@@ -1162,7 +1162,7 @@ void TWriteSessionActor::HandleWakeup(const TActorContext& ctx) {
     if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() && !SourceIdUpdateInfly && ctx.Now() - LastSourceIdUpdate > SOURCEID_UPDATE_PERIOD) {
         auto ev = MakeUpdateSourceIdMetadataRequest(ctx);
         SourceIdUpdateInfly = true;
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release()); 
     }
     if (ctx.Now() >= LogSessionDeadline) {
         LogSession(ctx);

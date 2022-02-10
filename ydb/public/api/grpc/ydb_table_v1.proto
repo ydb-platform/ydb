@@ -27,7 +27,7 @@ service TableService {
 
     // Drop table.
     rpc DropTable(Table.DropTableRequest) returns (Table.DropTableResponse);
-
+ 
     // Modifies schema of given table.
     rpc AlterTable(Table.AlterTableRequest) returns (Table.AlterTableResponse);
 
@@ -46,26 +46,26 @@ service TableService {
     // Explains data query.
     // SessionId of previously created session must be provided.
     rpc ExplainDataQuery(Table.ExplainDataQueryRequest) returns (Table.ExplainDataQueryResponse);
-
-    // Prepares data query, returns query id.
+ 
+    // Prepares data query, returns query id. 
     // SessionId of previously created session must be provided.
     rpc PrepareDataQuery(Table.PrepareDataQueryRequest) returns (Table.PrepareDataQueryResponse);
-
+ 
     // Executes data query.
-    // SessionId of previously created session must be provided.
+    // SessionId of previously created session must be provided. 
     rpc ExecuteDataQuery(Table.ExecuteDataQueryRequest) returns (Table.ExecuteDataQueryResponse);
-
+ 
     // Executes scheme query.
-    // SessionId of previously created session must be provided.
+    // SessionId of previously created session must be provided. 
     rpc ExecuteSchemeQuery(Table.ExecuteSchemeQueryRequest) returns (Table.ExecuteSchemeQueryResponse);
-
-    // Begins new transaction.
+ 
+    // Begins new transaction. 
     rpc BeginTransaction(Table.BeginTransactionRequest) returns (Table.BeginTransactionResponse);
-
-    // Commits specified active transaction.
+ 
+    // Commits specified active transaction. 
     rpc CommitTransaction(Table.CommitTransactionRequest) returns (Table.CommitTransactionResponse);
-
-    // Performs a rollback of the specified active transaction.
+ 
+    // Performs a rollback of the specified active transaction. 
     rpc RollbackTransaction(Table.RollbackTransactionRequest) returns (Table.RollbackTransactionResponse);
 
     // Describe supported table options.
@@ -78,7 +78,7 @@ service TableService {
     // Returns success only when all rows were successfully upserted. In case of an error some rows might
     // be upserted and some might not.
     rpc BulkUpsert(Table.BulkUpsertRequest) returns (Table.BulkUpsertResponse);
-
-    // Executes scan query with streaming result.
-    rpc StreamExecuteScanQuery(Table.ExecuteScanQueryRequest) returns (stream Table.ExecuteScanQueryPartialResponse);
+ 
+    // Executes scan query with streaming result. 
+    rpc StreamExecuteScanQuery(Table.ExecuteScanQueryRequest) returns (stream Table.ExecuteScanQueryPartialResponse); 
 }

@@ -34,7 +34,7 @@ public:
         ui64 ReadSize = 0;
         ui64 ReplySize = 0;
         THashMap<ui64, ui64> OutReadSetSize;
-        ui64 TotalKeysSize = 0;
+        ui64 TotalKeysSize = 0; 
     };
 
     TEngineBay(TDataShard * self, TTransactionContext& txc, const TActorContext& ctx,
@@ -43,9 +43,9 @@ public:
     virtual ~TEngineBay();
 
     const NMiniKQL::IEngineFlat * GetEngine() const { return Engine.Get(); }
-    NMiniKQL::IEngineFlat * GetEngine();
-    void SetLockTxId(ui64 lockTxId);
-    void SetUseLlvmRuntime(bool llvmRuntime) { EngineSettings->LlvmRuntime = llvmRuntime; }
+    NMiniKQL::IEngineFlat * GetEngine(); 
+    void SetLockTxId(ui64 lockTxId); 
+    void SetUseLlvmRuntime(bool llvmRuntime) { EngineSettings->LlvmRuntime = llvmRuntime; } 
 
     EResult Validate() {
         if (Info.Loaded)
@@ -71,7 +71,7 @@ public:
 
     /// @note it expects TValidationInfo keys are materialized outsize of engine's allocs
     void DestroyEngine() {
-        ComputeCtx->Clear();
+        ComputeCtx->Clear(); 
         if (KqpTasksRunner) {
             KqpTasksRunner.Reset();
             {
@@ -88,7 +88,7 @@ public:
     }
 
     const TValidationInfo& TxInfo() const { return Info; }
-    TEngineBay::TSizes CalcSizes(bool needsTotalKeysSize) const;
+    TEngineBay::TSizes CalcSizes(bool needsTotalKeysSize) const; 
 
     void SetWriteVersion(TRowVersion writeVersion);
     void SetReadVersion(TRowVersion readVersion);
@@ -101,19 +101,19 @@ public:
 
     NKqp::TKqpTasksRunner& GetKqpTasksRunner(const NKikimrTxDataShard::TKqpTransaction& tx);
     NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx();
-
+ 
 private:
-    std::pair<ui64, ui64> StepTxId;
+    std::pair<ui64, ui64> StepTxId; 
     THolder<NMiniKQL::IEngineFlatHost> EngineHost;
-    THolder<NMiniKQL::TEngineFlatSettings> EngineSettings;
+    THolder<NMiniKQL::TEngineFlatSettings> EngineSettings; 
     THolder<NMiniKQL::IEngineFlat> Engine;
     TValidationInfo Info;
     TEngineHostCounters EngineHostCounters;
     ui64 LockTxId;
     TString TraceMessage;
     NYql::NDq::TLogFunc KqpLogFunc;
-    THolder<NUdf::IApplyContext> KqpApplyCtx;
-    THolder<NMiniKQL::TKqpDatashardComputeContext> ComputeCtx;
+    THolder<NUdf::IApplyContext> KqpApplyCtx; 
+    THolder<NMiniKQL::TKqpDatashardComputeContext> ComputeCtx; 
     THolder<NMiniKQL::TScopedAlloc> KqpAlloc;
     THolder<NMiniKQL::TTypeEnvironment> KqpTypeEnv;
     NYql::NDq::TDqTaskRunnerContext KqpExecCtx;

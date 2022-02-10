@@ -56,7 +56,7 @@ public:
                                                TAutoPtr<IEventHandle> ev = nullptr);
 
     bool MakeNewSubscriptionChecks(TSubscription::TPtr subscription,
-                                   Ydb::StatusIds::StatusCode &code,
+                                   Ydb::StatusIds::StatusCode &code, 
                                    TString &error);
 
     bool IsConfigItemScopeAllowed(TConfigItem::TPtr item);

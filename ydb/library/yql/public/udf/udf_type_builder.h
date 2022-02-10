@@ -485,14 +485,14 @@ public:
     // 1.2
     virtual IFunctionTypeInfoBuilder1& PayloadImpl(const TStringRef& payload) = 0;
 
-    // Important: Always add new ABI VERSION methods to the end of the class definition.
-
+    // Important: Always add new ABI VERSION methods to the end of the class definition. 
+ 
     virtual IVariantTypeBuilder::TPtr Variant() const = 0;
-
+ 
     virtual IFunctionTypeInfoBuilder1& UserTypeImpl(TDataTypeId type) = 0;
     virtual IFunctionTypeInfoBuilder1& UserTypeImpl(const TType* type) = 0;
     virtual IFunctionTypeInfoBuilder1& UserTypeImpl(const ITypeBuilder& typeBuilder) = 0;
-
+ 
     virtual NUdf::IStreamTypeBuilder::TPtr Stream() const = 0;
 };
 

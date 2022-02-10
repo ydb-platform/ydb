@@ -328,54 +328,54 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     }
 
     Y_UNIT_TEST(SelectRowWithTargetParameter) {
-        TPortManager pm;
-        ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
-
-        TFlatMsgBusClient annoyingClient(port);
-        annoyingClient.InitRoot();
-
-        annoyingClient.CreateTable("/dc-1", R"(
-            Name: "TestTable"
-            Columns { Name: "key" Type: "Uint32"}
-            Columns { Name: "value" Type: "String"}
-            KeyColumnNames: ["key"]
-        )");
-
-        annoyingClient.FlatQuery(R"(
-            (
-                (let row '('('key (Uint32 '1))))
-                (let upd '('('value (String 'test1))))
-                (let ret (AsList
-                    (UpdateRow '/dc-1/TestTable row upd)
-                ))
-                (return ret)
-            )
-        )");
-
-        TString query = R"(
-            (
-                (let row '('('key (Uint32 '1))))
-                (let cols '('value))
-                (let select (SelectRow '/dc-1/TestTable row cols (Parameter 'rt (DataType 'Uint32))))
-                (let ret (AsList (SetResult 'result (Member select 'value))))
-                (return ret)
-            )
-        )";
-
-        TString params = R"(
-            (
-                (let params (Parameters))
-                (let params (AddParameter params 'rt (Uint32 '0)))
-                (return params)
-            )
-        )";
-
-        NKikimrMiniKQL::TResult result;
-        annoyingClient.FlatQueryParams(query, params, false, result);
-        UNIT_ASSERT_NO_DIFF(result.GetValue().GetStruct(0).GetOptional().GetOptional().GetBytes(), "test1");
-    }
-
+        TPortManager pm; 
+        ui16 port = pm.GetPort(2134); 
+        TServer cleverServer = TServer(TServerSettings(port)); 
+ 
+        TFlatMsgBusClient annoyingClient(port); 
+        annoyingClient.InitRoot(); 
+ 
+        annoyingClient.CreateTable("/dc-1", R"( 
+            Name: "TestTable" 
+            Columns { Name: "key" Type: "Uint32"} 
+            Columns { Name: "value" Type: "String"} 
+            KeyColumnNames: ["key"] 
+        )"); 
+ 
+        annoyingClient.FlatQuery(R"( 
+            ( 
+                (let row '('('key (Uint32 '1)))) 
+                (let upd '('('value (String 'test1)))) 
+                (let ret (AsList 
+                    (UpdateRow '/dc-1/TestTable row upd) 
+                )) 
+                (return ret) 
+            ) 
+        )"); 
+ 
+        TString query = R"( 
+            ( 
+                (let row '('('key (Uint32 '1)))) 
+                (let cols '('value)) 
+                (let select (SelectRow '/dc-1/TestTable row cols (Parameter 'rt (DataType 'Uint32)))) 
+                (let ret (AsList (SetResult 'result (Member select 'value)))) 
+                (return ret) 
+            ) 
+        )"; 
+ 
+        TString params = R"( 
+            ( 
+                (let params (Parameters)) 
+                (let params (AddParameter params 'rt (Uint32 '0))) 
+                (return params) 
+            ) 
+        )"; 
+ 
+        NKikimrMiniKQL::TResult result; 
+        annoyingClient.FlatQueryParams(query, params, false, result); 
+        UNIT_ASSERT_NO_DIFF(result.GetValue().GetStruct(0).GetOptional().GetOptional().GetBytes(), "test1"); 
+    } 
+ 
     Y_UNIT_TEST(ModifyMultipleRowsCrossShardAllToAll) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
@@ -1852,7 +1852,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                 "(let select '('Key 'Value 'Large))"
                 "(let options '())"
                 "(let pgmReturn (AsList"
-                "    (SetResult 'range1 (SelectRange '%s range1 select options (Uint32 '%d)))"
+                "    (SetResult 'range1 (SelectRange '%s range1 select options (Uint32 '%d)))" 
                 "))"
                 "(return pgmReturn)"
                 ")";
@@ -3266,234 +3266,234 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
         UNIT_ASSERT_C(found, "DbDataBytes counter not found");
     }
-
-    void LargeDatashardReplyRO(TFlatMsgBusClient& client) {
-        const ui32 TABLE_ROWS = 700;
-        const ui32 BLOB_SIZE = 100 * 1024; // 100 Kb
-
-        for (ui32 i = 0; i < TABLE_ROWS; ++i) {
-            client.FlatQuery(Sprintf(R"(
-                (
-                (let key '('('Key (Uint64 '%d)) ))
-                (let payload '('('Value (String '%s))))
-                (return (AsList (UpdateRow '"/dc-1/test/BlobTable" key payload)))
-                )
-                )", i, TString(BLOB_SIZE, '0' + i % 10).c_str()
-            ));
-        }
-
-        client.FlatQuery(Sprintf(R"(
-            (
-            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
-            (let data (Member (SelectRange '"/dc-1/test/BlobTable" range '('Key 'Value) '()) 'List))
-            (let result (Filter data (lambda '(row)
-                (Coalesce (NotEqual (Member row 'Key) (Uint64 '1)) (Bool 'false))
-            )))
-            (return (AsList (SetResult 'Result result)))
-            )
-            )"
-        ), NMsgBusProxy::MSTATUS_ERROR, TEvTxUserProxy::TResultStatus::ExecResultUnavailable);
-    }
-
-    Y_UNIT_TEST(LargeDatashardReply) {
-        TPortManager pm;
-        ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
-        TFlatMsgBusClient annoyingClient(port);
-
-        annoyingClient.InitRoot();
-        annoyingClient.MkDir("/dc-1", "test");
-
-        annoyingClient.CreateTable("/dc-1/test",
-            R"(Name: "BlobTable"
-                Columns { Name: "Key"   Type: "Uint64"}
-                Columns { Name: "Value" Type: "String"}
-                KeyColumnNames: ["Key"]
-            )");
-
-        LargeDatashardReplyRO(annoyingClient);
-    }
-
-    Y_UNIT_TEST(LargeDatashardReplyDistributed) {
-        TPortManager pm;
-        ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
-        TFlatMsgBusClient annoyingClient(port);
-
-        annoyingClient.InitRoot();
-        annoyingClient.MkDir("/dc-1", "test");
-
-        annoyingClient.CreateTable("/dc-1/test",
-            R"(Name: "BlobTable"
-                Columns { Name: "Key"   Type: "Uint64"}
-                Columns { Name: "Value" Type: "String"}
-                KeyColumnNames: ["Key"]
-                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } }
-            )");
-
-        LargeDatashardReplyRO(annoyingClient);
-    }
-
+ 
+    void LargeDatashardReplyRO(TFlatMsgBusClient& client) { 
+        const ui32 TABLE_ROWS = 700; 
+        const ui32 BLOB_SIZE = 100 * 1024; // 100 Kb 
+ 
+        for (ui32 i = 0; i < TABLE_ROWS; ++i) { 
+            client.FlatQuery(Sprintf(R"( 
+                ( 
+                (let key '('('Key (Uint64 '%d)) )) 
+                (let payload '('('Value (String '%s)))) 
+                (return (AsList (UpdateRow '"/dc-1/test/BlobTable" key payload))) 
+                ) 
+                )", i, TString(BLOB_SIZE, '0' + i % 10).c_str() 
+            )); 
+        } 
+ 
+        client.FlatQuery(Sprintf(R"( 
+            ( 
+            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void)))) 
+            (let data (Member (SelectRange '"/dc-1/test/BlobTable" range '('Key 'Value) '()) 'List)) 
+            (let result (Filter data (lambda '(row) 
+                (Coalesce (NotEqual (Member row 'Key) (Uint64 '1)) (Bool 'false)) 
+            ))) 
+            (return (AsList (SetResult 'Result result))) 
+            ) 
+            )" 
+        ), NMsgBusProxy::MSTATUS_ERROR, TEvTxUserProxy::TResultStatus::ExecResultUnavailable); 
+    } 
+ 
+    Y_UNIT_TEST(LargeDatashardReply) { 
+        TPortManager pm; 
+        ui16 port = pm.GetPort(2134); 
+        TServer cleverServer = TServer(TServerSettings(port)); 
+        TFlatMsgBusClient annoyingClient(port); 
+ 
+        annoyingClient.InitRoot(); 
+        annoyingClient.MkDir("/dc-1", "test"); 
+ 
+        annoyingClient.CreateTable("/dc-1/test", 
+            R"(Name: "BlobTable" 
+                Columns { Name: "Key"   Type: "Uint64"} 
+                Columns { Name: "Value" Type: "String"} 
+                KeyColumnNames: ["Key"] 
+            )"); 
+ 
+        LargeDatashardReplyRO(annoyingClient); 
+    } 
+ 
+    Y_UNIT_TEST(LargeDatashardReplyDistributed) { 
+        TPortManager pm; 
+        ui16 port = pm.GetPort(2134); 
+        TServer cleverServer = TServer(TServerSettings(port)); 
+        TFlatMsgBusClient annoyingClient(port); 
+ 
+        annoyingClient.InitRoot(); 
+        annoyingClient.MkDir("/dc-1", "test"); 
+ 
+        annoyingClient.CreateTable("/dc-1/test", 
+            R"(Name: "BlobTable" 
+                Columns { Name: "Key"   Type: "Uint64"} 
+                Columns { Name: "Value" Type: "String"} 
+                KeyColumnNames: ["Key"] 
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } } 
+            )"); 
+ 
+        LargeDatashardReplyRO(annoyingClient); 
+    } 
+ 
     Y_UNIT_TEST(LargeDatashardReplyRW) {
-        const ui32 TABLE_ROWS = 700;
-        const ui32 BLOB_SIZE = 100 * 1024; // 100 Kb
-        const ui32 KEY_TO_ERASE = 1;
-
-        TPortManager pm;
-        ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
-        TFlatMsgBusClient annoyingClient(port);
-
-        annoyingClient.InitRoot();
-        annoyingClient.MkDir("/dc-1", "test");
-
-        annoyingClient.CreateTable("/dc-1/test",
-            R"(Name: "BlobTable"
-                Columns { Name: "Key"   Type: "Uint64"}
-                Columns { Name: "Value" Type: "String"}
-                KeyColumnNames: ["Key"]
-            )");
-
-        for (ui32 i = 0; i < TABLE_ROWS; ++i) {
-            annoyingClient.FlatQuery(Sprintf(R"(
-                (
-                (let key '('('Key (Uint64 '%d)) ))
-                (let payload '('('Value (String '%s))))
-                (return (AsList (UpdateRow '"/dc-1/test/BlobTable" key payload)))
-                )
-                )", i, TString(BLOB_SIZE, '0' + i % 10).c_str()
-            ));
-        }
-
-        auto selectQuery = Sprintf(R"(
-            (
-            (let read (SelectRow '"/dc-1/test/BlobTable" '('('Key (Uint64 '%d))) '('Key)))
-            (return (AsList (SetResult 'Result read)))
-            )
-        )", KEY_TO_ERASE);
-
-        // Make sure row exists
-        auto res = annoyingClient.FlatQuery(selectQuery);
-        UNIT_ASSERT(res.GetValue().GetStruct(0).GetOptional().HasOptional());
-
-        annoyingClient.FlatQuery(Sprintf(R"(
-            (
-            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
-            (let data (Member (SelectRange '"/dc-1/test/BlobTable" range '('Key 'Value) '()) 'List))
-            (let result (Take (Skip (Filter data (lambda '(row)
-                (Coalesce (NotEqual (Member row 'Key) (Uint64 '1)) (Bool 'false))
-            )) (Uint64 '"15")) (Uint64 '"10")) )
-            (return (AsList (SetResult 'Result result) (EraseRow '"/dc-1/test/BlobTable" '('('Key (Uint64 '%d))))))
-            )
-            )", KEY_TO_ERASE
-        ), NMsgBusProxy::MSTATUS_ERROR, TEvTxUserProxy::TResultStatus::ExecResultUnavailable);
-
-        // Make sure row erased
-        res = annoyingClient.FlatQuery(selectQuery);
-        UNIT_ASSERT(!res.GetValue().GetStruct(0).GetOptional().HasOptional());
-    }
-
+        const ui32 TABLE_ROWS = 700; 
+        const ui32 BLOB_SIZE = 100 * 1024; // 100 Kb 
+        const ui32 KEY_TO_ERASE = 1; 
+ 
+        TPortManager pm; 
+        ui16 port = pm.GetPort(2134); 
+        TServer cleverServer = TServer(TServerSettings(port)); 
+        TFlatMsgBusClient annoyingClient(port); 
+ 
+        annoyingClient.InitRoot(); 
+        annoyingClient.MkDir("/dc-1", "test"); 
+ 
+        annoyingClient.CreateTable("/dc-1/test", 
+            R"(Name: "BlobTable" 
+                Columns { Name: "Key"   Type: "Uint64"} 
+                Columns { Name: "Value" Type: "String"} 
+                KeyColumnNames: ["Key"] 
+            )"); 
+ 
+        for (ui32 i = 0; i < TABLE_ROWS; ++i) { 
+            annoyingClient.FlatQuery(Sprintf(R"( 
+                ( 
+                (let key '('('Key (Uint64 '%d)) )) 
+                (let payload '('('Value (String '%s)))) 
+                (return (AsList (UpdateRow '"/dc-1/test/BlobTable" key payload))) 
+                ) 
+                )", i, TString(BLOB_SIZE, '0' + i % 10).c_str() 
+            )); 
+        } 
+ 
+        auto selectQuery = Sprintf(R"( 
+            ( 
+            (let read (SelectRow '"/dc-1/test/BlobTable" '('('Key (Uint64 '%d))) '('Key))) 
+            (return (AsList (SetResult 'Result read))) 
+            ) 
+        )", KEY_TO_ERASE); 
+ 
+        // Make sure row exists 
+        auto res = annoyingClient.FlatQuery(selectQuery); 
+        UNIT_ASSERT(res.GetValue().GetStruct(0).GetOptional().HasOptional()); 
+ 
+        annoyingClient.FlatQuery(Sprintf(R"( 
+            ( 
+            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void)))) 
+            (let data (Member (SelectRange '"/dc-1/test/BlobTable" range '('Key 'Value) '()) 'List)) 
+            (let result (Take (Skip (Filter data (lambda '(row) 
+                (Coalesce (NotEqual (Member row 'Key) (Uint64 '1)) (Bool 'false)) 
+            )) (Uint64 '"15")) (Uint64 '"10")) ) 
+            (return (AsList (SetResult 'Result result) (EraseRow '"/dc-1/test/BlobTable" '('('Key (Uint64 '%d)))))) 
+            ) 
+            )", KEY_TO_ERASE 
+        ), NMsgBusProxy::MSTATUS_ERROR, TEvTxUserProxy::TResultStatus::ExecResultUnavailable); 
+ 
+        // Make sure row erased 
+        res = annoyingClient.FlatQuery(selectQuery); 
+        UNIT_ASSERT(!res.GetValue().GetStruct(0).GetOptional().HasOptional()); 
+    } 
+ 
     Y_UNIT_TEST(LargeProxyReply) {
-        const ui32 TABLE_ROWS = 350;
-        const ui32 BLOB_SIZE = 100 * 1024; // 100 Kb
-
-        TPortManager pm;
-        ui16 port = pm.GetPort(2134);
+        const ui32 TABLE_ROWS = 350; 
+        const ui32 BLOB_SIZE = 100 * 1024; // 100 Kb 
+ 
+        TPortManager pm; 
+        ui16 port = pm.GetPort(2134); 
         TServer cleverServer = TServer(TServerSettings(port));
-        TFlatMsgBusClient annoyingClient(port);
-
-        annoyingClient.InitRoot();
-        annoyingClient.MkDir("/dc-1", "test");
-
-        annoyingClient.CreateTable("/dc-1/test",
-            R"(Name: "BlobTable"
-                Columns { Name: "Key"   Type: "Uint64"}
-                Columns { Name: "Value" Type: "String"}
-                KeyColumnNames: ["Key"]
-            )");
-
-        for (ui32 i = 0; i < TABLE_ROWS; ++i) {
-            annoyingClient.FlatQuery(Sprintf(R"(
-                (
-                (let key '('('Key (Uint64 '%d)) ))
-                (let payload '('('Value (String '%s))))
-                (return (AsList (UpdateRow '"/dc-1/test/BlobTable" key payload)))
-                )
-                )", i, TString(BLOB_SIZE, '0' + i % 10).c_str()
-            ));
-        }
-
-        annoyingClient.FlatQuery(Sprintf(R"(
-            (
-            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
-            (let data (Member (SelectRange '"/dc-1/test/BlobTable" range '('Key 'Value) '()) 'List))
-            (let result (OrderedMap data (lambda '(row)
-                (AddMember row 'Value2 (Member row 'Value))
-            )))
-            (return (AsList (SetResult 'Result result)))
-            )
-            )"
-        ), NMsgBusProxy::MSTATUS_ERROR, TEvTxUserProxy::TResultStatus::ExecResultUnavailable);
-    }
-
+        TFlatMsgBusClient annoyingClient(port); 
+ 
+        annoyingClient.InitRoot(); 
+        annoyingClient.MkDir("/dc-1", "test"); 
+ 
+        annoyingClient.CreateTable("/dc-1/test", 
+            R"(Name: "BlobTable" 
+                Columns { Name: "Key"   Type: "Uint64"} 
+                Columns { Name: "Value" Type: "String"} 
+                KeyColumnNames: ["Key"] 
+            )"); 
+ 
+        for (ui32 i = 0; i < TABLE_ROWS; ++i) { 
+            annoyingClient.FlatQuery(Sprintf(R"( 
+                ( 
+                (let key '('('Key (Uint64 '%d)) )) 
+                (let payload '('('Value (String '%s)))) 
+                (return (AsList (UpdateRow '"/dc-1/test/BlobTable" key payload))) 
+                ) 
+                )", i, TString(BLOB_SIZE, '0' + i % 10).c_str() 
+            )); 
+        } 
+ 
+        annoyingClient.FlatQuery(Sprintf(R"( 
+            ( 
+            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void)))) 
+            (let data (Member (SelectRange '"/dc-1/test/BlobTable" range '('Key 'Value) '()) 'List)) 
+            (let result (OrderedMap data (lambda '(row) 
+                (AddMember row 'Value2 (Member row 'Value)) 
+            ))) 
+            (return (AsList (SetResult 'Result result))) 
+            ) 
+            )" 
+        ), NMsgBusProxy::MSTATUS_ERROR, TEvTxUserProxy::TResultStatus::ExecResultUnavailable); 
+    } 
+ 
     Y_UNIT_TEST(LargeProxyReplyRW) {
-        const ui32 TABLE_ROWS = 350;
-        const ui32 BLOB_SIZE = 100 * 1024; // 100 Kb
-        const ui32 KEY_TO_ERASE = 1;
-
-        TPortManager pm;
-        ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
-        TFlatMsgBusClient annoyingClient(port);
-
-        annoyingClient.InitRoot();
-        annoyingClient.MkDir("/dc-1", "test");
-
-        annoyingClient.CreateTable("/dc-1/test",
-            R"(Name: "BlobTable"
-                Columns { Name: "Key"   Type: "Uint64"}
-                Columns { Name: "Value" Type: "String"}
-                KeyColumnNames: ["Key"]
-            )");
-
-        for (ui32 i = 0; i < TABLE_ROWS; ++i) {
-            annoyingClient.FlatQuery(Sprintf(R"(
-                (
-                (let key '('('Key (Uint64 '%d)) ))
-                (let payload '('('Value (String '%s))))
-                (return (AsList (UpdateRow '"/dc-1/test/BlobTable" key payload)))
-                )
-                )", i, TString(BLOB_SIZE, '0' + i % 10).c_str()
-            ));
-        }
-
-        auto selectQuery = Sprintf(R"(
-            (
-            (let read (SelectRow '"/dc-1/test/BlobTable" '('('Key (Uint64 '%d))) '('Key)))
-            (return (AsList (SetResult 'Result read)))
-            )
-        )", KEY_TO_ERASE);
-
-        // Make sure row exists
-        auto res = annoyingClient.FlatQuery(selectQuery);
-        UNIT_ASSERT(res.GetValue().GetStruct(0).GetOptional().HasOptional());
-
-        annoyingClient.FlatQuery(Sprintf(R"(
-            (
-            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
-            (let data (Member (SelectRange '"/dc-1/test/BlobTable" range '('Key 'Value) '()) 'List))
-            (let result (OrderedMap data (lambda '(row)
-                (AddMember row 'Value2 (Member row 'Value))
-            )))
-            (return (AsList (SetResult 'Result result) (EraseRow '"/dc-1/test/BlobTable" '('('Key (Uint64 '%d))))))
-            )
-            )", KEY_TO_ERASE
-        ), NMsgBusProxy::MSTATUS_ERROR, TEvTxUserProxy::TResultStatus::ExecResultUnavailable);
-
-        // Make sure row erased
-        res = annoyingClient.FlatQuery(selectQuery);
-        UNIT_ASSERT(!res.GetValue().GetStruct(0).GetOptional().HasOptional());
-    }
+        const ui32 TABLE_ROWS = 350; 
+        const ui32 BLOB_SIZE = 100 * 1024; // 100 Kb 
+        const ui32 KEY_TO_ERASE = 1; 
+ 
+        TPortManager pm; 
+        ui16 port = pm.GetPort(2134); 
+        TServer cleverServer = TServer(TServerSettings(port)); 
+        TFlatMsgBusClient annoyingClient(port); 
+ 
+        annoyingClient.InitRoot(); 
+        annoyingClient.MkDir("/dc-1", "test"); 
+ 
+        annoyingClient.CreateTable("/dc-1/test", 
+            R"(Name: "BlobTable" 
+                Columns { Name: "Key"   Type: "Uint64"} 
+                Columns { Name: "Value" Type: "String"} 
+                KeyColumnNames: ["Key"] 
+            )"); 
+ 
+        for (ui32 i = 0; i < TABLE_ROWS; ++i) { 
+            annoyingClient.FlatQuery(Sprintf(R"( 
+                ( 
+                (let key '('('Key (Uint64 '%d)) )) 
+                (let payload '('('Value (String '%s)))) 
+                (return (AsList (UpdateRow '"/dc-1/test/BlobTable" key payload))) 
+                ) 
+                )", i, TString(BLOB_SIZE, '0' + i % 10).c_str() 
+            )); 
+        } 
+ 
+        auto selectQuery = Sprintf(R"( 
+            ( 
+            (let read (SelectRow '"/dc-1/test/BlobTable" '('('Key (Uint64 '%d))) '('Key))) 
+            (return (AsList (SetResult 'Result read))) 
+            ) 
+        )", KEY_TO_ERASE); 
+ 
+        // Make sure row exists 
+        auto res = annoyingClient.FlatQuery(selectQuery); 
+        UNIT_ASSERT(res.GetValue().GetStruct(0).GetOptional().HasOptional()); 
+ 
+        annoyingClient.FlatQuery(Sprintf(R"( 
+            ( 
+            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void)))) 
+            (let data (Member (SelectRange '"/dc-1/test/BlobTable" range '('Key 'Value) '()) 'List)) 
+            (let result (OrderedMap data (lambda '(row) 
+                (AddMember row 'Value2 (Member row 'Value)) 
+            ))) 
+            (return (AsList (SetResult 'Result result) (EraseRow '"/dc-1/test/BlobTable" '('('Key (Uint64 '%d)))))) 
+            ) 
+            )", KEY_TO_ERASE 
+        ), NMsgBusProxy::MSTATUS_ERROR, TEvTxUserProxy::TResultStatus::ExecResultUnavailable); 
+ 
+        // Make sure row erased 
+        res = annoyingClient.FlatQuery(selectQuery); 
+        UNIT_ASSERT(!res.GetValue().GetStruct(0).GetOptional().HasOptional()); 
+    } 
 
     Y_UNIT_TEST(PartBloomFilter) {
         TPortManager pm;
@@ -3594,262 +3594,262 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             ui32 val = ret0[0];
             UNIT_ASSERT_VALUES_EQUAL(val, i);
         }
+    } 
+
+    Y_UNIT_TEST(SelectRangeBytesLimit) { 
+        const ui32 TABLE_ROWS = 10; 
+ 
+        TPortManager pm; 
+        ui16 port = pm.GetPort(2134); 
+        TServer cleverServer = TServer(TServerSettings(port)); 
+        TFlatMsgBusClient annoyingClient(port); 
+ 
+        annoyingClient.InitRoot(); 
+        annoyingClient.MkDir("/dc-1", "test"); 
+ 
+        annoyingClient.CreateTable("/dc-1/test", 
+            R"(Name: "TestTable" 
+                Columns { Name: "Key"   Type: "Uint64"} 
+                Columns { Name: "Value" Type: "Uint64"} 
+                KeyColumnNames: ["Key"] 
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } } 
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 200 } } } } 
+            )"); 
+ 
+        for (ui32 shard = 0; shard < 3; ++shard) { 
+            for (ui32 i = 0; i < TABLE_ROWS; ++i) { 
+                auto key = shard * 100 + i; 
+ 
+                annoyingClient.FlatQuery(Sprintf(R"( 
+                    ( 
+                    (let key '('('Key (Uint64 '%d)) )) 
+                    (let payload '('('Value (Uint64 '%d)))) 
+                    (return (AsList (UpdateRow '"/dc-1/test/TestTable" key payload))) 
+                    ) 
+                    )", key, i 
+                )); 
+            } 
+        } 
+ 
+        auto res = annoyingClient.FlatQuery(Sprintf(R"( 
+            ( 
+            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void)))) 
+            (let data (SelectRange 
+                '"/dc-1/test/TestTable" 
+                range 
+                '('Key 'Value) 
+                '( 
+                    '('"BytesLimit" (Uint64 '%d)) 
+                 ) 
+            )) 
+            (return (AsList (SetResult 'Result data))) 
+            ) 
+            )", TABLE_ROWS * 8 
+        )); 
+ 
+        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
+        TValue result = value["Result"]; 
+        UNIT_ASSERT_VALUES_EQUAL((bool)result["Truncated"], true); 
+        auto list = result["List"]; 
+        for (ui32 i = 0; i < list.Size(); ++i) { 
+            auto key = (ui64) list[i]["Key"]; 
+            UNIT_ASSERT(key < 100); 
+        } 
     }
-
-    Y_UNIT_TEST(SelectRangeBytesLimit) {
-        const ui32 TABLE_ROWS = 10;
-
-        TPortManager pm;
-        ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
-        TFlatMsgBusClient annoyingClient(port);
-
-        annoyingClient.InitRoot();
-        annoyingClient.MkDir("/dc-1", "test");
-
-        annoyingClient.CreateTable("/dc-1/test",
-            R"(Name: "TestTable"
-                Columns { Name: "Key"   Type: "Uint64"}
-                Columns { Name: "Value" Type: "Uint64"}
-                KeyColumnNames: ["Key"]
-                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } }
-                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 200 } } } }
-            )");
-
-        for (ui32 shard = 0; shard < 3; ++shard) {
-            for (ui32 i = 0; i < TABLE_ROWS; ++i) {
-                auto key = shard * 100 + i;
-
-                annoyingClient.FlatQuery(Sprintf(R"(
-                    (
-                    (let key '('('Key (Uint64 '%d)) ))
-                    (let payload '('('Value (Uint64 '%d))))
-                    (return (AsList (UpdateRow '"/dc-1/test/TestTable" key payload)))
-                    )
-                    )", key, i
-                ));
-            }
-        }
-
-        auto res = annoyingClient.FlatQuery(Sprintf(R"(
-            (
-            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
-            (let data (SelectRange
-                '"/dc-1/test/TestTable"
-                range
-                '('Key 'Value)
-                '(
-                    '('"BytesLimit" (Uint64 '%d))
-                 )
-            ))
-            (return (AsList (SetResult 'Result data)))
-            )
-            )", TABLE_ROWS * 8
-        ));
-
-        TValue value = TValue::Create(res.GetValue(), res.GetType());
-        TValue result = value["Result"];
-        UNIT_ASSERT_VALUES_EQUAL((bool)result["Truncated"], true);
-        auto list = result["List"];
-        for (ui32 i = 0; i < list.Size(); ++i) {
-            auto key = (ui64) list[i]["Key"];
-            UNIT_ASSERT(key < 100);
-        }
-    }
-
-     Y_UNIT_TEST(SelectRangeItemsLimit) {
-        const ui32 TABLE_ROWS = 10;
-
-        TPortManager pm;
-        ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
-        TFlatMsgBusClient annoyingClient(port);
-
-        annoyingClient.InitRoot();
-        annoyingClient.MkDir("/dc-1", "test");
-
-        annoyingClient.CreateTable("/dc-1/test",
-            R"(Name: "TestTable"
-                Columns { Name: "Key"   Type: "Uint64"}
-                Columns { Name: "Value" Type: "Uint64"}
-                KeyColumnNames: ["Key"]
-                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } }
-                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 200 } } } }
-            )");
-
-        for (ui32 shard = 0; shard < 3; ++shard) {
-            for (ui32 i = 0; i < TABLE_ROWS; ++i) {
-                auto key = shard * 100 + i;
-
-                annoyingClient.FlatQuery(Sprintf(R"(
-                    (
-                    (let key '('('Key (Uint64 '%d)) ))
-                    (let payload '('('Value (Uint64 '%d))))
-                    (return (AsList (UpdateRow '"/dc-1/test/TestTable" key payload)))
-                    )
-                    )", key, i
-                ));
-            }
-        }
-
-        auto res = annoyingClient.FlatQuery(Sprintf(R"(
-            (
-            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
-            (let data (SelectRange
-                '"/dc-1/test/TestTable"
-                range
-                '('Key 'Value)
-                '(
-                    '('"ItemsLimit" (Uint64 '%d))
-                 )
-            ))
-            (return (AsList (SetResult 'Result data)))
-            )
-            )", 5
-        ));
-
-        TValue value = TValue::Create(res.GetValue(), res.GetType());
-        TValue result = value["Result"];
-        UNIT_ASSERT_VALUES_EQUAL((bool)result["Truncated"], true);
-        auto list = result["List"];
-        for (ui32 i = 0; i < list.Size(); ++i) {
-            auto key = (ui64) list[i]["Key"];
-            UNIT_ASSERT(key < 100);
-        }
-    }
-
-    Y_UNIT_TEST(SelectRangeBothLimit) {
-        const ui32 TABLE_ROWS = 50;
-
-        TPortManager pm;
-        ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
-        TFlatMsgBusClient annoyingClient(port);
-
-        annoyingClient.InitRoot();
-        annoyingClient.MkDir("/dc-1", "test");
-
-        annoyingClient.CreateTable("/dc-1/test",
-            R"(Name: "TestTable"
-                Columns { Name: "Key"   Type: "Uint64"}
-                Columns { Name: "Value" Type: "Uint64"}
-                KeyColumnNames: ["Key"]
-                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } }
-                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 200 } } } }
-            )");
-
-        for (ui32 shard = 0; shard < 3; ++shard) {
-            for (ui32 i = 0; i < TABLE_ROWS; ++i) {
-                auto key = shard * 100 + i;
-
-                annoyingClient.FlatQuery(Sprintf(R"(
-                    (
-                    (let key '('('Key (Uint64 '%d)) ))
-                    (let payload '('('Value (Uint64 '%d))))
-                    (return (AsList (UpdateRow '"/dc-1/test/TestTable" key payload)))
-                    )
-                    )", key, i
-                ));
-            }
-        }
-
-        auto res = annoyingClient.FlatQuery(Sprintf(R"(
-            (
-            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
-            (let data (SelectRange
-                '"/dc-1/test/TestTable"
-                range
-                '('Key 'Value)
-                '(
-                    '('"ItemsLimit" (Uint64 '%d))
-                    '('"BytesLimit" (Uint64 '%d))
-                 )
-            ))
-            (return (AsList (SetResult 'Result data)))
-            )
-            )", 30, TABLE_ROWS * 8
-        ));
-
-        TValue value = TValue::Create(res.GetValue(), res.GetType());
-        TValue result = value["Result"];
-        UNIT_ASSERT_VALUES_EQUAL((bool)result["Truncated"], true);
-        auto list = result["List"];
-        for (ui32 i = 0; i < list.Size(); ++i) {
-            auto key = (ui64) list[i]["Key"];
-            UNIT_ASSERT(key < 100);
-        }
-    }
-
+ 
+     Y_UNIT_TEST(SelectRangeItemsLimit) { 
+        const ui32 TABLE_ROWS = 10; 
+ 
+        TPortManager pm; 
+        ui16 port = pm.GetPort(2134); 
+        TServer cleverServer = TServer(TServerSettings(port)); 
+        TFlatMsgBusClient annoyingClient(port); 
+ 
+        annoyingClient.InitRoot(); 
+        annoyingClient.MkDir("/dc-1", "test"); 
+ 
+        annoyingClient.CreateTable("/dc-1/test", 
+            R"(Name: "TestTable" 
+                Columns { Name: "Key"   Type: "Uint64"} 
+                Columns { Name: "Value" Type: "Uint64"} 
+                KeyColumnNames: ["Key"] 
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } } 
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 200 } } } } 
+            )"); 
+ 
+        for (ui32 shard = 0; shard < 3; ++shard) { 
+            for (ui32 i = 0; i < TABLE_ROWS; ++i) { 
+                auto key = shard * 100 + i; 
+ 
+                annoyingClient.FlatQuery(Sprintf(R"( 
+                    ( 
+                    (let key '('('Key (Uint64 '%d)) )) 
+                    (let payload '('('Value (Uint64 '%d)))) 
+                    (return (AsList (UpdateRow '"/dc-1/test/TestTable" key payload))) 
+                    ) 
+                    )", key, i 
+                )); 
+            } 
+        } 
+ 
+        auto res = annoyingClient.FlatQuery(Sprintf(R"( 
+            ( 
+            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void)))) 
+            (let data (SelectRange 
+                '"/dc-1/test/TestTable" 
+                range 
+                '('Key 'Value) 
+                '( 
+                    '('"ItemsLimit" (Uint64 '%d)) 
+                 ) 
+            )) 
+            (return (AsList (SetResult 'Result data))) 
+            ) 
+            )", 5 
+        )); 
+ 
+        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
+        TValue result = value["Result"]; 
+        UNIT_ASSERT_VALUES_EQUAL((bool)result["Truncated"], true); 
+        auto list = result["List"]; 
+        for (ui32 i = 0; i < list.Size(); ++i) { 
+            auto key = (ui64) list[i]["Key"]; 
+            UNIT_ASSERT(key < 100); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(SelectRangeBothLimit) { 
+        const ui32 TABLE_ROWS = 50; 
+ 
+        TPortManager pm; 
+        ui16 port = pm.GetPort(2134); 
+        TServer cleverServer = TServer(TServerSettings(port)); 
+        TFlatMsgBusClient annoyingClient(port); 
+ 
+        annoyingClient.InitRoot(); 
+        annoyingClient.MkDir("/dc-1", "test"); 
+ 
+        annoyingClient.CreateTable("/dc-1/test", 
+            R"(Name: "TestTable" 
+                Columns { Name: "Key"   Type: "Uint64"} 
+                Columns { Name: "Value" Type: "Uint64"} 
+                KeyColumnNames: ["Key"] 
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } } 
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 200 } } } } 
+            )"); 
+ 
+        for (ui32 shard = 0; shard < 3; ++shard) { 
+            for (ui32 i = 0; i < TABLE_ROWS; ++i) { 
+                auto key = shard * 100 + i; 
+ 
+                annoyingClient.FlatQuery(Sprintf(R"( 
+                    ( 
+                    (let key '('('Key (Uint64 '%d)) )) 
+                    (let payload '('('Value (Uint64 '%d)))) 
+                    (return (AsList (UpdateRow '"/dc-1/test/TestTable" key payload))) 
+                    ) 
+                    )", key, i 
+                )); 
+            } 
+        } 
+ 
+        auto res = annoyingClient.FlatQuery(Sprintf(R"( 
+            ( 
+            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void)))) 
+            (let data (SelectRange 
+                '"/dc-1/test/TestTable" 
+                range 
+                '('Key 'Value) 
+                '( 
+                    '('"ItemsLimit" (Uint64 '%d)) 
+                    '('"BytesLimit" (Uint64 '%d)) 
+                 ) 
+            )) 
+            (return (AsList (SetResult 'Result data))) 
+            ) 
+            )", 30, TABLE_ROWS * 8 
+        )); 
+ 
+        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
+        TValue result = value["Result"]; 
+        UNIT_ASSERT_VALUES_EQUAL((bool)result["Truncated"], true); 
+        auto list = result["List"]; 
+        for (ui32 i = 0; i < list.Size(); ++i) { 
+            auto key = (ui64) list[i]["Key"]; 
+            UNIT_ASSERT(key < 100); 
+        } 
+    } 
+ 
     static NKikimrMiniKQL::TResult CreateTableAndExecuteMkql(const TString& mkql) {
-        TPortManager pm;
-        ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
-        TFlatMsgBusClient annoyingClient(port);
-
-        annoyingClient.InitRoot();
-        annoyingClient.MkDir("/dc-1", "test");
-
-        annoyingClient.CreateTable("/dc-1/test",
-            R"(Name: "TestTable"
-                Columns { Name: "Key1"   Type: "Uint64"}
-                Columns { Name: "Key2"   Type: "String"}
-                Columns { Name: "Value"  Type: "String"}
-                KeyColumnNames: ["Key1", "Key2"]
-            )");
-
-        auto fillValues = [&annoyingClient]
-            (const TMaybe<ui64>& key1, const TMaybe<TString>& key2, const TString& value) {
-                TString key1Str = key1
-                    ? "(Uint64 '" + ToString(*key1) + ")"
-                    : "(Null)";
-
-                TString key2Str = key2
-                    ? "(String '" + ToString(*key2) + ")"
-                    : "(Null)";
-
-                annoyingClient.FlatQuery(Sprintf(R"(
-                    (
-                    (let key '('('Key1 %s) '('Key2 %s) ))
-                    (let payload '('('Value (String '%s))))
-                    (return (AsList (UpdateRow '"/dc-1/test/TestTable" key payload)))
-                    )
-                    )", key1Str.c_str(), key2Str.c_str(), value.c_str()
-                ));
-            };
-
-        fillValues({}, {},            "One");
-        fillValues(1,  {},            "Two");
-        fillValues(1,  TString("k1"), "Three");
-        fillValues(2,  {},            "Four");
-        fillValues(2,  TString("k1"), "Five");
-
+        TPortManager pm; 
+        ui16 port = pm.GetPort(2134); 
+        TServer cleverServer = TServer(TServerSettings(port)); 
+        TFlatMsgBusClient annoyingClient(port); 
+ 
+        annoyingClient.InitRoot(); 
+        annoyingClient.MkDir("/dc-1", "test"); 
+ 
+        annoyingClient.CreateTable("/dc-1/test", 
+            R"(Name: "TestTable" 
+                Columns { Name: "Key1"   Type: "Uint64"} 
+                Columns { Name: "Key2"   Type: "String"} 
+                Columns { Name: "Value"  Type: "String"} 
+                KeyColumnNames: ["Key1", "Key2"] 
+            )"); 
+ 
+        auto fillValues = [&annoyingClient] 
+            (const TMaybe<ui64>& key1, const TMaybe<TString>& key2, const TString& value) { 
+                TString key1Str = key1 
+                    ? "(Uint64 '" + ToString(*key1) + ")" 
+                    : "(Null)"; 
+ 
+                TString key2Str = key2 
+                    ? "(String '" + ToString(*key2) + ")" 
+                    : "(Null)"; 
+ 
+                annoyingClient.FlatQuery(Sprintf(R"( 
+                    ( 
+                    (let key '('('Key1 %s) '('Key2 %s) )) 
+                    (let payload '('('Value (String '%s)))) 
+                    (return (AsList (UpdateRow '"/dc-1/test/TestTable" key payload))) 
+                    ) 
+                    )", key1Str.c_str(), key2Str.c_str(), value.c_str() 
+                )); 
+            }; 
+ 
+        fillValues({}, {},            "One"); 
+        fillValues(1,  {},            "Two"); 
+        fillValues(1,  TString("k1"), "Three"); 
+        fillValues(2,  {},            "Four"); 
+        fillValues(2,  TString("k1"), "Five"); 
+ 
         return annoyingClient.FlatQuery(mkql);
     }
 
     Y_UNIT_TEST(SelectRangeSkipNullKeys) {
         auto res = CreateTableAndExecuteMkql(Sprintf(R"(
-            (
-            (let range '('ExcFrom 'ExcTo '('Key1 (Null) (Void)) '('Key2 (Null) (Void))))
-            (let data (SelectRange
-                '"/dc-1/test/TestTable"
-                range
-                '('Value)
-                '(
-                    '('"SkipNullKeys" '('Key2))
-                 )
-            ))
-            (return (AsList (SetResult 'Result data)))
-            )
-            )"
-        ));
-
-        TValue value = TValue::Create(res.GetValue(), res.GetType());
-        TValue result = value["Result"];
-        auto list = result["List"];
-        UNIT_ASSERT_VALUES_EQUAL(list.Size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL((TString)list[0]["Value"], "Three");
-        UNIT_ASSERT_VALUES_EQUAL((TString)list[1]["Value"], "Five");
-    }
+            ( 
+            (let range '('ExcFrom 'ExcTo '('Key1 (Null) (Void)) '('Key2 (Null) (Void)))) 
+            (let data (SelectRange 
+                '"/dc-1/test/TestTable" 
+                range 
+                '('Value) 
+                '( 
+                    '('"SkipNullKeys" '('Key2)) 
+                 ) 
+            )) 
+            (return (AsList (SetResult 'Result data))) 
+            ) 
+            )" 
+        )); 
+ 
+        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
+        TValue result = value["Result"]; 
+        auto list = result["List"]; 
+        UNIT_ASSERT_VALUES_EQUAL(list.Size(), 2); 
+        UNIT_ASSERT_VALUES_EQUAL((TString)list[0]["Value"], "Three"); 
+        UNIT_ASSERT_VALUES_EQUAL((TString)list[1]["Value"], "Five"); 
+    } 
 
     Y_UNIT_TEST(SelectRangeForbidNullArgs1) {
         auto res = CreateTableAndExecuteMkql(Sprintf(R"(

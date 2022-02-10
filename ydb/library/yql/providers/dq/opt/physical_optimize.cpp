@@ -25,7 +25,7 @@ public:
         AddHandler(0, &TDqReadWrap::Match, HNDL(BuildStageWithReadWrap));
         AddHandler(0, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<false>));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<false>));
-        AddHandler(0, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<false>));
+        AddHandler(0, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<false>)); 
         AddHandler(0, &TCoCombineByKey::Match, HNDL(PushCombineToStage<false>));
         AddHandler(0, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage));
         AddHandler(0, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage));
@@ -51,7 +51,7 @@ public:
 
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<true>));
         AddHandler(1, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<true>));
-        AddHandler(1, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<true>));
+        AddHandler(1, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<true>)); 
         AddHandler(1, &TCoCombineByKey::Match, HNDL(PushCombineToStage<true>));
         AddHandler(1, &TCoTopSort::Match, HNDL(BuildTopSortStage<true>));
         AddHandler(1, &TCoSort::Match, HNDL(BuildSortStage<true>));
@@ -198,7 +198,7 @@ protected:
     }
 
     template <bool IsGlobal>
-    TMaybeNode<TExprBase> BuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+    TMaybeNode<TExprBase> BuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) { 
         return DqBuildFlatmapStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
@@ -258,7 +258,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildExtendStage(TExprBase node, TExprContext& ctx) {
-        return DqBuildExtendStage(node, ctx);
+        return DqBuildExtendStage(node, ctx); 
     }
 
     TMaybeNode<TExprBase> RewriteRightJoinToLeft(TExprBase node, TExprContext& ctx) {
@@ -266,10 +266,10 @@ protected:
     }
 
     template <bool IsGlobal>
-    TMaybeNode<TExprBase> PushJoinToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+    TMaybeNode<TExprBase> PushJoinToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) { 
         return DqPushJoinToStage(node, ctx, optCtx, *getParents(), IsGlobal);
-    }
-
+    } 
+ 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildJoin(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         auto join = node.Cast<TDqJoin>();
@@ -277,7 +277,7 @@ protected:
         if (!JoinPrerequisitesVerify(join, parentsMap, IsGlobal)) {
             return node;
         }
-
+ 
         return DqBuildPhyJoin(join, false /* TODO */, ctx, optCtx);
     }
 

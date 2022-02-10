@@ -1286,31 +1286,31 @@ public:
 
     TString MiniKQL;
     TString Params;
-    bool Proto = false;
+    bool Proto = false; 
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
         config.SetFreeArgsNum(1, 2);
         SetFreeArgTitle(0, "<MINIKQL>", "Text MiniKQL");
         SetFreeArgTitle(1, "<PARAMS>", "Text MiniKQL parameters");
-        config.Opts->AddLongOption('p', "proto", "MiniKQL parameters are in protobuf format").NoArgument().SetFlag(&Proto);
+        config.Opts->AddLongOption('p', "proto", "MiniKQL parameters are in protobuf format").NoArgument().SetFlag(&Proto); 
     }
 
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
         MiniKQL = GetMiniKQL(config.ParseResult->GetFreeArgs()[0]);
         if (config.ParseResult->GetFreeArgsPos() > 1) {
-            auto paramsArg = config.ParseResult->GetFreeArgs()[1];
-            Params = Proto
+            auto paramsArg = config.ParseResult->GetFreeArgs()[1]; 
+            Params = Proto 
                 ? TUnbufferedFileInput(paramsArg).ReadAll()
-                : GetMiniKQL(paramsArg);
+                : GetMiniKQL(paramsArg); 
         }
     }
 
     virtual int Run(TConfig& config) override {
         auto handler = [this](NClient::TKikimr& kikimr) {
             NClient::TTextQuery query(kikimr.Query(MiniKQL));
-
+ 
             NThreading::TFuture<NClient::TQueryResult> future;
             if (Proto) {
                 NKikimrMiniKQL::TParams mkqlParams;
@@ -1319,7 +1319,7 @@ public:
             } else {
                 future = query.AsyncExecute(Params);
             }
-
+ 
             return HandleResponse<NClient::TQueryResult>(future, [](const NClient::TQueryResult& result) -> int {
                 Cout << result.GetValue().GetValueText<NClient::TFormatJSON>() << '\n';
                 return 0;

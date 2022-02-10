@@ -147,19 +147,19 @@ struct TLocksV1 {
             << "Counter: " << lock.Counter << Endl;
     }
 };
-
+ 
 ///
 struct TLocksV2 {
     static constexpr const char * TableName() { return "/sys/locks2"; }
     static constexpr const char * Columns() { return "'LockId 'DataShard 'Generation 'Counter 'SchemeShard 'PathId"; }
     static constexpr const char * ResultLabel() { return NMiniKQL::TxLocksResultLabel2.data(); }
-
+ 
     static TString Key(ui64 lockId, ui64 datashard, ui64 schemeshard, ui64 pathId) {
         return Sprintf(
             "'('LockId (Uint64 '%lu)) '('DataShard (Uint64 '%lu)) '('SchemeShard (Uint64 '%lu)) '('PathId (Uint64 '%lu))",
             lockId, datashard, schemeshard, pathId);
     }
-
+ 
     static NMiniKQL::IEngineFlat::TTxLock ExtractLock(TValue l) {
         UNIT_ASSERT_VALUES_EQUAL(l.Size(), 6);
         ui64 lockId = l["LockId"];
@@ -170,7 +170,7 @@ struct TLocksV2 {
         ui64 pathId = l["PathId"];
         return NMiniKQL::IEngineFlat::TTxLock(lockId, dataShard, generation, counter, schemeShard, pathId);
     }
-
+ 
     static void PrintLock(const NMiniKQL::IEngineFlat::TTxLock& lock) {
         Cout << "LockId: " << lock.LockId << ", "
             << "DataShard: " << lock.DataShard << ", "
@@ -178,15 +178,15 @@ struct TLocksV2 {
             << "Counter: " << lock.Counter << ", "
             << "SchemeShard: "<< lock.SchemeShard << ", "
             << "PathId: " << lock.PathId << Endl;
-    }
+    } 
 };
 
 template<typename T>
 static NMiniKQL::IEngineFlat::TTxLock ExtractRowLock(TValue l) {
     UNIT_ASSERT(l.HaveValue());
     return T::ExtractLock(l);
-}
-
+} 
+ 
 template<typename T>
 static void ExtractResultLocks(const NKikimrMiniKQL::TResult& result, TVector<NMiniKQL::IEngineFlat::TTxLock>& txLocks) {
     TValue value = TValue::Create(result.GetValue(), result.GetType());
@@ -295,47 +295,47 @@ void TestLock(const TLocksTestOptions& testOpts) {
     TClientServer cs(testOpts.OutOfOrder, testOpts.SoftUpdates);
     NKikimrMiniKQL::TResult res;
 
-    ui64 txLockId = 0;
-    auto getSetLocks = [&testOpts, &txLockId] () {
-        if (testOpts.TestRange) {
-            const char * setLocksT = R"___((
+    ui64 txLockId = 0; 
+    auto getSetLocks = [&testOpts, &txLockId] () { 
+        if (testOpts.TestRange) { 
+            const char * setLocksT = R"___(( 
                 (let table_ '%s)
                 (let range0_ '(%s '('key %s %s) %s))
                 (let range1_ '(%s '('key %s %s) %s))
-                (let cols_ '('key 'value))
-                (let ret_ (AsList
+                (let cols_ '('key 'value)) 
+                (let ret_ (AsList 
                     (SetResult 'res0 (SelectRange table_ range0_ cols_ '()))
                     (SetResult 'res1 (SelectRange table_ range1_ cols_ '()))
                     (AcquireLocks (Uint64 '%lu))
-                ))
-                (return ret_)
-            ))___";
+                )) 
+                (return ret_) 
+            ))___"; 
             return Sprintf(setLocksT, testOpts.Table,
                            testOpts.Range0Inc, testOpts.Range0Begin, testOpts.Range0End, testOpts.Range0OptKey,
                            testOpts.Range1Inc, testOpts.Range1Begin, testOpts.Range1End, testOpts.Range1OptKey, txLockId);
-        } else {
-            const char * setLocksT = R"___((
+        } else { 
+            const char * setLocksT = R"___(( 
                 (let table_ '%s)
                 (let row0_ '(%s))
                 (let row1_ '(%s))
                 (let row2_ '(%s))
-                (let cols_ '('value))
+                (let cols_ '('value)) 
                 (let select0_ (SelectRow table_ row0_ cols_))
                 (let select1_ (SelectRow table_ row1_ cols_))
                 (let select2_ (SelectRow table_ row2_ cols_))
-                (let ret_ (AsList
-                    (SetResult 'res0 select0_)
-                    (SetResult 'res1 select1_)
+                (let ret_ (AsList 
+                    (SetResult 'res0 select0_) 
+                    (SetResult 'res1 select1_) 
                     (SetResult 'res2 select2_)
-                    (SetResult 'txid (Nth (StepTxId) '1))
+                    (SetResult 'txid (Nth (StepTxId) '1)) 
                     (AcquireLocks (Uint64 '%lu))
-                ))
-                (return ret_)
-            ))___";
+                )) 
+                (return ret_) 
+            ))___"; 
             return Sprintf(setLocksT, testOpts.Table,
                            testOpts.BreakKey, testOpts.NoBreakKey0, testOpts.NoBreakKey1, txLockId);
-        }
-    };
+        } 
+    }; 
 
     TVector<NMiniKQL::IEngineFlat::TTxLock> txLocks;
 
@@ -344,21 +344,21 @@ void TestLock(const TLocksTestOptions& testOpts) {
         ui64 pathId = 3;
         txLocks.emplace_back(NMiniKQL::IEngineFlat::TTxLock{281474976710659, 72075186224037888, 2, 0, ssId, pathId});
         txLocks.emplace_back(NMiniKQL::IEngineFlat::TTxLock{281474976710659, 72075186224037889, 2, 0, ssId, pathId});
-        txLockId = 281474976710659;
+        txLockId = 281474976710659; 
     } else {
-        cs.Client.FlatQuery(getSetLocks(), res);
+        cs.Client.FlatQuery(getSetLocks(), res); 
         ExtractResultLocks<TLocksVer>(res, txLocks);
-        UNIT_ASSERT(txLocks.size() > 0);
-        txLockId = txLocks[0].LockId;
+        UNIT_ASSERT(txLocks.size() > 0); 
+        txLockId = txLocks[0].LockId; 
     }
 
-    for (auto& lock : txLocks)
+    for (auto& lock : txLocks) 
         TLocksVer::PrintLock(lock);
 
     if (testOpts.SetOnly)
         return;
 
-    UNIT_ASSERT_VALUES_EQUAL(txLocks.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(txLocks.size(), 2); 
 
     const char * breakLock = nullptr;
     if (!testOpts.TestErase) {
@@ -389,7 +389,7 @@ void TestLock(const TLocksTestOptions& testOpts) {
     cs.Client.FlatQuery(Sprintf(breakLock, testOpts.Table, testOpts.BreakKey, (testOpts.Break ? "true" : "false") ));
 
     if (testOpts.Dup) {
-        cs.Client.FlatQuery(getSetLocks(), res);
+        cs.Client.FlatQuery(getSetLocks(), res); 
         ExtractResultLocks<TLocksVer>(res, txLocks);
     }
 
@@ -1130,11 +1130,11 @@ static void MultipleLocks() {
         (let select0_ (SelectRow '/dc-1/Dir/A row0_ cols_))
         (let ret_ (AsList
             (SetResult 'res0 select0_)
-            (AcquireLocks (Uint64 '0))
+            (AcquireLocks (Uint64 '0)) 
         ))
         (return ret_)
     ))___";
-    cs.Client.FlatQuery(q1, res);
+    cs.Client.FlatQuery(q1, res); 
     TVector<NMiniKQL::IEngineFlat::TTxLock> locks1;
     ExtractResultLocks<TLocksVer>(res, locks1);
 
@@ -1162,11 +1162,11 @@ static void MultipleLocks() {
         (let ret_ (AsList
             (SetResult 'res0 select0_)
             (SetResult 'res1 select1_)
-            (AcquireLocks (Uint64 '0))
+            (AcquireLocks (Uint64 '0)) 
         ))
         (return ret_)
     ))___";
-    cs.Client.FlatQuery(q2, res);
+    cs.Client.FlatQuery(q2, res); 
     TVector<NMiniKQL::IEngineFlat::TTxLock> locks2;
     ExtractResultLocks<TLocksVer>(res, locks2);
 
@@ -1274,7 +1274,7 @@ Y_UNIT_TEST(SetLockFail) {
         (let update_ '('('value (Uint32 '0))))
         (let ret_ (AsList
             (UpdateRow '/dc-1/Dir/A row0_ update_)
-            (AcquireLocks (Uint64 '0))
+            (AcquireLocks (Uint64 '0)) 
         ))
         (return ret_)
     ))___";
@@ -1285,7 +1285,7 @@ Y_UNIT_TEST(SetLockFail) {
         (let row0_ '('('key (Uint32 '42))))
         (let ret_ (AsList
             (EraseRow '/dc-1/Dir/A row0_)
-            (AcquireLocks (Uint64 '0))
+            (AcquireLocks (Uint64 '0)) 
         ))
         (return ret_)
     ))___";

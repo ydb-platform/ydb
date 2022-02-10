@@ -5,7 +5,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/util/proto_duration.h>
-
+ 
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -28,7 +28,7 @@ inline void SetAuthToken(TEv& ev, const IRequestCtx& ctx) {
 template<typename TEv>
 inline void SetDatabase(TEv& ev, const IRequestCtx& ctx) {
     // Empty database in case of absent header
-    ev->Record.MutableRequest()->SetDatabase(CanonizePath(ctx.GetDatabaseName().GetOrElse("")));
+    ev->Record.MutableRequest()->SetDatabase(CanonizePath(ctx.GetDatabaseName().GetOrElse(""))); 
 }
 
 inline void SetDatabase(TEvTxUserProxy::TEvProposeTransaction* ev, const IRequestCtx& ctx) {

@@ -7,14 +7,14 @@
 #include <util/generic/strbuf.h>
 #include <util/stream/format.h>
 #include <util/system/getpid.h>
-#include <util/system/mutex.h>
+#include <util/system/mutex.h> 
 #include <util/system/progname.h>
 #include <util/system/thread.i>
 
 #include <stdio.h>
 #include <time.h>
 
-static TMutex g_InitLoggerMutex;
+static TMutex g_InitLoggerMutex; 
 static int g_LoggerInitialized = 0;
 
 namespace {
@@ -89,21 +89,21 @@ public:
     }
 };
 
-TYqlLog::TYqlLog()
-    : TLog()
-    , ProcName_()
-    , ProcId_()
-    , WriteTruncMsg_(0) {}
-
+TYqlLog::TYqlLog() 
+    : TLog() 
+    , ProcName_() 
+    , ProcId_() 
+    , WriteTruncMsg_(0) {} 
+ 
 TYqlLog::TYqlLog(const TString& logType, const TComponentLevels& levels)
     : TLog(logType)
     , ProcName_(GetProgramName())
     , ProcId_(GetPID())
     , WriteTruncMsg_(0)
 {
-    for (size_t component = 0; component < levels.size(); ++component) {
-        SetComponentLevel(EComponentHelpers::FromInt(component), levels[component]);
-    }
+    for (size_t component = 0; component < levels.size(); ++component) { 
+        SetComponentLevel(EComponentHelpers::FromInt(component), levels[component]); 
+    } 
 }
 
 TYqlLog::TYqlLog(TAutoPtr<TLogBackend> backend, const TComponentLevels& levels)
@@ -112,9 +112,9 @@ TYqlLog::TYqlLog(TAutoPtr<TLogBackend> backend, const TComponentLevels& levels)
     , ProcId_(GetPID())
     , WriteTruncMsg_(0)
 {
-    for (size_t component = 0; component < levels.size(); ++component) {
-        SetComponentLevel(EComponentHelpers::FromInt(component), levels[component]);
-    }
+    for (size_t component = 0; component < levels.size(); ++component) { 
+        SetComponentLevel(EComponentHelpers::FromInt(component), levels[component]); 
+    } 
 }
 
 void TYqlLog::UpdateProcInfo(const TString& procName) {
@@ -164,63 +164,63 @@ void TYqlLog::SetMaxLogLimit(ui64 limit) {
 }
 
 void InitLogger(const TString& logType, bool startAsDaemon) {
-    with_lock(g_InitLoggerMutex) {
+    with_lock(g_InitLoggerMutex) { 
         ++g_LoggerInitialized;
         if (g_LoggerInitialized > 1) {
-            return;
-        }
+            return; 
+        } 
 
-        TComponentLevels levels;
-        levels.fill(ELevel::INFO);
+        TComponentLevels levels; 
+        levels.fill(ELevel::INFO); 
 
-        if (startAsDaemon && (
+        if (startAsDaemon && ( 
                 TStringBuf("console") == logType ||
                 TStringBuf("cout") == logType ||
                 TStringBuf("cerr") == logType))
-        {
-            TLoggerOperator<TYqlLog>::Set(new TYqlLog("null", levels));
-            return;
-        }
-
+        { 
+            TLoggerOperator<TYqlLog>::Set(new TYqlLog("null", levels)); 
+            return; 
+        } 
+ 
         if (TStringBuf("syslog") == logType) {
-            auto backend = MakeHolder<TSysLogBackend>(
-                        GetProgramName().data(), TSysLogBackend::TSYSLOG_LOCAL1);
-            auto& logger = TLoggerOperator<TYqlLog>::Log();
+            auto backend = MakeHolder<TSysLogBackend>( 
+                        GetProgramName().data(), TSysLogBackend::TSYSLOG_LOCAL1); 
+            auto& logger = TLoggerOperator<TYqlLog>::Log(); 
             logger.ResetBackend(THolder(backend.Release()));
-        } else {
-            TLoggerOperator<TYqlLog>::Set(new TYqlLog(logType, levels));
-        }
+        } else { 
+            TLoggerOperator<TYqlLog>::Set(new TYqlLog(logType, levels)); 
+        } 
     }
 }
 
 void InitLogger(TAutoPtr<TLogBackend> backend) {
-    with_lock(g_InitLoggerMutex) {
+    with_lock(g_InitLoggerMutex) { 
         ++g_LoggerInitialized;
         if (g_LoggerInitialized > 1) {
-            return;
-        }
-
-        TComponentLevels levels;
-        levels.fill(ELevel::INFO);
-        TLoggerOperator<TYqlLog>::Set(new TYqlLog(backend, levels));
-    }
+            return; 
+        } 
+ 
+        TComponentLevels levels; 
+        levels.fill(ELevel::INFO); 
+        TLoggerOperator<TYqlLog>::Set(new TYqlLog(backend, levels)); 
+    } 
 }
 
 void InitLogger(IOutputStream* out) {
     InitLogger(new TStreamLogBackend(out));
 }
 
-void CleanupLogger() {
-    with_lock(g_InitLoggerMutex) {
+void CleanupLogger() { 
+    with_lock(g_InitLoggerMutex) { 
         --g_LoggerInitialized;
         if (g_LoggerInitialized > 0) {
-            return;
-        }
-
-        TLoggerOperator<TYqlLog>::Set(new TYqlLog());
-    }
-}
-
+            return; 
+        } 
+ 
+        TLoggerOperator<TYqlLog>::Set(new TYqlLog()); 
+    } 
+} 
+ 
 } // namespace NLog
 } // namespace NYql
 

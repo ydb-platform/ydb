@@ -1339,7 +1339,7 @@ private:
         auto key = Args[0];
         auto inNode = Args[1];
         auto hints = Args[2];
-
+ 
         const auto pos = inNode->GetPos();
 
         if (!key->Init(ctx, src)) {
@@ -1366,7 +1366,7 @@ private:
                                                                       << "perhaps you should remove "
                                                                       << parenKind << "parenthesis here";
             }
-        }
+        } 
 
         TVector<TNodePtr> hintElements;
         for (size_t i = 0; i < hints->GetTupleSize(); ++i) {
@@ -1390,7 +1390,7 @@ private:
             key,
             BuildTuple(pos, hintElements)
         };
-
+ 
         return TCallNode::DoInit(ctx, src);
     }
 
@@ -1430,7 +1430,7 @@ private:
     void DoUpdateState() const override {
         TCallNode::DoUpdateState();
         State.Set(ENodeState::Aggregated, false/*!RunConfig || RunConfig->IsAggregated()*/);
-        State.Set(ENodeState::Const, true /* FIXME: To avoid CheckAggregationLevel issue for non-const TypeOf. */);
+        State.Set(ENodeState::Const, true /* FIXME: To avoid CheckAggregationLevel issue for non-const TypeOf. */); 
     }
 
 private:
@@ -1992,7 +1992,7 @@ public:
         : INode(pos)
         , Module(module)
         , Name(name)
-        , Args(args)
+        , Args(args) 
         , ForReduce(forReduce)
     {}
 

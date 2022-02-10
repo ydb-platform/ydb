@@ -331,10 +331,10 @@ ui32 TFakeProxyTx::SetProgram(TTester& tester, const TString& programText) {
     for (auto& dbKey : dbKeys) {
         keyResolver(*dbKey);
         UNIT_ASSERT(dbKey->Status == TKeyDesc::EStatus::Ok);
-
-        for (auto& partition : dbKey->Partitions) {
-            resolvedShards.insert(partition.ShardId);
-        }
+ 
+        for (auto& partition : dbKey->Partitions) { 
+            resolvedShards.insert(partition.ShardId); 
+        } 
     }
 
     result = Engine->PrepareShardPrograms();
@@ -353,7 +353,7 @@ ui32 TFakeProxyTx::GetShardProgram(ui32 idx, TString& outTxBody) {
     NKikimrTxDataShard::TDataTransaction tx;
     tx.SetMiniKQL(shardData.Program);
     tx.SetImmediate(shardData.Immediate);
-    tx.SetReadOnly(Engine->IsReadOnlyProgram());
+    tx.SetReadOnly(Engine->IsReadOnlyProgram()); 
     outTxBody = tx.SerializeAsString();
     return shardData.ShardId;
 }
@@ -454,7 +454,7 @@ void TFakeScanTx::AddPlanStepShardResult(ui32 /*shardId*/,
                                          bool /*complete*/) {
     if (event->Record.GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::RESPONSE_DATA) {
         auto &res = event->Record.GetTxResult();
-        YdbOld::ResultSet part;
+        YdbOld::ResultSet part; 
         UNIT_ASSERT(part.ParseFromArray(res.data(), res.size()));
 
         if (Result.column_metaSize())
@@ -469,7 +469,7 @@ void TFakeScanTx::AddPlanStepShardResult(ui32 /*shardId*/,
     }
 }
 
-YdbOld::ResultSet TFakeScanTx::GetScanResult() const {
+YdbOld::ResultSet TFakeScanTx::GetScanResult() const { 
     return Result;
 }
 
@@ -1719,7 +1719,7 @@ void SendSQL(Tests::TServer::TPtr server,
 {
     auto &runtime = *server->GetRuntime();
     auto request = MakeSQLRequest(sql, dml);
-    runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
+    runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release())); 
 }
 
 void ExecSQL(Tests::TServer::TPtr server,
@@ -1732,7 +1732,7 @@ void ExecSQL(Tests::TServer::TPtr server,
     TAutoPtr<IEventHandle> handle;
 
     auto request = MakeSQLRequest(sql, dml);
-    runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
+    runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release())); 
     auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
     UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetRef().GetYdbStatus(), code);
 }

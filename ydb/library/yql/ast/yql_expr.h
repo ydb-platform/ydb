@@ -33,18 +33,18 @@
 #include <span>
 #include <stack>
 
-//#define YQL_CHECK_NODES_CONSISTENCY
-#ifdef YQL_CHECK_NODES_CONSISTENCY
-    #define ENSURE_NOT_DELETED \
+//#define YQL_CHECK_NODES_CONSISTENCY 
+#ifdef YQL_CHECK_NODES_CONSISTENCY 
+    #define ENSURE_NOT_DELETED \ 
         YQL_ENSURE(!Dead(), "Access to dead node # " << UniqueId_ << ": " << Type_ << " '" << ContentUnchecked() << "'");
-    #define ENSURE_NOT_FROZEN \
+    #define ENSURE_NOT_FROZEN \ 
         YQL_ENSURE(!Frozen(), "Change in frozen node # " << UniqueId_ << ": " << Type_ << " '" << ContentUnchecked() << "'");
-    #define ENSURE_NOT_FROZEN_CTX \
-        YQL_ENSURE(!Frozen, "Change in frozen expr context.");
+    #define ENSURE_NOT_FROZEN_CTX \ 
+        YQL_ENSURE(!Frozen, "Change in frozen expr context."); 
 #else
     #define ENSURE_NOT_DELETED Y_VERIFY_DEBUG(!Dead(), "Access to dead node # %lu: %d '%s'", UniqueId_, (int)Type_, TString(ContentUnchecked()).data());
-    #define ENSURE_NOT_FROZEN Y_VERIFY_DEBUG(!Frozen());
-    #define ENSURE_NOT_FROZEN_CTX Y_VERIFY_DEBUG(!Frozen);
+    #define ENSURE_NOT_FROZEN Y_VERIFY_DEBUG(!Frozen()); 
+    #define ENSURE_NOT_FROZEN_CTX Y_VERIFY_DEBUG(!Frozen); 
 #endif
 
 namespace NYql {
@@ -68,7 +68,7 @@ class TDictExprType;
 class TVoidExprType;
 class TNullExprType;
 class TGenericExprType;
-class TTaggedExprType;
+class TTaggedExprType; 
 class TErrorExprType;
 class TVariantExprType;
 class TStreamExprType;
@@ -101,7 +101,7 @@ struct TTypeAnnotationVisitor {
     virtual void Visit(const TVoidExprType& type) = 0;
     virtual void Visit(const TNullExprType& type) = 0;
     virtual void Visit(const TGenericExprType& type) = 0;
-    virtual void Visit(const TTaggedExprType& type) = 0;
+    virtual void Visit(const TTaggedExprType& type) = 0; 
     virtual void Visit(const TErrorExprType& type) = 0;
     virtual void Visit(const TVariantExprType& type) = 0;
     virtual void Visit(const TEmptyListExprType& type) = 0;
@@ -1059,16 +1059,16 @@ private:
     const TStringBuf Tag;
 };
 
-class TTaggedExprType : public TTypeAnnotationNode {
-public:
+class TTaggedExprType : public TTypeAnnotationNode { 
+public: 
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Tagged;
 
     TTaggedExprType(ui64 hash, const TTypeAnnotationNode* baseType, const TStringBuf& tag)
         : TTypeAnnotationNode(KindValue, baseType->GetFlags(), hash)
-        , BaseType(baseType)
-        , Tag(tag)
-    {}
-
+        , BaseType(baseType) 
+        , Tag(tag) 
+    {} 
+ 
     static ui64 MakeHash(const TTypeAnnotationNode* baseType, const TStringBuf& tag) {
         ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::Tagged;
         hash = StreamHash(baseType->GetHash(), hash);
@@ -1077,25 +1077,25 @@ public:
     }
 
     const TStringBuf& GetTag() const {
-        return Tag;
-    }
-
-    const TTypeAnnotationNode* GetBaseType() const {
-        return BaseType;
-    }
-
-    bool operator==(const TTaggedExprType& other) const {
+        return Tag; 
+    } 
+ 
+    const TTypeAnnotationNode* GetBaseType() const { 
+        return BaseType; 
+    } 
+ 
+    bool operator==(const TTaggedExprType& other) const { 
         return Tag == other.Tag && GetBaseType() == other.GetBaseType();
-    }
-
+    } 
+ 
     bool Validate(TPosition position, TExprContext& ctx) const;
     bool Validate(TPositionHandle position, TExprContext& ctx) const;
 
-private:
+private: 
     const TTypeAnnotationNode* BaseType;
     const TStringBuf Tag;
-};
-
+}; 
+ 
 class TErrorExprType : public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Error;
@@ -1281,7 +1281,7 @@ inline void TTypeAnnotationNode::Accept(TTypeAnnotationVisitor& visitor) const {
         return visitor.Visit(static_cast<const TGenericExprType&>(*this));
     case ETypeAnnotationKind::Resource:
         return visitor.Visit(static_cast<const TResourceExprType&>(*this));
-    case ETypeAnnotationKind::Tagged:
+    case ETypeAnnotationKind::Tagged: 
         return visitor.Visit(static_cast<const TTaggedExprType&>(*this));
     case ETypeAnnotationKind::Error:
         return visitor.Visit(static_cast<const TErrorExprType&>(*this));
@@ -1303,20 +1303,20 @@ inline void TTypeAnnotationNode::Accept(TTypeAnnotationVisitor& visitor) const {
 }
 
 class TExprNode {
-    friend class TExprNodeBuilder;
-    friend class TExprNodeReplaceBuilder;
-    friend struct TExprContext;
+    friend class TExprNodeBuilder; 
+    friend class TExprNodeReplaceBuilder; 
+    friend struct TExprContext; 
 
-private:
-    struct TExprFlags {
-        enum : ui16 {
-            Default = 0,
-            Dead = 0x01,
-            Frozen = 0x02,
-        };
+private: 
+    struct TExprFlags { 
+        enum : ui16 { 
+            Default = 0, 
+            Dead = 0x01, 
+            Frozen = 0x02, 
+        }; 
         static constexpr ui32 FlagsMask = 0x03; // all flags should fit here
-    };
-
+    }; 
+ 
 public:
     typedef TIntrusivePtr<TExprNode> TPtr;
     typedef std::vector<TPtr> TListType;
@@ -1337,7 +1337,7 @@ public:
     xx(Arguments, 5) \
     xx(World, 7)
 
-    enum EType : ui8 {
+    enum EType : ui8 { 
         YQL_EXPR_NODE_TYPE_MAP(ENUM_VALUE_GEN)
     };
 
@@ -1378,7 +1378,7 @@ public:
 
     void SetResult(TPtr&& result) {
         ENSURE_NOT_DELETED
-        ENSURE_NOT_FROZEN
+        ENSURE_NOT_FROZEN 
         Result = std::move(result);
     }
 
@@ -1398,11 +1398,11 @@ public:
         return Type() == TExprNode::Callable && names.contains(Content());
     }
 
-    bool IsCallable() const {
+    bool IsCallable() const { 
         ENSURE_NOT_DELETED
         return Type() == TExprNode::Callable;
-    }
-
+    } 
+ 
     bool IsAtom() const {
         ENSURE_NOT_DELETED
         return Type() == TExprNode::Atom;
@@ -1490,30 +1490,30 @@ public:
     }
 
     void Ref() {
-        ENSURE_NOT_DELETED
-        ENSURE_NOT_FROZEN
+        ENSURE_NOT_DELETED 
+        ENSURE_NOT_FROZEN 
         Y_ENSURE(RefCount_ < Max<ui32>());
         ++RefCount_;
     }
 
     void UnRef() {
-        ENSURE_NOT_DELETED
-        ENSURE_NOT_FROZEN
+        ENSURE_NOT_DELETED 
+        ENSURE_NOT_FROZEN 
         if (!--RefCount_) {
             Result.Reset();
             Children_.clear();
             Constraints_.Clear();
-            MarkDead();
+            MarkDead(); 
         }
     }
 
     ui32 UseCount() const { return RefCount_; }
     bool Unique() const { return 1U == UseCount(); }
 
-    bool Dead() const {
-        return ExprFlags_ & TExprFlags::Dead;
-    }
-
+    bool Dead() const { 
+        return ExprFlags_ & TExprFlags::Dead; 
+    } 
+ 
     TPositionHandle Pos() const {
         ENSURE_NOT_DELETED
         return Position_;
@@ -1523,7 +1523,7 @@ public:
 
     EType Type() const {
         ENSURE_NOT_DELETED
-        return (EType)Type_;
+        return (EType)Type_; 
     }
 
     TListType::size_type ChildrenSize() const {
@@ -1545,7 +1545,7 @@ public:
 
     TPtr& ChildRef(ui32 index) {
         ENSURE_NOT_DELETED
-        ENSURE_NOT_FROZEN
+        ENSURE_NOT_FROZEN 
         Y_ENSURE(index < Children_.size(), "index out of range");
         return Children_[index];
     }
@@ -1632,8 +1632,8 @@ public:
     }
 
     void NormalizeAtomFlags(const TExprNode& otherAtom) {
-        ENSURE_NOT_DELETED
-        ENSURE_NOT_FROZEN
+        ENSURE_NOT_DELETED 
+        ENSURE_NOT_FROZEN 
         Y_ENSURE(Type_ == Atom && otherAtom.Type_ == Atom, "Expected atoms");
         Y_ENSURE((Flags_ & TNodeFlags::BinaryContent) ==
             (otherAtom.Flags_ & TNodeFlags::BinaryContent), "Mismatch binary atom flags");
@@ -1869,9 +1869,9 @@ public:
     }
 
     ~TExprNode() {
-        Y_VERIFY(Dead(), "Node (id: %lu, type: %s, content: '%s') not dead on destruction.",
+        Y_VERIFY(Dead(), "Node (id: %lu, type: %s, content: '%s') not dead on destruction.", 
             UniqueId_, ToString(Type_).data(),  TString(ContentUnchecked()).data());
-        Y_VERIFY(!UseCount(), "Node (id: %lu, type: %s, content: '%s') has non-zero use count on destruction.",
+        Y_VERIFY(!UseCount(), "Node (id: %lu, type: %s, content: '%s') has non-zero use count on destruction.", 
             UniqueId_, ToString(Type_).data(),  TString(ContentUnchecked()).data());
     }
 
@@ -1894,35 +1894,35 @@ private:
         , Position_(position)
         , ContentSize(contentSize)
         , Type_(type)
-        , Flags_(flags)
-        , ExprFlags_(TExprFlags::Default)
+        , Flags_(flags) 
+        , ExprFlags_(TExprFlags::Default) 
         , State(EState::Initial)
         , HasLambdaScope(0)
         , UsedInDependsOn(0)
         , UnordChildren(0)
         , ShallBeDisclosed(0)
     {}
-
+ 
     TExprNode(const TExprNode&) = delete;
     TExprNode(TExprNode&&) = delete;
     TExprNode& operator=(const TExprNode&) = delete;
     TExprNode& operator=(TExprNode&&) = delete;
 
-    bool Frozen() const {
-        return ExprFlags_ & TExprFlags::Frozen;
-    }
-
-    void MarkFrozen(bool frozen = true) {
-        if (frozen) {
-            ExprFlags_ |= TExprFlags::Frozen;
-        } else {
-            ExprFlags_ &= ~TExprFlags::Frozen;
-        }
-    }
-
-    void MarkDead() {
-        ExprFlags_ |= TExprFlags::Dead;
-    }
+    bool Frozen() const { 
+        return ExprFlags_ & TExprFlags::Frozen; 
+    } 
+ 
+    void MarkFrozen(bool frozen = true) { 
+        if (frozen) { 
+            ExprFlags_ |= TExprFlags::Frozen; 
+        } else { 
+            ExprFlags_ &= ~TExprFlags::Frozen; 
+        } 
+    } 
+ 
+    void MarkDead() { 
+        ExprFlags_ |= TExprFlags::Dead; 
+    } 
 
     TStringBuf ContentUnchecked() const {
         return TStringBuf(Content_, ContentSize);
@@ -2214,25 +2214,25 @@ using TSingletonTypeCache = std::tuple<
 >;
 
 struct TExprContext : private TNonCopyable {
-    class TFreezeGuard {
-    public:
-        TFreezeGuard(const TFreezeGuard&) = delete;
-        TFreezeGuard& operator=(const TFreezeGuard&) = delete;
-
-        TFreezeGuard(TExprContext& ctx)
-            : Ctx(ctx)
-        {
-            Ctx.Freeze();
-        }
-
-        ~TFreezeGuard() {
-            Ctx.UnFreeze();
-        }
-
-    private:
-        TExprContext& Ctx;
-    };
-
+    class TFreezeGuard { 
+    public: 
+        TFreezeGuard(const TFreezeGuard&) = delete; 
+        TFreezeGuard& operator=(const TFreezeGuard&) = delete; 
+ 
+        TFreezeGuard(TExprContext& ctx) 
+            : Ctx(ctx) 
+        { 
+            Ctx.Freeze(); 
+        } 
+ 
+        ~TFreezeGuard() { 
+            Ctx.UnFreeze(); 
+        } 
+ 
+    private: 
+        TExprContext& Ctx; 
+    }; 
+ 
     TIssueManager IssueManager;
     TNodeMap<TIssues> AssociativeIssues;
 
@@ -2262,19 +2262,19 @@ struct TExprContext : private TNonCopyable {
 
     TExprStep Step;
 
-    bool Frozen;
-
+    bool Frozen; 
+ 
     explicit TExprContext(ui64 nextUniqueId = 0ULL);
     ~TExprContext();
 
     ui64 AllocateNextUniqueId() {
-        ENSURE_NOT_FROZEN_CTX
+        ENSURE_NOT_FROZEN_CTX 
         const auto ret = ++NextUniqueId;
         return ret;
     }
 
     TStringBuf AppendString(const TStringBuf& buf) {
-        ENSURE_NOT_FROZEN_CTX
+        ENSURE_NOT_FROZEN_CTX 
         if (buf.size() == 0) {
             return ZeroString;
         }
@@ -2436,19 +2436,19 @@ struct TExprContext : private TNonCopyable {
     const T* MakeConstraint(Args&&... args);
 
     void AddError(const TIssue& error) {
-        ENSURE_NOT_FROZEN_CTX
+        ENSURE_NOT_FROZEN_CTX 
         IssueManager.RaiseIssue(error);
     }
-
+ 
     bool AddWarning(const TIssue& warning) {
         ENSURE_NOT_FROZEN_CTX
         return IssueManager.RaiseWarning(warning);
     }
 
-    void Freeze();
-    void UnFreeze();
-
-    void Reset();
+    void Freeze(); 
+    void UnFreeze(); 
+ 
+    void Reset(); 
 
     template <class TConstraint>
     bool IsConstraintEnabled() const {
@@ -2484,10 +2484,10 @@ inline const T* TExprContext::MakeConstraint(Args&&... args) {
     return static_cast<const T*>(*ins.first);
 }
 
-#undef ENSURE_NOT_DELETED
-#undef ENSURE_NOT_FROZEN
-#undef ENSURE_NOT_FROZEN_CTX
-
+#undef ENSURE_NOT_DELETED 
+#undef ENSURE_NOT_FROZEN 
+#undef ENSURE_NOT_FROZEN_CTX 
+ 
 inline bool IsSameAnnotation(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right) {
     return &left == &right;
 }
@@ -2526,9 +2526,9 @@ private:
 bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx,
     IModuleResolver* resolver, bool hasAnnotations = false, ui32 typeAnnotationIndex = Max<ui32>(), ui16 syntaxVersion = 0);
 
-bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx,
+bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx, 
     IModuleResolver* resolver, ui32 annotationFlags, ui16 syntaxVersion = 0);
-
+ 
 struct TLibraryCohesion {
     TExportTable Exports;
     TNodeMap<std::pair<TString, TString>> Imports;
@@ -2551,18 +2551,18 @@ bool CompareExprTreeParts(const TExprNode& one, const TExprNode& two, const TNod
 void GatherParents(const TExprNode& node, TParentsMap& parentsMap, bool withLeaves = false);
 void GatherParentsMulti(const TExprNode& node, TParentsMultiMap& parentsMap, bool withLeaves = false);
 
-struct TConvertToAstSettings {
-    ui32 AnnotationFlags = 0;
-    bool RefAtoms = false;
-    std::function<bool(const TExprNode&)> NoInlineFunc;
+struct TConvertToAstSettings { 
+    ui32 AnnotationFlags = 0; 
+    bool RefAtoms = false; 
+    std::function<bool(const TExprNode&)> NoInlineFunc; 
     bool PrintArguments = false;
-};
-
-TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, const TConvertToAstSettings& settings);
-
-// refAtoms allows omit copying of atom bodies - they will be referenced from expr graph
-TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, ui32 annotationFlags, bool refAtoms);
-
+}; 
+ 
+TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, const TConvertToAstSettings& settings); 
+ 
+// refAtoms allows omit copying of atom bodies - they will be referenced from expr graph 
+TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, ui32 annotationFlags, bool refAtoms); 
+ 
 TExprNode::TListType GetLambdaBody(const TExprNode& lambda);
 
 } // namespace NYql

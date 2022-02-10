@@ -36,29 +36,29 @@
 namespace NKikimr {
 
 using namespace Tests;
-using namespace NYdb;
-using namespace NYdb::NTable;
-using namespace NYdb::NScheme;
+using namespace NYdb; 
+using namespace NYdb::NTable; 
+using namespace NYdb::NScheme; 
 
-static bool HasIssue(const NYql::TIssues& issues, ui32 code,
-    std::function<bool(const NYql::TIssue& issue)> predicate = {})
-{
-    bool hasIssue = false;
-
-    for (auto& issue : issues) {
-        WalkThroughIssues(issue, false, [code, predicate, &hasIssue] (const NYql::TIssue& issue, int level) {
-            Y_UNUSED(level);
-            if (issue.GetCode() == code) {
-                hasIssue = predicate
-                    ? predicate(issue)
-                    : true;
-            }
-        });
-    }
-
-    return hasIssue;
-}
-
+static bool HasIssue(const NYql::TIssues& issues, ui32 code, 
+    std::function<bool(const NYql::TIssue& issue)> predicate = {}) 
+{ 
+    bool hasIssue = false; 
+ 
+    for (auto& issue : issues) { 
+        WalkThroughIssues(issue, false, [code, predicate, &hasIssue] (const NYql::TIssue& issue, int level) { 
+            Y_UNUSED(level); 
+            if (issue.GetCode() == code) { 
+                hasIssue = predicate 
+                    ? predicate(issue) 
+                    : true; 
+            } 
+        }); 
+    } 
+ 
+    return hasIssue; 
+} 
+ 
 Ydb::Table::DescribeTableResult DescribeTable(std::shared_ptr<grpc::Channel> channel, const TString& sessionId, const TString& path)
 {
     Ydb::Table::DescribeTableRequest request;
@@ -89,7 +89,7 @@ Ydb::Table::DescribeTableResult DescribeTable(std::shared_ptr<grpc::Channel> cha
 
 Ydb::Table::ExecuteQueryResult ExecYql(std::shared_ptr<grpc::Channel> channel, const TString &sessionId, const TString &yql, bool withStat = false);
 
-static Ydb::StatusIds::StatusCode WaitForStatus(std::shared_ptr<grpc::Channel> channel, const TString& opId) {
+static Ydb::StatusIds::StatusCode WaitForStatus(std::shared_ptr<grpc::Channel> channel, const TString& opId) { 
     std::unique_ptr<Ydb::Operation::V1::OperationService::Stub> stub;
     stub = Ydb::Operation::V1::OperationService::NewStub(channel);
     Ydb::Operations::GetOperationRequest request;
@@ -479,14 +479,14 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
         TString location = TStringBuilder() << "localhost:" << grpc;
 
         //TDriver
-        auto connection = NYdb::TDriver(
-            TDriverConfig()
+        auto connection = NYdb::TDriver( 
+            TDriverConfig() 
                 .SetEndpoint(location));
 
-        auto client = NYdb::NTable::TTableClient(connection);
+        auto client = NYdb::NTable::TTableClient(connection); 
 
-        std::function<void(const TAsyncCreateSessionResult& future)> createSessionHandler =
-            [client] (const TAsyncCreateSessionResult& future) mutable {
+        std::function<void(const TAsyncCreateSessionResult& future)> createSessionHandler = 
+            [client] (const TAsyncCreateSessionResult& future) mutable { 
                 const auto& sessionValue = future.GetValue();
                 UNIT_ASSERT(!sessionValue.IsTransportError());
                 auto session = sessionValue.GetSession();
@@ -496,37 +496,37 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
                         const auto& createTableResult = future.GetValue();
                         UNIT_ASSERT(!createTableResult.IsTransportError());
                         auto sqlResultHandler =
-                            [](TAsyncDataQueryResult future) mutable {
+                            [](TAsyncDataQueryResult future) mutable { 
                                 auto sqlResultSets = future.ExtractValue();
                                 UNIT_ASSERT(!sqlResultSets.IsTransportError());
-
-                                auto resultSets = sqlResultSets.GetResultSets();
+ 
+                                auto resultSets = sqlResultSets.GetResultSets(); 
                                 UNIT_ASSERT_EQUAL(resultSets.size(), 1);
                                 auto& resultSet = resultSets[0];
-                                UNIT_ASSERT_EQUAL(resultSet.ColumnsCount(), 1);
+                                UNIT_ASSERT_EQUAL(resultSet.ColumnsCount(), 1); 
                                 auto meta = resultSet.GetColumnsMeta();
                                 UNIT_ASSERT_EQUAL(meta.size(), 1);
                                 UNIT_ASSERT_EQUAL(meta[0].Name, "colName");
-                                TTypeParser parser(meta[0].Type);
-                                UNIT_ASSERT(parser.GetKind() == TTypeParser::ETypeKind::Primitive);
-                                UNIT_ASSERT(parser.GetPrimitive() == EPrimitiveType::Int32);
-
-                                TResultSetParser rsParser(resultSet);
-                                while (rsParser.TryNextRow()) {
-                                    UNIT_ASSERT_EQUAL(rsParser.ColumnParser(0).GetInt32(), 42);
+                                TTypeParser parser(meta[0].Type); 
+                                UNIT_ASSERT(parser.GetKind() == TTypeParser::ETypeKind::Primitive); 
+                                UNIT_ASSERT(parser.GetPrimitive() == EPrimitiveType::Int32); 
+ 
+                                TResultSetParser rsParser(resultSet); 
+                                while (rsParser.TryNextRow()) { 
+                                    UNIT_ASSERT_EQUAL(rsParser.ColumnParser(0).GetInt32(), 42); 
                                 }
                             };
-
-                        session.ExecuteDataQuery(
-                            "SELECT 42 as colName;", TTxControl::BeginTx(
-                                TTxSettings::SerializableRW()).CommitTx()
+ 
+                        session.ExecuteDataQuery( 
+                            "SELECT 42 as colName;", TTxControl::BeginTx( 
+                                TTxSettings::SerializableRW()).CommitTx() 
                         ).Apply(std::move(sqlResultHandler)).Wait();
                     };
 
                 auto tableBuilder = client.GetTableBuilder();
-                tableBuilder
-                    .AddNullableColumn("Key", EPrimitiveType::Int32)
-                    .AddNullableColumn("Value", EPrimitiveType::String);
+                tableBuilder 
+                    .AddNullableColumn("Key", EPrimitiveType::Int32) 
+                    .AddNullableColumn("Value", EPrimitiveType::String); 
                 tableBuilder.SetPrimaryKeyColumn("Key");
                 session.CreateTable("/Root/FooTable", tableBuilder.Build()).Apply(createTableHandler).Wait();
             };
@@ -540,12 +540,12 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
         TString location = TStringBuilder() << "localhost:" << grpc;
 
         auto connection = NYdb::TDriver(
-            TDriverConfig()
+            TDriverConfig() 
                 .SetAuthToken("test_user@builtin")
                 .UseSecureConnection(NYdbSslTestData::CaCrt)
                 .SetEndpoint(location));
 
-        auto client = NYdb::NTable::TTableClient(connection);
+        auto client = NYdb::NTable::TTableClient(connection); 
         std::function<void(const TAsyncCreateSessionResult& future)> createSessionHandler =
             [client] (const TAsyncCreateSessionResult& future) mutable {
                 const auto& sessionValue = future.GetValue();
@@ -563,51 +563,51 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
         TString location = TStringBuilder() << "localhost:" << grpc;
 
         //TDriver
-        auto connection = NYdb::TDriver(
-            TDriverConfig()
+        auto connection = NYdb::TDriver( 
+            TDriverConfig() 
                 .SetEndpoint(location));
 
-        auto client = NYdb::NTable::TTableClient(connection);
+        auto client = NYdb::NTable::TTableClient(connection); 
 
-        std::function<void(const TAsyncCreateSessionResult& future)> createSessionHandler =
-            [client] (const TAsyncCreateSessionResult& future) mutable {
+        std::function<void(const TAsyncCreateSessionResult& future)> createSessionHandler = 
+            [client] (const TAsyncCreateSessionResult& future) mutable { 
                 const auto& sessionValue = future.GetValue();
                 UNIT_ASSERT(!sessionValue.IsTransportError());
                 auto session = sessionValue.GetSession();
 
                 auto prepareQueryHandler =
-                    [session, client] (TAsyncPrepareQueryResult future) mutable {
+                    [session, client] (TAsyncPrepareQueryResult future) mutable { 
                         const auto& prepareQueryResult = future.GetValue();
                         UNIT_ASSERT(!prepareQueryResult.IsTransportError());
                         UNIT_ASSERT_EQUAL(prepareQueryResult.GetStatus(), EStatus::SUCCESS);
-                        auto query = prepareQueryResult.GetQuery();
+                        auto query = prepareQueryResult.GetQuery(); 
                         auto paramsBuilder = client.GetParamsBuilder();
-                        auto& param = paramsBuilder.AddParam("$paramName");
-                        param.String("someString").Build();
+                        auto& param = paramsBuilder.AddParam("$paramName"); 
+                        param.String("someString").Build(); 
 
                         auto sqlResultHandler =
-                            [](TAsyncDataQueryResult future) mutable {
+                            [](TAsyncDataQueryResult future) mutable { 
                                 auto sqlResultSets = future.ExtractValue();
                                 UNIT_ASSERT(!sqlResultSets.IsTransportError());
-                                UNIT_ASSERT(sqlResultSets.IsSuccess());
-
-                                auto resultSets = sqlResultSets.GetResultSets();
+                                UNIT_ASSERT(sqlResultSets.IsSuccess()); 
+ 
+                                auto resultSets = sqlResultSets.GetResultSets(); 
                                 UNIT_ASSERT_EQUAL(resultSets.size(), 1);
                                 auto& resultSet = resultSets[0];
-                                UNIT_ASSERT_EQUAL(resultSet.ColumnsCount(), 1);
+                                UNIT_ASSERT_EQUAL(resultSet.ColumnsCount(), 1); 
                                 auto meta = resultSet.GetColumnsMeta();
                                 UNIT_ASSERT_EQUAL(meta.size(), 1);
-                                TTypeParser parser(meta[0].Type);
-                                UNIT_ASSERT(parser.GetKind() == TTypeParser::ETypeKind::Primitive);
-                                UNIT_ASSERT(parser.GetPrimitive() == EPrimitiveType::String);
-
-                                TResultSetParser rsParser(resultSet);
-                                while (rsParser.TryNextRow()) {
-                                    UNIT_ASSERT_EQUAL(rsParser.ColumnParser(0).GetString(), "someString");
+                                TTypeParser parser(meta[0].Type); 
+                                UNIT_ASSERT(parser.GetKind() == TTypeParser::ETypeKind::Primitive); 
+                                UNIT_ASSERT(parser.GetPrimitive() == EPrimitiveType::String); 
+ 
+                                TResultSetParser rsParser(resultSet); 
+                                while (rsParser.TryNextRow()) { 
+                                    UNIT_ASSERT_EQUAL(rsParser.ColumnParser(0).GetString(), "someString"); 
                                 }
                             };
-
-                        query.Execute(TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx(),
+ 
+                        query.Execute(TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx(), 
                             paramsBuilder.Build()).Apply(sqlResultHandler).Wait();
                     };
 
@@ -622,28 +622,28 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto connection = NYdb::TDriver(
-            TDriverConfig()
+        auto connection = NYdb::TDriver( 
+            TDriverConfig() 
                 .SetEndpoint(location));
 
-        auto client = NYdb::NTable::TTableClient(connection);
+        auto client = NYdb::NTable::TTableClient(connection); 
         bool done = false;
 
-        std::function<void(const TAsyncCreateSessionResult& future)> createSessionHandler =
-            [client, &done] (const TAsyncCreateSessionResult& future) mutable {
+        std::function<void(const TAsyncCreateSessionResult& future)> createSessionHandler = 
+            [client, &done] (const TAsyncCreateSessionResult& future) mutable { 
                 const auto& sessionValue = future.GetValue();
                 UNIT_ASSERT(!sessionValue.IsTransportError());
                 UNIT_ASSERT_EQUAL(sessionValue.GetStatus(), EStatus::SUCCESS);
                 auto session = sessionValue.GetSession();
 
                 auto schemeQueryHandler =
-                    [session, &done] (const NYdb::TAsyncStatus& future) mutable {
+                    [session, &done] (const NYdb::TAsyncStatus& future) mutable { 
                         const auto& schemeQueryResult = future.GetValue();
                         UNIT_ASSERT(!schemeQueryResult.IsTransportError());
                         UNIT_ASSERT_EQUAL(schemeQueryResult.GetStatus(), EStatus::SUCCESS);
 
                         auto sqlResultHandler =
-                            [&done] (const TAsyncExplainDataQueryResult& future) mutable {
+                            [&done] (const TAsyncExplainDataQueryResult& future) mutable { 
                                 const auto& explainResult = future.GetValue();
                                 UNIT_ASSERT(!explainResult.IsTransportError());
                                 Cerr << explainResult.GetIssues().ToString() << Endl;
@@ -667,24 +667,24 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
 
-        auto connection = NYdb::TDriver(
-            TDriverConfig()
+        auto connection = NYdb::TDriver( 
+            TDriverConfig() 
                 .SetEndpoint(location));
         {
 
-            auto asyncStatus = NYdb::NScheme::TSchemeClient(connection).MakeDirectory("/Root/TheDir");
+            auto asyncStatus = NYdb::NScheme::TSchemeClient(connection).MakeDirectory("/Root/TheDir"); 
             asyncStatus.Wait();
             UNIT_ASSERT_EQUAL(asyncStatus.GetValue().GetStatus(), EStatus::SUCCESS);
         }
         {
-            auto asyncDescPath = NYdb::NScheme::TSchemeClient(connection).DescribePath("/Root/TheDir");
+            auto asyncDescPath = NYdb::NScheme::TSchemeClient(connection).DescribePath("/Root/TheDir"); 
             asyncDescPath.Wait();
             auto entry = asyncDescPath.GetValue().GetEntry();
             UNIT_ASSERT_EQUAL(entry.Name, "TheDir");
             UNIT_ASSERT_EQUAL(entry.Type, ESchemeEntryType::Directory);
         }
         {
-            auto asyncDescDir = NYdb::NScheme::TSchemeClient(connection).ListDirectory("/Root");
+            auto asyncDescDir = NYdb::NScheme::TSchemeClient(connection).ListDirectory("/Root"); 
             asyncDescDir.Wait();
             const auto& val = asyncDescDir.GetValue();
             auto entry = val.GetEntry();
@@ -697,11 +697,11 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
 
         }
 
-        auto client = NYdb::NTable::TTableClient(connection);
+        auto client = NYdb::NTable::TTableClient(connection); 
         bool done = false;
 
-        std::function<void(const TAsyncCreateSessionResult& future)> createSessionHandler =
-            [client, &done] (const TAsyncCreateSessionResult& future) mutable {
+        std::function<void(const TAsyncCreateSessionResult& future)> createSessionHandler = 
+            [client, &done] (const TAsyncCreateSessionResult& future) mutable { 
                 const auto& sessionValue = future.GetValue();
                 UNIT_ASSERT(!sessionValue.IsTransportError());
                 auto session = sessionValue.GetSession();
@@ -716,12 +716,12 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
                                 UNIT_ASSERT(!alterStatus.IsTransportError());
                                 UNIT_ASSERT_EQUAL(alterStatus.GetStatus(), EStatus::SUCCESS);
                                 auto upsertHandler =
-                                    [session, &done] (const TAsyncDataQueryResult& future) mutable {
+                                    [session, &done] (const TAsyncDataQueryResult& future) mutable { 
                                         const auto& sqlResultSets = future.GetValue();
                                         UNIT_ASSERT(!sqlResultSets.IsTransportError());
                                         UNIT_ASSERT_EQUAL(sqlResultSets.GetStatus(), EStatus::SUCCESS);
                                         auto describeHandler =
-                                            [session, &done] (const TAsyncDescribeTableResult& future) mutable {
+                                            [session, &done] (const TAsyncDescribeTableResult& future) mutable { 
                                                 const auto& value = future.GetValue();
                                                 UNIT_ASSERT(!value.IsTransportError());
                                                 UNIT_ASSERT_EQUAL(value.GetStatus(), EStatus::SUCCESS);
@@ -732,18 +732,18 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
                                                 UNIT_ASSERT_EQUAL(columns[0].Name, "Key");
                                                 UNIT_ASSERT_EQUAL(columns[1].Name, "Value");
                                                 UNIT_ASSERT_EQUAL(columns[2].Name, "NewColumn");
-                                                TTypeParser column0(columns[0].Type);
-                                                TTypeParser column1(columns[1].Type);
-                                                TTypeParser column2(columns[2].Type);
-                                                UNIT_ASSERT_EQUAL(column0.GetKind(), TTypeParser::ETypeKind::Optional);
-                                                UNIT_ASSERT_EQUAL(column1.GetKind(), TTypeParser::ETypeKind::Optional);
-                                                UNIT_ASSERT_EQUAL(column2.GetKind(), TTypeParser::ETypeKind::Optional);
-                                                column0.OpenOptional();
-                                                column1.OpenOptional();
-                                                column2.OpenOptional();
-                                                UNIT_ASSERT_EQUAL(column0.GetPrimitive(), EPrimitiveType::Int32);
-                                                UNIT_ASSERT_EQUAL(column1.GetPrimitive(), EPrimitiveType::String);
-                                                UNIT_ASSERT_EQUAL(column2.GetPrimitive(), EPrimitiveType::Utf8);
+                                                TTypeParser column0(columns[0].Type); 
+                                                TTypeParser column1(columns[1].Type); 
+                                                TTypeParser column2(columns[2].Type); 
+                                                UNIT_ASSERT_EQUAL(column0.GetKind(), TTypeParser::ETypeKind::Optional); 
+                                                UNIT_ASSERT_EQUAL(column1.GetKind(), TTypeParser::ETypeKind::Optional); 
+                                                UNIT_ASSERT_EQUAL(column2.GetKind(), TTypeParser::ETypeKind::Optional); 
+                                                column0.OpenOptional(); 
+                                                column1.OpenOptional(); 
+                                                column2.OpenOptional(); 
+                                                UNIT_ASSERT_EQUAL(column0.GetPrimitive(), EPrimitiveType::Int32); 
+                                                UNIT_ASSERT_EQUAL(column1.GetPrimitive(), EPrimitiveType::String); 
+                                                UNIT_ASSERT_EQUAL(column2.GetPrimitive(), EPrimitiveType::Utf8); 
                                                 UNIT_ASSERT_EQUAL( desc.GetOwner(), "root@builtin");
                                                 auto dropHandler =
                                                     [&done] (const NThreading::TFuture<TStatus>& future) mutable {
@@ -761,27 +761,27 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
                                                                             };
                                 const TString sql = "UPSERT INTO [Root/TheDir/FooTable] (Key, Value, NewColumn)"
                                    " VALUES (1, \"One\", \"йцукен\")";
-                                session.ExecuteDataQuery(sql, TTxControl::
-                                    BeginTx(TTxSettings::SerializableRW()).CommitTx()
+                                session.ExecuteDataQuery(sql, TTxControl:: 
+                                    BeginTx(TTxSettings::SerializableRW()).CommitTx() 
                                 ).Apply(upsertHandler).Wait();
                             };
 
                         {
-                            auto type = TTypeBuilder()
-                                    .BeginOptional()
-                                        .Primitive(EPrimitiveType::Utf8)
-                                    .EndOptional()
-                                    .Build();
-
-                            session.AlterTable("/Root/TheDir/FooTable", TAlterTableSettings()
+                            auto type = TTypeBuilder() 
+                                    .BeginOptional() 
+                                        .Primitive(EPrimitiveType::Utf8) 
+                                    .EndOptional() 
+                                    .Build(); 
+ 
+                            session.AlterTable("/Root/TheDir/FooTable", TAlterTableSettings() 
                                 .AppendAddColumns(TColumn{"NewColumn", type})).Apply(alterResultHandler).Wait();
                         }
                     };
 
                 auto tableBuilder = client.GetTableBuilder();
-                tableBuilder
-                    .AddNullableColumn("Key", EPrimitiveType::Int32)
-                    .AddNullableColumn("Value", EPrimitiveType::String);
+                tableBuilder 
+                    .AddNullableColumn("Key", EPrimitiveType::Int32) 
+                    .AddNullableColumn("Value", EPrimitiveType::String); 
                 tableBuilder.SetPrimaryKeyColumn("Key");
                 session.CreateTable("/Root/TheDir/FooTable", tableBuilder.Build()).Apply(createTableHandler).Wait();
             };
@@ -791,23 +791,23 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
     }
 }
 
-static TString CreateSession(std::shared_ptr<grpc::Channel> channel) {
-    std::unique_ptr<Ydb::Table::V1::TableService::Stub> stub;
-    stub = Ydb::Table::V1::TableService::NewStub(channel);
-    grpc::ClientContext context;
-    Ydb::Table::CreateSessionRequest request;
-    Ydb::Table::CreateSessionResponse response;
-
-    auto status = stub->CreateSession(&context, request, &response);
-    auto deferred = response.operation();
-    UNIT_ASSERT(status.ok());
-    UNIT_ASSERT(deferred.ready() == true);
-    Ydb::Table::CreateSessionResult result;
-
-    deferred.result().UnpackTo(&result);
-    return result.session_id();
-}
-
+static TString CreateSession(std::shared_ptr<grpc::Channel> channel) { 
+    std::unique_ptr<Ydb::Table::V1::TableService::Stub> stub; 
+    stub = Ydb::Table::V1::TableService::NewStub(channel); 
+    grpc::ClientContext context; 
+    Ydb::Table::CreateSessionRequest request; 
+    Ydb::Table::CreateSessionResponse response; 
+ 
+    auto status = stub->CreateSession(&context, request, &response); 
+    auto deferred = response.operation(); 
+    UNIT_ASSERT(status.ok()); 
+    UNIT_ASSERT(deferred.ready() == true); 
+    Ydb::Table::CreateSessionResult result; 
+ 
+    deferred.result().UnpackTo(&result); 
+    return result.session_id(); 
+} 
+ 
 void IncorrectConnectionStringPending(const TString& incorrectLocation) {
     auto connection = NYdb::TDriver(incorrectLocation);
     auto client = NYdb::NTable::TTableClient(connection);
@@ -881,7 +881,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
             auto deferred = response.operation();
             UNIT_ASSERT(status.ok());  //GRpc layer - OK
             UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SCHEME_ERROR);
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SCHEME_ERROR); 
             NYql::TIssues issues;
             NYql::IssuesFromMessage(deferred.issues(), issues);
             TString tmp = issues.ToString();
@@ -917,7 +917,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
         /*
         {
             auto status = WaitForStatus(Channel_, id);
-            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS); 
         }
         */
         {
@@ -983,7 +983,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
         /*
         {
             auto status = WaitForStatus(Channel_, id);
-            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS); 
         }
         */
     }
@@ -1025,7 +1025,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
         Channel_ = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
         {
             auto status = WaitForStatus(Channel_, "ydb://operation/1?txid=42&sstid=66");
-            UNIT_ASSERT(status == Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT(status == Ydb::StatusIds::BAD_REQUEST); 
         }
     }
 */
@@ -1045,7 +1045,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
         auto deferred = response.operation();
         UNIT_ASSERT(status.ok()); //GRpc layer - OK
         UNIT_ASSERT(deferred.ready() == true); //Ready to get status
-        UNIT_ASSERT(deferred.status() == Ydb::StatusIds::BAD_REQUEST); //But with error
+        UNIT_ASSERT(deferred.status() == Ydb::StatusIds::BAD_REQUEST); //But with error 
     }
 
     static void CreateTableBadRequest(const TString& scheme,
@@ -1120,7 +1120,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
             auto deferred = response.operation();
             UNIT_ASSERT(status.ok()); //GRpc layer - OK
             UNIT_ASSERT(deferred.ready() == true); //Ready to get status
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::BAD_REQUEST); //But with error
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::BAD_REQUEST); //But with error 
         }
         {
             Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
@@ -1137,7 +1137,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
             auto deferred = response.operation();
             UNIT_ASSERT(status.ok()); //GRpc layer - OK
             UNIT_ASSERT(deferred.ready() == true); //Ready to get status
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SCHEME_ERROR); //But with error
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SCHEME_ERROR); //But with error 
         }
 
     }
@@ -1218,7 +1218,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
         /*
         {
             auto status = WaitForStatus(Channel_, id);
-            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS); 
         }
         */
         {
@@ -1320,7 +1320,7 @@ partitioning_settings {
         /*
         {
             auto status = WaitForStatus(Channel_, id);
-            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS); 
         }
         */
         id.clear();
@@ -1343,7 +1343,7 @@ partitioning_settings {
         /*
         {
             auto status = WaitForStatus(Channel_, id);
-            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS); 
         }
         */
         id.clear();
@@ -1396,7 +1396,7 @@ partitioning_settings {
         /*
         {
             auto status = WaitForStatus(Channel_, id);
-            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS); 
         }
         */
     }
@@ -1697,8 +1697,8 @@ partitioning_settings {
 
         std::shared_ptr<grpc::Channel> Channel_;
         Channel_ = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
-
-        TString sessionId;
+ 
+        TString sessionId; 
         {
             std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
             Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
@@ -1706,28 +1706,28 @@ partitioning_settings {
             Ydb::Table::CreateSessionRequest request;
             Ydb::Table::CreateSessionResponse response;
 
-            auto status = Stub_->CreateSession(&context, request, &response);
+            auto status = Stub_->CreateSession(&context, request, &response); 
             auto deferred = response.operation();
-            UNIT_ASSERT(status.ok());
-            UNIT_ASSERT(deferred.ready() == true);
+            UNIT_ASSERT(status.ok()); 
+            UNIT_ASSERT(deferred.ready() == true); 
             Ydb::Table::CreateSessionResult result;
-
-            deferred.result().UnpackTo(&result);
-            sessionId = result.session_id();
-        }
-
-        {
+ 
+            deferred.result().UnpackTo(&result); 
+            sessionId = result.session_id(); 
+        } 
+ 
+        { 
             std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
             Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
-            grpc::ClientContext context;
+            grpc::ClientContext context; 
             Ydb::Table::ExecuteDataQueryRequest request;
-            request.set_session_id(sessionId);
+            request.set_session_id(sessionId); 
             Ydb::Table::ExecuteDataQueryResponse response;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response); 
             auto deferred = response.operation();
             UNIT_ASSERT(status.ok());  //GRpc layer - OK
             UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT_VALUES_EQUAL(deferred.status(), Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(deferred.status(), Ydb::StatusIds::BAD_REQUEST); 
         }
     }
 
@@ -1742,13 +1742,13 @@ partitioning_settings {
             Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
             grpc::ClientContext context;
             Ydb::Table::ExecuteDataQueryRequest request;
-            request.mutable_query()->set_yql_text("SELECT 1 as a, 'qwerty' as b, 43.5 as c UNION ALL SELECT 11 as a, 'asdfgg' as b, Null as c;");
+            request.mutable_query()->set_yql_text("SELECT 1 as a, 'qwerty' as b, 43.5 as c UNION ALL SELECT 11 as a, 'asdfgg' as b, Null as c;"); 
             Ydb::Table::ExecuteDataQueryResponse response;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response); 
             UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::BAD_REQUEST); 
         }
     }
 
@@ -1787,7 +1787,7 @@ partitioning_settings {
             UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS); 
         }
 
         {
@@ -1796,15 +1796,15 @@ partitioning_settings {
             grpc::ClientContext context;
             Ydb::Table::ExecuteDataQueryRequest request;
             request.set_session_id(sessionId);
-            request.mutable_query()->set_yql_text("SELECT 1 as a, 'qwerty' as b, 43.5 as c UNION ALL SELECT 11 as a, 'asdfgg' as b, Null as c;");
-            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.mutable_tx_control()->set_commit_tx(true);
+            request.mutable_query()->set_yql_text("SELECT 1 as a, 'qwerty' as b, 43.5 as c UNION ALL SELECT 11 as a, 'asdfgg' as b, Null as c;"); 
+            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write(); 
+            request.mutable_tx_control()->set_commit_tx(true); 
             Ydb::Table::ExecuteDataQueryResponse response;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response); 
             UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS); 
 
             Ydb::Table::ExecuteQueryResult result;
             deferred.result().UnpackTo(&result);
@@ -1813,19 +1813,19 @@ partitioning_settings {
                 google::protobuf::TextFormat::PrintToString(result, &tmp);
                 const TString expected =
                     "result_sets {\n"
-                    "  columns {\n"
+                    "  columns {\n" 
                     "    name: \"a\"\n"
                     "    type {\n"
                     "      type_id: INT32\n"
                     "    }\n"
                     "  }\n"
-                    "  columns {\n"
+                    "  columns {\n" 
                     "    name: \"b\"\n"
                     "    type {\n"
                     "      type_id: STRING\n"
                     "    }\n"
                     "  }\n"
-                    "  columns {\n"
+                    "  columns {\n" 
                     "    name: \"c\"\n"
                     "    type {\n"
                     "      optional_type {\n"
@@ -1857,28 +1857,28 @@ partitioning_settings {
                     "      null_flag_value: NULL_VALUE\n"
                     "    }\n"
                     "  }\n"
-                    "}\n"
-                    "tx_meta {\n"
+                    "}\n" 
+                    "tx_meta {\n" 
                     "}\n";
                 UNIT_ASSERT_NO_DIFF(tmp, expected);
-                TResultSet resultSet(result.result_sets(0));
-                UNIT_ASSERT_EQUAL(resultSet.ColumnsCount(), 3);
-
+                TResultSet resultSet(result.result_sets(0)); 
+                UNIT_ASSERT_EQUAL(resultSet.ColumnsCount(), 3); 
+ 
                 int row = 0;
-                TResultSetParser rsParser(resultSet);
-                while (rsParser.TryNextRow()) {
+                TResultSetParser rsParser(resultSet); 
+                while (rsParser.TryNextRow()) { 
                     switch (row) {
                         case 0: {
-                            UNIT_ASSERT_EQUAL(rsParser.ColumnParser(0).GetInt32(), 1);
-                            UNIT_ASSERT_EQUAL(rsParser.ColumnParser(1).GetString(), "qwerty");
-                            UNIT_ASSERT_EQUAL(rsParser.ColumnParser(2).GetOptionalDouble(), 43.5);
+                            UNIT_ASSERT_EQUAL(rsParser.ColumnParser(0).GetInt32(), 1); 
+                            UNIT_ASSERT_EQUAL(rsParser.ColumnParser(1).GetString(), "qwerty"); 
+                            UNIT_ASSERT_EQUAL(rsParser.ColumnParser(2).GetOptionalDouble(), 43.5); 
                         }
                         break;
                         case 1: {
-                            UNIT_ASSERT_EQUAL(rsParser.ColumnParser(0).GetInt32(), 11);
-                            UNIT_ASSERT_EQUAL(rsParser.ColumnParser(1).GetString(), "asdfgg");
-                            rsParser.ColumnParser(2).OpenOptional();
-                            UNIT_ASSERT_EQUAL(rsParser.ColumnParser(2).IsNull(), true);
+                            UNIT_ASSERT_EQUAL(rsParser.ColumnParser(0).GetInt32(), 11); 
+                            UNIT_ASSERT_EQUAL(rsParser.ColumnParser(1).GetString(), "asdfgg"); 
+                            rsParser.ColumnParser(2).OpenOptional(); 
+                            UNIT_ASSERT_EQUAL(rsParser.ColumnParser(2).IsNull(), true); 
                         }
                         break;
                         default: {
@@ -1934,7 +1934,7 @@ partitioning_settings {
             deferred.result().UnpackTo(&result);
             {
                 TString expected = R"___(result_sets {
-  columns {
+  columns { 
     name: "column0"
     type {
       optional_type {
@@ -1984,73 +1984,73 @@ tx_meta {
             deferred.result().UnpackTo(&result);
             sessionId = result.session_id();
         }
-
+ 
         std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
         Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
-        Ydb::Table::ExecuteDataQueryRequest request;
-        request.set_session_id(sessionId);
-        request.mutable_query()->set_yql_text("DECLARE $param1 AS \"Tuple<Int32,Bool>\"; SELECT $param1 AS Tuple;");
-        request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
-        request.mutable_tx_control()->set_commit_tx(true);
-
+        Ydb::Table::ExecuteDataQueryRequest request; 
+        request.set_session_id(sessionId); 
+        request.mutable_query()->set_yql_text("DECLARE $param1 AS \"Tuple<Int32,Bool>\"; SELECT $param1 AS Tuple;"); 
+        request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write(); 
+        request.mutable_tx_control()->set_commit_tx(true); 
+ 
         {
-            // Bad type Kind
+            // Bad type Kind 
             ::google::protobuf::Map<TString, Ydb::TypedValue> parameters;
-
-            const TString type = R"(
-                type_id: TYPE_UNDEFINED
-            )";
-            google::protobuf::TextFormat::ParseFromString(type, parameters["$param1"].mutable_type());
-
-            const TString value = R"(
-                int32_value: 10
-            )";
-            google::protobuf::TextFormat::ParseFromString(value, parameters["$param1"].mutable_value());
-
-            *request.mutable_parameters() = parameters;
-            Ydb::Table::ExecuteDataQueryResponse response;
+ 
+            const TString type = R"( 
+                type_id: TYPE_UNDEFINED 
+            )"; 
+            google::protobuf::TextFormat::ParseFromString(type, parameters["$param1"].mutable_type()); 
+ 
+            const TString value = R"( 
+                int32_value: 10 
+            )"; 
+            google::protobuf::TextFormat::ParseFromString(value, parameters["$param1"].mutable_value()); 
+ 
+            *request.mutable_parameters() = parameters; 
+            Ydb::Table::ExecuteDataQueryResponse response; 
             grpc::ClientContext context;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response); 
+            UNIT_ASSERT(status.ok());
+            auto deferred = response.operation(); 
+            UNIT_ASSERT(deferred.ready() == true); 
+            NYql::TIssues issues; 
+            NYql::IssuesFromMessage(deferred.issues(), issues); 
+            issues.PrintTo(Cerr); 
+            UNIT_ASSERT_VALUES_EQUAL(deferred.status(), Ydb::StatusIds::BAD_REQUEST); 
+        } 
+
+        { 
+            // Value mismatch 
+            ::google::protobuf::Map<TString, Ydb::TypedValue> parameters;
+ 
+            const TString type = R"( 
+                tuple_type { 
+                    elements { 
+                        type_id: Int32 
+                    } 
+                    elements { 
+                        type_id: Bool 
+                    } 
+                } 
+            )"; 
+            google::protobuf::TextFormat::ParseFromString(type, parameters["$param1"].mutable_type()); 
+ 
+            const TString value = R"( 
+                int32_value: 10 
+            )"; 
+            google::protobuf::TextFormat::ParseFromString(value, parameters["$param1"].mutable_value()); 
+ 
+            *request.mutable_parameters() = parameters; 
+            Ydb::Table::ExecuteDataQueryResponse response;
+            grpc::ClientContext context; 
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response); 
             UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(deferred.issues(), issues);
-            issues.PrintTo(Cerr);
-            UNIT_ASSERT_VALUES_EQUAL(deferred.status(), Ydb::StatusIds::BAD_REQUEST);
-        }
-
-        {
-            // Value mismatch
-            ::google::protobuf::Map<TString, Ydb::TypedValue> parameters;
-
-            const TString type = R"(
-                tuple_type {
-                    elements {
-                        type_id: Int32
-                    }
-                    elements {
-                        type_id: Bool
-                    }
-                }
-            )";
-            google::protobuf::TextFormat::ParseFromString(type, parameters["$param1"].mutable_type());
-
-            const TString value = R"(
-                int32_value: 10
-            )";
-            google::protobuf::TextFormat::ParseFromString(value, parameters["$param1"].mutable_value());
-
-            *request.mutable_parameters() = parameters;
-            Ydb::Table::ExecuteDataQueryResponse response;
-            grpc::ClientContext context;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
-            auto deferred = response.operation();
-            UNIT_ASSERT(deferred.ready() == true);
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(deferred.issues(), issues);
-            issues.PrintTo(Cerr);
+            NYql::TIssues issues; 
+            NYql::IssuesFromMessage(deferred.issues(), issues); 
+            issues.PrintTo(Cerr); 
             UNIT_ASSERT_VALUES_EQUAL(deferred.status(), Ydb::StatusIds::BAD_REQUEST);
         }
     }
@@ -2083,9 +2083,9 @@ tx_meta {
             Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
             grpc::ClientContext context;
             Ydb::Table::ExecuteDataQueryRequest request;
-            request.mutable_query()->set_yql_text("DECLARE $paramName AS String; SELECT $paramName;");
-            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.mutable_tx_control()->set_commit_tx(true);
+            request.mutable_query()->set_yql_text("DECLARE $paramName AS String; SELECT $paramName;"); 
+            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write(); 
+            request.mutable_tx_control()->set_commit_tx(true); 
             Ydb::TypedValue parameter;
             {
                 const TString type =
@@ -2101,16 +2101,16 @@ tx_meta {
                 TString tmp;
                 google::protobuf::TextFormat::PrintToString(request, &tmp);
                 const TString expected =
-                    "tx_control {\n"
-                    "  begin_tx {\n"
-                    "    serializable_read_write {\n"
-                    "    }\n"
-                    "  }\n"
-                    "  commit_tx: true\n"
-                    "}\n"
-                    "query {\n"
-                    "  yql_text: \"DECLARE $paramName AS String; SELECT $paramName;\"\n"
-                    "}\n"
+                    "tx_control {\n" 
+                    "  begin_tx {\n" 
+                    "    serializable_read_write {\n" 
+                    "    }\n" 
+                    "  }\n" 
+                    "  commit_tx: true\n" 
+                    "}\n" 
+                    "query {\n" 
+                    "  yql_text: \"DECLARE $paramName AS String; SELECT $paramName;\"\n" 
+                    "}\n" 
                     "parameters {\n"
                     "  key: \"$paramName\"\n"
                     "  value {\n"
@@ -2126,11 +2126,11 @@ tx_meta {
             }
             request.set_session_id(sessionId);
             Ydb::Table::ExecuteDataQueryResponse response;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response); 
             UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS); 
 
             Ydb::Table::ExecuteQueryResult result;
             deferred.result().UnpackTo(&result);
@@ -2139,7 +2139,7 @@ tx_meta {
                 google::protobuf::TextFormat::PrintToString(result, &tmp);
                 const TString expected =
                     "result_sets {\n"
-                    "  columns {\n"
+                    "  columns {\n" 
                     "    name: \"column0\"\n"
                     "    type {\n"
                     "      type_id: STRING\n"
@@ -2150,8 +2150,8 @@ tx_meta {
                     "      bytes_value: \"Paul\"\n"
                     "    }\n"
                     "  }\n"
-                    "}\n"
-                    "tx_meta {\n"
+                    "}\n" 
+                    "tx_meta {\n" 
                     "}\n";
                 UNIT_ASSERT_NO_DIFF(tmp, expected);
             }
@@ -2191,7 +2191,7 @@ tx_meta {
                 TString tmp;
                 google::protobuf::TextFormat::PrintToString(result, &tmp);
                 const TString expected = R"___(result_sets {
-  columns {
+  columns { 
     name: "column0"
     type {
       type_id: UUID
@@ -2214,198 +2214,198 @@ tx_meta {
     }
 
     Y_UNIT_TEST(ExecuteDmlQuery) {
-        TKikimrWithGrpcAndRootSchema server;
-        ui16 grpc = server.GetPort();
+        TKikimrWithGrpcAndRootSchema server; 
+        ui16 grpc = server.GetPort(); 
 
-        std::shared_ptr<grpc::Channel> Channel_;
-        Channel_ = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
-
-        TString sessionId;
-        {
+        std::shared_ptr<grpc::Channel> Channel_; 
+        Channel_ = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials()); 
+ 
+        TString sessionId; 
+        { 
             std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
             Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
-            grpc::ClientContext context;
+            grpc::ClientContext context; 
             Ydb::Table::CreateSessionRequest request;
             Ydb::Table::CreateSessionResponse response;
-
-            auto status = Stub_->CreateSession(&context, request, &response);
+ 
+            auto status = Stub_->CreateSession(&context, request, &response); 
             auto deferred = response.operation();
-            UNIT_ASSERT(status.ok());
-            UNIT_ASSERT(deferred.ready() == true);
+            UNIT_ASSERT(status.ok()); 
+            UNIT_ASSERT(deferred.ready() == true); 
             Ydb::Table::CreateSessionResult result;
-
-            deferred.result().UnpackTo(&result);
-            sessionId = result.session_id();
-        }
-
-        {
+ 
+            deferred.result().UnpackTo(&result); 
+            sessionId = result.session_id(); 
+        } 
+ 
+        { 
             std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
             Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
-            grpc::ClientContext context;
-
+            grpc::ClientContext context; 
+ 
             Ydb::Table::ExecuteSchemeQueryRequest request;
-            request.set_session_id(sessionId);
-            request.set_yql_text(R"(
-                CREATE TABLE [Root/TheTable] (
+            request.set_session_id(sessionId); 
+            request.set_yql_text(R"( 
+                CREATE TABLE [Root/TheTable] ( 
                     Key UINT64,
                     Value UTF8,
-                    PRIMARY KEY (Key)
-                );
-            )");
-
+                    PRIMARY KEY (Key) 
+                ); 
+            )"); 
+ 
             Ydb::Table::ExecuteSchemeQueryResponse response;
-            auto status = Stub_->ExecuteSchemeQuery(&context, request, &response);
+            auto status = Stub_->ExecuteSchemeQuery(&context, request, &response); 
             UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
-
-            UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
-        }
-
-        {
+ 
+            UNIT_ASSERT(deferred.ready() == true); 
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS); 
+        } 
+ 
+        { 
             std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
             Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
-            grpc::ClientContext context;
-
+            grpc::ClientContext context; 
+ 
             Ydb::Table::ExplainDataQueryRequest request;
-            request.set_session_id(sessionId);
-            request.set_yql_text(R"(
-                UPSERT INTO [Root/TheTable] (Key, Value)
-                VALUES (1, "One");
-            )");
-
+            request.set_session_id(sessionId); 
+            request.set_yql_text(R"( 
+                UPSERT INTO [Root/TheTable] (Key, Value) 
+                VALUES (1, "One"); 
+            )"); 
+ 
             Ydb::Table::ExplainDataQueryResponse response;
-            auto status = Stub_->ExplainDataQuery(&context, request, &response);
+            auto status = Stub_->ExplainDataQuery(&context, request, &response); 
             UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
-
-            UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
-        }
-
-        TString txId;
-        {
+ 
+            UNIT_ASSERT(deferred.ready() == true); 
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS); 
+        } 
+ 
+        TString txId; 
+        { 
             std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
             Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
-            grpc::ClientContext context;
-
+            grpc::ClientContext context; 
+ 
             Ydb::Table::ExecuteDataQueryRequest request;
-            request.set_session_id(sessionId);
-            request.mutable_query()->set_yql_text(R"(
-                UPSERT INTO [Root/TheTable] (Key, Value)
-                VALUES (1, "One");
-            )");
-
-            auto& txControl = *request.mutable_tx_control();
-            txControl.mutable_begin_tx()->mutable_serializable_read_write();
-
+            request.set_session_id(sessionId); 
+            request.mutable_query()->set_yql_text(R"( 
+                UPSERT INTO [Root/TheTable] (Key, Value) 
+                VALUES (1, "One"); 
+            )"); 
+ 
+            auto& txControl = *request.mutable_tx_control(); 
+            txControl.mutable_begin_tx()->mutable_serializable_read_write(); 
+ 
             Ydb::Table::ExecuteDataQueryResponse response;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response); 
             UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
-
-            UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
-
+ 
+            UNIT_ASSERT(deferred.ready() == true); 
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS); 
+ 
             Ydb::Table::ExecuteQueryResult result;
-            deferred.result().UnpackTo(&result);
-
-            txId = result.tx_meta().id();
-            UNIT_ASSERT(!txId.empty());
-        }
-
-        {
+            deferred.result().UnpackTo(&result); 
+ 
+            txId = result.tx_meta().id(); 
+            UNIT_ASSERT(!txId.empty()); 
+        } 
+ 
+        { 
             std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
             Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
-            grpc::ClientContext context;
-
+            grpc::ClientContext context; 
+ 
             Ydb::Table::ExecuteDataQueryRequest request;
-            request.set_session_id(sessionId);
-            request.mutable_query()->set_yql_text(R"(
-                UPSERT INTO [Root/TheTable] (Key, Value)
-                VALUES (2, "Two");
-            )");
-
-            auto& txControl = *request.mutable_tx_control();
-            txControl.set_tx_id(txId);
-            txControl.set_commit_tx(true);
-
+            request.set_session_id(sessionId); 
+            request.mutable_query()->set_yql_text(R"( 
+                UPSERT INTO [Root/TheTable] (Key, Value) 
+                VALUES (2, "Two"); 
+            )"); 
+ 
+            auto& txControl = *request.mutable_tx_control(); 
+            txControl.set_tx_id(txId); 
+            txControl.set_commit_tx(true); 
+ 
             Ydb::Table::ExecuteDataQueryResponse response;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response); 
             UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
-
-            UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
-        }
-
-        TString queryId;
-        {
+ 
+            UNIT_ASSERT(deferred.ready() == true); 
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS); 
+        } 
+ 
+        TString queryId; 
+        { 
             std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
             Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
-            grpc::ClientContext context;
-
+            grpc::ClientContext context; 
+ 
             Ydb::Table::PrepareDataQueryRequest request;
-            request.set_session_id(sessionId);
-            request.set_yql_text(R"(
-                DECLARE $Key AS Uint64;
-                SELECT * FROM [Root/TheTable] WHERE Key < $Key;
-            )");
-
+            request.set_session_id(sessionId); 
+            request.set_yql_text(R"( 
+                DECLARE $Key AS Uint64; 
+                SELECT * FROM [Root/TheTable] WHERE Key < $Key; 
+            )"); 
+ 
             Ydb::Table::PrepareDataQueryResponse response;
-            auto status = Stub_->PrepareDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
-
+            auto status = Stub_->PrepareDataQuery(&context, request, &response); 
+            UNIT_ASSERT(status.ok()); 
+ 
             auto deferred = response.operation();
-            UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
-
+            UNIT_ASSERT(deferred.ready() == true); 
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS); 
+ 
             Ydb::Table::PrepareQueryResult result;
-            deferred.result().UnpackTo(&result);
-            queryId = result.query_id();
-        }
-
-        {
+            deferred.result().UnpackTo(&result); 
+            queryId = result.query_id(); 
+        } 
+ 
+        { 
             std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
             Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
-            grpc::ClientContext context;
-
+            grpc::ClientContext context; 
+ 
             Ydb::Table::ExecuteDataQueryRequest request;
-            request.set_session_id(sessionId);
-            request.mutable_query()->set_id(queryId);
-
-            auto& txControl = *request.mutable_tx_control();
-            txControl.mutable_begin_tx()->mutable_online_read_only();
-            txControl.set_commit_tx(true);
-
+            request.set_session_id(sessionId); 
+            request.mutable_query()->set_id(queryId); 
+ 
+            auto& txControl = *request.mutable_tx_control(); 
+            txControl.mutable_begin_tx()->mutable_online_read_only(); 
+            txControl.set_commit_tx(true); 
+ 
             Ydb::TypedValue parameter;
-            {
-                const TString type =
+            { 
+                const TString type = 
                     "type_id: UINT64\n";
-                google::protobuf::TextFormat::ParseFromString(type, parameter.mutable_type());
-                const TString value = "uint64_value: 5\n";
-                google::protobuf::TextFormat::ParseFromString(value, parameter.mutable_value());
-            }
-
-            auto& map = *request.mutable_parameters();
-            map["$Key"] = parameter;
-
+                google::protobuf::TextFormat::ParseFromString(type, parameter.mutable_type()); 
+                const TString value = "uint64_value: 5\n"; 
+                google::protobuf::TextFormat::ParseFromString(value, parameter.mutable_value()); 
+            } 
+ 
+            auto& map = *request.mutable_parameters(); 
+            map["$Key"] = parameter; 
+ 
             Ydb::Table::ExecuteDataQueryResponse response;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response); 
             UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
-
-            UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
-
+ 
+            UNIT_ASSERT(deferred.ready() == true); 
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS); 
+ 
             Ydb::Table::ExecuteQueryResult result;
-            deferred.result().UnpackTo(&result);
-
-            UNIT_ASSERT(result.tx_meta().id().empty());
-            UNIT_ASSERT_VALUES_EQUAL(result.result_sets(0).rows_size(), 2);
-        }
-    }
-
+            deferred.result().UnpackTo(&result); 
+ 
+            UNIT_ASSERT(result.tx_meta().id().empty()); 
+            UNIT_ASSERT_VALUES_EQUAL(result.result_sets(0).rows_size(), 2); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(CreateYqlSessionExecuteQuery) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
@@ -2435,11 +2435,11 @@ tx_meta {
             grpc::ClientContext context;
             Ydb::Table::ExecuteDataQueryRequest request;
             request.set_session_id(sessionId);
-            request.mutable_query()->set_yql_text("SELECT 1, \"qq\"; SELECT 2;");
-            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.mutable_tx_control()->set_commit_tx(true);
+            request.mutable_query()->set_yql_text("SELECT 1, \"qq\"; SELECT 2;"); 
+            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write(); 
+            request.mutable_tx_control()->set_commit_tx(true); 
             Ydb::Table::ExecuteDataQueryResponse response;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response); 
             auto deferred = response.operation();
             UNIT_ASSERT(status.ok());
             UNIT_ASSERT(deferred.ready() == true);
@@ -2450,22 +2450,22 @@ tx_meta {
             grpc::ClientContext context;
             Ydb::Table::ExecuteDataQueryRequest request;
             request.set_session_id(sessionId);
-            request.mutable_query()->set_yql_text("SELECT * from [Root/NotFound]");
-            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.mutable_tx_control()->set_commit_tx(true);
+            request.mutable_query()->set_yql_text("SELECT * from [Root/NotFound]"); 
+            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write(); 
+            request.mutable_tx_control()->set_commit_tx(true); 
             Ydb::Table::ExecuteDataQueryResponse response;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response); 
             auto deferred = response.operation();
             UNIT_ASSERT(status.ok());
             UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SCHEME_ERROR);
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SCHEME_ERROR); 
             NYql::TIssues issues;
             NYql::IssuesFromMessage(deferred.issues(), issues);
-            UNIT_ASSERT(HasIssue(issues, NYql::TIssuesIds::KIKIMR_SCHEME_ERROR));
+            UNIT_ASSERT(HasIssue(issues, NYql::TIssuesIds::KIKIMR_SCHEME_ERROR)); 
         }
 
     }
-
+ 
     Y_UNIT_TEST(ExecutePreparedQuery) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
@@ -2495,13 +2495,13 @@ tx_meta {
             grpc::ClientContext context;
             Ydb::Table::PrepareDataQueryRequest request;
             request.set_session_id(sessionId);
-            request.set_yql_text("DECLARE $paramName AS String; SELECT $paramName;");
+            request.set_yql_text("DECLARE $paramName AS String; SELECT $paramName;"); 
             Ydb::Table::PrepareDataQueryResponse response;
-            auto status = Stub_->PrepareDataQuery(&context, request, &response);
+            auto status = Stub_->PrepareDataQuery(&context, request, &response); 
             UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS); 
             Ydb::Table::PrepareQueryResult result;
 
             deferred.result().UnpackTo(&result);
@@ -2513,9 +2513,9 @@ tx_meta {
             grpc::ClientContext context;
             Ydb::Table::ExecuteDataQueryRequest request;
             request.set_session_id(sessionId);
-            request.mutable_query()->set_id(preparedQueryId);
-            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.mutable_tx_control()->set_commit_tx(true);
+            request.mutable_query()->set_id(preparedQueryId); 
+            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write(); 
+            request.mutable_tx_control()->set_commit_tx(true); 
             Ydb::TypedValue parameter;
             {
                 const TString type =
@@ -2529,11 +2529,11 @@ tx_meta {
             map["$paramName"] = parameter;
 
             Ydb::Table::ExecuteDataQueryResponse response;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response); 
             UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS); 
             Ydb::Table::ExecuteQueryResult result;
             deferred.result().UnpackTo(&result);
             {
@@ -2541,7 +2541,7 @@ tx_meta {
                 google::protobuf::TextFormat::PrintToString(result, &tmp);
                 const TString expected =
                     "result_sets {\n"
-                    "  columns {\n"
+                    "  columns {\n" 
                     "    name: \"column0\"\n"
                     "    type {\n"
                     "      type_id: STRING\n"
@@ -2552,100 +2552,100 @@ tx_meta {
                     "      bytes_value: \"Paul\"\n"
                     "    }\n"
                     "  }\n"
-                    "}\n"
-                    "tx_meta {\n"
+                    "}\n" 
+                    "tx_meta {\n" 
                     "}\n";
                 UNIT_ASSERT_NO_DIFF(tmp, expected);
             }
         }
     }
 
-    Y_UNIT_TEST(ExecuteQueryCache) {
-        TKikimrWithGrpcAndRootSchema server;
-        ui16 grpc = server.GetPort();
-
-        std::shared_ptr<grpc::Channel> Channel_;
-        Channel_ = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
-        TString sessionId;
-        {
-            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
-            Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
-            grpc::ClientContext context;
-            Ydb::Table::CreateSessionRequest request;
-            Ydb::Table::CreateSessionResponse response;
-
-            auto status = Stub_->CreateSession(&context, request, &response);
-            auto deferred = response.operation();
-            UNIT_ASSERT(status.ok());  //GRpc layer - OK
-            UNIT_ASSERT(deferred.ready() == true);
-            Ydb::Table::CreateSessionResult result;
-
-            deferred.result().UnpackTo(&result);
-            sessionId = result.session_id();
-        }
-
-        Ydb::TypedValue parameter;
-        {
-            const TString type =
-                "type_id: STRING\n";
-            google::protobuf::TextFormat::ParseFromString(type, parameter.mutable_type());
-            const TString value = "bytes_value: \"Paul\"\n";
-            google::protobuf::TextFormat::ParseFromString(value, parameter.mutable_value());
-        }
-
-        TString queryId;
-        {
-            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
-            Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
-            grpc::ClientContext context;
-            Ydb::Table::ExecuteDataQueryRequest request;
-            request.set_session_id(sessionId);
-            request.mutable_query()->set_yql_text("DECLARE $paramName AS String; SELECT $paramName;");
-            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.mutable_tx_control()->set_commit_tx(true);
-            request.mutable_query_cache_policy()->set_keep_in_cache(true);
-            auto& map = *request.mutable_parameters();
-            map["$paramName"] = parameter;
-            Ydb::Table::ExecuteDataQueryResponse response;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
-            auto deferred = response.operation();
+    Y_UNIT_TEST(ExecuteQueryCache) { 
+        TKikimrWithGrpcAndRootSchema server; 
+        ui16 grpc = server.GetPort(); 
+ 
+        std::shared_ptr<grpc::Channel> Channel_; 
+        Channel_ = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials()); 
+        TString sessionId; 
+        { 
+            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_; 
+            Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_); 
+            grpc::ClientContext context; 
+            Ydb::Table::CreateSessionRequest request; 
+            Ydb::Table::CreateSessionResponse response; 
+ 
+            auto status = Stub_->CreateSession(&context, request, &response); 
+            auto deferred = response.operation(); 
+            UNIT_ASSERT(status.ok());  //GRpc layer - OK 
+            UNIT_ASSERT(deferred.ready() == true); 
+            Ydb::Table::CreateSessionResult result; 
+ 
+            deferred.result().UnpackTo(&result); 
+            sessionId = result.session_id(); 
+        } 
+ 
+        Ydb::TypedValue parameter; 
+        { 
+            const TString type = 
+                "type_id: STRING\n"; 
+            google::protobuf::TextFormat::ParseFromString(type, parameter.mutable_type()); 
+            const TString value = "bytes_value: \"Paul\"\n"; 
+            google::protobuf::TextFormat::ParseFromString(value, parameter.mutable_value()); 
+        } 
+ 
+        TString queryId; 
+        { 
+            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_; 
+            Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_); 
+            grpc::ClientContext context; 
+            Ydb::Table::ExecuteDataQueryRequest request; 
+            request.set_session_id(sessionId); 
+            request.mutable_query()->set_yql_text("DECLARE $paramName AS String; SELECT $paramName;"); 
+            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write(); 
+            request.mutable_tx_control()->set_commit_tx(true); 
+            request.mutable_query_cache_policy()->set_keep_in_cache(true); 
+            auto& map = *request.mutable_parameters(); 
+            map["$paramName"] = parameter; 
+            Ydb::Table::ExecuteDataQueryResponse response; 
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response); 
+            auto deferred = response.operation(); 
             UNIT_ASSERT(status.ok());
-            UNIT_ASSERT(deferred.ready() == true);
-
-            Ydb::Table::ExecuteQueryResult result;
-            deferred.result().UnpackTo(&result);
-            UNIT_ASSERT(result.has_query_meta());
-            queryId = result.query_meta().id();
+            UNIT_ASSERT(deferred.ready() == true); 
+ 
+            Ydb::Table::ExecuteQueryResult result; 
+            deferred.result().UnpackTo(&result); 
+            UNIT_ASSERT(result.has_query_meta()); 
+            queryId = result.query_meta().id(); 
             UNIT_ASSERT(!queryId.empty());
-            UNIT_ASSERT(!result.query_meta().parameters_types().empty());
-        }
-
-        {
-            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
-            Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
-            grpc::ClientContext context;
-            Ydb::Table::ExecuteDataQueryRequest request;
-            request.set_session_id(sessionId);
-            request.mutable_query()->set_id(queryId);
-            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.mutable_tx_control()->set_commit_tx(true);
-            request.mutable_query_cache_policy()->set_keep_in_cache(true);
-            auto& map = *request.mutable_parameters();
-            map["$paramName"] = parameter;
-
-            Ydb::Table::ExecuteDataQueryResponse response;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
-            UNIT_ASSERT(status.ok());
-            auto deferred = response.operation();
-            UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
-
-            Ydb::Table::ExecuteQueryResult result;
-            deferred.result().UnpackTo(&result);
-            UNIT_ASSERT(!result.has_query_meta());
-        }
-    }
-
+            UNIT_ASSERT(!result.query_meta().parameters_types().empty()); 
+        } 
+ 
+        { 
+            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_; 
+            Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_); 
+            grpc::ClientContext context; 
+            Ydb::Table::ExecuteDataQueryRequest request; 
+            request.set_session_id(sessionId); 
+            request.mutable_query()->set_id(queryId); 
+            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write(); 
+            request.mutable_tx_control()->set_commit_tx(true); 
+            request.mutable_query_cache_policy()->set_keep_in_cache(true); 
+            auto& map = *request.mutable_parameters(); 
+            map["$paramName"] = parameter; 
+ 
+            Ydb::Table::ExecuteDataQueryResponse response; 
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response); 
+            UNIT_ASSERT(status.ok()); 
+            auto deferred = response.operation(); 
+            UNIT_ASSERT(deferred.ready() == true); 
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS); 
+ 
+            Ydb::Table::ExecuteQueryResult result; 
+            deferred.result().UnpackTo(&result); 
+            UNIT_ASSERT(!result.has_query_meta()); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(ExplainQuery) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
@@ -2681,7 +2681,7 @@ tx_meta {
         /*
         {
             auto status = WaitForStatus(Channel_, id);
-            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS); 
         }
         */
 
@@ -2710,15 +2710,15 @@ tx_meta {
             grpc::ClientContext context;
             Ydb::Table::ExecuteDataQueryRequest request;
             request.set_session_id(sessionId);
-            request.mutable_query()->set_yql_text("UPSERT INTO [Root/TheTable] (Key, Value) VALUES (42, \"data\");");
-            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.mutable_tx_control()->set_commit_tx(true);
+            request.mutable_query()->set_yql_text("UPSERT INTO [Root/TheTable] (Key, Value) VALUES (42, \"data\");"); 
+            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write(); 
+            request.mutable_tx_control()->set_commit_tx(true); 
             Ydb::Table::ExecuteDataQueryResponse response;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response); 
             UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS); 
         }
 
         {
@@ -2727,13 +2727,13 @@ tx_meta {
             grpc::ClientContext context;
             Ydb::Table::ExplainDataQueryRequest request;
             request.set_session_id(sessionId);
-            request.set_yql_text("SELECT COUNT(*) FROM [Root/TheTable];");
+            request.set_yql_text("SELECT COUNT(*) FROM [Root/TheTable];"); 
             Ydb::Table::ExplainDataQueryResponse response;
-            auto status = Stub_->ExplainDataQuery(&context, request, &response);
+            auto status = Stub_->ExplainDataQuery(&context, request, &response); 
             UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS); 
         }
     }
 
@@ -2768,7 +2768,7 @@ tx_meta {
         /*
         {
             auto status = WaitForStatus(Channel_, id);
-            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS); 
         }
         */
         {
@@ -2810,7 +2810,7 @@ tx_meta {
         /*
         {
             auto status = WaitForStatus(Channel_, id);
-            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS); 
         }
         */
         {
@@ -2835,15 +2835,15 @@ tx_meta {
             grpc::ClientContext context;
             Ydb::Table::ExecuteDataQueryRequest request;
             request.set_session_id(sessionId);
-            request.mutable_query()->set_yql_text("DELETE FROM [Root/TheTable];");
-            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.mutable_tx_control()->set_commit_tx(true);
+            request.mutable_query()->set_yql_text("DELETE FROM [Root/TheTable];"); 
+            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write(); 
+            request.mutable_tx_control()->set_commit_tx(true); 
             Ydb::Table::ExecuteDataQueryResponse response;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response); 
             UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS); 
         }
         {
             std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
@@ -2851,15 +2851,15 @@ tx_meta {
             grpc::ClientContext context;
             Ydb::Table::ExecuteDataQueryRequest request;
             request.set_session_id(sessionId);
-            request.mutable_query()->set_yql_text("DELETE FROM [Root/TheTable2];");
-            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.mutable_tx_control()->set_commit_tx(true);
+            request.mutable_query()->set_yql_text("DELETE FROM [Root/TheTable2];"); 
+            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write(); 
+            request.mutable_tx_control()->set_commit_tx(true); 
             Ydb::Table::ExecuteDataQueryResponse response;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response); 
             UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS); 
         }
     }
 
@@ -2936,14 +2936,14 @@ tx_meta {
             req.back() = ';';
             request.mutable_query()->set_yql_text(req);
 
-            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.mutable_tx_control()->set_commit_tx(true);
+            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write(); 
+            request.mutable_tx_control()->set_commit_tx(true); 
             Ydb::Table::ExecuteDataQueryResponse response;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response); 
             UNIT_ASSERT(status.ok());
             auto deferred = response.operation();
             UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS); 
         }
         {
             std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
@@ -3059,124 +3059,124 @@ tx_meta {
             }
         }
     }
-
-    Y_UNIT_TEST(OperationTimeout) {
-        TKikimrWithGrpcAndRootSchema server;
-        ui16 grpc = server.GetPort();
-
-        std::shared_ptr<grpc::Channel> Channel_;
-        Channel_ = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
-        {
-            std::unique_ptr<Draft::Dummy::DummyService::Stub> Stub_;
-            Stub_ = Draft::Dummy::DummyService::NewStub(Channel_);
-            grpc::ClientContext context;
-
-            Draft::Dummy::InfiniteRequest request;
-            Draft::Dummy::InfiniteResponse response;
-
-            request.mutable_operation_params()->mutable_operation_timeout()->set_nanos(100000000); // 100ms
-
-            auto status = Stub_->Infinite(&context, request, &response);
-            auto deferred = response.operation();
-            UNIT_ASSERT(status.ok());  //GRpc layer - OK
-            UNIT_ASSERT(deferred.ready() == true);
-
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(deferred.issues(), issues);
-            issues.PrintTo(Cerr);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::TIMEOUT);
-        }
-    }
-
-    Y_UNIT_TEST(OperationCancelAfter) {
-        TKikimrWithGrpcAndRootSchema server;
-        ui16 grpc = server.GetPort();
-
-        std::shared_ptr<grpc::Channel> Channel_;
-        Channel_ = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
-        {
-            std::unique_ptr<Draft::Dummy::DummyService::Stub> Stub_;
-            Stub_ = Draft::Dummy::DummyService::NewStub(Channel_);
-            grpc::ClientContext context;
-
-            Draft::Dummy::InfiniteRequest request;
-            Draft::Dummy::InfiniteResponse response;
-
-            request.mutable_operation_params()->mutable_cancel_after()->set_nanos(100000000); // 100ms
-
-            auto status = Stub_->Infinite(&context, request, &response);
-            auto deferred = response.operation();
-            UNIT_ASSERT(status.ok());  //GRpc layer - OK
-            UNIT_ASSERT(deferred.ready() == true);
-
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(deferred.issues(), issues);
-            issues.PrintTo(Cerr);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::CANCELLED);
-        }
-    }
-
-    Y_UNIT_TEST(KeepAlive) {
-        TKikimrWithGrpcAndRootSchema server;
-        ui16 grpc = server.GetPort();
-
-        std::shared_ptr<grpc::Channel> channel;
-        channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
-
-        TString sessionId = CreateSession(channel);
-
-        {
-            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
-            Stub_ = Ydb::Table::V1::TableService::NewStub(channel);
-            grpc::ClientContext context;
-            Ydb::Table::KeepAliveRequest request;
-            request.set_session_id(sessionId);
-            Ydb::Table::KeepAliveResponse response;
-            auto status = Stub_->KeepAlive(&context, request, &response);
+ 
+    Y_UNIT_TEST(OperationTimeout) { 
+        TKikimrWithGrpcAndRootSchema server; 
+        ui16 grpc = server.GetPort(); 
+ 
+        std::shared_ptr<grpc::Channel> Channel_; 
+        Channel_ = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials()); 
+        { 
+            std::unique_ptr<Draft::Dummy::DummyService::Stub> Stub_; 
+            Stub_ = Draft::Dummy::DummyService::NewStub(Channel_); 
+            grpc::ClientContext context; 
+ 
+            Draft::Dummy::InfiniteRequest request; 
+            Draft::Dummy::InfiniteResponse response; 
+ 
+            request.mutable_operation_params()->mutable_operation_timeout()->set_nanos(100000000); // 100ms 
+ 
+            auto status = Stub_->Infinite(&context, request, &response); 
+            auto deferred = response.operation(); 
+            UNIT_ASSERT(status.ok());  //GRpc layer - OK 
+            UNIT_ASSERT(deferred.ready() == true); 
+ 
+            NYql::TIssues issues; 
+            NYql::IssuesFromMessage(deferred.issues(), issues); 
+            issues.PrintTo(Cerr); 
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::TIMEOUT); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(OperationCancelAfter) { 
+        TKikimrWithGrpcAndRootSchema server; 
+        ui16 grpc = server.GetPort(); 
+ 
+        std::shared_ptr<grpc::Channel> Channel_; 
+        Channel_ = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials()); 
+        { 
+            std::unique_ptr<Draft::Dummy::DummyService::Stub> Stub_; 
+            Stub_ = Draft::Dummy::DummyService::NewStub(Channel_); 
+            grpc::ClientContext context; 
+ 
+            Draft::Dummy::InfiniteRequest request; 
+            Draft::Dummy::InfiniteResponse response; 
+ 
+            request.mutable_operation_params()->mutable_cancel_after()->set_nanos(100000000); // 100ms 
+ 
+            auto status = Stub_->Infinite(&context, request, &response); 
+            auto deferred = response.operation(); 
+            UNIT_ASSERT(status.ok());  //GRpc layer - OK 
+            UNIT_ASSERT(deferred.ready() == true); 
+ 
+            NYql::TIssues issues; 
+            NYql::IssuesFromMessage(deferred.issues(), issues); 
+            issues.PrintTo(Cerr); 
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::CANCELLED); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(KeepAlive) { 
+        TKikimrWithGrpcAndRootSchema server; 
+        ui16 grpc = server.GetPort(); 
+ 
+        std::shared_ptr<grpc::Channel> channel; 
+        channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials()); 
+ 
+        TString sessionId = CreateSession(channel); 
+ 
+        { 
+            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_; 
+            Stub_ = Ydb::Table::V1::TableService::NewStub(channel); 
+            grpc::ClientContext context; 
+            Ydb::Table::KeepAliveRequest request; 
+            request.set_session_id(sessionId); 
+            Ydb::Table::KeepAliveResponse response; 
+            auto status = Stub_->KeepAlive(&context, request, &response); 
             UNIT_ASSERT(status.ok());
-            auto deferred = response.operation();
-            UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS);
-
-            Ydb::Table::KeepAliveResult result;
-            deferred.result().UnpackTo(&result);
-
-            UNIT_ASSERT(result.session_status() == Ydb::Table::KeepAliveResult::SESSION_STATUS_READY);
-        }
-    }
-
-    Y_UNIT_TEST(BeginTxRequestError) {
-        TVector<NKikimrKqp::TKqpSetting> settings;
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_KqpMaxActiveTxPerSession");
-        setting.SetValue("2");
-        settings.push_back(setting);
-
+            auto deferred = response.operation(); 
+            UNIT_ASSERT(deferred.ready() == true); 
+            UNIT_ASSERT(deferred.status() == Ydb::StatusIds::SUCCESS); 
+ 
+            Ydb::Table::KeepAliveResult result; 
+            deferred.result().UnpackTo(&result); 
+ 
+            UNIT_ASSERT(result.session_status() == Ydb::Table::KeepAliveResult::SESSION_STATUS_READY); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(BeginTxRequestError) { 
+        TVector<NKikimrKqp::TKqpSetting> settings; 
+        auto setting = NKikimrKqp::TKqpSetting(); 
+        setting.SetName("_KqpMaxActiveTxPerSession"); 
+        setting.SetValue("2"); 
+        settings.push_back(setting); 
+ 
         TKikimrWithGrpcAndRootSchema server(NKikimrConfig::TAppConfig(), settings);
-        ui16 grpc = server.GetPort();
-
-        std::shared_ptr<grpc::Channel> channel;
-        channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
-
-        TString sessionId = CreateSession(channel);
-
-        for (ui32 i = 0; i < 3; ++i) {
-            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
-            Stub_ = Ydb::Table::V1::TableService::NewStub(channel);
-            grpc::ClientContext context;
-            Ydb::Table::ExecuteDataQueryRequest request;
-            request.set_session_id(sessionId);
-            request.mutable_query()->set_id("ydb://preparedqueryid/0?id=bad_query");
-            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
-            Ydb::Table::ExecuteDataQueryResponse response;
-            auto status = Stub_->ExecuteDataQuery(&context, request, &response);
-            auto deferred = response.operation();
-
-            UNIT_ASSERT(status.ok());
-            UNIT_ASSERT(deferred.ready() == true);
-            UNIT_ASSERT_VALUES_EQUAL(deferred.status(), Ydb::StatusIds::NOT_FOUND);
-        }
-    }
+        ui16 grpc = server.GetPort(); 
+ 
+        std::shared_ptr<grpc::Channel> channel; 
+        channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials()); 
+ 
+        TString sessionId = CreateSession(channel); 
+ 
+        for (ui32 i = 0; i < 3; ++i) { 
+            std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_; 
+            Stub_ = Ydb::Table::V1::TableService::NewStub(channel); 
+            grpc::ClientContext context; 
+            Ydb::Table::ExecuteDataQueryRequest request; 
+            request.set_session_id(sessionId); 
+            request.mutable_query()->set_id("ydb://preparedqueryid/0?id=bad_query"); 
+            request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write(); 
+            Ydb::Table::ExecuteDataQueryResponse response; 
+            auto status = Stub_->ExecuteDataQuery(&context, request, &response); 
+            auto deferred = response.operation(); 
+ 
+            UNIT_ASSERT(status.ok()); 
+            UNIT_ASSERT(deferred.ready() == true); 
+            UNIT_ASSERT_VALUES_EQUAL(deferred.status(), Ydb::StatusIds::NOT_FOUND); 
+        } 
+    } 
 }
 
 namespace {
@@ -3764,7 +3764,7 @@ void CreateTableComplexKey(TKikimrWithGrpcAndRootSchema &server,
 
 Y_UNIT_TEST_SUITE(TTableProfileTests) {
     Y_UNIT_TEST(UseDefaultProfile) {
-        TKikimrWithGrpcAndRootSchema server;
+        TKikimrWithGrpcAndRootSchema server; 
         //server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::CMS_CONFIGS, NLog::PRI_TRACE);
         //server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::CONFIGS_DISPATCHER, NLog::PRI_TRACE);
         InitConfigs(server);
@@ -3800,7 +3800,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
     }
 
     Y_UNIT_TEST(UseTableProfilePreset) {
-        TKikimrWithGrpcAndRootSchema server;
+        TKikimrWithGrpcAndRootSchema server; 
         InitConfigs(server);
 
         {
@@ -3837,16 +3837,16 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
     }
 
     Y_UNIT_TEST(UseTableProfilePresetViaSdk) {
-        TKikimrWithGrpcAndRootSchema server;
+        TKikimrWithGrpcAndRootSchema server; 
         InitConfigs(server);
         ui16 grpc = server.GetPort();
 
         TString location = TStringBuilder() << "localhost:" << grpc;
 
         auto connection = NYdb::TDriver(
-            TDriverConfig()
+            TDriverConfig() 
                 .SetEndpoint(location));
-        auto client = NYdb::NTable::TTableClient(connection);
+        auto client = NYdb::NTable::TTableClient(connection); 
         auto session = client.CreateSession().ExtractValueSync().GetSession();
 
         {
@@ -3900,7 +3900,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
 
 
     Y_UNIT_TEST(OverwriteCompactionPolicy) {
-        TKikimrWithGrpcAndRootSchema server;
+        TKikimrWithGrpcAndRootSchema server; 
         InitConfigs(server);
 
         {
@@ -3940,7 +3940,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
 
 
     Y_UNIT_TEST(OverwriteExecutionPolicy) {
-        TKikimrWithGrpcAndRootSchema server;
+        TKikimrWithGrpcAndRootSchema server; 
         InitConfigs(server);
 
         {
@@ -3978,7 +3978,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
     }
 
     Y_UNIT_TEST(OverwritePartitioningPolicy) {
-        TKikimrWithGrpcAndRootSchema server;
+        TKikimrWithGrpcAndRootSchema server; 
         InitConfigs(server);
 
         {
@@ -4149,30 +4149,30 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
 
             for (const auto& range : ranges) {
                 if (n == 0) {
-                    UNIT_ASSERT(!range.From());
+                    UNIT_ASSERT(!range.From()); 
                 } else {
-                    UNIT_ASSERT(range.From()->IsInclusive());
-
+                    UNIT_ASSERT(range.From()->IsInclusive()); 
+ 
                     auto left = extractValue(range.From()->GetValue());
-                    UNIT_ASSERT_VALUES_EQUAL(left, expectedRanges[n - 1]);
+                    UNIT_ASSERT_VALUES_EQUAL(left, expectedRanges[n - 1]); 
                 }
 
-                if (n == 9) {
-                    UNIT_ASSERT(!range.To());
-                } else {
-                    UNIT_ASSERT(!range.To()->IsInclusive());
+                if (n == 9) { 
+                    UNIT_ASSERT(!range.To()); 
+                } else { 
+                    UNIT_ASSERT(!range.To()->IsInclusive()); 
                     auto right = extractValue(range.To()->GetValue());
                     UNIT_ASSERT_VALUES_EQUAL(right, expectedRanges[n]);
                 }
-
-                ++n;
+ 
+                ++n; 
             }
 
         }
     }
 
     Y_UNIT_TEST(OverwriteStoragePolicy) {
-        TKikimrWithGrpcAndRootSchema server;
+        TKikimrWithGrpcAndRootSchema server; 
         server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnablePublicApiKeepInMemory(true);
         InitConfigs(server);
 
@@ -4291,7 +4291,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
     }
 
     Y_UNIT_TEST(OverwriteCachingPolicy) {
-        TKikimrWithGrpcAndRootSchema server;
+        TKikimrWithGrpcAndRootSchema server; 
         InitConfigs(server);
 
         {
@@ -4329,7 +4329,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
     }
 
     Y_UNIT_TEST(WrongTableProfile) {
-        TKikimrWithGrpcAndRootSchema server;
+        TKikimrWithGrpcAndRootSchema server; 
         InitConfigs(server);
 
         {
@@ -4553,7 +4553,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
     }
 
     Y_UNIT_TEST(DescribeTableOptions) {
-        TKikimrWithGrpcAndRootSchema server;
+        TKikimrWithGrpcAndRootSchema server; 
         InitConfigs(server);
 
 
@@ -4755,7 +4755,7 @@ Ydb::Table::ExecuteQueryResult ExecYql(std::shared_ptr<grpc::Channel> channel, c
     request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
     request.mutable_tx_control()->set_commit_tx(true);
     if (withStat) {
-        request.set_collect_stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
+        request.set_collect_stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC); 
     }
     Ydb::Table::ExecuteDataQueryResponse response;
     auto status = stub->ExecuteDataQuery(&context, request, &response);

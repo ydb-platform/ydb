@@ -1,6 +1,6 @@
 #include "service_scheme.h"
 
-#include "rpc_scheme_base.h"
+#include "rpc_scheme_base.h" 
 #include "rpc_common.h"
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/public/api/protos/ydb_scheme.pb.h>
@@ -9,21 +9,21 @@ namespace NKikimr {
 namespace NGRpcService {
 
 using namespace NActors;
-using namespace Ydb;
+using namespace Ydb; 
 
 using TEvRemoveDirectoryRequest = TGrpcRequestOperationCall<Ydb::Scheme::RemoveDirectoryRequest,
     Ydb::Scheme::RemoveDirectoryResponse>;
 
-class TRemoveDirectoryRPC : public TRpcSchemeRequestActor<TRemoveDirectoryRPC, TEvRemoveDirectoryRequest> {
-    using TBase = TRpcSchemeRequestActor<TRemoveDirectoryRPC, TEvRemoveDirectoryRequest>;
-
+class TRemoveDirectoryRPC : public TRpcSchemeRequestActor<TRemoveDirectoryRPC, TEvRemoveDirectoryRequest> { 
+    using TBase = TRpcSchemeRequestActor<TRemoveDirectoryRPC, TEvRemoveDirectoryRequest>; 
+ 
 public:
     TRemoveDirectoryRPC(IRequestOpCtx* msg)
-        : TBase(msg) {}
+        : TBase(msg) {} 
 
     void Bootstrap(const TActorContext &ctx) {
-        TBase::Bootstrap(ctx);
-
+        TBase::Bootstrap(ctx); 
+ 
         SendProposeRequest(ctx);
         Become(&TRemoveDirectoryRPC::StateWork);
     }

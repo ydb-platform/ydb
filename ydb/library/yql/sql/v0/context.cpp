@@ -2,11 +2,11 @@
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/utils/yql_panic.h>
-
-#include <util/folder/pathsplit.h>
+ 
+#include <util/folder/pathsplit.h> 
 #include <util/string/join.h>
 #include <util/stream/null.h>
-
+ 
 #ifdef GetMessage
 #undef GetMessage
 #endif
@@ -15,45 +15,45 @@ using namespace NYql;
 
 namespace NSQLTranslationV0 {
 
-namespace {
-
+namespace { 
+ 
 TNodePtr AddTablePathPrefix(TContext &ctx, TStringBuf prefixPath, const TDeferredAtom& path) {
     Y_UNUSED(ctx);
-    if (prefixPath.empty()) {
+    if (prefixPath.empty()) { 
         return path.Build();
-    }
-
+    } 
+ 
     YQL_ENSURE(path.GetLiteral(), "TODO support prefix for deferred atoms");
     prefixPath.SkipPrefix("//");
 
-    TPathSplitUnix prefixPathSplit(prefixPath);
+    TPathSplitUnix prefixPathSplit(prefixPath); 
     TPathSplitUnix pathSplit(*path.GetLiteral());
-
-    if (pathSplit.IsAbsolute) {
+ 
+    if (pathSplit.IsAbsolute) { 
         return path.Build();
-    }
-
+    } 
+ 
     return BuildQuotedAtom(path.Build()->GetPos(), prefixPathSplit.AppendMany(pathSplit.begin(), pathSplit.end()).Reconstruct());
-}
-
+} 
+ 
 typedef bool TContext::*TPragmaField;
 
 THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"PullUpFlatMapOverJoin", &TContext::PragmaPullUpFlatMapOverJoin},
 };
 
-} // namespace
-
+} // namespace 
+ 
 TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
                    TIssues& issues)
     : ClusterMapping(settings.ClusterMapping)
-    , PathPrefix(settings.PathPrefix)
-    , ClusterPathPrefixes(settings.ClusterPathPrefixes)
-    , Settings(settings)
+    , PathPrefix(settings.PathPrefix) 
+    , ClusterPathPrefixes(settings.ClusterPathPrefixes) 
+    , Settings(settings) 
     , Pool(new TMemoryPool(4096))
     , Issues(issues)
-    , IncrementMonCounterFunction(settings.IncrementCounter)
-    , CurrCluster(settings.DefaultCluster)
+    , IncrementMonCounterFunction(settings.IncrementCounter) 
+    , CurrCluster(settings.DefaultCluster) 
     , HasPendingErrors(false)
     , Libraries(settings.Libraries)
 {
@@ -137,7 +137,7 @@ IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TP
         }
     }
 
-    Issues.AddIssue(TIssue(pos, TString()));
+    Issues.AddIssue(TIssue(pos, TString())); 
     auto& curIssue = Issues.back();
     curIssue.Severity = severity;
     curIssue.IssueCode = code;
@@ -146,50 +146,50 @@ IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TP
 }
 
 bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
-    if (arg.Defined()) {
+    if (arg.Defined()) { 
         if (*arg == YtProviderName
             || *arg == KikimrProviderName
             || *arg == RtmrProviderName
             )
-        {
-            ProviderPathPrefixes[*arg] = value;
-            return true;
-        }
-
+        { 
+            ProviderPathPrefixes[*arg] = value; 
+            return true; 
+        } 
+ 
         TString normalizedClusterName;
         if (!GetClusterProvider(*arg, normalizedClusterName)) {
             Error() << "Unknown cluster or provider: " << *arg;
-            IncrementMonCounter("sql_errors", "BadPragmaValue");
-            return false;
-        }
-
+            IncrementMonCounter("sql_errors", "BadPragmaValue"); 
+            return false; 
+        } 
+ 
         ClusterPathPrefixes[normalizedClusterName] = value;
-    } else {
-        PathPrefix = value;
-    }
-
-    return true;
-}
-
+    } else { 
+        PathPrefix = value; 
+    } 
+ 
+    return true; 
+} 
+ 
 TNodePtr TContext::GetPrefixedPath(const TString& cluster, const TDeferredAtom& path) {
     auto* clusterPrefix = ClusterPathPrefixes.FindPtr(cluster);
-    if (clusterPrefix && !clusterPrefix->empty()) {
-        return AddTablePathPrefix(*this, *clusterPrefix, path);
-    } else {
+    if (clusterPrefix && !clusterPrefix->empty()) { 
+        return AddTablePathPrefix(*this, *clusterPrefix, path); 
+    } else { 
         auto provider = GetClusterProvider(cluster);
         YQL_ENSURE(provider.Defined());
-
-        auto* providerPrefix = ProviderPathPrefixes.FindPtr(*provider);
-        if (providerPrefix && !providerPrefix->empty()) {
-            return AddTablePathPrefix(*this, *providerPrefix, path);
+ 
+        auto* providerPrefix = ProviderPathPrefixes.FindPtr(*provider); 
+        if (providerPrefix && !providerPrefix->empty()) { 
+            return AddTablePathPrefix(*this, *providerPrefix, path); 
         } else if (!PathPrefix.empty()) {
-            return AddTablePathPrefix(*this, PathPrefix, path);
-        }
-
+            return AddTablePathPrefix(*this, PathPrefix, path); 
+        } 
+ 
         return path.Build();
-    }
-}
-
+    } 
+} 
+ 
 TNodePtr TContext::UniversalAlias(const TString& baseName, TNodePtr&& node) {
     auto alias = MakeName(baseName);
     UniversalAliases.emplace(alias, node);
@@ -351,8 +351,8 @@ IOutputStream& TTranslation::Error() {
 }
 
 TNodePtr TTranslation::GetNamedNode(const TString& name) {
-    auto mapIt = Ctx.NamedNodes.find(name);
-    if (mapIt == Ctx.NamedNodes.end()) {
+    auto mapIt = Ctx.NamedNodes.find(name); 
+    if (mapIt == Ctx.NamedNodes.end()) { 
         Ctx.Error() << "Unknown name: " << name;
         return nullptr;
     }
@@ -362,23 +362,23 @@ TNodePtr TTranslation::GetNamedNode(const TString& name) {
 
 void TTranslation::PushNamedNode(const TString& name, TNodePtr node) {
     Y_VERIFY_DEBUG(node);
-    auto mapIt = Ctx.NamedNodes.find(name);
-    if (mapIt == Ctx.NamedNodes.end()) {
+    auto mapIt = Ctx.NamedNodes.find(name); 
+    if (mapIt == Ctx.NamedNodes.end()) { 
         auto result = Ctx.NamedNodes.insert(std::make_pair(name, TStack<TNodePtr>()));
         Y_VERIFY_DEBUG(result.second);
-        mapIt = result.first;
+        mapIt = result.first; 
     }
-
-    mapIt->second.push(node);
-}
-
+ 
+    mapIt->second.push(node); 
+} 
+ 
 void TTranslation::PopNamedNode(const TString& name) {
-    auto mapIt = Ctx.NamedNodes.find(name);
+    auto mapIt = Ctx.NamedNodes.find(name); 
     Y_VERIFY_DEBUG(mapIt != Ctx.NamedNodes.end());
     Y_VERIFY_DEBUG(mapIt->second.size() > 0);
-    mapIt->second.pop();
-    if (mapIt->second.empty()) {
-        Ctx.NamedNodes.erase(mapIt);
+    mapIt->second.pop(); 
+    if (mapIt->second.empty()) { 
+        Ctx.NamedNodes.erase(mapIt); 
     }
 }
 

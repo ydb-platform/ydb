@@ -114,7 +114,7 @@ namespace NJson {
             , HasFormatError(false)
         {
             for (size_t n = 0; n < Parent.Fields.size(); ++n) {
-                if (!Parent.Fields[n].Path.empty() && Parent.Fields[n].Path.back().Type == NImpl::ARRAY)
+                if (!Parent.Fields[n].Path.empty() && Parent.Fields[n].Path.back().Type == NImpl::ARRAY) 
                     ShouldUpdateOnArrayChange = true;
             }
         }

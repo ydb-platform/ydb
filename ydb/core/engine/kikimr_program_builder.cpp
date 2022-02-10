@@ -212,29 +212,29 @@ TVector<TRuntimeNode> TKikimrProgramBuilder::FixKeysType(
     return tmp;
 }
 
-TRuntimeNode TKikimrProgramBuilder::ReadTarget(const TReadTarget& target) {
-    MKQL_ENSURE(!target.HasSnapshotTime(), "Snapshots are not supported");
-    return NewDataLiteral((ui32)target.GetMode());
-}
-
+TRuntimeNode TKikimrProgramBuilder::ReadTarget(const TReadTarget& target) { 
+    MKQL_ENSURE(!target.HasSnapshotTime(), "Snapshots are not supported"); 
+    return NewDataLiteral((ui32)target.GetMode()); 
+} 
+ 
 TRuntimeNode TKikimrProgramBuilder::SelectRow(
         const TTableId& tableId,
         const TArrayRef<const ui32>& keyTypes,
         const TArrayRef<const TSelectColumn>& columns,
         const TKeyColumnValues& row, const TReadTarget& target)
 {
-    return SelectRow(tableId, keyTypes, columns, row, ReadTarget(target));
-}
-
-TRuntimeNode TKikimrProgramBuilder::SelectRow(
-        const TTableId& tableId,
-        const TArrayRef<const ui32>& keyTypes,
-        const TArrayRef<const TSelectColumn>& columns,
-        const TKeyColumnValues& row, TRuntimeNode readTarget)
-{
-    MKQL_ENSURE(AS_TYPE(TDataType, readTarget)->GetSchemeType() == NUdf::TDataType<ui32>::Id,
-        "Read target must be ui32");
-
+    return SelectRow(tableId, keyTypes, columns, row, ReadTarget(target)); 
+} 
+ 
+TRuntimeNode TKikimrProgramBuilder::SelectRow( 
+        const TTableId& tableId, 
+        const TArrayRef<const ui32>& keyTypes, 
+        const TArrayRef<const TSelectColumn>& columns, 
+        const TKeyColumnValues& row, TRuntimeNode readTarget) 
+{ 
+    MKQL_ENSURE(AS_TYPE(TDataType, readTarget)->GetSchemeType() == NUdf::TDataType<ui32>::Id, 
+        "Read target must be ui32"); 
+ 
     auto rows = FixKeysType(keyTypes, row);
 
     TRuntimeNode tags;
@@ -247,7 +247,7 @@ TRuntimeNode TKikimrProgramBuilder::SelectRow(
     builder.Add(TRuntimeNode(rowType, true));
     builder.Add(tags);
     builder.Add(NewTuple(TKeyColumnValues(rows)));
-    builder.Add(readTarget);
+    builder.Add(readTarget); 
 
     return TRuntimeNode(builder.Build(), false);
 }
@@ -259,9 +259,9 @@ TRuntimeNode TKikimrProgramBuilder::SelectRange(
         const TTableRangeOptions& options,
         const TReadTarget& target)
 {
-    return SelectRange(tableId, keyTypes, columns, options, ReadTarget(target));
-}
-
+    return SelectRange(tableId, keyTypes, columns, options, ReadTarget(target)); 
+} 
+ 
 static TRuntimeNode BuildOptionList(const TArrayRef<bool>& arr, TProgramBuilder& pBuilder) {
     TListLiteralBuilder builder(pBuilder.GetTypeEnvironment(), pBuilder.NewDataType(NUdf::TDataType<bool>::Id));
     for (auto& item : arr) {
@@ -278,14 +278,14 @@ static bool AtLeastOneFlagSet(const TArrayRef<bool>& arr) {
     return false;
 }
 
-TRuntimeNode TKikimrProgramBuilder::SelectRange(
-        const TTableId& tableId,
-        const TArrayRef<const ui32>& keyTypes,
-        const TArrayRef<const TSelectColumn>& columns,
-        const TTableRangeOptions& options,
-        TRuntimeNode readTarget)
-{
-    MKQL_ENSURE(AS_TYPE(TDataType, readTarget)->GetSchemeType() == NUdf::TDataType<ui32>::Id, "Read target must be ui32");
+TRuntimeNode TKikimrProgramBuilder::SelectRange( 
+        const TTableId& tableId, 
+        const TArrayRef<const ui32>& keyTypes, 
+        const TArrayRef<const TSelectColumn>& columns, 
+        const TTableRangeOptions& options, 
+        TRuntimeNode readTarget) 
+{ 
+    MKQL_ENSURE(AS_TYPE(TDataType, readTarget)->GetSchemeType() == NUdf::TDataType<ui32>::Id, "Read target must be ui32"); 
     MKQL_ENSURE(AS_TYPE(TDataType, options.Flags)->GetSchemeType() == NUdf::TDataType<ui32>::Id, "Flags must be ui32");
     MKQL_ENSURE(AS_TYPE(TDataType, options.ItemsLimit)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "ItemsLimit must be ui64");
     MKQL_ENSURE(AS_TYPE(TDataType, options.BytesLimit)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "BytesLimit must be ui64");
@@ -316,8 +316,8 @@ TRuntimeNode TKikimrProgramBuilder::SelectRange(
             dataTo = UnpackOptionalData(to[i], isOptionalTo);
         }
 
-        MKQL_ENSURE(dataFrom || dataTo, "Invalid key tuple values");
-
+        MKQL_ENSURE(dataFrom || dataTo, "Invalid key tuple values"); 
+ 
         if (dataFrom && dataTo) {
             MKQL_ENSURE(dataFrom->IsSameType(*dataTo), "Data types for key column " << i
                 << " don't match From: " << NUdf::GetDataTypeInfo(*dataFrom->GetDataSlot()).Name
@@ -338,7 +338,7 @@ TRuntimeNode TKikimrProgramBuilder::SelectRange(
     TRuntimeNode skipNullKeys = BuildOptionList(options.SkipNullKeys, *this);
     TRuntimeNode forbidNullArgsFrom = BuildOptionList(options.ForbidNullArgsFrom, *this);
     TRuntimeNode forbidNullArgsTo = BuildOptionList(options.ForbidNullArgsTo, *this);
-
+ 
     TStructTypeBuilder returnTypeBuilder(Env);
     returnTypeBuilder.Reserve(2);
     returnTypeBuilder.Add(TStringBuf("List"), listType);
@@ -354,8 +354,8 @@ TRuntimeNode TKikimrProgramBuilder::SelectRange(
     builder.Add(options.Flags);
     builder.Add(options.ItemsLimit);
     builder.Add(options.BytesLimit);
-    builder.Add(readTarget);
-    builder.Add(skipNullKeys);
+    builder.Add(readTarget); 
+    builder.Add(skipNullKeys); 
     builder.Add(options.Reverse);
 
     // Compat with older kikimr
@@ -472,38 +472,38 @@ TRuntimeNode TKikimrProgramBuilder::FlatMapParameter(
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TKikimrProgramBuilder::AcquireLocks(TRuntimeNode lockTxId) {
+TRuntimeNode TKikimrProgramBuilder::AcquireLocks(TRuntimeNode lockTxId) { 
     MKQL_ENSURE(AS_TYPE(TDataType, lockTxId)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "LockTxId must be ui64");
-
-    TCallableBuilder callableBuilder(Env, "AcquireLocks", Env.GetTypeOfVoid());
-    callableBuilder.Add(lockTxId);
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
-TRuntimeNode TKikimrProgramBuilder::CombineByKeyMerge(TRuntimeNode list) {
-    auto listType = list.GetStaticType();
-    MKQL_ENSURE(listType->IsList(), "Expected list");
-
-    TCallableBuilder callableBuilder(Env, "CombineByKeyMerge", listType);
-    callableBuilder.Add(list);
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
+ 
+    TCallableBuilder callableBuilder(Env, "AcquireLocks", Env.GetTypeOfVoid()); 
+    callableBuilder.Add(lockTxId); 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
+TRuntimeNode TKikimrProgramBuilder::CombineByKeyMerge(TRuntimeNode list) { 
+    auto listType = list.GetStaticType(); 
+    MKQL_ENSURE(listType->IsList(), "Expected list"); 
+ 
+    TCallableBuilder callableBuilder(Env, "CombineByKeyMerge", listType); 
+    callableBuilder.Add(list); 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
 TRuntimeNode TKikimrProgramBuilder::Diagnostics() {
     TCallableBuilder callableBuilder(Env, "Diagnostics", Env.GetTypeOfVoid());
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TKikimrProgramBuilder::PartialSort(TRuntimeNode list, TRuntimeNode ascending,
-    std::function<TRuntimeNode(TRuntimeNode item)> keyExtractor)
-{
-    return BuildSort("PartialSort", list, ascending, keyExtractor);
-}
-
-TRuntimeNode TKikimrProgramBuilder::PartialTake(TRuntimeNode list, TRuntimeNode count) {
-    return BuildTake("PartialTake", list, count);
-}
-
+TRuntimeNode TKikimrProgramBuilder::PartialSort(TRuntimeNode list, TRuntimeNode ascending, 
+    std::function<TRuntimeNode(TRuntimeNode item)> keyExtractor) 
+{ 
+    return BuildSort("PartialSort", list, ascending, keyExtractor); 
+} 
+ 
+TRuntimeNode TKikimrProgramBuilder::PartialTake(TRuntimeNode list, TRuntimeNode count) { 
+    return BuildTake("PartialTake", list, count); 
+} 
+ 
 TRuntimeNode TKikimrProgramBuilder::Bind(TRuntimeNode program, TRuntimeNode parameters, ui32 bindFlags) {
     auto listType = program.GetStaticType();
     AS_TYPE(TListType, listType);
@@ -536,18 +536,18 @@ TRuntimeNode TKikimrProgramBuilder::Bind(TRuntimeNode program, TRuntimeNode para
                 auto structObj = AS_VALUE(NMiniKQL::TStructLiteral, NMiniKQL::TRuntimeNode(callable.GetType()->GetPayload(), true));
                 auto payloadIndex = 1; // fields: Args, Payload
                 const TStringBuf parameterName(AS_VALUE(NMiniKQL::TDataLiteral, structObj->GetValue(payloadIndex))->AsValue().AsStringRef());
-
-                auto parameterIndex = parametersStruct.GetType()->FindMemberIndex(parameterName);
-                MKQL_ENSURE(parameterIndex, "Missing value for parameter: " << parameterName);
-
-                auto value = parametersStruct.GetValue(*parameterIndex);
+ 
+                auto parameterIndex = parametersStruct.GetType()->FindMemberIndex(parameterName); 
+                MKQL_ENSURE(parameterIndex, "Missing value for parameter: " << parameterName); 
+ 
+                auto value = parametersStruct.GetValue(*parameterIndex); 
                 MKQL_ENSURE(value.IsImmediate(), "Parameter value must be immediate");
-
-                MKQL_ENSURE(value.GetStaticType()->IsSameType(*callable.GetType()->GetReturnType()),
-                    "Incorrect type for parameter " << parameterName
+ 
+                MKQL_ENSURE(value.GetStaticType()->IsSameType(*callable.GetType()->GetReturnType()), 
+                    "Incorrect type for parameter " << parameterName 
                     << ", expected: " << PrintNode(callable.GetType()->GetReturnType(), true)
                     << ", actual: " << PrintNode(value.GetStaticType(), true));
-
+ 
                 callable.SetResult(value, Env);
             } else if (callableName == mapParameterFunc || callableName == flatMapParameterFunc) {
                 MKQL_ENSURE(callable.GetInput(0).HasValue(), "Expected parameter value");
@@ -561,7 +561,7 @@ TRuntimeNode TKikimrProgramBuilder::Bind(TRuntimeNode program, TRuntimeNode para
                 }
 
                 TVector<TRuntimeNode> mapResults;
-                mapResults.reserve(list->GetItemsCount());
+                mapResults.reserve(list->GetItemsCount()); 
 
                 TExploringNodeVisitor explorer;
                 auto lambdaArgNode = callable.GetInput(1).GetNode();
@@ -589,20 +589,20 @@ TRuntimeNode TKikimrProgramBuilder::Bind(TRuntimeNode program, TRuntimeNode para
                             };
                         }, Env, false, wereChanges);
 
-                    mapResults.push_back(newValue);
+                    mapResults.push_back(newValue); 
                 }
 
-                TRuntimeNode res;
-                TListLiteralBuilder listBuilder(Env, retItemType);
+                TRuntimeNode res; 
+                TListLiteralBuilder listBuilder(Env, retItemType); 
                 if (callableName == mapParameterFunc) {
-                    for (auto& node : mapResults) {
-                        listBuilder.Add(node);
-                    }
-                    res = TRuntimeNode(listBuilder.Build(), true);
-                } else {
-                    res = mapResults.empty()
-                        ? TRuntimeNode(listBuilder.Build(), true)
-                        : Extend(mapResults);
+                    for (auto& node : mapResults) { 
+                        listBuilder.Add(node); 
+                    } 
+                    res = TRuntimeNode(listBuilder.Build(), true); 
+                } else { 
+                    res = mapResults.empty() 
+                        ? TRuntimeNode(listBuilder.Build(), true) 
+                        : Extend(mapResults); 
                 }
 
                 callable.SetResult(res, Env);

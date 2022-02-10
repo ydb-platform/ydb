@@ -801,10 +801,10 @@ class OnlineReadOnly(AbstractTransactionModeBuilder):
 
     def __init__(self):
         self._pb = _apis.ydb_table.OnlineModeSettings()
-        self._pb.allow_inconsistent_reads = False
+        self._pb.allow_inconsistent_reads = False 
         self._name = "online_read_only"
 
-    def with_allow_inconsistent_reads(self):
+    def with_allow_inconsistent_reads(self): 
         self._pb.allow_inconsistent_reads = True
         return self
 

@@ -48,7 +48,7 @@ class TOperationClient::TImpl : public TClientImplCommon<TOperationClient::TImpl
             extractor,
             rpc,
             DbDriverState_,
-            TRpcRequestSettings(),
+            TRpcRequestSettings(), 
             OPERATION_CLIENT_TIMEOUT,
             TString());
 
@@ -110,7 +110,7 @@ public:
             extractor,
             &V1::OperationService::Stub::AsyncListOperations,
             DbDriverState_,
-            TRpcRequestSettings(),
+            TRpcRequestSettings(), 
             OPERATION_CLIENT_TIMEOUT,
             TString());
 

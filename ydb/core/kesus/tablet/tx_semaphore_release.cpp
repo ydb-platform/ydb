@@ -26,7 +26,7 @@ struct TKesusTablet::TTxSemaphoreRelease : public TTxBase {
             new TEvKesus::TEvReleaseSemaphoreResult(Record.GetProxyGeneration(), released));
     }
 
-    void ReplyError(Ydb::StatusIds::StatusCode status, const TString& reason) {
+    void ReplyError(Ydb::StatusIds::StatusCode status, const TString& reason) { 
         Events.emplace_back(Sender, Cookie,
             new TEvKesus::TEvReleaseSemaphoreResult(Record.GetProxyGeneration(), status, reason));
     }
@@ -40,7 +40,7 @@ struct TKesusTablet::TTxSemaphoreRelease : public TTxBase {
         if (!proxy || proxy->Generation != Record.GetProxyGeneration()) {
             // World has changed by the time we executed
             ReplyError(
-                Ydb::StatusIds::BAD_SESSION,
+                Ydb::StatusIds::BAD_SESSION, 
                 proxy ? "ProxyGeneration mismatch" : "Proxy is not registered");
             return true;
         }
@@ -53,7 +53,7 @@ struct TKesusTablet::TTxSemaphoreRelease : public TTxBase {
         if (!session || session->OwnerProxy != proxy) {
             // Session destroyed or stolen by the time we executed
             ReplyError(
-                session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED,
+                session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED, 
                 session ? "Session not attached" : "Session does not exist");
             return true;
         }
@@ -73,7 +73,7 @@ struct TKesusTablet::TTxSemaphoreRelease : public TTxBase {
                     Events.emplace_back(proxy->ActorID, cookie,
                         new TEvKesus::TEvAcquireSemaphoreResult(
                             proxy->Generation,
-                            Ydb::StatusIds::ABORTED,
+                            Ydb::StatusIds::ABORTED, 
                             "Operation superseded by another request"));
                 });
                 ReplyOk();

@@ -170,28 +170,28 @@ public:
         return *this;
     }
 
-    template <typename ItemType, NScheme::TTypeId SchemeType = SchemeMapper<ItemType>::SchemeType>
-    TWriteValue& EmptyOptional() {
-        Type.SetKind(NKikimrMiniKQL::ETypeKind::Optional);
-
-        auto& optionalType = *Type.MutableOptional()->MutableItem();
-        optionalType.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-        optionalType.MutableData()->SetScheme(SchemeType);
-
-        return *this;
-    }
-
-    template <typename ItemType, NScheme::TTypeId SchemeType = SchemeMapper<ItemType>::SchemeType>
-    TWriteValue& EmptyList() {
-        Type.SetKind(NKikimrMiniKQL::ETypeKind::List);
-
-        auto& itemType = *Type.MutableList()->MutableItem();
-        itemType.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-        itemType.MutableData()->SetScheme(SchemeType);
-
-        return *this;
-    }
-
+    template <typename ItemType, NScheme::TTypeId SchemeType = SchemeMapper<ItemType>::SchemeType> 
+    TWriteValue& EmptyOptional() { 
+        Type.SetKind(NKikimrMiniKQL::ETypeKind::Optional); 
+ 
+        auto& optionalType = *Type.MutableOptional()->MutableItem(); 
+        optionalType.SetKind(NKikimrMiniKQL::ETypeKind::Data); 
+        optionalType.MutableData()->SetScheme(SchemeType); 
+ 
+        return *this; 
+    } 
+ 
+    template <typename ItemType, NScheme::TTypeId SchemeType = SchemeMapper<ItemType>::SchemeType> 
+    TWriteValue& EmptyList() { 
+        Type.SetKind(NKikimrMiniKQL::ETypeKind::List); 
+ 
+        auto& itemType = *Type.MutableList()->MutableItem(); 
+        itemType.SetKind(NKikimrMiniKQL::ETypeKind::Data); 
+        itemType.MutableData()->SetScheme(SchemeType); 
+ 
+        return *this; 
+    } 
+ 
     ui32 GetValueBytesSize() const;
     ui32 GetTypeBytesSize() const;
     ui32 GetBytesSize() const;

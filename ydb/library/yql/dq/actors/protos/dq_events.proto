@@ -1,6 +1,6 @@
 package NYql.NDqProto;
 option cc_enable_arenas = true;
-
+ 
 import "library/cpp/actors/protos/actors.proto";
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
 import "ydb/library/yql/dq/proto/dq_state_load_plan.proto";
@@ -8,7 +8,7 @@ import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/library/yql/dq/proto/dq_transport.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
-
+ 
 message TCheckpoint {
     optional uint64 Id = 1;
     optional uint64 Generation = 2;
@@ -20,28 +20,28 @@ message TCheckpoint {
     2) Checkpoint
     3) Finished
 */
-message TChannelData {
-    optional uint64 ChannelId = 1;
+message TChannelData { 
+    optional uint64 ChannelId = 1; 
     optional NYql.NDqProto.TData Data = 2;
-    optional bool Finished = 3;
+    optional bool Finished = 3; 
     optional TCheckpoint Checkpoint = 4;
-};
-
+}; 
+ 
 message TEvRun {
     optional TMessageTransportMeta TransportMeta = 100;
 }
 
-message TEvChannelsInfo {
-    repeated NYql.NDqProto.TChannel Update = 1;
-};
-
-enum EComputeState {
-    COMPUTE_STATE_UNKNOWN = 0;
-    COMPUTE_STATE_FAILURE = 1;
-    COMPUTE_STATE_EXECUTING = 2;
-    COMPUTE_STATE_FINISHED = 3;
-};
-
+message TEvChannelsInfo { 
+    repeated NYql.NDqProto.TChannel Update = 1; 
+}; 
+ 
+enum EComputeState { 
+    COMPUTE_STATE_UNKNOWN = 0; 
+    COMPUTE_STATE_FAILURE = 1; 
+    COMPUTE_STATE_EXECUTING = 2; 
+    COMPUTE_STATE_FINISHED = 3; 
+}; 
+ 
 message TComputeActorStats {
     optional NActorsProto.TActorId ActorId = 1;
     reserved 2; //optional NKqpProto.TKqpStatsRun LegacyStats = 2;
@@ -54,17 +54,17 @@ message TEvComputeActorState {
     repeated Ydb.Issue.IssueMessage Issues = 4;
     optional uint64 TaskId = 5;
     optional TDqComputeActorStats Stats = 6;
-};
-
+}; 
+ 
 message TEvComputeStateRequest {
 }
 
-message TEvComputeChannelData {
-    optional TChannelData ChannelData = 1;
+message TEvComputeChannelData { 
+    optional TChannelData ChannelData = 1; 
     optional uint64 SendTime = 2;
     optional uint64 SeqNo = 3;
     optional bool NoAck = 4;
-};
+}; 
 
 message TEvComputeChannelDataAck {
     optional uint64 ChannelId = 1;
@@ -90,7 +90,7 @@ message TComputeRuntimeSettings {
 
     enum EExecType {
         UNSPECIFIED = 0;
-        SCAN = 1;
+        SCAN = 1; 
         DATA = 2;
     }
     optional EExecType ExecType = 2;

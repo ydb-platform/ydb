@@ -36,7 +36,7 @@ enum class EExecutionUnitKind : ui32 {
     ExecuteDistributedEraseTx,
     ExecuteCommitWritesTx,
     CompleteOperation,
-    ExecuteKqpScanTx,
+    ExecuteKqpScanTx, 
     MakeScanSnapshot,
     WaitForStreamClearance,
     ReadTableScan,

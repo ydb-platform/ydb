@@ -27,7 +27,7 @@ public:
     void PrintExplainResult(NScripting::TExplainYqlResult& result);
 
 private:
-    TString CollectStatsMode;
+    TString CollectStatsMode; 
     TString Script;
     TString ScriptFile;
     bool Explain = false;

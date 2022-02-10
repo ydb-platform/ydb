@@ -127,11 +127,11 @@ struct TCredential {
 using TCredentialTable = THashMap<TString, TCredential>;
 using TCredentialTablePtr = std::shared_ptr<TCredentialTable>;
 
-struct TUserCredentials {
-    TString OauthToken;
-    TString BlackboxSessionIdCookie;
-};
-
+struct TUserCredentials { 
+    TString OauthToken; 
+    TString BlackboxSessionIdCookie; 
+}; 
+ 
 bool SplitUdfName(TStringBuf name, TStringBuf& moduleName, TStringBuf& funcName);
 
 using TUdfModulesTable = THashMap<TString, TString>; // external module name -> alias of file
@@ -191,14 +191,14 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TUserDataTable UserDataStorageCrutches;
     TYqlOperationOptions OperationOptions;
     TVector<TCredentialTablePtr> Credentials;
-    TUserCredentials UserCredentials;
+    TUserCredentials UserCredentials; 
     IModuleResolver::TPtr Modules;
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
     bool DisableNativeUdfSupport = false;
     TMaybe<TString> OptLLVM;
     bool IsReadOnly = false;
     TAutoPtr<IGraphTransformer> CustomInstantTypeTransformer;
-    bool Diagnostics = false;
+    bool Diagnostics = false; 
     THashMap<ui64, ui32> NodeToOperationId; // UniqueId->PublicId translation
     bool EvaluationInProgress = false;
     THashMap<ui64, const TTypeAnnotationNode*> ExpectedTypes;

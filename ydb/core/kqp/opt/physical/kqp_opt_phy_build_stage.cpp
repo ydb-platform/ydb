@@ -1,8 +1,8 @@
 #include "kqp_opt_phy_rules.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/core/kqp/opt/kqp_opt_impl.h>
-#include <ydb/core/kqp/opt/physical/kqp_opt_phy_impl.h>
+#include <ydb/core/kqp/opt/kqp_opt_impl.h> 
+#include <ydb/core/kqp/opt/physical/kqp_opt_phy_impl.h> 
 #include <ydb/core/kqp/provider/kqp_opt_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 
@@ -11,50 +11,50 @@
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
-namespace NKikimr::NKqp::NOpt {
+namespace NKikimr::NKqp::NOpt { 
 
 using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
-TMaybeNode<TDqPhyPrecompute> BuildLookupKeysPrecompute(const TExprBase& input, TExprContext& ctx) {
-    TMaybeNode<TDqConnection> precomputeInput;
-
-    if (IsDqPureExpr(input)) {
-        YQL_ENSURE(input.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List, "" << input.Ref().Dump());
-
-        auto computeStage = Build<TDqStage>(ctx, input.Pos())
-            .Inputs()
-                .Build()
-            .Program()
-                .Args({})
-                .Body<TCoToStream>()
-                    .Input<TCoJust>()
-                        .Input(input)
-                        .Build()
-                    .Build()
-                .Build()
-            .Settings().Build()
-            .Done();
-
-        precomputeInput = Build<TDqCnValue>(ctx, input.Pos())
-            .Output()
-                .Stage(computeStage)
-                .Index().Build("0")
-                .Build()
-            .Done();
-
-    } else if (input.Maybe<TDqCnUnionAll>()) {
-        precomputeInput = input.Cast<TDqCnUnionAll>();
-    } else {
-        return {};
-    }
-
-    return Build<TDqPhyPrecompute>(ctx, input.Pos())
-        .Connection(precomputeInput.Cast())
-        .Done();
-}
-
+TMaybeNode<TDqPhyPrecompute> BuildLookupKeysPrecompute(const TExprBase& input, TExprContext& ctx) { 
+    TMaybeNode<TDqConnection> precomputeInput; 
+ 
+    if (IsDqPureExpr(input)) { 
+        YQL_ENSURE(input.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List, "" << input.Ref().Dump()); 
+ 
+        auto computeStage = Build<TDqStage>(ctx, input.Pos()) 
+            .Inputs() 
+                .Build() 
+            .Program() 
+                .Args({}) 
+                .Body<TCoToStream>() 
+                    .Input<TCoJust>() 
+                        .Input(input) 
+                        .Build() 
+                    .Build() 
+                .Build() 
+            .Settings().Build() 
+            .Done(); 
+ 
+        precomputeInput = Build<TDqCnValue>(ctx, input.Pos()) 
+            .Output() 
+                .Stage(computeStage) 
+                .Index().Build("0") 
+                .Build() 
+            .Done(); 
+ 
+    } else if (input.Maybe<TDqCnUnionAll>()) { 
+        precomputeInput = input.Cast<TDqCnUnionAll>(); 
+    } else { 
+        return {}; 
+    } 
+ 
+    return Build<TDqPhyPrecompute>(ctx, input.Pos()) 
+        .Connection(precomputeInput.Cast()) 
+        .Done(); 
+} 
+ 
 TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TKqlReadTable>()) {
         return node;
@@ -369,4 +369,4 @@ TExprBase KqpBuildLookupTableStage(TExprBase node, TExprContext& ctx) {
         .Done();
 }
 
-} // namespace NKikimr::NKqp::NOpt
+} // namespace NKikimr::NKqp::NOpt 

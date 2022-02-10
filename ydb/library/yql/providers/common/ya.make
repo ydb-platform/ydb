@@ -1,14 +1,14 @@
-RECURSE(
+RECURSE( 
     codec
     config
     dq
-    gateway
+    gateway 
     http_gateway
     metrics
-    mkql
+    mkql 
     comp_nodes
     proto
-    provider
+    provider 
     schema
     schema/expr
     schema/mkql
@@ -18,4 +18,4 @@ RECURSE(
     token_accessor
     transform
     udf_resolve
-)
+) 

@@ -121,42 +121,42 @@ struct TTestContext {
         const TString& lockName, ELockMode mode,
         ui64 timeoutMillis = 0, const TString& data = TString());
     bool ExpectAcquireLockResult(ui64 reqId, const TActorId& proxy, ui64 generation,
-        Ydb::StatusIds::StatusCode status);
+        Ydb::StatusIds::StatusCode status); 
     void ExpectAcquireLockResult(ui64 reqId, const TActorId& proxy, ui64 generation, bool acquired = true);
 
     // Lock release helpers
     bool MustReleaseLock(
         ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, const TString& lockName,
-        Ydb::StatusIds::StatusCode status);
+        Ydb::StatusIds::StatusCode status); 
     void MustReleaseLock(
         ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, const TString& lockName, bool released = true);
 
     // Semaphore helpers
     void CreateSemaphore(
-        const TString& name, ui64 limit, const TString& data, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
-    void CreateSemaphore(const TString& name, ui64 limit, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) {
+        const TString& name, ui64 limit, const TString& data, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
+    void CreateSemaphore(const TString& name, ui64 limit, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) { 
         CreateSemaphore(name, limit, TString(), status);
     }
 
     void UpdateSemaphore(
-        const TString& name, const TString& data, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+        const TString& name, const TString& data, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
 
-    void DeleteSemaphore(const TString& name, bool force, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
-    void DeleteSemaphore(const TString& name, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) {
+    void DeleteSemaphore(const TString& name, bool force, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
+    void DeleteSemaphore(const TString& name, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) { 
         DeleteSemaphore(name, false, status);
     }
 
     void SessionCreateSemaphore(
         ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId,
-        const TString& name, ui64 limit, const TString& data, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+        const TString& name, ui64 limit, const TString& data, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
 
     void SessionUpdateSemaphore(
         ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId,
-        const TString& name, const TString& data, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+        const TString& name, const TString& data, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
 
     void SessionDeleteSemaphore(
         ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId,
-        const TString& name, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+        const TString& name, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
 
     // Semaphore acquire helpers
     void SendAcquireSemaphore(
@@ -164,14 +164,14 @@ struct TTestContext {
         const TString& name, ui64 count,
         ui64 timeoutMillis = 0, const TString& data = TString());
     bool ExpectAcquireSemaphoreResult(ui64 reqId, const TActorId& proxy, ui64 generation,
-        Ydb::StatusIds::StatusCode status);
+        Ydb::StatusIds::StatusCode status); 
     void ExpectAcquireSemaphoreResult(ui64 reqId, const TActorId& proxy, ui64 generation, bool acquired = true);
     void ExpectAcquireSemaphorePending(ui64 reqId, const TActorId& proxy, ui64 generation);
 
     // Semaphore release helpers
     bool MustReleaseSemaphore(
         ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, const TString& name,
-        Ydb::StatusIds::StatusCode status);
+        Ydb::StatusIds::StatusCode status); 
     void MustReleaseSemaphore(
         ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, const TString& name, bool released = true);
 
@@ -239,7 +239,7 @@ struct TTestContext {
         const TString& name, bool watchData = false, bool watchOwners = false);
     TSimpleSemaphoreDescription ExpectDescribeSemaphoreResult(
         ui64 reqId, const TActorId& proxy, ui64 generation,
-        Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+        Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
     TDescribeSemaphoreChanges ExpectDescribeSemaphoreChanged(ui64 reqId, const TActorId& proxy, ui64 generation);
 
     // Quoter

@@ -4,7 +4,7 @@
 
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
 
-namespace NKikimr::NKqp::NOpt {
+namespace NKikimr::NKqp::NOpt { 
 
 using namespace NYql;
 using namespace NYql::NDq;
@@ -235,4 +235,4 @@ TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, 
     return node;
 }
 
-} // namespace NKikimr::NKqp::NOpt
+} // namespace NKikimr::NKqp::NOpt 

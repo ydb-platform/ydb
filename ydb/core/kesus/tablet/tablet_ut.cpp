@@ -92,10 +92,10 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
         // cannot use generation 0
-        ctx.MustRegisterProxy(proxy, 0, Ydb::StatusIds::BAD_REQUEST);
+        ctx.MustRegisterProxy(proxy, 0, Ydb::StatusIds::BAD_REQUEST); 
         ctx.MustRegisterProxy(proxy, 2);
         // cannot reuse the same generation
-        ctx.MustRegisterProxy(proxy, 2, Ydb::StatusIds::BAD_REQUEST);
+        ctx.MustRegisterProxy(proxy, 2, Ydb::StatusIds::BAD_REQUEST); 
     }
 
     Y_UNIT_TEST(TestRegisterProxyFromDeadActor) {
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         auto proxy = ctx.Runtime->AllocateEdgeActor();
         ctx.MustRegisterProxy(proxy, 1);
         ctx.MustRegisterProxy(proxy, 2);
-        ctx.MustUnregisterProxy(proxy, 1, Ydb::StatusIds::BAD_SESSION);
+        ctx.MustUnregisterProxy(proxy, 1, Ydb::StatusIds::BAD_SESSION); 
     }
 
     Y_UNIT_TEST(TestAttachNewSessions) {
@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         auto proxy = ctx.Runtime->AllocateEdgeActor();
         ctx.MustRegisterProxy(proxy, 1);
         auto result = ctx.AttachSession(proxy, 1, 1);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::SESSION_EXPIRED);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::SESSION_EXPIRED); 
     }
 
     Y_UNIT_TEST(TestAttachOldGeneration) {
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         auto proxy = ctx.Runtime->AllocateEdgeActor();
         ctx.RegisterProxy(proxy, 2); // register with generation 2
         auto result1 = ctx.AttachSession(proxy, 1, 0); // attach with generation 1
-        UNIT_ASSERT_VALUES_EQUAL(result1.GetError().GetStatus(), Ydb::StatusIds::BAD_SESSION);
+        UNIT_ASSERT_VALUES_EQUAL(result1.GetError().GetStatus(), Ydb::StatusIds::BAD_SESSION); 
         ui64 sessionId = ctx.MustAttachSession(proxy, 2, 0); // retry with generation 2
         UNIT_ASSERT_VALUES_EQUAL(sessionId, 1);
         ctx.VerifyProxyHasSessions(proxy, 2, {1});
@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.RegisterProxy(proxy2, 1);
         ctx.MustAttachSession(proxy1, 1, 0, 0, "", 222);
         auto result = ctx.AttachSession(proxy2, 1, 1, 0, "", 111);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::BAD_SESSION);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::BAD_SESSION); 
 
         // verify proxy2 did not steal the session
         ctx.VerifyProxyHasSessions(proxy1, 1, {1});
@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.SendAttachSession(111, proxy, 1, 0, 0, "", 42);
         ctx.SendAttachSession(222, proxy, 1, 1, 0, "", 41);
         ctx.ExpectAttachSessionResult(111, proxy, 1);
-        ctx.ExpectAttachSessionResult(222, proxy, 1, Ydb::StatusIds::BAD_SESSION);
+        ctx.ExpectAttachSessionResult(222, proxy, 1, Ydb::StatusIds::BAD_SESSION); 
         ctx.VerifyProxyHasSessions(proxy, 1, {1});
     }
 
@@ -271,21 +271,21 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.MustAttachSession(proxy1, 1, 0, 1000);
         ctx.VerifyProxyHasSessions(proxy1, 1, {1});
         // Cannot detach using wrong generation
-        ctx.MustDetachSession(proxy1, 2, 1, Ydb::StatusIds::BAD_SESSION);
+        ctx.MustDetachSession(proxy1, 2, 1, Ydb::StatusIds::BAD_SESSION); 
         // Cannot detach from unregistered proxy
         auto proxy2 = ctx.Runtime->AllocateEdgeActor();
-        ctx.MustDetachSession(proxy2, 1, 1, Ydb::StatusIds::BAD_SESSION);
+        ctx.MustDetachSession(proxy2, 1, 1, Ydb::StatusIds::BAD_SESSION); 
         // Cannot detach from registered non-owner proxy
         ctx.MustRegisterProxy(proxy2, 1);
-        ctx.MustDetachSession(proxy2, 1, 1, Ydb::StatusIds::BAD_SESSION);
+        ctx.MustDetachSession(proxy2, 1, 1, Ydb::StatusIds::BAD_SESSION); 
         // Cannot detach sessions that don't exist
-        ctx.MustDetachSession(proxy1, 1, 2, Ydb::StatusIds::SESSION_EXPIRED);
+        ctx.MustDetachSession(proxy1, 1, 2, Ydb::StatusIds::SESSION_EXPIRED); 
         // OK to detach if everything checks out
         ctx.VerifyProxyHasSessions(proxy1, 1, {1});
         ctx.MustDetachSession(proxy1, 1, 1);
         ctx.VerifyProxyHasSessions(proxy1, 1, {});
         // Cannot detach it twice in a row
-        ctx.MustDetachSession(proxy1, 1, 1, Ydb::StatusIds::BAD_SESSION);
+        ctx.MustDetachSession(proxy1, 1, 1, Ydb::StatusIds::BAD_SESSION); 
         // Attach it again and make sure it works with in-flight transactions
         ctx.MustAttachSession(proxy1, 1, 1);
         ctx.SendAcquireLock(111, proxy1, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
@@ -336,7 +336,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         auto proxy = ctx.Runtime->AllocateEdgeActor();
         ctx.RegisterProxy(proxy, 1);
         auto result = ctx.AttachSession(proxy, 1, 0, TDuration::Days(2).MilliSeconds());
-        UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::BAD_REQUEST); 
     }
 
     Y_UNIT_TEST(TestSessionTimeoutAfterDetach) {
@@ -547,7 +547,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_SHARED);
         ctx.ExpectAcquireLockResult(111, proxy, 1);
         ctx.SendAcquireLock(222, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
-        ctx.ExpectAcquireLockResult(222, proxy, 1, Ydb::StatusIds::BAD_REQUEST);
+        ctx.ExpectAcquireLockResult(222, proxy, 1, Ydb::StatusIds::BAD_REQUEST); 
         ctx.VerifyLockShared("Lock1", {1}); // still locked in shared mode
     }
 
@@ -691,7 +691,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyLockWaiters("Lock2", {2}); // verify session2 still waiting for Lock2
         // now session2 changes mode to shared, old request is dropped, new request succeeds
         ctx.SendAcquireLock(444, proxy2, 1, 2, "Lock2", LOCK_MODE_SHARED);
-        ctx.ExpectAcquireLockResult(223, proxy2, 1, Ydb::StatusIds::ABORTED);
+        ctx.ExpectAcquireLockResult(223, proxy2, 1, Ydb::StatusIds::ABORTED); 
         ctx.ExpectAcquireLockResult(444, proxy2, 1);
         ctx.VerifyLockShared("Lock2", {1, 2});
         ctx.VerifyLockWaiters("Lock2", {});
@@ -775,7 +775,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         // now it immediately changes mode to shared
         ctx.SendAcquireLock(333, proxy, 1, 2, "Lock1", LOCK_MODE_SHARED, 30000);
         // first request gets cancelled, second succeeds
-        ctx.ExpectAcquireLockResult(222, proxy, 1, Ydb::StatusIds::ABORTED);
+        ctx.ExpectAcquireLockResult(222, proxy, 1, Ydb::StatusIds::ABORTED); 
         ctx.ExpectAcquireLockResult(333, proxy, 1);
         ctx.VerifyLockShared("Lock1", {1, 2});
     }
@@ -794,7 +794,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.SendAcquireLock(222, proxy, 1, 2, "Lock1", LOCK_MODE_SHARED, 30000);
         // now it immediately changes mode to exclusive
         ctx.SendAcquireLock(333, proxy, 1, 2, "Lock1", LOCK_MODE_EXCLUSIVE, 30000);
-        ctx.ExpectAcquireLockResult(333, proxy, 1, Ydb::StatusIds::BAD_REQUEST);
+        ctx.ExpectAcquireLockResult(333, proxy, 1, Ydb::StatusIds::BAD_REQUEST); 
         // the old request must still be waiting
         ctx.VerifyLockExclusive("Lock1", 1);
         ctx.VerifyLockWaiters("Lock1", {2});
@@ -817,7 +817,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         // now it immediately changes timeout to zero
         ctx.SendAcquireLock(333, proxy, 1, 2, "Lock1", LOCK_MODE_SHARED, 0);
         // it must receive correct replies
-        ctx.ExpectAcquireLockResult(222, proxy, 1, Ydb::StatusIds::ABORTED);
+        ctx.ExpectAcquireLockResult(222, proxy, 1, Ydb::StatusIds::ABORTED); 
         ctx.ExpectAcquireLockResult(333, proxy, 1, false);
         // there must be no waiters
         ctx.VerifyLockExclusive("Lock1", 1);
@@ -843,7 +843,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.SendAcquireLock(222, proxy, 1, 2, "Lock1", LOCK_MODE_SHARED, 30000);
         // now it immediately tries to release it
         ctx.MustReleaseLock(333, proxy, 1, 2, "Lock1");
-        ctx.ExpectAcquireLockResult(222, proxy, 1, Ydb::StatusIds::ABORTED);
+        ctx.ExpectAcquireLockResult(222, proxy, 1, Ydb::StatusIds::ABORTED); 
     }
 
     Y_UNIT_TEST(TestReleaseLockFailure) {
@@ -871,12 +871,12 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
         ctx.ExpectAcquireLockResult(111, proxy, 1);
 
-        ctx.CreateSemaphore("Sem1", 0, Ydb::StatusIds::BAD_REQUEST);
+        ctx.CreateSemaphore("Sem1", 0, Ydb::StatusIds::BAD_REQUEST); 
         ctx.CreateSemaphore("Sem1", 42);
-        ctx.CreateSemaphore("Sem1", 42, Ydb::StatusIds::ALREADY_EXISTS);
-        ctx.CreateSemaphore("Sem1", 51, Ydb::StatusIds::ALREADY_EXISTS);
-        ctx.CreateSemaphore("Lock1", 42, Ydb::StatusIds::PRECONDITION_FAILED);
-        ctx.CreateSemaphore("Lock1", -1, Ydb::StatusIds::PRECONDITION_FAILED);
+        ctx.CreateSemaphore("Sem1", 42, Ydb::StatusIds::ALREADY_EXISTS); 
+        ctx.CreateSemaphore("Sem1", 51, Ydb::StatusIds::ALREADY_EXISTS); 
+        ctx.CreateSemaphore("Lock1", 42, Ydb::StatusIds::PRECONDITION_FAILED); 
+        ctx.CreateSemaphore("Lock1", -1, Ydb::StatusIds::PRECONDITION_FAILED); 
         ctx.VerifySemaphoreOwners("Sem1", {});
         ctx.VerifySemaphoreNotFound("Sem2");
 
@@ -894,11 +894,11 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.SendAcquireLock(111, proxy, 1, 1, "Lock1", LOCK_MODE_EXCLUSIVE);
         ctx.ExpectAcquireLockResult(111, proxy, 1);
 
-        ctx.DeleteSemaphore("Lock1", Ydb::StatusIds::PRECONDITION_FAILED);
-        ctx.DeleteSemaphore("Sem1", Ydb::StatusIds::NOT_FOUND);
+        ctx.DeleteSemaphore("Lock1", Ydb::StatusIds::PRECONDITION_FAILED); 
+        ctx.DeleteSemaphore("Sem1", Ydb::StatusIds::NOT_FOUND); 
         ctx.CreateSemaphore("Sem1", 42);
         ctx.DeleteSemaphore("Sem1");
-        ctx.DeleteSemaphore("Sem1", Ydb::StatusIds::NOT_FOUND);
+        ctx.DeleteSemaphore("Sem1", Ydb::StatusIds::NOT_FOUND); 
     }
 
     Y_UNIT_TEST(TestAcquireSemaphore) {
@@ -910,17 +910,17 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.MustAttachSession(proxy, 1, 0, 30000);
 
         ctx.SendAcquireSemaphore(111, proxy, 1, 1, "Sem1", 1);
-        ctx.ExpectAcquireSemaphoreResult(111, proxy, 1, Ydb::StatusIds::NOT_FOUND);
+        ctx.ExpectAcquireSemaphoreResult(111, proxy, 1, Ydb::StatusIds::NOT_FOUND); 
 
         ctx.CreateSemaphore("Sem1", 1);
 
         // cannot acquire 0 tokens
         ctx.SendAcquireSemaphore(222, proxy, 1, 1, "Sem1", 0);
-        ctx.ExpectAcquireSemaphoreResult(222, proxy, 1, Ydb::StatusIds::BAD_REQUEST);
+        ctx.ExpectAcquireSemaphoreResult(222, proxy, 1, Ydb::StatusIds::BAD_REQUEST); 
 
         // cannot acquire more tokens than available
         ctx.SendAcquireSemaphore(333, proxy, 1, 1, "Sem1", 100500);
-        ctx.ExpectAcquireSemaphoreResult(333, proxy, 1, Ydb::StatusIds::BAD_REQUEST);
+        ctx.ExpectAcquireSemaphoreResult(333, proxy, 1, Ydb::StatusIds::BAD_REQUEST); 
 
         ctx.SendAcquireSemaphore(222, proxy, 1, 1, "Sem1", 1);
         ctx.SendAcquireSemaphore(333, proxy, 1, 2, "Sem1", 1, 60000);
@@ -930,11 +930,11 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifySemaphoreWaiters("Sem1", {2});
 
         // Cannot destroy semaphore unless forced
-        ctx.DeleteSemaphore("Sem1", Ydb::StatusIds::PRECONDITION_FAILED);
+        ctx.DeleteSemaphore("Sem1", Ydb::StatusIds::PRECONDITION_FAILED); 
         ctx.DeleteSemaphore("Sem1", true);
 
         // Forced destruction aborts the request
-        ctx.ExpectAcquireSemaphoreResult(333, proxy, 1, Ydb::StatusIds::ABORTED);
+        ctx.ExpectAcquireSemaphoreResult(333, proxy, 1, Ydb::StatusIds::ABORTED); 
     }
 
     Y_UNIT_TEST(TestReleaseSemaphore) {
@@ -994,7 +994,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
 
         ctx.CreateSemaphore("Sem1", 1);
         ctx.SendAcquireSemaphore(111, proxy, 1, 1, "Sem1", 1, TDuration::Days(2).MilliSeconds());
-        ctx.ExpectAcquireSemaphoreResult(111, proxy, 1, Ydb::StatusIds::BAD_REQUEST);
+        ctx.ExpectAcquireSemaphoreResult(111, proxy, 1, Ydb::StatusIds::BAD_REQUEST); 
     }
 
     Y_UNIT_TEST(TestAcquireSemaphoreTimeoutInfinite) {
@@ -1106,14 +1106,14 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem2").Data, "\x81\x82\x83\x84");
 
         // ALREADY_EXISTS should not update the data
-        ctx.CreateSemaphore("Sem1", 1, "\x81\x82\x83\x84", Ydb::StatusIds::ALREADY_EXISTS);
-        ctx.CreateSemaphore("Sem2", 1, "", Ydb::StatusIds::ALREADY_EXISTS);
+        ctx.CreateSemaphore("Sem1", 1, "\x81\x82\x83\x84", Ydb::StatusIds::ALREADY_EXISTS); 
+        ctx.CreateSemaphore("Sem2", 1, "", Ydb::StatusIds::ALREADY_EXISTS); 
         UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem1").Data, "");
         UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem2").Data, "\x81\x82\x83\x84");
 
         ctx.UpdateSemaphore("Sem1", "\x85\x86\x87\x88");
         ctx.UpdateSemaphore("Sem2", "foobar");
-        ctx.UpdateSemaphore("Sem3", "foobarbaz", Ydb::StatusIds::NOT_FOUND);
+        ctx.UpdateSemaphore("Sem3", "foobarbaz", Ydb::StatusIds::NOT_FOUND); 
         UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem1").Data, "\x85\x86\x87\x88");
         UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeSemaphore("Sem2").Data, "foobar");
         ctx.VerifySemaphoreNotFound("Sem3");
@@ -1140,7 +1140,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 1, "Sem1");
         ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1);
         ctx.SendSessionDescribeSemaphore(++reqId, proxy, 1, 2, "Sem1");
-        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1, Ydb::StatusIds::BAD_SESSION);
+        ctx.ExpectDescribeSemaphoreResult(reqId, proxy, 1, Ydb::StatusIds::BAD_SESSION); 
 
         ctx.MustAttachSession(proxy, 1, 2, 30000);
 
@@ -1196,7 +1196,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
 
         // Changing acquire3 data shouldn't trigger a change notification
         ctx.SendAcquireSemaphore(++reqId, proxy, 1, 3, "Sem1", 1, 30000, "waiter3");
-        ctx.ExpectAcquireSemaphoreResult(acquire3, proxy, 1, Ydb::StatusIds::ABORTED);
+        ctx.ExpectAcquireSemaphoreResult(acquire3, proxy, 1, Ydb::StatusIds::ABORTED); 
         ctx.ExpectAcquireSemaphorePending(reqId, proxy, 1);
         acquire3 = reqId;
         ctx.ExpectNoEdgeEvent<TEvKesus::TEvDescribeSemaphoreChanged>(proxy, TDuration::Seconds(1));
@@ -1292,7 +1292,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.SessionUpdateSemaphore(++reqId, proxy, 1, 1, "Sem1", "other data");
         ctx.SessionDeleteSemaphore(++reqId, proxy, 1, 1, "Sem1");
 
-        auto testAllFailures = [&](Ydb::StatusIds::StatusCode status) {
+        auto testAllFailures = [&](Ydb::StatusIds::StatusCode status) { 
             ctx.SessionCreateSemaphore(++reqId, proxy, 1, 1, "Sem1", 5, "some data", status);
             ctx.SessionUpdateSemaphore(++reqId, proxy, 1, 1, "Sem1", "other data", status);
             ctx.SessionDeleteSemaphore(++reqId, proxy, 1, 1, "Sem1", status);
@@ -1304,11 +1304,11 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         };
 
         ctx.MustDetachSession(proxy, 1, 1);
-        testAllFailures(Ydb::StatusIds::BAD_SESSION);
+        testAllFailures(Ydb::StatusIds::BAD_SESSION); 
         ctx.MustDestroySession(proxy, 1, 1);
-        testAllFailures(Ydb::StatusIds::SESSION_EXPIRED);
+        testAllFailures(Ydb::StatusIds::SESSION_EXPIRED); 
         ctx.MustRegisterProxy(proxy, 2);
-        testAllFailures(Ydb::StatusIds::BAD_SESSION);
+        testAllFailures(Ydb::StatusIds::BAD_SESSION); 
     }
 
     Y_UNIT_TEST(TestQuoterResourceDescribe) {

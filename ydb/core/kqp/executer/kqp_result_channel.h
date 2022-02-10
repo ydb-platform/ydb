@@ -15,10 +15,10 @@ class TData;
 } // namespace NDqProto
 } // namespace NYql
 
-namespace NKikimrMiniKQL {
-class TType;
-} // namespace NKikimrMiniKQL
-
+namespace NKikimrMiniKQL { 
+class TType; 
+} // namespace NKikimrMiniKQL 
+ 
 namespace NKikimr::NKqp {
 
 struct TQueryExecutionStats;

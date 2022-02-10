@@ -84,7 +84,7 @@ public:
             &Ydb::Discovery::V1::DiscoveryService::Stub::AsyncListEndpoints,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
+            TRpcRequestSettings::Make(settings), 
             settings.ClientTimeout_);
 
         return promise.GetFuture();
@@ -114,7 +114,7 @@ public:
             &Ydb::Discovery::V1::DiscoveryService::Stub::AsyncWhoAmI,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
+            TRpcRequestSettings::Make(settings), 
             settings.ClientTimeout_);
 
         return promise.GetFuture();

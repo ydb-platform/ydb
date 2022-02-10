@@ -24,7 +24,7 @@ namespace NKikimr {
 namespace NGRpcService {
 
 using namespace NActors;
-using namespace Ydb;
+using namespace Ydb; 
 using namespace NKqp;
 
 static const TDuration RlMaxDuration = TDuration::Minutes(1);
@@ -138,11 +138,11 @@ public:
 
         auto actorId = SelfId();
         const TActorSystem* const as = ctx.ExecutorThread.ActorSystem;
-        auto clientLostCb = [actorId, as]() {
+        auto clientLostCb = [actorId, as]() { 
             LOG_WARN(*as, NKikimrServices::READ_TABLE_API, "ForgetAction occurred, send TEvPoisonPill");
             as->Send(actorId, new TEvents::TEvPoisonPill());
         };
-        Request_->SetClientLostAction(std::move(clientLostCb));
+        Request_->SetClientLostAction(std::move(clientLostCb)); 
 
     }
 
@@ -213,13 +213,13 @@ private:
                 const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Got AccessDenied response from TxProxy");
                 auto tmp = issueMessage.Add();
                 NYql::IssueToMessage(issue, tmp);
-                return ReplyFinishStream(Ydb::StatusIds::UNAUTHORIZED, issueMessage, ctx);
+                return ReplyFinishStream(Ydb::StatusIds::UNAUTHORIZED, issueMessage, ctx); 
             }
             case TEvTxUserProxy::TResultStatus::ResolveError: {
                 const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Got ResolveError response from TxProxy");
                 auto tmp = issueMessage.Add();
                 NYql::IssueToMessage(issue, tmp);
-                return ReplyFinishStream(Ydb::StatusIds::SCHEME_ERROR, issueMessage, ctx);
+                return ReplyFinishStream(Ydb::StatusIds::SCHEME_ERROR, issueMessage, ctx); 
             }
             case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyNotReady:
             case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardTryLater:
@@ -537,14 +537,14 @@ private:
         }
     }
 
-    void ReplyFinishStream(Ydb::StatusIds::StatusCode status,
+    void ReplyFinishStream(Ydb::StatusIds::StatusCode status, 
                          const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message,
                          const TActorContext& ctx) {
         // Skip sending empty result in case of success status - simplify client logic
         if (status != Ydb::StatusIds::SUCCESS) {
             TString out;
             NullSerializeReadTableResponse(message, status, &out);
-            Request_->SendSerializedResult(std::move(out), status);
+            Request_->SendSerializedResult(std::move(out), status); 
         }
         Request_->FinishStream();
         LOG_NOTICE_S(ctx, NKikimrServices::READ_TABLE_API,
@@ -710,7 +710,7 @@ private:
                     SelfId() << " Data response has been delayed for " << delay << " seconds");
         }
 
-        Request_->SendSerializedResult(std::move(out), StatusIds::SUCCESS);
+        Request_->SendSerializedResult(std::move(out), StatusIds::SUCCESS); 
 
         LeftInGRpcAdaptorQueue_++;
         if (LeftInGRpcAdaptorQueue_ > QuotaLimit_) {

@@ -33,7 +33,7 @@ TKqpPlanner::TKqpPlanner(ui64 txId, const TActorId& executer, TVector<NDqProto::
     , Database(database)
     , UserToken(userToken)
     , Deadline(deadline)
-    , StatsMode(statsMode)
+    , StatsMode(statsMode) 
     , DisableLlvmForUdfStages(disableLlvmForUdfStages)
     , EnableLlvm(enableLlvm)
     , WithSpilling(withSpilling)

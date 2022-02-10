@@ -66,60 +66,60 @@ struct TCancelTxFailPoint {
     }
 };
 
-// Allows to skip specified number of replies from datashard by TabletID and TxId
-struct TSkipRepliesFailPoint {
-    TAtomic Enabled;
-    TSpinLock Lock;
-    ui64 TabletId;
-    ui64 TxId;
-    ui64 RepliesToSkip;
-
-    TSkipRepliesFailPoint() {
-        Disable();
-    }
-
-    void Enable(ui64 tabletId, ui64 txId, ui64 count) {
-        Disable();
-
-        TGuard<TSpinLock> g(Lock);
-        TabletId = tabletId;
-        TxId = txId;
-        RepliesToSkip = count;
-
-        AtomicSet(Enabled, 1);
-    }
-
-    void Disable() {
-        TGuard<TSpinLock> g(Lock);
-
-        TabletId = 0;
-        TxId = 0;
-        RepliesToSkip = 0;
-
-        AtomicSet(Enabled, 0);
-    }
-
-    bool Check(ui64 tabletId, ui64 txId) {
-        if (!AtomicGet(Enabled)) {
-            return false;
-        }
-
-        TGuard<TSpinLock> g(Lock);
-
-        if ((tabletId != TabletId && TabletId != (ui64)-1) || (txId != TxId && TxId != (ui64)-1)) {
-            return false;
-        }
-
-        if (RepliesToSkip == 0) {
-            return false;
-        }
-
-        --RepliesToSkip;
-        return true;
-    }
-};
-
+// Allows to skip specified number of replies from datashard by TabletID and TxId 
+struct TSkipRepliesFailPoint { 
+    TAtomic Enabled; 
+    TSpinLock Lock; 
+    ui64 TabletId; 
+    ui64 TxId; 
+    ui64 RepliesToSkip; 
+ 
+    TSkipRepliesFailPoint() { 
+        Disable(); 
+    } 
+ 
+    void Enable(ui64 tabletId, ui64 txId, ui64 count) { 
+        Disable(); 
+ 
+        TGuard<TSpinLock> g(Lock); 
+        TabletId = tabletId; 
+        TxId = txId; 
+        RepliesToSkip = count; 
+ 
+        AtomicSet(Enabled, 1); 
+    } 
+ 
+    void Disable() { 
+        TGuard<TSpinLock> g(Lock); 
+ 
+        TabletId = 0; 
+        TxId = 0; 
+        RepliesToSkip = 0; 
+ 
+        AtomicSet(Enabled, 0); 
+    } 
+ 
+    bool Check(ui64 tabletId, ui64 txId) { 
+        if (!AtomicGet(Enabled)) { 
+            return false; 
+        } 
+ 
+        TGuard<TSpinLock> g(Lock); 
+ 
+        if ((tabletId != TabletId && TabletId != (ui64)-1) || (txId != TxId && TxId != (ui64)-1)) { 
+            return false; 
+        } 
+ 
+        if (RepliesToSkip == 0) { 
+            return false; 
+        } 
+ 
+        --RepliesToSkip; 
+        return true; 
+    } 
+}; 
+ 
 extern TCancelTxFailPoint gCancelTxFailPoint;
-extern TSkipRepliesFailPoint gSkipRepliesFailPoint;
+extern TSkipRepliesFailPoint gSkipRepliesFailPoint; 
 
 }}

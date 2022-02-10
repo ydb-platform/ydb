@@ -14,7 +14,7 @@ public:
     {
     }
 
-    bool Error(Ydb::StatusIds::StatusCode code, const TString &error,
+    bool Error(Ydb::StatusIds::StatusCode code, const TString &error, 
                const TActorContext &ctx)
     {
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "Cannot remove tenant: " << error);
@@ -34,7 +34,7 @@ public:
     void FillTenantResponse()
     {
         Y_VERIFY(Tenant);
-        Ydb::TOperationId id = Self->MakeOperationId(Tenant, TTenant::REMOVE);
+        Ydb::TOperationId id = Self->MakeOperationId(Tenant, TTenant::REMOVE); 
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_ready(false);
         operation.set_id(ProtoToString(id));
@@ -59,7 +59,7 @@ public:
         auto path = CanonizePath(rec.path());
         Tenant = Self->GetTenant(path);
         if (!Tenant)
-            return Error(Ydb::StatusIds::NOT_FOUND,
+            return Error(Ydb::StatusIds::NOT_FOUND, 
                          Sprintf("Database '%s' doesn't exist", path.data()), ctx);
 
         if (Tenant->IsRemoving()) {
@@ -68,7 +68,7 @@ public:
             Tenant = nullptr;
             return true;
         } else if (!Tenant->IsConfiguring() && !Tenant->IsRunning()) {
-            return Error(Ydb::StatusIds::UNAVAILABLE,
+            return Error(Ydb::StatusIds::UNAVAILABLE, 
                          Sprintf("Database '%s' is busy", path.data()), ctx);
         } else if (Tenant->HostedTenants) {
             return Error(Ydb::StatusIds::PRECONDITION_FAILED,

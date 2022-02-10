@@ -4,6 +4,6 @@ package NKikimrConsole;
 option java_package = "ru.yandex.kikimr.proto";
 
 message TStatus {
-    optional Ydb.StatusIds.StatusCode Code = 1;
+    optional Ydb.StatusIds.StatusCode Code = 1; 
     optional string Reason = 2;
 }

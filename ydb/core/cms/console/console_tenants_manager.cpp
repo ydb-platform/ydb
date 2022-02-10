@@ -1263,7 +1263,7 @@ bool TTenantsManager::TTenant::CheckComputationalUnitsQuota(const TUnitsCount &u
         for (auto &pr : units)
             total += pr.second;
         if (total > ComputationalUnitsQuota) {
-            code = Ydb::StatusIds::BAD_REQUEST;
+            code = Ydb::StatusIds::BAD_REQUEST; 
             error = Sprintf("Total count of computational units %" PRIu64 " exceeds quota %" PRIu64,
                             total, ComputationalUnitsQuota);
             return false;
@@ -1273,7 +1273,7 @@ bool TTenantsManager::TTenant::CheckComputationalUnitsQuota(const TUnitsCount &u
     return true;
 }
 
-bool TTenantsManager::TTenant::CheckStorageUnitsQuota(Ydb::StatusIds::StatusCode &code, TString &error,
+bool TTenantsManager::TTenant::CheckStorageUnitsQuota(Ydb::StatusIds::StatusCode &code, TString &error, 
                                                       ui64 additionalUnits)
 {
     if (StorageUnitsQuota) {
@@ -1281,7 +1281,7 @@ bool TTenantsManager::TTenant::CheckStorageUnitsQuota(Ydb::StatusIds::StatusCode
         for (auto &pr : StoragePools)
             total += pr.second->Config.GetNumGroups();
         if (total > StorageUnitsQuota) {
-            code = Ydb::StatusIds::BAD_REQUEST;
+            code = Ydb::StatusIds::BAD_REQUEST; 
             error = Sprintf("Total count of storage units %" PRIu64 " exceeds quota %" PRIu64,
                             total, StorageUnitsQuota);
             return false;
@@ -1291,7 +1291,7 @@ bool TTenantsManager::TTenant::CheckStorageUnitsQuota(Ydb::StatusIds::StatusCode
     return true;
 }
 
-bool TTenantsManager::TTenant::CheckQuota(Ydb::StatusIds::StatusCode &code, TString &error)
+bool TTenantsManager::TTenant::CheckQuota(Ydb::StatusIds::StatusCode &code, TString &error) 
 {
     return (CheckStorageUnitsQuota(code, error)
             && CheckComputationalUnitsQuota(ComputationalUnits, code, error));
@@ -1482,16 +1482,16 @@ bool TTenantsManager::CheckTenantSlots(TTenant::TPtr tenant, const NKikimrTenant
     return state.RequiredSlotsSize() == tenant->Slots.size();
 }
 
-bool TTenantsManager::MakeBasicPoolCheck(const TString &kind, ui64 size, Ydb::StatusIds::StatusCode &code, TString &error)
+bool TTenantsManager::MakeBasicPoolCheck(const TString &kind, ui64 size, Ydb::StatusIds::StatusCode &code, TString &error) 
 {
     if (!size) {
-        code = Ydb::StatusIds::BAD_REQUEST;
+        code = Ydb::StatusIds::BAD_REQUEST; 
         error = "Zero count for storage units is not allowed";
         return false;
     }
 
     if (!Domain->StoragePoolTypes.contains(kind)) {
-        code = Ydb::StatusIds::BAD_REQUEST;
+        code = Ydb::StatusIds::BAD_REQUEST; 
         error = Sprintf("Unsupported storage unit kind '%s'.", kind.data());
         return false;
     }
@@ -1500,25 +1500,25 @@ bool TTenantsManager::MakeBasicPoolCheck(const TString &kind, ui64 size, Ydb::St
 }
 
 bool TTenantsManager::MakeBasicComputationalUnitCheck(const TString &kind, const TString &zone,
-                                                      Ydb::StatusIds::StatusCode &code,
+                                                      Ydb::StatusIds::StatusCode &code, 
                                                       TString &error)
 {
     if (!Config.TenantSlotKinds.contains(kind)) {
-        code = Ydb::StatusIds::BAD_REQUEST;
+        code = Ydb::StatusIds::BAD_REQUEST; 
         error = Sprintf("Unknown computational unit kind '%s'", kind.data());
         return false;
     }
 
     if (zone) {
         if (!Config.AvailabilityZones.contains(zone)) {
-            code = Ydb::StatusIds::BAD_REQUEST;
+            code = Ydb::StatusIds::BAD_REQUEST; 
             error = Sprintf("Unknown availability zone '%s'", zone.data());
             return false;
         }
 
         auto &slotKind = Config.TenantSlotKinds.at(kind);
         if (!slotKind.AllowedZones.contains(zone)) {
-            code = Ydb::StatusIds::BAD_REQUEST;
+            code = Ydb::StatusIds::BAD_REQUEST; 
             error = Sprintf("Zone '%s' is unavailable for units of kind '%s'", zone.data(), kind.data());
             return false;
         }
@@ -1597,14 +1597,14 @@ bool TTenantsManager::CheckComputationalUnitsQuota(const TUnitsCount &units,
 }
 
 bool TTenantsManager::CheckTenantsConfig(const NKikimrConsole::TTenantsConfig &config,
-                                         Ydb::StatusIds::StatusCode &code,
+                                         Ydb::StatusIds::StatusCode &code, 
                                          TString &error)
 {
     TTenantsConfig newConfig;
 
     // Check config is consistent.
     if (!newConfig.Parse(config, error)) {
-        code = Ydb::StatusIds::BAD_REQUEST;
+        code = Ydb::StatusIds::BAD_REQUEST; 
         return false;
     }
 
@@ -1614,7 +1614,7 @@ bool TTenantsManager::CheckTenantsConfig(const NKikimrConsole::TTenantsConfig &c
         if (it == newConfig.AvailabilityZones.end() || it->second != pr.second) {
             auto tenant = FindZoneKindUsage(pr.first);
             if (tenant) {
-                code = Ydb::StatusIds::BAD_REQUEST;
+                code = Ydb::StatusIds::BAD_REQUEST; 
                 error = Sprintf("cannot remove or modify availability zone '%s' used by tenant '%s'",
                                 pr.first.data(), tenant->Path.data());
                 return false;
@@ -1630,7 +1630,7 @@ bool TTenantsManager::CheckTenantsConfig(const NKikimrConsole::TTenantsConfig &c
         if (it == newConfig.TenantSlotKinds.end()) {
             auto tenant = FindComputationalUnitKindUsage(pr.first);
             if (tenant) {
-                code = Ydb::StatusIds::BAD_REQUEST;
+                code = Ydb::StatusIds::BAD_REQUEST; 
                 error = Sprintf("cannot remove computational unit kind '%s' used by tenant '%s'",
                                 pr.first.data(), tenant->Path.data());
                 return false;
@@ -1655,7 +1655,7 @@ bool TTenantsManager::CheckTenantsConfig(const NKikimrConsole::TTenantsConfig &c
                 if (!it->second.AllowedZones.contains(zone)) {
                     auto tenant = FindComputationalUnitKindUsage(pr.first, zone);
                     if (tenant) {
-                        code = Ydb::StatusIds::BAD_REQUEST;
+                        code = Ydb::StatusIds::BAD_REQUEST; 
                         error = Sprintf("cannot remove allowed availability zone '%s' from computational"
                                         " unit kind '%s' used by tenant '%s'",
                                         zone.data(), pr.first.data(), tenant->Path.data());
@@ -1703,10 +1703,10 @@ Ydb::TOperationId TTenantsManager::MakeOperationId(const TString &path, ui64 txI
     return id;
 }
 
-Ydb::TOperationId TTenantsManager::MakeOperationId(TTenant::TPtr tenant, TTenant::EAction action)
+Ydb::TOperationId TTenantsManager::MakeOperationId(TTenant::TPtr tenant, TTenant::EAction action) 
 {
-    Ydb::TOperationId id;
-    id.SetKind(Ydb::TOperationId::CMS_REQUEST);
+    Ydb::TOperationId id; 
+    id.SetKind(Ydb::TOperationId::CMS_REQUEST); 
     AddOptionalValue(id, "tenant", tenant->Path);
     AddOptionalValue(id, "cmstid", ToString(Self.TabletID()));
     AddOptionalValue(id, "txid", ToString(tenant->TxId));

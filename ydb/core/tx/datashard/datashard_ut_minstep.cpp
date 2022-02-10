@@ -66,7 +66,7 @@ TAutoPtr<IEventHandle> EjectDataPropose(TServer::TPtr server, ui64 dataShard)
 }
 
 Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
-    void TestDropTablePlanComesNotTooEarly(const TString& query, Ydb::StatusIds::StatusCode expectedStatus) {
+    void TestDropTablePlanComesNotTooEarly(const TString& query, Ydb::StatusIds::StatusCode expectedStatus) { 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
 
         // propose data tx for datashards but not to coordinator
         // eject propose message to coordinator
-        SendSQL(server, sender, query);
+        SendSQL(server, sender, query); 
         auto proposeEvent = EjectDataPropose(server, shard2);
 
         // drop one table while proposes are active
@@ -115,17 +115,17 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
 
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime.GrabEdgeEventRethrow<TEvTxProxy::TEvProposeTransactionStatus>(handle);
-            UNIT_ASSERT_VALUES_EQUAL((TEvTxProxy::TEvProposeTransactionStatus::EStatus)reply->Record.GetStatus(),
-                TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated);
+            UNIT_ASSERT_VALUES_EQUAL((TEvTxProxy::TEvProposeTransactionStatus::EStatus)reply->Record.GetStatus(), 
+                TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated); 
         }
 
         { // handle respond from unplanned data transaction because plan ejection
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(handle);
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(reply->Record.GetRef().GetResponse().GetQueryIssues(), issues);
-            UNIT_ASSERT_VALUES_EQUAL_C(reply->Record.GetRef().GetYdbStatus(), expectedStatus,
-                issues.ToString());
+            NYql::TIssues issues; 
+            NYql::IssuesFromMessage(reply->Record.GetRef().GetResponse().GetQueryIssues(), issues); 
+            UNIT_ASSERT_VALUES_EQUAL_C(reply->Record.GetRef().GetYdbStatus(), expectedStatus, 
+                issues.ToString()); 
         }
 
         // make sure that second table is still operationable
@@ -133,20 +133,20 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         ExecSQL(server, sender, "DROP TABLE [/Root/table-2]", false);
         WaitTabletBecomesOffline(server, shard2);
     }
-
-    Y_UNIT_TEST(TestDropTablePlanComesNotTooEarlyRO) {
-        TestDropTablePlanComesNotTooEarly(
-            "SELECT * FROM [/Root/table-1]; SELECT * FROM [/Root/table-2];",
-            Ydb::StatusIds::UNAVAILABLE
-        );
+ 
+    Y_UNIT_TEST(TestDropTablePlanComesNotTooEarlyRO) { 
+        TestDropTablePlanComesNotTooEarly( 
+            "SELECT * FROM [/Root/table-1]; SELECT * FROM [/Root/table-2];", 
+            Ydb::StatusIds::UNAVAILABLE 
+        ); 
     }
 
-    Y_UNIT_TEST(TestDropTablePlanComesNotTooEarlyRW) {
-        TestDropTablePlanComesNotTooEarly(
-            "UPSERT INTO [/Root/table-2] (key, value) SELECT key, value FROM [/Root/table-1];",
-            Ydb::StatusIds::UNDETERMINED
-        );
-    }
+    Y_UNIT_TEST(TestDropTablePlanComesNotTooEarlyRW) { 
+        TestDropTablePlanComesNotTooEarly( 
+            "UPSERT INTO [/Root/table-2] (key, value) SELECT key, value FROM [/Root/table-1];", 
+            Ydb::StatusIds::UNDETERMINED 
+        ); 
+    } 
 
     enum class ERebootOnPropose {
         DataShard,
@@ -483,6 +483,6 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         );
     }
 
-}
-
+} 
+ 
 } // namespace NKikimr

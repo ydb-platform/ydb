@@ -1167,7 +1167,7 @@ Y_UNIT_TEST_WITH_MVCC(ScanFollowedByUpdate) {
 
     auto checkScanResult = [](const TFakeProxyTx &tx, TSet<TString> ref) -> bool {
         const TFakeScanTx &scanTx = dynamic_cast<const TFakeScanTx &>(tx);
-        YdbOld::ResultSet res = scanTx.GetScanResult();
+        YdbOld::ResultSet res = scanTx.GetScanResult(); 
         //Cerr << res.DebugString() << Endl;
         for (auto &row : res.rows()) {
             auto &val = row.items(0).text_value();
@@ -1501,9 +1501,9 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderLockLost, UseMvcc, UseNewEngine) {
         auto& response = ev->Get()->Record.GetRef();
         if (response.GetYdbStatus() == Ydb::StatusIds::ABORTED) {
             // Let's suppose somehow locks still managed to become invalidated
-            NYql::TIssues issues;
-            IssuesFromMessage(response.GetResponse().GetQueryIssues(), issues);
-            UNIT_ASSERT(NKqp::HasIssue(issues, NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
+            NYql::TIssues issues; 
+            IssuesFromMessage(response.GetResponse().GetQueryIssues(), issues); 
+            UNIT_ASSERT(NKqp::HasIssue(issues, NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED)); 
             committed = false;
         } else {
             UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
@@ -3271,15 +3271,15 @@ Y_UNIT_TEST_NEW_ENGINE(TestReadTableWriteConflict) {
         "UPSERT INTO [/Root/table-2] (key, value) VALUES (4, 2)")));
 
     // Wait until we captured all readsets
-    if (readSets.size() < 4) {
+    if (readSets.size() < 4) { 
         TDispatchOptions options;
         options.FinalEvents.emplace_back(
             [&](IEventHandle &) -> bool {
-                return readSets.size() >= 4;
+                return readSets.size() >= 4; 
             });
         runtime.DispatchEvents(options);
     }
-    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 4u);
+    UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 4u); 
     captureReadSets = false;
 
     // Start reading table-1, wait for its plan step

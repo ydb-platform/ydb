@@ -6,22 +6,22 @@ namespace NYql {
 TExprNodeBuilder::TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx)
     : Ctx(ctx)
     , Parent(nullptr)
-    , ParentReplacer(nullptr)
+    , ParentReplacer(nullptr) 
     , Container(nullptr)
     , Pos(pos)
     , CurrentNode(nullptr)
 {}
 
 TExprNodeBuilder::TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx, ExtArgsFuncType extArgsFunc)
-    : Ctx(ctx)
-    , Parent(nullptr)
-    , ParentReplacer(nullptr)
-    , Container(nullptr)
-    , Pos(pos)
-    , CurrentNode(nullptr)
-    , ExtArgsFunc(extArgsFunc)
-{}
-
+    : Ctx(ctx) 
+    , Parent(nullptr) 
+    , ParentReplacer(nullptr) 
+    , Container(nullptr) 
+    , Pos(pos) 
+    , CurrentNode(nullptr) 
+    , ExtArgsFunc(extArgsFunc) 
+{} 
+ 
 TExprNodeBuilder::TExprNodeBuilder(TPositionHandle pos, TExprNodeBuilder* parent, const TExprNode::TPtr& container)
     : Ctx(parent->Ctx)
     , Parent(parent)
@@ -332,12 +332,12 @@ TExprNode::TPtr TExprNodeBuilder::FindArgument(const TStringBuf& name) {
         }
     }
 
-    if (ExtArgsFunc) {
+    if (ExtArgsFunc) { 
         if (const auto arg = ExtArgsFunc(name)) {
-            return arg;
-        }
-    }
-
+            return arg; 
+        } 
+    } 
+ 
     ythrow yexception() << "Parameter not found: " << name;
 }
 
@@ -367,10 +367,10 @@ TExprNodeReplaceBuilder TExprNodeBuilder::ApplyPartial(ui32 index, TExprNode::TP
     Y_ENSURE(Container, "Container expected");
     Y_ENSURE(Container->ChildrenSize() == index + (Container->IsLambda() ? 1U : 0U),
         "Container position mismatch, expected: " << Container->ChildrenSize() <<
-        ", actual: " << index);
+        ", actual: " << index); 
     return TExprNodeReplaceBuilder(this, Container, std::move(args), std::move(body));
-}
-
+} 
+ 
 TExprNodeReplaceBuilder TExprNodeBuilder::ApplyPartial(ui32 index, TExprNode::TPtr args, TExprNode::TListType body) {
     Y_ENSURE(Container, "Container expected");
     Y_ENSURE(Container->ChildrenSize() == index + (Container->IsLambda() ? 1U : 0U),
@@ -383,8 +383,8 @@ TExprNodeReplaceBuilder TExprNodeBuilder::ApplyPartial(TExprNode::TPtr args, TEx
     Y_ENSURE(!Container || Container->Type() == TExprNode::Lambda, "No container expected");
     Y_ENSURE(!CurrentNode, "Node is already build");
     return TExprNodeReplaceBuilder(this, Container, std::move(args), std::move(body));
-}
-
+} 
+ 
 TExprNodeReplaceBuilder TExprNodeBuilder::ApplyPartial(TExprNode::TPtr args, TExprNode::TListType body) {
     Y_ENSURE(!Container || Container->Type() == TExprNode::Lambda, "No container expected");
     Y_ENSURE(!CurrentNode, "Node is already build");
@@ -416,10 +416,10 @@ TExprNodeReplaceBuilder::TExprNodeReplaceBuilder(TExprNodeBuilder* owner, TExprN
 TExprNodeReplaceBuilder::TExprNodeReplaceBuilder(TExprNodeBuilder* owner, TExprNode::TPtr container,
     const TExprNode& lambda)
     : TExprNodeReplaceBuilder(owner, std::move(container), lambda.HeadPtr(), lambda.TailPtr())
-{
+{ 
     Y_ENSURE(lambda.Type() == TExprNode::Lambda, "Expected lambda");
-}
-
+} 
+ 
 TExprNodeReplaceBuilder& TExprNodeReplaceBuilder::With(
     ui32 argIndex, const TStringBuf& toName) {
     Y_ENSURE(Args, "No arguments");
@@ -458,13 +458,13 @@ TExprNodeReplaceBuilder& TExprNodeReplaceBuilder::With(ui32 argIndex, const TStr
 
 TExprNodeReplaceBuilder& TExprNodeReplaceBuilder::WithNode(const TExprNode& fromNode, TExprNode::TPtr&& toNode) {
     Body = Owner->Ctx.ReplaceNodes(std::move(Body), {{&fromNode, std::move(toNode)}});
-    return *this;
-}
-
+    return *this; 
+} 
+ 
 TExprNodeReplaceBuilder& TExprNodeReplaceBuilder::WithNode(const TExprNode& fromNode, const TStringBuf& toName) {
     return WithNode(fromNode, Owner->FindArgument(toName));
-}
-
+} 
+ 
 TExprNodeBuilder TExprNodeReplaceBuilder::With(ui32 argIndex) {
     CurrentIndex = argIndex;
     return TExprNodeBuilder(Owner->Pos, this);

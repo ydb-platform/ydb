@@ -192,7 +192,7 @@ TVector<TCell> FillKeyValues(const TVector<NUdf::TDataTypeId>& keyColumnTypes, c
                 YQL_ENSURE(false, "Unexpected type case " << (int) tupleValue.GetKindCase());
         }
 
-        auto param = stageInfo.Meta.Tx.Params.Values.FindPtr(paramName);
+        auto param = stageInfo.Meta.Tx.Params.Values.FindPtr(paramName); 
         YQL_ENSURE(param, "Param not found: " << paramName);
 
         const auto* protoType = &param->GetType();
@@ -334,7 +334,7 @@ TVector<TSerializedPointOrRange> FillRangesFromParameter(const TVector<NUdf::TDa
 {
     TString paramName = rangesParam.GetParamName();
 
-    auto param = stageInfo.Meta.Tx.Params.Values.FindPtr(paramName);
+    auto param = stageInfo.Meta.Tx.Params.Values.FindPtr(paramName); 
     YQL_ENSURE(param, "Param not found: " << paramName);
 
     const auto* protoType = &param->GetType();
@@ -754,7 +754,7 @@ THashMap<ui64, TShardInfo> PruneEffectPartitionsImpl(const TKqpTableKeys& tableK
         effect.GetRowsValue().GetKindCase() == NKqpProto::TKqpPhyValue::kParamValue)
     {
         const auto& name = effect.GetRowsValue().GetParamValue().GetParamName();
-        auto param = stageInfo.Meta.Tx.Params.Values.FindPtr(name);
+        auto param = stageInfo.Meta.Tx.Params.Values.FindPtr(name); 
         YQL_ENSURE(param);
 
         auto shardsMap = PartitionParamByKey(*param, stageInfo.Meta.TableId, tableKeys, *stageInfo.Meta.ShardKey,

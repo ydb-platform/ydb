@@ -31,15 +31,15 @@ inline TString IssueCodeToString(EYqlIssueCode id) {
     }
 }
 
-inline TIssue YqlIssue(const TPosition& position, EYqlIssueCode id, const TString& message) {
-    TIssue issue(position, message);
-    SetIssueCode(id, issue);
-
-    return issue;
+inline TIssue YqlIssue(const TPosition& position, EYqlIssueCode id, const TString& message) { 
+    TIssue issue(position, message); 
+    SetIssueCode(id, issue); 
+ 
+    return issue; 
 }
-
-inline TIssue YqlIssue(const TPosition& position, EYqlIssueCode id) {
-    return YqlIssue(position, id, IssueCodeToString(id));
-}
-
-}
+ 
+inline TIssue YqlIssue(const TPosition& position, EYqlIssueCode id) { 
+    return YqlIssue(position, id, IssueCodeToString(id)); 
+} 
+ 
+} 

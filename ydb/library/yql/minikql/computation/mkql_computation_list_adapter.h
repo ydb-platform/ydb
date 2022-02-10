@@ -209,39 +209,39 @@ private:
 
 template <typename TVectorType>
 class TOwningVectorListAdapter : private TVectorType, public TVectorListAdapter<TVectorType> {
-public:
+public: 
     using TAdapterBase = TVectorListAdapter<TVectorType>;
-
-    TOwningVectorListAdapter(
-            TMemoryUsageInfo* memInfo,
+ 
+    TOwningVectorListAdapter( 
+            TMemoryUsageInfo* memInfo, 
             TVectorType&& list,
-            typename TAdapterBase::TItemFactory itemFactory,
-            ui64 start, ui64 finish,
-            bool reversed)
+            typename TAdapterBase::TItemFactory itemFactory, 
+            ui64 start, ui64 finish, 
+            bool reversed) 
         : TVectorType(std::move(list))
         , TAdapterBase(memInfo, *this, itemFactory, start, finish, reversed) {}
-
-    TOwningVectorListAdapter(
-            TMemoryUsageInfo* memInfo,
+ 
+    TOwningVectorListAdapter( 
+            TMemoryUsageInfo* memInfo, 
             const TVectorType& list,
-            typename TAdapterBase::TItemFactory itemFactory,
-            ui64 start, ui64 finish,
-            bool reversed)
+            typename TAdapterBase::TItemFactory itemFactory, 
+            ui64 start, ui64 finish, 
+            bool reversed) 
         : TVectorType(list)
         , TAdapterBase(memInfo, *this, itemFactory, start, finish, reversed) {}
-};
-
+}; 
+ 
 template<typename TVectorType>
 NUdf::TUnboxedValue CreateOwningVectorListAdapter(
     TVectorType&& list,
     typename TVectorListAdapter<std::remove_reference_t<TVectorType>>::TItemFactory itemFactory,
-    ui64 start, ui64 finish,
-    bool reversed,
-    TMemoryUsageInfo& memInfo)
-{
+    ui64 start, ui64 finish, 
+    bool reversed, 
+    TMemoryUsageInfo& memInfo) 
+{ 
     return NUdf::TUnboxedValuePod(new TOwningVectorListAdapter<std::remove_reference_t<TVectorType>>(
         &memInfo, std::forward<TVectorType>(list), itemFactory, start, finish, reversed));
 }
-
+ 
 }
-}
+} 

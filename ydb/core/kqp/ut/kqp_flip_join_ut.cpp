@@ -52,15 +52,15 @@ static const bool EnableJoinFlip = false;
 static const bool DisableJoinFlip = true;
 
 static const char* FormatPragma(bool disableFlip) {
-    if (!disableFlip) {
-        return "PRAGMA Kikimr.OptDisableJoinReverseTableLookup = 'False';";
-    }
-    return "";
-}
-
-static const char* FormatLeftSemiPragma(bool disableFlip) {
+    if (!disableFlip) { 
+        return "PRAGMA Kikimr.OptDisableJoinReverseTableLookup = 'False';"; 
+    } 
+    return ""; 
+} 
+ 
+static const char* FormatLeftSemiPragma(bool disableFlip) { 
     if (disableFlip) {
-        return "PRAGMA Kikimr.OptDisableJoinReverseTableLookupLeftSemi = 'True';";
+        return "PRAGMA Kikimr.OptDisableJoinReverseTableLookupLeftSemi = 'True';"; 
     }
     return "";
 }
@@ -560,19 +560,19 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
                     ORDER BY t3.Key, t3.Value
                 )", FormatPragma(disableFlip));
 
-            auto result = ExecQueryAndTestResult(session, query, NoParams, R"([])");
+            auto result = ExecQueryAndTestResult(session, query, NoParams, R"([])"); 
             assertFn(result);
         };
 
         test(DisableJoinFlip, [](const TDataQueryResult& result) {
             AssertTableReads(result, "/Root/FJ_Table_1", 4);
-            AssertTableReads(result, "/Root/FJ_Table_2", 0);
+            AssertTableReads(result, "/Root/FJ_Table_2", 0); 
             AssertTableReads(result, "/Root/FJ_Table_3", 4);
         });
 
         test(EnableJoinFlip, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/FJ_Table_1", 3);
-            AssertTableReads(result, "/Root/FJ_Table_2", 0);
+            AssertTableReads(result, "/Root/FJ_Table_1", 3); 
+            AssertTableReads(result, "/Root/FJ_Table_2", 0); 
             AssertTableReads(result, "/Root/FJ_Table_3", 4);
         });
     }

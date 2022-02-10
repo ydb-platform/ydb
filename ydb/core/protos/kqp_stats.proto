@@ -1,17 +1,17 @@
-syntax = "proto3";
-option cc_enable_arenas = true;
-
-package NKqpProto;
-option java_package = "ru.yandex.kikimr.proto";
-
+syntax = "proto3"; 
+option cc_enable_arenas = true; 
+ 
+package NKqpProto; 
+option java_package = "ru.yandex.kikimr.proto"; 
+ 
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
-
-message TKqpStatsCompile {
-    bool FromCache = 1;
-    uint64 DurationUs = 2;
-    uint64 CpuTimeUs = 3;
-}
-
+ 
+message TKqpStatsCompile { 
+    bool FromCache = 1; 
+    uint64 DurationUs = 2; 
+    uint64 CpuTimeUs = 3; 
+} 
+ 
 // Per datashard table extra stats
 message TKqpShardTableExtraStats {
     uint64 ShardId = 1;
@@ -58,17 +58,17 @@ message TKqpExecutionExtraStats {
     uint64 ResolveWallTimeUs = 101;
 }
 
-message TKqpStatsQuery {
-    // Basic stats
-    uint64 DurationUs = 1;
-    TKqpStatsCompile Compilation = 2;
+message TKqpStatsQuery { 
+    // Basic stats 
+    uint64 DurationUs = 1; 
+    TKqpStatsCompile Compilation = 2; 
 
     reserved 3; // repeated TKqpStatsExecution Executions = 3;
 
-    uint64 WorkerCpuTimeUs = 4;
+    uint64 WorkerCpuTimeUs = 4; 
     uint64 ReadSetsCount = 5;
     uint64 MaxShardProgramSize = 6;
     uint64 MaxShardReplySize = 7;
 
     repeated NYql.NDqProto.TDqExecutionStats Executions = 8;
-}
+} 

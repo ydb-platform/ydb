@@ -25,7 +25,7 @@ using namespace NResourceBroker;
 #define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
+#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream) 
 
 namespace {
 
@@ -299,7 +299,7 @@ public:
 
         if (!hasScanQueryMemory) {
             Counters->RmNotEnoughMemory->Inc();
-            LOG_N("TxId: " << txId << ", taskId: " << taskId << ". Not enough ScanQueryMemory, requested: " << resources.Memory);
+            LOG_N("TxId: " << txId << ", taskId: " << taskId << ". Not enough ScanQueryMemory, requested: " << resources.Memory); 
             if (details) {
                 details->SetScanQueryMemory();
             }
@@ -308,7 +308,7 @@ public:
 
         if (!hasExecutionUnits) {
             Counters->RmNotEnoughComputeActors->Inc();
-            LOG_N("TxId: " << txId << ", taskId: " << taskId << ". Not enough ExecutionUnits, requested: " << resources.ExecutionUnits);
+            LOG_N("TxId: " << txId << ", taskId: " << taskId << ". Not enough ExecutionUnits, requested: " << resources.ExecutionUnits); 
             if (details) {
                 details->SetExecutionUnits();
             }
@@ -331,7 +331,7 @@ public:
                     } // with_lock (Lock)
 
                     Counters->RmNotEnoughMemory->Inc();
-                    LOG_N("TxId: " << txId << ", taskId: " << taskId << ". Query memory limit exceeded: "
+                    LOG_N("TxId: " << txId << ", taskId: " << taskId << ". Query memory limit exceeded: " 
                         << "requested " << (it->second.TxScanQueryMemory + resources.Memory));
                     if (details) {
                         details->SetQueryMemoryLimit();
@@ -353,7 +353,7 @@ public:
                 } // with_lock (Lock)
 
                 Counters->RmNotEnoughMemory->Inc();
-                LOG_N("TxId: " << txId << ", taskId: " << taskId << ". Not enough ScanQueryMemory: "
+                LOG_N("TxId: " << txId << ", taskId: " << taskId << ". Not enough ScanQueryMemory: " 
                     << "requested " << resources.Memory);
                 if (details) {
                     details->SetScanQueryMemory();

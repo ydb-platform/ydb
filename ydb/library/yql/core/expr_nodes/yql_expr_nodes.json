@@ -1,36 +1,36 @@
-{
-    "NodeRootType": "TExprBase",
-    "NodeBuilderBase": "TNodeBuilderBase",
-    "ListBuilderBase": "TListBuilderBase",
-    "FreeArgCallableBase": "TFreeArgCallable",
-    "FreeArgBuilderBase": "TFreeArgCallableBuilderBase",
-    "Nodes": [
-        {
-            "Name": "TExprList",
-            "ListBase": "TExprBase"
-        },
-        {
+{ 
+    "NodeRootType": "TExprBase", 
+    "NodeBuilderBase": "TNodeBuilderBase", 
+    "ListBuilderBase": "TListBuilderBase", 
+    "FreeArgCallableBase": "TFreeArgCallable", 
+    "FreeArgBuilderBase": "TFreeArgCallableBuilderBase", 
+    "Nodes": [ 
+        { 
+            "Name": "TExprList", 
+            "ListBase": "TExprBase" 
+        }, 
+        { 
             "Name": "TCoAtom",
-            "Base": "TExprBase",
-            "Definition": "Custom",
-            "Match": {"Type": "NodeType", "TypeName": "Atom"},
+            "Base": "TExprBase", 
+            "Definition": "Custom", 
+            "Match": {"Type": "NodeType", "TypeName": "Atom"}, 
             "Content": {"Name": "Value", "Type": "TStringBuf"},
-            "Builder": {"Generate": "Custom"}
-        },
-        {
+            "Builder": {"Generate": "Custom"} 
+        }, 
+        { 
             "Name": "TCoAtomList",
             "ListBase": "TCoAtom"
-        },
-        {
+        }, 
+        { 
             "Name": "TCoNameValueTuple",
-            "Base": "TExprBase",
-            "Match": {"Type": "Tuple"},
-            "Children": [
+            "Base": "TExprBase", 
+            "Match": {"Type": "Tuple"}, 
+            "Children": [ 
                 {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "Value", "Type": "TExprBase", "Optional": true}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoIndex",
             "Base": "TExprBase",
             "Match": {"Type": "Tuple"},
@@ -48,8 +48,8 @@
         {
             "Name": "TCoNameValueTupleList",
             "ListBase": "TCoNameValueTuple"
-        },
-        {
+        }, 
+        { 
             "Name": "TCoChangefeed",
             "Base": "TExprBase",
             "Match": {"Type": "Tuple"},
@@ -65,35 +65,35 @@
         },
         {
             "Name": "TCoWorld",
-            "Base": "TExprBase",
-            "Match": {"Type": "NodeType", "TypeName": "World"},
-            "Builder": {"Generate": "Custom"}
-        },
-        {
+            "Base": "TExprBase", 
+            "Match": {"Type": "NodeType", "TypeName": "World"}, 
+            "Builder": {"Generate": "Custom"} 
+        }, 
+        { 
             "Name": "TCoArgument",
-            "Base": "TExprBase",
-            "Match": {"Type": "NodeType", "TypeName": "Argument"},
+            "Base": "TExprBase", 
+            "Match": {"Type": "NodeType", "TypeName": "Argument"}, 
             "Content": {"Name": "Name", "Type": "TStringBuf"},
-            "Builder": {"Generate": "Custom"}
-        },
-        {
+            "Builder": {"Generate": "Custom"} 
+        }, 
+        { 
             "Name": "TCoArguments",
-            "Base": "TExprBase",
-            "Definition": "Custom",
-            "Match": {"Type": "NodeType", "TypeName": "Arguments"},
-            "Builder": {"Generate": "None"}
-        },
-        {
+            "Base": "TExprBase", 
+            "Definition": "Custom", 
+            "Match": {"Type": "NodeType", "TypeName": "Arguments"}, 
+            "Builder": {"Generate": "None"} 
+        }, 
+        { 
             "Name": "TCoLambda",
-            "Base": "TExprBase",
-            "Match": {"Type": "NodeType", "TypeName": "Lambda"},
-            "Builder": {"Generate": "Custom"},
-            "Children": [
+            "Base": "TExprBase", 
+            "Match": {"Type": "NodeType", "TypeName": "Lambda"}, 
+            "Builder": {"Generate": "Custom"}, 
+            "Children": [ 
                 {"Index": 0, "Name": "Args", "Type": "TCoArguments"},
-                {"Index": 1, "Name": "Body", "Type": "TExprBase"}
-            ]
-        },
-        {
+                {"Index": 1, "Name": "Body", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoInputBase",
             "Base": "TCallable",
             "Match": {"Type": "CallableBase"},
@@ -104,23 +104,23 @@
         },
         {
             "Name": "TCoApply",
-            "Base": "TFreeArgCallable",
-            "Match": {"Type": "Callable", "Name": "Apply"},
-            "Children": [
-                {"Index": 0, "Name": "Callable", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Base": "TFreeArgCallable", 
+            "Match": {"Type": "Callable", "Name": "Apply"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Callable", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoRight",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "Right!"}
-        },
-        {
+        }, 
+        { 
             "Name": "TCoLeft",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "Left!"}
-        },
-        {
+        }, 
+        { 
             "Name": "TCoCons",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "Cons!"},
@@ -131,13 +131,13 @@
         },
         {
             "Name": "TCoTypeOf",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "TypeOf"},
-            "Children": [
-                {"Index": 0, "Name": "Value", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "TypeOf"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Value", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoImplicitEquals",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "ImplicitEquals"},
@@ -148,18 +148,18 @@
         },
         {
             "Name": "TCoNothing",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "Nothing"},
-            "Children": [
-                {"Index": 0, "Name": "OptionalType", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "Nothing"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "OptionalType", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoVoid",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "Void"}
-        },
-        {
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "Void"} 
+        }, 
+        { 
             "Name": "TCoNull",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "Null"}
@@ -168,11 +168,11 @@
             "Name": "TCoMapBase",
             "Base": "TCoInputBase",
             "Match": {"Type": "CallableBase"},
-            "Children": [
+            "Children": [ 
                 {"Index": 1, "Name": "Lambda", "Type": "TCoLambda"}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoMap",
             "Base": "TCoMapBase",
             "Match": {"Type": "Callable", "Name": "Map"}
@@ -221,12 +221,12 @@
             "Name": "TCoFilterBase",
             "Base": "TCoInputBase",
             "Match": {"Type": "CallableBase"},
-            "Children": [
+            "Children": [ 
                 {"Index": 1, "Name": "Lambda", "Type": "TCoLambda"},
                 {"Index": 2, "Name": "Limit", "Type": "TExprBase", "Optional": true}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoFilter",
             "Base": "TCoFilterBase",
             "Match": {"Type": "Callable", "Name": "Filter"}
@@ -246,11 +246,11 @@
             "Base": "TCoInputBase",
             "Match": {"Type": "CallableBase"},
             "Builder": {"Generate": "None"},
-            "Children": [
+            "Children": [ 
                 {"Index": 1, "Name": "Members", "Type": "TCoAtomList", "Optional": true}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoFilterNullMembers",
             "Base": "TCoFilterNullMembersBase",
             "Match": {"Type": "Callable", "Name": "FilterNullMembers"}
@@ -305,11 +305,11 @@
             "Name": "TCoFlatMapBase",
             "Base": "TCoInputBase",
             "Match": {"Type": "CallableBase"},
-            "Children": [
+            "Children": [ 
                 {"Index": 1, "Name": "Lambda", "Type": "TCoLambda"}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoFlatMap",
             "Base": "TCoFlatMapBase",
             "Match": {"Type": "Callable", "Name": "FlatMap"}
@@ -369,56 +369,56 @@
         },
         {
             "Name": "TCoConditionalValueBase",
-            "Base": "TCallable",
-            "Match": {"Type": "CallableBase"},
-            "Children": [
-                {"Index": 0, "Name": "Predicate", "Type": "TExprBase"},
-                {"Index": 1, "Name": "Value", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Base": "TCallable", 
+            "Match": {"Type": "CallableBase"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Predicate", "Type": "TExprBase"}, 
+                {"Index": 1, "Name": "Value", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoOptionalIf",
             "Base": "TCoConditionalValueBase",
-            "Match": {"Type": "Callable", "Name": "OptionalIf"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "OptionalIf"} 
+        }, 
+        { 
             "Name": "TCoFlatOptionalIf",
             "Base": "TCoConditionalValueBase",
-            "Match": {"Type": "Callable", "Name": "FlatOptionalIf"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "FlatOptionalIf"} 
+        }, 
+        { 
             "Name": "TCoListIf",
             "Base": "TCoConditionalValueBase",
-            "Match": {"Type": "Callable", "Name": "ListIf"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "ListIf"} 
+        }, 
+        { 
             "Name": "TCoFlatListIf",
             "Base": "TCoConditionalValueBase",
-            "Match": {"Type": "Callable", "Name": "FlatListIf"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "FlatListIf"} 
+        }, 
+        { 
             "Name": "TCoJust",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "Just"}
-        },
-        {
+        }, 
+        { 
             "Name": "TCoCombineByKey",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "CombineByKey"},
-            "Children": [
+            "Children": [ 
                 {"Index": 1, "Name": "PreMapLambda",        "Type": "TCoLambda"},
                 {"Index": 2, "Name": "KeySelectorLambda",   "Type": "TCoLambda"},
                 {"Index": 3, "Name": "InitHandlerLambda",   "Type": "TCoLambda"},
                 {"Index": 4, "Name": "UpdateHandlerLambda", "Type": "TCoLambda"},
                 {"Index": 5, "Name": "FinishHandlerLambda", "Type": "TCoLambda"}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoMin",
             "VarArgBase": "TExprBase",
-            "Match": {"Type": "Callable", "Name": "Min"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "Min"} 
+        }, 
+        { 
             "Name": "TCoMax",
             "VarArgBase": "TExprBase",
             "Match": {"Type": "Callable", "Name": "Max"}
@@ -428,11 +428,11 @@
             "Base": "TCoInputBase",
             "Match": {"Type": "CallableBase"},
             "Builder": {"Generate": "None"},
-            "Children": [
-                {"Index": 1, "Name": "Count", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Children": [ 
+                {"Index": 1, "Name": "Count", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoTake",
             "Base": "TCoCountBase",
             "Match": {"Type": "Callable", "Name": "Take"}
@@ -446,17 +446,17 @@
             "Name": "TCoSkip",
             "Base": "TCoCountBase",
             "Match": {"Type": "Callable", "Name": "Skip"}
-        },
-        {
+        }, 
+        { 
             "Name": "TCoAppend",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "Append"},
-            "Children": [
-                {"Index": 0, "Name": "List", "Type": "TExprBase"},
-                {"Index": 1, "Name": "Item", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "Append"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "List", "Type": "TExprBase"}, 
+                {"Index": 1, "Name": "Item", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoExtendBase",
             "VarArgBase": "TExprBase",
             "Match": {"Type": "CallableBase"}
@@ -464,9 +464,9 @@
         {
             "Name": "TCoExtend",
             "Base": "TCoExtendBase",
-            "Match": {"Type": "Callable", "Name": "Extend"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "Extend"} 
+        }, 
+        { 
             "Name": "TCoOrderedExtend",
             "Base": "TCoExtendBase",
             "Match": {"Type": "Callable", "Name": "OrderedExtend"}
@@ -493,13 +493,13 @@
         },
         {
             "Name": "TCoHasItems",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "HasItems"},
-            "Children": [
-                {"Index": 0, "Name": "List", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "HasItems"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "List", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoLength",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "Length"},
@@ -574,10 +574,10 @@
         },
         {
             "Name": "TCoAggregationTraits",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "AggregationTraits"},
-            "Children": [
-                {"Index": 0, "Name": "ItemType",      "Type": "TExprBase"},
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "AggregationTraits"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "ItemType",      "Type": "TExprBase"}, 
                 {"Index": 1, "Name": "InitHandler",   "Type": "TCoLambda"},
                 {"Index": 2, "Name": "UpdateHandler", "Type": "TCoLambda"},
                 {"Index": 3, "Name": "SaveHandler",   "Type": "TCoLambda"},
@@ -585,23 +585,23 @@
                 {"Index": 5, "Name": "MergeHandler",  "Type": "TCoLambda"},
                 {"Index": 6, "Name": "FinishHandler", "Type": "TCoLambda"},
                 {"Index": 7, "Name": "DefVal",        "Type": "TExprBase"}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoAggregateTuple",
-            "Base": "TExprBase",
-            "Match": {"Type": "Tuple"},
-            "Children": [
-                {"Index": 0, "Name": "ColumnName",   "Type": "TExprBase"},
+            "Base": "TExprBase", 
+            "Match": {"Type": "Tuple"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "ColumnName",   "Type": "TExprBase"}, 
                 {"Index": 1, "Name": "Trait",        "Type": "TCoAggregationTraits"},
                 {"Index": 2, "Name": "DistinctName", "Type": "TCoAtom", "Optional": true}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoAggregateTupleList",
             "ListBase": "TCoAggregateTuple"
-        },
-        {
+        }, 
+        { 
             "Name": "TCoAggregate",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "Aggregate"},
@@ -610,17 +610,17 @@
                 {"Index": 2, "Name": "Handlers",  "Type": "TCoAggregateTupleList"},
                 {"Index": 3, "Name": "Settings",  "Type": "TCoNameValueTupleList"}
             ]
-        },
-        {
+        }, 
+        { 
             "Name": "TCoFold1",
             "Base": "TCoInputBase",
-            "Match": {"Type": "Callable", "Name": "Fold1"},
-            "Children": [
+            "Match": {"Type": "Callable", "Name": "Fold1"}, 
+            "Children": [ 
                 {"Index": 1, "Name": "InitHandler",   "Type": "TCoLambda"},
                 {"Index": 2, "Name": "UpdateHandler", "Type": "TCoLambda"}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoChain1Map",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "Chain1Map"},
@@ -632,9 +632,9 @@
         {
             "Name": "TCoZip",
             "VarArgBase": "TExprBase",
-            "Match": {"Type": "Callable", "Name": "Zip"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "Zip"} 
+        }, 
+        { 
             "Name": "TCoZipAll",
             "VarArgBase": "TExprBase",
             "Match": {"Type": "Callable", "Name": "ZipAll"}
@@ -642,56 +642,56 @@
         {
             "Name": "TCoSync",
             "VarArgBase": "TExprBase",
-            "Match": {"Type": "Callable", "Name": "Sync!"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "Sync!"} 
+        }, 
+        { 
             "Name": "TCoDataSource",
-            "Base": "TFreeArgCallable",
-            "Match": {"Type": "Callable", "Name": "DataSource"},
-            "Children": [
+            "Base": "TFreeArgCallable", 
+            "Match": {"Type": "Callable", "Name": "DataSource"}, 
+            "Children": [ 
                 {"Index": 0, "Name": "Category", "Type": "TCoAtom"}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoDataSink",
-            "Base": "TFreeArgCallable",
-            "Match": {"Type": "Callable", "Name": "DataSink"},
-            "Children": [
+            "Base": "TFreeArgCallable", 
+            "Match": {"Type": "Callable", "Name": "DataSink"}, 
+            "Children": [ 
                 {"Index": 0, "Name": "Category", "Type": "TCoAtom"}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoCommit",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "Commit!"},
-            "Children": [
-                {"Index": 0, "Name": "World", "Type": "TExprBase"},
-                {"Index": 1, "Name": "DataSink", "Type": "TExprBase"},
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "Commit!"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "World", "Type": "TExprBase"}, 
+                {"Index": 1, "Name": "DataSink", "Type": "TExprBase"}, 
                 {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoWrite",
-            "Base": "TFreeArgCallable",
-            "Match": {"Type": "Callable", "Name": "Write!"},
-            "Children": [
-                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+            "Base": "TFreeArgCallable", 
+            "Match": {"Type": "Callable", "Name": "Write!"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "World", "Type": "TExprBase"}, 
                 {"Index": 1, "Name": "DataSink", "Type": "TCoDataSink"}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoKey",
             "VarArgBase": "TExprBase",
-            "Match": {"Type": "Callable", "Name": "Key"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "Key"} 
+        }, 
+        { 
             "Name": "TCoRead",
-            "Base": "TFreeArgCallable",
-            "Match": {"Type": "Callable", "Name": "Read!"},
-            "Children": [
-                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+            "Base": "TFreeArgCallable", 
+            "Match": {"Type": "Callable", "Name": "Read!"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "World", "Type": "TExprBase"}, 
                 {"Index": 1, "Name": "DataSource", "Type": "TCoDataSource"}
-            ]
+            ] 
         },
         {
             "Name": "TCoConfigure",
@@ -704,50 +704,50 @@
         },
         {
             "Name": "TCoDataType",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "DataType"},
-            "Children": [
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "DataType"}, 
+            "Children": [ 
                 {"Index": 0, "Name": "Type", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "ParamOne", "Type": "TCoAtom", "Optional": true},
                 {"Index": 2, "Name": "ParamTwo",  "Type": "TCoAtom", "Optional": true}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoTaggedType",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "TaggedType"},
-            "Children": [
-                {"Index": 0, "Name": "Type", "Type": "TExprBase"},
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "TaggedType"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Type", "Type": "TExprBase"}, 
                 {"Index": 1, "Name": "Tag", "Type": "TCoAtom"}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoListType",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "ListType"},
-            "Children": [
-                {"Index": 0, "Name": "ItemType", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "ListType"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "ItemType", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoStructType",
             "VarArgBase": "TExprBase",
             "Match": {"Type": "Callable", "Name": "StructType"}
         },
         {
             "Name": "TCoOptionalType",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "OptionalType"},
-            "Children": [
-                {"Index": 0, "Name": "ItemType", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "OptionalType"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "ItemType", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoVoidType",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "VoidType"}
-        },
-        {
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "VoidType"} 
+        }, 
+        { 
             "Name": "TCoTupleType",
             "VarArgBase": "TExprBase",
             "Match": {"Type": "Callable", "Name": "TupleType"}
@@ -762,25 +762,25 @@
         },
         {
             "Name": "TCoDataCtor",
-            "Base": "TCallable",
-            "Match": {"Type": "CallableBase"},
-            "Builder": {"Generate": "None"},
-            "Children": [
+            "Base": "TCallable", 
+            "Match": {"Type": "CallableBase"}, 
+            "Builder": {"Generate": "None"}, 
+            "Children": [ 
                 {"Index": 0, "Name": "Literal", "Type": "TCoAtom"}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoIntegralCtor",
             "Base": "TCoDataCtor",
-            "Match": {"Type": "CallableBase"},
-            "Builder": {"Generate": "None"}
-        },
-        {
+            "Match": {"Type": "CallableBase"}, 
+            "Builder": {"Generate": "None"} 
+        }, 
+        { 
             "Name": "TCoUint8",
             "Base": "TCoIntegralCtor",
             "Match": {"Type": "Callable", "Name": "Uint8"}
-        },
-        {
+        }, 
+        { 
             "Name": "TCoInt8",
             "Base": "TCoIntegralCtor",
             "Match": {"Type": "Callable", "Name": "Int8"}
@@ -798,24 +798,24 @@
         {
             "Name": "TCoInt32",
             "Base": "TCoIntegralCtor",
-            "Match": {"Type": "Callable", "Name": "Int32"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "Int32"} 
+        }, 
+        { 
             "Name": "TCoUint32",
             "Base": "TCoIntegralCtor",
-            "Match": {"Type": "Callable", "Name": "Uint32"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "Uint32"} 
+        }, 
+        { 
             "Name": "TCoInt64",
             "Base": "TCoIntegralCtor",
-            "Match": {"Type": "Callable", "Name": "Int64"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "Int64"} 
+        }, 
+        { 
             "Name": "TCoUint64",
             "Base": "TCoIntegralCtor",
-            "Match": {"Type": "Callable", "Name": "Uint64"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "Uint64"} 
+        }, 
+        { 
             "Name": "TCoFloat",
             "Base": "TCoDataCtor",
             "Match": {"Type": "Callable", "Name": "Float"}
@@ -828,14 +828,14 @@
         {
             "Name": "TCoString",
             "Base": "TCoDataCtor",
-            "Match": {"Type": "Callable", "Name": "String"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "String"} 
+        }, 
+        { 
             "Name": "TCoUtf8",
             "Base": "TCoDataCtor",
-            "Match": {"Type": "Callable", "Name": "Utf8"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "Utf8"} 
+        }, 
+        { 
             "Name": "TCoYson",
             "Base": "TCoDataCtor",
             "Match": {"Type": "Callable", "Name": "Yson"}
@@ -848,9 +848,9 @@
         {
             "Name": "TCoBool",
             "Base": "TCoDataCtor",
-            "Match": {"Type": "Callable", "Name": "Bool"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "Bool"} 
+        }, 
+        { 
             "Name": "TCoDateBase",
             "Base": "TCoDataCtor",
             "Match": {"Type": "CallableBase"},
@@ -914,54 +914,54 @@
         {
             "Name": "TCoAsList",
             "VarArgBase": "TExprBase",
-            "Match": {"Type": "Callable", "Name": "AsList"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "AsList"} 
+        }, 
+        { 
             "Name": "TCoToList",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "ToList"},
-            "Children": [
-                {"Index": 0, "Name": "Optional", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "ToList"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Optional", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoToOptional",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "ToOptional"},
-            "Children": [
-                {"Index": 0, "Name": "List", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "ToOptional"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "List", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoList",
             "Base": "TFreeArgCallable",
-            "Match": {"Type": "Callable", "Name": "List"},
-            "Children": [
-                {"Index": 0, "Name": "ListType", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "List"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "ListType", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoAsStruct",
             "VarArgBase": "TExprList",
-            "Match": {"Type": "Callable", "Name": "AsStruct"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "AsStruct"} 
+        }, 
+        { 
             "Name": "TCoAsDict",
             "Base": "TFreeArgCallable",
             "Match": {"Type": "Callable", "Name": "AsDict"}
         },
         {
             "Name": "TCoToDict",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "ToDict"},
-            "Children": [
-                {"Index": 0, "Name": "List", "Type": "TExprBase"},
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "ToDict"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "List", "Type": "TExprBase"}, 
                 {"Index": 1, "Name": "KeySelector", "Type": "TCoLambda"},
                 {"Index": 2, "Name": "PayloadSelector", "Type": "TCoLambda"},
                 {"Index": 3, "Name": "Settings", "Type": "TCoAtomList"}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoDictFromKeys",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "DictFromKeys"},
@@ -969,8 +969,8 @@
                 {"Index": 0, "Name": "Type", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Keys", "Type": "TExprList"}
             ]
-        },
-        {
+        }, 
+        { 
             "Name": "TCoSqueezeToDict",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "SqueezeToDict"},
@@ -1007,24 +1007,24 @@
             ]
         },
         {
-            "Name": "TCoDictItems",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "DictItems"},
-            "Children": [
-                {"Index": 0, "Name": "Dict", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Name": "TCoDictItems", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "DictItems"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Dict", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoLookupBase",
-            "Base": "TCallable",
+            "Base": "TCallable", 
             "Match": {"Type": "CallableBase"},
             "Builder": {"Generate": "None"},
-            "Children": [
+            "Children": [ 
                 {"Index": 0, "Name": "Collection", "Type": "TExprBase"},
-                {"Index": 1, "Name": "Lookup", "Type": "TExprBase"}
-            ]
-        },
-        {
+                {"Index": 1, "Name": "Lookup", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoContains",
             "Base": "TCoLookupBase",
             "Match": {"Type": "Callable", "Name": "Contains"}
@@ -1041,66 +1041,66 @@
             "Name": "TCoLookup",
             "Base": "TCoLookupBase",
             "Match": {"Type": "Callable", "Name": "Lookup"}
-        },
-        {
+        }, 
+        { 
             "Name": "TCoMember",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "Member"},
-            "Children": [
-                {"Index": 0, "Name": "Struct", "Type": "TExprBase"},
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "Member"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Struct", "Type": "TExprBase"}, 
                 {"Index": 1, "Name": "Name", "Type": "TCoAtom"}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoNth",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "Nth"},
-            "Children": [
-                {"Index": 0, "Name": "Tuple", "Type": "TExprBase"},
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "Nth"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Tuple", "Type": "TExprBase"}, 
                 {"Index": 1, "Name": "Index", "Type": "TCoAtom"}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoCompare",
-            "Base": "TCallable",
-            "Match": {"Type": "CallableBase"},
-            "Builder": {"Generate": "None"},
-            "Children": [
-                {"Index": 0, "Name": "Left", "Type": "TExprBase"},
-                {"Index": 1, "Name": "Right", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Base": "TCallable", 
+            "Match": {"Type": "CallableBase"}, 
+            "Builder": {"Generate": "None"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Left", "Type": "TExprBase"}, 
+                {"Index": 1, "Name": "Right", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoCmpLess",
             "Base": "TCoCompare",
-            "Match": {"Type": "Callable", "Name": "<"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "<"} 
+        }, 
+        { 
             "Name": "TCoCmpLessOrEqual",
             "Base": "TCoCompare",
-            "Match": {"Type": "Callable", "Name": "<="}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "<="} 
+        }, 
+        { 
             "Name": "TCoCmpGreater",
             "Base": "TCoCompare",
-            "Match": {"Type": "Callable", "Name": ">"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": ">"} 
+        }, 
+        { 
             "Name": "TCoCmpGreaterOrEqual",
             "Base": "TCoCompare",
-            "Match": {"Type": "Callable", "Name": ">="}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": ">="} 
+        }, 
+        { 
             "Name": "TCoCmpEqual",
             "Base": "TCoCompare",
-            "Match": {"Type": "Callable", "Name": "=="}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "=="} 
+        }, 
+        { 
             "Name": "TCoCmpNotEqual",
             "Base": "TCoCompare",
-            "Match": {"Type": "Callable", "Name": "!="}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "!="} 
+        }, 
+        { 
             "Name": "TCoAggrEqual",
             "Base": "TCoCompare",
             "Match": {"Type": "Callable", "Name": "AggrEquals"}
@@ -1138,23 +1138,23 @@
         },
         {
             "Name": "TCoNot",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "Not"},
-            "Children": [
-                {"Index": 0, "Name": "Value", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "Not"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Value", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoAnd",
             "VarArgBase": "TExprBase",
-            "Match": {"Type": "Callable", "Name": "And"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "And"} 
+        }, 
+        { 
             "Name": "TCoOr",
             "VarArgBase": "TExprBase",
-            "Match": {"Type": "Callable", "Name": "Or"}
-        },
-        {
+            "Match": {"Type": "Callable", "Name": "Or"} 
+        }, 
+        { 
             "Name": "TCoXor",
             "VarArgBase": "TExprBase",
             "Match": {"Type": "Callable", "Name": "Xor"}
@@ -1185,50 +1185,50 @@
             "Match": {"Type": "Callable", "Name": "+"}
         },
         {
-            "Name": "TCoMul",
-            "Base": "TCoBinaryArithmetic",
-            "Match": {"Type": "Callable", "Name": "*"}
-        },
-        {
-            "Name": "TCoDiv",
-            "Base": "TCoBinaryArithmetic",
-            "Match": {"Type": "Callable", "Name": "/"}
-        },
-        {
-            "Name": "TCoMod",
-            "Base": "TCoBinaryArithmetic",
-            "Match": {"Type": "Callable", "Name": "%"}
-        },
-        {
+            "Name": "TCoMul", 
+            "Base": "TCoBinaryArithmetic", 
+            "Match": {"Type": "Callable", "Name": "*"} 
+        }, 
+        { 
+            "Name": "TCoDiv", 
+            "Base": "TCoBinaryArithmetic", 
+            "Match": {"Type": "Callable", "Name": "/"} 
+        }, 
+        { 
+            "Name": "TCoMod", 
+            "Base": "TCoBinaryArithmetic", 
+            "Match": {"Type": "Callable", "Name": "%"} 
+        }, 
+        { 
             "Name": "TCoCoalesce",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "Coalesce"},
-            "Children": [
-                {"Index": 0, "Name": "Predicate", "Type": "TExprBase"},
-                {"Index": 1, "Name": "Value", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "Coalesce"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Predicate", "Type": "TExprBase"}, 
+                {"Index": 1, "Name": "Value", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoUnwrap",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "Unwrap"},
-            "Children": [
-                {"Index": 0, "Name": "Optional", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "Unwrap"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Optional", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoScriptUdf",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "ScriptUdf"},
-            "Children": [
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "ScriptUdf"}, 
+            "Children": [ 
                 {"Index": 0, "Name": "ScriptType", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "FunctionName", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "FunctionType", "Type": "TExprBase"},
+                {"Index": 2, "Name": "FunctionType", "Type": "TExprBase"}, 
                 {"Index": 3, "Name": "Script", "Type": "TExprBase"},
                 {"Index": 4, "Name": "Options", "Type": "TCoNameValueTupleList", "Optional": true}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TCoUdf",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "Udf"},
@@ -1244,23 +1244,23 @@
         },
         {
             "Name": "TCoExists",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "Exists"},
-            "Children": [
-                {"Index": 0, "Name": "Optional", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "Exists"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Optional", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoIf",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "If"},
-            "Children": [
-                {"Index": 0, "Name": "Predicate", "Type": "TExprBase"},
-                {"Index": 1, "Name": "ThenValue", "Type": "TExprBase"},
-                {"Index": 2, "Name": "ElseValue", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "If"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Predicate", "Type": "TExprBase"}, 
+                {"Index": 1, "Name": "ThenValue", "Type": "TExprBase"}, 
+                {"Index": 2, "Name": "ElseValue", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoIfStrict",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "IfStrict"},
@@ -1272,21 +1272,21 @@
         },
         {
             "Name": "TCoIfPresent",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "IfPresent"},
-            "Children": [
-                {"Index": 0, "Name": "Optional", "Type": "TExprBase"},
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "IfPresent"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Optional", "Type": "TExprBase"}, 
                 {"Index": 1, "Name": "PresentHandler", "Type": "TCoLambda"},
-                {"Index": 2, "Name": "MissingValue", "Type": "TExprBase"}
-            ]
-        },
-        {
+                {"Index": 2, "Name": "MissingValue", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoDefault",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "Default"},
-            "Children": [
-                {"Index": 0, "Name": "Type", "Type": "TExprBase"}
-            ]
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "Default"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Type", "Type": "TExprBase"} 
+            ] 
         },
         {
             "Name": "TCoCalcOverWindowBase",
@@ -1298,8 +1298,8 @@
                 {"Index": 2, "Name": "SortSpec",  "Type": "TExprBase"},
                 {"Index": 3, "Name": "Frames",    "Type": "TExprList"}
             ]
-        },
-        {
+        }, 
+        { 
             "Name": "TCoCalcOverWindow",
             "Base": "TCoCalcOverWindowBase",
             "Match": {"Type": "Callable", "Name": "CalcOverWindow"}
@@ -1339,30 +1339,30 @@
         },
         {
             "Name": "TCoEquiJoinTuple",
-            "Base": "TExprBase",
-            "Match": {"Type": "Tuple"},
-            "Children": [
+            "Base": "TExprBase", 
+            "Match": {"Type": "Tuple"}, 
+            "Children": [ 
                {"Index": 0, "Name": "Type", "Type": "TCoAtom"},
-               {"Index": 1, "Name": "LeftScope", "Type": "TExprBase"},
-               {"Index": 2, "Name": "RightScope", "Type": "TExprBase"},
+               {"Index": 1, "Name": "LeftScope", "Type": "TExprBase"}, 
+               {"Index": 2, "Name": "RightScope", "Type": "TExprBase"}, 
                {"Index": 3, "Name": "LeftKeys", "Type": "TCoAtomList"},
                {"Index": 4, "Name": "RightKeys", "Type": "TCoAtomList"},
-               {"Index": 5, "Name": "Options", "Type": "TExprList"}
-            ]
-        },
-        {
+               {"Index": 5, "Name": "Options", "Type": "TExprList"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoEquiJoinInput",
-            "Base": "TExprBase",
-            "Match": {"Type": "Tuple"},
-            "Children": [
-               {"Index": 0, "Name": "List", "Type": "TExprBase"},
-               {"Index": 1, "Name": "Scope", "Type": "TExprBase"}
-            ]
-        },
-        {
+            "Base": "TExprBase", 
+            "Match": {"Type": "Tuple"}, 
+            "Children": [ 
+               {"Index": 0, "Name": "List", "Type": "TExprBase"}, 
+               {"Index": 1, "Name": "Scope", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoEquiJoin",
             "VarArgBase": "TExprBase",
-            "Match": {"Type": "Callable", "Name": "EquiJoin"}
+            "Match": {"Type": "Callable", "Name": "EquiJoin"} 
         },
         {
             "Name": "TCoMapJoinCore",
@@ -1462,15 +1462,15 @@
         },
         {
             "Name": "TCoReplaceMember",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "ReplaceMember"},
-            "Children": [
-                {"Index": 0, "Name": "Struct", "Type": "TExprBase"},
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "ReplaceMember"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Struct", "Type": "TExprBase"}, 
                 {"Index": 1, "Name": "Name", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "Item", "Type": "TExprBase"}
-            ]
-        },
-        {
+                {"Index": 2, "Name": "Item", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoRemoveMember",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "RemoveMember"},
@@ -1538,47 +1538,47 @@
             "Children": [
                 {"Index": 0, "Name": "ListType", "Type": "TExprBase"}
             ]
-        },
-        {
-            "Name": "TCoStreamItemType",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "StreamItemType"},
-            "Children": [
-                {"Index": 0, "Name": "StreamType", "Type": "TExprBase"}
-            ]
-        },
-        {
-            "Name": "TCoDictKeyType",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "DictKeyType"},
-            "Children": [
-                {"Index": 0, "Name": "DictType", "Type": "TExprBase"}
-            ]
-        },
-        {
+        }, 
+        { 
+            "Name": "TCoStreamItemType", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "StreamItemType"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "StreamType", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
+            "Name": "TCoDictKeyType", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "DictKeyType"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "DictType", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoDependsOn",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "DependsOn"}
         },
         {
             "Name": "TCoParameter",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "Parameter"},
-            "Children": [
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "Parameter"}, 
+            "Children": [ 
                 {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Type", "Type": "TExprBase"}
-            ]
-        },
-        {
+                {"Index": 1, "Name": "Type", "Type": "TExprBase"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoMatchType",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "MatchType"},
-            "Children": [
-                {"Index": 0, "Name": "Expression", "Type": "TExprBase"},
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "MatchType"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Expression", "Type": "TExprBase"}, 
                 {"Index": 1, "Name": "TypeKind", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "MatchLambda", "Type": "TCoLambda"},
                 {"Index": 3, "Name": "NotMatchLambda", "Type": "TCoLambda"}
-            ]
+            ] 
         },
         {
             "Name": "TCoIterator",
@@ -1612,8 +1612,8 @@
                 {"Index": 9,  "Name": "MergeHandler",   "Type": "TCoLambda"},
                 {"Index": 10, "Name": "FinishHandler",  "Type": "TCoLambda"}
             ]
-        },
-        {
+        }, 
+        { 
             "Name": "TCoMultiHoppingCore",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "MultiHoppingCore"},
@@ -1669,10 +1669,10 @@
         {
             "Name": "TCoConvert",
             "Base": "TCoInputBase",
-            "Match": {"Type": "Callable", "Name": "Convert"},
-            "Children": [
+            "Match": {"Type": "Callable", "Name": "Convert"}, 
+            "Children": [ 
                 {"Index": 1, "Name": "Type", "Type": "TCoAtom"}
-            ]
+            ] 
         },
         {
             "Name": "TCoCondense",
@@ -2062,6 +2062,6 @@
             "Name": "TCoCurrentTzTimestamp",
             "Base": "TCoTzTimeBase",
             "Match": {"Type": "Callable", "Name": "CurrentTzTimestamp"}
-        }
-    ]
-}
+        } 
+    ] 
+} 

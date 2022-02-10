@@ -119,15 +119,15 @@ public:
     TIssue() = default;
 
     template <typename T>
-    explicit TIssue(const T& message)
-        : Position(TPosition())
-        , EndPosition(TPosition())
-        , Message(message)
-    {
+    explicit TIssue(const T& message) 
+        : Position(TPosition()) 
+        , EndPosition(TPosition()) 
+        , Message(message) 
+    { 
         SanitizeNonAscii(Message);
-    }
-
-    template <typename T>
+    } 
+ 
+    template <typename T> 
     TIssue(TPosition position, const T& message)
         : Position(position)
         , EndPosition(position)
@@ -206,15 +206,15 @@ public:
     TIssues() = default;
 
     inline TIssues(const TVector<TIssue>& issues)
-        : Issues_(issues)
-    {
-    }
-
-    inline TIssues(const std::initializer_list<TIssue>& issues)
-        : TIssues(TVector<TIssue>(issues))
-    {
-    }
-
+        : Issues_(issues) 
+    { 
+    } 
+ 
+    inline TIssues(const std::initializer_list<TIssue>& issues) 
+        : TIssues(TVector<TIssue>(issues)) 
+    { 
+    } 
+ 
     inline TIssues(const TIssues& rhs)
         : Issues_(rhs.Issues_)
     {
@@ -234,16 +234,16 @@ public:
         return *this;
     }
 
-    template <typename ... Args> void AddIssue(Args&& ... args) {
+    template <typename ... Args> void AddIssue(Args&& ... args) { 
         Issues_.emplace_back(std::forward<Args>(args)...);
     }
 
-    inline void AddIssues(const TIssues& errors) {
+    inline void AddIssues(const TIssues& errors) { 
         Issues_.insert(Issues_.end(),
                        errors.Issues_.begin(), errors.Issues_.end());
     }
 
-    inline void AddIssues(const TPosition& pos, const TIssues& errors) {
+    inline void AddIssues(const TPosition& pos, const TIssues& errors) { 
         Issues_.reserve(Issues_.size() + errors.Size());
         for (const auto& e: errors) {
             Issues_.push_back(TIssue(pos, e.Message));

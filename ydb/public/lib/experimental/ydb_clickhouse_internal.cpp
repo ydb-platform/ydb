@@ -14,8 +14,8 @@
 namespace NYdb {
 namespace NClickhouseInternal {
 
-using namespace NThreading;
-
+using namespace NThreading; 
+ 
 ///////////////////////////////////////////////////////////////////////////
 class TScanResult::TResultImpl {
 public:
@@ -108,7 +108,7 @@ public:
                     &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncScan,
                     DbDriverState_,
                     INITIAL_DEFERRED_CALL_DELAY,
-                    TRpcRequestSettings::Make(settings),
+                    TRpcRequestSettings::Make(settings), 
                     settings.ClientTimeout_,
                     settings.Endpoint_);
 
@@ -375,7 +375,7 @@ public:
                     &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncGetShardLocations,
                     DbDriverState_,
                     INITIAL_DEFERRED_CALL_DELAY,
-                    TRpcRequestSettings::Make(settings),
+                    TRpcRequestSettings::Make(settings), 
                     settings.ClientTimeout_);
 
         return promise.GetFuture();
@@ -411,7 +411,7 @@ public:
                     &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncDescribeTable,
                     DbDriverState_,
                     INITIAL_DEFERRED_CALL_DELAY,
-                    TRpcRequestSettings::Make(settings),
+                    TRpcRequestSettings::Make(settings), 
                     settings.ClientTimeout_);
 
         return promise.GetFuture();
@@ -462,7 +462,7 @@ public:
                 &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncCreateSnapshot,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
+                TRpcRequestSettings::Make(settings), 
                 settings.ClientTimeout_);
 
         return future;
@@ -498,7 +498,7 @@ public:
                 &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncRefreshSnapshot,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
+                TRpcRequestSettings::Make(settings), 
                 settings.ClientTimeout_);
 
         return future;
@@ -534,7 +534,7 @@ public:
                 &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncDiscardSnapshot,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
+                TRpcRequestSettings::Make(settings), 
                 settings.ClientTimeout_);
 
         return future;
@@ -910,4 +910,4 @@ TAsyncCreateSnapshotHandleResult TMetaClient::CreateSnapshotHandle(
 }
 
 } // namespace NClickhouseInternal
-} // namespace NYdb
+} // namespace NYdb 

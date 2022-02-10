@@ -96,8 +96,8 @@ struct TEvKesus {
     static_assert(EvEnd <= EventSpaceEnd(TKikimrEvents::ES_KESUS),
         "expected EvEnd <= EventSpaceEnd(TKikimrEvents::ES_KESUS)");
 
-    inline static void FillError(NKikimrKesus::TKesusError* error, Ydb::StatusIds::StatusCode status, const TString& reason) {
-        Y_VERIFY(status != Ydb::StatusIds::SUCCESS, "Attempting to set error to SUCCESS");
+    inline static void FillError(NKikimrKesus::TKesusError* error, Ydb::StatusIds::StatusCode status, const TString& reason) { 
+        Y_VERIFY(status != Ydb::StatusIds::SUCCESS, "Attempting to set error to SUCCESS"); 
         error->SetStatus(status);
         error->AddIssues()->set_message(reason);
     }
@@ -147,7 +147,7 @@ struct TEvKesus {
         TEvSetConfigResult(ui64 txId, ui64 tabletId) {
             Record.SetTxId(txId);
             Record.SetTabletId(tabletId);
-            Record.MutableError()->SetStatus(Ydb::StatusIds::SUCCESS);
+            Record.MutableError()->SetStatus(Ydb::StatusIds::SUCCESS); 
         }
 
         void SetError(Ydb::StatusIds::StatusCode status, const TString& reason) {
@@ -300,7 +300,7 @@ struct TEvKesus {
             Record.SetSessionId(sessionId);
         }
 
-        TEvAttachSessionResult(ui64 generation, ui64 sessionId, Ydb::StatusIds::StatusCode status, const TString& reason)
+        TEvAttachSessionResult(ui64 generation, ui64 sessionId, Ydb::StatusIds::StatusCode status, const TString& reason) 
             : TResultBase(generation, status, reason)
         {
             Record.SetSessionId(sessionId);
@@ -370,7 +370,7 @@ struct TEvKesus {
             Record.SetAcquired(acquired);
         }
 
-        TEvAcquireSemaphoreResult(ui64 generation, Ydb::StatusIds::StatusCode status, const TString& reason)
+        TEvAcquireSemaphoreResult(ui64 generation, Ydb::StatusIds::StatusCode status, const TString& reason) 
             : TResultBase(generation, status, reason)
         {
         }
@@ -396,7 +396,7 @@ struct TEvKesus {
             Record.SetReleased(released);
         }
 
-        TEvReleaseSemaphoreResult(ui64 generation, Ydb::StatusIds::StatusCode status, const TString& reason)
+        TEvReleaseSemaphoreResult(ui64 generation, Ydb::StatusIds::StatusCode status, const TString& reason) 
             : TResultBase(generation, status, reason)
         {
         }

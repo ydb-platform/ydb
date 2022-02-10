@@ -56,7 +56,7 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("channels-file", "tablet channel profile config file").OptionalArgument("PATH").Required();
     opts.AddLongOption("vdisk-file", "vdisk kind config file").OptionalArgument("PATH");
     opts.AddLongOption("drivemodel-file", "drive model config file").OptionalArgument("PATH");
-    opts.AddLongOption("kqp-file", "Kikimr Query Processor config file").OptionalArgument("PATH");
+    opts.AddLongOption("kqp-file", "Kikimr Query Processor config file").OptionalArgument("PATH"); 
     opts.AddLongOption("incrhuge-file", "incremental huge blob keeper config file").OptionalArgument("PATH");
     opts.AddLongOption("memorylog-file", "set buffer size for memory log").OptionalArgument("PATH");
     opts.AddLongOption("grpc-file", "gRPC config file").OptionalArgument("PATH");
@@ -116,14 +116,14 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
     if (res.Has("vdisk-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("vdisk-file"), Config.AppConfig.MutableVDiskConfig()));
     }
-
+ 
     if (res.Has("drivemodel-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("drivemodel-file"), Config.AppConfig.MutableDriveModelConfig()));
     }
 
-    if (res.Has("kqp-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("kqp-file"), Config.AppConfig.MutableKQPConfig()));
-    }
+    if (res.Has("kqp-file")) { 
+        Y_VERIFY(ParsePBFromFile(res.Get("kqp-file"), Config.AppConfig.MutableKQPConfig())); 
+    } 
 
     if (res.Has("incrhuge-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("incrhuge-file"), Config.AppConfig.MutableIncrHugeConfig()));

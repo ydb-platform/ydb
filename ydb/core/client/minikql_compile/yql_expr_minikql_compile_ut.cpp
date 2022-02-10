@@ -45,21 +45,21 @@ namespace {
 
         auto resFuture = ConvertToMiniKQL(expr, services.FunctionRegistry.Get(),
             &services.TypeEnv, &services.DbSchemeResolver);
-        result = resFuture.GetValue(TIME_LIMIT);
-
-        if (!result.Node.GetNode()) {
-            return false;
-        }
-
-        // Cout << PrintNode(result.Node.GetNode()) << Endl;
-
-        return true;
-    }
-
+        result = resFuture.GetValue(TIME_LIMIT); 
+ 
+        if (!result.Node.GetNode()) { 
+            return false; 
+        } 
+ 
+        // Cout << PrintNode(result.Node.GetNode()) << Endl; 
+ 
+        return true; 
+    } 
+ 
     TRuntimeNode ProgramText2Bin(const TString& programText, TServices& services) {
-        TConvertResult res;
-        TryProgramText2Bin(programText, services, res);
-
+        TConvertResult res; 
+        TryProgramText2Bin(programText, services, res); 
+ 
         res.Errors.PrintTo(Cerr);
         UNIT_ASSERT(res.Node.GetNode());
         return res.Node;
@@ -69,7 +69,7 @@ namespace {
         using TColumn = IDbSchemeResolver::TTableResult::TColumn;
         IDbSchemeResolver::TTableResult table(IDbSchemeResolver::TTableResult::Ok);
         table.Table.TableName = "table1";
-        table.Table.ColumnNames = { "key", "value" };
+        table.Table.ColumnNames = { "key", "value" }; 
         table.TableId.Reset(new TTableId(1, 2));
         table.KeyColumnCount = 1;
         table.Columns.insert(std::make_pair("key", TColumn{ 34, 0, NUdf::TDataType<ui32>::Id, 0 }));
@@ -78,7 +78,7 @@ namespace {
 
         IDbSchemeResolver::TTableResult table2(IDbSchemeResolver::TTableResult::Ok);
         table2.Table.TableName = "table2";
-        table2.Table.ColumnNames = { "key", "value" };
+        table2.Table.ColumnNames = { "key", "value" }; 
         table2.TableId.Reset(new TTableId(10, 20));
         table2.KeyColumnCount = 1;
         table2.Columns.insert(std::make_pair("key", TColumn{ 340, 0, NUdf::TDataType<ui32>::Id, 0 }));
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
         TVector<IDbSchemeResolver::TTable> tablesToResolve;
         IDbSchemeResolver::TTable tableToResolve;
         tableToResolve.TableName = "table1";
-        tableToResolve.ColumnNames.insert("value");
+        tableToResolve.ColumnNames.insert("value"); 
         tablesToResolve.push_back(tableToResolve);
         auto resolveRes = services.DbSchemeResolver.ResolveTables(tablesToResolve);
         auto res = resolveRes.GetValue(TIME_LIMIT);
@@ -104,9 +104,9 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
         UNIT_ASSERT(res[0].TableId->HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT_EQUAL(res[0].KeyColumnCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(res[0].Columns.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(res[0].Columns["value"].Column, 56);
-        UNIT_ASSERT_VALUES_EQUAL(res[0].Columns["value"].KeyPosition, -1);
-        UNIT_ASSERT_VALUES_EQUAL(res[0].Columns["value"].AllowInplaceMode, (ui32)EInplaceUpdateMode::Min);
+        UNIT_ASSERT_VALUES_EQUAL(res[0].Columns["value"].Column, 56); 
+        UNIT_ASSERT_VALUES_EQUAL(res[0].Columns["value"].KeyPosition, -1); 
+        UNIT_ASSERT_VALUES_EQUAL(res[0].Columns["value"].AllowInplaceMode, (ui32)EInplaceUpdateMode::Min); 
         UNIT_ASSERT_VALUES_EQUAL(res[0].Columns["value"].Type, (ui32)NUdf::TDataType<char*>::Id);
     }
 
@@ -255,89 +255,89 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
         UNIT_ASSERT_VALUES_EQUAL(counters[TKeyDesc::ERowOperation::Read], 1);
         UNIT_ASSERT_VALUES_EQUAL(counters[TKeyDesc::ERowOperation::Update], 1);
     }
-
+ 
     Y_UNIT_TEST(AcquireLocks) {
-        auto programText = R"___(
-(
-(let row '('('key (Uint32 '23))))
-(let select '('value))
-(let pgmReturn (AsList
-    (SetResult 'myRes (Map (SelectRow 'table1 row select) (lambda '(x) (Member x 'value))))
-    (AcquireLocks (Uint64 '0))
-))
-(return pgmReturn)
-)
-)___";
-
-        TServices services;
-        RegisterSampleTables(services);
-        auto pgm = ProgramText2Bin(programText, services);
-        services.ExtractKeys(pgm);
-        UNIT_ASSERT_VALUES_EQUAL(services.DescList.size(), 1);
-        for (ui32 i = 0; i < services.DescList.size(); ++i) {
-            UNIT_ASSERT_EQUAL(services.DescList[i]->RowOperation, TKeyDesc::ERowOperation::Read);
-        }
-    }
-
+        auto programText = R"___( 
+( 
+(let row '('('key (Uint32 '23)))) 
+(let select '('value)) 
+(let pgmReturn (AsList 
+    (SetResult 'myRes (Map (SelectRow 'table1 row select) (lambda '(x) (Member x 'value)))) 
+    (AcquireLocks (Uint64 '0)) 
+)) 
+(return pgmReturn) 
+) 
+)___"; 
+ 
+        TServices services; 
+        RegisterSampleTables(services); 
+        auto pgm = ProgramText2Bin(programText, services); 
+        services.ExtractKeys(pgm); 
+        UNIT_ASSERT_VALUES_EQUAL(services.DescList.size(), 1); 
+        for (ui32 i = 0; i < services.DescList.size(); ++i) { 
+            UNIT_ASSERT_EQUAL(services.DescList[i]->RowOperation, TKeyDesc::ERowOperation::Read); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(StaticMapTypeOf) {
-        auto programText = R"___(
-(
-    (return (AsList
-        (SetResult 'x (StaticMap
-            (AsStruct
-                '('aaa (Just (Uint32 '17)))
+        auto programText = R"___( 
+( 
+    (return (AsList 
+        (SetResult 'x (StaticMap 
+            (AsStruct 
+                '('aaa (Just (Uint32 '17))) 
                 '('bbb (Nothing (OptionalType (DataType 'Utf8))))
-            )
-            (lambda '(field) (block '(
-                (return (Coalesce field (Default (OptionalItemType (TypeOf field)))))
-            )))
-        ))
-    ))
-)
-)___";
-
-        TServices services;
-        RegisterSampleTables(services);
-        auto pgm = ProgramText2Bin(programText, services);
-        services.ExtractKeys(pgm);
-        UNIT_ASSERT_VALUES_EQUAL(services.DescList.size(), 0);
-    }
-
+            ) 
+            (lambda '(field) (block '( 
+                (return (Coalesce field (Default (OptionalItemType (TypeOf field))))) 
+            ))) 
+        )) 
+    )) 
+) 
+)___"; 
+ 
+        TServices services; 
+        RegisterSampleTables(services); 
+        auto pgm = ProgramText2Bin(programText, services); 
+        services.ExtractKeys(pgm); 
+        UNIT_ASSERT_VALUES_EQUAL(services.DescList.size(), 0); 
+    } 
+ 
     Y_UNIT_TEST(SelectRangeAtomInRange) {
-        auto programText = R"___(
-(
-    (let range '('key (Void) 'Void))
-    (let rows (SelectRange 'table1 '(range) '() '()))
-    (return rows)
-)
-)___";
-
-        TServices services;
-        RegisterSampleTables(services);
-        TConvertResult result;
-        UNIT_ASSERT(!TryProgramText2Bin(programText, services, result));
-        UNIT_ASSERT(!result.Errors.Empty());
+        auto programText = R"___( 
+( 
+    (let range '('key (Void) 'Void)) 
+    (let rows (SelectRange 'table1 '(range) '() '())) 
+    (return rows) 
+) 
+)___"; 
+ 
+        TServices services; 
+        RegisterSampleTables(services); 
+        TConvertResult result; 
+        UNIT_ASSERT(!TryProgramText2Bin(programText, services, result)); 
+        UNIT_ASSERT(!result.Errors.Empty()); 
         UNIT_ASSERT_NO_DIFF(result.Errors.begin()->Message, "At function: SelectRange");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(Extract) {
-        auto programText = R"___(
-(
-(let range '('IncFrom 'ExcTo '('key (Uint32 '23) (Void))))
-(let select '('key 'value))
-(let options '('('ItemsLimit (Uint64 '2))))
-(let tupleList (AsList '((Uint32 '1) (Uint32 '2)) '((Uint32 '3) (Uint32 '4))))
-(let pgmReturn (AsList
-    (SetResult 'extractRes (Extract (Member (SelectRange 'table1 range select options) 'List) 'value))
-    (SetResult 'orderedRes (OrderedExtract tupleList '1))
-))
-(return pgmReturn)
-)
-)___";
-
-        TServices services;
-        RegisterSampleTables(services);
-        auto pgm = ProgramText2Bin(programText, services);
-    }
+        auto programText = R"___( 
+( 
+(let range '('IncFrom 'ExcTo '('key (Uint32 '23) (Void)))) 
+(let select '('key 'value)) 
+(let options '('('ItemsLimit (Uint64 '2)))) 
+(let tupleList (AsList '((Uint32 '1) (Uint32 '2)) '((Uint32 '3) (Uint32 '4)))) 
+(let pgmReturn (AsList 
+    (SetResult 'extractRes (Extract (Member (SelectRange 'table1 range select options) 'List) 'value)) 
+    (SetResult 'orderedRes (OrderedExtract tupleList '1)) 
+)) 
+(return pgmReturn) 
+) 
+)___"; 
+ 
+        TServices services; 
+        RegisterSampleTables(services); 
+        auto pgm = ProgramText2Bin(programText, services); 
+    } 
 }
 } // namespace NYql

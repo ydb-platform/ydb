@@ -23,22 +23,22 @@ message TableAccessStats {
 message QueryPhaseStats {
     uint64 duration_us = 1;
     repeated TableAccessStats table_access = 2;
-    uint64 cpu_time_us = 3;
+    uint64 cpu_time_us = 3; 
     uint64 affected_shards = 4;
     bool literal_phase = 5;
 }
 
-message CompilationStats {
-    bool from_cache = 1;
-    uint64 duration_us = 2;
-    uint64 cpu_time_us = 3;
-}
-
+message CompilationStats { 
+    bool from_cache = 1; 
+    uint64 duration_us = 2; 
+    uint64 cpu_time_us = 3; 
+} 
+ 
 message QueryStats {
     // A query might have one or more execution phases
     repeated QueryPhaseStats query_phases = 1;
-    CompilationStats compilation = 2;
-    uint64 process_cpu_time_us = 3;
+    CompilationStats compilation = 2; 
+    uint64 process_cpu_time_us = 3; 
     string query_plan = 4;
     string query_ast = 5;
     uint64 total_duration_us = 6;

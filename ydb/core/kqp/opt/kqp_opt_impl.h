@@ -1,14 +1,14 @@
-#pragma once
-
-#include "kqp_opt.h"
-
+#pragma once 
+ 
+#include "kqp_opt.h" 
+ 
 #include <ydb/core/kqp/common/kqp_yql.h>
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 
-namespace NKikimr::NKqp::NOpt {
-
+namespace NKikimr::NKqp::NOpt { 
+ 
 static inline void DumpAppliedRule(const TString& name, const NYql::TExprNode::TPtr& input,
     const NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx)
 {
@@ -30,26 +30,26 @@ static inline void DumpAppliedRule(const TString& name, const NYql::TExprNode::T
 #endif
 }
 
-bool IsKqpPureLambda(const NYql::NNodes::TCoLambda& lambda);
+bool IsKqpPureLambda(const NYql::NNodes::TCoLambda& lambda); 
+ 
+const NYql::TKikimrTableDescription& GetTableData(const NYql::TKikimrTablesData& tablesData, 
+    TStringBuf cluster, TStringBuf table); 
+ 
+NYql::NNodes::TExprBase ProjectColumns(const NYql::NNodes::TExprBase& input, const TVector<TString>& columnNames, 
+    NYql::TExprContext& ctx); 
+NYql::NNodes::TExprBase ProjectColumns(const NYql::NNodes::TExprBase& input, const THashSet<TStringBuf>& columnNames, 
+    NYql::TExprContext& ctx); 
 
-const NYql::TKikimrTableDescription& GetTableData(const NYql::TKikimrTablesData& tablesData,
-    TStringBuf cluster, TStringBuf table);
+NYql::NNodes::TKqpTable BuildTableMeta(const NYql::TKikimrTableDescription& tableDesc, 
+    const NYql::TPositionHandle& pos, NYql::TExprContext& ctx); 
+NYql::NNodes::TKqpTable BuildTableMeta(const NYql::TKikimrTableMetadata& tableMeta, 
+    const NYql::TPositionHandle& pos, NYql::TExprContext& ctx); 
 
-NYql::NNodes::TExprBase ProjectColumns(const NYql::NNodes::TExprBase& input, const TVector<TString>& columnNames,
-    NYql::TExprContext& ctx);
-NYql::NNodes::TExprBase ProjectColumns(const NYql::NNodes::TExprBase& input, const THashSet<TStringBuf>& columnNames,
-    NYql::TExprContext& ctx);
-
-NYql::NNodes::TKqpTable BuildTableMeta(const NYql::TKikimrTableDescription& tableDesc,
-    const NYql::TPositionHandle& pos, NYql::TExprContext& ctx);
-NYql::NNodes::TKqpTable BuildTableMeta(const NYql::TKikimrTableMetadata& tableMeta,
-    const NYql::TPositionHandle& pos, NYql::TExprContext& ctx);
-
-NYql::NNodes::TExprBase KqpBuildJoin(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
-    const TKqpOptimizeContext& kqpCtx, NYql::IOptimizationContext& optCtx, const NYql::TParentsMap& parentsMap,
-    bool allowStageMultiUsage);
+NYql::NNodes::TExprBase KqpBuildJoin(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, 
+    const TKqpOptimizeContext& kqpCtx, NYql::IOptimizationContext& optCtx, const NYql::TParentsMap& parentsMap, 
+    bool allowStageMultiUsage); 
 
 TIntrusivePtr<NYql::TKikimrTableMetadata> GetIndexMetadata(const NYql::NNodes::TKqlReadTableIndex& index,
     const NYql::TKikimrTablesData& tables, TStringBuf cluster);
 
-} // namespace NKikimr::NKqp::NOpt
+} // namespace NKikimr::NKqp::NOpt 

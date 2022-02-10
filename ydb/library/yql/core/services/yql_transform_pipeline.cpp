@@ -1,7 +1,7 @@
-#include "yql_transform_pipeline.h"
+#include "yql_transform_pipeline.h" 
 #include "yql_eval_expr.h"
 #include "yql_eval_params.h"
-
+ 
 #include <ydb/library/yql/core/type_ann/type_ann_core.h>
 #include <ydb/library/yql/core/type_ann/type_ann_expr.h>
 #include <ydb/library/yql/core/yql_execution.h>
@@ -13,24 +13,24 @@
 #include <ydb/library/yql/core/common_opt/yql_co_transformer.h>
 #include <ydb/library/yql/core/yql_opt_proposed_by_data.h>
 #include <ydb/library/yql/core/yql_opt_rewrite_io.h>
-
+ 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 
-namespace NYql {
-
+namespace NYql { 
+ 
 TTransformationPipeline::TTransformationPipeline(TIntrusivePtr<TTypeAnnotationContext> ctx)
-    : TypeAnnotationContext_(ctx)
+    : TypeAnnotationContext_(ctx) 
 {}
-
-TTransformationPipeline& TTransformationPipeline::Add(TAutoPtr<IGraphTransformer> transformer, const TString& stageName,
+ 
+TTransformationPipeline& TTransformationPipeline::Add(TAutoPtr<IGraphTransformer> transformer, const TString& stageName, 
     EYqlIssueCode issueCode, const TString& issueMessage)
-{
-    if (transformer) {
+{ 
+    if (transformer) { 
         Transformers_.push_back(TTransformStage(transformer, stageName, issueCode, issueMessage));
-    }
-    return *this;
-}
-
+    } 
+    return *this; 
+} 
+ 
 TTransformationPipeline& TTransformationPipeline::Add(IGraphTransformer& transformer, const TString& stageName,
     EYqlIssueCode issueCode, const TString& issueMessage)
 {
@@ -39,10 +39,10 @@ TTransformationPipeline& TTransformationPipeline::Add(IGraphTransformer& transfo
 }
 
 TTransformationPipeline& TTransformationPipeline::AddServiceTransformers(EYqlIssueCode issueCode) {
-    Transformers_.push_back(TTransformStage(CreateGcNodeTransformer(), "GC", issueCode));
-    return *this;
-}
-
+    Transformers_.push_back(TTransformStage(CreateGcNodeTransformer(), "GC", issueCode)); 
+    return *this; 
+} 
+ 
 TTransformationPipeline& TTransformationPipeline::AddParametersEvaluation(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry, EYqlIssueCode issueCode) {
     auto& typeCtx = *TypeAnnotationContext_;
     Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
@@ -67,50 +67,50 @@ TTransformationPipeline& TTransformationPipeline::AddExpressionEvaluation(const 
 
 TTransformationPipeline& TTransformationPipeline::AddPreTypeAnnotation(EYqlIssueCode issueCode) {
     auto& typeCtx = *TypeAnnotationContext_;
-    Transformers_.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApply), "ExpandApply",
+    Transformers_.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApply), "ExpandApply", 
         issueCode));
-    Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
+    Transformers_.push_back(TTransformStage(CreateFunctorTransformer( 
         [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             return ValidateProviders(input, output, ctx, typeCtx);
-        }), "ValidateProviders", issueCode));
-
-    Transformers_.push_back(TTransformStage(
-        CreateConfigureTransformer(*TypeAnnotationContext_), "Configure", issueCode));
+        }), "ValidateProviders", issueCode)); 
+ 
+    Transformers_.push_back(TTransformStage( 
+        CreateConfigureTransformer(*TypeAnnotationContext_), "Configure", issueCode)); 
 
     return *this;
 }
 
 TTransformationPipeline& TTransformationPipeline::AddPreIOAnnotation(EYqlIssueCode issueCode) {
-    Transformers_.push_back(TTransformStage(
-        CreateIODiscoveryTransformer(*TypeAnnotationContext_), "IODiscovery", issueCode));
+    Transformers_.push_back(TTransformStage( 
+        CreateIODiscoveryTransformer(*TypeAnnotationContext_), "IODiscovery", issueCode)); 
     Transformers_.push_back(TTransformStage(
         CreateEpochsTransformer(*TypeAnnotationContext_), "Epochs", issueCode));
-    AddIntentDeterminationTransformer();
+    AddIntentDeterminationTransformer(); 
 
     return *this;
 }
 
 TTransformationPipeline& TTransformationPipeline::AddIOAnnotation(EYqlIssueCode issueCode) {
     AddPreIOAnnotation(issueCode);
-    AddTableMetadataLoaderTransformer();
-
+    AddTableMetadataLoaderTransformer(); 
+ 
     auto& typeCtx = *TypeAnnotationContext_;
-    Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
+    Transformers_.push_back(TTransformStage(CreateFunctorTransformer( 
         [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-            return RewriteIO(input, output, typeCtx, ctx);
-        }), "RewriteIO", issueCode));
-
+            return RewriteIO(input, output, typeCtx, ctx); 
+        }), "RewriteIO", issueCode)); 
+ 
     return *this;
 }
 
 TTransformationPipeline& TTransformationPipeline::AddTypeAnnotation(EYqlIssueCode issueCode) {
-    AddTypeAnnotationTransformer();
-    Transformers_.push_back(TTransformStage(
-        CreateFunctorTransformer(&CheckWholeProgramType),
-        "CheckWholeProgramType", issueCode));
-    return *this;
-}
-
+    AddTypeAnnotationTransformer(); 
+    Transformers_.push_back(TTransformStage( 
+        CreateFunctorTransformer(&CheckWholeProgramType), 
+        "CheckWholeProgramType", issueCode)); 
+    return *this; 
+} 
+ 
 TTransformationPipeline& TTransformationPipeline::AddPostTypeAnnotation(bool forSubGraph, EYqlIssueCode issueCode) {
     Transformers_.push_back(TTransformStage(
         CreateConstraintTransformer(*TypeAnnotationContext_, false, forSubGraph), "Constraints", issueCode));
@@ -135,13 +135,13 @@ TTransformationPipeline& TTransformationPipeline::AddPostTypeAnnotation(bool for
 }
 
 TTransformationPipeline& TTransformationPipeline::AddCommonOptimization(EYqlIssueCode issueCode) {
-    // auto instantCallableTransformer =
+    // auto instantCallableTransformer = 
     //    CreateExtCallableTypeAnnotationTransformer(*TypeAnnotationContext_, true);
     // TypeAnnotationContext_->CustomInstantTypeTransformer =
     //     CreateTypeAnnotationTransformer(instantCallableTransformer, *TypeAnnotationContext_);
-    Transformers_.push_back(TTransformStage(
-        CreateCommonOptTransformer(TypeAnnotationContext_.Get()),
-        "CommonOptimization",
+    Transformers_.push_back(TTransformStage( 
+        CreateCommonOptTransformer(TypeAnnotationContext_.Get()), 
+        "CommonOptimization", 
         issueCode));
     return *this;
 }
@@ -156,21 +156,21 @@ TTransformationPipeline& TTransformationPipeline::AddFinalCommonOptimization(EYq
 
 TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode) {
     AddCommonOptimization(issueCode);
-    Transformers_.push_back(TTransformStage(
+    Transformers_.push_back(TTransformStage( 
         CreateRecaptureDataProposalsInspector(*TypeAnnotationContext_, TString{DqProviderName}),
         "RecaptureDataProposals",
         issueCode));
     Transformers_.push_back(TTransformStage(
         CreateLogicalDataProposalsInspector(*TypeAnnotationContext_),
-        "LogicalDataProposals",
+        "LogicalDataProposals", 
         issueCode));
-    Transformers_.push_back(TTransformStage(
+    Transformers_.push_back(TTransformStage( 
         CreatePhysicalDataProposalsInspector(*TypeAnnotationContext_),
-        "PhysicalDataProposals",
+        "PhysicalDataProposals", 
         issueCode));
-    Transformers_.push_back(TTransformStage(
+    Transformers_.push_back(TTransformStage( 
         CreatePhysicalFinalizers(*TypeAnnotationContext_),
-        "PhysicalFinalizers",
+        "PhysicalFinalizers", 
         issueCode));
     if (withFinalOptimization) {
         AddFinalCommonOptimization(issueCode);
@@ -180,57 +180,57 @@ TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorl
 }
 
 TTransformationPipeline& TTransformationPipeline::AddCheckExecution(bool checkWorld, EYqlIssueCode issueCode) {
-    Transformers_.push_back(TTransformStage(
+    Transformers_.push_back(TTransformStage( 
         CreateCheckExecutionTransformer(*TypeAnnotationContext_, checkWorld),
-        "CheckExecution",
+        "CheckExecution", 
         issueCode));
-    return *this;
-}
-
+    return *this; 
+} 
+ 
 TTransformationPipeline& TTransformationPipeline::AddRun(TOperationProgressWriter writer, EYqlIssueCode issueCode) {
-    Transformers_.push_back(TTransformStage(
+    Transformers_.push_back(TTransformStage( 
         CreateExecutionTransformer(*TypeAnnotationContext_, writer),
-        "Execution",
+        "Execution", 
         issueCode));
-    return *this;
-}
-
+    return *this; 
+} 
+ 
 TTransformationPipeline& TTransformationPipeline::AddIntentDeterminationTransformer(EYqlIssueCode issueCode) {
-    Transformers_.push_back(TTransformStage(
+    Transformers_.push_back(TTransformStage( 
         CreateIntentDeterminationTransformer(*TypeAnnotationContext_),
-        "IntentDetermination",
+        "IntentDetermination", 
         issueCode));
-    return *this;
-}
-
+    return *this; 
+} 
+ 
 TTransformationPipeline& TTransformationPipeline::AddTableMetadataLoaderTransformer(EYqlIssueCode issueCode) {
-    Transformers_.push_back(TTransformStage(
+    Transformers_.push_back(TTransformStage( 
         CreateTableMetadataLoader(*TypeAnnotationContext_),
-        "TableMetadataLoader",
+        "TableMetadataLoader", 
         issueCode));
-    return *this;
-}
-
-TTransformationPipeline& TTransformationPipeline::AddTypeAnnotationTransformer(
+    return *this; 
+} 
+ 
+TTransformationPipeline& TTransformationPipeline::AddTypeAnnotationTransformer( 
     TAutoPtr<IGraphTransformer> callableTransformer, EYqlIssueCode issueCode)
-{
-    Transformers_.push_back(TTransformStage(
+{ 
+    Transformers_.push_back(TTransformStage( 
         CreateTypeAnnotationTransformer(callableTransformer, *TypeAnnotationContext_),
-        "TypeAnnotation",
+        "TypeAnnotation", 
         issueCode));
-    return *this;
-}
-
+    return *this; 
+} 
+ 
 TTransformationPipeline& TTransformationPipeline::AddTypeAnnotationTransformer(EYqlIssueCode issueCode)
-{
+{ 
     auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(*TypeAnnotationContext_);
     return AddTypeAnnotationTransformer(callableTransformer, issueCode);
-}
-
+} 
+ 
 TAutoPtr<IGraphTransformer> TTransformationPipeline::Build(bool useIssueScopes) {
     return CreateCompositeGraphTransformer(Transformers_, useIssueScopes);
-}
-
+} 
+ 
 TAutoPtr<IGraphTransformer> TTransformationPipeline::BuildWithNoArgChecks(bool useIssueScopes) {
     return CreateCompositeGraphTransformerWithNoArgChecks(Transformers_, useIssueScopes);
 }
@@ -240,4 +240,4 @@ TIntrusivePtr<TTypeAnnotationContext> TTransformationPipeline::GetTypeAnnotation
 }
 
 
-} // namespace NYql
+} // namespace NYql 

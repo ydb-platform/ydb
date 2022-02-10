@@ -19,7 +19,7 @@ public:
     using TPrerequisite = std::function<TStatus(const TExprNode::TPtr&)>;
     using THandler = std::function<TStatusCallbackPair(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)>;
 
-    TStatusCallbackPair CallbackTransform(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
+    TStatusCallbackPair CallbackTransform(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx); 
 
     bool CanExec(const TExprNode& node) const {
         return Handlers.contains(node.Content());

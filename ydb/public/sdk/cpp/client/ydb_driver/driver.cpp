@@ -12,7 +12,7 @@
 #include <util/stream/file.h>
 #include <ydb/public/sdk/cpp/client/resources/ydb_ca.h>
 
-namespace NYdb {
+namespace NYdb { 
 
 using NGrpc::TGRpcClientLow;
 using NGrpc::TServiceConnection;
@@ -22,11 +22,11 @@ using NGrpc::TResponseCallback;
 using NGrpc::TGrpcStatus;
 using NGrpc::TTcpKeepAliveSettings;
 
-using Ydb::StatusIds;
+using Ydb::StatusIds; 
 
 using namespace NThreading;
 
-class TDriverConfig::TImpl : public IConnectionsParams {
+class TDriverConfig::TImpl : public IConnectionsParams { 
 public:
     TStringType GetEndpoint() const override { return Endpoint; }
     size_t GetNetworkThreadsNum() const override { return NetworkThreadsNum; }
@@ -88,12 +88,12 @@ TDriverConfig& TDriverConfig::SetEndpoint(const TStringType& endpoint) {
     return *this;
 }
 
-TDriverConfig& TDriverConfig::SetNetworkThreadsNum(size_t sz) {
+TDriverConfig& TDriverConfig::SetNetworkThreadsNum(size_t sz) { 
     Impl_->NetworkThreadsNum = sz;
     return *this;
 }
 
-TDriverConfig& TDriverConfig::SetClientThreadsNum(size_t sz) {
+TDriverConfig& TDriverConfig::SetClientThreadsNum(size_t sz) { 
     Impl_->ClientThreadsNum = sz;
     return *this;
 }
@@ -124,12 +124,12 @@ TDriverConfig& TDriverConfig::SetCredentialsProviderFactory(std::shared_ptr<ICre
     return *this;
 }
 
-TDriverConfig& TDriverConfig::SetDiscoveryMode(EDiscoveryMode discoveryMode) {
+TDriverConfig& TDriverConfig::SetDiscoveryMode(EDiscoveryMode discoveryMode) { 
     Impl_->DiscoveryMode = discoveryMode;
     return *this;
 }
 
-TDriverConfig& TDriverConfig::SetMaxQueuedRequests(size_t sz) {
+TDriverConfig& TDriverConfig::SetMaxQueuedRequests(size_t sz) { 
     Impl_->MaxQueuedRequests = sz;
     return *this;
 }
@@ -185,16 +185,16 @@ std::shared_ptr<TGRpcConnectionsImpl> CreateInternalInterface(const TDriver conn
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDriver::TDriver(const TDriverConfig& config) {
-    if (!config.Impl_) {
-        ythrow yexception() << "Invalid config object";
+TDriver::TDriver(const TDriverConfig& config) { 
+    if (!config.Impl_) { 
+        ythrow yexception() << "Invalid config object"; 
     }
-
-    Impl_.reset(new TGRpcConnectionsImpl(config.Impl_));
+ 
+    Impl_.reset(new TGRpcConnectionsImpl(config.Impl_)); 
 }
 
 void TDriver::Stop(bool wait) {
     Impl_->Stop(wait);
 }
 
-} // namespace NYdb
+} // namespace NYdb 

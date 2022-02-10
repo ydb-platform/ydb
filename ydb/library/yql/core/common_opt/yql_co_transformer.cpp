@@ -17,15 +17,15 @@
 namespace NYql {
 namespace {
 
-class TCommonOptTransformer final : public TSyncTransformerBase {
+class TCommonOptTransformer final : public TSyncTransformerBase { 
 public:
     TCommonOptTransformer(TTypeAnnotationContext* typeCtx, bool final)
         : TypeCtx(typeCtx)
         , Final(final)
     {}
 
-    IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
-    void Rewind() final;
+    IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final; 
+    void Rewind() final; 
 private:
     IGraphTransformer::TStatus DoTransform(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx,
         const TCallableOptimizerMap& callables, TProcessedNodesSet& processedNodes,
@@ -38,13 +38,13 @@ private:
     TProcessedNodesSet SimpleProcessedNodes[TCoCallableRules::SIMPLE_STEPS];
     TProcessedNodesSet FlowProcessedNodes[TCoCallableRules::FLOW_STEPS];
     TProcessedNodesSet FinalProcessedNodes;
-    TTypeAnnotationContext* TypeCtx;
+    TTypeAnnotationContext* TypeCtx; 
     const bool Final;
 };
 
 }
 
-TAutoPtr<IGraphTransformer> CreateCommonOptTransformer(TTypeAnnotationContext* typeCtx) {
+TAutoPtr<IGraphTransformer> CreateCommonOptTransformer(TTypeAnnotationContext* typeCtx) { 
     return new TCommonOptTransformer(typeCtx, false);
 }
 
@@ -82,24 +82,24 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(TExprNode::TPtr in
     return status;
 }
 
-void TCommonOptTransformer::Rewind() {
-    FinalProcessedNodes.clear();
-
-    for (auto& set : FlowProcessedNodes) {
-        set.clear();
-    }
-
-    for (auto& set : SimpleProcessedNodes) {
-        set.clear();
-    }
-}
-
+void TCommonOptTransformer::Rewind() { 
+    FinalProcessedNodes.clear(); 
+ 
+    for (auto& set : FlowProcessedNodes) { 
+        set.clear(); 
+    } 
+ 
+    for (auto& set : SimpleProcessedNodes) { 
+        set.clear(); 
+    } 
+} 
+ 
 IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx,
     const TCallableOptimizerMap& callables,
     TProcessedNodesSet& processedNodes, bool withParents)
 {
-    TOptimizeExprSettings settings(TypeCtx);
+    TOptimizeExprSettings settings(TypeCtx); 
     settings.ProcessedNodes = &processedNodes;
     settings.CustomInstantTypeTransformer = TypeCtx->CustomInstantTypeTransformer.Get();
     TParentsMap parentsMap;
@@ -157,7 +157,7 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(const TExprNode::T
     );
 
     if (!toOptimize.empty()) {
-        TOptimizeExprSettings settings(TypeCtx);
+        TOptimizeExprSettings settings(TypeCtx); 
         settings.VisitTuples = true;
         settings.CustomInstantTypeTransformer = TypeCtx->CustomInstantTypeTransformer.Get();
         return RemapExpr(input, output, toOptimize, ctx, settings);

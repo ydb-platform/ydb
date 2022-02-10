@@ -158,9 +158,9 @@ public:
 
     ui64 GetLockId() const { return LockId; }
 
-    TInstant GetCreationTime() const { return CreationTime; }
+    TInstant GetCreationTime() const { return CreationTime; } 
     const THashSet<TPathId>& GetAffectedTables() const { return AffectedTables; }
-
+ 
     const TVector<TPointKey>& GetPoints() const { return Points; }
     const TVector<TRangeKey>& GetRanges() const { return Ranges; }
 

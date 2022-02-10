@@ -89,7 +89,7 @@ private:
                         "Not allowing requests with an empty KesusPath");
                     Send(ev->Sender,
                         new TEvKesusProxy::TEvProxyError(
-                            Ydb::StatusIds::BAD_REQUEST,
+                            Ydb::StatusIds::BAD_REQUEST, 
                             "KesusPath cannot be empty"),
                         0, ev->Cookie);
                     Cache.erase(msg->KesusPath);
@@ -134,7 +134,7 @@ private:
                     LOG_DEBUG_S(ctx, NKikimrServices::KESUS_PROXY,
                         "Received an OK result for " << msg->KesusPath.Quote()
                         << " without KesusInfo: not found");
-                    entry.LastError.SetStatus(Ydb::StatusIds::NOT_FOUND);
+                    entry.LastError.SetStatus(Ydb::StatusIds::NOT_FOUND); 
                     entry.LastError.AddIssues()->set_message("Kesus not found");
                     break;
                 }
@@ -148,7 +148,7 @@ private:
                     entry.LastError.AddIssues()->set_message("Kesus not found");
                     break;
                 }
-                entry.LastError.SetStatus(Ydb::StatusIds::SUCCESS);
+                entry.LastError.SetStatus(Ydb::StatusIds::SUCCESS); 
                 entry.SecurityObject = result.SecurityObject;
                 if (entry.ProxyActor && entry.TabletId != tabletId) {
                     // Kill the old proxy
@@ -175,17 +175,17 @@ private:
                 LOG_TRACE_S(ctx, NKikimrServices::KESUS_PROXY,
                     "Resolve did not find path " << msg->KesusPath.Quote()
                     << ": " << result.Status);
-                entry.LastError.SetStatus(Ydb::StatusIds::NOT_FOUND);
+                entry.LastError.SetStatus(Ydb::StatusIds::NOT_FOUND); 
                 entry.LastError.AddIssues()->set_message("Kesus not found");
                 break;
             default:
                 LOG_ERROR_S(ctx, NKikimrServices::KESUS_PROXY,
                     "Kesus resolve failed: " << result.Status);
-                entry.LastError.SetStatus(Ydb::StatusIds::INTERNAL_ERROR);
+                entry.LastError.SetStatus(Ydb::StatusIds::INTERNAL_ERROR); 
                 entry.LastError.AddIssues()->set_message(ToString(result.Status));
                 break;
         }
-        if (entry.ProxyActor && entry.LastError.GetStatus() != Ydb::StatusIds::SUCCESS) {
+        if (entry.ProxyActor && entry.LastError.GetStatus() != Ydb::StatusIds::SUCCESS) { 
             // Entry expired, kill the proxy
             LOG_INFO_S(ctx, NKikimrServices::KESUS_PROXY,
                 "Destroying kesus proxy for path " << msg->KesusPath.Quote());
@@ -193,7 +193,7 @@ private:
             entry.ProxyActor = {};
         }
         for (const auto& subscriber : entry.ResolveSubscribers) {
-            if (entry.LastError.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            if (entry.LastError.GetStatus() != Ydb::StatusIds::SUCCESS) { 
                 Send(subscriber.Sender,
                     new TEvKesusProxy::TEvProxyError(entry.LastError),
                     0, subscriber.Cookie);

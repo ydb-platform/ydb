@@ -1,14 +1,14 @@
-#include "yql_kikimr_provider_impl.h"
+#include "yql_kikimr_provider_impl.h" 
 #include "kqp_opt_helpers.h"
-
+ 
 #include <ydb/library/yql/core/yql_opt_utils.h>
-
-namespace NYql {
-namespace {
-
-using namespace NNodes;
+ 
+namespace NYql { 
+namespace { 
+ 
+using namespace NNodes; 
 using namespace NKikimr::NKqp;
-
+ 
 TCoNameValueTupleList CreateSecondaryIndexKeyTuples(TCoArgument itemArg, const TVector<TString>& keyColumnNames,
     const THashSet<TStringBuf>& inputColumns, const TKikimrTableDescription& table,
     const TExprBase& fetch, bool nullExtension, TExprContext& ctx)
@@ -234,57 +234,57 @@ TExprBase CreateUpdateRowWithSecondaryIndex(
         .Done();
 }
 
-TExprNode::TPtr KiUpsertTableToKql(const TKiWriteTable& node, TExprContext& ctx, const TKikimrTableDescription& table,
+TExprNode::TPtr KiUpsertTableToKql(const TKiWriteTable& node, TExprContext& ctx, const TKikimrTableDescription& table, 
     bool replace, bool skipErase, TExprNode::TPtr& effect)
-{
-    auto itemArg = Build<TCoArgument>(ctx, node.Pos())
-        .Name("item")
-        .Done();
-
-    auto inputColumnsSetting = GetSetting(node.Settings().Ref(), "input_columns");
-    YQL_ENSURE(inputColumnsSetting);
-
-    THashSet<TStringBuf> inputColumns;
-    for (const auto& atom : TCoNameValueTuple(inputColumnsSetting).Value().Cast<TCoAtomList>()) {
-        inputColumns.insert(atom.Value());
-    }
-
+{ 
+    auto itemArg = Build<TCoArgument>(ctx, node.Pos()) 
+        .Name("item") 
+        .Done(); 
+ 
+    auto inputColumnsSetting = GetSetting(node.Settings().Ref(), "input_columns"); 
+    YQL_ENSURE(inputColumnsSetting); 
+ 
+    THashSet<TStringBuf> inputColumns; 
+    for (const auto& atom : TCoNameValueTuple(inputColumnsSetting).Value().Cast<TCoAtomList>()) { 
+        inputColumns.insert(atom.Value()); 
+    } 
+ 
     const auto& secondaryIndexes = BuildSecondaryIndexVector(table, node.Pos(), ctx);
 
-    TVector<TCoNameValueTuple> valueTuples;
+    TVector<TCoNameValueTuple> valueTuples; 
 
     const auto versionedTable = BuildVersionedTable(*table.Metadata, node.Pos(), ctx);
     YQL_ENSURE(versionedTable.Path() == node.Table());
 
-    for (auto& pair : table.Metadata->Columns) {
-        const TString& name = pair.first;
-
-        if (table.GetKeyColumnIndex(name)) {
-            continue;
-        }
-
-        if (inputColumns.contains(name)) {
-            auto tuple = Build<TCoNameValueTuple>(ctx, node.Pos())
-                .Name().Build(name)
-                .Value<TCoMember>()
-                    .Struct(itemArg)
-                    .Name().Build(name)
-                    .Build()
-                .Done();
-            valueTuples.push_back(tuple);
-        } else if (replace) {
-            auto type = table.GetColumnType(name);
+    for (auto& pair : table.Metadata->Columns) { 
+        const TString& name = pair.first; 
+ 
+        if (table.GetKeyColumnIndex(name)) { 
+            continue; 
+        } 
+ 
+        if (inputColumns.contains(name)) { 
+            auto tuple = Build<TCoNameValueTuple>(ctx, node.Pos()) 
+                .Name().Build(name) 
+                .Value<TCoMember>() 
+                    .Struct(itemArg) 
+                    .Name().Build(name) 
+                    .Build() 
+                .Done(); 
+            valueTuples.push_back(tuple); 
+        } else if (replace) { 
+            auto type = table.GetColumnType(name); 
             YQL_ENSURE(type, "No such column: " << name);
-            auto tuple = Build<TCoNameValueTuple>(ctx, node.Pos())
-                .Name().Build(name)
-                .Value<TCoNothing>()
-                    .OptionalType(NCommon::BuildTypeExpr(node.Pos(), *type, ctx))
-                    .Build()
-                .Done();
-            valueTuples.push_back(tuple);
-        }
-    }
-
+            auto tuple = Build<TCoNameValueTuple>(ctx, node.Pos()) 
+                .Name().Build(name) 
+                .Value<TCoNothing>() 
+                    .OptionalType(NCommon::BuildTypeExpr(node.Pos(), *type, ctx)) 
+                    .Build() 
+                .Done(); 
+            valueTuples.push_back(tuple); 
+        } 
+    } 
+ 
     const auto& tablePk = ExtractNamedKeyTuples(itemArg, table, ctx);
 
     // Update for main table
@@ -294,9 +294,9 @@ TExprNode::TPtr KiUpsertTableToKql(const TKiWriteTable& node, TExprContext& ctx,
         .Key(tablePk)
         .Update<TCoNameValueTupleList>()
             .Add(valueTuples)
-            .Build()
-        .Done();
-
+            .Build() 
+        .Done(); 
+ 
     const auto& input = (skipErase || secondaryIndexes.empty()) ? node.Input() : RemoveDuplicateKeyFromInput(node.Input(), table, node.Pos(), ctx);
 
     effect = Build<TCoFlatMap>(ctx, node.Pos())
@@ -318,110 +318,110 @@ TExprNode::TPtr KiUpsertTableToKql(const TKiWriteTable& node, TExprContext& ctx,
                 .Build()
             .Done()
             .Ptr();
-
-    return Build<TCoWorld>(ctx, node.Pos())
-        .Done()
-        .Ptr();
-}
-
-TExprNode::TPtr KiInsertTableToKql(const TKiWriteTable& node, TExprContext& ctx, const TKikimrTableDescription& table,
+ 
+    return Build<TCoWorld>(ctx, node.Pos()) 
+        .Done() 
+        .Ptr(); 
+} 
+ 
+TExprNode::TPtr KiInsertTableToKql(const TKiWriteTable& node, TExprContext& ctx, const TKikimrTableDescription& table, 
     const TYdbOperation& op, TExprNode::TPtr& effect)
-{
-    auto fetchItemArg = Build<TCoArgument>(ctx, node.Pos())
-        .Name("fetchItem")
-        .Done();
-
+{ 
+    auto fetchItemArg = Build<TCoArgument>(ctx, node.Pos()) 
+        .Name("fetchItem") 
+        .Done(); 
+ 
     const auto versionedTable = BuildVersionedTable(*table.Metadata, node.Pos(), ctx);
     YQL_ENSURE(versionedTable.Path() == node.Table());
 
-    auto fetchLambda = Build<TCoLambda>(ctx, node.Pos())
-        .Args(fetchItemArg)
-        .Body<TKiSelectRow>()
-            .Cluster(node.DataSink().Cluster())
+    auto fetchLambda = Build<TCoLambda>(ctx, node.Pos()) 
+        .Args(fetchItemArg) 
+        .Body<TKiSelectRow>() 
+            .Cluster(node.DataSink().Cluster()) 
             .Table(versionedTable)
-            .Key(ExtractNamedKeyTuples(fetchItemArg, table, ctx))
-            .Select()
-                .Build()
-            .Build()
-        .Done();
-
-    auto getKeyListItemArg = Build<TCoArgument>(ctx, node.Pos())
-        .Name("getKeyListItem")
-        .Done();
-
-    auto keyList = Build<TCoMap>(ctx, node.Pos())
-        .Input(node.Input())
-        .Lambda()
-            .Args(getKeyListItemArg)
-            .Body(ExtractKeys(getKeyListItemArg, table, ctx))
-            .Build()
-        .Done();
-
-    auto duplicatesPredicate = Build<TCoCmpNotEqual>(ctx, node.Pos())
-        .Left<TCoLength>()
-            .List(keyList)
-            .Build()
-        .Right<TCoLength>()
-            .List<TCoToDict>()
-                .List(keyList)
-                .KeySelector()
-                    .Args({"item"})
-                    .Body("item")
-                    .Build()
-                .PayloadSelector()
-                    .Args({"item"})
-                    .Body<TCoVoid>().Build()
-                    .Build()
-                .Settings()
-                    .Add().Build("One")
-                    .Add().Build("Hashed")
-                    .Build()
-                .Build()
-            .Build()
-        .Done();
-
-    auto fetchPredicate = Build<TCoHasItems>(ctx, node.Pos())
-        .List<TCoFlatMap>()
-            .Input(node.Input())
-            .Lambda(fetchLambda)
-            .Build()
-        .Done();
-
-    auto predicate = Build<TCoOr>(ctx, node.Pos())
+            .Key(ExtractNamedKeyTuples(fetchItemArg, table, ctx)) 
+            .Select() 
+                .Build() 
+            .Build() 
+        .Done(); 
+ 
+    auto getKeyListItemArg = Build<TCoArgument>(ctx, node.Pos()) 
+        .Name("getKeyListItem") 
+        .Done(); 
+ 
+    auto keyList = Build<TCoMap>(ctx, node.Pos()) 
+        .Input(node.Input()) 
+        .Lambda() 
+            .Args(getKeyListItemArg) 
+            .Body(ExtractKeys(getKeyListItemArg, table, ctx)) 
+            .Build() 
+        .Done(); 
+ 
+    auto duplicatesPredicate = Build<TCoCmpNotEqual>(ctx, node.Pos()) 
+        .Left<TCoLength>() 
+            .List(keyList) 
+            .Build() 
+        .Right<TCoLength>() 
+            .List<TCoToDict>() 
+                .List(keyList) 
+                .KeySelector() 
+                    .Args({"item"}) 
+                    .Body("item") 
+                    .Build() 
+                .PayloadSelector() 
+                    .Args({"item"}) 
+                    .Body<TCoVoid>().Build() 
+                    .Build() 
+                .Settings() 
+                    .Add().Build("One") 
+                    .Add().Build("Hashed") 
+                    .Build() 
+                .Build() 
+            .Build() 
+        .Done(); 
+ 
+    auto fetchPredicate = Build<TCoHasItems>(ctx, node.Pos()) 
+        .List<TCoFlatMap>() 
+            .Input(node.Input()) 
+            .Lambda(fetchLambda) 
+            .Build() 
+        .Done(); 
+ 
+    auto predicate = Build<TCoOr>(ctx, node.Pos()) 
         .Add({duplicatesPredicate, fetchPredicate})
-        .Done();
-
-    TExprNode::TPtr insertEffect;
+        .Done(); 
+ 
+    TExprNode::TPtr insertEffect; 
     auto insertKql = KiUpsertTableToKql(node, ctx, table, false, true, insertEffect);
-
+ 
     if (op == TYdbOperation::InsertAbort) {
-        effect = Build<TKiAbortIf>(ctx, node.Pos())
-            .Predicate(predicate)
-            .Effect(insertEffect)
-            .Constraint().Build("insert_pk")
-            .Done()
-            .Ptr();
+        effect = Build<TKiAbortIf>(ctx, node.Pos()) 
+            .Predicate(predicate) 
+            .Effect(insertEffect) 
+            .Constraint().Build("insert_pk") 
+            .Done() 
+            .Ptr(); 
     } else if (op == TYdbOperation::InsertRevert) {
-        effect = Build<TKiRevertIf>(ctx, node.Pos())
-            .Predicate(predicate)
-            .Effect(insertEffect)
-            .Constraint().Build("insert_pk")
-            .Done()
-            .Ptr();
-    } else {
-        YQL_ENSURE(false, "Unexpected table operation");
-    }
-
-    return insertKql;
-}
-
-TExprNode::TPtr KiDeleteOnTableToKql(const TKiWriteTable& node, TExprContext& ctx,
-    const TKikimrTableDescription& table, TExprNode::TPtr& effect)
-{
-    auto itemArg = Build<TCoArgument>(ctx, node.Pos())
-        .Name("item")
-        .Done();
-
+        effect = Build<TKiRevertIf>(ctx, node.Pos()) 
+            .Predicate(predicate) 
+            .Effect(insertEffect) 
+            .Constraint().Build("insert_pk") 
+            .Done() 
+            .Ptr(); 
+    } else { 
+        YQL_ENSURE(false, "Unexpected table operation"); 
+    } 
+ 
+    return insertKql; 
+} 
+ 
+TExprNode::TPtr KiDeleteOnTableToKql(const TKiWriteTable& node, TExprContext& ctx, 
+    const TKikimrTableDescription& table, TExprNode::TPtr& effect) 
+{ 
+    auto itemArg = Build<TCoArgument>(ctx, node.Pos()) 
+        .Name("item") 
+        .Done(); 
+ 
     TVector<TExprBase> updates;
 
     const auto& tablePk = ExtractNamedKeyTuples(itemArg, table, ctx);
@@ -444,14 +444,14 @@ TExprNode::TPtr KiDeleteOnTableToKql(const TKiWriteTable& node, TExprContext& ct
         const THashSet<TString> dummyDataColumns;
         const auto& columnsToSelect = NKikimr::NKqp::CreateColumnsToSelectToUpdateIndex(indexes, pk, dummyDataColumns, node.Pos(), ctx);
         const TExprBase& fetch = Build<TKiSelectRow>(ctx, node.Pos())
-            .Cluster(node.DataSink().Cluster())
+            .Cluster(node.DataSink().Cluster()) 
             .Table(versionedTable)
             .Key(tablePk)
             .template Select<TCoAtomList>()
                 .Add(columnsToSelect)
                 .Build()
             .Done();
-
+ 
         for (const auto& pair : indexes) {
 
             TVector<TExprBase> keyToErase;
@@ -500,38 +500,38 @@ TExprNode::TPtr KiDeleteOnTableToKql(const TKiWriteTable& node, TExprContext& ct
     }
 
     effect = Build<TCoFlatMap>(ctx, node.Pos())
-        .Input(node.Input())
+        .Input(node.Input()) 
             .Lambda<TCoLambda>()
                 .Args({itemArg})
                 .Body<TCoAsList>()
                     .Add(updates)
                 .Build()
             .Build()
-        .Done()
-        .Ptr();
-
-    return Build<TCoWorld>(ctx, node.Pos())
-        .Done()
-        .Ptr();
-}
-
+        .Done() 
+        .Ptr(); 
+ 
+    return Build<TCoWorld>(ctx, node.Pos()) 
+        .Done() 
+        .Ptr(); 
+} 
+ 
 TExprNode::TPtr KiReadTableToKql(TCoRight right, TExprContext& ctx, const TKikimrTablesData& tablesData, bool withSystemColumns) {
     const auto& read = right.Input().Cast<TKiReadTable>();
     bool unwrapValues = HasSetting(read.Settings().Ref(), "unwrap_values");
-
-    TKikimrKey key(ctx);
-    YQL_ENSURE(key.Extract(read.TableKey().Ref()));
-    YQL_ENSURE(key.GetKeyType() == TKikimrKey::Type::Table);
+ 
+    TKikimrKey key(ctx); 
+    YQL_ENSURE(key.Extract(read.TableKey().Ref())); 
+    YQL_ENSURE(key.GetKeyType() == TKikimrKey::Type::Table); 
     const auto& cluster = read.DataSource().Cluster();
     const auto& table = key.GetTablePath();
-
+ 
     const auto& tableDesc = tablesData.ExistingTable(TString(cluster), TString(table));
-
+ 
     const auto versionedTable = BuildVersionedTable(*tableDesc.Metadata, read.Pos(), ctx);
     YQL_ENSURE(versionedTable.Path().Value() == table);
 
     TMaybe<TString> secondaryIndex;
-
+ 
     if (const auto& view = key.GetView()) {
         YQL_ENSURE(tableDesc.Metadata);
         if (!ValidateTableHasIndex(tableDesc.Metadata, ctx, read.Pos())) {
@@ -550,7 +550,7 @@ TExprNode::TPtr KiReadTableToKql(TCoRight right, TExprContext& ctx, const TKikim
         }
         secondaryIndex = metadata->Name;
     }
-
+ 
     if (secondaryIndex) {
         const auto& indexTableName = secondaryIndex.GetRef();
         const auto& keyTableDesc = tablesData.ExistingTable(TString(cluster), TString(indexTableName));
@@ -590,42 +590,42 @@ TExprNode::TPtr KiReadTableToKql(TCoRight right, TExprContext& ctx, const TKikim
         } else {
             return TExprBase(selectRange).Ptr();
         }
-    }
-}
-
-TExprNode::TPtr KiUpdateOnTableToKql(const TKiWriteTable& node, TExprContext& ctx,
+    } 
+} 
+ 
+TExprNode::TPtr KiUpdateOnTableToKql(const TKiWriteTable& node, TExprContext& ctx, 
     const TKikimrTableDescription& tableDesc, TExprNode::TPtr& effect)
-{
-    // TODO: KIKIMR-3206
+{ 
+    // TODO: KIKIMR-3206 
     // This function should be rewriten
-
+ 
     const auto& cluster = node.DataSink().Cluster();
 
     const auto& itemArg = Build<TCoArgument>(ctx, node.Pos())
-        .Name("item")
-        .Done();
-
+        .Name("item") 
+        .Done(); 
+ 
     const auto& inputColumnsSetting = GetSetting(node.Settings().Ref(), "input_columns");
-    YQL_ENSURE(inputColumnsSetting);
-
-    TVector<TCoNameValueTuple> valueTuples;
+    YQL_ENSURE(inputColumnsSetting); 
+ 
+    TVector<TCoNameValueTuple> valueTuples; 
     THashSet<TStringBuf> updatedColumns;
-    for (const auto& atom : TCoNameValueTuple(inputColumnsSetting).Value().Cast<TCoAtomList>()) {
+    for (const auto& atom : TCoNameValueTuple(inputColumnsSetting).Value().Cast<TCoAtomList>()) { 
         if (tableDesc.GetKeyColumnIndex(TString(atom.Value()))) {
-            continue;
-        }
-
-        auto tuple = Build<TCoNameValueTuple>(ctx, node.Pos())
-            .Name(atom)
-            .Value<TCoMember>()
-                .Struct(itemArg)
-                .Name(atom)
-                .Build()
-            .Done();
-        valueTuples.push_back(tuple);
+            continue; 
+        } 
+ 
+        auto tuple = Build<TCoNameValueTuple>(ctx, node.Pos()) 
+            .Name(atom) 
+            .Value<TCoMember>() 
+                .Struct(itemArg) 
+                .Name(atom) 
+                .Build() 
+            .Done(); 
+        valueTuples.push_back(tuple); 
         updatedColumns.insert(atom.Value());
-    }
-
+    } 
+ 
     // Returns index only if at least one of indexed columns for coresponding index has been updated.
     const auto& indexes = BuildSecondaryIndexVector(tableDesc, node.Pos(), ctx, &updatedColumns);
     const TVector<TString>& pk = tableDesc.Metadata->KeyColumnNames;
@@ -650,9 +650,9 @@ TExprNode::TPtr KiUpdateOnTableToKql(const TKiWriteTable& node, TExprContext& ct
             .Cluster(cluster)
             .Table(versionedTable)
             .Key(ExtractNamedKeyTuples(itemArg, tableDesc, ctx))
-            .Update<TCoNameValueTupleList>()
-                .Add(valueTuples)
-                .Build()
+            .Update<TCoNameValueTupleList>() 
+                .Add(valueTuples) 
+                .Build() 
             .Done()
         );
 
@@ -766,55 +766,55 @@ TExprNode::TPtr KiUpdateOnTableToKql(const TKiWriteTable& node, TExprContext& ct
                         .Build()
                     .Build()
                 .Build()
-            .Build()
-        .Done();
-
+            .Build() 
+        .Done(); 
+ 
     effect = Build<TCoFlatMap>(ctx, node.Pos())
         .Input(node.Input())
         .Lambda(updateLambda)
-        .Done()
-        .Ptr();
-
-    return Build<TCoWorld>(ctx, node.Pos())
-        .Done()
-        .Ptr();
-}
-
-TExprNode::TPtr KiWriteTableToKql(TKiWriteTable write, TExprContext& ctx,
-    const TKikimrTablesData& tablesData, TExprNode::TPtr& effect)
-{
-    auto op = GetTableOp(write);
-
-    auto cluster = write.DataSink().Cluster().Value();
-    auto table = write.Table().Value();
-    auto& tableDesc = tablesData.ExistingTable(TString(cluster), TString(table));
-
-    switch (op) {
+        .Done() 
+        .Ptr(); 
+ 
+    return Build<TCoWorld>(ctx, node.Pos()) 
+        .Done() 
+        .Ptr(); 
+} 
+ 
+TExprNode::TPtr KiWriteTableToKql(TKiWriteTable write, TExprContext& ctx, 
+    const TKikimrTablesData& tablesData, TExprNode::TPtr& effect) 
+{ 
+    auto op = GetTableOp(write); 
+ 
+    auto cluster = write.DataSink().Cluster().Value(); 
+    auto table = write.Table().Value(); 
+    auto& tableDesc = tablesData.ExistingTable(TString(cluster), TString(table)); 
+ 
+    switch (op) { 
         case TYdbOperation::Upsert:
         case TYdbOperation::Replace:
             return KiUpsertTableToKql(write, ctx, tableDesc, op == TYdbOperation::Replace, false, effect);
         case TYdbOperation::InsertRevert:
         case TYdbOperation::InsertAbort:
-            return KiInsertTableToKql(write, ctx, tableDesc, op, effect);
+            return KiInsertTableToKql(write, ctx, tableDesc, op, effect); 
         case TYdbOperation::DeleteOn:
-            return KiDeleteOnTableToKql(write, ctx, tableDesc, effect);
+            return KiDeleteOnTableToKql(write, ctx, tableDesc, effect); 
         case TYdbOperation::UpdateOn:
-            return KiUpdateOnTableToKql(write, ctx, tableDesc, effect);
-        default:
-            return nullptr;
-    }
-}
-
-TExprNode::TPtr KiUpdateTableToKql(TKiUpdateTable update, TExprContext& ctx,
+            return KiUpdateOnTableToKql(write, ctx, tableDesc, effect); 
+        default: 
+            return nullptr; 
+    } 
+} 
+ 
+TExprNode::TPtr KiUpdateTableToKql(TKiUpdateTable update, TExprContext& ctx, 
     const TKikimrTablesData& tablesData, TExprNode::TPtr& effect, bool withSystemColumns)
-{
-    YQL_ENSURE(update.Update().Ref().GetTypeAnn());
-
+{ 
+    YQL_ENSURE(update.Update().Ref().GetTypeAnn()); 
+ 
     const auto& cluster = update.DataSink().Cluster();
     const auto& table = update.Table();
     const auto& tableDesc = tablesData.ExistingTable(TString(cluster.Value()), TString(table.Value()));
     const TVector<TString>& pk = tableDesc.Metadata->KeyColumnNames;
-
+ 
     const auto versionedTable = BuildVersionedTable(*tableDesc.Metadata, update.Pos(), ctx);
     YQL_ENSURE(versionedTable.Path() == update.Table());
 
@@ -824,54 +824,54 @@ TExprNode::TPtr KiUpdateTableToKql(TKiUpdateTable update, TExprContext& ctx,
     const auto& selectRange = Build<TKiSelectRange>(ctx, update.Pos())
         .Cluster(cluster)
         .Table(versionedTable)
-        .Range(range.ToRangeExpr(update, ctx))
+        .Range(range.ToRangeExpr(update, ctx)) 
         .Select(BuildColumnsList(tableDesc, update.Pos(), ctx, withSystemColumns))
-        .Settings().Build()
-        .Done();
-
+        .Settings().Build() 
+        .Done(); 
+ 
     const auto& filter = Build<TCoFilter>(ctx, update.Pos())
-        .Input(selectRange)
-        .Lambda(update.Filter())
-        .Done();
-
+        .Input(selectRange) 
+        .Lambda(update.Filter()) 
+        .Done(); 
+ 
     const auto& itemArg = Build<TCoArgument>(ctx, update.Pos())
-        .Name("item")
-        .Done();
-
-    TVector<TCoNameValueTuple> valueTuples;
+        .Name("item") 
+        .Done(); 
+ 
+    TVector<TCoNameValueTuple> valueTuples; 
     const auto& updateResultType = update.Update().Ref().GetTypeAnn()->Cast<TStructExprType>();
     THashSet<TStringBuf> updatedColumns;
 
     for (const auto& item : updateResultType->GetItems()) {
-        const auto& name = item->GetName();
+        const auto& name = item->GetName(); 
         updatedColumns.insert(name);
-
+ 
         const auto& tuple = Build<TCoNameValueTuple>(ctx, update.Pos())
-            .Name().Build(name)
-            .Value<TCoMember>()
-                .Struct<TExprApplier>()
-                    .Apply(update.Update())
-                    .With(0, itemArg)
-                    .Build()
-                .Name().Build(name)
-                .Build()
-            .Done();
-        valueTuples.push_back(tuple);
-    }
-
+            .Name().Build(name) 
+            .Value<TCoMember>() 
+                .Struct<TExprApplier>() 
+                    .Apply(update.Update()) 
+                    .With(0, itemArg) 
+                    .Build() 
+                .Name().Build(name) 
+                .Build() 
+            .Done(); 
+        valueTuples.push_back(tuple); 
+    } 
+ 
     const auto& indexes = BuildSecondaryIndexVector(tableDesc, update.Pos(), ctx, &updatedColumns);
 
     TVector<TExprBase> updates;
     updates.emplace_back(Build<TKiUpdateRow>(ctx, update.Pos())
             .Cluster(cluster)
             .Table(versionedTable)
-            .Key(ExtractNamedKeyTuples(itemArg, tableDesc, ctx))
-            .Update<TCoNameValueTupleList>()
-                .Add(valueTuples)
-                .Build()
+            .Key(ExtractNamedKeyTuples(itemArg, tableDesc, ctx)) 
+            .Update<TCoNameValueTupleList>() 
+                .Add(valueTuples) 
+                .Build() 
             .Done()
         );
-
+ 
     if (indexes) {
         for (const auto& pair : indexes) {
             TVector<TString> indexTablePk;
@@ -971,28 +971,28 @@ TExprNode::TPtr KiUpdateTableToKql(TKiUpdateTable update, TExprContext& ctx,
     }
 
     effect = Build<TCoFlatMap>(ctx, update.Pos())
-        .Input(filter)
+        .Input(filter) 
         .Lambda<TCoLambda>()
             .Args({itemArg})
             .Body<TCoAsList>()
                 .Add(updates)
                 .Build()
             .Build()
-        .Done()
-        .Ptr();
-
-    return Build<TCoWorld>(ctx, update.Pos())
-        .Done()
-        .Ptr();
-}
-
-TExprNode::TPtr KiDeleteTableToKql(TKiDeleteTable del, TExprContext& ctx,
+        .Done() 
+        .Ptr(); 
+ 
+    return Build<TCoWorld>(ctx, update.Pos()) 
+        .Done() 
+        .Ptr(); 
+} 
+ 
+TExprNode::TPtr KiDeleteTableToKql(TKiDeleteTable del, TExprContext& ctx, 
     const TKikimrTablesData& tablesData, TExprNode::TPtr& effect, bool withSystemColumns)
-{
+{ 
     const auto& cluster = del.DataSink().Cluster();
     const auto& table = del.Table();
     const auto& tableDesc = tablesData.ExistingTable(TString(cluster.Value()), TString(table.Value()));
-
+ 
     const auto versionedTable = BuildVersionedTable(*tableDesc.Metadata, del.Pos(), ctx);
     YQL_ENSURE(versionedTable.Path() == table);
 
@@ -1000,25 +1000,25 @@ TExprNode::TPtr KiDeleteTableToKql(TKiDeleteTable del, TExprContext& ctx,
     const auto& selectRange = Build<TKiSelectRange>(ctx, del.Pos())
         .Cluster(cluster)
         .Table(versionedTable)
-        .Range(range.ToRangeExpr(del, ctx))
+        .Range(range.ToRangeExpr(del, ctx)) 
         .Select(BuildColumnsList(tableDesc, del.Pos(), ctx, withSystemColumns))
-        .Settings().Build()
-        .Done();
-
+        .Settings().Build() 
+        .Done(); 
+ 
     const auto& filter = Build<TCoFilter>(ctx, del.Pos())
-        .Input(selectRange)
-        .Lambda(del.Filter())
-        .Done();
-
+        .Input(selectRange) 
+        .Lambda(del.Filter()) 
+        .Done(); 
+ 
     const auto& itemArg = Build<TCoArgument>(ctx, del.Pos())
-        .Name("item")
-        .Done();
-
+        .Name("item") 
+        .Done(); 
+ 
     const auto& indexes = BuildSecondaryIndexVector(tableDesc, del.Pos(), ctx);
-
+ 
     TVector<TExprBase> updates;
     updates.reserve(indexes.size() + 1);
-
+ 
     const auto& tablePk = ExtractNamedKeyTuples(itemArg, tableDesc, ctx);
     updates.emplace_back(Build<TKiEraseRow>(ctx, del.Pos())
             .Cluster(cluster)
@@ -1086,124 +1086,124 @@ TExprNode::TPtr KiDeleteTableToKql(TKiDeleteTable del, TExprContext& ctx,
             .Done()
             .Ptr();
 
-    return Build<TCoWorld>(ctx, del.Pos())
-        .Done()
-        .Ptr();
-}
-
-} // namespace
-
-TKiProgram BuildKiProgram(TKiDataQuery query, const TKikimrTablesData& tablesData,
+    return Build<TCoWorld>(ctx, del.Pos()) 
+        .Done() 
+        .Ptr(); 
+} 
+ 
+} // namespace 
+ 
+TKiProgram BuildKiProgram(TKiDataQuery query, const TKikimrTablesData& tablesData, 
     TExprContext& ctx, bool withSystemColumns)
-{
-    TExprNode::TPtr optResult;
-    TOptimizeExprSettings optSettings(nullptr);
-    optSettings.VisitChanges = true;
-    IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
-    status = OptimizeExpr(query.Effects().Ptr(), optResult,
+{ 
+    TExprNode::TPtr optResult; 
+    TOptimizeExprSettings optSettings(nullptr); 
+    optSettings.VisitChanges = true; 
+    IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok); 
+    status = OptimizeExpr(query.Effects().Ptr(), optResult, 
         [&tablesData, withSystemColumns](const TExprNode::TPtr& input, TExprContext& ctx) {
-            auto node = TExprBase(input);
-            auto ret = input;
-
-            if (auto maybeWrite = node.Maybe<TKiWriteTable>()) {
-                KiWriteTableToKql(maybeWrite.Cast(), ctx, tablesData, ret);
-            } else if (auto maybeUpdate = node.Maybe<TKiUpdateTable>()) {
+            auto node = TExprBase(input); 
+            auto ret = input; 
+ 
+            if (auto maybeWrite = node.Maybe<TKiWriteTable>()) { 
+                KiWriteTableToKql(maybeWrite.Cast(), ctx, tablesData, ret); 
+            } else if (auto maybeUpdate = node.Maybe<TKiUpdateTable>()) { 
                 KiUpdateTableToKql(maybeUpdate.Cast(), ctx, tablesData, ret, withSystemColumns);
-            } else if (auto maybeDelete = node.Maybe<TKiDeleteTable>()) {
+            } else if (auto maybeDelete = node.Maybe<TKiDeleteTable>()) { 
                 KiDeleteTableToKql(maybeDelete.Cast(), ctx, tablesData, ret, withSystemColumns);
-            }
-
-            return ret;
-        }, ctx, optSettings);
-
-    YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
-
-    YQL_ENSURE(TMaybeNode<TKiEffects>(optResult));
-    TVector<TExprBase> effectsList(TKiEffects(optResult).begin(), TKiEffects(optResult).end());
-
-    TMaybeNode<TExprBase> effects;
-    if (effectsList.empty()) {
-        effects = Build<TCoList>(ctx, query.Pos())
-            .ListType<TCoListType>()
-                .ItemType<TCoVoidType>()
-                    .Build()
-                .Build()
-            .Done();
-    } else {
-        effects = Build<TCoExtend>(ctx, query.Pos())
-            .Add(effectsList)
-            .Done();
-    }
-
-    TVector<TExprBase> results;
-    for (const auto& kiResult : query.Results()) {
-        results.push_back(kiResult.Value());
-    }
-
-    auto program = Build<TKiProgram>(ctx, query.Pos())
-        .Results()
-            .Add(results)
-            .Build()
-        .Effects(effects.Cast())
-        .Done();
-
-    TExprNode::TPtr newProgram;
-    status = OptimizeExpr(program.Ptr(), newProgram,
+            } 
+ 
+            return ret; 
+        }, ctx, optSettings); 
+ 
+    YQL_ENSURE(status == IGraphTransformer::TStatus::Ok); 
+ 
+    YQL_ENSURE(TMaybeNode<TKiEffects>(optResult)); 
+    TVector<TExprBase> effectsList(TKiEffects(optResult).begin(), TKiEffects(optResult).end()); 
+ 
+    TMaybeNode<TExprBase> effects; 
+    if (effectsList.empty()) { 
+        effects = Build<TCoList>(ctx, query.Pos()) 
+            .ListType<TCoListType>() 
+                .ItemType<TCoVoidType>() 
+                    .Build() 
+                .Build() 
+            .Done(); 
+    } else { 
+        effects = Build<TCoExtend>(ctx, query.Pos()) 
+            .Add(effectsList) 
+            .Done(); 
+    } 
+ 
+    TVector<TExprBase> results; 
+    for (const auto& kiResult : query.Results()) { 
+        results.push_back(kiResult.Value()); 
+    } 
+ 
+    auto program = Build<TKiProgram>(ctx, query.Pos()) 
+        .Results() 
+            .Add(results) 
+            .Build() 
+        .Effects(effects.Cast()) 
+        .Done(); 
+ 
+    TExprNode::TPtr newProgram; 
+    status = OptimizeExpr(program.Ptr(), newProgram, 
         [&tablesData, withSystemColumns](const TExprNode::TPtr& input, TExprContext& ctx) {
-            auto node = TExprBase(input);
-
-            if (node.Maybe<TCoRight>().Input().Maybe<TKiReadTable>()) {
+            auto node = TExprBase(input); 
+ 
+            if (node.Maybe<TCoRight>().Input().Maybe<TKiReadTable>()) { 
                 return KiReadTableToKql(node.Cast<TCoRight>(), ctx, tablesData, withSystemColumns);
-            }
-
-            return input;
-        }, ctx, optSettings);
-
-    YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
-    YQL_ENSURE(TMaybeNode<TKiProgram>(newProgram));
-
-    return TKiProgram(newProgram);
-}
-
-TExprBase UnwrapKiReadTableValues(TExprBase input, const TKikimrTableDescription& tableDesc,
+            } 
+ 
+            return input; 
+        }, ctx, optSettings); 
+ 
+    YQL_ENSURE(status == IGraphTransformer::TStatus::Ok); 
+    YQL_ENSURE(TMaybeNode<TKiProgram>(newProgram)); 
+ 
+    return TKiProgram(newProgram); 
+} 
+ 
+TExprBase UnwrapKiReadTableValues(TExprBase input, const TKikimrTableDescription& tableDesc, 
     const TCoAtomList columns, TExprContext& ctx)
-{
-    TCoArgument itemArg = Build<TCoArgument>(ctx, input.Pos())
-        .Name("item")
-        .Done();
-
-    TVector<TExprBase> structItems;
-    for (auto atom : columns) {
-        auto columnType = tableDesc.GetColumnType(TString(atom.Value()));
+{ 
+    TCoArgument itemArg = Build<TCoArgument>(ctx, input.Pos()) 
+        .Name("item") 
+        .Done(); 
+ 
+    TVector<TExprBase> structItems; 
+    for (auto atom : columns) { 
+        auto columnType = tableDesc.GetColumnType(TString(atom.Value())); 
         YQL_ENSURE(columnType);
-
-        auto item = Build<TCoNameValueTuple>(ctx, input.Pos())
-            .Name(atom)
-            .Value<TCoCoalesce>()
-                .Predicate<TCoMember>()
-                    .Struct(itemArg)
-                    .Name(atom)
-                    .Build()
-                .Value<TCoDefault>()
-                    .Type(ExpandType(atom.Pos(), *columnType->Cast<TOptionalExprType>()->GetItemType(), ctx))
-                    .Build()
-                .Build()
-            .Done();
-
-        structItems.push_back(item);
-    }
-
-    return Build<TCoMap>(ctx, input.Pos())
-        .Input(input)
-        .Lambda()
-            .Args({itemArg})
-            .Body<TCoAsStruct>()
-                .Add(structItems)
-                .Build()
-            .Build()
-        .Done();
-}
-
+ 
+        auto item = Build<TCoNameValueTuple>(ctx, input.Pos()) 
+            .Name(atom) 
+            .Value<TCoCoalesce>() 
+                .Predicate<TCoMember>() 
+                    .Struct(itemArg) 
+                    .Name(atom) 
+                    .Build() 
+                .Value<TCoDefault>() 
+                    .Type(ExpandType(atom.Pos(), *columnType->Cast<TOptionalExprType>()->GetItemType(), ctx)) 
+                    .Build() 
+                .Build() 
+            .Done(); 
+ 
+        structItems.push_back(item); 
+    } 
+ 
+    return Build<TCoMap>(ctx, input.Pos()) 
+        .Input(input) 
+        .Lambda() 
+            .Args({itemArg}) 
+            .Body<TCoAsStruct>() 
+                .Add(structItems) 
+                .Build() 
+            .Build() 
+        .Done(); 
+} 
+ 
 bool IsKeySelectorPkPrefix(NNodes::TCoLambda keySelector, const TKikimrTableDescription& tableDesc, TVector<TString>* columns) {
     auto checkKey = [keySelector, &tableDesc, columns] (const TExprBase& key, ui32 index) {
         if (!key.Maybe<TCoMember>()) {
@@ -1245,4 +1245,4 @@ bool IsKeySelectorPkPrefix(NNodes::TCoLambda keySelector, const TKikimrTableDesc
     return true;
 }
 
-} // namespace NYql
+} // namespace NYql 

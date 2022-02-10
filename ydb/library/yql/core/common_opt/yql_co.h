@@ -12,10 +12,10 @@ struct TOptimizeContext {
     TParentsMap* ParentsMap = nullptr;
 
     const TExprNode* GetParentIfSingle(const TExprNode& node) const {
-        YQL_ENSURE(ParentsMap);
+        YQL_ENSURE(ParentsMap); 
 
         const auto it = ParentsMap->find(&node);
-        YQL_ENSURE(it != ParentsMap->cend());
+        YQL_ENSURE(it != ParentsMap->cend()); 
 
         auto& parents = it->second;
         YQL_ENSURE(!parents.empty());
@@ -40,8 +40,8 @@ struct TOptimizeContext {
 
     bool IsSingleUsage(const NNodes::TExprBase& node) const {
         return IsSingleUsage(node.Ref());
-    }
-
+    } 
+ 
     bool HasParent(const TExprNode& node) const {
         YQL_ENSURE(ParentsMap);
         return ParentsMap->contains(&node);
@@ -64,10 +64,10 @@ struct TOptimizeContext {
 
         return false;
     }
-
-    bool IsPersistentNode(const NNodes::TExprBase& node) const {
-        return IsPersistentNode(node.Ref());
-    }
+ 
+    bool IsPersistentNode(const NNodes::TExprBase& node) const { 
+        return IsPersistentNode(node.Ref()); 
+    } 
 };
 
 using TCallableOptimizerExt = std::function<TExprNode::TPtr (const TExprNode::TPtr&, TExprContext&, TOptimizeContext&)>;

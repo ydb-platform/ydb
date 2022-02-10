@@ -548,8 +548,8 @@ message TTabletsConfig {
 
 message TKQPConfig {
     optional bool Enable = 1 [default = true];
-
-    repeated NKikimrKqp.TKqpSetting Settings = 10;
+ 
+    repeated NKikimrKqp.TKqpSetting Settings = 10; 
 }
 
 message TMemoryLogConfig {
@@ -641,7 +641,7 @@ message TFeatureFlags {
     optional bool DisableDataShardBarrier = 26 [default = false];
     optional bool EnablePutBatchingForBlobStorage = 27 [default = true];
     optional bool EnableKqpWideFlow = 28 [default = true]; // deprecated: always true
-    optional bool EnableKqpScanQueries = 29 [default = true]; // deprecated: always true
+    optional bool EnableKqpScanQueries = 29 [default = true]; // deprecated: always true 
     optional bool EnablePersistentPartitionStats = 30 [default = false];
     optional bool EnableTtlOnIndexedTables = 31 [default = true]; // deprecated: always true
     optional bool AllowUpdateChannelsBindingOfSolomonPartitions = 32 [default = false];
@@ -674,8 +674,8 @@ message TFeatureFlags {
     // Dangerous settings we don't want in the public api unless required
     optional bool EnablePublicApiExternalBlobs = 59 [default = false];
     optional bool EnablePublicApiKeepInMemory = 60 [default = false];
-    optional bool EnableImplicitScanQueryInScripts = 61 [default = true];
-    optional bool EnablePredicateExtractForScanQueries = 62 [default = true];
+    optional bool EnableImplicitScanQueryInScripts = 61 [default = true]; 
+    optional bool EnablePredicateExtractForScanQueries = 62 [default = true]; 
 }
 
 message TSqsConfig {
@@ -944,15 +944,15 @@ message TTableProfilesConfig {
     repeated TCachingPolicy CachingPolicies = 7;
 }
 
-message TTableServiceConfig {
-    message TResourceManager {
-        optional uint32 ComputeActorsCount = 1 [default = 1000];
+message TTableServiceConfig { 
+    message TResourceManager { 
+        optional uint32 ComputeActorsCount = 1 [default = 1000]; 
         optional uint64 ChannelBufferSize = 2 [default = 4194304];              //  4 MB
         optional uint64 ScanBufferSize = 3 [default = 8388608];                 //  8 MB
         optional uint64 MkqlLightProgramMemoryLimit = 4 [default = 31457280];   // 30 MB
         optional uint64 MkqlHeavyProgramMemoryLimit = 5 [default = 31457280];   // 30 MB
         optional uint64 QueryMemoryLimit = 6 [default = 32212254720];           // 30 GB
-        optional uint32 PublishStatisticsIntervalSec = 7 [default = 2];
+        optional uint32 PublishStatisticsIntervalSec = 7 [default = 2]; 
         optional bool EnableInstantMkqlMemoryAlloc = 8 [default = true];
         reserved 9;  // optional uint32 InstantMkqlMemoryAllocWaitTimeMs = 9 [default = 20];
         reserved 10; // optional uint32 InstantMkqlMemoryAllocStepTimeMs = 10 [default = 1];
@@ -962,8 +962,8 @@ message TTableServiceConfig {
 
         optional uint64 MaxTotalScanBuffersSize = 13 [default = 4294967296];    // 4 GB
         optional uint64 MinScanBufferSize = 14 [default = 2097152];             // 2 MB
-    }
-
+    } 
+ 
     message TSpillingServiceConfig {
         message TLocalFileConfig {
             optional bool Enable = 1 [default = false];
@@ -982,21 +982,21 @@ message TTableServiceConfig {
         optional TLocalFileConfig LocalFileConfig = 1;
     }
 
-    message TQueryPhaseLimits {
-        optional uint32 AffectedShardsLimit = 1;
-        optional uint32 ReadsetCountLimit = 2;
-        optional uint64 ComputeNodeMemoryLimitBytes = 3;
-        optional uint64 TotalReadSizeLimitBytes = 4;
-    }
-
-    message TQueryLimits {
-        optional TQueryPhaseLimits PhaseLimits = 1;
-        optional uint32 SchemeQueryTimeoutMs = 2 [default = 600000];
-        optional uint32 DataQueryTimeoutMs = 3 [default = 300000];
-        optional uint32 ScanQueryTimeoutMs = 4 [default = 300000];
-        optional uint32 ResultRowsLimit = 5;
-    }
-
+    message TQueryPhaseLimits { 
+        optional uint32 AffectedShardsLimit = 1; 
+        optional uint32 ReadsetCountLimit = 2; 
+        optional uint64 ComputeNodeMemoryLimitBytes = 3; 
+        optional uint64 TotalReadSizeLimitBytes = 4; 
+    } 
+ 
+    message TQueryLimits { 
+        optional TQueryPhaseLimits PhaseLimits = 1; 
+        optional uint32 SchemeQueryTimeoutMs = 2 [default = 600000]; 
+        optional uint32 DataQueryTimeoutMs = 3 [default = 300000]; 
+        optional uint32 ScanQueryTimeoutMs = 4 [default = 300000]; 
+        optional uint32 ResultRowsLimit = 5; 
+    } 
+ 
     message TShutdownSettings {
         optional uint32 ShutdownTimeoutMs = 1 [default = 30000];
         optional uint32 HardTimeoutMs = 2 [default = 10000];
@@ -1006,7 +1006,7 @@ message TTableServiceConfig {
     message TSessionBalancerSettings {
         optional bool Enabled = 1 [default = false];
         // MaxSessionsShutdownInFlightSize option determines the number of sessions
-        // that we can keep in shutdown state at the moment.
+        // that we can keep in shutdown state at the moment. 
         optional uint32 MaxSessionsShutdownInFlightSize = 2 [default = 3];
         //         GREEN ZONE         YELLOW ZONE               RED ZONE
         //                     MinCV                   MaxCV
@@ -1055,21 +1055,21 @@ message TTableServiceConfig {
         optional uint32 LeakyBucketQuotaBucketDurationSeconds = 6 [default = 60];
     }
 
-    optional uint32 QueryLimitBytes = 1;
-    optional uint32 ParametersLimitBytes = 2;
-    optional uint32 SessionsLimitPerNode = 3;
+    optional uint32 QueryLimitBytes = 1; 
+    optional uint32 ParametersLimitBytes = 2; 
+    optional uint32 SessionsLimitPerNode = 3; 
     reserved 4; // obsolete: optional uint32 SessionQueryCacheSize = 4 [default = 1000];
-    reserved 5; // UseCompileService (always true)
-    optional uint32 CompileQueryCacheSize = 6 [default = 1000];
-    optional uint32 CompileMaxActiveRequests = 7 [default = 4];
-    optional uint32 CompileRequestQueueSize = 8 [default = 1000];
-    optional bool UseSchemeCacheMetadata = 9 [default = true];
-    optional bool UseSessionBusyStatus = 10 [default = true];
-    optional bool AllowUnsafeCommit = 11 [default = true];
-    optional uint32 CompileTimeoutMs = 12 [default = 60000];
-    optional TResourceManager ResourceManager = 13;
-    optional TQueryLimits QueryLimits = 14;
-    optional uint32 SqlVersion = 15;
+    reserved 5; // UseCompileService (always true) 
+    optional uint32 CompileQueryCacheSize = 6 [default = 1000]; 
+    optional uint32 CompileMaxActiveRequests = 7 [default = 4]; 
+    optional uint32 CompileRequestQueueSize = 8 [default = 1000]; 
+    optional bool UseSchemeCacheMetadata = 9 [default = true]; 
+    optional bool UseSessionBusyStatus = 10 [default = true]; 
+    optional bool AllowUnsafeCommit = 11 [default = true]; 
+    optional uint32 CompileTimeoutMs = 12 [default = 60000]; 
+    optional TResourceManager ResourceManager = 13; 
+    optional TQueryLimits QueryLimits = 14; 
+    optional uint32 SqlVersion = 15; 
     optional TSpillingServiceConfig SpillingServiceConfig = 16;
     optional TShutdownSettings ShutdownSettings = 17;
     optional TSessionBalancerSettings SessionBalancerSettings = 18;
@@ -1082,8 +1082,8 @@ message TTableServiceConfig {
     optional uint32 ForceNewEngineLevel = 22 [default = 0];
     optional uint32 CompileQueryCacheTTLSec = 20 [default = 0];
     optional TQueryReplayConfig QueryReplayConfig = 21;
-};
-
+}; 
+ 
 // Config describes immediate controls and allows
 // to manage their values (not variety and limits)
 // via CMS. All fields should be either [u]int64 or
@@ -1366,7 +1366,7 @@ message TAppConfig {
     optional NKikimrProto.TKeyConfig KeyConfig = 35;
     optional NKikimrProto.TKeyConfig PDiskKeyConfig = 51;
     optional NKikimrNodeBroker.TConfig NodeBrokerConfig = 36;
-    optional TTableServiceConfig TableServiceConfig = 37;
+    optional TTableServiceConfig TableServiceConfig = 37; 
     optional NKikimrSharedCache.TSharedCacheConfig SharedCacheConfig = 38; // dynamic configuration via cms
     optional TImmediateControlsConfig ImmediateControlsConfig = 39;
     optional TAllocatorConfig AllocatorConfig = 40;

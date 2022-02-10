@@ -11,22 +11,22 @@
 
 #include <util/string/builder.h>
 
-namespace NSQLTranslation {
-
-    NYql::TAstParseResult SqlToYql(const TString& query, const TTranslationSettings& settings,
+namespace NSQLTranslation { 
+ 
+    NYql::TAstParseResult SqlToYql(const TString& query, const TTranslationSettings& settings, 
         NYql::TWarningRules* warningRules, ui16* actualSyntaxVersion)
-    {
-        NYql::TAstParseResult result;
-        TTranslationSettings parsedSettings(settings);
+    { 
+        NYql::TAstParseResult result; 
+        TTranslationSettings parsedSettings(settings); 
         google::protobuf::Arena arena;
         if (!parsedSettings.Arena) {
             parsedSettings.Arena = &arena;
         }
 
-        if (!ParseTranslationSettings(query, parsedSettings, result.Issues)) {
-            return result;
-        }
-
+        if (!ParseTranslationSettings(query, parsedSettings, result.Issues)) { 
+            return result; 
+        } 
+ 
         if (actualSyntaxVersion) {
             *actualSyntaxVersion = parsedSettings.SyntaxVersion;
         }
@@ -35,7 +35,7 @@ namespace NSQLTranslation {
             return NSQLTranslationPG::PGToYql(query, parsedSettings);
         }
 
-        switch (parsedSettings.SyntaxVersion) {
+        switch (parsedSettings.SyntaxVersion) { 
             case 0:
                 if (settings.V0ForceDisable || parsedSettings.V0Behavior == EV0Behavior::Disable) {
                     result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
@@ -49,29 +49,29 @@ namespace NSQLTranslation {
                     return result;
                 }
 
-                return NSQLTranslationV0::SqlToYql(query, parsedSettings, warningRules);
+                return NSQLTranslationV0::SqlToYql(query, parsedSettings, warningRules); 
             case 1:
-                return NSQLTranslationV1::SqlToYql(query, parsedSettings, warningRules);
+                return NSQLTranslationV1::SqlToYql(query, parsedSettings, warningRules); 
             default:
-                result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
-                    TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));
-                return result;
+                result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR, 
+                    TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion)); 
+                return result; 
         }
     }
 
     google::protobuf::Message* SqlAST(const TString& query, const TString& queryName, NYql::TIssues& issues,
         size_t maxErrors, const TTranslationSettings& settings, ui16* actualSyntaxVersion)
-    {
-        TTranslationSettings parsedSettings(settings);
-        if (!ParseTranslationSettings(query, parsedSettings, issues)) {
-            return nullptr;
-        }
-
+    { 
+        TTranslationSettings parsedSettings(settings); 
+        if (!ParseTranslationSettings(query, parsedSettings, issues)) { 
+            return nullptr; 
+        } 
+ 
         if (actualSyntaxVersion) {
             *actualSyntaxVersion = parsedSettings.SyntaxVersion;
         }
 
-        switch (parsedSettings.SyntaxVersion) {
+        switch (parsedSettings.SyntaxVersion) { 
             case 0:
                 if (settings.V0ForceDisable || settings.V0Behavior == EV0Behavior::Disable) {
                     issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
@@ -89,9 +89,9 @@ namespace NSQLTranslation {
             case 1:
                 return NSQLTranslationV1::SqlAST(query, queryName, issues, maxErrors, parsedSettings.AnsiLexer, settings.Arena);
             default:
-                issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
-                    TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));
-                return nullptr;
+                issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR, 
+                    TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion)); 
+                return nullptr; 
         }
     }
 
@@ -131,7 +131,7 @@ namespace NSQLTranslation {
     }
 
     NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst, const TTranslationSettings& settings) {
-        NYql::TAstParseResult result;
+        NYql::TAstParseResult result; 
         switch (settings.SyntaxVersion) {
             case 0:
                 if (settings.V0ForceDisable || settings.V0Behavior == EV0Behavior::Disable) {
@@ -150,9 +150,9 @@ namespace NSQLTranslation {
             case 1:
                 return NSQLTranslationV1::SqlASTToYql(protoAst, settings);
             default:
-                result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
-                    TStringBuilder() << "Unknown SQL syntax version: " << settings.SyntaxVersion));
-                return result;
+                result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR, 
+                    TStringBuilder() << "Unknown SQL syntax version: " << settings.SyntaxVersion)); 
+                return result; 
         }
     }
 

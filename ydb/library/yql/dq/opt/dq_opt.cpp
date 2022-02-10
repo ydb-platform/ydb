@@ -147,7 +147,7 @@ bool IsSingleConsumerConnection(const TDqConnection& node, const TParentsMap& pa
 ui32 GetStageOutputsCount(const TDqStageBase& stage, bool includingSinks) {
     auto stageType = stage.Ref().GetTypeAnn();
     YQL_ENSURE(stageType);
-    auto resultsTypeTuple = stageType->Cast<TTupleExprType>();
+    auto resultsTypeTuple = stageType->Cast<TTupleExprType>(); 
     ui32 result = resultsTypeTuple->GetSize();
     if (!includingSinks && stage.Sinks()) {
         result -= stage.Sinks().Cast().Size();
@@ -155,29 +155,29 @@ ui32 GetStageOutputsCount(const TDqStageBase& stage, bool includingSinks) {
     return result;
 }
 
-TVector<TDqConnection> FindDqConnections(const TExprBase& node) {
-    TVector<TDqConnection> connections;
-
-    VisitExpr(node.Ptr(), [&connections](const TExprNode::TPtr& exprNode) {
-        TExprBase node(exprNode);
-
+TVector<TDqConnection> FindDqConnections(const TExprBase& node) { 
+    TVector<TDqConnection> connections; 
+ 
+    VisitExpr(node.Ptr(), [&connections](const TExprNode::TPtr& exprNode) { 
+        TExprBase node(exprNode); 
+ 
         if (node.Maybe<TDqPhyPrecompute>()) {
             return false;
         }
 
-        if (auto maybeConnection = node.Maybe<TDqConnection>()) {
+        if (auto maybeConnection = node.Maybe<TDqConnection>()) { 
             YQL_ENSURE(!maybeConnection.Maybe<TDqCnValue>());
             connections.emplace_back(maybeConnection.Cast());
-            return false;
-        }
-
-        return true;
-    });
-
-    return connections;
-}
-
-bool IsDqPureExpr(const TExprBase& node, bool isPrecomputePure) {
+            return false; 
+        } 
+ 
+        return true; 
+    }); 
+ 
+    return connections; 
+} 
+ 
+bool IsDqPureExpr(const TExprBase& node, bool isPrecomputePure) { 
     auto filter = [](const TExprNode::TPtr& node) {
         return !TMaybeNode<TDqPhyPrecompute>(node).IsValid();
     };
@@ -187,25 +187,25 @@ bool IsDqPureExpr(const TExprBase& node, bool isPrecomputePure) {
                TMaybeNode<TDqConnection>(node).IsValid();
     };
 
-    if (isPrecomputePure) {
+    if (isPrecomputePure) { 
         return !FindNode(node.Ptr(), filter, predicate);
     }
 
     return !FindNode(node.Ptr(), predicate);
 }
 
-bool IsDqDependsOnStage(const TExprBase& node, const TDqStageBase& stage) {
+bool IsDqDependsOnStage(const TExprBase& node, const TDqStageBase& stage) { 
     return !!FindNode(node.Ptr(), [ptr = stage.Raw()](const TExprNode::TPtr& exprNode) {
         return exprNode.Get() == ptr;
-    });
-}
-
-bool CanPushDqExpr(const TExprBase& expr, const TDqStageBase& stage) {
-    return IsDqPureExpr(expr, true) && !IsDqDependsOnStage(expr, stage);
-}
-
-bool CanPushDqExpr(const TExprBase& expr, const TDqConnection& connection) {
-    return CanPushDqExpr(expr, connection.Output().Stage());
-}
-
+    }); 
+} 
+ 
+bool CanPushDqExpr(const TExprBase& expr, const TDqStageBase& stage) { 
+    return IsDqPureExpr(expr, true) && !IsDqDependsOnStage(expr, stage); 
+} 
+ 
+bool CanPushDqExpr(const TExprBase& expr, const TDqConnection& connection) { 
+    return CanPushDqExpr(expr, connection.Output().Stage()); 
+} 
+ 
 } // namespace NYql::NDq

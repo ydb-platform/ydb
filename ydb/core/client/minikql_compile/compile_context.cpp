@@ -9,7 +9,7 @@ namespace NYql {
 TContext::TContext(const IFunctionRegistry* funcRegistry,
                    const TTypeEnvironment* typeEnv)
     : FuncRegistry(funcRegistry)
-    , TypeEnv(typeEnv)
+    , TypeEnv(typeEnv) 
     , TypeInfoHelper(new NKikimr::NMiniKQL::TTypeInfoHelper)
     , PgmBuilder(new TKikimrProgramBuilder(*typeEnv, *funcRegistry))
     , WasParams(false)
@@ -29,24 +29,24 @@ TRuntimeNode TContext::NewParam(TStringBuf name, TType* type) {
     return PgmBuilder->Parameter(TString(name), type);
 }
 
-void TContext::AddTableLookup(const IDbSchemeResolver::TTable& request) {
-    auto state = Tables.FindPtr(request.TableName);
-    if (state) {
-        state->Request.ColumnNames.insert(request.ColumnNames.begin(), request.ColumnNames.end());
-    } else {
-        Tables.insert({request.TableName, TTableState{request, TMaybe<IDbSchemeResolver::TTableResult>()}});
-    }
+void TContext::AddTableLookup(const IDbSchemeResolver::TTable& request) { 
+    auto state = Tables.FindPtr(request.TableName); 
+    if (state) { 
+        state->Request.ColumnNames.insert(request.ColumnNames.begin(), request.ColumnNames.end()); 
+    } else { 
+        Tables.insert({request.TableName, TTableState{request, TMaybe<IDbSchemeResolver::TTableResult>()}}); 
+    } 
 }
 
 template<typename TStringType>
 IDbSchemeResolver::TTableResult* TContext::GetTableLookup(const TExprNode& node, const TStringType& tableName) {
-    auto entry = Tables.FindPtr(tableName);
+    auto entry = Tables.FindPtr(tableName); 
     if (!entry) {
-        ythrow TNodeException(node) << "Table is not found: " << tableName;
+        ythrow TNodeException(node) << "Table is not found: " << tableName; 
     }
 
     if (!entry->Response.Defined()) {
-        ythrow TNodeException(node) << "Table is not resolved: " << tableName;
+        ythrow TNodeException(node) << "Table is not resolved: " << tableName; 
     }
 
     return entry->Response.Get();
@@ -72,7 +72,7 @@ TConvertResult TContext::Finish(TRuntimeNode convertedNode) {
         convRes.Node = convertedNode;
     } else {
         // Params with params.
-        convRes.Errors.AddIssue(TPosition(1, 1), "Params program can't contains params.");
+        convRes.Errors.AddIssue(TPosition(1, 1), "Params program can't contains params."); 
     }
     return convRes;
 }

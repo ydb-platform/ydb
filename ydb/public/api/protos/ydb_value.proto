@@ -3,13 +3,13 @@ option cc_enable_arenas = true;
 
 import "google/protobuf/struct.proto";
 
-package Ydb;
+package Ydb; 
 option java_package = "com.yandex.ydb";
 option java_outer_classname = "ValueProtos";
 
-message DecimalType {
-    uint32 precision = 1;
-    uint32 scale = 2;
+message DecimalType { 
+    uint32 precision = 1; 
+    uint32 scale = 2; 
 }
 
 message OptionalType {
@@ -20,7 +20,7 @@ message ListType {
     Type item = 1;
 }
 
-message VariantType {
+message VariantType { 
     oneof type {
         TupleType tuple_items = 1;
         StructType struct_items = 2;
@@ -31,13 +31,13 @@ message TupleType {
     repeated Type elements = 1;
 }
 
-message StructMember {
+message StructMember { 
     string name = 1;
     Type type = 2;
 }
 
 message StructType {
-    repeated StructMember members = 1;
+    repeated StructMember members = 1; 
 }
 
 message DictType {
@@ -51,7 +51,7 @@ message TaggedType {
 }
 
 message Type {
-    enum PrimitiveTypeId {
+    enum PrimitiveTypeId { 
         PRIMITIVE_TYPE_ID_UNSPECIFIED = 0x0000;
         BOOL           = 0x0006;
         INT8           = 0x0007;
@@ -79,27 +79,27 @@ message Type {
         JSON_DOCUMENT  = 0x1204;
         DYNUMBER       = 0x1302;
     }
-
-    oneof type {
-        /* Data types */
-        PrimitiveTypeId type_id = 1;
-        DecimalType decimal_type = 2;
-
-        /* Container types */
-        OptionalType optional_type = 101;
-        ListType list_type = 102;
-        TupleType tuple_type = 103;
-        StructType struct_type = 104;
-        DictType dict_type = 105;
-        VariantType variant_type = 106;
+ 
+    oneof type { 
+        /* Data types */ 
+        PrimitiveTypeId type_id = 1; 
+        DecimalType decimal_type = 2; 
+ 
+        /* Container types */ 
+        OptionalType optional_type = 101; 
+        ListType list_type = 102; 
+        TupleType tuple_type = 103; 
+        StructType struct_type = 104; 
+        DictType dict_type = 105; 
+        VariantType variant_type = 106; 
         TaggedType tagged_type = 107;
-
-        /* Special types */
-        google.protobuf.NullValue void_type = 201;
+ 
+        /* Special types */ 
+        google.protobuf.NullValue void_type = 201; 
         google.protobuf.NullValue null_type = 202;
         google.protobuf.NullValue empty_list_type = 203;
         google.protobuf.NullValue empty_dict_type = 204;
-    }
+    } 
 }
 
 /**
@@ -124,7 +124,7 @@ message ValuePair {
  */
 
 message Value {
-    oneof value {
+    oneof value { 
         bool bool_value = 1;
         sfixed32 int32_value = 2;
         fixed32 uint32_value = 3;
@@ -138,7 +138,7 @@ message Value {
         Value nested_value = 11; // Represents nested TValue for Optional<Optional<T>>(Null), or Variant<T> types
         fixed64 low_128 = 15;
     }
-
+ 
     repeated Value items = 12; // Used for List, Tuple, Struct types
     repeated ValuePair pairs = 13; // Used for Dict type
     uint32 variant_index = 14; // Used for Variant type
@@ -150,19 +150,19 @@ message TypedValue {
     Value value = 2;
 }
 
-message Column {
-    // Name of column
-    string name = 1;
-    // Type of column
-    Type type = 2;
+message Column { 
+    // Name of column 
+    string name = 1; 
+    // Type of column 
+    Type type = 2; 
 }
-
-// Represents table-like structure with ordered set of rows and columns
-message ResultSet {
-    // Metadata of columns
-    repeated Column columns = 1;
-    // Rows of table
-    repeated Value rows = 2;
-    // Flag indicates the result was truncated
-    bool truncated = 3;
+ 
+// Represents table-like structure with ordered set of rows and columns 
+message ResultSet { 
+    // Metadata of columns 
+    repeated Column columns = 1; 
+    // Rows of table 
+    repeated Value rows = 2; 
+    // Flag indicates the result was truncated 
+    bool truncated = 3; 
 }

@@ -1,17 +1,17 @@
 UNITTEST_FOR(ydb/core/kqp/provider)
-
-OWNER(spuchin)
-
-SRCS(
-    yql_kikimr_gateway_ut.cpp
-)
-
-PEERDIR(
+ 
+OWNER(spuchin) 
+ 
+SRCS( 
+    yql_kikimr_gateway_ut.cpp 
+) 
+ 
+PEERDIR( 
     ydb/core/client/minikql_result_lib
     ydb/core/kqp/ut/common
-)
-
-YQL_LAST_ABI_VERSION()
+) 
+ 
+YQL_LAST_ABI_VERSION() 
 
 FORK_SUBTESTS()
 
@@ -24,4 +24,4 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-END()
+END() 

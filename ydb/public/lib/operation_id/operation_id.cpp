@@ -13,24 +13,24 @@ namespace NOperationId {
 
 using namespace NUri;
 
-TString ProtoToString(const Ydb::TOperationId& proto) {
+TString ProtoToString(const Ydb::TOperationId& proto) { 
     using namespace ::google::protobuf;
     const Reflection& reflection = *proto.GetReflection();
     std::vector<const FieldDescriptor*> fields;
     reflection.ListFields(proto, &fields);
     TStringStream res;
     switch (proto.GetKind()) {
-        case Ydb::TOperationId::OPERATION_DDL:
-        case Ydb::TOperationId::OPERATION_DML:
+        case Ydb::TOperationId::OPERATION_DDL: 
+        case Ydb::TOperationId::OPERATION_DML: 
             res << "ydb://operation";
             break;
-        case Ydb::TOperationId::SESSION_YQL:
+        case Ydb::TOperationId::SESSION_YQL: 
             res << "ydb://session";
             break;
-        case Ydb::TOperationId::PREPARED_QUERY_ID:
+        case Ydb::TOperationId::PREPARED_QUERY_ID: 
             res << "ydb://preparedqueryid";
             break;
-        case Ydb::TOperationId::CMS_REQUEST:
+        case Ydb::TOperationId::CMS_REQUEST: 
             res << "ydb://cmsrequest";
             break;
         case Ydb::TOperationId::EXPORT:
@@ -58,7 +58,7 @@ TString ProtoToString(const Ydb::TOperationId& proto) {
                 }
                 for (int i = 0; i < size; i++) {
                     const auto& message = reflection.GetRepeatedMessage(proto, field, i);
-                    const auto& data = dynamic_cast<const Ydb::TOperationId::TData&>(message);
+                    const auto& data = dynamic_cast<const Ydb::TOperationId::TData&>(message); 
                     TUri::ReEncode(res, data.GetKey());
                     res << "=";
                     TUri::ReEncode(res, data.GetValue());
@@ -113,7 +113,7 @@ TOperationId::TOperationId(const TString &string, bool allowEmpty) {
         ythrow yexception() << "Invalid operation kind: " << kind;
     }
 
-    SetKind(static_cast<Ydb::TOperationId::EKind>(kind));
+    SetKind(static_cast<Ydb::TOperationId::EKind>(kind)); 
 
     const TString& query = uri.PrintS(TField::FlagQuery);
 
@@ -149,7 +149,7 @@ TString TOperationId::GetSubKind() const {
     return *it->second.at(0);
 }
 
-void AddOptionalValue(Ydb::TOperationId& proto, const TString& key, const TString& value) {
+void AddOptionalValue(Ydb::TOperationId& proto, const TString& key, const TString& value) { 
     auto data = proto.AddData();
     data->SetKey(key);
     data->SetValue(value);

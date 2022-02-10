@@ -1,6 +1,6 @@
 #include "mkql_engine_flat.h"
 #include "mkql_engine_flat_host.h"
-
+ 
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
@@ -88,13 +88,13 @@ namespace {
 
     void SingleShardResolver(TKeyDesc& key) {
         key.Status = TKeyDesc::EStatus::Ok;
-        key.Partitions.push_back(TKeyDesc::TPartitionInfo(Shard1));
+        key.Partitions.push_back(TKeyDesc::TPartitionInfo(Shard1)); 
     }
 
     void DoubleShardResolver(TKeyDesc& key) {
         key.Status = TKeyDesc::EStatus::Ok;
-        key.Partitions.push_back(TKeyDesc::TPartitionInfo(Shard1));
-        key.Partitions.push_back(TKeyDesc::TPartitionInfo(Shard2));
+        key.Partitions.push_back(TKeyDesc::TPartitionInfo(Shard1)); 
+        key.Partitions.push_back(TKeyDesc::TPartitionInfo(Shard2)); 
     }
 
     void TwoShardResolver(TKeyDesc& key) {
@@ -138,8 +138,8 @@ namespace {
         IEngineFlat::EStatus Run(
             TRuntimeNode pgm,
             NKikimrMiniKQL::TResult& res,
-            std::function<void(TKeyDesc&)> keyResolver,
-            IEngineFlat::TShardLimits shardLimits = IEngineFlat::TShardLimits()) {
+            std::function<void(TKeyDesc&)> keyResolver, 
+            IEngineFlat::TShardLimits shardLimits = IEngineFlat::TShardLimits()) { 
             TString pgmStr = SerializeRuntimeNode(pgm, Env);
 
             TEngineFlatSettings settings(IEngineFlat::EProtocol::V1, FunctionRegistry.Get(), *RandomProvider, *TimeProvider);
@@ -159,7 +159,7 @@ namespace {
                     return IEngineFlat::EStatus::Error;
             }
 
-            if (proxyEngine->PrepareShardPrograms(shardLimits) != IEngineFlat::EResult::Ok) {
+            if (proxyEngine->PrepareShardPrograms(shardLimits) != IEngineFlat::EResult::Ok) { 
                 Cerr << proxyEngine->GetErrors() << Endl;
                 return IEngineFlat::EStatus::Error;
             }
@@ -263,7 +263,7 @@ namespace {
                 else {
                     const TString reply = dataEngine->GetShardReply(shardPgm.first);
                     ShardReplyInspector(shardPgm.first, reply);
-                    proxyEngine->AddShardReply(shardPgm.first, reply);
+                    proxyEngine->AddShardReply(shardPgm.first, reply); 
                     proxyEngine->FinalizeOriginReplies(shardPgm.first);
                 }
 
@@ -1528,13 +1528,13 @@ Value {
             NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
             db.Table<Schema1::Table1>()
                 .Key(ui32(42))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("loremipsumloremipsum1"));
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("loremipsumloremipsum1")); 
             db.Table<Schema1::Table1>()
                 .Key(ui32(43))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("loremipsumloremipsum2"));
-                db.Table<Schema1::Table1>()
-                .Key(ui32(44))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("loremipsumloremipsum3"));
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("loremipsumloremipsum2")); 
+                db.Table<Schema1::Table1>() 
+                .Key(ui32(44)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("loremipsumloremipsum3")); 
 
             driver.ShardDbState.CommitTransaction(Shard1);
         }
@@ -1550,7 +1550,7 @@ Value {
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        options.BytesLimit = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(32);
+        options.BytesLimit = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(32); 
         auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
 
@@ -1618,17 +1618,17 @@ Value {
         List {
           Struct {
             Optional {
-              Text: "loremipsumloremipsum1"
+              Text: "loremipsumloremipsum1" 
             }
           }
         }
-        List {
-          Struct {
-            Optional {
-              Text: "loremipsumloremipsum2"
-            }
-          }
-        }
+        List { 
+          Struct { 
+            Optional { 
+              Text: "loremipsumloremipsum2" 
+            } 
+          } 
+        } 
       }
       Struct {
         Bool: true
@@ -4378,74 +4378,74 @@ Value {
     }
 
     Y_UNIT_TEST(TestAcquireLocks) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        auto& pgmBuilder = driver.PgmBuilder;
-
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.AcquireLocks(
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.AcquireLocks( 
             pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(0))));
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
-        auto resStr = res.DebugString();
-
-        auto expectedStr = R"___(Type {
-  Kind: Struct
-  Struct {
-    Member {
-      Name: "__tx_locks"
-      Type {
-        Kind: Optional
-        Optional {
-          Item {
-            Kind: List
-            List {
-              Item {
-                Kind: Struct
-                Struct {
-                  Member {
-                    Name: "Counter"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 4
-                      }
-                    }
-                  }
-                  Member {
-                    Name: "DataShard"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 4
-                      }
-                    }
-                  }
-                  Member {
-                    Name: "Generation"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 2
-                      }
-                    }
-                  }
-                  Member {
-                    Name: "LockId"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 4
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete); 
+        auto resStr = res.DebugString(); 
+ 
+        auto expectedStr = R"___(Type { 
+  Kind: Struct 
+  Struct { 
+    Member { 
+      Name: "__tx_locks" 
+      Type { 
+        Kind: Optional 
+        Optional { 
+          Item { 
+            Kind: List 
+            List { 
+              Item { 
+                Kind: Struct 
+                Struct { 
+                  Member { 
+                    Name: "Counter" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 4 
+                      } 
+                    } 
+                  } 
+                  Member { 
+                    Name: "DataShard" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 4 
+                      } 
+                    } 
+                  } 
+                  Member { 
+                    Name: "Generation" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 2 
+                      } 
+                    } 
+                  } 
+                  Member { 
+                    Name: "LockId" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 4 
+                      } 
+                    } 
+                  } 
+                } 
+              } 
+            } 
+          } 
+        } 
+      } 
+    } 
     Member {
       Name: "__tx_locks2"
       Type {
@@ -4518,21 +4518,21 @@ Value {
         }
       }
     }
-  }
+  } 
 }
-Value {
+Value { 
+  Struct { 
+    Optional { 
+    } 
+  } 
   Struct {
     Optional {
     }
   }
-  Struct {
-    Optional {
-    }
-  }
-}
-)___";
-        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
-    }
+} 
+)___"; 
+        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr); 
+    } 
 
     Y_UNIT_TEST(TestDiagnostics) {
         TDriver driver;
@@ -4689,1768 +4689,1768 @@ Value {
 
     Y_UNIT_TEST(TestMapsPushdown) {
         const TString okValue = "Ok";
-
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema1>(Shard2);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(1))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>(okValue));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(3))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Bad"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(5))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>(okValue));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(2))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Bad"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(4))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>(okValue));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(6))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>(okValue));
-
-            driver.ShardDbState.CommitTransaction(Shard2);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
+ 
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema1>(Shard2); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(1)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>(okValue)); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(3)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Bad")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(5)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>(okValue)); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(2)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Bad")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(4)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>(okValue)); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(6)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>(okValue)); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard2); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType); 
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
+        options.FromColumns = rowFrom; 
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto list = pgmBuilder.Member(range, "List");
+        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto list = pgmBuilder.Member(range, "List"); 
         TVector<TStringBuf> filterNullColumns {"Value"};
-        auto filterNull = pgmBuilder.FilterNullMembers(list, filterNullColumns);
-        auto filtered = pgmBuilder.Filter(filterNull, [&pgmBuilder, &okValue](TRuntimeNode item) {
+        auto filterNull = pgmBuilder.FilterNullMembers(list, filterNullColumns); 
+        auto filtered = pgmBuilder.Filter(filterNull, [&pgmBuilder, &okValue](TRuntimeNode item) { 
             return pgmBuilder.AggrEquals(
-                pgmBuilder.Member(item, "Value"),
+                pgmBuilder.Member(item, "Value"), 
                 pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(okValue));
-        });
-        auto mapped = pgmBuilder.Map(filtered, [&pgmBuilder](TRuntimeNode item) {
-            return pgmBuilder.AddMember(item, "MappedID", pgmBuilder.Add(
+        }); 
+        auto mapped = pgmBuilder.Map(filtered, [&pgmBuilder](TRuntimeNode item) { 
+            return pgmBuilder.AddMember(item, "MappedID", pgmBuilder.Add( 
                 pgmBuilder.Member(item, "ID"), pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10)));
-        });
-        auto flatmapped = pgmBuilder.FlatMap(mapped, [&pgmBuilder](TRuntimeNode item) {
+        }); 
+        auto flatmapped = pgmBuilder.FlatMap(mapped, [&pgmBuilder](TRuntimeNode item) { 
             TString prefix = "mapped_";
             auto prefixNode = pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::String>(prefix);
-
-            return pgmBuilder.AsList(pgmBuilder.AddMember(item, "RemappedId", pgmBuilder.Concat(
-                prefixNode, pgmBuilder.ToString(pgmBuilder.Coalesce(pgmBuilder.Member(item, "MappedID"),
+ 
+            return pgmBuilder.AsList(pgmBuilder.AddMember(item, "RemappedId", pgmBuilder.Concat( 
+                prefixNode, pgmBuilder.ToString(pgmBuilder.Coalesce(pgmBuilder.Member(item, "MappedID"), 
                     pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(0))))));
-        });
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", flatmapped)));
-
+        }); 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", flatmapped))); 
+ 
         driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
-            Y_UNUSED(shard);
-
-            UNIT_ASSERT(program.Contains("Filter"));
-            UNIT_ASSERT(program.Contains("Map"));
-            UNIT_ASSERT(program.Contains("FlatMap"));
-        };
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
-
-        NKqp::CompareYson(R"___([[[
+            Y_UNUSED(shard); 
+ 
+            UNIT_ASSERT(program.Contains("Filter")); 
+            UNIT_ASSERT(program.Contains("Map")); 
+            UNIT_ASSERT(program.Contains("FlatMap")); 
+        }; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+        NKqp::CompareYson(R"___([[[ 
             [["1"];["11"];"mapped_11";"Ok"];
             [["5"];["15"];"mapped_15";"Ok"];
             [["4"];["14"];"mapped_14";"Ok"];
             [["6"];["16"];"mapped_16";"Ok"]
-        ]]])___", res);
-    }
-
+        ]]])___", res); 
+    } 
+ 
     Y_UNIT_TEST(NoMapPushdownMultipleConsumers) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(1))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(3))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Bad"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(5))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(1)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(3)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Bad")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(5)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType); 
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
+        options.FromColumns = rowFrom; 
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto list = pgmBuilder.Member(range, "List");
-        auto mapped = pgmBuilder.Map(list, [&pgmBuilder](TRuntimeNode item) {
-            return pgmBuilder.AddMember(item, "MappedID", pgmBuilder.Add(
+        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto list = pgmBuilder.Member(range, "List"); 
+        auto mapped = pgmBuilder.Map(list, [&pgmBuilder](TRuntimeNode item) { 
+            return pgmBuilder.AddMember(item, "MappedID", pgmBuilder.Add( 
                 pgmBuilder.Member(item, "ID"), pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10)));
-        });
-
+        }); 
+ 
         TRuntimeNode::TList results;
-        results.push_back(pgmBuilder.SetResult("Result1", mapped));
-        results.push_back(pgmBuilder.SetResult("Result2", list));
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(results));
-
+        results.push_back(pgmBuilder.SetResult("Result1", mapped)); 
+        results.push_back(pgmBuilder.SetResult("Result2", list)); 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(results)); 
+ 
         driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
-            Y_UNUSED(shard);
-            UNIT_ASSERT(!program.Contains("Map"));
-        };
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
-
-        NKqp::CompareYson(R"___([
-            [[
+            Y_UNUSED(shard); 
+            UNIT_ASSERT(!program.Contains("Map")); 
+        }; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+        NKqp::CompareYson(R"___([ 
+            [[ 
                 [["1"];["11"];["Ok"]];
                 [["3"];["13"];["Bad"]];
                 [["5"];["15"];["Ok"]]
-            ]];
-            [[
+            ]]; 
+            [[ 
                 [["1"];["Ok"]];
                 [["3"];["Bad"]];
                 [["5"];["Ok"]]
-            ]]
-        ])___", res);
-    }
-
+            ]] 
+        ])___", res); 
+    } 
+ 
     Y_UNIT_TEST(NoMapPushdownNonPureLambda) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(1))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(3))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Bad"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(5))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(1)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(3)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Bad")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(5)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType); 
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
+        options.FromColumns = rowFrom; 
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto list = pgmBuilder.Member(range, "List");
-        auto mapped = pgmBuilder.Map(list, [&pgmBuilder, keyTypes, columns](TRuntimeNode item) {
+        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto list = pgmBuilder.Member(range, "List"); 
+        auto mapped = pgmBuilder.Map(list, [&pgmBuilder, keyTypes, columns](TRuntimeNode item) { 
             TRuntimeNode::TList row(1);
             row[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(3);
-
-            return pgmBuilder.AddMember(item, "Fetch",
-                pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row));
-        });
-
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", mapped)));
-
+ 
+            return pgmBuilder.AddMember(item, "Fetch", 
+                pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row)); 
+        }); 
+ 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", mapped))); 
+ 
         driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
-            Y_UNUSED(shard);
-            UNIT_ASSERT(!program.Contains("Map"));
-        };
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
-
-        NKqp::CompareYson(R"___([[[
+            Y_UNUSED(shard); 
+            UNIT_ASSERT(!program.Contains("Map")); 
+        }; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+        NKqp::CompareYson(R"___([[[ 
             [[[["3"];["Bad"]]];["1"];["Ok"]];
             [[[["3"];["Bad"]]];["3"];["Bad"]];
             [[[["3"];["Bad"]]];["5"];["Ok"]]
-        ]]])___", res);
-    }
-
+        ]]])___", res); 
+    } 
+ 
     Y_UNIT_TEST(NoOrderedMapPushdown) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+ 
         const TString okValue = "Ok";
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(1))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(3))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Bad"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(5))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(1)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(3)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Bad")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(5)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType); 
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto list = pgmBuilder.Member(range, "List");
-        auto filtered = pgmBuilder.OrderedFilter(list, [&pgmBuilder, &okValue](TRuntimeNode item) {
+        options.FromColumns = rowFrom; 
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto list = pgmBuilder.Member(range, "List"); 
+        auto filtered = pgmBuilder.OrderedFilter(list, [&pgmBuilder, &okValue](TRuntimeNode item) { 
             return pgmBuilder.AggrEquals(
                 pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"), pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0),
                 pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(okValue));
-        });
-        auto mapped = pgmBuilder.OrderedMap(filtered, [&pgmBuilder](TRuntimeNode item) {
-            return pgmBuilder.AddMember(item, "MappedID", pgmBuilder.Add(
-                pgmBuilder.Member(item, "ID"), pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10)));
-        });
-        auto flatmapped = pgmBuilder.OrderedFlatMap(mapped, [&pgmBuilder](TRuntimeNode item) {
+        }); 
+        auto mapped = pgmBuilder.OrderedMap(filtered, [&pgmBuilder](TRuntimeNode item) { 
+            return pgmBuilder.AddMember(item, "MappedID", pgmBuilder.Add( 
+                pgmBuilder.Member(item, "ID"), pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10))); 
+        }); 
+        auto flatmapped = pgmBuilder.OrderedFlatMap(mapped, [&pgmBuilder](TRuntimeNode item) { 
             TString prefix = "mapped_";
             auto prefixNode = pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::String>(prefix);
-
-            return pgmBuilder.AsList(pgmBuilder.AddMember(item, "RemappedId", pgmBuilder.Concat(
-                prefixNode, pgmBuilder.ToString(pgmBuilder.Coalesce(pgmBuilder.Member(item, "MappedID"),
-                    pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(0))))));
-        });
-
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", flatmapped)));
-
+ 
+            return pgmBuilder.AsList(pgmBuilder.AddMember(item, "RemappedId", pgmBuilder.Concat( 
+                prefixNode, pgmBuilder.ToString(pgmBuilder.Coalesce(pgmBuilder.Member(item, "MappedID"), 
+                    pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(0)))))); 
+        }); 
+ 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", flatmapped))); 
+ 
         driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
-            Y_UNUSED(shard);
-            UNIT_ASSERT(!program.Contains("Filter"));
-            UNIT_ASSERT(!program.Contains("OrderedFilter"));
-            UNIT_ASSERT(!program.Contains("Map"));
-            UNIT_ASSERT(!program.Contains("OrderedMap"));
-            UNIT_ASSERT(!program.Contains("FlatMap"));
-            UNIT_ASSERT(!program.Contains("OrderedFlatMap"));
-        };
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
-
-        NKqp::CompareYson(R"___([[[
+            Y_UNUSED(shard); 
+            UNIT_ASSERT(!program.Contains("Filter")); 
+            UNIT_ASSERT(!program.Contains("OrderedFilter")); 
+            UNIT_ASSERT(!program.Contains("Map")); 
+            UNIT_ASSERT(!program.Contains("OrderedMap")); 
+            UNIT_ASSERT(!program.Contains("FlatMap")); 
+            UNIT_ASSERT(!program.Contains("OrderedFlatMap")); 
+        }; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+        NKqp::CompareYson(R"___([[[ 
             [["1"];["11"];"mapped_11";["Ok"]];
             [["5"];["15"];"mapped_15";["Ok"]]
-        ]]])___", res);
-    }
-
+        ]]])___", res); 
+    } 
+ 
     Y_UNIT_TEST(NoMapPushdownWriteToTable) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema2>(Shard2);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(1))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(3))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Bad"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(5))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-            db.Table<Schema2::Table2>()
-                .Key(ui64(0))
-                .Update(NIceDb::TUpdate<Schema2::Table2::Value>(0));
-
-            driver.ShardDbState.CommitTransaction(Shard2);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema2>(Shard2); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(1)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(3)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Bad")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(5)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+            db.Table<Schema2::Table2>() 
+                .Key(ui64(0)) 
+                .Update(NIceDb::TUpdate<Schema2::Table2::Value>(0)); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard2); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType); 
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
+        options.FromColumns = rowFrom; 
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto list = pgmBuilder.Member(range, "List");
-        auto mapped = pgmBuilder.Map(list, [&pgmBuilder](TRuntimeNode item) {
-            return pgmBuilder.AddMember(item, "MappedID", pgmBuilder.Add(
+        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto list = pgmBuilder.Member(range, "List"); 
+        auto mapped = pgmBuilder.Map(list, [&pgmBuilder](TRuntimeNode item) { 
+            return pgmBuilder.AddMember(item, "MappedID", pgmBuilder.Add( 
                 pgmBuilder.Member(item, "ID"), pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10)));
-        });
-
-        auto write = pgmBuilder.Map(mapped, [&pgmBuilder](TRuntimeNode item) {
+        }); 
+ 
+        auto write = pgmBuilder.Map(mapped, [&pgmBuilder](TRuntimeNode item) { 
             TVector<ui32> keyTypes(1);
             keyTypes[0] = (ui32)NUdf::TDataType<ui64>::Id;
-
+ 
             TRuntimeNode::TList row(1);
             row[0] = pgmBuilder.Convert(pgmBuilder.Member(item, "ID"), pgmBuilder.NewOptionalType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)));
-
-            auto update = pgmBuilder.GetUpdateRowBuilder();
-            ui32 columnId = (ui32)Schema2::Table2::Value::ColumnId;
+ 
+            auto update = pgmBuilder.GetUpdateRowBuilder(); 
+            ui32 columnId = (ui32)Schema2::Table2::Value::ColumnId; 
             update.SetColumn(columnId, NUdf::TDataType<ui32>::Id, pgmBuilder.Member(item, "ID"));
-            return pgmBuilder.UpdateRow(TTableId(OwnerId, Table2Id), keyTypes, row, update);
-        });
-
-        auto pgm = pgmBuilder.Build(write);
-
+            return pgmBuilder.UpdateRow(TTableId(OwnerId, Table2Id), keyTypes, row, update); 
+        }); 
+ 
+        auto pgm = pgmBuilder.Build(write); 
+ 
         driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
-            if (shard == Shard1) {
-                UNIT_ASSERT(!program.Contains("Map"));
-            }
-        };
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &TwoShardResolver), IEngineFlat::EStatus::Complete);
-
-        {
+            if (shard == Shard1) { 
+                UNIT_ASSERT(!program.Contains("Map")); 
+            } 
+        }; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &TwoShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+        { 
             TVector<TSelectColumn> columns;
-            columns.emplace_back("ID", (ui32)Schema2::Table2::ID::ColumnId, (ui32)Schema2::Table2::ID::ColumnType);
-            columns.emplace_back("Value", (ui32)Schema2::Table2::Value::ColumnId, (ui32)Schema2::Table2::Value::ColumnType);
-
-            auto options = pgmBuilder.GetDefaultTableRangeOptions();
+            columns.emplace_back("ID", (ui32)Schema2::Table2::ID::ColumnId, (ui32)Schema2::Table2::ID::ColumnType); 
+            columns.emplace_back("Value", (ui32)Schema2::Table2::Value::ColumnId, (ui32)Schema2::Table2::Value::ColumnType); 
+ 
+            auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
             TVector<ui32> keyTypes(1);
             keyTypes[0] = (ui32)NUdf::TDataType<ui64>::Id;
             TRuntimeNode::TList rowFrom(1);
             rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id);
-            options.FromColumns = rowFrom;
+            options.FromColumns = rowFrom; 
             options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-            auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table2Id), keyTypes, columns, options);
-            auto checkpgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", range)));
-
-            NKikimrMiniKQL::TResult res;
-            UNIT_ASSERT_EQUAL(driver.Run(checkpgm, res, &TwoShardResolver), IEngineFlat::EStatus::Complete);
-
-            NKqp::CompareYson(R"___([[[[
+            auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table2Id), keyTypes, columns, options); 
+            auto checkpgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", range))); 
+ 
+            NKikimrMiniKQL::TResult res; 
+            UNIT_ASSERT_EQUAL(driver.Run(checkpgm, res, &TwoShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+            NKqp::CompareYson(R"___([[[[ 
                 [["0"];["0"]];
                 [["1"];["1"]];
                 [["3"];["3"]];
                 [["5"];["5"]]];
-                %false]]])___", res);
-        }
-    }
-
+                %false]]])___", res); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(NoMapPushdownArgClosure) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema2>(Shard2);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(1))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(3))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Bad"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-
-            db.Table<Schema2::Table2>()
-                .Key(ui64(2))
-                .Update(NIceDb::TUpdate<Schema2::Table2::Value>(20));
-            db.Table<Schema2::Table2>()
-                .Key(ui64(4))
-                .Update(NIceDb::TUpdate<Schema2::Table2::Value>(40));
-
-
-            driver.ShardDbState.CommitTransaction(Shard2);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema2>(Shard2); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(1)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(3)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Bad")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+ 
+            db.Table<Schema2::Table2>() 
+                .Key(ui64(2)) 
+                .Update(NIceDb::TUpdate<Schema2::Table2::Value>(20)); 
+            db.Table<Schema2::Table2>() 
+                .Key(ui64(4)) 
+                .Update(NIceDb::TUpdate<Schema2::Table2::Value>(40)); 
+ 
+ 
+            driver.ShardDbState.CommitTransaction(Shard2); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
         TVector<TSelectColumn> columns1;
-        columns1.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
-        columns1.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-        auto options1 = pgmBuilder.GetDefaultTableRangeOptions();
+        columns1.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType); 
+        columns1.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+        auto options1 = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes1(1);
         keyTypes1[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList rowFrom1(1);
         rowFrom1[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options1.FromColumns = rowFrom1;
-        options1.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range1 = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes1, columns1, options1);
-        auto list1 = pgmBuilder.Member(range1, "List");
-
+        options1.FromColumns = rowFrom1; 
+        options1.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        auto range1 = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes1, columns1, options1); 
+        auto list1 = pgmBuilder.Member(range1, "List"); 
+ 
         TVector<TSelectColumn> columns2;
-        columns2.emplace_back("ID", (ui32)Schema2::Table2::ID::ColumnId, (ui32)Schema2::Table2::ID::ColumnType);
-        columns2.emplace_back("Value", (ui32)Schema2::Table2::Value::ColumnId, (ui32)Schema2::Table2::Value::ColumnType);
-        auto options2 = pgmBuilder.GetDefaultTableRangeOptions();
+        columns2.emplace_back("ID", (ui32)Schema2::Table2::ID::ColumnId, (ui32)Schema2::Table2::ID::ColumnType); 
+        columns2.emplace_back("Value", (ui32)Schema2::Table2::Value::ColumnId, (ui32)Schema2::Table2::Value::ColumnType); 
+        auto options2 = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes2(1);
         keyTypes2[0] = (ui32)NUdf::TDataType<ui64>::Id;
         TRuntimeNode::TList rowFrom2(1);
         rowFrom2[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id);
-        options2.FromColumns = rowFrom2;
-        options2.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range2 = pgmBuilder.SelectRange(TTableId(OwnerId, Table2Id), keyTypes2, columns2, options2);
-        auto list2 = pgmBuilder.Member(range2, "List");
-
-        auto flatmapped = pgmBuilder.FlatMap(list1, [&pgmBuilder, &list2](TRuntimeNode item1) {
-            auto mapped = pgmBuilder.Map(list2, [&pgmBuilder, &item1](TRuntimeNode item2) {
-                return pgmBuilder.NewTuple({item1, item2});
-            });
-
-            return mapped;
-        });
-
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", flatmapped)));
-
-        driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
-            Y_UNUSED(shard);
-
-            UNIT_ASSERT(!program.Contains("Map"));
-            UNIT_ASSERT(!program.Contains("FlatMap"));
-        };
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &TwoShardResolver), IEngineFlat::EStatus::Complete);
-
-        NKqp::CompareYson(R"___([[[
+        options2.FromColumns = rowFrom2; 
+        options2.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        auto range2 = pgmBuilder.SelectRange(TTableId(OwnerId, Table2Id), keyTypes2, columns2, options2); 
+        auto list2 = pgmBuilder.Member(range2, "List"); 
+ 
+        auto flatmapped = pgmBuilder.FlatMap(list1, [&pgmBuilder, &list2](TRuntimeNode item1) { 
+            auto mapped = pgmBuilder.Map(list2, [&pgmBuilder, &item1](TRuntimeNode item2) { 
+                return pgmBuilder.NewTuple({item1, item2}); 
+            }); 
+ 
+            return mapped; 
+        }); 
+ 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", flatmapped))); 
+ 
+        driver.ShardProgramInspector = [] (ui64 shard, const TString& program) { 
+            Y_UNUSED(shard); 
+ 
+            UNIT_ASSERT(!program.Contains("Map")); 
+            UNIT_ASSERT(!program.Contains("FlatMap")); 
+        }; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &TwoShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+        NKqp::CompareYson(R"___([[[ 
             [[["1"];["Ok"]];[["2"];["20"]]];
             [[["1"];["Ok"]];[["4"];["40"]]];
             [[["3"];["Bad"]];[["2"];["20"]]];
             [[["3"];["Bad"]];[["4"];["40"]]]
-        ]]])___", res);
-    }
-
+        ]]])___", res); 
+    } 
+ 
     Y_UNIT_TEST(TestSomePushDown) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema2>(Shard2);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(1))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(3))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Bad"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-
-            db.Table<Schema2::Table2>()
-                .Key(ui64(2))
-                .Update(NIceDb::TUpdate<Schema2::Table2::Value>(20));
-            db.Table<Schema2::Table2>()
-                .Key(ui64(4))
-                .Update(NIceDb::TUpdate<Schema2::Table2::Value>(40));
-
-
-            driver.ShardDbState.CommitTransaction(Shard2);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema2>(Shard2); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(1)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(3)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Bad")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+ 
+            db.Table<Schema2::Table2>() 
+                .Key(ui64(2)) 
+                .Update(NIceDb::TUpdate<Schema2::Table2::Value>(20)); 
+            db.Table<Schema2::Table2>() 
+                .Key(ui64(4)) 
+                .Update(NIceDb::TUpdate<Schema2::Table2::Value>(40)); 
+ 
+ 
+            driver.ShardDbState.CommitTransaction(Shard2); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
         TVector<TSelectColumn> columns1;
-        columns1.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
-        columns1.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-        auto options1 = pgmBuilder.GetDefaultTableRangeOptions();
+        columns1.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType); 
+        columns1.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+        auto options1 = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes1(1);
         keyTypes1[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList rowFrom1(1);
         rowFrom1[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options1.FromColumns = rowFrom1;
-        options1.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range1 = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes1, columns1, options1);
-        auto list1 = pgmBuilder.Member(range1, "List");
-
+        options1.FromColumns = rowFrom1; 
+        options1.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        auto range1 = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes1, columns1, options1); 
+        auto list1 = pgmBuilder.Member(range1, "List"); 
+ 
         TVector<TSelectColumn> columns2;
-        columns2.emplace_back("ID", (ui32)Schema2::Table2::ID::ColumnId, (ui32)Schema2::Table2::ID::ColumnType);
-        columns2.emplace_back("Value", (ui32)Schema2::Table2::Value::ColumnId, (ui32)Schema2::Table2::Value::ColumnType);
-        auto options2 = pgmBuilder.GetDefaultTableRangeOptions();
+        columns2.emplace_back("ID", (ui32)Schema2::Table2::ID::ColumnId, (ui32)Schema2::Table2::ID::ColumnType); 
+        columns2.emplace_back("Value", (ui32)Schema2::Table2::Value::ColumnId, (ui32)Schema2::Table2::Value::ColumnType); 
+        auto options2 = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes2(1);
         keyTypes2[0] = (ui32)NUdf::TDataType<ui64>::Id;
         TRuntimeNode::TList rowFrom2(1);
         rowFrom2[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id);
-        options2.FromColumns = rowFrom2;
-        options2.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range2 = pgmBuilder.SelectRange(TTableId(OwnerId, Table2Id), keyTypes2, columns2, options2);
-        auto list2 = pgmBuilder.Member(range2, "List");
-
-        auto mapped = pgmBuilder.Map(list2, [&pgmBuilder](TRuntimeNode item2) {
-            return pgmBuilder.Member(item2, "Value");
-        });
-
-        auto flatmapped = pgmBuilder.FlatMap(list1, [&pgmBuilder, &mapped](TRuntimeNode item1) {
-            return pgmBuilder.AsList({
-                pgmBuilder.NewTuple({pgmBuilder.ToString(pgmBuilder.Member(item1, "ID")), mapped}),
-                pgmBuilder.NewTuple({pgmBuilder.ToString(pgmBuilder.Member(item1, "Value")), mapped})
-            });
-        });
-
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", flatmapped)));
-
-        driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
-            Y_UNUSED(shard);
-
-            if (shard == Shard1) {
-                UNIT_ASSERT(!program.Contains("Map"));
-                UNIT_ASSERT(!program.Contains("FlatMap"));
-            } else {
-                UNIT_ASSERT(program.Contains("Map"));
-                UNIT_ASSERT(!program.Contains("FlatMap"));
-            }
-        };
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &TwoShardResolver), IEngineFlat::EStatus::Complete);
-
-        NKqp::CompareYson(R"___([[[
+        options2.FromColumns = rowFrom2; 
+        options2.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        auto range2 = pgmBuilder.SelectRange(TTableId(OwnerId, Table2Id), keyTypes2, columns2, options2); 
+        auto list2 = pgmBuilder.Member(range2, "List"); 
+ 
+        auto mapped = pgmBuilder.Map(list2, [&pgmBuilder](TRuntimeNode item2) { 
+            return pgmBuilder.Member(item2, "Value"); 
+        }); 
+ 
+        auto flatmapped = pgmBuilder.FlatMap(list1, [&pgmBuilder, &mapped](TRuntimeNode item1) { 
+            return pgmBuilder.AsList({ 
+                pgmBuilder.NewTuple({pgmBuilder.ToString(pgmBuilder.Member(item1, "ID")), mapped}), 
+                pgmBuilder.NewTuple({pgmBuilder.ToString(pgmBuilder.Member(item1, "Value")), mapped}) 
+            }); 
+        }); 
+ 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", flatmapped))); 
+ 
+        driver.ShardProgramInspector = [] (ui64 shard, const TString& program) { 
+            Y_UNUSED(shard); 
+ 
+            if (shard == Shard1) { 
+                UNIT_ASSERT(!program.Contains("Map")); 
+                UNIT_ASSERT(!program.Contains("FlatMap")); 
+            } else { 
+                UNIT_ASSERT(program.Contains("Map")); 
+                UNIT_ASSERT(!program.Contains("FlatMap")); 
+            } 
+        }; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &TwoShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+        NKqp::CompareYson(R"___([[[ 
             [["1"];[["20"];["40"]]];
             [["Ok"];[["20"];["40"]]];
             [["3"];[["20"];["40"]]];
             [["Bad"];[["20"];["40"]]]
-        ]]])___", res);
-    }
-
+        ]]])___", res); 
+    } 
+ 
     Y_UNIT_TEST(TestCombineByKeyPushdown) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema1>(Shard2);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(1))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(3))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(5))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(2))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(4))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(6))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-
-            driver.ShardDbState.CommitTransaction(Shard2);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema1>(Shard2); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(1)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(3)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(5)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(2)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(4)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(6)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard2); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType); 
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
+        options.FromColumns = rowFrom; 
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto list = pgmBuilder.Member(range, "List");
-
-        auto preMap = pgmBuilder.FlatMap(list, [&](TRuntimeNode item) {
-            return pgmBuilder.NewOptional(item);
-        });
-
-        auto dict = pgmBuilder.ToHashedDict(preMap, true, [&](TRuntimeNode item) {
-            return pgmBuilder.Member(item, "Value");
-        }, [&](TRuntimeNode item) {
-            return item;
-        });
-
+        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto list = pgmBuilder.Member(range, "List"); 
+ 
+        auto preMap = pgmBuilder.FlatMap(list, [&](TRuntimeNode item) { 
+            return pgmBuilder.NewOptional(item); 
+        }); 
+ 
+        auto dict = pgmBuilder.ToHashedDict(preMap, true, [&](TRuntimeNode item) { 
+            return pgmBuilder.Member(item, "Value"); 
+        }, [&](TRuntimeNode item) { 
+            return item; 
+        }); 
+ 
         auto values = pgmBuilder.DictItems(dict);
-
-        auto agg = pgmBuilder.FlatMap(values, [&](TRuntimeNode item) {
-            auto key = pgmBuilder.Nth(item, 0);
-            auto payloadList = pgmBuilder.Nth(item, 1);
-            auto fold1 = pgmBuilder.Fold1(payloadList, [&](TRuntimeNode item2) {
+ 
+        auto agg = pgmBuilder.FlatMap(values, [&](TRuntimeNode item) { 
+            auto key = pgmBuilder.Nth(item, 0); 
+            auto payloadList = pgmBuilder.Nth(item, 1); 
+            auto fold1 = pgmBuilder.Fold1(payloadList, [&](TRuntimeNode item2) { 
                 std::vector<std::pair<std::string_view, TRuntimeNode>> fields {
-                    {"Key", key},
-                    {"Sum", pgmBuilder.Member(item2, "ID")}
-                };
-                return pgmBuilder.NewOptional(pgmBuilder.NewStruct(fields));
-            }, [&](TRuntimeNode item2, TRuntimeNode state) {
+                    {"Key", key}, 
+                    {"Sum", pgmBuilder.Member(item2, "ID")} 
+                }; 
+                return pgmBuilder.NewOptional(pgmBuilder.NewStruct(fields)); 
+            }, [&](TRuntimeNode item2, TRuntimeNode state) { 
                 std::vector<std::pair<std::string_view, TRuntimeNode>> fields {
-                    {"Key", pgmBuilder.Member(state, "Key")},
-                    {"Sum", pgmBuilder.AggrAdd(pgmBuilder.Member(state, "Sum"), pgmBuilder.Member(item2, "ID"))}
-                };
-                return pgmBuilder.NewOptional(pgmBuilder.NewStruct(fields));
-            });
-
-            auto res = pgmBuilder.FlatMap(fold1, [&](TRuntimeNode state) {
-                return state;
-            });
-
-            return res;
-        });
-
-        auto merge = pgmBuilder.CombineByKeyMerge(agg);
-
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", merge)));
-
+                    {"Key", pgmBuilder.Member(state, "Key")}, 
+                    {"Sum", pgmBuilder.AggrAdd(pgmBuilder.Member(state, "Sum"), pgmBuilder.Member(item2, "ID"))} 
+                }; 
+                return pgmBuilder.NewOptional(pgmBuilder.NewStruct(fields)); 
+            }); 
+ 
+            auto res = pgmBuilder.FlatMap(fold1, [&](TRuntimeNode state) { 
+                return state; 
+            }); 
+ 
+            return res; 
+        }); 
+ 
+        auto merge = pgmBuilder.CombineByKeyMerge(agg); 
+ 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", merge))); 
+ 
         driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
-            Y_UNUSED(shard);
-
-            UNIT_ASSERT(program.Contains("FlatMap"));
-            UNIT_ASSERT(program.Contains("ToHashedDict"));
-            UNIT_ASSERT(program.Contains("DictItems"));
-        };
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
-
-        NKqp::CompareYson(R"___([[[
+            Y_UNUSED(shard); 
+ 
+            UNIT_ASSERT(program.Contains("FlatMap")); 
+            UNIT_ASSERT(program.Contains("ToHashedDict")); 
+            UNIT_ASSERT(program.Contains("DictItems")); 
+        }; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+        NKqp::CompareYson(R"___([[[ 
             [["Value1"];["6"]];
             [["Value2"];["3"]];
             [["Value2"];["8"]];
             [["Value3"];["4"]]
-        ]]])___", res);
-    }
-
+        ]]])___", res); 
+    } 
+ 
     Y_UNIT_TEST(TestCombineByKeyNoPushdown) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema1>(Shard2);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(1))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(3))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(5))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(2))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(4))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(6))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-
-            driver.ShardDbState.CommitTransaction(Shard2);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema1>(Shard2); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(1)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(3)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(5)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(2)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(4)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(6)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard2); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType); 
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
+        options.FromColumns = rowFrom; 
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto list = pgmBuilder.Member(range, "List");
-
-        auto dict = pgmBuilder.ToHashedDict(list, true, [&](TRuntimeNode item) {
-            return pgmBuilder.Member(item, "Value");
-        }, [&](TRuntimeNode item) {
-            return item;
-        });
-
+        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto list = pgmBuilder.Member(range, "List"); 
+ 
+        auto dict = pgmBuilder.ToHashedDict(list, true, [&](TRuntimeNode item) { 
+            return pgmBuilder.Member(item, "Value"); 
+        }, [&](TRuntimeNode item) { 
+            return item; 
+        }); 
+ 
         auto values = pgmBuilder.DictItems(dict);
-
-        auto agg = pgmBuilder.FlatMap(values, [&](TRuntimeNode item) {
-            auto key = pgmBuilder.Nth(item, 0);
-            auto payloadList = pgmBuilder.Nth(item, 1);
-            auto fold1 = pgmBuilder.Fold1(payloadList, [&](TRuntimeNode item2) {
+ 
+        auto agg = pgmBuilder.FlatMap(values, [&](TRuntimeNode item) { 
+            auto key = pgmBuilder.Nth(item, 0); 
+            auto payloadList = pgmBuilder.Nth(item, 1); 
+            auto fold1 = pgmBuilder.Fold1(payloadList, [&](TRuntimeNode item2) { 
                 std::vector<std::pair<std::string_view, TRuntimeNode>> fields {
-                    {"Key", key},
-                    {"Sum", pgmBuilder.Member(item2, "ID")}
-                };
-                return pgmBuilder.NewOptional(pgmBuilder.NewStruct(fields));
-            }, [&](TRuntimeNode item2, TRuntimeNode state) {
+                    {"Key", key}, 
+                    {"Sum", pgmBuilder.Member(item2, "ID")} 
+                }; 
+                return pgmBuilder.NewOptional(pgmBuilder.NewStruct(fields)); 
+            }, [&](TRuntimeNode item2, TRuntimeNode state) { 
                 std::vector<std::pair<std::string_view, TRuntimeNode>> fields {
-                    {"Key", pgmBuilder.Member(state, "Key")},
-                    {"Sum", pgmBuilder.AggrAdd(pgmBuilder.Member(state, "Sum"), pgmBuilder.Member(item2, "ID"))}
-                };
-                return pgmBuilder.NewOptional(pgmBuilder.NewStruct(fields));
-            });
-
-            auto res = pgmBuilder.FlatMap(fold1, [&](TRuntimeNode state) {
-                return state;
-            });
-
-            return res;
-        });
-
-        auto merge = pgmBuilder.CombineByKeyMerge(agg);
-
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", merge)));
-
+                    {"Key", pgmBuilder.Member(state, "Key")}, 
+                    {"Sum", pgmBuilder.AggrAdd(pgmBuilder.Member(state, "Sum"), pgmBuilder.Member(item2, "ID"))} 
+                }; 
+                return pgmBuilder.NewOptional(pgmBuilder.NewStruct(fields)); 
+            }); 
+ 
+            auto res = pgmBuilder.FlatMap(fold1, [&](TRuntimeNode state) { 
+                return state; 
+            }); 
+ 
+            return res; 
+        }); 
+ 
+        auto merge = pgmBuilder.CombineByKeyMerge(agg); 
+ 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", merge))); 
+ 
         driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
-            Y_UNUSED(shard);
-
-            UNIT_ASSERT(!program.Contains("FlatMap"));
-            UNIT_ASSERT(!program.Contains("ToHashedDict"));
-            UNIT_ASSERT(!program.Contains("DictItems"));
-        };
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
-
-        NKqp::CompareYson(R"___([[[
+            Y_UNUSED(shard); 
+ 
+            UNIT_ASSERT(!program.Contains("FlatMap")); 
+            UNIT_ASSERT(!program.Contains("ToHashedDict")); 
+            UNIT_ASSERT(!program.Contains("DictItems")); 
+        }; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+        NKqp::CompareYson(R"___([[[ 
             [["Value1"];["6"]];
             [["Value2"];["11"]];
             [["Value3"];["4"]]
-        ]]])___", res);
-    }
-
+        ]]])___", res); 
+    } 
+ 
     Y_UNIT_TEST(TestTakePushdown) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema1>(Shard2);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(1))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(3))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(5))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(2))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(4))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(6))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-
-            driver.ShardDbState.CommitTransaction(Shard2);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema1>(Shard2); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(1)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(3)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(5)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(2)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(4)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(6)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard2); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType); 
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
+        options.FromColumns = rowFrom; 
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto list = pgmBuilder.Member(range, "List");
-
+        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto list = pgmBuilder.Member(range, "List"); 
+ 
         const TString filterValue = "Value1";
-        auto filtered = pgmBuilder.Filter(list, [&pgmBuilder, &filterValue](TRuntimeNode item) {
+        auto filtered = pgmBuilder.Filter(list, [&pgmBuilder, &filterValue](TRuntimeNode item) { 
             return pgmBuilder.AggrNotEquals(
                 pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"), pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0),
                 pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(filterValue));
-        });
-
+        }); 
+ 
         auto take = pgmBuilder.Take(filtered, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2));
-
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", take)));
-
+ 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", take))); 
+ 
         driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
-            Y_UNUSED(shard);
-
-            UNIT_ASSERT(program.Contains("Filter"));
-            UNIT_ASSERT(program.Contains("Take"));
-        };
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
-
-        NKqp::CompareYson(R"___([[[
+            Y_UNUSED(shard); 
+ 
+            UNIT_ASSERT(program.Contains("Filter")); 
+            UNIT_ASSERT(program.Contains("Take")); 
+        }; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+        NKqp::CompareYson(R"___([[[ 
             [["3"];["Value2"]];
             [["2"];["Value2"]]
-        ]]])___", res);
-    }
-
+        ]]])___", res); 
+    } 
+ 
     Y_UNIT_TEST(TestNoOrderedTakePushdown) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema1>(Shard2);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(1))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(2))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(3))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(4))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(5))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(6))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-
-            driver.ShardDbState.CommitTransaction(Shard2);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema1>(Shard2); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(1)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(2)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(3)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(4)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(5)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(6)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard2); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType); 
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
+        options.FromColumns = rowFrom; 
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto list = pgmBuilder.Member(range, "List");
-
+        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto list = pgmBuilder.Member(range, "List"); 
+ 
         auto take = pgmBuilder.Take(list, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(4));
-
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", take)));
-
+ 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", take))); 
+ 
         driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
-            Y_UNUSED(shard);
-
-            UNIT_ASSERT(!program.Contains("Take"));
-        };
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
-
-        NKqp::CompareYson(R"___([[[
+            Y_UNUSED(shard); 
+ 
+            UNIT_ASSERT(!program.Contains("Take")); 
+        }; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+        NKqp::CompareYson(R"___([[[ 
             [["1"];["Value1"]];
             [["2"];["Value2"]];
             [["3"];["Value1"]];
             [["4"];["Value2"]]
-        ]]])___", res);
-    }
-
+        ]]])___", res); 
+    } 
+ 
     Y_UNIT_TEST(TestLengthPushdown) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema1>(Shard2);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(1))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(3))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(5))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(2))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(4))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(6))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-
-            driver.ShardDbState.CommitTransaction(Shard2);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema1>(Shard2); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(1)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(3)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(5)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(2)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(4)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(6)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard2); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType); 
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
+        options.FromColumns = rowFrom; 
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto list = pgmBuilder.Member(range, "List");
-
+        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto list = pgmBuilder.Member(range, "List"); 
+ 
         const TString filterValue = "Value2";
-        auto filtered = pgmBuilder.Filter(list, [&pgmBuilder, &filterValue](TRuntimeNode item) {
+        auto filtered = pgmBuilder.Filter(list, [&pgmBuilder, &filterValue](TRuntimeNode item) { 
             return pgmBuilder.AggrNotEquals(
                 pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"), pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0),
                 pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(filterValue));
-        });
-
-        auto length = pgmBuilder.Length(filtered);
-
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", length)));
-
+        }); 
+ 
+        auto length = pgmBuilder.Length(filtered); 
+ 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", length))); 
+ 
         driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
-            Y_UNUSED(shard);
-
-            UNIT_ASSERT(program.Contains("Filter"));
-            UNIT_ASSERT(program.Contains("Length"));
-        };
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
-
-        NKqp::CompareYson(R"___([["3"]])___", res);
-    }
-
+            Y_UNUSED(shard); 
+ 
+            UNIT_ASSERT(program.Contains("Filter")); 
+            UNIT_ASSERT(program.Contains("Length")); 
+        }; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+        NKqp::CompareYson(R"___([["3"]])___", res); 
+    } 
+ 
     Y_UNIT_TEST(TestNoAggregatedPushdown) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema1>(Shard2);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(1))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(3))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(5))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(2))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(4))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(6))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-
-            driver.ShardDbState.CommitTransaction(Shard2);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema1>(Shard2); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(1)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(3)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(5)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(2)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(4)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(6)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard2); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType); 
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
+        options.FromColumns = rowFrom; 
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto list = pgmBuilder.Member(range, "List");
-
-        auto mapped = pgmBuilder.Map(list, [&pgmBuilder](TRuntimeNode item) {
-            return pgmBuilder.AddMember(item, "MappedID", pgmBuilder.Add(
+        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto list = pgmBuilder.Member(range, "List"); 
+ 
+        auto mapped = pgmBuilder.Map(list, [&pgmBuilder](TRuntimeNode item) { 
+            return pgmBuilder.AddMember(item, "MappedID", pgmBuilder.Add( 
                 pgmBuilder.Member(item, "ID"), pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10)));
-        });
-
+        }); 
+ 
         auto take = pgmBuilder.Take(mapped, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2));
-
+ 
         const TString filterValue = "Value2";
-        auto filtered = pgmBuilder.Filter(take, [&pgmBuilder, &filterValue](TRuntimeNode item) {
+        auto filtered = pgmBuilder.Filter(take, [&pgmBuilder, &filterValue](TRuntimeNode item) { 
             return pgmBuilder.AggrNotEquals(
                 pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"), pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0),
                 pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(filterValue));
-        });
-        auto length = pgmBuilder.Length(filtered);
-
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", length)));
-
+        }); 
+        auto length = pgmBuilder.Length(filtered); 
+ 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", length))); 
+ 
         driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
-            Y_UNUSED(shard);
-
-            UNIT_ASSERT(program.Contains("Map"));
-            UNIT_ASSERT(program.Contains("Take"));
-            UNIT_ASSERT(!program.Contains("Filter"));
-            UNIT_ASSERT(!program.Contains("Length"));
-        };
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
-
-        NKqp::CompareYson(R"___([["1"]])___", res);
-    }
-
+            Y_UNUSED(shard); 
+ 
+            UNIT_ASSERT(program.Contains("Map")); 
+            UNIT_ASSERT(program.Contains("Take")); 
+            UNIT_ASSERT(!program.Contains("Filter")); 
+            UNIT_ASSERT(!program.Contains("Length")); 
+        }; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+        NKqp::CompareYson(R"___([["1"]])___", res); 
+    } 
+ 
     Y_UNIT_TEST(TestTopSortPushdownPk) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema1>(Shard2);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(1))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(3))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(5))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value5"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(2))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(4))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value4"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(6))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value6"));
-
-            driver.ShardDbState.CommitTransaction(Shard2);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema1>(Shard2); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(1)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(3)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(5)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value5")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(2)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(4)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value4")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(6)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value6")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard2); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType); 
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto list = pgmBuilder.Member(range, "List");
-
-        const TString filterValue = "Value1";
-        auto filtered = pgmBuilder.Filter(list, [&pgmBuilder, &filterValue](TRuntimeNode item) {
+        options.FromColumns = rowFrom; 
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto list = pgmBuilder.Member(range, "List"); 
+ 
+        const TString filterValue = "Value1"; 
+        auto filtered = pgmBuilder.Filter(list, [&pgmBuilder, &filterValue](TRuntimeNode item) { 
             return pgmBuilder.AggrNotEquals(
                 pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"), pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0),
                 pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(filterValue));
-        });
-
-        auto partialTake = pgmBuilder.PartialTake(filtered, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2));
-        auto sort = pgmBuilder.Sort(partialTake, pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(true),
-            [&pgmBuilder] (TRuntimeNode item) {
-                return pgmBuilder.Member(item, "ID");
-            });
-
-        auto take = pgmBuilder.Take(sort, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2));
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", take)));
-
-        driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
-            Y_UNUSED(shard);
-
-            UNIT_ASSERT(program.Contains("Filter"));
-            UNIT_ASSERT(program.Contains("Take"));
-            UNIT_ASSERT(!program.Contains("Sort"));
-        };
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
-
-        NKqp::CompareYson(R"___([[[[["2"];["Value2"]];[["3"];["Value3"]]]]])___", res);
-    }
-
+        }); 
+ 
+        auto partialTake = pgmBuilder.PartialTake(filtered, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2)); 
+        auto sort = pgmBuilder.Sort(partialTake, pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(true), 
+            [&pgmBuilder] (TRuntimeNode item) { 
+                return pgmBuilder.Member(item, "ID"); 
+            }); 
+ 
+        auto take = pgmBuilder.Take(sort, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2)); 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", take))); 
+ 
+        driver.ShardProgramInspector = [] (ui64 shard, const TString& program) { 
+            Y_UNUSED(shard); 
+ 
+            UNIT_ASSERT(program.Contains("Filter")); 
+            UNIT_ASSERT(program.Contains("Take")); 
+            UNIT_ASSERT(!program.Contains("Sort")); 
+        }; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+        NKqp::CompareYson(R"___([[[[["2"];["Value2"]];[["3"];["Value3"]]]]])___", res); 
+    } 
+ 
     Y_UNIT_TEST(TestTopSortPushdown) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema1>(Shard2);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(1))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(3))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(5))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value5"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(2))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(4))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value4"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(6))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value6"));
-
-            driver.ShardDbState.CommitTransaction(Shard2);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema1>(Shard2); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(1)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(3)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(5)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value5")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(2)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(4)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value4")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(6)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value6")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard2); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType); 
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto list = pgmBuilder.Member(range, "List");
-
-        const TString filterValue = "Value6";
-        auto filtered = pgmBuilder.Filter(list, [&pgmBuilder, &filterValue](TRuntimeNode item) {
+        options.FromColumns = rowFrom; 
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto list = pgmBuilder.Member(range, "List"); 
+ 
+        const TString filterValue = "Value6"; 
+        auto filtered = pgmBuilder.Filter(list, [&pgmBuilder, &filterValue](TRuntimeNode item) { 
             return pgmBuilder.AggrNotEquals(
                 pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"), pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0),
                 pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(filterValue));
-        });
-
-        auto partialSort = pgmBuilder.PartialSort(filtered, pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(false),
-            [&pgmBuilder] (TRuntimeNode item) {
-                return pgmBuilder.Member(item, "Value");
-            });
-        auto partialTake = pgmBuilder.PartialTake(partialSort, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2));
-        auto sort = pgmBuilder.Sort(partialTake, pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(false),
-            [&pgmBuilder] (TRuntimeNode item) {
-                return pgmBuilder.Member(item, "Value");
-            });
-
-        auto take = pgmBuilder.Take(sort, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2));
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", take)));
-
-        driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
-            Y_UNUSED(shard);
-
-            UNIT_ASSERT(program.Contains("Filter"));
-            UNIT_ASSERT(program.Contains("Take"));
-            UNIT_ASSERT(program.Contains("Sort"));
-        };
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
-
-        NKqp::CompareYson(R"___([[[[["5"];["Value5"]];[["4"];["Value4"]]]]])___", res);
-    }
-
-    Y_UNIT_TEST(TestTopSortNonImmediatePushdown) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema1>(Shard2);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(1))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(3))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(5))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value5"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(2))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(4))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value4"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(6))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value6"));
-
-            driver.ShardDbState.CommitTransaction(Shard2);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
-        TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        }); 
+ 
+        auto partialSort = pgmBuilder.PartialSort(filtered, pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(false), 
+            [&pgmBuilder] (TRuntimeNode item) { 
+                return pgmBuilder.Member(item, "Value"); 
+            }); 
+        auto partialTake = pgmBuilder.PartialTake(partialSort, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2)); 
+        auto sort = pgmBuilder.Sort(partialTake, pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(false), 
+            [&pgmBuilder] (TRuntimeNode item) { 
+                return pgmBuilder.Member(item, "Value"); 
+            }); 
+ 
+        auto take = pgmBuilder.Take(sort, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2)); 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", take))); 
+ 
+        driver.ShardProgramInspector = [] (ui64 shard, const TString& program) { 
+            Y_UNUSED(shard); 
+ 
+            UNIT_ASSERT(program.Contains("Filter")); 
+            UNIT_ASSERT(program.Contains("Take")); 
+            UNIT_ASSERT(program.Contains("Sort")); 
+        }; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+        NKqp::CompareYson(R"___([[[[["5"];["Value5"]];[["4"];["Value4"]]]]])___", res); 
+    } 
+ 
+    Y_UNIT_TEST(TestTopSortNonImmediatePushdown) { 
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema1>(Shard2); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(1)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(3)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(5)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value5")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(2)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(4)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value4")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(6)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value6")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard2); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
+        TVector<TSelectColumn> columns; 
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType); 
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
+        TVector<ui32> keyTypes(1); 
+        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id; 
         TRuntimeNode::TList rowFrom(1);
-        rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto list = pgmBuilder.Member(range, "List");
-
-        const TString filterValue = "Value6";
-        auto filtered = pgmBuilder.Filter(list, [&pgmBuilder, &filterValue](TRuntimeNode item) {
-            return pgmBuilder.AggrNotEquals(
-                pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"), pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0),
-                pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(filterValue));
-        });
-
-        auto partialSort = pgmBuilder.PartialSort(filtered, pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(false),
-            [&pgmBuilder] (TRuntimeNode item) {
-                return pgmBuilder.Member(item, "Value");
-            });
-
-        auto takeCount = pgmBuilder.Add(pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1),
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1));
-
-        auto partialTake = pgmBuilder.PartialTake(partialSort, takeCount);
-        auto sort = pgmBuilder.Sort(partialTake, pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(false),
-            [&pgmBuilder] (TRuntimeNode item) {
-                return pgmBuilder.Member(item, "Value");
-            });
-
-        auto take = pgmBuilder.Take(sort, takeCount);
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", take)));
-
-        driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
-            Y_UNUSED(shard);
-
-            UNIT_ASSERT(program.Contains("Filter"));
-            UNIT_ASSERT(program.Contains("Take"));
-            UNIT_ASSERT(program.Contains("Sort"));
-        };
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
-
-        NKqp::CompareYson(R"___([[[[["5"];["Value5"]];[["4"];["Value4"]]]]])___", res);
-    }
-
-    Y_UNIT_TEST(TestNoPartialSortPushdown) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema1>(Shard2);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(1))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(3))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(5))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value5"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(2))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(4))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value4"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(6))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value6"));
-
-            driver.ShardDbState.CommitTransaction(Shard2);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
-        TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
-        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
+        rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id); 
+        options.FromColumns = rowFrom; 
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto list = pgmBuilder.Member(range, "List"); 
+ 
+        const TString filterValue = "Value6"; 
+        auto filtered = pgmBuilder.Filter(list, [&pgmBuilder, &filterValue](TRuntimeNode item) { 
+            return pgmBuilder.AggrNotEquals( 
+                pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"), pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0), 
+                pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(filterValue)); 
+        }); 
+ 
+        auto partialSort = pgmBuilder.PartialSort(filtered, pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(false), 
+            [&pgmBuilder] (TRuntimeNode item) { 
+                return pgmBuilder.Member(item, "Value"); 
+            }); 
+ 
+        auto takeCount = pgmBuilder.Add(pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1), 
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1)); 
+ 
+        auto partialTake = pgmBuilder.PartialTake(partialSort, takeCount); 
+        auto sort = pgmBuilder.Sort(partialTake, pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(false), 
+            [&pgmBuilder] (TRuntimeNode item) { 
+                return pgmBuilder.Member(item, "Value"); 
+            }); 
+ 
+        auto take = pgmBuilder.Take(sort, takeCount); 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", take))); 
+ 
+        driver.ShardProgramInspector = [] (ui64 shard, const TString& program) { 
+            Y_UNUSED(shard); 
+ 
+            UNIT_ASSERT(program.Contains("Filter")); 
+            UNIT_ASSERT(program.Contains("Take")); 
+            UNIT_ASSERT(program.Contains("Sort")); 
+        }; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+        NKqp::CompareYson(R"___([[[[["5"];["Value5"]];[["4"];["Value4"]]]]])___", res); 
+    } 
+ 
+    Y_UNIT_TEST(TestNoPartialSortPushdown) { 
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema1>(Shard2); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(1)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(3)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(5)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value5")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(2)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value2")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(4)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value4")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(6)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value6")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard2); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
+        TVector<TSelectColumn> columns; 
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType); 
+        columns.emplace_back("Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
+        TVector<ui32> keyTypes(1); 
+        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id; 
         TRuntimeNode::TList rowFrom(1);
-        rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto list = pgmBuilder.Member(range, "List");
-
-        const TString filterValue = "Value6";
-        auto filtered = pgmBuilder.Filter(list, [&pgmBuilder, &filterValue](TRuntimeNode item) {
-            return pgmBuilder.AggrNotEquals(
-                pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"), pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0),
-                pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(filterValue));
-        });
-
-        auto partialSort = pgmBuilder.PartialSort(filtered, pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(false),
-            [&pgmBuilder] (TRuntimeNode item) {
-                return pgmBuilder.Member(item, "Value");
-            });
-
-        const TString filter2Value = "Value5";
-        auto filtered2 = pgmBuilder.Filter(partialSort, [&pgmBuilder, &filter2Value](TRuntimeNode item) {
-            return pgmBuilder.AggrNotEquals(
-                pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"), pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0),
-                pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(filter2Value));
-        });
-
-        auto take = pgmBuilder.Take(filtered2, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2));
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", take)));
-
-        driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
-            Y_UNUSED(shard);
-
-            UNIT_ASSERT(program.Contains("Filter"));
-            UNIT_ASSERT(!program.Contains("Take"));
-            UNIT_ASSERT(!program.Contains("Sort"));
-        };
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete);
-
-        NKqp::CompareYson(R"___([[[[["4"];["Value4"]];[["3"];["Value3"]]]]])___", res);
-    }
-
+        rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id); 
+        options.FromColumns = rowFrom; 
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto list = pgmBuilder.Member(range, "List"); 
+ 
+        const TString filterValue = "Value6"; 
+        auto filtered = pgmBuilder.Filter(list, [&pgmBuilder, &filterValue](TRuntimeNode item) { 
+            return pgmBuilder.AggrNotEquals( 
+                pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"), pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0), 
+                pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(filterValue)); 
+        }); 
+ 
+        auto partialSort = pgmBuilder.PartialSort(filtered, pgmBuilder.TProgramBuilder::NewDataLiteral<bool>(false), 
+            [&pgmBuilder] (TRuntimeNode item) { 
+                return pgmBuilder.Member(item, "Value"); 
+            }); 
+ 
+        const TString filter2Value = "Value5"; 
+        auto filtered2 = pgmBuilder.Filter(partialSort, [&pgmBuilder, &filter2Value](TRuntimeNode item) { 
+            return pgmBuilder.AggrNotEquals( 
+                pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"), pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0), 
+                pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(filter2Value)); 
+        }); 
+ 
+        auto take = pgmBuilder.Take(filtered2, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2)); 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", take))); 
+ 
+        driver.ShardProgramInspector = [] (ui64 shard, const TString& program) { 
+            Y_UNUSED(shard); 
+ 
+            UNIT_ASSERT(program.Contains("Filter")); 
+            UNIT_ASSERT(!program.Contains("Take")); 
+            UNIT_ASSERT(!program.Contains("Sort")); 
+        }; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+        NKqp::CompareYson(R"___([[[[["4"];["Value4"]];[["3"];["Value3"]]]]])___", res); 
+    } 
+ 
     Y_UNIT_TEST(TestSelectRangeNoColumns) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-
-            db.Table<Schema1::Table1>()
-                .Key(ui64(1))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(3))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Bad"));
-            db.Table<Schema1::Table1>()
-                .Key(ui64(5))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(1)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(3)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Bad")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui64(5)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Ok")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList rowFrom(1);
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        options.FromColumns = rowFrom;
+        options.FromColumns = rowFrom; 
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, {}, options);
-        auto list = pgmBuilder.Member(range, "List");
-        auto length = pgmBuilder.Length(list);
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", length)));
-
+        auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, {}, options); 
+        auto list = pgmBuilder.Member(range, "List"); 
+        auto length = pgmBuilder.Length(list); 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", length))); 
+ 
         driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
-            Y_UNUSED(shard);
-            UNIT_ASSERT(!program.Contains("Map"));
-        };
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
-
-        NKqp::CompareYson(R"___([["3"]])___", res);
-    }
-
+            Y_UNUSED(shard); 
+            UNIT_ASSERT(!program.Contains("Map")); 
+        }; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+        NKqp::CompareYson(R"___([["3"]])___", res); 
+    } 
+ 
     Y_UNIT_TEST(TestInternalResult) {
-        TDriver driver;
-        auto& pgmBuilder = driver.PgmBuilder;
-        auto value = pgmBuilder.TProgramBuilder::TProgramBuilder::NewDataLiteral<ui32>(42);
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("__cantuse", value)));
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &EmptyShardResolver), IEngineFlat::EStatus::Error);
-
-        Cout << res.DebugString() << Endl;
-    }
-
+        TDriver driver; 
+        auto& pgmBuilder = driver.PgmBuilder; 
+        auto value = pgmBuilder.TProgramBuilder::TProgramBuilder::NewDataLiteral<ui32>(42); 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("__cantuse", value))); 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &EmptyShardResolver), IEngineFlat::EStatus::Error); 
+ 
+        Cout << res.DebugString() << Endl; 
+    } 
+ 
     Y_UNIT_TEST(TestIndependentSelects) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema2>(Shard2);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-
-            db.Table<Schema1::Table1>()
-                .Key(1)
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1"));
-            db.Table<Schema1::Table1>()
-                .Key(3)
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3"));
-            db.Table<Schema1::Table1>()
-                .Key(5)
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value5"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-
-            db.Table<Schema2::Table2>()
-                .Key(2)
-                .Update(NIceDb::TUpdate<Schema2::Table2::Value>(20));
-            db.Table<Schema2::Table2>()
-                .Key(4)
-                .Update(NIceDb::TUpdate<Schema2::Table2::Value>(40));
-            db.Table<Schema2::Table2>()
-                .Key(6)
-                .Update(NIceDb::TUpdate<Schema2::Table2::Value>(50));
-
-            driver.ShardDbState.CommitTransaction(Shard2);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
-        TVector<TSelectColumn> columns1 {
-            {"ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType},
-            {"Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType}
-        };
-
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema2>(Shard2); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+ 
+            db.Table<Schema1::Table1>() 
+                .Key(1) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value1")); 
+            db.Table<Schema1::Table1>() 
+                .Key(3) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value3")); 
+            db.Table<Schema1::Table1>() 
+                .Key(5) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("Value5")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+ 
+            db.Table<Schema2::Table2>() 
+                .Key(2) 
+                .Update(NIceDb::TUpdate<Schema2::Table2::Value>(20)); 
+            db.Table<Schema2::Table2>() 
+                .Key(4) 
+                .Update(NIceDb::TUpdate<Schema2::Table2::Value>(40)); 
+            db.Table<Schema2::Table2>() 
+                .Key(6) 
+                .Update(NIceDb::TUpdate<Schema2::Table2::Value>(50)); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard2); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
+        TVector<TSelectColumn> columns1 { 
+            {"ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType}, 
+            {"Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType} 
+        }; 
+ 
         TRuntimeNode::TList fromColumns1{pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id)};
-        auto options1 = pgmBuilder.GetDefaultTableRangeOptions();
-        options1.FromColumns = fromColumns1;
-        options1.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range1 = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), {(ui32)NUdf::TDataType<ui32>::Id},
-            columns1, options1);
-        auto list1 = pgmBuilder.Member(range1, "List");
-
-        const TString filterValue = "Value6";
-        auto filtered1 = pgmBuilder.Filter(list1, [&pgmBuilder, &filterValue](TRuntimeNode item) {
+        auto options1 = pgmBuilder.GetDefaultTableRangeOptions(); 
+        options1.FromColumns = fromColumns1; 
+        options1.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        auto range1 = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), {(ui32)NUdf::TDataType<ui32>::Id}, 
+            columns1, options1); 
+        auto list1 = pgmBuilder.Member(range1, "List"); 
+ 
+        const TString filterValue = "Value6"; 
+        auto filtered1 = pgmBuilder.Filter(list1, [&pgmBuilder, &filterValue](TRuntimeNode item) { 
             return pgmBuilder.AggrNotEquals(
-                pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"),
-                pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0),
-                pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(filterValue));
-        });
-
-        auto take1 = pgmBuilder.Take(filtered1, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2));
-
-        TVector<TSelectColumn> columns2 {
-            {"ID", (ui32)Schema2::Table2::ID::ColumnId, (ui32)Schema2::Table2::ID::ColumnType},
-            {"Value", (ui32)Schema2::Table2::Value::ColumnId, (ui32)Schema2::Table2::Value::ColumnType}
-        };
-
+                pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"), 
+                pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0), 
+                pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(filterValue)); 
+        }); 
+ 
+        auto take1 = pgmBuilder.Take(filtered1, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2)); 
+ 
+        TVector<TSelectColumn> columns2 { 
+            {"ID", (ui32)Schema2::Table2::ID::ColumnId, (ui32)Schema2::Table2::ID::ColumnType}, 
+            {"Value", (ui32)Schema2::Table2::Value::ColumnId, (ui32)Schema2::Table2::Value::ColumnType} 
+        }; 
+ 
         TRuntimeNode::TList fromColumns2{pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id)};
-        auto options2 = pgmBuilder.GetDefaultTableRangeOptions();
-        options2.FromColumns = fromColumns2;
-        options2.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto range2 = pgmBuilder.SelectRange(TTableId(OwnerId, Table2Id), {(ui32)NUdf::TDataType<ui64>::Id},
-            columns2, options2);
-        auto list2 = pgmBuilder.Member(range2, "List");
-
-        auto mapped2 = pgmBuilder.Map(list2, [&pgmBuilder](TRuntimeNode item) {
-            return pgmBuilder.AddMember(item, "MappedID", pgmBuilder.Add(
-                pgmBuilder.Member(item, "ID"), pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10)));
-        });
-
-        auto take2 = pgmBuilder.Take(mapped2, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2));
-
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(
-            pgmBuilder.SetResult("Result", pgmBuilder.NewTuple({take1, take2}))
-        ));
-
-        driver.ShardProgramInspector = [] (ui64 shard, const TString& program) {
-            if (shard == Shard1) {
-                UNIT_ASSERT(program.Contains("Filter"));
-            }
-        };
-
-        driver.ReadSetsInspector = [] (const TDriver::TOutgoingReadsets& outReadsets,
-            const TDriver::TIncomingReadsets& inReadsets)
-        {
-            UNIT_ASSERT(outReadsets.empty());
-            UNIT_ASSERT(inReadsets.empty());
-        };
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &TwoShardResolver), IEngineFlat::EStatus::Complete);
-
-        NKqp::CompareYson(R"___([
+        auto options2 = pgmBuilder.GetDefaultTableRangeOptions(); 
+        options2.FromColumns = fromColumns2; 
+        options2.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        auto range2 = pgmBuilder.SelectRange(TTableId(OwnerId, Table2Id), {(ui32)NUdf::TDataType<ui64>::Id}, 
+            columns2, options2); 
+        auto list2 = pgmBuilder.Member(range2, "List"); 
+ 
+        auto mapped2 = pgmBuilder.Map(list2, [&pgmBuilder](TRuntimeNode item) { 
+            return pgmBuilder.AddMember(item, "MappedID", pgmBuilder.Add( 
+                pgmBuilder.Member(item, "ID"), pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10))); 
+        }); 
+ 
+        auto take2 = pgmBuilder.Take(mapped2, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2)); 
+ 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList( 
+            pgmBuilder.SetResult("Result", pgmBuilder.NewTuple({take1, take2})) 
+        )); 
+ 
+        driver.ShardProgramInspector = [] (ui64 shard, const TString& program) { 
+            if (shard == Shard1) { 
+                UNIT_ASSERT(program.Contains("Filter")); 
+            } 
+        }; 
+ 
+        driver.ReadSetsInspector = [] (const TDriver::TOutgoingReadsets& outReadsets, 
+            const TDriver::TIncomingReadsets& inReadsets) 
+        { 
+            UNIT_ASSERT(outReadsets.empty()); 
+            UNIT_ASSERT(inReadsets.empty()); 
+        }; 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &TwoShardResolver), IEngineFlat::EStatus::Complete); 
+ 
+        NKqp::CompareYson(R"___([ 
             [[[[["1"];["Value1"]];[["3"];["Value3"]]];
             [[["2"];["12"];["20"]];[["4"];["14"];["40"]]]]]
-        ])___", res);
-    }
-
-    Y_UNIT_TEST(TestMultiRSPerDestination) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema1>(Shard2);
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
-
+        ])___", res); 
+    } 
+ 
+    Y_UNIT_TEST(TestMultiRSPerDestination) { 
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema1>(Shard2); 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
+        TVector<ui32> keyTypes(1); 
+        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id; 
+        TVector<TSelectColumn> columns; 
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType); 
+ 
         TRuntimeNode::TList row1(1);
-        row1[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(1);
-        auto value1 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row1);
-
+        row1[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(1); 
+        auto value1 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row1); 
+ 
         TRuntimeNode::TList row2(1);
-        row2[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(3);
-        auto value2 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row2);
-
+        row2[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(3); 
+        auto value2 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row2); 
+ 
         TRuntimeNode::TList row3(1);
-        row3[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(5);
-        auto value3 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row3);
-
-        auto list = pgmBuilder.AsList({value1, value2, value3});
-
-        auto mapped = pgmBuilder.Map(list, [&pgmBuilder, &keyTypes](TRuntimeNode item) {
-            auto update = pgmBuilder.GetUpdateRowBuilder();
-
+        row3[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(5); 
+        auto value3 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row3); 
+ 
+        auto list = pgmBuilder.AsList({value1, value2, value3}); 
+ 
+        auto mapped = pgmBuilder.Map(list, [&pgmBuilder, &keyTypes](TRuntimeNode item) { 
+            auto update = pgmBuilder.GetUpdateRowBuilder(); 
+ 
             TRuntimeNode::TList row(1);
-            row[0] = pgmBuilder.Add(
-                pgmBuilder.Member(item, "ID"),
-                pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10));
-
-            return pgmBuilder.UpdateRow(TTableId(OwnerId, Table1Id), keyTypes, row, update);
-        });
-
-        auto pgm = pgmBuilder.Build(mapped);
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver,
-            IEngineFlat::TShardLimits(2, 2)), IEngineFlat::EStatus::Complete);
-
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver,
-            IEngineFlat::TShardLimits(2, 1)), IEngineFlat::EStatus::Error);
-        Cerr << res.DebugString() << Endl;
-    }
-
-    Y_UNIT_TEST(TestCrossTableRs) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        driver.ShardDbState.AddShard<Schema2>(Shard2);
-
-        auto& pgmBuilder = driver.PgmBuilder;
-
-        TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TVector<TSelectColumn> columns;
-        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
-
-        TVector<ui32> key2Types(1);
-        key2Types[0] = (ui32)NUdf::TDataType<ui64>::Id;
-
+            row[0] = pgmBuilder.Add( 
+                pgmBuilder.Member(item, "ID"), 
+                pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10)); 
+ 
+            return pgmBuilder.UpdateRow(TTableId(OwnerId, Table1Id), keyTypes, row, update); 
+        }); 
+ 
+        auto pgm = pgmBuilder.Build(mapped); 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver, 
+            IEngineFlat::TShardLimits(2, 2)), IEngineFlat::EStatus::Complete); 
+ 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &DoubleShardResolver, 
+            IEngineFlat::TShardLimits(2, 1)), IEngineFlat::EStatus::Error); 
+        Cerr << res.DebugString() << Endl; 
+    } 
+ 
+    Y_UNIT_TEST(TestCrossTableRs) { 
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        driver.ShardDbState.AddShard<Schema2>(Shard2); 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
+        TVector<ui32> keyTypes(1); 
+        keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id; 
+        TVector<TSelectColumn> columns; 
+        columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType); 
+ 
+        TVector<ui32> key2Types(1); 
+        key2Types[0] = (ui32)NUdf::TDataType<ui64>::Id; 
+ 
         TRuntimeNode::TList row1(1);
-        row1[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(1);
-        auto value1 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row1);
-
+        row1[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(1); 
+        auto value1 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row1); 
+ 
         TRuntimeNode::TList row2(1);
-        row2[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(3);
-        auto value2 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row2);
-
+        row2[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(3); 
+        auto value2 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row2); 
+ 
         TRuntimeNode::TList row3(1);
-        row3[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(5);
-        auto value3 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row3);
-
-        auto list = pgmBuilder.AsList({value1, value2, value3});
-
-        auto mapped = pgmBuilder.Map(list, [&pgmBuilder, &key2Types](TRuntimeNode item) {
-            auto update = pgmBuilder.GetUpdateRowBuilder();
-
+        row3[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(5); 
+        auto value3 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row3); 
+ 
+        auto list = pgmBuilder.AsList({value1, value2, value3}); 
+ 
+        auto mapped = pgmBuilder.Map(list, [&pgmBuilder, &key2Types](TRuntimeNode item) { 
+            auto update = pgmBuilder.GetUpdateRowBuilder(); 
+ 
             TRuntimeNode::TList row(1);
-            row[0] = pgmBuilder.Add(
+            row[0] = pgmBuilder.Add( 
                 pgmBuilder.Convert(pgmBuilder.Member(item, "ID"), pgmBuilder.NewOptionalType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id))),
-                pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10));
-
-            return pgmBuilder.UpdateRow(TTableId(OwnerId, Table2Id), key2Types, row, update);
-        });
-
-        auto pgm = pgmBuilder.Build(mapped);
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &TwoShardResolver,
-            IEngineFlat::TShardLimits(2, 1)), IEngineFlat::EStatus::Complete);
-
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &TwoShardResolver,
-            IEngineFlat::TShardLimits(2, 0)), IEngineFlat::EStatus::Error);
-        Cerr << res.DebugString() << Endl;
-    }
+                pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10)); 
+ 
+            return pgmBuilder.UpdateRow(TTableId(OwnerId, Table2Id), key2Types, row, update); 
+        }); 
+ 
+        auto pgm = pgmBuilder.Build(mapped); 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &TwoShardResolver, 
+            IEngineFlat::TShardLimits(2, 1)), IEngineFlat::EStatus::Complete); 
+ 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &TwoShardResolver, 
+            IEngineFlat::TShardLimits(2, 0)), IEngineFlat::EStatus::Error); 
+        Cerr << res.DebugString() << Endl; 
+    } 
 }
-
+ 
 }
-}
+} 

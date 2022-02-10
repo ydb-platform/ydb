@@ -1,49 +1,49 @@
-#include "kqp_olap_compiler.h"
-
+#include "kqp_olap_compiler.h" 
+ 
 #include <ydb/core/formats/arrow_helpers.h>
 
-namespace NKikimr {
-namespace NKqp {
-
-using namespace NYql;
-using namespace NYql::NNodes;
+namespace NKikimr { 
+namespace NKqp { 
+ 
+using namespace NYql; 
+using namespace NYql::NNodes; 
 using namespace NKikimrSSA;
-
+ 
 constexpr ui32 OLAP_PROGRAM_VERSION = 1;
 
-namespace {
-
-class TKqpOlapCompileContext {
-public:
+namespace { 
+ 
+class TKqpOlapCompileContext { 
+public: 
     TKqpOlapCompileContext(const TCoArgument& row, const TKikimrTableMetadata& tableMeta,
         NKqpProto::TKqpPhyOpReadOlapRanges& readProto)
-        : Row(row)
-        , MaxColumnId(0)
+        : Row(row) 
+        , MaxColumnId(0) 
         , ReadProto(readProto)
-    {
-        for (const auto& [_, columnMeta] : tableMeta.Columns) {
-            YQL_ENSURE(ReadColumns.emplace(columnMeta.Name, columnMeta.Id).second);
-            MaxColumnId = std::max(MaxColumnId, columnMeta.Id);
-        }
+    { 
+        for (const auto& [_, columnMeta] : tableMeta.Columns) { 
+            YQL_ENSURE(ReadColumns.emplace(columnMeta.Name, columnMeta.Id).second); 
+            MaxColumnId = std::max(MaxColumnId, columnMeta.Id); 
+        } 
 
         Program.SetVersion(OLAP_PROGRAM_VERSION);
-    }
-
-    ui32 GetColumnId(const TStringBuf& name) const {
-        auto column = ReadColumns.FindPtr(name);
-        YQL_ENSURE(column);
-
-        return *column;
-    }
-
-    ui32 NewColumnId() {
-        return ++MaxColumnId;
-    }
-
-    const TExprNode* GetRowExpr() const {
-        return Row.Raw();
-    }
-
+    } 
+ 
+    ui32 GetColumnId(const TStringBuf& name) const { 
+        auto column = ReadColumns.FindPtr(name); 
+        YQL_ENSURE(column); 
+ 
+        return *column; 
+    } 
+ 
+    ui32 NewColumnId() { 
+        return ++MaxColumnId; 
+    } 
+ 
+    const TExprNode* GetRowExpr() const { 
+        return Row.Raw(); 
+    } 
+ 
     TProgram::TAssignment* CreateAssignCmd() {
         auto* cmd = Program.AddCommand();
         auto* assign = cmd->MutableAssign();
@@ -67,17 +67,17 @@ public:
         ReadProto.SetOlapProgram(programBytes);
     }
 
-private:
-    TCoArgument Row;
-    TMap<TString, ui32> ReadColumns;
-    ui32 MaxColumnId;
+private: 
+    TCoArgument Row; 
+    TMap<TString, ui32> ReadColumns; 
+    ui32 MaxColumnId; 
     TProgram Program;
     NKqpProto::TKqpPhyOpReadOlapRanges& ReadProto;
-};
-
+}; 
+ 
 
 TProgram::TAssignment* CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx);
-
+ 
 ui32 ConvertValueToColumn(const TCoDataCtor& value, TKqpOlapCompileContext& ctx)
 {
     TProgram::TAssignment* ssaValue = ctx.CreateAssignCmd();
@@ -162,12 +162,12 @@ ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx) {
 }
 
 TProgram::TAssignment* CompileComparison(const TKqpOlapFilterCompare& comparison,
-    TKqpOlapCompileContext& ctx)
-{
+    TKqpOlapCompileContext& ctx) 
+{ 
     // Columns should be created before comparison, otherwise comparison fail to find columns
     ui32 leftColumnId = GetOrCreateColumnId(comparison.Left(), ctx);
     ui32 rightColumnId = GetOrCreateColumnId(comparison.Right(), ctx);
-
+ 
     TProgram::TAssignment* command = ctx.CreateAssignCmd();
     auto* cmpFunc = command->MutableFunction();
 
@@ -188,10 +188,10 @@ TProgram::TAssignment* CompileComparison(const TKqpOlapFilterCompare& comparison
     cmpFunc->SetId(function);
     cmpFunc->AddArguments()->SetId(leftColumnId);
     cmpFunc->AddArguments()->SetId(rightColumnId);
-
+ 
     return command;
-}
-
+} 
+ 
 TProgram::TAssignment* CompileExists(const TKqpOlapFilterExists& exists,
     TKqpOlapCompileContext& ctx)
 {
@@ -213,8 +213,8 @@ TProgram::TAssignment* CompileExists(const TKqpOlapFilterExists& exists,
 }
 
 TProgram::TAssignment* BuildLogicalProgram(const TExprNode::TChildrenType& args, ui32 function,
-    TKqpOlapCompileContext& ctx)
-{
+    TKqpOlapCompileContext& ctx) 
+{ 
     ui32 childrenCount = args.size();
 
     if (childrenCount == 1) {
@@ -298,32 +298,32 @@ void CompileFilter(const TKqpOlapFilter& filterNode, TKqpOlapCompileContext& ctx
 }
 
 void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
-    if (operation.Raw() == ctx.GetRowExpr()) {
-        return;
-    }
-
+    if (operation.Raw() == ctx.GetRowExpr()) { 
+        return; 
+    } 
+ 
     if (auto maybeFilter = operation.Maybe<TKqpOlapFilter>()) {
         CompileOlapProgramImpl(maybeFilter.Cast().Input(), ctx);
         CompileFilter(maybeFilter.Cast(), ctx);
-        return;
-    }
-
-    YQL_ENSURE(operation.Maybe<TCallable>(), "Unexpected OLAP operation node type: " << operation.Ref().Type());
-    YQL_ENSURE(false, "Unexpected OLAP operation: " << operation.Cast<TCallable>().CallableName());
-}
-
-} // namespace
-
+        return; 
+    } 
+ 
+    YQL_ENSURE(operation.Maybe<TCallable>(), "Unexpected OLAP operation node type: " << operation.Ref().Type()); 
+    YQL_ENSURE(false, "Unexpected OLAP operation: " << operation.Cast<TCallable>().CallableName()); 
+} 
+ 
+} // namespace 
+ 
 void CompileOlapProgram(const TCoLambda& lambda, const TKikimrTableMetadata& tableMeta,
     NKqpProto::TKqpPhyOpReadOlapRanges& readProto)
 {
-    YQL_ENSURE(lambda.Args().Size() == 1);
-
+    YQL_ENSURE(lambda.Args().Size() == 1); 
+ 
     TKqpOlapCompileContext ctx(lambda.Args().Arg(0), tableMeta, readProto);
-
+ 
     CompileOlapProgramImpl(lambda.Body(), ctx);
     ctx.SerializeToProto();
-}
-
-} // namespace NKqp
-} // namespace NKikimr
+} 
+ 
+} // namespace NKqp 
+} // namespace NKikimr 

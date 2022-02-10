@@ -38,7 +38,7 @@ public:
             , ResponseTo(sender)
             , Alloc(allocPoolCounters, functionRegistry->SupportsSizedAllocators())
             , TypeEnv(Alloc)
-            , Cookie(0)
+            , Cookie(0) 
             , Retried(false)
         {
             Alloc.Release();
@@ -53,7 +53,7 @@ public:
         TActorId ResponseTo;
         NMiniKQL::TScopedAlloc Alloc;
         NMiniKQL::TTypeEnvironment TypeEnv;
-        ui64 Cookie;
+        ui64 Cookie; 
         bool Retried;
         THashMap<TString, ui64> CompileResolveCookies;
         bool ForceRefresh;
@@ -101,7 +101,7 @@ private:
     void Handle(TMiniKQLCompileServiceEvents::TEvCompile::TPtr& ev, const TActorContext& ctx) {
         TMiniKQLCompileServiceEvents::TEvCompile *msg = ev->Get();
         TCompileContext::TPtr c(new TCompileContext(msg->Program, ev->Sender, AllocPoolCounters, AppData(ctx)->FunctionRegistry));
-        c->Cookie = ev->Cookie;
+        c->Cookie = ev->Cookie; 
         c->CompileResolveCookies = std::move(msg->CompileResolveCookies);
         c->ForceRefresh = msg->ForceRefresh;
         CompileQueue.push(c);

@@ -24,7 +24,7 @@ Y_UNIT_TEST(TTestWithSimpleProgram) {
 (
 (let list (AsList (Uint32 '20) (Uint32 '10) (Uint32 '0)))
 (let opt (Just (String 'i_am_opt)))
-(let tuple '((Double '12) (Float '22)))
+(let tuple '((Double '12) (Float '22))) 
 (return (AsList
     (SetResult 'list list)
     (SetResult 'opt opt)

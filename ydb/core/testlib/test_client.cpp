@@ -121,14 +121,14 @@ namespace Tests {
         TDuration::Seconds(120)
     ).MilliSeconds();
 
-    NMiniKQL::IFunctionRegistry* DefaultFrFactory(const NScheme::TTypeRegistry& typeRegistry) {
+    NMiniKQL::IFunctionRegistry* DefaultFrFactory(const NScheme::TTypeRegistry& typeRegistry) { 
         Y_UNUSED(typeRegistry);
-        // register test UDFs
+        // register test UDFs 
         auto freg = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone();
         NKikimr::NMiniKQL::FillStaticModules(*freg);
-        return freg.Release();
-    }
-
+        return freg.Release(); 
+    } 
+ 
     ui64 ChangeDomain(ui64 tabletId, ui32 domainUid) {
         return MakeTabletID(StateStorageGroupFromTabletID(tabletId), domainUid, UniqPartFromTabletID(tabletId));
     }
@@ -151,8 +151,8 @@ namespace Tests {
     TServer::TServer(const TServerSettings &settings, bool init)
         : TServer(new TServerSettings(settings), init)
     {
-    }
-
+    } 
+ 
     void TServer::Initialize() {
         if (Settings->SupportsRedirect && IsServerRedirected())
             return;
@@ -187,7 +187,7 @@ namespace Tests {
         }
 
         SetupLogging();
-
+ 
         SetupMessageBus(Settings->Port, Settings->TracePath);
         SetupDomains(app);
 
@@ -302,9 +302,9 @@ namespace Tests {
         GRpcServer->AddService(grpcService);
         GRpcServer->AddService(new NGRpcService::TGRpcYdbExportService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbImportService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbSchemeService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbTableService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbScriptingService(system, counters, grpcRequestProxyId));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbSchemeService(system, counters, grpcRequestProxyId)); 
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbTableService(system, counters, grpcRequestProxyId)); 
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbScriptingService(system, counters, grpcRequestProxyId)); 
         GRpcServer->AddService(new NGRpcService::TGRpcOperationService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::V1::TGRpcPersQueueService(system, counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcPQClusterDiscoveryService(system, counters, grpcRequestProxyId));
@@ -563,7 +563,7 @@ namespace Tests {
                                         TMailboxType::Revolving, 0);
         Runtime->RegisterService(MakeTenantPoolRootID(), poolId, nodeIdx);
         if (Settings->EnableConfigsDispatcher) {
-            auto *dispatcher = NConsole::CreateConfigsDispatcher(Settings->AppConfig);
+            auto *dispatcher = NConsole::CreateConfigsDispatcher(Settings->AppConfig); 
             auto aid = Runtime->Register(dispatcher, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid);
         }
@@ -590,7 +590,7 @@ namespace Tests {
             TActorId ticketParserId = Runtime->Register(ticketParser, nodeIdx);
             Runtime->RegisterService(MakeTicketParserID(), ticketParserId, nodeIdx);
         }
-
+ 
         {
             IActor* healthCheck = NHealthCheck::CreateHealthCheckService();
             TActorId healthCheckId = Runtime->Register(healthCheck, nodeIdx);
@@ -604,14 +604,14 @@ namespace Tests {
         }
 
         {
-            IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig.GetLogConfig(),
+            IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig.GetLogConfig(), 
                                                                   Settings->AppConfig.GetTableServiceConfig(),
                                                                   TVector<NKikimrKqp::TKqpSetting>(Settings->KqpSettings),
                                                                   nullptr);
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx);
             Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
         }
-
+ 
         {
             IActor* txProxy = CreateTxProxy(Runtime->GetTxAllocatorTabletIds());
             TActorId txProxyId = Runtime->Register(txProxy, nodeIdx);
@@ -651,7 +651,7 @@ namespace Tests {
                 }
             }
         }
-
+ 
         {
             auto driverConfig = NYdb::TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << Settings->GrpcPort);
             if (!Driver) {
@@ -821,12 +821,12 @@ namespace Tests {
     }
 
     void TServer::SetupLogging() {
-        Runtime->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_WARN);
+        Runtime->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_WARN); 
         //Runtime->SetLogPriority(NKikimrServices::SCHEMESHARD_DESCRIBE, NLog::PRI_DEBUG);
-        //Runtime->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG);
+        //Runtime->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG); 
         //Runtime->SetLogPriority(NKikimrServices::LOCAL, NActors::NLog::PRI_DEBUG);
 
-        Runtime->SetLogPriority(NKikimrServices::BS_CONTROLLER, NLog::PRI_WARN);
+        Runtime->SetLogPriority(NKikimrServices::BS_CONTROLLER, NLog::PRI_WARN); 
         Runtime->SetLogPriority(NKikimrServices::MSGBUS_REQUEST, NLog::PRI_WARN);
 
         //Runtime->SetLogPriority(NKikimrServices::TX_COORDINATOR, NLog::PRI_DEBUG);
@@ -835,8 +835,8 @@ namespace Tests {
         //Runtime->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
 
         //Runtime->SetLogPriority(NKikimrServices::MINIKQL_ENGINE, NLog::PRI_DEBUG);
-        //Runtime->SetLogPriority(NKikimrServices::KQP_PROXY, NLog::PRI_DEBUG);
-        //Runtime->SetLogPriority(NKikimrServices::KQP_WORKER, NLog::PRI_DEBUG);
+        //Runtime->SetLogPriority(NKikimrServices::KQP_PROXY, NLog::PRI_DEBUG); 
+        //Runtime->SetLogPriority(NKikimrServices::KQP_WORKER, NLog::PRI_DEBUG); 
 
         //Runtime->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_TRACE);
         //Runtime->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_TRACE);
@@ -872,7 +872,7 @@ namespace Tests {
 
     const NMiniKQL::IFunctionRegistry* TServer::GetFunctionRegistry() {
         return Runtime->GetAppData().FunctionRegistry;
-    }
+    } 
 
     TServer::~TServer() {
         if (Runtime->GetAppData().Mon) {
@@ -883,9 +883,9 @@ namespace Tests {
             GRpcServer->Stop();
         }
 
-        if (Runtime) {
-            Runtime.Destroy();
-        }
+        if (Runtime) { 
+            Runtime.Destroy(); 
+        } 
 
         if (Bus) {
             Bus->Stop();
@@ -1904,7 +1904,7 @@ namespace Tests {
                 if (opts.CollectStats)
                     mkqlTx->SetCollectStats(true);
             }
-
+ 
             TAutoPtr<NBus::TBusMessage> reply;
             NBus::EMessageStatus msgStatus = SyncCall(request, reply);
             UNIT_ASSERT_EQUAL(msgStatus, NBus::MESSAGE_OK);
@@ -1929,10 +1929,10 @@ namespace Tests {
         FlatQueryRaw(query, opts, response);
 
         if (!response.GetDataShardErrors().empty()) {
-            Cerr << "DataShardErrors:" << Endl << response.GetDataShardErrors() << Endl;
+            Cerr << "DataShardErrors:" << Endl << response.GetDataShardErrors() << Endl; 
         }
         if (!response.GetMiniKQLErrors().empty()) {
-            Cerr << "MiniKQLErrors:" << Endl << response.GetMiniKQLErrors() << Endl;
+            Cerr << "MiniKQLErrors:" << Endl << response.GetMiniKQLErrors() << Endl; 
         }
         if (response.HasProxyErrorCode()) {
             if (response.GetProxyErrorCode() != TEvTxUserProxy::TResultStatus::ExecComplete)

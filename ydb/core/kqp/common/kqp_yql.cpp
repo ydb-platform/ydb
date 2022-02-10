@@ -1,130 +1,130 @@
-#include "kqp_yql.h"
-
+#include "kqp_yql.h" 
+ 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
-namespace NYql {
-
-using namespace NKikimr;
-using namespace NKikimr::NKqp;
-using namespace NNodes;
-
-static EPhysicalQueryType GetPhysicalQueryType(const TStringBuf& value) {
-    if (value == "data_query") {
-        return EPhysicalQueryType::Data;
-    } else if (value == "scan_query") {
-        return EPhysicalQueryType::Scan;
-    } else {
-        YQL_ENSURE(false, "Unknown physical query type: " << value);
-    }
-}
-
-static TStringBuf PhysicalQueryTypeToString(EPhysicalQueryType type) {
-    switch (type) {
-        case EPhysicalQueryType::Unspecified:
-            break;
-        case EPhysicalQueryType::Data:
-            return "data_query";
-        case EPhysicalQueryType::Scan:
-            return "scan_query";
-    }
-
-    YQL_ENSURE(false, "Unexpected physical query type: " << type);
-}
-
-TKqpPhyQuerySettings TKqpPhyQuerySettings::Parse(const TKqpPhysicalQuery& node) {
-    TKqpPhyQuerySettings settings;
-
-    for (const auto& tuple : node.Settings()) {
-        auto name = tuple.Name().Value();
-        if (name == TypeSettingName) {
-            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
-            settings.Type = GetPhysicalQueryType(tuple.Value().Cast<TCoAtom>().Value());
-        }
-    }
-
-    return settings;
-}
-
-NNodes::TCoNameValueTupleList TKqpPhyQuerySettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
-    TVector<TCoNameValueTuple> settings;
-
-    if (Type) {
-        settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
-            .Name().Build(TypeSettingName)
-            .Value<TCoAtom>().Build(PhysicalQueryTypeToString(*Type))
-            .Done());
-    }
-
-    return Build<TCoNameValueTupleList>(ctx, pos)
-        .Add(settings)
-        .Done();
-}
-
-static EPhysicalTxType GetPhysicalTxType(const TStringBuf& value) {
-    if (value == "compute") {
-        return EPhysicalTxType::Compute;
-    } else if (value == "data") {
-        return EPhysicalTxType::Data;
-    } else if (value == "scan") {
-        return EPhysicalTxType::Scan;
-    } else {
-        YQL_ENSURE(false, "Unknown physical tx type: " << value);
-    }
-}
-
-static TStringBuf PhysicalTxTypeToString(EPhysicalTxType type) {
-    switch (type) {
-        case EPhysicalTxType::Unspecified:
-            break;
-        case EPhysicalTxType::Compute:
-            return "compute";
-        case EPhysicalTxType::Data:
-            return "data";
-        case EPhysicalTxType::Scan:
-            return "scan";
-    }
-
-    YQL_ENSURE(false, "Unexpected physical tx type: " << type);
-}
-
-TKqpPhyTxSettings TKqpPhyTxSettings::Parse(const TKqpPhysicalTx& node) {
-    TKqpPhyTxSettings settings;
-
-    for (const auto& tuple : node.Settings()) {
-        auto name = tuple.Name().Value();
-        if (name == TypeSettingName) {
-            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
-            settings.Type = GetPhysicalTxType(tuple.Value().Cast<TCoAtom>().Value());
+namespace NYql { 
+ 
+using namespace NKikimr; 
+using namespace NKikimr::NKqp; 
+using namespace NNodes; 
+ 
+static EPhysicalQueryType GetPhysicalQueryType(const TStringBuf& value) { 
+    if (value == "data_query") { 
+        return EPhysicalQueryType::Data; 
+    } else if (value == "scan_query") { 
+        return EPhysicalQueryType::Scan; 
+    } else { 
+        YQL_ENSURE(false, "Unknown physical query type: " << value); 
+    } 
+} 
+ 
+static TStringBuf PhysicalQueryTypeToString(EPhysicalQueryType type) { 
+    switch (type) { 
+        case EPhysicalQueryType::Unspecified: 
+            break; 
+        case EPhysicalQueryType::Data: 
+            return "data_query"; 
+        case EPhysicalQueryType::Scan: 
+            return "scan_query"; 
+    } 
+ 
+    YQL_ENSURE(false, "Unexpected physical query type: " << type); 
+} 
+ 
+TKqpPhyQuerySettings TKqpPhyQuerySettings::Parse(const TKqpPhysicalQuery& node) { 
+    TKqpPhyQuerySettings settings; 
+ 
+    for (const auto& tuple : node.Settings()) { 
+        auto name = tuple.Name().Value(); 
+        if (name == TypeSettingName) { 
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>()); 
+            settings.Type = GetPhysicalQueryType(tuple.Value().Cast<TCoAtom>().Value()); 
+        } 
+    } 
+ 
+    return settings; 
+} 
+ 
+NNodes::TCoNameValueTupleList TKqpPhyQuerySettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const { 
+    TVector<TCoNameValueTuple> settings; 
+ 
+    if (Type) { 
+        settings.push_back(Build<TCoNameValueTuple>(ctx, pos) 
+            .Name().Build(TypeSettingName) 
+            .Value<TCoAtom>().Build(PhysicalQueryTypeToString(*Type)) 
+            .Done()); 
+    } 
+ 
+    return Build<TCoNameValueTupleList>(ctx, pos) 
+        .Add(settings) 
+        .Done(); 
+} 
+ 
+static EPhysicalTxType GetPhysicalTxType(const TStringBuf& value) { 
+    if (value == "compute") { 
+        return EPhysicalTxType::Compute; 
+    } else if (value == "data") { 
+        return EPhysicalTxType::Data; 
+    } else if (value == "scan") { 
+        return EPhysicalTxType::Scan; 
+    } else { 
+        YQL_ENSURE(false, "Unknown physical tx type: " << value); 
+    } 
+} 
+ 
+static TStringBuf PhysicalTxTypeToString(EPhysicalTxType type) { 
+    switch (type) { 
+        case EPhysicalTxType::Unspecified: 
+            break; 
+        case EPhysicalTxType::Compute: 
+            return "compute"; 
+        case EPhysicalTxType::Data: 
+            return "data"; 
+        case EPhysicalTxType::Scan: 
+            return "scan"; 
+    } 
+ 
+    YQL_ENSURE(false, "Unexpected physical tx type: " << type); 
+} 
+ 
+TKqpPhyTxSettings TKqpPhyTxSettings::Parse(const TKqpPhysicalTx& node) { 
+    TKqpPhyTxSettings settings; 
+ 
+    for (const auto& tuple : node.Settings()) { 
+        auto name = tuple.Name().Value(); 
+        if (name == TypeSettingName) { 
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>()); 
+            settings.Type = GetPhysicalTxType(tuple.Value().Cast<TCoAtom>().Value()); 
         } else if (name == WithEffectsSettingName) {
             settings.WithEffects = true;
-        }
-    }
-
-    return settings;
-}
-
-NNodes::TCoNameValueTupleList TKqpPhyTxSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
-    TVector<TCoNameValueTuple> settings;
+        } 
+    } 
+ 
+    return settings; 
+} 
+ 
+NNodes::TCoNameValueTupleList TKqpPhyTxSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const { 
+    TVector<TCoNameValueTuple> settings; 
     settings.reserve(2);
-
-    if (Type) {
+ 
+    if (Type) { 
         settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
-            .Name().Build(TypeSettingName)
-            .Value<TCoAtom>().Build(PhysicalTxTypeToString(*Type))
-            .Done());
-    }
-
+            .Name().Build(TypeSettingName) 
+            .Value<TCoAtom>().Build(PhysicalTxTypeToString(*Type)) 
+            .Done()); 
+    } 
+ 
     if (WithEffects) {
         settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(WithEffectsSettingName)
             .Done());
     }
 
-    return Build<TCoNameValueTupleList>(ctx, pos)
-        .Add(settings)
-        .Done();
-}
-
+    return Build<TCoNameValueTupleList>(ctx, pos) 
+        .Add(settings) 
+        .Done(); 
+} 
+ 
 namespace {
 
 template <typename TKqlReadOperation>
@@ -215,39 +215,39 @@ void TKqpReadTableSettings::AddSkipNullKey(const TString& key) {
     SkipNullKeys.emplace_back(key);
 }
 
-TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const TKqpUpsertRows& node) {
-    TKqpUpsertRowsSettings settings;
-
-    for (const auto& tuple : node.Settings()) {
-        TStringBuf name = tuple.Name().Value();
-
-        if (name == TKqpUpsertRowsSettings::InplaceSettingName) {
-            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
-            settings.Inplace = true;
-        } else {
-            YQL_ENSURE(false, "Unknown KqpUpsertRows setting name '" << name << "'");
-        }
-    }
-
-    return settings;
-}
-
-NNodes::TCoNameValueTupleList TKqpUpsertRowsSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
-    TVector<TCoNameValueTuple> settings;
-    settings.reserve(1);
-
-    if (Inplace) {
-        settings.emplace_back(
-            Build<TCoNameValueTuple>(ctx, pos)
-                .Name().Build(InplaceSettingName)
-                .Done());
-    }
-
-    return Build<TCoNameValueTupleList>(ctx, pos)
-        .Add(settings)
-        .Done();
-}
-
+TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const TKqpUpsertRows& node) { 
+    TKqpUpsertRowsSettings settings; 
+ 
+    for (const auto& tuple : node.Settings()) { 
+        TStringBuf name = tuple.Name().Value(); 
+ 
+        if (name == TKqpUpsertRowsSettings::InplaceSettingName) { 
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1); 
+            settings.Inplace = true; 
+        } else { 
+            YQL_ENSURE(false, "Unknown KqpUpsertRows setting name '" << name << "'"); 
+        } 
+    } 
+ 
+    return settings; 
+} 
+ 
+NNodes::TCoNameValueTupleList TKqpUpsertRowsSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const { 
+    TVector<TCoNameValueTuple> settings; 
+    settings.reserve(1); 
+ 
+    if (Inplace) { 
+        settings.emplace_back( 
+            Build<TCoNameValueTuple>(ctx, pos) 
+                .Name().Build(InplaceSettingName) 
+                .Done()); 
+    } 
+ 
+    return Build<TCoNameValueTupleList>(ctx, pos) 
+        .Add(settings) 
+        .Done(); 
+} 
+ 
 TCoNameValueTupleList TKqpReadTableExplainPrompt::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
     TVector<TCoNameValueTuple> prompt;
     prompt.reserve(2);
@@ -310,47 +310,47 @@ TKqpReadTableExplainPrompt TKqpReadTableExplainPrompt::Parse(const NNodes::TKqlR
     return prompt;
 }
 
-TString KqpExprToPrettyString(const TExprNode& expr, TExprContext& ctx) {
+TString KqpExprToPrettyString(const TExprNode& expr, TExprContext& ctx) { 
     try {
         TConvertToAstSettings settings;
         settings.NoInlineFunc = [] (const TExprNode& exprNode) {
             TExprBase node(&exprNode);
-
+ 
             if (node.Maybe<TDqStageBase>()) {
                 return true;
             }
-
+ 
             if (node.Maybe<TDqConnection>()) {
                 return true;
             }
-
+ 
             if (node.Maybe<TKqlReadTableBase>()) {
                 return true;
             }
-
+ 
             if (node.Maybe<TKqlReadTableRangesBase>()) {
                 return true;
             }
 
             return false;
         };
-
+ 
         auto ast = ConvertToAst(expr, ctx, settings);
         TStringStream exprStream;
         YQL_ENSURE(ast.Root);
         ast.Root->PrettyPrintTo(exprStream, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);
         TString exprText = exprStream.Str();
-
+ 
         return exprText;
     } catch (const std::exception& e) {
         return TStringBuilder() << "Failed to render expression to pretty string: " << e.what();
     }
-}
-
-TString KqpExprToPrettyString(const TExprBase& expr, TExprContext& ctx) {
-    return KqpExprToPrettyString(expr.Ref(), ctx);
-}
-
+} 
+ 
+TString KqpExprToPrettyString(const TExprBase& expr, TExprContext& ctx) { 
+    return KqpExprToPrettyString(expr.Ref(), ctx); 
+} 
+ 
 TString PrintKqpStageOnly(const TDqStageBase& stage, TExprContext& ctx) {
     if (stage.Inputs().Empty()) {
         return KqpExprToPrettyString(stage, ctx);
@@ -371,4 +371,4 @@ TString PrintKqpStageOnly(const TDqStageBase& stage, TExprContext& ctx) {
     return KqpExprToPrettyString(TExprBase(newStage), ctx);
 }
 
-} // namespace NYql
+} // namespace NYql 

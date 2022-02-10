@@ -1,27 +1,27 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 
-namespace NKikimr::NKqp::NOpt {
+namespace NKikimr::NKqp::NOpt { 
 
 using namespace NYql;
 using namespace NYql::NNodes;
 
-namespace {
-
-template <typename TContainer>
-TCoAtomList BuildColumnsListImpl(const TContainer& columns, TPositionHandle pos, TExprContext& ctx) {
-    TVector<TCoAtom> columnsList;
-    for (const auto& column : columns) {
-        auto atom = ctx.NewAtom(pos, column);
-        columnsList.push_back(TCoAtom(atom));
-    }
-
-    return Build<TCoAtomList>(ctx, pos)
-        .Add(columnsList)
-        .Done();
-}
-
-} // namespace
-
+namespace { 
+ 
+template <typename TContainer> 
+TCoAtomList BuildColumnsListImpl(const TContainer& columns, TPositionHandle pos, TExprContext& ctx) { 
+    TVector<TCoAtom> columnsList; 
+    for (const auto& column : columns) { 
+        auto atom = ctx.NewAtom(pos, column); 
+        columnsList.push_back(TCoAtom(atom)); 
+    } 
+ 
+    return Build<TCoAtomList>(ctx, pos) 
+        .Add(columnsList) 
+        .Done(); 
+} 
+ 
+} // namespace 
+ 
 TExprBase BuildReadNode(TPositionHandle pos, TExprContext& ctx, TExprBase input, TKqpReadTableSettings& settings) {
     TCoNameValueTupleList settingsNode = settings.BuildNode(ctx, pos);
 
@@ -76,12 +76,12 @@ TKqpReadTableSettings GetReadTableSettings(TExprBase input, bool isReadRanges) {
     return TKqpReadTableSettings::Parse(input.Cast<TKqpReadTable>());
 };
 
-TCoAtomList BuildColumnsList(const THashSet<TStringBuf>& columns, TPositionHandle pos, TExprContext& ctx) {
-    return BuildColumnsListImpl(columns, pos, ctx);
-}
-
-TCoAtomList BuildColumnsList(const TVector<TString>& columns, TPositionHandle pos, TExprContext& ctx) {
-    return BuildColumnsListImpl(columns, pos, ctx);
-}
-
-} // namespace NKikimr::NKqp::NOpt
+TCoAtomList BuildColumnsList(const THashSet<TStringBuf>& columns, TPositionHandle pos, TExprContext& ctx) { 
+    return BuildColumnsListImpl(columns, pos, ctx); 
+} 
+ 
+TCoAtomList BuildColumnsList(const TVector<TString>& columns, TPositionHandle pos, TExprContext& ctx) { 
+    return BuildColumnsListImpl(columns, pos, ctx); 
+} 
+ 
+} // namespace NKikimr::NKqp::NOpt 

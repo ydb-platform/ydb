@@ -1,28 +1,28 @@
-#include "kqp_transport.h"
+#include "kqp_transport.h" 
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
-
+ 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-
+ 
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/utils/yql_panic.h>
-
-namespace NKikimr {
-namespace NKqp {
-
-using namespace NMiniKQL;
-using namespace NYql;
-
+ 
+namespace NKikimr { 
+namespace NKqp { 
+ 
+using namespace NMiniKQL; 
+using namespace NYql; 
+ 
 TKqpProtoBuilder::TSelfHosted::TSelfHosted(const IFunctionRegistry& funcRegistry)
     : Alloc(TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
-    , TypeEnv(Alloc)
+    , TypeEnv(Alloc) 
     , MemInfo("KqpProtoBuilder")
     , HolderFactory(Alloc.Ref(), MemInfo)
-{
-}
-
+{ 
+} 
+ 
 TKqpProtoBuilder::TKqpProtoBuilder(const IFunctionRegistry& funcRegistry)
     : SelfHosted(MakeHolder<TSelfHosted>(funcRegistry))
 {
@@ -40,12 +40,12 @@ TKqpProtoBuilder::TKqpProtoBuilder(TScopedAlloc* alloc, TTypeEnvironment* typeEn
 {
 }
 
-TKqpProtoBuilder::~TKqpProtoBuilder() {
+TKqpProtoBuilder::~TKqpProtoBuilder() { 
     if (SelfHosted) {
         SelfHosted->Alloc.Acquire();
     }
-}
-
+} 
+ 
 NKikimrMiniKQL::TType TKqpProtoBuilder::ApplyColumnHints(const NKikimrMiniKQL::TType& srcRowType,
     const TVector<TString>& columnHints)
 {
@@ -75,17 +75,17 @@ NKikimrMiniKQL::TType TKqpProtoBuilder::ApplyColumnHints(const NKikimrMiniKQL::T
 
 void TKqpProtoBuilder::BuildValue(const TVector<NDqProto::TData>& data, const NKikimrMiniKQL::TType& valueType,
     NKikimrMiniKQL::TResult* result)
-{
+{ 
     THolder<TGuard<TScopedAlloc>> guard;
     if (SelfHosted) {
         guard = MakeHolder<TGuard<TScopedAlloc>>(*Alloc);
     }
-
+ 
     result->MutableType()->CopyFrom(valueType);
-
+ 
     auto mkqlType = ImportTypeFromProto(result->GetType(), *TypeEnv);
-
-    TUnboxedValueVector buffer;
+ 
+    TUnboxedValueVector buffer; 
     auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
     if (!data.empty()) {
         switch (data.front().GetTransportVersion()) {
@@ -106,14 +106,14 @@ void TKqpProtoBuilder::BuildValue(const TVector<NDqProto::TData>& data, const NK
         }
     }
     NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion);
-    for (auto& part : data) {
-        dataSerializer.Deserialize(part, mkqlType, buffer);
-    }
-    YQL_ENSURE(buffer.size() == 1, "Actual buffer size: " << data.size());
-
+    for (auto& part : data) { 
+        dataSerializer.Deserialize(part, mkqlType, buffer); 
+    } 
+    YQL_ENSURE(buffer.size() == 1, "Actual buffer size: " << data.size()); 
+ 
     ExportValueToProto(mkqlType, buffer[0], *result->MutableValue());
 }
-
+ 
 void TKqpProtoBuilder::BuildValue(TUnboxedValueVector& rows, const NKikimrMiniKQL::TType& valueType,
     NKikimrMiniKQL::TResult* result)
 {
@@ -122,19 +122,19 @@ void TKqpProtoBuilder::BuildValue(TUnboxedValueVector& rows, const NKikimrMiniKQ
     result->MutableType()->CopyFrom(valueType);
     auto mkqlType = ImportTypeFromProto(result->GetType(), *TypeEnv);
     ExportValueToProto(mkqlType, rows[0], *result->MutableValue());
-}
-
+} 
+ 
 void TKqpProtoBuilder::BuildStream(const TVector<NDqProto::TData>& data, const NKikimrMiniKQL::TType& srcRowType,
     const NKikimrMiniKQL::TType* dstRowType, NKikimrMiniKQL::TResult* result)
-{
+{ 
     YQL_ENSURE(srcRowType.GetKind() == NKikimrMiniKQL::Struct);
-
+ 
     auto* mkqlSrcRowType = NMiniKQL::ImportTypeFromProto(srcRowType, *TypeEnv);
     auto* mkqlSrcRowStructType = static_cast<TStructType*>(mkqlSrcRowType);
 
     result->MutableType()->SetKind(NKikimrMiniKQL::List);
     auto* newRowType = result->MutableType()->MutableList()->MutableItem();
-
+ 
     TListType* mkqlSrcRowsType = nullptr;
     TMap<TStringBuf, ui32> memberIndices;
 
@@ -176,14 +176,14 @@ void TKqpProtoBuilder::BuildStream(const TVector<NDqProto::TData>& data, const N
         mkqlSrcRowsType = TListType::Create(mkqlSrcRowType, *TypeEnv);
     }
 
-    for (auto& part : data) {
+    for (auto& part : data) { 
         if (part.GetRows() == 0) {
             continue;
         }
 
         TUnboxedValueVector rows;
         dataSerializer.Deserialize(part, mkqlSrcRowType, rows);
-
+ 
         if (dstRowType) {
             for (auto& srcRow : rows) {
                 auto* dstRow = result->MutableValue()->MutableList()->Add()->MutableStruct();
@@ -198,9 +198,9 @@ void TKqpProtoBuilder::BuildStream(const TVector<NDqProto::TData>& data, const N
         } else {
             ExportValueToProto(mkqlSrcRowsType, HolderFactory->VectorAsArray(rows), *result->MutableValue());
         }
-    }
+    } 
 }
-
+ 
 void TKqpProtoBuilder::BuildStream(TUnboxedValueVector& rows, const NKikimrMiniKQL::TType& srcRowType,
     const NKikimrMiniKQL::TType* dstRowType, NKikimrMiniKQL::TResult* result)
 {
@@ -242,20 +242,20 @@ void TKqpProtoBuilder::BuildStream(TUnboxedValueVector& rows, const NKikimrMiniK
 
         ExportValueToProto(mkqlSrcRowsType, HolderFactory->VectorAsArray(rows), *result->MutableValue());
     }
-}
-
+} 
+ 
 Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(const TVector<NDqProto::TData>& data,
     const NKikimrMiniKQL::TType& srcRowType, const NKikimrMiniKQL::TType* dstRowType)
-{
+{ 
     YQL_ENSURE(srcRowType.GetKind() == NKikimrMiniKQL::Struct);
-
+ 
     auto* mkqlSrcRowType = NMiniKQL::ImportTypeFromProto(srcRowType, *TypeEnv);
     auto* mkqlSrcRowStructType = static_cast<TStructType*>(mkqlSrcRowType);
 
-    Ydb::ResultSet resultSet;
-
+    Ydb::ResultSet resultSet; 
+ 
     TMap<TStringBuf, ui32> memberIndices;
-
+ 
     if (dstRowType) {
         YQL_ENSURE(dstRowType->GetKind() == NKikimrMiniKQL::Struct);
 
@@ -274,8 +274,8 @@ Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(const TVector<NDqProto::TData
             column->set_name(member.GetName());
             ConvertMiniKQLTypeToYdbType(member.GetType(), *column->mutable_type());
         }
-    }
-
+    } 
+ 
     THolder<TGuard<TScopedAlloc>> guard;
     if (SelfHosted) {
         guard = MakeHolder<TGuard<TScopedAlloc>>(*Alloc);
@@ -302,7 +302,7 @@ Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(const TVector<NDqProto::TData
     }
     NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion);
 
-    for (auto& part : data) {
+    for (auto& part : data) { 
         if (part.GetRows()) {
             TUnboxedValueVector rows;
             dataSerializer.Deserialize(part, mkqlSrcRowType, rows);
@@ -325,11 +325,11 @@ Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(const TVector<NDqProto::TData
                     ExportValueToProto(mkqlSrcRowType, row, *resultSet.add_rows());
                 }
             }
-        }
-    }
-
-    return resultSet;
-}
-
+        } 
+    } 
+ 
+    return resultSet; 
+} 
+ 
 } // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr 

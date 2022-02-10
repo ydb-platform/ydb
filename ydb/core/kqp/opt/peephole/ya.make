@@ -7,7 +7,7 @@ OWNER(
 
 SRCS(
     kqp_opt_peephole_wide_read.cpp
-    kqp_opt_peephole.cpp
+    kqp_opt_peephole.cpp 
 )
 
 PEERDIR(

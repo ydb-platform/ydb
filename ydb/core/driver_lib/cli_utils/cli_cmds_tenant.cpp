@@ -62,7 +62,7 @@ public:
 
     virtual void PrintResponse(const NKikimrClient::TConsoleResponse &response)
     {
-        if (response.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS)
+        if (response.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS) 
             Cout << response.DebugString();
         else
             Cout << "ERROR: " << response.GetStatus().GetCode()
@@ -71,7 +71,7 @@ public:
 
     virtual void PrintResponse(const Ydb::Operations::Operation &response)
     {
-        if (response.status() == Ydb::StatusIds::SUCCESS)
+        if (response.status() == Ydb::StatusIds::SUCCESS) 
             Cout << "OK" << Endl;
         else {
             Cout << "ERROR: " << response.status() << Endl;
@@ -178,7 +178,7 @@ public:
 
     void PrintResponse(const Ydb::Operations::Operation &response) override
     {
-        if (response.status() != Ydb::StatusIds::SUCCESS) {
+        if (response.status() != Ydb::StatusIds::SUCCESS) { 
             TTenantClientGRpcCommand::PrintResponse(response);
         } else {
             Ydb::Cms::ListDatabasesResult result;
@@ -262,7 +262,7 @@ public:
 
     void PrintResponse(const Ydb::Operations::Operation &response) override
     {
-        if (response.status() != Ydb::StatusIds::SUCCESS) {
+        if (response.status() != Ydb::StatusIds::SUCCESS) { 
             TTenantClientGRpcCommand::PrintResponse(response);
         } else {
             Ydb::Cms::GetDatabaseStatusResult result;

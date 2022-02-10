@@ -31,9 +31,9 @@ struct TAlignedPagePoolCounters {
     }
 };
 
-// NOTE: We intentionally avoid inheritance from std::exception here to make it harder
-// to catch this exception in UDFs code, so we can handle it in the host.
-class TMemoryLimitExceededException {};
+// NOTE: We intentionally avoid inheritance from std::exception here to make it harder 
+// to catch this exception in UDFs code, so we can handle it in the host. 
+class TMemoryLimitExceededException {}; 
 
 class TAlignedPagePool {
 public:
@@ -98,8 +98,8 @@ public:
         DoSwap(OffloadedActiveBytes, other.OffloadedActiveBytes);
         DoSwap(Counters, other.Counters);
         DoSwap(CheckLostMem, other.CheckLostMem);
-        DoSwap(AllocNotifyCallback, other.AllocNotifyCallback);
-        DoSwap(IncreaseMemoryLimitCallback, other.IncreaseMemoryLimitCallback);
+        DoSwap(AllocNotifyCallback, other.AllocNotifyCallback); 
+        DoSwap(IncreaseMemoryLimitCallback, other.IncreaseMemoryLimitCallback); 
     }
 
     void PrintStat(size_t usedPages, IOutputStream& out) const;
@@ -163,17 +163,17 @@ public:
         CheckLostMem = false;
     }
 
-    using TAllocNotifyCallback = std::function<void()>;
-    void SetAllocNotifyCallback(TAllocNotifyCallback&& callback, ui64 notifyBytes = 0) {
-        AllocNotifyCallback = std::move(callback);
-        AllocNotifyBytes = notifyBytes;
-        AllocNotifyCurrentBytes = 0;
-    }
-
+    using TAllocNotifyCallback = std::function<void()>; 
+    void SetAllocNotifyCallback(TAllocNotifyCallback&& callback, ui64 notifyBytes = 0) { 
+        AllocNotifyCallback = std::move(callback); 
+        AllocNotifyBytes = notifyBytes; 
+        AllocNotifyCurrentBytes = 0; 
+    } 
+ 
     using TIncreaseMemoryLimitCallback = std::function<void(ui64 currentLimit, ui64 required)>;
 
     void SetIncreaseMemoryLimitCallback(TIncreaseMemoryLimitCallback&& callback) {
-        IncreaseMemoryLimitCallback = std::move(callback);
+        IncreaseMemoryLimitCallback = std::move(callback); 
     }
 
 protected:
@@ -209,11 +209,11 @@ protected:
     TAlignedPagePoolCounters Counters;
     bool CheckLostMem = true;
 
-    TAllocNotifyCallback AllocNotifyCallback;
-    ui64 AllocNotifyBytes = 0;
-    ui64 AllocNotifyCurrentBytes = 0;
-
-    TIncreaseMemoryLimitCallback IncreaseMemoryLimitCallback;
+    TAllocNotifyCallback AllocNotifyCallback; 
+    ui64 AllocNotifyBytes = 0; 
+    ui64 AllocNotifyCurrentBytes = 0; 
+ 
+    TIncreaseMemoryLimitCallback IncreaseMemoryLimitCallback; 
 };
 
 } // NKikimr

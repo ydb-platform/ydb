@@ -13,7 +13,7 @@ public:
     {
     }
 
-    bool Error(Ydb::StatusIds::StatusCode code,
+    bool Error(Ydb::StatusIds::StatusCode code, 
                const TString &error,
                const TActorContext &ctx)
     {
@@ -32,7 +32,7 @@ public:
                         const TActorContext &ctx)
     {
         if (item->Generation != generation) {
-            Error(Ydb::StatusIds::BAD_REQUEST,
+            Error(Ydb::StatusIds::BAD_REQUEST, 
                   TStringBuilder() << "wrong generation for config item #" << item->Id,
                   ctx);
             return false;
@@ -46,7 +46,7 @@ public:
                         const TActorContext &ctx)
     {
         if (!kind) {
-            Error(Ydb::StatusIds::BAD_REQUEST,
+            Error(Ydb::StatusIds::BAD_REQUEST, 
                   TStringBuilder() << "zero kind value is not allowed for config items",
                   ctx);
             return false;
@@ -57,7 +57,7 @@ public:
         reflection->ListFields(config, &fields);
         for (auto field : fields) {
             if (field->number() != static_cast<int>(kind)) {
-                Error(Ydb::StatusIds::BAD_REQUEST,
+                Error(Ydb::StatusIds::BAD_REQUEST, 
                       TStringBuilder() << "wrong config item: field '" << field->name()
                       << "' shouldn't be set for confg item "
                       << TConfigItem::KindName(kind) << " (" << kind << ")",
@@ -111,7 +111,7 @@ public:
         auto &item = action.GetConfigItem();
 
         if (item.HasId()) {
-            Error(Ydb::StatusIds::BAD_REQUEST,
+            Error(Ydb::StatusIds::BAD_REQUEST, 
                   "cannot add config item: new items should have empty id",
                   ctx);
             return false;
@@ -135,13 +135,13 @@ public:
                 if (action.GetEnableAutoSplit()) {
                     SplitConfigItem(item, newItems, ctx);
                     if (newItems.empty()) {
-                        Error(Ydb::StatusIds::BAD_REQUEST,
+                        Error(Ydb::StatusIds::BAD_REQUEST, 
                               "cannot detect kind for new item with empty config",
                               ctx);
                         return false;
                     }
                 } else {
-                    Error(Ydb::StatusIds::BAD_REQUEST,
+                    Error(Ydb::StatusIds::BAD_REQUEST, 
                           TStringBuilder() << "cannot detect kind for config item"
                           << " (auto split is disabled): " << item.ShortDebugString(),
                           ctx);
@@ -179,7 +179,7 @@ public:
     {
         TConfigItem::TPtr item = Self->ConfigIndex.GetItem(action.GetConfigItemId().GetId());
         if (!item) {
-            Error(Ydb::StatusIds::BAD_REQUEST,
+            Error(Ydb::StatusIds::BAD_REQUEST, 
                   TStringBuilder() << "cannot remove unknown config item #" << action.GetConfigItemId().GetId(),
                   ctx);
             return false;
@@ -189,7 +189,7 @@ public:
             return false;
 
         if (Self->PendingConfigModifications.ModifiedItems.contains(item->Id)) {
-            Error(Ydb::StatusIds::BAD_REQUEST,
+            Error(Ydb::StatusIds::BAD_REQUEST, 
                   TStringBuilder() << "removal action for config item #"
                   << item->Id << " conflicts with its modification",
                   ctx);
@@ -235,7 +235,7 @@ public:
         auto &newItem = action.GetConfigItem();
         TConfigItem::TPtr item = Self->ConfigIndex.GetItem(newItem.GetId().GetId());
         if (!item) {
-            Error(Ydb::StatusIds::BAD_REQUEST,
+            Error(Ydb::StatusIds::BAD_REQUEST, 
                   TStringBuilder() << "cannot modify unknown config item #" << newItem.GetId().GetId(),
                   ctx);
             return false;
@@ -245,7 +245,7 @@ public:
             return false;
 
         if (newItem.HasKind() && newItem.GetKind() != item->Kind) {
-            Error(Ydb::StatusIds::BAD_REQUEST,
+            Error(Ydb::StatusIds::BAD_REQUEST, 
                   TStringBuilder() << "cannot modify kind for config item #" << item->Id,
                   ctx);
             return false;
@@ -263,13 +263,13 @@ public:
             return false;
 
         if (Self->PendingConfigModifications.ModifiedItems.contains(item->Id)) {
-            Error(Ydb::StatusIds::BAD_REQUEST,
+            Error(Ydb::StatusIds::BAD_REQUEST, 
                   TStringBuilder() << "multiple modification actions for config item #"
                   << item->Id << " are not allowed",
                   ctx);
             return false;
         } else if (Self->PendingConfigModifications.RemovedItems.contains(item->Id)) {
-            Error(Ydb::StatusIds::BAD_REQUEST,
+            Error(Ydb::StatusIds::BAD_REQUEST, 
                   TStringBuilder() << "modification action conflicts with removal action"
                   " for config item #" << item->Id,
                   ctx);
@@ -305,10 +305,10 @@ public:
         case NKikimrConsole::TConfigureAction::kRemoveConfigItems:
             return IsRemoveConfigItemsActionOk(action.GetRemoveConfigItems(), ctx);
         case NKikimrConsole::TConfigureAction::ACTION_NOT_SET:
-            Error(Ydb::StatusIds::BAD_REQUEST, "empty action", ctx);
+            Error(Ydb::StatusIds::BAD_REQUEST, "empty action", ctx); 
             return false;
         default:
-            Error(Ydb::StatusIds::BAD_REQUEST,
+            Error(Ydb::StatusIds::BAD_REQUEST, 
                   Sprintf("unsupported configure action (%s)", action.ShortDebugString().data()),
                   ctx);
             return false;
@@ -331,7 +331,7 @@ public:
         for (auto &conflictItem : conflicts) {
             if (!Self->PendingConfigModifications.ModifiedItems.contains(conflictItem->Id)
                 && !Self->PendingConfigModifications.RemovedItems.contains(conflictItem->Id)) {
-                Error(Ydb::StatusIds::BAD_REQUEST,
+                Error(Ydb::StatusIds::BAD_REQUEST, 
                       TStringBuilder() << ItemName(item) << " (scope: " << item->UsageScope.ToString()
                       << ") has order conflict with config item #" << conflictItem->Id
                       << " (scope: " << conflictItem->UsageScope.ToString() << ")",
@@ -345,13 +345,13 @@ public:
                 continue;
 
             if (!conflictItem->Id && !item->Id)
-                Error(Ydb::StatusIds::BAD_REQUEST,
+                Error(Ydb::StatusIds::BAD_REQUEST, 
                       TStringBuilder() << "two added items conflict by order (scope1: "
                       << item->UsageScope.ToString() << " scope2: "
                       << conflictItem->UsageScope.ToString() << ")",
                       ctx);
             else
-                Error(Ydb::StatusIds::BAD_REQUEST,
+                Error(Ydb::StatusIds::BAD_REQUEST, 
                       TStringBuilder() << ItemName(item) << " (scope: " << item->UsageScope.ToString()
                       << ") has order conflict with " << ItemName(conflictItem) << " (scope: "
                       << conflictItem->UsageScope.ToString() << ")",
@@ -389,7 +389,7 @@ public:
                 maxOrder = Max(maxOrder, pr.second->UsageScope.Order);
 
         if (maxOrder == Max<ui32>()) {
-            Error(Ydb::StatusIds::BAD_REQUEST,
+            Error(Ydb::StatusIds::BAD_REQUEST, 
                   TStringBuilder() << "Cannot auto order " << ItemName(item) << " (scope: "
                   << item->UsageScope.ToString() << " because max order value is used"
                   " by one of intersecting usage scopes.",
@@ -462,7 +462,7 @@ public:
         Response = new TEvConsole::TEvConfigureResponse;
 
         if (!rec.ActionsSize())
-            return Error(Ydb::StatusIds::BAD_REQUEST,
+            return Error(Ydb::StatusIds::BAD_REQUEST, 
                          "no actions specified", ctx);
 
         for (auto &action : rec.GetActions()) {
@@ -484,7 +484,7 @@ public:
                          validator.GetErrorMessage(), ctx);
 
         // Now configure command is known to be OK and we start to apply it.
-        Response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
+        Response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS); 
 
         // Fill affected configs.
         TConfigsConfig config(Self->Config);

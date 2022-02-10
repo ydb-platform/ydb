@@ -14,32 +14,32 @@ namespace NScripting {
 
 using namespace NThreading;
 
-TExecuteYqlResult::TExecuteYqlResult(TStatus&& status, TVector<TResultSet>&& resultSets,
-    const TMaybe<NTable::TQueryStats>& queryStats)
-    : TStatus(std::move(status))
-    , ResultSets_(std::move(resultSets))
-    , QueryStats_(queryStats) {}
-
-const TVector<TResultSet>& TExecuteYqlResult::GetResultSets() const {
-    return ResultSets_;
-}
-
-TResultSet TExecuteYqlResult::GetResultSet(size_t resultIndex) const {
-    if (resultIndex >= ResultSets_.size()) {
-        RaiseError(TString("Requested index out of range\n"));
-    }
-
-    return ResultSets_[resultIndex];
-}
-
-TResultSetParser TExecuteYqlResult::GetResultSetParser(size_t resultIndex) const {
-    return TResultSetParser(GetResultSet(resultIndex));
-}
-
-const TMaybe<NTable::TQueryStats>& TExecuteYqlResult::GetStats() const {
-    return QueryStats_;
-}
-
+TExecuteYqlResult::TExecuteYqlResult(TStatus&& status, TVector<TResultSet>&& resultSets, 
+    const TMaybe<NTable::TQueryStats>& queryStats) 
+    : TStatus(std::move(status)) 
+    , ResultSets_(std::move(resultSets)) 
+    , QueryStats_(queryStats) {} 
+ 
+const TVector<TResultSet>& TExecuteYqlResult::GetResultSets() const { 
+    return ResultSets_; 
+} 
+ 
+TResultSet TExecuteYqlResult::GetResultSet(size_t resultIndex) const { 
+    if (resultIndex >= ResultSets_.size()) { 
+        RaiseError(TString("Requested index out of range\n")); 
+    } 
+ 
+    return ResultSets_[resultIndex]; 
+} 
+ 
+TResultSetParser TExecuteYqlResult::GetResultSetParser(size_t resultIndex) const { 
+    return TResultSetParser(GetResultSet(resultIndex)); 
+} 
+ 
+const TMaybe<NTable::TQueryStats>& TExecuteYqlResult::GetStats() const { 
+    return QueryStats_; 
+} 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TYqlResultPartIterator::TReaderImpl {
@@ -150,20 +150,20 @@ public:
         : TClientImplCommon(std::move(connections), settings) {}
 
     template<typename TParamsType>
-    TAsyncExecuteYqlResult ExecuteYqlScript(const TString& script, TParamsType params,
-        const TExecuteYqlRequestSettings& settings)
-    {
+    TAsyncExecuteYqlResult ExecuteYqlScript(const TString& script, TParamsType params, 
+        const TExecuteYqlRequestSettings& settings) 
+    { 
         auto request = MakeOperationRequest<Ydb::Scripting::ExecuteYqlRequest>(settings);
         request.set_script(script);
         SetParams(params, &request);
-        request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
+        request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_)); 
 
-        auto promise = NewPromise<TExecuteYqlResult>();
+        auto promise = NewPromise<TExecuteYqlResult>(); 
 
         auto extractor = [promise]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
                 TVector<TResultSet> res;
-                TMaybe<NTable::TQueryStats> queryStats;
+                TMaybe<NTable::TQueryStats> queryStats; 
                 if (any) {
                     Ydb::Scripting::ExecuteYqlResult result;
                     any->UnpackTo(&result);
@@ -171,26 +171,26 @@ public:
                     for (size_t i = 0; i < result.result_setsSize(); i++) {
                         res.push_back(TResultSet(*result.mutable_result_sets(i)));
                     }
-
-                    if (result.has_query_stats()) {
-                        queryStats = NTable::TQueryStats(result.query_stats());
-                    }
+ 
+                    if (result.has_query_stats()) { 
+                        queryStats = NTable::TQueryStats(result.query_stats()); 
+                    } 
                 }
 
                 TExecuteYqlResult executeResult(TStatus(std::move(status)), std::move(res),
-                    queryStats);
-                promise.SetValue(std::move(executeResult));
+                    queryStats); 
+                promise.SetValue(std::move(executeResult)); 
             };
 
-        Connections_->RunDeferred<Ydb::Scripting::V1::ScriptingService, Ydb::Scripting::ExecuteYqlRequest,
-            Ydb::Scripting::ExecuteYqlResponse>(
-                std::move(request),
-                extractor,
-                &Ydb::Scripting::V1::ScriptingService::Stub::AsyncExecuteYql,
-                DbDriverState_,
+        Connections_->RunDeferred<Ydb::Scripting::V1::ScriptingService, Ydb::Scripting::ExecuteYqlRequest, 
+            Ydb::Scripting::ExecuteYqlResponse>( 
+                std::move(request), 
+                extractor, 
+                &Ydb::Scripting::V1::ScriptingService::Stub::AsyncExecuteYql, 
+                DbDriverState_, 
                 INITIAL_DEFERRED_CALL_DELAY,
-                TRpcRequestSettings::Make(settings),
-                settings.ClientTimeout_);
+                TRpcRequestSettings::Make(settings), 
+                settings.ClientTimeout_); 
 
         return promise.GetFuture();
     }
@@ -315,28 +315,28 @@ TScriptingClient::TScriptingClient(const TDriver& driver, const TCommonClientSet
     : Impl_(new TImpl(CreateInternalInterface(driver), settings))
 {}
 
-TParamsBuilder TScriptingClient::GetParamsBuilder() {
+TParamsBuilder TScriptingClient::GetParamsBuilder() { 
     return TParamsBuilder();
-}
-
-TAsyncExecuteYqlResult TScriptingClient::ExecuteYqlScript(const TString &query, NYdb::TParams&& params,
-    const TExecuteYqlRequestSettings &settings)
-{
+} 
+ 
+TAsyncExecuteYqlResult TScriptingClient::ExecuteYqlScript(const TString &query, NYdb::TParams&& params, 
+    const TExecuteYqlRequestSettings &settings) 
+{ 
     auto paramsPtr = params.Empty() ? nullptr : params.GetProtoMapPtr();
-    return Impl_->ExecuteYqlScript(query, paramsPtr, settings);
+    return Impl_->ExecuteYqlScript(query, paramsPtr, settings); 
 }
 
-TAsyncExecuteYqlResult TScriptingClient::ExecuteYqlScript(const TString &query, const NYdb::TParams& params,
-    const TExecuteYqlRequestSettings &settings)
-{
+TAsyncExecuteYqlResult TScriptingClient::ExecuteYqlScript(const TString &query, const NYdb::TParams& params, 
+    const TExecuteYqlRequestSettings &settings) 
+{ 
     if (params.Empty()) {
-        return Impl_->ExecuteYqlScript(
+        return Impl_->ExecuteYqlScript( 
             query,
             nullptr,
             settings);
     } else {
         using TProtoParamsType = const ::google::protobuf::Map<TString, Ydb::TypedValue>;
-        return Impl_->ExecuteYqlScript<TProtoParamsType&>(
+        return Impl_->ExecuteYqlScript<TProtoParamsType&>( 
             query,
             params.GetProtoMap(),
             settings);
@@ -344,8 +344,8 @@ TAsyncExecuteYqlResult TScriptingClient::ExecuteYqlScript(const TString &query, 
 }
 
 TAsyncExecuteYqlResult TScriptingClient::ExecuteYqlScript(const TString &script,
-    const TExecuteYqlRequestSettings &settings)
-{
+    const TExecuteYqlRequestSettings &settings) 
+{ 
     return Impl_->ExecuteYqlScript(script, nullptr, settings);
 }
 

@@ -190,8 +190,8 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         auto result = NKikimr::NKqp::CollectStreamResult(it);
         Cerr << "RESULT:\n" << result.ResultSetYson << "\n---------------------\nSTATS:\n";
-        UNIT_ASSERT(result.QueryStats);
-        PrintQueryStats(Cerr, *result.QueryStats);
+        UNIT_ASSERT(result.QueryStats); 
+        PrintQueryStats(Cerr, *result.QueryStats); 
         Cerr << "\n";
         return result.ResultSetYson;
     }

@@ -49,8 +49,8 @@ namespace NYql::NDqs {
                                 .Build()
                             .Program()
                                 .Args({})
-                                .Body<TCoIterator>()
-                                    .List(input)
+                                .Body<TCoIterator>() 
+                                    .List(input) 
                                     .Build()
                                 .Build()
                             .Settings(TDqStageSettings().BuildNode(ctx, input->Pos()))
@@ -85,13 +85,13 @@ namespace NYql::NDqs {
                         .Build()
                     .Program()
                         .Args({"row"})
-                        .Body("row")
-                        .Build()
+                        .Body("row") 
+                        .Build() 
                     .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
-                    .Build()
+                    .Build() 
                 .Index()
                     .Build("0")
-                .Build()
+                .Build() 
               .ColumnHints() // TODO: set column hints
                 .Build()
               .Done().Ptr(); // clang-format on
@@ -109,7 +109,7 @@ namespace NYql::NDqs {
                     PERFORM_RULE(DqPeepholeRewriteCrossJoin, node, ctx);
                     PERFORM_RULE(DqPeepholeRewriteJoinDict, node, ctx);
                     PERFORM_RULE(DqPeepholeRewriteMapJoin, node, ctx);
-                    PERFORM_RULE(DqPeepholeRewritePureJoin, node, ctx);
+                    PERFORM_RULE(DqPeepholeRewritePureJoin, node, ctx); 
                     PERFORM_RULE(DqPeepholeRewriteReplicate, node, ctx);
                     return inputExpr;
                 }, ctx, optSettings);

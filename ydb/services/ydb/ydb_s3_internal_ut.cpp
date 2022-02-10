@@ -82,14 +82,14 @@ Y_UNIT_TEST_SUITE(YdbS3Internal) {
 
         {
             UNIT_ASSERT_VALUES_EQUAL(res.GetCommonPrefixes().RowsCount(), 1);
-            TResultSetParser parser(res.GetCommonPrefixes());
+            TResultSetParser parser(res.GetCommonPrefixes()); 
             UNIT_ASSERT(parser.TryNextRow());
             UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser("Path").GetOptionalUtf8(), "/home/Music/");
         }
 
         {
             UNIT_ASSERT_VALUES_EQUAL(res.GetContents().RowsCount(), 1);
-            TResultSetParser parser(res.GetContents());
+            TResultSetParser parser(res.GetContents()); 
             UNIT_ASSERT(parser.TryNextRow());
             UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser("Name").GetOptionalUtf8(), "bucket50");
             UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser("Path").GetOptionalUtf8(), "/home/.bashrc");

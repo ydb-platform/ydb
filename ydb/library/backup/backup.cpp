@@ -266,7 +266,7 @@ TMaybe<TValue> TryReadTable(TDriver driver, const NTable::TTableDescription& des
         }
         VerifyStatus(resultSetStreamPart, TStringBuilder() << "TStreamPart<TResultSet> is not successfull"
                     " error msg: " << resultSetStreamPart.GetIssues().ToString());
-        TResultSet resultSetCurrent = resultSetStreamPart.ExtractPart();
+        TResultSet resultSetCurrent = resultSetStreamPart.ExtractPart(); 
 
         TFsPath tmpFileName = folderPath.Child(INCOMPLETE_DATA_FILE_NAME);
         TFile tmpFile = TFile(tmpFileName, CreateAlways | WrOnly);
@@ -276,7 +276,7 @@ TMaybe<TValue> TryReadTable(TDriver driver, const NTable::TTableDescription& des
         TMaybe<TValue> lastReadPK;
 
         while (true) {
-            NTable::TAsyncSimpleStreamPart<TResultSet> nextResult;
+            NTable::TAsyncSimpleStreamPart<TResultSet> nextResult; 
             if (resultSetCurrent.Truncated()) {
                 nextResult = iter->ReadNext();
             }

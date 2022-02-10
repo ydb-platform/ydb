@@ -98,7 +98,7 @@ message TConfigItem {
         TableProfilesConfigItem = 34;
         KeyConfigItem = 35;
         NodeBrokerConfigItem = 36;
-        TableServiceConfigItem = 37;
+        TableServiceConfigItem = 37; 
         SharedCacheConfigItem = 38;
         ImmediateControlsConfigItem = 39;
         AllocatorConfigItem = 40;
@@ -490,4 +490,4 @@ message TConfigsConfig {
 
     optional TUsageScopeRestrictions UsageScopeRestrictions = 1;
     optional TValidationOptions ValidationOptions = 2;
-}
+} 

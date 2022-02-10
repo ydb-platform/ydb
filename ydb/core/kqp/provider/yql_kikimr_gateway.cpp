@@ -1,204 +1,204 @@
-#include "yql_kikimr_gateway.h"
-
+#include "yql_kikimr_gateway.h" 
+ 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/utils/yql_panic.h>
-
+ 
 #include <ydb/core/base/table_index.h>
 
-#include <util/string/split.h>
-
-namespace NYql {
-
-using namespace NThreading;
-
+#include <util/string/split.h> 
+ 
+namespace NYql { 
+ 
+using namespace NThreading; 
+ 
 static void CreateDirs(std::shared_ptr<TVector<TString>> partsHolder, size_t index,
-    TPromise<IKikimrGateway::TGenericResult>& promise, IKikimrGateway::TCreateDirFunc createDir)
-{
-    auto partPromise = NewPromise<IKikimrGateway::TGenericResult>();
-    auto& parts = *partsHolder;
-
-    partPromise.GetFuture().Apply(
-        [partsHolder, index, promise, createDir](const TFuture<IKikimrGateway::TGenericResult>& future) mutable {
-            auto& result = future.GetValue();
-            if (index == partsHolder->size() - 1) {
-                promise.SetValue(result);
-                return;
-            }
-
-            if (!result.Success() && result.Status() != TIssuesIds::KIKIMR_ACCESS_DENIED) {
-                promise.SetValue(result);
-                return;
-            }
-
-            CreateDirs(partsHolder, index + 1, promise, createDir);
-        });
-
+    TPromise<IKikimrGateway::TGenericResult>& promise, IKikimrGateway::TCreateDirFunc createDir) 
+{ 
+    auto partPromise = NewPromise<IKikimrGateway::TGenericResult>(); 
+    auto& parts = *partsHolder; 
+ 
+    partPromise.GetFuture().Apply( 
+        [partsHolder, index, promise, createDir](const TFuture<IKikimrGateway::TGenericResult>& future) mutable { 
+            auto& result = future.GetValue(); 
+            if (index == partsHolder->size() - 1) { 
+                promise.SetValue(result); 
+                return; 
+            } 
+ 
+            if (!result.Success() && result.Status() != TIssuesIds::KIKIMR_ACCESS_DENIED) { 
+                promise.SetValue(result); 
+                return; 
+            } 
+ 
+            CreateDirs(partsHolder, index + 1, promise, createDir); 
+        }); 
+ 
     TString basePath = IKikimrGateway::CombinePath(parts.begin(), parts.begin() + index);
-
-    createDir(basePath, parts[index], partPromise);
-}
-
-TKikimrClusterMapping::TKikimrClusterMapping(const TKikimrGatewayConfig& config) {
+ 
+    createDir(basePath, parts[index], partPromise); 
+} 
+ 
+TKikimrClusterMapping::TKikimrClusterMapping(const TKikimrGatewayConfig& config) { 
     THashMap<TString, TString> defaultSettings;
-    for (auto& setting : config.GetDefaultSettings()) {
-        defaultSettings[setting.GetName()] = setting.GetValue();
-    }
-
-    for (size_t i = 0; i < config.ClusterMappingSize(); ++i) {
-        const TKikimrClusterConfig& cluster = config.GetClusterMapping(i);
-
+    for (auto& setting : config.GetDefaultSettings()) { 
+        defaultSettings[setting.GetName()] = setting.GetValue(); 
+    } 
+ 
+    for (size_t i = 0; i < config.ClusterMappingSize(); ++i) { 
+        const TKikimrClusterConfig& cluster = config.GetClusterMapping(i); 
+ 
         auto name = cluster.GetName();
-
+ 
         if (Clusters.contains(name)) {
-            ythrow yexception() << "TKikimrGatewayConfig: Duplicate cluster name: " << name;
-        }
-
-        Clusters[name] = cluster;
-
-        if (cluster.GetDefault()) {
-            if (DefaultClusterName) {
-                ythrow yexception() << "TKikimrGatewayConfig: More than one default cluster (current: "
-                    << name << ", previous: " << DefaultClusterName << ")";
-            }
-            DefaultClusterName = name;
-        }
-
-        ClusterSettings[name] = defaultSettings;
-        for (auto& setting : cluster.GetSettings()) {
-            ClusterSettings[name][setting.GetName()] = setting.GetValue();
-        }
-    }
-}
-
+            ythrow yexception() << "TKikimrGatewayConfig: Duplicate cluster name: " << name; 
+        } 
+ 
+        Clusters[name] = cluster; 
+ 
+        if (cluster.GetDefault()) { 
+            if (DefaultClusterName) { 
+                ythrow yexception() << "TKikimrGatewayConfig: More than one default cluster (current: " 
+                    << name << ", previous: " << DefaultClusterName << ")"; 
+            } 
+            DefaultClusterName = name; 
+        } 
+ 
+        ClusterSettings[name] = defaultSettings; 
+        for (auto& setting : cluster.GetSettings()) { 
+            ClusterSettings[name][setting.GetName()] = setting.GetValue(); 
+        } 
+    } 
+} 
+ 
 void TKikimrClusterMapping::GetAllClusterNames(TVector<TString>& names) const {
-    names.clear();
-    for (const auto& c: Clusters) {
-        names.push_back(c.first);
-    }
-}
-
+    names.clear(); 
+    for (const auto& c: Clusters) { 
+        names.push_back(c.first); 
+    } 
+} 
+ 
 const TKikimrClusterConfig& TKikimrClusterMapping::GetClusterConfig(const TString& name) const {
-    if (const TKikimrClusterConfig* config = Clusters.FindPtr(name)) {
-        return *config;
-    } else {
-        throw yexception() << "Unknown cluster name: " << name;
-    }
-}
-
+    if (const TKikimrClusterConfig* config = Clusters.FindPtr(name)) { 
+        return *config; 
+    } else { 
+        throw yexception() << "Unknown cluster name: " << name; 
+    } 
+} 
+ 
 TMaybe<TString> TKikimrClusterMapping::GetClusterSetting(const TString& cluster, const TString& name) const {
-    auto clusterSettings = ClusterSettings.FindPtr(cluster);
-    YQL_ENSURE(clusterSettings);
-
-    auto setting = clusterSettings->FindPtr(name);
+    auto clusterSettings = ClusterSettings.FindPtr(cluster); 
+    YQL_ENSURE(clusterSettings); 
+ 
+    auto setting = clusterSettings->FindPtr(name); 
     return setting ? *setting : TMaybe<TString>();
-}
-
+} 
+ 
 TString TKikimrClusterMapping::GetDefaultClusterName() const {
     if (!DefaultClusterName) {
         ythrow yexception() << "TKikimrGatewayConfig: No default cluster";
     }
 
-    return DefaultClusterName;
-}
-
-bool TKikimrClusterMapping::HasCluster(const TString& cluster) const {
+    return DefaultClusterName; 
+} 
+ 
+bool TKikimrClusterMapping::HasCluster(const TString& cluster) const { 
     return Clusters.contains(cluster);
-}
-
-TKikimrPathId TKikimrPathId::Parse(const TStringBuf& str) {
-    TStringBuf ownerStr;
-    TStringBuf idStr;
-    YQL_ENSURE(str.TrySplit(':', ownerStr, idStr));
-
-    return TKikimrPathId(FromString<ui64>(ownerStr), FromString<ui64>(idStr));
-}
-
+} 
+ 
+TKikimrPathId TKikimrPathId::Parse(const TStringBuf& str) { 
+    TStringBuf ownerStr; 
+    TStringBuf idStr; 
+    YQL_ENSURE(str.TrySplit(':', ownerStr, idStr)); 
+ 
+    return TKikimrPathId(FromString<ui64>(ownerStr), FromString<ui64>(idStr)); 
+} 
+ 
 TString IKikimrGateway::CanonizePath(const TString& path) {
-    if (path.empty()) {
-        return "/";
-    }
-
-    if (path[0] != '/') {
-        return "/" + path;
-    }
-
-    return path;
-}
-
+    if (path.empty()) { 
+        return "/"; 
+    } 
+ 
+    if (path[0] != '/') { 
+        return "/" + path; 
+    } 
+ 
+    return path; 
+} 
+ 
 TVector<TString> IKikimrGateway::SplitPath(const TString& path) {
     TVector<TString> parts;
-    Split(path, "/", parts);
-    return parts;
-}
-
-bool IKikimrGateway::TrySplitTablePath(const TString& path, std::pair<TString, TString>& result, TString& error) {
-    auto parts = SplitPath(path);
-
-    if (parts.size() < 2) {
-        error = TString("Missing scheme root in table path: ") + path;
-        return false;
-    }
-
-    result = std::make_pair(
-        CombinePath(parts.begin(), parts.end() - 1),
+    Split(path, "/", parts); 
+    return parts; 
+} 
+ 
+bool IKikimrGateway::TrySplitTablePath(const TString& path, std::pair<TString, TString>& result, TString& error) { 
+    auto parts = SplitPath(path); 
+ 
+    if (parts.size() < 2) { 
+        error = TString("Missing scheme root in table path: ") + path; 
+        return false; 
+    } 
+ 
+    result = std::make_pair( 
+        CombinePath(parts.begin(), parts.end() - 1), 
         parts.back());
-
-    return true;
-}
-
+ 
+    return true; 
+} 
+ 
 TFuture<IKikimrGateway::TGenericResult> IKikimrGateway::CreatePath(const TString& path, TCreateDirFunc createDir) {
     auto partsHolder = std::make_shared<TVector<TString>>(SplitPath(path));
-    auto &parts = *partsHolder;
-
-    if (parts.size() < 2) {
-        TGenericResult result;
-        result.SetSuccess();
-        return MakeFuture<TGenericResult>(result);
-    }
-
-    auto pathPromise = NewPromise<TGenericResult>();
-    CreateDirs(partsHolder, 1, pathPromise, createDir);
-
-    return pathPromise.GetFuture();
-}
-
+    auto &parts = *partsHolder; 
+ 
+    if (parts.size() < 2) { 
+        TGenericResult result; 
+        result.SetSuccess(); 
+        return MakeFuture<TGenericResult>(result); 
+    } 
+ 
+    auto pathPromise = NewPromise<TGenericResult>(); 
+    CreateDirs(partsHolder, 1, pathPromise, createDir); 
+ 
+    return pathPromise.GetFuture(); 
+} 
+ 
 TString IKikimrGateway::CreateIndexTablePath(const TString& tableName, const TString& indexName) {
     return tableName + "/" + indexName + "/indexImplTable";
 }
 
 
-void IKikimrGateway::BuildIndexMetadata(TTableMetadataResult& loadTableMetadataResult) {
-    auto tableMetadata = loadTableMetadataResult.Metadata;
-    YQL_ENSURE(tableMetadata);
+void IKikimrGateway::BuildIndexMetadata(TTableMetadataResult& loadTableMetadataResult) { 
+    auto tableMetadata = loadTableMetadataResult.Metadata; 
+    YQL_ENSURE(tableMetadata); 
 
-    if (tableMetadata->Indexes.empty()) {
-        return;
-    }
-
+    if (tableMetadata->Indexes.empty()) { 
+        return; 
+    } 
+ 
     const auto& cluster = tableMetadata->Cluster;
     const auto& tableName = tableMetadata->Name;
     const size_t indexesCount = tableMetadata->Indexes.size();
 
-    NKikimr::NTableIndex::TTableColumns tableColumns;
-    tableColumns.Columns.reserve(tableMetadata->Columns.size());
+    NKikimr::NTableIndex::TTableColumns tableColumns; 
+    tableColumns.Columns.reserve(tableMetadata->Columns.size()); 
     for (auto& column: tableMetadata->Columns) {
-        tableColumns.Columns.insert_noresize(column.first);
+        tableColumns.Columns.insert_noresize(column.first); 
     }
-    tableColumns.Keys = tableMetadata->KeyColumnNames;
+    tableColumns.Keys = tableMetadata->KeyColumnNames; 
 
     tableMetadata->SecondaryGlobalIndexMetadata.resize(indexesCount);
     for (size_t i = 0; i < indexesCount; i++) {
         const auto& index = tableMetadata->Indexes[i];
         auto indexTablePath = CreateIndexTablePath(tableName, index.Name);
-        NKikimr::NTableIndex::TTableColumns indexTableColumns = NKikimr::NTableIndex::CalcTableImplDescription(
+        NKikimr::NTableIndex::TTableColumns indexTableColumns = NKikimr::NTableIndex::CalcTableImplDescription( 
                     tableColumns,
                     NKikimr::NTableIndex::TIndexColumns{index.KeyColumns, {}});
 
         TKikimrTableMetadataPtr indexTableMetadata = new TKikimrTableMetadata(cluster, indexTablePath);
         indexTableMetadata->DoesExist = true;
-        indexTableMetadata->KeyColumnNames = indexTableColumns.Keys;
-        for (auto& column: indexTableColumns.Columns) {
+        indexTableMetadata->KeyColumnNames = indexTableColumns.Keys; 
+        for (auto& column: indexTableColumns.Columns) { 
             indexTableMetadata->Columns[column] = tableMetadata->Columns.at(column);
         }
 
@@ -351,14 +351,14 @@ void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::T
     proto.mutable_date_type_column()->set_expire_after_seconds(settings.ExpireAfter.Seconds());
 }
 
-Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value) {
-    if (!value) {
-        return Ydb::FeatureFlag::STATUS_UNSPECIFIED;
-    }
-
-    return *value
-        ? Ydb::FeatureFlag::ENABLED
-        : Ydb::FeatureFlag::DISABLED;
-}
-
-} // namespace NYql
+Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value) { 
+    if (!value) { 
+        return Ydb::FeatureFlag::STATUS_UNSPECIFIED; 
+    } 
+ 
+    return *value 
+        ? Ydb::FeatureFlag::ENABLED 
+        : Ydb::FeatureFlag::DISABLED; 
+} 
+ 
+} // namespace NYql 

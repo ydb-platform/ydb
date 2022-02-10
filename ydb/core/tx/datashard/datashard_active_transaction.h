@@ -137,12 +137,12 @@ public:
     ui64 LockTxId() const { return Tx.GetLockTxId(); }
     ui64 ProgramSize() const { return Tx.GetMiniKQL().size(); }
     bool Immediate() const { return Tx.GetImmediate(); }
-    bool ReadOnly() const { return Tx.GetReadOnly(); }
+    bool ReadOnly() const { return Tx.GetReadOnly(); } 
     bool NeedDiagnostics() const { return Tx.GetNeedDiagnostics(); }
     bool CollectStats() const { return Tx.GetCollectStats(); }
     TInstant ReceivedAt() const { return ReceivedAt_; }
     TInstant Deadline() const { return Deadline_; }
-    TMaybe<ui64> PerShardKeysSizeLimitBytes() const { return PerShardKeysSizeLimitBytes_; }
+    TMaybe<ui64> PerShardKeysSizeLimitBytes() const { return PerShardKeysSizeLimitBytes_; } 
 
     bool Ready() const { return ErrCode == NKikimrTxDataShard::TError::OK; }
     bool RequirePrepare() const { return ErrCode == NKikimrTxDataShard::TError::SNAPSHOT_NOT_READY_YET; }
@@ -152,16 +152,16 @@ public:
     bool HasDynamicWrites() const { return TxInfo().DynKeysCount != 0; }
 
     // TODO: It's an expensive operation (Precharge() inside). We need avoid it.
-    TEngineBay::TSizes CalcReadSizes(bool needsTotalKeysSize) const { return EngineBay.CalcSizes(needsTotalKeysSize); }
+    TEngineBay::TSizes CalcReadSizes(bool needsTotalKeysSize) const { return EngineBay.CalcSizes(needsTotalKeysSize); } 
 
     ui64 GetMemoryAllocated() const {
-        if (!IsKqpDataTx()) {
-            const NMiniKQL::IEngineFlat * engine = EngineBay.GetEngine();
-            if (engine) {
-                return EngineBay.GetEngine()->GetMemoryAllocated();
-            }
-        }
-
+        if (!IsKqpDataTx()) { 
+            const NMiniKQL::IEngineFlat * engine = EngineBay.GetEngine(); 
+            if (engine) { 
+                return EngineBay.GetEngine()->GetMemoryAllocated(); 
+            } 
+        } 
+ 
         return 0;
     }
 
@@ -169,8 +169,8 @@ public:
     void DestroyEngine() { EngineBay.DestroyEngine(); }
     const NMiniKQL::TEngineHostCounters& GetCounters() { return EngineBay.GetCounters(); }
     void ResetCounters() { EngineBay.ResetCounters(); }
-
-    bool CanCancel();
+ 
+    bool CanCancel(); 
     bool CheckCancelled();
 
     void SetWriteVersion(TRowVersion writeVersion) { EngineBay.SetWriteVersion(writeVersion); }
@@ -185,21 +185,21 @@ public:
 
     bool IsTableRead() const { return Tx.HasReadTableTransaction(); }
 
-    bool IsKqpTx() const { return Tx.HasKqpTransaction(); }
-
-    bool IsKqpDataTx() const {
-        return IsKqpTx() && Tx.GetKqpTransaction().GetType() == NKikimrTxDataShard::KQP_TX_TYPE_DATA;
-    }
-
-    bool IsKqpScanTx() const {
-        return IsKqpTx() && Tx.GetKqpTransaction().GetType() == NKikimrTxDataShard::KQP_TX_TYPE_SCAN;
-    }
-
+    bool IsKqpTx() const { return Tx.HasKqpTransaction(); } 
+ 
+    bool IsKqpDataTx() const { 
+        return IsKqpTx() && Tx.GetKqpTransaction().GetType() == NKikimrTxDataShard::KQP_TX_TYPE_DATA; 
+    } 
+ 
+    bool IsKqpScanTx() const { 
+        return IsKqpTx() && Tx.GetKqpTransaction().GetType() == NKikimrTxDataShard::KQP_TX_TYPE_SCAN; 
+    } 
+ 
     const NKikimrTxDataShard::TKqpTransaction &GetKqpTransaction() const { return Tx.GetKqpTransaction(); }
     const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& GetKqpTasks() const;
     NKqp::TKqpTasksRunner& GetKqpTasksRunner() { Y_VERIFY(IsKqpDataTx()); return EngineBay.GetKqpTasksRunner(Tx.GetKqpTransaction()); }
     NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx() { Y_VERIFY(IsKqpDataTx()); return EngineBay.GetKqpComputeCtx(); }
-
+ 
     bool HasStreamResponse() const { return Tx.GetStreamResponse(); }
     TActorId GetSink() const { return ActorIdFromProto(Tx.GetSink()); }
     const NKikimrTxDataShard::TReadTableTransaction &GetReadTableTransaction() const { return Tx.GetReadTableTransaction(); }
@@ -219,8 +219,8 @@ public:
 
     bool IsTxInfoLoaded() const { return TxInfo().Loaded; }
 
-    bool IsTxReadOnly() const { return IsReadOnly; }
-
+    bool IsTxReadOnly() const { return IsReadOnly; } 
+ 
     bool HasOutReadsets() const { return TxInfo().HasOutReadsets; }
     bool HasInReadsets() const { return TxInfo().HasInReadsets; }
 
@@ -238,8 +238,8 @@ private:
     ui64 TxSize;
     ui64 TxCacheUsage;
     bool IsReleased;
-    TMaybe<ui64> PerShardKeysSizeLimitBytes_;
-    bool IsReadOnly;
+    TMaybe<ui64> PerShardKeysSizeLimitBytes_; 
+    bool IsReadOnly; 
     bool AllowCancelROwithReadsets;
     bool Cancelled;
     const TInstant ReceivedAt_; // For local timeout tracking

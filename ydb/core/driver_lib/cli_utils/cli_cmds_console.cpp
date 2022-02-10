@@ -79,7 +79,7 @@ public:
 
     virtual void PrintResponse(const NKikimrClient::TConsoleResponse &response)
     {
-        if (response.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS)
+        if (response.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS) 
             Cout << response.DebugString();
         else
             Cout << "ERROR: " << response.GetStatus().GetCode()
@@ -357,7 +357,7 @@ public:
 
     void PrintResponse(const NKikimrClient::TConsoleResponse &response) override
     {
-        if (response.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
+        if (response.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) { 
             TConsoleClientCommand::PrintResponse(response);
         } else {
             Cout << "Curent Console config: " << Endl
@@ -404,7 +404,7 @@ public:
 
     void PrintResponse(const NKikimrClient::TConsoleResponse &response) override
     {
-        if (response.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
+        if (response.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) { 
             TConsoleClientCommand::PrintResponse(response);
         } else {
             Cout << "OK" << Endl;

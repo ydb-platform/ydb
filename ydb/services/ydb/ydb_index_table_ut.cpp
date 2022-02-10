@@ -7,14 +7,14 @@
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
-#include "ydb_common_ut.h"
+#include "ydb_common_ut.h" 
 
 #include <util/thread/factory.h>
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
-using namespace NYdb;
-using namespace NYdb::NTable;
+using namespace NYdb; 
+using namespace NYdb::NTable; 
 
 void CreateTestTableWithIndex(NYdb::NTable::TTableClient& client) {
     auto sessionResult = client.CreateSession().ExtractValueSync();

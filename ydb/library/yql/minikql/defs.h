@@ -29,8 +29,8 @@
             (THROW yexception() << __FUNCTION__ << "(): requirement " \
                 << #condition << " failed. " << "" __VA_ARGS__);      \
         }                                                             \
-    } while (0)
-
+    } while (0) 
+ 
 namespace NKikimr {
 
 template <typename T>

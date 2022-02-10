@@ -1,15 +1,15 @@
-#pragma once
-
+#pragma once 
+ 
 #include <ydb/library/yql/dq/runtime/dq_compute.h>
-
+ 
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
 
 // TODO rename file to runtime_compute_context.h
 
-namespace NKikimr {
-namespace NMiniKQL {
-
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 class TKqpComputeContextBase : public NYql::NDq::TDqComputeContextBase {
 public:
     struct TColumn {
@@ -24,9 +24,9 @@ public:
 private:
     ui64 CurrentTaskId = 0;
 };
-
-TComputationNodeFactory GetKqpBaseComputeFactory(const TKqpComputeContextBase* computeCtx);
-
+ 
+TComputationNodeFactory GetKqpBaseComputeFactory(const TKqpComputeContextBase* computeCtx); 
+ 
 class TKqpEnsureFail : public yexception {
 public:
     TKqpEnsureFail(ui32 code, TString&& message)
@@ -49,4 +49,4 @@ private:
 IComputationNode* WrapKqpEnsure(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
 } // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr 

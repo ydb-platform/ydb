@@ -40,7 +40,7 @@ union TBasicKikimrServicesMask {
         bool EnableLoadService:1;
         bool EnableFailureInjectionService:1;
         bool EnablePersQueueL2Cache:1;
-        bool EnableKqp:1;
+        bool EnableKqp:1; 
         bool EnableMemoryLog:1;
         bool EnableGRpcService:1;
         bool EnableNodeIdentifier:1;

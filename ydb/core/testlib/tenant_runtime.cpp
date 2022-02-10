@@ -1094,7 +1094,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         SendToConsole(req);
         TAutoPtr<IEventHandle> handle;
         auto reply = GrabEdgeEventRethrow<TEvConsole::TEvSetConfigResponse>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS); 
     }
 
     // Create Tenant Slot Broker

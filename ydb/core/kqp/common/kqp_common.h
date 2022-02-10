@@ -1,28 +1,28 @@
-#pragma once
-
+#pragma once 
+ 
 #include <ydb/core/base/events.h>
 #include <ydb/library/yql/dq/actors/dq_events_ids.h>
-
-namespace NKikimr {
-namespace NKqp {
-
-struct TKqpEvents {
-    enum EKqpEvents {
-        EvQueryRequest = EventSpaceBegin(TKikimrEvents::ES_KQP),
-        EvQueryResponse,
-        EvContinueProcess,
-        EvQueryTimeout,
-        EvIdleTimeout,
-        EvCloseSessionRequest,
-        EvProcessResponse,
-        EvCreateSessionRequest,
-        EvCreateSessionResponse,
-        EvPingSessionRequest,
-        EvCloseSessionResponse,
-        EvPingSessionResponse,
-        EvCompileRequest,
-        EvCompileResponse,
-        EvCompileInvalidateRequest,
+ 
+namespace NKikimr { 
+namespace NKqp { 
+ 
+struct TKqpEvents { 
+    enum EKqpEvents { 
+        EvQueryRequest = EventSpaceBegin(TKikimrEvents::ES_KQP), 
+        EvQueryResponse, 
+        EvContinueProcess, 
+        EvQueryTimeout, 
+        EvIdleTimeout, 
+        EvCloseSessionRequest, 
+        EvProcessResponse, 
+        EvCreateSessionRequest, 
+        EvCreateSessionResponse, 
+        EvPingSessionRequest, 
+        EvCloseSessionResponse, 
+        EvPingSessionResponse, 
+        EvCompileRequest, 
+        EvCompileResponse, 
+        EvCompileInvalidateRequest, 
         EvAbortExecution = NYql::NDq::TDqEvents::EDqEvents::EvAbortExecution,
         EvInitiateShutdownRequest,
         EvInitiateSessionShutdown,
@@ -30,25 +30,25 @@ struct TKqpEvents {
         EvDataQueryStreamPart,
         EvDataQueryStreamPartAck,
         EvRecompileRequest,
-    };
+    }; 
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);
-};
+}; 
+ 
 
-
-struct TKqpExecuterEvents {
-    enum EKqpExecuterEvents {
-        EvTxRequest = EventSpaceBegin(TKikimrEvents::ES_KQP) + 100,
-        EvTxResponse,
+struct TKqpExecuterEvents { 
+    enum EKqpExecuterEvents { 
+        EvTxRequest = EventSpaceBegin(TKikimrEvents::ES_KQP) + 100, 
+        EvTxResponse, 
         EvStreamData,
         EvStreamProfile,
         EvProgress,
         EvStreamDataAck,
-        EvTableResolveStatus,
-        EvShardsResolveStatus
-    };
-};
-
+        EvTableResolveStatus, 
+        EvShardsResolveStatus 
+    }; 
+}; 
+ 
 struct TKqpSnapshotEvents {
     enum EKqpSnapshotEvents {
         EvCreateSnapshotRequest = EventSpaceBegin(TKikimrEvents::ES_KQP) + 150,
@@ -118,4 +118,4 @@ struct TKqpSpillingEvents {
 };
 
 } // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr 

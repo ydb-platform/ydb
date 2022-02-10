@@ -113,7 +113,7 @@ message TReadTableTransaction {
 }
 
 message TKqpLocks {
-    repeated TLock Locks = 1;
+    repeated TLock Locks = 1; 
     repeated uint64 SendingShards = 2;   // empty at Erase
     repeated uint64 ReceivingShards = 3; // empty at Erase
 
@@ -124,26 +124,26 @@ message TKqpLocks {
         Erase = 3;
     }
     optional ELocksOp Op = 4;
-}
-
-message TKqpValidateLocksResult {
-    optional bool Success = 1;
-    repeated TLock BrokenLocks = 2;
-};
-
-enum EKqpTransactionType {
-    KQP_TX_TYPE_UNSPECIFIED = 0;
-    KQP_TX_TYPE_DATA = 1;
-    KQP_TX_TYPE_SCAN = 2;
-}
-
+} 
+ 
+message TKqpValidateLocksResult { 
+    optional bool Success = 1; 
+    repeated TLock BrokenLocks = 2; 
+}; 
+ 
+enum EKqpTransactionType { 
+    KQP_TX_TYPE_UNSPECIFIED = 0; 
+    KQP_TX_TYPE_DATA = 1; 
+    KQP_TX_TYPE_SCAN = 2; 
+} 
+ 
 enum EScanDataFormat {
     UNSPECIFIED = 0;
     CELLVEC = 1;
     ARROW = 2;
 }
 
-message TKqpTransaction {
+message TKqpTransaction { 
     message TColumnMeta {
         optional uint32 Id = 1;
         optional string Name = 2;
@@ -215,7 +215,7 @@ message TKqpTransaction {
          optional NKikimrSSA.TOlapProgram OlapProgram = 10; // Currently only for OLAP tables
     }
 
-    optional EKqpTransactionType Type = 1;
+    optional EKqpTransactionType Type = 1; 
     repeated NYql.NDqProto.TDqTask Tasks = 2;
     optional TKqpLocks Locks = 3;
 
@@ -223,23 +223,23 @@ message TKqpTransaction {
     reserved 5;
 
     optional NKikimrKqp.TKqpSnapshot Snapshot = 6;
-}
-
-message TKqpTaskInfo {
-    optional uint64 TaskId = 1;
+} 
+ 
+message TKqpTaskInfo { 
+    optional uint64 TaskId = 1; 
     optional NActorsProto.TActorId ComputeActor = 2;
-}
-
-message TKqpReply {
+} 
+ 
+message TKqpReply { 
     repeated NYql.NDqProto.TChannelData Outputs = 1;
-    repeated TKqpTaskInfo Tasks = 2;
-}
-
-message TKqpReadset {
+    repeated TKqpTaskInfo Tasks = 2; 
+} 
+ 
+message TKqpReadset { 
     repeated NYql.NDqProto.TChannelData Outputs = 1;
-    optional TKqpValidateLocksResult ValidateLocksResult = 2;
-}
-
+    optional TKqpValidateLocksResult ValidateLocksResult = 2; 
+} 
+ 
 message TDataTransaction {
     optional TRWTransaction RWTransaction = 1;  // DEPRECATED
     optional TROTransaction ROTransaction = 2;  // DEPRECATED
@@ -247,16 +247,16 @@ message TDataTransaction {
     optional bool Immediate = 4;
     optional fixed64 LockTxId = 5;
     optional bool NeedDiagnostics = 6;
-    optional bool ReadOnly = 7;
+    optional bool ReadOnly = 7; 
     optional TReadTableTransaction ReadTableTransaction = 8;
     optional bool StreamResponse = 9;
     optional NActorsProto.TActorId Sink = 10;
-    optional bool LlvmRuntime = 11;
-    optional uint64 PerShardKeysSizeLimitBytes = 12;
-    optional TKqpTransaction KqpTransaction = 13;
-    optional uint64 CancelDeadlineMs = 14; // Wallclock timestamp from datareq (not duration)
-    optional uint64 CancelAfterMs = 15; // Duration from tx start local to datashard
-    optional bool CollectStats = 16;
+    optional bool LlvmRuntime = 11; 
+    optional uint64 PerShardKeysSizeLimitBytes = 12; 
+    optional TKqpTransaction KqpTransaction = 13; 
+    optional uint64 CancelDeadlineMs = 14; // Wallclock timestamp from datareq (not duration) 
+    optional uint64 CancelAfterMs = 15; // Duration from tx start local to datashard 
+    optional bool CollectStats = 16; 
 }
 
 message TCreateVolatileSnapshot {
@@ -505,9 +505,9 @@ message TError {
         OUT_OF_SPACE = 14;
         READ_SIZE_EXECEEDED = 15;
         SHARD_IS_BLOCKED = 16;
-        UNKNOWN = 17;
-        REPLY_SIZE_EXECEEDED = 18;
-        EXECUTION_CANCELLED = 19;
+        UNKNOWN = 17; 
+        REPLY_SIZE_EXECEEDED = 18; 
+        EXECUTION_CANCELLED = 19; 
     }
 
     optional EKind Kind = 1;
@@ -541,10 +541,10 @@ message TEvProposeTransactionResult {
         TRY_LATER = 5;
         OVERLOADED = 6;
         RESPONSE_DATA = 7;
-        EXEC_ERROR = 8;
-        RESULT_UNAVAILABLE = 9;
-        LOCKS_BROKEN = 10;
-        CANCELLED = 11;
+        EXEC_ERROR = 8; 
+        RESULT_UNAVAILABLE = 9; 
+        LOCKS_BROKEN = 10; 
+        CANCELLED = 11; 
         BAD_REQUEST = 12;
     };
 

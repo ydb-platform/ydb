@@ -1,5 +1,5 @@
-#include "kqp_prepare_impl.h"
-
+#include "kqp_prepare_impl.h" 
+ 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/public/lib/value/value.h>
@@ -9,46 +9,46 @@
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
-
+ 
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/json_reader.h>
 
-#include <util/generic/queue.h>
-#include <util/string/strip.h>
+#include <util/generic/queue.h> 
+#include <util/string/strip.h> 
 #include <util/string/vector.h>
-
+ 
 #include <regex>
 
-namespace NKikimr {
-namespace NKqp {
-
-using namespace NYql;
-using namespace NYql::NNodes;
+namespace NKikimr { 
+namespace NKqp { 
+ 
+using namespace NYql; 
+using namespace NYql::NNodes; 
 using namespace NYql::NDq;
 using namespace NClient;
-
-namespace {
-
-struct TTableRead {
-    ETableReadType Type = ETableReadType::Unspecified;
-    TVector<TString> LookupBy;
-    TVector<TString> ScanBy;
+ 
+namespace { 
+ 
+struct TTableRead { 
+    ETableReadType Type = ETableReadType::Unspecified; 
+    TVector<TString> LookupBy; 
+    TVector<TString> ScanBy; 
     TVector<TString> Columns;
-    TMaybe<TString> Limit;
+    TMaybe<TString> Limit; 
     bool Reverse = false;
-};
-
-struct TTableWrite {
-    ETableWriteType Type = ETableWriteType::Unspecified;
-    TVector<TString> Keys;
-    TVector<TString> Columns;
-};
-
-struct TTableInfo {
-    TVector<TTableRead> Reads;
-    TVector<TTableWrite> Writes;
-};
-
+}; 
+ 
+struct TTableWrite { 
+    ETableWriteType Type = ETableWriteType::Unspecified; 
+    TVector<TString> Keys; 
+    TVector<TString> Columns; 
+}; 
+ 
+struct TTableInfo { 
+    TVector<TTableRead> Reads; 
+    TVector<TTableWrite> Writes; 
+}; 
+ 
 struct TSerializerCtx {
     TSerializerCtx(TExprContext& exprCtx, const TString& cluster,
         const TIntrusivePtr<NYql::TKikimrTablesData> tablesData,
@@ -76,212 +76,212 @@ struct TSerializerCtx {
     THashMap<ui32, TVector<NKikimrMiniKQL::TResult>> PureTxResults;
 };
 
-TString GetExprStr(const TExprBase& scalar) {
-    if (auto maybeData = scalar.Maybe<TCoDataCtor>()) {
-        auto literal = TString(maybeData.Cast().Literal());
-        CollapseText(literal, 32);
-
-        return TStringBuilder() << '"' << literal << '"';
-    }
-
-    if (auto maybeParam = scalar.Maybe<TCoParameter>()) {
-        return TString(maybeParam.Cast().Name());
-    }
-
-    return "expr";
-}
-
-void FillTablesInfo(const TExprNode::TPtr& query, TMap<TString, TTableInfo>& tables) {
-    TNodeSet visitedNodes;
-    TQueue<TMaybe<TExprScope>> scopesQueue;
-    scopesQueue.push(TMaybe<TExprScope>());
-
-    while (!scopesQueue.empty()) {
-        auto scope = scopesQueue.front();
-        scopesQueue.pop();
-
-        auto scopeRoot = scope
-            ? scope->Lambda.Body()
-            : TExprBase(query);
-
-        VisitExpr(scopeRoot.Ptr(), [scope, &scopesQueue, &tables] (const TExprNode::TPtr& exprNode) {
-            auto node = TExprBase(exprNode);
-            auto mapDepth = scope ? scope->Depth : 0;
-
-            if (node.Maybe<TCoLambda>()) {
-                return false;
-            }
-
-            if (auto callable = node.Maybe<TCallable>()) {
-                bool isMap = callable.Maybe<TCoMapBase>().IsValid() ||
-                             callable.Maybe<TCoFlatMapBase>().IsValid() ||
-                             callable.Maybe<TCoFilterBase>().IsValid();
-
-                for (const auto& arg : node.Cast<TVarArgCallable<TExprBase>>()) {
-                    if (auto lambda = arg.Maybe<TCoLambda>()) {
-                        TExprScope newScope(callable.Cast(), lambda.Cast(), isMap ? mapDepth + 1 : mapDepth);
-                        scopesQueue.push(newScope);
-                    }
-                }
-            }
-
-            if (auto maybeSelectRange = node.Maybe<TKiSelectRange>()) {
-                auto selectRange = maybeSelectRange.Cast();
-
-                TTableRead read;
-
-                auto isBoundDefined = [](const TExprBase& bound) -> bool {
-                    return !bound.Maybe<TCoNothing>() && !bound.Maybe<TCoVoid>();
-                };
-
-                auto getBoundStr = [](const TExprBase& bound) -> TString {
-                    if (bound.Maybe<TCoNothing>()) {
-                        return "-inf";
-                    }
-
-                    if (bound.Maybe<TCoVoid>()) {
-                        return "+inf";
-                    }
-
-                    return GetExprStr(bound);
-                };
-
-                bool incFrom = false;
-                bool incTo = false;
-                for (const auto& node : selectRange.Range()) {
-                    if (auto maybeAtom = node.Maybe<TCoAtom>()) {
-                        auto value = maybeAtom.Cast().Value();
-
-                        if (value == "IncFrom") {
-                            incFrom = true;
-                        }
-
-                        if (value == "IncTo") {
-                            incTo = true;
-                        }
-                    }
-                }
-
-                bool isScan = false;
-                for (const auto& node : selectRange.Range()) {
-                    if (auto maybeColumnRange = node.Maybe<TKiColumnRangeTuple>()) {
-                        auto columnRange = maybeColumnRange.Cast();
-
-                        if (!isScan && columnRange.From().Raw() == columnRange.To().Raw()) {
-                            auto lookup = TStringBuilder() << columnRange.Column().Value()
-                                << " (" << GetExprStr(columnRange.From()) << ")";
-                            read.LookupBy.push_back(lookup);
-                        } else {
-                            isScan = true;
-
-                            TStringBuilder scanBuilder;
-                            scanBuilder << columnRange.Column().Value();
-
-                            if (isBoundDefined(columnRange.From()) || isBoundDefined(columnRange.To())) {
-                                scanBuilder
-                                    << (incFrom ? " [" : " (")
-                                    << getBoundStr(columnRange.From()) << ", "
-                                    << getBoundStr(columnRange.To())
-                                    << (incTo ? "]" : ")");
-                            }
-
-                            read.ScanBy.push_back(scanBuilder);
-                        }
-                    }
-                }
-
-                auto limitSetting = GetSetting(selectRange.Settings().Ref(), "ItemsLimit");
-                if (limitSetting && TMaybeNode<TCoNameValueTuple>(limitSetting)) {
-                    read.Limit = GetExprStr(TCoNameValueTuple(limitSetting).Value().Cast());
-                }
-
+TString GetExprStr(const TExprBase& scalar) { 
+    if (auto maybeData = scalar.Maybe<TCoDataCtor>()) { 
+        auto literal = TString(maybeData.Cast().Literal()); 
+        CollapseText(literal, 32); 
+ 
+        return TStringBuilder() << '"' << literal << '"'; 
+    } 
+ 
+    if (auto maybeParam = scalar.Maybe<TCoParameter>()) { 
+        return TString(maybeParam.Cast().Name()); 
+    } 
+ 
+    return "expr"; 
+} 
+ 
+void FillTablesInfo(const TExprNode::TPtr& query, TMap<TString, TTableInfo>& tables) { 
+    TNodeSet visitedNodes; 
+    TQueue<TMaybe<TExprScope>> scopesQueue; 
+    scopesQueue.push(TMaybe<TExprScope>()); 
+ 
+    while (!scopesQueue.empty()) { 
+        auto scope = scopesQueue.front(); 
+        scopesQueue.pop(); 
+ 
+        auto scopeRoot = scope 
+            ? scope->Lambda.Body() 
+            : TExprBase(query); 
+ 
+        VisitExpr(scopeRoot.Ptr(), [scope, &scopesQueue, &tables] (const TExprNode::TPtr& exprNode) { 
+            auto node = TExprBase(exprNode); 
+            auto mapDepth = scope ? scope->Depth : 0; 
+ 
+            if (node.Maybe<TCoLambda>()) { 
+                return false; 
+            } 
+ 
+            if (auto callable = node.Maybe<TCallable>()) { 
+                bool isMap = callable.Maybe<TCoMapBase>().IsValid() || 
+                             callable.Maybe<TCoFlatMapBase>().IsValid() || 
+                             callable.Maybe<TCoFilterBase>().IsValid(); 
+ 
+                for (const auto& arg : node.Cast<TVarArgCallable<TExprBase>>()) { 
+                    if (auto lambda = arg.Maybe<TCoLambda>()) { 
+                        TExprScope newScope(callable.Cast(), lambda.Cast(), isMap ? mapDepth + 1 : mapDepth); 
+                        scopesQueue.push(newScope); 
+                    } 
+                } 
+            } 
+ 
+            if (auto maybeSelectRange = node.Maybe<TKiSelectRange>()) { 
+                auto selectRange = maybeSelectRange.Cast(); 
+ 
+                TTableRead read; 
+ 
+                auto isBoundDefined = [](const TExprBase& bound) -> bool { 
+                    return !bound.Maybe<TCoNothing>() && !bound.Maybe<TCoVoid>(); 
+                }; 
+ 
+                auto getBoundStr = [](const TExprBase& bound) -> TString { 
+                    if (bound.Maybe<TCoNothing>()) { 
+                        return "-inf"; 
+                    } 
+ 
+                    if (bound.Maybe<TCoVoid>()) { 
+                        return "+inf"; 
+                    } 
+ 
+                    return GetExprStr(bound); 
+                }; 
+ 
+                bool incFrom = false; 
+                bool incTo = false; 
+                for (const auto& node : selectRange.Range()) { 
+                    if (auto maybeAtom = node.Maybe<TCoAtom>()) { 
+                        auto value = maybeAtom.Cast().Value(); 
+ 
+                        if (value == "IncFrom") { 
+                            incFrom = true; 
+                        } 
+ 
+                        if (value == "IncTo") { 
+                            incTo = true; 
+                        } 
+                    } 
+                } 
+ 
+                bool isScan = false; 
+                for (const auto& node : selectRange.Range()) { 
+                    if (auto maybeColumnRange = node.Maybe<TKiColumnRangeTuple>()) { 
+                        auto columnRange = maybeColumnRange.Cast(); 
+ 
+                        if (!isScan && columnRange.From().Raw() == columnRange.To().Raw()) { 
+                            auto lookup = TStringBuilder() << columnRange.Column().Value() 
+                                << " (" << GetExprStr(columnRange.From()) << ")"; 
+                            read.LookupBy.push_back(lookup); 
+                        } else { 
+                            isScan = true; 
+ 
+                            TStringBuilder scanBuilder; 
+                            scanBuilder << columnRange.Column().Value(); 
+ 
+                            if (isBoundDefined(columnRange.From()) || isBoundDefined(columnRange.To())) { 
+                                scanBuilder 
+                                    << (incFrom ? " [" : " (") 
+                                    << getBoundStr(columnRange.From()) << ", " 
+                                    << getBoundStr(columnRange.To()) 
+                                    << (incTo ? "]" : ")"); 
+                            } 
+ 
+                            read.ScanBy.push_back(scanBuilder); 
+                        } 
+                    } 
+                } 
+ 
+                auto limitSetting = GetSetting(selectRange.Settings().Ref(), "ItemsLimit"); 
+                if (limitSetting && TMaybeNode<TCoNameValueTuple>(limitSetting)) { 
+                    read.Limit = GetExprStr(TCoNameValueTuple(limitSetting).Value().Cast()); 
+                } 
+ 
                 auto reverseSettings = GetSetting(selectRange.Settings().Ref(), "Reverse");
                 if (reverseSettings) {
                     read.Reverse = true;
                 }
 
-                for (const auto& column : selectRange.Select()) {
-                    read.Columns.emplace_back(column);
-                }
-
-                if (read.LookupBy.empty()) {
-                    read.Type = TKikimrKeyRange::IsFull(selectRange.Range())
-                        ? ETableReadType::FullScan
-                        : ETableReadType::Scan;
-                } else {
-                    read.Type = mapDepth > 0
-                        ? ETableReadType::MultiLookup
-                        : ETableReadType::Lookup;
-                }
-
-                tables[TString(selectRange.Table().Path())].Reads.push_back(read);
-            }
-
-            if (auto maybeSelectRow = node.Maybe<TKiSelectRow>()) {
-                auto selectRow = maybeSelectRow.Cast();
-
-                TTableRead read;
-                read.Type = mapDepth > 0
-                    ? ETableReadType::MultiLookup
-                    : ETableReadType::Lookup;
-
-                for (const auto& key : selectRow.Key()) {
-                    auto lookup = TStringBuilder() << key.Name().Value()
-                        << " (" << GetExprStr(key.Value().Cast()) << ")";
-                    read.LookupBy.push_back(lookup);
-                }
-
-                for (const auto& column : selectRow.Select()) {
-                    read.Columns.emplace_back(column);
-                }
-
-                tables[TString(selectRow.Table().Path())].Reads.push_back(read);
-            }
-
-            if (auto maybeUpdateRow = node.Maybe<TKiUpdateRow>()) {
-                auto updateRow = maybeUpdateRow.Cast();
-
-                TTableWrite write;
-                write.Type = mapDepth > 0
-                    ? ETableWriteType::MultiUpsert
-                    : ETableWriteType::Upsert;
-
-
-                for (const auto& tuple : updateRow.Key()) {
-                    auto key = TStringBuilder() << tuple.Name().Value()
-                        << " (" << GetExprStr(tuple.Value().Cast()) << ")";
-                    write.Keys.push_back(key);
-                }
-
-                for (const auto& tuple : updateRow.Update()) {
-                    write.Columns.emplace_back(tuple.Name());
-                }
-
-                tables[TString(updateRow.Table().Path())].Writes.push_back(write);
-            }
-
-            if (auto maybeEraseRow = node.Maybe<TKiEraseRow>()) {
-                auto eraseRow = maybeEraseRow.Cast();
-
-                TTableWrite write;
-                write.Type = mapDepth > 0
-                    ? ETableWriteType::MultiErase
-                    : ETableWriteType::Erase;
-
-                for (const auto& tuple : eraseRow.Key()) {
-                    auto key = TStringBuilder() << tuple.Name().Value()
-                        << " (" << GetExprStr(tuple.Value().Cast()) << ")";
-                    write.Keys.push_back(key);
-                }
-
-                tables[TString(eraseRow.Table().Path())].Writes.push_back(write);
-            }
-
-            return true;
-        }, visitedNodes);
-    }
-};
-
+                for (const auto& column : selectRange.Select()) { 
+                    read.Columns.emplace_back(column); 
+                } 
+ 
+                if (read.LookupBy.empty()) { 
+                    read.Type = TKikimrKeyRange::IsFull(selectRange.Range()) 
+                        ? ETableReadType::FullScan 
+                        : ETableReadType::Scan; 
+                } else { 
+                    read.Type = mapDepth > 0 
+                        ? ETableReadType::MultiLookup 
+                        : ETableReadType::Lookup; 
+                } 
+ 
+                tables[TString(selectRange.Table().Path())].Reads.push_back(read); 
+            } 
+ 
+            if (auto maybeSelectRow = node.Maybe<TKiSelectRow>()) { 
+                auto selectRow = maybeSelectRow.Cast(); 
+ 
+                TTableRead read; 
+                read.Type = mapDepth > 0 
+                    ? ETableReadType::MultiLookup 
+                    : ETableReadType::Lookup; 
+ 
+                for (const auto& key : selectRow.Key()) { 
+                    auto lookup = TStringBuilder() << key.Name().Value() 
+                        << " (" << GetExprStr(key.Value().Cast()) << ")"; 
+                    read.LookupBy.push_back(lookup); 
+                } 
+ 
+                for (const auto& column : selectRow.Select()) { 
+                    read.Columns.emplace_back(column); 
+                } 
+ 
+                tables[TString(selectRow.Table().Path())].Reads.push_back(read); 
+            } 
+ 
+            if (auto maybeUpdateRow = node.Maybe<TKiUpdateRow>()) { 
+                auto updateRow = maybeUpdateRow.Cast(); 
+ 
+                TTableWrite write; 
+                write.Type = mapDepth > 0 
+                    ? ETableWriteType::MultiUpsert 
+                    : ETableWriteType::Upsert; 
+ 
+ 
+                for (const auto& tuple : updateRow.Key()) { 
+                    auto key = TStringBuilder() << tuple.Name().Value() 
+                        << " (" << GetExprStr(tuple.Value().Cast()) << ")"; 
+                    write.Keys.push_back(key); 
+                } 
+ 
+                for (const auto& tuple : updateRow.Update()) { 
+                    write.Columns.emplace_back(tuple.Name()); 
+                } 
+ 
+                tables[TString(updateRow.Table().Path())].Writes.push_back(write); 
+            } 
+ 
+            if (auto maybeEraseRow = node.Maybe<TKiEraseRow>()) { 
+                auto eraseRow = maybeEraseRow.Cast(); 
+ 
+                TTableWrite write; 
+                write.Type = mapDepth > 0 
+                    ? ETableWriteType::MultiErase 
+                    : ETableWriteType::Erase; 
+ 
+                for (const auto& tuple : eraseRow.Key()) { 
+                    auto key = TStringBuilder() << tuple.Name().Value() 
+                        << " (" << GetExprStr(tuple.Value().Cast()) << ")"; 
+                    write.Keys.push_back(key); 
+                } 
+ 
+                tables[TString(eraseRow.Table().Path())].Writes.push_back(write); 
+            } 
+ 
+            return true; 
+        }, visitedNodes); 
+    } 
+}; 
+ 
 class TxPlanSerializer {
 public:
     TxPlanSerializer(TSerializerCtx& serializerCtx, ui32 txId, const TKqpPhysicalTx& tx) : SerializerCtx(serializerCtx), TxId(txId), Tx(tx) {}
@@ -681,7 +681,7 @@ private:
 
                 auto& inputPlanNode = AddPlanNode(stagePlanNode);
                 inputPlanNode.Type = EPlanNodeType::Connection;
-
+ 
                 if (inputCn.Maybe<TDqCnUnionAll>()) {
                     inputPlanNode.TypeName = "UnionAll";
                 } else if (inputCn.Maybe<TDqCnBroadcast>()) {
@@ -695,15 +695,15 @@ private:
                 } else {
                     inputPlanNode.TypeName = inputCn.Ref().Content();
                 }
-
+ 
                 Visit(inputCn.Output().Stage(), inputPlanNode);
-            }
+            } 
         } else {
             Visit(expr.Ptr(),  planNode);
-
+ 
             if (planNode.TypeName.Empty()) {
                 planNode.TypeName = "Stage";
-            }
+            } 
         }
     }
 
@@ -1240,113 +1240,113 @@ void ModifyPlan(NJson::TJsonValue& plan, const ModifyFunction& modify) {
 
 void WriteCommonTablesInfo(NJsonWriter::TBuf& writer, TMap<TString, TTableInfo>& tables) {
 
-    for (auto& pair : tables) {
-        auto& info = pair.second;
-
-        std::sort(info.Reads.begin(), info.Reads.end(), [](const auto& l, const auto& r) {
-            return std::tie(l.Type, l.LookupBy, l.ScanBy, l.Limit, l.Columns) <
-                   std::tie(r.Type, r.LookupBy, r.ScanBy, r.Limit, r.Columns);
-        });
-
-        std::sort(info.Writes.begin(), info.Writes.end(), [](const auto& l, const auto& r) {
-            return std::tie(l.Type, l.Keys, l.Columns) <
-                   std::tie(r.Type, r.Keys, r.Columns);
-        });
-    }
-
-    writer.BeginList();
-
-    for (auto& pair : tables) {
-        auto& name = pair.first;
-        auto& table = pair.second;
-
-        writer.BeginObject();
-        writer.WriteKey("name").WriteString(name);
-
-        if (!table.Reads.empty()) {
-            writer.WriteKey("reads");
-            writer.BeginList();
-
-            for (auto& read : table.Reads) {
-                writer.BeginObject();
-                writer.WriteKey("type").WriteString(ToString(read.Type));
-
-                if (!read.LookupBy.empty()) {
-                    writer.WriteKey("lookup_by");
-                    writer.BeginList();
-                    for (auto& column : read.LookupBy) {
-                        writer.WriteString(column);
-                    }
-                    writer.EndList();
-                }
-
-                if (!read.ScanBy.empty()) {
-                    writer.WriteKey("scan_by");
-                    writer.BeginList();
-                    for (auto& column : read.ScanBy) {
-                        writer.WriteString(column);
-                    }
-                    writer.EndList();
-                }
-
-                if (read.Limit) {
-                    writer.WriteKey("limit").WriteString(*read.Limit);
-                }
+    for (auto& pair : tables) { 
+        auto& info = pair.second; 
+ 
+        std::sort(info.Reads.begin(), info.Reads.end(), [](const auto& l, const auto& r) { 
+            return std::tie(l.Type, l.LookupBy, l.ScanBy, l.Limit, l.Columns) < 
+                   std::tie(r.Type, r.LookupBy, r.ScanBy, r.Limit, r.Columns); 
+        }); 
+ 
+        std::sort(info.Writes.begin(), info.Writes.end(), [](const auto& l, const auto& r) { 
+            return std::tie(l.Type, l.Keys, l.Columns) < 
+                   std::tie(r.Type, r.Keys, r.Columns); 
+        }); 
+    } 
+ 
+    writer.BeginList(); 
+ 
+    for (auto& pair : tables) { 
+        auto& name = pair.first; 
+        auto& table = pair.second; 
+ 
+        writer.BeginObject(); 
+        writer.WriteKey("name").WriteString(name); 
+ 
+        if (!table.Reads.empty()) { 
+            writer.WriteKey("reads"); 
+            writer.BeginList(); 
+ 
+            for (auto& read : table.Reads) { 
+                writer.BeginObject(); 
+                writer.WriteKey("type").WriteString(ToString(read.Type)); 
+ 
+                if (!read.LookupBy.empty()) { 
+                    writer.WriteKey("lookup_by"); 
+                    writer.BeginList(); 
+                    for (auto& column : read.LookupBy) { 
+                        writer.WriteString(column); 
+                    } 
+                    writer.EndList(); 
+                } 
+ 
+                if (!read.ScanBy.empty()) { 
+                    writer.WriteKey("scan_by"); 
+                    writer.BeginList(); 
+                    for (auto& column : read.ScanBy) { 
+                        writer.WriteString(column); 
+                    } 
+                    writer.EndList(); 
+                } 
+ 
+                if (read.Limit) { 
+                    writer.WriteKey("limit").WriteString(*read.Limit); 
+                } 
                 if (read.Reverse) {
                     writer.WriteKey("reverse").WriteBool(true);
                 }
-
-                if (!read.Columns.empty()) {
-                    writer.WriteKey("columns");
-                    writer.BeginList();
-                    for (auto& column : read.Columns) {
-                        writer.WriteString(column);
-                    }
-                    writer.EndList();
-                }
-
-                writer.EndObject();
-            }
-
-            writer.EndList();
-        }
-
-        if (!table.Writes.empty()) {
-            writer.WriteKey("writes");
-            writer.BeginList();
-
-            for (auto& write : table.Writes) {
-                writer.BeginObject();
-                writer.WriteKey("type").WriteString(ToString(write.Type));
-
-                if (!write.Keys.empty()) {
-                    writer.WriteKey("key");
-                    writer.BeginList();
-                    for (auto& column : write.Keys) {
-                        writer.WriteString(column);
-                    }
-                    writer.EndList();
-                }
-
-                if (!write.Columns.empty()) {
-                    writer.WriteKey("columns");
-                    writer.BeginList();
-                    for (auto& column : write.Columns) {
-                        writer.WriteString(column);
-                    }
-                    writer.EndList();
-                }
-
-                writer.EndObject();
-            }
-
-            writer.EndList();
-        }
-
-        writer.EndObject();
-    }
-
-    writer.EndList();
+ 
+                if (!read.Columns.empty()) { 
+                    writer.WriteKey("columns"); 
+                    writer.BeginList(); 
+                    for (auto& column : read.Columns) { 
+                        writer.WriteString(column); 
+                    } 
+                    writer.EndList(); 
+                } 
+ 
+                writer.EndObject(); 
+            } 
+ 
+            writer.EndList(); 
+        } 
+ 
+        if (!table.Writes.empty()) { 
+            writer.WriteKey("writes"); 
+            writer.BeginList(); 
+ 
+            for (auto& write : table.Writes) { 
+                writer.BeginObject(); 
+                writer.WriteKey("type").WriteString(ToString(write.Type)); 
+ 
+                if (!write.Keys.empty()) { 
+                    writer.WriteKey("key"); 
+                    writer.BeginList(); 
+                    for (auto& column : write.Keys) { 
+                        writer.WriteString(column); 
+                    } 
+                    writer.EndList(); 
+                } 
+ 
+                if (!write.Columns.empty()) { 
+                    writer.WriteKey("columns"); 
+                    writer.BeginList(); 
+                    for (auto& column : write.Columns) { 
+                        writer.WriteString(column); 
+                    } 
+                    writer.EndList(); 
+                } 
+ 
+                writer.EndObject(); 
+            } 
+ 
+            writer.EndList(); 
+        } 
+ 
+        writer.EndObject(); 
+    } 
+ 
+    writer.EndList(); 
 
 }
 
@@ -1361,15 +1361,15 @@ void WriteKqlPlan(NJsonWriter::TBuf& writer, const TExprNode::TPtr& query) {
     writer.BeginObject();
     writer.WriteKey("version").WriteString("0.1");
     writer.WriteKey("type").WriteString("query");
-    writer.EndObject();
-
+    writer.EndObject(); 
+ 
     writer.WriteKey("tables");
     FillTablesInfo(query, tables);
     WriteCommonTablesInfo(writer, tables);
 
     writer.EndObject();
-}
-
+} 
+ 
 // TODO(sk): check prepared statements params in read ranges
 // TODO(sk): check params from correlated subqueries // lookup join
 void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQuery& query,
@@ -1570,4 +1570,4 @@ TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {
 }
 
 } // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr 

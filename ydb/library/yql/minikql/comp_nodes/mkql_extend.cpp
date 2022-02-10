@@ -83,10 +83,10 @@ private:
     const TComputationNodePtrVector Flows;
 };
 
-template <bool IsStream>
+template <bool IsStream> 
 class TExtendWrapper : public TMutableCodegeneratorNode<TExtendWrapper<IsStream>> {
     typedef TMutableCodegeneratorNode<TExtendWrapper<IsStream>> TBaseComputation;
-public:
+public: 
     TExtendWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& lists)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , Lists(std::move(lists))

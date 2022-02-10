@@ -125,8 +125,8 @@ public:
 
 class TExploringNodeVisitor : public INodeVisitor {
 public:
-    using TNodesVec = TStackVec<TNode*, 2>;
-public:
+    using TNodesVec = TStackVec<TNode*, 2>; 
+public: 
     void Visit(TTypeType& node) override;
     void Visit(TVoidType& node) override;
     void Visit(TNullType& node) override;
@@ -161,18 +161,18 @@ public:
     void Visit(TBlockType& node) override;
 
     void Walk(TNode* root, const TTypeEnvironment& env, const std::vector<TNode*>& terminalNodes = std::vector<TNode*>(),
-        bool buildConsumersMap = false, size_t nodesCountHint = 0);
+        bool buildConsumersMap = false, size_t nodesCountHint = 0); 
     const std::vector<TNode*>& GetNodes();
-    const TNodesVec& GetConsumerNodes(TNode& node);
+    const TNodesVec& GetConsumerNodes(TNode& node); 
     void Clear();
 
 private:
-    void AddChildNode(TNode* parent, TNode& child);
+    void AddChildNode(TNode* parent, TNode& child); 
 
 private:
     std::vector<TNode*> NodeList;
     std::vector<TNode*>* Stack = nullptr;
-    bool BuildConsumersMap = false;
+    bool BuildConsumersMap = false; 
     std::unordered_map<TNode*, TNodesVec> ConsumersMap;
 };
 

@@ -29,7 +29,7 @@
 namespace NKikimr {
 
 using namespace Tests;
-using namespace NYdb;
+using namespace NYdb; 
 
 struct TCmsTestSettings : TKikimrTestSettings {
     static constexpr bool PrecreatePools = false;
@@ -125,7 +125,7 @@ void InitConsoleConfig(TKikimrWithGrpcAndRootSchema &server)
 
 template<typename TRequest>
 static void SetSyncOperation(TRequest& req) {
-    req.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
+    req.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC); 
 }
 
 static void doSimpleTenantsTest(bool sync) {

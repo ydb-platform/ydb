@@ -1307,7 +1307,7 @@ message TDescribePath {
     optional TDescribeOptions Options = 7;
 }
 
-// Must be sync with Ydb::EntryType
+// Must be sync with Ydb::EntryType 
 enum EPathType {
     EPathTypeInvalid = 0;
     EPathTypeDir = 1;

@@ -16,7 +16,7 @@ namespace {
 
 const bool RewriteSanityCheck = false;
 
-class TExecutionTransformer : public TGraphTransformerBase {
+class TExecutionTransformer : public TGraphTransformerBase { 
 public:
     struct TState : public TThrRefBase {
         TAdaptiveLock Lock;
@@ -41,10 +41,10 @@ public:
         , Writer(writer)
         , WithFinalize(withFinalize)
     {
-        Rewind();
+        Rewind(); 
     }
 
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final { 
         if (FinalizingTransformer) {
             YQL_CLOG(INFO, CoreExecution) << "FinalizingTransformer, root #" << input->UniqueId();
             auto status = FinalizingTransformer->Transform(input, output, ctx);
@@ -89,13 +89,13 @@ public:
         return FinalizingTransformer->Transform(input, output, ctx);
     }
 
-    NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
+    NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final { 
         return FinalizingTransformer ?
             FinalizingTransformer->GetAsyncFuture(input) :
             State->Promise.GetFuture();
     }
 
-    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
+    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final { 
         if (FinalizingTransformer) {
             return FinalizingTransformer->ApplyAsyncChanges(input, output, ctx);
         }
@@ -200,18 +200,18 @@ public:
         return true;
     }
 
-    void Rewind() override {
-        State = MakeIntrusive<TState>();
-        State->Promise = NThreading::NewPromise();
-        State->HasResult = false;
-        NewNodes.clear();
-        FinalizingTransformer.Reset();
+    void Rewind() override { 
+        State = MakeIntrusive<TState>(); 
+        State->Promise = NThreading::NewPromise(); 
+        State->HasResult = false; 
+        NewNodes.clear(); 
+        FinalizingTransformer.Reset(); 
 
         TrackableNodes.clear();
         CollectingNodes.clear();
         ProvidersCache.clear();
-    }
-
+    } 
+ 
     TStatus ExecuteNode(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExprContext& ctx, ui32 depth) {
         output = node;
         bool changed = false;

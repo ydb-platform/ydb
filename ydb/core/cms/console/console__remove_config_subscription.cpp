@@ -12,7 +12,7 @@ public:
     {
     }
 
-    bool Error(Ydb::StatusIds::StatusCode code,
+    bool Error(Ydb::StatusIds::StatusCode code, 
                const TString &error,
                const TActorContext &ctx)
     {
@@ -39,10 +39,10 @@ public:
 
         ui64 id = rec.GetSubscriptionId();
         if (!Self->SubscriptionIndex.GetSubscription(id))
-            return Error(Ydb::StatusIds::NOT_FOUND,
+            return Error(Ydb::StatusIds::NOT_FOUND, 
                          Sprintf("cannot find subscription %" PRIu64, id), ctx);
 
-        Response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
+        Response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS); 
 
         Self->PendingSubscriptionModifications.RemovedSubscriptions.insert(id);
 

@@ -262,8 +262,8 @@ TString TError::GetMessage() const {
             return "Execution failed";
         case NTxProxy::TResultStatus::EStatus::ExecInProgress:
             return "Request accepted and now runs";
-        case NTxProxy::TResultStatus::EStatus::ExecResultUnavailable:
-            return "Execution result unavailable.";
+        case NTxProxy::TResultStatus::EStatus::ExecResultUnavailable: 
+            return "Execution result unavailable."; 
         };
         break;
     case EFacility::FacilityMsgBusProxy:
@@ -331,7 +331,7 @@ TError::EFacility TError::GetFacility() const {
     return Facility;
 }
 
-Ydb::StatusIds::StatusCode TError::GetYdbStatus() const {
+Ydb::StatusIds::StatusCode TError::GetYdbStatus() const { 
     return YdbStatus;
 }
 

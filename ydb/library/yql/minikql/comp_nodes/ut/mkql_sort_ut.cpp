@@ -5,96 +5,96 @@
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
-
+ 
 #include "mkql_computation_node_ut.h"
-
+ 
 #include <random>
 #include <ctime>
 #include <algorithm>
 
-namespace NKikimr {
-namespace NMiniKQL {
-
-namespace {
-
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
+namespace { 
+ 
 template <bool LLVM>
 TRuntimeNode MakeStream(TSetup<LLVM>& setup) {
-    TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-
+    TProgramBuilder& pgmBuilder = *setup.PgmBuilder; 
+ 
     TCallableBuilder callableBuilder(*setup.Env, "TestYieldStream",
-        pgmBuilder.NewStreamType(
-            pgmBuilder.NewStructType({
+        pgmBuilder.NewStreamType( 
+            pgmBuilder.NewStructType({ 
                 {TStringBuf("a"), pgmBuilder.NewDataType(NUdf::EDataSlot::Uint64)},
                 {TStringBuf("b"), pgmBuilder.NewDataType(NUdf::EDataSlot::String)}
-            })
-        )
-    );
-
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
+            }) 
+        ) 
+    ); 
+ 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
 TRuntimeNode StreamToString(TProgramBuilder& pgmBuilder, TRuntimeNode stream) {
     return pgmBuilder.Condense(stream,
-        pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("|"),
+        pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("|"), 
             [&] (TRuntimeNode, TRuntimeNode) { return pgmBuilder.NewDataLiteral<bool>(false); },
-            [&] (TRuntimeNode item, TRuntimeNode state) {
-                auto str = pgmBuilder.Concat(
-                    pgmBuilder.Concat(
-                        pgmBuilder.ToString(pgmBuilder.Member(item, "a")),
-                        pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("-")
-                    ),
-                    pgmBuilder.Member(item, "b")
-                );
-
-                return pgmBuilder.Concat(pgmBuilder.Concat(state, str),
-                    pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("|"));
+            [&] (TRuntimeNode item, TRuntimeNode state) { 
+                auto str = pgmBuilder.Concat( 
+                    pgmBuilder.Concat( 
+                        pgmBuilder.ToString(pgmBuilder.Member(item, "a")), 
+                        pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("-") 
+                    ), 
+                    pgmBuilder.Member(item, "b") 
+                ); 
+ 
+                return pgmBuilder.Concat(pgmBuilder.Concat(state, str), 
+                    pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("|")); 
             }
         );
-}
-
-} // namespace
-
-Y_UNIT_TEST_SUITE(TMiniKQLSortTest) {
+} 
+ 
+} // namespace 
+ 
+Y_UNIT_TEST_SUITE(TMiniKQLSortTest) { 
     Y_UNIT_TEST_LLVM(TestStreamSort) {
         TSetup<LLVM> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-
-        auto stream = MakeStream(setup);
+        TProgramBuilder& pgmBuilder = *setup.PgmBuilder; 
+ 
+        auto stream = MakeStream(setup); 
         std::vector<TRuntimeNode> order {
-            pgmBuilder.NewDataLiteral<bool>(true),
-            pgmBuilder.NewDataLiteral<bool>(false)
-        };
-        auto sort = pgmBuilder.Sort(stream, pgmBuilder.NewTuple(order),
-            [&pgmBuilder](TRuntimeNode item) {
+            pgmBuilder.NewDataLiteral<bool>(true), 
+            pgmBuilder.NewDataLiteral<bool>(false) 
+        }; 
+        auto sort = pgmBuilder.Sort(stream, pgmBuilder.NewTuple(order), 
+            [&pgmBuilder](TRuntimeNode item) { 
                 std::vector<TRuntimeNode> keys {
-                    pgmBuilder.Member(item, "a"),
-                    pgmBuilder.Member(item, "b")
-                };
-
-                return pgmBuilder.NewTuple(keys);
-            });
-
+                    pgmBuilder.Member(item, "a"), 
+                    pgmBuilder.Member(item, "b") 
+                }; 
+ 
+                return pgmBuilder.NewTuple(keys); 
+            }); 
+ 
         auto pgmResult = StreamToString(pgmBuilder, sort);
-
-        auto graph = setup.BuildGraph(pgmResult);
-        auto value = graph->GetValue();
-
-
-        NUdf::TUnboxedValue result;
+ 
+        auto graph = setup.BuildGraph(pgmResult); 
+        auto value = graph->GetValue(); 
+ 
+ 
+        NUdf::TUnboxedValue result; 
         auto yieldCount = 0U;
-        auto status = NUdf::EFetchStatus::Ok;
-        while (status != NUdf::EFetchStatus::Finish) {
-            status = value.Fetch(result);
-            if (status == NUdf::EFetchStatus::Yield) {
-                ++yieldCount;
-            }
-        }
-
-        UNIT_ASSERT_EQUAL(status, NUdf::EFetchStatus::Finish);
+        auto status = NUdf::EFetchStatus::Ok; 
+        while (status != NUdf::EFetchStatus::Finish) { 
+            status = value.Fetch(result); 
+            if (status == NUdf::EFetchStatus::Yield) { 
+                ++yieldCount; 
+            } 
+        } 
+ 
+        UNIT_ASSERT_EQUAL(status, NUdf::EFetchStatus::Finish); 
         UNIT_ASSERT_EQUAL(yieldCount, 3U);
-        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()),
-            "|0-8|0-4|0-11|0-0|1-9|1-6|1-13|1-1|2-7|2-2|2-14|2-10|");
-    }
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), 
+            "|0-8|0-4|0-11|0-0|1-9|1-6|1-13|1-1|2-7|2-2|2-14|2-10|"); 
+    } 
 
     Y_UNIT_TEST_LLVM(TestFlowSortByLambdaComparator) {
         TSetup<LLVM> setup;
@@ -516,6 +516,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLSortTest) {
         UNIT_ASSERT_VALUES_EQUAL(res.size(), n);
         UNIT_ASSERT(copy == res);
     }
-}
-} // NMiniKQL
-} // NKikimr
+} 
+} // NMiniKQL 
+} // NKikimr 

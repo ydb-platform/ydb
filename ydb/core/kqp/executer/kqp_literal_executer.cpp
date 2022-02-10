@@ -97,9 +97,9 @@ private:
                 }
             }
         } catch (const TMemoryLimitExceededException& e) {
-            LOG_W("TKqpLiteralExecuter, memory limit exceeded.");
-            ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
-                YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Memory limit exceeded"));
+            LOG_W("TKqpLiteralExecuter, memory limit exceeded."); 
+            ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, 
+                YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Memory limit exceeded")); 
         } catch (...) {
             auto msg = CurrentExceptionMessage();
             LOG_C("TKqpLiteralExecuter, unexpected exception caught: " << msg);
@@ -346,7 +346,7 @@ private:
 private:
     void InternalError(const TString& message) {
         LOG_E(message);
-        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
+        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction."); 
         issue.AddSubIssue(MakeIntrusive<TIssue>(message));
         ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, issue);
     }

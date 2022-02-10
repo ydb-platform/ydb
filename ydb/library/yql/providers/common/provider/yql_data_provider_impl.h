@@ -80,7 +80,7 @@ public:
     bool CollectDiscoveredData(NYson::TYsonWriter& writer) override;
     IPlanFormatter& GetPlanFormatter() override;
     ITrackableNodeProcessor& GetTrackableNodeProcessor() override;
-    IGraphTransformer& GetPlanInfoTransformer() override;
+    IGraphTransformer& GetPlanInfoTransformer() override; 
     IDqIntegration* GetDqIntegration() override;
 
 protected:

@@ -176,7 +176,7 @@ using TAsyncDescribeSemaphoreResult = NThreading::TFuture<TDescribeSemaphoreResu
 ////////////////////////////////////////////////////////////////////////////////
 
 template<class TDerived>
-struct TNodeSettings : public TOperationRequestSettings<TDerived> {
+struct TNodeSettings : public TOperationRequestSettings<TDerived> { 
     using TSelf = TDerived;
 
     FLUENT_SETTING_OPTIONAL(TDuration, SelfCheckPeriod);
@@ -192,8 +192,8 @@ struct TNodeSettings : public TOperationRequestSettings<TDerived> {
 
 struct TCreateNodeSettings : public TNodeSettings<TCreateNodeSettings> { };
 struct TAlterNodeSettings : public TNodeSettings<TAlterNodeSettings> { };
-struct TDropNodeSettings : public TOperationRequestSettings<TDropNodeSettings> { };
-struct TDescribeNodeSettings : public TOperationRequestSettings<TDescribeNodeSettings> { };
+struct TDropNodeSettings : public TOperationRequestSettings<TDropNodeSettings> { }; 
+struct TDescribeNodeSettings : public TOperationRequestSettings<TDescribeNodeSettings> { }; 
 
 ////////////////////////////////////////////////////////////////////////////////
 

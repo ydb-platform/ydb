@@ -1,8 +1,8 @@
 #include "grpc_request_proxy.h"
 
 #include "rpc_calls.h"
-#include "rpc_scheme_base.h"
-
+#include "rpc_scheme_base.h" 
+ 
 #include "rpc_common.h"
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/ydb_convert/table_description.h>
@@ -12,18 +12,18 @@ namespace NKikimr {
 namespace NGRpcService {
 
 using namespace NActors;
-using namespace Ydb;
+using namespace Ydb; 
 
-class TDescribeTableRPC : public TRpcSchemeRequestActor<TDescribeTableRPC, TEvDescribeTableRequest> {
-    using TBase = TRpcSchemeRequestActor<TDescribeTableRPC, TEvDescribeTableRequest>;
-
+class TDescribeTableRPC : public TRpcSchemeRequestActor<TDescribeTableRPC, TEvDescribeTableRequest> { 
+    using TBase = TRpcSchemeRequestActor<TDescribeTableRPC, TEvDescribeTableRequest>; 
+ 
 public:
     TDescribeTableRPC(TEvDescribeTableRequest* msg)
-        : TBase(msg) {}
+        : TBase(msg) {} 
 
     void Bootstrap(const TActorContext &ctx) {
-        TBase::Bootstrap(ctx);
-
+        TBase::Bootstrap(ctx); 
+ 
         SendProposeRequest(ctx);
         Become(&TDescribeTableRPC::StateWork);
     }
@@ -32,7 +32,7 @@ private:
     void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
-            default: TBase::StateWork(ev, ctx);
+            default: TBase::StateWork(ev, ctx); 
         }
     }
 
@@ -87,12 +87,12 @@ private:
                 FillKeyBloomFilter(describeTableResult, tableDescription);
                 FillReadReplicasSettings(describeTableResult, tableDescription);
 
-                return ReplyWithResult(Ydb::StatusIds::SUCCESS, describeTableResult, ctx);
+                return ReplyWithResult(Ydb::StatusIds::SUCCESS, describeTableResult, ctx); 
             }
 
             case NKikimrScheme::StatusPathDoesNotExist:
             case NKikimrScheme::StatusSchemeError: {
-                return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+                return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx); 
             }
 
             case NKikimrScheme::StatusAccessDenied: {
@@ -100,11 +100,11 @@ private:
             }
 
             case NKikimrScheme::StatusNotAvailable: {
-                return Reply(Ydb::StatusIds::UNAVAILABLE, ctx);
-            }
-
+                return Reply(Ydb::StatusIds::UNAVAILABLE, ctx); 
+            } 
+ 
             default: {
-                return Reply(Ydb::StatusIds::GENERIC_ERROR, ctx);
+                return Reply(Ydb::StatusIds::GENERIC_ERROR, ctx); 
             }
         }
     }

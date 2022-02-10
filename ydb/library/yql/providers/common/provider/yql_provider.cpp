@@ -1,5 +1,5 @@
-#include "yql_provider.h"
-
+#include "yql_provider.h" 
+ 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/type_ann/type_ann_core.h>
 #include <ydb/library/yql/core/type_ann/type_ann_expr.h>
@@ -9,107 +9,107 @@
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
-
+ 
 #include <util/folder/path.h>
 #include <util/generic/utility.h>
 
-namespace NYql {
-namespace NCommon {
-
-using namespace NNodes;
-
-bool TCommitSettings::EnsureModeEmpty(TExprContext& ctx) {
-    if (Mode) {
+namespace NYql { 
+namespace NCommon { 
+ 
+using namespace NNodes; 
+ 
+bool TCommitSettings::EnsureModeEmpty(TExprContext& ctx) { 
+    if (Mode) { 
         ctx.AddError(TIssue(ctx.GetPosition(Pos), TStringBuilder()
-            << "Unsupported mode:" << Mode.Cast().Value()));
-        return false;
-    }
-
-    return true;
-}
-
-bool TCommitSettings::EnsureEpochEmpty(TExprContext& ctx) {
-    if (Epoch) {
+            << "Unsupported mode:" << Mode.Cast().Value())); 
+        return false; 
+    } 
+ 
+    return true; 
+} 
+ 
+bool TCommitSettings::EnsureEpochEmpty(TExprContext& ctx) { 
+    if (Epoch) { 
         ctx.AddError(TIssue(ctx.GetPosition(Pos), TStringBuilder()
-            << "Epochs are unsupported."));
-        return false;
-    }
-
-    return true;
-}
-
-bool TCommitSettings::EnsureOtherEmpty(TExprContext& ctx) {
-    if (!Other.Empty()) {
+            << "Epochs are unsupported.")); 
+        return false; 
+    } 
+ 
+    return true; 
+} 
+ 
+bool TCommitSettings::EnsureOtherEmpty(TExprContext& ctx) { 
+    if (!Other.Empty()) { 
         ctx.AddError(TIssue(ctx.GetPosition(Pos), TStringBuilder()
-            << "Unsupported setting:" << Other.Item(0).Name().Value()));
-        return false;
-    }
-
-    return true;
-}
-
+            << "Unsupported setting:" << Other.Item(0).Name().Value())); 
+        return false; 
+    } 
+ 
+    return true; 
+} 
+ 
 TCoNameValueTupleList TCommitSettings::BuildNode(TExprContext& ctx) const {
     TVector<TExprBase> settings;
-
+ 
     auto addSettings = [this, &settings, &ctx] (const TString& name, TMaybeNode<TExprBase> value) {
-        if (value) {
-
+        if (value) { 
+ 
             auto node = Build<TCoNameValueTuple>(ctx, Pos)
-                .Name().Build(name)
-                .Value(value.Cast())
-                .Done();
-
-            settings.push_back(node);
-
-        }
-    };
-
-    addSettings("mode", Mode);
-    addSettings("epoch", Epoch);
-
-    for (auto setting : Other) {
-        settings.push_back(setting);
-    }
-
+                .Name().Build(name) 
+                .Value(value.Cast()) 
+                .Done(); 
+ 
+            settings.push_back(node); 
+ 
+        } 
+    }; 
+ 
+    addSettings("mode", Mode); 
+    addSettings("epoch", Epoch); 
+ 
+    for (auto setting : Other) { 
+        settings.push_back(setting); 
+    } 
+ 
     auto ret = Build<TCoNameValueTupleList>(ctx, Pos)
-        .Add(settings)
-        .Done();
-
-    return ret;
-}
-
+        .Add(settings) 
+        .Done(); 
+ 
+    return ret; 
+} 
+ 
 const TStructExprType* BuildCommonTableListType(TExprContext& ctx) {
     TVector<const TItemExprType*> items;
     auto stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
     auto listOfString = ctx.MakeType<TListExprType>(stringType);
-
+ 
     items.push_back(ctx.MakeType<TItemExprType>("Prefix", stringType));
     items.push_back(ctx.MakeType<TItemExprType>("Folders", listOfString));
     items.push_back(ctx.MakeType<TItemExprType>("Tables", listOfString));
-
+ 
     return ctx.MakeType<TStructExprType>(items);
-}
-
+} 
+ 
 TExprNode::TPtr BuildTypeExpr(TPositionHandle pos, const TTypeAnnotationNode& ann, TExprContext& ctx) {
     return ExpandType(pos, ann, ctx);
-}
-
+} 
+ 
 bool HasResOrPullOption(const TExprNode& node, const TStringBuf& option) {
     if (node.Content() == "Result" || node.Content() == "Pull") {
         auto options = node.Child(4);
         for (auto setting : options->Children()) {
             if (setting->Head().Content() == option) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
+                return true; 
+            } 
+        } 
+    } 
+    return false; 
+} 
+ 
 TVector<TString> GetResOrPullColumnHints(const TExprNode& node) {
     TVector<TString> columns;
     auto setting = GetSetting(*node.Child(4), "columns");
-    if (setting) {
+    if (setting) { 
         auto type = node.Head().GetTypeAnn();
         if (type->GetKind() != ETypeAnnotationKind::EmptyList) {
             auto structType = type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
@@ -117,40 +117,40 @@ TVector<TString> GetResOrPullColumnHints(const TExprNode& node) {
                auto field = setting->Child(1)->Child(i);
                columns.push_back(TString(field->Content()));
             }
-        }
-    }
-    return columns;
-}
-
+        } 
+    } 
+    return columns; 
+} 
+ 
 TString FullTableName(const TStringBuf& cluster, const TStringBuf& table) {
-    return TStringBuilder() << cluster << ".[" << table << "]";
-}
-
-IDataProvider::TFillSettings GetFillSettings(const TExprNode& node) {
-    IDataProvider::TFillSettings fillSettings;
+    return TStringBuilder() << cluster << ".[" << table << "]"; 
+} 
+ 
+IDataProvider::TFillSettings GetFillSettings(const TExprNode& node) { 
+    IDataProvider::TFillSettings fillSettings; 
     fillSettings.AllResultsBytesLimit = node.Child(1)->Content().empty()
-        ? Nothing()
-        : TMaybe<ui64>(FromString<ui64>(node.Child(1)->Content()));
+        ? Nothing() 
+        : TMaybe<ui64>(FromString<ui64>(node.Child(1)->Content())); 
 
     fillSettings.RowsLimitPerWrite = node.Child(2)->Content().empty()
-        ? Nothing()
-        : TMaybe<ui64>(FromString<ui64>(node.Child(2)->Content()));
+        ? Nothing() 
+        : TMaybe<ui64>(FromString<ui64>(node.Child(2)->Content())); 
 
-    fillSettings.Format = (IDataProvider::EResultFormat)FromString<ui32>(node.Child(5)->Content());
-    fillSettings.FormatDetails = node.Child(3)->Content();
+    fillSettings.Format = (IDataProvider::EResultFormat)FromString<ui32>(node.Child(5)->Content()); 
+    fillSettings.FormatDetails = node.Child(3)->Content(); 
     fillSettings.Discard = FromString<bool>(node.Child(7)->Content());
-
-    return fillSettings;
-}
-
+ 
+    return fillSettings; 
+} 
+ 
 NYson::EYsonFormat GetYsonFormat(const IDataProvider::TFillSettings& fillSettings) {
-    YQL_ENSURE(fillSettings.Format == IDataProvider::EResultFormat::Yson);
+    YQL_ENSURE(fillSettings.Format == IDataProvider::EResultFormat::Yson); 
     return (NYson::EYsonFormat)FromString<ui32>(fillSettings.FormatDetails);
-}
-
-TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
+} 
+ 
+TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) { 
     TMaybeNode<TCoAtom> mode;
-    TMaybeNode<TExprList> columns;
+    TMaybeNode<TExprList> columns; 
     TMaybeNode<TCoAtomList> primaryKey;
     TMaybeNode<TCoAtomList> partitionBy;
     TMaybeNode<TCoNameValueTupleList> orderBy;
@@ -162,18 +162,18 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TExprList> columnFamilies;
     TVector<TCoNameValueTuple> tableSettings;
     TVector<TCoNameValueTuple> alterActions;
-    for (auto child : node) {
+    for (auto child : node) { 
         if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
-            auto tuple = maybeTuple.Cast();
-            auto name = tuple.Name().Value();
-
-            if (name == "mode") {
+            auto tuple = maybeTuple.Cast(); 
+            auto name = tuple.Name().Value(); 
+ 
+            if (name == "mode") { 
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
                 mode = tuple.Value().Cast<TCoAtom>();
-            } else if (name == "columns")  {
-                YQL_ENSURE(tuple.Value().Maybe<TExprList>());
-                columns = tuple.Value().Cast<TExprList>();
-            } else if (name == "primarykey")  {
+            } else if (name == "columns")  { 
+                YQL_ENSURE(tuple.Value().Maybe<TExprList>()); 
+                columns = tuple.Value().Cast<TExprList>(); 
+            } else if (name == "primarykey")  { 
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
                 primaryKey = tuple.Value().Cast<TCoAtomList>();
             } else if (name == "partitionby")  {
@@ -182,10 +182,10 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
             } else if (name == "orderby")  {
                 YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
                 orderBy = tuple.Value().Cast<TCoNameValueTupleList>();
-            } else if (name == "filter") {
+            } else if (name == "filter") { 
                 YQL_ENSURE(tuple.Value().Maybe<TCoLambda>());
                 filter = tuple.Value().Cast<TCoLambda>();
-            } else if (name == "update") {
+            } else if (name == "update") { 
                 YQL_ENSURE(tuple.Value().Maybe<TCoLambda>());
                 update = tuple.Value().Cast<TCoLambda>();
             } else if (name == "index") {
@@ -236,16 +236,16 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
                 for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
                     alterActions.push_back(item);
                 }
-            } else {
-                other.push_back(tuple);
-            }
-        }
-    }
-
+            } else { 
+                other.push_back(tuple); 
+            } 
+        } 
+    } 
+ 
     const auto& otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
-        .Add(other)
-        .Done();
-
+        .Add(other) 
+        .Done(); 
+ 
     const auto& idx = Build<TCoIndexList>(ctx, node.Pos())
         .Add(indexes)
         .Done();
@@ -267,22 +267,22 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     }
 
     TWriteTableSettings ret(otherSettings);
-    ret.Mode = mode;
-    ret.Columns = columns;
-    ret.PrimaryKey = primaryKey;
+    ret.Mode = mode; 
+    ret.Columns = columns; 
+    ret.PrimaryKey = primaryKey; 
     ret.PartitionBy = partitionBy;
     ret.OrderBy = orderBy;
-    ret.Filter = filter;
-    ret.Update = update;
+    ret.Filter = filter; 
+    ret.Update = update; 
     ret.Indexes = idx;
     ret.Changefeeds = cfs;
     ret.ColumnFamilies = columnFamilies;
     ret.TableSettings = tableProfileSettings;
     ret.AlterActions = alterTableActions;
-
-    return ret;
-}
-
+ 
+    return ret; 
+} 
+ 
 TWriteRoleSettings ParseWriteRoleSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoAtom> mode;
     TMaybeNode<TCoAtomList> roles;
@@ -316,41 +316,41 @@ TWriteRoleSettings ParseWriteRoleSettings(TExprList node, TExprContext& ctx) {
 }
 
 TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx) {
-    if (!node.Settings()) {
+    if (!node.Settings()) { 
         return TCommitSettings(Build<TCoNameValueTupleList>(ctx, node.Pos()).Done());
-    }
-
+    } 
+ 
     TMaybeNode<TCoAtom> mode;
     TMaybeNode<TCoAtom> epoch;
     TVector<TExprBase> other;
-
-    if (node.Settings()) {
-        auto settings = node.Settings().Cast();
-        for (auto setting : settings) {
-            if (setting.Name() == "mode") {
+ 
+    if (node.Settings()) { 
+        auto settings = node.Settings().Cast(); 
+        for (auto setting : settings) { 
+            if (setting.Name() == "mode") { 
                 YQL_ENSURE(setting.Value().Maybe<TCoAtom>());
                 mode = setting.Value().Cast<TCoAtom>();
-            } else if (setting.Name() == "epoch") {
+            } else if (setting.Name() == "epoch") { 
                 YQL_ENSURE(setting.Value().Maybe<TCoAtom>());
                 epoch = setting.Value().Cast<TCoAtom>();
-            } else {
-                other.push_back(setting);
-            }
-        }
-    }
-
+            } else { 
+                other.push_back(setting); 
+            } 
+        } 
+    } 
+ 
     auto otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
-        .Add(other)
-        .Done();
-
-    TCommitSettings ret(otherSettings);
-    ret.Pos = node.Pos();
-    ret.Mode = mode;
-    ret.Epoch = epoch;
-
-    return ret;
-}
-
+        .Add(other) 
+        .Done(); 
+ 
+    TCommitSettings ret(otherSettings); 
+    ret.Pos = node.Pos(); 
+    ret.Mode = mode; 
+    ret.Epoch = epoch; 
+ 
+    return ret; 
+} 
+ 
 TVector<TString> GetStructFields(const TTypeAnnotationNode* type) {
     TVector<TString> fields;
     if (type->GetKind() == ETypeAnnotationKind::List) {
@@ -365,59 +365,59 @@ TVector<TString> GetStructFields(const TTypeAnnotationNode* type) {
     return fields;
 }
 
-
-void TransformerStatsToYson(const TString& name, const IGraphTransformer::TStatistics& stats,
+ 
+void TransformerStatsToYson(const TString& name, const IGraphTransformer::TStatistics& stats, 
     NYson::TYsonWriter& writer)
-{
-    writer.OnBeginMap();
-
-    if (!name.empty()) {
-        writer.OnKeyedItem("Name");
-        writer.OnStringScalar(name);
-    }
-
-    if (stats.TransformDuration.MicroSeconds() > 0) {
-        writer.OnKeyedItem("TransformDurationUs");
-        writer.OnUint64Scalar(stats.TransformDuration.MicroSeconds());
-    }
-    if (stats.WaitDuration.MicroSeconds() > 0) {
-        writer.OnKeyedItem("WaitDurationUs");
-        writer.OnUint64Scalar(stats.WaitDuration.MicroSeconds());
-    }
-    if (stats.NewExprNodes > 0) {
-        writer.OnKeyedItem("NewExprNodes");
-        writer.OnInt64Scalar(stats.NewExprNodes);
-    }
-    if (stats.NewTypeNodes > 0) {
-        writer.OnKeyedItem("NewTypeNodes");
-        writer.OnInt64Scalar(stats.NewTypeNodes);
-    }
+{ 
+    writer.OnBeginMap(); 
+ 
+    if (!name.empty()) { 
+        writer.OnKeyedItem("Name"); 
+        writer.OnStringScalar(name); 
+    } 
+ 
+    if (stats.TransformDuration.MicroSeconds() > 0) { 
+        writer.OnKeyedItem("TransformDurationUs"); 
+        writer.OnUint64Scalar(stats.TransformDuration.MicroSeconds()); 
+    } 
+    if (stats.WaitDuration.MicroSeconds() > 0) { 
+        writer.OnKeyedItem("WaitDurationUs"); 
+        writer.OnUint64Scalar(stats.WaitDuration.MicroSeconds()); 
+    } 
+    if (stats.NewExprNodes > 0) { 
+        writer.OnKeyedItem("NewExprNodes"); 
+        writer.OnInt64Scalar(stats.NewExprNodes); 
+    } 
+    if (stats.NewTypeNodes > 0) { 
+        writer.OnKeyedItem("NewTypeNodes"); 
+        writer.OnInt64Scalar(stats.NewTypeNodes); 
+    } 
     if (stats.NewConstraintNodes > 0) {
         writer.OnKeyedItem("NewConstraintNodes");
         writer.OnInt64Scalar(stats.NewConstraintNodes);
     }
-    if (stats.Repeats > 0) {
-        writer.OnKeyedItem("Repeats");
-        writer.OnUint64Scalar(stats.Repeats);
-    }
-    if (stats.Restarts > 0) {
-        writer.OnKeyedItem("Restarts");
-        writer.OnUint64Scalar(stats.Restarts);
-    }
-
-    if (!stats.Stages.empty()) {
-        writer.OnKeyedItem("Stages");
-        writer.OnBeginList();
-        for (auto& stage : stats.Stages) {
-            writer.OnListItem();
-            TransformerStatsToYson(stage.first, stage.second, writer);
-        }
-        writer.OnEndList();
-    }
-
-    writer.OnEndMap();
-}
-
+    if (stats.Repeats > 0) { 
+        writer.OnKeyedItem("Repeats"); 
+        writer.OnUint64Scalar(stats.Repeats); 
+    } 
+    if (stats.Restarts > 0) { 
+        writer.OnKeyedItem("Restarts"); 
+        writer.OnUint64Scalar(stats.Restarts); 
+    } 
+ 
+    if (!stats.Stages.empty()) { 
+        writer.OnKeyedItem("Stages"); 
+        writer.OnBeginList(); 
+        for (auto& stage : stats.Stages) { 
+            writer.OnListItem(); 
+            TransformerStatsToYson(stage.first, stage.second, writer); 
+        } 
+        writer.OnEndList(); 
+    } 
+ 
+    writer.OnEndMap(); 
+} 
+ 
 bool FillUsedFilesImpl(
     const TExprNode& node,
     TUserDataTable& files,
@@ -679,41 +679,41 @@ bool FreezeUsedFilesSync(const TExprNode& node, TUserDataTable& files, const TTy
 }
 
 void WriteColumns(NYson::TYsonWriter& writer, const TExprBase& columns) {
-    if (auto maybeList = columns.Maybe<TCoAtomList>()) {
-        writer.OnBeginList();
-        for (const auto& column : maybeList.Cast()) {
-            writer.OnListItem();
-            writer.OnStringScalar(column.Value());
-        }
-        writer.OnEndList();
-    } else if (columns.Maybe<TCoVoid>()) {
-        writer.OnStringScalar("*");
-    } else {
-        writer.OnStringScalar("?");
-    }
-}
+    if (auto maybeList = columns.Maybe<TCoAtomList>()) { 
+        writer.OnBeginList(); 
+        for (const auto& column : maybeList.Cast()) { 
+            writer.OnListItem(); 
+            writer.OnStringScalar(column.Value()); 
+        } 
+        writer.OnEndList(); 
+    } else if (columns.Maybe<TCoVoid>()) { 
+        writer.OnStringScalar("*"); 
+    } else { 
+        writer.OnStringScalar("?"); 
+    } 
+} 
 
 TString SerializeExpr(TExprContext& ctx, const TExprNode& expr, bool withTypes) {
-    ui32 typeFlags = TExprAnnotationFlags::None;
-    if (withTypes) {
-        typeFlags |= TExprAnnotationFlags::Types;
-    }
-
+    ui32 typeFlags = TExprAnnotationFlags::None; 
+    if (withTypes) { 
+        typeFlags |= TExprAnnotationFlags::Types; 
+    } 
+ 
     auto ast = ConvertToAst(expr, ctx, typeFlags, true);
-    YQL_ENSURE(ast.Root);
-    return ast.Root->ToString();
-}
-
+    YQL_ENSURE(ast.Root); 
+    return ast.Root->ToString(); 
+} 
+ 
 TString ExprToPrettyString(TExprContext& ctx, const TExprNode& expr) {
     auto ast = ConvertToAst(expr, ctx, TExprAnnotationFlags::None, true);
-    TStringStream exprStream;
-    YQL_ENSURE(ast.Root);
-    ast.Root->PrettyPrintTo(exprStream, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);
-    TString exprText = exprStream.Str();
-
-    return exprText;
-}
-
+    TStringStream exprStream; 
+    YQL_ENSURE(ast.Root); 
+    ast.Root->PrettyPrintTo(exprStream, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote); 
+    TString exprText = exprStream.Str(); 
+ 
+    return exprText; 
+} 
+ 
 bool IsFlowOrStream(const TExprNode* node) {
     auto kind = node->GetTypeAnn()->GetKind();
     return kind == ETypeAnnotationKind::Stream || kind == ETypeAnnotationKind::Flow;
@@ -1047,5 +1047,5 @@ void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<
     writer.OnEndMap();
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NCommon 
+} // namespace NYql 

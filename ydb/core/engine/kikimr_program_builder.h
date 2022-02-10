@@ -63,7 +63,7 @@ struct TTableRangeOptions
     TRuntimeNode Flags; // default = ui64 IncludeInitValue | IncludeTermValue
     TKeyColumnValues FromColumns;
     TKeyColumnValues ToColumns;
-    TArrayRef<bool> SkipNullKeys;
+    TArrayRef<bool> SkipNullKeys; 
     TArrayRef<bool> ForbidNullArgsFrom;
     TArrayRef<bool> ForbidNullArgsTo;
     TRuntimeNode Reverse; // default = <unset>
@@ -142,13 +142,13 @@ public:
             const TKeyColumnValues& row,
             const TReadTarget& target = TReadTarget());
 
-    TRuntimeNode SelectRow(
-            const TTableId& tableId,
-            const TArrayRef<const ui32>& keyTypes,
-            const TArrayRef<const TSelectColumn>& columns,
-            const TKeyColumnValues& row,
-            TRuntimeNode readTarget);
-
+    TRuntimeNode SelectRow( 
+            const TTableId& tableId, 
+            const TArrayRef<const ui32>& keyTypes, 
+            const TArrayRef<const TSelectColumn>& columns, 
+            const TKeyColumnValues& row, 
+            TRuntimeNode readTarget); 
+ 
     TTableRangeOptions GetDefaultTableRangeOptions() const {
         return TTableRangeOptions(Env);
     }
@@ -162,13 +162,13 @@ public:
             const TTableRangeOptions& options,
             const TReadTarget& target = TReadTarget());
 
-    TRuntimeNode SelectRange(
-            const TTableId& tableId,
-            const TArrayRef<const ui32>& keyTypes,
-            const TArrayRef<const TSelectColumn>& columns,
-            const TTableRangeOptions& options,
-            TRuntimeNode readTarget);
-
+    TRuntimeNode SelectRange( 
+            const TTableId& tableId, 
+            const TArrayRef<const ui32>& keyTypes, 
+            const TArrayRef<const TSelectColumn>& columns, 
+            const TTableRangeOptions& options, 
+            TRuntimeNode readTarget); 
+ 
     TUpdateRowBuilder GetUpdateRowBuilder() const {
         return TUpdateRowBuilder(Env);
     }
@@ -199,19 +199,19 @@ public:
             TRuntimeNode list,
             std::function<TRuntimeNode(TRuntimeNode item)> handler);
 
-    TRuntimeNode AcquireLocks(TRuntimeNode lockTxId);
-
-    TRuntimeNode ReadTarget(const TReadTarget& target);
-
-    TRuntimeNode CombineByKeyMerge(TRuntimeNode list);
-
+    TRuntimeNode AcquireLocks(TRuntimeNode lockTxId); 
+ 
+    TRuntimeNode ReadTarget(const TReadTarget& target); 
+ 
+    TRuntimeNode CombineByKeyMerge(TRuntimeNode list); 
+ 
     TRuntimeNode Diagnostics();
 
-    TRuntimeNode PartialSort(TRuntimeNode list, TRuntimeNode ascending,
-        std::function<TRuntimeNode(TRuntimeNode item)> keyExtractor);
-
-    TRuntimeNode PartialTake(TRuntimeNode list, TRuntimeNode count);
-
+    TRuntimeNode PartialSort(TRuntimeNode list, TRuntimeNode ascending, 
+        std::function<TRuntimeNode(TRuntimeNode item)> keyExtractor); 
+ 
+    TRuntimeNode PartialTake(TRuntimeNode list, TRuntimeNode count); 
+ 
     TRuntimeNode Bind(
             TRuntimeNode program,
             TRuntimeNode parameters,

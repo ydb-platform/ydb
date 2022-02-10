@@ -13,8 +13,8 @@
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 
-#include <math.h>
-
+#include <math.h> 
+ 
 namespace NYdb {
 namespace NConsoleClient {
 
@@ -406,10 +406,10 @@ int TCommandExecuteQuery::Run(TConfig& config) {
 }
 
 int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
-    auto defaultStatsMode = BasicStats ? NTable::ECollectQueryStatsMode::Basic : NTable::ECollectQueryStatsMode::None;
+    auto defaultStatsMode = BasicStats ? NTable::ECollectQueryStatsMode::Basic : NTable::ECollectQueryStatsMode::None; 
     NTable::TExecDataQuerySettings settings;
-    settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, defaultStatsMode));
-
+    settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, defaultStatsMode)); 
+ 
     NTable::TTxSettings txSettings;
     if (TxMode) {
         if (TxMode == "serializable-rw") {
@@ -478,10 +478,10 @@ int TCommandExecuteQuery::ExecuteSchemeQuery(TConfig& config) {
 
 int TCommandExecuteQuery::ExecuteScanQuery(TConfig& config) {
     NTable::TTableClient client(CreateDriver(config));
-
-    auto defaultStatsMode = BasicStats ? NTable::ECollectQueryStatsMode::Basic : NTable::ECollectQueryStatsMode::None;
+ 
+    auto defaultStatsMode = BasicStats ? NTable::ECollectQueryStatsMode::Basic : NTable::ECollectQueryStatsMode::None; 
     NTable::TStreamExecScanQuerySettings settings;
-    settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, defaultStatsMode));
+    settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, defaultStatsMode)); 
 
     NTable::TAsyncScanQueryPartIterator asyncResult;
     if (Parameters.size()) {
@@ -515,7 +515,7 @@ void TCommandExecuteQuery::PrintScanQueryResponse(NTable::TScanQueryPartIterator
                 }
                 ThrowOnError(streamPart);
             }
-
+ 
             if (streamPart.HasResultSet()) {
                 printer.Print(streamPart.GetResultSet());
             }
@@ -523,12 +523,12 @@ void TCommandExecuteQuery::PrintScanQueryResponse(NTable::TScanQueryPartIterator
             if (streamPart.HasQueryStats()) {
                 const auto& queryStats = streamPart.GetQueryStats();
                 statsStr << Endl << queryStats.ToString(false) << Endl;
-
+ 
                 auto plan = queryStats.GetPlan();
                 if (plan) {
                     statsStr << "Full statistics:" << Endl << *plan << Endl;
                 }
-            }
+            } 
         }
     } // TResultSetPrinter destructor should be called before printing stats
 
@@ -551,8 +551,8 @@ void TCommandExplain::Config(TConfig& config) {
     config.Opts->AddLongOption('q', "query", "Text of query to explain").RequiredArgument("[String]").StoreResult(&Query);
     config.Opts->AddLongOption('f', "file", "Path to file with query text to explain")
         .RequiredArgument("PATH").StoreResult(&QueryFile);
-    config.Opts->AddLongOption("ast", "Print query AST")
-        .StoreTrue(&PrintAst);
+    config.Opts->AddLongOption("ast", "Print query AST") 
+        .StoreTrue(&PrintAst); 
 
     config.Opts->AddLongOption('t', "type", "Query type [data, scan]")
         .RequiredArgument("[String]").DefaultValue("data").StoreResult(&QueryType);
@@ -576,13 +576,13 @@ void TCommandExplain::Parse(TConfig& config) {
 
 int TCommandExplain::Run(TConfig& config) {
     CheckQueryFile();
-
+ 
     TString planJson;
     TString ast;
     if (QueryType == "scan") {
         NTable::TTableClient client(CreateDriver(config));
         NTable::TStreamExecScanQuerySettings settings;
-
+ 
         if (Analyze) {
             settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Full);
         } else {
@@ -640,7 +640,7 @@ int TCommandExplain::Run(TConfig& config) {
         throw TMissUseException() << "Unknown query type for explain.";
     }
 
-    if (PrintAst) {
+    if (PrintAst) { 
         Cout << "Query AST:" << Endl << ast << Endl;
     } else {
         Cout << "Query Plan:" << Endl;

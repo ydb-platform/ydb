@@ -1,7 +1,7 @@
 #include "grpc_request_proxy.h"
 
 #include "rpc_calls.h"
-#include "rpc_scheme_base.h"
+#include "rpc_scheme_base.h" 
 #include "rpc_common.h"
 
 namespace NKikimr {
@@ -10,16 +10,16 @@ namespace NGRpcService {
 using namespace NActors;
 using namespace Ydb;
 
-class TAlterCoordinationNodeRPC : public TRpcSchemeRequestActor<TAlterCoordinationNodeRPC, TEvAlterCoordinationNode> {
-    using TBase = TRpcSchemeRequestActor<TAlterCoordinationNodeRPC, TEvAlterCoordinationNode>;
+class TAlterCoordinationNodeRPC : public TRpcSchemeRequestActor<TAlterCoordinationNodeRPC, TEvAlterCoordinationNode> { 
+    using TBase = TRpcSchemeRequestActor<TAlterCoordinationNodeRPC, TEvAlterCoordinationNode>; 
 
 public:
     TAlterCoordinationNodeRPC(TEvAlterCoordinationNode* msg)
-        : TBase(msg) {}
+        : TBase(msg) {} 
 
     void Bootstrap(const TActorContext& ctx) {
-        TBase::Bootstrap(ctx);
-
+        TBase::Bootstrap(ctx); 
+ 
         SendProposeRequest(ctx);
         Become(&TAlterCoordinationNodeRPC::StateWork);
     }

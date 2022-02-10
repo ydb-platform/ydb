@@ -35,7 +35,7 @@ struct TKesusTablet::TTxSemaphoreDelete : public TTxBase {
                 Events.emplace_back(Sender, Cookie,
                     new TEvKesus::TEvDeleteSemaphoreResult(
                         Record.GetProxyGeneration(),
-                        Ydb::StatusIds::BAD_SESSION,
+                        Ydb::StatusIds::BAD_SESSION, 
                         proxy ? "ProxyGeneration mismatch" : "Proxy is not registered"));
                 return true;
             }
@@ -47,7 +47,7 @@ struct TKesusTablet::TTxSemaphoreDelete : public TTxBase {
                 Events.emplace_back(Sender, Cookie,
                     new TEvKesus::TEvDeleteSemaphoreResult(
                         Record.GetProxyGeneration(),
-                        session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED,
+                        session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED, 
                         session ? "Session not attached" : "Session does not exist"));
                 return true;
             }
@@ -60,7 +60,7 @@ struct TKesusTablet::TTxSemaphoreDelete : public TTxBase {
             Events.emplace_back(Sender, Cookie,
                 new TEvKesus::TEvDeleteSemaphoreResult(
                     Record.GetProxyGeneration(),
-                    Ydb::StatusIds::NOT_FOUND,
+                    Ydb::StatusIds::NOT_FOUND, 
                     "Semaphore does not exist"));
             return true;
         }
@@ -69,7 +69,7 @@ struct TKesusTablet::TTxSemaphoreDelete : public TTxBase {
             Events.emplace_back(Sender, Cookie,
                 new TEvKesus::TEvDeleteSemaphoreResult(
                     Record.GetProxyGeneration(),
-                    Ydb::StatusIds::PRECONDITION_FAILED,
+                    Ydb::StatusIds::PRECONDITION_FAILED, 
                     "Cannot delete ephemeral semaphores"));
             return true;
         }
@@ -78,7 +78,7 @@ struct TKesusTablet::TTxSemaphoreDelete : public TTxBase {
             Events.emplace_back(Sender, Cookie,
                 new TEvKesus::TEvDeleteSemaphoreResult(
                     Record.GetProxyGeneration(),
-                    Ydb::StatusIds::PRECONDITION_FAILED,
+                    Ydb::StatusIds::PRECONDITION_FAILED, 
                     "Semaphore not empty"));
             return true;
         }

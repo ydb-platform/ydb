@@ -125,29 +125,29 @@ void TConfigsManager::ApplyPendingSubscriptionModifications(const TActorContext 
 }
 
 bool TConfigsManager::MakeNewSubscriptionChecks(TSubscription::TPtr subscription,
-                                                Ydb::StatusIds::StatusCode &code,
+                                                Ydb::StatusIds::StatusCode &code, 
                                                 TString &error)
 {
     if (subscription->Id) {
-        code = Ydb::StatusIds::BAD_REQUEST;
+        code = Ydb::StatusIds::BAD_REQUEST; 
         error = "subscription id shouldn't be defined";
         return false;
     }
 
     if (!subscription->Subscriber.TabletId && !subscription->Subscriber.ServiceId) {
-        code = Ydb::StatusIds::BAD_REQUEST;
+        code = Ydb::StatusIds::BAD_REQUEST; 
         error = "no subscriber specified";
         return false;
     }
 
     if (subscription->Subscriber.ServiceId && !subscription->Subscriber.ServiceId.IsService()) {
-        code = Ydb::StatusIds::BAD_REQUEST;
+        code = Ydb::StatusIds::BAD_REQUEST; 
         error = "wrong service id";
         return false;
     }
 
     if (subscription->ItemKinds.empty()) {
-        code = Ydb::StatusIds::BAD_REQUEST;
+        code = Ydb::StatusIds::BAD_REQUEST; 
         error = "no item kinds specified";
         return false;
     }

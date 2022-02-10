@@ -4,8 +4,8 @@
 #include "yql_errors.h"
 #include "yql_pos_handle.h"
 
-#include <functional>
-
+#include <functional> 
+ 
 namespace NYql {
 
 struct TExprContext;
@@ -13,13 +13,13 @@ class TExprNode;
 typedef TIntrusivePtr<TExprNode> TExprNodePtr;
 typedef std::vector<TExprNodePtr> TExprNodeList;
 
-class TExprNodeReplaceBuilder;
+class TExprNodeReplaceBuilder; 
 
 class TExprNodeBuilder {
 friend class TExprNodeReplaceBuilder;
 public:
     typedef std::function<TExprNodePtr(const TStringBuf&)> ExtArgsFuncType;
-public:
+public: 
     TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx);
     TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx, ExtArgsFuncType extArgsFunc);
     TExprNodePtr Build();
@@ -99,31 +99,31 @@ private:
     TExprNodePtr Container;
     TPositionHandle Pos;
     TExprNodePtr CurrentNode;
-    ExtArgsFuncType ExtArgsFunc;
+    ExtArgsFuncType ExtArgsFunc; 
 };
 
-namespace NNodes {
-    template<typename TParent, typename TNode>
-    class TNodeBuilder;
-}
-
-class TExprNodeReplaceBuilder {
-friend class TExprNodeBuilder;
-private:
-    struct TBuildAdapter {
-        typedef TExprNodeReplaceBuilder& ResultType;
-
-        TBuildAdapter(TExprNodeReplaceBuilder& builder)
-            : Builder(builder) {}
-
-        ResultType Value() {
-            return Builder;
-        }
-
-        TExprNodeReplaceBuilder& Builder;
-    };
-
-public:
+namespace NNodes { 
+    template<typename TParent, typename TNode> 
+    class TNodeBuilder; 
+} 
+ 
+class TExprNodeReplaceBuilder { 
+friend class TExprNodeBuilder; 
+private: 
+    struct TBuildAdapter { 
+        typedef TExprNodeReplaceBuilder& ResultType; 
+ 
+        TBuildAdapter(TExprNodeReplaceBuilder& builder) 
+            : Builder(builder) {} 
+ 
+        ResultType Value() { 
+            return Builder; 
+        } 
+ 
+        TExprNodeReplaceBuilder& Builder; 
+    }; 
+ 
+public: 
     TExprNodeReplaceBuilder(TExprNodeBuilder* owner, TExprNodePtr container, const TExprNode& lambda);
     TExprNodeReplaceBuilder(TExprNodeBuilder* owner, TExprNodePtr container, TExprNodePtr&& args, TExprNodePtr&& body);
     TExprNodeReplaceBuilder(TExprNodeBuilder* owner, TExprNodePtr container, TExprNodePtr&& args, TExprNodeList&& body);
@@ -134,40 +134,40 @@ public:
     TExprNodeReplaceBuilder& With(const TStringBuf& toName, ui32 toIndex);
     TExprNodeReplaceBuilder& WithNode(const TExprNode& fromNode, TExprNodePtr&& toNode);
     TExprNodeReplaceBuilder& WithNode(const TExprNode& fromNode, const TStringBuf& toName);
-    TExprNodeBuilder With(ui32 argIndex);
+    TExprNodeBuilder With(ui32 argIndex); 
     TExprNodeBuilder WithNode(TExprNodePtr&& fromNode);
-
-    template<typename TNode>
-    NNodes::TNodeBuilder<TBuildAdapter, TNode> With(ui32 argIndex) {
-        TBuildAdapter adapter(*this);
-
-        NNodes::TNodeBuilder<TBuildAdapter, TNode> builder(Owner->Ctx, Owner->Pos,
-            [adapter, argIndex](const TNode& node) mutable -> TBuildAdapter& {
-                adapter.Builder = adapter.Builder.With(argIndex, node.Get());
-                return adapter;
-            },
-            [adapter] (const TStringBuf& argName) {
+ 
+    template<typename TNode> 
+    NNodes::TNodeBuilder<TBuildAdapter, TNode> With(ui32 argIndex) { 
+        TBuildAdapter adapter(*this); 
+ 
+        NNodes::TNodeBuilder<TBuildAdapter, TNode> builder(Owner->Ctx, Owner->Pos, 
+            [adapter, argIndex](const TNode& node) mutable -> TBuildAdapter& { 
+                adapter.Builder = adapter.Builder.With(argIndex, node.Get()); 
+                return adapter; 
+            }, 
+            [adapter] (const TStringBuf& argName) { 
                 return adapter.Builder.Owner->FindArgument(argName);
-            });
-
-        return builder;
-    }
-
-    TExprNodeBuilder& Seal();
-
+            }); 
+ 
+        return builder; 
+    } 
+ 
+    TExprNodeBuilder& Seal(); 
+ 
     template <typename TFunc>
     TExprNodeReplaceBuilder& Do(const TFunc& func) {
         return func(*this);
     }
 
-private:
-    TExprNodeBuilder* Owner;
+private: 
+    TExprNodeBuilder* Owner; 
     TExprNodePtr Container;
     TExprNodePtr Args;
     TExprNodeList Body;
-    ui32 CurrentIndex;
+    ui32 CurrentIndex; 
     TExprNodePtr CurrentNode;
-};
-
+}; 
+ 
 } // namespace NYql
 

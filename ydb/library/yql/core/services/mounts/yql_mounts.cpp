@@ -1,30 +1,30 @@
-#include "yql_mounts.h"
-
+#include "yql_mounts.h" 
+ 
 #include <ydb/library/yql/core/yql_library_compiler.h>
-
+ 
 #include <library/cpp/resource/resource.h>
-
+ 
 #include <util/folder/path.h>
 #include <util/stream/file.h>
 
-namespace NYql {
+namespace NYql { 
     namespace {
         using namespace NUserData;
-
+ 
         void AddLibraryFromResource(TUserDataTable& userDataTable, const TString& resourceName) {
             auto& block = userDataTable[TUserDataKey::File(resourceName)];
             block.Data = NResource::Find(resourceName);
             block.Type = EUserDataType::RAW_INLINE_DATA;
             block.Usage.Set(EUserDataBlockUsage::Library, true);
         }
-
+ 
         TUserDataKey CreateKey(const NUserData::TUserData& item) {
             TString name = (item.Disposition_ == EDisposition::RESOURCE) ? item.Content_ : item.Name_;
 
             if (!name.StartsWith('/')) {
                 name = GetDefaultFilePrefix() + name;
             }
-
+ 
             if (item.Type_ == EType::UDF) {
                 return TUserDataKey::Udf(name);
             } else {
@@ -106,10 +106,10 @@ namespace NYql {
         AddLibraryFromResource(userData, "/lib/yql/id.yql");
         AddLibraryFromResource(userData, "/lib/yql/sqr.yql");
         AddLibraryFromResource(userData, "/lib/yql/core.yql");
-
+ 
         return userData;
     }
-
+ 
     TUserDataTable GetYqlModuleResolverImpl(
         TExprContext* rawCtx,
         IModuleResolver::TPtr& moduleResolver,
@@ -135,8 +135,8 @@ namespace NYql {
         moduleResolver = std::make_shared<TModuleResolver>(std::move(modulesTable), ctx->NextUniqueId,
             clusterMapping, sqlFlags, optimizeLibraries, std::move(ownedCtx));
         return mounts;
-    }
-
+    } 
+ 
     TUserDataTable GetYqlModuleResolver(
         TExprContext& ctx,
         IModuleResolver::TPtr& moduleResolver,

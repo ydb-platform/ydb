@@ -35,7 +35,7 @@ struct TKesusTablet::TTxSemaphoreUpdate : public TTxBase {
                 Events.emplace_back(Sender, Cookie,
                     new TEvKesus::TEvUpdateSemaphoreResult(
                         Record.GetProxyGeneration(),
-                        Ydb::StatusIds::BAD_SESSION,
+                        Ydb::StatusIds::BAD_SESSION, 
                         proxy ? "ProxyGeneration mismatch" : "Proxy is not registered"));
                 return true;
             }
@@ -47,7 +47,7 @@ struct TKesusTablet::TTxSemaphoreUpdate : public TTxBase {
                 Events.emplace_back(Sender, Cookie,
                     new TEvKesus::TEvUpdateSemaphoreResult(
                         Record.GetProxyGeneration(),
-                        session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED,
+                        session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED, 
                         session ? "Session not attached" : "Session does not exist"));
                 return true;
             }
@@ -60,7 +60,7 @@ struct TKesusTablet::TTxSemaphoreUpdate : public TTxBase {
             Events.emplace_back(Sender, Cookie,
                 new TEvKesus::TEvUpdateSemaphoreResult(
                     Record.GetProxyGeneration(),
-                    Ydb::StatusIds::NOT_FOUND,
+                    Ydb::StatusIds::NOT_FOUND, 
                     "Semaphore does not exist"));
             return true;
         }

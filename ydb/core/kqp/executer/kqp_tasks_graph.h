@@ -19,15 +19,15 @@ namespace NKqp {
 
 struct TTransaction : private TMoveOnly {
     NYql::NNodes::TKqpPhysicalTx Node;
-    TKqpParamsMap Params;
+    TKqpParamsMap Params; 
 
-    inline TTransaction(const NYql::NNodes::TKqpPhysicalTx& node, TKqpParamsMap&& params)
+    inline TTransaction(const NYql::NNodes::TKqpPhysicalTx& node, TKqpParamsMap&& params) 
         : Node(node)
         , Params(std::move(params)) {}
 };
 
 struct TStageInfoMeta {
-    const IKqpGateway::TPhysicalTxData& Tx;
+    const IKqpGateway::TPhysicalTxData& Tx; 
 
     TTableId TableId;
     TString TablePath;
@@ -37,9 +37,9 @@ struct TStageInfoMeta {
 
     THashSet<TKeyDesc::ERowOperation> ShardOperations;
     THolder<TKeyDesc> ShardKey;
-    NSchemeCache::TSchemeCacheRequest::EKind ShardKind = NSchemeCache::TSchemeCacheRequest::EKind::KindUnknown;
-
-    explicit TStageInfoMeta(const IKqpGateway::TPhysicalTxData& tx)
+    NSchemeCache::TSchemeCacheRequest::EKind ShardKind = NSchemeCache::TSchemeCacheRequest::EKind::KindUnknown; 
+ 
+    explicit TStageInfoMeta(const IKqpGateway::TPhysicalTxData& tx) 
         : Tx(tx)
         , TableKind(ETableKind::Unknown)
     {}
@@ -156,14 +156,14 @@ struct TKqpTaskOutputType {
     };
 };
 
-const NKqpProto::TKqpPhyStage& GetStage(const TStageInfo& stageInfo);
-
-void LogStage(const NActors::TActorContext& ctx, const TStageInfo& stageInfo);
-
+const NKqpProto::TKqpPhyStage& GetStage(const TStageInfo& stageInfo); 
+ 
+void LogStage(const NActors::TActorContext& ctx, const TStageInfo& stageInfo); 
+ 
 bool HasReads(const TStageInfo& stageInfo);
 bool HasWrites(const TStageInfo& stageInfo);
 
 bool IsCrossShardChannel(TKqpTasksGraph& tasksGraph, const NYql::NDq::TChannel& channel);
-
+ 
 } // namespace NKqp
 } // namespace NKikimr

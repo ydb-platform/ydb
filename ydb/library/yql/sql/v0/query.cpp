@@ -18,7 +18,7 @@ class TUniqueTableKey: public ITableKeys {
 public:
     TUniqueTableKey(TPosition pos, const TString& cluster, const TDeferredAtom& name, const TString& view)
         : ITableKeys(pos)
-        , Cluster(cluster)
+        , Cluster(cluster) 
         , Name(name)
         , View(view)
         , Full(name.GetRepr())
@@ -43,10 +43,10 @@ public:
             ctx.Error(Pos) << "Table view can not be created with CREATE TABLE clause";
             return nullptr;
         }
-        auto path = ctx.GetPrefixedPath(Cluster, Name);
-        if (!path) {
-            return nullptr;
-        }
+        auto path = ctx.GetPrefixedPath(Cluster, Name); 
+        if (!path) { 
+            return nullptr; 
+        } 
         auto key = Y("Key", Q(Y(Q(tableScheme ? "tablescheme" : "table"), Y("String", path))));
         if (!View.empty()) {
             key = L(key, Q(Y(Q("view"), Y("String", BuildQuotedAtom(Pos, View)))));
@@ -69,14 +69,14 @@ private:
 };
 
 TNodePtr BuildTableKey(TPosition pos, const TString& cluster, const TDeferredAtom& name, const TString& view) {
-    return new TUniqueTableKey(pos, cluster, name, view);
+    return new TUniqueTableKey(pos, cluster, name, view); 
 }
 
 class TPrepTableKeys: public ITableKeys {
 public:
     TPrepTableKeys(TPosition pos, const TString& cluster, const TString& func, const TVector<TTableArg>& args)
         : ITableKeys(pos)
-        , Cluster(cluster)
+        , Cluster(cluster) 
         , Func(func)
         , Args(args)
     {
@@ -111,7 +111,7 @@ public:
                     if (!arg.View.empty()) {
                         key = L(key, Q(Y(Q("view"), Y("String", BuildQuotedAtom(Pos, arg.View)))));
                     }
-                }
+                } 
 
                 tuple = L(tuple, key);
             }
@@ -134,7 +134,7 @@ public:
                     if (!arg.View.empty()) {
                         key = L(key, Q(Y(Q("view"), Y("String", BuildQuotedAtom(Pos, arg.View)))));
                     }
-                }
+                } 
 
                 concat = L(concat, key);
             }
@@ -182,9 +182,9 @@ public:
             }
 
             auto path = ctx.GetPrefixedPath(Cluster, Args[0].Id);
-            if (!path) {
-                return nullptr;
-            }
+            if (!path) { 
+                return nullptr; 
+            } 
             auto range = Y(func.EndsWith("_strict") ? "MrTableRangeStrict" : "MrTableRange", path);
             TNodePtr predicate;
             TDeferredAtom suffix;
@@ -312,7 +312,7 @@ private:
 };
 
 TNodePtr BuildTableKeys(TPosition pos, const TString& cluster, const TString& func, const TVector<TTableArg>& args) {
-    return new TPrepTableKeys(pos, cluster, func, args);
+    return new TPrepTableKeys(pos, cluster, func, args); 
 }
 
 class TInputOptions final: public TAstListNode {
@@ -426,7 +426,7 @@ public:
         : TAstListNode(pos)
         , Table(tr)
         , Columns(columns)
-        , PkColumns(pkColumns)
+        , PkColumns(pkColumns) 
         , PartitionByColumns(partitionByColumns)
         , OrderByColumns(orderByColumns)
     {}
@@ -441,19 +441,19 @@ public:
             return false;
         }
         keys = ctx.GroundBlockShortcutsForExpr(keys);
-
+ 
         if (!PkColumns.empty() || !PartitionByColumns.empty() || !OrderByColumns.empty()) {
             THashSet<TString> columnsSet;
-            for (auto& col : Columns) {
-                columnsSet.insert(col.Name);
-            }
-
-            for (auto& keyColumn : PkColumns) {
+            for (auto& col : Columns) { 
+                columnsSet.insert(col.Name); 
+            } 
+ 
+            for (auto& keyColumn : PkColumns) { 
                 if (!columnsSet.contains(keyColumn.Name)) {
-                    ctx.Error(keyColumn.Pos) << "Undefined column: " << keyColumn.Name;
-                    return false;
-                }
-            }
+                    ctx.Error(keyColumn.Pos) << "Undefined column: " << keyColumn.Name; 
+                    return false; 
+                } 
+            } 
             for (auto& keyColumn : PartitionByColumns) {
                 if (!columnsSet.contains(keyColumn.Name)) {
                     ctx.Error(keyColumn.Pos) << "Undefined column: " << keyColumn.Name;
@@ -466,8 +466,8 @@ public:
                     return false;
                 }
             }
-        }
-
+        } 
+ 
         auto columns = Y();
         for (auto& col: Columns) {
             auto type = ParseType(TypeByAlias(col.Type, !col.IsTypeString), *ctx.Pool, ctx.Issues, col.Pos);
@@ -520,12 +520,12 @@ public:
             }
         }
 
-        if (!PkColumns.empty()) {
+        if (!PkColumns.empty()) { 
             auto primaryKey = Y();
             for (auto& col : PkColumns) {
                 primaryKey = L(primaryKey, BuildQuotedAtom(col.Pos, col.Name));
             }
-            opts = L(opts, Q(Y(Q("primarykey"), Q(primaryKey))));
+            opts = L(opts, Q(Y(Q("primarykey"), Q(primaryKey)))); 
             if (!OrderByColumns.empty()) {
                 ctx.Error() << "PRIMARY KEY cannot be used with ORDER BY, use PARTITION BY instead";
                 return false;
@@ -546,7 +546,7 @@ public:
                 opts = L(opts, Q(Y(Q("orderby"), Q(orderBy))));
             }
         }
-
+ 
         Add("block", Q(Y(
             Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.ServiceName(ctx)), BuildQuotedAtom(Pos, Table.Cluster))),
             Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),
@@ -571,7 +571,7 @@ private:
 TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, const TVector<TColumnSchema>& columns,
     const TVector<TIdentifier>& pkColumns, const TVector<TIdentifier>& partitionByColumns,
     const TVector<std::pair<TIdentifier, bool>>& orderByColumns)
-{
+{ 
     return new TCreateTableNode(pos, tr, columns, pkColumns, partitionByColumns, orderByColumns);
 }
 
@@ -708,8 +708,8 @@ TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr) {
 
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapMR {
     {EWriteColumnMode::Default, ""},
-    {EWriteColumnMode::Insert, "append"},
-    {EWriteColumnMode::Renew, "renew"}
+    {EWriteColumnMode::Insert, "append"}, 
+    {EWriteColumnMode::Renew, "renew"} 
 };
 
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapStat {
@@ -717,19 +717,19 @@ static const TMap<EWriteColumnMode, TString> columnModeToStrMapStat {
 };
 
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapKikimr {
-    {EWriteColumnMode::Default, ""},
-    {EWriteColumnMode::Insert, "insert_abort"},
-    {EWriteColumnMode::InsertOrAbort, "insert_abort"},
-    {EWriteColumnMode::InsertOrIgnore, "insert_ignore"},
-    {EWriteColumnMode::InsertOrRevert, "insert_revert"},
-    {EWriteColumnMode::Upsert, "upsert"},
-    {EWriteColumnMode::Replace, "replace"},
-    {EWriteColumnMode::Update, "update"},
-    {EWriteColumnMode::UpdateOn, "update_on"},
-    {EWriteColumnMode::Delete, "delete"},
-    {EWriteColumnMode::DeleteOn, "delete_on"},
-};
-
+    {EWriteColumnMode::Default, ""}, 
+    {EWriteColumnMode::Insert, "insert_abort"}, 
+    {EWriteColumnMode::InsertOrAbort, "insert_abort"}, 
+    {EWriteColumnMode::InsertOrIgnore, "insert_ignore"}, 
+    {EWriteColumnMode::InsertOrRevert, "insert_revert"}, 
+    {EWriteColumnMode::Upsert, "upsert"}, 
+    {EWriteColumnMode::Replace, "replace"}, 
+    {EWriteColumnMode::Update, "update"}, 
+    {EWriteColumnMode::UpdateOn, "update_on"}, 
+    {EWriteColumnMode::Delete, "delete"}, 
+    {EWriteColumnMode::DeleteOn, "delete_on"}, 
+}; 
+ 
 class TWriteTableNode final: public TAstListNode {
 public:
     TWriteTableNode(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode,
@@ -738,7 +738,7 @@ public:
         , Label(label)
         , Table(table)
         , Mode(mode)
-        , Options(options)
+        , Options(options) 
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
@@ -751,19 +751,19 @@ public:
             return false;
         }
         keys = ctx.GroundBlockShortcutsForExpr(keys);
-
+ 
         const auto serviceName = to_lower(Table.ServiceName(ctx));
         auto getModesMap = [] (const TString& serviceName) -> const TMap<EWriteColumnMode, TString>& {
-            if (serviceName == KikimrProviderName) {
-                return columnModeToStrMapKikimr;
+            if (serviceName == KikimrProviderName) { 
+                return columnModeToStrMapKikimr; 
             } else if (serviceName == StatProviderName) {
                 return columnModeToStrMapStat;
-            } else {
-                return columnModeToStrMapMR;
-            }
-        };
-
-        auto options = Y();
+            } else { 
+                return columnModeToStrMapMR; 
+            } 
+        }; 
+ 
+        auto options = Y(); 
         if (Options) {
             if (!Options->Init(ctx, src)) {
                 return false;
@@ -772,12 +772,12 @@ public:
             options = L(Options);
         }
 
-        if (Mode != EWriteColumnMode::Default) {
-            auto modeStr = getModesMap(serviceName).FindPtr(Mode);
-
-            options->Add(Q(Y(Q("mode"), Q(modeStr ? *modeStr : "unsupported"))));
-        }
-
+        if (Mode != EWriteColumnMode::Default) { 
+            auto modeStr = getModesMap(serviceName).FindPtr(Mode); 
+ 
+            options->Add(Q(Y(Q("mode"), Q(modeStr ? *modeStr : "unsupported")))); 
+        } 
+ 
         Add("block", Q((Y(
             Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.ServiceName(ctx)), BuildQuotedAtom(Pos, Table.Cluster))),
             Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Label, Q(options))),
@@ -799,28 +799,28 @@ private:
 };
 
 TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode, TNodePtr options)
-{
+{ 
     return new TWriteTableNode(pos, label, table, mode, std::move(options));
 }
 
-class TClustersSinkOperationBase: public TAstListNode {
-protected:
+class TClustersSinkOperationBase: public TAstListNode { 
+protected: 
     TClustersSinkOperationBase(TPosition pos, const TSet<TString>& clusters)
         : TAstListNode(pos)
-        , Clusters(clusters) {}
+        , Clusters(clusters) {} 
 
     virtual TPtr ProduceOperation(TContext& ctx, const TString& sinkName, const TString& service) = 0;
 
-    bool DoInit(TContext& ctx, ISource* src) override {
+    bool DoInit(TContext& ctx, ISource* src) override { 
         auto block(Y());
         auto clusters = &Clusters;
         if (Clusters.empty()) {
             clusters = &ctx.UsedClusters;
         }
-        if (clusters->empty() && !ctx.CurrCluster.empty()) {
-            clusters->insert(ctx.CurrCluster);
-        }
-
+        if (clusters->empty() && !ctx.CurrCluster.empty()) { 
+            clusters->insert(ctx.CurrCluster); 
+        } 
+ 
         for (auto& cluster: *clusters) {
             TString normalizedClusterName;
             auto service = ctx.GetClusterProvider(cluster, normalizedClusterName);
@@ -828,24 +828,24 @@ protected:
                 ctx.Error(ctx.Pos()) << "Unknown cluster: " << cluster;
                 return false;
             }
-
+ 
             auto sinkName = normalizedClusterName + "_sink";
-
-            auto op = ProduceOperation(ctx, sinkName, *service);
-            if (!op) {
-                return false;
-            }
-
+ 
+            auto op = ProduceOperation(ctx, sinkName, *service); 
+            if (!op) { 
+                return false; 
+            } 
+ 
             block = L(block, Y("let", sinkName, Y("DataSink", BuildQuotedAtom(Pos, *service), BuildQuotedAtom(Pos, normalizedClusterName))));
-            block = L(block, op);
+            block = L(block, op); 
         }
-
+ 
         clusters->clear();
         block = L(block, Y("return", "world"));
         Add("block", Q(block));
-
+ 
         return TAstListNode::DoInit(ctx, src);
-     }
+     } 
 
     TPtr DoClone() const final {
         return {};
@@ -854,41 +854,41 @@ private:
     TSet<TString> Clusters;
 };
 
-class TCommitClustersNode: public TClustersSinkOperationBase {
-public:
+class TCommitClustersNode: public TClustersSinkOperationBase { 
+public: 
     TCommitClustersNode(TPosition pos, const TSet<TString>& clusters)
-        : TClustersSinkOperationBase(pos, clusters) {}
-
+        : TClustersSinkOperationBase(pos, clusters) {} 
+ 
     TPtr ProduceOperation(TContext& ctx, const TString& sinkName, const TString& service) override {
         Y_UNUSED(ctx);
         Y_UNUSED(service);
         return Y("let", "world", Y(TString(CommitName), "world", sinkName));
-    }
-};
-
+    } 
+}; 
+ 
 TNodePtr BuildCommitClusters(TPosition pos, const TSet<TString>& clusters) {
     return new TCommitClustersNode(pos, clusters);
 }
 
-class TRollbackClustersNode: public TClustersSinkOperationBase {
-public:
+class TRollbackClustersNode: public TClustersSinkOperationBase { 
+public: 
     TRollbackClustersNode(TPosition pos, const TSet<TString>& clusters)
-        : TClustersSinkOperationBase(pos, clusters) {}
-
+        : TClustersSinkOperationBase(pos, clusters) {} 
+ 
     TPtr ProduceOperation(TContext& ctx, const TString& sinkName, const TString& service) override {
-        if (service != KikimrProviderName) {
+        if (service != KikimrProviderName) { 
             ctx.Error(ctx.Pos()) << "ROLLBACK isn't supported for provider: " << TStringBuf(service);
-            return nullptr;
-        }
-
+            return nullptr; 
+        } 
+ 
         return Y("let", "world", Y(TString(CommitName), "world", sinkName, Q(Y(Q(Y(Q("mode"), Q("rollback")))))));
-    }
-};
-
+    } 
+}; 
+ 
 TNodePtr BuildRollbackClusters(TPosition pos, const TSet<TString>& clusters) {
-    return new TRollbackClustersNode(pos, clusters);
-}
-
+    return new TRollbackClustersNode(pos, clusters); 
+} 
+ 
 class TWriteResultNode final: public TAstListNode {
 public:
     TWriteResultNode(TPosition pos, const TString& label, TNodePtr settings, const TSet<TString>& clusters)

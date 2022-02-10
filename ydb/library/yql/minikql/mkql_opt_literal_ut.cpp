@@ -230,23 +230,23 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *functionRegistry);
-
+ 
         TVector<TRuntimeNode> items;
         items.push_back(pgmBuilder.NewDataLiteral<ui32>(1));
         items.push_back(pgmBuilder.NewDataLiteral<ui32>(2));
         auto list = pgmBuilder.AsList(items);
-
+ 
         auto pgmReturn = pgmBuilder.FlatMap(list,
             [&](TRuntimeNode item) {
                 Y_UNUSED(item);
                 return pgmBuilder.NewEmptyOptional(pgmBuilder.NewOptionalType(env.GetTypeOfVoid()));
             });
-
+ 
         auto pgm = LiteralPropagationOptimization(pgmReturn, env, true).GetNode();
         UNIT_ASSERT_EQUAL(pgm->GetType()->GetKind(), TType::EKind::List);
         UNIT_ASSERT_EQUAL(static_cast<TListLiteral&>(*pgm).GetItemsCount(), 0);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestLiteralCoalesceExist) {
         auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
         TScopedAlloc alloc;
@@ -301,44 +301,44 @@ Y_UNIT_TEST_SUITE(TMiniKQLLPOTest) {
         UNIT_ASSERT_EQUAL(static_cast<TDataType&>(*pgm->GetType()).GetSchemeType(), NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT_EQUAL(static_cast<TDataLiteral&>(*pgm).AsValue().Get<ui32>(), 56);
     }
-
-    Y_UNIT_TEST(TestExtend) {
-        auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr());
-        TScopedAlloc alloc;
-        TTypeEnvironment env(alloc);
-        TProgramBuilder pgmBuilder(env, *functionRegistry);
-
-        auto pgmReturn = pgmBuilder.Extend({
-            pgmBuilder.NewEmptyListOfVoid(),
-            pgmBuilder.NewEmptyListOfVoid(),
-            pgmBuilder.NewEmptyListOfVoid()});
-
-        auto pgm = LiteralPropagationOptimization(pgmReturn, env, true).GetNode();
-        UNIT_ASSERT_EQUAL(pgm->GetType()->GetKind(), TType::EKind::List);
-        const auto& result1 = static_cast<const TListLiteral&>(*pgm);
-        UNIT_ASSERT_EQUAL(result1.GetItemsCount(), 0);
-
-        pgmReturn = pgmBuilder.Extend({
-            pgmBuilder.NewEmptyListOfVoid(),
-            pgmBuilder.Extend({
-                pgmBuilder.NewEmptyListOfVoid(),
-                pgmBuilder.NewEmptyListOfVoid(),
-            }),
-            pgmBuilder.NewEmptyListOfVoid()});
-
-        pgm = LiteralPropagationOptimization(pgmReturn, env, true).GetNode();
-        UNIT_ASSERT_EQUAL(pgm->GetType()->GetKind(), TType::EKind::List);
-        const auto& result2 = static_cast<const TListLiteral&>(*pgm);
-        UNIT_ASSERT_EQUAL(result2.GetItemsCount(), 0);
-
-        pgmReturn = pgmBuilder.Extend({
-            pgmBuilder.NewEmptyListOfVoid(),
-            pgmBuilder.AsList(MakeVoidCallable(pgmBuilder)),
-            pgmBuilder.NewEmptyListOfVoid()});
-
-        pgm = LiteralPropagationOptimization(pgmReturn, env, true).GetNode();
-        UNIT_ASSERT_EQUAL(pgm->GetType()->GetKind(), TType::EKind::Callable);
-    }
+ 
+    Y_UNIT_TEST(TestExtend) { 
+        auto functionRegistry = CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr()); 
+        TScopedAlloc alloc; 
+        TTypeEnvironment env(alloc); 
+        TProgramBuilder pgmBuilder(env, *functionRegistry); 
+ 
+        auto pgmReturn = pgmBuilder.Extend({ 
+            pgmBuilder.NewEmptyListOfVoid(), 
+            pgmBuilder.NewEmptyListOfVoid(), 
+            pgmBuilder.NewEmptyListOfVoid()}); 
+ 
+        auto pgm = LiteralPropagationOptimization(pgmReturn, env, true).GetNode(); 
+        UNIT_ASSERT_EQUAL(pgm->GetType()->GetKind(), TType::EKind::List); 
+        const auto& result1 = static_cast<const TListLiteral&>(*pgm); 
+        UNIT_ASSERT_EQUAL(result1.GetItemsCount(), 0); 
+ 
+        pgmReturn = pgmBuilder.Extend({ 
+            pgmBuilder.NewEmptyListOfVoid(), 
+            pgmBuilder.Extend({ 
+                pgmBuilder.NewEmptyListOfVoid(), 
+                pgmBuilder.NewEmptyListOfVoid(), 
+            }), 
+            pgmBuilder.NewEmptyListOfVoid()}); 
+ 
+        pgm = LiteralPropagationOptimization(pgmReturn, env, true).GetNode(); 
+        UNIT_ASSERT_EQUAL(pgm->GetType()->GetKind(), TType::EKind::List); 
+        const auto& result2 = static_cast<const TListLiteral&>(*pgm); 
+        UNIT_ASSERT_EQUAL(result2.GetItemsCount(), 0); 
+ 
+        pgmReturn = pgmBuilder.Extend({ 
+            pgmBuilder.NewEmptyListOfVoid(), 
+            pgmBuilder.AsList(MakeVoidCallable(pgmBuilder)), 
+            pgmBuilder.NewEmptyListOfVoid()}); 
+ 
+        pgm = LiteralPropagationOptimization(pgmReturn, env, true).GetNode(); 
+        UNIT_ASSERT_EQUAL(pgm->GetType()->GetKind(), TType::EKind::Callable); 
+    } 
 }
 
 }

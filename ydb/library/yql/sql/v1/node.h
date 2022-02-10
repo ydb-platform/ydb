@@ -43,9 +43,9 @@ namespace NSQLTranslationV1 {
 
     enum class ESQLWriteColumnMode {
         InsertInto,
-        InsertOrAbortInto,
-        InsertOrIgnoreInto,
-        InsertOrRevertInto,
+        InsertOrAbortInto, 
+        InsertOrIgnoreInto, 
+        InsertOrRevertInto, 
         UpsertInto,
         ReplaceInto,
         InsertIntoWithTruncate,
@@ -55,17 +55,17 @@ namespace NSQLTranslationV1 {
 
     enum class EWriteColumnMode {
         Default,
-        Insert,
-        InsertOrAbort,
-        InsertOrIgnore,
-        InsertOrRevert,
+        Insert, 
+        InsertOrAbort, 
+        InsertOrIgnore, 
+        InsertOrRevert, 
         Upsert,
         Replace,
         Renew,
         Update,
-        UpdateOn,
+        UpdateOn, 
         Delete,
-        DeleteOn,
+        DeleteOn, 
     };
 
     enum class EAlterTableIntentnt {
@@ -520,14 +520,14 @@ namespace NSQLTranslationV1 {
     };
 
     struct TIdentifier {
-        TPosition Pos;
+        TPosition Pos; 
         TString Name;
-
+ 
         TIdentifier(TPosition pos, const TString& name)
-            : Pos(pos)
-            , Name(name) {}
-    };
-
+            : Pos(pos) 
+            , Name(name) {} 
+    }; 
+ 
     struct TColumnSchema {
         TPosition Pos;
         TString Name;
@@ -684,22 +684,22 @@ namespace NSQLTranslationV1 {
     };
 
     class TArgPlaceholderNode final: public INode
-    {
-    public:
+    { 
+    public: 
         TArgPlaceholderNode(TPosition pos, const TString &name);
-
+ 
         TAstNode* Translate(TContext& ctx) const override;
-
+ 
         TString GetName() const;
         TNodePtr DoClone() const final;
-
-    protected:
+ 
+    protected: 
         bool DoInit(TContext& ctx, ISource* src) override;
-
-    private:
+ 
+    private: 
         TString Name;
-    };
-
+    }; 
+ 
     enum class EAggregateMode {
         Normal,
         Distinct,
@@ -1201,7 +1201,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildListOfNamedNodes(TPosition pos, TVector<TNodePtr>&& exprs);
 
     TNodePtr BuildArgPlaceholder(TPosition pos, const TString& name);
-
+ 
     TNodePtr BuildColumn(TPosition pos, const TString& column = TString(), const TString& source = TString());
     TNodePtr BuildColumn(TPosition pos, const TNodePtr& column, const TString& source = TString());
     TNodePtr BuildColumn(TPosition pos, const TDeferredAtom& column, const TString& source = TString());
@@ -1285,7 +1285,7 @@ namespace NSQLTranslationV1 {
         TWinSpecs&& windowSpec,
         THoppingWindowSpecPtr hoppingWindowSpec,
         TVector<TNodePtr>&& terms,
-        bool distinct,
+        bool distinct, 
         TVector<TNodePtr>&& without,
         bool selectStream,
         const TWriteSettings& settings

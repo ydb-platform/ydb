@@ -24,8 +24,8 @@ namespace NActors {
         }
 
         ++ActorBackTraceEnableCounter;
-    }
-
+    } 
+ 
     void DisableActorCallstack() {
         --ActorBackTraceEnableCounter;
 
@@ -35,13 +35,13 @@ namespace NActors {
             PreviousFormatBackTrace = 0;
         }
     }
-
+ 
     TCallstack::TCallstack()
         : BeginIdx(0)
         , Size(0)
         , LinesToSkip(0)
     {
-    }
+    } 
 
     void TCallstack::SetLinesToSkip() {
         TTrace record;

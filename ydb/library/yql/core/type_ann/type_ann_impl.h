@@ -16,14 +16,14 @@ namespace NTypeAnnImpl {
         TContext(TExprContext& expr);
     };
 
-    struct TExtContext : public TContext {
+    struct TExtContext : public TContext { 
         TTypeAnnotationContext& Types;
-
+ 
         TExtContext(TExprContext& expr, TTypeAnnotationContext& types);
         bool LoadUdfMetadata(const TVector<IUdfResolver::TFunction*>& functions);
         void RegisterResolvedImport(const IUdfResolver::TImport& import);
-    };
-
+    }; 
+ 
     // Implemented in type_ann_join.cpp
     IGraphTransformer::TStatus JoinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus JoinDictWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);

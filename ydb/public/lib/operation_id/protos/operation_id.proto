@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package Ydb;
+package Ydb; 
 
 message TOperationId {
     enum EKind {

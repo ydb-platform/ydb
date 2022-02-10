@@ -60,13 +60,13 @@ struct TTestContext {
     void ExpectProxyError(const TActorId& edge, ui64 cookie, Ydb::StatusIds::StatusCode status);
 
     void CreateSemaphore(ui64 proxyId, const TString& name, ui64 limit, const TString& data,
-        Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+        Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
 
-    void CreateSemaphore(ui64 proxyId, const TString& name, ui64 limit, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) {
+    void CreateSemaphore(ui64 proxyId, const TString& name, ui64 limit, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) { 
         CreateSemaphore(proxyId, name, limit, TString(), status);
     }
 
-    void DeleteSemaphore(ui64 proxyId, const TString& name, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+    void DeleteSemaphore(ui64 proxyId, const TString& name, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
 
     // Returns a cookie used for the session
     ui64 SendAttachSession(

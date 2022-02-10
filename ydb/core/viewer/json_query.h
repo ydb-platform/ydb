@@ -117,7 +117,7 @@ public:
             event->Record.SetUserToken(Event->Get()->UserToken);
         }
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), event.Release());
+        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), event.Release()); 
 
         Become(&TThis::StateWork, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
@@ -205,7 +205,7 @@ private:
     void HandleReply(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         TStringBuilder out;
         NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record.GetRef();
-        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) { 
             const auto& response = record.GetResponse();
             out << Viewer->GetHTTPOKJSON();
             if (!Stats.empty()) {
@@ -270,19 +270,19 @@ private:
             }
         } else {
             out << "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nConnection: Close\r\n\r\n";
-
-            TStringBuilder err;
-            for (const auto& queryIssue : record.GetResponse().GetQueryIssues()) {
-                if (!err.empty()) {
-                    err << '\n';
+ 
+            TStringBuilder err; 
+            for (const auto& queryIssue : record.GetResponse().GetQueryIssues()) { 
+                if (!err.empty()) { 
+                    err << '\n'; 
                 }
-                if (queryIssue.has_position()) {
-                    err << queryIssue.position().row() << ':' << queryIssue.position().column() << ' ';
-                }
-                err << queryIssue.message();
+                if (queryIssue.has_position()) { 
+                    err << queryIssue.position().row() << ':' << queryIssue.position().column() << ' '; 
+                } 
+                err << queryIssue.message(); 
             }
-            out << err;
-
+            out << err; 
+ 
             out << "\r\n";
         }
 

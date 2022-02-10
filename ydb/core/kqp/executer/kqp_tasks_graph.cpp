@@ -1,10 +1,10 @@
-#include "kqp_tasks_graph.h"
+#include "kqp_tasks_graph.h" 
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/tx/datashard/range_ops.h>
-
+ 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 
 #include <library/cpp/actors/core/log.h>
@@ -18,11 +18,11 @@ using namespace NYql::NNodes;
 
 // #define DBG_TRACE
 
-void LogStage(const NActors::TActorContext& ctx, const TStageInfo& stageInfo) {
-    // TODO: Print stage details, including input types and program.
+void LogStage(const NActors::TActorContext& ctx, const TStageInfo& stageInfo) { 
+    // TODO: Print stage details, including input types and program. 
     LOG_DEBUG_S(ctx, NKikimrServices::KQP_EXECUTER, "StageInfo: StageId #" << stageInfo.Id
         << ", InputsCount: " << stageInfo.InputsCount
-        << ", OutputsCount: " << stageInfo.OutputsCount);
+        << ", OutputsCount: " << stageInfo.OutputsCount); 
 }
 
 bool HasReads(const TStageInfo& stageInfo) {
@@ -67,7 +67,7 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
                 switch (op.GetTypeCase()) {
                     case NKqpProto::TKqpPhyTableOperation::kReadRange:
                     case NKqpProto::TKqpPhyTableOperation::kReadRanges:
-                    case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
+                    case NKqpProto::TKqpPhyTableOperation::kReadOlapRange: 
                     case NKqpProto::TKqpPhyTableOperation::kLookup:
                         stageInfo.Meta.ShardOperations.insert(TKeyDesc::ERowOperation::Read);
                         break;
@@ -116,7 +116,7 @@ void BuildKqpTaskGraphResultChannels(TKqpTasksGraph& tasksGraph, const NKqpProto
     }
 }
 
-void BuildMapShardChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, ui32 inputIndex,
+void BuildMapShardChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, ui32 inputIndex, 
     const TStageInfo& inputStageInfo, ui32 outputIndex, bool enableSpilling, const TChannelLogFunc& logFunc)
 {
     YQL_ENSURE(stageInfo.Tasks.size() == inputStageInfo.Tasks.size());
@@ -153,7 +153,7 @@ void BuildMapShardChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, u
     }
 }
 
-void BuildShuffleShardChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, ui32 inputIndex,
+void BuildShuffleShardChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, ui32 inputIndex, 
     const TStageInfo& inputStageInfo, ui32 outputIndex, const TKqpTableKeys& tableKeys, bool enableSpilling,
     const TChannelLogFunc& logFunc)
 {
@@ -169,7 +169,7 @@ void BuildShuffleShardChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
         auto& originTask = graph.GetTask(originTaskId);
         auto& taskOutput = originTask.Outputs[outputIndex];
         taskOutput.Type = TKqpTaskOutputType::ShardRangePartition;
-        taskOutput.KeyColumns = table.KeyColumns;
+        taskOutput.KeyColumns = table.KeyColumns; 
 
         for (auto& targetTaskId : stageInfo.Tasks) {
             auto& targetTask = graph.GetTask(targetTaskId);
@@ -293,13 +293,13 @@ bool IsCrossShardChannel(TKqpTasksGraph& tasksGraph, const TChannel& channel) {
     return targetShard != tasksGraph.GetTask(channel.SrcTask).Meta.ShardId;
 }
 
-const NKqpProto::TKqpPhyStage& GetStage(const TStageInfo& stageInfo) {
-    auto& txBody = stageInfo.Meta.Tx.Body;
-    YQL_ENSURE(stageInfo.Id.StageId < txBody.StagesSize());
-
-    return txBody.GetStages(stageInfo.Id.StageId);
-}
-
+const NKqpProto::TKqpPhyStage& GetStage(const TStageInfo& stageInfo) { 
+    auto& txBody = stageInfo.Meta.Tx.Body; 
+    YQL_ENSURE(stageInfo.Id.StageId < txBody.StagesSize()); 
+ 
+    return txBody.GetStages(stageInfo.Id.StageId); 
+} 
+ 
 void TShardKeyRanges::AddPoint(TSerializedCellVec&& point) {
     if (!IsFullRange()) {
         Ranges.emplace_back(std::move(point));

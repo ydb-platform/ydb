@@ -151,12 +151,12 @@ void TSettingDispatcher::FreezeDefaults() {
     }
 }
 
-void TSettingDispatcher::Restore() {
-    for (auto& item: Handlers) {
-        item.second->Restore(ALL_CLUSTERS);
-    }
-}
-
+void TSettingDispatcher::Restore() { 
+    for (auto& item: Handlers) { 
+        item.second->Restore(ALL_CLUSTERS); 
+    } 
+} 
+ 
 template <class TActivation>
 bool TSettingDispatcher::Allow(const TActivation& activation, const TString& userName) {
     if (AnyOf(activation.GetIncludeUsers(), [&](const auto& user) { return user == userName; })) {

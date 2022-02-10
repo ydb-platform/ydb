@@ -8,8 +8,8 @@
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 #include <ydb/library/yql/providers/common/provider/yql_table_lookup.h>
 
-namespace NKikimr::NKqp::NOpt {
-
+namespace NKikimr::NKqp::NOpt { 
+ 
 namespace {
 
 using namespace NYql;
@@ -113,7 +113,7 @@ TKqlKeyRange BuildKeyRangeExpr(const TKeyRange& keyRange, const TKikimrTableDesc
         .Done();
 }
 
-} // namespace
+} // namespace 
 
 TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TCoFlatMap>()) {
@@ -293,5 +293,5 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
         .Done();
 }
 
-} // namespace NKikimr::NKqp::NOpt
+} // namespace NKikimr::NKqp::NOpt 
 

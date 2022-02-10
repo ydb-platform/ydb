@@ -3,7 +3,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/library/yql/core/extract_predicate/extract_predicate.h>
 
-namespace NKikimr::NKqp::NOpt {
+namespace NKikimr::NKqp::NOpt { 
 
 using namespace NYql;
 using namespace NYql::NNodes;
@@ -718,4 +718,4 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
 #endif
 }
 
-} // namespace NKikimr::NKqp::NOpt
+} // namespace NKikimr::NKqp::NOpt 

@@ -26,23 +26,23 @@ private:
     typedef typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type TRequestBase;
 
 public:
-    enum EWakeupTag {
-        WakeupTagTimeout = 10,
-        WakeupTagCancel = 11,
-        WakeupTagGetConfig = 21,
+    enum EWakeupTag { 
+        WakeupTagTimeout = 10, 
+        WakeupTagCancel = 11, 
+        WakeupTagGetConfig = 21, 
         WakeupTagClientLost = 22,
-    };
-
-public:
+    }; 
+ 
+public: 
     TRpcRequestWithOperationParamsActor(TRequestBase* request)
-        : Request_(request)
-    {
+        : Request_(request) 
+    { 
         auto& operationParams = GetProtoRequest()->operation_params();
-        OperationTimeout_ = GetDuration(operationParams.operation_timeout());
-        CancelAfter_ = GetDuration(operationParams.cancel_after());
+        OperationTimeout_ = GetDuration(operationParams.operation_timeout()); 
+        CancelAfter_ = GetDuration(operationParams.cancel_after()); 
         ReportCostInfo_ = operationParams.report_cost_info() == Ydb::FeatureFlag::ENABLED;
-    }
-
+    } 
+ 
     const typename TRequest::TRequest* GetProtoRequest() const {
         return TRequest::GetProtoRequest(Request_);
     }
@@ -51,38 +51,38 @@ public:
         return GetProtoRequest()->operation_params().operation_mode();
     }
 
-    void Bootstrap(const TActorContext &ctx) {
-        HasCancel_ = static_cast<TDerived*>(this)->HasCancelOperation();
-
-        if (OperationTimeout_) {
+    void Bootstrap(const TActorContext &ctx) { 
+        HasCancel_ = static_cast<TDerived*>(this)->HasCancelOperation(); 
+ 
+        if (OperationTimeout_) { 
             OperationTimeoutTimer = CreateLongTimer(ctx, OperationTimeout_,
                 new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(WakeupTagTimeout)),
                 AppData(ctx)->UserPoolId);
-        }
-
-        if (HasCancel_ && CancelAfter_) {
+        } 
+ 
+        if (HasCancel_ && CancelAfter_) { 
             CancelAfterTimer = CreateLongTimer(ctx, CancelAfter_,
                 new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(WakeupTagCancel)),
                 AppData(ctx)->UserPoolId);
         }
 
-        auto selfId = ctx.SelfID;
-        auto* actorSystem = ctx.ExecutorThread.ActorSystem;
-        auto clientLostCb = [selfId, actorSystem]() {
-            actorSystem->Send(selfId, new TRpcServices::TEvForgetOperation());
-        };
-
-        Request_->SetClientLostAction(std::move(clientLostCb));
-    }
-
+        auto selfId = ctx.SelfID; 
+        auto* actorSystem = ctx.ExecutorThread.ActorSystem; 
+        auto clientLostCb = [selfId, actorSystem]() { 
+            actorSystem->Send(selfId, new TRpcServices::TEvForgetOperation()); 
+        }; 
+ 
+        Request_->SetClientLostAction(std::move(clientLostCb)); 
+    } 
+ 
     bool HasCancelOperation() {
         return false;
     }
 
     TRequestBase& Request() const {
-        return *Request_;
-    }
-
+        return *Request_; 
+    } 
+ 
 protected:
     TDuration GetOperationTimeout() {
         return OperationTimeout_;
@@ -137,52 +137,52 @@ public:
         return NKikimrServices::TActivity::DEFERRABLE_RPC;
     }
 
-    void OnCancelOperation(const TActorContext& ctx) {
-        Y_UNUSED(ctx);
+    void OnCancelOperation(const TActorContext& ctx) { 
+        Y_UNUSED(ctx); 
     }
 
-    void OnForgetOperation(const TActorContext& ctx) {
-        // No client is waiting for the reply, but we have to issue fake reply
-        // anyway before dying to make Grpc happy.
-        NYql::TIssues issues;
-        issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-            "Closing Grpc request, client should not see this message."));
-        Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx);
+    void OnForgetOperation(const TActorContext& ctx) { 
+        // No client is waiting for the reply, but we have to issue fake reply 
+        // anyway before dying to make Grpc happy. 
+        NYql::TIssues issues; 
+        issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, 
+            "Closing Grpc request, client should not see this message.")); 
+        Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx); 
+    } 
+ 
+    void OnOperationTimeout(const TActorContext& ctx) { 
+        NYql::TIssues issues; 
+        issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, 
+            "Operation timeout.")); 
+        Reply(Ydb::StatusIds::TIMEOUT, issues, ctx); 
     }
 
-    void OnOperationTimeout(const TActorContext& ctx) {
-        NYql::TIssues issues;
-        issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-            "Operation timeout."));
-        Reply(Ydb::StatusIds::TIMEOUT, issues, ctx);
-    }
-
-protected:
-    void StateFuncBase(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvents::TEvWakeup, HandleWakeup);
-            HFunc(TRpcServices::TEvForgetOperation, HandleForget);
-            default: {
-                NYql::TIssues issues;
-                issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-                    TStringBuilder() << "Unexpected event received in TRpcOperationRequestActor::StateWork: "
-                        << ev->GetTypeRewrite()));
-                return this->Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx);
-            }
+protected: 
+    void StateFuncBase(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
+        switch (ev->GetTypeRewrite()) { 
+            HFunc(TEvents::TEvWakeup, HandleWakeup); 
+            HFunc(TRpcServices::TEvForgetOperation, HandleForget); 
+            default: { 
+                NYql::TIssues issues; 
+                issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, 
+                    TStringBuilder() << "Unexpected event received in TRpcOperationRequestActor::StateWork: " 
+                        << ev->GetTypeRewrite())); 
+                return this->Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx); 
+            } 
         }
     }
 
-protected:
+protected: 
     using TBase::Request_;
-
-    void Reply(Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext& ctx)
-    {
+ 
+    void Reply(Ydb::StatusIds::StatusCode status, 
+        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext& ctx) 
+    { 
         Request_->SendResult(status, message);
         this->Die(ctx);
     }
 
-    void Reply(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TActorContext& ctx) {
+    void Reply(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TActorContext& ctx) { 
         Request_->RaiseIssues(issues);
         Request_->ReplyWithYdbStatus(status);
         this->Die(ctx);
@@ -199,9 +199,9 @@ protected:
         this->Die(ctx);
     }
 
-    void ReplyWithResult(Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext &ctx)
-    {
+    void ReplyWithResult(Ydb::StatusIds::StatusCode status, 
+        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext &ctx) 
+    { 
         Request_->SendResult(status, message);
         this->Die(ctx);
     }
@@ -237,24 +237,24 @@ protected:
         }
     }
 
-protected:
-    void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
-        switch (ev->Get()->Tag) {
+protected: 
+    void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) { 
+        switch (ev->Get()->Tag) { 
             case TBase::WakeupTagTimeout:
-                static_cast<TDerived*>(this)->OnOperationTimeout(ctx);
-                break;
+                static_cast<TDerived*>(this)->OnOperationTimeout(ctx); 
+                break; 
             case TBase::WakeupTagCancel:
-                static_cast<TDerived*>(this)->OnCancelOperation(ctx);
-                break;
-            default:
-                break;
-        }
-    }
-
-    void HandleForget(TRpcServices::TEvForgetOperation::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
-        static_cast<TDerived*>(this)->OnForgetOperation(ctx);
-    }
+                static_cast<TDerived*>(this)->OnCancelOperation(ctx); 
+                break; 
+            default: 
+                break; 
+        } 
+    } 
+ 
+    void HandleForget(TRpcServices::TEvForgetOperation::TPtr &ev, const TActorContext &ctx) { 
+        Y_UNUSED(ev); 
+        static_cast<TDerived*>(this)->OnForgetOperation(ctx); 
+    } 
 };
 
 } // namespace NGRpcService

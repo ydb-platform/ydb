@@ -270,7 +270,7 @@ public:
         FacilityMessageBus,
         FacilityExecutionEngine,
         FacilityTxProxy,
-        FacilityMsgBusProxy,
+        FacilityMsgBusProxy, 
     };
 
     TError() = default;
@@ -290,7 +290,7 @@ public:
     void Throw() const;
     EFacility GetFacility() const;
     // Returns YDB status
-    Ydb::StatusIds::StatusCode GetYdbStatus() const;
+    Ydb::StatusIds::StatusCode GetYdbStatus() const; 
 
 protected:
     TError(const TResult& result);
@@ -299,7 +299,7 @@ protected:
     TString Message;
     EFacility Facility;
     ui16 Code;
-    Ydb::StatusIds::StatusCode YdbStatus;
+    Ydb::StatusIds::StatusCode YdbStatus; 
 };
 
 /// Owns query result data
@@ -380,7 +380,7 @@ public:
     TReadTableResult& operator=(TReadTableResult&&) = default;
     TReadTableResult& operator=(const TReadTableResult&) = default;
 
-    const YdbOld::ResultSet &GetResultSet() const;
+    const YdbOld::ResultSet &GetResultSet() const; 
 
     template<typename TFormat>
     TString GetTypeText(const TFormat &format) const;
@@ -391,11 +391,11 @@ protected:
     TReadTableResult(const TResult& result);
 
     template<typename TFormat>
-    static TString ValueToString(const YdbOld::Value &value, const YdbOld::DataType &type);
+    static TString ValueToString(const YdbOld::Value &value, const YdbOld::DataType &type); 
     template<typename TFormat>
-    static TString ValueToString(const YdbOld::Value &value, const YdbOld::Type &type);
+    static TString ValueToString(const YdbOld::Value &value, const YdbOld::Type &type); 
 
-    mutable YdbOld::ResultSet Result;
+    mutable YdbOld::ResultSet Result; 
     mutable bool Parsed = false;
 };
 
@@ -434,8 +434,8 @@ public:
         structValue.StoreValue(value);
     }
 
-    static void ParseTextParameters(NKikimrMiniKQL::TParams& params, const TString& parameters);
-
+    static void ParseTextParameters(NKikimrMiniKQL::TParams& params, const TString& parameters); 
+ 
 protected:
     TQuery(const TQuery&) = default;
     TQuery(TKikimr& kikimr);
@@ -486,9 +486,9 @@ public:
     TQueryResult SyncExecute(const NKikimrMiniKQL::TParams& parameters) const;
     NThreading::TFuture<TQueryResult> AsyncExecute(const NKikimrMiniKQL::TParams& parameters) const;
 
-protected:
-    TTextQuery(TKikimr& kikimr, const TString& program);
-
+protected: 
+    TTextQuery(TKikimr& kikimr, const TString& program); 
+ 
     TString TextProgram;
 };
 
@@ -544,9 +544,9 @@ public:
     TQueryResult SyncExecute(const TString& parameters) const;
     NThreading::TFuture<TQueryResult> AsyncExecute(const TString& parameters) const;
 
-    TQueryResult SyncExecute(const NKikimrMiniKQL::TParams& parameters) const;
-    NThreading::TFuture<TQueryResult> AsyncExecute(const NKikimrMiniKQL::TParams& parameters) const;
-
+    TQueryResult SyncExecute(const NKikimrMiniKQL::TParams& parameters) const; 
+    NThreading::TFuture<TQueryResult> AsyncExecute(const NKikimrMiniKQL::TParams& parameters) const; 
+ 
     TUnbindedQuery Unbind() const;
 
 protected:

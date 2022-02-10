@@ -1,106 +1,106 @@
-#include "datashard_kqp_compute.h"
+#include "datashard_kqp_compute.h" 
 #include "range_ops.h"
-
+ 
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/runtime/kqp_read_table.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
-
+ 
 #include <ydb/library/yql/minikql/mkql_node.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
-using namespace NTable;
-using namespace NUdf;
-
-TSmallVec<TTag> ExtractTags(const TSmallVec<TKqpComputeContextBase::TColumn>& columns) {
-    TSmallVec<TTag> tags;
-    for (const auto& column : columns) {
-        tags.push_back(column.Tag);
-    }
-    return tags;
-}
-
-typedef IComputationNode* (*TCallableDatashardBuilderFunc)(TCallable& callable,
-    const TComputationNodeFactoryContext& ctx, TKqpDatashardComputeContext& computeCtx);
-
-struct TKqpDatashardComputationMap {
-    TKqpDatashardComputationMap() {
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
+using namespace NTable; 
+using namespace NUdf; 
+ 
+TSmallVec<TTag> ExtractTags(const TSmallVec<TKqpComputeContextBase::TColumn>& columns) { 
+    TSmallVec<TTag> tags; 
+    for (const auto& column : columns) { 
+        tags.push_back(column.Tag); 
+    } 
+    return tags; 
+} 
+ 
+typedef IComputationNode* (*TCallableDatashardBuilderFunc)(TCallable& callable, 
+    const TComputationNodeFactoryContext& ctx, TKqpDatashardComputeContext& computeCtx); 
+ 
+struct TKqpDatashardComputationMap { 
+    TKqpDatashardComputationMap() { 
         Map["KqpWideReadTable"] = &WrapKqpWideReadTable;
         Map["KqpWideReadTableRanges"] = &WrapKqpWideReadTableRanges;
-        Map["KqpLookupTable"] = &WrapKqpLookupTable;
-        Map["KqpUpsertRows"] = &WrapKqpUpsertRows;
+        Map["KqpLookupTable"] = &WrapKqpLookupTable; 
+        Map["KqpUpsertRows"] = &WrapKqpUpsertRows; 
         Map["KqpDeleteRows"] = &WrapKqpDeleteRows;
-        Map["KqpEffects"] = &WrapKqpEffects;
-    }
-
-    THashMap<TString, TCallableDatashardBuilderFunc> Map;
-};
-
-TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx) {
-    MKQL_ENSURE_S(computeCtx);
-    MKQL_ENSURE_S(computeCtx->Database);
-
-    auto computeFactory = GetKqpBaseComputeFactory(computeCtx);
-
-    return [computeFactory, computeCtx]
-        (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
-            if (auto compute = computeFactory(callable, ctx)) {
-                return compute;
-            }
-
-            const auto& datashardMap = Singleton<TKqpDatashardComputationMap>()->Map;
-            auto it = datashardMap.find(callable.GetType()->GetName());
-            if (it != datashardMap.end()) {
-                return it->second(callable, ctx, *computeCtx);
-            }
-
-            return nullptr;
-        };
-};
-
-typedef IComputationNode* (*TCallableScanBuilderFunc)(TCallable& callable,
+        Map["KqpEffects"] = &WrapKqpEffects; 
+    } 
+ 
+    THashMap<TString, TCallableDatashardBuilderFunc> Map; 
+}; 
+ 
+TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx) { 
+    MKQL_ENSURE_S(computeCtx); 
+    MKQL_ENSURE_S(computeCtx->Database); 
+ 
+    auto computeFactory = GetKqpBaseComputeFactory(computeCtx); 
+ 
+    return [computeFactory, computeCtx] 
+        (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* { 
+            if (auto compute = computeFactory(callable, ctx)) { 
+                return compute; 
+            } 
+ 
+            const auto& datashardMap = Singleton<TKqpDatashardComputationMap>()->Map; 
+            auto it = datashardMap.find(callable.GetType()->GetName()); 
+            if (it != datashardMap.end()) { 
+                return it->second(callable, ctx, *computeCtx); 
+            } 
+ 
+            return nullptr; 
+        }; 
+}; 
+ 
+typedef IComputationNode* (*TCallableScanBuilderFunc)(TCallable& callable, 
     const TComputationNodeFactoryContext& ctx, TKqpScanComputeContext& computeCtx);
-
-struct TKqpScanComputationMap {
-    TKqpScanComputationMap() {
+ 
+struct TKqpScanComputationMap { 
+    TKqpScanComputationMap() { 
         Map["KqpWideReadTable"] = &WrapKqpScanWideReadTable;
         Map["KqpWideReadTableRanges"] = &WrapKqpScanWideReadTableRanges;
-    }
-
-    THashMap<TString, TCallableScanBuilderFunc> Map;
-};
-
-TComputationNodeFactory GetKqpScanComputeFactory(TKqpScanComputeContext* computeCtx) {
-    MKQL_ENSURE_S(computeCtx);
-
-    auto computeFactory = GetKqpBaseComputeFactory(computeCtx);
-
-    return [computeFactory, computeCtx]
-        (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
-            if (auto compute = computeFactory(callable, ctx)) {
-                return compute;
-            }
-
-            const auto& datashardMap = Singleton<TKqpScanComputationMap>()->Map;
-            auto it = datashardMap.find(callable.GetType()->GetName());
-            if (it != datashardMap.end()) {
-                return it->second(callable, ctx, *computeCtx);
-            }
-
-            return nullptr;
-        };
-}
-
-ui64 TKqpDatashardComputeContext::GetLocalTableId(const TTableId &tableId) const {
-    MKQL_ENSURE_S(Shard);
-    return Shard->GetLocalTableId(tableId);
-}
-
-TVector<std::pair<NScheme::TTypeId, TString>> TKqpDatashardComputeContext::GetKeyColumnsInfo(
-        const TTableId &tableId) const
-{
+    } 
+ 
+    THashMap<TString, TCallableScanBuilderFunc> Map; 
+}; 
+ 
+TComputationNodeFactory GetKqpScanComputeFactory(TKqpScanComputeContext* computeCtx) { 
+    MKQL_ENSURE_S(computeCtx); 
+ 
+    auto computeFactory = GetKqpBaseComputeFactory(computeCtx); 
+ 
+    return [computeFactory, computeCtx] 
+        (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* { 
+            if (auto compute = computeFactory(callable, ctx)) { 
+                return compute; 
+            } 
+ 
+            const auto& datashardMap = Singleton<TKqpScanComputationMap>()->Map; 
+            auto it = datashardMap.find(callable.GetType()->GetName()); 
+            if (it != datashardMap.end()) { 
+                return it->second(callable, ctx, *computeCtx); 
+            } 
+ 
+            return nullptr; 
+        }; 
+} 
+ 
+ui64 TKqpDatashardComputeContext::GetLocalTableId(const TTableId &tableId) const { 
+    MKQL_ENSURE_S(Shard); 
+    return Shard->GetLocalTableId(tableId); 
+} 
+ 
+TVector<std::pair<NScheme::TTypeId, TString>> TKqpDatashardComputeContext::GetKeyColumnsInfo( 
+        const TTableId &tableId) const 
+{ 
     MKQL_ENSURE_S(Shard);
     const NDataShard::TUserTable::TCPtr* tablePtr = Shard->GetUserTables().FindPtr(tableId.PathId.LocalPathId);
     MKQL_ENSURE_S(tablePtr);
@@ -119,28 +119,28 @@ TVector<std::pair<NScheme::TTypeId, TString>> TKqpDatashardComputeContext::GetKe
     return res;
 }
 
-THashMap<TString, NScheme::TTypeId> TKqpDatashardComputeContext::GetKeyColumnsMap(const TTableId &tableId) const {
-    THashMap<TString, NScheme::TTypeId> columnsMap;
-
-    auto keyColumns = GetKeyColumnsInfo(tableId);
-    for (const auto& [type, name] : keyColumns) {
-        columnsMap[name] = type;
-    }
-
-    return columnsMap;
-}
-
-TString TKqpDatashardComputeContext::GetTablePath(const TTableId &tableId) const {
-    MKQL_ENSURE_S(Shard);
-
-    auto table = Shard->GetUserTables().FindPtr(tableId.PathId.LocalPathId);
-    if (!table) {
-        return TStringBuilder() << tableId;
-    }
-
-    return (*table)->Path;
-}
-
+THashMap<TString, NScheme::TTypeId> TKqpDatashardComputeContext::GetKeyColumnsMap(const TTableId &tableId) const { 
+    THashMap<TString, NScheme::TTypeId> columnsMap; 
+ 
+    auto keyColumns = GetKeyColumnsInfo(tableId); 
+    for (const auto& [type, name] : keyColumns) { 
+        columnsMap[name] = type; 
+    } 
+ 
+    return columnsMap; 
+} 
+ 
+TString TKqpDatashardComputeContext::GetTablePath(const TTableId &tableId) const { 
+    MKQL_ENSURE_S(Shard); 
+ 
+    auto table = Shard->GetUserTables().FindPtr(tableId.PathId.LocalPathId); 
+    if (!table) { 
+        return TStringBuilder() << tableId; 
+    } 
+ 
+    return (*table)->Path; 
+} 
+ 
 const NDataShard::TUserTable* TKqpDatashardComputeContext::GetTable(const TTableId& tableId) const {
     MKQL_ENSURE_S(Shard);
     auto ptr = Shard->GetUserTables().FindPtr(tableId.PathId.LocalPathId);
@@ -148,27 +148,27 @@ const NDataShard::TUserTable* TKqpDatashardComputeContext::GetTable(const TTable
     return ptr->Get();
 }
 
-void TKqpDatashardComputeContext::ReadTable(const TTableId& tableId, const TTableRange& range) const {
-    MKQL_ENSURE_S(Shard);
-    Shard->SysLocksTable().SetLock(tableId, range, LockTxId);
-    Shard->SetTableAccessTime(tableId, Now);
-}
-
-void TKqpDatashardComputeContext::ReadTable(const TTableId& tableId, const TArrayRef<const TCell>& key) const {
-    MKQL_ENSURE_S(Shard);
-    Shard->SysLocksTable().SetLock(tableId, key, LockTxId);
-    Shard->SetTableAccessTime(tableId, Now);
-}
-
+void TKqpDatashardComputeContext::ReadTable(const TTableId& tableId, const TTableRange& range) const { 
+    MKQL_ENSURE_S(Shard); 
+    Shard->SysLocksTable().SetLock(tableId, range, LockTxId); 
+    Shard->SetTableAccessTime(tableId, Now); 
+} 
+ 
+void TKqpDatashardComputeContext::ReadTable(const TTableId& tableId, const TArrayRef<const TCell>& key) const { 
+    MKQL_ENSURE_S(Shard); 
+    Shard->SysLocksTable().SetLock(tableId, key, LockTxId); 
+    Shard->SetTableAccessTime(tableId, Now); 
+} 
+ 
 void TKqpDatashardComputeContext::BreakSetLocks() const {
     MKQL_ENSURE_S(Shard);
     Shard->SysLocksTable().BreakSetLocks(LockTxId);
 }
 
-void TKqpDatashardComputeContext::SetLockTxId(ui64 lockTxId) {
-    LockTxId = lockTxId;
-}
-
+void TKqpDatashardComputeContext::SetLockTxId(ui64 lockTxId) { 
+    LockTxId = lockTxId; 
+} 
+ 
 ui64 TKqpDatashardComputeContext::GetShardId() const {
     return Shard->TabletID();
 }
@@ -195,11 +195,11 @@ TActorId TKqpDatashardComputeContext::GetTaskOutputChannel(ui64 taskId, ui64 cha
     return TActorId();
 }
 
-void TKqpDatashardComputeContext::Clear() {
-    Database = nullptr;
-    LockTxId = 0;
-}
-
+void TKqpDatashardComputeContext::Clear() { 
+    Database = nullptr; 
+    LockTxId = 0; 
+} 
+ 
 bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidatedKey>& keys, ui64 pageFaultCount) {
     ui64 limitMultiplier = 1;
     if (pageFaultCount >= 2) {
@@ -276,4 +276,4 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
 }
 
 } // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr 

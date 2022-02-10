@@ -69,8 +69,8 @@ namespace NTxProxy {
     XX(ExecError, 52) \
     XX(ExecInProgress, 53) \
     XX(ExecResponseData, 54) \
-    XX(ExecResultUnavailable, 55) \
-    XX(ExecCancelled, 56) \
+    XX(ExecResultUnavailable, 55) \ 
+    XX(ExecCancelled, 56) \ 
     \
     XX(SynthBackendError, 64) \
     XX(SynthNoProxy, 65) \

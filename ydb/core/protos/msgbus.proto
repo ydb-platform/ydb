@@ -100,7 +100,7 @@ message TResponse {
             {Value: 2 Name: "EmptyAffectedSet" Man: "Program must touch at least one shard but touches none" },
             {Value: 3 Name: "NotImplemented" Man: "Not yet implemented feature requested" },
             {Value: 4 Name: "ResolveError" Man: "Some keys not resolved, see UnresolvedKeys for details" },
-            {Value: 5 Name: "AccessDenied" Man: "Access denied for request" },
+            {Value: 5 Name: "AccessDenied" Man: "Access denied for request" }, 
             {Value: 6 Name: "DomainLocalityError" Man: "Cross database transactions not allowed"},
             {Value: 16 Name: "ProxyNotReady" Man: "Transaction proxy not ready for handling requests, try later. Most known case is temporary lack of txid-s" },
             {Value: 17 Name: "ProxyAccepted" Man: "Request accepted by proxy. Transitional status" },
@@ -120,9 +120,9 @@ message TResponse {
             {Value: 50 Name: "ExecAborted" Man: "Request aborted, particular meaning depends on context" },
             {Value: 51 Name: "ExecTimeout" Man: "Proxy got no execution reply in timeout period" },
             {Value: 52 Name: "ExecError" Man: "Execution failed" },
-            {Value: 53 Name: "ExecInProgress" Man: "Request accepted and now runs" },
-            {Value: 55 Name: "ExecResultUnavailable" Man: "Execution results unavailable" },
-            {Value: 56 Name: "ExecCancelled" Man: "Execution was cancelled" }
+            {Value: 53 Name: "ExecInProgress" Man: "Request accepted and now runs" }, 
+            {Value: 55 Name: "ExecResultUnavailable" Man: "Execution results unavailable" }, 
+            {Value: 56 Name: "ExecCancelled" Man: "Execution was cancelled" } 
         ]}
     ]; // see tx_proxy.h - TResultStatus::EStatus
 
@@ -167,7 +167,7 @@ message TResponse {
 
     optional NKikimrTxUserProxy.TMiniKQLCompileResults MiniKQLCompileResults = 108;
     optional bool HadFollowerReads = 109;
-    optional bytes SerializedReadTableResponse = 110; // Serialized Ydb.Db.TResultSet
+    optional bytes SerializedReadTableResponse = 110; // Serialized Ydb.Db.TResultSet 
 
     optional uint32 BSAssignedID = 40;
 
@@ -497,7 +497,7 @@ message TJSON {
     optional string SecurityToken = 2;
     optional TJsonSettings JsonSettings = 3;
 };
-
+ 
 message TChooseProxyRequest {
     optional uint32 DataCenterNum = 1;
     optional string DataCenter = 3;

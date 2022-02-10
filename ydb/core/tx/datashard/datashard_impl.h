@@ -227,7 +227,7 @@ class TDataShard
     friend class TScanTransactionProcessor;
     friend class TDataShardEngineHost;
     friend class TTxS3Listing;
-    friend class TExecuteKqpScanTxUnit;
+    friend class TExecuteKqpScanTxUnit; 
     friend class TTableScan;
     friend class TKqpScan;
 
@@ -1186,12 +1186,12 @@ public:
 
     const THashMap<ui64, TUserTable::TCPtr> &GetUserTables() const { return TableInfos; }
 
-    ui64 GetLocalTableId(const TTableId& tableId) const {
-        Y_VERIFY(!TSysTables::IsSystemTable(tableId));
+    ui64 GetLocalTableId(const TTableId& tableId) const { 
+        Y_VERIFY(!TSysTables::IsSystemTable(tableId)); 
         auto it = TableInfos.find(tableId.PathId.LocalPathId);
         return it == TableInfos.end() ? 0 : it->second->LocalTid;
-    }
-
+    } 
+ 
     ui64 GetShadowTableId(const TTableId& tableId) const {
         Y_VERIFY(!TSysTables::IsSystemTable(tableId));
         auto it = TableInfos.find(tableId.PathId.LocalPathId);
@@ -2423,8 +2423,8 @@ protected:
     void ResolveTablePath(const TActorContext &ctx);
 };
 
-NKikimrTxDataShard::TError::EKind ConvertErrCode(NMiniKQL::IEngineFlat::EResult code);
-
+NKikimrTxDataShard::TError::EKind ConvertErrCode(NMiniKQL::IEngineFlat::EResult code); 
+ 
 Ydb::StatusIds::StatusCode ConvertToYdbStatusCode(NKikimrTxDataShard::TError::EKind);
 
 template <class T>

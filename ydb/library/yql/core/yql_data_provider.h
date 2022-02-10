@@ -76,24 +76,24 @@ public:
 
 class IDqIntegration;
 
-class IOptimizationContext;
-
+class IOptimizationContext; 
+ 
 class IDataProvider : public TThrRefBase {
 public:
     virtual ~IDataProvider() {}
 
     virtual TStringBuf GetName() const = 0;
 
-    enum class EResultFormat {
-        Yson,
-        Custom
-    };
-
+    enum class EResultFormat { 
+        Yson, 
+        Custom 
+    }; 
+ 
     // settings for result data provider
     struct TFillSettings {
         TMaybe<ui64> AllResultsBytesLimit = 100000;
         TMaybe<ui64> RowsLimitPerWrite = 1000; // only if list is written
-        EResultFormat Format;
+        EResultFormat Format; 
         TString FormatDetails;
         bool Discard = false;
     };
@@ -145,7 +145,7 @@ public:
     virtual void UndoEvaluationChanges() = 0;
     virtual TExprNode::TPtr CleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) = 0;
     virtual TExprNode::TPtr OptimizePull(const TExprNode::TPtr& source, const TFillSettings& fillSettings, TExprContext& ctx,
-        IOptimizationContext& optCtx) = 0;
+        IOptimizationContext& optCtx) = 0; 
 
     //-- execution
     virtual bool CanExecute(const TExprNode& node) = 0;
@@ -160,7 +160,7 @@ public:
     virtual bool CollectDiscoveredData(NYson::TYsonWriter& writer) = 0;
 
     //-- plan
-    virtual IGraphTransformer& GetPlanInfoTransformer() = 0;
+    virtual IGraphTransformer& GetPlanInfoTransformer() = 0; 
     virtual IPlanFormatter& GetPlanFormatter() = 0;
 
     //-- garbage collection
@@ -180,12 +180,12 @@ class TGatewaysConfig;
 
 using TOperationProgressWriter = std::function<void(const TOperationProgress&)>;
 
-enum class ESourceSyntax {
-    Unknown,
-    Sql,
-    Yql
-};
-
+enum class ESourceSyntax { 
+    Unknown, 
+    Sql, 
+    Yql 
+}; 
+ 
 struct TDataProviderInfo {
     using TFutureStatus = NThreading::TFuture<IGraphTransformer::TStatus>;
 

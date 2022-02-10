@@ -32,7 +32,7 @@ struct TKesusTablet::TTxSessionDetach : public TTxBase {
             // World has changed by the time we executed
             Reply.Reset(new TEvKesus::TEvDetachSessionResult(
                 Record.GetProxyGeneration(),
-                Ydb::StatusIds::BAD_SESSION,
+                Ydb::StatusIds::BAD_SESSION, 
                 proxy ? "ProxyGeneration mismatch" : "Proxy is not registered"));
             return true;
         }
@@ -43,7 +43,7 @@ struct TKesusTablet::TTxSessionDetach : public TTxBase {
             // Session destroyed or stolen by the time we executed
             Reply.Reset(new TEvKesus::TEvDetachSessionResult(
                 Record.GetProxyGeneration(),
-                session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED,
+                session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED, 
                 session ? "Session not attached" : "Session does not exist"));
             return true;
         }
@@ -75,7 +75,7 @@ void TKesusTablet::Handle(TEvKesus::TEvDetachSession::TPtr& ev) {
         Send(ev->Sender,
             new TEvKesus::TEvDetachSessionResult(
                 record.GetProxyGeneration(),
-                Ydb::StatusIds::BAD_SESSION,
+                Ydb::StatusIds::BAD_SESSION, 
                 proxy ? "ProxyGeneration mismatch" : "Proxy is not registered"),
             0, ev->Cookie);
         return;
@@ -88,7 +88,7 @@ void TKesusTablet::Handle(TEvKesus::TEvDetachSession::TPtr& ev) {
             Send(ev->Sender,
                 new TEvKesus::TEvDetachSessionResult(
                     record.GetProxyGeneration(),
-                    session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED,
+                    session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED, 
                     session ? "Session not attached" : "Session does not exist"),
                 0, ev->Cookie);
             return;

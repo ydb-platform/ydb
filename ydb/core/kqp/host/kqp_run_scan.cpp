@@ -1,70 +1,70 @@
-#include "kqp_host_impl.h"
-#include "kqp_run_physical.h"
-
+#include "kqp_host_impl.h" 
+#include "kqp_run_physical.h" 
+ 
 #include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 
-namespace NKikimr {
-namespace NKqp {
-
-using namespace NYql;
-using namespace NYql::NNodes;
-using namespace NThreading;
-
-class TKqpExecuteScanTransformer : public TKqpExecutePhysicalTransformerBase {
-public:
-    TKqpExecuteScanTransformer(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
-        TIntrusivePtr<TKqpTransactionState> txState, TIntrusivePtr<TKqlTransformContext> transformCtx)
-        : TKqpExecutePhysicalTransformerBase(gateway, cluster, txState, transformCtx) {}
-
-protected:
+namespace NKikimr { 
+namespace NKqp { 
+ 
+using namespace NYql; 
+using namespace NYql::NNodes; 
+using namespace NThreading; 
+ 
+class TKqpExecuteScanTransformer : public TKqpExecutePhysicalTransformerBase { 
+public: 
+    TKqpExecuteScanTransformer(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster, 
+        TIntrusivePtr<TKqpTransactionState> txState, TIntrusivePtr<TKqlTransformContext> transformCtx) 
+        : TKqpExecutePhysicalTransformerBase(gateway, cluster, txState, transformCtx) {} 
+ 
+protected: 
     TStatus DoExecute(const NKqpProto::TKqpPhyTx* tx, bool commit, NYql::TExprContext&) final {
-        YQL_ENSURE(tx);
-        YQL_ENSURE(!commit);
-
-        IKqpGateway::TExecPhysicalRequest request;
-        request.Transactions.emplace_back(*tx, PrepareParameters(*tx));
+        YQL_ENSURE(tx); 
+        YQL_ENSURE(!commit); 
+ 
+        IKqpGateway::TExecPhysicalRequest request; 
+        request.Transactions.emplace_back(*tx, PrepareParameters(*tx)); 
 
         request.RlPath = TransformCtx->QueryCtx->RlPath;
         request.Timeout = TransformCtx->QueryCtx->Deadlines.TimeoutAt - Gateway->GetCurrentTime();
         if (!request.Timeout) {
-            // TODO: Just cancel request.
+            // TODO: Just cancel request. 
             request.Timeout = TDuration::MilliSeconds(1);
         }
         request.MaxComputeActors = TransformCtx->Config->_KqpMaxComputeActors.Get().GetRef();
-        request.StatsMode = GetStatsMode(TransformCtx->QueryCtx->StatsMode);
+        request.StatsMode = GetStatsMode(TransformCtx->QueryCtx->StatsMode); 
         request.DisableLlvmForUdfStages = TransformCtx->Config->DisableLlvmForUdfStages();
         request.LlvmEnabled = TransformCtx->Config->GetEnableLlvm() != EOptionalFlag::Disabled;
         request.Snapshot = TxState->Tx().GetSnapshot();
-
-        switch (tx->GetType()) {
-            case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
+ 
+        switch (tx->GetType()) { 
+            case NKqpProto::TKqpPhyTx::TYPE_COMPUTE: 
                 ExecuteFuture = Gateway->ExecutePhysical(std::move(request), TransformCtx->ReplyTarget);
-                break;
-            case NKqpProto::TKqpPhyTx::TYPE_SCAN:
-                ExecuteFuture = Gateway->ExecuteScanQuery(std::move(request), TransformCtx->ReplyTarget);
-                break;
-            default:
+                break; 
+            case NKqpProto::TKqpPhyTx::TYPE_SCAN: 
+                ExecuteFuture = Gateway->ExecuteScanQuery(std::move(request), TransformCtx->ReplyTarget); 
+                break; 
+            default: 
                 YQL_ENSURE(false, "Unexpected physical tx type in scan query: "
                     << NKqpProto::TKqpPhyTx_EType_Name(tx->GetType()));
-        }
-
-        return TStatus::Async;
-    }
-
+        } 
+ 
+        return TStatus::Async; 
+    } 
+ 
     TStatus DoRollback() final {
         YQL_ENSURE(false, "Rollback in ScanQuery tx");
     }
 
-    bool OnExecuterResult(NKikimrKqp::TExecuterTxResult&& execResult, TExprContext& ctx, bool commit) override {
-        Y_UNUSED(execResult);
-        Y_UNUSED(ctx);
-        Y_UNUSED(commit);
-
-        return true;
-    }
-};
-
+    bool OnExecuterResult(NKikimrKqp::TExecuterTxResult&& execResult, TExprContext& ctx, bool commit) override { 
+        Y_UNUSED(execResult); 
+        Y_UNUSED(ctx); 
+        Y_UNUSED(commit); 
+ 
+        return true; 
+    } 
+}; 
+ 
 class TKqpCreateSnapshotTransformer : public TGraphTransformerBase {
 public:
     TKqpCreateSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKqlTransformContext> transformCtx,
@@ -178,13 +178,13 @@ private:
 };
 
 
-TAutoPtr<IGraphTransformer> CreateKqpExecuteScanTransformer(TIntrusivePtr<IKqpGateway> gateway,
-    const TString& cluster, TIntrusivePtr<TKqpTransactionState> txState,
-    TIntrusivePtr<TKqlTransformContext> transformCtx)
-{
-    return new TKqpExecuteScanTransformer(gateway, cluster, txState, transformCtx);
-}
-
+TAutoPtr<IGraphTransformer> CreateKqpExecuteScanTransformer(TIntrusivePtr<IKqpGateway> gateway, 
+    const TString& cluster, TIntrusivePtr<TKqpTransactionState> txState, 
+    TIntrusivePtr<TKqlTransformContext> transformCtx) 
+{ 
+    return new TKqpExecuteScanTransformer(gateway, cluster, txState, transformCtx); 
+} 
+ 
 TAutoPtr<IGraphTransformer> CreateKqpCreateSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway,
     TIntrusivePtr<TKqlTransformContext> transformCtx, TIntrusivePtr<TKqpTransactionState> txState)
 {
@@ -198,4 +198,4 @@ TAutoPtr<IGraphTransformer> CreateKqpReleaseSnapshotTransformer(TIntrusivePtr<IK
 }
 
 } // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr 

@@ -14,7 +14,7 @@
 namespace NYql {
 
 struct TNodeFlags {
-    enum : ui16 {
+    enum : ui16 { 
         Default = 0,
         ArbitraryContent = 0x01,
         BinaryContent = 0x02,

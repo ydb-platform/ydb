@@ -38,7 +38,7 @@ TIssue IssueFromMessage(const TIssueMessage& issueMessage) {
             issue.AddSubIssue(subIssue);
             queue.push_front(std::make_pair(subIssue, &subMessage));
         }
-
+ 
         issue.SetCode(message.issue_code(), static_cast<ESeverity>(message.severity()));
     }
     return topIssue;

@@ -9,7 +9,7 @@
  * This file contains declaration of all rule functions for physical optimizer
  */
 
-namespace NKikimr::NKqp::NOpt {
+namespace NKikimr::NKqp::NOpt { 
 
 NYql::NNodes::TExprBase KqpBuildReadTableStage(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
@@ -30,4 +30,4 @@ NYql::NNodes::TExprBase KqpPushOlapFilter(NYql::NNodes::TExprBase node, NYql::TE
 
 NYql::NNodes::TExprBase KqpFloatUpStage(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx);
 
-} // NKikimr::NKqp::NOpt
+} // NKikimr::NKqp::NOpt 

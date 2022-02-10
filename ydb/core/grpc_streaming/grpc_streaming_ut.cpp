@@ -61,7 +61,7 @@ public:
             acceptCallback,
             ActorSystem,
             "Session",
-            getCounterBlock("streaming", "Session"));
+            getCounterBlock("streaming", "Session")); 
     }
 
     void SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) override {

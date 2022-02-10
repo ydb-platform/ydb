@@ -313,7 +313,7 @@ bool TTestContext::ExpectAcquireLockResult(ui64 reqId, const TActorId& proxy, ui
 }
 
 void TTestContext::ExpectAcquireLockResult(ui64 reqId, const TActorId& proxy, ui64 generation, bool acquired) {
-    UNIT_ASSERT_VALUES_EQUAL(ExpectAcquireLockResult(reqId, proxy, generation, Ydb::StatusIds::SUCCESS), acquired);
+    UNIT_ASSERT_VALUES_EQUAL(ExpectAcquireLockResult(reqId, proxy, generation, Ydb::StatusIds::SUCCESS), acquired); 
 }
 
 bool TTestContext::MustReleaseLock(ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, const TString& lockName, Ydb::StatusIds::StatusCode status) {
@@ -325,10 +325,10 @@ bool TTestContext::MustReleaseLock(ui64 reqId, const TActorId& proxy, ui64 gener
 }
 
 void TTestContext::MustReleaseLock(ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, const TString& lockName, bool released) {
-    UNIT_ASSERT_VALUES_EQUAL(MustReleaseLock(reqId, proxy, generation, sessionId, lockName, Ydb::StatusIds::SUCCESS), released);
+    UNIT_ASSERT_VALUES_EQUAL(MustReleaseLock(reqId, proxy, generation, sessionId, lockName, Ydb::StatusIds::SUCCESS), released); 
 }
 
-void TTestContext::CreateSemaphore(const TString& name, ui64 limit, const TString& data, Ydb::StatusIds::StatusCode status) {
+void TTestContext::CreateSemaphore(const TString& name, ui64 limit, const TString& data, Ydb::StatusIds::StatusCode status) { 
     ui64 cookie = RandomNumber<ui64>();
     auto edge = Runtime->AllocateEdgeActor();
     SendFromEdge(edge, new TEvKesus::TEvCreateSemaphore("", name, limit, data), cookie);
@@ -338,7 +338,7 @@ void TTestContext::CreateSemaphore(const TString& name, ui64 limit, const TStrin
 
 void TTestContext::SessionCreateSemaphore(
         ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId,
-        const TString& name, ui64 limit, const TString& data, Ydb::StatusIds::StatusCode status)
+        const TString& name, ui64 limit, const TString& data, Ydb::StatusIds::StatusCode status) 
 {
     auto event = new TEvKesus::TEvCreateSemaphore("", name, limit, data);
     event->Record.SetProxyGeneration(generation);
@@ -349,7 +349,7 @@ void TTestContext::SessionCreateSemaphore(
     UNIT_ASSERT_VALUES_EQUAL(result->Record.GetError().GetStatus(), status);
 }
 
-void TTestContext::UpdateSemaphore(const TString& name, const TString& data, Ydb::StatusIds::StatusCode status) {
+void TTestContext::UpdateSemaphore(const TString& name, const TString& data, Ydb::StatusIds::StatusCode status) { 
     ui64 cookie = RandomNumber<ui64>();
     auto edge = Runtime->AllocateEdgeActor();
     SendFromEdge(edge, new TEvKesus::TEvUpdateSemaphore("", name, data), cookie);
@@ -359,7 +359,7 @@ void TTestContext::UpdateSemaphore(const TString& name, const TString& data, Ydb
 
 void TTestContext::SessionUpdateSemaphore(
         ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId,
-        const TString& name, const TString& data, Ydb::StatusIds::StatusCode status)
+        const TString& name, const TString& data, Ydb::StatusIds::StatusCode status) 
 {
     auto event = new TEvKesus::TEvUpdateSemaphore("", name, data);
     event->Record.SetProxyGeneration(generation);
@@ -370,7 +370,7 @@ void TTestContext::SessionUpdateSemaphore(
     UNIT_ASSERT_VALUES_EQUAL(result->Record.GetError().GetStatus(), status);
 }
 
-void TTestContext::DeleteSemaphore(const TString& name, bool force, Ydb::StatusIds::StatusCode status) {
+void TTestContext::DeleteSemaphore(const TString& name, bool force, Ydb::StatusIds::StatusCode status) { 
     ui64 cookie = RandomNumber<ui64>();
     auto edge = Runtime->AllocateEdgeActor();
     SendFromEdge(edge, new TEvKesus::TEvDeleteSemaphore("", name, force), cookie);
@@ -380,7 +380,7 @@ void TTestContext::DeleteSemaphore(const TString& name, bool force, Ydb::StatusI
 
 void TTestContext::SessionDeleteSemaphore(
         ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId,
-        const TString& name, Ydb::StatusIds::StatusCode status)
+        const TString& name, Ydb::StatusIds::StatusCode status) 
 {
     auto event = new TEvKesus::TEvDeleteSemaphore("", name, false);
     event->Record.SetProxyGeneration(generation);
@@ -407,7 +407,7 @@ bool TTestContext::ExpectAcquireSemaphoreResult(ui64 reqId, const TActorId& prox
 }
 
 void TTestContext::ExpectAcquireSemaphoreResult(ui64 reqId, const TActorId& proxy, ui64 generation, bool acquired) {
-    UNIT_ASSERT_VALUES_EQUAL(ExpectAcquireSemaphoreResult(reqId, proxy, generation, Ydb::StatusIds::SUCCESS), acquired);
+    UNIT_ASSERT_VALUES_EQUAL(ExpectAcquireSemaphoreResult(reqId, proxy, generation, Ydb::StatusIds::SUCCESS), acquired); 
 }
 
 void TTestContext::ExpectAcquireSemaphorePending(ui64 reqId, const TActorId& proxy, ui64 generation) {
@@ -417,7 +417,7 @@ void TTestContext::ExpectAcquireSemaphorePending(ui64 reqId, const TActorId& pro
 
 bool TTestContext::MustReleaseSemaphore(
     ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, const TString& name,
-    Ydb::StatusIds::StatusCode status)
+    Ydb::StatusIds::StatusCode status) 
 {
     SendFromProxy(proxy, generation, new TEvKesus::TEvReleaseSemaphore("", generation, sessionId, name), reqId);
     auto result = ExpectEdgeEvent<TEvKesus::TEvReleaseSemaphoreResult>(proxy, reqId);
@@ -429,7 +429,7 @@ bool TTestContext::MustReleaseSemaphore(
 void TTestContext::MustReleaseSemaphore(
     ui64 reqId, const TActorId& proxy, ui64 generation, ui64 sessionId, const TString& name, bool released)
 {
-    UNIT_ASSERT_VALUES_EQUAL(MustReleaseSemaphore(reqId, proxy, generation, sessionId, name, Ydb::StatusIds::SUCCESS), released);
+    UNIT_ASSERT_VALUES_EQUAL(MustReleaseSemaphore(reqId, proxy, generation, sessionId, name, Ydb::StatusIds::SUCCESS), released); 
 }
 
 THashMap<TActorId, TTestContext::TSimpleProxyInfo> TTestContext::DescribeProxies() {
@@ -509,8 +509,8 @@ TTestContext::TSimpleLockDescription TTestContext::DescribeLock(const TString& l
     SendFromEdge(edge, request, cookie);
     auto event = ExpectEdgeEvent<TEvKesus::TEvDescribeSemaphoreResult>(edge, cookie);
     TSimpleLockDescription result;
-    if (event->Record.GetError().GetStatus() != Ydb::StatusIds::NOT_FOUND) {
-        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+    if (event->Record.GetError().GetStatus() != Ydb::StatusIds::NOT_FOUND) { 
+        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS); 
         const auto& desc = event->Record.GetSemaphoreDescription();
         UNIT_ASSERT_C(desc.ephemeral(), "Lock " << lockName << " is not ephemeral");
         for (const auto& owner : desc.owners()) {
@@ -600,7 +600,7 @@ TTestContext::TSimpleSemaphoreDescription TTestContext::DescribeSemaphore(const 
     request->Record.SetIncludeWaiters(includeWaiters);
     SendFromEdge(edge, request, cookie);
     auto event = ExpectEdgeEvent<TEvKesus::TEvDescribeSemaphoreResult>(edge, cookie);
-    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS); 
     const auto& desc = event->Record.GetSemaphoreDescription();
     return MakeSimpleSemaphoreDescription(desc);
 }
@@ -610,7 +610,7 @@ void TTestContext::VerifySemaphoreNotFound(const TString& name) {
     TActorId edge = Runtime->AllocateEdgeActor();
     SendFromEdge(edge, new TEvKesus::TEvDescribeSemaphore("", name), cookie);
     auto event = ExpectEdgeEvent<TEvKesus::TEvDescribeSemaphoreResult>(edge, cookie);
-    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetError().GetStatus(), Ydb::StatusIds::NOT_FOUND);
+    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetError().GetStatus(), Ydb::StatusIds::NOT_FOUND); 
 }
 
 void TTestContext::VerifySemaphoreOwners(const TString& name, const THashSet<ui64>& sessionIds, bool ephemeral) {
@@ -651,7 +651,7 @@ void TTestContext::SendSessionDescribeSemaphore(
 
 TTestContext::TSimpleSemaphoreDescription TTestContext::ExpectDescribeSemaphoreResult(
         ui64 reqId, const TActorId& proxy, ui64 generation,
-        Ydb::StatusIds::StatusCode status)
+        Ydb::StatusIds::StatusCode status) 
 {
     auto event = ExpectEdgeEvent<TEvKesus::TEvDescribeSemaphoreResult>(proxy, reqId);
     UNIT_ASSERT_VALUES_EQUAL(event->Record.GetProxyGeneration(), generation);

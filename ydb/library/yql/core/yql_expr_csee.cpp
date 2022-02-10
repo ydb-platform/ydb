@@ -235,9 +235,9 @@ namespace {
     bool EqualNodes(const TExprNode& left, TLambdaFrame& currLeftFrame, const TExprNode& right, TLambdaFrame& currRightFrame,
         TNodeSet& visited, const TColumnOrderStorage& coStore)
     {
-        if (&left == &right) {
-            return true;
-        }
+        if (&left == &right) { 
+            return true; 
+        } 
 
         if (!visited.emplace(&left).second) {
             return true;
@@ -248,8 +248,8 @@ namespace {
         }
 
         if (left.GetTypeAnn() != right.GetTypeAnn()) {
-            return false;
-        }
+            return false; 
+        } 
 
         if (left.GetAllConstraints() != right.GetAllConstraints()) {
             return false;
@@ -259,7 +259,7 @@ namespace {
             return false;
         }
 
-        switch (left.Type()) {
+        switch (left.Type()) { 
         case TExprNode::Atom:
             // compare pointers due to intern
             return left.Content().data() == right.Content().data() && left.GetFlagsToCompare() == right.GetFlagsToCompare();
@@ -267,12 +267,12 @@ namespace {
         case TExprNode::Callable:
             // compare pointers due to intern
             if (left.Content().data() != right.Content().data()) {
-                return false;
+                return false; 
             }
             [[fallthrough]];
         case TExprNode::List:
-            if (left.ChildrenSize() != right.ChildrenSize()) {
-                return false;
+            if (left.ChildrenSize() != right.ChildrenSize()) { 
+                return false; 
             }
 
             if (left.UnorderedChildren() && right.UnorderedChildren()) {
@@ -305,12 +305,12 @@ namespace {
                         return false;
                     }
                 }
-            }
+            } 
 
-            return true;
+            return true; 
         case TExprNode::Lambda: {
             if (left.IsComplete() != right.IsComplete()) {
-                return false;
+                return false; 
             }
 
             if (left.ChildrenSize() != right.ChildrenSize()) {
@@ -320,8 +320,8 @@ namespace {
             const auto& leftArgs = left.Head();
             const auto& rightArgs = right.Head();
             if (leftArgs.ChildrenSize() != rightArgs.ChildrenSize()) {
-                return false;
-            }
+                return false; 
+            } 
 
             for (ui32 i = 0; i < leftArgs.ChildrenSize(); ++i) {
                 const auto& leftArg = *leftArgs.Child(i);
@@ -332,7 +332,7 @@ namespace {
                 if (leftArg.GetAllConstraints() != rightArg.GetAllConstraints()) {
                     return false;
                 }
-            }
+            } 
 
             TLambdaFrame newLeftFrame(&left, &currLeftFrame);
             TLambdaFrame newRightFrame(&right, &currRightFrame);
@@ -350,17 +350,17 @@ namespace {
                 return leftRelativeLevel == rightRelativeLevel && left.GetArgIndex() == right.GetArgIndex();
             } else {
                 return &left == &right;
-            }
-        }
+            } 
+        } 
         case TExprNode::Arguments:
             break;
-        case TExprNode::World:
-            return true;
-        }
-
+        case TExprNode::World: 
+            return true; 
+        } 
+ 
         YQL_ENSURE(false, "Unexpected");
         return false;
-    }
+    } 
 
     int CompareNodes(const TExprNode& left, const TExprNode& right, TNodeSet& visited) {
         if (&left == &right) {
@@ -550,7 +550,7 @@ namespace {
                     iter = nodesSet.erase(iter);
                     continue;
                 }
-
+ 
                 if (!EqualNodes(node, *iter->second, coStore)) {
 #ifndef NDEBUG
                     if (!GetEnv("YQL_ALLOW_CSEE_HASH_COLLISION")) {
@@ -578,7 +578,7 @@ namespace {
         return nullptr;
     }
 }
-
+ 
 IGraphTransformer::TStatus UpdateCompletness(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext&) {
     YQL_PROFILE_SCOPE(DEBUG, "UpdateCompletness");
     output = input;

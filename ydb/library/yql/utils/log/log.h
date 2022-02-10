@@ -38,22 +38,22 @@
     ::NYql::NLog::EComponent::component, \
     ::NYql::NLog::ELevel::level)
 
-// with component/level values logger
-
-#define YQL_CVLOG_PREP(level, component, preprocessor) YQL_LOG_IMPL(\
-    ::NYql::NLog::YqlLogger(), \
-    component, \
-    level, \
-    preprocessor, \
-    __FILE__, __LINE__)
-
-#define YQL_CVLOG(level, component) \
-    YQL_CVLOG_PREP(level, component, ::NYql::NLog::TContextPreprocessor)
-
-#define YQL_CVLOG_ACTIVE(level, component) ::NYql::NLog::YqlLogger().NeedToLog( \
-    component, \
-    level)
-
+// with component/level values logger 
+ 
+#define YQL_CVLOG_PREP(level, component, preprocessor) YQL_LOG_IMPL(\ 
+    ::NYql::NLog::YqlLogger(), \ 
+    component, \ 
+    level, \ 
+    preprocessor, \ 
+    __FILE__, __LINE__) 
+ 
+#define YQL_CVLOG(level, component) \ 
+    YQL_CVLOG_PREP(level, component, ::NYql::NLog::TContextPreprocessor) 
+ 
+#define YQL_CVLOG_ACTIVE(level, component) ::NYql::NLog::YqlLogger().NeedToLog( \ 
+    component, \ 
+    level) 
+ 
 // default logger
 
 #define YQL_LOG_PREP(level, preprocessor) \
@@ -95,7 +95,7 @@ using TComponentLevels =
  */
 class TYqlLog: public TLog {
 public:
-    TYqlLog();
+    TYqlLog(); 
     TYqlLog(const TString& logType, const TComponentLevels& levels);
     TYqlLog(TAutoPtr<TLogBackend> backend, const TComponentLevels& levels);
 
@@ -103,11 +103,11 @@ public:
     void UpdateProcInfo(const TString& procName);
 
     ELevel GetComponentLevel(EComponent component) const {
-        return ELevelHelpers::FromInt(AtomicGet(ComponentLevels_[EComponentHelpers::ToInt(component)]));
+        return ELevelHelpers::FromInt(AtomicGet(ComponentLevels_[EComponentHelpers::ToInt(component)])); 
     }
 
     void SetComponentLevel(EComponent component, ELevel level) {
-        AtomicSet(ComponentLevels_[EComponentHelpers::ToInt(component)], ELevelHelpers::ToInt(level));
+        AtomicSet(ComponentLevels_[EComponentHelpers::ToInt(component)], ELevelHelpers::ToInt(level)); 
     }
 
     bool NeedToLog(EComponent component, ELevel level) const {
@@ -123,7 +123,7 @@ public:
 private:
     TString ProcName_;
     pid_t ProcId_;
-    std::array<TAtomic, EComponentHelpers::ToInt(EComponent::MaxValue)> ComponentLevels_{0};
+    std::array<TAtomic, EComponentHelpers::ToInt(EComponent::MaxValue)> ComponentLevels_{0}; 
     mutable TAtomic WriteTruncMsg_;
 };
 
@@ -163,17 +163,17 @@ void InitLogger(TAutoPtr<TLogBackend> backend);
  */
 void InitLogger(IOutputStream* out);
 
-void CleanupLogger();
-
-class YqlLoggerScope {
-public:
-    YqlLoggerScope(const TString& log, bool startAsDaemon = false) { InitLogger(log, startAsDaemon); }
-    YqlLoggerScope(TAutoPtr<TLogBackend> backend) { InitLogger(backend); }
-    YqlLoggerScope(IOutputStream* out) { InitLogger(out); }
-
-    ~YqlLoggerScope() { CleanupLogger(); }
-};
-
+void CleanupLogger(); 
+ 
+class YqlLoggerScope { 
+public: 
+    YqlLoggerScope(const TString& log, bool startAsDaemon = false) { InitLogger(log, startAsDaemon); } 
+    YqlLoggerScope(TAutoPtr<TLogBackend> backend) { InitLogger(backend); } 
+    YqlLoggerScope(IOutputStream* out) { InitLogger(out); } 
+ 
+    ~YqlLoggerScope() { CleanupLogger(); } 
+}; 
+ 
 } // namespace NLog
 } // namespace NYql
 

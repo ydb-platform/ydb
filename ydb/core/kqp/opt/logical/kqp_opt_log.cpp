@@ -8,7 +8,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 
-namespace NKikimr::NKqp::NOpt {
+namespace NKikimr::NKqp::NOpt { 
 
 using namespace NYql;
 using namespace NYql::NCommon;
@@ -41,8 +41,8 @@ public:
         AddHandler(0, &TCoTopSort::Match, HNDL(RewriteTopSortOverIndexRead));
         AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeOverIndexRead));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverExtend));
-        AddHandler(0, &TKqlDeleteRows::Match, HNDL(DeleteOverLookup));
-        AddHandler(0, &TKqlUpsertRowsBase::Match, HNDL(ExcessUpsertInputColumns));
+        AddHandler(0, &TKqlDeleteRows::Match, HNDL(DeleteOverLookup)); 
+        AddHandler(0, &TKqlUpsertRowsBase::Match, HNDL(ExcessUpsertInputColumns)); 
 
         AddHandler(1, &TKqlReadTableIndex::Match, HNDL(RewriteIndexRead));
         AddHandler(1, &TKqlLookupIndex::Match, HNDL(RewriteLookupIndex));
@@ -153,18 +153,18 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> DeleteOverLookup(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpDeleteOverLookup(node, ctx, KqpCtx);
-        DumpAppliedRule("DeleteOverLookup", node.Ptr(), output.Ptr(), ctx);
-        return output;
-    }
-
-    TMaybeNode<TExprBase> ExcessUpsertInputColumns(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpExcessUpsertInputColumns(node, ctx);
-        DumpAppliedRule("ExcessUpsertInputColumns", node.Ptr(), output.Ptr(), ctx);
-        return output;
-    }
-
+    TMaybeNode<TExprBase> DeleteOverLookup(TExprBase node, TExprContext& ctx) { 
+        TExprBase output = KqpDeleteOverLookup(node, ctx, KqpCtx); 
+        DumpAppliedRule("DeleteOverLookup", node.Ptr(), output.Ptr(), ctx); 
+        return output; 
+    } 
+ 
+    TMaybeNode<TExprBase> ExcessUpsertInputColumns(TExprBase node, TExprContext& ctx) { 
+        TExprBase output = KqpExcessUpsertInputColumns(node, ctx); 
+        DumpAppliedRule("ExcessUpsertInputColumns", node.Ptr(), output.Ptr(), ctx); 
+        return output; 
+    } 
+ 
 private:
     TTypeAnnotationContext& TypesCtx;
     const TKqpOptimizeContext& KqpCtx;
@@ -177,4 +177,4 @@ TAutoPtr<IGraphTransformer> CreateKqpLogOptTransformer(const TIntrusivePtr<TKqpO
     return THolder<IGraphTransformer>(new TKqpLogicalOptTransformer(typesCtx, kqpCtx, config));
 }
 
-} // namespace NKikimr::NKqp::NOpt
+} // namespace NKikimr::NKqp::NOpt 

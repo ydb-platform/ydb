@@ -114,23 +114,23 @@ public:
     }
 
     TFuture<TExportToYtResponse> ExportToYt(ExportToYtRequest&& request,
-        const TExportToYtSettings& settings)
+        const TExportToYtSettings& settings) 
     {
         return RunOperation<V1::ExportService, ExportToYtRequest, ExportToYtResponse, TExportToYtResponse>(
             std::move(request),
             &V1::ExportService::Stub::AsyncExportToYt,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings), 
+            settings.ClientTimeout_); 
     }
 
     TFuture<TExportToS3Response> ExportToS3(ExportToS3Request&& request,
-        const TExportToS3Settings& settings)
+        const TExportToS3Settings& settings) 
     {
         return RunOperation<V1::ExportService, ExportToS3Request, ExportToS3Response, TExportToS3Response>(
             std::move(request),
             &V1::ExportService::Stub::AsyncExportToS3,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+            TRpcRequestSettings::Make(settings), 
+            settings.ClientTimeout_); 
     }
 
 };
@@ -165,7 +165,7 @@ TFuture<TExportToYtResponse> TExportClient::ExportToYt(const TExportToYtSettings
 
     request.mutable_settings()->set_use_type_v3(settings.UseTypeV3_);
 
-    return Impl_->ExportToYt(std::move(request), settings);
+    return Impl_->ExportToYt(std::move(request), settings); 
 }
 
 TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings& settings) {
@@ -192,7 +192,7 @@ TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings
         request.mutable_settings()->set_number_of_retries(settings.NumberOfRetries_.GetRef());
     }
 
-    return Impl_->ExportToS3(std::move(request), settings);
+    return Impl_->ExportToS3(std::move(request), settings); 
 }
 
 } // namespace NExport

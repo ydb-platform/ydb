@@ -10,9 +10,9 @@
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
-#include <util/generic/maybe.h>
+#include <util/generic/maybe.h> 
 #include <util/generic/map.h>
-
+ 
 namespace NKikimr {
 
 using TSchemaVersion = ui64;
@@ -50,8 +50,8 @@ struct TTableId {
     // ctors from TPathId
     TTableId(const TPathId& pathId, const TString& sysViewInfo, ui64 schemaVersion)
         : TTableId(pathId.OwnerId, pathId.LocalPathId, sysViewInfo, schemaVersion)
-    {}
-
+    {} 
+ 
     TTableId(const TPathId& pathId, const TString& sysViewInfo)
         : TTableId(pathId, sysViewInfo, 0)
     {}
@@ -76,37 +76,37 @@ struct TTableId {
         return !SysViewInfo.empty();
     }
 
-    bool operator==(const TTableId& x) const {
-        return PathId == x.PathId && SysViewInfo == x.SysViewInfo && SchemaVersion == x.SchemaVersion;
-    }
-
-    bool operator!=(const TTableId& x) const {
-        return !operator==(x);
-    }
-
-    ui64 Hash() const noexcept {
-        auto hash = PathId.Hash();
-        if (SysViewInfo) {
-            hash = CombineHashes(hash, THash<TString>()(SysViewInfo));
-        }
-        if (SchemaVersion) {
-            hash = CombineHashes(hash, THash<TSchemaVersion>()(SchemaVersion));
-        }
-
-        return hash;
-    }
-
+    bool operator==(const TTableId& x) const { 
+        return PathId == x.PathId && SysViewInfo == x.SysViewInfo && SchemaVersion == x.SchemaVersion; 
+    } 
+ 
+    bool operator!=(const TTableId& x) const { 
+        return !operator==(x); 
+    } 
+ 
+    ui64 Hash() const noexcept { 
+        auto hash = PathId.Hash(); 
+        if (SysViewInfo) { 
+            hash = CombineHashes(hash, THash<TString>()(SysViewInfo)); 
+        } 
+        if (SchemaVersion) { 
+            hash = CombineHashes(hash, THash<TSchemaVersion>()(SchemaVersion)); 
+        } 
+ 
+        return hash; 
+    } 
+ 
     ui64 PathHash() const noexcept {
         auto hash = PathId.Hash();
-        if (SysViewInfo) {
+        if (SysViewInfo) { 
             hash = CombineHashes(hash, THash<TString>()(SysViewInfo));
-        }
-
+        } 
+ 
         return hash;
     }
 };
 
-struct TIndexId {
+struct TIndexId { 
     TPathId PathId;
     TSchemaVersion SchemaVersion = 0;
 
@@ -154,15 +154,15 @@ public:
     bool InclusiveTo;
     bool Point;
 
-    explicit TTableRange(TConstArrayRef<TCell> point)
+    explicit TTableRange(TConstArrayRef<TCell> point) 
         : From(point)
         , To()
         , InclusiveFrom(true)
         , InclusiveTo(true)
-        , Point(true) {}
+        , Point(true) {} 
 
-    TTableRange(TConstArrayRef<TCell> fromValues, bool inclusiveFrom, TConstArrayRef<TCell> toValues, bool inclusiveTo,
-        bool point = false)
+    TTableRange(TConstArrayRef<TCell> fromValues, bool inclusiveFrom, TConstArrayRef<TCell> toValues, bool inclusiveTo, 
+        bool point = false) 
         : From(fromValues)
         , To(toValues)
         , InclusiveFrom(inclusiveFrom || point)
@@ -181,33 +181,33 @@ class TSerializedTableRange {
 public:
     TSerializedCellVec From;
     TSerializedCellVec To;
-    bool FromInclusive = false;
-    bool ToInclusive = false;
+    bool FromInclusive = false; 
+    bool ToInclusive = false; 
     bool Point = false;
 
-    TSerializedTableRange() {}
+    TSerializedTableRange() {} 
 
-    TSerializedTableRange(const TString& from, const TString& to, bool fromInclusive, bool toInclusive)
+    TSerializedTableRange(const TString& from, const TString& to, bool fromInclusive, bool toInclusive) 
         : From(from)
         , To(to)
         , FromInclusive(fromInclusive)
         , ToInclusive(toInclusive) {}
 
-    TSerializedTableRange(TConstArrayRef<TCell> fromValues, bool inclusiveFrom, TConstArrayRef<TCell> toValues,
-        bool inclusiveTo)
-        : From(TSerializedCellVec::Serialize(fromValues))
-        , To(TSerializedCellVec::Serialize(toValues))
-        , FromInclusive(inclusiveFrom)
+    TSerializedTableRange(TConstArrayRef<TCell> fromValues, bool inclusiveFrom, TConstArrayRef<TCell> toValues, 
+        bool inclusiveTo) 
+        : From(TSerializedCellVec::Serialize(fromValues)) 
+        , To(TSerializedCellVec::Serialize(toValues)) 
+        , FromInclusive(inclusiveFrom) 
         , ToInclusive(inclusiveTo) {}
-
-
-    explicit TSerializedTableRange(const TTableRange& range)
-        : TSerializedTableRange(range.From, range.InclusiveFrom, range.To, range.InclusiveTo)
+ 
+ 
+    explicit TSerializedTableRange(const TTableRange& range) 
+        : TSerializedTableRange(range.From, range.InclusiveFrom, range.To, range.InclusiveTo) 
     {
         Point = range.Point;
     }
-
-    explicit TSerializedTableRange(const NKikimrTx::TKeyRange& range) {
+ 
+    explicit TSerializedTableRange(const NKikimrTx::TKeyRange& range) { 
         Load(range);
     }
 
@@ -216,14 +216,14 @@ public:
     TSerializedTableRange &operator=(const TSerializedTableRange &other) = default;
     TSerializedTableRange &operator=(TSerializedTableRange &&other) = default;
 
-    void Load(const NKikimrTx::TKeyRange& range) {
+    void Load(const NKikimrTx::TKeyRange& range) { 
         From.Parse(range.GetFrom());
         To.Parse(range.GetTo());
         FromInclusive = range.GetFromInclusive();
         ToInclusive = range.GetToInclusive();
     }
 
-    void Serialize(NKikimrTx::TKeyRange& range) const {
+    void Serialize(NKikimrTx::TKeyRange& range) const { 
         range.SetFrom(From.GetBuffer());
         range.SetFromInclusive(FromInclusive);
         if (Point) {
@@ -238,7 +238,7 @@ public:
 
     bool IsEmpty(TConstArrayRef<NScheme::TTypeId> type) const;
 
-    TTableRange ToTableRange() const {
+    TTableRange ToTableRange() const { 
         return TTableRange(From.GetCells(), FromInclusive, To.GetCells(), ToInclusive, Point);
     }
 };
@@ -646,22 +646,22 @@ public:
         {}
     };
 
-    struct TPartitionRangeInfo {
-        TSerializedCellVec EndKeyPrefix;
-        bool IsInclusive = false;
-        bool IsPoint = false;
-    };
-
-    struct TPartitionInfo {
-        TPartitionInfo() {}
-
-        TPartitionInfo(ui64 shardId)
-            : ShardId(shardId) {}
-
-        ui64 ShardId = 0;
-        TMaybe<TPartitionRangeInfo> Range;
-    };
-
+    struct TPartitionRangeInfo { 
+        TSerializedCellVec EndKeyPrefix; 
+        bool IsInclusive = false; 
+        bool IsPoint = false; 
+    }; 
+ 
+    struct TPartitionInfo { 
+        TPartitionInfo() {} 
+ 
+        TPartitionInfo(ui64 shardId) 
+            : ShardId(shardId) {} 
+ 
+        ui64 ShardId = 0; 
+        TMaybe<TPartitionRangeInfo> Range; 
+    }; 
+ 
     // in
     const TTableId TableId;
     const TOwnedTableRange Range;
@@ -675,7 +675,7 @@ public:
     // out
     EStatus Status;
     TVector<TColumnInfo> ColumnInfos;
-    TVector<TPartitionInfo> Partitions;
+    TVector<TPartitionInfo> Partitions; 
     TIntrusivePtr<TSecurityObject> SecurityObject;
 
     bool IsSystemView() const { return Partitions.empty(); }
@@ -721,22 +721,22 @@ inline int CompareRangeKeys(const TKeyDesc& rangeX, const TKeyDesc& rangeY) {
     return CompareRanges(rangeX.Range, rangeY.Range, rangeX.KeyColumnTypes);
 }
 
-} // namespace NKikimr
-
-template<>
-struct THash<NKikimr::TTableId> {
-    inline ui64 operator()(const NKikimr::TTableId& x) const noexcept {
-        return x.Hash();
-    }
-};
-
-template<>
-inline void Out<NKikimr::TTableId>(IOutputStream& o, const NKikimr::TTableId& x) {
-    o << '[' << x.PathId.OwnerId << ':' << x.PathId.LocalPathId << ':' << x.SchemaVersion;
-    if (x.SysViewInfo) {
-        o << ":" << x.SysViewInfo;
-    }
-    o << ']';
+} // namespace NKikimr 
+ 
+template<> 
+struct THash<NKikimr::TTableId> { 
+    inline ui64 operator()(const NKikimr::TTableId& x) const noexcept { 
+        return x.Hash(); 
+    } 
+}; 
+ 
+template<> 
+inline void Out<NKikimr::TTableId>(IOutputStream& o, const NKikimr::TTableId& x) { 
+    o << '[' << x.PathId.OwnerId << ':' << x.PathId.LocalPathId << ':' << x.SchemaVersion; 
+    if (x.SysViewInfo) { 
+        o << ":" << x.SysViewInfo; 
+    } 
+    o << ']'; 
 }
 
 template<>

@@ -1,100 +1,100 @@
-#include "grpc_request_proxy.h"
-
-#include "rpc_calls.h"
-#include "rpc_kqp_base.h"
+#include "grpc_request_proxy.h" 
+ 
+#include "rpc_calls.h" 
+#include "rpc_kqp_base.h" 
 #include "rpc_common.h"
-
+ 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
-
-namespace NKikimr {
-namespace NGRpcService {
-
-using namespace NActors;
-using namespace Ydb;
-using namespace NKqp;
-
-class TCommitTransactionRPC : public TRpcKqpRequestActor<TCommitTransactionRPC, TEvCommitTransactionRequest> {
-    using TBase = TRpcKqpRequestActor<TCommitTransactionRPC, TEvCommitTransactionRequest>;
-
-public:
-    TCommitTransactionRPC(TEvCommitTransactionRequest* msg)
-        : TBase(msg) {}
-
-    void Bootstrap(const TActorContext& ctx) {
-        TBase::Bootstrap(ctx);
-
-        CommitTransactionImpl(ctx);
-        Become(&TCommitTransactionRPC::StateWork);
-    }
-
-    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
-            default: TBase::StateWork(ev, ctx);
-        }
-    }
-
-private:
-    void CommitTransactionImpl(const TActorContext &ctx) {
+ 
+namespace NKikimr { 
+namespace NGRpcService { 
+ 
+using namespace NActors; 
+using namespace Ydb; 
+using namespace NKqp; 
+ 
+class TCommitTransactionRPC : public TRpcKqpRequestActor<TCommitTransactionRPC, TEvCommitTransactionRequest> { 
+    using TBase = TRpcKqpRequestActor<TCommitTransactionRPC, TEvCommitTransactionRequest>; 
+ 
+public: 
+    TCommitTransactionRPC(TEvCommitTransactionRequest* msg) 
+        : TBase(msg) {} 
+ 
+    void Bootstrap(const TActorContext& ctx) { 
+        TBase::Bootstrap(ctx); 
+ 
+        CommitTransactionImpl(ctx); 
+        Become(&TCommitTransactionRPC::StateWork); 
+    } 
+ 
+    void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
+        switch (ev->GetTypeRewrite()) { 
+            HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle); 
+            default: TBase::StateWork(ev, ctx); 
+        } 
+    } 
+ 
+private: 
+    void CommitTransactionImpl(const TActorContext &ctx) { 
         const auto req = GetProtoRequest();
-        const auto traceId = Request_->GetTraceId();
-
-        TString sessionId;
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        const auto traceId = Request_->GetTraceId(); 
+ 
+        TString sessionId; 
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(); 
         SetAuthToken(ev, *Request_);
         SetDatabase(ev, *Request_);
 
-        NYql::TIssues issues;
-        if (CheckSession(req->session_id(), issues)) {
-            ev->Record.MutableRequest()->SetSessionId(req->session_id());
-        } else {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
-        }
-
-        if (traceId) {
-            ev->Record.SetTraceId(traceId.GetRef());
-        }
-
-        if (!req->tx_id()) {
-            NYql::TIssues issues;
-            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Empty transaction id."));
-            return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
-        }
-
-        ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_COMMIT_TX);
-        ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(req->tx_id());
-        ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
-        ev->Record.MutableRequest()->SetStatsMode(GetKqpStatsMode(req->collect_stats()));
-
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-    }
-
-    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record.GetRef();
+        NYql::TIssues issues; 
+        if (CheckSession(req->session_id(), issues)) { 
+            ev->Record.MutableRequest()->SetSessionId(req->session_id()); 
+        } else { 
+            return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx); 
+        } 
+ 
+        if (traceId) { 
+            ev->Record.SetTraceId(traceId.GetRef()); 
+        } 
+ 
+        if (!req->tx_id()) { 
+            NYql::TIssues issues; 
+            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Empty transaction id.")); 
+            return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx); 
+        } 
+ 
+        ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_COMMIT_TX); 
+        ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(req->tx_id()); 
+        ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true); 
+        ev->Record.MutableRequest()->SetStatsMode(GetKqpStatsMode(req->collect_stats())); 
+ 
+        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release()); 
+    } 
+ 
+    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) { 
+        const auto& record = ev->Get()->Record.GetRef(); 
         SetCost(record.GetConsumedRu());
         AddServerHintsIfAny(record);
 
-        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-            const auto& kqpResponse = record.GetResponse();
-            const auto& issueMessage = kqpResponse.GetQueryIssues();
-
+        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) { 
+            const auto& kqpResponse = record.GetResponse(); 
+            const auto& issueMessage = kqpResponse.GetQueryIssues(); 
+ 
             auto commitResult = TEvCommitTransactionRequest::AllocateResult<Ydb::Table::CommitTransactionResult>(Request_);
-
-            if (kqpResponse.HasQueryStats()) {
+ 
+            if (kqpResponse.HasQueryStats()) { 
                 FillQueryStats(*commitResult->mutable_query_stats(), kqpResponse);
-            }
-
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, *commitResult, ctx);
-        } else {
-            return OnGenericQueryResponseError(record, ctx);
-        }
-    }
-};
-
-void TGRpcRequestProxy::Handle(TEvCommitTransactionRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TCommitTransactionRPC(ev->Release().Release()));
-}
-
-} // namespace NGRpcService
-} // namespace NKikimr
+            } 
+ 
+            ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, *commitResult, ctx); 
+        } else { 
+            return OnGenericQueryResponseError(record, ctx); 
+        } 
+    } 
+}; 
+ 
+void TGRpcRequestProxy::Handle(TEvCommitTransactionRequest::TPtr& ev, const TActorContext& ctx) { 
+    ctx.Register(new TCommitTransactionRPC(ev->Release().Release())); 
+} 
+ 
+} // namespace NGRpcService 
+} // namespace NKikimr 

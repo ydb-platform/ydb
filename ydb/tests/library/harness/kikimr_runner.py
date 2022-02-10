@@ -617,8 +617,8 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
     @property
     def grpc_port(self):
         return self.__port
-
-    @property
+ 
+    @property 
     def mbus_port(self):
         return self.__mbus_port
 

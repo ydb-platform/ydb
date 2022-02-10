@@ -16,11 +16,11 @@ namespace {
 std::pair<TDqStage, TVector<TCoAtom>> ReplicateStageOutput(const TDqStage& stage, const TCoAtom& indexAtom,
     const TVector<TCoLambda>& lambdas, TExprContext& ctx)
 {
-    auto result = stage.Program().Body();
+    auto result = stage.Program().Body(); 
     auto resultType = result.Ref().GetTypeAnn();
 
     const TTypeAnnotationNode* resultItemType = nullptr;
-    if (!EnsureNewSeqType<false, false>(result.Pos(), *resultType, ctx, &resultItemType)) {
+    if (!EnsureNewSeqType<false, false>(result.Pos(), *resultType, ctx, &resultItemType)) { 
         YQL_ENSURE(false, "got " << FormatType(resultType));
     }
 
@@ -133,8 +133,8 @@ struct TMultiUsedOutput {
 struct TMultiUsedConnection {
     TDqConnection Connection;
     const TNodeMultiSet& Consumers;
-
-    // set if Connection has single consumer, but it's Output has many consumers
+ 
+    // set if Connection has single consumer, but it's Output has many consumers 
     // in that case, Connection - is on of connections, references to this Output
     TMaybe<TMultiUsedOutput> Output;
 
@@ -153,8 +153,8 @@ struct TMultiUsedConnection {
                 sb << "consumer: " << PrintConsumer(consumer, output.Stage(), ctx) << Endl;
             }
         } else {
-            sb << "multiused output, index: " << Output->Output.Index().Value()
-               << ", #" << Output->Output.Ref().UniqueId()
+            sb << "multiused output, index: " << Output->Output.Index().Value() 
+               << ", #" << Output->Output.Ref().UniqueId() 
                << ", stage: " << PrintDqStageOnly(Output->Output.Stage(), ctx)
                << ", consumers: " << Output->Consumers.size() << Endl;
             for (const auto& consumer : Output->Consumers) {
@@ -201,136 +201,136 @@ TString IndexesToString(const TCoAtom& head, const TVector<TCoAtom>& tail) {
     return sb;
 }
 
-void BuildIdentityLambdas(TVector<TCoLambda>& lambdas, ui32 count, TExprContext& ctx, TPositionHandle pos) {
-    lambdas.reserve(count);
-    for (size_t i = 0; i < count; ++i) {
-        lambdas.emplace_back(BuildIdentityLambda(pos, ctx));
-    }
-}
-
+void BuildIdentityLambdas(TVector<TCoLambda>& lambdas, ui32 count, TExprContext& ctx, TPositionHandle pos) { 
+    lambdas.reserve(count); 
+    for (size_t i = 0; i < count; ++i) { 
+        lambdas.emplace_back(BuildIdentityLambda(pos, ctx)); 
+    } 
+} 
+ 
 TExprNode::TPtr ReplicateDqOutput(TExprNode::TPtr&& input, const TMultiUsedConnection& muConnection, TExprContext& ctx)
-{
-    YQL_ENSURE(muConnection.Output.Defined());
-    auto dqOutput = muConnection.Output->Output;
-    auto dqStage = dqOutput.Stage().Cast<TDqStage>();
-    auto outputIndex = dqOutput.Index();
-    auto consumersCount = muConnection.Output->Consumers.size();
-    YQL_ENSURE(consumersCount > 1);
-
-    TVector<TCoLambda> lambdas;
-    BuildIdentityLambdas(lambdas, consumersCount - 1, ctx, dqOutput.Pos());
-
+{ 
+    YQL_ENSURE(muConnection.Output.Defined()); 
+    auto dqOutput = muConnection.Output->Output; 
+    auto dqStage = dqOutput.Stage().Cast<TDqStage>(); 
+    auto outputIndex = dqOutput.Index(); 
+    auto consumersCount = muConnection.Output->Consumers.size(); 
+    YQL_ENSURE(consumersCount > 1); 
+ 
+    TVector<TCoLambda> lambdas; 
+    BuildIdentityLambdas(lambdas, consumersCount - 1, ctx, dqOutput.Pos()); 
+ 
     auto ret = ReplicateStageOutput(dqStage, outputIndex, lambdas, ctx);
-    auto newStage = ret.first;
-    auto newAdditionalIndexes = ret.second;
-
+    auto newStage = ret.first; 
+    auto newAdditionalIndexes = ret.second; 
+ 
     YQL_CLOG(TRACE, CoreDq) << "Replicate DQ output (stage #" << dqStage.Ref().UniqueId() << ", "
         << outputIndex.Value() << ") -> (#" << newStage.Ref().UniqueId() << ", ["
         << IndexesToString(outputIndex, newAdditionalIndexes) << "])." << Endl << PrintDqStageOnly(newStage, ctx);
-
-    TNodeOnNodeOwnedMap replaces;
-    replaces[dqStage.Raw()] = newStage.Ptr();
-
-    ui32 consumerIdx = 0;
-    for (auto& connection : muConnection.Output->Consumers) {
-        YQL_ENSURE(TExprBase(connection).Maybe<TDqConnection>(), "DqOutput "
-            << NCommon::ExprToPrettyString(ctx, muConnection.Output->Output.Ref())
-            << " used by not DqConnection callable: " << connection->Content());
-
-        if (consumerIdx == 0) {
-            // Keep first (any of) consumer as is.
-            ++consumerIdx;
-            continue;
-        }
-
-        auto newOutput = Build<TDqOutput>(ctx, connection->Pos())
-            .Stage(newStage)
-            .Index(newAdditionalIndexes[consumerIdx - 1])
-            .Done();
-        auto newConnection = ctx.ChangeChild(*connection, TDqConnection::idx_Output, newOutput.Ptr());
-        replaces[connection] = newConnection;
-        ++consumerIdx;
-    }
-
-    return ctx.ReplaceNodes(std::move(input), replaces);
-}
-
-TExprNode::TPtr ReplicateDqConnection(TExprNode::TPtr&& input, const TMultiUsedConnection& muConnection,
+ 
+    TNodeOnNodeOwnedMap replaces; 
+    replaces[dqStage.Raw()] = newStage.Ptr(); 
+ 
+    ui32 consumerIdx = 0; 
+    for (auto& connection : muConnection.Output->Consumers) { 
+        YQL_ENSURE(TExprBase(connection).Maybe<TDqConnection>(), "DqOutput " 
+            << NCommon::ExprToPrettyString(ctx, muConnection.Output->Output.Ref()) 
+            << " used by not DqConnection callable: " << connection->Content()); 
+ 
+        if (consumerIdx == 0) { 
+            // Keep first (any of) consumer as is. 
+            ++consumerIdx; 
+            continue; 
+        } 
+ 
+        auto newOutput = Build<TDqOutput>(ctx, connection->Pos()) 
+            .Stage(newStage) 
+            .Index(newAdditionalIndexes[consumerIdx - 1]) 
+            .Done(); 
+        auto newConnection = ctx.ChangeChild(*connection, TDqConnection::idx_Output, newOutput.Ptr()); 
+        replaces[connection] = newConnection; 
+        ++consumerIdx; 
+    } 
+ 
+    return ctx.ReplaceNodes(std::move(input), replaces); 
+} 
+ 
+TExprNode::TPtr ReplicateDqConnection(TExprNode::TPtr&& input, const TMultiUsedConnection& muConnection, 
     TExprContext& ctx)
-{
+{ 
     YQL_CLOG(TRACE, CoreDq) << "-- ReplicateDqConnection: " << NCommon::ExprToPrettyString(ctx, *input);
 
-    YQL_ENSURE(!muConnection.Output.Defined());
-    auto dqOutput = muConnection.Connection.Output();
-    auto dqStage = dqOutput.Stage().Cast<TDqStage>();
-    auto outputIndex = dqOutput.Index();
-
-    auto& consumers = muConnection.Consumers;
-    YQL_ENSURE(consumers.size() > 1);
-
-    // NOTE: Only handle one consumer at a time, as there might be dependencies between them.
+    YQL_ENSURE(!muConnection.Output.Defined()); 
+    auto dqOutput = muConnection.Connection.Output(); 
+    auto dqStage = dqOutput.Stage().Cast<TDqStage>(); 
+    auto outputIndex = dqOutput.Index(); 
+ 
+    auto& consumers = muConnection.Consumers; 
+    YQL_ENSURE(consumers.size() > 1); 
+ 
+    // NOTE: Only handle one consumer at a time, as there might be dependencies between them. 
     // Ensure stable order by processing connection with minimal ID
-    auto& consumer = *std::min_element(consumers.begin(), consumers.end(),
-        [](auto l, auto r) { return l->UniqueId() < r->UniqueId(); });
+    auto& consumer = *std::min_element(consumers.begin(), consumers.end(), 
+        [](auto l, auto r) { return l->UniqueId() < r->UniqueId(); }); 
 
-    auto usagesCount = consumers.count(consumer);
-    bool isLastConsumer = consumers.size() == usagesCount;
+    auto usagesCount = consumers.count(consumer); 
+    bool isLastConsumer = consumers.size() == usagesCount; 
 
-    YQL_CLOG(TRACE, CoreDq) << "-- usagesCount: " << usagesCount << ", isLastConsumer: " << isLastConsumer;
-
-    if (isLastConsumer) {
-        YQL_ENSURE(usagesCount > 1);
-    }
-
-    auto lambdasCount = isLastConsumer
-        ? usagesCount - 1
-        : usagesCount;
-
+    YQL_CLOG(TRACE, CoreDq) << "-- usagesCount: " << usagesCount << ", isLastConsumer: " << isLastConsumer; 
+ 
+    if (isLastConsumer) { 
+        YQL_ENSURE(usagesCount > 1); 
+    } 
+ 
+    auto lambdasCount = isLastConsumer 
+        ? usagesCount - 1 
+        : usagesCount; 
+ 
     YQL_CLOG(TRACE, CoreDq) << "-- lambdas count: " << lambdasCount;
 
-    TVector<TCoLambda> lambdas;
-    BuildIdentityLambdas(lambdas, lambdasCount, ctx, dqOutput.Pos());
-
-    auto [newStage, newAdditionalIndexes] = ReplicateStageOutput(dqStage, outputIndex, lambdas, ctx);
-
-    bool isStageConsumer = TMaybeNode<TDqStage>(consumer).IsValid();
-    auto consumerNode = isStageConsumer
-        ? TDqStage(consumer).Inputs().Raw()
-        : consumer;
-
-    ui32 usageIdx = 0;
-    bool skipUsage = isLastConsumer;
-    TExprNode::TPtr newConsumer = ctx.ShallowCopy(*consumerNode);
-    for (size_t childIndex = 0; childIndex < newConsumer->ChildrenSize(); ++childIndex) {
-        TExprBase child(newConsumer->Child(childIndex));
-
-        if (child.Raw() == muConnection.Connection.Raw()) {
-            if (skipUsage && usageIdx == 0) {
-                // Keep first (any of) usage as is.
-                skipUsage = false;
-                continue;
-            }
-
-            auto newOutput = Build<TDqOutput>(ctx, child.Pos())
-                .Stage(newStage)
-                .Index(newAdditionalIndexes[usageIdx])
-                .Done();
-
-            auto newConnection = ctx.ChangeChild(child.Ref(), TDqConnection::idx_Output, newOutput.Ptr());
-
-            newConsumer = ctx.ChangeChild(*newConsumer, childIndex, std::move(newConnection));
-            ++usageIdx;
-        }
-    }
-
-    if (isStageConsumer) {
-        newConsumer = ctx.ChangeChild(*consumer, TDqStage::idx_Inputs, std::move(newConsumer));
-    }
-
-    auto result = ctx.ReplaceNode(std::move(input), *consumer, newConsumer);
-    return ctx.ReplaceNode(std::move(result), dqStage.Ref(), newStage.Ptr());
-}
-
+    TVector<TCoLambda> lambdas; 
+    BuildIdentityLambdas(lambdas, lambdasCount, ctx, dqOutput.Pos()); 
+ 
+    auto [newStage, newAdditionalIndexes] = ReplicateStageOutput(dqStage, outputIndex, lambdas, ctx); 
+ 
+    bool isStageConsumer = TMaybeNode<TDqStage>(consumer).IsValid(); 
+    auto consumerNode = isStageConsumer 
+        ? TDqStage(consumer).Inputs().Raw() 
+        : consumer; 
+ 
+    ui32 usageIdx = 0; 
+    bool skipUsage = isLastConsumer; 
+    TExprNode::TPtr newConsumer = ctx.ShallowCopy(*consumerNode); 
+    for (size_t childIndex = 0; childIndex < newConsumer->ChildrenSize(); ++childIndex) { 
+        TExprBase child(newConsumer->Child(childIndex)); 
+ 
+        if (child.Raw() == muConnection.Connection.Raw()) { 
+            if (skipUsage && usageIdx == 0) { 
+                // Keep first (any of) usage as is. 
+                skipUsage = false; 
+                continue; 
+            } 
+ 
+            auto newOutput = Build<TDqOutput>(ctx, child.Pos()) 
+                .Stage(newStage) 
+                .Index(newAdditionalIndexes[usageIdx]) 
+                .Done(); 
+ 
+            auto newConnection = ctx.ChangeChild(child.Ref(), TDqConnection::idx_Output, newOutput.Ptr()); 
+ 
+            newConsumer = ctx.ChangeChild(*newConsumer, childIndex, std::move(newConnection)); 
+            ++usageIdx; 
+        } 
+    } 
+ 
+    if (isStageConsumer) { 
+        newConsumer = ctx.ChangeChild(*consumer, TDqStage::idx_Inputs, std::move(newConsumer)); 
+    } 
+ 
+    auto result = ctx.ReplaceNode(std::move(input), *consumer, newConsumer); 
+    return ctx.ReplaceNode(std::move(result), dqStage.Ref(), newStage.Ptr()); 
+} 
+ 
 template <typename TExpr>
 TVector<TExpr> CollectNodes(const TExprNode::TPtr& input) {
     TVector<TExpr> result;
@@ -345,92 +345,92 @@ TVector<TExpr> CollectNodes(const TExprNode::TPtr& input) {
     return result;
 }
 
-bool GatherConsumersImpl(const TExprNode& node, TNodeMap<TNodeMultiSet>& consumers, TNodeSet& visited) {
-    if (!visited.emplace(&node).second) {
-        return true;
-    }
-
-    switch (node.Type()) {
-        case TExprNode::Atom:
-        case TExprNode::Argument:
-        case TExprNode::Arguments:
-        case TExprNode::World:
-            return true;
-
-        case TExprNode::List:
-        case TExprNode::Callable:
-        case TExprNode::Lambda:
-            break;
-    }
-
-    if (auto stageBase = TMaybeNode<TDqStageBase>(&node)) {
-        if (!stageBase.Maybe<TDqStage>()) {
-            return false;
-        }
-
-        TDqStage stage(&node);
-        for (const auto& input : stage.Inputs()) {
-            if (auto connection = input.Maybe<TDqConnection>()) {
-                consumers[connection.Cast().Raw()].insert(stage.Raw());
-                consumers[connection.Cast().Output().Raw()].insert(connection.Raw());
-            }
-
-            if (!GatherConsumersImpl(input.Ref(), consumers, visited)) {
-                return false;
-            }
-        }
-
-        if (!GatherConsumersImpl(stage.Program().Ref(), consumers, visited)) {
-            return false;
-        }
-
-        if (!GatherConsumersImpl(stage.Settings().Ref(), consumers, visited)) {
-            return false;
-        }
-
-        if (stage.Sinks()) {
-            if (!GatherConsumersImpl(stage.Sinks().Ref(), consumers, visited)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    for (const auto& child : node.Children()) {
-        if (auto connection = TMaybeNode<TDqConnection>(child)) {
-            consumers[connection.Cast().Raw()].insert(&node);
-            consumers[connection.Cast().Output().Raw()].insert(&node);
-        }
-
-        if (!GatherConsumersImpl(*child, consumers, visited)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool GatherConsumers(const TExprNode& root, TNodeMap<TNodeMultiSet>& consumers) {
-    TNodeSet visited;
-    return GatherConsumersImpl(root, consumers, visited);
-}
-
+bool GatherConsumersImpl(const TExprNode& node, TNodeMap<TNodeMultiSet>& consumers, TNodeSet& visited) { 
+    if (!visited.emplace(&node).second) { 
+        return true; 
+    } 
+ 
+    switch (node.Type()) { 
+        case TExprNode::Atom: 
+        case TExprNode::Argument: 
+        case TExprNode::Arguments: 
+        case TExprNode::World: 
+            return true; 
+ 
+        case TExprNode::List: 
+        case TExprNode::Callable: 
+        case TExprNode::Lambda: 
+            break; 
+    } 
+ 
+    if (auto stageBase = TMaybeNode<TDqStageBase>(&node)) { 
+        if (!stageBase.Maybe<TDqStage>()) { 
+            return false; 
+        } 
+ 
+        TDqStage stage(&node); 
+        for (const auto& input : stage.Inputs()) { 
+            if (auto connection = input.Maybe<TDqConnection>()) { 
+                consumers[connection.Cast().Raw()].insert(stage.Raw()); 
+                consumers[connection.Cast().Output().Raw()].insert(connection.Raw()); 
+            } 
+ 
+            if (!GatherConsumersImpl(input.Ref(), consumers, visited)) { 
+                return false; 
+            } 
+        } 
+ 
+        if (!GatherConsumersImpl(stage.Program().Ref(), consumers, visited)) { 
+            return false; 
+        } 
+ 
+        if (!GatherConsumersImpl(stage.Settings().Ref(), consumers, visited)) { 
+            return false; 
+        } 
+ 
+        if (stage.Sinks()) { 
+            if (!GatherConsumersImpl(stage.Sinks().Ref(), consumers, visited)) { 
+                return false; 
+            } 
+        } 
+ 
+        return true; 
+    } 
+ 
+    for (const auto& child : node.Children()) { 
+        if (auto connection = TMaybeNode<TDqConnection>(child)) { 
+            consumers[connection.Cast().Raw()].insert(&node); 
+            consumers[connection.Cast().Output().Raw()].insert(&node); 
+        } 
+ 
+        if (!GatherConsumersImpl(*child, consumers, visited)) { 
+            return false; 
+        } 
+    } 
+ 
+    return true; 
+} 
+ 
+bool GatherConsumers(const TExprNode& root, TNodeMap<TNodeMultiSet>& consumers) { 
+    TNodeSet visited; 
+    return GatherConsumersImpl(root, consumers, visited); 
+} 
+ 
 } // anonymous namespace
 
 IGraphTransformer::TStatus DqReplicateStageMultiOutput(TExprNode::TPtr input, TExprNode::TPtr& output,
     TExprContext& ctx)
 {
-    output = input;
+    output = input; 
 
-    // YQL_CLOG(TRACE, CoreDq) << "-- replicate query: " << NCommon::ExprToPrettyString(ctx, *input);
-    // YQL_CLOG(TRACE, CoreDq) << "-- replicate query: " << input->Dump();
+    // YQL_CLOG(TRACE, CoreDq) << "-- replicate query: " << NCommon::ExprToPrettyString(ctx, *input); 
+    // YQL_CLOG(TRACE, CoreDq) << "-- replicate query: " << input->Dump(); 
 
-    TNodeMap<TNodeMultiSet> consumersMap;
-    if (!GatherConsumers(*input, consumersMap)) {
-        return IGraphTransformer::TStatus::Ok;
-    }
-
+    TNodeMap<TNodeMultiSet> consumersMap; 
+    if (!GatherConsumers(*input, consumersMap)) { 
+        return IGraphTransformer::TStatus::Ok; 
+    } 
+ 
     // rewrite only 1 (any of) multi-used connection at a time
     std::optional<TMultiUsedConnection> multiUsedConnection;
     TDeque<TExprNode::TPtr> precomputes;
@@ -442,8 +442,8 @@ IGraphTransformer::TStatus DqReplicateStageMultiOutput(TExprNode::TPtr input, TE
         auto head = precomputes.front();
         precomputes.pop_front();
 
-        YQL_CLOG(TRACE, CoreDq) << "DqReplicateStageMultiOutput: start traverse node #" << head->UniqueId()
-            << ", " << head->Content();
+        YQL_CLOG(TRACE, CoreDq) << "DqReplicateStageMultiOutput: start traverse node #" << head->UniqueId() 
+            << ", " << head->Content(); 
 
         visitedNodes.erase(head.Get());
 
@@ -464,33 +464,33 @@ IGraphTransformer::TStatus DqReplicateStageMultiOutput(TExprNode::TPtr input, TE
                 TExprBase expr{ptr};
 
                 if (auto precompute = expr.Maybe<TDqPhyPrecompute>()) {
-                    YQL_CLOG(TRACE, CoreDq) << "DqReplicateStageMultiOutput: got precompute (#"
-                        << ptr->UniqueId() << "),"
+                    YQL_CLOG(TRACE, CoreDq) << "DqReplicateStageMultiOutput: got precompute (#" 
+                        << ptr->UniqueId() << ")," 
                         << " stop iteration. Child: " << precompute.Connection().Ref().Content()
                         << ", #" << precompute.Connection().Ref().UniqueId();
                     precomputes.emplace_back(ptr);
                     return false;
                 }
 
-                if (expr.Maybe<TDqConnection>() && consumersMap.find(expr.Raw()) != consumersMap.end()) {
+                if (expr.Maybe<TDqConnection>() && consumersMap.find(expr.Raw()) != consumersMap.end()) { 
                     auto connection = expr.Cast<TDqConnection>();
                     YQL_CLOG(TRACE, CoreDq) << "DqReplicateStageMultiOutput: test connection "
                         << connection.Ref().Content() << " (#" << ptr->UniqueId() << ")";
-                    const auto& consumers = GetConsumers(connection, consumersMap);
+                    const auto& consumers = GetConsumers(connection, consumersMap); 
                     if (consumers.size() > 1) {
                         // if connection has multiple consumers - stop traversing and return this connection
                         multiUsedConnection.emplace(connection, consumers);
                         return false;
                     }
                     auto output = connection.Output();
-                    const auto& outputConsumers = GetConsumers(output, consumersMap);
+                    const auto& outputConsumers = GetConsumers(output, consumersMap); 
                     if (outputConsumers.size() > 1) {
                         // connection has single consumer, but it's output has multiple ones
                         // in that case we check, that this output is used by single-client connections only
                         bool allConnectionsWithSingleConsumer = true;
                         for (auto conn : outputConsumers) {
-                            bool singleConsumer = GetConsumers(TExprBase(conn), consumersMap).size() == 1;
-                            allConnectionsWithSingleConsumer &= singleConsumer;
+                            bool singleConsumer = GetConsumers(TExprBase(conn), consumersMap).size() == 1; 
+                            allConnectionsWithSingleConsumer &= singleConsumer; 
                         }
                         if (allConnectionsWithSingleConsumer) {
                             multiUsedConnection.emplace(connection, consumers);
@@ -512,7 +512,7 @@ IGraphTransformer::TStatus DqReplicateStageMultiOutput(TExprNode::TPtr input, TE
 
     YQL_CLOG(TRACE, CoreDq) << "DqReplicateStageMultiOutput: " << multiUsedConnection->Print(ctx);
 
-    if (multiUsedConnection->Output.Defined()) {
+    if (multiUsedConnection->Output.Defined()) { 
         output = ReplicateDqOutput(std::move(input), *multiUsedConnection, ctx);
     } else {
         output = ReplicateDqConnection(std::move(input), *multiUsedConnection, ctx);

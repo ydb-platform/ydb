@@ -23,9 +23,9 @@
 namespace NYql {
 
 namespace {
-    using namespace NNodes;
-
-    class TConfigCallableExecutionTransformer : public TSyncTransformerBase {
+    using namespace NNodes; 
+ 
+    class TConfigCallableExecutionTransformer : public TSyncTransformerBase { 
     public:
         TConfigCallableExecutionTransformer(const TTypeAnnotationContext& types)
             : Types(types)
@@ -33,7 +33,7 @@ namespace {
             Y_UNUSED(Types);
         }
 
-        TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
+        TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final { 
             output = input;
             YQL_ENSURE(input->Type() == TExprNode::Callable);
             if (input->Content() == "Pull") {
@@ -43,9 +43,9 @@ namespace {
                 }
 
                 IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(*input);
-                YQL_ENSURE(fillSettings.Format == IDataProvider::EResultFormat::Yson);
+                YQL_ENSURE(fillSettings.Format == IDataProvider::EResultFormat::Yson); 
                 NYson::EYsonFormat ysonFormat = NCommon::GetYsonFormat(fillSettings);
-
+ 
                 auto nodeToPull = input->Child(0)->Child(0);
                 if (nodeToPull->IsCallable(ConfReadName)) {
                     auto key = nodeToPull->Child(2);
@@ -159,7 +159,7 @@ namespace {
                 return false;
             }
 
-            cluster = Nothing();
+            cluster = Nothing(); 
             return true;
         }
 
@@ -182,7 +182,7 @@ namespace {
                 return *ConfigurationTransformer;
             }
 
-            ConfigurationTransformer = CreateFunctorTransformer(
+            ConfigurationTransformer = CreateFunctorTransformer( 
                 [this](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
                 output = input;
                 if (ctx.Step.IsDone(TExprStep::Configure)) {
@@ -230,8 +230,8 @@ namespace {
 
                         if (!ApplyFlag(ctx.GetPosition(node->Child(2)->Pos()), command, args, ctx)) {
                             return {};
-                        }
-
+                        } 
+ 
                         if (command == "PureDataSource") {
                             if (Types.PureResultDataSource != node->Child(3)->Content()) {
                                 res = ctx.ChangeChild(*node, 3, ctx.RenameNode(*node->Child(3), Types.PureResultDataSource));
@@ -251,7 +251,7 @@ namespace {
         IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
             Y_UNUSED(instantOnly);
             if (!TypeAnnotationTransformer) {
-                TypeAnnotationTransformer = CreateFunctorTransformer(
+                TypeAnnotationTransformer = CreateFunctorTransformer( 
                     [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
                     output = input;
                     if (input->Content() == ConfReadName) {
@@ -360,18 +360,18 @@ namespace {
         }
 
         bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) override {
-            Y_UNUSED(syncList);
-
+            Y_UNUSED(syncList); 
+ 
             if (node.IsCallable(RightName)) {
                 if (node.Child(0)->IsCallable(ConfReadName)) {
-                    canRef = false;
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
+                    canRef = false; 
+                    return true; 
+                } 
+            } 
+ 
+            return false; 
+        } 
+ 
         bool CanExecute(const TExprNode& node) override {
             if (ConfigProviderFunctions().contains(node.Content()) ||
                 node.Content() == ConfigureName)
@@ -401,7 +401,7 @@ namespace {
 
         void WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
             YQL_ENSURE(node.IsCallable(RightName));
-
+ 
             writer.OnKeyedItem("PullOperation");
             writer.OnStringScalar(node.Child(0)->Content());
         }

@@ -72,8 +72,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateExecuteCommitWritesTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::CompleteOperation:
         return CreateCompleteOperationUnit(dataShard, pipeline);
-    case EExecutionUnitKind::ExecuteKqpScanTx:
-        return CreateExecuteKqpScanTxUnit(dataShard, pipeline);
+    case EExecutionUnitKind::ExecuteKqpScanTx: 
+        return CreateExecuteKqpScanTxUnit(dataShard, pipeline); 
     case EExecutionUnitKind::MakeScanSnapshot:
         return CreateMakeScanSnapshotUnit(dataShard, pipeline);
     case EExecutionUnitKind::WaitForStreamClearance:

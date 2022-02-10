@@ -22,18 +22,18 @@ namespace {
 class TKqpTableResolver : public TActorBootstrapped<TKqpTableResolver> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::KQP_TABLE_RESOLVER;
+        return NKikimrServices::TActivity::KQP_TABLE_RESOLVER; 
     }
 
-    TKqpTableResolver(const TActorId& owner, ui64 txId, TMaybe<TString> userToken,
-        const TVector<IKqpGateway::TPhysicalTxData>& transactions, TKqpTableKeys& tableKeys,
-        TKqpTasksGraph& tasksGraph)
-        : Owner(owner)
-        , TxId(txId)
+    TKqpTableResolver(const TActorId& owner, ui64 txId, TMaybe<TString> userToken, 
+        const TVector<IKqpGateway::TPhysicalTxData>& transactions, TKqpTableKeys& tableKeys, 
+        TKqpTasksGraph& tasksGraph) 
+        : Owner(owner) 
+        , TxId(txId) 
         , UserToken(userToken)
-        , Transactions(transactions)
-        , TableKeys(tableKeys)
-        , TasksGraph(tasksGraph) {}
+        , Transactions(transactions) 
+        , TableKeys(tableKeys) 
+        , TasksGraph(tasksGraph) {} 
 
     void Bootstrap() {
         ResolveTables();
@@ -55,7 +55,7 @@ private:
 
         const auto& entries = ev->Get()->Request->ResultSet;
         LOG_D("Resolved tables: " << entries.size());
-        YQL_ENSURE(entries.size() == TableKeys.Size());
+        YQL_ENSURE(entries.size() == TableKeys.Size()); 
 
         for (auto& entry : entries) {
             if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
@@ -204,7 +204,7 @@ private:
 
             auto& stageInfo = DecodeStageInfo(entry.UserData);
             stageInfo.Meta.ShardKey = std::move(entry.KeyDescription);
-            stageInfo.Meta.ShardKind = std::move(entry.Kind);
+            stageInfo.Meta.ShardKind = std::move(entry.Kind); 
         }
 
         timer.reset();
@@ -223,10 +223,10 @@ private:
 private:
     // TODO: Get rid of ResolveTables & TableKeys, get table information from phy tx proto.
     void ResolveTables() {
-        for (auto& tx : Transactions) {
+        for (auto& tx : Transactions) { 
             for (auto& stage : tx.Body.GetStages()) {
                 for (auto& op : stage.GetTableOps()) {
-                    auto& table = TableKeys.GetOrAddTable(MakeTableId(op.GetTable()), op.GetTable().GetPath());
+                    auto& table = TableKeys.GetOrAddTable(MakeTableId(op.GetTable()), op.GetTable().GetPath()); 
                     for (auto& column : op.GetColumns()) {
                         table.Columns.emplace(column.GetName(), TKqpTableKeys::TColumn());
                     }
@@ -235,8 +235,8 @@ private:
         }
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        request->ResultSet.reserve(TableKeys.Size());
-        for (auto& [tableId, table] : TableKeys.Get()) {
+        request->ResultSet.reserve(TableKeys.Size()); 
+        for (auto& [tableId, table] : TableKeys.Get()) { 
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
             entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
             entry.TableId = tableId;
@@ -254,12 +254,12 @@ private:
         FillKqpTasksGraphStages(TasksGraph, Transactions);
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
-        request->ResultSet.reserve(TasksGraph.GetStagesInfo().size());
+        request->ResultSet.reserve(TasksGraph.GetStagesInfo().size()); 
         if (UserToken) {
             request->UserToken = new NACLib::TUserToken(*UserToken);
         }
 
-        for (auto& pair : TasksGraph.GetStagesInfo()) {
+        for (auto& pair : TasksGraph.GetStagesInfo()) { 
             auto& stageInfo = pair.second;
             if (!stageInfo.Meta.ShardOperations.empty()) {
                 YQL_ENSURE(stageInfo.Meta.TableId);
@@ -298,7 +298,7 @@ private:
         auto range = GetFullRange(tableKey.KeyColumnTypes.size());
 
         return MakeHolder<TKeyDesc>(table, range.ToTableRange(), operation, tableKey.KeyColumnTypes,
-            TVector<TKeyDesc::TColumnOp>{});
+            TVector<TKeyDesc::TColumnOp>{}); 
     }
 
     static TSerializedTableRange GetFullRange(ui32 columnsCount) {
@@ -319,13 +319,13 @@ private:
 private:
     void UnexpectedEvent(const TString& state, ui32 eventType) {
         LOG_C("TKqpTableResolver, unexpected event: " << eventType << ", at state:" << state << ", self: " << SelfId());
-        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
-        ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, std::move(issue));
+        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction."); 
+        ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, std::move(issue)); 
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, TIssue&& issue) {
         auto replyEv = std::make_unique<TEvKqpExecuter::TEvTableResolveStatus>();
-        replyEv->Status = status;
+        replyEv->Status = status; 
         replyEv->Issues.AddIssue(std::move(issue));
         replyEv->CpuTime = CpuTime;
         Send(Owner, replyEv.release());
@@ -333,15 +333,15 @@ private:
     }
 
 private:
-    const TActorId Owner;
+    const TActorId Owner; 
     const ui64 TxId;
     const TMaybe<TString> UserToken;
-    const TVector<IKqpGateway::TPhysicalTxData>& Transactions;
-    TKqpTableKeys& TableKeys;
-
-    // TODO: TableResolver should not populate TasksGraph as it's not related to its job (bad API).
-    TKqpTasksGraph& TasksGraph;
-
+    const TVector<IKqpGateway::TPhysicalTxData>& Transactions; 
+    TKqpTableKeys& TableKeys; 
+ 
+    // TODO: TableResolver should not populate TasksGraph as it's not related to its job (bad API). 
+    TKqpTasksGraph& TasksGraph; 
+ 
     bool ShouldTerminate = false;
     TMaybe<ui32> GotUnexpectedEvent;
     TDuration CpuTime;
@@ -349,9 +349,9 @@ private:
 
 } // anonymous namespace
 
-NActors::IActor* CreateKqpTableResolver(const TActorId& owner, ui64 txId, TMaybe<TString> userToken,
-    const TVector<IKqpGateway::TPhysicalTxData>& transactions, TKqpTableKeys& tableKeys, TKqpTasksGraph& tasksGraph) {
-    return new TKqpTableResolver(owner, txId, userToken, transactions, tableKeys, tasksGraph);
+NActors::IActor* CreateKqpTableResolver(const TActorId& owner, ui64 txId, TMaybe<TString> userToken, 
+    const TVector<IKqpGateway::TPhysicalTxData>& transactions, TKqpTableKeys& tableKeys, TKqpTasksGraph& tasksGraph) { 
+    return new TKqpTableResolver(owner, txId, userToken, transactions, tableKeys, tasksGraph); 
 }
 
 } // namespace NKikimr::NKqp

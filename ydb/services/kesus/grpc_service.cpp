@@ -656,7 +656,7 @@ void TKesusGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
         &Ydb::Coordination::V1::CoordinationService::AsyncService::Request ## NAME, \
         "Coordination/" #NAME,             \
         logger, \
-        getCounterBlock("coordination", #NAME))->Run();
+        getCounterBlock("coordination", #NAME))->Run(); 
 
     ADD_REQUEST(CreateNode, CreateNodeRequest, CreateNodeResponse, {
         ActorSystem->Send(GRpcRequestProxyId, new NGRpcService::TEvCreateCoordinationNode(reqCtx));
@@ -687,7 +687,7 @@ void TKesusGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
         },
         *ActorSystem,
         "Coordination/Session",
-        getCounterBlock("coordination", "Session", true, true),
+        getCounterBlock("coordination", "Session", true, true), 
         /* TODO: limiter */ nullptr);
 }
 

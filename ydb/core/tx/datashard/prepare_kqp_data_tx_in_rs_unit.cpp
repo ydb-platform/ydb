@@ -14,22 +14,22 @@ public:
     ~TPrepareKqpDataTxInRSUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext &txc, const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op, const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext &txc, const TActorContext &ctx) override; 
+    void Complete(TOperation::TPtr op, const TActorContext &ctx) override; 
 };
 
 TPrepareKqpDataTxInRSUnit::TPrepareKqpDataTxInRSUnit(TDataShard &dataShard,
-    TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::PrepareKqpDataTxInRS, true, dataShard, pipeline) {}
+    TPipeline &pipeline) 
+    : TExecutionUnit(EExecutionUnitKind::PrepareKqpDataTxInRS, true, dataShard, pipeline) {} 
 
-TPrepareKqpDataTxInRSUnit::~TPrepareKqpDataTxInRSUnit() {}
+TPrepareKqpDataTxInRSUnit::~TPrepareKqpDataTxInRSUnit() {} 
 
-bool TPrepareKqpDataTxInRSUnit::IsReadyToExecute(TOperation::TPtr) const {
+bool TPrepareKqpDataTxInRSUnit::IsReadyToExecute(TOperation::TPtr) const { 
     return true;
 }
 
-EExecutionStatus TPrepareKqpDataTxInRSUnit::Execute(TOperation::TPtr op, TTransactionContext &txc,
-    const TActorContext &ctx)
+EExecutionStatus TPrepareKqpDataTxInRSUnit::Execute(TOperation::TPtr op, TTransactionContext &txc, 
+    const TActorContext &ctx) 
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
@@ -43,7 +43,7 @@ EExecutionStatus TPrepareKqpDataTxInRSUnit::Execute(TOperation::TPtr op, TTransa
             case ERestoreDataStatus::Error:
                 Y_FAIL("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
         }
-    }
+    } 
 
     if (tx->GetDataTx()->CheckCancelled()) {
         tx->ReleaseTxData(txc, ctx);
@@ -56,17 +56,17 @@ EExecutionStatus TPrepareKqpDataTxInRSUnit::Execute(TOperation::TPtr op, TTransa
     }
 
     try {
-        KqpPrepareInReadsets(op->InReadSets(), tx->GetDataTx()->GetKqpTransaction(), DataShard.TabletID());
-    } catch (const yexception& e) {
-        LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, "Exception while preparing in-readsets for KQP transaction "
-            << *op << " at " << DataShard.TabletID() << ": " << CurrentExceptionMessage());
-        Y_FAIL_S("Unexpected exception in KQP in-readsets prepare: " << CurrentExceptionMessage());
+        KqpPrepareInReadsets(op->InReadSets(), tx->GetDataTx()->GetKqpTransaction(), DataShard.TabletID()); 
+    } catch (const yexception& e) { 
+        LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, "Exception while preparing in-readsets for KQP transaction " 
+            << *op << " at " << DataShard.TabletID() << ": " << CurrentExceptionMessage()); 
+        Y_FAIL_S("Unexpected exception in KQP in-readsets prepare: " << CurrentExceptionMessage()); 
     }
 
     return EExecutionStatus::Executed;
 }
 
-void TPrepareKqpDataTxInRSUnit::Complete(TOperation::TPtr, const TActorContext &) {}
+void TPrepareKqpDataTxInRSUnit::Complete(TOperation::TPtr, const TActorContext &) {} 
 
 THolder<TExecutionUnit> CreatePrepareKqpDataTxInRSUnit(TDataShard &dataShard, TPipeline &pipeline) {
     return THolder(new TPrepareKqpDataTxInRSUnit(dataShard, pipeline));

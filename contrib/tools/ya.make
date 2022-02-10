@@ -38,7 +38,7 @@ RECURSE(
     sqlite3
     swig
     tf
-    tpce-benchmark
+    tpce-benchmark 
     tpch-benchmark
     tre
     unbound

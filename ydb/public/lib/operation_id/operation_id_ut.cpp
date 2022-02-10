@@ -8,8 +8,8 @@ namespace NOperationId {
 
 Y_UNIT_TEST_SUITE(OperationIdTest) {
     Y_UNIT_TEST(ConvertKindOnly) {
-        Ydb::TOperationId proto;
-        proto.SetKind(Ydb::TOperationId::OPERATION_DDL);
+        Ydb::TOperationId proto; 
+        proto.SetKind(Ydb::TOperationId::OPERATION_DDL); 
         auto str = ProtoToString(proto);
         UNIT_ASSERT_EQUAL(str, "ydb://operation/1");
         auto newProto = TOperationId(str);
@@ -18,8 +18,8 @@ Y_UNIT_TEST_SUITE(OperationIdTest) {
     }
 
     Y_UNIT_TEST(ConvertKindAndValues) {
-        Ydb::TOperationId proto;
-        proto.SetKind(Ydb::TOperationId::OPERATION_DDL);
+        Ydb::TOperationId proto; 
+        proto.SetKind(Ydb::TOperationId::OPERATION_DDL); 
         {
             auto data = proto.AddData();
             data->SetKey("key1");

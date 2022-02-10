@@ -27,15 +27,15 @@ public:
 
     using TClient::FlatQuery;
 
-    NKikimrMiniKQL::TResult FlatQuery(const TString& mkql) {
+    NKikimrMiniKQL::TResult FlatQuery(const TString& mkql) { 
         NKikimrMiniKQL::TResult res;
         TClient::TFlatQueryOptions opts;
         bool success = TClient::FlatQuery(mkql, opts, res, NMsgBusProxy::MSTATUS_OK);
         UNIT_ASSERT(success);
-        return res;
+        return res; 
     }
 
-    NKikimrMiniKQL::TResult FlatQuery(const TString& mkql, ui32 expectedStatus, ui32 expectedProxyErrorCode = TEvTxUserProxy::TResultStatus::Unknown) {
+    NKikimrMiniKQL::TResult FlatQuery(const TString& mkql, ui32 expectedStatus, ui32 expectedProxyErrorCode = TEvTxUserProxy::TResultStatus::Unknown) { 
         NKikimrMiniKQL::TResult res;
         TClient::TFlatQueryOptions opts;
         NKikimrClient::TResponse expectedResponse;
@@ -43,9 +43,9 @@ public:
         if (expectedProxyErrorCode != TEvTxUserProxy::TResultStatus::Unknown) {
             expectedResponse.SetProxyErrorCode(expectedProxyErrorCode);
         }
-        bool success = TClient::FlatQuery(mkql, opts, res, expectedResponse);
+        bool success = TClient::FlatQuery(mkql, opts, res, expectedResponse); 
         UNIT_ASSERT(success == (expectedStatus == NMsgBusProxy::MSTATUS_OK));
-        return res;
+        return res; 
     }
 
     TAutoPtr<NMsgBusProxy::TBusResponse> LsPathId(ui64 schemeshardId, ui64 pathId) {

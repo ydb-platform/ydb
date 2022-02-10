@@ -682,20 +682,20 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
         UNIT_ASSERT(tableKeys[0]->Columns[1].Operation == TKeyDesc::EColumnOperation::Read);
         UNIT_ASSERT(tableKeys[0]->Columns[1].ExpectedType == NUdf::TDataType<ui64>::Id);
     }
-
+ 
     Y_UNIT_TEST(TestAcquireLocks) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
-        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid();
-        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("locks",
+        auto pgmReturn = pgmBuilder.NewEmptyListOfVoid(); 
+        pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("locks", 
             pgmBuilder.AcquireLocks(pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(0))));
-        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode();
-
-        VerifyProgram(pgm, env);
-    }
-
+        auto pgm = pgmBuilder.Build(pgmReturn, TKikimrProgramBuilder::TBindFlags::DisableOptimization).GetNode(); 
+ 
+        VerifyProgram(pgm, env); 
+    } 
+ 
     Y_UNIT_TEST(TestDiagnostics) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
@@ -709,46 +709,46 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
     }
 
     Y_UNIT_TEST(TestInvalidParameterName) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc; 
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
-
-        auto paramsBuilder = pgmBuilder.GetParametersBuilder();
-        paramsBuilder.Add("Param1", pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(10));
-
+ 
+        auto paramsBuilder = pgmBuilder.GetParametersBuilder(); 
+        paramsBuilder.Add("Param1", pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(10)); 
+ 
         auto param = pgmBuilder.Parameter("Param2", pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
-
-        try {
-            pgmBuilder.Bind(pgmBuilder.AsList(pgmBuilder.SetResult("Result", param)), paramsBuilder.Build());
-        } catch (const yexception& ex) {
+ 
+        try { 
+            pgmBuilder.Bind(pgmBuilder.AsList(pgmBuilder.SetResult("Result", param)), paramsBuilder.Build()); 
+        } catch (const yexception& ex) { 
             UNIT_ASSERT(TString(ex.what()).EndsWith("Missing value for parameter: Param2"));
-            return;
-        }
-
-        UNIT_FAIL("Expected exception.");
-    }
-
+            return; 
+        } 
+ 
+        UNIT_FAIL("Expected exception."); 
+    } 
+ 
     Y_UNIT_TEST(TestInvalidParameterType) {
-        TScopedAlloc alloc;
+        TScopedAlloc alloc; 
         TTypeEnvironment env(alloc);
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         TKikimrProgramBuilder pgmBuilder(env, *functionRegistry);
-
-        auto paramsBuilder = pgmBuilder.GetParametersBuilder();
-        paramsBuilder.Add("Param1", pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(10));
-
+ 
+        auto paramsBuilder = pgmBuilder.GetParametersBuilder(); 
+        paramsBuilder.Add("Param1", pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(10)); 
+ 
         auto param = pgmBuilder.Parameter("Param1", pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
-
-        try {
-            pgmBuilder.Bind(pgmBuilder.AsList(pgmBuilder.SetResult("Result", param)), paramsBuilder.Build());
-        } catch (const yexception& ex) {
+ 
+        try { 
+            pgmBuilder.Bind(pgmBuilder.AsList(pgmBuilder.SetResult("Result", param)), paramsBuilder.Build()); 
+        } catch (const yexception& ex) { 
             UNIT_ASSERT(TString(ex.what()).Contains("Incorrect type for parameter Param1"));
-            return;
-        }
-
-        UNIT_FAIL("Expected exception.");
-    }
+            return; 
+        } 
+ 
+        UNIT_FAIL("Expected exception."); 
+    } 
 }
 
 } // namespace NMiniKQL

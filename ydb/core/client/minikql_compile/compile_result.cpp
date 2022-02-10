@@ -4,7 +4,7 @@
 namespace NYql {
 
 TMiniKQLCompileResult::TMiniKQLCompileResult(const TIssue& error) {
-    Errors.AddIssue(error);
+    Errors.AddIssue(error); 
 }
 
 TMiniKQLCompileResult::TMiniKQLCompileResult(const TIssues& errors)

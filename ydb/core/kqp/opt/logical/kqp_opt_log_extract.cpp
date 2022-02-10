@@ -8,7 +8,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 #include <ydb/library/yql/providers/common/provider/yql_table_lookup.h>
 
-namespace NKikimr::NKqp::NOpt {
+namespace NKikimr::NKqp::NOpt { 
 
 using namespace NYql;
 using namespace NYql::NCommon;
@@ -111,5 +111,5 @@ TExprBase KqpApplyExtractMembersToReadOlapTable(TExprBase node, TExprContext& ct
         .Done();
 }
 
-} // namespace NKikimr::NKqp::NOpt
+} // namespace NKikimr::NKqp::NOpt 
 

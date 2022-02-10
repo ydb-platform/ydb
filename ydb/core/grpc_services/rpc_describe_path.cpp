@@ -1,7 +1,7 @@
 #include "service_scheme.h"
 #include <ydb/core/grpc_services/base/base.h>
 
-#include "rpc_scheme_base.h"
+#include "rpc_scheme_base.h" 
 #include "rpc_common.h"
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -11,7 +11,7 @@ namespace NKikimr {
 namespace NGRpcService {
 
 using namespace NActors;
-using namespace Ydb;
+using namespace Ydb; 
 
 using TEvListDirectoryRequest = TGrpcRequestOperationCall<Ydb::Scheme::ListDirectoryRequest,
     Ydb::Scheme::ListDirectoryResponse>;
@@ -22,14 +22,14 @@ using TEvDescribePathRequest = TGrpcRequestOperationCall<Ydb::Scheme::DescribePa
 template <typename TDerived, typename TRequest, typename TResult, bool ListChildren = false>
 class TBaseDescribe : public TRpcSchemeRequestActor<TDerived, TRequest> {
     using TBase = TRpcSchemeRequestActor<TDerived, TRequest>;
-
+ 
 public:
     TBaseDescribe(IRequestOpCtx* msg)
-        : TBase(msg) {}
+        : TBase(msg) {} 
 
     void Bootstrap(const TActorContext &ctx) {
-        TBase::Bootstrap(ctx);
-
+        TBase::Bootstrap(ctx); 
+ 
         SendProposeRequest(ctx);
         this->Become(&TDerived::StateWork);
     }
@@ -50,7 +50,7 @@ private:
     void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
-            default: TBase::StateWork(ev, ctx);
+            default: TBase::StateWork(ev, ctx); 
         }
     }
 
@@ -84,7 +84,7 @@ private:
             }
             case NKikimrScheme::StatusNotAvailable: {
                 return this->Reply(Ydb::StatusIds::UNAVAILABLE, ctx);
-            }
+            } 
             default: {
                 return this->Reply(Ydb::StatusIds::GENERIC_ERROR, ctx);
             }

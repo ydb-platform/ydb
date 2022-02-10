@@ -63,10 +63,10 @@ public:
                 }
             }
 
-            Self->KeyExtractorItemNode->SetValue(CompCtx, NUdf::TUnboxedValue(Value));
+            Self->KeyExtractorItemNode->SetValue(CompCtx, NUdf::TUnboxedValue(Value)); 
             key = Self->KeyExtractorResultNode->GetValue(CompCtx);
-            Self->GroupSwitchKeyNode->SetValue(CompCtx, NUdf::TUnboxedValue(key));
-            Self->GroupSwitchItemNode->SetValue(CompCtx, NUdf::TUnboxedValue(Value));
+            Self->GroupSwitchKeyNode->SetValue(CompCtx, NUdf::TUnboxedValue(key)); 
+            Self->GroupSwitchItemNode->SetValue(CompCtx, NUdf::TUnboxedValue(Value)); 
             State = AtGroupStart;
 
             return NUdf::EFetchStatus::Ok;
@@ -89,7 +89,7 @@ public:
             }
 
             if (Fetching == State) {
-                Self->GroupSwitchItemNode->SetValue(CompCtx, NUdf::TUnboxedValue(Value));
+                Self->GroupSwitchItemNode->SetValue(CompCtx, NUdf::TUnboxedValue(Value)); 
                 if (Self->GroupSwitchResultNode->GetValue(CompCtx).template Get<bool>()) {
                     State = GroupFinished;
                     return NUdf::EFetchStatus::Finish;
@@ -152,7 +152,7 @@ public:
     TGroupingCoreWrapper(TComputationMutables& mutables,
         IComputationNode* stream,
         IComputationExternalNode* keyExtractorItem,
-        IComputationNode* keyExtractorResult,
+        IComputationNode* keyExtractorResult, 
         IComputationExternalNode* groupSwitchKey,
         IComputationExternalNode* groupSwitchItem,
         IComputationNode* groupSwitchResult,
@@ -160,10 +160,10 @@ public:
         IComputationNode* handlerResult)
         : TBaseComputation(mutables)
         , Stream(stream)
-        , KeyExtractorItemNode(keyExtractorItem)
-        , KeyExtractorResultNode(keyExtractorResult)
-        , GroupSwitchKeyNode(groupSwitchKey)
-        , GroupSwitchItemNode(groupSwitchItem)
+        , KeyExtractorItemNode(keyExtractorItem) 
+        , KeyExtractorResultNode(keyExtractorResult) 
+        , GroupSwitchKeyNode(groupSwitchKey) 
+        , GroupSwitchItemNode(groupSwitchItem) 
         , GroupSwitchResultNode(groupSwitchResult)
         , HandlerItemNode(handlerItem)
         , HandlerResultNode(handlerResult)
@@ -177,12 +177,12 @@ public:
 private:
     void RegisterDependencies() const final {
         this->DependsOn(Stream);
-        this->DependsOn(KeyExtractorResultNode);
+        this->DependsOn(KeyExtractorResultNode); 
         this->DependsOn(GroupSwitchResultNode);
         this->DependsOn(HandlerResultNode);
-        this->Own(KeyExtractorItemNode);
-        this->Own(GroupSwitchKeyNode);
-        this->Own(GroupSwitchItemNode);
+        this->Own(KeyExtractorItemNode); 
+        this->Own(GroupSwitchKeyNode); 
+        this->Own(GroupSwitchItemNode); 
         this->Own(HandlerItemNode);
     }
 
@@ -190,7 +190,7 @@ private:
     IComputationNode* const Stream;
 
     IComputationExternalNode* const KeyExtractorItemNode;
-    IComputationNode* const KeyExtractorResultNode;
+    IComputationNode* const KeyExtractorResultNode; 
 
     IComputationExternalNode* const GroupSwitchKeyNode;
     IComputationExternalNode* const GroupSwitchItemNode;
@@ -228,12 +228,12 @@ IComputationNode* WrapGroupingCore(TCallable& callable, const TComputationNodeFa
     }
 
     return new TGroupingCoreWrapper<false>(
-        ctx.Mutables,
-        stream,
-        keyExtractorItem,
-        keyExtractorResult,
-        groupSwitchKey,
-        groupSwitchItem,
+        ctx.Mutables, 
+        stream, 
+        keyExtractorItem, 
+        keyExtractorResult, 
+        groupSwitchKey, 
+        groupSwitchItem, 
         groupSwitchResult,
         nullptr,
         nullptr);

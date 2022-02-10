@@ -2,7 +2,7 @@ syntax = "proto3";
 option cc_enable_arenas = true;
 
 import "google/protobuf/any.proto";
-import "google/protobuf/duration.proto";
+import "google/protobuf/duration.proto"; 
 
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_common.proto";
@@ -17,37 +17,37 @@ option java_outer_classname = "OperationProtos";
 message OperationParams {
     enum OperationMode {
         OPERATION_MODE_UNSPECIFIED = 0;
-
-        // Server will only reply once operation is finished (ready=true), and operation object won't be
-        // accessible after the reply. This is a basic request-response mode.
-        SYNC = 1;
+ 
+        // Server will only reply once operation is finished (ready=true), and operation object won't be 
+        // accessible after the reply. This is a basic request-response mode. 
+        SYNC = 1; 
 
         ASYNC = 2;
     }
 
     OperationMode operation_mode = 1;
-
-    // Indicates that client is no longer interested in the result of operation after the specified duration
-    // starting from the time operation arrives at the server.
-    // Server will try to stop the execution of operation and if no result is currently available the operation
-    // will receive TIMEOUT status code, which will be sent back to client if it was waiting for the operation result.
-    // Timeout of operation does not tell anything about its result, it might be completed successfully
-    // or cancelled on server.
-    google.protobuf.Duration operation_timeout = 2;
-
-    // Server will try to cancel the operation after the specified duration starting from the time
-    // the operation arrives at server.
-    // In case of successful cancellation operation will receive CANCELLED status code, which will be
-    // sent back to client if it was waiting for the operation result.
-    // In case when cancellation isn't possible, no action will be performed.
-    google.protobuf.Duration cancel_after = 3;
+ 
+    // Indicates that client is no longer interested in the result of operation after the specified duration 
+    // starting from the time operation arrives at the server. 
+    // Server will try to stop the execution of operation and if no result is currently available the operation 
+    // will receive TIMEOUT status code, which will be sent back to client if it was waiting for the operation result. 
+    // Timeout of operation does not tell anything about its result, it might be completed successfully 
+    // or cancelled on server. 
+    google.protobuf.Duration operation_timeout = 2; 
+ 
+    // Server will try to cancel the operation after the specified duration starting from the time 
+    // the operation arrives at server. 
+    // In case of successful cancellation operation will receive CANCELLED status code, which will be 
+    // sent back to client if it was waiting for the operation result. 
+    // In case when cancellation isn't possible, no action will be performed. 
+    google.protobuf.Duration cancel_after = 3; 
 
     // User-defined labels of operation.
     map<string, string> labels = 4 [(map_key).length.le = 128, (length).le = 128];
-
-    // If enabled, server will report cost information, if supported by the operation.
-    // This flag is mostly useful for SYNC operations, to get the cost information in the response.
-    Ydb.FeatureFlag.Status report_cost_info = 5;
+ 
+    // If enabled, server will report cost information, if supported by the operation. 
+    // This flag is mostly useful for SYNC operations, to get the cost information in the response. 
+    Ydb.FeatureFlag.Status report_cost_info = 5; 
 }
 
 message GetOperationRequest {
@@ -90,8 +90,8 @@ message ListOperationsResponse {
 }
 
 message Operation {
-    // Identifier of the operation, empty value means no active operation object is present (it was forgotten or
-    // not created in the first place, as in SYNC operation mode).
+    // Identifier of the operation, empty value means no active operation object is present (it was forgotten or 
+    // not created in the first place, as in SYNC operation mode). 
     string id = 1;
 
     // true - this operation has beed finished (doesn't matter successful or not),
@@ -106,10 +106,10 @@ message Operation {
     google.protobuf.Any result = 5;
 
     google.protobuf.Any metadata = 6;
-
-    // Contains information about the cost of the operation.
-    // For completed operations, it shows the final cost of the operation.
-    // For operations in progress, it might indicate the current cost of the operation (if supported).
-    CostInfo cost_info = 7;
+ 
+    // Contains information about the cost of the operation. 
+    // For completed operations, it shows the final cost of the operation. 
+    // For operations in progress, it might indicate the current cost of the operation (if supported). 
+    CostInfo cost_info = 7; 
 }
 

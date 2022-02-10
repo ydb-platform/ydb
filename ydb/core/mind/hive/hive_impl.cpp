@@ -5,7 +5,7 @@
 #include <ydb/core/protos/counters_hive.pb.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/core/util/yverify_stream.h>
-#include <library/cpp/actors/interconnect/interconnect.h> 
+#include <library/cpp/actors/interconnect/interconnect.h>
 #include <util/generic/array_ref.h>
 
 template <>

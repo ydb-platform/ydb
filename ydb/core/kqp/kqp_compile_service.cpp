@@ -8,8 +8,8 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/library/aclib/aclib.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h> 
-#include <library/cpp/actors/core/hfunc.h> 
+#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/cache/cache.h>
 
 #include <util/string/escape.h>

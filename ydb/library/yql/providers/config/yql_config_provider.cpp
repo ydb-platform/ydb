@@ -14,7 +14,7 @@
 #include <ydb/library/yql/utils/fetch/fetch.h>
 #include <ydb/library/yql/utils/retry.h>
 
-#include <library/cpp/json/json_reader.h> 
+#include <library/cpp/json/json_reader.h>
 
 #include <util/string/cast.h>
 

@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/openssl/method) 
+UNITTEST_FOR(library/cpp/openssl/method)
 
 OWNER(somov deshevoy)
 

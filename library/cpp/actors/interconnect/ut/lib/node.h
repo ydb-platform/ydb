@@ -1,13 +1,13 @@
 #pragma once
 
-#include <library/cpp/actors/core/actorsystem.h> 
-#include <library/cpp/actors/core/executor_pool_basic.h> 
-#include <library/cpp/actors/core/scheduler_basic.h> 
+#include <library/cpp/actors/core/actorsystem.h>
+#include <library/cpp/actors/core/executor_pool_basic.h>
+#include <library/cpp/actors/core/scheduler_basic.h>
 #include <library/cpp/actors/core/mailbox.h>
 #include <library/cpp/actors/dnsresolver/dnsresolver.h>
 
-#include <library/cpp/actors/interconnect/interconnect_tcp_server.h> 
-#include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h> 
+#include <library/cpp/actors/interconnect/interconnect_tcp_server.h>
+#include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h>
 #include <library/cpp/actors/interconnect/interconnect_proxy_wrapper.h>
 
 using namespace NActors;

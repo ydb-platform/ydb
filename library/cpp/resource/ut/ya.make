@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/resource/ut/lib) 
+UNITTEST_FOR(library/cpp/resource/ut/lib)
 
 OWNER(pg)
 

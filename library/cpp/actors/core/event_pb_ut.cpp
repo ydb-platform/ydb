@@ -1,7 +1,7 @@
 #include "event_pb.h"
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/actors/protos/unittests.pb.h> 
+#include <library/cpp/actors/protos/unittests.pb.h>
 
 Y_UNIT_TEST_SUITE(TEventSerialization) {
     struct TMockEvent: public NActors::IEventBase {

@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/actors/prof) 
+UNITTEST_FOR(library/cpp/actors/prof)
 
 OWNER(
     agri

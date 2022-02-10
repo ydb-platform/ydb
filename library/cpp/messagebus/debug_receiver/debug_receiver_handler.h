@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/messagebus/ybus.h> 
+#include <library/cpp/messagebus/ybus.h>
 
 struct TDebugReceiverHandler: public NBus::IBusServerHandler {
     NBus::TBusServerSession* ServerSession;

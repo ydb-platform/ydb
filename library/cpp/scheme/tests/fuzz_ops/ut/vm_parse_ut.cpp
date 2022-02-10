@@ -1,4 +1,4 @@
-#include <library/cpp/scheme/tests/fuzz_ops/lib/vm_parse.h> 
+#include <library/cpp/scheme/tests/fuzz_ops/lib/vm_parse.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 Y_UNIT_TEST_SUITE(TestParseNextAction) {

@@ -9,9 +9,9 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core 
+    library/cpp/actors/core
     library/cpp/actors/interconnect/mock
-    library/cpp/actors/protos 
+    library/cpp/actors/protos
     library/cpp/random_provider
     library/cpp/time_provider
 )

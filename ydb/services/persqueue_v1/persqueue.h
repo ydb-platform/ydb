@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/core/actorsystem.h> 
+#include <library/cpp/actors/core/actorsystem.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 

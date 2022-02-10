@@ -9,9 +9,9 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/codecs 
-    library/cpp/archive 
-    library/cpp/svnversion 
+    library/cpp/codecs
+    library/cpp/archive
+    library/cpp/svnversion
     util/draft
 )
 

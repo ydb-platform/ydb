@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <library/cpp/charset/doccodes.h> 
+#include <library/cpp/charset/doccodes.h>
 
 using namespace NTld;
 

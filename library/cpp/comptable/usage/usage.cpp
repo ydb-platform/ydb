@@ -1,4 +1,4 @@
-#include <library/cpp/comptable/comptable.h> 
+#include <library/cpp/comptable/comptable.h>
 
 #include <util/random/random.h>
 #include <util/random/fast.h>

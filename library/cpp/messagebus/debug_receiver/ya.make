@@ -10,8 +10,8 @@ SRCS(
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/lwtrace 
-    library/cpp/messagebus 
+    library/cpp/lwtrace
+    library/cpp/messagebus
 )
 
 END()

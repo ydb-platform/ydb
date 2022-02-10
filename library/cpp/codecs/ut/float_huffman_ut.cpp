@@ -1,4 +1,4 @@
-#include <library/cpp/codecs/float_huffman.h> 
+#include <library/cpp/codecs/float_huffman.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

@@ -9,7 +9,7 @@
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/interconnect.h> 
+#include <library/cpp/actors/core/interconnect.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/xrange.h>

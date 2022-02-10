@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/lwtrace/all.h> 
+#include <library/cpp/lwtrace/all.h>
 
 #define SCHLAB_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES) \
     PROBE(AddJob, GROUPS("SchLab"), \

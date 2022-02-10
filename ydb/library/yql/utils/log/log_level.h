@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/logger/priority.h> 
+#include <library/cpp/logger/priority.h>
 
 #include <util/generic/strbuf.h>
 #include <util/generic/yexception.h>

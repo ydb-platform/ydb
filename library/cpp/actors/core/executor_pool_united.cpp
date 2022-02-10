@@ -6,7 +6,7 @@
 #include "probes.h"
 #include "mailbox.h"
 #include "scheduler_queue.h"
-#include <library/cpp/actors/util/affinity.h> 
+#include <library/cpp/actors/util/affinity.h>
 #include <library/cpp/actors/util/datetime.h>
 #include <library/cpp/actors/util/futex.h>
 #include <library/cpp/actors/util/intrinsics.h>

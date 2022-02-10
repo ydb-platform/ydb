@@ -7,7 +7,7 @@
 #include <ydb/core/scheme_types/scheme_types.h>
 
 #include <util/stream/output.h> // for IOutputStream
-#include <library/cpp/deprecated/enum_codegen/enum_codegen.h> 
+#include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
 
 namespace NKikimr {

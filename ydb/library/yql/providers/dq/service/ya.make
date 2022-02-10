@@ -10,13 +10,13 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core 
+    library/cpp/actors/core
     library/cpp/actors/dnsresolver
-    library/cpp/actors/interconnect 
-    library/cpp/build_info 
+    library/cpp/actors/interconnect
+    library/cpp/build_info
     library/cpp/grpc/server
     library/cpp/grpc/server/actors
-    library/cpp/svnversion 
+    library/cpp/svnversion
     library/cpp/threading/future
     ydb/library/yql/sql
     ydb/public/api/protos

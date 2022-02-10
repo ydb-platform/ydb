@@ -32,7 +32,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/charset 
+    library/cpp/charset
 )
 
 END()

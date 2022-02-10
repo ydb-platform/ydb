@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/codecs/codecs.h> 
+#include <library/cpp/codecs/codecs.h>
 
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>

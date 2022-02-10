@@ -25,7 +25,7 @@
 #include <thrift/transport/TSocketPool.h>
 
 using std::pair;
-using std::random_shuffle; 
+using std::random_shuffle;
 using std::string;
 using std::vector;
 

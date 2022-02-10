@@ -5,7 +5,7 @@
 
 #include <memory>
 
-#include <library/cpp/json/json_value.h> 
+#include <library/cpp/json/json_value.h>
 
 namespace NIdxTest {
 

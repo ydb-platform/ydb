@@ -23,7 +23,7 @@ RESOURCE(
 )
 
 PEERDIR(
-    library/cpp/resource 
+    library/cpp/resource
     library/cpp/monlib/encode/protobuf
     library/cpp/monlib/encode/json
     library/cpp/threading/future

@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/digest/old_crc) 
+UNITTEST_FOR(library/cpp/digest/old_crc)
 
 OWNER(
     pg

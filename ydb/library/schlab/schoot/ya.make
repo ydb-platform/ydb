@@ -7,7 +7,7 @@ OWNER(
 
 PEERDIR(
     library/cpp/containers/stack_vector
-    library/cpp/protobuf/json 
+    library/cpp/protobuf/json
     ydb/library/schlab/protos
 )
 

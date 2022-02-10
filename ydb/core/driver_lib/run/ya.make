@@ -43,25 +43,25 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
-    library/cpp/actors/core 
+    library/cpp/actors/core
     library/cpp/actors/dnsresolver
-    library/cpp/actors/interconnect 
-    library/cpp/actors/memory_log 
-    library/cpp/actors/prof 
-    library/cpp/actors/protos 
-    library/cpp/actors/util 
+    library/cpp/actors/interconnect
+    library/cpp/actors/memory_log
+    library/cpp/actors/prof
+    library/cpp/actors/protos
+    library/cpp/actors/util
     library/cpp/getopt/small
-    library/cpp/grpc/client 
+    library/cpp/grpc/client
     library/cpp/grpc/server
     library/cpp/grpc/server/actors
-    library/cpp/logger 
-    library/cpp/malloc/api 
-    library/cpp/messagebus 
+    library/cpp/logger
+    library/cpp/malloc/api
+    library/cpp/messagebus
     library/cpp/monlib/dynamic_counters
     library/cpp/monlib/messagebus
-    library/cpp/sighandler 
+    library/cpp/sighandler
     library/cpp/string_utils/parse_size
-    library/cpp/svnversion 
+    library/cpp/svnversion
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/blobstorage

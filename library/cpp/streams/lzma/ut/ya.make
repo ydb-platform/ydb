@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/streams/lzma) 
+UNITTEST_FOR(library/cpp/streams/lzma)
 
 OWNER(
     pg

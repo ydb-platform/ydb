@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/deprecated/kmp) 
+UNITTEST_FOR(library/cpp/deprecated/kmp)
 
 OWNER(g:util)
 

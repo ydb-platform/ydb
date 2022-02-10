@@ -3,7 +3,7 @@
 #include "mkql_engine_flat_impl.h"
 #include "mkql_proto.h"
 
-#include <library/cpp/actors/core/log.h> 
+#include <library/cpp/actors/core/log.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>

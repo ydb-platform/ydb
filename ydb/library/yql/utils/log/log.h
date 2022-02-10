@@ -5,7 +5,7 @@
 #include "context.h"
 #include "profile.h"
 
-#include <library/cpp/logger/global/common.h> 
+#include <library/cpp/logger/global/common.h>
 
 #include <util/system/atomic.h>
 #include <util/stream/output.h>

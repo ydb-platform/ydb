@@ -1,7 +1,7 @@
 #pragma once
 
 #include <library/cpp/grpc/server/grpc_server.h>
-#include <library/cpp/actors/core/actorsystem.h> 
+#include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/monlib/counters/counters.h>
 #include <ydb/public/api/grpc/draft/dummy.grpc.pb.h>
 

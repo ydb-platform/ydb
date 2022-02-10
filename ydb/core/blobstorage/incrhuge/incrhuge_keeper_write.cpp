@@ -1,6 +1,6 @@
 #include "incrhuge_keeper_write.h"
 #include "incrhuge_keeper.h"
-#include <library/cpp/digest/crc32c/crc32c.h> 
+#include <library/cpp/digest/crc32c/crc32c.h>
 
 namespace NKikimr {
     namespace NIncrHuge {

@@ -10,7 +10,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/testing/gmock_in_unittest 
+    library/cpp/testing/gmock_in_unittest
 )
 
 END()

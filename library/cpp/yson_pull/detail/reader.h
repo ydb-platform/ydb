@@ -3,7 +3,7 @@
 #include "lexer_base.h"
 #include "symbols.h"
 
-#include <library/cpp/yson_pull/reader.h> 
+#include <library/cpp/yson_pull/reader.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>

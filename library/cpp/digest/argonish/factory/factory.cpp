@@ -2,14 +2,14 @@
 // Created by Evgeny Sidorov on 12/04/17.
 //
 
-#include <library/cpp/digest/argonish/blake2b.h> 
-#include <library/cpp/digest/argonish/argon2.h> 
-#include <library/cpp/digest/argonish/internal/proxies/ref/proxy_ref.h> 
+#include <library/cpp/digest/argonish/blake2b.h>
+#include <library/cpp/digest/argonish/argon2.h>
+#include <library/cpp/digest/argonish/internal/proxies/ref/proxy_ref.h>
 #if !defined(_arm64_)
-#include <library/cpp/digest/argonish/internal/proxies/sse2/proxy_sse2.h> 
-#include <library/cpp/digest/argonish/internal/proxies/ssse3/proxy_ssse3.h> 
-#include <library/cpp/digest/argonish/internal/proxies/sse41/proxy_sse41.h> 
-#include <library/cpp/digest/argonish/internal/proxies/avx2/proxy_avx2.h> 
+#include <library/cpp/digest/argonish/internal/proxies/sse2/proxy_sse2.h>
+#include <library/cpp/digest/argonish/internal/proxies/ssse3/proxy_ssse3.h>
+#include <library/cpp/digest/argonish/internal/proxies/sse41/proxy_sse41.h>
+#include <library/cpp/digest/argonish/internal/proxies/avx2/proxy_avx2.h>
 #endif
 
 #include <util/system/cpu_id.h>

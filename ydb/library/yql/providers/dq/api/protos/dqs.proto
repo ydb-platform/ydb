@@ -9,7 +9,7 @@ import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/library/yql/providers/dq/api/protos/service.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_value.proto";
-import "library/cpp/actors/protos/actors.proto"; 
+import "library/cpp/actors/protos/actors.proto";
 
 message TAllocateWorkersRequest {
     uint32 Count = 1;

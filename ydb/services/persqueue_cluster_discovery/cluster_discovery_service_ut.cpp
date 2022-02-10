@@ -9,7 +9,7 @@
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 
-#include <library/cpp/actors/http/http_proxy.h> 
+#include <library/cpp/actors/http/http_proxy.h>
 
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>

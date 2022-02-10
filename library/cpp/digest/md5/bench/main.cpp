@@ -1,6 +1,6 @@
 #include <benchmark/benchmark.h>
 
-#include <library/cpp/digest/md5/md5.h> 
+#include <library/cpp/digest/md5/md5.h>
 
 #define MD5_DEF(N)                                                  \
     static void MD5Benchmark_##N(benchmark::State& st) {            \

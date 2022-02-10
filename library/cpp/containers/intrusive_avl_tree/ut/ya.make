@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/containers/intrusive_avl_tree) 
+UNITTEST_FOR(library/cpp/containers/intrusive_avl_tree)
 
 OWNER(
     pg

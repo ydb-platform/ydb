@@ -1,6 +1,6 @@
 #include <contrib/libs/cctz/include/cctz/zone_info_source.h>
 
-#include <library/cpp/resource/resource.h> 
+#include <library/cpp/resource/resource.h>
 
 #include <util/generic/string.h>
 #include <util/stream/str.h>

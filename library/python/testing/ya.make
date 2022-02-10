@@ -8,12 +8,12 @@ RECURSE(
     gtest
     gtest/test
     gtest/test/gtest
-    pyremock 
+    pyremock
     pytest_runner
     pytest_runner/example
     pytest_runner/test
     recipe
-    system_info 
+    system_info
     types_test
     yapackage
     yapackage/test

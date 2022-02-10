@@ -4,7 +4,7 @@ OWNER(g:messagebus)
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/deprecated/enum_codegen 
+    library/cpp/deprecated/enum_codegen
 )
 
 SRCS(

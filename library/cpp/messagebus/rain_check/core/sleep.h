@@ -2,7 +2,7 @@
 
 #include "fwd.h"
 
-#include <library/cpp/messagebus/scheduler/scheduler.h> 
+#include <library/cpp/messagebus/scheduler/scheduler.h>
 
 #include <util/datetime/base.h>
 

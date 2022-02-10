@@ -6,7 +6,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/events/internal.h>
 
-#include <library/cpp/actors/interconnect/interconnect.h> 
+#include <library/cpp/actors/interconnect/interconnect.h>
 
 namespace NKikimr {
 namespace NPQ {

@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/yson_pull) 
+UNITTEST_FOR(library/cpp/yson_pull)
 
 OWNER(borman)
 

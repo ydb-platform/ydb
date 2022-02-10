@@ -3,7 +3,7 @@
 #include "event.h"
 #include "event_pb.h"
 
-#include <library/cpp/actors/protos/actors.pb.h> 
+#include <library/cpp/actors/protos/actors.pb.h>
 #include <util/system/unaligned_mem.h>
 
 namespace NActors {

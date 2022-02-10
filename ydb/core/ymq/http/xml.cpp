@@ -1,7 +1,7 @@
 #include "xml.h"
 #include "xml_builder.h"
 
-#include <library/cpp/protobuf/json/proto2json.h> 
+#include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/string/builder.h>

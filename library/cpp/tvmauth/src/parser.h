@@ -1,17 +1,17 @@
 #pragma once
 
-#include <library/cpp/tvmauth/src/protos/ticket2.pb.h> 
-#include <library/cpp/tvmauth/src/rw/keys.h> 
+#include <library/cpp/tvmauth/src/protos/ticket2.pb.h>
+#include <library/cpp/tvmauth/src/rw/keys.h>
 
-#include <library/cpp/tvmauth/ticket_status.h> 
+#include <library/cpp/tvmauth/ticket_status.h>
 
 #include <util/generic/fwd.h>
 
 #include <string>
 
-namespace NTvmAuth { 
+namespace NTvmAuth {
     struct TParserTvmKeys {
-        static inline const char DELIM = ':'; 
+        static inline const char DELIM = ':';
         static TString ParseStrV1(TStringBuf str);
     };
 
@@ -22,12 +22,12 @@ namespace NTvmAuth {
         static TStringBuf ServiceFlag();
 
         struct TRes {
-            TRes(ETicketStatus status) 
+            TRes(ETicketStatus status)
                 : Status(status)
             {
             }
 
-            ETicketStatus Status; 
+            ETicketStatus Status;
 
             ticket2::Ticket Ticket;
         };
@@ -35,7 +35,7 @@ namespace NTvmAuth {
 
         // private:
         struct TStrRes {
-            const ETicketStatus Status; 
+            const ETicketStatus Status;
 
             TString Proto;
             TString Sign;
@@ -48,4 +48,4 @@ namespace NTvmAuth {
         };
         static TStrRes ParseStrV3(TStringBuf body, TStringBuf type);
     };
-} 
+}

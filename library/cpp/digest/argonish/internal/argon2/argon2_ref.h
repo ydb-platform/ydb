@@ -1,7 +1,7 @@
 #pragma once
 
 #include "argon2_base.h"
-#include <library/cpp/digest/argonish/internal/rotations/rotations_ref.h> 
+#include <library/cpp/digest/argonish/internal/rotations/rotations_ref.h>
 
 namespace NArgonish {
     static inline ui64 FBlaMka(ui64 x, ui64 y) {

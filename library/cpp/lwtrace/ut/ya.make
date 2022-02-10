@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/lwtrace) 
+UNITTEST_FOR(library/cpp/lwtrace)
 
 OWNER(serxa)
 

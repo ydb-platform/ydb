@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/regex/pcre/regexp.h> 
+#include <library/cpp/regex/pcre/regexp.h>
 #include <util/generic/vector.h>
 
 namespace NYql {

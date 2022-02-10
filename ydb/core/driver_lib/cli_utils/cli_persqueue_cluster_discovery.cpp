@@ -7,7 +7,7 @@
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 
-#include <library/cpp/protobuf/json/proto2json.h> 
+#include <library/cpp/protobuf/json/proto2json.h>
 
 
 namespace NKikimr::NDriverClient {

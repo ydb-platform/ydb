@@ -2,7 +2,7 @@
 
 #include "mon_page.h"
 
-#include <library/cpp/resource/resource.h> 
+#include <library/cpp/resource/resource.h>
 
 namespace NMonitoring {
     struct TResourceMonPage: public IMonPage {

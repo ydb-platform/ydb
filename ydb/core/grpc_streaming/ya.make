@@ -7,7 +7,7 @@ OWNER(
 
 PEERDIR(
     contrib/libs/grpc
-    library/cpp/actors/core 
+    library/cpp/actors/core
     library/cpp/grpc/server
     ydb/core/base
 )

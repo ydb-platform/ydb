@@ -28,7 +28,7 @@ ENDIF()
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/regex/pcre 
+    library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/client/scheme_cache_lib
     ydb/core/tablet_flat/test/libs/rows

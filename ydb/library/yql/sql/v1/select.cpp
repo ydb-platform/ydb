@@ -6,7 +6,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
-#include <library/cpp/charset/ci_string.h> 
+#include <library/cpp/charset/ci_string.h>
 
 using namespace NYql;
 

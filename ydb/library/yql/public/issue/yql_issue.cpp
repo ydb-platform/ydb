@@ -3,7 +3,7 @@
 
 #include <ydb/library/yql/utils/utf8.h>
 
-#include <library/cpp/colorizer/output.h> 
+#include <library/cpp/colorizer/output.h>
 
 #include <util/string/ascii.h>
 #include <util/string/split.h>

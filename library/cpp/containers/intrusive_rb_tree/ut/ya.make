@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/containers/intrusive_rb_tree) 
+UNITTEST_FOR(library/cpp/containers/intrusive_rb_tree)
 
 OWNER(
     pg

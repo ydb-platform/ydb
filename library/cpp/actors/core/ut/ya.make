@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/actors/core) 
+UNITTEST_FOR(library/cpp/actors/core)
 
 OWNER(
     alexvru
@@ -24,8 +24,8 @@ ENDIF()
 
 
 PEERDIR(
-    library/cpp/actors/interconnect 
-    library/cpp/actors/testlib 
+    library/cpp/actors/interconnect
+    library/cpp/actors/testlib
 )
 
 SRCS(

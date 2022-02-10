@@ -1,5 +1,5 @@
-#include <library/cpp/tvmauth/src/rw/keys.h> 
-#include <library/cpp/tvmauth/src/rw/rw.h> 
+#include <library/cpp/tvmauth/src/rw/keys.h>
+#include <library/cpp/tvmauth/src/rw/rw.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -7,36 +7,36 @@
 #include <contrib/libs/openssl/include/openssl/bn.h>
 #include <contrib/libs/openssl/include/openssl/evp.h>
 
-namespace NTvmAuth { 
+namespace NTvmAuth {
     /*
  returns 0 in case of error
  */
-    int MakeKeysRw(TRwKey** skey, TRwKey** vkey) { 
+    int MakeKeysRw(TRwKey** skey, TRwKey** vkey) {
         int result = 0;
 
-        TRwKey* rw = RwNew(); 
+        TRwKey* rw = RwNew();
 
         do {
-            RwGenerateKey(rw, 2048); 
+            RwGenerateKey(rw, 2048);
 
             if (rw == nullptr) {
-                printf("RwGenerateKey failed\n"); 
+                printf("RwGenerateKey failed\n");
                 break; /* failed */
             }
 
-            printf("RW key bits: %d\n", BN_num_bits(rw->N)); 
+            printf("RW key bits: %d\n", BN_num_bits(rw->N));
 
             /* Set signing key */
-            *skey = RwPrivateKeyDup(rw); 
+            *skey = RwPrivateKeyDup(rw);
             if (*skey == nullptr) {
-                printf("RwPrivateKeyDup failed\n"); 
+                printf("RwPrivateKeyDup failed\n");
                 break;
             }
 
             /* Set verifier key */
-            *vkey = RwPublicKeyDup(rw); 
+            *vkey = RwPublicKeyDup(rw);
             if (*vkey == nullptr) {
-                printf("RwPublicKeyDup failed\n"); 
+                printf("RwPublicKeyDup failed\n");
                 break;
             }
 
@@ -45,14 +45,14 @@ namespace NTvmAuth {
         } while (0);
 
         if (rw) {
-            RwFree(rw); 
+            RwFree(rw);
             rw = nullptr;
         }
 
         return result;
     }
 
-    static void PrintIt(const char* label, const unsigned char* buff, size_t len) { 
+    static void PrintIt(const char* label, const unsigned char* buff, size_t len) {
         if (!buff || !len)
             return;
 
@@ -65,26 +65,26 @@ namespace NTvmAuth {
         printf("\n");
     }
 
-    int TestSignVerify() { 
-        TRwKey *skey = nullptr, *vkey = nullptr; 
+    int TestSignVerify() {
+        TRwKey *skey = nullptr, *vkey = nullptr;
         const char* msg = "Test test test test test";
         unsigned int msg_len = 0;
         int res = 0;
 
         msg_len = (unsigned int)strlen(msg);
-        if (MakeKeysRw(&skey, &vkey)) { 
-            unsigned char* sign = new unsigned char[RwModSize(skey) + 10]; 
-            int sign_len; 
-            printf("RwModSize(skey) returned %d\n", RwModSize(skey)); 
-            memset(sign, 0x00, RwModSize(skey) + 10); 
+        if (MakeKeysRw(&skey, &vkey)) {
+            unsigned char* sign = new unsigned char[RwModSize(skey) + 10];
+            int sign_len;
+            printf("RwModSize(skey) returned %d\n", RwModSize(skey));
+            memset(sign, 0x00, RwModSize(skey) + 10);
 
             printf("--- Signing call ---\n");
-            if ((sign_len = RwPssrSignMsg(msg_len, (unsigned char*)msg, sign, skey, (EVP_MD*)EVP_sha256())) != 0) { 
+            if ((sign_len = RwPssrSignMsg(msg_len, (unsigned char*)msg, sign, skey, (EVP_MD*)EVP_sha256())) != 0) {
 #ifdef RW_PRINT_DEBUG
                 BIGNUM* s = BN_new();
 #endif
                 printf("\n");
-                PrintIt("Signature", sign, RwModSize(skey)); 
+                PrintIt("Signature", sign, RwModSize(skey));
 
 #ifdef RW_PRINT_DEBUG
                 BN_bin2bn(sign, RW_mod_size(skey), s);
@@ -95,42 +95,42 @@ namespace NTvmAuth {
 #endif
 
                 printf("--- Verification call ---\n");
-                if (RwPssrVerifyMsg(msg_len, (unsigned char*)msg, sign, sign_len, vkey, (EVP_MD*)EVP_sha256())) { 
+                if (RwPssrVerifyMsg(msg_len, (unsigned char*)msg, sign, sign_len, vkey, (EVP_MD*)EVP_sha256())) {
                     printf("Verification: success!\n");
                     res = 1;
                 } else {
                     printf("Verification: failed!\n");
-                    printf("RwPssrVerifyMsg failed!\n"); 
+                    printf("RwPssrVerifyMsg failed!\n");
                     return 1;
                 }
             } else {
-                printf("RwPssrSignMsg failed!\n"); 
+                printf("RwPssrSignMsg failed!\n");
                 return 1;
             }
 
             if (sign != nullptr)
-                delete[] sign; 
+                delete[] sign;
 
         } else {
-            printf("MakeKeysRw failed!\n"); 
+            printf("MakeKeysRw failed!\n");
             return 1;
         }
 
         if (skey != nullptr) {
-            RwFree(skey); 
+            RwFree(skey);
         }
         if (vkey != nullptr)
-            RwFree(vkey); 
+            RwFree(vkey);
 
         return res;
     }
 }
 
-using namespace NTvmAuth; 
+using namespace NTvmAuth;
 Y_UNIT_TEST_SUITE(Rw) {
     Y_UNIT_TEST(SignVerify) {
         for (int i = 1; i < 10; ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(1, TestSignVerify()); 
+            UNIT_ASSERT_VALUES_EQUAL(1, TestSignVerify());
         }
     }
 
@@ -142,10 +142,10 @@ Y_UNIT_TEST_SUITE(Rw) {
         NRw::TRwPrivateKey priv3(Base64Decode("MIICVAKBgF9t2YJGAJkRRFq6fWhi3m1TFW1UOE0f6ZrfYhHAkpqGlKlh0QVfeTNPpeJhi75xXzCe6oReRUm-0DbqDNhTShC7uGUv1INYnRBQWH6E-5Fc5XrbDFSuGQw2EYjNfHy_HefHJXxQKAqPvxBDKMKkHgV58WtM6rC8jRi9sdX_ig2NAkEAg1xBDL_UkHy347HwioMscJFP-6eKeim3LoG9rd1EvOycxkoStZ4299OdyzzEXC9cjLdq401BXe-LairiMUgZawJBALn5ziBCc2ycMaYjZDon2EN55jBEe0tJdUy4mOi0ozTV9OLcBANds0nMYPjZFOY3QymzU0LcOa_An3JknI0C2ucCQGxtwTb3h7ux5Ld8jkeRYzkNoB2Y6Is5fqCYVRIJZmz0IcQFb2iW0EX92U7_BpgVuKlvSDTP9LuaxuPfmY6WXEECQBc_OcQITm2ThjTEbIdE-whvPMYIj2lpLqmXEx0WlGaavpxbgIBrtmk5jB8bIpzG6GU2amhbhzX4E-5Mk5GgW10CQBBriCGX-pIPlvx2PhFQZY4SKf908U9FNuXQN7W7qJedk5jJQlazxt76c7lnmIuF65GW7VxpqCu98W1FXEYpAy0CQG-lpihdvxaZ8SkHqNFZGnXhELT2YesLs7GehZSTwuUwx1iTpVm88PVROLYBDZqoGM316s9aZEJBALe5zEpxQTQCQQCDMszX1cQlbBCP08isuMQ2ac3S-qNd0mfRXDCRfMm4s7iuJ5MeHU3uPUVlA_MR4ULRbg1d97TGio912z4KPgjE"),
                                  0);
 
-        UNIT_ASSERT_EXCEPTION(NRw::TRwPrivateKey("asdzxcv", 0), yexception); 
+        UNIT_ASSERT_EXCEPTION(NRw::TRwPrivateKey("asdzxcv", 0), yexception);
         UNIT_ASSERT_EXCEPTION(NRw::TRwPrivateKey(Base64Decode("AKBgF9t2YJGAJkRRFq6fWhi3m1TFW1UOE0f6ZrfYhHAkpqGlKlh0QVfeTNPpeJhi75xXzCe6oReRUm-0DbqDNhTShC7uGUv1INYnRBQWH6E-5Fc5XrbDFSuGQw2EYjNfHy_HefHJXxQKAqPvxBDKMKkHgV58WtM6rC8jRi9sdX_ig2NAkEAg1xBDL_UkHy347HwioMscJFP-6eKeim3LoG9rd1EvOycxkoStZ4299OdyzzEXC9cjLdq401BXe-LairiMUgZawJBALn5ziBCc2ycMaYjZDon2EN55jBEe0tJdUy4mOi0ozTV9OLcBANds0nMYPjZFOY3QymzU0LcOa_An3JknI0C2ucCQGxtwTb3h7ux5Ld8jkeRYzkNoB2Y6Is5fqCYVRIJZmz0IcQFb2iW0EX92U7_BpgVuKlvSDTP9LuaxuPfmY6WXEECQBc_OcQITm2ThjTEbIdE-whvPMYIj2lpLqmXEx0WlGaavpxbgIBrtmk5jB8bIpzG6GU2amhbhzX4E-5Mk5GgW10CQBBriCGX-pIPlvx2PhFQZY4SKf908U9FNuXQN7W7qJedk5jJQlazxt76c7lnmIuF65GW7VxpqCu98W1FXEYpAy0CQG-lpihdvxaZ8SkHqNFZGnXhELT2YesLs7GehZSTwuUwx1iTpVm88PVROLYBDZqoGM316s9aZEJBALe5zEpxQTQCQQCDMszX1cQlbBCP08isuMQ2ac3S-qNd0mfRXDCRfMm4s7iuJ5MeHU3uPUVlA_MR4ULRbg1d97TGio912z4KP"),
                                                  0),
-                              yexception); 
+                              yexception);
 
         UNIT_ASSERT(!priv.SignTicket("").empty());
     }
@@ -155,8 +155,8 @@ Y_UNIT_TEST_SUITE(Rw) {
         NRw::TRwPublicKey pub2(Base64Decode("MIIBBQKCAQEA4RATOfumLD1n6ICrW5biaAl9VldinczmkNPjpUWwc3gs8PnkCrtdnPFmpBwW3gjHdSNU1OuEg5A6K1o1xiGv9sU-jd88zQBOdK6E2zwnJnkK6bNusKE2H2CLqg3aMWCmTa9JbzSy1uO7wa-xCqqNUuCko-2lyv12HhL1ICIH951SHDa4qO1U5xZhhlUAnqWi9R4tYDeMiF41WdOjwT2fg8UkbusThmxa3yjCXjD7OyjshPtukN8Tl3UyGtV_s2CLnE3f28VAi-AVW8FtgL22xbGhuyEplXRrtF1E5oV7NSqxH1FS0SYROA8ffYQGV5tfx5WDFHiXDEP6BzoVfeBDRQ=="));
         NRw::TRwPublicKey pub3(Base64Decode("MIGDAoGAX23ZgkYAmRFEWrp9aGLebVMVbVQ4TR_pmt9iEcCSmoaUqWHRBV95M0-l4mGLvnFfMJ7qhF5FSb7QNuoM2FNKELu4ZS_Ug1idEFBYfoT7kVzletsMVK4ZDDYRiM18fL8d58clfFAoCo-_EEMowqQeBXnxa0zqsLyNGL2x1f-KDY0="));
 
-        UNIT_ASSERT_EXCEPTION(NRw::TRwPublicKey("asdzxcv"), yexception); 
-        UNIT_ASSERT_EXCEPTION(NRw::TRwPublicKey(Base64Decode("AoGAX23ZgkYAmRFEWrp9aGLebVMVbVQ4TR_pmt9iEcCSmoaUqWHRBV95M0-l4mGLvnFfMJ7qhF5FSb7QNuoM2FNKELu4ZS_Ug1idEFBYfoT7kVzletsMVK40")), yexception); 
+        UNIT_ASSERT_EXCEPTION(NRw::TRwPublicKey("asdzxcv"), yexception);
+        UNIT_ASSERT_EXCEPTION(NRw::TRwPublicKey(Base64Decode("AoGAX23ZgkYAmRFEWrp9aGLebVMVbVQ4TR_pmt9iEcCSmoaUqWHRBV95M0-l4mGLvnFfMJ7qhF5FSb7QNuoM2FNKELu4ZS_Ug1idEFBYfoT7kVzletsMVK40")), yexception);
 
         UNIT_ASSERT(!pub.CheckSign("~~~", "~~~"));
     }
@@ -181,20 +181,20 @@ Y_UNIT_TEST_SUITE(Rw) {
     }
 
     Y_UNIT_TEST(Keygen) {
-        for (size_t idx = 0; idx < 100; ++idx) { 
-            NRw::TKeyPair pair = NRw::GenKeyPair(1024); 
-            NRw::TRwPrivateKey priv(pair.Private, 0); 
-            NRw::TRwPublicKey pub(pair.Public); 
+        for (size_t idx = 0; idx < 100; ++idx) {
+            NRw::TKeyPair pair = NRw::GenKeyPair(1024);
+            NRw::TRwPrivateKey priv(pair.Private, 0);
+            NRw::TRwPublicKey pub(pair.Public);
 
-            const TString data = "my magic data"; 
-            TStringStream s; 
-            s << "data='" << data << "'."; 
-            s << "private='" << Base64Encode(pair.Private) << "'."; 
-            s << "public='" << Base64Encode(pair.Public) << "'."; 
-            TString sign; 
-            UNIT_ASSERT_NO_EXCEPTION_C(sign = priv.SignTicket(data), s.Str()); 
-            s << "sign='" << Base64Encode(sign) << "'."; 
-            UNIT_ASSERT_C(pub.CheckSign(data, sign), s.Str()); 
-        } 
+            const TString data = "my magic data";
+            TStringStream s;
+            s << "data='" << data << "'.";
+            s << "private='" << Base64Encode(pair.Private) << "'.";
+            s << "public='" << Base64Encode(pair.Public) << "'.";
+            TString sign;
+            UNIT_ASSERT_NO_EXCEPTION_C(sign = priv.SignTicket(data), s.Str());
+            s << "sign='" << Base64Encode(sign) << "'.";
+            UNIT_ASSERT_C(pub.CheckSign(data, sign), s.Str());
+        }
     }
 }

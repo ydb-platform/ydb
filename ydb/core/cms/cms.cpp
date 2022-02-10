@@ -9,7 +9,7 @@
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
-#include <library/cpp/actors/interconnect/interconnect.h> 
+#include <library/cpp/actors/interconnect/interconnect.h>
 
 #include <util/generic/serialized_enum.h>
 #include <util/string/join.h>

@@ -3,7 +3,7 @@ UNITTEST()
 OWNER(nga)
 
 PEERDIR(
-    library/cpp/malloc/api/helpers 
+    library/cpp/malloc/api/helpers
 )
 
 SRCS(

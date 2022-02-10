@@ -11,7 +11,7 @@
 #include <util/system/hp_timer.h>
 #include <util/system/atomic.h>
 #include <util/system/condvar.h>
-#include <library/cpp/actors/core/actorsystem.h> 
+#include <library/cpp/actors/core/actorsystem.h>
 
 namespace NKikimr {
 namespace NPDisk {

@@ -1,6 +1,6 @@
 #include "keyvalue_flat_impl.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h> 
+#include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/hive.h>

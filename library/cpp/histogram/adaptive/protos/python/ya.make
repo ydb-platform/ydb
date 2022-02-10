@@ -1,3 +1,3 @@
 OWNER(abogutskiy)
 
-PY_PROTOS_FOR(library/cpp/histogram/adaptive/protos) 
+PY_PROTOS_FOR(library/cpp/histogram/adaptive/protos)

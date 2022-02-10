@@ -1,7 +1,7 @@
 #pragma once
 
-#include <library/cpp/codecs/codecs.h> 
-#include <library/cpp/packedtypes/longs.h> 
+#include <library/cpp/codecs/codecs.h>
+#include <library/cpp/packedtypes/longs.h>
 
 namespace NCodecs {
 

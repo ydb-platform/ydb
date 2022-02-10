@@ -1,4 +1,4 @@
-#include <library/cpp/protobuf/interop/cast.h> 
+#include <library/cpp/protobuf/interop/cast.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <google/protobuf/duration.pb.h>

@@ -12,7 +12,7 @@
 #include <library/cpp/yson/node/node.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/random_provider/random_provider.h>
-#include <library/cpp/enumbitset/enumbitset.h> 
+#include <library/cpp/enumbitset/enumbitset.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>

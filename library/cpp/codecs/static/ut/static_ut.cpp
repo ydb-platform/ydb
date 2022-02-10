@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/codecs/static/example/example.h> 
+#include <library/cpp/codecs/static/example/example.h>
 
 class TStaticCodecUsageTest: public NUnitTest::TTestBase {
     UNIT_TEST_SUITE(TStaticCodecUsageTest)

@@ -5,8 +5,8 @@
 
 #include <ydb/core/protos/blobstorage.pb.h>
 
-#include <library/cpp/actors/core/actor.h> 
-#include <library/cpp/actors/core/event_local.h> 
+#include <library/cpp/actors/core/actor.h>
+#include <library/cpp/actors/core/event_local.h>
 
 namespace NKikimr {
 

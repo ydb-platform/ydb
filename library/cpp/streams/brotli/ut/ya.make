@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/streams/brotli) 
+UNITTEST_FOR(library/cpp/streams/brotli)
 
 OWNER(
     levysotsky

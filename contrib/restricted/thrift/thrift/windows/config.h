@@ -109,6 +109,6 @@ typedef boost::uint8_t uint8_t;
   #endif
 #endif // __MINGW32__
 
-#define PACKAGE_VERSION "0.10.0-dev" 
- 
+#define PACKAGE_VERSION "0.10.0-dev"
+
 #endif // _THRIFT_WINDOWS_CONFIG_H_

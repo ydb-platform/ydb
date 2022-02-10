@@ -18,7 +18,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/c-ares
-    library/cpp/lwtrace 
+    library/cpp/lwtrace
 )
 
 END()

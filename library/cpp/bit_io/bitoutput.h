@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/deprecated/accessors/accessors.h> 
+#include <library/cpp/deprecated/accessors/accessors.h>
 
 #include <util/stream/output.h>
 #include <util/system/yassert.h>

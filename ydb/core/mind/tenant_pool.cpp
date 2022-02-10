@@ -12,10 +12,10 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/mon/mon.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h> 
-#include <library/cpp/actors/core/hfunc.h> 
-#include <library/cpp/actors/core/log.h> 
-#include <library/cpp/actors/core/mon.h> 
+#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/log.h>
+#include <library/cpp/actors/core/mon.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/generic/queue.h>

@@ -6,7 +6,7 @@ RECURSE(
     holders
     holders/ut
     io
-    io/ut 
+    io/ut
     method
     method/ut
     init

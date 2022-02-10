@@ -4,8 +4,8 @@
 
 #include <ydb/core/tablet_flat/util_basics.h>
 #include <ydb/core/tablet_flat/util_fmt_line.h>
-#include <library/cpp/actors/core/actor.h> 
-#include <library/cpp/actors/core/log_iface.h> 
+#include <library/cpp/actors/core/actor.h>
+#include <library/cpp/actors/core/log_iface.h>
 
 namespace NKikimr {
 namespace NFake {

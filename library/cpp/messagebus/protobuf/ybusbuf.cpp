@@ -1,6 +1,6 @@
 #include "ybusbuf.h"
 
-#include <library/cpp/messagebus/actor/what_thread_does.h> 
+#include <library/cpp/messagebus/actor/what_thread_does.h>
 
 #include <google/protobuf/io/coded_stream.h>
 

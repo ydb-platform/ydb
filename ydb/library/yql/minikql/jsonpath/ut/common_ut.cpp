@@ -90,7 +90,7 @@ public:
             {"1", "\"string\"", {"\"string\""}},
             {"1", "\"  space  another space  \"", {"\"  space  another space  \""}},
             {"1", "\"привет\"", {"\"привет\""}},
-            // NOTE: escaping is added by library/cpp/json 
+            // NOTE: escaping is added by library/cpp/json
             {"1", "\"\r\n\t\"", {"\"\\r\\n\\t\""}},
         };
 

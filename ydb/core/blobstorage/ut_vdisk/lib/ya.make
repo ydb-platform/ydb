@@ -49,9 +49,9 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/protos 
-    library/cpp/http/io 
-    library/cpp/openssl/io 
+    library/cpp/actors/protos
+    library/cpp/http/io
+    library/cpp/openssl/io
     library/cpp/string_utils/url
     library/cpp/testing/unittest
     ydb/core/base

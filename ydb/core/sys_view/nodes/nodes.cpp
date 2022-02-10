@@ -7,9 +7,9 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
-#include <library/cpp/actors/core/interconnect.h> 
-#include <library/cpp/actors/interconnect/interconnect.h> 
-#include <library/cpp/actors/core/hfunc.h> 
+#include <library/cpp/actors/core/interconnect.h>
+#include <library/cpp/actors/interconnect/interconnect.h>
+#include <library/cpp/actors/core/hfunc.h>
 
 namespace NKikimr {
 namespace NSysView {

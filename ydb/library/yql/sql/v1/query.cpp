@@ -6,7 +6,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
-#include <library/cpp/charset/ci_string.h> 
+#include <library/cpp/charset/ci_string.h>
 
 #include <util/digest/fnv.h>
 

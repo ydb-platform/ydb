@@ -3,7 +3,7 @@
 
 #include <google/protobuf/message.h>
 
-#include <library/cpp/protobuf/util/proto/merge.pb.h> 
+#include <library/cpp/protobuf/util/proto/merge.pb.h>
 
 namespace NProtoBuf {
     void RewriteMerge(const Message& src, Message& dst) {

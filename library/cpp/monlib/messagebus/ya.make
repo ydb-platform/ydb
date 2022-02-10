@@ -8,8 +8,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/messagebus 
-    library/cpp/messagebus/www 
+    library/cpp/messagebus
+    library/cpp/messagebus/www
     library/cpp/monlib/dynamic_counters
 )
 

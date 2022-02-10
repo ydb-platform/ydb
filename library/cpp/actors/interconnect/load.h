@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/core/actor.h> 
+#include <library/cpp/actors/core/actor.h>
 
 namespace NInterconnect {
     // load responder -- lives on every node as a service actor

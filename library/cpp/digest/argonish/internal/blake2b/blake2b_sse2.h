@@ -2,7 +2,7 @@
 
 #include <emmintrin.h>
 #include "blake2b.h"
-#include <library/cpp/digest/argonish/internal/rotations/rotations_sse2.h> 
+#include <library/cpp/digest/argonish/internal/rotations/rotations_sse2.h>
 
 namespace NArgonish {
     template <>

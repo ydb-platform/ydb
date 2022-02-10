@@ -8,7 +8,7 @@
 #include <ydb/library/yql/dq/common/dq_value.h>
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
 
-#include <library/cpp/protobuf/util/pb_io.h> 
+#include <library/cpp/protobuf/util/pb_io.h>
 
 namespace NKikimr {
 namespace NKqp {

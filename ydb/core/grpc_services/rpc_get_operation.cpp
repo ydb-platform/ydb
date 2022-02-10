@@ -16,7 +16,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
-#include <library/cpp/actors/core/hfunc.h> 
+#include <library/cpp/actors/core/hfunc.h>
 
 #include <util/string/cast.h>
 

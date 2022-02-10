@@ -17,8 +17,8 @@ SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/regex/pcre 
-    library/cpp/svnversion 
+    library/cpp/regex/pcre
+    library/cpp/svnversion
     ydb/core/kqp/ut/common
     ydb/core/testlib
     ydb/core/tx

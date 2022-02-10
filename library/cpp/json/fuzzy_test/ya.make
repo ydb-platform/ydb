@@ -3,7 +3,7 @@ FUZZ()
 OWNER(pg)
 
 PEERDIR(
-    library/cpp/json 
+    library/cpp/json
 )
 
 SRCS(

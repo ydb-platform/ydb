@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(pg)
 
 PEERDIR(
-    library/cpp/colorizer 
+    library/cpp/colorizer
 )
 
 SRCS(

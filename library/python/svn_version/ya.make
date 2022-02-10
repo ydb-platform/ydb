@@ -3,7 +3,7 @@ PY23_LIBRARY()
 OWNER(pg)
 
 PEERDIR(
-    library/cpp/svnversion 
+    library/cpp/svnversion
     contrib/python/future
 )
 

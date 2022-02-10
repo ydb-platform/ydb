@@ -1,7 +1,7 @@
-#include <library/cpp/codecs/static/tools/common/ct_common.h> 
-#include <library/cpp/codecs/static/static_codec_info.pb.h> 
-#include <library/cpp/codecs/static/builder.h> 
-#include <library/cpp/codecs/codecs.h> 
+#include <library/cpp/codecs/static/tools/common/ct_common.h>
+#include <library/cpp/codecs/static/static_codec_info.pb.h>
+#include <library/cpp/codecs/static/builder.h>
+#include <library/cpp/codecs/codecs.h>
 
 #include <library/cpp/getopt/small/last_getopt.h>
 

@@ -2,7 +2,7 @@
 
 #include "preprocessor.h"
 
-#include <library/cpp/lwtrace/protos/lwtrace.pb.h> 
+#include <library/cpp/lwtrace/protos/lwtrace.pb.h>
 
 #include <util/generic/cast.h>
 #include <util/generic/string.h>

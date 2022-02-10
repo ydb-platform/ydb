@@ -11,7 +11,7 @@
 #include <ydb/core/protos/tablet_tx.pb.h>
 #include <ydb/core/tablet/tablet_metrics.h>
 
-#include <library/cpp/deprecated/enum_codegen/enum_codegen.h> 
+#include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 #include <util/generic/deque.h>
 #include <util/generic/vector.h>
 #include <util/datetime/base.h>

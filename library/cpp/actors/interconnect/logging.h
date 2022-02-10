@@ -1,7 +1,7 @@
 #pragma once
 
-#include <library/cpp/actors/core/log.h> 
-#include <library/cpp/actors/protos/services_common.pb.h> 
+#include <library/cpp/actors/core/log.h>
+#include <library/cpp/actors/protos/services_common.pb.h>
 
 #define LOG_LOG_IC_X(component, marker, priority, ...)                                                                                   \
     do {                                                                                                                               \

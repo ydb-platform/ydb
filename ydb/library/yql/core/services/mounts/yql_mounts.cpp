@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/core/yql_library_compiler.h>
 
-#include <library/cpp/resource/resource.h> 
+#include <library/cpp/resource/resource.h>
 
 #include <util/folder/path.h>
 #include <util/stream/file.h>

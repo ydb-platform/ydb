@@ -7,7 +7,7 @@
 
 #include <ydb/core/protos/config.pb.h>
 
-#include <library/cpp/scheme/scheme.h> 
+#include <library/cpp/scheme/scheme.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>

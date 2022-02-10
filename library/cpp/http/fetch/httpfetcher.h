@@ -4,7 +4,7 @@
 #include <io.h>
 #endif
 
-#include <library/cpp/http/misc/httpdate.h> 
+#include <library/cpp/http/misc/httpdate.h>
 
 #include "httpagent.h"
 #include "httpparser.h"

@@ -1,4 +1,4 @@
-#include <library/cpp/lwtrace/all.h> 
+#include <library/cpp/lwtrace/all.h>
 #include <google/protobuf/text_format.h>
 #include "my_action.h"
 

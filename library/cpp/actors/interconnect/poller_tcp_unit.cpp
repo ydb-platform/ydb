@@ -7,8 +7,8 @@
 #include "poller_tcp_unit_select.h"
 #include "poller.h"
 
-#include <library/cpp/actors/prof/tag.h> 
-#include <library/cpp/actors/util/intrinsics.h> 
+#include <library/cpp/actors/prof/tag.h>
+#include <library/cpp/actors/util/intrinsics.h>
 
 #if defined _linux_
 #include <pthread.h>

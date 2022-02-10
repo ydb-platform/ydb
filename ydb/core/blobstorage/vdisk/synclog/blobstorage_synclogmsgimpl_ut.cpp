@@ -96,9 +96,9 @@ Y_UNIT_TEST_SUITE(ReorderCodecTest) {
 }
 
 
-#include <library/cpp/codecs/pfor_codec.h> 
-#include <library/cpp/codecs/huffman_codec.h> 
-#include <library/cpp/codecs/solar_codec.h> 
+#include <library/cpp/codecs/pfor_codec.h>
+#include <library/cpp/codecs/huffman_codec.h>
+#include <library/cpp/codecs/solar_codec.h>
 
 Y_UNIT_TEST_SUITE(CodecsTest) {
 

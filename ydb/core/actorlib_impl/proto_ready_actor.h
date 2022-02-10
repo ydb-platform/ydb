@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/core/actor.h> 
+#include <library/cpp/actors/core/actor.h>
 #include <util/system/type_name.h>
 
 template <typename TType, TType val>

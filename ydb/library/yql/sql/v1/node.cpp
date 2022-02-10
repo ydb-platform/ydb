@@ -8,7 +8,7 @@
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <library/cpp/charset/ci_string.h> 
+#include <library/cpp/charset/ci_string.h>
 #include <util/generic/hash_set.h>
 #include <util/stream/str.h>
 #include <util/string/cast.h>

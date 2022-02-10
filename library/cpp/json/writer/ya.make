@@ -7,7 +7,7 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/json/common 
+    library/cpp/json/common
 )
 
 SRCS(

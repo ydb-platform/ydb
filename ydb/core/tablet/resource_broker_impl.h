@@ -5,7 +5,7 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/appdata.h>
 
-#include <library/cpp/actors/core/hfunc.h> 
+#include <library/cpp/actors/core/hfunc.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>

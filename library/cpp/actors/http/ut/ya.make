@@ -1,11 +1,11 @@
-UNITTEST_FOR(library/cpp/actors/http) 
+UNITTEST_FOR(library/cpp/actors/http)
 
 OWNER(xenoxeno)
 
 SIZE(SMALL)
 
 PEERDIR(
-    library/cpp/actors/testlib 
+    library/cpp/actors/testlib
 )
 
 IF (NOT OS_WINDOWS)

@@ -1,12 +1,12 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <library/cpp/messagebus/test/helper/example.h> 
-#include <library/cpp/messagebus/test/helper/fixed_port.h> 
-#include <library/cpp/messagebus/test/helper/hanging_server.h> 
-#include <library/cpp/messagebus/test/helper/object_count_check.h> 
-#include <library/cpp/messagebus/test/helper/wait_for.h> 
+#include <library/cpp/messagebus/test/helper/example.h>
+#include <library/cpp/messagebus/test/helper/fixed_port.h>
+#include <library/cpp/messagebus/test/helper/hanging_server.h>
+#include <library/cpp/messagebus/test/helper/object_count_check.h>
+#include <library/cpp/messagebus/test/helper/wait_for.h>
 
-#include <library/cpp/messagebus/misc/test_sync.h> 
+#include <library/cpp/messagebus/misc/test_sync.h>
 
 #include <util/network/sock.h>
 

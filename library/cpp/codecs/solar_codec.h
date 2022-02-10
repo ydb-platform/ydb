@@ -2,7 +2,7 @@
 
 #include "codecs.h"
 #include <library/cpp/containers/comptrie/comptrie_trie.h>
-#include <library/cpp/codecs/greedy_dict/gd_builder.h> 
+#include <library/cpp/codecs/greedy_dict/gd_builder.h>
 
 #include <util/string/cast.h>
 #include <util/string/escape.h>

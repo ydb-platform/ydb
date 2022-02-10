@@ -41,8 +41,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/deprecated/enum_codegen 
-    library/cpp/resource 
+    library/cpp/deprecated/enum_codegen
+    library/cpp/resource
     ydb/library/yql/public/decimal
     ydb/library/yql/public/types
 )

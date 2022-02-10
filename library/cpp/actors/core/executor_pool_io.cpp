@@ -1,6 +1,6 @@
 #include "executor_pool_io.h"
 #include "mailbox.h"
-#include <library/cpp/actors/util/affinity.h> 
+#include <library/cpp/actors/util/affinity.h>
 #include <library/cpp/actors/util/datetime.h>
 
 namespace NActors {

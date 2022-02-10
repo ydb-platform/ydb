@@ -213,8 +213,8 @@ GENERATE_ENUM_SERIALIZATION(schemeshard_types.h)
 
 PEERDIR(
     contrib/libs/protobuf
-    library/cpp/deprecated/enum_codegen 
-    library/cpp/html/pcdata 
+    library/cpp/deprecated/enum_codegen
+    library/cpp/html/pcdata
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/blockstore/core

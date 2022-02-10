@@ -1,6 +1,6 @@
-#include <library/cpp/messagebus/rain_check/test/helper/misc.h> 
+#include <library/cpp/messagebus/rain_check/test/helper/misc.h>
 
-#include <library/cpp/messagebus/rain_check/core/rain_check.h> 
+#include <library/cpp/messagebus/rain_check/core/rain_check.h>
 
 #include <util/datetime/base.h>
 

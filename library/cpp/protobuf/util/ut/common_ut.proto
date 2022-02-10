@@ -1,5 +1,5 @@
 import "google/protobuf/descriptor.proto";
-import "library/cpp/protobuf/util/proto/merge.proto"; 
+import "library/cpp/protobuf/util/proto/merge.proto";
 
 package NProtobufUtilUt;
 

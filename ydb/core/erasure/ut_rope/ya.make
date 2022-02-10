@@ -21,7 +21,7 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/digest/crc32c 
+    library/cpp/digest/crc32c
     ydb/core/erasure
 )
 

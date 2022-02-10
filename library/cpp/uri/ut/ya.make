@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/uri) 
+UNITTEST_FOR(library/cpp/uri)
 
 OWNER(leo)
 
@@ -7,7 +7,7 @@ NO_OPTIMIZE()
 NO_WSHADOW()
 
 PEERDIR(
-    library/cpp/html/entity 
+    library/cpp/html/entity
 )
 
 SRCS(

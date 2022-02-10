@@ -1,6 +1,6 @@
 #include "mb_lwtrace.h"
 
-#include <library/cpp/lwtrace/all.h> 
+#include <library/cpp/lwtrace/all.h>
 
 #include <util/generic/singleton.h>
 

@@ -4,7 +4,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/kqp.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h> 
+#include <library/cpp/actors/core/actor_bootstrapped.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/scope.h>

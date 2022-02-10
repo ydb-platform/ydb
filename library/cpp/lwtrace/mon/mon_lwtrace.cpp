@@ -5,13 +5,13 @@
 
 #include <google/protobuf/text_format.h>
 #include <library/cpp/lwtrace/mon/analytics/all.h>
-#include <library/cpp/lwtrace/all.h> 
+#include <library/cpp/lwtrace/all.h>
 #include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/monlib/service/pages/resource_mon_page.h>
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <library/cpp/resource/resource.h> 
+#include <library/cpp/resource/resource.h>
 #include <library/cpp/string_utils/base64/base64.h>
-#include <library/cpp/html/pcdata/pcdata.h> 
+#include <library/cpp/html/pcdata/pcdata.h>
 #include <util/string/escape.h>
 #include <util/system/condvar.h>
 #include <util/system/execpath.h>
@@ -3852,7 +3852,7 @@ private:
                 "<li" << (request.GetParams().Get("mode") == "dashboards"? active: "") << "><a href=\"?mode=dashboards\">Dashboard</a></li>"
                 "<li" << (request.GetParams().Get("mode") == "builder"? active: "") << "><a href=\"?mode=builder\">Builder</a></li>"
                 "<li" << (request.GetParams().Get("mode") == "analytics"? active: "") << "><a href=\"?mode=analytics&id=\">Analytics</a></li>"
-                "<li><a href=\"https://wiki.yandex-team.ru/development/poisk/arcadia/library/cpp/lwtrace/\" target=\"_blank\">Documentation</a></li>" 
+                "<li><a href=\"https://wiki.yandex-team.ru/development/poisk/arcadia/library/cpp/lwtrace/\" target=\"_blank\">Documentation</a></li>"
               "</ul>"
             "</div></nav>"
             ;

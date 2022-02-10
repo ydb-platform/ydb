@@ -1,8 +1,8 @@
 #pragma once
 
-#include <library/cpp/messagebus/rain_check/core/task.h> 
+#include <library/cpp/messagebus/rain_check/core/task.h>
 
-#include <library/cpp/messagebus/ybus.h> 
+#include <library/cpp/messagebus/ybus.h>
 
 namespace NRainCheck {
     class TBusFuture: public TSubtaskCompletion {

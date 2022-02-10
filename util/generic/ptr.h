@@ -686,10 +686,10 @@ public:
         TIntrusiveConstPtr(nullptr).Swap(*this);
     }
 
-    inline long RefCount() const noexcept { 
-        return T_ ? Ops::RefCount(T_) : 0; 
-    } 
- 
+    inline long RefCount() const noexcept {
+        return T_ ? Ops::RefCount(T_) : 0;
+    }
+
 #ifdef __cpp_impl_three_way_comparison
     template <class Other>
     inline bool operator==(const Other& p) const noexcept {

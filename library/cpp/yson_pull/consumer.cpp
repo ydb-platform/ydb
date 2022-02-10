@@ -1,6 +1,6 @@
 #include "consumer.h"
 
-#include <library/cpp/yson_pull/detail/macros.h> 
+#include <library/cpp/yson_pull/detail/macros.h>
 
 using namespace NYsonPull;
 

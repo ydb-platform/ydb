@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <library/cpp/actors/core/mon.h> 
+#include <library/cpp/actors/core/mon.h>
 
 namespace NKikimr {
 namespace NCms {

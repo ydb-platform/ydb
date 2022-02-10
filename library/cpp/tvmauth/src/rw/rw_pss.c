@@ -72,21 +72,21 @@
 
 static const unsigned char zeroes[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
-static int PkcS1MgF1(unsigned char *mask, const int len, const unsigned char *seed, const int seedlen, const EVP_MD *dgst) { 
-    int i, outlen = 0; 
+static int PkcS1MgF1(unsigned char *mask, const int len, const unsigned char *seed, const int seedlen, const EVP_MD *dgst) {
+    int i, outlen = 0;
     unsigned char cnt[4];
-    EVP_MD_CTX* c = EVP_MD_CTX_create(); 
+    EVP_MD_CTX* c = EVP_MD_CTX_create();
     unsigned char md[EVP_MAX_MD_SIZE];
     int mdlen;
     int rv = -1;
 
-    if (!c) { 
-        return rv; 
-    } 
- 
+    if (!c) {
+        return rv;
+    }
+
     mdlen = EVP_MD_size(dgst);
 
-    if (mdlen < 0 || seedlen < 0) 
+    if (mdlen < 0 || seedlen < 0)
         goto err;
 
     for (i = 0; outlen < len; i++) {
@@ -95,15 +95,15 @@ static int PkcS1MgF1(unsigned char *mask, const int len, const unsigned char *se
         cnt[2] = (unsigned char)((i >> 8)) & 255;
         cnt[3] = (unsigned char)(i & 255);
 
-        if (!EVP_DigestInit_ex(c,dgst, NULL) || !EVP_DigestUpdate(c, seed, seedlen) || !EVP_DigestUpdate(c, cnt, 4)) 
+        if (!EVP_DigestInit_ex(c,dgst, NULL) || !EVP_DigestUpdate(c, seed, seedlen) || !EVP_DigestUpdate(c, cnt, 4))
             goto err;
 
         if (outlen + mdlen <= len) {
-            if (!EVP_DigestFinal_ex(c, mask + outlen, NULL)) 
+            if (!EVP_DigestFinal_ex(c, mask + outlen, NULL))
                 goto err;
             outlen += mdlen;
         } else {
-            if (!EVP_DigestFinal_ex(c, md, NULL)) 
+            if (!EVP_DigestFinal_ex(c, md, NULL))
                 goto err;
             memcpy(mask + outlen, md, len - outlen);
             outlen = len;
@@ -112,22 +112,22 @@ static int PkcS1MgF1(unsigned char *mask, const int len, const unsigned char *se
     rv = 0;
 
 err:
-    EVP_MD_CTX_destroy(c); 
+    EVP_MD_CTX_destroy(c);
     return rv;
 }
 
-int RwVerifyPssr(const TRwKey *rw, const unsigned char *mHash, const EVP_MD *Hash, const unsigned char *EM, int sLen) { 
+int RwVerifyPssr(const TRwKey *rw, const unsigned char *mHash, const EVP_MD *Hash, const unsigned char *EM, int sLen) {
     int i = 0, ret = 0, hLen = 0, maskedDBLen = 0, MSBits = 0, emLen = 0;
     const unsigned char *H = NULL;
     unsigned char *DB = NULL;
-    EVP_MD_CTX* ctx = NULL; 
+    EVP_MD_CTX* ctx = NULL;
     unsigned char H_[EVP_MAX_MD_SIZE];
     const EVP_MD *mgf1Hash = Hash;
 
-    ctx = EVP_MD_CTX_create(); 
-    if (!ctx) { 
-        return ret; 
-    } 
+    ctx = EVP_MD_CTX_create();
+    if (!ctx) {
+        return ret;
+    }
     hLen = EVP_MD_size(Hash);
 
     if (hLen < 0)
@@ -143,14 +143,14 @@ int RwVerifyPssr(const TRwKey *rw, const unsigned char *mHash, const EVP_MD *Has
     else if (sLen < -2)
         goto err;
 
-    { 
-        int bits = BN_num_bits(rw->N); 
-        if (bits <= 0) 
-            goto err; 
- 
-        MSBits = (bits - 1) & 0x7; 
-    } 
-    emLen = RwModSize(rw); 
+    {
+        int bits = BN_num_bits(rw->N);
+        if (bits <= 0)
+            goto err;
+
+        MSBits = (bits - 1) & 0x7;
+    }
+    emLen = RwModSize(rw);
 
     if (EM[0] & (0xFF << MSBits)) {
         goto err;
@@ -164,23 +164,23 @@ int RwVerifyPssr(const TRwKey *rw, const unsigned char *mHash, const EVP_MD *Has
     if (emLen < (hLen + sLen + 2)) /* sLen can be small negative */
         goto err;
 
-    if (emLen < 1) 
-        goto err; 
- 
+    if (emLen < 1)
+        goto err;
+
     if (EM[emLen - 1] != 0xbc)
         goto err;
 
     maskedDBLen = emLen - hLen - 1;
-    if (maskedDBLen <= 0) 
-        goto err; 
- 
+    if (maskedDBLen <= 0)
+        goto err;
+
     H = EM + maskedDBLen;
-    DB = malloc(maskedDBLen); 
+    DB = malloc(maskedDBLen);
 
     if (!DB)
         goto err;
 
-    if (PkcS1MgF1(DB, maskedDBLen, H, hLen, mgf1Hash) < 0) 
+    if (PkcS1MgF1(DB, maskedDBLen, H, hLen, mgf1Hash) < 0)
         goto err;
 
     for (i = 0; i < maskedDBLen; i++)
@@ -197,24 +197,24 @@ int RwVerifyPssr(const TRwKey *rw, const unsigned char *mHash, const EVP_MD *Has
     if (sLen >= 0 && (maskedDBLen - i) != sLen)
         goto err;
 
-    if (!EVP_DigestInit_ex(ctx, Hash, NULL) || !EVP_DigestUpdate(ctx, zeroes, sizeof zeroes) || !EVP_DigestUpdate(ctx, mHash, hLen)) 
+    if (!EVP_DigestInit_ex(ctx, Hash, NULL) || !EVP_DigestUpdate(ctx, zeroes, sizeof zeroes) || !EVP_DigestUpdate(ctx, mHash, hLen))
         goto err;
 
     if (maskedDBLen - i) {
-        if (!EVP_DigestUpdate(ctx, DB + i, maskedDBLen - i)) 
+        if (!EVP_DigestUpdate(ctx, DB + i, maskedDBLen - i))
             goto err;
     }
 
-    if (!EVP_DigestFinal_ex(ctx, H_, NULL)) 
+    if (!EVP_DigestFinal_ex(ctx, H_, NULL))
         goto err;
 
     ret = memcmp(H, H_, hLen) ? 0 : 1;
 
 err:
     if (DB)
-        free(DB); 
+        free(DB);
 
-    EVP_MD_CTX_destroy(ctx); 
+    EVP_MD_CTX_destroy(ctx);
 
     return ret;
 }
@@ -226,14 +226,14 @@ err:
  Hash - EVP_MD() that will be used to pad
  sLen - random salt len (usually == hashLen)
  */
-int RwPaddingAddPssr(const TRwKey *rw, unsigned char *EM, const unsigned char *mHash, const EVP_MD *Hash, int sLen) { 
+int RwPaddingAddPssr(const TRwKey *rw, unsigned char *EM, const unsigned char *mHash, const EVP_MD *Hash, int sLen) {
     int i = 0, ret = 0, hLen = 0, maskedDBLen = 0, MSBits = 0, emLen = 0;
     unsigned char *H = NULL, *salt = NULL, *p = NULL;
     const EVP_MD *mgf1Hash = Hash;
-    EVP_MD_CTX* ctx = EVP_MD_CTX_create(); 
-    if (!ctx) { 
-        return ret; 
-    } 
+    EVP_MD_CTX* ctx = EVP_MD_CTX_create();
+    if (!ctx) {
+        return ret;
+    }
 
     hLen = EVP_MD_size(Hash);
     if (hLen < 0)
@@ -249,20 +249,20 @@ int RwPaddingAddPssr(const TRwKey *rw, unsigned char *EM, const unsigned char *m
     else if (sLen < -2)
         goto err;
 
-    { 
-        int bits = BN_num_bits(rw->N); 
-        if (bits <= 0) 
-            goto err; 
-        MSBits = (bits - 1) & 0x7; 
-    } 
-    emLen = RwModSize(rw); 
-    if (emLen <= 0) 
-        goto err; 
+    {
+        int bits = BN_num_bits(rw->N);
+        if (bits <= 0)
+            goto err;
+        MSBits = (bits - 1) & 0x7;
+    }
+    emLen = RwModSize(rw);
+    if (emLen <= 0)
+        goto err;
 
     if (MSBits == 0) {
         *EM++ = 0;
         emLen--;
-        fprintf(stderr, "MSBits == 0\n"); 
+        fprintf(stderr, "MSBits == 0\n");
     }
 
     if (sLen == -2) {
@@ -272,28 +272,28 @@ int RwPaddingAddPssr(const TRwKey *rw, unsigned char *EM, const unsigned char *m
         goto err;
 
     if (sLen > 0) {
-        salt = malloc(sLen); 
+        salt = malloc(sLen);
         if (!salt) goto err;
         if (RAND_bytes(salt, sLen) <= 0)
             goto err;
     }
 
     maskedDBLen = emLen - hLen - 1;
-    if (maskedDBLen < 0) 
-        goto err; 
+    if (maskedDBLen < 0)
+        goto err;
     H = EM + maskedDBLen;
 
-    if (!EVP_DigestInit_ex(ctx, Hash, NULL) || !EVP_DigestUpdate(ctx, zeroes, sizeof zeroes) || !EVP_DigestUpdate(ctx, mHash, hLen)) 
+    if (!EVP_DigestInit_ex(ctx, Hash, NULL) || !EVP_DigestUpdate(ctx, zeroes, sizeof zeroes) || !EVP_DigestUpdate(ctx, mHash, hLen))
         goto err;
 
-    if (sLen && !EVP_DigestUpdate(ctx, salt, sLen)) 
+    if (sLen && !EVP_DigestUpdate(ctx, salt, sLen))
         goto err;
 
-    if (!EVP_DigestFinal_ex(ctx, H, NULL)) 
+    if (!EVP_DigestFinal_ex(ctx, H, NULL))
         goto err;
 
     /* Generate dbMask in place then perform XOR on it */
-    if (PkcS1MgF1(EM, maskedDBLen, H, hLen, mgf1Hash)) 
+    if (PkcS1MgF1(EM, maskedDBLen, H, hLen, mgf1Hash))
         goto err;
 
     p = EM;
@@ -319,10 +319,10 @@ int RwPaddingAddPssr(const TRwKey *rw, unsigned char *EM, const unsigned char *m
     ret = 1;
 
 err:
-    EVP_MD_CTX_destroy(ctx); 
- 
+    EVP_MD_CTX_destroy(ctx);
+
     if (salt)
-        free(salt); 
+        free(salt);
 
     return ret;
 }

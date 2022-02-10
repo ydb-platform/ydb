@@ -9,7 +9,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/histogram/hdr 
+    library/cpp/histogram/hdr
 )
 
 END()

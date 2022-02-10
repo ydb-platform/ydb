@@ -2,7 +2,7 @@ LIBRARY()
 
 PEERDIR(
     contrib/libs/protobuf
-    library/cpp/protobuf/util 
+    library/cpp/protobuf/util
     ydb/library/aclib/protos
 )
 

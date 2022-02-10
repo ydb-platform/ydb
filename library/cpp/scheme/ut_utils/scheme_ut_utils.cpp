@@ -1,6 +1,6 @@
 #include "scheme_ut_utils.h"
 
-#include <library/cpp/colorizer/colors.h> 
+#include <library/cpp/colorizer/colors.h>
 
 #include <util/stream/str.h>
 

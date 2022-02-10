@@ -1,6 +1,6 @@
 #include "json_value_output.h"
 
-#include <library/cpp/json/json_reader.h> 
+#include <library/cpp/json/json_reader.h>
 
 namespace NProtobufJson {
     template <typename T>

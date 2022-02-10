@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/html/escape 
+    library/cpp/html/escape
 )
 
 END()

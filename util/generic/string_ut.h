@@ -1074,83 +1074,83 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(constStr.front(), (ui8)'f');
         UNIT_ASSERT_VALUES_EQUAL(str.front(), (ui8)'r');
     }
- 
+
     void TestIterators() {
-        const char_type chars[] = {'f', 'o', 0}; 
- 
-        TStringType str = chars; 
-        const TStringType constStr = str; 
- 
-        typename TStringType::const_iterator itBegin = str.begin(); 
-        typename TStringType::const_iterator itEnd = str.end(); 
-        typename TStringType::const_iterator citBegin = constStr.begin(); 
-        typename TStringType::const_iterator citEnd = constStr.end(); 
- 
+        const char_type chars[] = {'f', 'o', 0};
+
+        TStringType str = chars;
+        const TStringType constStr = str;
+
+        typename TStringType::const_iterator itBegin = str.begin();
+        typename TStringType::const_iterator itEnd = str.end();
+        typename TStringType::const_iterator citBegin = constStr.begin();
+        typename TStringType::const_iterator citEnd = constStr.end();
+
         UNIT_ASSERT_VALUES_EQUAL(*itBegin, (ui8)'f');
         UNIT_ASSERT_VALUES_EQUAL(*citBegin, (ui8)'f');
- 
-        str.front() = 'r'; 
+
+        str.front() = 'r';
         UNIT_ASSERT_VALUES_EQUAL(*itBegin, (ui8)'r');
         UNIT_ASSERT_VALUES_EQUAL(*citBegin, (ui8)'f');
- 
-        UNIT_ASSERT_VALUES_EQUAL(2, itEnd - itBegin); 
-        UNIT_ASSERT_VALUES_EQUAL(2, citEnd - citBegin); 
- 
+
+        UNIT_ASSERT_VALUES_EQUAL(2, itEnd - itBegin);
+        UNIT_ASSERT_VALUES_EQUAL(2, citEnd - citBegin);
+
         UNIT_ASSERT_VALUES_EQUAL(*(++itBegin), (ui8)'o');
         UNIT_ASSERT_VALUES_EQUAL(*(++citBegin), (ui8)'o');
- 
+
         UNIT_ASSERT_VALUES_EQUAL(*(--itBegin), (ui8)'r');
         UNIT_ASSERT_VALUES_EQUAL(*(--citBegin), (ui8)'f');
- 
+
         UNIT_ASSERT_VALUES_EQUAL(*(itBegin++), (ui8)'r');
         UNIT_ASSERT_VALUES_EQUAL(*(citBegin++), (ui8)'f');
         UNIT_ASSERT_VALUES_EQUAL(*itBegin, (ui8)'o');
         UNIT_ASSERT_VALUES_EQUAL(*citBegin, (ui8)'o');
- 
+
         UNIT_ASSERT_VALUES_EQUAL(*(itBegin--), (ui8)'o');
         UNIT_ASSERT_VALUES_EQUAL(*(citBegin--), (ui8)'o');
         UNIT_ASSERT_VALUES_EQUAL(*itBegin, (ui8)'r');
         UNIT_ASSERT_VALUES_EQUAL(*citBegin, (ui8)'f');
-    } 
- 
+    }
+
     void TestReverseIterators() {
-        const char_type chars[] = {'f', 'o', 0}; 
- 
-        TStringType str = chars; 
-        const TStringType constStr = str; 
- 
-        typename TStringType::reverse_iterator ritBegin = str.rbegin(); 
-        typename TStringType::reverse_iterator ritEnd = str.rend(); 
-        typename TStringType::const_reverse_iterator critBegin = constStr.rbegin(); 
-        typename TStringType::const_reverse_iterator critEnd = constStr.rend(); 
- 
+        const char_type chars[] = {'f', 'o', 0};
+
+        TStringType str = chars;
+        const TStringType constStr = str;
+
+        typename TStringType::reverse_iterator ritBegin = str.rbegin();
+        typename TStringType::reverse_iterator ritEnd = str.rend();
+        typename TStringType::const_reverse_iterator critBegin = constStr.rbegin();
+        typename TStringType::const_reverse_iterator critEnd = constStr.rend();
+
         UNIT_ASSERT_VALUES_EQUAL(*ritBegin, (ui8)'o');
         UNIT_ASSERT_VALUES_EQUAL(*critBegin, (ui8)'o');
- 
+
         str.back() = (ui8)'r';
         UNIT_ASSERT_VALUES_EQUAL(*ritBegin, (ui8)'r');
         UNIT_ASSERT_VALUES_EQUAL(*critBegin, (ui8)'o');
- 
-        UNIT_ASSERT_VALUES_EQUAL(2, ritEnd - ritBegin); 
-        UNIT_ASSERT_VALUES_EQUAL(2, critEnd - critBegin); 
- 
+
+        UNIT_ASSERT_VALUES_EQUAL(2, ritEnd - ritBegin);
+        UNIT_ASSERT_VALUES_EQUAL(2, critEnd - critBegin);
+
         UNIT_ASSERT_VALUES_EQUAL(*(++ritBegin), (ui8)'f');
         UNIT_ASSERT_VALUES_EQUAL(*(++critBegin), (ui8)'f');
- 
+
         UNIT_ASSERT_VALUES_EQUAL(*(--ritBegin), (ui8)'r');
         UNIT_ASSERT_VALUES_EQUAL(*(--critBegin), (ui8)'o');
- 
+
         UNIT_ASSERT_VALUES_EQUAL(*(ritBegin++), (ui8)'r');
         UNIT_ASSERT_VALUES_EQUAL(*(critBegin++), (ui8)'o');
         UNIT_ASSERT_VALUES_EQUAL(*ritBegin, (ui8)'f');
         UNIT_ASSERT_VALUES_EQUAL(*critBegin, (ui8)'f');
- 
+
         UNIT_ASSERT_VALUES_EQUAL(*(ritBegin--), (ui8)'f');
         UNIT_ASSERT_VALUES_EQUAL(*(critBegin--), (ui8)'f');
         UNIT_ASSERT_VALUES_EQUAL(*ritBegin, (ui8)'r');
         UNIT_ASSERT_VALUES_EQUAL(*critBegin, (ui8)'o');
- 
+
         *ritBegin = (ui8)'e';
         UNIT_ASSERT_VALUES_EQUAL(*ritBegin, (ui8)'e');
-    } 
+    }
 };

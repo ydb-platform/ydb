@@ -2,7 +2,7 @@
 #include "guid_proxywrite.h"
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
-#include <library/cpp/actors/helpers/activeactors.h> 
+#include <library/cpp/actors/helpers/activeactors.h>
 
 namespace NKikimr {
 

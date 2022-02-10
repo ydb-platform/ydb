@@ -1,8 +1,8 @@
 
 #include "yencoding.h"
 
-#include <library/cpp/charset/codepage.h> 
-#include <library/cpp/charset/recyr.hh> 
+#include <library/cpp/charset/codepage.h>
+#include <library/cpp/charset/recyr.hh>
 
 
 int

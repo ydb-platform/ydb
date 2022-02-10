@@ -2,8 +2,8 @@
 
 #include <ydb/core/control/immediate_control_board_impl.h>
 
-#include <library/cpp/actors/core/defs.h> 
-#include <library/cpp/actors/core/actor.h> 
+#include <library/cpp/actors/core/defs.h>
+#include <library/cpp/actors/core/actor.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 

@@ -15,8 +15,8 @@ ENDIF()
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/regex/pcre 
-    library/cpp/svnversion 
+    library/cpp/regex/pcre
+    library/cpp/svnversion
     ydb/core/testlib
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers

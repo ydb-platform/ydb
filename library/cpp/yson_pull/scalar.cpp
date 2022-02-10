@@ -1,6 +1,6 @@
 #include "scalar.h"
 
-#include <library/cpp/yson_pull/detail/cescape.h> 
+#include <library/cpp/yson_pull/detail/cescape.h>
 
 #include <util/stream/output.h>
 

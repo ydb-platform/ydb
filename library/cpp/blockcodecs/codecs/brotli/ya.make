@@ -5,7 +5,7 @@ OWNER(pg)
 PEERDIR(
     contrib/libs/brotli/enc
     contrib/libs/brotli/dec
-    library/cpp/blockcodecs/core 
+    library/cpp/blockcodecs/core
 )
 
 SRCS(

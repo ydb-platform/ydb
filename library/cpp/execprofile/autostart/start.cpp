@@ -1,4 +1,4 @@
-#include <library/cpp/execprofile/profile.h> 
+#include <library/cpp/execprofile/profile.h>
 
 namespace {
     struct TInit {

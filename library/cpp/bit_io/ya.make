@@ -6,7 +6,7 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/deprecated/accessors 
+    library/cpp/deprecated/accessors
 )
 
 SRCS(

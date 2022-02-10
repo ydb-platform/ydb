@@ -1,4 +1,4 @@
-#include <library/cpp/messagebus/www/www.h> 
+#include <library/cpp/messagebus/www/www.h>
 
 #include "mon_messagebus.h"
 

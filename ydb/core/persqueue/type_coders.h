@@ -2,9 +2,9 @@
 
 #include "type_codecs_defs.h"
 
-#include <library/cpp/containers/bitseq/bitvector.h> 
-#include <library/cpp/packedtypes/longs.h> 
-#include <library/cpp/packedtypes/zigzag.h> 
+#include <library/cpp/containers/bitseq/bitvector.h>
+#include <library/cpp/packedtypes/longs.h>
+#include <library/cpp/packedtypes/zigzag.h>
 
 #include <util/generic/typetraits.h>
 

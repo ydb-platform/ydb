@@ -1,4 +1,4 @@
-#include <library/cpp/balloc/lib/balloc.h> 
+#include <library/cpp/balloc/lib/balloc.h>
 #include <errno.h>
 
 namespace NBalloc {

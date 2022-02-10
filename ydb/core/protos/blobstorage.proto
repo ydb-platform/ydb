@@ -1,5 +1,5 @@
-import "library/cpp/actors/protos/actors.proto"; 
-import "library/cpp/actors/protos/interconnect.proto"; 
+import "library/cpp/actors/protos/actors.proto";
+import "library/cpp/actors/protos/interconnect.proto";
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/blobstorage_vdisk_config.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";

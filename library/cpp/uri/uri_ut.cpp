@@ -1,7 +1,7 @@
 #include "uri_ut.h"
 #include "other.h"
 #include "qargs.h"
-#include <library/cpp/html/entity/htmlentity.h> 
+#include <library/cpp/html/entity/htmlentity.h>
 
 #include <util/system/maxlen.h>
 

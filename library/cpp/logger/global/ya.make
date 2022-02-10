@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(g:geosaas)
 
 PEERDIR(
-    library/cpp/logger 
+    library/cpp/logger
 )
 
 IF (OS_WINDOWS)

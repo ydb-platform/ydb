@@ -1,7 +1,7 @@
 #pragma once
 
 #include <functional>
-#include <library/cpp/actors/core/events.h> 
+#include <library/cpp/actors/core/events.h>
 
 namespace NActors {
     class TSharedDescriptor: public TThrRefBase {

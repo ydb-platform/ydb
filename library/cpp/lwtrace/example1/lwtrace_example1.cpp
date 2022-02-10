@@ -1,4 +1,4 @@
-#include <library/cpp/lwtrace/all.h> 
+#include <library/cpp/lwtrace/all.h>
 
 #define LWTRACE_EXAMPLE_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES)          \
     PROBE(IterationProbe, GROUPS(), TYPES(i32, double), NAMES("n", "result")) \

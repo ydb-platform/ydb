@@ -2,8 +2,8 @@
 
 #include <ydb/library/yql/utils/log/log.h>
 
-#include <library/cpp/openssl/io/stream.h> 
-#include <library/cpp/http/misc/httpcodes.h> 
+#include <library/cpp/openssl/io/stream.h>
+#include <library/cpp/http/misc/httpcodes.h>
 #include <library/cpp/charset/ci_string.h>
 
 #include <util/network/socket.h>

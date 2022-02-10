@@ -1,9 +1,9 @@
 package tvm_keys;
 
-option go_package = "a.yandex-team.ru/library/cpp/tvmauth/src/protos"; 
- 
+option go_package = "a.yandex-team.ru/library/cpp/tvmauth/src/protos";
+
 enum KeyType {
-    RabinWilliams = 0; 
+    RabinWilliams = 0;
 }
 
 enum BbEnvType {

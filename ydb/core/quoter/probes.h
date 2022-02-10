@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/base/quoter.h>
 
-#include <library/cpp/lwtrace/all.h> 
+#include <library/cpp/lwtrace/all.h>
 
 #include <util/string/builder.h>
 

@@ -2,8 +2,8 @@
 
 #include <flatbuffers/flexbuffers.h>
 
-#include <library/cpp/json/fast_sax/parser.h> 
-#include <library/cpp/json/json_reader.h> 
+#include <library/cpp/json/fast_sax/parser.h>
+#include <library/cpp/json/json_reader.h>
 
 #include <util/generic/vector.h>
 #include <util/stream/output.h>

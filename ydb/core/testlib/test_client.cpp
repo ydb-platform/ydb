@@ -89,7 +89,7 @@
 
 #include <ydb/core/client/server/msgbus_server_tracer.h>
 
-#include <library/cpp/actors/interconnect/interconnect.h> 
+#include <library/cpp/actors/interconnect/interconnect.h>
 
 #include <library/cpp/grpc/server/actors/logger.h>
 

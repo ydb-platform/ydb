@@ -3,7 +3,7 @@
 #include <library/cpp/yson/public.h>
 #include <library/cpp/yson/consumer.h>
 
-#include <library/cpp/json/json_writer.h> 
+#include <library/cpp/json/json_writer.h>
 
 #include <util/generic/vector.h>
 

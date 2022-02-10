@@ -15,7 +15,7 @@ ENDIF()
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/svnversion 
+    library/cpp/svnversion
     ydb/core/erasure
     ydb/core/protos
 )

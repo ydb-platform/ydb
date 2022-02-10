@@ -1,8 +1,8 @@
 #include "tablet_monitoring_proxy.h"
 
-#include <library/cpp/actors/core/log.h> 
+#include <library/cpp/actors/core/log.h>
 #include <ydb/core/mon/mon.h>
-#include <library/cpp/actors/core/mon.h> 
+#include <library/cpp/actors/core/mon.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/statestorage.h>

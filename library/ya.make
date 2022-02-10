@@ -1,10 +1,10 @@
 OWNER(g:cpp-contrib)
 
 RECURSE(
-    c 
+    c
     cpp
     python
-    recipes 
+    recipes
     #lemmer/byk/ut
 )
 

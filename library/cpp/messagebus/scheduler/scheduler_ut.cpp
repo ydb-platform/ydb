@@ -2,7 +2,7 @@
 
 #include "scheduler.h"
 
-#include <library/cpp/messagebus/misc/test_sync.h> 
+#include <library/cpp/messagebus/misc/test_sync.h>
 
 using namespace NBus;
 using namespace NBus::NPrivate;

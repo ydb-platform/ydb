@@ -1,7 +1,7 @@
 package NYql.NDqProto;
 option cc_enable_arenas = true;
 
-import "library/cpp/actors/protos/actors.proto"; 
+import "library/cpp/actors/protos/actors.proto";
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
 import "ydb/library/yql/dq/proto/dq_state_load_plan.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";

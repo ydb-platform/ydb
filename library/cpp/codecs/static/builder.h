@@ -2,7 +2,7 @@
 
 #include "static.h"
 
-#include <library/cpp/svnversion/svnversion.h> 
+#include <library/cpp/svnversion/svnversion.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/string.h>

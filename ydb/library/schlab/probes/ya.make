@@ -6,7 +6,7 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/lwtrace 
+    library/cpp/lwtrace
 )
 
 SRCS(

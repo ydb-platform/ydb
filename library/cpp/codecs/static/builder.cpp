@@ -1,9 +1,9 @@
 #include "builder.h"
 #include "common.h"
 
-#include <library/cpp/codecs/static/static_codec_info.pb.h> 
+#include <library/cpp/codecs/static/static_codec_info.pb.h>
 
-#include <library/cpp/codecs/codecs.h> 
+#include <library/cpp/codecs/codecs.h>
 
 #include <util/generic/yexception.h>
 #include <util/string/subst.h>

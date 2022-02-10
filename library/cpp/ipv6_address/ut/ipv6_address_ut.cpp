@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/ipv6_address/ipv6_address.h> 
+#include <library/cpp/ipv6_address/ipv6_address.h>
 #include <unordered_set>
 
 class TIpv6AddressTest: public TTestBase {

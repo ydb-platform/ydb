@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/xml/init/ptr.h> 
+#include <library/cpp/xml/init/ptr.h>
 #include <util/generic/ptr.h>
 #include <libxml/xmlstring.h>
 #include <libxml/tree.h>

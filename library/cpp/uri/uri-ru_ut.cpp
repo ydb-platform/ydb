@@ -1,6 +1,6 @@
 #include "uri_ut.h"
-#include <library/cpp/charset/recyr.hh> 
-#include <library/cpp/html/entity/htmlentity.h> 
+#include <library/cpp/charset/recyr.hh>
+#include <library/cpp/html/entity/htmlentity.h>
 #include <util/system/maxlen.h>
 
 namespace NUri {

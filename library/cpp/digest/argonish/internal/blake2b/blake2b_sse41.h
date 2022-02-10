@@ -3,7 +3,7 @@
 #include <smmintrin.h>
 #include "blake2b.h"
 #include "load_sse41.h"
-#include <library/cpp/digest/argonish/internal/rotations/rotations_ssse3.h> 
+#include <library/cpp/digest/argonish/internal/rotations/rotations_ssse3.h>
 
 namespace NArgonish {
     template <>

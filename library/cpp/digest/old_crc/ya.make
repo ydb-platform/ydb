@@ -10,7 +10,7 @@ SRCS(
 )
 
 RUN_PROGRAM(
-    library/cpp/digest/old_crc/gencrc 
+    library/cpp/digest/old_crc/gencrc
     STDOUT crc.inc
 )
 

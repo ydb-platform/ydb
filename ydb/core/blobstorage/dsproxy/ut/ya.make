@@ -20,9 +20,9 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    library/cpp/actors/core 
+    library/cpp/actors/core
     library/cpp/getopt
-    library/cpp/svnversion 
+    library/cpp/svnversion
     ydb/core/base
     ydb/core/blobstorage/base
     ydb/core/blobstorage/dsproxy

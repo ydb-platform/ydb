@@ -4,7 +4,7 @@
 #include "fixed_bin_histogram.h"
 #include "histogram.h"
 
-#include <library/cpp/histogram/adaptive/protos/histo.pb.h> 
+#include <library/cpp/histogram/adaptive/protos/histo.pb.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/yexception.h>

@@ -3,8 +3,8 @@ LIBRARY()
 OWNER(pg)
 
 PEERDIR(
-    library/cpp/blockcodecs/core 
-    library/cpp/blockcodecs/codecs/zstd 
+    library/cpp/blockcodecs/core
+    library/cpp/blockcodecs/codecs/zstd
 )
 
 SRCS(

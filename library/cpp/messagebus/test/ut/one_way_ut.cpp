@@ -24,14 +24,14 @@
 /// See example in NBus::NullServer::OnMessage().
 /// Discard identity for reply message.
 
-#include <library/cpp/messagebus/test/helper/alloc_counter.h> 
-#include <library/cpp/messagebus/test/helper/example.h> 
-#include <library/cpp/messagebus/test/helper/hanging_server.h> 
-#include <library/cpp/messagebus/test/helper/message_handler_error.h> 
-#include <library/cpp/messagebus/test/helper/object_count_check.h> 
-#include <library/cpp/messagebus/test/helper/wait_for.h> 
+#include <library/cpp/messagebus/test/helper/alloc_counter.h>
+#include <library/cpp/messagebus/test/helper/example.h>
+#include <library/cpp/messagebus/test/helper/hanging_server.h>
+#include <library/cpp/messagebus/test/helper/message_handler_error.h>
+#include <library/cpp/messagebus/test/helper/object_count_check.h>
+#include <library/cpp/messagebus/test/helper/wait_for.h>
 
-#include <library/cpp/messagebus/ybus.h> 
+#include <library/cpp/messagebus/ybus.h>
 
 using namespace std;
 using namespace NBus;

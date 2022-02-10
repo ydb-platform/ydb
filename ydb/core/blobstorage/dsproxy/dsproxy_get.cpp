@@ -5,7 +5,7 @@
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/blobstorage/base/wilson_events.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <library/cpp/digest/crc32c/crc32c.h> 
+#include <library/cpp/digest/crc32c/crc32c.h>
 #include <util/generic/set.h>
 #include <util/system/datetime.h>
 #include "dsproxy_get_impl.h"

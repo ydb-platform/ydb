@@ -10,7 +10,7 @@
 
 #include <ydb/library/aclib/aclib.h>
 
-#include <library/cpp/actors/core/hfunc.h> 
+#include <library/cpp/actors/core/hfunc.h>
 #include <util/string/cast.h>
 
 namespace NKikimr {

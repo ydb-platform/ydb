@@ -1,5 +1,5 @@
 #include "writer.h"
-#include <library/cpp/yson_pull/detail/writer.h> 
+#include <library/cpp/yson_pull/detail/writer.h>
 
 using namespace NYsonPull;
 

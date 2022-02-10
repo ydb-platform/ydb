@@ -8,7 +8,7 @@
 
 #include <ydb/core/base/shared_data.h>
 
-#include <library/cpp/blockcodecs/codecs.h> 
+#include <library/cpp/blockcodecs/codecs.h>
 #include <util/generic/buffer.h>
 
 namespace NKikimr {

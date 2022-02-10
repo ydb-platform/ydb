@@ -8,7 +8,7 @@ OWNER(
 
 PEERDIR(
     ydb/library/yql/minikql
-    library/cpp/packedtypes 
+    library/cpp/packedtypes
     dict/dictutil
 )
 

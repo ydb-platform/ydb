@@ -2,9 +2,9 @@
 
 #include "messagebus_server.h"
 
-#include <library/cpp/messagebus/rain_check/test/ut/test.h> 
+#include <library/cpp/messagebus/rain_check/test/ut/test.h>
 
-#include <library/cpp/messagebus/test/helper/example.h> 
+#include <library/cpp/messagebus/test/helper/example.h>
 
 using namespace NBus;
 using namespace NBus::NTest;

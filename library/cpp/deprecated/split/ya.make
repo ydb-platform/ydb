@@ -8,7 +8,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/deprecated/kmp 
+    library/cpp/deprecated/kmp
 )
 
 END()

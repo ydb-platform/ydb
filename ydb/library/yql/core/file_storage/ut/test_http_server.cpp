@@ -1,7 +1,7 @@
 #include "test_http_server.h"
 
-#include <library/cpp/http/misc/httpcodes.h> 
-#include <library/cpp/http/server/http_ex.h> 
+#include <library/cpp/http/misc/httpcodes.h>
+#include <library/cpp/http/server/http_ex.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/atomic_ops.h>

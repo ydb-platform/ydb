@@ -21,7 +21,7 @@ ENDIF()
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/svnversion 
+    library/cpp/svnversion
     ydb/core/blobstorage/storagepoolmon
     ydb/core/testlib
     ydb/core/testlib/actors

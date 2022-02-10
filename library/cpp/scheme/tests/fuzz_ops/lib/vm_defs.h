@@ -1,7 +1,7 @@
 #pragma once
 
-#include <library/cpp/bit_io/bitinput.h> 
-#include <library/cpp/scheme/scheme.h> 
+#include <library/cpp/bit_io/bitinput.h>
+#include <library/cpp/scheme/scheme.h>
 
 #include <util/generic/deque.h>
 #include <util/generic/maybe.h>

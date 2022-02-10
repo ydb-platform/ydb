@@ -1,7 +1,7 @@
 #include "options.h"
 #include "server.h"
 
-#include <library/cpp/colorizer/colors.h> 
+#include <library/cpp/colorizer/colors.h>
 
 using namespace NKikimr;
 

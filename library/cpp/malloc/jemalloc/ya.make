@@ -6,11 +6,11 @@ OWNER(nga)
 
 IF (OS_ANDROID)
     PEERDIR(
-        library/cpp/malloc/system 
+        library/cpp/malloc/system
     )
 ELSE()
     PEERDIR(
-        library/cpp/malloc/api 
+        library/cpp/malloc/api
         contrib/libs/jemalloc
     )
     SRCS(

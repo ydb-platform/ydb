@@ -6,8 +6,8 @@ Index: test/perftest/CMakeLists.txt
  OWNER(nga)
  
  PEERDIR(
--    library/cpp/execprofile 
+-    library/cpp/execprofile
 +    junk/davenger/stackcollect
-     library/cpp/messagebus 
-     library/cpp/messagebus/protobuf 
-     library/cpp/sighandler 
+     library/cpp/messagebus
+     library/cpp/messagebus/protobuf
+     library/cpp/sighandler

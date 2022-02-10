@@ -1,5 +1,5 @@
 This is a library of compression algorithms with a unified interface and serialization.
-See also library/cpp/codecs/static, where a support for statically compiled dictionaries is implemented. 
+See also library/cpp/codecs/static, where a support for statically compiled dictionaries is implemented.
 
 All algorithms have a common `ICodec` interface (described in codecs.h).
 

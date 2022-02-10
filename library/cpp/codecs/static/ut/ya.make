@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/codecs/static) 
+UNITTEST_FOR(library/cpp/codecs/static)
 
 OWNER(velavokr)
 
@@ -8,7 +8,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/codecs/static/example 
+    library/cpp/codecs/static/example
 )
 
 END()

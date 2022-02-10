@@ -11,7 +11,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/retry/protos 
+    library/cpp/retry/protos
 )
 
 END()

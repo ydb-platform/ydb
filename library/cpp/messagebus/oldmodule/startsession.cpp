@@ -16,7 +16,7 @@
 
 #include "module.h"
 
-#include <library/cpp/messagebus/ybus.h> 
+#include <library/cpp/messagebus/ybus.h>
 
 namespace NBus {
     void* TBusStarter::_starter(void* data) {

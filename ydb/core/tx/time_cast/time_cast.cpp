@@ -1,7 +1,7 @@
 #include "time_cast.h"
 
-#include <library/cpp/actors/core/hfunc.h> 
-#include <library/cpp/actors/core/log.h> 
+#include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/log.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/services.pb.h>

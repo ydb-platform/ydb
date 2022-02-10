@@ -3,7 +3,7 @@
 #include "actor.h"
 #include "queue_in_actor.h"
 
-#include <library/cpp/messagebus/misc/test_sync.h> 
+#include <library/cpp/messagebus/misc/test_sync.h>
 
 #include <util/generic/object_counter.h>
 #include <util/system/event.h>

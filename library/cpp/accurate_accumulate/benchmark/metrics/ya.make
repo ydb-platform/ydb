@@ -12,6 +12,6 @@ TAG(
 
 TEST_SRCS(main.py)
 
-DEPENDS(library/cpp/accurate_accumulate/benchmark) 
+DEPENDS(library/cpp/accurate_accumulate/benchmark)
 
 END()

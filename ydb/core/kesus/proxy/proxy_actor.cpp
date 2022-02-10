@@ -5,9 +5,9 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kesus/tablet/events.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h> 
-#include <library/cpp/actors/core/hfunc.h> 
-#include <library/cpp/actors/core/log.h> 
+#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/log.h>
 
 #include <util/generic/hash_set.h>
 

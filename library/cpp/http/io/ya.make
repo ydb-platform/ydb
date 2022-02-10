@@ -6,10 +6,10 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/blockcodecs 
-    library/cpp/streams/brotli 
-    library/cpp/streams/bzip2 
-    library/cpp/streams/lzma 
+    library/cpp/blockcodecs
+    library/cpp/streams/brotli
+    library/cpp/streams/bzip2
+    library/cpp/streams/lzma
 )
 
 SRCS(

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/lwtrace/all.h> 
+#include <library/cpp/lwtrace/all.h>
 #include <util/generic/vector.h>
 
 #define LWACTORID(x) (x).RawX1(), (x).RawX2(), (x).NodeId(), (x).PoolID()

@@ -15,7 +15,7 @@
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/appdata.h>
-#include <library/cpp/actors/core/actor.h> 
+#include <library/cpp/actors/core/actor.h>
 
 #include <bitset>
 

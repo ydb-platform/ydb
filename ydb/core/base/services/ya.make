@@ -9,10 +9,10 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core 
-    library/cpp/actors/protos 
-    library/cpp/actors/interconnect 
-    library/cpp/actors/helpers 
+    library/cpp/actors/core
+    library/cpp/actors/protos
+    library/cpp/actors/interconnect
+    library/cpp/actors/helpers
 )
 
 END()

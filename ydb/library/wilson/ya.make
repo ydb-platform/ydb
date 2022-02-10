@@ -1,6 +1,6 @@
 LIBRARY()
     PEERDIR(
-        library/cpp/actors/wilson 
+        library/cpp/actors/wilson
     )
 
     OWNER(alexvru)

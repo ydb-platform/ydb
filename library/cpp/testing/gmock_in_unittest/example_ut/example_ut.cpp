@@ -1,4 +1,4 @@
-#include <library/cpp/testing/gmock_in_unittest/gmock.h> 
+#include <library/cpp/testing/gmock_in_unittest/gmock.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/packers) 
+UNITTEST_FOR(library/cpp/packers)
 
 OWNER(velavokr)
 

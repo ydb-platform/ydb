@@ -16,7 +16,7 @@
 
 #include <ydb/library/wilson/wilson_event.h>
 
-#include <library/cpp/lwtrace/shuttle.h> 
+#include <library/cpp/lwtrace/shuttle.h>
 
 #include <util/stream/str.h>
 #include <util/generic/xrange.h>

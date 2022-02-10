@@ -204,9 +204,9 @@ RESOURCE(
 )
 
 PEERDIR(
-    library/cpp/actors/core 
+    library/cpp/actors/core
     library/cpp/containers/flat_hash
-    library/cpp/html/pcdata 
+    library/cpp/html/pcdata
     library/cpp/string_utils/quote
     ydb/core/actorlib_impl
     ydb/core/base

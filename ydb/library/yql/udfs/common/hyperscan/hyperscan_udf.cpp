@@ -4,8 +4,8 @@
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 #include <ydb/library/yql/public/udf/udf_terminator.h>
 
-#include <library/cpp/regex/hyperscan/hyperscan.h> 
-#include <library/cpp/regex/pcre/regexp.h> 
+#include <library/cpp/regex/hyperscan/hyperscan.h>
+#include <library/cpp/regex/pcre/regexp.h>
 
 #include <util/charset/utf8.h>
 #include <util/string/split.h>

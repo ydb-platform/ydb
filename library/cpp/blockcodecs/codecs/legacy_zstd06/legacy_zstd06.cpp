@@ -1,6 +1,6 @@
-#include <library/cpp/blockcodecs/core/codecs.h> 
-#include <library/cpp/blockcodecs/core/common.h> 
-#include <library/cpp/blockcodecs/core/register.h> 
+#include <library/cpp/blockcodecs/core/codecs.h>
+#include <library/cpp/blockcodecs/core/common.h>
+#include <library/cpp/blockcodecs/core/register.h>
 
 #include <contrib/libs/zstd06/common/zstd.h>
 #include <contrib/libs/zstd06/common/zstd_static.h>

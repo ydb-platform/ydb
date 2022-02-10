@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/core/actorsystem.h> 
+#include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/grpc/server/grpc_server.h>
 #include <ydb/public/api/grpc/ydb_export_v1.grpc.pb.h>
 

@@ -2,13 +2,13 @@
 #include "proto.h"
 #include "proto2json.h"
 
-#include <library/cpp/protobuf/json/ut/test.pb.h> 
+#include <library/cpp/protobuf/json/ut/test.pb.h>
 
-#include <library/cpp/json/json_value.h> 
-#include <library/cpp/json/json_reader.h> 
-#include <library/cpp/json/json_writer.h> 
+#include <library/cpp/json/json_value.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 
-#include <library/cpp/protobuf/json/json2proto.h> 
+#include <library/cpp/protobuf/json/json2proto.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(TJson2ProtoTest) {
         FillFlatProto(&modelProto, skippedField);                     \
         UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);                  \
     }
-#include <library/cpp/protobuf/json/ut/fields.incl> 
+#include <library/cpp/protobuf/json/ut/fields.incl>
 #undef DEFINE_FIELD
 } // TestFlatOptional
 
@@ -114,7 +114,7 @@ UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
         TFlatRequired proto;                                          \
         UNIT_ASSERT_EXCEPTION(Json2Proto(json, proto), yexception);   \
     }
-#include <library/cpp/protobuf/json/ut/fields.incl> 
+#include <library/cpp/protobuf/json/ut/fields.incl>
 #undef DEFINE_FIELD
 } // TestFlatRequired
 
@@ -153,7 +153,7 @@ Y_UNIT_TEST(TestFlatNoCheckRequired) {
         TFlatRequired proto;                                          \
         UNIT_ASSERT_NO_EXCEPTION(Json2Proto(json, proto, cfg));       \
     }
-#include <library/cpp/protobuf/json/ut/fields.incl> 
+#include <library/cpp/protobuf/json/ut/fields.incl>
 #undef DEFINE_FIELD
 } // TestFlatNoCheckRequired
 
@@ -178,7 +178,7 @@ UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
         FillRepeatedProto(&modelProto, skippedField);                         \
         UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);                          \
     }
-#include <library/cpp/protobuf/json/ut/repeated_fields.incl> 
+#include <library/cpp/protobuf/json/ut/repeated_fields.incl>
 #undef DEFINE_REPEATED_FIELD
 } // TestFlatRepeated
 
@@ -203,7 +203,7 @@ UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
         FillCompositeProto(&modelProto, skippedField);                     \
         UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);                       \
     }
-#include <library/cpp/protobuf/json/ut/fields.incl> 
+#include <library/cpp/protobuf/json/ut/fields.incl>
 #undef DEFINE_FIELD
 } // TestCompositeOptional
 
@@ -236,7 +236,7 @@ UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
         }                                                           \
         UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);                \
     }
-#include <library/cpp/protobuf/json/ut/fields.incl> 
+#include <library/cpp/protobuf/json/ut/fields.incl>
 #undef DEFINE_FIELD
 } // TestCompositeOptionalStringBuf
 
@@ -289,7 +289,7 @@ Y_UNIT_TEST(TestCompositeRepeated) {
         modelProto.AddPart()->CopyFrom(partModelProto);  \
         array.AppendValue(CreateFlatJson(skippedField)); \
     }
-#include <library/cpp/protobuf/json/ut/repeated_fields.incl> 
+#include <library/cpp/protobuf/json/ut/repeated_fields.incl>
 #undef DEFINE_REPEATED_FIELD
 
         NJson::TJsonValue json;
@@ -462,7 +462,7 @@ Y_UNIT_TEST(TestFieldNameMode) {
     {
         // FIXME(CONTRIB-139): since protobuf 3.1, Def_upper json name is
         // "DefUpper", but until kernel/ugc/schema and yweb/yasap/pdb are
-        // updated, library/cpp/protobuf/json preserves compatibility with 
+        // updated, library/cpp/protobuf/json preserves compatibility with
         // protobuf 3.0 by lowercasing default names, making it "defUpper".
         TString modelStr(R"_({"My-Upper":1,"my-lower":2,"defUpper":3,"defLower":4})_");
 
@@ -591,7 +591,7 @@ Y_UNIT_TEST(TestCastFromString) {
         NJson::TJsonValue json;
 #define DEFINE_FIELD(name, value) \
     json.InsertValue(#name, ConvertToString(value));
-#include <library/cpp/protobuf/json/ut/fields.incl> 
+#include <library/cpp/protobuf/json/ut/fields.incl>
 #undef DEFINE_FIELD
 
         TFlatOptional proto;
@@ -618,7 +618,7 @@ Y_UNIT_TEST(TestCastFromString) {
         }                                                              \
         json.InsertValue(#name, array);                                \
     }
-#include <library/cpp/protobuf/json/ut/repeated_fields.incl> 
+#include <library/cpp/protobuf/json/ut/repeated_fields.incl>
 #undef DEFINE_REPEATED_FIELD
 
         TFlatRepeated proto;
@@ -676,7 +676,7 @@ Y_UNIT_TEST(TestVectorizeScalars) {
     NJson::TJsonValue json;
 #define DEFINE_FIELD(name, value) \
     json.InsertValue(#name, value);
-#include <library/cpp/protobuf/json/ut/fields.incl> 
+#include <library/cpp/protobuf/json/ut/fields.incl>
 #undef DEFINE_FIELD
 
     TFlatRepeated proto;
@@ -686,7 +686,7 @@ Y_UNIT_TEST(TestVectorizeScalars) {
 
 #define DEFINE_FIELD(name, value) \
     UNIT_ASSERT_VALUES_EQUAL(proto.Get ## name(0), value);
-#include <library/cpp/protobuf/json/ut/fields.incl> 
+#include <library/cpp/protobuf/json/ut/fields.incl>
 #undef DEFINE_FIELD
 }
 

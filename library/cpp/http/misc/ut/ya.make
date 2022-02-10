@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/http/misc) 
+UNITTEST_FOR(library/cpp/http/misc)
 
 OWNER(g:util)
 

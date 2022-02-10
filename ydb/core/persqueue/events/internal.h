@@ -5,8 +5,8 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 
-#include <library/cpp/actors/core/event_local.h> 
-#include <library/cpp/actors/core/actorid.h> 
+#include <library/cpp/actors/core/event_local.h>
+#include <library/cpp/actors/core/actorid.h>
 
 #include <util/generic/maybe.h>
 

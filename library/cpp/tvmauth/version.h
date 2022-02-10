@@ -2,6 +2,6 @@
 
 #include <util/generic/strbuf.h>
 
-namespace NTvmAuth { 
+namespace NTvmAuth {
     TStringBuf LibVersion();
 }

@@ -11,7 +11,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/json 
+    library/cpp/json
     ydb/library/binary_json
     ydb/library/yql/minikql
     ydb/library/yql/minikql/computation

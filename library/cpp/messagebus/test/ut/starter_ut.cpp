@@ -1,8 +1,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <library/cpp/messagebus/test/helper/example_module.h> 
-#include <library/cpp/messagebus/test/helper/object_count_check.h> 
-#include <library/cpp/messagebus/test/helper/wait_for.h> 
+#include <library/cpp/messagebus/test/helper/example_module.h>
+#include <library/cpp/messagebus/test/helper/object_count_check.h>
+#include <library/cpp/messagebus/test/helper/wait_for.h>
 
 using namespace NBus;
 using namespace NBus::NTest;

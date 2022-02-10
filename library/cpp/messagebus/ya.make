@@ -53,14 +53,14 @@ SRCS(
 
 PEERDIR(
     contrib/libs/sparsehash
-    library/cpp/codecs 
-    library/cpp/deprecated/enum_codegen 
+    library/cpp/codecs
+    library/cpp/deprecated/enum_codegen
     library/cpp/getopt/small
-    library/cpp/lwtrace 
-    library/cpp/messagebus/actor 
-    library/cpp/messagebus/config 
-    library/cpp/messagebus/monitoring 
-    library/cpp/messagebus/scheduler 
+    library/cpp/lwtrace
+    library/cpp/messagebus/actor
+    library/cpp/messagebus/config
+    library/cpp/messagebus/monitoring
+    library/cpp/messagebus/scheduler
     library/cpp/string_utils/indent_text
     library/cpp/threading/future
 )

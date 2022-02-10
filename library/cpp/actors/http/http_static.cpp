@@ -1,10 +1,10 @@
 #include "http_proxy.h"
 #include "http_static.h"
-#include <library/cpp/actors/core/executor_pool_basic.h> 
-#include <library/cpp/actors/core/log.h> 
-#include <library/cpp/actors/core/scheduler_basic.h> 
-#include <library/cpp/actors/http/http.h> 
-#include <library/cpp/resource/resource.h> 
+#include <library/cpp/actors/core/executor_pool_basic.h>
+#include <library/cpp/actors/core/log.h>
+#include <library/cpp/actors/core/scheduler_basic.h>
+#include <library/cpp/actors/http/http.h>
+#include <library/cpp/resource/resource.h>
 #include <util/folder/path.h>
 #include <util/stream/file.h>
 

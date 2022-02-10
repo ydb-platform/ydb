@@ -1,19 +1,19 @@
 #include "simple_proto.h"
 
-#include <library/cpp/messagebus/test/perftest/messages.pb.h> 
+#include <library/cpp/messagebus/test/perftest/messages.pb.h>
 
-#include <library/cpp/messagebus/text_utils.h> 
-#include <library/cpp/messagebus/thread_extra.h> 
-#include <library/cpp/messagebus/ybus.h> 
-#include <library/cpp/messagebus/oldmodule/module.h> 
-#include <library/cpp/messagebus/protobuf/ybusbuf.h> 
-#include <library/cpp/messagebus/www/www.h> 
+#include <library/cpp/messagebus/text_utils.h>
+#include <library/cpp/messagebus/thread_extra.h>
+#include <library/cpp/messagebus/ybus.h>
+#include <library/cpp/messagebus/oldmodule/module.h>
+#include <library/cpp/messagebus/protobuf/ybusbuf.h>
+#include <library/cpp/messagebus/www/www.h>
 
-#include <library/cpp/deprecated/threadable/threadable.h> 
-#include <library/cpp/execprofile/profile.h> 
+#include <library/cpp/deprecated/threadable/threadable.h>
+#include <library/cpp/execprofile/profile.h>
 #include <library/cpp/getopt/opt.h>
-#include <library/cpp/lwtrace/start.h> 
-#include <library/cpp/sighandler/async_signals_handler.h> 
+#include <library/cpp/lwtrace/start.h>
+#include <library/cpp/sighandler/async_signals_handler.h>
 #include <library/cpp/threading/future/legacy_future.h>
 
 #include <util/generic/ptr.h>

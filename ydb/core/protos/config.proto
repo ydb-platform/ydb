@@ -1,5 +1,5 @@
 import "google/protobuf/descriptor.proto";
-import "library/cpp/actors/protos/interconnect.proto"; 
+import "library/cpp/actors/protos/interconnect.proto";
 import "ydb/core/protos/blobstorage.proto";
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_vdisk_config.proto";

@@ -1,7 +1,7 @@
 #pragma once
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
-#include <library/cpp/deprecated/enum_codegen/enum_codegen.h> 
+#include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
 namespace NYql {
 namespace NUdf {

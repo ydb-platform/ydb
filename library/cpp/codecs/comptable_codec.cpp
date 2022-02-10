@@ -1,6 +1,6 @@
 #include "comptable_codec.h"
 
-#include <library/cpp/comptable/comptable.h> 
+#include <library/cpp/comptable/comptable.h>
 #include <util/string/cast.h>
 
 namespace NCodecs {

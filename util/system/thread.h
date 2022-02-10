@@ -13,10 +13,10 @@
 bool SetHighestThreadPriority();
 
 class TThread {
-    template <typename Callable> 
-    struct TCallableParams; 
-    struct TPrivateCtor {}; 
- 
+    template <typename Callable>
+    struct TCallableParams;
+    struct TPrivateCtor {};
+
 public:
     using TThreadProc = void* (*)(void*);
     using TId = size_t;
@@ -75,23 +75,23 @@ public:
     TThread(const TParams& params);
     TThread(TThreadProc threadProc, void* param);
 
-    template <typename Callable> 
-    TThread(Callable&& callable) 
-        : TThread(TPrivateCtor{}, 
+    template <typename Callable>
+    TThread(Callable&& callable)
+        : TThread(TPrivateCtor{},
                   MakeHolder<TCallableParams<Callable>>(std::forward<Callable>(callable)))
     {
-    } 
- 
-    TThread(TParams&& params) 
-        : TThread((const TParams&)params) 
-    { 
-    } 
- 
-    TThread(TParams& params) 
-        : TThread((const TParams&)params) 
-    { 
-    } 
- 
+    }
+
+    TThread(TParams&& params)
+        : TThread((const TParams&)params)
+    {
+    }
+
+    TThread(TParams& params)
+        : TThread((const TParams&)params)
+    {
+    }
+
     ~TThread();
 
     void Start();
@@ -126,33 +126,33 @@ public:
     static bool CanGetCurrentThreadName();
 
 private:
-    struct TCallableBase { 
-        virtual ~TCallableBase() = default; 
-        virtual void run() = 0; 
- 
-        static void* ThreadWorker(void* arg) { 
-            static_cast<TCallableBase*>(arg)->run(); 
-            return nullptr; 
-        } 
-    }; 
- 
-    template <typename Callable> 
-    struct TCallableParams: public TCallableBase { 
-        TCallableParams(Callable&& callable) 
-            : Callable_(std::forward<Callable>(callable)) 
-        { 
-        } 
- 
-        Callable Callable_; 
- 
-        void run() override { 
-            Callable_(); 
-        } 
-    }; 
- 
-    TThread(TPrivateCtor, THolder<TCallableBase> callable); 
- 
-private: 
+    struct TCallableBase {
+        virtual ~TCallableBase() = default;
+        virtual void run() = 0;
+
+        static void* ThreadWorker(void* arg) {
+            static_cast<TCallableBase*>(arg)->run();
+            return nullptr;
+        }
+    };
+
+    template <typename Callable>
+    struct TCallableParams: public TCallableBase {
+        TCallableParams(Callable&& callable)
+            : Callable_(std::forward<Callable>(callable))
+        {
+        }
+
+        Callable Callable_;
+
+        void run() override {
+            Callable_();
+        }
+    };
+
+    TThread(TPrivateCtor, THolder<TCallableBase> callable);
+
+private:
     class TImpl;
     THolder<TImpl> Impl_;
 };

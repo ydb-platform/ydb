@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/comptable) 
+UNITTEST_FOR(library/cpp/comptable)
 
 OWNER(ironpeter)
 

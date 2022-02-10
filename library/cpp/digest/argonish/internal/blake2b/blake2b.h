@@ -2,7 +2,7 @@
 
 #include <util/generic/yexception.h>
 #include <util/system/compiler.h>
-#include <library/cpp/digest/argonish/blake2b.h> 
+#include <library/cpp/digest/argonish/blake2b.h>
 
 namespace NArgonish {
     const ui32 BLAKE2B_BLOCKBYTES = 128;

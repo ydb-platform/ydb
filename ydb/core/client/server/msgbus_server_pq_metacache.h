@@ -1,7 +1,7 @@
 #pragma once
 
-#include <library/cpp/actors/core/events.h> 
-#include <library/cpp/actors/core/event_local.h> 
+#include <library/cpp/actors/core/events.h>
+#include <library/cpp/actors/core/event_local.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>

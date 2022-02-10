@@ -7,7 +7,7 @@
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
-#include <library/cpp/grpc/client/grpc_client_low.h> 
+#include <library/cpp/grpc/client/grpc_client_low.h>
 
 #include <library/cpp/svnversion/svnversion.h>
 

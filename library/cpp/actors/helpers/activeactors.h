@@ -1,7 +1,7 @@
 #pragma once
 
-#include <library/cpp/actors/core/actor.h> 
-#include <library/cpp/actors/core/events.h> 
+#include <library/cpp/actors/core/actor.h>
+#include <library/cpp/actors/core/events.h>
 #include <util/generic/hash_set.h>
 
 namespace NActors {

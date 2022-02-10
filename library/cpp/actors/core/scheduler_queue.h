@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/util/queue_chunk.h> 
+#include <library/cpp/actors/util/queue_chunk.h>
 
 namespace NActors {
     class IEventHandle;

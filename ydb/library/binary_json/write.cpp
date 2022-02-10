@@ -1,6 +1,6 @@
 #include "write.h"
 
-#include <library/cpp/json/json_reader.h> 
+#include <library/cpp/json/json_reader.h>
 
 #include <util/generic/vector.h>
 #include <util/generic/stack.h>

@@ -11,7 +11,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/actors/dnsresolver
-    library/cpp/regex/pcre 
+    library/cpp/regex/pcre
     library/cpp/testing/unittest
     ydb/core/base
     ydb/core/blobstorage

@@ -10,7 +10,7 @@
 #include "incrhuge_keeper_recovery.h"
 #include "incrhuge_keeper_write.h"
 
-#include <library/cpp/actors/core/actor.h> 
+#include <library/cpp/actors/core/actor.h>
 
 namespace NKikimr {
     namespace NIncrHuge {

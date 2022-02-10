@@ -14,8 +14,8 @@
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 
-#include <library/cpp/actors/core/hfunc.h> 
-#include <library/cpp/actors/core/log.h> 
+#include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/log.h>
 #include <library/cpp/json/json_writer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>

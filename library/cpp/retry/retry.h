@@ -2,7 +2,7 @@
 
 #include "utils.h"
 
-#include <library/cpp/retry/protos/retry_options.pb.h> 
+#include <library/cpp/retry/protos/retry_options.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/maybe.h>

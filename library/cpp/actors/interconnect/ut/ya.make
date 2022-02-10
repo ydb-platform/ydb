@@ -24,10 +24,10 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core 
-    library/cpp/actors/interconnect 
-    library/cpp/actors/interconnect/ut/lib 
-    library/cpp/actors/interconnect/ut/protos 
+    library/cpp/actors/core
+    library/cpp/actors/interconnect
+    library/cpp/actors/interconnect/ut/lib
+    library/cpp/actors/interconnect/ut/protos
     library/cpp/actors/testlib
     library/cpp/digest/md5
     library/cpp/testing/unittest

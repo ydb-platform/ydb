@@ -9,7 +9,7 @@ YQL_ABI_VERSION(
 OWNER(g:yql)
 
 PEERDIR(
-    library/cpp/deprecated/split 
+    library/cpp/deprecated/split
 )
 
 SRCS(

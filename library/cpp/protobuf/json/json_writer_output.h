@@ -3,7 +3,7 @@
 #include "json_output.h"
 #include "config.h"
 
-#include <library/cpp/json/json_writer.h> 
+#include <library/cpp/json/json_writer.h>
 
 #include <util/string/builder.h>
 #include <util/generic/store_policy.h>

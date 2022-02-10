@@ -251,23 +251,23 @@ namespace {
 
 class TThread::TImpl: public TThreadBase {
 public:
-    inline TImpl(const TParams& params, THolder<TCallableBase> callable = {}) 
+    inline TImpl(const TParams& params, THolder<TCallableBase> callable = {})
         : TThreadBase(params)
-        , Callable_(std::move(callable)) 
+        , Callable_(std::move(callable))
     {
     }
 
     inline TId Id() const noexcept {
         return ThreadIdHashFunction(SystemThreadId());
     }
- 
-    static THolder<TImpl> Create(THolder<TCallableBase> callable) { 
-        TParams params(TCallableBase::ThreadWorker, callable.Get()); 
-        return MakeHolder<TImpl>(std::move(params), std::move(callable)); 
-    } 
- 
-private: 
-    THolder<TCallableBase> Callable_; 
+
+    static THolder<TImpl> Create(THolder<TCallableBase> callable) {
+        TParams params(TCallableBase::ThreadWorker, callable.Get());
+        return MakeHolder<TImpl>(std::move(params), std::move(callable));
+    }
+
+private:
+    THolder<TCallableBase> Callable_;
 };
 
 TThread::TThread(const TParams& p)
@@ -280,11 +280,11 @@ TThread::TThread(TThreadProc threadProc, void* param)
 {
 }
 
-TThread::TThread(TPrivateCtor, THolder<TCallableBase> callable) 
-    : Impl_(TImpl::Create(std::move(callable))) 
-{ 
-} 
- 
+TThread::TThread(TPrivateCtor, THolder<TCallableBase> callable)
+    : Impl_(TImpl::Create(std::move(callable)))
+{
+}
+
 TThread::~TThread() {
     Join();
 }

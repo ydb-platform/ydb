@@ -9,8 +9,8 @@
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 
-#include <library/cpp/http/io/stream.h> 
-#include <library/cpp/http/server/http_ex.h> 
+#include <library/cpp/http/io/stream.h>
+#include <library/cpp/http/server/http_ex.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <google/protobuf/text_format.h>

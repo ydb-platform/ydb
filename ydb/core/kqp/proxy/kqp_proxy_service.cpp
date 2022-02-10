@@ -21,12 +21,12 @@
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h> 
+#include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/core/hfunc.h> 
-#include <library/cpp/actors/core/log.h> 
+#include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
-#include <library/cpp/resource/resource.h> 
+#include <library/cpp/resource/resource.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 

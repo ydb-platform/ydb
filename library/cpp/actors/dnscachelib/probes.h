@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/lwtrace/all.h> 
+#include <library/cpp/lwtrace/all.h>
 
 #define DNSCACHELIB_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES)           \
     PROBE(Created, GROUPS(), TYPES(), NAMES())                             \

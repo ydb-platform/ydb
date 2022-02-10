@@ -2,11 +2,11 @@
 
 #include <util/generic/strbuf.h>
 
-namespace NTvmAuth { 
-    /*! 
-     * Status mean result of ticket check 
-     */ 
-    enum class ETicketStatus { 
+namespace NTvmAuth {
+    /*!
+     * Status mean result of ticket check
+     */
+    enum class ETicketStatus {
         Ok,
         Expired,
         InvalidBlackboxEnv,
@@ -16,8 +16,8 @@ namespace NTvmAuth {
         MissingKey,
         SignBroken,
         UnsupportedVersion,
-        NoRoles, 
+        NoRoles,
     };
 
-    TStringBuf StatusToString(ETicketStatus st); 
+    TStringBuf StatusToString(ETicketStatus st);
 }

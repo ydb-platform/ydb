@@ -4,7 +4,7 @@
 #include <util/generic/set.h>
 #include <util/generic/bitmap.h>
 #include <util/system/unaligned_mem.h>
-#include <library/cpp/digest/crc32c/crc32c.h> 
+#include <library/cpp/digest/crc32c/crc32c.h>
 
 class TFakeVDisk
     : public TActor<TFakeVDisk>

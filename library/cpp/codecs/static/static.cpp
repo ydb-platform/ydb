@@ -1,8 +1,8 @@
 #include "static.h"
 #include "common.h"
 
-#include <library/cpp/codecs/static/static_codec_info.pb.h> 
-#include <library/cpp/archive/yarchive.h> 
+#include <library/cpp/codecs/static/static_codec_info.pb.h>
+#include <library/cpp/archive/yarchive.h>
 
 #include <util/draft/datetime.h>
 

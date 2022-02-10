@@ -3,7 +3,7 @@
 #include <util/string/vector.h>
 #include <algorithm>
 #include <util/string/split.h>
-#include <library/cpp/protobuf/util/is_equal.h> 
+#include <library/cpp/protobuf/util/is_equal.h>
 
 namespace NACLib {
 

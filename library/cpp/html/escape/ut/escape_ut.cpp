@@ -1,4 +1,4 @@
-#include <library/cpp/html/escape/escape.h> 
+#include <library/cpp/html/escape/escape.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NHtml;

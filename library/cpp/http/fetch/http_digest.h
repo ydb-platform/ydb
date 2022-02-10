@@ -3,7 +3,7 @@
 #include "httpheader.h"
 
 #include <util/system/compat.h>
-#include <library/cpp/http/misc/httpcodes.h> 
+#include <library/cpp/http/misc/httpcodes.h>
 
 class httpDigestHandler {
 protected:

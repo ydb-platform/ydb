@@ -7,7 +7,7 @@ OWNER(
 
 PEERDIR(
     contrib/libs/re2
-    library/cpp/json 
+    library/cpp/json
     library/cpp/monlib/metrics
 )
 

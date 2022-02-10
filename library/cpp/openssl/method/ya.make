@@ -4,7 +4,7 @@ OWNER(somov deshevoy)
 
 PEERDIR(
     contrib/libs/openssl
-    library/cpp/openssl/holders 
+    library/cpp/openssl/holders
 )
 
 SRCS(

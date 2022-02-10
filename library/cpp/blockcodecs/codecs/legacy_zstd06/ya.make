@@ -4,7 +4,7 @@ OWNER(pg)
 
 PEERDIR(
     contrib/libs/zstd06
-    library/cpp/blockcodecs/core 
+    library/cpp/blockcodecs/core
 )
 
 SRCS(

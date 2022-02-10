@@ -1,10 +1,10 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <library/cpp/messagebus/test/helper/example.h> 
-#include <library/cpp/messagebus/test/helper/message_handler_error.h> 
+#include <library/cpp/messagebus/test/helper/example.h>
+#include <library/cpp/messagebus/test/helper/message_handler_error.h>
 
-#include <library/cpp/messagebus/misc/test_sync.h> 
-#include <library/cpp/messagebus/oldmodule/module.h> 
+#include <library/cpp/messagebus/misc/test_sync.h>
+#include <library/cpp/messagebus/oldmodule/module.h>
 
 using namespace NBus;
 using namespace NBus::NTest;

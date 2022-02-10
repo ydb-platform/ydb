@@ -5,7 +5,7 @@
 
 #include <util/stream/hex.h>
 #include <util/string/escape.h>
-#include <library/cpp/html/pcdata/pcdata.h> 
+#include <library/cpp/html/pcdata/pcdata.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {

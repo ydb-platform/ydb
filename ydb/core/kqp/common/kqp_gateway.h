@@ -7,7 +7,7 @@
 #include <ydb/library/yql/dq/common/dq_value.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 
-#include <library/cpp/actors/core/actorid.h> 
+#include <library/cpp/actors/core/actorid.h>
 
 namespace NKikimr {
 namespace NKqp {

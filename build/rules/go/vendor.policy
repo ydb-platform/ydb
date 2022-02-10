@@ -287,9 +287,9 @@ ALLOW .* -> vendor/github.com/Masterminds/squirrel
 # isatty for golang
 ALLOW .* -> vendor/github.com/mattn/go-isatty
 
-# go-sqlite3 for golang 
-ALLOW .* -> vendor/github.com/mattn/go-sqlite3 
- 
+# go-sqlite3 for golang
+ALLOW .* -> vendor/github.com/mattn/go-sqlite3
+
 # complete and usable DNS library
 ALLOW .* -> vendor/github.com/miekg/dns
 
@@ -404,9 +404,9 @@ ALLOW .* -> vendor/golang.org/x/image/webp
 # less experimental implementation of Go error inspection
 ALLOW .* -> vendor/golang.org/x/xerrors
 
-# golang.org/x/sys required for SO_REUSEPORT, for example 
-ALLOW .* -> vendor/golang.org/x/sys 
- 
+# golang.org/x/sys required for SO_REUSEPORT, for example
+ALLOW .* -> vendor/golang.org/x/sys
+
 ALLOW .* -> vendor/golang.org/x/mod
 
 # basic LDAP v3 functionality for the GO programming language

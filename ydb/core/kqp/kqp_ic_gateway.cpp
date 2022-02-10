@@ -28,8 +28,8 @@
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h> 
-#include <library/cpp/actors/core/hfunc.h> 
+#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/core/hfunc.h>
 
 #include <util/string/split.h>
 #include <util/string/vector.h>

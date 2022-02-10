@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/openssl/holders/bio.h> 
+#include <library/cpp/openssl/holders/bio.h>
 
 namespace NOpenSSL {
 

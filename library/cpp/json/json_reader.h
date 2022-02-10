@@ -2,8 +2,8 @@
 
 #include "json_value.h"
 
-#include <library/cpp/json/common/defs.h> 
-#include <library/cpp/json/fast_sax/parser.h> 
+#include <library/cpp/json/common/defs.h>
+#include <library/cpp/json/fast_sax/parser.h>
 
 #include <util/generic/yexception.h>
 
@@ -134,7 +134,7 @@ namespace NJson {
         bool CloseComplexValue();
     };
 
-    //// relaxed json, used in library/cpp/scheme 
+    //// relaxed json, used in library/cpp/scheme
     bool ReadJsonFastTree(TStringBuf in, TJsonValue* out, bool throwOnError = false, bool notClosedBracketIsError = false);
     TJsonValue ReadJsonFastTree(TStringBuf in, bool notClosedBracketIsError = false);
 }

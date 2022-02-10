@@ -1,4 +1,4 @@
-#include <library/cpp/json/json_prettifier.h> 
+#include <library/cpp/json/json_prettifier.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

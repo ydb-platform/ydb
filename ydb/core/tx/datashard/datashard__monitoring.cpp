@@ -4,10 +4,10 @@
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 #include <ydb/core/util/pb.h>
 
-#include <library/cpp/mime/types/mime.h> 
-#include <library/cpp/resource/resource.h> 
+#include <library/cpp/mime/types/mime.h>
+#include <library/cpp/resource/resource.h>
 
-#include <library/cpp/html/pcdata/pcdata.h> 
+#include <library/cpp/html/pcdata/pcdata.h>
 
 namespace NKikimr {
 namespace NDataShard {

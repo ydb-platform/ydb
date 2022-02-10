@@ -1,4 +1,4 @@
-#include <library/cpp/colorizer/colors.h> 
+#include <library/cpp/colorizer/colors.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/stream/str.h>

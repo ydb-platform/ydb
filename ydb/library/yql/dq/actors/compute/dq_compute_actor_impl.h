@@ -18,7 +18,7 @@
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <library/cpp/actors/core/interconnect.h> 
+#include <library/cpp/actors/core/interconnect.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>

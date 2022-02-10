@@ -19,7 +19,7 @@ ELSE()
     )
 
     PEERDIR(
-        library/cpp/balloc/lib 
+        library/cpp/balloc/lib
     )
 ENDIF()
 

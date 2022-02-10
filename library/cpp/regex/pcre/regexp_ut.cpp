@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/strip.h>
-#include <library/cpp/regex/pcre/regexp.h> 
+#include <library/cpp/regex/pcre/regexp.h>
 #include <util/stream/output.h>
 
 struct TRegTest {

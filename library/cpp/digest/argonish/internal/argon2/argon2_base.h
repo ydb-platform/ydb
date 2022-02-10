@@ -1,13 +1,13 @@
 #pragma once
 
 #include <util/generic/yexception.h>
-#include <library/cpp/digest/argonish/argon2.h> 
-#include <library/cpp/digest/argonish/internal/blake2b/blake2b.h> 
+#include <library/cpp/digest/argonish/argon2.h>
+#include <library/cpp/digest/argonish/internal/blake2b/blake2b.h>
 #include <library/cpp/threading/poor_man_openmp/thread_helper.h>
 
 namespace NArgonish {
     const ui32 ARGON2_PREHASH_DIGEST_LENGTH = 64;
-    const ui32 ARGON2_SECRET_MAX_LENGTH = 64; 
+    const ui32 ARGON2_SECRET_MAX_LENGTH = 64;
     const ui32 ARGON2_PREHASH_SEED_LENGTH = 72;
     const ui32 ARGON2_BLOCK_SIZE = 1024;
     const ui32 ARGON2_QWORDS_IN_BLOCK = ARGON2_BLOCK_SIZE / 8;

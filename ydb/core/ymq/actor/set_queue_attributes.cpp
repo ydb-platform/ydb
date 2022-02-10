@@ -10,7 +10,7 @@
 #include <ydb/core/ymq/base/queue_attributes.h>
 #include <ydb/public/lib/value/value.h>
 
-#include <library/cpp/scheme/scheme.h> 
+#include <library/cpp/scheme/scheme.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/utility.h>

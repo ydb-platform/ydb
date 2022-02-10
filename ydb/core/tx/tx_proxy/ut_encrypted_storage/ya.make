@@ -26,7 +26,7 @@ ENDIF()
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/svnversion 
+    library/cpp/svnversion
     library/cpp/testing/unittest
     ydb/core/testlib
     ydb/core/tx

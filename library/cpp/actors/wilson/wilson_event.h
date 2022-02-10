@@ -4,7 +4,7 @@
 
 #include <library/cpp/string_utils/base64/base64.h>
 
-#include <library/cpp/actors/core/log.h> 
+#include <library/cpp/actors/core/log.h>
 
 namespace NWilson {
 #if !defined(_win_)

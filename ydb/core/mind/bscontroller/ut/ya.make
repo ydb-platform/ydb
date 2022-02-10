@@ -20,7 +20,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    library/cpp/actors/util 
+    library/cpp/actors/util
     ydb/core/yql_testlib
 )
 

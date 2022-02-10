@@ -14,7 +14,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/re2
-    library/cpp/deprecated/enum_codegen 
+    library/cpp/deprecated/enum_codegen
 )
 
 END()

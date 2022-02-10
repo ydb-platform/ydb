@@ -2,7 +2,7 @@
 
 #include "macros.h"
 
-#include <library/cpp/yson_pull/output.h> 
+#include <library/cpp/yson_pull/output.h>
 
 #include <util/system/types.h>
 

@@ -1,6 +1,6 @@
 #pragma once
 #include <bitset>
-#include <library/cpp/actors/core/interconnect.h> 
+#include <library/cpp/actors/core/interconnect.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/blobstorage.h>
@@ -28,8 +28,8 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 
-#include <library/cpp/actors/core/interconnect.h> 
-#include <library/cpp/actors/core/hfunc.h> 
+#include <library/cpp/actors/core/interconnect.h>
+#include <library/cpp/actors/core/hfunc.h>
 
 #include <util/generic/queue.h>
 #include <util/random/random.h>

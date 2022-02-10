@@ -4,7 +4,7 @@
 #include "scheduler_actor.h"
 #include "scheduler_queue.h"
 
-#include <library/cpp/actors/interconnect/poller_actor.h> 
+#include <library/cpp/actors/interconnect/poller_actor.h>
 #include <util/system/hp_timer.h>
 
 #ifdef __linux__

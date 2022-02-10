@@ -7,11 +7,11 @@
 #include "symbols.h"
 #include "varint.h"
 
-#include <library/cpp/yson_pull/consumer.h> 
-#include <library/cpp/yson_pull/event.h> 
-#include <library/cpp/yson_pull/output.h> 
-#include <library/cpp/yson_pull/stream_type.h> 
-#include <library/cpp/yson_pull/writer.h> 
+#include <library/cpp/yson_pull/consumer.h>
+#include <library/cpp/yson_pull/event.h>
+#include <library/cpp/yson_pull/output.h>
+#include <library/cpp/yson_pull/stream_type.h>
+#include <library/cpp/yson_pull/writer.h>
 
 #include <util/generic/vector.h>
 #include <util/system/yassert.h>

@@ -15,12 +15,12 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core 
-    library/cpp/actors/prof 
-    library/cpp/html/pcdata 
+    library/cpp/actors/core
+    library/cpp/actors/prof
+    library/cpp/html/pcdata
     library/cpp/lfalloc/alloc_profiler
     library/cpp/lfalloc/dbg_info
-    library/cpp/malloc/api 
+    library/cpp/malloc/api
     library/cpp/monlib/service/pages
     library/cpp/ytalloc/api
     ydb/core/base

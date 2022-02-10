@@ -1,5 +1,5 @@
-#include <library/cpp/lwtrace/all.h> 
-#include <library/cpp/lwtrace/lwprobe.h> 
+#include <library/cpp/lwtrace/all.h>
+#include <library/cpp/lwtrace/lwprobe.h>
 
 template <ui64 N>
 ui64 Fact() {

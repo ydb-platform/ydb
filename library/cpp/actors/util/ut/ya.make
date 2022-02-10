@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/actors/util) 
+UNITTEST_FOR(library/cpp/actors/util)
 
 IF (WITH_VALGRIND)
     TIMEOUT(600)

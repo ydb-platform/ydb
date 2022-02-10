@@ -1,6 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <library/cpp/containers/intrusive_avl_tree/avltree.h> 
+#include <library/cpp/containers/intrusive_avl_tree/avltree.h>
 
 class TAvlTreeTest: public TTestBase {
     UNIT_TEST_SUITE(TAvlTreeTest);

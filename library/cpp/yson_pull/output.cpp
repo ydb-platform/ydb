@@ -1,7 +1,7 @@
 #include "output.h"
 
-#include <library/cpp/yson_pull/detail/output/stdio_file.h> 
-#include <library/cpp/yson_pull/detail/output/stream.h> 
+#include <library/cpp/yson_pull/detail/output/stdio_file.h>
+#include <library/cpp/yson_pull/detail/output/stream.h>
 
 #include <util/generic/ptr.h>
 #include <util/stream/file.h>

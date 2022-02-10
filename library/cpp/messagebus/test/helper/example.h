@@ -5,8 +5,8 @@
 #include "alloc_counter.h"
 #include "message_handler_error.h"
 
-#include <library/cpp/messagebus/ybus.h> 
-#include <library/cpp/messagebus/misc/test_sync.h> 
+#include <library/cpp/messagebus/ybus.h>
+#include <library/cpp/messagebus/misc/test_sync.h>
 
 #include <util/system/event.h>
 

@@ -7,9 +7,9 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/codecs 
-    library/cpp/codecs/static 
-    library/cpp/codecs/static/tools/common 
+    library/cpp/codecs
+    library/cpp/codecs/static
+    library/cpp/codecs/static/tools/common
     library/cpp/getopt/small
 )
 

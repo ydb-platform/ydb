@@ -56,15 +56,15 @@ SRCS(
 PEERDIR(
     contrib/libs/openssl
     contrib/libs/protobuf
-    library/cpp/actors/core 
-    library/cpp/containers/intrusive_rb_tree 
-    library/cpp/digest/md5 
-    library/cpp/grpc/client 
-    library/cpp/logger 
+    library/cpp/actors/core
+    library/cpp/containers/intrusive_rb_tree
+    library/cpp/digest/md5
+    library/cpp/grpc/client
+    library/cpp/logger
     library/cpp/lwtrace/mon
     library/cpp/monlib/dynamic_counters
     library/cpp/monlib/service/pages
-    library/cpp/scheme 
+    library/cpp/scheme
     ydb/core/base
     ydb/core/client/minikql_compile
     ydb/core/engine

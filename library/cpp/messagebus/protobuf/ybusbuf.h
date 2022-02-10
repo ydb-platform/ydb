@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/messagebus/ybus.h> 
+#include <library/cpp/messagebus/ybus.h>
 
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>

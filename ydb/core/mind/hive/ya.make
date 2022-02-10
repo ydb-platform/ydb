@@ -79,8 +79,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core 
-    library/cpp/actors/interconnect 
+    library/cpp/actors/core
+    library/cpp/actors/interconnect
     library/cpp/json
     library/cpp/monlib/dynamic_counters
     ydb/core/base

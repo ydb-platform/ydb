@@ -37,10 +37,10 @@ RESOURCE(
 )
 
 PEERDIR(
-    library/cpp/json 
+    library/cpp/json
     library/cpp/monlib/consumers
     library/cpp/monlib/encode/protobuf
-    library/cpp/resource 
+    library/cpp/resource
 )
 
 END()

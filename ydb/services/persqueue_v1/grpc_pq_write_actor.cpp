@@ -9,7 +9,7 @@
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/services/lib/sharding/sharding.h>
-#include <library/cpp/actors/core/log.h> 
+#include <library/cpp/actors/core/log.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <util/string/hex.h>
 #include <util/string/vector.h>

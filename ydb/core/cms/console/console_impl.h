@@ -15,7 +15,7 @@
 
 #include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 
-#include <library/cpp/actors/core/hfunc.h> 
+#include <library/cpp/actors/core/hfunc.h>
 
 #include <util/generic/set.h>
 

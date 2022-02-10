@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/containers/top_keeper) 
+UNITTEST_FOR(library/cpp/containers/top_keeper)
 
 OWNER(
     mbusel

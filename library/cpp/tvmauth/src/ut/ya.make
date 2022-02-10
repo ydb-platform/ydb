@@ -1,6 +1,6 @@
-UNITTEST_FOR(library/cpp/tvmauth) 
+UNITTEST_FOR(library/cpp/tvmauth)
 
-OWNER(g:passport_infra) 
+OWNER(g:passport_infra)
 
 SRCS(
     parser_ut.cpp
@@ -8,7 +8,7 @@ SRCS(
     service_ut.cpp
     user_ut.cpp
     utils_ut.cpp
-    version_ut.cpp 
+    version_ut.cpp
 )
 
 END()

@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/compproto 
+    library/cpp/compproto
 )
 
 END()

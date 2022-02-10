@@ -1,8 +1,8 @@
 #include "interconnect_tcp_proxy.h"
 #include "interconnect_handshake.h"
 #include "interconnect_tcp_session.h"
-#include <library/cpp/actors/core/log.h> 
-#include <library/cpp/actors/protos/services_common.pb.h> 
+#include <library/cpp/actors/core/log.h>
+#include <library/cpp/actors/protos/services_common.pb.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/system/getpid.h>
 

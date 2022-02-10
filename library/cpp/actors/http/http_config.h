@@ -1,7 +1,7 @@
 #pragma once
 #include <util/network/sock.h>
-#include <library/cpp/actors/core/log.h> 
-#include <library/cpp/actors/protos/services_common.pb.h> 
+#include <library/cpp/actors/core/log.h>
+#include <library/cpp/actors/protos/services_common.pb.h>
 
 namespace NHttp {
 

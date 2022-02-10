@@ -15,8 +15,8 @@
 #include <library/cpp/grpc/server/grpc_async_ctx_base.h>
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h> 
-#include <library/cpp/actors/core/hfunc.h> 
+#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/core/hfunc.h>
 
 namespace NKikimr {
 namespace NKesus {

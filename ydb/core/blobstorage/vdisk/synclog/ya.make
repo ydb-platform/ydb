@@ -3,10 +3,10 @@ LIBRARY()
 OWNER(g:kikimr)
 
 PEERDIR(
-    library/cpp/actors/core 
-    library/cpp/actors/interconnect 
-    library/cpp/blockcodecs 
-    library/cpp/codecs 
+    library/cpp/actors/core
+    library/cpp/actors/interconnect
+    library/cpp/blockcodecs
+    library/cpp/codecs
     library/cpp/monlib/service/pages
     ydb/core/base
     ydb/core/blobstorage/base

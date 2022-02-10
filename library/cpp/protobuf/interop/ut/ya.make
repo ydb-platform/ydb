@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/protobuf/interop) 
+UNITTEST_FOR(library/cpp/protobuf/interop)
 
 OWNER(
     paxakor
@@ -9,7 +9,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/protobuf/interop 
+    library/cpp/protobuf/interop
 )
 
 END()

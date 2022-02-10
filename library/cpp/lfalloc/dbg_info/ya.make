@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(vskipin)
 
 PEERDIR(
-    library/cpp/malloc/api 
+    library/cpp/malloc/api
 )
 
 SRCS(

@@ -2,7 +2,7 @@
 
 #include "kqp_tasks_graph.h"
 
-#include <library/cpp/actors/core/actor.h> 
+#include <library/cpp/actors/core/actor.h>
 
 namespace NYql {
 

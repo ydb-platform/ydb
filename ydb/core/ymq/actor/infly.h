@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-#include <library/cpp/containers/intrusive_rb_tree/rb_tree.h> 
+#include <library/cpp/containers/intrusive_rb_tree/rb_tree.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/ptr.h>

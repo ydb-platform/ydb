@@ -1,8 +1,8 @@
 #include "tag.h"
 #include "tcmalloc.h"
 
-#include <library/cpp/charset/ci_string.h> 
-#include <library/cpp/containers/atomizer/atomizer.h> 
+#include <library/cpp/charset/ci_string.h>
+#include <library/cpp/containers/atomizer/atomizer.h>
 #include <library/cpp/malloc/api/malloc.h>
 
 #if defined(PROFILE_MEMORY_ALLOCATIONS)

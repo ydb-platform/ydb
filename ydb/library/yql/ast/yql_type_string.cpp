@@ -7,7 +7,7 @@
 #include <util/string/cast.h>
 #include <util/generic/map.h>
 #include <util/generic/utility.h>
-#include <library/cpp/deprecated/enum_codegen/enum_codegen.h> 
+#include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
 
 #define EXPECT_AND_SKIP_TOKEN_IMPL(token, message, result) \

@@ -9,7 +9,7 @@
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
-#include <library/cpp/grpc/client/grpc_client_low.h> 
+#include <library/cpp/grpc/client/grpc_client_low.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/threading/task_scheduler/task_scheduler.h>
 

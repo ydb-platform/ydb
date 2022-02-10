@@ -4,8 +4,8 @@
 
 #include <ydb/core/kqp/kqp.h>
 
-#include <library/cpp/actors/core/actor.h> 
-#include <library/cpp/actors/interconnect/interconnect.h> 
+#include <library/cpp/actors/core/actor.h>
+#include <library/cpp/actors/interconnect/interconnect.h>
 
 
 namespace NYql::NDq {

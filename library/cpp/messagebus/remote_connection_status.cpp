@@ -2,7 +2,7 @@
 
 #include "key_value_printer.h"
 
-#include <library/cpp/messagebus/monitoring/mon_proto.pb.h> 
+#include <library/cpp/messagebus/monitoring/mon_proto.pb.h>
 
 #include <util/stream/format.h>
 #include <util/stream/output.h>

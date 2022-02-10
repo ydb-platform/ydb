@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/regex/pcre) 
+UNITTEST_FOR(library/cpp/regex/pcre)
 
 OWNER(g:util)
 

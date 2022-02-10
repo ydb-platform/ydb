@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/stream/output.h>
-#include <library/cpp/digest/md5/md5.h> 
+#include <library/cpp/digest/md5/md5.h>
 
 namespace NYql {
 class TMd5OutputStream : public IOutputStream {

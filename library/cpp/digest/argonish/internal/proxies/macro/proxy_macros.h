@@ -45,12 +45,12 @@
             ythrow yexception() << "key is null or keylen equals 0 or key is too long";                                       \
                                                                                                                               \
         ARGON2_INSTANCE_DECL(IS, 1, 1)                                                                                        \
-        ARGON2_INSTANCE_DECL(IS, 8, 1)                                                                                        \ 
+        ARGON2_INSTANCE_DECL(IS, 8, 1)                                                                                        \
         ARGON2_INSTANCE_DECL(IS, 16, 1)                                                                                       \
         ARGON2_INSTANCE_DECL(IS, 32, 1)                                                                                       \
         ARGON2_INSTANCE_DECL(IS, 64, 1)                                                                                       \
-        ARGON2_INSTANCE_DECL(IS, 128, 1)                                                                                       \ 
-        ARGON2_INSTANCE_DECL(IS, 256, 1)                                                                                       \ 
+        ARGON2_INSTANCE_DECL(IS, 128, 1)                                                                                       \
+        ARGON2_INSTANCE_DECL(IS, 256, 1)                                                                                       \
         ARGON2_INSTANCE_DECL(IS, 512, 1)                                                                                      \
         ARGON2_INSTANCE_DECL(IS, 1024, 1)                                                                                     \
         ARGON2_INSTANCE_DECL(IS, 2048, 1)                                                                                     \

@@ -1,7 +1,7 @@
 #include "registar.h"
 
 #include <library/cpp/diff/diff.h>
-#include <library/cpp/colorizer/colors.h> 
+#include <library/cpp/colorizer/colors.h>
 
 #include <util/generic/bt_exception.h>
 #include <util/random/fast.h>

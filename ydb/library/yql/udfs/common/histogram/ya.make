@@ -13,7 +13,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/histogram/adaptive 
+    library/cpp/histogram/adaptive
 )
 
 END()

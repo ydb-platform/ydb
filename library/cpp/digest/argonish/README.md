@@ -50,7 +50,7 @@ How to use
 ----------
 
 ```
-#include <library/cpp/digest/argonish/argon2.h> 
+#include <library/cpp/digest/argonish/argon2.h>
 ...
 uint32_t tcost = 1;  	/* one pass */
 uint32_t mcost = 32; 	/* in KB */
@@ -59,7 +59,7 @@ NArgonish::TArgon2Factory afactory;
 THolder<NArgonish::IArgon2Base> argon2 = afactory.Create(NArgonish::EArgon2Type::Argon2d, tcost, mcost, threads);
 argon2->Hash(input, insize, salt, saltsize, out, outlen);
 ...
-#include <library/cpp/digest/argonish/blake2b.h> 
+#include <library/cpp/digest/argonish/blake2b.h>
 ...
 NArgonish::TBlake2BFactory bfactory;
 uint32_t outlen = 32;

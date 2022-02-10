@@ -3,10 +3,10 @@
 #include "hfunc.h"
 #include "scheduler_basic.h"
 
-#include <library/cpp/actors/util/should_continue.h> 
+#include <library/cpp/actors/util/should_continue.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/actors/protos/unittests.pb.h> 
+#include <library/cpp/actors/protos/unittests.pb.h>
 
 using namespace NActors;
 

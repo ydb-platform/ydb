@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/digest/sfh) 
+UNITTEST_FOR(library/cpp/digest/sfh)
 
 OWNER(
     pg

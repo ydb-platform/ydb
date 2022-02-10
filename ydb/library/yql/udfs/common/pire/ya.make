@@ -13,7 +13,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/regex/pire 
+    library/cpp/regex/pire
 )
 
 END()

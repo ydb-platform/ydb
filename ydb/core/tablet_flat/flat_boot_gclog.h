@@ -6,7 +6,7 @@
 #include "flat_bio_events.h"
 
 #include <ydb/core/util/pb.h>
-#include <library/cpp/blockcodecs/codecs.h> 
+#include <library/cpp/blockcodecs/codecs.h>
 #include <util/generic/xrange.h>
 
 namespace NKikimr {

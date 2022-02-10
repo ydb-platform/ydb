@@ -2,7 +2,7 @@
 
 #include <immintrin.h>
 #include "blake2b.h"
-#include <library/cpp/digest/argonish/internal/rotations/rotations_avx2.h> 
+#include <library/cpp/digest/argonish/internal/rotations/rotations_avx2.h>
 
 namespace NArgonish {
     template <>

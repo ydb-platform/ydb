@@ -1,6 +1,6 @@
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 
-#include <library/cpp/hyperloglog/hyperloglog.h> 
+#include <library/cpp/hyperloglog/hyperloglog.h>
 
 #include <util/generic/hash_set.h>
 

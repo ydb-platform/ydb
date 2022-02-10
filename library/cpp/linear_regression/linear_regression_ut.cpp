@@ -1,4 +1,4 @@
-#include <library/cpp/linear_regression/linear_regression.h> 
+#include <library/cpp/linear_regression/linear_regression.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/vector.h>

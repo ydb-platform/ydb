@@ -1,7 +1,7 @@
 #include "fuzz_json.h"
 #include "util/generic/fwd.h"
 
-#include <library/cpp/scheme/scheme.h> 
+#include <library/cpp/scheme/scheme.h>
 #include <util/stream/null.h>
 
 namespace {

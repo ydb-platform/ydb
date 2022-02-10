@@ -11,7 +11,7 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
-#include <library/cpp/tvmauth/unittest.h> 
+#include <library/cpp/tvmauth/unittest.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/printf.h>
@@ -33,7 +33,7 @@ inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount = 2, bool ro
     authConfig.SetUseStaff(false);
     authConfig.MutableTVMConfig()->SetEnabled(true);
     authConfig.MutableTVMConfig()->SetServiceTVMId(10);
-    authConfig.MutableTVMConfig()->SetPublicKeys(NTvmAuth::NUnittest::TVMKNIFE_PUBLIC_KEYS); 
+    authConfig.MutableTVMConfig()->SetPublicKeys(NTvmAuth::NUnittest::TVMKNIFE_PUBLIC_KEYS);
     authConfig.MutableTVMConfig()->SetUpdatePublicKeys(false);
     pqConfig.SetRoundRobinPartitionMapping(roundrobin);
     const TString query = R"___(

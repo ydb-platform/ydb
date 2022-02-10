@@ -8,10 +8,10 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/colorizer 
-    library/cpp/dbg_output 
+    library/cpp/colorizer
+    library/cpp/dbg_output
     library/cpp/diff
-    library/cpp/json/writer 
+    library/cpp/json/writer
     library/cpp/testing/common
     library/cpp/testing/hook
 )

@@ -1,6 +1,6 @@
 #include "zstd_dict_codec.h"
 
-#include <library/cpp/packers/packers.h> 
+#include <library/cpp/packers/packers.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/refcount.h>

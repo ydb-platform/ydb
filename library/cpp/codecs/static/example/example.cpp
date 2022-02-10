@@ -1,6 +1,6 @@
 #include "example.h"
 
-#include <library/cpp/codecs/static/static.h> 
+#include <library/cpp/codecs/static/static.h>
 
 #include <util/generic/yexception.h>
 

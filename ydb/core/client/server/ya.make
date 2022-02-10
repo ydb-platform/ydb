@@ -65,13 +65,13 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/helpers 
-    library/cpp/json 
-    library/cpp/messagebus 
-    library/cpp/messagebus/protobuf 
+    library/cpp/actors/helpers
+    library/cpp/json
+    library/cpp/messagebus
+    library/cpp/messagebus/protobuf
     library/cpp/monlib/messagebus
-    library/cpp/protobuf/json 
-    library/cpp/protobuf/util 
+    library/cpp/protobuf/json
+    library/cpp/protobuf/util
     library/cpp/threading/future
     ydb/core/actorlib_impl
     ydb/core/base

@@ -13,7 +13,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/hyperloglog 
+    library/cpp/hyperloglog
 )
 
 END()

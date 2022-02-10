@@ -39,7 +39,7 @@
 #include "proto2json_printer.h"
 #include "json_output_create.h"
 
-#include <library/cpp/protobuf/util/simple_reflection.h> 
+#include <library/cpp/protobuf/util/simple_reflection.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/yexception.h>

@@ -4,8 +4,8 @@ OWNER(alexvru)
 
 PEERDIR(
     contrib/libs/protobuf
-    library/cpp/actors/core 
-    library/cpp/containers/intrusive_rb_tree 
+    library/cpp/actors/core
+    library/cpp/containers/intrusive_rb_tree
     ydb/core/base
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/lwtrace_probes

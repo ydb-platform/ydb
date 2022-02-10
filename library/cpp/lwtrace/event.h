@@ -4,7 +4,7 @@
 #include "signature.h"
 #include "param_traits.h"
 
-#include <library/cpp/lwtrace/protos/lwtrace.pb.h> 
+#include <library/cpp/lwtrace/protos/lwtrace.pb.h>
 
 namespace NLWTrace {
     // Common class for all events

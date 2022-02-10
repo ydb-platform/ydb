@@ -7,11 +7,11 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/charset 
-    library/cpp/http/io 
-    library/cpp/http/misc 
+    library/cpp/charset
+    library/cpp/http/io
+    library/cpp/http/misc
     library/cpp/openssl/io
-    library/cpp/uri 
+    library/cpp/uri
     ydb/library/yql/utils/log
 )
 

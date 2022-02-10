@@ -8,7 +8,7 @@ SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/svnversion 
+    library/cpp/svnversion
 )
 
 SRCS(

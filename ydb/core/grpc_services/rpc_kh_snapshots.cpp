@@ -7,7 +7,7 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 
-#include <library/cpp/actors/core/hfunc.h> 
+#include <library/cpp/actors/core/hfunc.h>
 
 #include <util/string/vector.h>
 #include <util/generic/hash.h>

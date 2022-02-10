@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/http/fetch) 
+UNITTEST_FOR(library/cpp/http/fetch)
 
 OWNER(
     g:zora

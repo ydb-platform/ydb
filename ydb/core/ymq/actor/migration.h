@@ -4,7 +4,7 @@
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <library/cpp/actors/core/actor.h> 
+#include <library/cpp/actors/core/actor.h>
 
 namespace NKikimr::NSQS {
 

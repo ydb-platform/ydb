@@ -57,8 +57,8 @@ LLVM_BC(
 
 PEERDIR(
     contrib/libs/apache/arrow
-    library/cpp/enumbitset 
-    library/cpp/packedtypes 
+    library/cpp/enumbitset
+    library/cpp/packedtypes
     library/cpp/random_provider
     library/cpp/time_provider
     ydb/library/yql/minikql

@@ -6,7 +6,7 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/json/writer 
+    library/cpp/json/writer
     library/cpp/monlib/service/pages
     library/cpp/threading/future
     ydb/core/base

@@ -15,11 +15,11 @@ SRCS(
 
 PEERDIR(
     contrib/libs/libxml
-    library/cpp/actors/core 
+    library/cpp/actors/core
     library/cpp/cgiparam
-    library/cpp/http/misc 
-    library/cpp/http/server 
-    library/cpp/protobuf/json 
+    library/cpp/http/misc
+    library/cpp/http/server
+    library/cpp/protobuf/json
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
     library/cpp/string_utils/url

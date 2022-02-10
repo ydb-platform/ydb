@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/protos/services.pb.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h> 
+#include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <util/generic/ptr.h>
 
 namespace NKikimr {

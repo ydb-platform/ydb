@@ -1,9 +1,9 @@
-UNITTEST_FOR(library/cpp/http/io) 
+UNITTEST_FOR(library/cpp/http/io)
 
 OWNER(g:util)
 
 PEERDIR(
-    library/cpp/http/server 
+    library/cpp/http/server
 )
 
 SRCS(

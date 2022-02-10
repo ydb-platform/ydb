@@ -120,14 +120,14 @@ void SetSocketPriority(SOCKET s, int priority);
 void SetTcpFastOpen(SOCKET s, int qlen);
 /**
  * Deprecated, consider using HasSocketDataToRead instead.
- **/ 
-bool IsNotSocketClosedByOtherSide(SOCKET s); 
+ **/
+bool IsNotSocketClosedByOtherSide(SOCKET s);
 enum class ESocketReadStatus {
     HasData,
     NoData,
     SocketClosed
 };
-/** 
+/**
  * Useful for keep-alive connections.
  **/
 ESocketReadStatus HasSocketDataToRead(SOCKET s);

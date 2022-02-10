@@ -11,7 +11,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/containers/flat_hash/lib 
+    library/cpp/containers/flat_hash/lib
 )
 
 END()

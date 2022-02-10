@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/histogram/hdr/histogram.h> 
+#include <library/cpp/histogram/hdr/histogram.h>
 
 #include <util/system/spinlock.h>
 #include <util/stream/output.h>

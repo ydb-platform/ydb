@@ -22,7 +22,7 @@ class TSockTest: public TTestBase {
     UNIT_TEST_EXCEPTION(TestConnectionRefused, yexception);
 #endif
     UNIT_TEST(TestNetworkResolutionError);
-    UNIT_TEST(TestNetworkResolutionErrorMessage); 
+    UNIT_TEST(TestNetworkResolutionErrorMessage);
     UNIT_TEST(TestBrokenPipe);
     UNIT_TEST(TestClose);
     UNIT_TEST(TestReusePortAvailCheck);
@@ -33,7 +33,7 @@ public:
     void TestTimeout();
     void TestConnectionRefused();
     void TestNetworkResolutionError();
-    void TestNetworkResolutionErrorMessage(); 
+    void TestNetworkResolutionErrorMessage();
     void TestBrokenPipe();
     void TestClose();
     void TestReusePortAvailCheck();
@@ -92,42 +92,42 @@ void TSockTest::TestNetworkResolutionError() {
     }
 }
 
-void TSockTest::TestNetworkResolutionErrorMessage() { 
-#ifdef _unix_ 
-    auto str = [](int code) -> TString { 
-        return TNetworkResolutionError(code).what(); 
-    }; 
- 
-    auto expected = [](int code) -> TString { 
-        return gai_strerror(code); 
-    }; 
- 
-    struct TErrnoGuard { 
-        TErrnoGuard() 
+void TSockTest::TestNetworkResolutionErrorMessage() {
+#ifdef _unix_
+    auto str = [](int code) -> TString {
+        return TNetworkResolutionError(code).what();
+    };
+
+    auto expected = [](int code) -> TString {
+        return gai_strerror(code);
+    };
+
+    struct TErrnoGuard {
+        TErrnoGuard()
             : PrevValue_(errno)
-        { 
-        } 
- 
-        ~TErrnoGuard() { 
+        {
+        }
+
+        ~TErrnoGuard() {
             errno = PrevValue_;
-        } 
- 
-    private: 
+        }
+
+    private:
         int PrevValue_;
-    } g; 
- 
-    UNIT_ASSERT_VALUES_EQUAL(expected(0) + "(0): ", str(0)); 
-    UNIT_ASSERT_VALUES_EQUAL(expected(-9) + "(-9): ", str(-9)); 
- 
-    errno = 0; 
-    UNIT_ASSERT_VALUES_EQUAL(expected(EAI_SYSTEM) + "(" + IntToString<10>(EAI_SYSTEM) + "; errno=0): ", 
-                             str(EAI_SYSTEM)); 
-    errno = 110; 
-    UNIT_ASSERT_VALUES_EQUAL(expected(EAI_SYSTEM) + "(" + IntToString<10>(EAI_SYSTEM) + "; errno=110): ", 
-                             str(EAI_SYSTEM)); 
-#endif 
-} 
- 
+    } g;
+
+    UNIT_ASSERT_VALUES_EQUAL(expected(0) + "(0): ", str(0));
+    UNIT_ASSERT_VALUES_EQUAL(expected(-9) + "(-9): ", str(-9));
+
+    errno = 0;
+    UNIT_ASSERT_VALUES_EQUAL(expected(EAI_SYSTEM) + "(" + IntToString<10>(EAI_SYSTEM) + "; errno=0): ",
+                             str(EAI_SYSTEM));
+    errno = 110;
+    UNIT_ASSERT_VALUES_EQUAL(expected(EAI_SYSTEM) + "(" + IntToString<10>(EAI_SYSTEM) + "; errno=110): ",
+                             str(EAI_SYSTEM));
+#endif
+}
+
 class TTempEnableSigPipe {
 public:
     TTempEnableSigPipe() {

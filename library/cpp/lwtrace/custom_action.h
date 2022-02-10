@@ -2,7 +2,7 @@
 
 #include "probe.h"
 
-#include <library/cpp/lwtrace/protos/lwtrace.pb.h> 
+#include <library/cpp/lwtrace/protos/lwtrace.pb.h>
 
 #include <util/generic/hash.h>
 

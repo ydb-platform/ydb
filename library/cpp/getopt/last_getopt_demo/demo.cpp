@@ -1,6 +1,6 @@
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/getopt/modchooser.h>
-#include <library/cpp/colorizer/colors.h> 
+#include <library/cpp/colorizer/colors.h>
 
 // For the sake of this example, let's implement Wget
 

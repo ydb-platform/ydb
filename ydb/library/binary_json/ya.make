@@ -12,7 +12,7 @@ YQL_ABI_VERSION(
 )
 
 PEERDIR(
-    library/cpp/json 
+    library/cpp/json
     ydb/library/yql/minikql/dom
 )
 

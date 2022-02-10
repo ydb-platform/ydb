@@ -2,8 +2,8 @@
 
 #include "pire.h"
 
-#include <library/cpp/charset/doccodes.h> 
-#include <library/cpp/charset/recyr.hh> 
+#include <library/cpp/charset/doccodes.h>
+#include <library/cpp/charset/recyr.hh>
 #include <util/generic/maybe.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>

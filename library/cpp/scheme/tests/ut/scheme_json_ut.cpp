@@ -1,5 +1,5 @@
-#include <library/cpp/scheme/scimpl_private.h> 
-#include <library/cpp/scheme/ut_utils/scheme_ut_utils.h> 
+#include <library/cpp/scheme/scimpl_private.h>
+#include <library/cpp/scheme/ut_utils/scheme_ut_utils.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/null.h>

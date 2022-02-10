@@ -2,11 +2,11 @@
 
 #include "http_code_extractor.h"
 
-#include <library/cpp/http/io/stream.h> 
-#include <library/cpp/neh/factory.h> 
-#include <library/cpp/neh/http_common.h> 
-#include <library/cpp/neh/location.h> 
-#include <library/cpp/neh/neh.h> 
+#include <library/cpp/http/io/stream.h>
+#include <library/cpp/neh/factory.h>
+#include <library/cpp/neh/http_common.h>
+#include <library/cpp/neh/location.h>
+#include <library/cpp/neh/neh.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/strbuf.h>

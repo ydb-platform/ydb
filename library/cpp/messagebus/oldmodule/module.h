@@ -41,7 +41,7 @@
 
 #include "startsession.h"
 
-#include <library/cpp/messagebus/ybus.h> 
+#include <library/cpp/messagebus/ybus.h>
 
 #include <util/generic/noncopyable.h>
 #include <util/generic/object_counter.h>

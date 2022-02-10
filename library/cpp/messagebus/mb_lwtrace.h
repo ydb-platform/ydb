@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/lwtrace/all.h> 
+#include <library/cpp/lwtrace/all.h>
 
 #include <util/generic/string.h>
 

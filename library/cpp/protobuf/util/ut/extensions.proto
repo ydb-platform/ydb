@@ -1,6 +1,6 @@
 package NExt;
 
-import "library/cpp/protobuf/util/ut/sample_for_simple_reflection.proto"; 
+import "library/cpp/protobuf/util/ut/sample_for_simple_reflection.proto";
 
 message TTestExt {
     extend TSample {

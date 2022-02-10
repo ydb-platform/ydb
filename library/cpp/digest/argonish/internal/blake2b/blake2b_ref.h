@@ -1,7 +1,7 @@
 #pragma once
 
 #include "blake2b.h"
-#include <library/cpp/digest/argonish/internal/rotations/rotations_ref.h> 
+#include <library/cpp/digest/argonish/internal/rotations/rotations_ref.h>
 
 namespace NArgonish {
     static const ui8 Sigma[12][16] = {

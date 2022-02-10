@@ -6,7 +6,7 @@ OWNER(
 )
 
 PEERDIR(
-    library/cpp/dns 
+    library/cpp/dns
 )
 
 SRCS(

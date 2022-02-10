@@ -5,7 +5,7 @@
 #include "downtime.h"
 #include "services.h"
 
-#include <library/cpp/actors/interconnect/interconnect.h> 
+#include <library/cpp/actors/interconnect/interconnect.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>

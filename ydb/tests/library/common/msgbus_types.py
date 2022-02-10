@@ -35,7 +35,7 @@ class MessageBusStatus(enum.IntEnum):
 @enum.unique
 class EMessageStatus(enum.IntEnum):
     """
-    See /arcadia/library/cpp/messagebus/message_status.h 
+    See /arcadia/library/cpp/messagebus/message_status.h
     """
     MESSAGE_OK = 0
     MESSAGE_CONNECT_FAILED = 1

@@ -1,7 +1,7 @@
 #include "blobstorage_synclogmsgwriter.h"
 #include "blobstorage_synclogmsgimpl.h"
 
-#include <library/cpp/blockcodecs/codecs.h> 
+#include <library/cpp/blockcodecs/codecs.h>
 #include <util/thread/singleton.h>
 #include <util/generic/algorithm.h>
 

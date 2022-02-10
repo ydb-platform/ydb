@@ -9,7 +9,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/int128 
+    library/cpp/int128
 )
 
 END()

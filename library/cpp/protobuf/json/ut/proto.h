@@ -13,7 +13,7 @@ namespace NProtobufJsonTest {
 #define DEFINE_FIELD(name, value)                         \
     if (skippedFields.find(#name) == skippedFields.end()) \
         proto->Set##name(value);
-#include <library/cpp/protobuf/json/ut/fields.incl> 
+#include <library/cpp/protobuf/json/ut/fields.incl>
 #undef DEFINE_FIELD
     }
 
@@ -38,7 +38,7 @@ namespace NProtobufJsonTest {
             AddValue(proto->Mutable##name(), values[i]);               \
         }                                                              \
     }
-#include <library/cpp/protobuf/json/ut/repeated_fields.incl> 
+#include <library/cpp/protobuf/json/ut/repeated_fields.incl>
 #undef DEFINE_REPEATED_FIELD
     }
 

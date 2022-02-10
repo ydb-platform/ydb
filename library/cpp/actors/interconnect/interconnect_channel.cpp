@@ -1,12 +1,12 @@
 #include "interconnect_channel.h"
 
-#include <library/cpp/actors/core/events.h> 
-#include <library/cpp/actors/core/executor_thread.h> 
-#include <library/cpp/actors/core/log.h> 
+#include <library/cpp/actors/core/events.h>
+#include <library/cpp/actors/core/executor_thread.h>
+#include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/core/probes.h>
-#include <library/cpp/actors/protos/services_common.pb.h> 
-#include <library/cpp/actors/prof/tag.h> 
-#include <library/cpp/digest/crc32c/crc32c.h> 
+#include <library/cpp/actors/protos/services_common.pb.h>
+#include <library/cpp/actors/prof/tag.h>
+#include <library/cpp/digest/crc32c/crc32c.h>
 
 LWTRACE_USING(ACTORLIB_PROVIDER);
 

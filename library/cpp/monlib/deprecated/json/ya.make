@@ -18,7 +18,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/json 
+    library/cpp/json
 )
 
 END()

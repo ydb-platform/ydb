@@ -15,7 +15,7 @@ ENDIF()
 OWNER(ddoarn cthulhu fomichev g:kikimr)
 
 PEERDIR(
-    library/cpp/digest/crc32c 
+    library/cpp/digest/crc32c
 )
 
 SRCS(

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <library/cpp/http/misc/httpcodes.h> 
-#include <library/cpp/http/io/stream.h> 
+#include <library/cpp/http/misc/httpcodes.h>
+#include <library/cpp/http/io/stream.h>
 
 #include <util/generic/strbuf.h>
 #include <util/string/cast.h>

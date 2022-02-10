@@ -14,7 +14,7 @@ TIMEOUT(600)
 SIZE(MEDIUM)
 
 PEERDIR(
-    library/cpp/testing/gmock_in_unittest 
+    library/cpp/testing/gmock_in_unittest
     ydb/core/testlib
 )
 

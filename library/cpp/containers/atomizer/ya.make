@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(g:util)
 
 PEERDIR(
-    library/cpp/containers/str_map 
+    library/cpp/containers/str_map
 )
 
 SRCS(

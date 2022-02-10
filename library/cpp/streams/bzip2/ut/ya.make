@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/streams/bzip2) 
+UNITTEST_FOR(library/cpp/streams/bzip2)
 
 OWNER(
     pg

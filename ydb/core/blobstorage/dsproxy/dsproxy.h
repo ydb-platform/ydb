@@ -15,7 +15,7 @@
 #include <ydb/core/blobstorage/base/transparent.h>
 #include <ydb/core/blobstorage/base/wilson_events.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
-#include <library/cpp/actors/core/interconnect.h> 
+#include <library/cpp/actors/core/interconnect.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/group_stat.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>

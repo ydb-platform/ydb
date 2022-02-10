@@ -10,8 +10,8 @@
 #include <ydb/core/ymq/base/counters.h>
 #include <ydb/core/ymq/base/processed_request_attributes.h>
 
-#include <library/cpp/logger/global/global.h> 
-#include <library/cpp/logger/record.h> 
+#include <library/cpp/logger/global/global.h>
+#include <library/cpp/logger/record.h>
 
 #include <util/generic/guid.h>
 #include <util/generic/serialized_enum.h>

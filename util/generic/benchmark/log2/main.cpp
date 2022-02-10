@@ -1,6 +1,6 @@
 #include <library/cpp/testing/benchmark/bench.h>
 
-#include <library/cpp/fast_log/fast_log.h> 
+#include <library/cpp/fast_log/fast_log.h>
 
 #include <util/generic/singleton.h>
 #include <util/generic/vector.h>

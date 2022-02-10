@@ -2,9 +2,9 @@
 
 #include "defs.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_syncneighbors.h>
-#include <library/cpp/actors/core/interconnect.h> 
+#include <library/cpp/actors/core/interconnect.h>
 
-#include <library/cpp/containers/intrusive_avl_tree/avltree.h> 
+#include <library/cpp/containers/intrusive_avl_tree/avltree.h>
 
 namespace NKikimr {
 

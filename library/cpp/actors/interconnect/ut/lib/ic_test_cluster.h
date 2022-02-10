@@ -3,8 +3,8 @@
 #include "node.h"
 #include "interrupter.h"
 
-#include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h> 
-#include <library/cpp/actors/core/events.h> 
+#include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h>
+#include <library/cpp/actors/core/events.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/generic/noncopyable.h>

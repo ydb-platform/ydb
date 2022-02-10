@@ -9,7 +9,7 @@ RECURSE(
     archive/test/data
     asgi_yauth
     async_clients
-    auth_client_parser 
+    auth_client_parser
     awssdk-extensions
     awssdk_async_extensions
     base64
@@ -27,7 +27,7 @@ RECURSE(
     celery_dashboard
     certifi
     cgroups
-    charset 
+    charset
     charts_notes
     charts_notes/example
     cityhash
@@ -51,7 +51,7 @@ RECURSE(
     cyson/pymodule
     cyson/ut
     deploy_formatter
-    deprecated 
+    deprecated
     dir-sync
     django
     django/example
@@ -66,7 +66,7 @@ RECURSE(
     django_tools_log_context
     dssclient
     dump_dict
-    edit_distance 
+    edit_distance
     errorboosterclient
     filelock
     filelock/ut
@@ -93,11 +93,11 @@ RECURSE(
     guid/test
     guid/at_fork_test
     gunicorn
-    hnsw 
+    hnsw
     ids
     import_test
-    infected_masks 
-    infected_masks/ut 
+    infected_masks
+    infected_masks/ut
     init_log
     init_log/example
     intrasearch_fetcher
@@ -108,16 +108,16 @@ RECURSE(
     json/test/py2
     json/test/py3
     langdetect
-    langmask 
-    langs 
+    langmask
+    langs
     luigi
     luigi/data
     luigi/example
     luigi/luigid_static
     maths
-    messagebus 
+    messagebus
     metrics_framework
-    mime_types 
+    mime_types
     monitoring
     monlib
     monlib/examples
@@ -194,7 +194,7 @@ RECURSE(
     thread
     thread/test
     tskv
-    tvmauth 
+    tvmauth
     tvm2
     tvm2/tests
     type_info

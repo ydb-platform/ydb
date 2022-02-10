@@ -1,8 +1,8 @@
 #pragma once
 
-#include <library/cpp/yson_pull/detail/macros.h> 
+#include <library/cpp/yson_pull/detail/macros.h>
 
-#include <library/cpp/yson_pull/input.h> 
+#include <library/cpp/yson_pull/input.h>
 
 #include <util/stream/buffered.h>
 #include <util/stream/file.h>

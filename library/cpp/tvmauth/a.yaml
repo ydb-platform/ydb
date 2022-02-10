@@ -1,23 +1,23 @@
-service: passport_infra 
-title: tvmauth (c++) 
- 
-ci: 
+service: passport_infra
+title: tvmauth (c++)
+
+ci:
   release-title-source: flow
-  autocheck: 
-    fast-targets: 
-      - library/c/tvmauth 
-      - library/cpp/tvmauth 
-      - library/go/yandex/ticket_parser2 
-      - library/java/ticket_parser2 
-      - library/java/tvmauth 
-      - library/python/deprecated/ticket_parser2 
-      - library/python/tvmauth 
-      - passport 
-    strong: true 
- 
-arcanum: 
-  auto_merge: 
-    enabled: true 
-    requirements: 
-      - system: arcanum 
-        type: comment_issues_closed 
+  autocheck:
+    fast-targets:
+      - library/c/tvmauth
+      - library/cpp/tvmauth
+      - library/go/yandex/ticket_parser2
+      - library/java/ticket_parser2
+      - library/java/tvmauth
+      - library/python/deprecated/ticket_parser2
+      - library/python/tvmauth
+      - passport
+    strong: true
+
+arcanum:
+  auto_merge:
+    enabled: true
+    requirements:
+      - system: arcanum
+        type: comment_issues_closed

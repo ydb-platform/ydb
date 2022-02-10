@@ -1,6 +1,6 @@
 #include "huffman_codec.h"
-#include <library/cpp/bit_io/bitinput.h> 
-#include <library/cpp/bit_io/bitoutput.h> 
+#include <library/cpp/bit_io/bitinput.h>
+#include <library/cpp/bit_io/bitoutput.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/bitops.h>

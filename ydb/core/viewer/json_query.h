@@ -1,11 +1,11 @@
 #pragma once
 #include "viewer.h"
 #include <unordered_map>
-#include <library/cpp/actors/core/actor_bootstrapped.h> 
-#include <library/cpp/actors/core/interconnect.h> 
-#include <library/cpp/actors/core/mon.h> 
-#include <library/cpp/json/json_value.h> 
-#include <library/cpp/json/json_reader.h> 
+#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/core/interconnect.h>
+#include <library/cpp/actors/core/mon.h>
+#include <library/cpp/json/json_value.h>
+#include <library/cpp/json/json_reader.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/kqp/kqp.h>
 #include <ydb/core/kqp/executer/kqp_executer.h>

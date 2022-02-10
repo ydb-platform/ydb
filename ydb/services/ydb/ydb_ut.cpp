@@ -15,7 +15,7 @@
 #include <ydb/public/api/grpc/draft/dummy.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
-#include <library/cpp/grpc/client/grpc_client_low.h> 
+#include <library/cpp/grpc/client/grpc_client_low.h>
 
 #include <google/protobuf/any.h>
 

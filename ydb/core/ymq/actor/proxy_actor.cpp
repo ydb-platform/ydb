@@ -5,7 +5,7 @@
 #include <ydb/core/protos/sqs.pb.h>
 #include <ydb/core/ymq/base/counters.h>
 #include <ydb/core/ymq/base/security.h>
-#include <library/cpp/actors/core/hfunc.h> 
+#include <library/cpp/actors/core/hfunc.h>
 
 #include <util/string/builder.h>
 #include <util/system/defaults.h>

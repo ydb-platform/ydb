@@ -10,7 +10,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
-#include <library/cpp/actors/core/hfunc.h> 
+#include <library/cpp/actors/core/hfunc.h>
 
 namespace NKikimr {
 namespace NGRpcService {

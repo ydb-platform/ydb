@@ -2,7 +2,7 @@
 
 #include "network.h"
 
-#include <library/cpp/messagebus/test/helper/fixed_port.h> 
+#include <library/cpp/messagebus/test/helper/fixed_port.h>
 
 using namespace NBus;
 using namespace NBus::NPrivate;

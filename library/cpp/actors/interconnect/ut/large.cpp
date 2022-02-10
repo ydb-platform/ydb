@@ -2,7 +2,7 @@
 #include "lib/test_events.h"
 #include "lib/test_actors.h"
 
-#include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h> 
+#include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h>
 
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>

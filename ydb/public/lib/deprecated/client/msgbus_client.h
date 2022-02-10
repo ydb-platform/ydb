@@ -7,7 +7,7 @@
 
 #include <functional>
 #include <util/system/info.h>
-#include <library/cpp/messagebus/ybus.h> 
+#include <library/cpp/messagebus/ybus.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {

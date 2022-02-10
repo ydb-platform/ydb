@@ -1,7 +1,7 @@
-#include <library/cpp/yson_pull/input.h> 
-#include <library/cpp/yson_pull/output.h> 
-#include <library/cpp/yson_pull/reader.h> 
-#include <library/cpp/yson_pull/writer.h> 
+#include <library/cpp/yson_pull/input.h>
+#include <library/cpp/yson_pull/output.h>
+#include <library/cpp/yson_pull/reader.h>
+#include <library/cpp/yson_pull/writer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

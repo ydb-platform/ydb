@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/json/common/defs.h> 
+#include <library/cpp/json/common/defs.h>
 
 #include <util/generic/string.h>
 #include <util/generic/hash.h>

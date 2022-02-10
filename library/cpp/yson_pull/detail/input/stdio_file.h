@@ -2,10 +2,10 @@
 
 #include "buffered.h"
 
-#include <library/cpp/yson_pull/detail/macros.h> 
+#include <library/cpp/yson_pull/detail/macros.h>
 
-#include <library/cpp/yson_pull/exceptions.h> 
-#include <library/cpp/yson_pull/input.h> 
+#include <library/cpp/yson_pull/exceptions.h>
+#include <library/cpp/yson_pull/input.h>
 
 #include <cstdio>
 #include <memory>

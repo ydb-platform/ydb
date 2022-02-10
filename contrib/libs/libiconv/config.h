@@ -19,7 +19,7 @@
 
 
 /* Define to 1 to enable a few rarely used encodings. */
-#define ENABLE_EXTRA !defined(ARCADIA_ICONV_NOCJK)
+#define ENABLE_EXTRA !defined(ARCADIA_ICONV_NOCJK) 
 
 /* Define to 1 if the package shall run at any location in the filesystem. */
 /* #undef ENABLE_RELOCATABLE */

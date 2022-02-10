@@ -42,21 +42,21 @@ union __m128i {
 union __m128 {
     float32x4_t AsFloat32x4;
     float64x2_t AsFloat64x2;
-
-    uint32x4_t AsUi32x4;
-    int32x4_t AsSi32x4;
-
+ 
+    uint32x4_t AsUi32x4; 
+    int32x4_t AsSi32x4; 
+ 
     uint64x2_t AsUi64x2;
     int64x2_t AsSi64x2;
-
+ 
     uint8x16_t AsUi8x16;
-    int8x16_t AsSi8x16;
-
-    __m128i As128i;
+    int8x16_t AsSi8x16; 
+ 
+    __m128i As128i; 
 };
 
-typedef float64x2_t __m128d;
-
+typedef float64x2_t __m128d; 
+ 
 enum _mm_hint
 {
   /* _MM_HINT_ET is _MM_HINT_T with set 3rd bit.  */
@@ -194,37 +194,37 @@ struct TWrapperSingleNegDup: public TBaseWrapper<__m128i> {
     }
 };
 
-inline __m128i _mm_srl_epi16(__m128i a, __m128i count) {
-    __m128i res;
-    res.AsUi16x8 = vshlq_u16(a.AsUi16x8, vdupq_n_s16(-count.AsUi16x8[0]));
-    return res;
-}
+inline __m128i _mm_srl_epi16(__m128i a, __m128i count) { 
+    __m128i res; 
+    res.AsUi16x8 = vshlq_u16(a.AsUi16x8, vdupq_n_s16(-count.AsUi16x8[0])); 
+    return res; 
+} 
+ 
 
-
-inline __m128i _mm_srl_epi32(__m128i a, __m128i count) {
-    __m128i res;
-    res.AsUi32x4 = vshlq_u32(a.AsUi32x4, vdupq_n_s32(-count.AsUi32x4[0]));
-    return res;
-}
-
-inline __m128i _mm_srl_epi64(__m128i a, __m128i count) {
-    __m128i res;
-    res.AsUi64x2 = vshlq_u64(a.AsUi64x2, vdupq_n_s64(-count.AsUi64x2[0]));
-    return res;
-}
-
-inline __m128i _mm_srai_epi16(__m128i a, int count) {
-    __m128i res;
-    res.AsSi16x8 = vqshlq_s16(a.AsSi16x8, vdupq_n_s16(-count));
-    return res;
-}
-
-inline __m128i _mm_srai_epi32(__m128i a, int count) {
-    __m128i res;
-    res.AsSi32x4 = vqshlq_s32(a.AsSi32x4, vdupq_n_s32(-count));
-    return res;
-}
-
+inline __m128i _mm_srl_epi32(__m128i a, __m128i count) { 
+    __m128i res; 
+    res.AsUi32x4 = vshlq_u32(a.AsUi32x4, vdupq_n_s32(-count.AsUi32x4[0])); 
+    return res; 
+} 
+ 
+inline __m128i _mm_srl_epi64(__m128i a, __m128i count) { 
+    __m128i res; 
+    res.AsUi64x2 = vshlq_u64(a.AsUi64x2, vdupq_n_s64(-count.AsUi64x2[0])); 
+    return res; 
+} 
+ 
+inline __m128i _mm_srai_epi16(__m128i a, int count) { 
+    __m128i res; 
+    res.AsSi16x8 = vqshlq_s16(a.AsSi16x8, vdupq_n_s16(-count)); 
+    return res; 
+} 
+ 
+inline __m128i _mm_srai_epi32(__m128i a, int count) { 
+    __m128i res; 
+    res.AsSi32x4 = vqshlq_s32(a.AsSi32x4, vdupq_n_s32(-count)); 
+    return res; 
+} 
+ 
 using _mm_srli_epi16 =
     TWrapperSingleNegDup<uint16x8_t, decltype(vshlq_u16), vshlq_u16,
                          decltype(vdupq_n_s16), vdupq_n_s16>;
@@ -236,25 +236,25 @@ using _mm_srli_epi64 =
                          decltype(vdupq_n_s64), vdupq_n_s64>;
 
 
-inline __m128i _mm_sll_epi16(__m128i a, __m128i count) {
-    __m128i res;
-    res.AsUi16x8 = vshlq_u16(a.AsUi16x8, vdupq_n_s16(count.AsUi16x8[0]));
-    return res;
-}
+inline __m128i _mm_sll_epi16(__m128i a, __m128i count) { 
+    __m128i res; 
+    res.AsUi16x8 = vshlq_u16(a.AsUi16x8, vdupq_n_s16(count.AsUi16x8[0])); 
+    return res; 
+} 
+ 
 
-
-inline __m128i _mm_sll_epi32(__m128i a, __m128i count) {
-    __m128i res;
-    res.AsUi32x4 = vshlq_u32(a.AsUi32x4, vdupq_n_s32(count.AsUi32x4[0]));
-    return res;
-}
-
-inline __m128i _mm_sll_epi64(__m128i a, __m128i count) {
-    __m128i res;
-    res.AsUi64x2 = vshlq_u64(a.AsUi64x2, vdupq_n_s64(count.AsUi64x2[0]));
-    return res;
-}
-
+inline __m128i _mm_sll_epi32(__m128i a, __m128i count) { 
+    __m128i res; 
+    res.AsUi32x4 = vshlq_u32(a.AsUi32x4, vdupq_n_s32(count.AsUi32x4[0])); 
+    return res; 
+} 
+ 
+inline __m128i _mm_sll_epi64(__m128i a, __m128i count) { 
+    __m128i res; 
+    res.AsUi64x2 = vshlq_u64(a.AsUi64x2, vdupq_n_s64(count.AsUi64x2[0])); 
+    return res; 
+} 
+ 
 using _mm_slli_epi16 =
     TWrapperSingleDup<uint16x8_t, decltype(vshlq_u16), vshlq_u16,
                       decltype(vdupq_n_s16), vdupq_n_s16>;
@@ -287,10 +287,10 @@ struct TWrapperDualSwap : TBaseWrapper<__m128i> {
     }
 };
 
-template <typename TOp, typename TFunc, TFunc* func, typename TArgument = __m128>
-struct TWrapperDualF : TBaseWrapper<TArgument> {
+template <typename TOp, typename TFunc, TFunc* func, typename TArgument = __m128> 
+struct TWrapperDualF : TBaseWrapper<TArgument> { 
     Y_FORCE_INLINE
-    TWrapperDualF(const TArgument& op1, const TArgument& op2) {
+    TWrapperDualF(const TArgument& op1, const TArgument& op2) { 
         TQType<TOp>::As(TBaseWrapper<TArgument>::Value) = (TOp) func(TQType<TOp>::As(op1), TQType<TOp>::As(op2));
     }
 };
@@ -306,27 +306,27 @@ using _mm_add_epi16 = TWrapperDual<uint16x8_t, decltype(vaddq_u16), vaddq_u16>;
 using _mm_add_epi32 = TWrapperDual<uint32x4_t, decltype(vaddq_u32), vaddq_u32>;
 using _mm_add_epi64 = TWrapperDual<uint64x2_t, decltype(vaddq_u64), vaddq_u64>;
 
-inline __m128i _mm_madd_epi16(__m128i a, __m128i b) {
-    int32x4_t aLow;
-    int32x4_t aHigh;
-    int32x4_t bLow;
-    int32x4_t bHigh;
+inline __m128i _mm_madd_epi16(__m128i a, __m128i b) { 
+    int32x4_t aLow; 
+    int32x4_t aHigh; 
+    int32x4_t bLow; 
+    int32x4_t bHigh; 
     #ifdef __LITTLE_ENDIAN__
         aLow[0] = a.AsSi16x8[0]; //!< I couldn't find vector instructions to do that. Feel free to fix this code.
         aLow[1] = a.AsSi16x8[2];
         aLow[2] = a.AsSi16x8[4];
         aLow[3] = a.AsSi16x8[6];
-
+ 
         aHigh[0] = a.AsSi16x8[1];
         aHigh[1] = a.AsSi16x8[3];
         aHigh[2] = a.AsSi16x8[5];
         aHigh[3] = a.AsSi16x8[7];
-
+ 
         bLow[0] = b.AsSi16x8[0];
         bLow[1] = b.AsSi16x8[2];
         bLow[2] = b.AsSi16x8[4];
         bLow[3] = b.AsSi16x8[6];
-
+ 
         bHigh[0] = b.AsSi16x8[1];
         bHigh[1] = b.AsSi16x8[3];
         bHigh[2] = b.AsSi16x8[5];
@@ -334,14 +334,14 @@ inline __m128i _mm_madd_epi16(__m128i a, __m128i b) {
     #else
         #error Not implemented yet. Do it yourself.
     #endif
-
-    const int32x4_t lowMul = vmulq_u32(aLow, bLow);
-    const int32x4_t highMul = vmulq_u32(aHigh, bHigh);
-    __m128i res;
-    res.AsSi32x4 = vaddq_u32(lowMul, highMul);
-    return res;
-}
-
+ 
+    const int32x4_t lowMul = vmulq_u32(aLow, bLow); 
+    const int32x4_t highMul = vmulq_u32(aHigh, bHigh); 
+    __m128i res; 
+    res.AsSi32x4 = vaddq_u32(lowMul, highMul); 
+    return res; 
+} 
+ 
 using _mm_sub_epi8 = TWrapperDual<uint8x16_t, decltype(vsubq_u8), vsubq_u8>;
 using _mm_sub_epi16 = TWrapperDual<uint16x8_t, decltype(vsubq_u16), vsubq_u16>;
 using _mm_sub_epi32 = TWrapperDual<uint32x4_t, decltype(vsubq_u32), vsubq_u32>;
@@ -455,28 +455,28 @@ struct _mm_storel_epi64 : TBaseWrapper<__m128i> {
     }
 };
 
-struct ShuffleStruct4 {
-    ui8 x[4];
-};
-
+struct ShuffleStruct4 { 
+    ui8 x[4]; 
+}; 
+ 
 Y_FORCE_INLINE ShuffleStruct4
-_MM_SHUFFLE(ui8 x4, ui8 x3, ui8 x2, ui8 x1) {
-    ShuffleStruct4 result;
-    result.x[0] = x1;
-    result.x[1] = x2;
-    result.x[2] = x3;
-    result.x[3] = x4;
-    return result;
-}
-
+_MM_SHUFFLE(ui8 x4, ui8 x3, ui8 x2, ui8 x1) { 
+    ShuffleStruct4 result; 
+    result.x[0] = x1; 
+    result.x[1] = x2; 
+    result.x[2] = x3; 
+    result.x[3] = x4; 
+    return result; 
+} 
+ 
 Y_FORCE_INLINE __m128i
 _mm_shuffle_epi32(const __m128i& op1, const ShuffleStruct4& op2) {
     __m128i result;
-    const ui8 xi[4] = {
-        ui8(op2.x[0] * 4), ui8(op2.x[1] * 4),
+    const ui8 xi[4] = { 
+        ui8(op2.x[0] * 4), ui8(op2.x[1] * 4), 
         ui8(op2.x[2] * 4), ui8(op2.x[3] * 4)
     };
-    const uint8x16_t transform = {
+    const uint8x16_t transform = { 
         ui8(xi[0]), ui8(xi[0] + 1), ui8(xi[0] + 2), ui8(xi[0] + 3),
         ui8(xi[1]), ui8(xi[1] + 1), ui8(xi[1] + 2), ui8(xi[1] + 3),
         ui8(xi[2]), ui8(xi[2] + 1), ui8(xi[2] + 2), ui8(xi[2] + 3),
@@ -504,39 +504,39 @@ template <int imm>
 struct THelper_mm_srli_si128 : TBaseWrapper<__m128i> {
     Y_FORCE_INLINE
     THelper_mm_srli_si128(const __m128i a) {
-        const auto zero = vdupq_n_u8(0);
+        const auto zero = vdupq_n_u8(0); 
         TQType<uint8x16_t>::As(Value) = vextq_u8(a.AsUi8x16, zero, imm);
     }
 };
 
-template <>
-struct THelper_mm_srli_si128<16> : TBaseWrapper<__m128i> {
-    Y_FORCE_INLINE
-    THelper_mm_srli_si128(const __m128i /* a */) {
-        const auto zero = vdupq_n_u8(0);
-        TQType<uint8x16_t>::As(Value) = zero;
-    }
-};
-
+template <> 
+struct THelper_mm_srli_si128<16> : TBaseWrapper<__m128i> { 
+    Y_FORCE_INLINE 
+    THelper_mm_srli_si128(const __m128i /* a */) { 
+        const auto zero = vdupq_n_u8(0); 
+        TQType<uint8x16_t>::As(Value) = zero; 
+    } 
+}; 
+ 
 #define _mm_srli_si128(a, imm) THelper_mm_srli_si128<imm>(a)
 
 template<int imm>
-inline uint8x16_t vextq_u8_function(uint8x16_t a, uint8x16_t b) {
-    return vextq_u8(a, b, imm);
-}
-
+inline uint8x16_t vextq_u8_function(uint8x16_t a, uint8x16_t b) { 
+    return vextq_u8(a, b, imm); 
+} 
+ 
 template<>
-inline uint8x16_t vextq_u8_function<16>(uint8x16_t /* a */, uint8x16_t b) {
-    return b;
-}
-
+inline uint8x16_t vextq_u8_function<16>(uint8x16_t /* a */, uint8x16_t b) { 
+    return b; 
+} 
+ 
 
 template <int imm>
 struct THelper_mm_slli_si128 : TBaseWrapper<__m128i> {
     Y_FORCE_INLINE
     THelper_mm_slli_si128(const __m128i a) {
         auto zero = vdupq_n_u8(0);
-        TQType<uint8x16_t>::As(Value) = vextq_u8_function<16 - imm>(zero, a.AsUi8x16);
+        TQType<uint8x16_t>::As(Value) = vextq_u8_function<16 - imm>(zero, a.AsUi8x16); 
     }
 };
 
@@ -598,14 +598,14 @@ struct _mm_cvtsi32_si128 : TBaseWrapper<__m128i> {
     }
 };
 
-struct _mm_cvtsi64_si128 : TBaseWrapper<__m128i> {
-    Y_FORCE_INLINE
-    _mm_cvtsi64_si128(i64 op) {
-        auto zero = vdupq_n_s64(0);
-        TQType<int64x2_t>::As(Value) = vsetq_lane_s64(op, zero, 0);
-    }
-};
-
+struct _mm_cvtsi64_si128 : TBaseWrapper<__m128i> { 
+    Y_FORCE_INLINE 
+    _mm_cvtsi64_si128(i64 op) { 
+        auto zero = vdupq_n_s64(0); 
+        TQType<int64x2_t>::As(Value) = vsetq_lane_s64(op, zero, 0); 
+    } 
+}; 
+ 
 template <typename TOpOut, typename TOpIn,
           typename TFunc, TFunc* func,
           typename TCombine, TCombine* combine>
@@ -648,7 +648,7 @@ int extract_epi8_arm(__m128i arg) {
 
 template<int imm>
 int extract_epi16_arm(__m128i arg) {
-    return vgetq_lane_u16(arg.AsUi16x8, imm);
+    return vgetq_lane_u16(arg.AsUi16x8, imm); 
 }
 
 template<int imm>
@@ -712,14 +712,14 @@ struct TQType<float64x2_t> {
     static inline const float64x2_t& As(const __m128i& value) {
         return value.AsFloat64x2;
     }
-
-    static inline float64x2_t& As(__m128d& value) {
-        return value;
-    }
-
-    static inline const float64x2_t& As(const __m128d& value) {
-        return value;
-    }
+ 
+    static inline float64x2_t& As(__m128d& value) { 
+        return value; 
+    } 
+ 
+    static inline const float64x2_t& As(const __m128d& value) { 
+        return value; 
+    } 
 };
 
 using _mm_set1_ps = TWrapperSimpleF<float32x4_t,
@@ -735,9 +735,9 @@ struct _mm_setzero_ps : TBaseWrapper<__m128> {
 };
 
 Y_FORCE_INLINE __m128d _mm_setzero_pd() {
-    return vdupq_n_f64(0.);
-}
-
+    return vdupq_n_f64(0.); 
+} 
+ 
 Y_FORCE_INLINE __m128 _mm_loadu_ps(const float* ptr) {
     __m128 result;
     result.AsFloat32x4 = vld1q_f32(ptr);
@@ -745,19 +745,19 @@ Y_FORCE_INLINE __m128 _mm_loadu_ps(const float* ptr) {
 }
 
 Y_FORCE_INLINE __m128 _mm_load_ps(const float* ptr) {
-    __m128 result;
-    result.AsFloat32x4 = vld1q_f32(ptr);
-    return result;
-}
-
+    __m128 result; 
+    result.AsFloat32x4 = vld1q_f32(ptr); 
+    return result; 
+} 
+ 
 Y_FORCE_INLINE void _mm_storeu_ps(float* ptr, const __m128& op) {
     vst1q_f32(ptr, op.AsFloat32x4);
 }
 
 Y_FORCE_INLINE void _mm_store_ps(float* ptr, const __m128& op) {
-    vst1q_f32(ptr, op.AsFloat32x4);
-}
-
+    vst1q_f32(ptr, op.AsFloat32x4); 
+} 
+ 
 struct _mm_set_ps : TBaseWrapper<__m128> {
     Y_FORCE_INLINE
     _mm_set_ps(const float x3, const float x2,
@@ -769,25 +769,25 @@ struct _mm_set_ps : TBaseWrapper<__m128> {
 };
 
 Y_FORCE_INLINE __m128d _mm_set_pd(double d1, double d0) {
-    const float64x1_t p0 = {d0};
-    const float64x1_t p1 = {d1};
-    return vcombine_f64(p0, p1);
-}
-
+    const float64x1_t p0 = {d0}; 
+    const float64x1_t p1 = {d1}; 
+    return vcombine_f64(p0, p1); 
+} 
+ 
 Y_FORCE_INLINE __m128d _mm_loadu_pd(const double* d) {
-    __m128d res;
-    res = vld1q_f64(d);
-    return res;
-}
-
+    __m128d res; 
+    res = vld1q_f64(d); 
+    return res; 
+} 
+ 
 Y_FORCE_INLINE void _mm_storeu_pd(double* res, __m128d a) {
-    vst1q_f64(res, a);
-}
-
+    vst1q_f64(res, a); 
+} 
+ 
 Y_FORCE_INLINE void _mm_store_pd(double* res, __m128d a) {
-    vst1q_f64(res, a);
-}
-
+    vst1q_f64(res, a); 
+} 
+ 
 using _mm_add_ps = TWrapperDualF<float32x4_t, decltype(vaddq_f32), vaddq_f32>;
 using _mm_sub_ps = TWrapperDualF<float32x4_t, decltype(vsubq_f32), vsubq_f32>;
 using _mm_mul_ps = TWrapperDualF<float32x4_t, decltype(vmulq_f32), vmulq_f32>;
@@ -797,11 +797,11 @@ using _mm_cmpgt_ps = TWrapperDualF<float32x4_t, decltype(vcgtq_f32), vcgtq_f32>;
 using _mm_max_ps = TWrapperDualF<float32x4_t, decltype(vmaxq_f32), vmaxq_f32>;
 using _mm_min_ps = TWrapperDualF<float32x4_t, decltype(vminq_f32), vminq_f32>;
 
-using _mm_add_pd = TWrapperDualF<float64x2_t, decltype(vaddq_f64), vaddq_f64, __m128d>;
-using _mm_sub_pd = TWrapperDualF<float64x2_t, decltype(vsubq_f64), vsubq_f64, __m128d>;
-using _mm_mul_pd = TWrapperDualF<float64x2_t, decltype(vmulq_f64), vmulq_f64, __m128d>;
-using _mm_div_pd = TWrapperDualF<float64x2_t, decltype(vdivq_f64), vdivq_f64, __m128d>;
-
+using _mm_add_pd = TWrapperDualF<float64x2_t, decltype(vaddq_f64), vaddq_f64, __m128d>; 
+using _mm_sub_pd = TWrapperDualF<float64x2_t, decltype(vsubq_f64), vsubq_f64, __m128d>; 
+using _mm_mul_pd = TWrapperDualF<float64x2_t, decltype(vmulq_f64), vmulq_f64, __m128d>; 
+using _mm_div_pd = TWrapperDualF<float64x2_t, decltype(vdivq_f64), vdivq_f64, __m128d>; 
+ 
 struct _mm_and_ps : TBaseWrapper<__m128> {
     Y_FORCE_INLINE
     _mm_and_ps(const __m128& op1, const __m128& op2) {
@@ -863,17 +863,17 @@ struct TCvtF2SWrapperSingle : TBaseWrapper<__m128i> {
     }
 };
 
-inline __m128i _mm_cvtps_epi32(__m128 a) {
-    /// vcvtq_s32_f32 rounds to zero, but we need to round to the nearest.
-    static const float32x4_t half = vdupq_n_f32(0.5f);
-    static const float32x4_t negHalf = vdupq_n_f32(-0.5f);
-    static const float32x4_t zero = vdupq_n_f32(0.0f);
-    const float32x4_t corrections = vbslq_f32(vcgeq_f32(a.AsFloat32x4, zero), half, negHalf);
-    __m128i res;
-    res.AsSi32x4 = vcvtq_s32_f32(vaddq_f32(a.AsFloat32x4, corrections));
-    return res;
-}
-
+inline __m128i _mm_cvtps_epi32(__m128 a) { 
+    /// vcvtq_s32_f32 rounds to zero, but we need to round to the nearest. 
+    static const float32x4_t half = vdupq_n_f32(0.5f); 
+    static const float32x4_t negHalf = vdupq_n_f32(-0.5f); 
+    static const float32x4_t zero = vdupq_n_f32(0.0f); 
+    const float32x4_t corrections = vbslq_f32(vcgeq_f32(a.AsFloat32x4, zero), half, negHalf); 
+    __m128i res; 
+    res.AsSi32x4 = vcvtq_s32_f32(vaddq_f32(a.AsFloat32x4, corrections)); 
+    return res; 
+} 
+ 
 using _mm_cvttps_epi32 =
     TCvtF2SWrapperSingle<int32x4_t, float32x4_t,
                          decltype(vcvtq_s32_f32), vcvtq_s32_f32>;
@@ -894,36 +894,36 @@ Y_FORCE_INLINE i64 _mm_cvtsi128_si64(__m128i a) {
 static inline void _mm_pause() {
     __asm__ ("YIELD");
 }
-
-static inline __m128 _mm_rsqrt_ps(__m128 a) {
-    __m128 res;
-    res.AsFloat32x4 = vrsqrteq_f32(a.AsFloat32x4);
-    return res;
-}
-
-inline float _mm_cvtss_f32(__m128 a) {
-    return a.AsFloat32x4[0];
-}
-
-inline __m128 _mm_cmpunord_ps(__m128 a, __m128 b) {
-    __m128 res;
-    res.AsUi32x4 = vorrq_u32(
-        vmvnq_u32(vceqq_f32(a.AsFloat32x4, a.AsFloat32x4)), //!< 0xffffffff for all nans in a.
+ 
+static inline __m128 _mm_rsqrt_ps(__m128 a) { 
+    __m128 res; 
+    res.AsFloat32x4 = vrsqrteq_f32(a.AsFloat32x4); 
+    return res; 
+} 
+ 
+inline float _mm_cvtss_f32(__m128 a) { 
+    return a.AsFloat32x4[0]; 
+} 
+ 
+inline __m128 _mm_cmpunord_ps(__m128 a, __m128 b) { 
+    __m128 res; 
+    res.AsUi32x4 = vorrq_u32( 
+        vmvnq_u32(vceqq_f32(a.AsFloat32x4, a.AsFloat32x4)), //!< 0xffffffff for all nans in a. 
         vmvnq_u32(vceqq_f32(b.AsFloat32x4, b.AsFloat32x4)) //!< 0xffffffff all nans in b.
-    );
-    return res;
-}
-
-inline __m128 _mm_andnot_ps(__m128 a, __m128 b) {
-    __m128 res;
-    res.AsFloat32x4 = vandq_u32(vmvnq_u32(a.AsUi32x4), b.AsUi32x4);
-    return res;
-}
-
-inline void _mm_store_ss(float* p, __m128 a) {
-    *p = vgetq_lane_f32(a.AsFloat32x4, 0);
-}
-
+    ); 
+    return res; 
+} 
+ 
+inline __m128 _mm_andnot_ps(__m128 a, __m128 b) { 
+    __m128 res; 
+    res.AsFloat32x4 = vandq_u32(vmvnq_u32(a.AsUi32x4), b.AsUi32x4); 
+    return res; 
+} 
+ 
+inline void _mm_store_ss(float* p, __m128 a) { 
+    *p = vgetq_lane_f32(a.AsFloat32x4, 0); 
+} 
+ 
 inline float vgetg_lane_f32_switch(float32x4_t a, ui8 b) {
     switch (b & 0x3) {
         case 0:
@@ -938,20 +938,20 @@ inline float vgetg_lane_f32_switch(float32x4_t a, ui8 b) {
     return 0;
 }
 
-inline __m128 _mm_shuffle_ps(__m128 a, __m128 b, const ShuffleStruct4& shuf) {
+inline __m128 _mm_shuffle_ps(__m128 a, __m128 b, const ShuffleStruct4& shuf) { 
     __m128 ret;
     ret.AsFloat32x4 = vmovq_n_f32(vgetg_lane_f32_switch(a.AsFloat32x4, shuf.x[0]));
     ret.AsFloat32x4 = vsetq_lane_f32(vgetg_lane_f32_switch(a.AsFloat32x4, shuf.x[1]), ret.AsFloat32x4, 1);
     ret.AsFloat32x4 = vsetq_lane_f32(vgetg_lane_f32_switch(b.AsFloat32x4, shuf.x[2]), ret.AsFloat32x4, 2);
     ret.AsFloat32x4 = vsetq_lane_f32(vgetg_lane_f32_switch(b.AsFloat32x4, shuf.x[3]), ret.AsFloat32x4, 3);
     return ret;
-}
-
-inline __m128 _mm_or_ps(__m128 a, __m128 b) {
-    __m128 res;
-    res.AsUi32x4 = vorrq_u32(a.AsUi32x4, b.AsUi32x4);
-    return res;
-}
+} 
+ 
+inline __m128 _mm_or_ps(__m128 a, __m128 b) { 
+    __m128 res; 
+    res.AsUi32x4 = vorrq_u32(a.AsUi32x4, b.AsUi32x4); 
+    return res; 
+} 
 
 inline __m128i _mm_sad_epu8(__m128i a, __m128i b) {
     uint16x8_t t = vpaddlq_u8(vabdq_u8(a.AsUi8x16, b.AsUi8x16));

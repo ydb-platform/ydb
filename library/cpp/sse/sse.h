@@ -14,7 +14,7 @@
 #include <xmmintrin.h>
 #include <emmintrin.h>
 #include <pmmintrin.h>
-#define ARCADIA_SSE
+#define ARCADIA_SSE 
 #if defined(_ssse3_)
 #include <tmmintrin.h>
 #endif
@@ -26,8 +26,8 @@
 #endif
 #elif defined(_arm64_)
 #include "sse2neon.h"
-#define ARCADIA_SSE
-#elif defined(_ppc64_)
-#include "powerpc.h"
-#define ARCADIA_SSE
+#define ARCADIA_SSE 
+#elif defined(_ppc64_) 
+#include "powerpc.h" 
+#define ARCADIA_SSE 
 #endif

@@ -292,7 +292,7 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
     setup1->Executors[1].Reset(new TBasicExecutorPool(1, 8, 20));
     setup1->Executors[2].Reset(new TIOExecutorPool(2, 10));
     setup1->Executors[3].Reset(new TBasicExecutorPool(3, 8, 20));
-    setup1->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(512, 100)));
+    setup1->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(512, 100))); 
 
     const TActorId nameserviceId = GetNameserviceActorId();
     TActorSetupCmd nameserviceSetup(CreateNameserverTable(nameserverTable), TMailboxType::Simple, 0);

@@ -249,12 +249,12 @@ namespace NJson {
     }
 
     TJsonValue& TJsonValue::Back() {
-        BackChecks();
-        return Value.Array->back();
-    }
+        BackChecks(); 
+        return Value.Array->back(); 
+    } 
 
-    const TJsonValue& TJsonValue::Back() const {
-        BackChecks();
+    const TJsonValue& TJsonValue::Back() const { 
+        BackChecks(); 
         return Value.Array->back();
     }
 
@@ -1089,13 +1089,13 @@ namespace NJson {
         return true;
     }
 
-    void TJsonValue::BackChecks() const {
-        if (Type != JSON_ARRAY)
-            ythrow TJsonException() << "Not an array";
-
-        if (Value.Array->empty())
-            ythrow TJsonException() << "Get back on empty array";
-    }
+    void TJsonValue::BackChecks() const { 
+        if (Type != JSON_ARRAY) 
+            ythrow TJsonException() << "Not an array"; 
+ 
+        if (Value.Array->empty()) 
+            ythrow TJsonException() << "Get back on empty array"; 
+    } 
 }
 
 template <>

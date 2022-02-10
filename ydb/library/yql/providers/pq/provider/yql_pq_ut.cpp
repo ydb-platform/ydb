@@ -110,7 +110,7 @@ bool RunPqProgram(
 
     const auto driverConfig = NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr"));
     NYdb::TDriver driver(driverConfig);
-    auto dqGateway = CreateLocalDqGateway(driver, functionRegistry.Get(), dqCompFactory, dqTaskTransformFactory, {});
+    auto dqGateway = CreateLocalDqGateway(driver, functionRegistry.Get(), dqCompFactory, dqTaskTransformFactory, {}); 
 
     auto storage = NYql::CreateFileStorage({});
     dataProvidersInit.push_back(NYql::GetDqDataProviderInitializer(&CreateInMemoryExecTransformer, dqGateway, dqCompFactory, {}, storage));

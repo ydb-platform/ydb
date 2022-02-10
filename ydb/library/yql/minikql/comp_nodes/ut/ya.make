@@ -20,7 +20,7 @@ OWNER(
 
 SRCS(
     mkql_blocks_ut.cpp
-    mkql_combine_ut.cpp
+    mkql_combine_ut.cpp 
     mkql_condense_ut.cpp
     mkql_decimal_ut.cpp
     mkql_chain_map_ut.cpp
@@ -34,7 +34,7 @@ SRCS(
     mkql_heap_ut.cpp
     mkql_compare_ut.cpp
     mkql_computation_node_ut.cpp
-    mkql_group_ut.cpp
+    mkql_group_ut.cpp 
     mkql_dict_ut.cpp
     mkql_join_ut.cpp
     mkql_join_dict_ut.cpp
@@ -42,7 +42,7 @@ SRCS(
     mkql_safe_circular_buffer_ut.cpp
     mkql_sort_ut.cpp
     mkql_switch_ut.cpp
-    mkql_todict_ut.cpp
+    mkql_todict_ut.cpp 
     mkql_variant_ut.cpp
     mkql_wide_chain_map_ut.cpp
     mkql_wide_chopper_ut.cpp

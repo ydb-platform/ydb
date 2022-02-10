@@ -438,26 +438,26 @@ TExprNode::TPtr CheckCompareSame(const TExprNode::TPtr& node, TExprContext& ctx)
     return node;
 }
 
-TExprNode::TPtr IfPresentSubsetFields(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-    if (3U == node->ChildrenSize() && TCoFilterNullMembers::Match(&node->Head())) {
-        auto children = node->ChildrenList();
-        const auto& lambda = *children[TCoIfPresent::idx_PresentHandler];
-
-        YQL_ENSURE(optCtx.ParentsMap);
-        TSet<TStringBuf> usedFields;
-        if (HaveFieldsSubset(lambda.TailPtr(), lambda.Head().Head(), usedFields, *optCtx.ParentsMap)) {
-            YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
-            children[TCoIfPresent::idx_Optional] = FilterByFields(children[TCoIfPresent::idx_Optional]->Pos(), children[TCoIfPresent::idx_Optional], usedFields, ctx, false);
-            children[TCoIfPresent::idx_PresentHandler] = ctx.DeepCopyLambda(*children[TCoIfPresent::idx_PresentHandler]);
-            return ctx.ChangeChildren(*node, std::move(children));
-        }
-    }
-
-    return node;
+TExprNode::TPtr IfPresentSubsetFields(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) { 
+    if (3U == node->ChildrenSize() && TCoFilterNullMembers::Match(&node->Head())) { 
+        auto children = node->ChildrenList(); 
+        const auto& lambda = *children[TCoIfPresent::idx_PresentHandler]; 
+ 
+        YQL_ENSURE(optCtx.ParentsMap); 
+        TSet<TStringBuf> usedFields; 
+        if (HaveFieldsSubset(lambda.TailPtr(), lambda.Head().Head(), usedFields, *optCtx.ParentsMap)) { 
+            YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields"; 
+            children[TCoIfPresent::idx_Optional] = FilterByFields(children[TCoIfPresent::idx_Optional]->Pos(), children[TCoIfPresent::idx_Optional], usedFields, ctx, false); 
+            children[TCoIfPresent::idx_PresentHandler] = ctx.DeepCopyLambda(*children[TCoIfPresent::idx_PresentHandler]); 
+            return ctx.ChangeChildren(*node, std::move(children)); 
+        } 
+    } 
+ 
+    return node; 
 }
 
-}
-
+} 
+ 
 void RegisterCoSimpleCallables2(TCallableOptimizerMap& map) {
     using namespace std::placeholders;
 
@@ -479,15 +479,15 @@ void RegisterCoSimpleCallables2(TCallableOptimizerMap& map) {
 
     map["AggrMin"] = map["AggrMax"] = map["Coalesce"] = std::bind(&DropAggrOverSame, _1);
 
-    map["StartsWith"] = map["EndsWith"] = std::bind(&CheckCompareSame<true, false>, _1, _2);
+    map["StartsWith"] = map["EndsWith"] = std::bind(&CheckCompareSame<true, false>, _1, _2); 
 
     map["=="] = map["<="] = map[">="] = std::bind(&CheckCompareSame<true, false>, _1, _2);
     map["!="] = map["<"] = map[">"] = std::bind(&CheckCompareSame<false, false>, _1, _2);
 
     map["AggrEquals"] = map["AggrLessOrEqual"] = map["AggrGreaterOrEqual"] = std::bind(&CheckCompareSame<true, true>, _1, _2);
     map["AggrNotEquals"] = map["AggrLess"] = map["AggrGreater"] = std::bind(&CheckCompareSame<false, true>, _1, _2);
-
-    map["IfPresent"] = std::bind(&IfPresentSubsetFields, _1, _2, _3);
+ 
+    map["IfPresent"] = std::bind(&IfPresentSubsetFields, _1, _2, _3); 
 }
 
 }

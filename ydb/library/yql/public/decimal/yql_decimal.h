@@ -3,9 +3,9 @@
 #include <util/generic/strbuf.h>
 #include "yql_wide_int.h"
 
-#include <type_traits>
-#include <limits>
-
+#include <type_traits> 
+#include <limits> 
+ 
 namespace NYql {
 namespace NDecimal {
 
@@ -44,10 +44,10 @@ inline constexpr TInt128 Nan() {
     return Inf() + TInt128(1);
 }
 
-inline constexpr TInt128 Err() {
-    return Nan() + TInt128(1);
-}
-
+inline constexpr TInt128 Err() { 
+    return Nan() + TInt128(1); 
+} 
+ 
 TUint128 GetDivider(ui8 scale);
 
 template<ui8 Precision>
@@ -87,48 +87,48 @@ inline TInt128 FromProto(const TMkqlProto& val) {
     return val128;
 }
 
-template<typename TValue>
-inline constexpr TValue YtDecimalNan() {
-    return std::numeric_limits<TValue>::max();
-}
-
-template<>
-inline constexpr TInt128 YtDecimalNan<TInt128>() {
-    return ~(TInt128(1) << 127);
-}
-
-template<typename TValue>
-inline constexpr TValue YtDecimalInf() {
-    return YtDecimalNan<TValue>() - 1;
-}
-
-template<typename TValue>
-inline TInt128 FromYtDecimal(TValue val) {
-    static_assert(std::is_same<TInt128, TValue>::value || std::is_signed<TValue>::value, "Expected signed value");
-    if (YtDecimalNan<TValue>() == val) {
-        return Nan();
-    } else if (YtDecimalInf<TValue>() == val) {
-        return Inf();
-    } else if (-YtDecimalInf<TValue>() == val) {
-        return -Inf();
-    } else {
-        return TInt128(val);
-    }
-}
-
-template<typename TValue>
-inline TValue ToYtDecimal(TInt128 val) {
-    static_assert(std::is_same<TInt128, TValue>::value || std::is_signed<TValue>::value, "Expected signed value");
-    if (IsNormal(val)) {
-        return (TValue)val;
-    } else if (val == Inf()) {
-        return YtDecimalInf<TValue>();
-    } else if (val == -Inf()) {
-        return -YtDecimalInf<TValue>();
-    }
-    return YtDecimalNan<TValue>();
-}
-
+template<typename TValue> 
+inline constexpr TValue YtDecimalNan() { 
+    return std::numeric_limits<TValue>::max(); 
+} 
+ 
+template<> 
+inline constexpr TInt128 YtDecimalNan<TInt128>() { 
+    return ~(TInt128(1) << 127); 
+} 
+ 
+template<typename TValue> 
+inline constexpr TValue YtDecimalInf() { 
+    return YtDecimalNan<TValue>() - 1; 
+} 
+ 
+template<typename TValue> 
+inline TInt128 FromYtDecimal(TValue val) { 
+    static_assert(std::is_same<TInt128, TValue>::value || std::is_signed<TValue>::value, "Expected signed value"); 
+    if (YtDecimalNan<TValue>() == val) { 
+        return Nan(); 
+    } else if (YtDecimalInf<TValue>() == val) { 
+        return Inf(); 
+    } else if (-YtDecimalInf<TValue>() == val) { 
+        return -Inf(); 
+    } else { 
+        return TInt128(val); 
+    } 
+} 
+ 
+template<typename TValue> 
+inline TValue ToYtDecimal(TInt128 val) { 
+    static_assert(std::is_same<TInt128, TValue>::value || std::is_signed<TValue>::value, "Expected signed value"); 
+    if (IsNormal(val)) { 
+        return (TValue)val; 
+    } else if (val == Inf()) { 
+        return YtDecimalInf<TValue>(); 
+    } else if (val == -Inf()) { 
+        return -YtDecimalInf<TValue>(); 
+    } 
+    return YtDecimalNan<TValue>(); 
+} 
+ 
 inline TInt128 FromHalfs(ui64 lo, i64 hi) {
     ui64 half[2] = {lo, static_cast<ui64>(hi)};
     TInt128 val128;

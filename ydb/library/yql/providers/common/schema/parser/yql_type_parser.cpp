@@ -1,58 +1,58 @@
-#include "yql_type_parser.h"
+#include "yql_type_parser.h" 
 
 #include <library/cpp/yson/node/node_io.h>
 
 namespace NYql {
 namespace NCommon {
 
-void TYqlTypeYsonSaverBase::SaveTypeHeader(TStringBuf name) {
-    Writer.OnBeginList();
-    Writer.OnListItem();
-    Writer.OnStringScalar(name);
-}
+void TYqlTypeYsonSaverBase::SaveTypeHeader(TStringBuf name) { 
+    Writer.OnBeginList(); 
+    Writer.OnListItem(); 
+    Writer.OnStringScalar(name); 
+} 
 
 #define SAVE_TYPE_IMPL(type) \
-void TYqlTypeYsonSaverBase::Save ## type() { \
-    SaveTypeHeader(#type); \
-    Writer.OnEndList(); \
-}
+void TYqlTypeYsonSaverBase::Save ## type() { \ 
+    SaveTypeHeader(#type); \ 
+    Writer.OnEndList(); \ 
+} 
 
-SAVE_TYPE_IMPL(Type)
-SAVE_TYPE_IMPL(VoidType)
-SAVE_TYPE_IMPL(NullType)
-SAVE_TYPE_IMPL(UnitType)
-SAVE_TYPE_IMPL(GenericType)
-SAVE_TYPE_IMPL(EmptyListType)
-SAVE_TYPE_IMPL(EmptyDictType)
+SAVE_TYPE_IMPL(Type) 
+SAVE_TYPE_IMPL(VoidType) 
+SAVE_TYPE_IMPL(NullType) 
+SAVE_TYPE_IMPL(UnitType) 
+SAVE_TYPE_IMPL(GenericType) 
+SAVE_TYPE_IMPL(EmptyListType) 
+SAVE_TYPE_IMPL(EmptyDictType) 
 
 #undef SAVE_TYPE_IMPL
 
-void TYqlTypeYsonSaverBase::SaveDataType(const TStringBuf& dataType) {
-    SaveTypeHeader("DataType");
-    Writer.OnListItem();
-    Writer.OnStringScalar(dataType);
-    Writer.OnEndList();
+void TYqlTypeYsonSaverBase::SaveDataType(const TStringBuf& dataType) { 
+    SaveTypeHeader("DataType"); 
+    Writer.OnListItem(); 
+    Writer.OnStringScalar(dataType); 
+    Writer.OnEndList(); 
 }
 
-void TYqlTypeYsonSaverBase::SaveDataTypeParams(const TStringBuf& dataType, const TStringBuf& paramOne, const TStringBuf& paramTwo) {
-    SaveTypeHeader("DataType");
-    Writer.OnListItem();
-    Writer.OnStringScalar(dataType);
-    Writer.OnListItem();
-    Writer.OnStringScalar(paramOne);
-    Writer.OnListItem();
-    Writer.OnStringScalar(paramTwo);
-    Writer.OnEndList();
+void TYqlTypeYsonSaverBase::SaveDataTypeParams(const TStringBuf& dataType, const TStringBuf& paramOne, const TStringBuf& paramTwo) { 
+    SaveTypeHeader("DataType"); 
+    Writer.OnListItem(); 
+    Writer.OnStringScalar(dataType); 
+    Writer.OnListItem(); 
+    Writer.OnStringScalar(paramOne); 
+    Writer.OnListItem(); 
+    Writer.OnStringScalar(paramTwo); 
+    Writer.OnEndList(); 
 }
 
-void TYqlTypeYsonSaverBase::SaveResourceType(const TStringBuf& tag) {
-    SaveTypeHeader("ResourceType");
-    Writer.OnListItem();
-    Writer.OnStringScalar(tag);
-    Writer.OnEndList();
+void TYqlTypeYsonSaverBase::SaveResourceType(const TStringBuf& tag) { 
+    SaveTypeHeader("ResourceType"); 
+    Writer.OnListItem(); 
+    Writer.OnStringScalar(tag); 
+    Writer.OnEndList(); 
 }
 
-bool ParseYson(NYT::TNode& res, const TStringBuf yson, IOutputStream& err) {
+bool ParseYson(NYT::TNode& res, const TStringBuf yson, IOutputStream& err) { 
     try {
         res = NYT::NodeFromYsonString(yson);
     }

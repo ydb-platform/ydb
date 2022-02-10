@@ -173,7 +173,7 @@ template<bool Strict, bool AutoConvert, typename TargetType>
 TUnboxedValuePod ConvertToFloat(TUnboxedValuePod x, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
     switch (GetNodeType(x)) {
         case ENodeType::Double:
-            return TUnboxedValuePod(TargetType(x.Get<double>()));
+            return TUnboxedValuePod(TargetType(x.Get<double>())); 
         case ENodeType::Uint64:
             return TUnboxedValuePod(TargetType(x.Get<ui64>()));
         case ENodeType::Int64:
@@ -260,7 +260,7 @@ TUnboxedValuePod ConvertToString(TUnboxedValuePod x, const IValueBuilder* valueB
                 return {};
         case ENodeType::Double:
             if constexpr (AutoConvert)
-                return valueBuilder->NewString(::FloatToString(x.Get<double>())).Release();
+                return valueBuilder->NewString(::FloatToString(x.Get<double>())).Release(); 
             else if constexpr (Strict)
                 break;
             else

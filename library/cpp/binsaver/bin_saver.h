@@ -9,7 +9,7 @@
 #include <util/generic/buffer.h>
 #include <util/generic/list.h>
 #include <util/generic/maybe.h>
-#include <util/generic/bitmap.h>
+#include <util/generic/bitmap.h> 
 #include <util/generic/variant.h>
 #include <util/generic/ylimits.h>
 #include <util/memory/blob.h>
@@ -426,31 +426,31 @@ public:
     }
 
     int Add(const chunk_id, TDynBitMap* pData) {
-        if (IsReading()) {
-            ui64 count = 0;
-            Add(1, &count);
-            pData->Clear();
-            pData->Reserve(count * sizeof(TDynBitMap::TChunk) * 8);
-            for (ui64 i = 0; i < count; ++i) {
-                TDynBitMap::TChunk chunk = 0;
-                Add(i + 1, &chunk);
-                if (i > 0) {
-                    pData->LShift(8 * sizeof(TDynBitMap::TChunk));
-                }
-                pData->Or(chunk);
-            }
-        } else {
-            ui64 count = pData->GetChunkCount();
-            Add(1, &count);
-            for (ui64 i = 0; i < count; ++i) {
-                // Write in reverse order
-                TDynBitMap::TChunk chunk = pData->GetChunks()[count - i - 1];
-                Add(i + 1, &chunk);
-            }
-        }
-        return 0;
-    }
-
+        if (IsReading()) { 
+            ui64 count = 0; 
+            Add(1, &count); 
+            pData->Clear(); 
+            pData->Reserve(count * sizeof(TDynBitMap::TChunk) * 8); 
+            for (ui64 i = 0; i < count; ++i) { 
+                TDynBitMap::TChunk chunk = 0; 
+                Add(i + 1, &chunk); 
+                if (i > 0) { 
+                    pData->LShift(8 * sizeof(TDynBitMap::TChunk)); 
+                } 
+                pData->Or(chunk); 
+            } 
+        } else { 
+            ui64 count = pData->GetChunkCount(); 
+            Add(1, &count); 
+            for (ui64 i = 0; i < count; ++i) { 
+                // Write in reverse order 
+                TDynBitMap::TChunk chunk = pData->GetChunks()[count - i - 1]; 
+                Add(i + 1, &chunk); 
+            } 
+        } 
+        return 0; 
+    } 
+ 
     template <class TVariantClass>
     struct TLoadFromTypeFromListHelper {
         template <class T0, class... TTail>

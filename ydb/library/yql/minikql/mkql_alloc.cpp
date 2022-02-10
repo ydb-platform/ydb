@@ -1,12 +1,12 @@
-#include "mkql_alloc.h"
+#include "mkql_alloc.h" 
 #include <util/system/align.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <tuple>
-
-namespace NKikimr {
-
-namespace NMiniKQL {
-
+ 
+namespace NKikimr { 
+ 
+namespace NMiniKQL { 
+ 
 Y_POD_THREAD(TAllocState*) TlsAllocState;
 
 TAllocPageHeader TAllocState::EmptyPageHeader = { 0, 0, 0, 0, 0, nullptr };
@@ -127,6 +127,6 @@ void TPagedArena::Clear() noexcept {
     CurrentPage_ = &TAllocState::EmptyPageHeader;
 }
 
-} // NMiniKQL
-
-} // NKikimr
+} // NMiniKQL 
+ 
+} // NKikimr 

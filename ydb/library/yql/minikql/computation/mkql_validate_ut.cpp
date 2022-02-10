@@ -649,7 +649,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
             FullValidateValueFunc fullValidateFunc = FullValidateValueFunc(),
             NUdf::EValidateMode validateMode = NUdf::EValidateMode::Lazy) {
         TScopedAlloc alloc;
-        TTypeEnvironment env(alloc);
+        TTypeEnvironment env(alloc); 
         NUdf::ITypeInfoHelper::TPtr typeInfoHelper(new TTypeInfoHelper);
         auto functionRegistry = CreateFunctionRegistryWithUDFs();
         auto randomProvider = CreateDeterministicRandomProvider(1);

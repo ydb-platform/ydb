@@ -139,7 +139,7 @@ public:
 
     // same as FindTails(&key, 1), a bit faster
     // return false, if no arc with @label exists
-    inline bool FindTails(TSymbol label, TCompactTrie<T, D, S>& res) const;
+    inline bool FindTails(TSymbol label, TCompactTrie<T, D, S>& res) const; 
 
     class TConstIterator {
     private:
@@ -361,28 +361,28 @@ bool TCompactTrie<T, D, S>::FindTails(const TSymbol* key, size_t keylen, TCompac
         return true;
     }
 
-    const char* datastart = DataHolder.AsCharPtr();
-    const char* datapos = datastart;
-    const char* const dataend = datapos + len;
-
+    const char* datastart = DataHolder.AsCharPtr(); 
+    const char* datapos = datastart; 
+    const char* const dataend = datapos + len; 
+ 
     const TSymbol* keyend = key + keylen;
     const char* value = nullptr;
-
+ 
     while (key != keyend) {
         T label = *(key++);
-        if (!NCompactTrie::Advance(datapos, dataend, value, label, Packer))
-            return false;
+        if (!NCompactTrie::Advance(datapos, dataend, value, label, Packer)) 
+            return false; 
 
-        if (key == keyend) {
-            if (datapos) {
+        if (key == keyend) { 
+            if (datapos) { 
                 Y_ASSERT(datapos >= datastart);
                 res = TCompactTrie<T, D, S>(TBlob::NoCopy(datapos, dataend - datapos), value);
-            } else {
-                res = TCompactTrie<T, D, S>(value);
+            } else { 
+                res = TCompactTrie<T, D, S>(value); 
             }
-            return true;
-        } else if (!datapos) {
-            return false; // No further way
+            return true; 
+        } else if (!datapos) { 
+            return false; // No further way 
         }
     }
 
@@ -390,7 +390,7 @@ bool TCompactTrie<T, D, S>::FindTails(const TSymbol* key, size_t keylen, TCompac
 }
 
 template <class T, class D, class S>
-inline bool TCompactTrie<T, D, S>::FindTails(TSymbol label, TCompactTrie<T, D, S>& res) const {
+inline bool TCompactTrie<T, D, S>::FindTails(TSymbol label, TCompactTrie<T, D, S>& res) const { 
     using namespace NCompactTrie;
 
     const size_t len = DataHolder.Length();
@@ -402,17 +402,17 @@ inline bool TCompactTrie<T, D, S>::FindTails(TSymbol label, TCompactTrie<T, D, S
     const char* datapos = datastart;
     const char* value = nullptr;
 
-    if (!NCompactTrie::Advance(datapos, dataend, value, label, Packer))
-        return false;
+    if (!NCompactTrie::Advance(datapos, dataend, value, label, Packer)) 
+        return false; 
 
-    if (datapos) {
+    if (datapos) { 
         Y_ASSERT(datapos >= datastart);
-        res = TCompactTrie<T, D, S>(TBlob::NoCopy(datapos, dataend - datapos), value);
-    } else {
-        res = TCompactTrie<T, D, S>(value);
+        res = TCompactTrie<T, D, S>(TBlob::NoCopy(datapos, dataend - datapos), value); 
+    } else { 
+        res = TCompactTrie<T, D, S>(value); 
     }
 
-    return true;
+    return true; 
 }
 
 template <class T, class D, class S>

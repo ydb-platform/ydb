@@ -112,11 +112,11 @@ namespace {
                 break;
         }
 
-        ui64 hash = node.GetTypeAnn()->GetHash();
+        ui64 hash = node.GetTypeAnn()->GetHash(); 
         hash = CseeHash(ui32(node.Type()), hash);
-        for (auto c: node.GetAllConstraints()) {
+        for (auto c: node.GetAllConstraints()) { 
             hash = CseeHash(c->GetHash(), hash);
-        }
+        } 
         hash = AddColumnOrderHash(coStore.Lookup(node.UniqueId()), hash);
 
         switch (node.Type()) {
@@ -173,9 +173,9 @@ namespace {
             for (ui32 i = 0; i < args.ChildrenSize(); ++i) {
                 const auto& arg = *args.Child(i);
                 hash = CseeHash(arg.GetTypeAnn()->GetHash(), hash);
-                for (auto c: arg.GetAllConstraints()) {
+                for (auto c: arg.GetAllConstraints()) { 
                     hash = CseeHash(c->GetHash(), hash);
-                }
+                } 
             }
 
             TLambdaFrame newFrame(&node, &currFrame);
@@ -247,14 +247,14 @@ namespace {
             return false;
         }
 
-        if (left.GetTypeAnn() != right.GetTypeAnn()) {
+        if (left.GetTypeAnn() != right.GetTypeAnn()) { 
             return false;
         }
 
-        if (left.GetAllConstraints() != right.GetAllConstraints()) {
-            return false;
-        }
-
+        if (left.GetAllConstraints() != right.GetAllConstraints()) { 
+            return false; 
+        } 
+ 
         if (coStore.Lookup(left.UniqueId()) != coStore.Lookup(right.UniqueId())) {
             return false;
         }
@@ -326,12 +326,12 @@ namespace {
             for (ui32 i = 0; i < leftArgs.ChildrenSize(); ++i) {
                 const auto& leftArg = *leftArgs.Child(i);
                 const auto& rightArg = *rightArgs.Child(i);
-                if (leftArg.GetTypeAnn() != rightArg.GetTypeAnn()) {
+                if (leftArg.GetTypeAnn() != rightArg.GetTypeAnn()) { 
                     return false;
                 }
-                if (leftArg.GetAllConstraints() != rightArg.GetAllConstraints()) {
-                    return false;
-                }
+                if (leftArg.GetAllConstraints() != rightArg.GetAllConstraints()) { 
+                    return false; 
+                } 
             }
 
             TLambdaFrame newLeftFrame(&left, &currLeftFrame);

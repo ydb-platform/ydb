@@ -190,7 +190,7 @@ public:
 
             IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(*input);
 
-            if (auto maybeTableList = TMaybeNode<TCoRight>(pullInput).Input().Maybe<TKiReadTableList>()) {
+            if (auto maybeTableList = TMaybeNode<TCoRight>(pullInput).Input().Maybe<TKiReadTableList>()) { 
                 if (!EnsureNotPrepare("tablelist", pullInput->Pos(), SessionCtx->Query(), ctx)) {
                     return SyncError();
                 }
@@ -210,7 +210,7 @@ public:
                 });
             }
 
-            if (auto maybeTableScheme = TMaybeNode<TCoRight>(pullInput).Input().Maybe<TKiReadTableScheme>()) {
+            if (auto maybeTableScheme = TMaybeNode<TCoRight>(pullInput).Input().Maybe<TKiReadTableScheme>()) { 
                 if (!EnsureNotPrepare("tablescheme", pullInput->Pos(), SessionCtx->Query(), ctx)) {
                     return SyncError();
                 }
@@ -249,7 +249,7 @@ public:
             auto exec = resultInput.Maybe<TCoNth>().Tuple().Maybe<TCoRight>().Input();
             YQL_ENSURE(exec.Maybe<TKiExecDataQuery>());
 
-            ui32 index = FromString<ui32>(resultInput.Cast<TCoNth>().Index().Value());
+            ui32 index = FromString<ui32>(resultInput.Cast<TCoNth>().Index().Value()); 
             YQL_ENSURE(index == 0);
 
             return RunResOrPullForExec(TResOrPullBase(input), exec.Cast(), ctx, 0);
@@ -261,7 +261,7 @@ public:
                 return SyncStatus(requireStatus);
             }
 
-            auto configure = TCoConfigure(input);
+            auto configure = TCoConfigure(input); 
             auto clusterName = TString(configure.DataSource().Arg(1).Cast<TCoAtom>().Value());
             if (configure.Arg(2).Cast<TCoAtom>().Value() == TStringBuf("Attr")) {
                 auto name = TString(configure.Arg(3).Cast<TCoAtom>().Value());
@@ -383,7 +383,7 @@ private:
             return SyncOk();
         }
 
-        auto executeRightType = exec.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1];
+        auto executeRightType = exec.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1]; 
         auto resultType = executeRightType->Cast<TTupleExprType>()->GetItems()[resultIndex];
 
         YQL_ENSURE(resultIndex < runResult->Results.size());
@@ -417,7 +417,7 @@ public:
         YQL_ENSURE(input->Type() == TExprNode::Callable);
         output = input;
 
-        if (auto maybeCommit = TMaybeNode<TCoCommit>(input)) {
+        if (auto maybeCommit = TMaybeNode<TCoCommit>(input)) { 
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
@@ -444,7 +444,7 @@ public:
             return RunKiExecDataQuery(ctx, maybeExecQuery.Cast());
         }
 
-        if (TMaybeNode<TCoNth>(input)) {
+        if (TMaybeNode<TCoNth>(input)) { 
             input->SetState(TExprNode::EState::ExecutionComplete);
             input->SetResult(ctx.NewWorld(input->Pos()));
             return SyncOk();

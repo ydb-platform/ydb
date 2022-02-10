@@ -41,7 +41,7 @@ private:
     virtual TStatus HandleAlterGroup(NNodes::TKiAlterGroup node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropGroup(NNodes::TKiDropGroup node, TExprContext& ctx) = 0;
     virtual TStatus HandleWrite(NNodes::TExprBase node, TExprContext& ctx) = 0;
-    virtual TStatus HandleCommit(NNodes::TCoCommit node, TExprContext& ctx) = 0;
+    virtual TStatus HandleCommit(NNodes::TCoCommit node, TExprContext& ctx) = 0; 
     virtual TStatus HandleKql(NNodes::TCallable node, TExprContext& ctx) = 0;
     virtual TStatus HandleExecDataQuery(NNodes::TKiExecDataQuery node, TExprContext& ctx) = 0;
     virtual TStatus HandleDataQuery(NNodes::TKiDataQuery node, TExprContext& ctx) = 0;
@@ -220,7 +220,7 @@ NNodes::TCoAtomList BuildKeyColumnsList(
 NNodes::TCoAtomList MergeColumns(const NNodes::TCoAtomList& col1, const TVector<TString>& col2, TExprContext& ctx);
 
 bool IsKqlPureExpr(NNodes::TExprBase expr);
-bool IsKqlPureLambda(NNodes::TCoLambda lambda);
+bool IsKqlPureLambda(NNodes::TCoLambda lambda); 
 bool IsKeySelectorPkPrefix(NNodes::TCoLambda lambda, const TKikimrTableDescription& desc, TVector<TString>* columns);
 
 NNodes::TCoNameValueTupleList ExtractNamedKeyTuples(NNodes::TCoArgument arg,

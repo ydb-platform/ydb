@@ -52,7 +52,7 @@ const TNodeMultiSet& GetConsumers(const NNodes::TExprBase& node, const TParentsM
 ui32 GetConsumersCount(const NNodes::TExprBase& node, const TParentsMap& parentsMap);
 bool IsSingleConsumer(const NNodes::TExprBase& node, const TParentsMap& parentsMap);
 
-bool IsSingleConsumerConnection(const NNodes::TDqConnection& node, const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
+bool IsSingleConsumerConnection(const NNodes::TDqConnection& node, const TParentsMap& parentsMap, bool allowStageMultiUsage = true); 
 
 ui32 GetStageOutputsCount(const NNodes::TDqStageBase& stage, bool includingSinks);
 

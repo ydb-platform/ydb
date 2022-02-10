@@ -83,38 +83,38 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
     }
 
     Y_UNIT_TEST(AnnotatedAstPrint) {
-        TMemoryPool pool(4096);
-        TAstParseResult ast = ParseAst(TEST_PROGRAM, &pool);
+        TMemoryPool pool(4096); 
+        TAstParseResult ast = ParseAst(TEST_PROGRAM, &pool); 
         UNIT_ASSERT(ast.IsOk());
 
-        TAstParseResult astWithPositions;
-        astWithPositions.Root = AnnotatePositions(*ast.Root, pool);
-        UNIT_ASSERT(!!astWithPositions.Root);
+        TAstParseResult astWithPositions; 
+        astWithPositions.Root = AnnotatePositions(*ast.Root, pool); 
+        UNIT_ASSERT(!!astWithPositions.Root); 
 
-        TString sAnn = astWithPositions.Root->ToString();
+        TString sAnn = astWithPositions.Root->ToString(); 
         UNIT_ASSERT(false == sAnn.empty());
 
         TAstParseResult annRes = ParseAst(sAnn);
         UNIT_ASSERT(annRes.IsOk());
 
-        TAstParseResult removedAnn;
-        removedAnn.Root = RemoveAnnotations(*annRes.Root, pool);
-        UNIT_ASSERT(!!removedAnn.Root);
+        TAstParseResult removedAnn; 
+        removedAnn.Root = RemoveAnnotations(*annRes.Root, pool); 
+        UNIT_ASSERT(!!removedAnn.Root); 
 
         TString strOriginal = ast.Root->ToString();
-        TString strAnnRemoved = removedAnn.Root->ToString();
+        TString strAnnRemoved = removedAnn.Root->ToString(); 
         UNIT_ASSERT_VALUES_EQUAL(strOriginal, strAnnRemoved);
 
-        astWithPositions.Root->GetChild(0)->SetContent("100:100", pool);
+        astWithPositions.Root->GetChild(0)->SetContent("100:100", pool); 
 
-        TAstParseResult appliedPositionsAnn;
-        appliedPositionsAnn.Root = ApplyPositionAnnotations(*astWithPositions.Root, 0, pool);
-        UNIT_ASSERT(appliedPositionsAnn.Root);
-
-        TAstParseResult removedAnn2;
-        removedAnn2.Root = RemoveAnnotations(*appliedPositionsAnn.Root, pool);
-        UNIT_ASSERT(removedAnn2.Root);
-        UNIT_ASSERT_VALUES_EQUAL(removedAnn2.Root->GetPosition().Row, 100);
+        TAstParseResult appliedPositionsAnn; 
+        appliedPositionsAnn.Root = ApplyPositionAnnotations(*astWithPositions.Root, 0, pool); 
+        UNIT_ASSERT(appliedPositionsAnn.Root); 
+ 
+        TAstParseResult removedAnn2; 
+        removedAnn2.Root = RemoveAnnotations(*appliedPositionsAnn.Root, pool); 
+        UNIT_ASSERT(removedAnn2.Root); 
+        UNIT_ASSERT_VALUES_EQUAL(removedAnn2.Root->GetPosition().Row, 100); 
     }
 
     template <typename TCharType>

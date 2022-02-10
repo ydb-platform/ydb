@@ -12,7 +12,7 @@
 #include "mkql_chopper.h"
 #include "mkql_coalesce.h"
 #include "mkql_collect.h"
-#include "mkql_combine.h"
+#include "mkql_combine.h" 
 #include "mkql_contains.h"
 #include "mkql_decimal_div.h"
 #include "mkql_decimal_mod.h"
@@ -33,7 +33,7 @@
 #include "mkql_fromstring.h"
 #include "mkql_fromyson.h"
 #include "mkql_guess.h"
-#include "mkql_group.h"
+#include "mkql_group.h" 
 #include "mkql_heap.h"
 #include "mkql_hasitems.h"
 #include "mkql_hopping.h"
@@ -84,7 +84,7 @@
 #include "mkql_tostring.h"
 #include "mkql_udf.h"
 #include "mkql_unwrap.h"
-#include "mkql_varitem.h"
+#include "mkql_varitem.h" 
 #include "mkql_visitall.h"
 #include "mkql_way.h"
 #include "mkql_weakmember.h"
@@ -316,17 +316,17 @@ TComputationNodeFactory GetBuiltinFactory() {
     };
 }
 
-TComputationNodeFactory GetCompositeWithBuiltinFactory(TVector<TComputationNodeFactory> factories) {
-    return [factories = std::move(factories), builtins = GetBuiltinFactory()](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
-        for (auto& f: factories) {
-            if (auto res = f(callable, ctx)) {
-                return res;
-            }
-        }
-
-        return builtins(callable, ctx);
-    };
+TComputationNodeFactory GetCompositeWithBuiltinFactory(TVector<TComputationNodeFactory> factories) { 
+    return [factories = std::move(factories), builtins = GetBuiltinFactory()](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* { 
+        for (auto& f: factories) { 
+            if (auto res = f(callable, ctx)) { 
+                return res; 
+            } 
+        } 
+ 
+        return builtins(callable, ctx); 
+    }; 
 }
-
+ 
 }
-}
+} 

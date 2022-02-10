@@ -64,7 +64,7 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus SortWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus TopWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus KeepTopWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
-    IGraphTransformer::TStatus UnorderedWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    IGraphTransformer::TStatus UnorderedWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx); 
     IGraphTransformer::TStatus SortTraitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus SessionWindowTraitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus GroupByKeyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
@@ -86,7 +86,7 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus CombineByKeyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus ExtractWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus ExtractMembersWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
-    IGraphTransformer::TStatus AssumeUniqueWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    IGraphTransformer::TStatus AssumeUniqueWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx); 
     IGraphTransformer::TStatus AssumeColumnOrderWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
     IGraphTransformer::TStatus AggregationTraitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus MultiAggregateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);

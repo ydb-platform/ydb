@@ -1,15 +1,15 @@
 #include "mkql_join.h"
-
+ 
 #include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
-
+ 
 #include <util/system/tempfile.h>
 #include <util/stream/file.h>
 #include <util/system/fstat.h>
-#include <util/generic/ylimits.h>
+#include <util/generic/ylimits.h> 
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -1396,7 +1396,7 @@ public:
         return *Ctx;
     }
 
-    bool Spill() {
+    bool Spill() { 
         if (FileState) {
             return false;
         }
@@ -1418,7 +1418,7 @@ public:
         LiveValue = std::move(liveValue);
     }
 
-    void Add(NUdf::TUnboxedValue&& value) {
+    void Add(NUdf::TUnboxedValue&& value) { 
 #ifndef NDEBUG
         Y_VERIFY_DEBUG(!IsSealed);
 #endif
@@ -1647,7 +1647,7 @@ public:
                 if (status == NUdf::EFetchStatus::Yield) {
                     return status;
                 }
-
+ 
                 if (status == NUdf::EFetchStatus::Finish) {
                     EatInput = false;
                 } else {
@@ -1989,7 +1989,7 @@ public:
         , RequiredColumns(std::move(requiredColumns))
         , LeftOutputColumns(std::move(leftOutputColumns))
         , RightOutputColumns(std::move(rightOutputColumns))
-        , MemLimit(memLimit)
+        , MemLimit(memLimit) 
         , SortedTableOrder(sortedTableOrder)
         , KeyColumns(std::move(keyColumns))
         , IsRequiredColumn(FillRequiredStructColumn(inputWidth, RequiredColumns))
@@ -2024,7 +2024,7 @@ private:
     const std::vector<ui32> RequiredColumns;
     const std::vector<ui32> LeftOutputColumns;
     const std::vector<ui32> RightOutputColumns;
-    const ui64 MemLimit;
+    const ui64 MemLimit; 
     const std::optional<ui32> SortedTableOrder;
     const std::vector<ui32> KeyColumns;
     const std::vector<bool> IsRequiredColumn;
@@ -2134,7 +2134,7 @@ IComputationNode* WrapCommonJoinCore(TCallable& callable, const TComputationNode
     for (ui32 i = 0; i < keyColumnsNode->GetValuesCount(); ++i) {
         keyColumns.push_back(AS_VALUE(TDataLiteral, keyColumnsNode->GetValue(i))->AsValue().Get<ui32>());
     }
-
+ 
     const ui64 memLimit = AS_VALUE(TDataLiteral, callable.GetInput(8))->AsValue().Get<ui64>();
 
     std::optional<ui32> sortedTableOrder;

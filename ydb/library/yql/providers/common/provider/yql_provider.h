@@ -8,13 +8,13 @@
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 
 #include <library/cpp/yson/writer.h>
-
-#include <util/generic/hash_set.h>
+ 
+#include <util/generic/hash_set.h> 
 #include <util/generic/string.h>
-#include <util/generic/strbuf.h>
-
-#include <utility>
-
+#include <util/generic/strbuf.h> 
+ 
+#include <utility> 
+ 
 namespace NYson {
     class TYsonWriter;
 }
@@ -33,16 +33,16 @@ struct TOperationStatistics;
 namespace NCommon {
 
 struct TWriteTableSettings {
-    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode; 
     NNodes::TMaybeNode<NNodes::TExprList> Columns;
-    NNodes::TMaybeNode<NNodes::TCoAtomList> PrimaryKey;
+    NNodes::TMaybeNode<NNodes::TCoAtomList> PrimaryKey; 
     NNodes::TMaybeNode<NNodes::TCoAtomList> PartitionBy;
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> OrderBy;
-    NNodes::TMaybeNode<NNodes::TCoLambda> Filter;
-    NNodes::TMaybeNode<NNodes::TCoLambda> Update;
+    NNodes::TMaybeNode<NNodes::TCoLambda> Filter; 
+    NNodes::TMaybeNode<NNodes::TCoLambda> Update; 
     NNodes::TMaybeNode<NNodes::TCoIndexList> Indexes;
     NNodes::TMaybeNode<NNodes::TCoChangefeedList> Changefeeds;
-    NNodes::TCoNameValueTupleList Other;
+    NNodes::TCoNameValueTupleList Other; 
     NNodes::TMaybeNode<NNodes::TExprList> ColumnFamilies;
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> TableSettings;
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> AlterActions;
@@ -63,14 +63,14 @@ struct TWriteRoleSettings {
 struct TCommitSettings
 {
     TPositionHandle Pos;
-    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
-    NNodes::TMaybeNode<NNodes::TCoAtom> Epoch;
-    NNodes::TCoNameValueTupleList Other;
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode; 
+    NNodes::TMaybeNode<NNodes::TCoAtom> Epoch; 
+    NNodes::TCoNameValueTupleList Other; 
 
-    TCommitSettings(NNodes::TCoNameValueTupleList other)
+    TCommitSettings(NNodes::TCoNameValueTupleList other) 
         : Other(other) {}
 
-    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx) const;
+    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx) const; 
 
     bool EnsureModeEmpty(TExprContext& ctx);
     bool EnsureEpochEmpty(TExprContext& ctx);
@@ -81,7 +81,7 @@ const TStructExprType* BuildCommonTableListType(TExprContext& ctx);
 
 TExprNode::TPtr BuildTypeExpr(TPositionHandle pos, const TTypeAnnotationNode& ann, TExprContext& ctx);
 
-bool HasResOrPullOption(const TExprNode& node, const TStringBuf& option);
+bool HasResOrPullOption(const TExprNode& node, const TStringBuf& option); 
 
 TVector<TString> GetResOrPullColumnHints(const TExprNode& node);
 
@@ -89,7 +89,7 @@ TWriteTableSettings ParseWriteTableSettings(NNodes::TExprList node, TExprContext
 
 TWriteRoleSettings ParseWriteRoleSettings(NNodes::TExprList node, TExprContext& ctx);
 
-TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx);
+TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx); 
 
 TString FullTableName(const TStringBuf& cluster, const TStringBuf& table);
 
@@ -103,11 +103,11 @@ void TransformerStatsToYson(const TString& name, const IGraphTransformer::TStati
 void FillSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& types, THashMap<TString, TString>& secureParams);
 
 bool FillUsedFiles(const TExprNode& node, TUserDataTable& files, const TTypeAnnotationContext& types, TExprContext& ctx, const TUserDataTable& crutches = {});
-
+ 
 std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> FreezeUsedFiles(const TExprNode& node, TUserDataTable& files, const TTypeAnnotationContext& types, TExprContext& ctx, const std::function<bool(const TString&)>& urlDownloadFilter, const TUserDataTable& crutches = {});
 
 bool FreezeUsedFilesSync(const TExprNode& node, TUserDataTable& files, const TTypeAnnotationContext& types, TExprContext& ctx, const std::function<bool(const TString&)>& urlDownloadFilter);
-
+ 
 void WriteColumns(NYson::TYsonWriter& writer, const NNodes::TExprBase& columns);
 
 TString SerializeExpr(TExprContext& ctx, const TExprNode& expr, bool withTypes = false);
@@ -117,7 +117,7 @@ void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprN
 void WriteStreams(NYson::TYsonWriter& writer, TStringBuf name, const NNodes::TCoLambda& lambda);
 
 double GetDataReplicationFactor(const TExprNode& lambda, TExprContext& ctx);
-
+ 
 void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics);
 
 } // namespace NCommon

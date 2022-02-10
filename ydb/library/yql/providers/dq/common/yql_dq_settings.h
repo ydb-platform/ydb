@@ -5,8 +5,8 @@
 
 #include <ydb/library/yql/core/yql_data_provider.h>
 
-#include <library/cpp/string_utils/parse_size/parse_size.h>
-
+#include <library/cpp/string_utils/parse_size/parse_size.h> 
+ 
 #include <util/generic/size_literals.h>
 #include <util/random/random.h>
 
@@ -19,7 +19,7 @@ struct TDqSettings {
         static constexpr ui32 MaxTasksPerOperation = 70U;
         static constexpr ui64 PortoMemoryLimit = 3_GB;
         static constexpr bool EnablePorto = false;
-        static constexpr ui64 DataSizePerJob = 128_MB;
+        static constexpr ui64 DataSizePerJob = 128_MB; 
         static constexpr ui64 MaxDataSizePerJob = 600_MB;
         static constexpr int MaxNetworkRetries = 5;
         static constexpr ui64 LiteralTimeout = 60000; // 1 minutes
@@ -45,16 +45,16 @@ struct TDqSettings {
     NCommon::TConfSetting<TString, false> FallbackPolicy;
     NCommon::TConfSetting<ui64, false> PullRequestTimeoutMs;
     NCommon::TConfSetting<ui64, false> PingTimeoutMs;
-    NCommon::TConfSetting<bool, false> UseSimpleYtReader;
+    NCommon::TConfSetting<bool, false> UseSimpleYtReader; 
     NCommon::TConfSetting<TString, false> OptLLVM;
     NCommon::TConfSetting<ui64, false> ChannelBufferSize;
     NCommon::TConfSetting<ui64, false> OutputChunkMaxSize;
-    NCommon::TConfSetting<NSize::TSize, false> MemoryLimit;
+    NCommon::TConfSetting<NSize::TSize, false> MemoryLimit; 
     NCommon::TConfSetting<ui64, false> _LiteralTimeout;
     NCommon::TConfSetting<ui64, false> _TableTimeout;
     NCommon::TConfSetting<ui64, false> _LongWorkersAllocationWarnTimeout;
     NCommon::TConfSetting<ui64, false> _LongWorkersAllocationFailTimeout;
-    NCommon::TConfSetting<bool, false> EnableInsert;
+    NCommon::TConfSetting<bool, false> EnableInsert; 
     NCommon::TConfSetting<ui64, false> _AllResultsBytesLimit;
     NCommon::TConfSetting<ui64, false> _RowsLimitPerWrite;
     NCommon::TConfSetting<bool, false> EnableStrip;
@@ -90,7 +90,7 @@ struct TDqSettings {
         SAVE_SETTING(OptLLVM);
         SAVE_SETTING(ChannelBufferSize);
         SAVE_SETTING(OutputChunkMaxSize);
-        SAVE_SETTING(MemoryLimit);
+        SAVE_SETTING(MemoryLimit); 
         SAVE_SETTING(_LiteralTimeout);
         SAVE_SETTING(_TableTimeout);
         SAVE_SETTING(_LongWorkersAllocationWarnTimeout);
@@ -131,9 +131,9 @@ struct TDqConfiguration: public TDqSettings, public NCommon::TSettingDispatcher 
     void Init(const TProtoConfig& config, const TString& userName)
     {
         // Init settings from config
-        this->Dispatch(config.GetDefaultSettings(), userName);
+        this->Dispatch(config.GetDefaultSettings(), userName); 
 
-        // TODO: drop after releasing new gateways config
+        // TODO: drop after releasing new gateways config 
         if (this->AnalyzeQuery.Get().Empty()) {
             int percent = 0;
 

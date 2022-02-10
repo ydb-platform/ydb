@@ -1,5 +1,5 @@
 #include "pattern_group.h"
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NYql;

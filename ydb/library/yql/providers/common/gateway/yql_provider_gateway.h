@@ -29,9 +29,9 @@ private:
 };
 
 template<typename TResult>
-TResult ResultFromException(const std::exception& e, const TPosition& pos = {}) {
+TResult ResultFromException(const std::exception& e, const TPosition& pos = {}) { 
     TResult result;
-    result.SetException(e, pos);
+    result.SetException(e, pos); 
     return result;
 }
 
@@ -89,5 +89,5 @@ inline void SetPromiseValue(NThreading::TPromise<T>& promise, const NThreading::
     });
 }
 
-} // NCommon
-} // NYql
+} // NCommon 
+} // NYql 

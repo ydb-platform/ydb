@@ -424,7 +424,7 @@ private:
         auto selectType = GetSelectType(lookup, *selectTuple, ctx);
         auto optSelectType = ctx.MakeType<TOptionalExprType>(selectType);
 
-        node.SetTypeAnn(optSelectType);
+        node.SetTypeAnn(optSelectType); 
         return TStatus::Ok;
     }
 
@@ -542,7 +542,7 @@ private:
         resultItems.push_back(ctx.MakeType<TItemExprType>("Truncated", boolType));
         auto resultType = ctx.MakeType<TStructExprType>(resultItems);
 
-        node.SetTypeAnn(resultType);
+        node.SetTypeAnn(resultType); 
         return TStatus::Ok;
     }
 
@@ -579,7 +579,7 @@ private:
             }
         }
 
-        node.SetTypeAnn(ctx.MakeType<TVoidExprType>());
+        node.SetTypeAnn(ctx.MakeType<TVoidExprType>()); 
         return TStatus::Ok;
     }
 
@@ -591,7 +591,7 @@ private:
             return TStatus::Error;
         }
 
-        node.SetTypeAnn(ctx.MakeType<TVoidExprType>());
+        node.SetTypeAnn(ctx.MakeType<TVoidExprType>()); 
         return TStatus::Ok;
     }
 
@@ -599,7 +599,7 @@ private:
         Y_ENSURE_EX(node.ChildrenSize() == 2, TNodeException(node) << "SetResult expects 2 args.");
         Y_ENSURE_EX(node.Child(0)->Type() == TExprNode::Atom, TNodeException(node) << "First SetResult argument should be Atom.");
 
-        node.SetTypeAnn(ctx.MakeType<TVoidExprType>());
+        node.SetTypeAnn(ctx.MakeType<TVoidExprType>()); 
         return TStatus::Ok;
     }
 
@@ -608,7 +608,7 @@ private:
             return IGraphTransformer::TStatus::Error;
         }
 
-        node.SetTypeAnn(node.Child(0)->GetTypeAnn());
+        node.SetTypeAnn(node.Child(0)->GetTypeAnn()); 
         return TStatus::Ok;
     }
 
@@ -625,7 +625,7 @@ private:
 
         auto tupleType = ctx.MakeType<TTupleExprType>(items);
 
-        node.SetTypeAnn(tupleType);
+        node.SetTypeAnn(tupleType); 
         return TStatus::Ok;
     }
 
@@ -638,9 +638,9 @@ private:
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto parameterType = node.Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto parameterType = node.Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
 
-        node.SetTypeAnn(parameterType);
+        node.SetTypeAnn(parameterType); 
         return TStatus::Ok;
     }
 
@@ -649,7 +649,7 @@ private:
 
         auto structType = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>());
 
-        node.SetTypeAnn(structType);
+        node.SetTypeAnn(structType); 
         return TStatus::Ok;
     }
 
@@ -661,7 +661,7 @@ private:
         auto output = tmpNode;
         YQL_ENSURE(CallableTransformer->Transform(tmpNode, output, ctx) == TStatus::Ok);
 
-        node.SetTypeAnn(tmpNode->GetTypeAnn());
+        node.SetTypeAnn(tmpNode->GetTypeAnn()); 
         return TStatus::Ok;
     }
 
@@ -673,7 +673,7 @@ private:
         auto output = tmpNode;
         YQL_ENSURE(CallableTransformer->Transform(tmpNode, output, ctx) == TStatus::Ok);
 
-        node.SetTypeAnn(tmpNode->GetTypeAnn());
+        node.SetTypeAnn(tmpNode->GetTypeAnn()); 
         return TStatus::Ok;
     }
 
@@ -691,20 +691,20 @@ private:
         }
 
         auto& lambda = node.ChildRef(1);
-        const TTypeAnnotationNode* itemType = node.Child(0)->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+        const TTypeAnnotationNode* itemType = node.Child(0)->GetTypeAnn()->Cast<TListExprType>()->GetItemType(); 
         if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!lambda->GetTypeAnn()) {
+        if (!lambda->GetTypeAnn()) { 
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (!EnsureComputableType(lambda->Pos(), *lambda->GetTypeAnn(), ctx)) {
+        if (!EnsureComputableType(lambda->Pos(), *lambda->GetTypeAnn(), ctx)) { 
             return IGraphTransformer::TStatus::Error;
         }
 
-        node.SetTypeAnn(ctx.MakeType<TListExprType>(lambda->GetTypeAnn()));
+        node.SetTypeAnn(ctx.MakeType<TListExprType>(lambda->GetTypeAnn())); 
         return TStatus::Ok;
     }
 
@@ -722,20 +722,20 @@ private:
         }
 
         auto& lambda = node.ChildRef(1);
-        const TTypeAnnotationNode* itemType = node.Child(0)->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+        const TTypeAnnotationNode* itemType = node.Child(0)->GetTypeAnn()->Cast<TListExprType>()->GetItemType(); 
         if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!lambda->GetTypeAnn()) {
+        if (!lambda->GetTypeAnn()) { 
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (!EnsureListType(lambda->Pos(), *lambda->GetTypeAnn(), ctx)) {
+        if (!EnsureListType(lambda->Pos(), *lambda->GetTypeAnn(), ctx)) { 
             return IGraphTransformer::TStatus::Error;
         }
 
-        node.SetTypeAnn(lambda->GetTypeAnn());
+        node.SetTypeAnn(lambda->GetTypeAnn()); 
         return TStatus::Ok;
     }
 
@@ -747,7 +747,7 @@ private:
             return IGraphTransformer::TStatus::Error;
         }
 
-        node.SetTypeAnn(ctx.MakeType<TVoidExprType>());
+        node.SetTypeAnn(ctx.MakeType<TVoidExprType>()); 
         return TStatus::Ok;
     }
 
@@ -756,7 +756,7 @@ private:
             return IGraphTransformer::TStatus::Error;
         }
 
-        node.SetTypeAnn(ctx.MakeType<TVoidExprType>());
+        node.SetTypeAnn(ctx.MakeType<TVoidExprType>()); 
         return TStatus::Ok;
     }
 
@@ -764,11 +764,11 @@ private:
         Y_UNUSED(ctx);
 
         if (node.Content() == "ByteString") {
-            node.SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::String));
+            node.SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::String)); 
         } else if (node.Content() == "Utf8String") {
-            node.SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Utf8));
+            node.SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Utf8)); 
         } else {
-            node.SetTypeAnn(ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(node.Content())));
+            node.SetTypeAnn(ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(node.Content()))); 
         }
 
         return TStatus::Ok;
@@ -778,12 +778,12 @@ private:
     {
         switch (node.ChildrenSize()) {
         case 1:
-            node.SetTypeAnn(ctx.MakeType<TTypeExprType>(ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(
-                AdaptLegacyYqlType(node.Child(0)->Content())))));
+            node.SetTypeAnn(ctx.MakeType<TTypeExprType>(ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot( 
+                AdaptLegacyYqlType(node.Child(0)->Content()))))); 
             break;
         case 3:
-            node.SetTypeAnn(ctx.MakeType<TTypeExprType>(ctx.MakeType<TDataExprParamsType>(
-                NKikimr::NUdf::GetDataSlot(AdaptLegacyYqlType(node.Child(0)->Content())), node.Child(1)->Content(), node.Child(2)->Content())));
+            node.SetTypeAnn(ctx.MakeType<TTypeExprType>(ctx.MakeType<TDataExprParamsType>( 
+                NKikimr::NUdf::GetDataSlot(AdaptLegacyYqlType(node.Child(0)->Content())), node.Child(1)->Content(), node.Child(2)->Content()))); 
             break;
         default:
             return TStatus::Error;
@@ -1200,7 +1200,7 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
         return mkqlContext->PgmBuilder->MapParameter(list, [&](TRuntimeNode item) {
             TMkqlBuildContext::TArgumentsMap innerArguments;
             auto arg = node.Child(1)->Child(0)->Child(0);
-            innerArguments[arg] = item;
+            innerArguments[arg] = item; 
             TMkqlBuildContext innerCtx(ctx, std::move(innerArguments), node.Child(1)->UniqueId());
             auto res = MkqlBuildExpr(*node.Child(1)->Child(1), innerCtx);
             return res;
@@ -1213,7 +1213,7 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
         return mkqlContext->PgmBuilder->FlatMapParameter(list, [&](TRuntimeNode item) {
             TMkqlBuildContext::TArgumentsMap innerArguments;
             auto arg = node.Child(1)->Child(0)->Child(0);
-            innerArguments[arg] = item;
+            innerArguments[arg] = item; 
             TMkqlBuildContext innerCtx(ctx, std::move(innerArguments), node.Child(1)->UniqueId());
             auto res = MkqlBuildExpr(*node.Child(1)->Child(1), innerCtx);
             return res;
@@ -1238,7 +1238,7 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
         return mkqlContext->PgmBuilder->PartialSort(list, ascending, [&](TRuntimeNode item) {
             TMkqlBuildContext::TArgumentsMap innerArguments;
             auto argItem = node.Child(2)->Child(0)->Child(0);
-            innerArguments[argItem] = item;
+            innerArguments[argItem] = item; 
             TMkqlBuildContext innerCtx(ctx, std::move(innerArguments), node.Child(2)->UniqueId());
             auto res = MkqlBuildExpr(*node.Child(2)->Child(1), innerCtx);
             return res;
@@ -1569,7 +1569,7 @@ private:
             return false;
         }
         Expr->Context.IssueManager.AddIssues(std::move(astRes.Issues));
-        if (!CompileExpr(*root, Expr->Root, Expr->Context, nullptr)) {
+        if (!CompileExpr(*root, Expr->Root, Expr->Context, nullptr)) { 
             errors = Expr->Context.IssueManager.GetIssues();
             return false;
         }

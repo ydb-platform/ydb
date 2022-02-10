@@ -1,10 +1,10 @@
 LIBRARY()
 
-OWNER(
+OWNER( 
     spuchin
-    g:yql
+    g:yql 
     g:yql_ydb_core
-)
+) 
 
 SRCS(
     yql_expr_nodes_gen.h

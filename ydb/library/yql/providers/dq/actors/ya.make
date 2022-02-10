@@ -11,15 +11,15 @@ SRCS(
     resource_allocator.cpp
     task_controller.cpp
     worker_actor.cpp
-    result_aggregator.cpp
-    result_receiver.cpp
-    full_result_writer.cpp
-    proto_builder.cpp
+    result_aggregator.cpp 
+    result_receiver.cpp 
+    full_result_writer.cpp 
+    proto_builder.cpp 
 )
 
 PEERDIR(
     library/cpp/actors/core
-    library/cpp/yson
+    library/cpp/yson 
     ydb/core/base
     ydb/library/mkql_proto
     ydb/library/yql/core/services
@@ -48,6 +48,6 @@ PEERDIR(
     ydb/library/yql/providers/dq/worker_manager/interface
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

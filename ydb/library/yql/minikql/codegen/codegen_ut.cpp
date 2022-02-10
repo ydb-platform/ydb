@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
     Y_UNIT_TEST(FibFromBitCode) {
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
-        codegen->LoadBitCode(bitcode, "Funcs");
+        codegen->LoadBitCode(bitcode, "Funcs"); 
         auto func = codegen->GetModule().getFunction("fib");
         codegen->Verify();
         codegen->ExportSymbol(func);
@@ -288,7 +288,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
     Y_UNIT_TEST(LinkWithNativeFunction) {
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
-        codegen->LoadBitCode(bitcode, "Funcs");
+        codegen->LoadBitCode(bitcode, "Funcs"); 
         auto func = codegen->GetModule().getFunction("sum_sqr");
         codegen->AddGlobalMapping("mul", (void*)&sum);
         codegen->ExportSymbol(func);
@@ -303,7 +303,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
         auto codegen = ICodegen::Make(ETarget::Native);
         auto mulFunc = CreateMulFunction(codegen->GetModule(), codegen->GetContext());
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
-        codegen->LoadBitCode(bitcode, "Funcs");
+        codegen->LoadBitCode(bitcode, "Funcs"); 
         auto func = codegen->GetModule().getFunction("sum_sqr");
         codegen->ExportSymbol(func);
         codegen->Verify();
@@ -316,7 +316,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
     Y_UNIT_TEST(ReuseExternalCode) {
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
-        codegen->LoadBitCode(bitcode, "Funcs");
+        codegen->LoadBitCode(bitcode, "Funcs"); 
         auto func = codegen->GetModule().getFunction("sum_sqr2");
         codegen->ExportSymbol(func);
         codegen->Verify();
@@ -329,7 +329,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
     Y_UNIT_TEST(UseObjectReference) {
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
-        codegen->LoadBitCode(bitcode, "Funcs");
+        codegen->LoadBitCode(bitcode, "Funcs"); 
         auto func = codegen->GetModule().getFunction("str_size");
         codegen->ExportSymbol(func);
         codegen->Verify();
@@ -355,7 +355,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
     Y_UNIT_TEST(UseExternalFromGeneratedFunction) {
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
-        codegen->LoadBitCode(bitcode, "Funcs");
+        codegen->LoadBitCode(bitcode, "Funcs"); 
         auto func = CreateUseExternalFromGeneratedFunction(codegen->GetModule(), codegen->GetContext());
         codegen->ExportSymbol(func);
         codegen->AddGlobalMapping("mul", (void*)&mul);
@@ -369,7 +369,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
     Y_UNIT_TEST(UseExternalFromGeneratedFunction_128bit_Compiled) {
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
-        codegen->LoadBitCode(bitcode, "Funcs");
+        codegen->LoadBitCode(bitcode, "Funcs"); 
         auto func = CreateUseExternalFromGeneratedFunction128(codegen, false);
         codegen->ExportSymbol(func);
         codegen->Verify();
@@ -395,7 +395,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
     Y_UNIT_TEST(UseExternalFromGeneratedFunction_128bit_Bitcode) {
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
-        codegen->LoadBitCode(bitcode, "Funcs");
+        codegen->LoadBitCode(bitcode, "Funcs"); 
         auto func = CreateUseExternalFromGeneratedFunction128(codegen, true);
         codegen->ExportSymbol(func);
         codegen->Verify();

@@ -1,40 +1,40 @@
-#include "yql_dq_datasink_type_ann.h"
-
+#include "yql_dq_datasink_type_ann.h" 
+ 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-
-namespace NYql {
-
-using namespace NNodes;
-
-namespace {
-
-class TDqsDataSinkTypeAnnotationTransformer : public TVisitorTransformerBase {
-public:
+ 
+namespace NYql { 
+ 
+using namespace NNodes; 
+ 
+namespace { 
+ 
+class TDqsDataSinkTypeAnnotationTransformer : public TVisitorTransformerBase { 
+public: 
     TDqsDataSinkTypeAnnotationTransformer(TTypeAnnotationContext* typeCtx)
         : TVisitorTransformerBase(true), TypeCtx(typeCtx)
-    {
-        AddHandler({TDqStage::CallableName()}, Hndl(&NDq::AnnotateDqStage));
-        AddHandler({TDqPhyStage::CallableName()}, Hndl(&NDq::AnnotateDqPhyStage));
-        AddHandler({TDqOutput::CallableName()}, Hndl(&NDq::AnnotateDqOutput));
-        AddHandler({TDqCnUnionAll::CallableName()}, Hndl(&NDq::AnnotateDqConnection));
+    { 
+        AddHandler({TDqStage::CallableName()}, Hndl(&NDq::AnnotateDqStage)); 
+        AddHandler({TDqPhyStage::CallableName()}, Hndl(&NDq::AnnotateDqPhyStage)); 
+        AddHandler({TDqOutput::CallableName()}, Hndl(&NDq::AnnotateDqOutput)); 
+        AddHandler({TDqCnUnionAll::CallableName()}, Hndl(&NDq::AnnotateDqConnection)); 
         AddHandler({TDqCnHashShuffle::CallableName()}, Hndl(&NDq::AnnotateDqCnHashShuffle));
-        AddHandler({TDqCnResult::CallableName()}, Hndl(&NDq::AnnotateDqCnResult));
-        AddHandler({TDqCnMap::CallableName()}, Hndl(&NDq::AnnotateDqConnection));
-        AddHandler({TDqCnBroadcast::CallableName()}, Hndl(&NDq::AnnotateDqConnection));
-        AddHandler({TDqCnValue::CallableName()}, Hndl(&NDq::AnnotateDqCnValue));
+        AddHandler({TDqCnResult::CallableName()}, Hndl(&NDq::AnnotateDqCnResult)); 
+        AddHandler({TDqCnMap::CallableName()}, Hndl(&NDq::AnnotateDqConnection)); 
+        AddHandler({TDqCnBroadcast::CallableName()}, Hndl(&NDq::AnnotateDqConnection)); 
+        AddHandler({TDqCnValue::CallableName()}, Hndl(&NDq::AnnotateDqCnValue)); 
         AddHandler({TDqCnMerge::CallableName()}, Hndl(&NDq::AnnotateDqCnMerge));
-        AddHandler({TDqReplicate::CallableName()}, Hndl(&NDq::AnnotateDqReplicate));
-        AddHandler({TDqJoin::CallableName()}, Hndl(&NDq::AnnotateDqJoin));
+        AddHandler({TDqReplicate::CallableName()}, Hndl(&NDq::AnnotateDqReplicate)); 
+        AddHandler({TDqJoin::CallableName()}, Hndl(&NDq::AnnotateDqJoin)); 
         AddHandler({TDqPhyMapJoin::CallableName()}, Hndl(&NDq::AnnotateDqMapOrDictJoin));
-        AddHandler({TDqPhyCrossJoin::CallableName()}, Hndl(&NDq::AnnotateDqCrossJoin));
+        AddHandler({TDqPhyCrossJoin::CallableName()}, Hndl(&NDq::AnnotateDqCrossJoin)); 
         AddHandler({TDqPhyJoinDict::CallableName()}, Hndl(&NDq::AnnotateDqMapOrDictJoin));
         AddHandler({TDqSink::CallableName()}, Hndl(&NDq::AnnotateDqSink));
         AddHandler({TDqWrite::CallableName()}, Hndl(&TDqsDataSinkTypeAnnotationTransformer::AnnotateDqWrite));
         AddHandler({TDqQuery::CallableName()}, Hndl(&NDq::AnnotateDqQuery));
-    }
+    } 
 
 private:
     TStatus AnnotateDqWrite(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -67,12 +67,12 @@ private:
     }
 
     TTypeAnnotationContext* TypeCtx;
-};
-
-} // unnamed
-
+}; 
+ 
+} // unnamed 
+ 
 THolder<TVisitorTransformerBase> CreateDqsDataSinkTypeAnnotationTransformer(TTypeAnnotationContext* typeCtx) {
     return THolder(new TDqsDataSinkTypeAnnotationTransformer(typeCtx));
-}
-
-} // NYql
+} 
+ 
+} // NYql 

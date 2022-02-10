@@ -19,11 +19,11 @@ namespace NSQLTranslation {
         LIMITED_VIEW = 1,
         LIBRARY = 2,
         SUBQUERY = 3,
-        DISCOVERY = 4,
+        DISCOVERY = 4, 
     };
 
     inline bool IsQueryMode(NSQLTranslation::ESqlMode mode) {
-        return mode == NSQLTranslation::ESqlMode::QUERY || mode == NSQLTranslation::ESqlMode::DISCOVERY;
+        return mode == NSQLTranslation::ESqlMode::QUERY || mode == NSQLTranslation::ESqlMode::DISCOVERY; 
     }
 
     using TIncrementMonCounterFunction = std::function<void(const TString&, const TString&)>;

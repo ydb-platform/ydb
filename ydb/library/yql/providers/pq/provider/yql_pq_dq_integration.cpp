@@ -55,7 +55,7 @@ public:
         return 0;
     }
 
-    ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
+    ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override { 
         if (auto maybePqRead = TMaybeNode<TPqReadTopic>(&node)) {
             return PartitionTopicRead(maybePqRead.Cast().Topic(), maxPartitions, partitions);
         }
@@ -109,7 +109,7 @@ public:
         return read;
     }
 
-    TMaybe<bool> CanWrite(const TDqSettings&, const TExprNode&, TExprContext&) override {
+    TMaybe<bool> CanWrite(const TDqSettings&, const TExprNode&, TExprContext&) override { 
         YQL_ENSURE(false, "Unimplemented");
     }
 

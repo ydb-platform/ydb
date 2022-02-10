@@ -17,12 +17,12 @@ public:
 
 public:
     explicit TYsonResultWriter(NYson::TYsonConsumerBase& writer)
-        : Writer(writer)
-    {
-    }
-    void OnVoid() {
-        Writer.OnStringScalar(VoidString);
-    }
+        : Writer(writer) 
+    { 
+    } 
+    void OnVoid() { 
+        Writer.OnStringScalar(VoidString); 
+    } 
     void OnNull() {
         Writer.OnEntity();
     }
@@ -34,55 +34,55 @@ public:
         Writer.OnBeginList();
         Writer.OnEndList();
     }
-    void OnEntity() {
-        Writer.OnEntity();
-    }
+    void OnEntity() { 
+        Writer.OnEntity(); 
+    } 
     // numbers
-    void OnInt64Scalar(i64 value) {
-        WriteNumberAsString(value);
-    }
-    void OnUint64Scalar(ui64 value) {
-        WriteNumberAsString(value);
-    }
-    void OnFloatScalar(float value) {
-        Writer.OnStringScalar(::FloatToString(value));
-    }
-    void OnDoubleScalar(double value) {
-        Writer.OnStringScalar(::FloatToString(value));
-    }
-    void OnBooleanScalar(bool value) {
-        Writer.OnBooleanScalar(value);
-    }
+    void OnInt64Scalar(i64 value) { 
+        WriteNumberAsString(value); 
+    } 
+    void OnUint64Scalar(ui64 value) { 
+        WriteNumberAsString(value); 
+    } 
+    void OnFloatScalar(float value) { 
+        Writer.OnStringScalar(::FloatToString(value)); 
+    } 
+    void OnDoubleScalar(double value) { 
+        Writer.OnStringScalar(::FloatToString(value)); 
+    } 
+    void OnBooleanScalar(bool value) { 
+        Writer.OnBooleanScalar(value); 
+    } 
     // strings
     void OnStringScalar(TStringBuf value);
-    void OnUtf8StringScalar(TStringBuf value) {
-        Writer.OnStringScalar(value);
-    }
+    void OnUtf8StringScalar(TStringBuf value) { 
+        Writer.OnStringScalar(value); 
+    } 
     // list construction
-    void OnBeginList() {
-        Writer.OnBeginList();
-    }
-    void OnListItem() {
-        Writer.OnListItem();
-    }
-    void OnEndList() {
-        Writer.OnEndList();
-    }
-    void OnBeginMap() {
-        Writer.OnBeginMap();
-    }
-    void OnKeyedItem(const TStringBuf& key) {
-        Writer.OnKeyedItem(key);
-    }
-    void OnEndMap() {
-        Writer.OnEndMap();
-    }
-    void OnBeginAttributes() {
-        Writer.OnBeginAttributes();
-    }
-    void OnEndAttributes() {
-        Writer.OnEndAttributes();
-    }
+    void OnBeginList() { 
+        Writer.OnBeginList(); 
+    } 
+    void OnListItem() { 
+        Writer.OnListItem(); 
+    } 
+    void OnEndList() { 
+        Writer.OnEndList(); 
+    } 
+    void OnBeginMap() { 
+        Writer.OnBeginMap(); 
+    } 
+    void OnKeyedItem(const TStringBuf& key) { 
+        Writer.OnKeyedItem(key); 
+    } 
+    void OnEndMap() { 
+        Writer.OnEndMap(); 
+    } 
+    void OnBeginAttributes() { 
+        Writer.OnBeginAttributes(); 
+    } 
+    void OnEndAttributes() { 
+        Writer.OnEndAttributes(); 
+    } 
 
 private:
     template <typename T>

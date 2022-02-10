@@ -6,7 +6,7 @@ namespace NMiniKQL {
 
 TComputationNodeFactory GetBuiltinFactory();
 
-TComputationNodeFactory GetCompositeWithBuiltinFactory(TVector<TComputationNodeFactory> factories);
-
+TComputationNodeFactory GetCompositeWithBuiltinFactory(TVector<TComputationNodeFactory> factories); 
+ 
 }
 }

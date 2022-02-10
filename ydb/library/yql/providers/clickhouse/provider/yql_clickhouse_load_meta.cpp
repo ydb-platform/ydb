@@ -213,7 +213,7 @@ private:
 
         const auto& cols = row.back().GetArray();
         if (cols.empty()) {
-            ctx.AddError(TIssue({}, TStringBuilder() << "Table " << cluster << '.' << table << " doesn't exist."));
+            ctx.AddError(TIssue({}, TStringBuilder() << "Table " << cluster << '.' << table << " doesn't exist.")); 
             return {nullptr, {}};
         }
 

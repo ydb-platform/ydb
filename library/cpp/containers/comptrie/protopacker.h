@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/stream/mem.h>
+#include <util/stream/mem.h> 
 #include <util/ysaveload.h>
 
 template <class Proto>

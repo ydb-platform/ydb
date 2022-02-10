@@ -17,9 +17,9 @@ struct TFunctionTypeInfo
     const TType* UserType = nullptr;
     NUdf::TUniquePtr<NUdf::IBoxedValue> Implementation;
     NUdf::TUniquePtr<NUdf::IBoxedValue> BlockImplementation;
-    TString ModuleIR;
-    TString ModuleIRUniqID;
-    TString IRFunctionName;
+    TString ModuleIR; 
+    TString ModuleIRUniqID; 
+    TString IRFunctionName; 
     bool Deterministic = true;
 };
 
@@ -100,13 +100,13 @@ public:
     NUdf::ICompare::TPtr MakeCompare(const NUdf::TType* type) override;
 
     NUdf::TType* Decimal(ui8 precision, ui8 scale) const override;
-
+ 
     NUdf::IFunctionTypeInfoBuilder7& IRImplementationImpl(
-        const NUdf::TStringRef& moduleIR,
-        const NUdf::TStringRef& moduleIRUniqId,
-        const NUdf::TStringRef& functionName
-    ) override;
-
+        const NUdf::TStringRef& moduleIR, 
+        const NUdf::TStringRef& moduleIRUniqId, 
+        const NUdf::TStringRef& functionName 
+    ) override; 
+ 
     NUdf::TType* Null() const override;
     NUdf::TType* EmptyList() const override;
     NUdf::TType* EmptyDict() const override;
@@ -135,9 +135,9 @@ private:
     NUdf::ICountersProvider* CountersProvider_;
     NUdf::TSourcePosition Pos_;
     const NUdf::ISecureParamsProvider* SecureParamsProvider_;
-    TString ModuleIR_;
-    TString ModuleIRUniqID_;
-    TString IRFunctionName_;
+    TString ModuleIR_; 
+    TString ModuleIRUniqID_; 
+    TString IRFunctionName_; 
 };
 
 class TTypeInfoHelper : public NUdf::ITypeInfoHelper

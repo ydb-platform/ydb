@@ -163,7 +163,7 @@ public:
             .AddServiceTransformers()
             .Add(TLogExprTransformer::Sync("KqlOptimizeTransformer", logComp, logLevel), "LogKqlOptimize")
             .AddTypeAnnotationTransformer()
-            .AddPostTypeAnnotation()
+            .AddPostTypeAnnotation() 
             .AddOptimization(false)
             .Build(false);
 
@@ -198,7 +198,7 @@ public:
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(),
                 *typesCtx, Config))
             .Add(CreateKqpCheckQueryTransformer(), "CheckKqlQuery")
-            .AddPostTypeAnnotation()
+            .AddPostTypeAnnotation() 
             .AddCommonOptimization()
             .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config), "LogicalOptimize")
             .Add(CreateKqpPhyOptTransformer(OptimizeCtx, *typesCtx), "PhysicalOptimize")
@@ -212,7 +212,7 @@ public:
             .AddServiceTransformers()
             .Add(TLogExprTransformer::Sync("PhysicalBuildQueryTransformer", logComp, logLevel), "LogPhysicalBuildQuery")
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
-            .AddPostTypeAnnotation()
+            .AddPostTypeAnnotation() 
             .Add(
                 CreateKqpBuildTxsTransformer(
                     OptimizeCtx,

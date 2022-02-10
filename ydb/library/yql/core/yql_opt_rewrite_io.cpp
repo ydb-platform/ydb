@@ -14,15 +14,15 @@ IGraphTransformer::TStatus RewriteIO(const TExprNode::TPtr& input, TExprNode::TP
         YQL_ENSURE(node->Type() == TExprNode::Callable);
         if (node->Content() == LeftName || node->Content() == RightName) {
             auto child = node->Child(0);
-            if (child->IsCallable(ReadName)) {
+            if (child->IsCallable(ReadName)) { 
                 auto dataSourceName = child->Child(1)->Child(0)->Content();
-                auto datasource = types.DataSourceMap.FindPtr(dataSourceName);
+                auto datasource = types.DataSourceMap.FindPtr(dataSourceName); 
                 YQL_ENSURE(datasource);
                 return (*datasource)->RewriteIO(node, ctx);
             }
         } else if (node->IsCallable(WriteName)) {
             auto dataSinkName = node->Child(1)->Child(0)->Content();
-            auto datasink = types.DataSinkMap.FindPtr(dataSinkName);
+            auto datasink = types.DataSinkMap.FindPtr(dataSinkName); 
             YQL_ENSURE(datasink);
             return (*datasink)->RewriteIO(node, ctx);
         }
@@ -39,9 +39,9 @@ IGraphTransformer::TStatus RewriteIO(const TExprNode::TPtr& input, TExprNode::TP
     }
 
     for (const auto& ds : types.DataSinks)
-        ds->PostRewriteIO();
+        ds->PostRewriteIO(); 
     for (const auto& ds : types.DataSources)
-        ds->PostRewriteIO();
+        ds->PostRewriteIO(); 
 
     ctx.Step.Done(TExprStep::RewriteIO);
     return IGraphTransformer::TStatus::Ok;

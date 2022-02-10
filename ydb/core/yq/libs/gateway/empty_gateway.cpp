@@ -30,16 +30,16 @@ public:
         NYql::NDqs::IDqsExecutionPlanner& plan,
         const TVector<TString>& columns,
         const THashMap<TString, TString>& secureParams,
-        const THashMap<TString, TString>& queryParams,
+        const THashMap<TString, TString>& queryParams, 
         const NYql::TDqSettings::TPtr& settings,
         const TDqProgressWriter& progressWriter,
         const THashMap<TString, TString>& modulesMapping,
-        bool discard) override
+        bool discard) override 
     {
         Y_UNUSED(progressWriter);
         Y_UNUSED(modulesMapping); // TODO: support.
         Y_UNUSED(discard);
-        Y_UNUSED(queryParams);
+        Y_UNUSED(queryParams); 
 
         NProto::TGraphParams params;
         THashMap<i64, TString> stagePrograms;

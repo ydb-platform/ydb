@@ -210,7 +210,7 @@ enum EGraphExecutionEventType {
     START = 1;
     FAIL = 2;
     SUCCESS = 3;
-    FULL_RESULT = 4;
+    FULL_RESULT = 4; 
 }
 
 message TGraphExecutionEvent {
@@ -223,13 +223,13 @@ message TGraphExecutionEvent {
     }
 
     message TExecuteGraphDescriptor {
-        TMap SecureParams = 1;
-        TMap GraphParams = 2;
+        TMap SecureParams = 1; 
+        TMap GraphParams = 2; 
     }
-
-    message TFullResultDescriptor {
-        bytes ResultType = 1;
-    }
+ 
+    message TFullResultDescriptor { 
+        bytes ResultType = 1; 
+    } 
 }
 
 message TFullResultWriterStatusRequest {

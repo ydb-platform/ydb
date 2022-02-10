@@ -2,10 +2,10 @@
 
 #include <util/system/thread.h>
 #include <util/system/tls.h>
-#include <util/stream/file.h>
-#include <util/generic/string.h>
+#include <util/stream/file.h> 
+#include <util/generic/string.h> 
 
-#include <string.h>
+#include <string.h> 
 
 
 namespace NYql {
@@ -37,14 +37,14 @@ void SetCurrentOperationId(const char* operationId) {
 }
 
 long GetRunnigThreadsCount() {
-    TString procStat = TFileInput("/proc/self/stat").ReadAll();
-    long num_threads = -2;         // Number of threads in this process (since Linux 2.6)
+    TString procStat = TFileInput("/proc/self/stat").ReadAll(); 
+    long num_threads = -2;         // Number of threads in this process (since Linux 2.6) 
 
     int n = sscanf(procStat.data(),
-        "%*d %*s %*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %*u %*u %*d %*d %*d %*d %ld",
-        &num_threads);
+        "%*d %*s %*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %*u %*u %*d %*d %*d %*d %ld", 
+        &num_threads); 
 
-    return n == 1 ? num_threads : -2;
+    return n == 1 ? num_threads : -2; 
 }
 
 } // namespace NYql

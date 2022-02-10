@@ -51,7 +51,7 @@ bool TListExtractBuiltin::DoInit(TContext& ctx, ISource* src) {
 
 bool TListProcessBuiltin::CheckArgs(TContext& ctx, ISource* src) {
     if (Args.size() != 2 ) {
-        ctx.Error(Pos) << OpName << " requires exactly two parameters";
+        ctx.Error(Pos) << OpName << " requires exactly two parameters"; 
         return false;
     }
 

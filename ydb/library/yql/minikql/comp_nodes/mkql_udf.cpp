@@ -14,43 +14,43 @@ namespace NMiniKQL {
 
 namespace {
 
-class TUdfRunCodegeneratorNode: public TUnboxedImmutableRunCodegeneratorNode {
-public:
-    TUdfRunCodegeneratorNode(TMemoryUsageInfo* memInfo,
-        NUdf::TUnboxedValue&& value, const TString& moduleIRUniqID, const TString& moduleIR, const TString& functionName)
-        : TUnboxedImmutableRunCodegeneratorNode(memInfo, std::move(value))
-        , ModuleIRUniqID(moduleIRUniqID)
-        , ModuleIR(moduleIR)
-        , FunctionName(functionName)
-    {
-    }
-
-#ifndef MKQL_DISABLE_CODEGEN
+class TUdfRunCodegeneratorNode: public TUnboxedImmutableRunCodegeneratorNode { 
+public: 
+    TUdfRunCodegeneratorNode(TMemoryUsageInfo* memInfo, 
+        NUdf::TUnboxedValue&& value, const TString& moduleIRUniqID, const TString& moduleIR, const TString& functionName) 
+        : TUnboxedImmutableRunCodegeneratorNode(memInfo, std::move(value)) 
+        , ModuleIRUniqID(moduleIRUniqID) 
+        , ModuleIR(moduleIR) 
+        , FunctionName(functionName) 
+    { 
+    } 
+ 
+#ifndef MKQL_DISABLE_CODEGEN 
     void CreateRun(const TCodegenContext& ctx, BasicBlock*& block, Value* result, Value* args) const final {
-        ctx.Codegen->LoadBitCode(ModuleIR, ModuleIRUniqID);
-
-        auto& context = ctx.Codegen->GetContext();
-
-        const auto type = Type::getInt128Ty(context);
-        YQL_ENSURE(result->getType() == PointerType::getUnqual(type));
-
-        const auto data = ConstantInt::get(Type::getInt64Ty(context), reinterpret_cast<ui64>(UnboxedValue.AsBoxed().Get()));
-        const auto ptrStructType = PointerType::getUnqual(StructType::get(context));
+        ctx.Codegen->LoadBitCode(ModuleIR, ModuleIRUniqID); 
+ 
+        auto& context = ctx.Codegen->GetContext(); 
+ 
+        const auto type = Type::getInt128Ty(context); 
+        YQL_ENSURE(result->getType() == PointerType::getUnqual(type)); 
+ 
+        const auto data = ConstantInt::get(Type::getInt64Ty(context), reinterpret_cast<ui64>(UnboxedValue.AsBoxed().Get())); 
+        const auto ptrStructType = PointerType::getUnqual(StructType::get(context)); 
         const auto boxed = CastInst::Create(Instruction::IntToPtr, data, ptrStructType, "boxed", block);
-        const auto builder = ctx.GetBuilder();
-
-        const auto funType = FunctionType::get(Type::getVoidTy(context), {boxed->getType(), result->getType(), builder->getType(), args->getType()}, false);
+        const auto builder = ctx.GetBuilder(); 
+ 
+        const auto funType = FunctionType::get(Type::getVoidTy(context), {boxed->getType(), result->getType(), builder->getType(), args->getType()}, false); 
         const auto runFunc = ctx.Codegen->GetModule().getOrInsertFunction(llvm::StringRef(FunctionName.data(), FunctionName.size()), funType).getCallee();
-        CallInst::Create(runFunc, {boxed, result, builder, args}, "", block);
-    }
-#endif
-private:
-    const TString ModuleIRUniqID;
-    const TString ModuleIR;
-    const TString FunctionName;
-};
-
-
+        CallInst::Create(runFunc, {boxed, result, builder, args}, "", block); 
+    } 
+#endif 
+private: 
+    const TString ModuleIRUniqID; 
+    const TString ModuleIR; 
+    const TString FunctionName; 
+}; 
+ 
+ 
 template<class TValidatePolicy, class TValidateMode>
 class TUdfWrapper: public TMutableCodegeneratorPtrNode<TUdfWrapper<TValidatePolicy,TValidateMode>> {
     typedef TMutableCodegeneratorPtrNode<TUdfWrapper<TValidatePolicy,TValidateMode>> TBaseComputation;
@@ -118,10 +118,10 @@ private:
 inline IComputationNode* CreateUdfWrapper(
     const TComputationNodeFactoryContext& ctx,
     NUdf::TUnboxedValue&& functionImpl,
-    TString&& functionName,
-    IComputationNode* runConfigNode,
-    const TCallableType* callableType)
-{
+    TString&& functionName, 
+    IComputationNode* runConfigNode, 
+    const TCallableType* callableType) 
+{ 
     const auto node = ctx.NodeFactory.CreateImmutableNode(std::move(functionImpl));
     ctx.NodePushBack(node);
     switch (ctx.ValidateMode) {
@@ -188,20 +188,20 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
     NUdf::TUnboxedValue impl(NUdf::TUnboxedValuePod(funcInfo.Implementation.Release()));
     if (runConfigType->IsVoid()) {
         // use function implementation as is
-
-        if (ctx.ValidateMode == NUdf::EValidateMode::None && funcInfo.ModuleIR && funcInfo.IRFunctionName) {
-            return new TUdfRunCodegeneratorNode(&ctx.HolderFactory.GetMemInfo(), std::move(impl), funcInfo.ModuleIRUniqID, funcInfo.ModuleIR, funcInfo.IRFunctionName);
-        }
-
-        if (ctx.ValidateMode != NUdf::EValidateMode::None) {
-            if (ctx.ValidateMode == NUdf::EValidateMode::Lazy) {
-                if (ctx.ValidatePolicy == NUdf::EValidatePolicy::Fail) {
+ 
+        if (ctx.ValidateMode == NUdf::EValidateMode::None && funcInfo.ModuleIR && funcInfo.IRFunctionName) { 
+            return new TUdfRunCodegeneratorNode(&ctx.HolderFactory.GetMemInfo(), std::move(impl), funcInfo.ModuleIRUniqID, funcInfo.ModuleIR, funcInfo.IRFunctionName); 
+        } 
+ 
+        if (ctx.ValidateMode != NUdf::EValidateMode::None) { 
+            if (ctx.ValidateMode == NUdf::EValidateMode::Lazy) { 
+                if (ctx.ValidatePolicy == NUdf::EValidatePolicy::Fail) { 
                     TValidate<TValidateErrorPolicyFail, TValidateModeLazy<TValidateErrorPolicyFail>>::WrapCallable(funcInfo.FunctionType, impl, TStringBuilder() << "FunctionWrapper<" << funcName << ">");
                 } else {
                     TValidate<TValidateErrorPolicyThrow, TValidateModeLazy<TValidateErrorPolicyThrow>>::WrapCallable(funcInfo.FunctionType, impl, TStringBuilder() << "FunctionWrapper<" << funcName << ">");
                 }
             } else {
-                if (ctx.ValidatePolicy == NUdf::EValidatePolicy::Fail) {
+                if (ctx.ValidatePolicy == NUdf::EValidatePolicy::Fail) { 
                     TValidate<TValidateErrorPolicyFail, TValidateModeGreedy<TValidateErrorPolicyFail>>::WrapCallable(funcInfo.FunctionType, impl, TStringBuilder() << "FunctionWrapper<" << funcName << ">");
                 } else {
                     TValidate<TValidateErrorPolicyThrow, TValidateModeGreedy<TValidateErrorPolicyThrow>>::WrapCallable(funcInfo.FunctionType, impl, TStringBuilder() << "FunctionWrapper<" << funcName << ">");

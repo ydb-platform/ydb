@@ -684,11 +684,11 @@ bool TCallDirectRow::DoInit(TContext& ctx, ISource* src) {
         ctx.Error(Pos) << "Failed to use function: " << OpName << " with aggregation, join, flatten by or window functions";
         return false;
     }
-    if (!TCallNode::DoInit(ctx, src)) {
-        return false;
-    }
-    Nodes.push_back(Y("DependsOn", "row"));
-    return true;
+    if (!TCallNode::DoInit(ctx, src)) { 
+        return false; 
+    } 
+    Nodes.push_back(Y("DependsOn", "row")); 
+    return true; 
 }
 
 void TCallDirectRow::DoUpdateState() const {
@@ -1585,10 +1585,10 @@ bool ISource::IsStream() const {
     return false;
 }
 
-EOrderKind ISource::GetOrderKind() const {
-    return EOrderKind::None;
-}
-
+EOrderKind ISource::GetOrderKind() const { 
+    return EOrderKind::None; 
+} 
+ 
 TWriteSettings ISource::GetWriteSettings() const {
     return {};
 }
@@ -1711,7 +1711,7 @@ TNodePtr ISource::BuildPrewindowMap(TContext& ctx) {
             feed = Y("AddMember", feed, Q(name), exprNode);
         }
     }
-    return Y(ctx.UseUnordered(*this) ? "OrderedFlatMap" : "FlatMap", "core", BuildLambda(Pos, Y("row"), Y("AsList", feed)));
+    return Y(ctx.UseUnordered(*this) ? "OrderedFlatMap" : "FlatMap", "core", BuildLambda(Pos, Y("row"), Y("AsList", feed))); 
 }
 
 bool ISource::BuildSamplingLambda(TNodePtr& node) {
@@ -1987,12 +1987,12 @@ TNodePtr ISource::BuildSort(TContext& ctx, const TString& label) {
     return nullptr;
 }
 
-TNodePtr ISource::BuildCleanupColumns(TContext& ctx, const TString& label) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(label);
-    return nullptr;
-}
-
+TNodePtr ISource::BuildCleanupColumns(TContext& ctx, const TString& label) { 
+    Y_UNUSED(ctx); 
+    Y_UNUSED(label); 
+    return nullptr; 
+} 
+ 
 IJoin* ISource::GetJoin() {
     return nullptr;
 }
@@ -2082,8 +2082,8 @@ TNodePtr ISource::BuildSortSpec(const TVector<TSortSpecificationPtr>& orderBy, c
     FillSortParts(orderBy, dirsNode, keySelectorNode);
     if (traits) {
         return Y("SortTraits", Y("TypeOf", label), dirsNode, keySelectorNode);
-    } else if (assume) {
-        return Y("AssumeSorted", label, dirsNode, keySelectorNode);
+    } else if (assume) { 
+        return Y("AssumeSorted", label, dirsNode, keySelectorNode); 
     } else {
         return Y("Sort", label, dirsNode, keySelectorNode);
     }
@@ -3380,45 +3380,45 @@ TDeferredAtom MakeAtomFromExpression(TContext& ctx, TNodePtr node) {
     return TDeferredAtom(wrappedNode, ctx);
 }
 
-class TTupleResultNode: public INode {
-public:
-    TTupleResultNode(TNodePtr&& tuple, int ensureTupleSize)
-        : INode(tuple->GetPos())
-        , Node(std::move(tuple))
-        , EnsureTupleSize(ensureTupleSize)
-    {
-    }
-
-    bool DoInit(TContext& ctx, ISource* src) override {
-        if (!Node->Init(ctx, src)) {
-            return false;
-        }
-
-        Node = Y("EnsureTupleSize", Node, Q(ToString(EnsureTupleSize)));
-
-        return true;
-    }
-
-    TAstNode* Translate(TContext& ctx) const override {
-        return Node->Translate(ctx);
-    }
-
-    TPtr DoClone() const final {
-        return {};
-    }
-
+class TTupleResultNode: public INode { 
+public: 
+    TTupleResultNode(TNodePtr&& tuple, int ensureTupleSize) 
+        : INode(tuple->GetPos()) 
+        , Node(std::move(tuple)) 
+        , EnsureTupleSize(ensureTupleSize) 
+    { 
+    } 
+ 
+    bool DoInit(TContext& ctx, ISource* src) override { 
+        if (!Node->Init(ctx, src)) { 
+            return false; 
+        } 
+ 
+        Node = Y("EnsureTupleSize", Node, Q(ToString(EnsureTupleSize))); 
+ 
+        return true; 
+    } 
+ 
+    TAstNode* Translate(TContext& ctx) const override { 
+        return Node->Translate(ctx); 
+    } 
+ 
+    TPtr DoClone() const final { 
+        return {}; 
+    } 
+ 
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const final {
         Y_VERIFY_DEBUG(Node);
         Node->VisitTree(func, visited);
     }
-protected:
-    TNodePtr Node;
-    const int EnsureTupleSize;
-};
-
-TNodePtr BuildTupleResult(TNodePtr tuple, int ensureTupleSize) {
-    return new TTupleResultNode(std::move(tuple), ensureTupleSize);
-}
-
-
+protected: 
+    TNodePtr Node; 
+    const int EnsureTupleSize; 
+}; 
+ 
+TNodePtr BuildTupleResult(TNodePtr tuple, int ensureTupleSize) { 
+    return new TTupleResultNode(std::move(tuple), ensureTupleSize); 
+} 
+ 
+ 
 } // namespace NSQLTranslationV1

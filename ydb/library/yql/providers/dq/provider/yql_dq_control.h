@@ -7,10 +7,10 @@
 
 namespace NYql {
 
-namespace NProto {
-class TDqConfig;
-}
-
+namespace NProto { 
+class TDqConfig; 
+} 
+ 
 class IDqControl : public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<IDqControl>;

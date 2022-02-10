@@ -16,23 +16,23 @@ inline THashType GetValueHash(const TUnboxedValuePod& value);
 inline THashType GetValueHash(EDataSlot type, const TUnboxedValuePod& value);
 
 template <EDataSlot Type>
-inline int CompareValues(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs);
-inline int CompareValues(EDataSlot type, const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs);
+inline int CompareValues(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs); 
+inline int CompareValues(EDataSlot type, const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs); 
 
 template <EDataSlot Type>
-inline bool EquateValues(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs);
-inline bool EquateValues(EDataSlot type, const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs);
+inline bool EquateValues(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs); 
+inline bool EquateValues(EDataSlot type, const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs); 
 
 template <EDataSlot Type>
 struct TUnboxedValueHash {
-    std::size_t operator()(const TUnboxedValuePod& value) const {
+    std::size_t operator()(const TUnboxedValuePod& value) const { 
         return static_cast<std::size_t>(GetValueHash<Type>(value));
     }
 };
 
 template <EDataSlot Type>
 struct TUnboxedValueEquals {
-    bool operator()(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) const {
+    bool operator()(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) const { 
         return EquateValues<Type>(lhs, rhs);
     }
 };
@@ -207,14 +207,14 @@ inline THashType GetValueHash(EDataSlot type, const TUnboxedValuePod& value) {
 // compare
 
 template <typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
-inline int CompareIntegers(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareIntegers(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     const auto x = lhs.Get<T>();
     const auto y = rhs.Get<T>();
     return (x == y) ? 0 : (x < y ? -1 : 1);
 }
 
 template <typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
-inline int CompareFloats(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareFloats(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     const auto x = lhs.Get<T>();
     const auto y = rhs.Get<T>();
     if (std::isunordered(x, y)) {
@@ -225,14 +225,14 @@ inline int CompareFloats(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rh
     return (x == y) ? 0 : (x < y ? -1 : 1);
 }
 
-inline int CompareStrings(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareStrings(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     const TStringBuf lhsBuf = lhs.AsStringRef();
     const TStringBuf rhsBuf = rhs.AsStringRef();
     return lhsBuf.compare(rhsBuf);
 }
 
 template <typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
-inline int CompareTzIntegers(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareTzIntegers(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     const auto x = lhs.Get<T>();
     const auto y = rhs.Get<T>();
     if (x < y) {
@@ -249,84 +249,84 @@ inline int CompareTzIntegers(const TUnboxedValuePod& lhs, const TUnboxedValuePod
 }
 
 template <>
-inline int CompareValues<EDataSlot::Bool>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::Bool>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     const auto x = lhs.Get<bool>();
     const auto y = rhs.Get<bool>();
     return x == y ? 0 : (!x ? -1 : 1);
 }
 
 template <>
-inline int CompareValues<EDataSlot::Int8>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::Int8>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareIntegers<i8>(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::Uint8>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::Uint8>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareIntegers<ui8>(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::Int16>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::Int16>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareIntegers<i16>(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::Uint16>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::Uint16>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareIntegers<ui16>(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::Int32>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::Int32>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareIntegers<i32>(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::Uint32>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::Uint32>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareIntegers<ui32>(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::Int64>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::Int64>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareIntegers<i64>(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::Uint64>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::Uint64>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareIntegers<ui64>(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::Float>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::Float>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareFloats<float>(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::Double>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::Double>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareFloats<double>(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::String>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::String>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareStrings(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::Utf8>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::Utf8>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareStrings(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::Uuid>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::Uuid>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareStrings(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::Yson>(const TUnboxedValuePod&, const TUnboxedValuePod&) {
+inline int CompareValues<EDataSlot::Yson>(const TUnboxedValuePod&, const TUnboxedValuePod&) { 
     Y_FAIL("Yson isn't comparable.");
 }
 
 template <>
-inline int CompareValues<EDataSlot::Json>(const TUnboxedValuePod&, const TUnboxedValuePod&) {
+inline int CompareValues<EDataSlot::Json>(const TUnboxedValuePod&, const TUnboxedValuePod&) { 
     Y_FAIL("Json isn't comparable.");
 }
 
@@ -336,42 +336,42 @@ inline int CompareValues<EDataSlot::JsonDocument>(const TUnboxedValuePod&, const
 }
 
 template <>
-inline int CompareValues<EDataSlot::Date>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::Date>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareIntegers<ui16>(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::Datetime>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::Datetime>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareIntegers<ui32>(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::Timestamp>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::Timestamp>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareIntegers<ui64>(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::Interval>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::Interval>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareIntegers<i64>(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::TzDate>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::TzDate>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareTzIntegers<ui16>(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::TzDatetime>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::TzDatetime>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareTzIntegers<ui32>(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::TzTimestamp>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::TzTimestamp>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return CompareTzIntegers<ui64>(lhs, rhs);
 }
 
 template <>
-inline int CompareValues<EDataSlot::Decimal>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues<EDataSlot::Decimal>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     const auto x = lhs.GetInt128();
     const auto y = rhs.GetInt128();
     return x == y ? 0 : (x < y ? -1 : 1);
@@ -382,7 +382,7 @@ inline int CompareValues<EDataSlot::DyNumber>(const TUnboxedValuePod& lhs, const
     return CompareStrings(lhs, rhs);
 }
 
-inline int CompareValues(EDataSlot type, const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline int CompareValues(EDataSlot type, const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
 #define COMPARE_TYPE(slot, ...) \
     case EDataSlot::slot:       \
         return CompareValues<EDataSlot::slot>(lhs, rhs);
@@ -398,105 +398,105 @@ inline int CompareValues(EDataSlot type, const TUnboxedValuePod& lhs, const TUnb
 // equate
 
 template <typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
-inline bool EquateIntegers(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateIntegers(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return lhs.Get<T>() == rhs.Get<T>();
 }
 
 template <typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
-inline bool EquateFloats(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateFloats(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     const auto x = lhs.Get<T>();
     const auto y = rhs.Get<T>();
     return std::isunordered(x, y) ? std::isnan(x) == std::isnan(y) : x == y;
 }
 
-inline bool EquateStrings(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateStrings(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     const auto& lhsBuf = lhs.AsStringRef();
     const auto& rhsBuf = rhs.AsStringRef();
     return lhsBuf == rhsBuf;
 }
 
 template <typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
-inline bool EquateTzIntegers(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateTzIntegers(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return lhs.Get<T>() == rhs.Get<T>() && lhs.GetTimezoneId() == rhs.GetTimezoneId();
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Bool>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::Bool>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateIntegers<bool>(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Int8>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::Int8>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateIntegers<i8>(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Uint8>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::Uint8>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateIntegers<ui8>(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Int16>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::Int16>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateIntegers<i16>(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Uint16>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::Uint16>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateIntegers<ui16>(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Int32>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::Int32>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateIntegers<i32>(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Uint32>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::Uint32>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateIntegers<ui32>(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Int64>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::Int64>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateIntegers<i64>(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Uint64>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::Uint64>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateIntegers<ui64>(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Float>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::Float>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateFloats<float>(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Double>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::Double>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateFloats<double>(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::String>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::String>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateStrings(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Utf8>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::Utf8>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateStrings(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Uuid>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::Uuid>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateStrings(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Yson>(const TUnboxedValuePod&, const TUnboxedValuePod&) {
+inline bool EquateValues<EDataSlot::Yson>(const TUnboxedValuePod&, const TUnboxedValuePod&) { 
     Y_FAIL("Yson isn't comparable.");
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Json>(const TUnboxedValuePod&, const TUnboxedValuePod&) {
+inline bool EquateValues<EDataSlot::Json>(const TUnboxedValuePod&, const TUnboxedValuePod&) { 
     Y_FAIL("Json isn't comparable.");
 }
 
@@ -506,42 +506,42 @@ inline bool EquateValues<EDataSlot::JsonDocument>(const TUnboxedValuePod&, const
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Date>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::Date>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateIntegers<ui16>(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Datetime>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::Datetime>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateIntegers<ui32>(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Timestamp>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::Timestamp>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateIntegers<ui64>(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Interval>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::Interval>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateIntegers<i64>(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::TzDate>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::TzDate>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateTzIntegers<ui16>(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::TzDatetime>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::TzDatetime>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateTzIntegers<ui32>(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::TzTimestamp>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::TzTimestamp>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return EquateTzIntegers<ui64>(lhs, rhs);
 }
 
 template <>
-inline bool EquateValues<EDataSlot::Decimal>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues<EDataSlot::Decimal>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
     return lhs.GetInt128() == rhs.GetInt128();
 }
 
@@ -550,7 +550,7 @@ inline bool EquateValues<EDataSlot::DyNumber>(const TUnboxedValuePod& lhs, const
     return EquateStrings(lhs, rhs);
 }
 
-inline bool EquateValues(EDataSlot type, const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+inline bool EquateValues(EDataSlot type, const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
 #define EQUATE_TYPE(slot, ...) \
     case EDataSlot::slot:      \
         return EquateValues<EDataSlot::slot>(lhs, rhs);

@@ -5,7 +5,7 @@
 #include "yql_type_string.h"
 #include "yql_expr_builder.h"
 #include "yql_gc_nodes.h"
-#include "yql_constraint.h"
+#include "yql_constraint.h" 
 #include "yql_pos_handle.h"
 
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -27,7 +27,7 @@
 #include <util/generic/algorithm.h>
 #include <util/digest/murmur.h>
 
-#include <algorithm>
+#include <algorithm> 
 #include <unordered_set>
 #include <unordered_map>
 #include <span>
@@ -393,8 +393,8 @@ private:
 struct TExprContext;
 
 
-bool ValidateName(TPosition position, TStringBuf name, TStringBuf descr, TExprContext& ctx);
-bool ValidateName(TPositionHandle position, TStringBuf name, TStringBuf descr, TExprContext& ctx);
+bool ValidateName(TPosition position, TStringBuf name, TStringBuf descr, TExprContext& ctx); 
+bool ValidateName(TPositionHandle position, TStringBuf name, TStringBuf descr, TExprContext& ctx); 
 
 class TItemExprType : public TTypeAnnotationNode {
 public:
@@ -1088,9 +1088,9 @@ public:
         return Tag == other.Tag && GetBaseType() == other.GetBaseType();
     }
 
-    bool Validate(TPosition position, TExprContext& ctx) const;
-    bool Validate(TPositionHandle position, TExprContext& ctx) const;
-
+    bool Validate(TPosition position, TExprContext& ctx) const; 
+    bool Validate(TPositionHandle position, TExprContext& ctx) const; 
+ 
 private:
     const TTypeAnnotationNode* BaseType;
     const TStringBuf Tag;
@@ -1348,13 +1348,13 @@ public:
     xx(TypeInProgress, 1) \
     xx(TypePending, 2) \
     xx(TypeComplete, 3) \
-    xx(ConstrInProgress, 4) \
-    xx(ConstrPending, 5) \
-    xx(ConstrComplete, 6) \
-    xx(ExecutionRequired, 7) \
-    xx(ExecutionInProgress, 8) \
-    xx(ExecutionPending, 9) \
-    xx(ExecutionComplete, 10) \
+    xx(ConstrInProgress, 4) \ 
+    xx(ConstrPending, 5) \ 
+    xx(ConstrComplete, 6) \ 
+    xx(ExecutionRequired, 7) \ 
+    xx(ExecutionInProgress, 8) \ 
+    xx(ExecutionPending, 9) \ 
+    xx(ExecutionComplete, 10) \ 
     xx(Error, 11) \
     xx(Last, 12)
 
@@ -1392,12 +1392,12 @@ public:
         return Type() == TExprNode::Callable && names.end() != std::find(names.begin(), names.end(), Content());
     }
 
-    template <class TKey>
+    template <class TKey> 
     bool IsCallable(const THashSet<TKey>& names) const {
         ENSURE_NOT_DELETED
         return Type() == TExprNode::Callable && names.contains(Content());
-    }
-
+    } 
+ 
     bool IsCallable() const {
         ENSURE_NOT_DELETED
         return Type() == TExprNode::Callable;
@@ -1435,22 +1435,22 @@ public:
 
     bool IsComposable() const {
         ENSURE_NOT_DELETED
-        return !IsLambda() && TypeAnnotation_->IsComposable();
+        return !IsLambda() && TypeAnnotation_->IsComposable(); 
     }
 
     bool IsPersistable() const {
         ENSURE_NOT_DELETED
-        return !IsLambda() && TypeAnnotation_->IsPersistable();
+        return !IsLambda() && TypeAnnotation_->IsPersistable(); 
     }
 
     bool IsComputable() const {
         ENSURE_NOT_DELETED
-        return !IsLambda() && TypeAnnotation_->IsComputable();
+        return !IsLambda() && TypeAnnotation_->IsComputable(); 
     }
 
     bool IsInspectable() const {
         ENSURE_NOT_DELETED
-        return !IsLambda() && TypeAnnotation_->IsInspectable();
+        return !IsLambda() && TypeAnnotation_->IsInspectable(); 
     }
 
     bool ForDisclosing() const {
@@ -1502,7 +1502,7 @@ public:
         if (!--RefCount_) {
             Result.Reset();
             Children_.clear();
-            Constraints_.Clear();
+            Constraints_.Clear(); 
             MarkDead();
         }
     }
@@ -1647,56 +1647,56 @@ public:
         return UniqueId_;
     }
 
-    const TConstraintNode* GetConstraint(TStringBuf name) const {
-        ENSURE_NOT_DELETED
-        Y_ENSURE(static_cast<EState>(State) >= EState::ConstrComplete);
-        return Constraints_.GetConstraint(name);
-    }
-
-    template <class TConstraintType>
-    const TConstraintType* GetConstraint() const {
-        ENSURE_NOT_DELETED
-        Y_ENSURE(static_cast<EState>(State) >= EState::ConstrComplete);
-        return Constraints_.GetConstraint<TConstraintType>();
-    }
-
-    const TConstraintNode::TListType& GetAllConstraints() const {
-        ENSURE_NOT_DELETED
-        Y_ENSURE(static_cast<EState>(State) >= EState::ConstrComplete);
-        return Constraints_.GetAllConstraints();
-    }
-
-    const TConstraintSet& GetConstraintSet() const {
-        ENSURE_NOT_DELETED
-        Y_ENSURE(static_cast<EState>(State) >= EState::ConstrComplete);
-        return Constraints_;
-    }
-
-    void AddConstraint(const TConstraintNode* node) {
-        ENSURE_NOT_DELETED
-        ENSURE_NOT_FROZEN
-        Y_ENSURE(static_cast<EState>(State) >= EState::TypeComplete);
-        Y_ENSURE(!StartsExecution());
-        Constraints_.AddConstraint(node);
-        State = EState::ConstrComplete;
-    }
-
-    void CopyConstraints(const TExprNode& node) {
-        ENSURE_NOT_DELETED
-        ENSURE_NOT_FROZEN
-        Y_ENSURE(static_cast<EState>(State) >= EState::TypeComplete);
-        Constraints_ = node.Constraints_;
-        State = EState::ConstrComplete;
-    }
-
-    void SetConstraints(const TConstraintSet& constraints) {
-        ENSURE_NOT_DELETED
-        ENSURE_NOT_FROZEN
-        Y_ENSURE(static_cast<EState>(State) >= EState::TypeComplete);
-        Constraints_ = constraints;
-        State = EState::ConstrComplete;
-    }
-
+    const TConstraintNode* GetConstraint(TStringBuf name) const { 
+        ENSURE_NOT_DELETED 
+        Y_ENSURE(static_cast<EState>(State) >= EState::ConstrComplete); 
+        return Constraints_.GetConstraint(name); 
+    } 
+ 
+    template <class TConstraintType> 
+    const TConstraintType* GetConstraint() const { 
+        ENSURE_NOT_DELETED 
+        Y_ENSURE(static_cast<EState>(State) >= EState::ConstrComplete); 
+        return Constraints_.GetConstraint<TConstraintType>(); 
+    } 
+ 
+    const TConstraintNode::TListType& GetAllConstraints() const { 
+        ENSURE_NOT_DELETED 
+        Y_ENSURE(static_cast<EState>(State) >= EState::ConstrComplete); 
+        return Constraints_.GetAllConstraints(); 
+    } 
+ 
+    const TConstraintSet& GetConstraintSet() const { 
+        ENSURE_NOT_DELETED 
+        Y_ENSURE(static_cast<EState>(State) >= EState::ConstrComplete); 
+        return Constraints_; 
+    } 
+ 
+    void AddConstraint(const TConstraintNode* node) { 
+        ENSURE_NOT_DELETED 
+        ENSURE_NOT_FROZEN 
+        Y_ENSURE(static_cast<EState>(State) >= EState::TypeComplete); 
+        Y_ENSURE(!StartsExecution()); 
+        Constraints_.AddConstraint(node); 
+        State = EState::ConstrComplete; 
+    } 
+ 
+    void CopyConstraints(const TExprNode& node) { 
+        ENSURE_NOT_DELETED 
+        ENSURE_NOT_FROZEN 
+        Y_ENSURE(static_cast<EState>(State) >= EState::TypeComplete); 
+        Constraints_ = node.Constraints_; 
+        State = EState::ConstrComplete; 
+    } 
+ 
+    void SetConstraints(const TConstraintSet& constraints) { 
+        ENSURE_NOT_DELETED 
+        ENSURE_NOT_FROZEN 
+        Y_ENSURE(static_cast<EState>(State) >= EState::TypeComplete); 
+        Constraints_ = constraints; 
+        State = EState::ConstrComplete; 
+    } 
+ 
     static TPtr NewAtom(ui64 uniqueId, TPositionHandle pos, const TStringBuf& content, ui32 flags) {
         return Make(pos, Atom, {}, content, flags, uniqueId);
     }
@@ -1769,15 +1769,15 @@ public:
         return Make(Position_, (EType)Type_, std::move(newChildren), Content(), Flags_, newUniqueId);
     }
 
-    void SetTypeAnn(const TTypeAnnotationNode* typeAnn) {
-        TypeAnnotation_ = typeAnn;
-        State = TypeAnnotation_ ? EState::TypeComplete : EState::Initial;
-    }
-
-    const TTypeAnnotationNode* GetTypeAnn() const {
-        return TypeAnnotation_;
-    }
-
+    void SetTypeAnn(const TTypeAnnotationNode* typeAnn) { 
+        TypeAnnotation_ = typeAnn; 
+        State = TypeAnnotation_ ? EState::TypeComplete : EState::Initial; 
+    } 
+ 
+    const TTypeAnnotationNode* GetTypeAnn() const { 
+        return TypeAnnotation_; 
+    } 
+ 
     EState GetState() const {
         return State;
     }
@@ -1929,7 +1929,7 @@ private:
     }
 
     TListType Children_;
-    TConstraintSet Constraints_;
+    TConstraintSet Constraints_; 
 
     const char* Content_ = nullptr;
 
@@ -2032,37 +2032,37 @@ struct TExprStep {
         Configure,
         ExprEval,
         DiscoveryIO,
-        Epochs,
+        Epochs, 
         Intents,
         LoadTablesMetadata,
-        RewriteIO,
-        Recapture,
-        LastLevel
+        RewriteIO, 
+        Recapture, 
+        LastLevel 
     };
 
-    TExprStep()
+    TExprStep() 
     {
     }
 
     void Done(ELevel level) {
-        Steps_.Set(level);
+        Steps_.Set(level); 
     }
 
-    void Reset() {
-        Steps_.Reset();
+    void Reset() { 
+        Steps_.Reset(); 
     }
 
-    TExprStep& Repeat(ELevel level) {
-        Steps_.Reset(level);
-        return *this;
-    }
-
+    TExprStep& Repeat(ELevel level) { 
+        Steps_.Reset(level); 
+        return *this; 
+    } 
+ 
     bool IsDone(ELevel level) {
-        return Steps_.Test(level);
+        return Steps_.Test(level); 
     }
 
 private:
-    TEnumBitSet<ELevel, ExpandApplyForLambdas, LastLevel> Steps_;
+    TEnumBitSet<ELevel, ExpandApplyForLambdas, LastLevel> Steps_; 
 };
 
 template <typename T>
@@ -2240,14 +2240,14 @@ struct TExprContext : private TNonCopyable {
     std::unordered_set<std::string_view> Strings;
 
     std::stack<std::unique_ptr<const TTypeAnnotationNode>> TypeNodes;
-    std::stack<std::unique_ptr<const TConstraintNode>> ConstraintNodes;
+    std::stack<std::unique_ptr<const TConstraintNode>> ConstraintNodes; 
     std::deque<std::unique_ptr<TExprNode>> ExprNodes;
 
     TSingletonTypeCache SingletonTypeCache;
     std::unordered_set<const TTypeAnnotationNode*, TTypeAnnotationNode::THash, TTypeAnnotationNode::TEqual> TypeSet;
-    std::unordered_set<const TConstraintNode*, TConstraintNode::THash, TConstraintNode::TEqual> ConstraintSet;
+    std::unordered_set<const TConstraintNode*, TConstraintNode::THash, TConstraintNode::TEqual> ConstraintSet; 
     std::unordered_map<const TTypeAnnotationNode*, TExprNode::TPtr> TypeAsNodeCache;
-    std::unordered_set<TStringBuf, THash<TStringBuf>> DisabledConstraints;
+    std::unordered_set<TStringBuf, THash<TStringBuf>> DisabledConstraints; 
 
     ui64 NextUniqueId = 0;
     ui64 NodeAllocationCounter = 0;
@@ -2296,32 +2296,32 @@ struct TExprContext : private TNonCopyable {
         return TExprNodeBuilder(pos, *this);
     }
 
-    [[nodiscard]]
+    [[nodiscard]] 
     TExprNode::TPtr RenameNode(const TExprNode& node, const TStringBuf& name);
-    [[nodiscard]]
+    [[nodiscard]] 
     TExprNode::TPtr ShallowCopy(const TExprNode& node);
-    [[nodiscard]]
+    [[nodiscard]] 
     TExprNode::TPtr ChangeChildren(const TExprNode& node, TExprNode::TListType&& children);
-    [[nodiscard]]
+    [[nodiscard]] 
     TExprNode::TPtr ChangeChild(const TExprNode& node, ui32 index, TExprNode::TPtr&& child);
-    [[nodiscard]]
+    [[nodiscard]] 
     TExprNode::TPtr ExactChangeChildren(const TExprNode& node, TExprNode::TListType&& children);
-    [[nodiscard]]
+    [[nodiscard]] 
     TExprNode::TPtr ExactShallowCopy(const TExprNode& node);
-    [[nodiscard]]
+    [[nodiscard]] 
     TExprNode::TPtr DeepCopyLambda(const TExprNode& node, TExprNode::TListType&& body);
-    [[nodiscard]]
+    [[nodiscard]] 
     TExprNode::TPtr DeepCopyLambda(const TExprNode& node, TExprNode::TPtr&& body = TExprNode::TPtr());
-    [[nodiscard]]
+    [[nodiscard]] 
     TExprNode::TPtr FuseLambdas(const TExprNode& outer, const TExprNode& inner);
 
     using TCustomDeepCopier = std::function<bool(const TExprNode& node, TExprNode::TListType& newChildren)>;
 
-    [[nodiscard]]
+    [[nodiscard]] 
     TExprNode::TPtr DeepCopy(const TExprNode& node, TExprContext& nodeContext, TNodeOnNodeOwnedMap& deepClones,
-        bool internStrings, bool copyTypes, bool copyResult = false, TCustomDeepCopier customCopier = {});
+        bool internStrings, bool copyTypes, bool copyResult = false, TCustomDeepCopier customCopier = {}); 
 
-    [[nodiscard]]
+    [[nodiscard]] 
     TExprNode::TPtr SwapWithHead(const TExprNode& node);
     TExprNode::TPtr ReplaceNode(TExprNode::TPtr&& start, const TExprNode& src, TExprNode::TPtr dst);
     TExprNode::TPtr ReplaceNodes(TExprNode::TPtr&& start, const TNodeOnNodeOwnedMap& replaces);
@@ -2432,9 +2432,9 @@ struct TExprContext : private TNonCopyable {
     template <typename T, typename... Args>
     const T* MakeType(Args&&... args);
 
-    template <typename T, typename... Args>
-    const T* MakeConstraint(Args&&... args);
-
+    template <typename T, typename... Args> 
+    const T* MakeConstraint(Args&&... args); 
+ 
     void AddError(const TIssue& error) {
         ENSURE_NOT_FROZEN_CTX
         IssueManager.RaiseIssue(error);
@@ -2450,11 +2450,11 @@ struct TExprContext : private TNonCopyable {
 
     void Reset();
 
-    template <class TConstraint>
-    bool IsConstraintEnabled() const {
-        return DisabledConstraints.find(TConstraint::Name()) == DisabledConstraints.end();
-    }
-
+    template <class TConstraint> 
+    bool IsConstraintEnabled() const { 
+        return DisabledConstraints.find(TConstraint::Name()) == DisabledConstraints.end(); 
+    } 
+ 
 private:
     using TPositionHandleEqualPred = std::function<bool(TPositionHandle, TPositionHandle)>;
     using TPositionHandleHasher = std::function<size_t(TPositionHandle)>;
@@ -2466,24 +2466,24 @@ private:
     std::deque<TPosition> Positions;
 };
 
-template <typename T, typename... Args>
-inline const T* TExprContext::MakeConstraint(Args&&... args) {
-    ENSURE_NOT_FROZEN_CTX
-    if (!IsConstraintEnabled<T>()) {
-        return nullptr;
-    }
-
-    T sample(*this, std::forward<Args>(args)...);
-    const auto it = ConstraintSet.find(&sample);
-    if (ConstraintSet.cend() != it) {
-        return static_cast<const T*>(*it);
-    }
-
-    ConstraintNodes.emplace(new T(std::move(sample)));
-    const auto ins = ConstraintSet.emplace(ConstraintNodes.top().get());
-    return static_cast<const T*>(*ins.first);
-}
-
+template <typename T, typename... Args> 
+inline const T* TExprContext::MakeConstraint(Args&&... args) { 
+    ENSURE_NOT_FROZEN_CTX 
+    if (!IsConstraintEnabled<T>()) { 
+        return nullptr; 
+    } 
+ 
+    T sample(*this, std::forward<Args>(args)...); 
+    const auto it = ConstraintSet.find(&sample); 
+    if (ConstraintSet.cend() != it) { 
+        return static_cast<const T*>(*it); 
+    } 
+ 
+    ConstraintNodes.emplace(new T(std::move(sample))); 
+    const auto ins = ConstraintSet.emplace(ConstraintNodes.top().get()); 
+    return static_cast<const T*>(*ins.first); 
+} 
+ 
 #undef ENSURE_NOT_DELETED
 #undef ENSURE_NOT_FROZEN
 #undef ENSURE_NOT_FROZEN_CTX

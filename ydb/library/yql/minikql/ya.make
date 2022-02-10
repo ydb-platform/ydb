@@ -13,7 +13,7 @@ SRCS(
     compact_hash.cpp
     compact_hash.h
     defs.h
-    mkql_alloc.cpp
+    mkql_alloc.cpp 
     mkql_function_metadata.h
     mkql_function_registry.cpp
     mkql_function_registry.h

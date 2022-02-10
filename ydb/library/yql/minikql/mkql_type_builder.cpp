@@ -1267,16 +1267,16 @@ NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ImplementationImpl(
 }
 
 NUdf::IFunctionTypeInfoBuilder7& TFunctionTypeInfoBuilder::IRImplementationImpl(
-    const NUdf::TStringRef& moduleIR,
-    const NUdf::TStringRef& moduleIRUniqId,
-    const NUdf::TStringRef& functionName
-) {
-    ModuleIR_ = moduleIR;
-    ModuleIRUniqID_ = moduleIRUniqId;
-    IRFunctionName_ = functionName;
-    return *this;
-}
-
+    const NUdf::TStringRef& moduleIR, 
+    const NUdf::TStringRef& moduleIRUniqId, 
+    const NUdf::TStringRef& functionName 
+) { 
+    ModuleIR_ = moduleIR; 
+    ModuleIRUniqID_ = moduleIRUniqId; 
+    IRFunctionName_ = functionName; 
+    return *this; 
+} 
+ 
 NUdf::TType* TFunctionTypeInfoBuilder::Null() const {
     return Env_.GetTypeOfNull();
 }
@@ -1427,9 +1427,9 @@ void TFunctionTypeInfoBuilder::Build(TFunctionTypeInfo* funcInfo)
     funcInfo->RunConfigType = RunConfigType_;
     funcInfo->UserType = UserType_;
     funcInfo->Implementation = std::move(Implementation_);
-    funcInfo->ModuleIR = std::move(ModuleIR_);
-    funcInfo->ModuleIRUniqID = std::move(ModuleIRUniqID_);
-    funcInfo->IRFunctionName = std::move(IRFunctionName_);
+    funcInfo->ModuleIR = std::move(ModuleIR_); 
+    funcInfo->ModuleIRUniqID = std::move(ModuleIRUniqID_); 
+    funcInfo->IRFunctionName = std::move(IRFunctionName_); 
     funcInfo->BlockImplementation = std::move(BlockImplementation_);
 }
 

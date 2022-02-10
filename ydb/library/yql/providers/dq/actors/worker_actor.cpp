@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/providers/dq/task_runner_actor/task_runner_actor.h>
 #include <ydb/library/yql/providers/dq/runtime/runtime_data.h>
-
+ 
 #include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -285,7 +285,7 @@ private:
         YQL_LOG_CTX_SCOPE(TraceId);
         YQL_LOG(DEBUG) << "TDqWorker::OnDqTask";
 
-        TFailureInjector::Reach("dq_task_failure", [] {::_exit(1); });
+        TFailureInjector::Reach("dq_task_failure", [] {::_exit(1); }); 
 
         Y_VERIFY(!TaskRunnerActor);
 

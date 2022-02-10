@@ -121,13 +121,13 @@ namespace {
 
 TInt128 FromString(const TStringBuf& str, ui8 precision, ui8 scale) {
     if (scale > precision)
-        return Err();
+        return Err(); 
 
     auto s = str.data();
     auto l = str.size();
 
     if (!s || !l)
-        return Err();
+        return Err(); 
 
     const bool neg = '-' == *s;
     if (neg || '+' == *s) {
@@ -148,7 +148,7 @@ TInt128 FromString(const TStringBuf& str, ui8 precision, ui8 scale) {
     for (bool dot = false; l; --l) {
         if (*s == '.') {
             if (dot)
-                return Err();
+                return Err(); 
 
             ++s;
             dot = true;
@@ -164,7 +164,7 @@ TInt128 FromString(const TStringBuf& str, ui8 precision, ui8 scale) {
 
         const char c = *s++;
         if (!std::isdigit(c))
-            return Err();
+            return Err(); 
 
         v *= Ten;
         v += c - '0';
@@ -177,14 +177,14 @@ TInt128 FromString(const TStringBuf& str, ui8 precision, ui8 scale) {
     if (l--) {
         const char c = *s++;
         if (!std::isdigit(c))
-            return Err();
+            return Err(); 
 
         bool plus = c > '5';
         if (!plus && c == '5') {
             for (plus = v & 1; !plus && l; --l) {
                 const char c = *s++;
                 if (!std::isdigit(c))
-                    return Err();
+                    return Err(); 
 
                 plus = c != '0';
             }

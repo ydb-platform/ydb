@@ -46,7 +46,7 @@ public:
     }
 
     TNodePtr BuildFilter(TContext& ctx, const TString& label) override {
-        Y_UNUSED(ctx);
+        Y_UNUSED(ctx); 
         Y_UNUSED(label);
         return nullptr;
     }
@@ -240,10 +240,10 @@ public:
         return new TModifyBySource(Pos, OperationHumanName, ColumnsHint, Source->CloneSource());
     }
 
-    EOrderKind GetOrderKind() const final {
-        return Source->GetOrderKind();
-    }
-
+    EOrderKind GetOrderKind() const final { 
+        return Source->GetOrderKind(); 
+    } 
+ 
 private:
     TString OperationHumanName;
     TSourcePtr Source;
@@ -303,7 +303,7 @@ public:
             options = L(options, Q(Y(Q("filter"), TableSource->BuildFilterLambda())));
         }
 
-        bool unordered = false;
+        bool unordered = false; 
         if (Values) {
             if (!Values->Init(ctx, TableSource.Get())) {
                 return false;
@@ -315,7 +315,7 @@ public:
             if (!values) {
                 return false;
             }
-            unordered = (EOrderKind::None == Values->GetOrderKind());
+            unordered = (EOrderKind::None == Values->GetOrderKind()); 
         }
 
         TNodePtr node(BuildInputTables(Pos, tableList, false, Scoped));
@@ -336,9 +336,9 @@ public:
         }
         if (values) {
             node = L(node, Y("let", "values", values));
-            if (unordered && ctx.UseUnordered(Table)) {
-                node = L(node, Y("let", "values", Y("Unordered", "values")));
-            }
+            if (unordered && ctx.UseUnordered(Table)) { 
+                node = L(node, Y("let", "values", Y("Unordered", "values"))); 
+            } 
         } else {
             node = L(node, Y("let", "values", Y("Void")));
         }

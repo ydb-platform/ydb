@@ -57,7 +57,7 @@ private:
 
 class TForwardListWrapper : public TMutableCodegeneratorNode<TForwardListWrapper> {
     typedef TMutableCodegeneratorNode<TForwardListWrapper> TBaseComputation;
-public:
+public: 
     TForwardListWrapper(TComputationMutables& mutables, IComputationNode* stream)
         : TBaseComputation(mutables, EValueRepresentation::Boxed), Stream(stream)
     {}

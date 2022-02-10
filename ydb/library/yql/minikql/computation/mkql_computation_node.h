@@ -1,7 +1,7 @@
 #pragma once
 
-#include "mkql_computation_node_list.h"
-
+#include "mkql_computation_node_list.h" 
+ 
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/arrow/mkql_memory_pool.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
@@ -14,7 +14,7 @@
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/udf/udf_validate.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
-
+ 
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 
@@ -30,11 +30,11 @@ inline const TDefaultListRepresentation* GetDefaultListRepresentation(const NUdf
     return reinterpret_cast<const TDefaultListRepresentation*>(NUdf::TBoxedValueAccessor::GetListRepresentation(*value.AsBoxed()));
 }
 
-enum class EGraphPerProcess {
-    Multi,
-    Single
-};
-
+enum class EGraphPerProcess { 
+    Multi, 
+    Single 
+}; 
+ 
 struct TComputationOpts {
     TComputationOpts(IStatsRegistry* stats)
         : Stats(stats)
@@ -89,20 +89,20 @@ struct TComputationContext : public TComputationContextLLVM {
         TComputationOptsFull& opts,
         const TComputationMutables& mutables,
         arrow::MemoryPool& arrowMemoryPool);
-    ~TComputationContext();
-
-    // Returns true if current usage delta exceeds the memory limit
-    // The function automatically adjusts memory limit taking into account RSS delta between calls
-    template<bool TrackRss>
+    ~TComputationContext(); 
+ 
+    // Returns true if current usage delta exceeds the memory limit 
+    // The function automatically adjusts memory limit taking into account RSS delta between calls 
+    template<bool TrackRss> 
     inline bool CheckAdjustedMemLimit(ui64 memLimit, ui64 initMemUsage);
-
+ 
     void UpdateUsageAdjustor(ui64 memLimit);
-private:
+private: 
     ui64 InitRss = 0ULL;
     ui64 LastRss = 0ULL;
-#ifndef NDEBUG
-    TInstant LastPrintUsage;
-#endif
+#ifndef NDEBUG 
+    TInstant LastPrintUsage; 
+#endif 
 };
 
 class IComputationNode {
@@ -209,9 +209,9 @@ struct TComputationNodeFactoryContext {
     const TNodeFactory& NodeFactory;
     const THolderFactory& HolderFactory;
     const NUdf::IValueBuilder *const Builder;
-    NUdf::EValidateMode ValidateMode;
-    NUdf::EValidatePolicy ValidatePolicy;
-    EGraphPerProcess GraphPerProcess;
+    NUdf::EValidateMode ValidateMode; 
+    NUdf::EValidatePolicy ValidatePolicy; 
+    EGraphPerProcess GraphPerProcess; 
     TComputationMutables& Mutables;
     TComputationNodeOnNodeMap& ElementsCache;
     const TNodePushBack NodePushBack;
@@ -226,13 +226,13 @@ struct TComputationNodeFactoryContext {
             const TNodeFactory& nodeFactory,
             const THolderFactory& holderFactory,
             const NUdf::IValueBuilder* builder,
-            NUdf::EValidateMode validateMode,
-            NUdf::EValidatePolicy validatePolicy,
+            NUdf::EValidateMode validateMode, 
+            NUdf::EValidatePolicy validatePolicy, 
             EGraphPerProcess graphPerProcess,
             TComputationMutables& mutables,
             TComputationNodeOnNodeMap& elementsCache,
             TNodePushBack&& nodePushBack
-            )
+            ) 
         : NodeLocator(nodeLocator)
         , FunctionRegistry(functionRegistry)
         , Env(env)
@@ -242,9 +242,9 @@ struct TComputationNodeFactoryContext {
         , NodeFactory(nodeFactory)
         , HolderFactory(holderFactory)
         , Builder(builder)
-        , ValidateMode(validateMode)
-        , ValidatePolicy(validatePolicy)
-        , GraphPerProcess(graphPerProcess)
+        , ValidateMode(validateMode) 
+        , ValidatePolicy(validatePolicy) 
+        , GraphPerProcess(graphPerProcess) 
         , Mutables(mutables)
         , ElementsCache(elementsCache)
         , NodePushBack(std::move(nodePushBack))
@@ -272,21 +272,21 @@ struct TComputationPatternOpts {
         const TTypeEnvironment& env,
         TComputationNodeFactory factory,
         const IFunctionRegistry* functionRegistry,
-        NUdf::EValidateMode validateMode,
-        NUdf::EValidatePolicy validatePolicy,
+        NUdf::EValidateMode validateMode, 
+        NUdf::EValidatePolicy validatePolicy, 
         const TString& optLLVM,
-        EGraphPerProcess graphPerProcess,
+        EGraphPerProcess graphPerProcess, 
         IStatsRegistry* stats = nullptr,
         NUdf::ICountersProvider* countersProvider = nullptr)
-        : AllocState(allocState)
-        , Env(env)
-        , Factory(factory)
-        , FunctionRegistry(functionRegistry)
-        , ValidateMode(validateMode)
-        , ValidatePolicy(validatePolicy)
+        : AllocState(allocState) 
+        , Env(env) 
+        , Factory(factory) 
+        , FunctionRegistry(functionRegistry) 
+        , ValidateMode(validateMode) 
+        , ValidatePolicy(validatePolicy) 
         , OptLLVM(optLLVM)
-        , GraphPerProcess(graphPerProcess)
-        , Stats(stats)
+        , GraphPerProcess(graphPerProcess) 
+        , Stats(stats) 
         , CountersProvider(countersProvider)
     {}
 
@@ -303,14 +303,14 @@ struct TComputationPatternOpts {
         Stats = stats;
         CountersProvider = counters;
         SecureParamsProvider = secureParamsProvider;
-    }
+    } 
 
     mutable std::shared_ptr<TInjectedAlloc> CacheAlloc;
     mutable std::shared_ptr<TTypeEnvironment> CacheEnv;
-    TAllocState& AllocState;
-    const TTypeEnvironment& Env;
+    TAllocState& AllocState; 
+    const TTypeEnvironment& Env; 
 
-    TComputationNodeFactory Factory;
+    TComputationNodeFactory Factory; 
     const IFunctionRegistry* FunctionRegistry = nullptr;
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
     NUdf::EValidatePolicy ValidatePolicy = NUdf::EValidatePolicy::Fail;
@@ -324,7 +324,7 @@ struct TComputationPatternOpts {
     TComputationOptsFull ToComputationOptions(IRandomProvider& randomProvider, ITimeProvider& timeProvider, TAllocState* allocStatePtr = nullptr) const {
         return TComputationOptsFull(Stats, allocStatePtr ? *allocStatePtr : AllocState, randomProvider, timeProvider, ValidatePolicy, SecureParamsProvider);
     }
-};
+}; 
 
 class IComputationPattern: public TAtomicRefCount<IComputationPattern> {
 public:
@@ -334,13 +334,13 @@ public:
     virtual THolder<IComputationGraph> Clone(const TComputationOptsFull& compOpts) = 0;
 };
 
-// node cookie's will be clean up when graph will be destroyed, explorer must not be changed/destroyed until that time
+// node cookie's will be clean up when graph will be destroyed, explorer must not be changed/destroyed until that time 
 IComputationPattern::TPtr MakeComputationPattern(
-        TExploringNodeVisitor& explorer,
+        TExploringNodeVisitor& explorer, 
         const TRuntimeNode& root,
         const std::vector<TNode*>& entryPoints,
         const TComputationPatternOpts& opts);
-
+ 
 class IComputationPatternCache {
 public:
     typedef THolder<IComputationPatternCache> TPtr;

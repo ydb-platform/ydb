@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
         },
             [&](TRuntimeNode item) {
             return pgmBuilder.Member(item, "Payload");
-        }, false, 0);
+        }, false, 0); 
         return dict;
     }
 

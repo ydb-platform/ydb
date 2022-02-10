@@ -7,9 +7,9 @@
 
 namespace NYql {
 
-const TTypeAnnotationNode* GetItemType(const TTypeAnnotationNode& type);
+const TTypeAnnotationNode* GetItemType(const TTypeAnnotationNode& type); 
 TSet<TStringBuf> GetColumnsOfStructOrSequenceOfStruct(const TTypeAnnotationNode& type);
-
+ 
 const TTypeAnnotationNode* GetSequenceItemType(NNodes::TExprBase listNode, bool allowMultiIO);
 const TTypeAnnotationNode* GetSequenceItemType(NNodes::TExprBase listNode, bool allowMultiIO, TExprContext& ctx);
 const TTypeAnnotationNode* GetSequenceItemType(TPositionHandle pos, const TTypeAnnotationNode* inputType,

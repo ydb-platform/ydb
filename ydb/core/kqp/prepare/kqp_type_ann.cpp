@@ -1155,7 +1155,7 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckKiProgramTransformer() {
             YQL_ENSURE(TMaybeNode<TKiProgram>(input));
 
             auto program = TKiProgram(input);
-            auto effectsType = program.Effects().Ptr()->GetTypeAnn();
+            auto effectsType = program.Effects().Ptr()->GetTypeAnn(); 
             bool typeOk = EnsureListType(input->Pos(), *effectsType, ctx);
             if (typeOk) {
                 auto listType = effectsType->Cast<TListExprType>();

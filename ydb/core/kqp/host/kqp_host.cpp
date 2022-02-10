@@ -540,10 +540,10 @@ public:
                 auto ret = input;
                 TExprBase node(input);
 
-                if (auto maybeParameter = node.Maybe<TCoParameter>()) {
+                if (auto maybeParameter = node.Maybe<TCoParameter>()) { 
                     auto parameter = maybeParameter.Cast();
                     auto name = parameter.Name().Value();
-                    auto expectedType = parameter.Ref().GetTypeAnn();
+                    auto expectedType = parameter.Ref().GetTypeAnn(); 
 
                     if (queryCtx->PrepareOnly) {
                         auto& paramDesc = *queryCtx->PreparingQuery->AddParameters();
@@ -1045,8 +1045,8 @@ public:
         FillSettings.Format = IDataProvider::EResultFormat::Custom;
         FillSettings.FormatDetails = TString(KikimrMkqlProtoFormat);
 
-        TypesCtx->AddDataSource(KikimrProviderName, kikimrDataSource);
-        TypesCtx->AddDataSink(KikimrProviderName, kikimrDataSink);
+        TypesCtx->AddDataSource(KikimrProviderName, kikimrDataSource); 
+        TypesCtx->AddDataSink(KikimrProviderName, kikimrDataSink); 
         TypesCtx->UdfResolver = CreateSimpleUdfResolver(FuncRegistry);
         TypesCtx->TimeProvider = TAppData::TimeProvider;
         TypesCtx->RandomProvider = TAppData::RandomProvider;
@@ -1059,7 +1059,7 @@ public:
         ResultProviderConfig = MakeIntrusive<TResultProviderConfig>(*TypesCtx, *FuncRegistry, FillSettings.Format,
             FillSettings.FormatDetails, writerFactory);
         auto resultProvider = CreateResultProvider(ResultProviderConfig);
-        TypesCtx->AddDataSink(ResultProviderName, resultProvider);
+        TypesCtx->AddDataSink(ResultProviderName, resultProvider); 
         TypesCtx->AvailablePureResultDataSources = TVector<TString>(1, TString(KikimrProviderName));
 
         // Config provider
@@ -1076,16 +1076,16 @@ public:
             .AddServiceTransformers()
             .Add(TLogExprTransformer::Sync("YqlTransformer", NYql::NLog::EComponent::ProviderKqp,
                 NYql::NLog::ELevel::TRACE), "LogYqlTransform")
-            .AddPreTypeAnnotation()
+            .AddPreTypeAnnotation() 
             // TODO: .AddExpressionEvaluation(*FuncRegistry)
             .Add(new TFailExpressionEvaluation(), "FailExpressionEvaluation")
-            .AddIOAnnotation()
-            .AddTypeAnnotation()
+            .AddIOAnnotation() 
+            .AddTypeAnnotation() 
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
-            .AddPostTypeAnnotation()
+            .AddPostTypeAnnotation() 
             .AddOptimization(true, false)
             .Add(TLogExprTransformer::Sync("Optimized expr"), "LogExpr")
-            .AddRun(&NullProgressWriter)
+            .AddRun(&NullProgressWriter) 
             .Build();
 
         DataQueryAstTransformer = TTransformationPipeline(TypesCtx)
@@ -1456,7 +1456,7 @@ private:
         }
 
         TExprNode::TPtr result;
-        if (!CompileExpr(*astRes.Root, result, ctx, ModuleResolver.get())) {
+        if (!CompileExpr(*astRes.Root, result, ctx, ModuleResolver.get())) { 
             return nullptr;
         }
 
@@ -1477,11 +1477,11 @@ private:
             return queryExpr;
         }
 
-        if (TMaybeNode<TCoCommit>(queryExpr) && TCoCommit(queryExpr).DataSink().Maybe<TKiDataSink>()) {
+        if (TMaybeNode<TCoCommit>(queryExpr) && TCoCommit(queryExpr).DataSink().Maybe<TKiDataSink>()) { 
             return queryExpr;
         }
 
-        return Build<TCoCommit>(ctx, queryExpr->Pos())
+        return Build<TCoCommit>(ctx, queryExpr->Pos()) 
             .World(queryExpr)
             .DataSink<TKiDataSink>()
                 .Category().Build(KikimrProviderName)
@@ -1490,7 +1490,7 @@ private:
             .Settings()
                 .Add()
                     .Name().Build("mode")
-                    .Value<TCoAtom>().Build(KikimrCommitModeFlush())
+                    .Value<TCoAtom>().Build(KikimrCommitModeFlush()) 
                     .Build()
                 .Build()
             .Done()

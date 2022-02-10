@@ -400,7 +400,7 @@ namespace {
 TMaybe<TIssue> TJoinLabel::Parse(TExprContext& ctx, TExprNode& node, const TStructExprType* structType) {
     Tables.clear();
     InputType = structType;
-    if (auto atom = TMaybeNode<TCoAtom>(&node)) {
+    if (auto atom = TMaybeNode<TCoAtom>(&node)) { 
         if (auto err = ValidateLabel(ctx, atom.Cast())) {
             return err;
         }
@@ -409,7 +409,7 @@ TMaybe<TIssue> TJoinLabel::Parse(TExprContext& ctx, TExprNode& node, const TStru
         Tables.push_back(atom.Cast().Value());
         return {};
     }
-    else if (auto tuple = TMaybeNode<TCoAtomList>(&node)) {
+    else if (auto tuple = TMaybeNode<TCoAtomList>(&node)) { 
         if (tuple.Cast().Size() == 0) {
             return TIssue(ctx.GetPosition(node.Pos()), "Empty list of correlation names are not allowed");
         }
@@ -620,14 +620,14 @@ TVector<TString> TJoinLabels::EnumerateColumns(const TStringBuf& table) const {
 
 IGraphTransformer::TStatus ValidateEquiJoinOptions(TPositionHandle positionHandle, const TExprNode& optionsNode,
     TJoinOptions& options, TExprContext& ctx)
-{
+{ 
     auto position = ctx.GetPosition(positionHandle);
     if (!EnsureTuple(optionsNode, ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
 
     options = TJoinOptions{};
-
+ 
     THashSet<TStringBuf> renameTargetSet;
     bool hasRename = false;
     for (auto child : optionsNode.Children()) {
@@ -666,7 +666,7 @@ IGraphTransformer::TStatus ValidateEquiJoinOptions(TPositionHandle positionHandl
             }
         } else if (optionName == "flatten") {
             options.Flatten = true;
-        } else if (optionName == "keep_sys") {
+        } else if (optionName == "keep_sys") { 
             options.KeepSysColumns = true;
         } else if (optionName == "strict_keys") {
             options.StrictKeys = true;
@@ -707,19 +707,19 @@ IGraphTransformer::TStatus ValidateEquiJoinOptions(TPositionHandle positionHandl
         }
     }
 
-    return IGraphTransformer::TStatus::Ok;
-}
-
-IGraphTransformer::TStatus EquiJoinAnnotation(
-    TPositionHandle positionHandle,
-    const TStructExprType*& resultType,
-    const TJoinLabels& labels,
-    const TExprNode& joins,
+    return IGraphTransformer::TStatus::Ok; 
+} 
+ 
+IGraphTransformer::TStatus EquiJoinAnnotation( 
+    TPositionHandle positionHandle, 
+    const TStructExprType*& resultType, 
+    const TJoinLabels& labels, 
+    const TExprNode& joins, 
     const TJoinOptions& options,
-    TExprContext& ctx
-) {
-    auto position = ctx.GetPosition(positionHandle);
-
+    TExprContext& ctx 
+) { 
+    auto position = ctx.GetPosition(positionHandle); 
+ 
     if (labels.InputByTable.size() < 2) {
         ctx.AddError(TIssue(position, TStringBuilder() << "Expected at least 2 table"));
         return IGraphTransformer::TStatus::Error;
@@ -750,7 +750,7 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
     auto columnTypes = GetJoinColumnTypes(joins, labels, ctx);
     TVector<const TItemExprType*> resultFields;
     TMap<TString, TFlattenState> flattenFields; // column -> table
-    THashSet<TString> processedRenames;
+    THashSet<TString> processedRenames; 
     for (auto it: labels.Inputs) {
         for (auto item: it.InputType->GetItems()) {
             TString fullName = it.FullName(item->GetName());
@@ -758,12 +758,12 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
             if (type) {
                 TVector<TStringBuf> fullNames;
                 fullNames.push_back(fullName);
-                if (!processedRenames.contains(fullName)) {
+                if (!processedRenames.contains(fullName)) { 
                     auto renameIt = options.RenameMap.find(fullName);
                     if (renameIt != options.RenameMap.end()) {
-                        fullNames = renameIt->second;
-                        processedRenames.insert(fullName);
-                    }
+                        fullNames = renameIt->second; 
+                        processedRenames.insert(fullName); 
+                    } 
                 }
 
                 for (auto& fullName: fullNames) {
@@ -1006,7 +1006,7 @@ std::pair<bool, bool> IsRequiredSide(const TExprNode::TPtr& joinTree, const TJoi
     auto joinType = joinTree->Child(0)->Content();
     auto left = joinTree->ChildPtr(1);
     auto right = joinTree->ChildPtr(2);
-    if (joinType == "Inner" || joinType == "Left" || joinType == "LeftOnly" || joinType == "LeftSemi" || joinType == "RightSemi" || joinType == "Cross") {
+    if (joinType == "Inner" || joinType == "Left" || joinType == "LeftOnly" || joinType == "LeftSemi" || joinType == "RightSemi" || joinType == "Cross") { 
         if (!left->IsAtom()) {
             auto x = IsRequiredSide(left, labels, inputIndex);
             if (x.first) {
@@ -1021,7 +1021,7 @@ std::pair<bool, bool> IsRequiredSide(const TExprNode::TPtr& joinTree, const TJoi
         }
     }
 
-    if (joinType == "Inner" || joinType == "Right" || joinType == "RightOnly" || joinType == "RightSemi" || joinType == "LeftSemi" || joinType == "Cross") {
+    if (joinType == "Inner" || joinType == "Right" || joinType == "RightOnly" || joinType == "RightSemi" || joinType == "LeftSemi" || joinType == "Cross") { 
         if (!right->IsAtom()) {
             auto x = IsRequiredSide(right, labels, inputIndex);
             if (x.first) {

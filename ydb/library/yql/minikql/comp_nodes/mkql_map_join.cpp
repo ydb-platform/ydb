@@ -1,11 +1,11 @@
 #include "mkql_map_join.h"
-
+ 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-
+ 
 #include <util/string/cast.h>
 
 namespace NKikimr {
@@ -1356,8 +1356,8 @@ private:
         }
 
     private:
-        NUdf::TUnboxedValue Stream;
-        NUdf::TUnboxedValue Dict;
+        NUdf::TUnboxedValue Stream; 
+        NUdf::TUnboxedValue Dict; 
         TComputationContext& Ctx;
         const TSelf* const Self;
     };
@@ -1412,8 +1412,8 @@ private:
         }
 
     private:
-        NUdf::TUnboxedValue Stream;
-        NUdf::TUnboxedValue Dict;
+        NUdf::TUnboxedValue Stream; 
+        NUdf::TUnboxedValue Dict; 
         TComputationContext& Ctx;
         const TSelf* const Self;
 

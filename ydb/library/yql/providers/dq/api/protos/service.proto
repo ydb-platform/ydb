@@ -80,7 +80,7 @@ message ExecuteGraphRequest {
     repeated TAttr Settings = 8;
     map<string, string> SecureParams = 9;
     bool Discard = 12;
-    map<string, string> GraphParams = 13;
+    map<string, string> GraphParams = 13; 
 }
 
 message ExecuteGraphResponse {
@@ -310,8 +310,8 @@ message GetMasterResponse {
 
 message ConfigureFailureInjectorRequest {
     string Name = 1;
-    uint64 Skip = 2;
-    uint64 CountOfFails = 5;
+    uint64 Skip = 2; 
+    uint64 CountOfFails = 5; 
     uint32 NodeId = 4; // aka actor id
 }
 

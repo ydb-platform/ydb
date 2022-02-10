@@ -913,7 +913,7 @@ TRuntimeNode TProgramBuilder::OrderedFlatMap(TRuntimeNode list, const TUnaryLamb
 }
 
 TRuntimeNode TProgramBuilder::Filter(TRuntimeNode list, const TUnaryLambda& handler)
-{
+{ 
     return BuildFilter(__func__, list, handler);
 }
 
@@ -2110,7 +2110,7 @@ TRuntimeNode TProgramBuilder::NewVariant(TRuntimeNode item, const std::string_vi
 }
 
 TRuntimeNode TProgramBuilder::Coalesce(TRuntimeNode data, TRuntimeNode defaultData) {
-    bool isOptional = false;
+    bool isOptional = false; 
     const auto dataType = UnpackOptional(data, isOptional);
     if (!isOptional) {
         MKQL_ENSURE(data.GetStaticType()->IsSameType(*defaultData.GetStaticType()), "Mismatch operand types");
@@ -2495,7 +2495,7 @@ TRuntimeNode TProgramBuilder::If(TRuntimeNode condition, TRuntimeNode thenBranch
     const bool isOptional = condOpt || thenOpt || elseOpt;
 
     TCallableBuilder callableBuilder(Env, __func__, isOptional ? NewOptionalType(thenUnpacked) : thenUnpacked);
-    callableBuilder.Add(condition);
+    callableBuilder.Add(condition); 
     callableBuilder.Add(thenBranch);
     callableBuilder.Add(elseBranch);
     return TRuntimeNode(callableBuilder.Build(), false);
@@ -2977,18 +2977,18 @@ TRuntimeNode TProgramBuilder::Way(TRuntimeNode variant) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::VariantItem(TRuntimeNode variant) {
-    bool isOptional;
-    auto unpacked = UnpackOptional(variant, isOptional);
-    auto type = AS_TYPE(TVariantType, unpacked);
-    auto underlyingType = type->GetAlternativeType(0);
-    auto resType = isOptional ? TOptionalType::Create(underlyingType, Env) : underlyingType;
-
+TRuntimeNode TProgramBuilder::VariantItem(TRuntimeNode variant) { 
+    bool isOptional; 
+    auto unpacked = UnpackOptional(variant, isOptional); 
+    auto type = AS_TYPE(TVariantType, unpacked); 
+    auto underlyingType = type->GetAlternativeType(0); 
+    auto resType = isOptional ? TOptionalType::Create(underlyingType, Env) : underlyingType; 
+ 
     TCallableBuilder callableBuilder(Env, __func__, resType);
-    callableBuilder.Add(variant);
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
+    callableBuilder.Add(variant); 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
 TRuntimeNode TProgramBuilder::VisitAll(TRuntimeNode variant, std::function<TRuntimeNode(ui32, TRuntimeNode)> handler) {
     const auto type = AS_TYPE(TVariantType, variant);
     std::vector<TRuntimeNode> items;
@@ -4413,38 +4413,38 @@ TRuntimeNode TProgramBuilder::WideCondense1(TRuntimeNode flow, const TWideLambda
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::CombineCore(TRuntimeNode stream,
+TRuntimeNode TProgramBuilder::CombineCore(TRuntimeNode stream, 
     const TUnaryLambda& keyExtractor,
     const TBinaryLambda& init,
     const TTernaryLambda& update,
     const TBinaryLambda& finish,
-    ui64 memLimit)
-{
+    ui64 memLimit) 
+{ 
     if constexpr (RuntimeVersion < 3U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
-
+ 
     const bool isStream = stream.GetStaticType()->IsStream();
     const auto itemType = isStream ? AS_TYPE(TStreamType, stream)->GetItemType() : AS_TYPE(TFlowType, stream)->GetItemType();
-
+ 
     const auto itemArg = Arg(itemType);
-
+ 
     const auto key = keyExtractor(itemArg);
     const auto keyType = key.GetStaticType();
-
+ 
     const auto keyArg = Arg(keyType);
-
+ 
     const auto stateInit = init(keyArg, itemArg);
     const auto stateType = stateInit.GetStaticType();
-
+ 
     const auto stateArg = Arg(stateType);
-
+ 
     const auto stateUpdate = update(keyArg, itemArg, stateArg);
     const auto finishItem = finish(keyArg, stateArg);
-
+ 
     const auto finishType = finishItem.GetStaticType();
     MKQL_ENSURE(finishType->IsList() || finishType->IsStream() || finishType->IsOptional(), "Expected list, stream or optional");
-
+ 
     TType* retItemType = nullptr;
     if (finishType->IsOptional()) {
         retItemType = AS_TYPE(TOptionalType, finishType)->GetItemType();
@@ -4453,7 +4453,7 @@ TRuntimeNode TProgramBuilder::CombineCore(TRuntimeNode stream,
     } else if (finishType->IsStream()) {
         retItemType = AS_TYPE(TStreamType, finishType)->GetItemType();
     }
-
+ 
     const auto resultStreamType = isStream ? NewStreamType(retItemType) : NewFlowType(retItemType);
     TCallableBuilder callableBuilder(Env, __func__, resultStreamType);
     callableBuilder.Add(stream);
@@ -4467,56 +4467,56 @@ TRuntimeNode TProgramBuilder::CombineCore(TRuntimeNode stream,
     callableBuilder.Add(NewDataLiteral(memLimit));
 
     return TRuntimeNode(callableBuilder.Build(), false);
-}
-
-TRuntimeNode TProgramBuilder::GroupingCore(TRuntimeNode stream,
+} 
+ 
+TRuntimeNode TProgramBuilder::GroupingCore(TRuntimeNode stream, 
     const TBinaryLambda& groupSwitch,
-    const TUnaryLambda& keyExtractor,
-    const TUnaryLambda& handler)
-{
-    if (handler && RuntimeVersion < 20U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__ << " with handler";
-    }
-
-    auto itemType = AS_TYPE(TStreamType, stream)->GetItemType();
-
+    const TUnaryLambda& keyExtractor, 
+    const TUnaryLambda& handler) 
+{ 
+    if (handler && RuntimeVersion < 20U) { 
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__ << " with handler"; 
+    } 
+ 
+    auto itemType = AS_TYPE(TStreamType, stream)->GetItemType(); 
+ 
     TRuntimeNode keyExtractorItemArg = Arg(itemType);
     TRuntimeNode keyExtractorResult = keyExtractor(keyExtractorItemArg);
-
+ 
     TRuntimeNode groupSwitchKeyArg = Arg(keyExtractorResult.GetStaticType());
     TRuntimeNode groupSwitchItemArg = Arg(itemType);
-
+ 
     TRuntimeNode groupSwitchResult = groupSwitch(groupSwitchKeyArg, groupSwitchItemArg);
     MKQL_ENSURE(AS_TYPE(TDataType, groupSwitchResult)->GetSchemeType() == NUdf::TDataType<bool>::Id,
         "Expected bool type");
 
-    TRuntimeNode handlerItemArg;
-    TRuntimeNode handlerResult;
-
-    if (handler) {
-        handlerItemArg = Arg(itemType);
-        handlerResult = handler(handlerItemArg);
-        itemType = handlerResult.GetStaticType();
-    }
-
-    const std::array<TType*, 2U> tupleItems = {{ keyExtractorResult.GetStaticType(), NewStreamType(itemType) }};
+    TRuntimeNode handlerItemArg; 
+    TRuntimeNode handlerResult; 
+ 
+    if (handler) { 
+        handlerItemArg = Arg(itemType); 
+        handlerResult = handler(handlerItemArg); 
+        itemType = handlerResult.GetStaticType(); 
+    } 
+ 
+    const std::array<TType*, 2U> tupleItems = {{ keyExtractorResult.GetStaticType(), NewStreamType(itemType) }}; 
     const auto finishType = NewStreamType(NewTupleType(tupleItems));
-
+ 
     TCallableBuilder callableBuilder(Env, __func__, finishType);
-    callableBuilder.Add(stream);
+    callableBuilder.Add(stream); 
     callableBuilder.Add(keyExtractorResult);
     callableBuilder.Add(groupSwitchResult);
     callableBuilder.Add(keyExtractorItemArg);
     callableBuilder.Add(groupSwitchKeyArg);
     callableBuilder.Add(groupSwitchItemArg);
-    if (handler) {
-        callableBuilder.Add(handlerResult);
-        callableBuilder.Add(handlerItemArg);
-    }
-
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
+    if (handler) { 
+        callableBuilder.Add(handlerResult); 
+        callableBuilder.Add(handlerItemArg); 
+    } 
+ 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
 TRuntimeNode TProgramBuilder::Chopper(TRuntimeNode flow, const TUnaryLambda& keyExtractor, const TBinaryLambda& groupSwitch, const TBinaryLambda& groupHandler) {
     const auto flowType = flow.GetStaticType();
     MKQL_ENSURE(flowType->IsFlow() || flowType->IsStream(), "Expected flow or stream.");

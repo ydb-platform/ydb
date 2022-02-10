@@ -1,215 +1,215 @@
 #include "mkql_computation_node_ut.h"
-
+ 
 #include <ydb/library/yql/minikql/mkql_runtime_version.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-
-#include <cstring>
+ 
+#include <cstring> 
 #include <random>
 #include <ctime>
 #include <algorithm>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
-namespace {
-
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
+namespace { 
+ 
 ui64 g_Yield = std::numeric_limits<ui64>::max();
-ui64 g_TestStreamData[] = {0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2};
+ui64 g_TestStreamData[] = {0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2}; 
 ui64 g_TestYieldStreamData[] = {0, 1, 2, g_Yield, 0, g_Yield, 1, 2, 0, 1, 2, 0, g_Yield, 1, 2};
-
+ 
 template <bool WithYields>
 class TTestStreamWrapper: public TMutableComputationNode<TTestStreamWrapper<WithYields>> {
     typedef TMutableComputationNode<TTestStreamWrapper<WithYields>> TBaseComputation;
-public:
-    class TStreamValue : public TComputationValue<TStreamValue> {
-    public:
-        using TBase = TComputationValue<TStreamValue>;
-
+public: 
+    class TStreamValue : public TComputationValue<TStreamValue> { 
+    public: 
+        using TBase = TComputationValue<TStreamValue>; 
+ 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, const TTestStreamWrapper* parent)
-            : TBase(memInfo)
+            : TBase(memInfo) 
             , CompCtx(compCtx)
-            , Parent(parent)
-        {
-        }
-
-    private:
-        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+            , Parent(parent) 
+        { 
+        } 
+ 
+    private: 
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override { 
             constexpr auto size = WithYields ? Y_ARRAY_SIZE(g_TestYieldStreamData) : Y_ARRAY_SIZE(g_TestStreamData);
             if (Index == size) {
-                return NUdf::EFetchStatus::Finish;
-            }
-
+                return NUdf::EFetchStatus::Finish; 
+            } 
+ 
             const auto val = WithYields ? g_TestYieldStreamData[Index] : g_TestStreamData[Index];
             if (g_Yield == val) {
                 ++Index;
                 return NUdf::EFetchStatus::Yield;
             }
 
-            NUdf::TUnboxedValue* items = nullptr;
+            NUdf::TUnboxedValue* items = nullptr; 
             result = CompCtx.HolderFactory.CreateDirectArrayHolder(2, items);
             items[0] = NUdf::TUnboxedValuePod(val);
-            if (((Index + 1) % Parent->PeakStep) == 0) {
+            if (((Index + 1) % Parent->PeakStep) == 0) { 
                 auto str = MakeStringNotFilled(64ul << 20);
-                const auto& buf = str.AsStringRef();
-                memset(buf.Data(), ' ', buf.Size());
+                const auto& buf = str.AsStringRef(); 
+                memset(buf.Data(), ' ', buf.Size()); 
                 items[1] = std::move(str);
-            } else {
+            } else { 
                 items[1] = NUdf::TUnboxedValuePod::Zero();
-            }
-
-            ++Index;
-            return NUdf::EFetchStatus::Ok;
-        }
-
-    private:
+            } 
+ 
+            ++Index; 
+            return NUdf::EFetchStatus::Ok; 
+        } 
+ 
+    private: 
         TComputationContext& CompCtx;
         const TTestStreamWrapper* const Parent;
-        ui64 Index = 0;
-    };
-
+        ui64 Index = 0; 
+    }; 
+ 
     TTestStreamWrapper(TComputationMutables& mutables, ui64 peakStep)
         : TBaseComputation(mutables)
         , PeakStep(peakStep)
-    {
-    }
-
+    { 
+    } 
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.Create<TStreamValue>(ctx, this);
-    }
-
-private:
+    } 
+ 
+private: 
     void RegisterDependencies() const final {
-    }
-
-private:
-    const ui64 PeakStep;
-};
-
+    } 
+ 
+private: 
+    const ui64 PeakStep; 
+}; 
+ 
 template <bool WithYields>
 IComputationNode* WrapTestStream(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args");
-    const ui64 peakStep = AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().Get<ui64>();
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args"); 
+    const ui64 peakStep = AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().Get<ui64>(); 
     return new TTestStreamWrapper<WithYields>(ctx.Mutables, peakStep);
-}
-
-TIntrusivePtr<IRandomProvider> CreateRandomProvider() {
-    return CreateDeterministicRandomProvider(1);
-}
-
-TIntrusivePtr<ITimeProvider> CreateTimeProvider() {
+} 
+ 
+TIntrusivePtr<IRandomProvider> CreateRandomProvider() { 
+    return CreateDeterministicRandomProvider(1); 
+} 
+ 
+TIntrusivePtr<ITimeProvider> CreateTimeProvider() { 
     return CreateDeterministicTimeProvider(10000000);
-}
-
-TComputationNodeFactory GetTestFactory() {
-    return [](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
+} 
+ 
+TComputationNodeFactory GetTestFactory() { 
+    return [](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* { 
         if (callable.GetType()->GetName() == "TestList") {
             return new TExternalComputationNode(ctx.Mutables);
         }
-        if (callable.GetType()->GetName() == "TestStream") {
+        if (callable.GetType()->GetName() == "TestStream") { 
             return WrapTestStream<false>(callable, ctx);
-        }
+        } 
         if (callable.GetType()->GetName() == "TestYieldStream") {
             return WrapTestStream<true>(callable, ctx);
         }
-        return GetBuiltinFactory()(callable, ctx);
-    };
-}
-
+        return GetBuiltinFactory()(callable, ctx); 
+    }; 
+} 
+ 
 template<bool UseLLVM>
 struct TSetup_ {
     TSetup_() {
-        FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
-        RandomProvider = CreateRandomProvider();
-        TimeProvider = CreateTimeProvider();
-
-        Env.Reset(new TTypeEnvironment(Alloc));
-        PgmBuilder.Reset(new TProgramBuilder(*Env, *FunctionRegistry));
-    }
-
+        FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry()); 
+        RandomProvider = CreateRandomProvider(); 
+        TimeProvider = CreateTimeProvider(); 
+ 
+        Env.Reset(new TTypeEnvironment(Alloc)); 
+        PgmBuilder.Reset(new TProgramBuilder(*Env, *FunctionRegistry)); 
+    } 
+ 
     TAutoPtr<IComputationGraph> BuildGraph(TRuntimeNode pgm, EGraphPerProcess graphPerProcess = EGraphPerProcess::Multi, const std::vector<TNode*>& entryPoints = std::vector<TNode*>()) {
-        Explorer.Walk(pgm.GetNode(), *Env);
+        Explorer.Walk(pgm.GetNode(), *Env); 
         TComputationPatternOpts opts(Alloc.Ref(), *Env, GetTestFactory(), FunctionRegistry.Get(),
             NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception, UseLLVM ? "" : "OFF", graphPerProcess);
         Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
         return Pattern->Clone(opts.ToComputationOptions(*RandomProvider, *TimeProvider));
-    }
-
-    TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
-    TIntrusivePtr<IRandomProvider> RandomProvider;
-    TIntrusivePtr<ITimeProvider> TimeProvider;
-
-    TScopedAlloc Alloc;
-    THolder<TTypeEnvironment> Env;
-    THolder<TProgramBuilder> PgmBuilder;
-
-    TExploringNodeVisitor Explorer;
+    } 
+ 
+    TIntrusivePtr<IFunctionRegistry> FunctionRegistry; 
+    TIntrusivePtr<IRandomProvider> RandomProvider; 
+    TIntrusivePtr<ITimeProvider> TimeProvider; 
+ 
+    TScopedAlloc Alloc; 
+    THolder<TTypeEnvironment> Env; 
+    THolder<TProgramBuilder> PgmBuilder; 
+ 
+    TExploringNodeVisitor Explorer; 
     IComputationPattern::TPtr Pattern;
-};
-
+}; 
+ 
 template <bool LLVM, bool WithYields = false>
 TRuntimeNode MakeStream(TSetup_<LLVM>& setup, ui64 peakStep) {
     TProgramBuilder& pb = *setup.PgmBuilder;
-
+ 
     TCallableBuilder callableBuilder(*setup.Env, WithYields ? "TestYieldStream" : "TestStream",
         pb.NewStreamType(
             pb.NewStructType({
                 {TStringBuf("a"), pb.NewDataType(NUdf::EDataSlot::Uint64)},
                 {TStringBuf("b"), pb.NewDataType(NUdf::EDataSlot::String)}
-            })
-        )
-    );
+            }) 
+        ) 
+    ); 
     callableBuilder.Add(pb.NewDataLiteral(peakStep));
-
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
+ 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
 template <bool OverFlow>
 TRuntimeNode Combine(TProgramBuilder& pb, TRuntimeNode stream, std::function<TRuntimeNode(TRuntimeNode, TRuntimeNode)> finishLambda) {
     const auto keyExtractor = [&](TRuntimeNode item) {
         return pb.Member(item, "a");
-    };
+    }; 
     const auto init = [&](TRuntimeNode /*key*/, TRuntimeNode item) {
-        return item;
-    };
+        return item; 
+    }; 
     const auto update = [&](TRuntimeNode /*key*/, TRuntimeNode item, TRuntimeNode state) {
         const auto a = pb.Add(pb.Member(item, "a"), pb.Member(state, "a"));
         const auto b = pb.Concat(pb.Member(item, "b"), pb.Member(state, "b"));
         return pb.NewStruct({
             {TStringBuf("a"), a},
             {TStringBuf("b"), b},
-        });
-    };
-
+        }); 
+    }; 
+ 
     return OverFlow ?
         pb.FromFlow(pb.CombineCore(pb.ToFlow(stream), keyExtractor, init, update, finishLambda, 64ul << 20)):
         pb.CombineCore(stream, keyExtractor, init, update, finishLambda, 64ul << 20);
-}
-
+} 
+ 
 TRuntimeNode Reduce(TProgramBuilder& pb, TRuntimeNode stream) {
     return pb.Condense(stream, pb.NewDataLiteral<ui64>(0),
         [&] (TRuntimeNode, TRuntimeNode) { return pb.NewDataLiteral<bool>(false); },
         [&] (TRuntimeNode item, TRuntimeNode state) { return pb.Add(state, item); }
     );
-}
-
+} 
+ 
 TRuntimeNode StreamToString(TProgramBuilder& pb, TRuntimeNode stream) {
     const auto sorted = pb.Sort(stream, pb.NewDataLiteral(true),
         [&](TRuntimeNode item) {
         return item;
     });
-
+ 
     return pb.Condense(sorted, pb.NewDataLiteral<NUdf::EDataSlot::String>("|"),
         [&] (TRuntimeNode, TRuntimeNode) { return pb.NewDataLiteral<bool>(false); },
         [&] (TRuntimeNode item, TRuntimeNode state) {
             return pb.Concat(pb.Concat(state, pb.ToString(item)), pb.NewDataLiteral<NUdf::EDataSlot::String>("|"));
         }
     );
-}
-
-} // unnamed
-
+} 
+ 
+} // unnamed 
+ 
 Y_UNIT_TEST_SUITE(TMiniKQLCombineStreamTest) {
     Y_UNIT_TEST_LLVM(TestFullCombineWithOptOut) {
         TSetup_<LLVM> setup;
@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLCombineStreamTest) {
         const auto finish = [&](TRuntimeNode /*key*/, TRuntimeNode state) {
             return pb.NewOptional(pb.Member(state, "a"));
         };
-
+ 
         const auto stream = MakeStream(setup, Max<ui64>());
         const auto pgm = StreamToString(pb, Combine<false>(pb, stream, finish));
         const auto graph = setup.BuildGraph(pgm);
@@ -845,18 +845,18 @@ Y_UNIT_TEST_SUITE(TMiniKQLCombineFlowTest) {
         TProgramBuilder& pb = *setup.PgmBuilder;
         const auto finish = [&](TRuntimeNode /*key*/, TRuntimeNode state) {
             return pb.NewOptional(pb.Member(state, "a"));
-        };
-
+        }; 
+ 
         const auto stream = MakeStream(setup, Max<ui64>());
         const auto pgm = StreamToString(pb, Combine<true>(pb, stream, finish));
         const auto graph = setup.BuildGraph(pgm);
         const auto streamVal = graph->GetValue();
         NUdf::TUnboxedValue result;
         UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
-
-        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|0|4|8|");
-    }
-
+ 
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|0|4|8|"); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestFullCombineWithListOut) {
         TSetup_<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -866,19 +866,19 @@ Y_UNIT_TEST_SUITE(TMiniKQLCombineFlowTest) {
             auto list = pb.NewEmptyList(itemType);
             list = pb.Append(list, item);
             list = pb.Append(list, item);
-            return list;
-        };
-
+            return list; 
+        }; 
+ 
         const auto stream = MakeStream(setup, Max<ui64>());
         const auto pgm = StreamToString(pb, Combine<true>(pb, stream, finish));
         const auto graph = setup.BuildGraph(pgm);
         const auto streamVal = graph->GetValue();
         NUdf::TUnboxedValue result;
         UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
-
-        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|0|0|4|4|8|8|");
-    }
-
+ 
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|0|0|4|4|8|8|"); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestFullCombineWithStreamOut) {
         TSetup_<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -889,18 +889,18 @@ Y_UNIT_TEST_SUITE(TMiniKQLCombineFlowTest) {
             list = pb.Append(list, item);
             list = pb.Append(list, item);
             return pb.Iterator(list, MakeArrayRef(&state, 1));
-        };
-
+        }; 
+ 
         const auto stream = MakeStream(setup, Max<ui64>());
         const auto pgm = StreamToString(pb, Combine<true>(pb, stream, finish));
         const auto graph = setup.BuildGraph(pgm);
         const auto streamVal = graph->GetValue();
         NUdf::TUnboxedValue result;
         UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
-
-        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|0|0|4|4|8|8|");
-    }
-
+ 
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|0|0|4|4|8|8|"); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestFullCombineWithOptOutAndYields) {
         TSetup_<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -976,74 +976,74 @@ Y_UNIT_TEST_SUITE(TMiniKQLCombineFlowTest) {
         TProgramBuilder& pb = *setup.PgmBuilder;
         const auto finish = [&](TRuntimeNode /*key*/, TRuntimeNode state) {
             return pb.NewOptional(pb.Member(state, "a"));
-        };
-
+        }; 
+ 
         const auto stream = MakeStream(setup, 6ul);
         const auto combine = Combine<true>(pb, stream, finish);
-        {
+        { 
             const auto pgm = Reduce(pb, combine);
             const auto graph = setup.BuildGraph(pgm);
             const auto streamVal = graph->GetValue();
             NUdf::TUnboxedValue result;
             UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
-
-            UNIT_ASSERT_VALUES_EQUAL(result.Get<ui64>(), 12ul);
-        }
-        {
+ 
+            UNIT_ASSERT_VALUES_EQUAL(result.Get<ui64>(), 12ul); 
+        } 
+        { 
             const auto pgm = StreamToString(pb, combine);
             const auto graph = setup.BuildGraph(pgm);
             const auto streamVal = graph->GetValue();
             NUdf::TUnboxedValue result;
             UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
-
+ 
             UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|0|0|2|2|4|4|");
-        }
-    }
-
+        } 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestCombineInSingleProc) {
         TSetup_<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         const auto finish = [&](TRuntimeNode /*key*/, TRuntimeNode state) {
             return pb.NewOptional(pb.Member(state, "a"));
-        };
-
+        }; 
+ 
         const auto stream = MakeStream(setup, 6ul);
         const auto pgm = Reduce(pb, Combine<true>(pb, stream, finish));
         const auto graph = setup.BuildGraph(pgm, EGraphPerProcess::Single);
         const auto streamVal = graph->GetValue();
         NUdf::TUnboxedValue result;
         UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
-
-        UNIT_ASSERT_VALUES_EQUAL(result.Get<ui64>(), 12ul);
-    }
-
+ 
+        UNIT_ASSERT_VALUES_EQUAL(result.Get<ui64>(), 12ul); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestCombineSwithYield) {
         TSetup_<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         const auto finish = [&](TRuntimeNode /*key*/, TRuntimeNode state) {
             return pb.NewOptional(pb.Member(state, "a"));
-        };
-
-        auto stream = MakeStream(setup, Max<ui64>());
-        TSwitchInput switchInput;
-        switchInput.Indicies.push_back(0);
-        switchInput.InputType = stream.GetStaticType();
-
+        }; 
+ 
+        auto stream = MakeStream(setup, Max<ui64>()); 
+        TSwitchInput switchInput; 
+        switchInput.Indicies.push_back(0); 
+        switchInput.InputType = stream.GetStaticType(); 
+ 
         stream = pb.Switch(stream,
-                MakeArrayRef(&switchInput, 1),
+                MakeArrayRef(&switchInput, 1), 
                 [&](ui32 /*index*/, TRuntimeNode item) { return Combine<true>(pb, item, finish); },
-                1,
+                1, 
                 pb.NewStreamType(pb.NewDataType(NUdf::EDataSlot::Uint64))
-                );
-
+                ); 
+ 
         const auto pgm = StreamToString(pb, stream);
         const auto graph = setup.BuildGraph(pgm);
         const auto streamVal = graph->GetValue();
         NUdf::TUnboxedValue result;
         UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
-
+ 
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|0|0|0|0|1|1|1|1|2|2|2|2|");
-    }
+    } 
 }
 
 Y_UNIT_TEST_SUITE(TMiniKQLCombineFlowPerfTest) {
@@ -1568,7 +1568,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLCombineFlowPerfTest) {
 
         Cerr << "Runtime is " << t2 - t1 << " vs C++ " << cppTime << Endl;
     }
-}
+} 
 #endif
-} // NMiniKQL
-} // NKikimr
+} // NMiniKQL 
+} // NKikimr 

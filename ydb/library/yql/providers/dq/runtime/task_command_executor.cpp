@@ -1,5 +1,5 @@
-#include "task_command_executor.h"
-
+#include "task_command_executor.h" 
+ 
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
@@ -89,12 +89,12 @@ void ToProto(T* s1, const NDq::TDqSinkStats* ss)
 class TTaskCommandExecutor {
 public:
     TTaskCommandExecutor(NKikimr::NMiniKQL::TComputationNodeFactory compFactory, TTaskTransformFactory taskTransformFactory, NKikimr::NMiniKQL::IStatsRegistry* jobStats, bool terminateOnError)
-        : ComputationFactory(std::move(compFactory))
-        , TaskTransformFactory(std::move(taskTransformFactory))
+        : ComputationFactory(std::move(compFactory)) 
+        , TaskTransformFactory(std::move(taskTransformFactory)) 
         , JobStats(std::move(jobStats))
         , TerminateOnError(terminateOnError)
-    {
-    }
+    { 
+    } 
 
     void UpdateStats() {
         if (!Runner) {
@@ -294,7 +294,7 @@ public:
                 NDqProto::TData data;
                 data.Load(&input);
 
-                auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
+                auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit 
                 channel->Push(std::move(data));
                 UpdateInputChannelStats(channelId);
                 break;
@@ -307,7 +307,7 @@ public:
                 NDqProto::TSourcePushRequest request;
                 request.Load(&input);
 
-                auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
+                auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit 
                 auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
                 switch (request.GetData().GetTransportVersion()) {
                     case 10000: {
@@ -421,7 +421,7 @@ public:
             }
             case NDqProto::TCommandHeader::POP: {
                 Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
-                auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
+                auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit 
 
                 Y_ENSURE(taskId == Runner->GetTaskId());
 
@@ -450,13 +450,13 @@ public:
                 auto guard = Runner->BindAllocator(DqConfiguration->MemoryLimit.Get().GetOrElse(0));
 
                 Y_ENSURE(taskId == Runner->GetTaskId());
-                try {
-                    NDqProto::TRunResponse response;
-                    auto status = Runner->Run();
-                    response.SetResult(static_cast<ui32>(status));
+                try { 
+                    NDqProto::TRunResponse response; 
+                    auto status = Runner->Run(); 
+                    response.SetResult(static_cast<ui32>(status)); 
                     UpdateStats(response);
-                    response.Save(&output);
-                } catch (const NKikimr::TMemoryLimitExceededException& ex) {
+                    response.Save(&output); 
+                } catch (const NKikimr::TMemoryLimitExceededException& ex) { 
                     throw yexception() << "DQ computation exceeds the memory limit " << DqConfiguration->MemoryLimit.Get().GetOrElse(0) << ". Try to increase the limit using PRAGMA dq.MemoryLimit";
                 }
                 break;
@@ -472,17 +472,17 @@ public:
                 });
 
                 request.GetTask().GetMeta().UnpackTo(&taskMeta);
-                try {
-                    Prepare(request.GetTask(), taskMeta, output);
-                } catch (const NKikimr::TMemoryLimitExceededException& ex) {
-                    throw yexception() << "DQ computation exceeds the memory limit " << DqConfiguration->MemoryLimit.Get().GetOrElse(0) << ". Try to increase the limit using PRAGMA dq.MemoryLimit";
-                }
-
+                try { 
+                    Prepare(request.GetTask(), taskMeta, output); 
+                } catch (const NKikimr::TMemoryLimitExceededException& ex) { 
+                    throw yexception() << "DQ computation exceeds the memory limit " << DqConfiguration->MemoryLimit.Get().GetOrElse(0) << ". Try to increase the limit using PRAGMA dq.MemoryLimit"; 
+                } 
+ 
                 break;
             }
             case NDqProto::TCommandHeader::GET_INPUT_TYPE: {
                 Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
-                auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
+                auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit 
 
                 Y_ENSURE(taskId == Runner->GetTaskId());
                 auto channel = Runner->GetInputChannel(channelId);
@@ -496,7 +496,7 @@ public:
             }
             case NDqProto::TCommandHeader::GET_SOURCE_TYPE: {
                 Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
-                auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
+                auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit 
 
                 Y_ENSURE(taskId == Runner->GetTaskId());
                 auto source = Runner->GetSource(channelId);
@@ -621,7 +621,7 @@ public:
                 NDqProto::TSinkPopRequest request;
                 request.Load(&input);
 
-                auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
+                auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit 
                 NKikimr::NMiniKQL::TUnboxedValueVector batch;
                 auto sink = Runner->GetSink(channelId);
                 auto* outputType = sink->GetOutputType();
@@ -648,7 +648,7 @@ public:
             }
             case NDqProto::TCommandHeader::SINK_OUTPUT_TYPE: {
                 Y_ENSURE(header.GetVersion() <= CurrentProtocolVersion);
-                auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
+                auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit 
 
                 Y_ENSURE(taskId == Runner->GetTaskId());
                 auto outputType = Runner->GetSink(channelId)->GetOutputType();
@@ -752,7 +752,7 @@ public:
             Runner = MakeDqTaskRunner(Ctx, settings, nullptr);
         });
 
-        auto guard = Runner->BindAllocator(DqConfiguration->MemoryLimit.Get().GetOrElse(0));
+        auto guard = Runner->BindAllocator(DqConfiguration->MemoryLimit.Get().GetOrElse(0)); 
 
         QueryStat.Measure<void>("Prepare", [&]() {
             NDq::TDqTaskRunnerMemoryLimits limits;
@@ -764,8 +764,8 @@ public:
         result.Save(&output);
     }
 
-    NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory;
-    TTaskTransformFactory TaskTransformFactory;
+    NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory; 
+    TTaskTransformFactory TaskTransformFactory; 
     THashMap<TString, i64> CurrentJobStats;
     NKikimr::NMiniKQL::IStatsRegistry* JobStats;
     bool TerminateOnError;

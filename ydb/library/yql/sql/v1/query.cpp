@@ -1,6 +1,6 @@
 #include "node.h"
 #include "context.h"
-
+ 
 #include <ydb/library/yql/ast/yql_type_string.h>
 #include <ydb/library/yql/core/yql_callable_names.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
@@ -8,8 +8,8 @@
 
 #include <library/cpp/charset/ci_string.h>
 
-#include <util/digest/fnv.h>
-
+#include <util/digest/fnv.h> 
+ 
 using namespace NYql;
 
 namespace NSQLTranslationV1 {
@@ -235,10 +235,10 @@ public:
                 ctx.Error(Pos) << Func << " requires from " << minArgs << " to " << maxArgs << " arguments, but got: " << Args.size();
                 return nullptr;
             }
-            if (ctx.DiscoveryMode) {
-                ctx.Error(Pos, TIssuesIds::YQL_NOT_ALLOWED_IN_DISCOVERY) << Func << " is not allowed in Discovery mode";
-                return nullptr;
-            }
+            if (ctx.DiscoveryMode) { 
+                ctx.Error(Pos, TIssuesIds::YQL_NOT_ALLOWED_IN_DISCOVERY) << Func << " is not allowed in Discovery mode"; 
+                return nullptr; 
+            } 
 
             for (ui32 index=0; index < Args.size(); ++index) {
                 auto& arg = Args[index];
@@ -373,11 +373,11 @@ public:
                 return nullptr;
             }
 
-            if (ctx.DiscoveryMode) {
-                ctx.Error(Pos, TIssuesIds::YQL_NOT_ALLOWED_IN_DISCOVERY) << Func << " is not allowed in Discovery mode";
-                return nullptr;
-            }
-
+            if (ctx.DiscoveryMode) { 
+                ctx.Error(Pos, TIssuesIds::YQL_NOT_ALLOWED_IN_DISCOVERY) << Func << " is not allowed in Discovery mode"; 
+                return nullptr; 
+            } 
+ 
             for (ui32 index = 0; index < Args.size(); ++index) {
                 auto& arg = Args[index];
                 if (arg.HasAt) {
@@ -1637,29 +1637,29 @@ public:
             }
 
             if (ctx.Settings.Mode != NSQLTranslation::ESqlMode::LIBRARY) {
-                auto configSource = Y("DataSource", BuildQuotedAtom(Pos, TString(ConfigProviderName)));
-                auto resultSink = Y("DataSink", BuildQuotedAtom(Pos, TString(ResultProviderName)));
+                auto configSource = Y("DataSource", BuildQuotedAtom(Pos, TString(ConfigProviderName))); 
+                auto resultSink = Y("DataSink", BuildQuotedAtom(Pos, TString(ResultProviderName))); 
 
                 for (const auto& warningPragma : ctx.WarningPolicy.GetRules()) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                         BuildQuotedAtom(Pos, "Warning"), BuildQuotedAtom(Pos, warningPragma.GetPattern()),
                             BuildQuotedAtom(Pos, to_lower(ToString(warningPragma.GetAction()))))));
-                }
+                } 
 
-                if (ctx.ResultSizeLimit > 0) {
+                if (ctx.ResultSizeLimit > 0) { 
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", resultSink,
-                        BuildQuotedAtom(Pos, "SizeLimit"), BuildQuotedAtom(Pos, ToString(ctx.ResultSizeLimit)))));
-                }
-
+                        BuildQuotedAtom(Pos, "SizeLimit"), BuildQuotedAtom(Pos, ToString(ctx.ResultSizeLimit))))); 
+                } 
+ 
                 if (!ctx.PragmaPullUpFlatMapOverJoin) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                         BuildQuotedAtom(Pos, "DisablePullUpFlatMapOverJoin"))));
                 }
-
-                if (ctx.DiscoveryMode) {
-                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
-                        BuildQuotedAtom(Pos, "DiscoveryMode"))));
-                }
+ 
+                if (ctx.DiscoveryMode) { 
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource, 
+                        BuildQuotedAtom(Pos, "DiscoveryMode")))); 
+                } 
 
                 if (ctx.DqEngineEnable) {
                     TString mode = "auto";
@@ -1765,57 +1765,57 @@ public:
         return !hasError;
     }
 
-    TPtr DoClone() const final {
-        return {};
-    }
-private:
+    TPtr DoClone() const final { 
+        return {}; 
+    } 
+private: 
     TVector<TNodePtr> Blocks;
     const bool TopLevel;
     TScopedStatePtr Scoped;
-};
+}; 
 
 TNodePtr BuildQuery(TPosition pos, const TVector<TNodePtr>& blocks, bool topLevel, TScopedStatePtr scoped) {
     return new TYqlProgramNode(pos, blocks, topLevel, scoped);
-}
-
+} 
+ 
 class TPragmaNode final: public INode {
-public:
+public: 
     TPragmaNode(TPosition pos, const TString& prefix, const TString& name, const TVector<TDeferredAtom>& values, bool valueDefault)
         : INode(pos)
-        , Prefix(prefix)
-        , Name(name)
-        , Values(values)
-        , ValueDefault(valueDefault)
+        , Prefix(prefix) 
+        , Name(name) 
+        , Values(values) 
+        , ValueDefault(valueDefault) 
     {
         FakeSource = BuildFakeSource(pos);
     }
-
-    bool DoInit(TContext& ctx, ISource* src) override {
+ 
+    bool DoInit(TContext& ctx, ISource* src) override { 
         Y_UNUSED(src);
-        TString serviceName;
-        TString cluster;
+        TString serviceName; 
+        TString cluster; 
         if (std::find(Providers.cbegin(), Providers.cend(), Prefix) != Providers.cend()) {
-            cluster = "$all";
-            serviceName = Prefix;
+            cluster = "$all"; 
+            serviceName = Prefix; 
         } else {
             serviceName = *ctx.GetClusterProvider(Prefix, cluster);
         }
 
-        auto datasource = Y("DataSource", BuildQuotedAtom(Pos, serviceName));
-        if (Prefix != ConfigProviderName) {
-            datasource = L(datasource, BuildQuotedAtom(Pos, cluster));
-        }
-
+        auto datasource = Y("DataSource", BuildQuotedAtom(Pos, serviceName)); 
+        if (Prefix != ConfigProviderName) { 
+            datasource = L(datasource, BuildQuotedAtom(Pos, cluster)); 
+        } 
+ 
         Node = Y();
         Node = L(Node, AstNode(TString(ConfigureName)));
         Node = L(Node, AstNode(TString(TStringBuf("world"))));
         Node = L(Node, datasource);
-
+ 
         if (Name == TStringBuf("flags")) {
-            for (ui32 i = 0; i < Values.size(); ++i) {
+            for (ui32 i = 0; i < Values.size(); ++i) { 
                 Node = L(Node, Values[i].Build());
-            }
-        }
+            } 
+        } 
         else if (Name == TStringBuf("AddFileByUrl") || Name == TStringBuf("AddFolderByUrl") || Name == TStringBuf("ImportUdfs") || Name == TStringBuf("SetPackageVersion")) {
             Node = L(Node, BuildQuotedAtom(Pos, Name));
             for (ui32 i = 0; i < Values.size(); ++i) {
@@ -1825,15 +1825,15 @@ public:
         else if (Name == TStringBuf("auth")) {
             Node = L(Node, BuildQuotedAtom(Pos, "Auth"));
             Node = L(Node, Values.empty() ? BuildQuotedAtom(Pos, TString()) : Values.front().Build());
-        }
-        else {
+        } 
+        else { 
             Node = L(Node, BuildQuotedAtom(Pos, "Attr"));
             Node = L(Node, BuildQuotedAtom(Pos, Name));
-            if (!ValueDefault) {
+            if (!ValueDefault) { 
                 Node = L(Node, Values.empty() ? BuildQuotedAtom(Pos, TString()) : Values.front().Build());
-            }
-        }
-
+            } 
+        } 
+ 
         if (!Node->Init(ctx, FakeSource.Get())) {
             return false;
         }
@@ -1848,18 +1848,18 @@ public:
     TPtr DoClone() const final {
         return {};
     }
-
+ 
 private:
-    TString Prefix;
-    TString Name;
+    TString Prefix; 
+    TString Name; 
     TVector<TDeferredAtom> Values;
-    bool ValueDefault;
+    bool ValueDefault; 
     TNodePtr Node;
     TSourcePtr FakeSource;
 };
 
 TNodePtr BuildPragma(TPosition pos, const TString& prefix, const TString& name, const TVector<TDeferredAtom>& values, bool valueDefault) {
-    return new TPragmaNode(pos, prefix, name, values, valueDefault);
+    return new TPragmaNode(pos, prefix, name, values, valueDefault); 
 }
 
 class TSqlLambda final: public TAstListNode {

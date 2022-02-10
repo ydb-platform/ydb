@@ -7,17 +7,17 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 
-#include <util/generic/ptr.h>
-
+#include <util/generic/ptr.h> 
+ 
 namespace NYql {
 
 using namespace NDqs; // TODO: remove this namespace;
 
-struct TDqState: public TThrRefBase {
+struct TDqState: public TThrRefBase { 
     IDqGateway::TPtr DqGateway;
     const TGatewaysConfig* GatewaysConfig;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
-    NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory;
+    NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory; 
     TIntrusivePtr<IRandomProvider> RandomProvider;
     TTypeAnnotationContext* TypeCtx;
     const TOperationProgressWriter ProgressWriter;
@@ -39,7 +39,7 @@ struct TDqState: public TThrRefBase {
         const IDqGateway::TPtr& dqGateway,
         const TGatewaysConfig* gatewaysConfig,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
+        NKikimr::NMiniKQL::TComputationNodeFactory compFactory, 
         const TIntrusivePtr<IRandomProvider>& randomProvider,
         TTypeAnnotationContext* typeCtx,
         const TOperationProgressWriter& progressWriter,
@@ -53,7 +53,7 @@ struct TDqState: public TThrRefBase {
         : DqGateway(dqGateway)
         , GatewaysConfig(gatewaysConfig)
         , FunctionRegistry(functionRegistry)
-        , ComputationFactory(compFactory)
+        , ComputationFactory(compFactory) 
         , RandomProvider(randomProvider)
         , TypeCtx(typeCtx)
         , ProgressWriter(progressWriter)
@@ -67,6 +67,6 @@ struct TDqState: public TThrRefBase {
     { }
 };
 
-using TDqStatePtr = TIntrusivePtr<TDqState>;
+using TDqStatePtr = TIntrusivePtr<TDqState>; 
 
 } // namespace

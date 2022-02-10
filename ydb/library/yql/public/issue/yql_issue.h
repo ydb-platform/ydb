@@ -16,7 +16,7 @@
 
 namespace NYql {
 
-void SanitizeNonAscii(TString& s);
+void SanitizeNonAscii(TString& s); 
 
 ///////////////////////////////////////////////////////////////////////////////
 // TPosition
@@ -33,7 +33,7 @@ struct TPosition {
         , Row(row)
         , File(file)
     {
-        SanitizeNonAscii(File);
+        SanitizeNonAscii(File); 
     }
 
     explicit operator bool() const {
@@ -124,7 +124,7 @@ public:
         , EndPosition(TPosition())
         , Message(message)
     {
-        SanitizeNonAscii(Message);
+        SanitizeNonAscii(Message); 
     }
 
     template <typename T>
@@ -133,7 +133,7 @@ public:
         , EndPosition(position)
         , Message(message)
     {
-        SanitizeNonAscii(Message);
+        SanitizeNonAscii(Message); 
     }
 
     inline TRange Range() const {
@@ -146,7 +146,7 @@ public:
         , EndPosition(endPosition)
         , Message(message)
     {
-        SanitizeNonAscii(Message);
+        SanitizeNonAscii(Message); 
     }
 
     inline bool operator==(const TIssue& other) const {

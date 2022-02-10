@@ -139,12 +139,12 @@ private:
             case TExprNode::EState::TypeInProgress:
                 return IGraphTransformer::TStatus::Async;
             case TExprNode::EState::TypePending:
-                if (start->Type() == TExprNode::Lambda) {
+                if (start->Type() == TExprNode::Lambda) { 
                     if (!start->Head().GetTypeAnn()) {
-                        return TStatus::Ok;
+                        return TStatus::Ok; 
                     } else if (start->Head().ChildrenSize() == 0) {
-                        break;
-                    }
+                        break; 
+                    } 
                 }
 
                 if (start->Type() == TExprNode::Arguments || start->Type() == TExprNode::Argument) {
@@ -153,9 +153,9 @@ private:
 
                 return TStatus(TStatus::Repeat, true);
             case TExprNode::EState::TypeComplete:
-            case TExprNode::EState::ConstrInProgress:
-            case TExprNode::EState::ConstrPending:
-            case TExprNode::EState::ConstrComplete:
+            case TExprNode::EState::ConstrInProgress: 
+            case TExprNode::EState::ConstrPending: 
+            case TExprNode::EState::ConstrComplete: 
             case TExprNode::EState::ExecutionInProgress:
             case TExprNode::EState::ExecutionRequired:
             case TExprNode::EState::ExecutionPending:
@@ -233,9 +233,9 @@ private:
             case TExprNode::EState::TypePending:
                 break;
             case TExprNode::EState::TypeComplete:
-            case TExprNode::EState::ConstrInProgress:
-            case TExprNode::EState::ConstrPending:
-            case TExprNode::EState::ConstrComplete:
+            case TExprNode::EState::ConstrInProgress: 
+            case TExprNode::EState::ConstrPending: 
+            case TExprNode::EState::ConstrComplete: 
             case TExprNode::EState::ExecutionInProgress:
             case TExprNode::EState::ExecutionRequired:
             case TExprNode::EState::ExecutionPending:
@@ -251,7 +251,7 @@ private:
             switch (input->Type()) {
             case TExprNode::Atom:
             {
-                input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+                input->SetTypeAnn(ctx.MakeType<TUnitExprType>()); 
                 CheckExpected(*input, ctx);
                 return TStatus::Ok;
             }
@@ -293,15 +293,15 @@ private:
                         return TStatus::Error;
                     }
 
-                    children.push_back(child->GetTypeAnn());
-                    if (child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit) {
+                    children.push_back(child->GetTypeAnn()); 
+                    if (child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit) { 
                         isUnit = true;
                     }
                 }
 
-                input->SetTypeAnn(isUnit ?
+                input->SetTypeAnn(isUnit ? 
                     (const TTypeAnnotationNode*)ctx.MakeType<TUnitExprType>() :
-                    ctx.MakeType<TTupleExprType>(children));
+                    ctx.MakeType<TTupleExprType>(children)); 
                 CheckExpected(*input, ctx);
                 return TStatus::Ok;
             }
@@ -363,7 +363,7 @@ private:
                     input->SetTypeAnn(input->Tail().GetTypeAnn());
                 }
 
-                if (input->GetTypeAnn()) {
+                if (input->GetTypeAnn()) { 
                     CheckExpected(*input, ctx);
                 }
 
@@ -371,7 +371,7 @@ private:
             }
 
             case TExprNode::Argument:
-                if (input->GetTypeAnn()) {
+                if (input->GetTypeAnn()) { 
                     if (input->Type() == TExprNode::Lambda) {
                         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Unable to use lambda as argument"));
                         input->SetState(TExprNode::EState::Error);
@@ -430,7 +430,7 @@ private:
                 }
 
                 if (status == TStatus::Ok) {
-                    if (!input->GetTypeAnn()) {
+                    if (!input->GetTypeAnn()) { 
                         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Node is not annotated yet"));
                         input->SetState(TExprNode::EState::Error);
                         return TStatus::Error;
@@ -458,7 +458,7 @@ private:
 
             case TExprNode::World:
             {
-                input->SetTypeAnn(ctx.MakeType<TWorldExprType>());
+                input->SetTypeAnn(ctx.MakeType<TWorldExprType>()); 
                 CheckExpected(*input, ctx);
                 return TStatus::Ok;
             }
@@ -466,7 +466,7 @@ private:
             case TExprNode::Arguments:
             {
                 if (input->Children().empty()) {
-                    if (input->GetTypeAnn()) {
+                    if (input->GetTypeAnn()) { 
                         input->SetState(TExprNode::EState::TypeComplete);
                         return TStatus::Ok;
                     }
@@ -491,7 +491,7 @@ private:
                     return combinedStatus;
                 }
 
-                input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+                input->SetTypeAnn(ctx.MakeType<TUnitExprType>()); 
                 return TStatus::Ok;
             }
 
@@ -517,7 +517,7 @@ private:
         Y_UNUSED(ctx);
         auto it = Types.ExpectedTypes.find(input.UniqueId());
         if (it != Types.ExpectedTypes.end()) {
-            YQL_ENSURE(IsSameAnnotation(*input.GetTypeAnn(), *it->second),
+            YQL_ENSURE(IsSameAnnotation(*input.GetTypeAnn(), *it->second), 
                 "Rewrite error, type should be : " <<
                 *it->second << ", but it is: " << *input.GetTypeAnn() << " for node " << input.Content());
         }
@@ -556,7 +556,7 @@ private:
 
 IGraphTransformer::TStatus CheckWholeProgramType(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
-    if (input->Type() == TExprNode::Lambda || input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::World) {
+    if (input->Type() == TExprNode::Lambda || input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::World) { 
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Return must be world"));
         input->SetState(TExprNode::EState::Error);
         return IGraphTransformer::TStatus::Error;
@@ -575,7 +575,7 @@ TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(
         TTypeAnnotationContext& typeAnnotationContext)
 {
     TVector<TTransformStage> transformers;
-    auto issueCode = TIssuesIds::CORE_PRE_TYPE_ANN;
+    auto issueCode = TIssuesIds::CORE_PRE_TYPE_ANN; 
     transformers.push_back(TTransformStage(
         CreateFunctorTransformer(&ExpandApply),
         "ExpandApply",
@@ -596,13 +596,13 @@ TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(
         CreateIODiscoveryTransformer(typeAnnotationContext),
         "IODiscovery",
         issueCode));
-    transformers.push_back(TTransformStage(
-        CreateEpochsTransformer(typeAnnotationContext),
-        "Epochs",
-        issueCode));
+    transformers.push_back(TTransformStage( 
+        CreateEpochsTransformer(typeAnnotationContext), 
+        "Epochs", 
+        issueCode)); 
 
     transformers.push_back(TTransformStage(
-        CreateIntentDeterminationTransformer(typeAnnotationContext),
+        CreateIntentDeterminationTransformer(typeAnnotationContext), 
         "IntentDetermination",
         issueCode));
     transformers.push_back(TTransformStage(
@@ -618,9 +618,9 @@ TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(
         "RewriteIO",
         issueCode));
 
-    issueCode = TIssuesIds::CORE_TYPE_ANN;
-    auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(typeAnnotationContext);
-    auto typeTransformer = CreateTypeAnnotationTransformer(callableTransformer, typeAnnotationContext);
+    issueCode = TIssuesIds::CORE_TYPE_ANN; 
+    auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(typeAnnotationContext); 
+    auto typeTransformer = CreateTypeAnnotationTransformer(callableTransformer, typeAnnotationContext); 
     transformers.push_back(TTransformStage(
         typeTransformer,
         "TypeAnnotation",
@@ -663,7 +663,7 @@ TExprNode::TPtr ParseAndAnnotate(
     }
 
     TExprNode::TPtr exprRoot;
-    if (!CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr)) {
+    if (!CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr)) { 
         return nullptr;
     }
 

@@ -348,7 +348,7 @@ bool IsKikimrPureNode(const TExprNode::TPtr& node) {
         return true;
     }
 
-    if (!node->GetTypeAnn()->IsComposable()) {
+    if (!node->GetTypeAnn()->IsComposable()) { 
         return false;
     }
 

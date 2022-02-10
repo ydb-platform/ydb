@@ -1,12 +1,12 @@
 #pragma once
 
-#include "tasks_runner_proxy.h"
+#include "tasks_runner_proxy.h" 
 #include "file_cache.h"
 
-#include <util/generic/hash.h>
-#include <util/generic/string.h>
+#include <util/generic/hash.h> 
+#include <util/generic/string.h> 
 
-namespace NYql::NTaskRunnerProxy {
+namespace NYql::NTaskRunnerProxy { 
 
 struct TPipeFactoryOptions {
     TString ExecPath;
@@ -21,4 +21,4 @@ struct TPipeFactoryOptions {
 
 IProxyFactory::TPtr CreatePipeFactory(const TPipeFactoryOptions& options);
 
-} // namespace NYql::NTaskRunnerProxy
+} // namespace NYql::NTaskRunnerProxy 

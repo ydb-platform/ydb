@@ -1,7 +1,7 @@
 #include "yql_dq_datasink.h"
 #include "yql_dq_state.h"
-#include "yql_dq_datasink_type_ann.h"
-#include "yql_dq_recapture.h"
+#include "yql_dq_datasink_type_ann.h" 
+#include "yql_dq_recapture.h" 
 
 #include <ydb/library/yql/providers/dq/opt/logical_optimize.h>
 #include <ydb/library/yql/providers/dq/opt/physical_optimize.h>
@@ -21,17 +21,17 @@
 
 namespace NYql {
 
-using namespace NNodes;
-
+using namespace NNodes; 
+ 
 class TDqDataProviderSink: public TDataProviderBase {
 public:
     TDqDataProviderSink(const TDqStatePtr& state)
         : State(state)
         , LogOptTransformer([state] () { return CreateDqsLogOptTransformer(/*TODO: State->TypeCtx);*/nullptr, state->Settings); })
-        , PhyOptTransformer([] () { return CreateDqsPhyOptTransformer(/*TODO: State->TypeCtx*/nullptr); })
-        , PhysicalFinalizingTransformer([] () { return CreateDqsFinalizingOptTransformer(); })
+        , PhyOptTransformer([] () { return CreateDqsPhyOptTransformer(/*TODO: State->TypeCtx*/nullptr); }) 
+        , PhysicalFinalizingTransformer([] () { return CreateDqsFinalizingOptTransformer(); }) 
         , TypeAnnotationTransformer([state] () { return CreateDqsDataSinkTypeAnnotationTransformer(state->TypeCtx); })
-        , RecaptureTransformer([state] () { return CreateDqsRecaptureTransformer(state); })
+        , RecaptureTransformer([state] () { return CreateDqsRecaptureTransformer(state); }) 
     { }
 
     bool CollectStatistics(NYson::TYsonWriter& writer, bool totalOnly) override {
@@ -151,57 +151,57 @@ public:
         return true;
     }
 
-    bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
-        if (node.IsCallable(TCoDataSink::CallableName())) {
-            if (!EnsureMinMaxArgsCount(node, 1, 2, ctx)) {
-                return false;
-            }
-
+    bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override { 
+        if (node.IsCallable(TCoDataSink::CallableName())) { 
+            if (!EnsureMinMaxArgsCount(node, 1, 2, ctx)) { 
+                return false; 
+            } 
+ 
             if (node.Child(0)->Content() == DqProviderName) {
-                if (node.ChildrenSize() == 2) {
-                    if (!EnsureAtom(*node.Child(1), ctx)) {
-                        return false;
-                    }
-
-                    if (node.Child(1)->Content() != "$all") {
-                        ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() << "Unexpected cluster name: " << node.Child(1)->Content()));
-                        return false;
-                    }
-                }
-                cluster = Nothing();
-                return true;
-            }
-        }
-
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid DQ DataSource parameters"));
-        return false;
-    }
-
-    bool CanParse(const TExprNode& node) override {
-        return TypeAnnotationTransformer->CanParse(node);
-    }
-
+                if (node.ChildrenSize() == 2) { 
+                    if (!EnsureAtom(*node.Child(1), ctx)) { 
+                        return false; 
+                    } 
+ 
+                    if (node.Child(1)->Content() != "$all") { 
+                        ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() << "Unexpected cluster name: " << node.Child(1)->Content())); 
+                        return false; 
+                    } 
+                } 
+                cluster = Nothing(); 
+                return true; 
+            } 
+        } 
+ 
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid DQ DataSource parameters")); 
+        return false; 
+    } 
+ 
+    bool CanParse(const TExprNode& node) override { 
+        return TypeAnnotationTransformer->CanParse(node); 
+    } 
+ 
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
         Y_UNUSED(instantOnly);
         return *TypeAnnotationTransformer;
     }
 
-    IGraphTransformer& GetRecaptureOptProposalTransformer() override {
-        return *RecaptureTransformer;
-    }
-
+    IGraphTransformer& GetRecaptureOptProposalTransformer() override { 
+        return *RecaptureTransformer; 
+    } 
+ 
     IGraphTransformer& GetLogicalOptProposalTransformer() override {
-        return *LogOptTransformer;
+        return *LogOptTransformer; 
     }
 
     IGraphTransformer& GetPhysicalOptProposalTransformer() override {
-        return *PhyOptTransformer;
+        return *PhyOptTransformer; 
     }
-
+ 
     IGraphTransformer& GetPhysicalFinalizingTransformer() override {
-        return *PhysicalFinalizingTransformer;
+        return *PhysicalFinalizingTransformer; 
     }
-
+ 
     TStringBuf GetName() const override {
         return DqProviderName;
     }
@@ -269,9 +269,9 @@ public:
 
     TLazyInitHolder<IGraphTransformer> LogOptTransformer;
     TLazyInitHolder<IGraphTransformer> PhyOptTransformer;
-    TLazyInitHolder<IGraphTransformer> PhysicalFinalizingTransformer;
-    TLazyInitHolder<TVisitorTransformerBase> TypeAnnotationTransformer;
-    TLazyInitHolder<IGraphTransformer> RecaptureTransformer;
+    TLazyInitHolder<IGraphTransformer> PhysicalFinalizingTransformer; 
+    TLazyInitHolder<TVisitorTransformerBase> TypeAnnotationTransformer; 
+    TLazyInitHolder<IGraphTransformer> RecaptureTransformer; 
 };
 
 TIntrusivePtr<IDataProvider> CreateDqDataSink(const TDqStatePtr& state) {

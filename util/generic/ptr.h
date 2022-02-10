@@ -102,7 +102,7 @@ template <class Base, class T>
 class TPointerCommon {
 public:
     using TValueType = T;
-
+ 
     inline T* operator->() const noexcept {
         T* ptr = AsT();
         Y_ASSERT(ptr);

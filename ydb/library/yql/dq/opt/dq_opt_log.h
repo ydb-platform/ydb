@@ -4,12 +4,12 @@
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 
-#include <functional>
-
-namespace NYql {
-    struct TTypeAnnotationContext;
-}
-
+#include <functional> 
+ 
+namespace NYql { 
+    struct TTypeAnnotationContext; 
+} 
+ 
 namespace NYql::NDq {
 
 NNodes::TExprBase DqRewriteAggregate(NNodes::TExprBase node, TExprContext& ctx);
@@ -28,5 +28,5 @@ NNodes::TExprBase DqFlatMapOverExtend(NNodes::TExprBase node, TExprContext& ctx)
 
 NNodes::TMaybeNode<NNodes::TExprBase> DqUnorderedInStage(NNodes::TExprBase node,
     const std::function<bool(const TExprNode*)>& stopTraverse, TExprContext& ctx, TTypeAnnotationContext* typeCtx);
-
+ 
 } // namespace NYql::NDq

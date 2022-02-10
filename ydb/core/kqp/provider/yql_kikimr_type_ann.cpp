@@ -50,18 +50,18 @@ const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tab
 IGraphTransformer::TStatus ConvertTableRowType(TExprNode::TPtr& input, const TKikimrTableDescription& tableDesc,
     TExprContext& ctx)
 {
-    YQL_ENSURE(input->GetTypeAnn());
+    YQL_ENSURE(input->GetTypeAnn()); 
 
     const TTypeAnnotationNode* actualType;
-    switch (input->GetTypeAnn()->GetKind()) {
+    switch (input->GetTypeAnn()->GetKind()) { 
         case ETypeAnnotationKind::List:
-            actualType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+            actualType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType(); 
             break;
         case ETypeAnnotationKind::Stream:
-            actualType = input->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
+            actualType = input->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType(); 
             break;
         default:
-            actualType = input->GetTypeAnn();
+            actualType = input->GetTypeAnn(); 
             break;
     }
 
@@ -74,7 +74,7 @@ IGraphTransformer::TStatus ConvertTableRowType(TExprNode::TPtr& input, const TKi
         return IGraphTransformer::TStatus::Error;
     }
 
-    switch (input->GetTypeAnn()->GetKind()) {
+    switch (input->GetTypeAnn()->GetKind()) { 
         case ETypeAnnotationKind::List:
             expectedType = ctx.MakeType<TListExprType>(expectedType);
             break;
@@ -158,10 +158,10 @@ private:
                 auto listSelectType = ctx.MakeType<TListExprType>(selectType);
 
                 TTypeAnnotationNode::TListType children;
-                children.push_back(node.World().Ref().GetTypeAnn());
+                children.push_back(node.World().Ref().GetTypeAnn()); 
                 children.push_back(listSelectType);
                 auto tupleAnn = ctx.MakeType<TTupleExprType>(children);
-                node.Ptr()->SetTypeAnn(tupleAnn);
+                node.Ptr()->SetTypeAnn(tupleAnn); 
 
                 YQL_ENSURE(tableDesc->Metadata->ColumnOrder.size() == tableDesc->Metadata->Columns.size());
                 return Types.SetColumnOrder(node.Ref(), tableDesc->Metadata->ColumnOrder, ctx);
@@ -171,9 +171,9 @@ private:
             {
                 auto tableListAnnotation = BuildCommonTableListType(ctx);
                 TTypeAnnotationNode::TListType children;
-                children.push_back(node.World().Ref().GetTypeAnn());
+                children.push_back(node.World().Ref().GetTypeAnn()); 
                 children.push_back(tableListAnnotation);
-                node.Ptr()->SetTypeAnn(ctx.MakeType<TTupleExprType>(children));
+                node.Ptr()->SetTypeAnn(ctx.MakeType<TTupleExprType>(children)); 
                 return TStatus::Ok;
             }
 
@@ -185,9 +185,9 @@ private:
                 }
 
                 TTypeAnnotationNode::TListType children;
-                children.push_back(node.World().Ref().GetTypeAnn());
+                children.push_back(node.World().Ref().GetTypeAnn()); 
                 children.push_back(ctx.MakeType<TDataExprType>(EDataSlot::Yson));
-                node.Ptr()->SetTypeAnn(ctx.MakeType<TTupleExprType>(children));
+                node.Ptr()->SetTypeAnn(ctx.MakeType<TTupleExprType>(children)); 
                 return TStatus::Ok;
             }
 
@@ -216,7 +216,7 @@ private:
             return TStatus::Error;
         }
 
-        node.Ptr()->SetTypeAnn(node.Ref().Child(0)->GetTypeAnn());
+        node.Ptr()->SetTypeAnn(node.Ref().Child(0)->GetTypeAnn()); 
         return TStatus::Ok;
     }
 
@@ -278,7 +278,7 @@ private:
             return TStatus::Error;
         }
 
-        node.Ptr()->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+        node.Ptr()->SetTypeAnn(ctx.MakeType<TUnitExprType>()); 
         return TStatus::Ok;
     }
 
@@ -308,7 +308,7 @@ private:
 
             TVector<TExprBase> convertedValues;
             for (const auto& value : tuple) {
-                auto valueType = value.Ref().GetTypeAnn();
+                auto valueType = value.Ref().GetTypeAnn(); 
                 if (valueType->GetKind() != ETypeAnnotationKind::Struct) {
                     ctx.AddError(TIssue(pos, TStringBuilder()
                         << "Expected structs as input, but got: " << *valueType));
@@ -330,7 +330,7 @@ private:
                 convertedValues.push_back(TExprBase(node));
             }
 
-            auto list = Build<TCoAsList>(ctx, node.Pos())
+            auto list = Build<TCoAsList>(ctx, node.Pos()) 
                 .Add(convertedValues)
                 .Done();
 
@@ -340,7 +340,7 @@ private:
 
         const TStructExprType* rowType = nullptr;
 
-        auto inputType = node.Input().Ref().GetTypeAnn();
+        auto inputType = node.Input().Ref().GetTypeAnn(); 
         if (inputType->GetKind() == ETypeAnnotationKind::List) {
             auto listType = inputType->Cast<TListExprType>();
             auto itemType = listType->GetItemType();
@@ -407,11 +407,11 @@ private:
                 columns.push_back(ctx.NewAtom(node.Pos(), item->GetName()));
             }
 
-            node.Ptr()->ChildRef(TKiWriteTable::idx_Settings) = Build<TCoNameValueTupleList>(ctx, node.Pos())
+            node.Ptr()->ChildRef(TKiWriteTable::idx_Settings) = Build<TCoNameValueTupleList>(ctx, node.Pos()) 
                 .Add(node.Settings())
                 .Add()
                     .Name().Build("input_columns")
-                    .Value<TCoAtomList>()
+                    .Value<TCoAtomList>() 
                         .Add(columns)
                         .Build()
                     .Build()
@@ -420,7 +420,7 @@ private:
 
             return TStatus::Repeat;
         } else {
-            for (const auto& atom : TCoNameValueTuple(inputColumns).Value().Cast<TCoAtomList>()) {
+            for (const auto& atom : TCoNameValueTuple(inputColumns).Value().Cast<TCoAtomList>()) { 
                 YQL_ENSURE(rowType->FindItem(atom.Value()));
             }
         }
@@ -434,7 +434,7 @@ private:
             return TStatus::Error;
         }
 
-        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn()); 
         return TStatus::Ok;
     }
 
@@ -454,7 +454,7 @@ private:
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!filterLambda->GetTypeAnn()) {
+        if (!filterLambda->GetTypeAnn()) { 
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -467,7 +467,7 @@ private:
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!updateLambda->GetTypeAnn()) {
+        if (!updateLambda->GetTypeAnn()) { 
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -475,7 +475,7 @@ private:
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto updateResultType = updateLambda->GetTypeAnn()->Cast<TStructExprType>();
+        auto updateResultType = updateLambda->GetTypeAnn()->Cast<TStructExprType>(); 
         for (auto& item : updateResultType->GetItems()) {
             const auto& name = item->GetName();
 
@@ -500,7 +500,7 @@ private:
         auto status = ConvertTableRowType(updateBody, *table, ctx);
         if (status != IGraphTransformer::TStatus::Ok) {
             if (status == IGraphTransformer::TStatus::Repeat) {
-                updateLambda = Build<TCoLambda>(ctx, node.Update().Pos())
+                updateLambda = Build<TCoLambda>(ctx, node.Update().Pos()) 
                     .Args(node.Update().Args())
                     .Body(updateBody)
                     .Done()
@@ -514,7 +514,7 @@ private:
             return TStatus::Error;
         }
 
-        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn()); 
         return TStatus::Ok;
     }
 
@@ -534,7 +534,7 @@ private:
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!filterLambda->GetTypeAnn()) {
+        if (!filterLambda->GetTypeAnn()) { 
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -546,7 +546,7 @@ private:
             return TStatus::Error;
         }
 
-        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn()); 
         return TStatus::Ok;
     }
 
@@ -570,11 +570,11 @@ private:
 
         for (auto item : create.Columns()) {
             auto columnTuple = item.Cast<TExprList>();
-            auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
+            auto nameNode = columnTuple.Item(0).Cast<TCoAtom>(); 
             auto typeNode = columnTuple.Item(1);
 
             auto columnName = TString(nameNode.Value());
-            auto columnType = typeNode.Ref().GetTypeAnn();
+            auto columnType = typeNode.Ref().GetTypeAnn(); 
             YQL_ENSURE(columnType && columnType->GetKind() == ETypeAnnotationKind::Type);
 
             auto type = columnType->Cast<TTypeExprType>()->GetType();
@@ -832,7 +832,7 @@ private:
         bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
         YQL_ENSURE(tableDesc.Load(ctx, sysColumnsEnabled));
 
-        create.Ptr()->SetTypeAnn(create.World().Ref().GetTypeAnn());
+        create.Ptr()->SetTypeAnn(create.World().Ref().GetTypeAnn()); 
         return TStatus::Ok;
     }
 
@@ -850,7 +850,7 @@ private:
             return TStatus::Error;
         }
 
-        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn()); 
         return TStatus::Ok;
     }
 
@@ -1018,7 +1018,7 @@ private:
             }
         }
 
-        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn()); 
         return TStatus::Ok;
     }
 
@@ -1133,7 +1133,7 @@ private:
         return TStatus::Error;
     }
 
-    virtual TStatus HandleCommit(NNodes::TCoCommit node, TExprContext& ctx) override {
+    virtual TStatus HandleCommit(NNodes::TCoCommit node, TExprContext& ctx) override { 
         auto settings = NCommon::ParseCommitSettings(node, ctx);
 
         bool isFlushCommit = false;
@@ -1172,7 +1172,7 @@ private:
                 break;
         }
 
-        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn()); 
         return TStatus::Ok;
     }
 
@@ -1235,10 +1235,10 @@ private:
         }
 
         TTypeAnnotationNode::TListType children;
-        children.push_back(node.World().Ref().GetTypeAnn());
+        children.push_back(node.World().Ref().GetTypeAnn()); 
         children.push_back(node.Query().Ref().GetTypeAnn());
         auto tupleAnn = ctx.MakeType<TTupleExprType>(children);
-        node.Ptr()->SetTypeAnn(tupleAnn);
+        node.Ptr()->SetTypeAnn(tupleAnn); 
 
         return TStatus::Ok;
     }
@@ -1256,7 +1256,7 @@ private:
 
             auto optSelectType = ctx.MakeType<TOptionalExprType>(selectType);
 
-            node.Ptr()->SetTypeAnn(optSelectType);
+            node.Ptr()->SetTypeAnn(optSelectType); 
 
             return TStatus::Ok;
         }
@@ -1278,19 +1278,19 @@ private:
         }
 
         if (node.Maybe<TKiUpdateRow>()) {
-            node.Ptr()->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+            node.Ptr()->SetTypeAnn(ctx.MakeType<TVoidExprType>()); 
 
             return TStatus::Ok;
         }
 
         if (node.Maybe<TKiEraseRow>()) {
-            node.Ptr()->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+            node.Ptr()->SetTypeAnn(ctx.MakeType<TVoidExprType>()); 
 
             return TStatus::Ok;
         }
 
         if (node.Maybe<TKiSetResult>()) {
-            node.Ptr()->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+            node.Ptr()->SetTypeAnn(ctx.MakeType<TVoidExprType>()); 
 
             return TStatus::Ok;
         }
@@ -1307,16 +1307,16 @@ private:
             }
 
             auto& lambda = map.Ptr()->ChildRef(TKiMapParameter::idx_Lambda);
-            auto itemType = map.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+            auto itemType = map.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType(); 
             if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (!lambda->GetTypeAnn()) {
+            if (!lambda->GetTypeAnn()) { 
                 return IGraphTransformer::TStatus::Repeat;
             }
 
-            map.Ptr()->SetTypeAnn(ctx.MakeType<TListExprType>(lambda->GetTypeAnn()));
+            map.Ptr()->SetTypeAnn(ctx.MakeType<TListExprType>(lambda->GetTypeAnn())); 
 
             return TStatus::Ok;
         }
@@ -1333,22 +1333,22 @@ private:
             }
 
             auto& lambda = map.Ptr()->ChildRef(TKiFlatMapParameter::idx_Lambda);
-            auto itemType = map.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+            auto itemType = map.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType(); 
             if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (!lambda->GetTypeAnn()) {
+            if (!lambda->GetTypeAnn()) { 
                 return IGraphTransformer::TStatus::Repeat;
             }
 
-            auto retKind = lambda->GetTypeAnn()->GetKind();
+            auto retKind = lambda->GetTypeAnn()->GetKind(); 
             if (retKind != ETypeAnnotationKind::List) {
                 ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()), TStringBuilder() << "Expected list as labmda return type, but got: " << *lambda->GetTypeAnn()));
                 return IGraphTransformer::TStatus::Error;
             }
 
-            map.Ptr()->SetTypeAnn(lambda->GetTypeAnn());
+            map.Ptr()->SetTypeAnn(lambda->GetTypeAnn()); 
 
             return TStatus::Ok;
         }
@@ -1372,7 +1372,7 @@ private:
                 return IGraphTransformer::TStatus::Error;
             }
 
-            auto predicateType = condEffect.Predicate().Ref().GetTypeAnn()->Cast<TDataExprType>();
+            auto predicateType = condEffect.Predicate().Ref().GetTypeAnn()->Cast<TDataExprType>(); 
             YQL_ENSURE(predicateType);
 
             if (predicateType->GetSlot() != EDataSlot::Bool) {
@@ -1384,7 +1384,7 @@ private:
                 return IGraphTransformer::TStatus::Error;
             }
 
-            condEffect.Ptr()->SetTypeAnn(condEffect.Effect().Ref().GetTypeAnn());
+            condEffect.Ptr()->SetTypeAnn(condEffect.Effect().Ref().GetTypeAnn()); 
 
             return TStatus::Ok;
         }

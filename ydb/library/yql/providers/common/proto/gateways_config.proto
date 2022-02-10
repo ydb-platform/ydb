@@ -3,41 +3,41 @@ option java_package = "ru.yandex.yql.proto";
 
 import "ydb/library/yql/protos/clickhouse.proto";
 
-/////////////////////////////// common ///////////////////////////////
-
-message TActivationByHour {
-    required uint32 Hour = 1;
-    required uint32 Percentage = 2;
-}
-
-message TActivationPercentage {
-    optional uint32 Percentage = 1 [default = 0];
-    repeated TActivationByHour ByHour = 2;
-    repeated string IncludeUsers = 3;
-    repeated string ExcludeUsers = 4;
-    optional bool ExcludeRobots = 5 [default = true];
-}
-
+/////////////////////////////// common /////////////////////////////// 
+ 
+message TActivationByHour { 
+    required uint32 Hour = 1; 
+    required uint32 Percentage = 2; 
+} 
+ 
+message TActivationPercentage { 
+    optional uint32 Percentage = 1 [default = 0]; 
+    repeated TActivationByHour ByHour = 2; 
+    repeated string IncludeUsers = 3; 
+    repeated string ExcludeUsers = 4; 
+    optional bool ExcludeRobots = 5 [default = true]; 
+} 
+ 
 message TAttr {
     required string Name = 1;
     required string Value = 2;
-    optional TActivationPercentage Activation = 3;
+    optional TActivationPercentage Activation = 3; 
 }
 
-message TRemoteFilePattern {
-    required string Pattern = 1; // regexp to match
-    required string Cluster = 2;  // replacement string for YT server
-    required string Path = 3;    // replacement string for remote file path
-}
-
-enum EYtLogLevel {
-    YL_NONE        = -1;
-    YL_FATAL       = 0;
-    YL_ERROR       = 1;
-    YL_INFO        = 2;
-    YL_DEBUG       = 3;
-};
-
+message TRemoteFilePattern { 
+    required string Pattern = 1; // regexp to match 
+    required string Cluster = 2;  // replacement string for YT server 
+    required string Path = 3;    // replacement string for remote file path 
+} 
+ 
+enum EYtLogLevel { 
+    YL_NONE        = -1; 
+    YL_FATAL       = 0; 
+    YL_ERROR       = 1; 
+    YL_INFO        = 2; 
+    YL_DEBUG       = 3; 
+}; 
+ 
 enum EHostScheme {
     HS_HTTP        = 0;
     HS_HTTPS       = 1;
@@ -57,40 +57,40 @@ message THttpGatewayConfig {
     optional uint64 MaxSimulatenousDownloadsSize = 2;
 }
 
-/////////////////////////////// YT ///////////////////////////////
-
-message TYtClusterConfig {
+/////////////////////////////// YT /////////////////////////////// 
+ 
+message TYtClusterConfig { 
     optional string Name = 1; // Short cluster name
     optional string Cluster = 2; // Real cluster server name with port
-    optional bool Default = 3 [default = false]; // Default cluster
-    optional string YTToken = 4; // token to use at YT servers
-    optional string YTName = 5; // YT cluster name
+    optional bool Default = 3 [default = false]; // Default cluster 
+    optional string YTToken = 4; // token to use at YT servers 
+    optional string YTName = 5; // YT cluster name 
 
     repeated TAttr Settings = 100;
 }
 
-message TYtGatewayConfig {
-    optional uint32 GatewayThreads = 1 [default = 0]; // Number of gateway MtpQueue threads. The adaptive MtpQueue will be used for 0 value
-    optional EYtLogLevel YtLogLevel = 2 [default = YL_ERROR]; // The verbosity level of YT log
-    optional string PerfToolsPath = 4; // Path to perftools libraries
-    optional bool PerfToolsFromPackage = 5; // Use perftools from package
-    optional string MrJobBin = 6; // Path to mrjob executable. If not set then main executable will be used
-    optional string MrJobBinMd5 = 13; // MD5 checksum of mrjob executable. Should not be specified directly
-    optional string MrJobUdfsDir = 7; // Path to linux udfs. If not set then loaded into main executable will be used
+message TYtGatewayConfig { 
+    optional uint32 GatewayThreads = 1 [default = 0]; // Number of gateway MtpQueue threads. The adaptive MtpQueue will be used for 0 value 
+    optional EYtLogLevel YtLogLevel = 2 [default = YL_ERROR]; // The verbosity level of YT log 
+    optional string PerfToolsPath = 4; // Path to perftools libraries 
+    optional bool PerfToolsFromPackage = 5; // Use perftools from package 
+    optional string MrJobBin = 6; // Path to mrjob executable. If not set then main executable will be used 
+    optional string MrJobBinMd5 = 13; // MD5 checksum of mrjob executable. Should not be specified directly 
+    optional string MrJobUdfsDir = 7; // Path to linux udfs. If not set then loaded into main executable will be used 
     optional bool ExecuteUdfLocallyIfPossible = 8; // Turns on local execution mode for calc job with UDF.
     optional bool LocalChainTest = 9 [default = false]; // Chain local execution jobs for test purpose.
-    optional string YtDebugLogFile = 10; // File for full YT debug log
-    optional uint64 YtDebugLogSize = 11 [default = 0]; // Max YT debug log size
-    optional bool YtDebugLogAlwaysWrite = 12 [default = false]; // Write YT debug log always or on error only
+    optional string YtDebugLogFile = 10; // File for full YT debug log 
+    optional uint64 YtDebugLogSize = 11 [default = 0]; // Max YT debug log size 
+    optional bool YtDebugLogAlwaysWrite = 12 [default = false]; // Write YT debug log always or on error only 
     optional string LocalChainFile = 14; // File to dump table contet in test mode
 
-    repeated TRemoteFilePattern RemoteFilePatterns = 100;
-    repeated TYtClusterConfig ClusterMapping = 101; // Accepted cluster shortcuts. All names not from this list will be rejected
-    repeated TAttr DefaultSettings = 102;
+    repeated TRemoteFilePattern RemoteFilePatterns = 100; 
+    repeated TYtClusterConfig ClusterMapping = 101; // Accepted cluster shortcuts. All names not from this list will be rejected 
+    repeated TAttr DefaultSettings = 102; 
 }
 
-/////////////////////////////// Kikimr ///////////////////////////////
-
+/////////////////////////////// Kikimr /////////////////////////////// 
+ 
 message THostPort {
     required string Host = 1;
     required uint32 Port = 2;
@@ -163,8 +163,8 @@ message TYdbGatewayConfig {
     repeated TAttr DefaultSettings = 4;
 }
 
-///////////////////////////// ClickHouse /////////////////////////////
-
+///////////////////////////// ClickHouse ///////////////////////////// 
+ 
 message TClickHouseClusterConfig {
     optional string Name = 1;
     optional bool Default = 2 [default = false];
@@ -407,17 +407,17 @@ message TDqGatewayConfig {
     repeated TAttr DefaultSettings = 102;
 }
 
-/////////////////////////////// Yql Core ///////////////////////////////
-
-message TCoreAttr {
-    required string Name = 1;
-    repeated string Args = 2;
-}
-
-message TYqlCoreConfig {
-    repeated TCoreAttr Flags = 1;
-}
-
+/////////////////////////////// Yql Core /////////////////////////////// 
+ 
+message TCoreAttr { 
+    required string Name = 1; 
+    repeated string Args = 2; 
+} 
+ 
+message TYqlCoreConfig { 
+    repeated TCoreAttr Flags = 1; 
+} 
+ 
 /////////////////////////////// Sql Core ///////////////////////////////
 message TWarnAsErrorByHourPercentage {
     required uint32 Hour = 1;
@@ -429,23 +429,23 @@ message TSqlCoreConfig {
                                                                      // warning to become an error
     repeated TWarnAsErrorByHourPercentage V0SyntaxWarnAsErrorByHour = 2;
     repeated string NoV0SyntaxErrorForUsers = 3;
-
-    repeated string TranslationFlags = 4;
+ 
+    repeated string TranslationFlags = 4; 
 }
 
-/////////////////////////////// Root ///////////////////////////////
-
+/////////////////////////////// Root /////////////////////////////// 
+ 
 message TGatewaysConfig {
-    optional TYtGatewayConfig Yt = 1;
-    optional TKikimrGatewayConfig Kikimr = 2;
-    optional TClickHouseGatewayConfig ClickHouse = 3;
+    optional TYtGatewayConfig Yt = 1; 
+    optional TKikimrGatewayConfig Kikimr = 2; 
+    optional TClickHouseGatewayConfig ClickHouse = 3; 
     optional TRtmrGatewayConfig Rtmr = 4;
     optional TKikimrMvpGatewayConfig KikimrMvp = 5;
     optional TStatGatewayConfig Stat = 6;
     optional TChytGatewayConfig Chyt = 7;
     optional TSolomonGatewayConfig Solomon = 8;
     optional TFileStorageAdditionalConfig Fs = 9;
-    optional TYqlCoreConfig YqlCore = 10;
+    optional TYqlCoreConfig YqlCore = 10; 
     optional TPostgresqlGatewayConfig Postgresql = 11;
     optional TSqlCoreConfig SqlCore = 12;
     optional TDqGatewayConfig Dq = 13;

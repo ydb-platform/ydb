@@ -1,17 +1,17 @@
-#include "yql_type_mkql.h"
+#include "yql_type_mkql.h" 
 
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/mkql_runtime_version.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
-
+ 
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/public/udf/udf_type_inspection.h>
-
+ 
 #include <ydb/library/yql/utils/yql_panic.h>
 
-#include <util/generic/vector.h>
-#include <util/string/cast.h>
+#include <util/generic/vector.h> 
+#include <util/string/cast.h> 
 
 namespace NYql {
 namespace NCommon {
@@ -22,8 +22,8 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
         auto data = annotation.Cast<TDataExprType>();
 
         auto slot = data->GetSlot();
-        const auto schemeType = NUdf::GetDataTypeInfo(slot).TypeId;
-        if (NUdf::TDataType<NUdf::TDecimal>::Id == schemeType) {
+        const auto schemeType = NUdf::GetDataTypeInfo(slot).TypeId; 
+        if (NUdf::TDataType<NUdf::TDecimal>::Id == schemeType) { 
             const auto params = static_cast<const TDataExprParamsType&>(annotation);
             return pgmBuilder.NewDecimalType(FromString<ui8>(params.GetParamOne()), FromString<ui8>(params.GetParamTwo()));
         } else {
@@ -34,16 +34,16 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
     case ETypeAnnotationKind::Struct: {
         auto structObj = annotation.Cast<TStructExprType>();
         std::vector<std::pair<std::string_view, NKikimr::NMiniKQL::TType*>> members;
-        members.reserve(structObj->GetItems().size());
-
+        members.reserve(structObj->GetItems().size()); 
+ 
         for (auto& item : structObj->GetItems()) {
             auto itemType = BuildType(*item->GetItemType(), pgmBuilder, err, withTagged);
             if (!itemType) {
                 return nullptr;
             }
-            members.emplace_back(item->GetName(), itemType);
+            members.emplace_back(item->GetName(), itemType); 
         }
-        return pgmBuilder.NewStructType(members);
+        return pgmBuilder.NewStructType(members); 
     }
 
     case ETypeAnnotationKind::List: {
@@ -67,7 +67,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
     case ETypeAnnotationKind::Tuple: {
         auto tuple = annotation.Cast<TTupleExprType>();
         TVector<NKikimr::NMiniKQL::TType*> elements;
-        elements.reserve(tuple->GetItems().size());
+        elements.reserve(tuple->GetItems().size()); 
         for (auto& child : tuple->GetItems()) {
             elements.push_back(BuildType(*child, pgmBuilder, err, withTagged));
             if (!elements.back()) {
@@ -203,19 +203,19 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
     }
 }
 
-NKikimr::NMiniKQL::TType* BuildType(TPositionHandle pos, const TTypeAnnotationNode& annotation, NKikimr::NMiniKQL::TProgramBuilder& pgmBuilder, bool withTagged) {
+NKikimr::NMiniKQL::TType* BuildType(TPositionHandle pos, const TTypeAnnotationNode& annotation, NKikimr::NMiniKQL::TProgramBuilder& pgmBuilder, bool withTagged) { 
     TStringStream err;
     auto type = BuildType(annotation, pgmBuilder, err, withTagged);
     if (!type) {
-        ythrow TNodeException(pos) << err.Str();
+        ythrow TNodeException(pos) << err.Str(); 
     }
     return type;
 }
 
-NKikimr::NMiniKQL::TType* BuildType(const TExprNode& owner, const TTypeAnnotationNode& annotation, NKikimr::NMiniKQL::TProgramBuilder& pgmBuilder, bool withTagged) {
-    return BuildType(owner.Pos(), annotation, pgmBuilder, withTagged);
-}
-
+NKikimr::NMiniKQL::TType* BuildType(const TExprNode& owner, const TTypeAnnotationNode& annotation, NKikimr::NMiniKQL::TProgramBuilder& pgmBuilder, bool withTagged) { 
+    return BuildType(owner.Pos(), annotation, pgmBuilder, withTagged); 
+} 
+ 
 const TTypeAnnotationNode* ConvertMiniKQLType(TPosition position, NKikimr::NMiniKQL::TType* type, TExprContext& ctx) {
     using namespace NKikimr::NMiniKQL;
     switch (type->GetKind()) {
@@ -228,7 +228,7 @@ const TTypeAnnotationNode* ConvertMiniKQLType(TPosition position, NKikimr::NMini
     case TType::EKind::Data:
     {
         auto dataType = static_cast<TDataType*>(type);
-        auto slot = NUdf::FindDataSlot(dataType->GetSchemeType());
+        auto slot = NUdf::FindDataSlot(dataType->GetSchemeType()); 
         YQL_ENSURE(slot, "Unknown datatype: " << dataType->GetSchemeType());
         if (*slot == EDataSlot::Decimal) {
             const auto params = static_cast<TDataDecimalType*>(dataType)->GetParams();

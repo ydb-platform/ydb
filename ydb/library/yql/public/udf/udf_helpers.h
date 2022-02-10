@@ -6,11 +6,11 @@
 #include "udf_terminator.h"
 #include "udf_type_builder.h"
 #include "udf_type_inspection.h"
-#include "udf_version.h"
+#include "udf_version.h" 
 
 #include <util/generic/yexception.h>
-#include <util/generic/string.h>
-#include <util/generic/strbuf.h>
+#include <util/generic/string.h> 
+#include <util/generic/strbuf.h> 
 #include <util/string/builder.h>
 
 
@@ -25,20 +25,20 @@ namespace NUdf {
         return {};
 #endif
     }
-
-    TString LoadResourceOnce(TStringBuf resourceId);
-
-    inline void SetIRImplementation(IFunctionTypeInfoBuilder& builder, TStringBuf resourceId, TStringBuf functionName) {
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 16)
-        if (functionName) {
-            builder.IRImplementation(LoadResourceOnce(resourceId), resourceId, functionName);
-        }
-#else
-        Y_UNUSED(builder);
-        Y_UNUSED(resourceId);
-        Y_UNUSED(functionName);
-#endif
-    }
+ 
+    TString LoadResourceOnce(TStringBuf resourceId); 
+ 
+    inline void SetIRImplementation(IFunctionTypeInfoBuilder& builder, TStringBuf resourceId, TStringBuf functionName) { 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 16) 
+        if (functionName) { 
+            builder.IRImplementation(LoadResourceOnce(resourceId), resourceId, functionName); 
+        } 
+#else 
+        Y_UNUSED(builder); 
+        Y_UNUSED(resourceId); 
+        Y_UNUSED(functionName); 
+#endif 
+    } 
 }
 }
 
@@ -79,7 +79,7 @@ namespace NUdf {
             if (Name() == name) {                                                           \
                 typeBody if (!typesOnly) {                                                  \
                     create_impl                                                             \
-                    SetIRImplementation(builder, irResourceId, irFunctionName);             \
+                    SetIRImplementation(builder, irResourceId, irFunctionName);             \ 
                 }                                                                           \
                 return true;                                                                \
             } else {                                                                        \
@@ -97,9 +97,9 @@ namespace NUdf {
 #define UDF_IMPL(udfName, typeBody, members, init, irResourceId, irFunctionName) \
         UDF_IMPL_EX(udfName, typeBody, members, init, irResourceId, irFunctionName, builder.Implementation(new udfName(builder));)
 
-#define UDF(udfName, typeBody) UDF_IMPL(udfName, typeBody, ;, ;, "", "")
+#define UDF(udfName, typeBody) UDF_IMPL(udfName, typeBody, ;, ;, "", "") 
 
-#define UDF_RUN_IMPL(udfName, typeBody, members, init, irResourceId, irFunctionName)        \
+#define UDF_RUN_IMPL(udfName, typeBody, members, init, irResourceId, irFunctionName)        \ 
     struct udfName##Members {                                                               \
         members                                                                             \
     };                                                                                      \
@@ -160,7 +160,7 @@ namespace NUdf {
             if (Name() == name) {                                                           \
                 typeBody if (!typesOnly) {                                                  \
                     builder.Implementation(new udfName(builder));                           \
-                    SetIRImplementation(builder, irResourceId, irFunctionName);             \
+                    SetIRImplementation(builder, irResourceId, irFunctionName);             \ 
                 }                                                                           \
                 return true;                                                                \
             } else {                                                                        \
@@ -174,14 +174,14 @@ namespace NUdf {
         const ::NYql::NUdf::IValueBuilder* valueBuilder,                                 \
         const ::NYql::NUdf::TUnboxedValuePod* args) const
 
-#define UDF_RUN(udfName, typeBody) UDF_RUN_IMPL(udfName, typeBody, ;, ;, "", "")
+#define UDF_RUN(udfName, typeBody) UDF_RUN_IMPL(udfName, typeBody, ;, ;, "", "") 
 
 #define SIMPLE_UDF(udfName, signature) \
     UDF(udfName, builder.SimpleSignature<signature>();)
 
-#define SIMPLE_UDF_WITH_IR(udfName, signature, irResourceId, irFunctionName) \
-    UDF_IMPL(udfName, builder.SimpleSignature<signature>();, ;, ;, irResourceId, irFunctionName)
-
+#define SIMPLE_UDF_WITH_IR(udfName, signature, irResourceId, irFunctionName) \ 
+    UDF_IMPL(udfName, builder.SimpleSignature<signature>();, ;, ;, irResourceId, irFunctionName) 
+ 
 #define SIMPLE_UDF_WITH_CREATE_IMPL(udfName, signature, create_impl) \
     UDF_IMPL_EX(udfName, builder.SimpleSignature<signature>();, ;, ;, "", "", create_impl)
 

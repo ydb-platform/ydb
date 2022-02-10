@@ -1,6 +1,6 @@
 #pragma once
 
-#include "yql_ast.h"
+#include "yql_ast.h" 
 #include "yql_errors.h"
 #include "yql_pos_handle.h"
 
@@ -30,8 +30,8 @@ public:
     // non-indexed version must be used (at root or as lambda body)
     TExprNodeBuilder& Atom(ui32 index, TPositionHandle pos, const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent);
     TExprNodeBuilder& Atom(TPositionHandle pos, const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent);
-    TExprNodeBuilder& Atom(ui32 index, const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent);
-    TExprNodeBuilder& Atom(const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent);
+    TExprNodeBuilder& Atom(ui32 index, const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent); 
+    TExprNodeBuilder& Atom(const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent); 
 
     TExprNodeBuilder List(ui32 index, TPositionHandle pos);
     TExprNodeBuilder List(TPositionHandle pos);
@@ -68,7 +68,7 @@ public:
     TExprNodeBuilder& Arg(const TStringBuf& name);
     TExprNodeBuilder& Arg(ui32 index, const TStringBuf& name, ui32 toIndex);
     TExprNodeBuilder& Arg(const TStringBuf& name, ui32 toIndex);
-    TExprNodeBuilder& Arg(const TExprNodePtr& arg);
+    TExprNodeBuilder& Arg(const TExprNodePtr& arg); 
 
     TExprNodeBuilder& Args(ui32 index, const TStringBuf& name, ui32 toIndex);
     TExprNodeBuilder& Args(const TStringBuf& name, ui32 toIndex);

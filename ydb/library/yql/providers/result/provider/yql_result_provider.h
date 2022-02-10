@@ -26,7 +26,7 @@ struct TResultProviderConfig : TThrRefBase {
 
     TResultProviderConfig(TTypeAnnotationContext& types,
         const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
-        IDataProvider::EResultFormat format, const TString& formatDetails, TResultWriterFactory writerFactory)
+        IDataProvider::EResultFormat format, const TString& formatDetails, TResultWriterFactory writerFactory) 
         : Types(types)
         , FunctionRegistry(functionRegistry)
         , WriterFactory(writerFactory)

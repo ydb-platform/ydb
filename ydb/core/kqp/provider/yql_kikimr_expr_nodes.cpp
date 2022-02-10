@@ -16,11 +16,11 @@ TString TKiReadTable::GetTable(TExprContext& ctx) const {
 TCoAtomList TKiReadTable::GetSelectColumns(TExprContext& ctx, const TKikimrTableDescription& tableData,
     bool withSystemColumns) const
 {
-    if (Select().Maybe<TCoVoid>()) {
+    if (Select().Maybe<TCoVoid>()) { 
         return BuildColumnsList(tableData, Pos(), ctx, withSystemColumns);
     }
 
-    return Select().Cast<TCoAtomList>();
+    return Select().Cast<TCoAtomList>(); 
 }
 
 TCoAtomList TKiReadTable::GetSelectColumns(TExprContext& ctx, const TKikimrTablesData& tablesData,

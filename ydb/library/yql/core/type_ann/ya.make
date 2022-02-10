@@ -1,10 +1,10 @@
 LIBRARY()
 
-OWNER(
+OWNER( 
     vvvv
-    g:yql
+    g:yql 
     g:yql_ydb_core
-)
+) 
 
 SRCS(
     type_ann_core.cpp

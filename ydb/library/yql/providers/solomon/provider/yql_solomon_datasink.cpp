@@ -64,10 +64,10 @@ public:
         return TypeAnnotationTransformer_->CanParse(node);
     }
 
-    void FillModifyCallables(THashSet<TStringBuf>& callables) override {
-        callables.insert(TSoWriteToShard::CallableName());
-    }
-
+    void FillModifyCallables(THashSet<TStringBuf>& callables) override { 
+        callables.insert(TSoWriteToShard::CallableName()); 
+    } 
+ 
     bool CanExecute(const TExprNode& node) override {
         return ExecutionTransformer_->CanExec(node);
     }

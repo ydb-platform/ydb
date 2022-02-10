@@ -181,7 +181,7 @@ struct TAstNode {
     inline ~TAstNode() {}
 
     void Destroy() {
-        TString().swap(Position.File);
+        TString().swap(Position.File); 
     }
 
 private:

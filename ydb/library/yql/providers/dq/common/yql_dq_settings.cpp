@@ -19,12 +19,12 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, FallbackPolicy);
     REGISTER_SETTING(*this, PullRequestTimeoutMs);
     REGISTER_SETTING(*this, PingTimeoutMs);
-    REGISTER_SETTING(*this, UseSimpleYtReader);
+    REGISTER_SETTING(*this, UseSimpleYtReader); 
     REGISTER_SETTING(*this, OptLLVM);
     REGISTER_SETTING(*this, ChannelBufferSize);
     REGISTER_SETTING(*this, OutputChunkMaxSize);
-    REGISTER_SETTING(*this, MemoryLimit);
-    REGISTER_SETTING(*this, EnableInsert);
+    REGISTER_SETTING(*this, MemoryLimit); 
+    REGISTER_SETTING(*this, EnableInsert); 
 
     REGISTER_SETTING(*this, _LiteralTimeout);
     REGISTER_SETTING(*this, _TableTimeout);

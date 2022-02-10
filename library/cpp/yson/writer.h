@@ -79,7 +79,7 @@ namespace NYson {
     ////////////////////////////////////////////////////////////////////////////////
 
     void ReformatYsonStream(
-        IInputStream* input,
+        IInputStream* input, 
         IOutputStream* output,
         EYsonFormat format = EYsonFormat::Binary,
         EYsonType type = ::NYson::EYsonType::Node);

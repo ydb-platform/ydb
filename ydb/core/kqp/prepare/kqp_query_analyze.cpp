@@ -70,7 +70,7 @@ bool IsSafePayloadCallable(const TCallable& callable) {
     if (auto maybeFilter = callable.Maybe<TCoFilterBase>()) {
         auto filter = maybeFilter.Cast();
 
-        if (filter.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+        if (filter.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) { 
             return true;
         }
 
@@ -84,7 +84,7 @@ bool IsSafePayloadCallable(const TCallable& callable) {
     if (auto maybeMap = callable.Maybe<TCoMapBase>()) {
         auto map = maybeMap.Cast();
 
-        if (map.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+        if (map.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) { 
             return true;
         }
 
@@ -94,7 +94,7 @@ bool IsSafePayloadCallable(const TCallable& callable) {
             } else {
                 auto body = map.Lambda().Body();
 
-                return body.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional ||
+                return body.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional || 
                     body.Maybe<TCoToList>() || body.Maybe<TCoAsList>();
             }
         }
@@ -203,7 +203,7 @@ void RequireImmediate(TExprBase node, TAnalyzeTxContext& ctx) {
     ctx.NodesInfo[node.Raw()].RequireImmediate = true;
 }
 
-void RequireImmediateKey(TCoNameValueTupleList key, TAnalyzeTxContext& ctx) {
+void RequireImmediateKey(TCoNameValueTupleList key, TAnalyzeTxContext& ctx) { 
     for (auto tuple : key) {
         YQL_ENSURE(tuple.Value().IsValid());
         RequireImmediate(tuple.Value().Cast(), ctx);
@@ -313,8 +313,8 @@ void RequireEffectPayloadSafety(TCoNameValueTupleList key, TCoNameValueTupleList
 }
 
 void MarkImmediateNodes(TExprBase node, TAnalyzeTxContext& ctx) {
-    if (node.Maybe<TCoDataType>() ||
-        node.Maybe<TCoOptionalType>())
+    if (node.Maybe<TCoDataType>() || 
+        node.Maybe<TCoOptionalType>()) 
     {
         ctx.NodesInfo[node.Raw()].IsImmediate = true;
     }
@@ -323,7 +323,7 @@ void MarkImmediateNodes(TExprBase node, TAnalyzeTxContext& ctx) {
         ctx.NodesInfo[node.Raw()].IsImmediate = true;
     }
 
-    if (node.Maybe<TCoParameter>()) {
+    if (node.Maybe<TCoParameter>()) { 
         ctx.NodesInfo[node.Raw()].IsImmediate = true;
     }
 
@@ -368,13 +368,13 @@ void MarkRequireImmediateNodes(TExprBase node, TAnalyzeTxContext& ctx) {
 }
 
 void PropagateImmediateNodes(TExprBase node, TAnalyzeTxContext& ctx) {
-    if (auto just = node.Maybe<TCoJust>()) {
+    if (auto just = node.Maybe<TCoJust>()) { 
         if (ctx.NodesInfo[just.Cast().Input().Raw()].IsImmediate) {
             ctx.NodesInfo[node.Raw()].IsImmediate = true;
         }
     }
 
-    if (auto nth = node.Maybe<TCoNth>()) {
+    if (auto nth = node.Maybe<TCoNth>()) { 
         if (ctx.NodesInfo[nth.Cast().Tuple().Raw()].IsImmediate) {
             ctx.NodesInfo[node.Raw()].IsImmediate = true;
         }
@@ -440,7 +440,7 @@ void AnalyzeNode(TExprBase node, TAnalyzeTxContext& ctx) {
 
         nodeInfo.IsExecutable = nodeInfo.IsExecutable && canExecute;
 
-        if (!TMaybeNode<TCoLambda>(child)) {
+        if (!TMaybeNode<TCoLambda>(child)) { 
             nodeInfo.AreInputsExecutable = nodeInfo.AreInputsExecutable && canExecute;
         }
 

@@ -1,13 +1,13 @@
 #pragma once
 
-#include "yql_issue.h"
-#include "yql_warning.h"
-
+#include "yql_issue.h" 
+#include "yql_warning.h" 
+ 
 #include <util/generic/maybe.h>
 #include <util/generic/stack.h>
-#include <util/generic/hash_set.h>
+#include <util/generic/hash_set.h> 
 
-#include <array>
+#include <array> 
 
 namespace NYql {
 
@@ -23,39 +23,39 @@ public:
     void AddIssues(const TPosition& pos, const TIssues& issues);
     bool HasOpenScopes() const;
 
-    TIssues GetIssues();
-    TIssues GetCompletedIssues() const;
+    TIssues GetIssues(); 
+    TIssues GetCompletedIssues() const; 
 
-    void Reset(const TIssues& issues);
+    void Reset(const TIssues& issues); 
     void Reset();
 
     void AddWarningRule(const TWarningRule &rule);
     void SetWarningToErrorTreatMessage(const TString& msg);
-
-    void SetIssueCountLimit(size_t limit) {
-        IssueLimit_ = limit;
-    }
-
+ 
+    void SetIssueCountLimit(size_t limit) { 
+        IssueLimit_ = limit; 
+    } 
+ 
 private:
-    TIssuePtr CheckUniqAndLimit(const TIssue& issue);
-
-    struct TIssueHash {
-        ui64 operator()(const TIssuePtr& p) {
-            return p->Hash();
-        }
-    };
-    struct TIssueEqual {
-        bool operator()(const TIssuePtr& l, const TIssuePtr& r) {
-            return *l == *r;
-        }
-    };
+    TIssuePtr CheckUniqAndLimit(const TIssue& issue); 
+ 
+    struct TIssueHash { 
+        ui64 operator()(const TIssuePtr& p) { 
+            return p->Hash(); 
+        } 
+    }; 
+    struct TIssueEqual { 
+        bool operator()(const TIssuePtr& l, const TIssuePtr& r) { 
+            return *l == *r; 
+        } 
+    }; 
     TStack<std::pair<TMaybe<TIssuePtr>, std::function<TIssuePtr()>>> RawIssues_;
     TIssues CompletedIssues_;
     TMaybe<TString> WarningToErrorTreatMessage_;
     TWarningPolicy WarningPolicy_;
-    std::array<TIssuePtr, NYql::TSeverityIds::ESeverityId_ARRAYSIZE> OverflowIssues_;
-    std::array<THashSet<TIssuePtr, TIssueHash, TIssueEqual>, NYql::TSeverityIds::ESeverityId_ARRAYSIZE> UniqueIssues_;
-    size_t IssueLimit_ = 0;
+    std::array<TIssuePtr, NYql::TSeverityIds::ESeverityId_ARRAYSIZE> OverflowIssues_; 
+    std::array<THashSet<TIssuePtr, TIssueHash, TIssueEqual>, NYql::TSeverityIds::ESeverityId_ARRAYSIZE> UniqueIssues_; 
+    size_t IssueLimit_ = 0; 
 };
 
 class TIssueScopeGuard: private TNonCopyable {

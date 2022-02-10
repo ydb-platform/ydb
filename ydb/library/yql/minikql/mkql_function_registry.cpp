@@ -262,10 +262,10 @@ public:
                             << ", function not found";
                 }
 
-                if (funcInfo->ModuleIRUniqID) {
-                    funcInfo->ModuleIRUniqID.prepend(moduleName);
-                }
-
+                if (funcInfo->ModuleIRUniqID) { 
+                    funcInfo->ModuleIRUniqID.prepend(moduleName); 
+                } 
+ 
                 return TStatus::Ok();
             }
 
@@ -488,7 +488,7 @@ void FindUdfsInDir(const TString& dirPath, TVector<TString>* paths)
                 }
 
                 paths->push_back(std::move(path));
-            }
+            } 
         }
     }
 }

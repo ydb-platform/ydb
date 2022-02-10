@@ -13,7 +13,7 @@ using namespace NYql::NNodes;
 namespace {
 
 template<typename TMapNode>
-TExprBase BuildMap(TExprBase input, TExprBase body, TCoArgument arg, TExprContext& ctx) {
+TExprBase BuildMap(TExprBase input, TExprBase body, TCoArgument arg, TExprContext& ctx) { 
     return Build<TMapNode>(ctx, input.Pos())
         .Input(input)
         .Lambda()
@@ -27,18 +27,18 @@ TExprBase BuildMap(TExprBase input, TExprBase body, TCoArgument arg, TExprContex
 }
 
 TExprNode::TPtr ExtractFilter(TExprBase node, TExprContext& ctx) {
-    if (!node.Maybe<TCoFlatMap>()) {
+    if (!node.Maybe<TCoFlatMap>()) { 
         return node.Ptr();
     }
 
-    auto flatmap = node.Cast<TCoFlatMap>();
+    auto flatmap = node.Cast<TCoFlatMap>(); 
     auto flatmapArg = flatmap.Lambda().Args().Arg(0);
 
-    if (flatmap.Input().Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::List) {
+    if (flatmap.Input().Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::List) { 
         return node.Ptr();
     }
 
-    if (auto maybeConditional = flatmap.Lambda().Body().Maybe<TCoConditionalValueBase>()) {
+    if (auto maybeConditional = flatmap.Lambda().Body().Maybe<TCoConditionalValueBase>()) { 
         auto conditional = maybeConditional.Cast();
 
         auto blacklistedNode = FindNode(conditional.Predicate().Ptr(), [](const TExprNode::TPtr& exprNode) {
@@ -55,7 +55,7 @@ TExprNode::TPtr ExtractFilter(TExprBase node, TExprContext& ctx) {
             return node.Ptr();
         }
 
-        auto filter = Build<TCoFilter>(ctx, node.Pos())
+        auto filter = Build<TCoFilter>(ctx, node.Pos()) 
             .Input(flatmap.Input())
             .Lambda()
                 .Args({"item"})
@@ -68,10 +68,10 @@ TExprNode::TPtr ExtractFilter(TExprBase node, TExprContext& ctx) {
 
         auto value = conditional.Value();
 
-        if (conditional.Maybe<TCoListIf>() || conditional.Maybe<TCoOptionalIf>()) {
-            return BuildMap<TCoMap>(filter, value, flatmapArg, ctx).Ptr();
+        if (conditional.Maybe<TCoListIf>() || conditional.Maybe<TCoOptionalIf>()) { 
+            return BuildMap<TCoMap>(filter, value, flatmapArg, ctx).Ptr(); 
         } else {
-            return BuildMap<TCoFlatMap>(filter, value, flatmapArg, ctx).Ptr();
+            return BuildMap<TCoFlatMap>(filter, value, flatmapArg, ctx).Ptr(); 
         }
     }
 
@@ -117,11 +117,11 @@ TExprNode::TPtr ExtractFilter(TExprBase node, TExprContext& ctx) {
 }
 
 TExprNode::TPtr ExtractCombineByKeyPreMap(TExprBase node, TExprContext& ctx) {
-    if (auto maybeCombine = node.Maybe<TCoCombineByKey>()) {
+    if (auto maybeCombine = node.Maybe<TCoCombineByKey>()) { 
         auto combine = maybeCombine.Cast();
         if (!IsKqlPureLambda(combine.PreMapLambda())) {
-            return Build<TCoCombineByKey>(ctx, node.Pos())
-                .Input<TCoMap>()
+            return Build<TCoCombineByKey>(ctx, node.Pos()) 
+                .Input<TCoMap>() 
                     .Input(combine.Input())
                     .Lambda(combine.PreMapLambda())
                     .Build()

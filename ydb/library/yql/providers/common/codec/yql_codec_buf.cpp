@@ -83,7 +83,7 @@ TStringBuf TInputBuf::ReadYtString(ui32 lookAhead) {
 
 void TInputBuf::Reset() {
     if (End_) {
-        Source_->ReturnBlock();
+        Source_->ReturnBlock(); 
     }
     Current_ = End_ = nullptr;
 }
@@ -93,29 +93,29 @@ void TInputBuf::Fill() {
         return;
     }
 
-    if (!Source_) {
-        return;
-    }
-
-    bool blockSwitch = false;
+    if (!Source_) { 
+        return; 
+    } 
+ 
+    bool blockSwitch = false; 
     if (End_) {
-        Source_->ReturnBlock();
-        blockSwitch = true;
+        Source_->ReturnBlock(); 
+        blockSwitch = true; 
     }
 
     if (ReadTimer_) {
         ReadTimer_->Acquire();
     }
 
-    std::tie(Current_, End_) = Source_->NextFilledBlock();
-    blockSwitch = blockSwitch && Current_ != End_;
+    std::tie(Current_, End_) = Source_->NextFilledBlock(); 
+    blockSwitch = blockSwitch && Current_ != End_; 
     MKQL_ADD_STAT(JobStats_, InputBytes, End_ - Current_);
     if (ReadTimer_) {
         ReadTimer_->Release();
     }
-    if (blockSwitch && OnNextBlockCallback_) {
-        OnNextBlockCallback_();
-    }
+    if (blockSwitch && OnNextBlockCallback_) { 
+        OnNextBlockCallback_(); 
+    } 
 }
 
 bool TInputBuf::TryReadSlow(char& value) {
@@ -138,9 +138,9 @@ extern "C" void InputBufReadManySlowThunk(TInputBuf& in, char* buffer, size_t co
 }
 
 extern "C" void InputBufSkipManySlowThunk(TInputBuf& in, size_t count) {
-    return in.SkipManySlow(count);
-}
-
+    return in.SkipManySlow(count); 
+} 
+ 
 char TInputBuf::ReadSlow() {
     End_ = Current_;
     Fill();
@@ -225,18 +225,18 @@ void TOutputBuf::Flush() {
     if (Current_ > Begin_) {
         if (WriteTimer_) {
             WriteTimer_->Acquire();
-        }
-        const ui64 avail = Current_ - Begin_;
-        MKQL_ADD_STAT(JobStats_, OutputBytes, avail);
-        WrittenBytes_ += avail;
-        Target_.ReturnBlock(avail, RecordBoundary_ ? std::make_optional(RecordBoundary_ - Begin_) : std::nullopt);
-        std::tie(Begin_, End_) = Target_.NextEmptyBlock();
-        Current_ = Begin_;
-        RecordBoundary_ = nullptr;
-        if (WriteTimer_) {
+        } 
+        const ui64 avail = Current_ - Begin_; 
+        MKQL_ADD_STAT(JobStats_, OutputBytes, avail); 
+        WrittenBytes_ += avail; 
+        Target_.ReturnBlock(avail, RecordBoundary_ ? std::make_optional(RecordBoundary_ - Begin_) : std::nullopt); 
+        std::tie(Begin_, End_) = Target_.NextEmptyBlock(); 
+        Current_ = Begin_; 
+        RecordBoundary_ = nullptr; 
+        if (WriteTimer_) { 
             WriteTimer_->Release();
         }
-   }
+   } 
 }
 
 void TOutputBuf::WriteManySlow(const char* buffer, size_t count) {

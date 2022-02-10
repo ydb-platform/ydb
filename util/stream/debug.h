@@ -40,7 +40,7 @@ IOutputStream& StdDbgStream() noexcept;
  * @see DBGTRACE
  */
 int StdDbgLevel() noexcept;
-
+ 
 /**
  * Standard debug stream.
  *

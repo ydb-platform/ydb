@@ -1,7 +1,7 @@
 #include "yql_eval_expr.h"
 #include "yql_transform_pipeline.h"
-#include "yql_out_transformers.h"
-
+#include "yql_out_transformers.h" 
+ 
 #include <ydb/library/yql/ast/serialize/yql_expr_serialize.h>
 #include <ydb/library/yql/core/type_ann/type_ann_core.h>
 #include <ydb/library/yql/core/type_ann/type_ann_expr.h>
@@ -12,9 +12,9 @@
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <ydb/library/yql/utils/log/log.h>
-
+ 
 #include <library/cpp/yson/node/node_io.h>
-#include <library/cpp/string_utils/base64/base64.h>
+#include <library/cpp/string_utils/base64/base64.h> 
 
 #include <util/string/builder.h>
 
@@ -83,86 +83,86 @@ bool CheckPendingArgs(const TExprNode& root, TNodeSet& visited, TNodeMap<const T
     return true;
 }
 
-class TMarkReachable {
-public:
-    TNodeSet Reachable;
-    TNodeMap<ui32> ExternalWorlds;
-    TDeque<TExprNode::TPtr> ExternalWorldsList;
-    bool HasConfigPending = false;
-
-public:
-    void Scan(const TExprNode& node) {
-        VisitExprByFirst(node, [this](const TExprNode& n) {
-            if (n.IsCallable(ConfigureName)) {
-                if (n.ChildrenSize() > 3 && n.Child(1)->Child(0)->Content() == ConfigProviderName) {
-                    bool pending = false;
-                    for (size_t i = 3; i < n.ChildrenSize(); ++i) {
-                        if (n.Child(i)->IsCallable("EvaluateAtom")) {
-                            pending = true;
-                            break;
-                        }
-                    }
-                    if (pending) {
-                        const TStringBuf command = n.Child(2)->Content();
-                        if (command == "AddFileByUrl") {
-                            PendingFileAliases.insert(n.Child(3)->Content());
-                        } else if (command == "AddFolderByUrl") {
-                            PendingFolderPrefixes.insert(n.Child(3)->Content());
-                        }
-                    }
-                }
-            }
-            return true;
-        });
-        ScanImpl(node);
+class TMarkReachable { 
+public: 
+    TNodeSet Reachable; 
+    TNodeMap<ui32> ExternalWorlds; 
+    TDeque<TExprNode::TPtr> ExternalWorldsList; 
+    bool HasConfigPending = false; 
+ 
+public: 
+    void Scan(const TExprNode& node) { 
+        VisitExprByFirst(node, [this](const TExprNode& n) { 
+            if (n.IsCallable(ConfigureName)) { 
+                if (n.ChildrenSize() > 3 && n.Child(1)->Child(0)->Content() == ConfigProviderName) { 
+                    bool pending = false; 
+                    for (size_t i = 3; i < n.ChildrenSize(); ++i) { 
+                        if (n.Child(i)->IsCallable("EvaluateAtom")) { 
+                            pending = true; 
+                            break; 
+                        } 
+                    } 
+                    if (pending) { 
+                        const TStringBuf command = n.Child(2)->Content(); 
+                        if (command == "AddFileByUrl") { 
+                            PendingFileAliases.insert(n.Child(3)->Content()); 
+                        } else if (command == "AddFolderByUrl") { 
+                            PendingFolderPrefixes.insert(n.Child(3)->Content()); 
+                        } 
+                    } 
+                } 
+            } 
+            return true; 
+        }); 
+        ScanImpl(node); 
     }
 
-private:
-    void ScanImpl(const TExprNode& node) {
-        if (!Visited.emplace(&node).second) {
-            return;
+private: 
+    void ScanImpl(const TExprNode& node) { 
+        if (!Visited.emplace(&node).second) { 
+            return; 
         }
 
-        if (node.IsCallable("Seq!")) {
-            for (ui32 i = 1; i < node.ChildrenSize(); ++i) {
-                auto lambda = node.Child(i);
-                auto arg = lambda->Child(0)->ChildPtr(0);
-                ui32 id = ExternalWorlds.size();
-                YQL_ENSURE(ExternalWorlds.emplace(arg.Get(), id).second);
-                ExternalWorldsList.push_back(arg);
-            }
-        }
+        if (node.IsCallable("Seq!")) { 
+            for (ui32 i = 1; i < node.ChildrenSize(); ++i) { 
+                auto lambda = node.Child(i); 
+                auto arg = lambda->Child(0)->ChildPtr(0); 
+                ui32 id = ExternalWorlds.size(); 
+                YQL_ENSURE(ExternalWorlds.emplace(arg.Get(), id).second); 
+                ExternalWorldsList.push_back(arg); 
+            } 
+        } 
 
-        static THashSet<TStringBuf> FILE_CALLABLES = {"FilePath", "FileContent", "FolderPath"};
-        if (node.IsCallable(FILE_CALLABLES)) {
-            const auto alias = node.Head().Content();
-            if (PendingFileAliases.contains(alias) || AnyOf(PendingFolderPrefixes, [alias](const TStringBuf prefix) { return alias.StartsWith(prefix); })) {
-                for (auto& curr: CurrentEvalNodes) {
-                    Reachable.erase(curr);
-                }
-                HasConfigPending = true;
-            }
-        }
+        static THashSet<TStringBuf> FILE_CALLABLES = {"FilePath", "FileContent", "FolderPath"}; 
+        if (node.IsCallable(FILE_CALLABLES)) { 
+            const auto alias = node.Head().Content(); 
+            if (PendingFileAliases.contains(alias) || AnyOf(PendingFolderPrefixes, [alias](const TStringBuf prefix) { return alias.StartsWith(prefix); })) { 
+                for (auto& curr: CurrentEvalNodes) { 
+                    Reachable.erase(curr); 
+                } 
+                HasConfigPending = true; 
+            } 
+        } 
 
-        if (node.IsCallable("QuoteCode")) {
-            Reachable.insert(&node);
-            return;
+        if (node.IsCallable("QuoteCode")) { 
+            Reachable.insert(&node); 
+            return; 
         }
-
-        bool pop = false;
+ 
+        bool pop = false; 
         if (node.IsCallable(EvaluationFuncs) || node.IsCallable(SubqueryExpandFuncs)) {
-            Reachable.insert(&node);
-            CurrentEvalNodes.insert(&node);
-            pop = true;
+            Reachable.insert(&node); 
+            CurrentEvalNodes.insert(&node); 
+            pop = true; 
         }
-
+ 
         if (node.IsCallable({ "EvaluateIf!", "EvaluateFor!" })) {
-            // scan predicate/list only
-            if (node.ChildrenSize() > 1) {
-                CurrentEvalNodes.insert(&node);
-                pop = true;
-                ScanImpl(*node.Child(1));
-            }
+            // scan predicate/list only 
+            if (node.ChildrenSize() > 1) { 
+                CurrentEvalNodes.insert(&node); 
+                pop = true; 
+                ScanImpl(*node.Child(1)); 
+            } 
         } else if (node.IsCallable(SubqueryExpandFuncs)) {
             // scan list only if it's wrapped by evaluation func
             ui32 index = 0;
@@ -180,24 +180,24 @@ private:
                     }
                 }
             }
-        } else {
-            for (const auto& child : node.Children()) {
-                ScanImpl(*child);
-            }
-        }
-        if (pop) {
-            CurrentEvalNodes.erase(&node);
-        }
+        } else { 
+            for (const auto& child : node.Children()) { 
+                ScanImpl(*child); 
+            } 
+        } 
+        if (pop) { 
+            CurrentEvalNodes.erase(&node); 
+        } 
     }
 
-private:
-    TNodeSet Visited;
-    THashSet<TStringBuf> PendingFileAliases;
-    THashSet<TStringBuf> PendingFolderPrefixes;
-    TNodeSet CurrentEvalNodes;
-};
-
-
+private: 
+    TNodeSet Visited; 
+    THashSet<TStringBuf> PendingFileAliases; 
+    THashSet<TStringBuf> PendingFolderPrefixes; 
+    TNodeSet CurrentEvalNodes; 
+}; 
+ 
+ 
 bool ValidateCalcWorlds(const TExprNode& node, const TTypeAnnotationContext& types, TNodeSet& visited) {
     if (!visited.emplace(&node).second) {
         return true;
@@ -222,7 +222,7 @@ bool ValidateCalcWorlds(const TExprNode& node, const TTypeAnnotationContext& typ
     }
 
     for (auto& dataProvider : types.DataSources) {
-        if (dataProvider->CanEvaluate(node)) {
+        if (dataProvider->CanEvaluate(node)) { 
             return true;
         }
     }
@@ -357,7 +357,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     if (ctx.Step.IsDone(TExprStep::ExprEval))
         return IGraphTransformer::TStatus::Ok;
 
-    YQL_CLOG(DEBUG, CoreEval) << "EvaluateExpression - start";
+    YQL_CLOG(DEBUG, CoreEval) << "EvaluateExpression - start"; 
     bool pure = false;
     TString nextProvider;
     TMaybe<IDataProvider*> calcProvider;
@@ -368,14 +368,14 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     bool isCodePipeline = false;
     TTransformationPipeline pipeline(&types);
     pipeline.AddServiceTransformers();
-    pipeline.AddPreTypeAnnotation();
+    pipeline.AddPreTypeAnnotation(); 
     pipeline.AddExpressionEvaluation(functionRegistry);
-    pipeline.AddIOAnnotation();
+    pipeline.AddIOAnnotation(); 
     pipeline.AddTypeAnnotationTransformer();
     pipeline.Add(CreateFunctorTransformer(
         [&](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
         output = input;
-        if (!input->GetTypeAnn()) {
+        if (!input->GetTypeAnn()) { 
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Lambda is not allowed as argument for function: " << input->Content()));
             return IGraphTransformer::TStatus::Error;
         }
@@ -407,8 +407,8 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     }), "TopLevelType", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR, "Ensure type of expression is correct");
     const bool forSubGraph = true;
     pipeline.AddPostTypeAnnotation(forSubGraph);
-    pipeline.Add(TExprLogTransformer::Sync("EvalExpressionOpt", NLog::EComponent::CoreEval, NLog::ELevel::TRACE),
-        "EvalOptTrace", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR, "EvalOptTrace");
+    pipeline.Add(TExprLogTransformer::Sync("EvalExpressionOpt", NLog::EComponent::CoreEval, NLog::ELevel::TRACE), 
+        "EvalOptTrace", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR, "EvalOptTrace"); 
     pipeline.AddOptimization(false);
     pipeline.Add(CreateFunctorTransformer(
         [&](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
@@ -431,14 +431,14 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             } else if (!calcTransfomer) {
                 for (auto& p : types.DataSources) {
                     TSyncMap syncList;
-                    if (p->CanBuildResult(*input, syncList)) {
+                    if (p->CanBuildResult(*input, syncList)) { 
                         bool canExec = true;
                         for (auto& x : syncList) {
                             if (x.first->Type() == TExprNode::World) {
                                 continue;
                             }
 
-                            if (!p->GetExecWorld(*x.first, calcWorldRoot)) {
+                            if (!p->GetExecWorld(*x.first, calcWorldRoot)) { 
                                 canExec = false;
                                 break;
                             }
@@ -455,7 +455,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                         }
 
                         if (canExec) {
-                            calcProvider = p.Get();
+                            calcProvider = p.Get(); 
                             output = (*calcProvider.Get())->CleanupWorld(input, ctx);
                             if (!output) {
                                 return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
@@ -474,7 +474,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
 
             if (!calcWorldRoot) {
                 calcWorldRoot = ctx.NewWorld(input->Pos());
-                calcWorldRoot->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+                calcWorldRoot->SetTypeAnn(ctx.MakeType<TUnitExprType>()); 
                 calcWorldRoot->SetState(TExprNode::EState::ConstrComplete);
             }
         }
@@ -486,18 +486,18 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
 
     auto fullTransformer = pipeline.Build();
 
-    TMarkReachable marked;
-    marked.Scan(*output);
+    TMarkReachable marked; 
+    marked.Scan(*output); 
 
-    THashSet<TStringBuf> modifyCallables;
-    modifyCallables.insert(WriteName);
-    modifyCallables.insert(ConfigureName);
-    modifyCallables.insert(CommitName);
-    modifyCallables.insert("CommitAll!");
-    for (auto& dataSink: types.DataSinks) {
-        dataSink->FillModifyCallables(modifyCallables);
-    }
-
+    THashSet<TStringBuf> modifyCallables; 
+    modifyCallables.insert(WriteName); 
+    modifyCallables.insert(ConfigureName); 
+    modifyCallables.insert(CommitName); 
+    modifyCallables.insert("CommitAll!"); 
+    for (auto& dataSink: types.DataSinks) { 
+        dataSink->FillModifyCallables(modifyCallables); 
+    } 
+ 
     IGraphTransformer::TStatus hasPendingEvaluations = IGraphTransformer::TStatus::Ok;
     TOptimizeExprSettings settings(nullptr);
     settings.VisitChanges = true;
@@ -845,7 +845,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
         }
 
         if (node->IsCallable("QuoteCode")) {
-            if (marked.Reachable.find(node.Get()) == marked.Reachable.cend()) {
+            if (marked.Reachable.find(node.Get()) == marked.Reachable.cend()) { 
                 hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus::Repeat);
                 return node;
             }
@@ -856,7 +856,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
 
             TNodeOnNodeOwnedMap knownArgs;
             TNodeOnNodeOwnedMap visited;
-            return QuoteCode(node->ChildPtr(0), ctx, knownArgs, visited, marked.ExternalWorlds);
+            return QuoteCode(node->ChildPtr(0), ctx, knownArgs, visited, marked.ExternalWorlds); 
         }
 
         if (!node->IsCallable(EvaluationFuncs)) {
@@ -867,11 +867,11 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             return nullptr;
         }
 
-        if (marked.Reachable.find(node.Get()) == marked.Reachable.cend()) {
-            if (marked.HasConfigPending) {
-                ctx.Step.Repeat(TExprStep::Configure);
-            }
-            hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, marked.HasConfigPending));
+        if (marked.Reachable.find(node.Get()) == marked.Reachable.cend()) { 
+            if (marked.HasConfigPending) { 
+                ctx.Step.Repeat(TExprStep::Configure); 
+            } 
+            hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, marked.HasConfigPending)); 
             return node;
         }
 
@@ -880,18 +880,18 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             TNodeSet visited;
             TNodeMap<const TExprNode*> activeArgs;
             bool hasUnresolvedTypes = false;
-            if (!CheckPendingArgs(*newArg, visited, activeArgs, marked.ExternalWorlds, ctx, false, hasUnresolvedTypes)) {
+            if (!CheckPendingArgs(*newArg, visited, activeArgs, marked.ExternalWorlds, ctx, false, hasUnresolvedTypes)) { 
                 return nullptr;
             }
 
             if (hasUnresolvedTypes) {
-                YQL_CLOG(DEBUG, CoreEval) << "EvaluateExpression - has unresolved types";
+                YQL_CLOG(DEBUG, CoreEval) << "EvaluateExpression - has unresolved types"; 
                 return node;
             }
         }
 
         TNodeOnNodeOwnedMap externalWorldReplaces;
-        for (auto& x : marked.ExternalWorlds) {
+        for (auto& x : marked.ExternalWorlds) { 
             externalWorldReplaces.emplace(x.first, ctx.NewWorld(x.first->Pos()));
         }
 
@@ -907,7 +907,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
         settings.VisitChanges = true;
         auto status = OptimizeExpr(clonedArg, clonedArg, [&](const TExprNode::TPtr& node, TExprContext& ctx) {
             Y_UNUSED(ctx);
-            if (node->IsCallable(modifyCallables) && node->ChildrenSize() > 0) {
+            if (node->IsCallable(modifyCallables) && node->ChildrenSize() > 0) { 
                 return node->ChildPtr(0);
             }
 
@@ -1009,23 +1009,23 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                     return nullptr;
                 }
 
-                dataNode = dataNode.AsList().front();
-            }
-            TString value;
-            if (dataNode.IsString()) {
-                value = dataNode.AsString();
+                dataNode = dataNode.AsList().front(); 
+            } 
+            TString value; 
+            if (dataNode.IsString()) { 
+                value = dataNode.AsString(); 
             } else {
-                YQL_ENSURE(dataNode.IsList() && dataNode.AsList().size() == 1 && dataNode.AsList().front().IsString(), "Unexpected atom value: " << NYT::NodeToYsonString(dataNode));
-                value = Base64Decode(dataNode.AsList().front().AsString());
+                YQL_ENSURE(dataNode.IsList() && dataNode.AsList().size() == 1 && dataNode.AsList().front().IsString(), "Unexpected atom value: " << NYT::NodeToYsonString(dataNode)); 
+                value = Base64Decode(dataNode.AsList().front().AsString()); 
             }
-            return ctx.NewAtom(node->Pos(), value);
+            return ctx.NewAtom(node->Pos(), value); 
         }
 
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TStringStream err;
         TProgramBuilder pgmBuilder(env, functionRegistry);
-        TType* mkqlType = NCommon::BuildType(*clonedArg->GetTypeAnn(), pgmBuilder, err);
+        TType* mkqlType = NCommon::BuildType(*clonedArg->GetTypeAnn(), pgmBuilder, err); 
         if (!mkqlType) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to process type: " << err.Str()));
             return nullptr;
@@ -1040,7 +1040,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
         }
 
         if (isTypePipeline) {
-            auto yson = TStringBuf(value->AsStringRef());
+            auto yson = TStringBuf(value->AsStringRef()); 
             auto type = NCommon::ParseTypeFromYson(yson, ctx, ctx.GetPosition(node->Pos()));
             if (!type) {
                 return nullptr;
@@ -1060,8 +1060,8 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                 if (input.IsCallable("WorldArg")) {
                     YQL_ENSURE(input.ChildrenSize() == 1 && input.Child(0)->IsAtom());
                     auto index = FromString<ui32>(input.Child(0)->Content());
-                    YQL_ENSURE(index < marked.ExternalWorldsList.size());
-                    YQL_ENSURE(replaces.emplace(&input, marked.ExternalWorldsList[index]).second);
+                    YQL_ENSURE(index < marked.ExternalWorldsList.size()); 
+                    YQL_ENSURE(replaces.emplace(&input, marked.ExternalWorldsList[index]).second); 
                 }
 
                 return true;
@@ -1073,7 +1073,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             return result;
         }
 
-        return NCommon::ValueToExprLiteral(clonedArg->GetTypeAnn(), *value, ctx, node->Pos());
+        return NCommon::ValueToExprLiteral(clonedArg->GetTypeAnn(), *value, ctx, node->Pos()); 
     }, ctx, settings);
 
     if (status.Level == IGraphTransformer::TStatus::Error) {
@@ -1081,11 +1081,11 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     }
 
     if (hasPendingEvaluations != IGraphTransformer::TStatus::Ok) {
-        YQL_CLOG(DEBUG, CoreEval) << "EvaluateExpression - has pending evaluations";
+        YQL_CLOG(DEBUG, CoreEval) << "EvaluateExpression - has pending evaluations"; 
         return hasPendingEvaluations;
     }
 
-    YQL_CLOG(DEBUG, CoreEval) << "EvaluateExpression - finish";
+    YQL_CLOG(DEBUG, CoreEval) << "EvaluateExpression - finish"; 
     // repeat some steps
     ctx.Step.Repeat(TExprStep::ValidateProviders);
     ctx.Step.Repeat(TExprStep::Configure);

@@ -192,8 +192,8 @@ public:
 
 private:
     friend class TComputationGraphBuildingVisitor;
-    friend class TComputationGraph;
-
+    friend class TComputationGraph; 
+ 
     TAllocState& AllocState;
     TIntrusivePtr<TMemoryUsageInfo> MemInfo;
     THolder<THolderFactory> HolderFactory;
@@ -427,8 +427,8 @@ private:
                 *NodeFactory,
                 *PatternNodes->HolderFactory,
                 PatternNodes->ValueBuilder.Get(),
-                ValidateMode,
-                ValidatePolicy,
+                ValidateMode, 
+                ValidatePolicy, 
                 GraphPerProcess,
                 PatternNodes->Mutables,
                 PatternNodes->ElementsCache,
@@ -515,9 +515,9 @@ private:
     const IFunctionRegistry& FunctionRegistry;
     TIntrusivePtr<TMemoryUsageInfo> MemInfo;
     THolder<TNodeFactory> NodeFactory;
-    NUdf::EValidateMode ValidateMode;
-    NUdf::EValidatePolicy ValidatePolicy;
-    EGraphPerProcess GraphPerProcess;
+    NUdf::EValidateMode ValidateMode; 
+    NUdf::EValidatePolicy ValidatePolicy; 
+    EGraphPerProcess GraphPerProcess; 
     TPatternNodes::TPtr PatternNodes;
     const bool ExternalAlloc;
 };
@@ -532,14 +532,14 @@ public:
 #ifndef NDEBUG
         CompOpts.AllocState.ActiveMemInfo.emplace(MemInfo.Get(), MemInfo);
 #endif
-        HolderFactory = MakeHolder<THolderFactory>(CompOpts.AllocState, *MemInfo, patternNodes->HolderFactory->GetFunctionRegistry());
+        HolderFactory = MakeHolder<THolderFactory>(CompOpts.AllocState, *MemInfo, patternNodes->HolderFactory->GetFunctionRegistry()); 
         ValueBuilder = MakeHolder<TDefaultValueBuilder>(*HolderFactory.Get(), compOpts.ValidatePolicy);
         ValueBuilder->SetSecureParamsProvider(CompOpts.SecureParamsProvider);
         ArrowMemoryPool = MakeArrowMemoryPool(CompOpts.AllocState);
     }
 
     ~TComputationGraph() {
-        auto stats = CompOpts.Stats;
+        auto stats = CompOpts.Stats; 
         auto& pagePool = HolderFactory->GetPagePool();
         MKQL_SET_MAX_STAT(stats, PagePool_PeakAllocated, pagePool.GetPeakAllocated());
         MKQL_SET_MAX_STAT(stats, PagePool_PeakUsed, pagePool.GetPeakUsed());

@@ -48,10 +48,10 @@
 #include <library/cpp/digest/md5/md5.h>
 
 #include <util/system/env.h>
-#include <util/generic/size_literals.h>
-#include <util/stream/file.h>
-#include <util/string/builder.h>
-
+#include <util/generic/size_literals.h> 
+#include <util/stream/file.h> 
+#include <util/string/builder.h> 
+ 
 namespace NYql {
 
 using namespace NCommon;
@@ -75,16 +75,16 @@ public:
     {
         try {
             return ExecuteUnsafe(lambda, columns, secureParams, fillSettings);
-        } catch (const NKikimr::TMemoryLimitExceededException& e) {
-            auto res = ResultFromError<IDqGateway::TResult>(TStringBuilder()
-                << "DQ computation exceeds the memory limit " << State->Settings->MemoryLimit.Get().GetOrElse(0) << ". Try to increase the limit using PRAGMA dq.MemoryLimit", pos);
-            return NThreading::MakeFuture(res);
-        } catch (const std::exception& e) {
-            return NThreading::MakeFuture(ResultFromException<IDqGateway::TResult>(e, pos));
+        } catch (const NKikimr::TMemoryLimitExceededException& e) { 
+            auto res = ResultFromError<IDqGateway::TResult>(TStringBuilder() 
+                << "DQ computation exceeds the memory limit " << State->Settings->MemoryLimit.Get().GetOrElse(0) << ". Try to increase the limit using PRAGMA dq.MemoryLimit", pos); 
+            return NThreading::MakeFuture(res); 
+        } catch (const std::exception& e) { 
+            return NThreading::MakeFuture(ResultFromException<IDqGateway::TResult>(e, pos)); 
         } catch (...) {
-            auto res = ResultFromError<IDqGateway::TResult>(CurrentExceptionMessage(), pos);
-            res.SetStatus(TIssuesIds::UNEXPECTED);
-            return NThreading::MakeFuture(res);
+            auto res = ResultFromError<IDqGateway::TResult>(CurrentExceptionMessage(), pos); 
+            res.SetStatus(TIssuesIds::UNEXPECTED); 
+            return NThreading::MakeFuture(res); 
         }
     }
 
@@ -121,16 +121,16 @@ public:
         NDq::TDqTaskRunnerContext executionContext;
         executionContext.FuncRegistry = State->FunctionRegistry;
 
-        executionContext.ComputationFactory = State->ComputationFactory;
+        executionContext.ComputationFactory = State->ComputationFactory; 
         executionContext.RandomProvider = randomProvider.Get();
         executionContext.TimeProvider = timeProvider.Get();
 
         NDq::TDqTaskRunnerMemoryLimits limits;
-        limits.ChannelBufferSize = 10_MB;
-        limits.OutputChunkMaxSize = 2_MB;
+        limits.ChannelBufferSize = 10_MB; 
+        limits.OutputChunkMaxSize = 2_MB; 
 
         NDq::TDqTaskRunnerSettings settings;
-        settings.OptLLVM = "OFF"; // Don't use LLVM for local execution
+        settings.OptLLVM = "OFF"; // Don't use LLVM for local execution 
         settings.SecureParams = secureParams;
         settings.CollectBasicStats = true;
         settings.CollectProfileStats = true;
@@ -150,21 +150,21 @@ public:
             NDq::ERunStatus status;
             while ((status = runner->Run()) == NDq::ERunStatus::PendingOutput || status == NDq::ERunStatus::Finished) {
                 NDqProto::TData data;
-                if (runner->GetOutputChannel(0)->PopAll(data) && !fillSettings.Discard) {
+                if (runner->GetOutputChannel(0)->PopAll(data) && !fillSettings.Discard) { 
                     rows.push_back(data);
                 }
                 if (status == NDq::ERunStatus::Finished) {
                     break;
                 }
-                if (!fillSettings.Discard) {
-                    if (fillSettings.AllResultsBytesLimit && runner->GetOutputChannel(0)->GetStats()->Bytes >= *fillSettings.AllResultsBytesLimit) {
-                        result.Truncated = true;
-                        break;
-                    }
-                    if (fillSettings.RowsLimitPerWrite && runner->GetOutputChannel(0)->GetStats()->RowsOut >= *fillSettings.RowsLimitPerWrite) {
-                        result.Truncated = true;
-                        break;
-                    }
+                if (!fillSettings.Discard) { 
+                    if (fillSettings.AllResultsBytesLimit && runner->GetOutputChannel(0)->GetStats()->Bytes >= *fillSettings.AllResultsBytesLimit) { 
+                        result.Truncated = true; 
+                        break; 
+                    } 
+                    if (fillSettings.RowsLimitPerWrite && runner->GetOutputChannel(0)->GetStats()->RowsOut >= *fillSettings.RowsLimitPerWrite) { 
+                        result.Truncated = true; 
+                        break; 
+                    } 
                 }
             }
 
@@ -562,12 +562,12 @@ private:
         }
     }
 
-    static TStatus FallbackCallback(const TDqStatePtr& state, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx)
+    static TStatus FallbackCallback(const TDqStatePtr& state, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) 
     {
-        if (state->Metrics) {
-            state->Metrics->IncCounter("dq", "Fallback");
+        if (state->Metrics) { 
+            state->Metrics->IncCounter("dq", "Fallback"); 
         }
-        state->Statistics[state->MetricId++].Entries.push_back(TOperationStatistics::TEntry("Fallback", 0, 0, 0, 0, 1));
+        state->Statistics[state->MetricId++].Entries.push_back(TOperationStatistics::TEntry("Fallback", 0, 0, 0, 0, 1)); 
 
         YQL_ENSURE(input->ChildrenSize() > 0, "Node: " << NCommon::ExprToPrettyString(ctx, *input));
         TExprNode::TPtr resFill = input->TailPtr();
@@ -582,10 +582,10 @@ private:
             }
 
             YQL_ENSURE(inMemoryIndex != resFill->ChildrenSize(), "Node: " << NCommon::ExprToPrettyString(ctx, *input));
-            YQL_ENSURE(!state->TypeCtx->AvailablePureResultDataSources.empty());
-            YQL_ENSURE(state->TypeCtx->AvailablePureResultDataSources.front() != DqProviderName);
+            YQL_ENSURE(!state->TypeCtx->AvailablePureResultDataSources.empty()); 
+            YQL_ENSURE(state->TypeCtx->AvailablePureResultDataSources.front() != DqProviderName); 
 
-            auto newAtom = ctx.NewAtom(input->Pos(), state->TypeCtx->AvailablePureResultDataSources.front());
+            auto newAtom = ctx.NewAtom(input->Pos(), state->TypeCtx->AvailablePureResultDataSources.front()); 
             resFill->Child(inMemoryIndex)->SetState(TExprNode::EState::ExecutionComplete);
             resFill = ctx.ChangeChild(*resFill, inMemoryIndex, std::move(newAtom));
 
@@ -593,14 +593,14 @@ private:
             output = ctx.ChangeChild(*input, input->ChildrenSize()-1, std::move(resFill));
             return TStatus::Repeat;
         } else {
-            YQL_ENSURE(!state->TypeCtx->AvailablePureResultDataSources.empty());
-            YQL_ENSURE(state->TypeCtx->AvailablePureResultDataSources.front() != DqProviderName);
+            YQL_ENSURE(!state->TypeCtx->AvailablePureResultDataSources.empty()); 
+            YQL_ENSURE(state->TypeCtx->AvailablePureResultDataSources.front() != DqProviderName); 
 
             TStringStream out;
             NYson::TYsonWriter writer((IOutputStream*)&out);
             writer.OnBeginMap();
             writer.OnKeyedItem("FallbackProvider");
-            writer.OnRaw(state->TypeCtx->AvailablePureResultDataSources.front());
+            writer.OnRaw(state->TypeCtx->AvailablePureResultDataSources.front()); 
             writer.OnEndMap();
 
             output->SetResult(ctx.NewAtom(input->Pos(), out.Str()));
@@ -609,8 +609,8 @@ private:
     }
 
     TStatusCallbackPair Fallback() const {
-        auto callback = TAsyncTransformCallback([state = State] (const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-            return FallbackCallback(state, input, output, ctx);
+        auto callback = TAsyncTransformCallback([state = State] (const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
+            return FallbackCallback(state, input, output, ctx); 
         });
         return std::make_pair(TStatus::Async, NThreading::MakeFuture(callback));
     }
@@ -628,9 +628,9 @@ private:
             auto result = TMaybeNode<TResult>(input).Cast();
             IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(result.Ref());
             auto settings = State->Settings->WithFillSettings(fillSettings);
-            if (!settings->_RowsLimitPerWrite.Get() && !settings->_AllResultsBytesLimit.Get()) {
-                settings->_AllResultsBytesLimit = 64_MB;
-            }
+            if (!settings->_RowsLimitPerWrite.Get() && !settings->_AllResultsBytesLimit.Get()) { 
+                settings->_AllResultsBytesLimit = 64_MB; 
+            } 
 
             THashMap<TString, TString> secureParams;
             NCommon::FillSecureParams(result.Input().Ptr(), *State->TypeCtx, secureParams);
@@ -683,16 +683,16 @@ private:
             }
             tasks[0].MutableMeta()->PackFrom(taskMeta);
 
-            bool enableFullResultWrite = settings->EnableFullResultWrite.Get().GetOrElse(false);
-            if (enableFullResultWrite) {
-                const auto type = result.Input().Ref().GetTypeAnn();
-                const auto integration = GetDqIntegrationForFullResTable(State);
-                enableFullResultWrite = type->GetKind() == ETypeAnnotationKind::List
-                    && type->Cast<TListExprType>()->GetItemType()->GetKind() == ETypeAnnotationKind::Struct
-                    && !fillSettings.Discard
-                    && integration
-                    && integration->PrepareFullResultTableParams(result.Ref(), ctx, graphParams, secureParams);
-                settings->EnableFullResultWrite = enableFullResultWrite;
+            bool enableFullResultWrite = settings->EnableFullResultWrite.Get().GetOrElse(false); 
+            if (enableFullResultWrite) { 
+                const auto type = result.Input().Ref().GetTypeAnn(); 
+                const auto integration = GetDqIntegrationForFullResTable(State); 
+                enableFullResultWrite = type->GetKind() == ETypeAnnotationKind::List 
+                    && type->Cast<TListExprType>()->GetItemType()->GetKind() == ETypeAnnotationKind::Struct 
+                    && !fillSettings.Discard 
+                    && integration 
+                    && integration->PrepareFullResultTableParams(result.Ref(), ctx, graphParams, secureParams); 
+                settings->EnableFullResultWrite = enableFullResultWrite; 
             }
 
             // bool executeUdfLocallyIfPossible ?
@@ -700,8 +700,8 @@ private:
             auto future = localRun
                 ? TLocalExecutor(State).Execute(ctx.GetPosition(input->Pos()), lambda, columns, secureParams, fillSettings)
                 : State->DqGateway->ExecutePlan(
-                            State->SessionId, *executionPlanner.Get(), columns, secureParams, graphParams,
-                            settings, progressWriter, ModulesMapping, fillSettings.Discard);
+                            State->SessionId, *executionPlanner.Get(), columns, secureParams, graphParams, 
+                            settings, progressWriter, ModulesMapping, fillSettings.Discard); 
 
             if (State->Metrics) {
                 State->Metrics->IncCounter("dq", localRun
@@ -711,13 +711,13 @@ private:
 
             FlushStatisticsToState();
 
-            return WrapFutureCallback(future, [localRun, startTime, type, fillSettings, level, settings, enableFullResultWrite, columns, graphParams, state = State](const IDqGateway::TResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-                YQL_LOG(DEBUG) << state->SessionId <<  " WrapFutureCallback";
+            return WrapFutureCallback(future, [localRun, startTime, type, fillSettings, level, settings, enableFullResultWrite, columns, graphParams, state = State](const IDqGateway::TResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
+                YQL_LOG(DEBUG) << state->SessionId <<  " WrapFutureCallback"; 
 
                 auto duration = TInstant::Now() - startTime;
-                if (state->Metrics) {
-                    state->Metrics->SetCounter("dq", "TotalExecutionTime", duration.MilliSeconds());
-                    state->Metrics->SetCounter(
+                if (state->Metrics) { 
+                    state->Metrics->SetCounter("dq", "TotalExecutionTime", duration.MilliSeconds()); 
+                    state->Metrics->SetCounter( 
                         "dq",
                         localRun
                             ? "InMemoryExecutionTime"
@@ -725,10 +725,10 @@ private:
                         duration.MilliSeconds());
                 }
 
-                state->Statistics[state->MetricId++] = res.Statistics;
+                state->Statistics[state->MetricId++] = res.Statistics; 
 
                 if (res.Fallback) {
-                    if (state->Settings->FallbackPolicy.Get().GetOrElse("default") == "never" || state->TypeCtx->ForceDq) {
+                    if (state->Settings->FallbackPolicy.Get().GetOrElse("default") == "never" || state->TypeCtx->ForceDq) { 
                         auto issues = TIssues{TIssue(ctx.GetPosition(input->Pos()), "Gateway Error").SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING)};
                         issues.AddIssues(res.Issues);
                         ctx.AssociativeIssues.emplace(input.Get(), std::move(issues));
@@ -736,16 +736,16 @@ private:
                     }
 
                     YQL_LOG(DEBUG) << "Fallback from gateway: " << NCommon::ExprToPrettyString(ctx, *input);
-                    TIssue warning(ctx.GetPosition(input->Pos()), "DQ cannot execute the query");
+                    TIssue warning(ctx.GetPosition(input->Pos()), "DQ cannot execute the query"); 
                     warning.Severity = TSeverityIds::S_INFO;
-                    ctx.IssueManager.RaiseIssue(warning);
+                    ctx.IssueManager.RaiseIssue(warning); 
 
                     if (res.ForceFallback) {
-                        state->Metrics->IncCounter("dq", "ForceFallback");
+                        state->Metrics->IncCounter("dq", "ForceFallback"); 
                     }
-                    return FallbackCallback(state, input, output, ctx);
+                    return FallbackCallback(state, input, output, ctx); 
                 }
-
+ 
                 output = input;
                 input->SetState(TExprNode::EState::ExecutionComplete);
 
@@ -785,13 +785,13 @@ private:
                         }
                     }
                     writer.OnEndList();
-                    if (enableFullResultWrite) {
+                    if (enableFullResultWrite) { 
                         writer.OnKeyedItem("Ref");
                         writer.OnBeginList();
                         writer.OnListItem();
-                        const auto integration = GetDqIntegrationForFullResTable(state);
-                        YQL_ENSURE(integration);
-                        integration->WriteFullResultTableRef(writer, columns, graphParams);
+                        const auto integration = GetDqIntegrationForFullResTable(state); 
+                        YQL_ENSURE(integration); 
+                        integration->WriteFullResultTableRef(writer, columns, graphParams); 
                         writer.OnEndList();
                     }
                     writer.OnKeyedItem("Truncated");
@@ -816,7 +816,7 @@ private:
             }, "");
 
         } catch (...) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), CurrentExceptionMessage()));
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), CurrentExceptionMessage())); 
             return SyncError();
         }
     }
@@ -832,11 +832,11 @@ private:
     }
 
     TStatusCallbackPair HandlePull(const TExprNode::TPtr& input, TExprContext& ctx) {
-        YQL_CLOG(DEBUG, ProviderDq) << "Executing " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
-        YQL_CLOG(TRACE, ProviderDq) << "HandlePull " << NCommon::ExprToPrettyString(ctx, *input);
+        YQL_CLOG(DEBUG, ProviderDq) << "Executing " << input->Content() << " (UniqueId=" << input->UniqueId() << ")"; 
+        YQL_CLOG(TRACE, ProviderDq) << "HandlePull " << NCommon::ExprToPrettyString(ctx, *input); 
 
         TInstant startTime = TInstant::Now();
-        auto pull = TPull(input);
+        auto pull = TPull(input); 
 
         YQL_ENSURE(!TMaybeNode<TDqQuery>(pull.Input().Ptr()) || State->Settings->EnableComputeActor.Get().GetOrElse(false),
             "DqQuery is not supported with worker actor");
@@ -891,20 +891,20 @@ private:
         TDqsPipelineConfigurator peepholeConfig;
         TPeepholeSettings peepholeSettings;
         peepholeSettings.CommonConfig = &peepholeConfig;
-        bool hasNonDeterministicFunctions;
-        // TODO: do it per stage
+        bool hasNonDeterministicFunctions; 
+        // TODO: do it per stage 
         auto status = PeepHoleOptimizeNode<true>(optimizedInput, optimizedInput, ctx, *State->TypeCtx, nullptr, hasNonDeterministicFunctions, peepholeSettings);
-        if (status != TStatus::Ok) {
-            ctx.AddError(TIssue(ctx.GetPosition(optimizedInput->Pos()), TString("Peephole optimization failed for Dq stage")));
-            return SyncStatus(status);
+        if (status != TStatus::Ok) { 
+            ctx.AddError(TIssue(ctx.GetPosition(optimizedInput->Pos()), TString("Peephole optimization failed for Dq stage"))); 
+            return SyncStatus(status); 
         }
-        YQL_CLOG(TRACE, ProviderDq) << "After PeepHole\n" << NCommon::ExprToPrettyString(ctx, *optimizedInput);
+        YQL_CLOG(TRACE, ProviderDq) << "After PeepHole\n" << NCommon::ExprToPrettyString(ctx, *optimizedInput); 
 
         // copy-paste {
         TUserDataTable crutches = State->TypeCtx->UserDataStorageCrutches;
         TUserDataTable files;
         StartCounter("FreezeUsedFiles");
-        auto filesRes = NCommon::FreezeUsedFiles(*optimizedInput, files, *State->TypeCtx, ctx, [](const TString&){return true;}, crutches);
+        auto filesRes = NCommon::FreezeUsedFiles(*optimizedInput, files, *State->TypeCtx, ctx, [](const TString&){return true;}, crutches); 
         if (filesRes.first.Level != TStatus::Ok) {
             if (filesRes.first.Level != TStatus::Error) {
                 YQL_LOG(DEBUG) << "Freezing files for " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
@@ -916,7 +916,7 @@ private:
 
         auto executionPlanner = MakeHolder<TDqsExecutionPlanner>(
             State->TypeCtx, ctx, State->FunctionRegistry,
-            optimizedInput);
+            optimizedInput); 
 
         // exprRoot must be DqCnResult or DqQuery
 
@@ -946,15 +946,15 @@ private:
 
         YQL_ENSURE(stagesCount <= maxTasksPerOperation);
 
-        try {
-            while (executionPlanner->PlanExecution(settings, canFallback) > maxTasksPerOperation && tasksPerStage > 1) {
-                tasksPerStage /= 2;
-                settings->MaxTasksPerStage = tasksPerStage;
-                executionPlanner->Clear();
-            }
-        } catch (const TFallbackError& err) {
-            YQL_ENSURE(canFallback, "Unexpected TFallbackError: " << err.what());
-            return FallbackWithMessage(pull.Ref(), err.what(), ctx);
+        try { 
+            while (executionPlanner->PlanExecution(settings, canFallback) > maxTasksPerOperation && tasksPerStage > 1) { 
+                tasksPerStage /= 2; 
+                settings->MaxTasksPerStage = tasksPerStage; 
+                executionPlanner->Clear(); 
+            } 
+        } catch (const TFallbackError& err) { 
+            YQL_ENSURE(canFallback, "Unexpected TFallbackError: " << err.what()); 
+            return FallbackWithMessage(pull.Ref(), err.what(), ctx); 
         }
 
         bool fallbackFlag = false;
@@ -1000,7 +1000,7 @@ private:
             }
         }
 
-        MarkProgressStarted(allPublicIds, State->ProgressWriter);
+        MarkProgressStarted(allPublicIds, State->ProgressWriter); 
 
         if (fallbackFlag) {
             return FallbackWithMessage(pull.Ref(), "Too big attachment", ctx);
@@ -1013,53 +1013,53 @@ private:
             settings->OptLLVM = *optLLVM;
         }
 
-        auto graphParams = GatherGraphParams(optimizedInput);
+        auto graphParams = GatherGraphParams(optimizedInput); 
 
-        bool ref = NCommon::HasResOrPullOption(pull.Ref(), "ref");
-        bool autoRef = NCommon::HasResOrPullOption(pull.Ref(), "autoref");
-
-        bool enableFullResultWrite = settings->EnableFullResultWrite.Get().GetOrElse(false);
-        if (enableFullResultWrite) {
-            const auto integration = GetDqIntegrationForFullResTable(State);
-            enableFullResultWrite = (ref || autoRef)
-                && !fillSettings.Discard
-                && integration
-                && integration->PrepareFullResultTableParams(pull.Ref(), ctx, graphParams, secureParams);
-            settings->EnableFullResultWrite = enableFullResultWrite;
+        bool ref = NCommon::HasResOrPullOption(pull.Ref(), "ref"); 
+        bool autoRef = NCommon::HasResOrPullOption(pull.Ref(), "autoref"); 
+ 
+        bool enableFullResultWrite = settings->EnableFullResultWrite.Get().GetOrElse(false); 
+        if (enableFullResultWrite) { 
+            const auto integration = GetDqIntegrationForFullResTable(State); 
+            enableFullResultWrite = (ref || autoRef) 
+                && !fillSettings.Discard 
+                && integration 
+                && integration->PrepareFullResultTableParams(pull.Ref(), ctx, graphParams, secureParams); 
+            settings->EnableFullResultWrite = enableFullResultWrite; 
         }
 
-        if (ref) {
-            if (!enableFullResultWrite) {
-                return FallbackWithMessage(pull.Ref(),
-                    TStringBuilder() << "RefSelect mode cannot be used with DQ, because \"" << State->TypeCtx->FullResultDataSink << "\" provider has failed to prepare a result table",
-                    ctx);
-            }
-            // Force write to table
-            settings->_AllResultsBytesLimit = 0;
-            settings->_RowsLimitPerWrite = 0;
-        }
-
+        if (ref) { 
+            if (!enableFullResultWrite) { 
+                return FallbackWithMessage(pull.Ref(), 
+                    TStringBuilder() << "RefSelect mode cannot be used with DQ, because \"" << State->TypeCtx->FullResultDataSink << "\" provider has failed to prepare a result table", 
+                    ctx); 
+            } 
+            // Force write to table 
+            settings->_AllResultsBytesLimit = 0; 
+            settings->_RowsLimitPerWrite = 0; 
+        } 
+ 
         IDqGateway::TDqProgressWriter progressWriter = MakeDqProgressWriter(allPublicIds);
 
-        auto future = State->DqGateway->ExecutePlan(State->SessionId, *executionPlanner.Get(), columns, secureParams, graphParams,
-            settings, progressWriter, ModulesMapping, fillSettings.Discard);
+        auto future = State->DqGateway->ExecutePlan(State->SessionId, *executionPlanner.Get(), columns, secureParams, graphParams, 
+            settings, progressWriter, ModulesMapping, fillSettings.Discard); 
 
-        future.Subscribe([allPublicIds, progressWriter = State->ProgressWriter](const NThreading::TFuture<IDqGateway::TResult>& completedFuture) {
+        future.Subscribe([allPublicIds, progressWriter = State->ProgressWriter](const NThreading::TFuture<IDqGateway::TResult>& completedFuture) { 
             YQL_ENSURE(!completedFuture.HasException());
-            MarkProgressFinished(allPublicIds, completedFuture.GetValueSync().Success(), progressWriter);
+            MarkProgressFinished(allPublicIds, completedFuture.GetValueSync().Success(), progressWriter); 
         });
-        executionPlanner.Destroy();
+        executionPlanner.Destroy(); 
 
         int level = 0;
 
         // TODO: remove copy-paste
-        return WrapFutureCallback(future, [settings, startTime, localRun, type, fillSettings, level, graphParams, columns, enableFullResultWrite, state = State](const IDqGateway::TResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-            YQL_LOG(DEBUG) << state->SessionId <<  " WrapFutureCallback";
+        return WrapFutureCallback(future, [settings, startTime, localRun, type, fillSettings, level, graphParams, columns, enableFullResultWrite, state = State](const IDqGateway::TResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
+            YQL_LOG(DEBUG) << state->SessionId <<  " WrapFutureCallback"; 
 
             auto duration = TInstant::Now() - startTime;
-            if (state->Metrics) {
-                state->Metrics->SetCounter("dq", "TotalExecutionTime", duration.MilliSeconds());
-                state->Metrics->SetCounter(
+            if (state->Metrics) { 
+                state->Metrics->SetCounter("dq", "TotalExecutionTime", duration.MilliSeconds()); 
+                state->Metrics->SetCounter( 
                     "dq",
                     localRun
                         ? "InMemoryExecutionTime"
@@ -1070,10 +1070,10 @@ private:
             state->Statistics[state->MetricId++] = res.Statistics;
 
             if (res.Fallback) {
-                if (state->Metrics) {
-                    state->Metrics->IncCounter("dq", "Fallback");
+                if (state->Metrics) { 
+                    state->Metrics->IncCounter("dq", "Fallback"); 
                 }
-                state->Statistics[state->MetricId++].Entries.push_back(TOperationStatistics::TEntry("Fallback", 0, 0, 0, 0, 1));
+                state->Statistics[state->MetricId++].Entries.push_back(TOperationStatistics::TEntry("Fallback", 0, 0, 0, 0, 1)); 
                 // never fallback will be captured in yql_facade
                 auto issues = TIssues{TIssue(ctx.GetPosition(input->Pos()), "Gateway Error").SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING)};
                 issues.AddIssues(res.Issues);
@@ -1103,8 +1103,8 @@ private:
             const bool truncated = res.Truncated;
             const ui64 rowsCount = res.RowsCount;
 
-            if (truncated && !state->TypeCtx->ForceDq && !enableFullResultWrite) {
-                auto issue = TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "DQ cannot execute the query. Cause: " << "too big result " <<  trStr).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_INFO);
+            if (truncated && !state->TypeCtx->ForceDq && !enableFullResultWrite) { 
+                auto issue = TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "DQ cannot execute the query. Cause: " << "too big result " <<  trStr).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_INFO); 
                 bool error = settings->FallbackPolicy.Get().GetOrElse("default") == "never";
                 for (const auto& i : res.Issues) {
                     TIssuePtr subIssue = new TIssue(i);
@@ -1118,7 +1118,7 @@ private:
                     issue.Message = "Too big result " + trStr;
                     issue.Severity = TSeverityIds::S_ERROR;
                 }
-                ctx.IssueManager.RaiseIssue(issue);
+                ctx.IssueManager.RaiseIssue(issue); 
                 return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
             }
 
@@ -1142,13 +1142,13 @@ private:
                 }
                 writer.OnEndList();
 
-                if (enableFullResultWrite) {
+                if (enableFullResultWrite) { 
                     writer.OnKeyedItem("Ref");
                     writer.OnBeginList();
                     writer.OnListItem();
-                    const auto integration = GetDqIntegrationForFullResTable(state);
-                    YQL_ENSURE(integration);
-                    integration->WriteFullResultTableRef(writer, columns, graphParams);
+                    const auto integration = GetDqIntegrationForFullResTable(state); 
+                    YQL_ENSURE(integration); 
+                    integration->WriteFullResultTableRef(writer, columns, graphParams); 
                     writer.OnEndList();
                 }
 
@@ -1165,21 +1165,21 @@ private:
 
             writer.OnEndMap();
 
-            ctx.IssueManager.RaiseIssues(res.Issues);
+            ctx.IssueManager.RaiseIssues(res.Issues); 
             input->SetResult(ctx.NewAtom(input->Pos(), out.Str()));
             return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Ok);
         }, "");
     }
 
     IDqGateway::TDqProgressWriter MakeDqProgressWriter(const THashMap<ui32, ui32>& allPublicIds) const {
-        IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, allPublicIds](const TString& stage) {
+        IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, allPublicIds](const TString& stage) { 
             for (const auto& publicId : allPublicIds) {
                 auto p = TOperationProgress(TString(DqProviderName), publicId.first, TOperationProgress::EState::InProgress, stage);
                 if (publicId.second) {
                     p.Counters.ConstructInPlace();
                     p.Counters->Running = p.Counters->Total = publicId.second;
                 }
-                progressWriter(p);
+                progressWriter(p); 
             }
         };
         return dqProgressWriter;
@@ -1192,7 +1192,7 @@ private:
                 p.Counters.ConstructInPlace();
                 p.Counters->Running = p.Counters->Total = publicId.second;
             }
-            progressWriter(p);
+            progressWriter(p); 
         }
     }
 
@@ -1204,7 +1204,7 @@ private:
                 p.Counters.ConstructInPlace();
                 (success ? p.Counters->Completed : p.Counters->Failed) = p.Counters->Total = publicId.second;
             }
-            progressWriter(p);
+            progressWriter(p); 
         }
     }
 
@@ -1218,42 +1218,42 @@ private:
         }
     }
 
-    THashMap<TString, TString> GatherGraphParams(const TExprNode::TPtr& root) {
-        THashMap<TString, TString> params;
-        VisitExpr(root, [&](const TExprNode::TPtr& node) -> bool {
-            if (node->IsCallable()) {
-                for (const auto& provider : State->TypeCtx->DataSources) {
-                    if (provider->CanParse(*node)) {
-                        if (auto dqIntegration = provider->GetDqIntegration()) {
-                            dqIntegration->Annotate(*node, params);
-                            return false;
-                        }
-                    }
-                }
-
-                for (const auto& provider : State->TypeCtx->DataSinks) {
-                    if (provider->CanParse(*node)) {
-                        if (auto dqIntegration = provider->GetDqIntegration()) {
-                            dqIntegration->Annotate(*node, params);
-                            return false;
-                        }
-                    }
-                }
-            }
-            return true;
-        });
-        return params;
-    }
-
-    static IDqIntegration* GetDqIntegrationForFullResTable(const TDqStatePtr& state) {
-        if (auto fullResultTableProvider = state->TypeCtx->DataSinkMap.Value(state->TypeCtx->FullResultDataSink, nullptr)) {
-            auto dqIntegration = fullResultTableProvider->GetDqIntegration();
-            YQL_ENSURE(dqIntegration);
-            return dqIntegration;
-        }
-        return nullptr;
-    }
-
+    THashMap<TString, TString> GatherGraphParams(const TExprNode::TPtr& root) { 
+        THashMap<TString, TString> params; 
+        VisitExpr(root, [&](const TExprNode::TPtr& node) -> bool { 
+            if (node->IsCallable()) { 
+                for (const auto& provider : State->TypeCtx->DataSources) { 
+                    if (provider->CanParse(*node)) { 
+                        if (auto dqIntegration = provider->GetDqIntegration()) { 
+                            dqIntegration->Annotate(*node, params); 
+                            return false; 
+                        } 
+                    } 
+                } 
+ 
+                for (const auto& provider : State->TypeCtx->DataSinks) { 
+                    if (provider->CanParse(*node)) { 
+                        if (auto dqIntegration = provider->GetDqIntegration()) { 
+                            dqIntegration->Annotate(*node, params); 
+                            return false; 
+                        } 
+                    } 
+                } 
+            } 
+            return true; 
+        }); 
+        return params; 
+    } 
+ 
+    static IDqIntegration* GetDqIntegrationForFullResTable(const TDqStatePtr& state) { 
+        if (auto fullResultTableProvider = state->TypeCtx->DataSinkMap.Value(state->TypeCtx->FullResultDataSink, nullptr)) { 
+            auto dqIntegration = fullResultTableProvider->GetDqIntegration(); 
+            YQL_ENSURE(dqIntegration); 
+            return dqIntegration; 
+        } 
+        return nullptr; 
+    } 
+ 
     TDqStatePtr State;
     THolder<IGraphTransformer> DqTypeAnnotationTransformer;
     mutable THashMap<TString, TFileLinkPtr> FileLinks;

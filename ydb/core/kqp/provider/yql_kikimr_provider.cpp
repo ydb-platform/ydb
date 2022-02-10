@@ -400,7 +400,7 @@ NNodes::TCoAtomList BuildColumnsList(
 ) {
     TVector<TExprBase> columnsToSelect;
     for (const auto& pair : table.Metadata->Columns) {
-        auto atom = Build<TCoAtom>(ctx, pos)
+        auto atom = Build<TCoAtom>(ctx, pos) 
             .Value(pair.second.Name)
             .Done();
 

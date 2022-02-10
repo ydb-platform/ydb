@@ -36,7 +36,7 @@ TExprBase GetDeferredEffectsList(const TDeferredEffects& effects, TPositionHandl
         effectNodes.push_back(effect.Node.Cast());
     }
 
-    return Build<TCoExtend>(ctx, pos)
+    return Build<TCoExtend>(ctx, pos) 
         .Add(effectNodes)
         .Done();
 }
@@ -56,14 +56,14 @@ TExprBase GetEraseLocksEffects(const TString& cluster, TPositionHandle pos, TCoP
                 .Key()
                     .Add()
                         .Name().Build("LockId")
-                        .Value<TCoMember>()
+                        .Value<TCoMember>() 
                             .Struct("lockItem")
                             .Name().Build("LockId")
                             .Build()
                         .Build()
                     .Add()
                         .Name().Build("DataShard")
-                        .Value<TCoMember>()
+                        .Value<TCoMember>() 
                             .Struct("lockItem")
                             .Name().Build("DataShard")
                             .Build()
@@ -418,7 +418,7 @@ private:
         YQL_ENSURE(TxState->Tx().ParamsState->Values.emplace(std::make_pair(locksParamName,
             GetLocksParamValue(TxState->Tx().Locks))).second);
 
-        auto locksParamNode = Build<TCoParameter>(ctx, pos)
+        auto locksParamNode = Build<TCoParameter>(ctx, pos) 
             .Name().Build(locksParamName)
             .Type(ExpandType(pos, *GetTxLockListType(ctx), ctx))
             .Done();
@@ -441,7 +441,7 @@ private:
         YQL_ENSURE(TxState->Tx().ParamsState->Values.emplace(std::make_pair(locksParamName,
             GetLocksParamValue(TxState->Tx().Locks))).second);
 
-        auto locksParamNode = Build<TCoParameter>(ctx, pos)
+        auto locksParamNode = Build<TCoParameter>(ctx, pos) 
             .Name().Build(locksParamName)
             .Type(ExpandType(pos, *GetTxLockListType(ctx), ctx))
             .Done();
@@ -449,7 +449,7 @@ private:
         if (!hasDataEffects && TxState->Tx().GetSnapshot().IsValid())
             return GetEraseLocksEffects(Cluster, pos, locksParamNode, ctx);
 
-        auto lockArg = Build<TCoArgument>(ctx, pos)
+        auto lockArg = Build<TCoArgument>(ctx, pos) 
             .Name("lockArg")
             .Done();
 
@@ -463,14 +463,14 @@ private:
             .Key()
                 .Add()
                     .Name().Build("LockId")
-                    .Value<TCoMember>()
+                    .Value<TCoMember>() 
                         .Struct(lockArg)
                         .Name().Build("LockId")
                         .Build()
                     .Build()
                 .Add()
                     .Name().Build("DataShard")
-                    .Value<TCoMember>()
+                    .Value<TCoMember>() 
                         .Struct(lockArg)
                         .Name().Build("DataShard")
                         .Build()
@@ -518,12 +518,12 @@ private:
                     .Build()
                 .Done()
         };
-        auto lockPredicate = Build<TCoNot>(ctx, pos)
-            .Value<TCoCoalesce>()
-                .Predicate<TCoAnd>()
+        auto lockPredicate = Build<TCoNot>(ctx, pos) 
+            .Value<TCoCoalesce>() 
+                .Predicate<TCoAnd>() 
                     .Add(args)
                     .Build()
-                .Value<TCoBool>()
+                .Value<TCoBool>() 
                     .Literal().Build("false")
                     .Build()
                 .Build()
@@ -544,10 +544,10 @@ private:
             .List(locksInvalidatedList)
             .Done();
 
-        auto effects = Build<TCoExtend>(ctx, pos)
-            .Add<TCoIf>()
+        auto effects = Build<TCoExtend>(ctx, pos) 
+            .Add<TCoIf>() 
                 .Predicate(locksInvalidatedPredicate)
-                .ThenValue<TCoAsList>()
+                .ThenValue<TCoAsList>() 
                     .Add<TKiSetResult>()
                         .Name().Build(LocksInvalidatedResultName)
                         .Data(locksInvalidatedPredicate)
@@ -604,9 +604,9 @@ private:
 } // namespace
 
 TCoList GetEmptyEffectsList(const TPositionHandle pos, TExprContext& ctx) {
-    return Build<TCoList>(ctx, pos)
-        .ListType<TCoListType>()
-            .ItemType<TCoVoidType>()
+    return Build<TCoList>(ctx, pos) 
+        .ListType<TCoListType>() 
+            .ItemType<TCoVoidType>() 
                 .Build()
             .Build()
         .Done();

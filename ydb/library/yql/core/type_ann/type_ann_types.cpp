@@ -55,20 +55,20 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus EnsureCodeOrListOfCode(TExprNode::TPtr& node, TExprContext& ctx) {
-        if (!node->GetTypeAnn()) {
+        if (!node->GetTypeAnn()) { 
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Expected code or list of code, but got lambda"));
             return IGraphTransformer::TStatus::Error;
         }
 
         auto resType = MakeCodeResourceType(ctx);
-        if (IsSameAnnotation(*node->GetTypeAnn(), *resType)) {
+        if (IsSameAnnotation(*node->GetTypeAnn(), *resType)) { 
             // wrap with AsList
             node = ctx.NewCallable(node->Pos(), "AsList", { node });
             return IGraphTransformer::TStatus::Repeat;
         }
 
         auto lstType = ctx.MakeType<TListExprType>(resType);
-        if (IsSameAnnotation(*node->GetTypeAnn(), *lstType)) {
+        if (IsSameAnnotation(*node->GetTypeAnn(), *lstType)) { 
             return IGraphTransformer::TStatus::Ok;
         }
 
@@ -89,7 +89,7 @@ namespace NTypeAnnImpl {
         }
 
         auto genType = ctx.Expr.MakeType<TGenericExprType>();
-        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(genType));
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(genType)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -106,7 +106,7 @@ namespace NTypeAnnImpl {
 
         auto tag = input->Child(0)->Content();
         auto resType = ctx.Expr.MakeType<TResourceExprType>(tag);
-        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(resType));
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(resType)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -125,7 +125,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto underlyingType = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto underlyingType = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
         if (!EnsureInspectableType(input->Child(0)->Pos(), *underlyingType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -133,10 +133,10 @@ namespace NTypeAnnImpl {
         auto tag = input->Child(1)->Content();
 
         auto taggedType = ctx.Expr.MakeType<TTaggedExprType>(underlyingType, tag);
-        if (!taggedType->Validate(input->Pos(), ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(taggedType));
+        if (!taggedType->Validate(input->Pos(), ctx.Expr)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(taggedType)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -178,7 +178,7 @@ namespace NTypeAnnImpl {
         auto file = TString(input->Child(2)->Content());
         auto message = input->Child(3)->Content();
         auto resType = ctx.Expr.MakeType<TErrorExprType>(TIssue(TPosition(column, row, file), message));
-        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(resType));
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(resType)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -207,14 +207,14 @@ namespace NTypeAnnImpl {
             if (!dataType->Validate(input->Pos(), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
-            input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(dataType));
+            input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(dataType)); 
         } else {
             if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
             auto dataType = ctx.Expr.MakeType<TDataExprType>(*slot);
-            input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(dataType));
+            input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(dataType)); 
         }
         return IGraphTransformer::TStatus::Ok;
     }
@@ -230,13 +230,13 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        auto itemType = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto itemType = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
         if (!EnsureInspectableType(input->Child(0)->Pos(), *itemType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         auto listType = ctx.Expr.MakeType<TListExprType>(itemType);
-        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(listType));
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(listType)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -251,13 +251,13 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        auto itemType = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto itemType = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
         if (!EnsureInspectableType(input->Child(0)->Pos(), *itemType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         auto listType = ctx.Expr.MakeType<TStreamExprType>(itemType);
-        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(listType));
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(listType)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -293,13 +293,13 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        auto itemType = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto itemType = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
         if (!EnsureInspectableType(input->Child(0)->Pos(), *itemType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         auto optionalType = ctx.Expr.MakeType<TOptionalExprType>(itemType);
-        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(optionalType));
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(optionalType)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -312,7 +312,7 @@ namespace NTypeAnnImpl {
             if (auto status = EnsureTypeRewrite(child, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
                 return status;
             }
-            auto elemType = child->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            auto elemType = child->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
             if (!EnsureInspectableType(child->Pos(), *elemType, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -321,7 +321,7 @@ namespace NTypeAnnImpl {
         }
 
         auto tupleType = ctx.Expr.MakeType<TTupleExprType>(items);
-        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(tupleType));
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(tupleType)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -371,7 +371,7 @@ namespace NTypeAnnImpl {
                 return status;
             }
 
-            auto memberType = typeNode->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            auto memberType = typeNode->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
             if (!EnsureInspectableType(typeNode->Pos(), *memberType, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -395,7 +395,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(structType));
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(structType)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -414,8 +414,8 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        auto keyType = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-        auto payloadType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto keyType = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
+        auto payloadType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
         if (!EnsureInspectableType(input->Child(1)->Pos(), *payloadType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -425,7 +425,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(dictType));
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(dictType)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -437,7 +437,7 @@ namespace NTypeAnnImpl {
         }
 
         auto voidType = ctx.Expr.MakeType<TVoidExprType>();
-        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(voidType));
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(voidType)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -449,7 +449,7 @@ namespace NTypeAnnImpl {
         }
 
         auto voidType = ctx.Expr.MakeType<TNullExprType>();
-        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(voidType));
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(voidType)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -461,7 +461,7 @@ namespace NTypeAnnImpl {
         }
 
         auto unitType = ctx.Expr.MakeType<TUnitExprType>();
-        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(unitType));
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(unitType)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -496,8 +496,8 @@ namespace NTypeAnnImpl {
         }
 
         auto resType = MakeTypeHandleResourceType(ctx.Expr);
-        if (input->Child(0)->GetTypeAnn() == resType) {
-            input->SetTypeAnn(resType);
+        if (input->Child(0)->GetTypeAnn() == resType) { 
+            input->SetTypeAnn(resType); 
             return IGraphTransformer::TStatus::Ok;
         }
 
@@ -505,7 +505,7 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
         if (type->GetKind() == ETypeAnnotationKind::Null) {
             output = ExpandType(input->Pos(), *ctx.Expr.MakeType<TUnitExprType>(), ctx.Expr);
             return IGraphTransformer::TStatus::Repeat;
@@ -528,8 +528,8 @@ namespace NTypeAnnImpl {
         }
 
         auto resType = MakeTypeHandleResourceType(ctx.Expr);
-        if (input->Child(0)->GetTypeAnn() == resType) {
-            input->SetTypeAnn(resType);
+        if (input->Child(0)->GetTypeAnn() == resType) { 
+            input->SetTypeAnn(resType); 
             return IGraphTransformer::TStatus::Ok;
         }
 
@@ -537,7 +537,7 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
         if (type->GetKind() == ETypeAnnotationKind::EmptyList) {
             output = ExpandType(input->Pos(), *ctx.Expr.MakeType<TUnitExprType>(), ctx.Expr);
             return IGraphTransformer::TStatus::Repeat;
@@ -560,8 +560,8 @@ namespace NTypeAnnImpl {
         }
 
         auto resType = MakeTypeHandleResourceType(ctx.Expr);
-        if (input->Child(0)->GetTypeAnn() == resType) {
-            input->SetTypeAnn(resType);
+        if (input->Child(0)->GetTypeAnn() == resType) { 
+            input->SetTypeAnn(resType); 
             return IGraphTransformer::TStatus::Ok;
         }
 
@@ -569,7 +569,7 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
         if (type->GetKind() != ETypeAnnotationKind::Stream) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()),
                 TStringBuilder() << "Expected stream type, but got: " << *type));
@@ -594,7 +594,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
         if (type->GetKind() != ETypeAnnotationKind::Tuple) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()),
                 TStringBuilder() << "Expected tuple type, but got: " << *type));
@@ -633,7 +633,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
         if (type->GetKind() != ETypeAnnotationKind::Struct) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()), TStringBuilder() << "Expected struct type, but got: "
                 << *type));
@@ -669,7 +669,7 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
         if (type->GetKind() == ETypeAnnotationKind::EmptyDict) {
             output = ExpandType(input->Pos(), *ctx.Expr.MakeType<TUnitExprType>(), ctx.Expr);
             return IGraphTransformer::TStatus::Repeat;
@@ -695,7 +695,7 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
         if (type->GetKind() == ETypeAnnotationKind::EmptyDict) {
             output = ExpandType(input->Pos(), *ctx.Expr.MakeType<TUnitExprType>(), ctx.Expr);
             return IGraphTransformer::TStatus::Repeat;
@@ -768,7 +768,7 @@ namespace NTypeAnnImpl {
                 return status;
             }
 
-            auto type = typeChild->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            auto type = typeChild->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
             if (!EnsureComputableType(child->Pos(), *type, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -808,7 +808,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(callableType));
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(callableType)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -822,7 +822,7 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
         if (type->GetKind() != ETypeAnnotationKind::Callable) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()), TStringBuilder() << "Expected callable type, but got: "
                 << *type));
@@ -847,7 +847,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
         if (type->GetKind() != ETypeAnnotationKind::Callable) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()), TStringBuilder() << "Expected callable type, but got: "
                 << *type));
@@ -894,7 +894,7 @@ namespace NTypeAnnImpl {
             TAstNode::NewList(inputPos, pool,
                 TAstNode::NewLiteralAtom(inputPos, TStringBuf("return"), pool), parsedType));
         TExprNode::TPtr exprRoot;
-        if (!CompileExpr(*astRoot, exprRoot, ctx.Expr, nullptr)) {
+        if (!CompileExpr(*astRoot, exprRoot, ctx.Expr, nullptr)) { 
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -905,7 +905,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(exprRoot->GetTypeAnn());
+        input->SetTypeAnn(exprRoot->GetTypeAnn()); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -922,7 +922,7 @@ namespace NTypeAnnImpl {
             }
         }
 
-        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String));
+        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -936,7 +936,7 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr));
+        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -950,7 +950,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Yson));
+        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Yson)); 
         return IGraphTransformer::TStatus::Ok;
     };
 
@@ -964,7 +964,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr));
+        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -986,7 +986,7 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
         if (!EnsureStructType(input->Child(0)->Pos(), *type, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -994,7 +994,7 @@ namespace NTypeAnnImpl {
         auto structType = type->Cast<TStructExprType>();
         TVector<const TItemExprType*> items = structType->GetItems();
         auto newItem = ctx.Expr.MakeType<TItemExprType>(input->Child(1)->Content(),
-            input->Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
+            input->Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()); 
         if (!newItem->Validate(input->Pos(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -1027,7 +1027,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
         if (!EnsureStructType(input->Child(0)->Pos(), *type, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -1087,7 +1087,7 @@ namespace NTypeAnnImpl {
                 return status;
             }
 
-            auto type = child->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            auto type = child->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
             if (!EnsureStructOrOptionalStructType(child->Child(1)->Pos(), *type, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -1134,7 +1134,7 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        auto underlyingType = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto underlyingType = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
         if (!EnsureComputableType(input->Child(0)->Pos(), *underlyingType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -1144,7 +1144,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(varType));
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(varType)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1155,8 +1155,8 @@ namespace NTypeAnnImpl {
         }
 
         auto resType = MakeTypeHandleResourceType(ctx.Expr);
-        if (input->Child(0)->GetTypeAnn() == resType) {
-            input->SetTypeAnn(resType);
+        if (input->Child(0)->GetTypeAnn() == resType) { 
+            input->SetTypeAnn(resType); 
             return IGraphTransformer::TStatus::Ok;
         }
 
@@ -1164,7 +1164,7 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
         if (type->GetKind() != ETypeAnnotationKind::Variant) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()), TStringBuilder() << "Expected variant type, but got: "
                 << *type));
@@ -1185,7 +1185,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String));
+        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1200,7 +1200,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String)));
+        input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String))); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1215,12 +1215,12 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto itemType = input->Child(0)->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+        auto itemType = input->Child(0)->GetTypeAnn()->Cast<TListExprType>()->GetItemType(); 
         if (!EnsureSpecificDataType(input->Child(0)->Pos(), *itemType, EDataSlot::String, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr));
+        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1235,7 +1235,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr));
+        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1250,7 +1250,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr));
+        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1265,7 +1265,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr));
+        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1280,7 +1280,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(MakeTypeHandleResourceType(ctx.Expr)));
+        input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(MakeTypeHandleResourceType(ctx.Expr))); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1298,7 +1298,7 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        input->SetTypeAnn(resType);
+        input->SetTypeAnn(resType); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1313,7 +1313,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(MakeItemDescriptorType(ctx.Expr)));
+        input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(MakeItemDescriptorType(ctx.Expr))); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1331,7 +1331,7 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr));
+        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1346,7 +1346,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(MakeDictDescriptorType(ctx.Expr));
+        input->SetTypeAnn(MakeDictDescriptorType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1365,7 +1365,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr));
+        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1380,7 +1380,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String));
+        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1395,7 +1395,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr));
+        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1410,7 +1410,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(MakeTaggedDescriptorType(ctx.Expr));
+        input->SetTypeAnn(MakeTaggedDescriptorType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1429,7 +1429,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr));
+        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1444,7 +1444,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr));
+        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1455,7 +1455,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr));
+        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1466,7 +1466,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr));
+        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1566,7 +1566,7 @@ return IGraphTransformer::TStatus::Repeat;
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(MakeCallabledDescriptorType(ctx.Expr));
+        input->SetTypeAnn(MakeCallabledDescriptorType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1607,7 +1607,7 @@ return IGraphTransformer::TStatus::Repeat;
             }
         }
 
-        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr));
+        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1621,7 +1621,7 @@ return IGraphTransformer::TStatus::Repeat;
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String));
+        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1635,7 +1635,7 @@ return IGraphTransformer::TStatus::Repeat;
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(MakeCodeResourceType(ctx.Expr));
+        input->SetTypeAnn(MakeCodeResourceType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1684,7 +1684,7 @@ return IGraphTransformer::TStatus::Repeat;
             return status;
         }
 
-        input->SetTypeAnn(MakeCodeResourceType(ctx.Expr));
+        input->SetTypeAnn(MakeCodeResourceType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1701,7 +1701,7 @@ return IGraphTransformer::TStatus::Repeat;
             return status;
         }
 
-        input->SetTypeAnn(MakeCodeResourceType(ctx.Expr));
+        input->SetTypeAnn(MakeCodeResourceType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1727,7 +1727,7 @@ return IGraphTransformer::TStatus::Repeat;
             return status;
         }
 
-        input->SetTypeAnn(MakeCodeResourceType(ctx.Expr));
+        input->SetTypeAnn(MakeCodeResourceType(ctx.Expr)); 
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -1768,7 +1768,7 @@ return IGraphTransformer::TStatus::Repeat;
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!lambda->GetTypeAnn()) {
+        if (!lambda->GetTypeAnn()) { 
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -1776,7 +1776,7 @@ return IGraphTransformer::TStatus::Repeat;
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(resType);
+        input->SetTypeAnn(resType); 
         return IGraphTransformer::TStatus::Ok;
     }
 } // namespace NTypeAnnImpl

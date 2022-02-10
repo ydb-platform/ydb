@@ -26,13 +26,13 @@ bool TTypeAnnotationContext::Initialize(TExprContext& ctx) {
 
 bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
     for (auto& x : DataSources) {
-        if (!x->Initialize(ctx)) {
+        if (!x->Initialize(ctx)) { 
             return false;
         }
     }
 
     for (auto& x : DataSinks) {
-        if (!x->Initialize(ctx)) {
+        if (!x->Initialize(ctx)) { 
             return false;
         }
     }
@@ -40,13 +40,13 @@ bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
     Y_ENSURE(UserDataStorage);
     UserDataStorage->FillUserDataTokens();
 
-    // Disable "in progress" constraints
-    //DisableConstraintCheck.emplace(TSortedConstraintNode::Name());
-    //DisableConstraintCheck.emplace(TEmptyConstraintNode::Name());
-    DisableConstraintCheck.emplace(TUniqueConstraintNode::Name());
-    //DisableConstraintCheck.emplace(TMultiConstraintNode::Name());
-    //DisableConstraintCheck.emplace(TVarIndexConstraintNode::Name());
-
+    // Disable "in progress" constraints 
+    //DisableConstraintCheck.emplace(TSortedConstraintNode::Name()); 
+    //DisableConstraintCheck.emplace(TEmptyConstraintNode::Name()); 
+    DisableConstraintCheck.emplace(TUniqueConstraintNode::Name()); 
+    //DisableConstraintCheck.emplace(TMultiConstraintNode::Name()); 
+    //DisableConstraintCheck.emplace(TVarIndexConstraintNode::Name()); 
+ 
     return true;
 }
 
@@ -234,14 +234,14 @@ bool TModuleResolver::AddFromFile(const TStringBuf& file, TExprContext& ctx, ui1
     bool isSql = file.EndsWith(".sql");
     bool isYql = file.EndsWith(".yql");
     if (!isSql && !isYql) {
-        ctx.AddError(TIssue(TStringBuilder() << "Unsupported syntax of library file, expected one of (.sql, .yql): " << file));
+        ctx.AddError(TIssue(TStringBuilder() << "Unsupported syntax of library file, expected one of (.sql, .yql): " << file)); 
         return false;
     }
 
     const TUserDataBlock* block = UserData->FindUserDataBlock(fullName);
 
     if (!block) {
-        ctx.AddError(TIssue(TStringBuilder() << "File not found: " << file));
+        ctx.AddError(TIssue(TStringBuilder() << "File not found: " << file)); 
         return false;
     }
 
@@ -265,8 +265,8 @@ bool TModuleResolver::AddFromFile(const TStringBuf& file, TExprContext& ctx, ui1
         break;
     case EUserDataType::URL:
         if (!UrlLoader) {
-            ctx.AddError(TIssue(TStringBuilder() << "Unable to load file \"" << file
-                << "\" from url, because url loader is not available"));
+            ctx.AddError(TIssue(TStringBuilder() << "Unable to load file \"" << file 
+                << "\" from url, because url loader is not available")); 
             return false;
         }
 
@@ -289,7 +289,7 @@ bool TModuleResolver::AddFromMemory(const TStringBuf& file, const TString& body,
     bool isSql = file.EndsWith(".sql");
     bool isYql = file.EndsWith(".yql");
     if (!isSql && !isYql) {
-        ctx.AddError(TIssue(TStringBuilder() << "Unsupported syntax of library file, expected one of (.sql, .yql): " << file));
+        ctx.AddError(TIssue(TStringBuilder() << "Unsupported syntax of library file, expected one of (.sql, .yql): " << file)); 
         return false;
     }
 
@@ -312,7 +312,7 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
         astRes = ParseAst(body, nullptr, fullName);
         if (!astRes.IsOk()) {
             ctx.IssueManager.AddIssues(astRes.Issues);
-            ctx.AddError(TIssue(TStringBuilder() << "Failed to parse YQL: " << fullName));
+            ctx.AddError(TIssue(TStringBuilder() << "Failed to parse YQL: " << fullName)); 
             return false;
         }
     } else {
@@ -320,13 +320,13 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
         settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
         settings.File = fullName;
         settings.ClusterMapping = ClusterMapping;
-        settings.Flags = SqlFlags;
+        settings.Flags = SqlFlags; 
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
         astRes = SqlToYql(body, settings);
         if (!astRes.IsOk()) {
             ctx.IssueManager.AddIssues(astRes.Issues);
-            ctx.AddError(TIssue(TStringBuilder() << "Failed to parse SQL: " << fullName));
+            ctx.AddError(TIssue(TStringBuilder() << "Failed to parse SQL: " << fullName)); 
             return false;
         }
     }
@@ -334,14 +334,14 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
     TLibraryCohesion cohesion;
     if (!CompileExpr(*astRes.Root, cohesion, LibsContext)) {
         ctx.IssueManager.AddIssues(LibsContext.IssueManager.GetIssues());
-        ctx.AddError(TIssue(TStringBuilder() << "Failed to compile: " << fullName));
+        ctx.AddError(TIssue(TStringBuilder() << "Failed to compile: " << fullName)); 
         return false;
     }
 
     if (OptimizeLibraries) {
         if (!OptimizeLibrary(cohesion, LibsContext)) {
             ctx.IssueManager.AddIssues(LibsContext.IssueManager.GetIssues());
-            ctx.AddError(TIssue(TStringBuilder() << "Failed to optimize: " << fullName));
+            ctx.AddError(TIssue(TStringBuilder() << "Failed to optimize: " << fullName)); 
             return false;
         }
     }

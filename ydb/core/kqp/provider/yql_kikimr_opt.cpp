@@ -16,7 +16,7 @@ bool CanPushPartialSort(const TKiPartialSort& node, const TKikimrTableDescriptio
 }
 
 TExprNode::TPtr KiTrimReadTableWorld(TExprBase node) {
-    if (auto maybeRead = node.Maybe<TCoLeft>().Input().Maybe<TKiReadTable>()) {
+    if (auto maybeRead = node.Maybe<TCoLeft>().Input().Maybe<TKiReadTable>()) { 
         YQL_CLOG(INFO, ProviderKikimr) << "KiTrimReadTableWorld";
         return maybeRead.Cast().World().Ptr();
     }
@@ -25,16 +25,16 @@ TExprNode::TPtr KiTrimReadTableWorld(TExprBase node) {
 }
 
 TExprNode::TPtr KiEmptyCommit(TExprBase node) {
-    if (!node.Maybe<TCoCommit>().World().Maybe<TCoCommit>()) {
+    if (!node.Maybe<TCoCommit>().World().Maybe<TCoCommit>()) { 
         return node.Ptr();
     }
 
-    auto commit = node.Cast<TCoCommit>();
+    auto commit = node.Cast<TCoCommit>(); 
     if (!commit.DataSink().Maybe<TKiDataSink>()) {
         return node.Ptr();
     }
 
-    auto innerCommit = commit.World().Cast<TCoCommit>();
+    auto innerCommit = commit.World().Cast<TCoCommit>(); 
     if (!innerCommit.DataSink().Maybe<TKiDataSink>()) {
         return node.Ptr();
     }
@@ -43,13 +43,13 @@ TExprNode::TPtr KiEmptyCommit(TExprBase node) {
 }
 
 TExprNode::TPtr KiEraseOverSelectRow(TExprBase node, TExprContext& ctx) {
-    if (!node.Maybe<TCoFlatMap>().Input().Maybe<TKiSelectRow>()) {
+    if (!node.Maybe<TCoFlatMap>().Input().Maybe<TKiSelectRow>()) { 
         return node.Ptr();
     }
 
-    auto map = node.Cast<TCoFlatMap>();
+    auto map = node.Cast<TCoFlatMap>(); 
 
-    if (auto maybeErase = map.Lambda().Body().Maybe<TCoJust>().Input().Maybe<TKiEraseRow>()) {
+    if (auto maybeErase = map.Lambda().Body().Maybe<TCoJust>().Input().Maybe<TKiEraseRow>()) { 
         auto selectRow = map.Input().Cast<TKiSelectRow>();
         auto eraseRow = maybeErase.Cast();
 
@@ -101,12 +101,12 @@ TExprNode::TPtr KiEraseOverSelectRow(TExprBase node, TExprContext& ctx) {
 }
 
 TExprNode::TPtr KiRewriteAggregate(TExprBase node, TExprContext& ctx) {
-    if (!node.Maybe<TCoAggregate>()) {
+    if (!node.Maybe<TCoAggregate>()) { 
         return node.Ptr();
     }
 
-    auto agg = node.Cast<TCoAggregate>();
-    if (!agg.Input().Maybe<TKiSelectRange>() && !agg.Input().Maybe<TCoFlatMap>().Input().Maybe<TKiSelectRange>()) {
+    auto agg = node.Cast<TCoAggregate>(); 
+    if (!agg.Input().Maybe<TKiSelectRange>() && !agg.Input().Maybe<TCoFlatMap>().Input().Maybe<TKiSelectRange>()) { 
         return node.Ptr();
     }
 
@@ -126,7 +126,7 @@ TExprNode::TPtr KiRewriteAggregate(TExprBase node, TExprContext& ctx) {
 TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx,
     const TKikimrTablesData& tablesData, const TKikimrConfiguration& config)
 {
-    auto maybeSort = node.Maybe<TCoSort>();
+    auto maybeSort = node.Maybe<TCoSort>(); 
     auto maybePartialSort = node.Maybe<TKiPartialSort>();
 
     if (!maybeSort && !maybePartialSort) {
@@ -139,8 +139,8 @@ TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx,
 
     auto read = input;
     TMaybe<THashSet<TStringBuf>> passthroughFields;
-    if (maybePartialSort && input.Maybe<TCoFlatMap>()) {
-        auto flatmap = input.Cast<TCoFlatMap>();
+    if (maybePartialSort && input.Maybe<TCoFlatMap>()) { 
+        auto flatmap = input.Cast<TCoFlatMap>(); 
 
         if (!IsPassthroughFlatMap(flatmap, &passthroughFields)) {
             return node.Ptr();
@@ -169,11 +169,11 @@ TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx,
     };
 
     auto getDirection = [] (TExprBase expr) -> ui32 {
-        if (!expr.Maybe<TCoBool>()) {
+        if (!expr.Maybe<TCoBool>()) { 
             return SortDirectionUnknown;
         }
 
-        if (!FromString<bool>(expr.Cast<TCoBool>().Literal().Value())) {
+        if (!FromString<bool>(expr.Cast<TCoBool>().Literal().Value())) { 
             return SortDirectionReverse;
         }
 
@@ -199,11 +199,11 @@ TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx,
     auto& tableData = tablesData.ExistingTable(selectRange.Cluster().StringValue(), selectRange.Table().Path().StringValue());
 
     auto checkKey = [keySelector, &tableData, &passthroughFields] (TExprBase key, ui32 index) {
-        if (!key.Maybe<TCoMember>()) {
+        if (!key.Maybe<TCoMember>()) { 
             return false;
         }
 
-        auto member = key.Cast<TCoMember>();
+        auto member = key.Cast<TCoMember>(); 
         if (member.Struct().Raw() != keySelector.Args().Arg(0).Raw()) {
             return false;
         }
@@ -290,7 +290,7 @@ TExprNode::TPtr KiTopSort(TExprBase node, TExprContext& ctx, const TOptimizeCont
         return node.Ptr();
     }
 
-    auto take = node.Cast<TCoTake>();
+    auto take = node.Cast<TCoTake>(); 
     TCoInputBase top = take;
     if (!optCtx.IsSingleUsage(take.Input().Ref())) {
         return node.Ptr();

@@ -7,18 +7,18 @@
 
 namespace NYql::NDq {
 
-IGraphTransformer::TStatus AnnotateDqStage(const TExprNode::TPtr& input, TExprContext& ctx);
-IGraphTransformer::TStatus AnnotateDqPhyStage(const TExprNode::TPtr& input, TExprContext& ctx);
-IGraphTransformer::TStatus AnnotateDqOutput(const TExprNode::TPtr& input, TExprContext& ctx);
+IGraphTransformer::TStatus AnnotateDqStage(const TExprNode::TPtr& input, TExprContext& ctx); 
+IGraphTransformer::TStatus AnnotateDqPhyStage(const TExprNode::TPtr& input, TExprContext& ctx); 
+IGraphTransformer::TStatus AnnotateDqOutput(const TExprNode::TPtr& input, TExprContext& ctx); 
 IGraphTransformer::TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx);
-IGraphTransformer::TStatus AnnotateDqCnValue(const TExprNode::TPtr& input, TExprContext& ctx);
-IGraphTransformer::TStatus AnnotateDqCnResult(const TExprNode::TPtr& input, TExprContext& ctx);
-IGraphTransformer::TStatus AnnotateDqReplicate(const TExprNode::TPtr& input, TExprContext& ctx);
-IGraphTransformer::TStatus AnnotateDqConnection(const TExprNode::TPtr& input, TExprContext& ctx);
+IGraphTransformer::TStatus AnnotateDqCnValue(const TExprNode::TPtr& input, TExprContext& ctx); 
+IGraphTransformer::TStatus AnnotateDqCnResult(const TExprNode::TPtr& input, TExprContext& ctx); 
+IGraphTransformer::TStatus AnnotateDqReplicate(const TExprNode::TPtr& input, TExprContext& ctx); 
+IGraphTransformer::TStatus AnnotateDqConnection(const TExprNode::TPtr& input, TExprContext& ctx); 
 IGraphTransformer::TStatus AnnotateDqCnMerge(const TExprNode::TPtr& input, TExprContext& ctx);
-IGraphTransformer::TStatus AnnotateDqJoin(const TExprNode::TPtr& input, TExprContext& ctx);
+IGraphTransformer::TStatus AnnotateDqJoin(const TExprNode::TPtr& input, TExprContext& ctx); 
 IGraphTransformer::TStatus AnnotateDqMapOrDictJoin(const TExprNode::TPtr& input, TExprContext& ctx);
-IGraphTransformer::TStatus AnnotateDqCrossJoin(const TExprNode::TPtr& input, TExprContext& ctx);
+IGraphTransformer::TStatus AnnotateDqCrossJoin(const TExprNode::TPtr& input, TExprContext& ctx); 
 IGraphTransformer::TStatus AnnotateDqSource(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus AnnotateDqSink(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus AnnotateDqQuery(const TExprNode::TPtr& input, TExprContext& ctx);

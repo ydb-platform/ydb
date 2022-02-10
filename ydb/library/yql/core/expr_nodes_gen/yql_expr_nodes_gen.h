@@ -1,16 +1,16 @@
 #pragma once
 
 #include <ydb/library/yql/utils/yql_panic.h>
-
+ 
 #include <ydb/library/yql/ast/yql_expr.h>
 
-#include <util/generic/vector.h>
-#include <util/generic/strbuf.h>
-#include <util/system/yassert.h>
+#include <util/generic/vector.h> 
+#include <util/generic/strbuf.h> 
+#include <util/system/yassert.h> 
 #include <util/string/cast.h>
-
+ 
 #include <functional>
-#include <iterator>
+#include <iterator> 
 
 namespace NYql {
 namespace NNodes {
@@ -91,10 +91,10 @@ public:
         return *Raw_;
     }
 
-    const TExprNode* Raw() const {
-        return Raw_;
-    }
-
+    const TExprNode* Raw() const { 
+        return Raw_; 
+    } 
+ 
     bool IsValid() const {
         return Raw_ != nullptr;
     }
@@ -281,65 +281,65 @@ public:
     }
 };
 
-template<typename TItem>
-class TVarArgCallable : public TCallable {
-public:
-    explicit TVarArgCallable(const TExprNode* node)
-        : TCallable(node)
-    {
-    }
-
-    explicit TVarArgCallable(const TExprNode::TPtr& node)
-        : TCallable(node)
-    {
-    }
-
-    TItem Arg(size_t index) const {
-        return TItem(Ref().ChildPtr(index));
-    }
-    size_t ArgCount() const {
-        return Ref().ChildrenSize();
-    }
+template<typename TItem> 
+class TVarArgCallable : public TCallable { 
+public: 
+    explicit TVarArgCallable(const TExprNode* node) 
+        : TCallable(node) 
+    { 
+    } 
+ 
+    explicit TVarArgCallable(const TExprNode::TPtr& node) 
+        : TCallable(node) 
+    { 
+    } 
+ 
+    TItem Arg(size_t index) const { 
+        return TItem(Ref().ChildPtr(index)); 
+    } 
+    size_t ArgCount() const { 
+        return Ref().ChildrenSize(); 
+    } 
     TExprNode::TChildrenType Args() const {
-        return Ref().Children();
-    }
-
-    TChildIterator<TItem> begin() const {
-        return TChildIterator<TItem>(*this);
-    }
-    TChildIterator<TItem> end() const {
-        return TChildIterator<TItem>();
-    }
-};
-
-template<typename TItem>
-class TMaybeNode<TVarArgCallable<TItem>> : public TMaybeNode<TExprBase> {
-public:
-    TMaybeNode(const TExprNode* node)
-        : TMaybeNode<TExprBase>(node && TVarArgCallable<TItem>::Match(node) ? node : nullptr) {}
-
-    TMaybeNode(const TExprNode::TPtr& node)
-        : TMaybeNode<TExprBase>(node && TVarArgCallable<TItem>::Match(node.Get()) ? node : TExprNode::TPtr()) {}
-
-    TVarArgCallable<TItem> Cast() const {
+        return Ref().Children(); 
+    } 
+ 
+    TChildIterator<TItem> begin() const { 
+        return TChildIterator<TItem>(*this); 
+    } 
+    TChildIterator<TItem> end() const { 
+        return TChildIterator<TItem>(); 
+    } 
+}; 
+ 
+template<typename TItem> 
+class TMaybeNode<TVarArgCallable<TItem>> : public TMaybeNode<TExprBase> { 
+public: 
+    TMaybeNode(const TExprNode* node) 
+        : TMaybeNode<TExprBase>(node && TVarArgCallable<TItem>::Match(node) ? node : nullptr) {} 
+ 
+    TMaybeNode(const TExprNode::TPtr& node) 
+        : TMaybeNode<TExprBase>(node && TVarArgCallable<TItem>::Match(node.Get()) ? node : TExprNode::TPtr()) {} 
+ 
+    TVarArgCallable<TItem> Cast() const { 
         YQL_ENSURE(IsValid());
-        return TMaybeNode<TExprBase>::Cast().template Cast<TVarArgCallable<TItem>>();
-    }
-
-    TMaybeNode<TItem> Arg(size_t index) const {
-        if (!IsValid()) {
-            return TMaybeNode<TItem>();
-        }
-
-        auto list = Cast();
-        if (index >= list.ArgCount()) {
-            return TMaybeNode<TItem>();
-        }
-
-        return TMaybeNode<TItem>(Ref().ChildPtr(index));
-    }
-};
-
+        return TMaybeNode<TExprBase>::Cast().template Cast<TVarArgCallable<TItem>>(); 
+    } 
+ 
+    TMaybeNode<TItem> Arg(size_t index) const { 
+        if (!IsValid()) { 
+            return TMaybeNode<TItem>(); 
+        } 
+ 
+        auto list = Cast(); 
+        if (index >= list.ArgCount()) { 
+            return TMaybeNode<TItem>(); 
+        } 
+ 
+        return TMaybeNode<TItem>(Ref().ChildPtr(index)); 
+    } 
+}; 
+ 
 class TArgs
 {
 public:
@@ -443,21 +443,21 @@ public:
         return parent.Value();
     }
 
-    TNodeBuilder<TParent, TDerived>& InitFrom(const ResultType& item) {
-        Items.assign(item.begin(), item.end());
-        return *static_cast<TNodeBuilder<TParent, TDerived>*>(this);
-    }
-
+    TNodeBuilder<TParent, TDerived>& InitFrom(const ResultType& item) { 
+        Items.assign(item.begin(), item.end()); 
+        return *static_cast<TNodeBuilder<TParent, TDerived>*>(this); 
+    } 
+ 
     TNodeBuilder<TParent, TDerived>& Add(const TExprBase& node) {
         Items.push_back(node);
         return *static_cast<TNodeBuilder<TParent, TDerived>*>(this);
     }
 
-    TNodeBuilder<TParent, TDerived>& Add(const TExprNode::TPtr& node) {
-        Items.push_back(TExprBase(node));
-        return *static_cast<TNodeBuilder<TParent, TDerived>*>(this);
-    }
-
+    TNodeBuilder<TParent, TDerived>& Add(const TExprNode::TPtr& node) { 
+        Items.push_back(TExprBase(node)); 
+        return *static_cast<TNodeBuilder<TParent, TDerived>*>(this); 
+    } 
+ 
     TNodeBuilder<TNodeBuilder<TParent, TDerived>, TItem> Add() {
         return TNodeBuilder<TNodeBuilder<TParent, TDerived>, TItem>(this->Ctx, this->Pos,
             [this] (const TExprBase& node) mutable -> TNodeBuilder<TParent, TDerived>& {

@@ -70,22 +70,22 @@ namespace NYql {
             TMaybe<i64> Max;
             TMaybe<i64> Min;
             TMaybe<i64> Avg;
-            TMaybe<i64> Count;
+            TMaybe<i64> Count; 
             TMaybe<TString> Value;
 
-            TEntry(TString name, TMaybe<i64> sum, TMaybe<i64> max, TMaybe<i64> min, TMaybe<i64> avg, TMaybe<i64> count)
-                : Name(std::move(name))
-                , Sum(std::move(sum))
-                , Max(std::move(max))
-                , Min(std::move(min))
-                , Avg(std::move(avg))
-                , Count(std::move(count))
+            TEntry(TString name, TMaybe<i64> sum, TMaybe<i64> max, TMaybe<i64> min, TMaybe<i64> avg, TMaybe<i64> count) 
+                : Name(std::move(name)) 
+                , Sum(std::move(sum)) 
+                , Max(std::move(max)) 
+                , Min(std::move(min)) 
+                , Avg(std::move(avg)) 
+                , Count(std::move(count)) 
             {
             }
 
-            TEntry(TString name, TString value)
-                : Name(std::move(name))
-                , Value(std::move(value))
+            TEntry(TString name, TString value) 
+                : Name(std::move(name)) 
+                , Value(std::move(value)) 
             {
             }
         };

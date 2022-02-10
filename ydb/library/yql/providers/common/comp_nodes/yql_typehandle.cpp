@@ -1,6 +1,6 @@
 #include "yql_typehandle.h"
 #include "yql_type_resource.h"
-
+ 
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
@@ -21,7 +21,7 @@ public:
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         auto exprCtxPtr = GetExprContextPtr(ctx, ExprCtxMutableIndex_);
-        const NYql::TTypeAnnotationNode* type = NYql::NCommon::ParseTypeFromYson(TStringBuf{Yson_}, *exprCtxPtr);
+        const NYql::TTypeAnnotationNode* type = NYql::NCommon::ParseTypeFromYson(TStringBuf{Yson_}, *exprCtxPtr); 
         if (!type) {
             UdfTerminate(exprCtxPtr->IssueManager.GetIssues().ToString().data());
         }

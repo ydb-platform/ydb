@@ -80,10 +80,10 @@ namespace NSQLTranslationV0 {
             return provider;
         }
 
-        TString GetServiceName(const ISource& source) const;
-        bool UseUnordered(const ISource& source) const;
-        bool UseUnordered(const TTableRef& table) const;
-
+        TString GetServiceName(const ISource& source) const; 
+        bool UseUnordered(const ISource& source) const; 
+        bool UseUnordered(const TTableRef& table) const; 
+ 
         bool SetPathPrefix(const TString& value, TMaybe<TString> arg = TMaybe<TString>());
 
         TNodePtr GetPrefixedPath(const TString& cluster, const TDeferredAtom& path);
@@ -144,7 +144,7 @@ namespace NSQLTranslationV0 {
         bool PragmaInferSchema = false;
         bool PragmaAutoCommit = false;
         bool SimpleColumns = false;
-        bool PragmaDirectRead = false;
+        bool PragmaDirectRead = false; 
         bool PragmaYsonAutoConvert = false;
         bool PragmaYsonStrict = false;
         bool PragmaClassicDivision = true;

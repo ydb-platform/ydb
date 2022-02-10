@@ -7,7 +7,7 @@ namespace NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLAllocTest) {
     Y_UNIT_TEST(TestPagedArena) {
-        TAlignedPagePool pagePool;
+        TAlignedPagePool pagePool; 
 
         {
             TPagedArena arena(&pagePool);

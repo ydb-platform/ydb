@@ -1,8 +1,8 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:yql)
-
-PEERDIR(
+ 
+PEERDIR( 
     library/cpp/svnversion
     library/cpp/threading/task_scheduler
     library/cpp/yson/node
@@ -19,15 +19,15 @@ PEERDIR(
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/counters
     ydb/library/yql/providers/dq/interface
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
 
-SRCS(
-    file_cache.cpp
-    tasks_runner_local.cpp
-    tasks_runner_proxy.cpp
-    tasks_runner_pipe.cpp
-)
-
-END()
+SRCS( 
+    file_cache.cpp 
+    tasks_runner_local.cpp 
+    tasks_runner_proxy.cpp 
+    tasks_runner_pipe.cpp 
+) 
+ 
+END() 

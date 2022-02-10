@@ -100,22 +100,22 @@ namespace NYql::NDqs {
     }
 
     THolder<IGraphTransformer> CreateDqsRewritePhyCallablesTransformer() {
-        return CreateFunctorTransformer([](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-            TOptimizeExprSettings optSettings{nullptr};
-            optSettings.VisitLambdas = true;
-            return OptimizeExprEx(input, output,
-                [](const TExprNode::TPtr& inputExpr, TExprContext& ctx, IOptimizationContext&) {
-                    TExprBase node{inputExpr};
+        return CreateFunctorTransformer([](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
+            TOptimizeExprSettings optSettings{nullptr}; 
+            optSettings.VisitLambdas = true; 
+            return OptimizeExprEx(input, output, 
+                [](const TExprNode::TPtr& inputExpr, TExprContext& ctx, IOptimizationContext&) { 
+                    TExprBase node{inputExpr}; 
                     PERFORM_RULE(DqPeepholeRewriteCrossJoin, node, ctx);
                     PERFORM_RULE(DqPeepholeRewriteJoinDict, node, ctx);
-                    PERFORM_RULE(DqPeepholeRewriteMapJoin, node, ctx);
+                    PERFORM_RULE(DqPeepholeRewriteMapJoin, node, ctx); 
                     PERFORM_RULE(DqPeepholeRewritePureJoin, node, ctx);
                     PERFORM_RULE(DqPeepholeRewriteReplicate, node, ctx);
-                    return inputExpr;
-                }, ctx, optSettings);
-        });
-    }
-
+                    return inputExpr; 
+                }, ctx, optSettings); 
+        }); 
+    } 
+ 
     namespace NPeephole {
 
         class TDqsPeepholeTransformer: public TSyncTransformerBase {
@@ -167,14 +167,14 @@ namespace NYql::NDqs {
         return MakeHolder<NPeephole::TDqsPeepholeTransformer>(std::move(typeAnnTransformer), typesCtx);
     }
 
-    THolder<IGraphTransformer> CreateDqsFinalizingOptTransformer() {
-        return CreateFunctorTransformer(
-            [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+    THolder<IGraphTransformer> CreateDqsFinalizingOptTransformer() { 
+        return CreateFunctorTransformer( 
+            [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
                 auto status = NDq::DqReplicateStageMultiOutput(input, output, ctx);
-                if (status.Level != TStatus::Error && input != output) {
-                    YQL_CVLOG(NLog::ELevel::INFO, NLog::EComponent::ProviderDq) << "DqReplicateStageMultiOutput";
-                }
-                return status;
+                if (status.Level != TStatus::Error && input != output) { 
+                    YQL_CVLOG(NLog::ELevel::INFO, NLog::EComponent::ProviderDq) << "DqReplicateStageMultiOutput"; 
+                } 
+                return status; 
             });
     }
 }

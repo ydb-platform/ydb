@@ -1,13 +1,13 @@
-LIBRARY()
-
-OWNER(g:yql)
-
-SRCS(
-    yql_result_provider.cpp
-    yql_result_provider.h
-)
-
-PEERDIR(
+LIBRARY() 
+ 
+OWNER(g:yql) 
+ 
+SRCS( 
+    yql_result_provider.cpp 
+    yql_result_provider.h 
+) 
+ 
+PEERDIR( 
     library/cpp/yson/node
     ydb/library/yql/ast
     ydb/library/yql/utils/log
@@ -17,8 +17,8 @@ PEERDIR(
     ydb/library/yql/providers/common/mkql
     ydb/library/yql/providers/common/provider
     ydb/library/yql/providers/result/expr_nodes
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
 
-END()
+END() 

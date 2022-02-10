@@ -1,35 +1,35 @@
-#include "yql_outproc_udf_resolver.h"
+#include "yql_outproc_udf_resolver.h" 
 #include "yql_simple_udf_resolver.h"
 #include "yql_files_box.h"
-
+ 
 #include <ydb/library/yql/providers/common/proto/udf_resolver.pb.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/core/yql_holding_file_storage.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/retry.h>
-
+ 
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/mkql_utils.h>
-
-#include <library/cpp/protobuf/util/pb_io.h>
-
+ 
+#include <library/cpp/protobuf/util/pb_io.h> 
+ 
 #include <util/generic/scope.h>
-#include <util/stream/str.h>
-#include <util/string/strip.h>
-#include <util/system/shellcommand.h>
+#include <util/stream/str.h> 
+#include <util/string/strip.h> 
+#include <util/system/shellcommand.h> 
 #include <util/string/split.h>
-
+ 
 #include <regex>
 
-namespace NYql {
-namespace NCommon {
-
-using namespace NKikimr;
-using namespace NKikimr::NMiniKQL;
-
+namespace NYql { 
+namespace NCommon { 
+ 
+using namespace NKikimr; 
+using namespace NKikimr::NMiniKQL; 
+ 
 namespace {
 template <typename F>
 void RunResolver(
@@ -103,15 +103,15 @@ TString ExtractSharedObjectNameFromErrorMessage(const char* message) {
 }
 }
 
-class TOutProcUdfResolver : public IUdfResolver {
-public:
+class TOutProcUdfResolver : public IUdfResolver { 
+public: 
     TOutProcUdfResolver(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TFileStoragePtr& fileStorage, const TString& resolverPath,
         const TString& user, const TString& group, bool filterSyscalls,
         const TString& udfDependencyStubPath, const TMap<TString, TString>& path2md5)
         : FunctionRegistry_(functionRegistry)
         , TypeInfoHelper_(new TTypeInfoHelper)
-        , FileStorage_(fileStorage)
+        , FileStorage_(fileStorage) 
         , ResolverPath_(resolverPath)
         , UdfDependencyStubPath_(udfDependencyStubPath)
         , Path2Md5_(path2md5)
@@ -124,7 +124,7 @@ public:
             UserGroupArgs_.push_back("-F");
         }
     }
-
+ 
     TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const override {
         auto path = FunctionRegistry_->FindUdfPath(moduleName);
         if (!path) {
@@ -133,22 +133,22 @@ public:
 
         const TString md5 = Path2Md5_.Value(*path, "");
         return MakeMaybe<TFilePathWithMd5>(*path, md5);
-    }
-
+    } 
+ 
     bool LoadMetadata(const TVector<TImport*>& imports, const TVector<TFunction*>& functions, TExprContext& ctx) const override {
         THashSet<TString> requiredLoadedModules;
         THashSet<TString> requiredExternalModules;
         TVector<TFunction*> loadedFunctions;
         TVector<TFunction*> externalFunctions;
 
-        bool hasErrors = false;
+        bool hasErrors = false; 
         for (auto udf : functions) {
-            TStringBuf moduleName, funcName;
+            TStringBuf moduleName, funcName; 
             if (!SplitUdfName(udf->Name, moduleName, funcName) || moduleName.empty() || funcName.empty()) {
                 ctx.AddError(TIssue(udf->Pos, TStringBuilder() <<
-                    "Incorrect format of function name: " << udf->Name));
-                hasErrors = true;
-            } else {
+                    "Incorrect format of function name: " << udf->Name)); 
+                hasErrors = true; 
+            } else { 
                 if (FunctionRegistry_->IsLoadedUdfModule(moduleName)) {
                     requiredLoadedModules.insert(TString(moduleName));
                     loadedFunctions.push_back(udf);
@@ -156,75 +156,75 @@ public:
                     requiredExternalModules.insert(TString(moduleName));
                     externalFunctions.push_back(udf);
                 }
-            }
-        }
-
-        TResolve request;
+            } 
+        } 
+ 
+        TResolve request; 
         THashMap<TString, TImport*> importMap;
         THoldingFileStorage holdingFileStorage(FileStorage_);
         THolder<TFilesBox> filesBox = CreateFilesBoxOverFileStorageTemp();
-
+ 
         THashMap<TString, TImport*> path2LoadedImport;
         for (auto import : imports) {
-            if (import->Modules) {
-                bool needLibrary = false;
-                for (auto& m : *import->Modules) {
+            if (import->Modules) { 
+                bool needLibrary = false; 
+                for (auto& m : *import->Modules) { 
                     if (requiredLoadedModules.contains(m)) {
                         YQL_ENSURE(import->Block->Type == EUserDataType::PATH);
                         path2LoadedImport[import->Block->Data] = import;
                     }
 
                     if (requiredExternalModules.contains(m)) {
-                        needLibrary = true;
-                        break;
-                    }
-                }
-
-                if (!needLibrary) {
-                    continue;
-                }
+                        needLibrary = true; 
+                        break; 
+                    } 
+                } 
+ 
+                if (!needLibrary) { 
+                    continue; 
+                } 
             } else {
                 import->Modules.ConstructInPlace();
-            }
-
-            importMap[import->FileAlias] = import;
-
-            try {
+            } 
+ 
+            importMap[import->FileAlias] = import; 
+ 
+            try { 
                 LoadImport(holdingFileStorage, *filesBox, *import, request);
             } catch (const std::exception& e) {
                 ctx.AddError(ExceptionToIssue(e));
-                hasErrors = true;
-            }
-        }
-
+                hasErrors = true; 
+            } 
+        } 
+ 
         for (auto& module : requiredExternalModules) {
             if (auto path = FunctionRegistry_->FindUdfPath(module)) {
-                auto importRequest = request.AddImports();
+                auto importRequest = request.AddImports(); 
                 const TString hiddenPath = filesBox->MakeLinkFrom(*path);
                 importRequest->SetFileAlias(hiddenPath);
                 importRequest->SetPath(hiddenPath);
-                importRequest->SetSystem(true);
-            }
-        }
-
+                importRequest->SetSystem(true); 
+            } 
+        } 
+ 
 
         for (auto udf : externalFunctions) {
-            auto udfRequest = request.AddUdfs();
-            udfRequest->SetName(udf->Name);
-            udfRequest->SetTypeConfig(udf->TypeConfig);
-            if (udf->UserType) {
-                udfRequest->SetUserType(WriteTypeToYson(udf->UserType));
-            }
-        }
-
+            auto udfRequest = request.AddUdfs(); 
+            udfRequest->SetName(udf->Name); 
+            udfRequest->SetTypeConfig(udf->TypeConfig); 
+            if (udf->UserType) { 
+                udfRequest->SetUserType(WriteTypeToYson(udf->UserType)); 
+            } 
+        } 
+ 
         TResolveResult response;
         try {
             response = RunResolverAndParseResult(request, { }, *filesBox);
             filesBox->Destroy();
         } catch (const std::exception& e) {
             ctx.AddError(ExceptionToIssue(e));
-            return false;
-        }
+            return false; 
+        } 
 
         // extract regardless of hasErrors value
         hasErrors = !ExtractMetadata(response, importMap, externalFunctions, ctx) || hasErrors;
@@ -317,68 +317,68 @@ private:
 
     static bool ExtractMetadata(const TResolveResult& response, const THashMap<TString, TImport*>& importMap, const TVector<TFunction*>& functions, TExprContext& ctx) {
         bool hasErrors = false;
-        YQL_ENSURE(response.UdfsSize() == functions.size(), "Number of returned udf signatures doesn't match original one");
-
-        for (size_t i = 0; i < response.ImportsSize(); ++i) {
-            const TImportResult& importRes = response.GetImports(i);
-
-            TImport* import = nullptr;
-            if (auto p = importMap.FindPtr(importRes.GetFileAlias())) {
-                import = *p;
-            }
-            if (importRes.HasError()) {
+        YQL_ENSURE(response.UdfsSize() == functions.size(), "Number of returned udf signatures doesn't match original one"); 
+ 
+        for (size_t i = 0; i < response.ImportsSize(); ++i) { 
+            const TImportResult& importRes = response.GetImports(i); 
+ 
+            TImport* import = nullptr; 
+            if (auto p = importMap.FindPtr(importRes.GetFileAlias())) { 
+                import = *p; 
+            } 
+            if (importRes.HasError()) { 
                 ctx.AddError(TIssue(import ? import->Pos : TPosition(), importRes.GetError()));
-                hasErrors = true;
-            } else if (import) {
-                import->Modules.ConstructInPlace();
+                hasErrors = true; 
+            } else if (import) { 
+                import->Modules.ConstructInPlace(); 
                 for (auto& module : importRes.GetModules()) {
-                    import->Modules->push_back(module);
-                }
-            }
-        }
-
-        for (size_t i = 0; i < response.UdfsSize(); ++i) {
-            TFunction* udf = functions[i];
-            const TFunctionResult& udfRes = response.GetUdfs(i);
-            if (udfRes.HasError()) {
+                    import->Modules->push_back(module); 
+                } 
+            } 
+        } 
+ 
+        for (size_t i = 0; i < response.UdfsSize(); ++i) { 
+            TFunction* udf = functions[i]; 
+            const TFunctionResult& udfRes = response.GetUdfs(i); 
+            if (udfRes.HasError()) { 
                 ctx.AddError(TIssue(udf->Pos, udfRes.GetError()));
-                hasErrors = true;
-            } else {
-                udf->CallableType = ParseTypeFromYson(TStringBuf{udfRes.GetCallableType()}, ctx, udf->Pos);
-                if (!udf->CallableType) {
-                    hasErrors = true;
-                    continue;
-                }
-                if (udfRes.HasNormalizedUserType()) {
-                    udf->NormalizedUserType = ParseTypeFromYson(TStringBuf{udfRes.GetNormalizedUserType()}, ctx, udf->Pos);
-                    if (!udf->NormalizedUserType) {
-                        hasErrors = true;
-                        continue;
-                    }
-                }
-                if (udfRes.HasRunConfigType()) {
-                    udf->RunConfigType = ParseTypeFromYson(TStringBuf{udfRes.GetRunConfigType()}, ctx, udf->Pos);
-                    if (!udf->RunConfigType) {
-                        hasErrors = true;
-                        continue;
-                    }
-                }
-            }
-        }
-
-        return !hasErrors;
-    }
-
-private:
+                hasErrors = true; 
+            } else { 
+                udf->CallableType = ParseTypeFromYson(TStringBuf{udfRes.GetCallableType()}, ctx, udf->Pos); 
+                if (!udf->CallableType) { 
+                    hasErrors = true; 
+                    continue; 
+                } 
+                if (udfRes.HasNormalizedUserType()) { 
+                    udf->NormalizedUserType = ParseTypeFromYson(TStringBuf{udfRes.GetNormalizedUserType()}, ctx, udf->Pos); 
+                    if (!udf->NormalizedUserType) { 
+                        hasErrors = true; 
+                        continue; 
+                    } 
+                } 
+                if (udfRes.HasRunConfigType()) { 
+                    udf->RunConfigType = ParseTypeFromYson(TStringBuf{udfRes.GetRunConfigType()}, ctx, udf->Pos); 
+                    if (!udf->RunConfigType) { 
+                        hasErrors = true; 
+                        continue; 
+                    } 
+                } 
+            } 
+        } 
+ 
+        return !hasErrors; 
+    } 
+ 
+private: 
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
-    TFileStoragePtr FileStorage_;
+    TFileStoragePtr FileStorage_; 
     const TString ResolverPath_;
     const TString UdfDependencyStubPath_;
     TList<TString> UserGroupArgs_;
     const TMap<TString, TString> Path2Md5_;
-};
-
+}; 
+ 
 void LoadSystemModulePaths(
         const TString& resolverPath,
         const TString& dir,
@@ -400,7 +400,7 @@ void LoadSystemModulePaths(
     });
 }
 
-IUdfResolver::TPtr CreateOutProcUdfResolver(
+IUdfResolver::TPtr CreateOutProcUdfResolver( 
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TFileStoragePtr& fileStorage,
     const TString& resolverPath,
@@ -410,7 +410,7 @@ IUdfResolver::TPtr CreateOutProcUdfResolver(
     const TString& udfDependencyStubPath,
     const TMap<TString, TString>& path2md5) {
     return new TOutProcUdfResolver(functionRegistry, fileStorage, resolverPath, user, group, filterSyscalls, udfDependencyStubPath, path2md5);
-}
-
-} // namespace NCommon
-} // namespace NYql
+} 
+ 
+} // namespace NCommon 
+} // namespace NYql 

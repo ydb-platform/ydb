@@ -1,5 +1,5 @@
 #include "result_receiver.h"
-#include "proto_builder.h"
+#include "proto_builder.h" 
 
 #include <ydb/library/yql/providers/dq/actors/execution_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/events.h>

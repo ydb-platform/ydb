@@ -39,10 +39,10 @@ private:
 class TPlanOutputTransformer {
 public:
     TPlanOutputTransformer(
-        IOutputStream* directOut,
+        IOutputStream* directOut, 
         IPlanBuilder& builder,
         NYson::EYsonFormat outputFormat)
-        : DirectOut_(directOut)
+        : DirectOut_(directOut) 
         , Builder_(builder)
         , OutputFormat_(outputFormat)
     {
@@ -51,40 +51,40 @@ public:
     IGraphTransformer::TStatus operator()(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
 
     static TAutoPtr <IGraphTransformer> Sync(
-            IOutputStream* directOut,
-            IPlanBuilder& builder,
+            IOutputStream* directOut, 
+            IPlanBuilder& builder, 
             NYson::EYsonFormat outputFormat)
     {
-        return CreateFunctorTransformer(TPlanOutputTransformer(directOut, builder, outputFormat));
+        return CreateFunctorTransformer(TPlanOutputTransformer(directOut, builder, outputFormat)); 
     }
 
 private:
-    IOutputStream* DirectOut_;
+    IOutputStream* DirectOut_; 
     IPlanBuilder& Builder_;
     NYson::EYsonFormat OutputFormat_;
 };
 
-class TExprLogTransformer {
-public:
-    TExprLogTransformer(const TString& description, NYql::NLog::EComponent component, NYql::NLog::ELevel level)
-        : Description(description)
-        , Component(component)
-        , Level(level) {}
-
-    NYql::IGraphTransformer::TStatus operator()(const NYql::TExprNode::TPtr& input, NYql::TExprNode::TPtr& output,
-        NYql::TExprContext& ctx);
-
-    static TAutoPtr<NYql::IGraphTransformer> Sync(const TString& description,
-        NYql::NLog::EComponent component = NYql::NLog::EComponent::Core,
-        NYql::NLog::ELevel level = NYql::NLog::ELevel::TRACE)
-    {
-        return CreateFunctorTransformer(TExprLogTransformer(description, component, level));
-    }
-
-private:
-    TString Description;
-    NYql::NLog::EComponent Component;
-    NYql::NLog::ELevel Level;
-};
-
-} // namespace NYql
+class TExprLogTransformer { 
+public: 
+    TExprLogTransformer(const TString& description, NYql::NLog::EComponent component, NYql::NLog::ELevel level) 
+        : Description(description) 
+        , Component(component) 
+        , Level(level) {} 
+ 
+    NYql::IGraphTransformer::TStatus operator()(const NYql::TExprNode::TPtr& input, NYql::TExprNode::TPtr& output, 
+        NYql::TExprContext& ctx); 
+ 
+    static TAutoPtr<NYql::IGraphTransformer> Sync(const TString& description, 
+        NYql::NLog::EComponent component = NYql::NLog::EComponent::Core, 
+        NYql::NLog::ELevel level = NYql::NLog::ELevel::TRACE) 
+    { 
+        return CreateFunctorTransformer(TExprLogTransformer(description, component, level)); 
+    } 
+ 
+private: 
+    TString Description; 
+    NYql::NLog::EComponent Component; 
+    NYql::NLog::ELevel Level; 
+}; 
+ 
+} // namespace NYql 

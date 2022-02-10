@@ -23,7 +23,7 @@ struct TOptimizeExprSettings {
     IGraphTransformer* CustomInstantTypeTransformer = nullptr;
     bool VisitLambdas = true;
     TTypeAnnotationContext* Types;
-    bool VisitTuples = false;
+    bool VisitTuples = false; 
 };
 
 IGraphTransformer::TStatus OptimizeExpr(const TExprNode::TPtr& input, TExprNode::TPtr& output, TCallableOptimizer optimizer,
@@ -32,10 +32,10 @@ IGraphTransformer::TStatus OptimizeExpr(const TExprNode::TPtr& input, TExprNode:
 IGraphTransformer::TStatus OptimizeExpr(const TExprNode::TPtr& input, TExprNode::TPtr& output, const TCallableOptimizerFast& optimizer,
     TExprContext& ctx, const TOptimizeExprSettings& settings);
 
-IGraphTransformer::TStatus RemapExpr(const TExprNode::TPtr& input, TExprNode::TPtr& output, const TNodeOnNodeOwnedMap& remaps,
-    TExprContext& ctx, const TOptimizeExprSettings& settings);
-
-
+IGraphTransformer::TStatus RemapExpr(const TExprNode::TPtr& input, TExprNode::TPtr& output, const TNodeOnNodeOwnedMap& remaps, 
+    TExprContext& ctx, const TOptimizeExprSettings& settings); 
+ 
+ 
 class IOptimizationContext {
 public:
     virtual ~IOptimizationContext() = default;
@@ -58,11 +58,11 @@ void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, co
 void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func, TNodeSet& visitedNodes);
 void VisitExpr(const TExprNode& root, const TExprVisitRefFunc& func);
 
-void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func);
-void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, const TExprVisitPtrFunc& postFunc);
-void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func, TNodeSet& visitedNodes);
-void VisitExprByFirst(const TExprNode& root, const TExprVisitRefFunc& func);
-
+void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func); 
+void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, const TExprVisitPtrFunc& postFunc); 
+void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func, TNodeSet& visitedNodes); 
+void VisitExprByFirst(const TExprNode& root, const TExprVisitRefFunc& func); 
+ 
 TExprNode::TPtr FindNode(const TExprNode::TPtr& root, const TExprVisitPtrFunc& predicate);
 TExprNode::TPtr FindNode(const TExprNode::TPtr& root, const TExprVisitPtrFunc& filter, const TExprVisitPtrFunc& predicate);
 

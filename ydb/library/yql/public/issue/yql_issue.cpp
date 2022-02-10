@@ -1,10 +1,10 @@
-#include "yql_issue.h"
-#include "yql_issue_id.h"
-
-#include <ydb/library/yql/utils/utf8.h>
-
+#include "yql_issue.h" 
+#include "yql_issue_id.h" 
+ 
+#include <ydb/library/yql/utils/utf8.h> 
+ 
 #include <library/cpp/colorizer/output.h>
-
+ 
 #include <util/string/ascii.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
@@ -17,14 +17,14 @@
 
 namespace NYql {
 
-void SanitizeNonAscii(TString& s) {
-    if (!NYql::IsUtf8(s)) {
-        for (size_t i = 0; i < s.size(); ++i) {
-            if (!IsAscii(s[i])) {
-                s[i] = '?';
-            }
-        }
-    }
+void SanitizeNonAscii(TString& s) { 
+    if (!NYql::IsUtf8(s)) { 
+        for (size_t i = 0; i < s.size(); ++i) { 
+            if (!IsAscii(s[i])) { 
+                s[i] = '?'; 
+            } 
+        } 
+    } 
 }
 
 TTextWalker& TTextWalker::Advance(char c) {

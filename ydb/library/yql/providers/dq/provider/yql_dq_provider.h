@@ -18,7 +18,7 @@ using TExecTransformerFactory = std::function<IGraphTransformer*(const TDqStateP
 TDataProviderInitializer GetDqDataProviderInitializer(
     TExecTransformerFactory execTransformerFactory,
     const IDqGateway::TPtr& dqGateway,
-    NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
+    NKikimr::NMiniKQL::TComputationNodeFactory compFactory, 
     const IMetricsRegistryPtr& metrics,
     const TFileStoragePtr& fileStorage,
     bool externalUser = false);

@@ -10,8 +10,8 @@ OWNER(
 SRCS(
     yql_ast.cpp
     yql_ast.h
-    yql_constraint.cpp
-    yql_constraint.h
+    yql_constraint.cpp 
+    yql_constraint.h 
     yql_ast_annotation.cpp
     yql_ast_annotation.h
     yql_ast_escaping.cpp
@@ -32,7 +32,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/colorizer
-    library/cpp/containers/sorted_vector
+    library/cpp/containers/sorted_vector 
     library/cpp/containers/stack_vector
     library/cpp/deprecated/enum_codegen
     library/cpp/enumbitset

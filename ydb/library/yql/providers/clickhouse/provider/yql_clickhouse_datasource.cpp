@@ -1,5 +1,5 @@
 #include "yql_clickhouse_provider_impl.h"
-#include "yql_clickhouse_dq_integration.h"
+#include "yql_clickhouse_dq_integration.h" 
 
 #include <ydb/library/yql/providers/clickhouse/expr_nodes/yql_clickhouse_expr_nodes.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
@@ -15,7 +15,7 @@ using namespace NNodes;
 
 namespace {
 
-class TClickHouseDataSource : public TDataProviderBase {
+class TClickHouseDataSource : public TDataProviderBase { 
 public:
     TClickHouseDataSource(TClickHouseState::TPtr state, IHTTPGateway::TPtr gateway)
         : State_(state)
@@ -103,11 +103,11 @@ public:
         }
     }
 
-    IDqIntegration* GetDqIntegration() override {
-        return DqIntegration_.Get();
-    }
-
-
+    IDqIntegration* GetDqIntegration() override { 
+        return DqIntegration_.Get(); 
+    } 
+ 
+ 
 private:
     const TClickHouseState::TPtr State_;
     const THolder<IGraphTransformer> IODiscoveryTransformer_;

@@ -26,7 +26,7 @@ TString Err2Str(NYql::TAstParseResult& res, EDebugOutput debug = EDebugOutput::N
 
 NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslation::ESqlMode mode = NSQLTranslation::ESqlMode::QUERY, size_t maxErrors = 10, const TString& provider = {}, EDebugOutput debug = EDebugOutput::None) {
     google::protobuf::Arena arena;
-    const auto service = provider ? provider : TString(NYql::YtProviderName);
+    const auto service = provider ? provider : TString(NYql::YtProviderName); 
     const TString cluster = "plato";
     NSQLTranslation::TTranslationSettings settings;
     settings.ClusterMapping[cluster] = service;
@@ -786,7 +786,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
         TWordCountHive elementStat = {{TString("Kikimr.PushData"), 0}};
         VerifyProgram(res, elementStat, verifyLine);
-        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Kikimr.PushData"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Kikimr.PushData"]); 
     }
 
     Y_UNIT_TEST(ProcessUserTypeAuth) {
@@ -906,7 +906,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         UNIT_ASSERT(!res.Root);
 
         TString a1 = Err2Str(res);
-        TString a2(R"foo(<main>:1:14: Error: Unexpected character 'с' (Unicode character <1089>) : cannot match to any predicted input...
+        TString a2(R"foo(<main>:1:14: Error: Unexpected character 'с' (Unicode character <1089>) : cannot match to any predicted input... 
 
 <main>:1:15: Error: Unexpected character : cannot match to any predicted input...
 

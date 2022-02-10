@@ -138,10 +138,10 @@ bool IsSingleConsumer(const TExprBase& node, const TParentsMap& parentsMap) {
     return GetConsumersCount(node, parentsMap) == 1;
 }
 
-bool IsSingleConsumerConnection(const TDqConnection& node, const TParentsMap& parentsMap, bool allowStageMultiUsage) {
-    return IsSingleConsumer(node, parentsMap)
-        && IsSingleConsumer(node.Output(), parentsMap)
-        && (allowStageMultiUsage || IsSingleConsumer(node.Output().Stage(), parentsMap));
+bool IsSingleConsumerConnection(const TDqConnection& node, const TParentsMap& parentsMap, bool allowStageMultiUsage) { 
+    return IsSingleConsumer(node, parentsMap) 
+        && IsSingleConsumer(node.Output(), parentsMap) 
+        && (allowStageMultiUsage || IsSingleConsumer(node.Output().Stage(), parentsMap)); 
 }
 
 ui32 GetStageOutputsCount(const TDqStageBase& stage, bool includingSinks) {

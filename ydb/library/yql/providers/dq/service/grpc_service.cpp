@@ -95,8 +95,8 @@ namespace NYql::NDqs {
             }
 
             void OnPoison() {
-                YQL_LOG_CTX_SCOPE(TraceId);
-                YQL_LOG(DEBUG) << __FUNCTION__ ;
+                YQL_LOG_CTX_SCOPE(TraceId); 
+                YQL_LOG(DEBUG) << __FUNCTION__ ; 
                 ReplyError(grpc::UNAVAILABLE, "Unexpected error");
                 *ClientDisconnectedCounter += 1;
             }
@@ -106,7 +106,7 @@ namespace NYql::NDqs {
             }
 
             void DoBootstrap(const NActors::TActorContext& ctx) {
-                YQL_LOG_CTX_SCOPE(TraceId);
+                YQL_LOG_CTX_SCOPE(TraceId); 
                 if (!CtxSubscribed) {
                     auto selfId = ctx.SelfID;
                     auto* actorSystem = ctx.ExecutorThread.ActorSystem;
@@ -165,7 +165,7 @@ namespace NYql::NDqs {
                 *operation.Mutableissues() = result.GetIssues();
                 ResponseBuffer.SetTruncated(result.GetTruncated());
 
-                Reply(Ydb::StatusIds::SUCCESS, result.GetIssues().size() > 0);
+                Reply(Ydb::StatusIds::SUCCESS, result.GetIssues().size() > 0); 
             }
 
             virtual void DoRetry()
@@ -212,8 +212,8 @@ namespace NYql::NDqs {
                 this->PassAway();
             }
 
-            virtual void Reply(ui32 status, bool hasIssues) {
-                Y_UNUSED(hasIssues);
+            virtual void Reply(ui32 status, bool hasIssues) { 
+                Y_UNUSED(hasIssues); 
                 Ctx->Reply(&ResponseBuffer, status);
                 this->PassAway();
             }
@@ -264,7 +264,7 @@ namespace NYql::NDqs {
             }
 
             void DoRetry() override {
-                YQL_LOG(DEBUG) << __FUNCTION__;
+                YQL_LOG(DEBUG) << __FUNCTION__; 
                 SendEvent(NYql::NDqProto::EGraphExecutionEventType::FAIL, nullptr, [this](const auto& ev) {
                     if (ev->Get()->Record.GetErrorMessage()) {
                         TBase::ReplyError(grpc::UNAVAILABLE, ev->Get()->Record.GetErrorMessage());
@@ -276,15 +276,15 @@ namespace NYql::NDqs {
                 });
             }
 
-            void Reply(ui32 status, bool hasIssues) override {
-                auto eventType = hasIssues
-                    ? NYql::NDqProto::EGraphExecutionEventType::FAIL
-                    : NYql::NDqProto::EGraphExecutionEventType::SUCCESS;
-                SendEvent(eventType, nullptr, [this, status, hasIssues](const auto& ev) {
-                    if (!hasIssues && ev->Get()->Record.GetErrorMessage()) {
+            void Reply(ui32 status, bool hasIssues) override { 
+                auto eventType = hasIssues 
+                    ? NYql::NDqProto::EGraphExecutionEventType::FAIL 
+                    : NYql::NDqProto::EGraphExecutionEventType::SUCCESS; 
+                SendEvent(eventType, nullptr, [this, status, hasIssues](const auto& ev) { 
+                    if (!hasIssues && ev->Get()->Record.GetErrorMessage()) { 
                         TBase::ReplyError(grpc::UNAVAILABLE, ev->Get()->Record.GetErrorMessage());
                     } else {
-                        TBase::Reply(status, hasIssues);
+                        TBase::Reply(status, hasIssues); 
                     }
                 });
             }
@@ -297,60 +297,60 @@ namespace NYql::NDqs {
             }
 
         private:
-            THolder<Yql::DqsProto::ExecuteGraphRequest> ModifiedRequest;
+            THolder<Yql::DqsProto::ExecuteGraphRequest> ModifiedRequest; 
 
             void DoPassAway() override {
-                YQL_LOG(DEBUG) << __FUNCTION__;
+                YQL_LOG(DEBUG) << __FUNCTION__; 
                 Send(GraphExecutionEventsActorId, new TEvents::TEvPoison());
                 TServiceProxyActor::DoPassAway();
             }
 
-            NDqProto::TGraphExecutionEvent::TExecuteGraphDescriptor SerializeGraphDescriptor() const {
+            NDqProto::TGraphExecutionEvent::TExecuteGraphDescriptor SerializeGraphDescriptor() const { 
                 NDqProto::TGraphExecutionEvent::TExecuteGraphDescriptor result;
 
                 for (const auto& kv : Request->GetSecureParams()) {
                     result.MutableSecureParams()->MutableData()->insert(kv);
                 }
 
-                for (const auto& kv : Request->GetGraphParams()) {
-                    result.MutableGraphParams()->MutableData()->insert(kv);
-                }
-
+                for (const auto& kv : Request->GetGraphParams()) { 
+                    result.MutableGraphParams()->MutableData()->insert(kv); 
+                } 
+ 
                 return result;
             }
 
             void Bootstrap() override {
                 YQL_LOG(DEBUG) << "TServiceProxyActor::OnExecuteGraph";
 
-                SendEvent(NYql::NDqProto::EGraphExecutionEventType::START, SerializeGraphDescriptor(), [this](const TEvGraphExecutionEvent::TPtr& ev) {
-                    if (ev->Get()->Record.GetErrorMessage()) {
-                        TBase::ReplyError(grpc::UNAVAILABLE, ev->Get()->Record.GetErrorMessage());
-                    } else {
-                        NDqProto::TGraphExecutionEvent::TMap params;
-                        ev->Get()->Record.GetMessage().UnpackTo(&params);
-                        FinishBootstrap(params);
-                    }
+                SendEvent(NYql::NDqProto::EGraphExecutionEventType::START, SerializeGraphDescriptor(), [this](const TEvGraphExecutionEvent::TPtr& ev) { 
+                    if (ev->Get()->Record.GetErrorMessage()) { 
+                        TBase::ReplyError(grpc::UNAVAILABLE, ev->Get()->Record.GetErrorMessage()); 
+                    } else { 
+                        NDqProto::TGraphExecutionEvent::TMap params; 
+                        ev->Get()->Record.GetMessage().UnpackTo(&params); 
+                        FinishBootstrap(params); 
+                    } 
                 });
             }
 
-            void MergeTaskMetas(const NDqProto::TGraphExecutionEvent::TMap& params) {
-                if (!params.data().empty()) {
-                    for (size_t i = 0; i < Request->TaskSize(); ++i) {
-                        if (!ModifiedRequest) {
-                            ModifiedRequest.Reset(new Yql::DqsProto::ExecuteGraphRequest());
-                            ModifiedRequest->CopyFrom(*Request);
-                        }
+            void MergeTaskMetas(const NDqProto::TGraphExecutionEvent::TMap& params) { 
+                if (!params.data().empty()) { 
+                    for (size_t i = 0; i < Request->TaskSize(); ++i) { 
+                        if (!ModifiedRequest) { 
+                            ModifiedRequest.Reset(new Yql::DqsProto::ExecuteGraphRequest()); 
+                            ModifiedRequest->CopyFrom(*Request); 
+                        } 
 
-                        auto* task = ModifiedRequest->MutableTask(i);
+                        auto* task = ModifiedRequest->MutableTask(i); 
 
-                        Yql::DqsProto::TTaskMeta taskMeta;
-                        task->GetMeta().UnpackTo(&taskMeta);
+                        Yql::DqsProto::TTaskMeta taskMeta; 
+                        task->GetMeta().UnpackTo(&taskMeta); 
 
-                        for (const auto&[key, value] : params.data()) {
-                            (*taskMeta.MutableTaskParams())[key] = value;
-                        }
+                        for (const auto&[key, value] : params.data()) { 
+                            (*taskMeta.MutableTaskParams())[key] = value; 
+                        } 
 
-                        task->MutableMeta()->PackFrom(taskMeta);
+                        task->MutableMeta()->PackFrom(taskMeta); 
                     }
                 }
 
@@ -359,9 +359,9 @@ namespace NYql::NDqs {
                 }
             }
 
-            void FinishBootstrap(const NDqProto::TGraphExecutionEvent::TMap& params) {
-                YQL_LOG(DEBUG) << __FUNCTION__;
-                MergeTaskMetas(params);
+            void FinishBootstrap(const NDqProto::TGraphExecutionEvent::TMap& params) { 
+                YQL_LOG(DEBUG) << __FUNCTION__; 
+                MergeTaskMetas(params); 
 
                 auto executerId = RegisterChild(NDq::MakeDqExecuter(MakeWorkerManagerActorID(SelfId().NodeId()), SelfId(), TraceId, Username, Settings, Counters, RequestStartTime));
 
@@ -380,14 +380,14 @@ namespace NYql::NDqs {
                     secureParams[x.first] = x.second;
                 }
                 auto resultId = RegisterChild(NExecutionHelpers::MakeResultAggregator(
-                    columns,
-                    executerId,
-                    TraceId,
-                    secureParams,
-                    Settings,
-                    Request->GetResultType(),
-                    Request->GetDiscard(),
-                    GraphExecutionEventsActorId).Release());
+                    columns, 
+                    executerId, 
+                    TraceId, 
+                    secureParams, 
+                    Settings, 
+                    Request->GetResultType(), 
+                    Request->GetDiscard(), 
+                    GraphExecutionEventsActorId).Release()); 
                 auto controlId = Settings->EnableComputeActor.Get().GetOrElse(false) == false ? resultId
                     :  RegisterChild(NYql::MakeTaskController(TraceId, executerId, resultId, Settings, NYq::NCommon::TServiceCounters(Counters, nullptr, "")).Release());
                 Send(executerId, MakeHolder<TEvGraphRequest>(
@@ -404,8 +404,8 @@ namespace NYql::NDqs {
                     record.MutableMessage()->PackFrom(payload);
                 }
                 Send(GraphExecutionEventsActorId, new TEvGraphExecutionEvent(record));
-                Synchronize<TEvGraphExecutionEvent>([callback, traceId = TraceId](TEvGraphExecutionEvent::TPtr& ev) {
-                    YQL_LOG_CTX_SCOPE(traceId);
+                Synchronize<TEvGraphExecutionEvent>([callback, traceId = TraceId](TEvGraphExecutionEvent::TPtr& ev) { 
+                    YQL_LOG_CTX_SCOPE(traceId); 
                     Y_VERIFY(ev->Get()->Record.GetEventType() == NYql::NDqProto::EGraphExecutionEventType::SYNC);
                     callback(ev);
                 });
@@ -459,7 +459,7 @@ namespace NYql::NDqs {
 
         CQ = cq;
 
-        using TDqTaskPreprocessorCollection = std::vector<NYql::IDqTaskPreprocessor::TPtr>;
+        using TDqTaskPreprocessorCollection = std::vector<NYql::IDqTaskPreprocessor::TPtr>; 
 
         ADD_REQUEST(ExecuteGraph, ExecuteGraphRequest, ExecuteGraphResponse, {
             TGuard<TMutex> lock(Mutex);
@@ -479,14 +479,14 @@ namespace NYql::NDqs {
             }
 
             TDqTaskPreprocessorCollection taskPreprocessors;
-            for (const auto& factory: DqTaskPreprocessorFactories) {
-                taskPreprocessors.push_back(factory());
+            for (const auto& factory: DqTaskPreprocessorFactories) { 
+                taskPreprocessors.push_back(factory()); 
             }
 
-            auto graphExecutionEventsActorId = ActorSystem.Register(NDqs::MakeGraphExecutionEventsActor(request->GetSession(), std::move(taskPreprocessors)));
+            auto graphExecutionEventsActorId = ActorSystem.Register(NDqs::MakeGraphExecutionEventsActor(request->GetSession(), std::move(taskPreprocessors))); 
 
             RunningRequests++;
-            auto actor = MakeHolder<TExecuteGraphProxyActor>(ctx, Counters, request->GetSession(), session->GetUsername(), graphExecutionEventsActorId);
+            auto actor = MakeHolder<TExecuteGraphProxyActor>(ctx, Counters, request->GetSession(), session->GetUsername(), graphExecutionEventsActorId); 
             auto future = actor->GetFuture();
             auto actorId = ActorSystem.Register(actor.Release());
             future.Apply([session, actorId, this] (const TFuture<void>&) mutable {

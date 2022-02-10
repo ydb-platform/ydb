@@ -12,7 +12,7 @@ namespace NYql {
 
 enum EExecutorPoolType {
     Main,
-    FullResultWriter,
+    FullResultWriter, 
 
     TotalCount,
 };

@@ -153,7 +153,7 @@ private:
             return false;
         }
 
-        return CompileExpr(*astRes.Root, expr, ctx, nullptr);
+        return CompileExpr(*astRes.Root, expr, ctx, nullptr); 
     }
 
     bool ShouldAcquireLocks(const NKikimrKqp::TPreparedKql& kql) {

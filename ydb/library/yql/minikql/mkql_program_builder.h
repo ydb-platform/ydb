@@ -406,16 +406,16 @@ public:
         ui64 memLimit, std::optional<ui32> sortedTableOrder,
         EAnyJoinSettings anyJoinSettings, const ui32 tableIndexField,
         TType* returnType);
-    TRuntimeNode CombineCore(TRuntimeNode stream,
+    TRuntimeNode CombineCore(TRuntimeNode stream, 
         const TUnaryLambda& keyExtractor,
         const TBinaryLambda& init,
         const TTernaryLambda& update,
         const TBinaryLambda& finish,
-        ui64 memLimit);
-    TRuntimeNode GroupingCore(TRuntimeNode stream,
+        ui64 memLimit); 
+    TRuntimeNode GroupingCore(TRuntimeNode stream, 
         const TBinaryLambda& groupSwitch,
-        const TUnaryLambda& keyExtractor,
-        const TUnaryLambda& handler = {});
+        const TUnaryLambda& keyExtractor, 
+        const TUnaryLambda& handler = {}); 
     TRuntimeNode HoppingCore(TRuntimeNode list,
         const TUnaryLambda& timeExtractor,
         const TUnaryLambda& init,
@@ -564,7 +564,7 @@ public:
     TRuntimeNode Guess(TRuntimeNode variant, const std::string_view& memberName);
     TRuntimeNode VisitAll(TRuntimeNode variant, std::function<TRuntimeNode(ui32, TRuntimeNode)> handler);
     TRuntimeNode Way(TRuntimeNode variant);
-    TRuntimeNode VariantItem(TRuntimeNode variant);
+    TRuntimeNode VariantItem(TRuntimeNode variant); 
 
     //-- random functions
     // expects ui64 seed, returns resource

@@ -182,40 +182,40 @@ namespace NCompactTrie {
     // If there is a value associated with the symbol, makes the value pointer point to it,
     // otherwise sets it to nullptr.
     // Returns true if the symbol was succesfully found in the trie, false otherwise.
-    template <typename TSymbol, class TPacker>
+    template <typename TSymbol, class TPacker> 
     Y_FORCE_INLINE bool Advance(const char*& datapos, const char* const dataend, const char*& value,
                                 TSymbol label, TPacker packer) {
         Y_ASSERT(datapos < dataend);
-        char flags = MT_NEXT;
-        for (int i = (int)ExtraBits<TSymbol>(); i >= 0; i -= 8) {
-            flags = LeapByte(datapos, dataend, (char)(label >> i));
-            if (!datapos) {
-                return false; // no such arc
-            }
-
+        char flags = MT_NEXT; 
+        for (int i = (int)ExtraBits<TSymbol>(); i >= 0; i -= 8) { 
+            flags = LeapByte(datapos, dataend, (char)(label >> i)); 
+            if (!datapos) { 
+                return false; // no such arc 
+            } 
+ 
             value = nullptr;
-
+ 
             Y_ASSERT(datapos <= dataend);
-            if ((flags & MT_FINAL)) {
-                value = datapos;
-                datapos += packer.SkipLeaf(datapos);
-            }
-
-            if (!(flags & MT_NEXT)) {
-                if (i == 0) {
+            if ((flags & MT_FINAL)) { 
+                value = datapos; 
+                datapos += packer.SkipLeaf(datapos); 
+            } 
+ 
+            if (!(flags & MT_NEXT)) { 
+                if (i == 0) { 
                     datapos = nullptr;
-                    return true;
-                }
-                return false; // no further way
-            }
-
-            TraverseEpsilon(datapos);
-            if (i == 0) { // last byte, and got a match
-                return true;
-            }
-        }
-
-        return false;
-    }
-
+                    return true; 
+                } 
+                return false; // no further way 
+            } 
+ 
+            TraverseEpsilon(datapos); 
+            if (i == 0) { // last byte, and got a match 
+                return true; 
+            } 
+        } 
+ 
+        return false; 
+    } 
+ 
 }

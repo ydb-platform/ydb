@@ -798,13 +798,13 @@ namespace NSQLTranslationV1 {
         ColumnOnly,
     };
 
-    enum class EOrderKind: int {
-        None,
-        Sort,
-        Assume,
-        Passthrough
-    };
-
+    enum class EOrderKind: int { 
+        None, 
+        Sort, 
+        Assume, 
+        Passthrough 
+    }; 
+ 
     class IJoin;
     class ISource: public INode {
     public:
@@ -843,7 +843,7 @@ namespace NSQLTranslationV1 {
         virtual bool IsCalcOverWindow() const;
         virtual bool IsOverWindowSource() const;
         virtual bool IsStream() const;
-        virtual EOrderKind GetOrderKind() const;
+        virtual EOrderKind GetOrderKind() const; 
         virtual TWriteSettings GetWriteSettings() const;
         virtual bool SetSamplingOptions(TContext& ctx, TPosition pos, ESampleMode mode, TNodePtr samplingRate, TNodePtr samplingSeed);
         virtual bool SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hints, const TTableHints& contextHints);
@@ -858,7 +858,7 @@ namespace NSQLTranslationV1 {
         virtual TNodePtr BuildAggregation(const TString& label);
         virtual TNodePtr BuildCalcOverWindow(TContext& ctx, const TString& label);
         virtual TNodePtr BuildSort(TContext& ctx, const TString& label);
-        virtual TNodePtr BuildCleanupColumns(TContext& ctx, const TString& label);
+        virtual TNodePtr BuildCleanupColumns(TContext& ctx, const TString& label); 
         virtual bool BuildSamplingLambda(TNodePtr& node);
         virtual bool SetSamplingRate(TContext& ctx, TNodePtr samplingRate);
         virtual IJoin* GetJoin();
@@ -1008,7 +1008,7 @@ namespace NSQLTranslationV1 {
         TString View;
     };
 
-    class TTableRows final : public INode {
+    class TTableRows final : public INode { 
     public:
         TTableRows(TPosition pos, const TVector<TNodePtr>& args);
         TTableRows(TPosition pos, ui32 argsCount);
@@ -1018,11 +1018,11 @@ namespace NSQLTranslationV1 {
         void DoUpdateState() const override;
 
         TNodePtr DoClone() const final;
-        TAstNode* Translate(TContext& ctx) const override;
+        TAstNode* Translate(TContext& ctx) const override; 
 
     private:
         ui32 ArgsCount;
-        TNodePtr Node;
+        TNodePtr Node; 
     };
 
     class TSessionWindow final : public INode {
@@ -1218,7 +1218,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildYsonOptionsNode(TPosition pos, bool autoConvert, bool strict, bool fastYson);
 
     TNodePtr BuildDoCall(TPosition pos, const TNodePtr& node);
-    TNodePtr BuildTupleResult(TNodePtr tuple, int ensureTupleSize);
+    TNodePtr BuildTupleResult(TNodePtr tuple, int ensureTupleSize); 
 
     // Implemented in aggregation.cpp
     TAggregationPtr BuildFactoryAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode, bool multi = false);
@@ -1257,9 +1257,9 @@ namespace NSQLTranslationV1 {
 
     // Implemented in select.cpp
     TNodePtr BuildSubquery(TSourcePtr source, const TString& alias, bool inSubquery, int ensureTupleSize, TScopedStatePtr scoped);
-    TNodePtr BuildSubqueryRef(TNodePtr subquery, const TString& alias, int tupleIndex = -1);
+    TNodePtr BuildSubqueryRef(TNodePtr subquery, const TString& alias, int tupleIndex = -1); 
     TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist = false);
-    TSourcePtr BuildMuxSource(TPosition pos, TVector<TSourcePtr>&& sources);
+    TSourcePtr BuildMuxSource(TPosition pos, TVector<TSourcePtr>&& sources); 
     TSourcePtr BuildFakeSource(TPosition pos, bool missingFrom = false);
     TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList = false);
     TSourcePtr BuildTableSource(TPosition pos, const TTableRef& table, const TString& label = TString());
@@ -1279,7 +1279,7 @@ namespace NSQLTranslationV1 {
         const TVector<TNodePtr>& groupByExpr,
         const TVector<TNodePtr>& groupBy,
         bool compactGroupBy,
-        bool assumeSorted,
+        bool assumeSorted, 
         const TVector<TSortSpecificationPtr>& orderBy,
         TNodePtr having,
         TWinSpecs&& windowSpec,
@@ -1298,7 +1298,7 @@ namespace NSQLTranslationV1 {
         ByAll,
     };
     TSourcePtr BuildReduce(TPosition pos, ReduceMode mode, TSourcePtr source, TVector<TSortSpecificationPtr>&& orderBy,
-        TVector<TNodePtr>&& keys, TVector<TNodePtr>&& args, TNodePtr udf, TNodePtr having, const TWriteSettings& settings,
+        TVector<TNodePtr>&& keys, TVector<TNodePtr>&& args, TNodePtr udf, TNodePtr having, const TWriteSettings& settings, 
         const TVector<TSortSpecificationPtr>& assumeOrderBy, bool listCall);
     TSourcePtr BuildProcess(TPosition pos, TSourcePtr source, TNodePtr with, bool withExtFunction, TVector<TNodePtr>&& terms, bool listCall,
         bool prcessStream, const TWriteSettings& settings, const TVector<TSortSpecificationPtr>& assumeOrderBy);

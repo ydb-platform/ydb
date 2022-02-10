@@ -18,10 +18,10 @@
 
 namespace NYql {
 
-namespace NProto {
-class TDqConfig;
-}
-
+namespace NProto { 
+class TDqConfig; 
+} 
+ 
 class IDqGateway : public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<IDqGateway>;
@@ -42,7 +42,7 @@ public:
 
     using TUploadList = THashSet<TFileResource, TFileResourceHash, TFileResourceEqual>;
 
-    class TResult: public NCommon::TOperationResult {
+    class TResult: public NCommon::TOperationResult { 
     public:
         TString Data;
         bool Fallback = false;
@@ -64,11 +64,11 @@ public:
     virtual void CloseSession(const TString& sessionId) = 0;
 
     virtual NThreading::TFuture<TResult>
-    ExecutePlan(const TString& sessionId, NDqs::IDqsExecutionPlanner& plan, const TVector<TString>& columns,
-                const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
-                const TDqSettings::TPtr& settings,
-                const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
-                bool discard) = 0;
+    ExecutePlan(const TString& sessionId, NDqs::IDqsExecutionPlanner& plan, const TVector<TString>& columns, 
+                const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams, 
+                const TDqSettings::TPtr& settings, 
+                const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping, 
+                bool discard) = 0; 
 
     virtual TString GetVanillaJobPath() {
         return "";

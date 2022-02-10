@@ -13,7 +13,7 @@ void TYsonResultWriter::OnStringScalar(TStringBuf value) {
     if (!IsUtf8(value)) {
         TString encoded = Base64Encode(value);
         Writer.OnBeginList();
-        Writer.OnListItem();
+        Writer.OnListItem(); 
         Writer.OnStringScalar(TStringBuf(encoded));
         Writer.OnEndList();
     } else {

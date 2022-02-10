@@ -1,22 +1,22 @@
 LIBRARY()
 
-OWNER(
+OWNER( 
     vvvv
-    g:yql
+    g:yql 
     g:yql_ydb_core
-)
+) 
 
 SRCS(
     yql_atom_enums.h
-    yql_callable_transform.cpp
-    yql_callable_transform.h
+    yql_callable_transform.cpp 
+    yql_callable_transform.h 
     yql_csv.cpp
     yql_csv.h
     yql_data_provider.h
     yql_execution.cpp
     yql_execution.h
-    yql_expr_constraint.cpp
-    yql_expr_constraint.h
+    yql_expr_constraint.cpp 
+    yql_expr_constraint.h 
     yql_expr_csee.cpp
     yql_expr_csee.h
     yql_expr_optimize.cpp

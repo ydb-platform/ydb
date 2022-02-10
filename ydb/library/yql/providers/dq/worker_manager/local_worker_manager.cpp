@@ -179,8 +179,8 @@ private:
         auto& request = ev->Get()->Record.GetRequest();
         YQL_ENSURE(request.GetNodeId() == SelfId().NodeId(), "Wrong node id!");
 
-        TFailureInjector::Set(request.GetName(), request.GetSkip(), request.GetCountOfFails());
-        YQL_LOG(DEBUG) << "Failure injector is configured " << request.GetName();
+        TFailureInjector::Set(request.GetName(), request.GetSkip(), request.GetCountOfFails()); 
+        YQL_LOG(DEBUG) << "Failure injector is configured " << request.GetName(); 
 
         auto response = MakeHolder<TEvConfigureFailureInjectorResponse>();
         auto* r = response->Record.MutableResponse();
@@ -209,7 +209,7 @@ private:
 
         YQL_LOG_CTX_SCOPE(ev->Get()->Record.GetTraceId());
         YQL_LOG(DEBUG) << "TLocalWorkerManager::TEvAllocateWorkersRequest " << resourceId;
-        TFailureInjector::Reach("allocate_workers_failure", [] { ::_exit(1); });
+        TFailureInjector::Reach("allocate_workers_failure", [] { ::_exit(1); }); 
 
         auto& allocationInfo = AllocatedWorkers[resourceId];
         auto traceId = ev->Get()->Record.GetTraceId();

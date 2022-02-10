@@ -5,7 +5,7 @@
 #include <library/cpp/yson/writer.h>
 
 #include <util/stream/null.h>
-#include <util/stream/str.h>
+#include <util/stream/str.h> 
 
 namespace NYql {
 
@@ -18,7 +18,7 @@ IGraphTransformer::TStatus TExprOutputTransformer::operator()(
         return IGraphTransformer::TStatus::Ok;
     }
 
-    auto ast = ConvertToAst(*ExprRoot_, ctx, WithTypes_ ? TExprAnnotationFlags::Types : TExprAnnotationFlags::None, true);
+    auto ast = ConvertToAst(*ExprRoot_, ctx, WithTypes_ ? TExprAnnotationFlags::Types : TExprAnnotationFlags::None, true); 
     ui32 prettyFlags = TAstPrintFlags::ShortQuote;
     if (!WithTypes_) {
         prettyFlags |= TAstPrintFlags::PerLine;
@@ -47,18 +47,18 @@ IGraphTransformer::TStatus TPlanOutputTransformer::operator()(
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus TExprLogTransformer::operator()(
-    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx)
-{
-    Y_UNUSED(ctx);
-    output = input;
-    if (YQL_CVLOG_ACTIVE(Level, Component)) {
-        TStringStream out;
-        auto ast = ConvertToAst(*input, ctx, TExprAnnotationFlags::None, true);
-        ast.Root->PrettyPrintTo(out, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
-        YQL_CVLOG(Level, Component) << Description << ":\n" << out.Str();
-    }
-    return IGraphTransformer::TStatus::Ok;
-}
-
-}
+IGraphTransformer::TStatus TExprLogTransformer::operator()( 
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) 
+{ 
+    Y_UNUSED(ctx); 
+    output = input; 
+    if (YQL_CVLOG_ACTIVE(Level, Component)) { 
+        TStringStream out; 
+        auto ast = ConvertToAst(*input, ctx, TExprAnnotationFlags::None, true); 
+        ast.Root->PrettyPrintTo(out, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine); 
+        YQL_CVLOG(Level, Component) << Description << ":\n" << out.Str(); 
+    } 
+    return IGraphTransformer::TStatus::Ok; 
+} 
+ 
+} 

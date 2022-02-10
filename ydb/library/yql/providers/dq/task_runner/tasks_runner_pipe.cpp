@@ -1,4 +1,4 @@
-#include "tasks_runner_pipe.h"
+#include "tasks_runner_pipe.h" 
 
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
@@ -13,10 +13,10 @@
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
-#include <library/cpp/yson/node/node.h>
-#include <library/cpp/yson/node/node_io.h>
-#include <library/cpp/svnversion/svnversion.h>
-
+#include <library/cpp/yson/node/node.h> 
+#include <library/cpp/yson/node/node_io.h> 
+#include <library/cpp/svnversion/svnversion.h> 
+ 
 #include <library/cpp/threading/task_scheduler/task_scheduler.h>
 
 #include <util/system/shellcommand.h>
@@ -24,17 +24,17 @@
 #include <util/system/fs.h>
 #include <util/stream/file.h>
 #include <util/stream/pipe.h>
-#include <util/generic/size_literals.h>
-#include <util/string/cast.h>
+#include <util/generic/size_literals.h> 
+#include <util/string/cast.h> 
 
-namespace NYql::NTaskRunnerProxy {
+namespace NYql::NTaskRunnerProxy { 
 
 const TString WorkingDirectoryParamName = "TaskRunnerProxy.WorkingDirectory";
 const TString WorkingDirectoryDontInitParamName = "TaskRunnerProxy.WorkingDirectoryDontInit";
 const TString UseMetaParamName = "TaskRunnerProxy.UseMeta"; // COMPAT(aozeritsky)
 
-using namespace NKikimr;
-using namespace NDq;
+using namespace NKikimr; 
+using namespace NDq; 
 
 #ifndef _win_
 extern "C" int fork(void);
@@ -1904,4 +1904,4 @@ IProxyFactory::TPtr CreatePipeFactory(
     return new TPipeFactory(options);
 }
 
-} // namespace NYql::NTaskRunnerProxy
+} // namespace NYql::NTaskRunnerProxy 

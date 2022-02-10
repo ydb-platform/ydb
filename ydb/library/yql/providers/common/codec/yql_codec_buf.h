@@ -2,8 +2,8 @@
 #include <ydb/library/yql/minikql/mkql_stats_registry.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
-#include <library/cpp/yson/zigzag.h>
-
+#include <library/cpp/yson/zigzag.h> 
+ 
 #include <util/generic/yexception.h>
 #include <util/generic/maybe.h>
 #ifndef LLVM_BC
@@ -14,8 +14,8 @@ using TInstant = ui64;
 #include <util/generic/vector.h>
 
 #include <utility>
-#include <functional>
-#include <optional>
+#include <functional> 
+#include <optional> 
 
 namespace NYql {
 namespace NCommon {
@@ -35,10 +35,10 @@ struct IBlockReader {
 struct IBlockWriter {
     virtual ~IBlockWriter() = default;
 
-    virtual void SetRecordBoundaryCallback(std::function<void()> callback) = 0;
-
+    virtual void SetRecordBoundaryCallback(std::function<void()> callback) = 0; 
+ 
     virtual std::pair<char*, char*> NextEmptyBlock() = 0;
-    virtual void ReturnBlock(size_t avail, std::optional<size_t> lastRecordBoundary) = 0;
+    virtual void ReturnBlock(size_t avail, std::optional<size_t> lastRecordBoundary) = 0; 
     virtual void Finish() = 0;
 };
 
@@ -56,31 +56,31 @@ friend void InputBufReadManySlowThunk(TInputBuf& in, char* buffer, size_t count)
 friend void InputBufSkipManySlowThunk(TInputBuf& in, size_t count);
 
 public:
-    TInputBuf(NKikimr::NMiniKQL::TStatTimer* readTimer)
-        : ReadTimer_(readTimer)
+    TInputBuf(NKikimr::NMiniKQL::TStatTimer* readTimer) 
+        : ReadTimer_(readTimer) 
     {}
 
-    TInputBuf(IBlockReader& source, NKikimr::NMiniKQL::TStatTimer* readTimer)
-        : TInputBuf(readTimer)
-    {
-        SetSource(source);
-    }
-
-    void SetSource(IBlockReader& source) {
-        Source_ = &source;
-        Current_ = nullptr;
-        End_ = nullptr;
-        String_.clear();
-    }
-
+    TInputBuf(IBlockReader& source, NKikimr::NMiniKQL::TStatTimer* readTimer) 
+        : TInputBuf(readTimer) 
+    { 
+        SetSource(source); 
+    } 
+ 
+    void SetSource(IBlockReader& source) { 
+        Source_ = &source; 
+        Current_ = nullptr; 
+        End_ = nullptr; 
+        String_.clear(); 
+    } 
+ 
     void SetStats(NKikimr::NMiniKQL::IStatsRegistry* jobStats) {
         JobStats_ = jobStats;
     }
 
-    void SetNextBlockCallback(std::function<void()> cb) {
-        OnNextBlockCallback_ = std::move(cb);
-    }
-
+    void SetNextBlockCallback(std::function<void()> cb) { 
+        OnNextBlockCallback_ = std::move(cb); 
+    } 
+ 
     bool TryRead(char& value) {
         if (Y_LIKELY(Current_ < End_)) {
             value = *Current_++;
@@ -180,13 +180,13 @@ private:
     void SkipManySlow(size_t count);
 
 private:
-    IBlockReader* Source_ = nullptr;
+    IBlockReader* Source_ = nullptr; 
     NKikimr::NMiniKQL::TStatTimer* ReadTimer_;
     NKikimr::NMiniKQL::IStatsRegistry* JobStats_ = nullptr;
     const char* Current_ = nullptr;
     const char* End_ = nullptr;
     TVector<char> String_;
-    std::function<void()> OnNextBlockCallback_;
+    std::function<void()> OnNextBlockCallback_; 
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -259,10 +259,10 @@ public:
         }
     }
 
-    void OnRecordBoundary() {
-        RecordBoundary_ = Current_;
-    }
-
+    void OnRecordBoundary() { 
+        RecordBoundary_ = Current_; 
+    } 
+ 
 private:
     void WriteSlow(char value) {
         OutputBufFlushThunk(*this);
@@ -278,7 +278,7 @@ private:
     char* Begin_ = nullptr;
     char* Current_ = nullptr;
     char* End_ = nullptr;
-    char* RecordBoundary_ = nullptr;
+    char* RecordBoundary_ = nullptr; 
     ui64 WrittenBytes_ = 0;
 };
 

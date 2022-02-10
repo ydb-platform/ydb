@@ -68,7 +68,7 @@ public:
 
 private:
     void DoWrite(const void* buf, size_t len) override final;
-    void DoFlush() override;
+    void DoFlush() override; 
 
 private:
     IOutputStream& Slave_;

@@ -46,13 +46,13 @@ void ensureMessageTypesSame(const Descriptor* a, const Descriptor* b, THashSet<T
 Y_UNIT_TEST_SUITE(IssueTest) {
     Y_UNIT_TEST(Ascii) {
         TIssue issue1("тест abc");
-        UNIT_ASSERT_VALUES_EQUAL(issue1.Message, "тест abc");
-        TIssue issue2("\xFF abc");
-        UNIT_ASSERT_VALUES_EQUAL(issue2.Message, "? abc");
-        TIssue issue3("");
-        UNIT_ASSERT_VALUES_EQUAL(issue3.Message, "");
-        TIssue issue4("abc");
-        UNIT_ASSERT_VALUES_EQUAL(issue4.Message, "abc");
+        UNIT_ASSERT_VALUES_EQUAL(issue1.Message, "тест abc"); 
+        TIssue issue2("\xFF abc"); 
+        UNIT_ASSERT_VALUES_EQUAL(issue2.Message, "? abc"); 
+        TIssue issue3(""); 
+        UNIT_ASSERT_VALUES_EQUAL(issue3.Message, ""); 
+        TIssue issue4("abc"); 
+        UNIT_ASSERT_VALUES_EQUAL(issue4.Message, "abc"); 
     }
 }
 

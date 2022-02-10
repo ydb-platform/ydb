@@ -6,9 +6,9 @@
 namespace NYql::NDqs {
 
 THolder<NActors::IActor> MakeFullResultWriterActor(
-    const TString& traceId,
-    const TString& resultType,
-    THolder<IDqFullResultWriter>&& writer,
-    const NActors::TActorId& aggregatorId);
+    const TString& traceId, 
+    const TString& resultType, 
+    THolder<IDqFullResultWriter>&& writer, 
+    const NActors::TActorId& aggregatorId); 
 
 } // namespace NYql::NDqs

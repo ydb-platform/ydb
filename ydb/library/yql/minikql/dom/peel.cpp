@@ -313,7 +313,7 @@ TUnboxedValuePod PeelOptional(const ITypeInfoHelper::TPtr typeHelper, const TTyp
     if (const auto result = TryPeelDom<Strict, AutoConvert>(typeHelper, itemType, value, valueBuilder, pos); AutoConvert || result)
         return result;
     else if constexpr (Strict)
-        UdfTerminate("Failed to convert Yson DOM.");
+        UdfTerminate("Failed to convert Yson DOM."); 
     else
         return TUnboxedValuePod().MakeOptional();
 }

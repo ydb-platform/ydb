@@ -4,8 +4,8 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 
-#include <algorithm>
-
+#include <algorithm> 
+ 
 namespace NYql::NDq {
 
 using namespace NNodes;
@@ -79,11 +79,11 @@ std::pair<TDqStage, TVector<TCoAtom>> ReplicateStageOutput(const TDqStage& stage
     }
 
     for (ui32 i = newOutputIndexStart, j = 0; i < newOutputIndexEnd; ++i, ++j) {
-        if (outputsCount > 1) {
+        if (outputsCount > 1) { 
             variants.emplace_back(ctx.FuseLambdas(lambdas[j].Ref(), variants[index].Ref()));
-        } else {
+        } else { 
             variants.emplace_back(ctx.DeepCopyLambda(lambdas[j].Ref()));
-        }
+        } 
     }
 
     newResult = Build<TDqReplicate>(ctx, stage.Pos())
@@ -269,7 +269,7 @@ TExprNode::TPtr ReplicateDqConnection(TExprNode::TPtr&& input, const TMultiUsedC
     YQL_ENSURE(consumers.size() > 1);
 
     // NOTE: Only handle one consumer at a time, as there might be dependencies between them.
-    // Ensure stable order by processing connection with minimal ID
+    // Ensure stable order by processing connection with minimal ID 
     auto& consumer = *std::min_element(consumers.begin(), consumers.end(),
         [](auto l, auto r) { return l->UniqueId() < r->UniqueId(); });
 

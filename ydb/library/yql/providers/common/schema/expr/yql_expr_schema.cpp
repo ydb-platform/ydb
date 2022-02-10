@@ -1,19 +1,19 @@
-#include "yql_expr_schema.h"
+#include "yql_expr_schema.h" 
 
 #include <ydb/library/yql/providers/common/schema/parser/yql_type_parser.h>
 #include <ydb/library/yql/ast/yql_expr_types.h>
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
-
+ 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/node/node_builder.h>
 #include <library/cpp/yson/writer.h>
-
+ 
 #include <util/generic/map.h>
-#include <util/stream/str.h>
+#include <util/stream/str.h> 
 
-
+ 
 namespace NYql {
 namespace NCommon {
 
@@ -98,57 +98,57 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
         }
     };
 
-    struct TCallableAdaptor {
-        const TCallableExprType* Type;
-
-        TCallableAdaptor(const TCallableExprType* type)
-            : Type(type)
-        {
-        }
-
-        size_t GetOptionalArgsCount() const {
-            return Type->GetOptionalArgumentsCount();
-        }
-
-        TStringBuf GetPayload() const {
-            return Type->GetPayload();
-        }
-
-        const TTypeAnnotationNode* GetReturnType() const {
-            return Type->GetReturnType();
-        }
-
-        size_t GetArgumentsCount() const {
-            return Type->GetArgumentsSize();
-        }
-
-        TStringBuf GetArgumentName(size_t i) const {
-            return Type->GetArguments().at(i).Name;
-        }
-
-        ui64 GetArgumentFlags(size_t i) const {
-            return Type->GetArguments().at(i).Flags;
-        }
-
-        const TTypeAnnotationNode* GetArgumentType(size_t i) const {
-            return Type->GetArguments().at(i).Type;
-        }
-    };
-
-    void SaveErrorType(const TErrorExprType& errorType) {
-        TBase::SaveTypeHeader("ErrorType");
-        auto err = errorType.GetError();
-        TBase::Writer.OnListItem();
-        TBase::Writer.OnInt64Scalar(err.Position.Row);
-        TBase::Writer.OnListItem();
-        TBase::Writer.OnInt64Scalar(err.Position.Column);
-        TBase::Writer.OnListItem();
-        TBase::Writer.OnStringScalar(err.Position.File);
-        TBase::Writer.OnListItem();
-        TBase::Writer.OnStringScalar(err.Message);
-        TBase::Writer.OnEndList();
-    }
-
+    struct TCallableAdaptor { 
+        const TCallableExprType* Type; 
+ 
+        TCallableAdaptor(const TCallableExprType* type) 
+            : Type(type) 
+        { 
+        } 
+ 
+        size_t GetOptionalArgsCount() const { 
+            return Type->GetOptionalArgumentsCount(); 
+        } 
+ 
+        TStringBuf GetPayload() const { 
+            return Type->GetPayload(); 
+        } 
+ 
+        const TTypeAnnotationNode* GetReturnType() const { 
+            return Type->GetReturnType(); 
+        } 
+ 
+        size_t GetArgumentsCount() const { 
+            return Type->GetArgumentsSize(); 
+        } 
+ 
+        TStringBuf GetArgumentName(size_t i) const { 
+            return Type->GetArguments().at(i).Name; 
+        } 
+ 
+        ui64 GetArgumentFlags(size_t i) const { 
+            return Type->GetArguments().at(i).Flags; 
+        } 
+ 
+        const TTypeAnnotationNode* GetArgumentType(size_t i) const { 
+            return Type->GetArguments().at(i).Type; 
+        } 
+    }; 
+ 
+    void SaveErrorType(const TErrorExprType& errorType) { 
+        TBase::SaveTypeHeader("ErrorType"); 
+        auto err = errorType.GetError(); 
+        TBase::Writer.OnListItem(); 
+        TBase::Writer.OnInt64Scalar(err.Position.Row); 
+        TBase::Writer.OnListItem(); 
+        TBase::Writer.OnInt64Scalar(err.Position.Column); 
+        TBase::Writer.OnListItem(); 
+        TBase::Writer.OnStringScalar(err.Position.File); 
+        TBase::Writer.OnListItem(); 
+        TBase::Writer.OnStringScalar(err.Message); 
+        TBase::Writer.OnEndList(); 
+    } 
+ 
 public:
     TExprTypeSaver(typename TBase::TConsumer& consumer)
         : TBase(consumer)
@@ -208,11 +208,11 @@ public:
                 TBase::SaveTaggedType(*type->Cast<TTaggedExprType>());
                 break;
             case ETypeAnnotationKind::Error:
-                SaveErrorType(*type->Cast<TErrorExprType>());
+                SaveErrorType(*type->Cast<TErrorExprType>()); 
                 break;
-            case ETypeAnnotationKind::Callable:
-                TBase::SaveCallableType(TCallableAdaptor(type->Cast<TCallableExprType>()));
-                break;
+            case ETypeAnnotationKind::Callable: 
+                TBase::SaveCallableType(TCallableAdaptor(type->Cast<TCallableExprType>())); 
+                break; 
             case ETypeAnnotationKind::Variant:
                 TBase::SaveVariantType(*type->Cast<TVariantExprType>());
                 break;
@@ -258,54 +258,54 @@ TString WriteTypeToYson(const TTypeAnnotationNode* type, NYson::EYsonFormat form
 }
 
 struct TExprTypeLoader {
-    typedef const TTypeAnnotationNode* TType;
+    typedef const TTypeAnnotationNode* TType; 
 
     TExprContext& Ctx;
-    TPosition Pos;
+    TPosition Pos; 
 
-    TExprTypeLoader(TExprContext& ctx, const TPosition& pos = TPosition())
+    TExprTypeLoader(TExprContext& ctx, const TPosition& pos = TPosition()) 
         : Ctx(ctx)
-        , Pos(pos)
+        , Pos(pos) 
     {
     }
-    TMaybe<TType> LoadVoidType(ui32 /*level*/) {
+    TMaybe<TType> LoadVoidType(ui32 /*level*/) { 
         return Ctx.MakeType<TVoidExprType>();
     }
-    TMaybe<TType> LoadNullType(ui32 /*level*/) {
+    TMaybe<TType> LoadNullType(ui32 /*level*/) { 
         return Ctx.MakeType<TNullExprType>();
     }
-    TMaybe<TType> LoadUnitType(ui32 /*level*/) {
+    TMaybe<TType> LoadUnitType(ui32 /*level*/) { 
         return Ctx.MakeType<TUnitExprType>();
     }
-    TMaybe<TType> LoadGenericType(ui32 /*level*/) {
+    TMaybe<TType> LoadGenericType(ui32 /*level*/) { 
         return Ctx.MakeType<TGenericExprType>();
     }
-    TMaybe<TType> LoadEmptyListType(ui32 /*level*/) {
+    TMaybe<TType> LoadEmptyListType(ui32 /*level*/) { 
         return Ctx.MakeType<TEmptyListExprType>();
     }
-    TMaybe<TType> LoadEmptyDictType(ui32 /*level*/) {
+    TMaybe<TType> LoadEmptyDictType(ui32 /*level*/) { 
         return Ctx.MakeType<TEmptyDictExprType>();
     }
-    TMaybe<TType> LoadDataType(const TString& dataType, ui32 /*level*/) {
-        return Ctx.MakeType<TDataExprType>(NYql::NUdf::GetDataSlot(dataType));
+    TMaybe<TType> LoadDataType(const TString& dataType, ui32 /*level*/) { 
+        return Ctx.MakeType<TDataExprType>(NYql::NUdf::GetDataSlot(dataType)); 
     }
-    TMaybe<TType> LoadDataTypeParams(const TString& dataType, const TString& paramOne, const TString& paramTwo, ui32 /*level*/) {
-        auto ret = Ctx.MakeType<TDataExprParamsType>(NYql::NUdf::GetDataSlot(dataType), paramOne, paramTwo);
+    TMaybe<TType> LoadDataTypeParams(const TString& dataType, const TString& paramOne, const TString& paramTwo, ui32 /*level*/) { 
+        auto ret = Ctx.MakeType<TDataExprParamsType>(NYql::NUdf::GetDataSlot(dataType), paramOne, paramTwo); 
         YQL_ENSURE(ret->Validate(TPosition(), Ctx));
         return ret;
     }
-    TMaybe<TType> LoadResourceType(const TString& tag, ui32 /*level*/) {
-        return Ctx.MakeType<TResourceExprType>(tag);
-    }
-    TMaybe<TType> LoadTaggedType(TType baseType, const TString& tag, ui32 /*level*/) {
-        auto ret = Ctx.MakeType<TTaggedExprType>(baseType, tag);
-        YQL_ENSURE(ret->Validate(TPosition(), Ctx));
-        return ret;
-    }
-    TMaybe<TType> LoadErrorType(ui32 row, ui32 column, const TString& file, const TString& msg, ui32 /*level*/) {
+    TMaybe<TType> LoadResourceType(const TString& tag, ui32 /*level*/) { 
+        return Ctx.MakeType<TResourceExprType>(tag); 
+    } 
+    TMaybe<TType> LoadTaggedType(TType baseType, const TString& tag, ui32 /*level*/) { 
+        auto ret = Ctx.MakeType<TTaggedExprType>(baseType, tag); 
+        YQL_ENSURE(ret->Validate(TPosition(), Ctx)); 
+        return ret; 
+    } 
+    TMaybe<TType> LoadErrorType(ui32 row, ui32 column, const TString& file, const TString& msg, ui32 /*level*/) { 
         return Ctx.MakeType<TErrorExprType>(TIssue(TPosition(column, row, file), msg));
-    }
-    TMaybe<TType> LoadStructType(const TVector<std::pair<TString, TType>>& members, ui32 /*level*/) {
+    } 
+    TMaybe<TType> LoadStructType(const TVector<std::pair<TString, TType>>& members, ui32 /*level*/) { 
         TVector<const TItemExprType*> items;
         for (auto& member: members) {
             items.push_back(Ctx.MakeType<TItemExprType>(member.first, member.second));
@@ -314,40 +314,40 @@ struct TExprTypeLoader {
         YQL_ENSURE(ret->Validate(TPosition(), Ctx));
         return ret;
     }
-    TMaybe<TType> LoadListType(TType itemType, ui32 /*level*/) {
+    TMaybe<TType> LoadListType(TType itemType, ui32 /*level*/) { 
         return Ctx.MakeType<TListExprType>(itemType);
     }
-    TMaybe<TType> LoadStreamType(TType itemType, ui32 /*level*/) {
+    TMaybe<TType> LoadStreamType(TType itemType, ui32 /*level*/) { 
         return Ctx.MakeType<TStreamExprType>(itemType);
     }
-    TMaybe<TType> LoadOptionalType(TType itemType, ui32 /*level*/) {
+    TMaybe<TType> LoadOptionalType(TType itemType, ui32 /*level*/) { 
         return Ctx.MakeType<TOptionalExprType>(itemType);
     }
-    TMaybe<TType> LoadTupleType(const TVector<TType>& elements, ui32 /*level*/) {
+    TMaybe<TType> LoadTupleType(const TVector<TType>& elements, ui32 /*level*/) { 
         auto ret = Ctx.MakeType<TTupleExprType>(elements);
         YQL_ENSURE(ret->Validate(TPosition(), Ctx));
         return ret;
     }
-    TMaybe<TType> LoadDictType(TType keyType, TType valType, ui32 /*level*/) {
+    TMaybe<TType> LoadDictType(TType keyType, TType valType, ui32 /*level*/) { 
         auto ret = Ctx.MakeType<TDictExprType>(keyType, valType);
         YQL_ENSURE(ret->Validate(TPosition(), Ctx));
         return ret;
     }
-    TMaybe<TType> LoadCallableType(TType returnType, const TVector<TType>& argTypes, const TVector<TString>& argNames,
-        const TVector<ui64>& argFlags, size_t optionalCount, const TString& payload, ui32 /*level*/) {
-        YQL_ENSURE(argTypes.size() == argNames.size() && argTypes.size() == argFlags.size());
+    TMaybe<TType> LoadCallableType(TType returnType, const TVector<TType>& argTypes, const TVector<TString>& argNames, 
+        const TVector<ui64>& argFlags, size_t optionalCount, const TString& payload, ui32 /*level*/) { 
+        YQL_ENSURE(argTypes.size() == argNames.size() && argTypes.size() == argFlags.size()); 
         TVector<TCallableExprType::TArgumentInfo> args;
-        for (size_t i = 0; i < argTypes.size(); ++i) {
-            args.emplace_back();
-            args.back().Type = argTypes[i];
-            args.back().Name = Ctx.AppendString(argNames[i]);
-            args.back().Flags = argFlags[i];
-        }
+        for (size_t i = 0; i < argTypes.size(); ++i) { 
+            args.emplace_back(); 
+            args.back().Type = argTypes[i]; 
+            args.back().Name = Ctx.AppendString(argNames[i]); 
+            args.back().Flags = argFlags[i]; 
+        } 
         auto ret = Ctx.MakeType<TCallableExprType>(returnType, args, optionalCount, Ctx.AppendString(payload));
         YQL_ENSURE(ret->Validate(TPosition(), Ctx));
         return ret;
-    }
-    TMaybe<TType> LoadVariantType(TType underlyingType, ui32 /*level*/) {
+    } 
+    TMaybe<TType> LoadVariantType(TType underlyingType, ui32 /*level*/) { 
         auto ret = Ctx.MakeType<TVariantExprType>(underlyingType);
         YQL_ENSURE(ret->Validate(TPosition(), Ctx));
         return ret;
@@ -357,7 +357,7 @@ struct TExprTypeLoader {
     }
 };
 
-const TTypeAnnotationNode* ParseTypeFromYson(const TStringBuf yson, TExprContext& ctx, const TPosition& pos) {
+const TTypeAnnotationNode* ParseTypeFromYson(const TStringBuf yson, TExprContext& ctx, const TPosition& pos) { 
     NYT::TNode node;
     TStringStream err;
     if (!ParseYson(node, yson, err)) {
@@ -365,7 +365,7 @@ const TTypeAnnotationNode* ParseTypeFromYson(const TStringBuf yson, TExprContext
         return nullptr;
     }
 
-    return ParseTypeFromYson(node, ctx, pos);
+    return ParseTypeFromYson(node, ctx, pos); 
 }
 
 const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(const TStringBuf yson, TVector<TString>& topLevelColumns, TExprContext& ctx, const TPosition& pos) {
@@ -379,9 +379,9 @@ const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(const TStringBuf yson, TV
     return ParseOrderAwareTypeFromYson(node, topLevelColumns, ctx, pos);
 }
 
-const TTypeAnnotationNode* ParseTypeFromYson(const NYT::TNode& node, TExprContext& ctx, const TPosition& pos) {
-    TExprTypeLoader loader(ctx, pos);
-    return DoLoadTypeFromYson(loader, node, 0).GetOrElse(nullptr);
+const TTypeAnnotationNode* ParseTypeFromYson(const NYT::TNode& node, TExprContext& ctx, const TPosition& pos) { 
+    TExprTypeLoader loader(ctx, pos); 
+    return DoLoadTypeFromYson(loader, node, 0).GetOrElse(nullptr); 
 }
 
 struct TOrderAwareExprTypeLoader: public TExprTypeLoader {

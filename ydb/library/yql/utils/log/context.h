@@ -1,11 +1,11 @@
-#pragma once
-
-#include <util/system/defaults.h>
+#pragma once 
+ 
+#include <util/system/defaults.h> 
 #include <util/generic/strbuf.h>
 #include <util/stream/output.h>
 #include <util/system/src_location.h>
 #include <util/system/yassert.h>
-
+ 
 
 // continues existing contexts chain
 
@@ -38,10 +38,10 @@
 
 class TLogElement;
 
-namespace NYql {
+namespace NYql { 
 namespace NLog {
 namespace NImpl {
-
+ 
 /**
  * @brief Represents item of logging context list.
  */
@@ -57,12 +57,12 @@ struct TLogContextListItem {
     {
     }
 
-    const TString* begin() const {
+    const TString* begin() const { 
         auto* ptr = reinterpret_cast<const ui8*>(this);
-        return reinterpret_cast<const TString*>(ptr + sizeof(*this));
+        return reinterpret_cast<const TString*>(ptr + sizeof(*this)); 
     }
 
-    const TString* end() const {
+    const TString* end() const { 
         return begin() + NamesCount;
     }
 
@@ -99,11 +99,11 @@ TLogContextListItem* GetLogContextList();
  */
 template <size_t Size>
 class TLogContext: public NImpl::TLogContextListItem {
-public:
+public: 
     template <typename... TArgs>
     TLogContext(TArgs... args)
         : TLogContextListItem(Size)
-        , Names_{{ TString{std::forward<TArgs>(args)}... }}
+        , Names_{{ TString{std::forward<TArgs>(args)}... }} 
     {
         LinkBefore(NImpl::GetLogContextList());
     }
@@ -112,14 +112,14 @@ public:
         Unlink();
     }
 
-    explicit inline operator bool() const noexcept {
-        return true;
-    }
+    explicit inline operator bool() const noexcept { 
+        return true; 
+    } 
 
-private:
-    std::array<TString, Size> Names_;
-};
-
+private: 
+    std::array<TString, Size> Names_; 
+}; 
+ 
 /**
  * @brief Special Root context elements which replaces previous log context
  *        list head by itself and restores previous one on destruction.
@@ -130,7 +130,7 @@ public:
     template <typename... TArgs>
     TRootLogContext(TArgs... args)
         : TLogContextListItem(Size)
-        , Names_{{ TString{std::forward<TArgs>(args)}... }}
+        , Names_{{ TString{std::forward<TArgs>(args)}... }} 
     {
         NImpl::TLogContextListItem* ctxList = NImpl::GetLogContextList();
         PrevLogContextHead_.Prev = ctxList->Prev;
@@ -151,7 +151,7 @@ public:
     }
 
 private:
-    std::array<TString, Size> Names_;
+    std::array<TString, Size> Names_; 
     NImpl::TLogContextListItem PrevLogContextHead_;
 };
 
@@ -186,14 +186,14 @@ TString ThrowedLogContextPath();
  */
 struct TContextPreprocessor {
     static TAutoPtr<TLogElement> Preprocess(TAutoPtr<TLogElement> element);
-};
-
+}; 
+ 
 /**
- * @brief Outputs current logger context into stream
- */
-void OutputLogCtx(IOutputStream* out, bool withBraces);
-
-/**
+ * @brief Outputs current logger context into stream 
+ */ 
+void OutputLogCtx(IOutputStream* out, bool withBraces); 
+ 
+/** 
  * @brief Outputs current logger context into exception message.
  */
 class TYqlLogContextLocation {
@@ -202,9 +202,9 @@ public:
         : Location_(location.File, location.Line)
     {
     }
-
+ 
     void SetThrowedLogContextPath() const;
-
+ 
     template <class T>
     inline T&& operator+(T&& t) {
         SetThrowedLogContextPath();
@@ -214,6 +214,6 @@ public:
 private:
     TSourceLocation Location_;
 };
-
+ 
 } // namespace NLog
 } // namespace NYql

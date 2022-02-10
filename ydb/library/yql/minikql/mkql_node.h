@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 #include "mkql_mem_info.h"
-#include "mkql_alloc.h"
+#include "mkql_alloc.h" 
 
 #include <ydb/library/yql/public/udf/udf_value.h>
 
@@ -354,7 +354,7 @@ namespace NMiniKQL {
 
 class TTypeEnvironment : private TNonCopyable {
 public:
-    explicit TTypeEnvironment(TScopedAlloc& alloc);
+    explicit TTypeEnvironment(TScopedAlloc& alloc); 
 
     ~TTypeEnvironment();
 

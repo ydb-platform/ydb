@@ -11,7 +11,7 @@ namespace NYql {
 TAutoPtr<IGraphTransformer> CreateTypeAnnotationTransformer(
         TAutoPtr<IGraphTransformer> callableTransformer, TTypeAnnotationContext& types);
 
-TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(bool instant, bool wholeProgram, TTypeAnnotationContext& types);
+TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(bool instant, bool wholeProgram, TTypeAnnotationContext& types); 
 
 bool SyncAnnotateTypes(
         TExprNode::TPtr& root, TExprContext& ctx, bool wholeProgram,

@@ -1,5 +1,5 @@
 #include "yql_provider_mkql.h"
-#include "yql_type_mkql.h"
+#include "yql_type_mkql.h" 
 
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
@@ -234,22 +234,22 @@ void TMkqlCallableCompilerBase::AddCallable(const std::initializer_list<std::str
 }
 
 void TMkqlCallableCompilerBase::ChainCallable(const std::string_view& name, TCompiler compiler) {
-    auto prevCompiler = GetCallable(name);
-    auto chainedCompiler = [compiler = std::move(compiler), prevCompiler = std::move(prevCompiler)](const TExprNode& node, TMkqlBuildContext& ctx) -> NKikimr::NMiniKQL::TRuntimeNode {
-        if (auto res = compiler(node, ctx)) {
-            return res;
-        }
-        return prevCompiler(node, ctx);
-    };
-    OverrideCallable(name, chainedCompiler);
-}
-
+    auto prevCompiler = GetCallable(name); 
+    auto chainedCompiler = [compiler = std::move(compiler), prevCompiler = std::move(prevCompiler)](const TExprNode& node, TMkqlBuildContext& ctx) -> NKikimr::NMiniKQL::TRuntimeNode { 
+        if (auto res = compiler(node, ctx)) { 
+            return res; 
+        } 
+        return prevCompiler(node, ctx); 
+    }; 
+    OverrideCallable(name, chainedCompiler); 
+} 
+ 
 void TMkqlCallableCompilerBase::ChainCallable(const std::initializer_list<std::string_view>& names, TCompiler compiler) {
-    for (const auto& name : names) {
-        ChainCallable(name, compiler);
-    }
-}
-
+    for (const auto& name : names) { 
+        ChainCallable(name, compiler); 
+    } 
+} 
+ 
 void TMkqlCallableCompilerBase::AddSimpleCallables(const std::initializer_list<std::pair<std::string_view, TProgramBuilder::UnaryFunctionMethod>>& callables) {
     for (const auto& callable : callables) {
         AddCallable(callable.first,
@@ -1483,9 +1483,9 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         ui64 memLimit = 0U;
         if (const auto memLimitSetting = GetSetting(*node.Child(6), "memLimit")) {
-            memLimit = FromString<ui64>(memLimitSetting->Child(1)->Content());
-        }
-
+            memLimit = FromString<ui64>(memLimitSetting->Child(1)->Content()); 
+        } 
+ 
         std::optional<ui32> sortedTableOrder;
         if (const auto sortSetting = GetSetting(*node.Child(6), "sorted")) {
             sortedTableOrder = sortSetting->Child(1)->Content() == "left" ? 0 : 1;
@@ -1507,47 +1507,47 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable("CombineCore", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         NNodes::TCoCombineCore core(&node);
-
+ 
         const auto stream = MkqlBuildExpr(core.Input().Ref(), ctx);
         const auto memLimit = FromString<ui64>(core.MemLimit().Cast().Value());
-
+ 
         const auto keyExtractor = [&](TRuntimeNode item) {
             return MkqlBuildLambda(core.KeyExtractor().Ref(), ctx, {item});
-        };
+        }; 
         const auto init = [&](TRuntimeNode key, TRuntimeNode item) {
             return MkqlBuildLambda(core.InitHandler().Ref(), ctx, {key, item});
-        };
+        }; 
         const auto update = [&](TRuntimeNode key, TRuntimeNode item, TRuntimeNode state) {
             return MkqlBuildLambda(core.UpdateHandler().Ref(), ctx, {key, item, state});
-        };
+        }; 
         const auto finish = [&](TRuntimeNode key, TRuntimeNode state) {
             return MkqlBuildLambda(core.FinishHandler().Ref(), ctx, {key, state});
-        };
-
+        }; 
+ 
         return ctx.ProgramBuilder.CombineCore(stream, keyExtractor, init, update, finish, memLimit);
-    });
-
+    }); 
+ 
     AddCallable("GroupingCore", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         NNodes::TCoGroupingCore core(&node);
-
+ 
         const auto stream = MkqlBuildExpr(core.Input().Ref(), ctx);
-
+ 
         const auto groupSwitch = [&](TRuntimeNode key, TRuntimeNode item) {
             return MkqlBuildLambda(core.GroupSwitch().Ref(), ctx, {key, item});
-        };
+        }; 
         const auto keyExtractor = [&](TRuntimeNode item) {
             return MkqlBuildLambda(core.KeyExtractor().Ref(), ctx, {item});
-        };
-        TProgramBuilder::TUnaryLambda handler;
-        if (auto lambda = core.ConvertHandler()) {
-            handler = [&](TRuntimeNode item) {
-                return MkqlBuildLambda(core.ConvertHandler().Ref(), ctx, {item});
-            };
-        }
-
-        return ctx.ProgramBuilder.GroupingCore(stream, groupSwitch, keyExtractor, handler);
-    });
-
+        }; 
+        TProgramBuilder::TUnaryLambda handler; 
+        if (auto lambda = core.ConvertHandler()) { 
+            handler = [&](TRuntimeNode item) { 
+                return MkqlBuildLambda(core.ConvertHandler().Ref(), ctx, {item}); 
+            }; 
+        } 
+ 
+        return ctx.ProgramBuilder.GroupingCore(stream, groupSwitch, keyExtractor, handler); 
+    }); 
+ 
     AddCallable("Chopper", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto stream = MkqlBuildExpr(node.Head(), ctx);
 
@@ -1642,7 +1642,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto list = MkqlBuildExpr(node.Head(), ctx);
         TMaybe<bool> isMany;
         TMaybe<bool> isHashed;
-        TMaybe<ui64> itemsCount;
+        TMaybe<ui64> itemsCount; 
         bool isCompact;
         if (const auto error = ParseToDictSettings(node, ctx.ExprCtx, isMany, isHashed, itemsCount, isCompact)) {
             ythrow TNodeException(node) << error->Message;
@@ -2105,7 +2105,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.JoinDict(dict1, multi1, dict2, multi2, joinKind);
     });
 
-    AddCallable({"FilePath", "FileContent", "FolderPath"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
+    AddCallable({"FilePath", "FileContent", "FolderPath"}, [](const TExprNode& node, TMkqlBuildContext& ctx) { 
         TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), node.Content(), ctx.ProgramBuilder.NewDataType(NUdf::TDataType<char*>::Id));
         call.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(node.Head().Content()));
         return TRuntimeNode(call.Build(), false);
@@ -2277,7 +2277,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     AddCallable("DependsOn", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return MkqlBuildExpr(node.Head(), ctx);
     });
-
+ 
     AddCallable("Parameter", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const NNodes::TCoParameter parameter(&node);
         return ctx.ProgramBuilder.Member(ctx.Parameters, parameter.Name());
@@ -2286,37 +2286,37 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     AddCallable("SecureParam", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(node.Head().Content());
     });
-
+ 
     AddCallable(SkippableCallables, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return MkqlBuildExpr(node.Head(), ctx);
-    });
-
-    AddCallable("Merge", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        const auto& args = GetAllArguments(node, ctx);
-        auto extend = ctx.ProgramBuilder.Extend(args);
-
-        if (auto sortConstr = node.GetConstraint<TSortedConstraintNode>()) {
+    }); 
+ 
+    AddCallable("Merge", [](const TExprNode& node, TMkqlBuildContext& ctx) { 
+        const auto& args = GetAllArguments(node, ctx); 
+        auto extend = ctx.ProgramBuilder.Extend(args); 
+ 
+        if (auto sortConstr = node.GetConstraint<TSortedConstraintNode>()) { 
             const auto input = MkqlBuildExpr(node.Head(), ctx);
             const auto& content = sortConstr->GetContent();
-            std::vector<TRuntimeNode> ascending;
+            std::vector<TRuntimeNode> ascending; 
             ascending.reserve(content.size());
             for (const auto& c: content) {
                 ascending.push_back(ctx.ProgramBuilder.NewDataLiteral(c.second));
-            }
-            TProgramBuilder::TUnaryLambda keyExractor = [&](TRuntimeNode item) {
-                std::vector<TRuntimeNode> keys;
+            } 
+            TProgramBuilder::TUnaryLambda keyExractor = [&](TRuntimeNode item) { 
+                std::vector<TRuntimeNode> keys; 
                 keys.reserve(content.size());
                 for (const auto& c : content) {
                     keys.push_back(ctx.ProgramBuilder.Member(item, c.first.front()));
-                }
-                return ctx.ProgramBuilder.NewTuple(keys);
-            };
-            return ctx.ProgramBuilder.Sort(extend, ctx.ProgramBuilder.NewTuple(ascending), keyExractor);
-        }
-        else {
-            return extend;
-        }
-    });
+                } 
+                return ctx.ProgramBuilder.NewTuple(keys); 
+            }; 
+            return ctx.ProgramBuilder.Sort(extend, ctx.ProgramBuilder.NewTuple(ascending), keyExractor); 
+        } 
+        else { 
+            return extend; 
+        } 
+    }); 
 }
 
 TRuntimeNode MkqlBuildLambda(const TExprNode& lambda, TMkqlBuildContext& ctx, const TRuntimeNode::TList& args) {

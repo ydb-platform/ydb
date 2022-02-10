@@ -1,23 +1,23 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(
     udovichenko-r
     g:yql
 )
-
-SRCS(
+ 
+SRCS( 
     context.cpp
-    log.cpp
+    log.cpp 
     profile.cpp
     tls_backend.cpp
-)
-
-PEERDIR(
+) 
+ 
+PEERDIR( 
     library/cpp/logger
     library/cpp/logger/global
-)
-
-END()
+) 
+ 
+END() 
 
 RECURSE_FOR_TESTS(
     ut

@@ -80,12 +80,12 @@ public:
 
     ~TMemoryMap();
 
-    TMapResult Map(i64 offset, size_t size);
+    TMapResult Map(i64 offset, size_t size); 
     bool Unmap(TMapResult region);
 
-    void ResizeAndReset(i64 size);
-    TMapResult ResizeAndRemap(i64 offset, size_t size);
-
+    void ResizeAndReset(i64 size); 
+    TMapResult ResizeAndRemap(i64 offset, size_t size); 
+ 
     i64 Length() const noexcept;
     bool IsOpen() const noexcept;
     bool IsWritable() const noexcept;
@@ -118,8 +118,8 @@ public:
 
     ~TFileMap();
 
-    TMapResult Map(i64 offset, size_t size);
-    TMapResult ResizeAndRemap(i64 offset, size_t size);
+    TMapResult Map(i64 offset, size_t size); 
+    TMapResult ResizeAndRemap(i64 offset, size_t size); 
     void Unmap();
 
     void Flush(void* ptr, size_t size) {

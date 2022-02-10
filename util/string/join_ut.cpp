@@ -39,18 +39,18 @@ Y_UNIT_TEST_SUITE(JoinStringTest) {
     }
 
     Y_UNIT_TEST(StrContainerItems) {
-        // try various overloads and template type arguments
-        static const char* const result = "1 22 333";
-        static const char* const v[] = {"1", "22", "333"};
+        // try various overloads and template type arguments 
+        static const char* const result = "1 22 333"; 
+        static const char* const v[] = {"1", "22", "333"}; 
         TVector<const char*> vchar(v, v + sizeof(v) / sizeof(v[0]));
         TVector<TStringBuf> vbuf(v, v + sizeof(v) / sizeof(v[0]));
         TVector<TString> vstring(v, v + sizeof(v) / sizeof(v[0]));
-
-        // ranges
-        UNIT_ASSERT_EQUAL(JoinRange(" ", v, v + 3), result);
-        UNIT_ASSERT_EQUAL(JoinRange(" ", vchar.begin(), vchar.end()), result);
-        UNIT_ASSERT_EQUAL(JoinRange(" ", vbuf.begin(), vbuf.end()), result);
-        UNIT_ASSERT_EQUAL(JoinRange(" ", vstring.begin(), vstring.end()), result);
+ 
+        // ranges 
+        UNIT_ASSERT_EQUAL(JoinRange(" ", v, v + 3), result); 
+        UNIT_ASSERT_EQUAL(JoinRange(" ", vchar.begin(), vchar.end()), result); 
+        UNIT_ASSERT_EQUAL(JoinRange(" ", vbuf.begin(), vbuf.end()), result); 
+        UNIT_ASSERT_EQUAL(JoinRange(" ", vstring.begin(), vstring.end()), result); 
         {
             TStringStream stream;
             stream << MakeRangeJoiner(" ", v, v + 3);
@@ -71,11 +71,11 @@ Y_UNIT_TEST_SUITE(JoinStringTest) {
             stream << MakeRangeJoiner(" ", vstring.begin(), vstring.end());
             UNIT_ASSERT_EQUAL(stream.Str(), result);
         }
-
-        // vectors
-        UNIT_ASSERT_EQUAL(JoinSeq(" ", vchar), result);
-        UNIT_ASSERT_EQUAL(JoinSeq(" ", vbuf), result);
-        UNIT_ASSERT_EQUAL(JoinSeq(" ", vstring), result);
+ 
+        // vectors 
+        UNIT_ASSERT_EQUAL(JoinSeq(" ", vchar), result); 
+        UNIT_ASSERT_EQUAL(JoinSeq(" ", vbuf), result); 
+        UNIT_ASSERT_EQUAL(JoinSeq(" ", vstring), result); 
         {
             TStringStream stream;
             stream << MakeRangeJoiner(" ", vchar);
@@ -91,12 +91,12 @@ Y_UNIT_TEST_SUITE(JoinStringTest) {
             stream << MakeRangeJoiner(" ", vstring);
             UNIT_ASSERT_EQUAL(stream.Str(), result);
         }
-
-        // initializer lists with type deduction
-        UNIT_ASSERT_EQUAL(JoinSeq(" ", {v[0], v[1], v[2]}), result);
-        UNIT_ASSERT_EQUAL(JoinSeq(" ", {vchar[0], vchar[1], vchar[2]}), result);
-        UNIT_ASSERT_EQUAL(JoinSeq(" ", {vbuf[0], vbuf[1], vbuf[2]}), result);
-        UNIT_ASSERT_EQUAL(JoinSeq(" ", {vstring[0], vstring[1], vstring[2]}), result);
+ 
+        // initializer lists with type deduction 
+        UNIT_ASSERT_EQUAL(JoinSeq(" ", {v[0], v[1], v[2]}), result); 
+        UNIT_ASSERT_EQUAL(JoinSeq(" ", {vchar[0], vchar[1], vchar[2]}), result); 
+        UNIT_ASSERT_EQUAL(JoinSeq(" ", {vbuf[0], vbuf[1], vbuf[2]}), result); 
+        UNIT_ASSERT_EQUAL(JoinSeq(" ", {vstring[0], vstring[1], vstring[2]}), result); 
         {
             TStringStream stream;
             stream << MakeRangeJoiner(" ", {v[0], v[1], v[2]});
@@ -117,12 +117,12 @@ Y_UNIT_TEST_SUITE(JoinStringTest) {
             stream << MakeRangeJoiner(" ", {vstring[0], vstring[1], vstring[2]});
             UNIT_ASSERT_EQUAL(stream.Str(), result);
         }
-
-        // initializer lists with explicit types
-        UNIT_ASSERT_EQUAL(JoinSeq(" ", std::initializer_list<const char*>{v[0], v[1], v[2]}), result);
-        UNIT_ASSERT_EQUAL(JoinSeq(" ", std::initializer_list<const char*>{vchar[0], vchar[1], vchar[2]}), result);
-        UNIT_ASSERT_EQUAL(JoinSeq(" ", std::initializer_list<TStringBuf>{vbuf[0], vbuf[1], vbuf[2]}), result);
-        UNIT_ASSERT_EQUAL(JoinSeq(" ", std::initializer_list<TString>{vstring[0], vstring[1], vstring[2]}), result);
+ 
+        // initializer lists with explicit types 
+        UNIT_ASSERT_EQUAL(JoinSeq(" ", std::initializer_list<const char*>{v[0], v[1], v[2]}), result); 
+        UNIT_ASSERT_EQUAL(JoinSeq(" ", std::initializer_list<const char*>{vchar[0], vchar[1], vchar[2]}), result); 
+        UNIT_ASSERT_EQUAL(JoinSeq(" ", std::initializer_list<TStringBuf>{vbuf[0], vbuf[1], vbuf[2]}), result); 
+        UNIT_ASSERT_EQUAL(JoinSeq(" ", std::initializer_list<TString>{vstring[0], vstring[1], vstring[2]}), result); 
         {
             TStringStream stream;
             stream << MakeRangeJoiner(" ", std::initializer_list<const char*>{v[0], v[1], v[2]});
@@ -146,8 +146,8 @@ Y_UNIT_TEST_SUITE(JoinStringTest) {
 
         // c-style array
         UNIT_ASSERT_VALUES_EQUAL(JoinSeq(" ", v), result);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(CustomToString) {
         TCustomData d1{{1, 2, 3, 4, 5}};
         TCustomData d2{{0, -1, -2}};

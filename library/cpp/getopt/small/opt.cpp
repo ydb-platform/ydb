@@ -8,10 +8,10 @@ using namespace NLastGetopt;
 
 namespace {
     struct TOptsNoDefault: public TOpts {
-        TOptsNoDefault(const TStringBuf& optstring = TStringBuf())
-            : TOpts(optstring)
-        {
-        }
+        TOptsNoDefault(const TStringBuf& optstring = TStringBuf()) 
+            : TOpts(optstring) 
+        { 
+        } 
     };
 
 }

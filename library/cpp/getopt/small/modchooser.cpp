@@ -16,9 +16,9 @@
 class PtrWrapper: public TMainClass {
 public:
     explicit PtrWrapper(const TMainFunctionPtr main)
-        : Main(main)
-    {
-    }
+        : Main(main) 
+    { 
+    } 
 
     int operator()(const int argc, const char** argv) override {
         return Main(argc, argv);
@@ -31,9 +31,9 @@ private:
 class PtrvWrapper: public TMainClass {
 public:
     explicit PtrvWrapper(const TMainFunctionPtrV main)
-        : Main(main)
-    {
-    }
+        : Main(main) 
+    { 
+    } 
 
     int operator()(const int argc, const char** argv) override {
         TVector<TString> nargv(argv, argv + argc);
@@ -47,9 +47,9 @@ private:
 class ClassWrapper: public TMainClass {
 public:
     explicit ClassWrapper(TMainClassV* main)
-        : Main(main)
-    {
-    }
+        : Main(main) 
+    { 
+    } 
 
     int operator()(const int argc, const char** argv) override {
         TVector<TString> nargv(argv, argv + argc);

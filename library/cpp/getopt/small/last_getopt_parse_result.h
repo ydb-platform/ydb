@@ -313,7 +313,7 @@ namespace NLastGetopt {
         }
         virtual ~TOptsParseResultException() = default;
         void HandleError() const override;
-
+ 
     protected:
         TOptsParseResultException() = default;
     };

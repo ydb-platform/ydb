@@ -50,12 +50,12 @@ public:
         return *this;
     }
 
-    inline THttpServerOptions& EnableReusePort(bool enable) noexcept {
-        ReusePort = enable;
-
-        return *this;
-    }
-
+    inline THttpServerOptions& EnableReusePort(bool enable) noexcept { 
+        ReusePort = enable; 
+ 
+        return *this; 
+    } 
+ 
     inline THttpServerOptions& EnableReuseAddress(bool enable) noexcept {
         ReuseAddress = enable;
 

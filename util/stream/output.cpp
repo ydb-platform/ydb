@@ -48,10 +48,10 @@ void IOutputStream::DoWriteV(const TPart* parts, size_t count) {
     }
 }
 
-void IOutputStream::DoWriteC(char ch) {
-    DoWrite(&ch, 1);
-}
-
+void IOutputStream::DoWriteC(char ch) { 
+    DoWrite(&ch, 1); 
+} 
+ 
 template <>
 void Out<wchar16>(IOutputStream& o, wchar16 ch) {
     const wchar32 w32ch = ReadSymbol(&ch, &ch + 1);

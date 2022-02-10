@@ -842,93 +842,93 @@ public:
         return this->MutRef();
     }
 
-    /*
-     * Following overloads of "operator+" aim to choose the cheapest implementation depending on
-     * summand types: lvalues, detached rvalues, shared rvalues.
-     *
-     * General idea is to use the detached-rvalue argument (left of right) to store the result
-     * wherever possible. If a buffer in rvalue is large enough this saves a re-allocation. If
-     * both arguments are rvalues we check which one is detached. If both of them are detached then
-     * the left argument is obviously preferrable because you won't need to shift the data.
-     *
-     * If an rvalue is shared then it's basically the same as lvalue because you cannot use its
-     * buffer to store the sum. However, we rely on the fact that append() and prepend() are already
-     * optimized for the shared case and detach the string into the buffer large enough to store
-     * the sum (compared to the detach+reallocation). This way, if we have only one rvalue argument
-     * (left or right) then we simply append/prepend into it, without checking if it's detached or
-     * not. This will be checked inside ReserveAndResize anyway.
-     *
-     * If both arguments cannot be used to store the sum (e.g. two lvalues) then we fall back to the
-     * Join function that constructs a resulting string in the new buffer with the minimum overhead:
-     * malloc + memcpy + memcpy.
-     */
-
+    /* 
+     * Following overloads of "operator+" aim to choose the cheapest implementation depending on 
+     * summand types: lvalues, detached rvalues, shared rvalues. 
+     * 
+     * General idea is to use the detached-rvalue argument (left of right) to store the result 
+     * wherever possible. If a buffer in rvalue is large enough this saves a re-allocation. If 
+     * both arguments are rvalues we check which one is detached. If both of them are detached then 
+     * the left argument is obviously preferrable because you won't need to shift the data. 
+     * 
+     * If an rvalue is shared then it's basically the same as lvalue because you cannot use its 
+     * buffer to store the sum. However, we rely on the fact that append() and prepend() are already 
+     * optimized for the shared case and detach the string into the buffer large enough to store 
+     * the sum (compared to the detach+reallocation). This way, if we have only one rvalue argument 
+     * (left or right) then we simply append/prepend into it, without checking if it's detached or 
+     * not. This will be checked inside ReserveAndResize anyway. 
+     * 
+     * If both arguments cannot be used to store the sum (e.g. two lvalues) then we fall back to the 
+     * Join function that constructs a resulting string in the new buffer with the minimum overhead: 
+     * malloc + memcpy + memcpy. 
+     */ 
+ 
     friend TBasicString operator+(TBasicString&& s1, const TBasicString& s2) Y_WARN_UNUSED_RESULT {
         s1 += s2;
-        return std::move(s1);
+        return std::move(s1); 
     }
 
     friend TBasicString operator+(const TBasicString& s1, TBasicString&& s2) Y_WARN_UNUSED_RESULT {
-        s2.prepend(s1);
-        return std::move(s2);
-    }
-
+        s2.prepend(s1); 
+        return std::move(s2); 
+    } 
+ 
     friend TBasicString operator+(TBasicString&& s1, TBasicString&& s2) Y_WARN_UNUSED_RESULT {
 #if 0 && !defined(TSTRING_IS_STD_STRING)
-        if (!s1.IsDetached() && s2.IsDetached()) {
-            s2.prepend(s1);
-            return std::move(s2);
-        }
+        if (!s1.IsDetached() && s2.IsDetached()) { 
+            s2.prepend(s1); 
+            return std::move(s2); 
+        } 
 #endif
         s1 += s2;
-        return std::move(s1);
+        return std::move(s1); 
     }
 
     friend TBasicString operator+(TBasicString&& s1, const TBasicStringBuf<TCharType, TTraits> s2) Y_WARN_UNUSED_RESULT {
         s1 += s2;
-        return std::move(s1);
+        return std::move(s1); 
     }
 
     friend TBasicString operator+(TBasicString&& s1, const TCharType* s2) Y_WARN_UNUSED_RESULT {
         s1 += s2;
-        return std::move(s1);
+        return std::move(s1); 
     }
 
     friend TBasicString operator+(TBasicString&& s1, TCharType s2) Y_WARN_UNUSED_RESULT {
-        s1 += s2;
-        return std::move(s1);
-    }
-
+        s1 += s2; 
+        return std::move(s1); 
+    } 
+ 
     friend TBasicString operator+(TExplicitType<TCharType> ch, const TBasicString& s) Y_WARN_UNUSED_RESULT {
         return Join(TCharType(ch), s);
     }
 
     friend TBasicString operator+(const TBasicString& s1, const TBasicString& s2) Y_WARN_UNUSED_RESULT {
-        return Join(s1, s2);
-    }
-
+        return Join(s1, s2); 
+    } 
+ 
     friend TBasicString operator+(const TBasicString& s1, const TBasicStringBuf<TCharType, TTraits> s2) Y_WARN_UNUSED_RESULT {
-        return Join(s1, s2);
-    }
-
+        return Join(s1, s2); 
+    } 
+ 
     friend TBasicString operator+(const TBasicString& s1, const TCharType* s2) Y_WARN_UNUSED_RESULT {
-        return Join(s1, s2);
-    }
-
+        return Join(s1, s2); 
+    } 
+ 
     friend TBasicString operator+(const TBasicString& s1, TCharType s2) Y_WARN_UNUSED_RESULT {
         return Join(s1, TBasicStringBuf<TCharType, TTraits>(&s2, 1));
-    }
-
+    } 
+ 
     friend TBasicString operator+(const TCharType* s1, TBasicString&& s2) Y_WARN_UNUSED_RESULT {
-        s2.prepend(s1);
-        return std::move(s2);
-    }
-
+        s2.prepend(s1); 
+        return std::move(s2); 
+    } 
+ 
     friend TBasicString operator+(const TBasicStringBuf<TCharType, TTraits> s1, TBasicString&& s2) Y_WARN_UNUSED_RESULT {
-        s2.prepend(s1);
-        return std::move(s2);
-    }
-
+        s2.prepend(s1); 
+        return std::move(s2); 
+    } 
+ 
     friend TBasicString operator+(const TBasicStringBuf<TCharType, TTraits> s1, const TBasicString& s2) Y_WARN_UNUSED_RESULT {
         return Join(s1, s2);
     }

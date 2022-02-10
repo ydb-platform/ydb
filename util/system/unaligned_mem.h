@@ -6,11 +6,11 @@
 #include <string.h>
 #include <type_traits>
 
-// The following code used to have smart tricks assuming that unaligned reads and writes are OK on x86. This assumption
-// is wrong because compiler may emit alignment-sensitive x86 instructions e.g. movaps. See IGNIETFERRO-735.
-
+// The following code used to have smart tricks assuming that unaligned reads and writes are OK on x86. This assumption 
+// is wrong because compiler may emit alignment-sensitive x86 instructions e.g. movaps. See IGNIETFERRO-735. 
+ 
 template <class T>
-inline T ReadUnaligned(const void* from) noexcept {
+inline T ReadUnaligned(const void* from) noexcept { 
     T ret;
     memcpy(&ret, from, sizeof(T));
     return ret;

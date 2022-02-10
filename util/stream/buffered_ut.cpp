@@ -55,24 +55,24 @@ Y_UNIT_TEST_SUITE(TestBufferedIO) {
 
         b.Write("1", 1);
         b.Write("12", 2);
-        b.Finish();
+        b.Finish(); 
 
         UNIT_ASSERT_VALUES_EQUAL(s, "112");
     }
 
     Y_UNIT_TEST(Test4) {
-        TString s;
-
-        auto&& b = TBuffered<TStringOutput>(1, s);
-
-        b.Write('1');
-        b.Write('2');
-        b.Write('3');
-        b.Finish();
-
-        UNIT_ASSERT_VALUES_EQUAL(s, "123");
-    }
-
+        TString s; 
+ 
+        auto&& b = TBuffered<TStringOutput>(1, s); 
+ 
+        b.Write('1'); 
+        b.Write('2'); 
+        b.Write('3'); 
+        b.Finish(); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(s, "123"); 
+    } 
+ 
     template <class TOut>
     inline void DoGenAndWrite(TOut&& output, TString& str) {
         TMersenne<ui64> r;

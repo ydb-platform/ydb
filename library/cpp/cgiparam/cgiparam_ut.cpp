@@ -132,56 +132,56 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
 
     Y_UNIT_TEST(TestReplaceUnescaped1) {
         TCgiParameters c;
-        c.ScanAddAll("many_keys=1&aaa=1&many_keys=2&bbb&many_keys=3");
-        c.ReplaceUnescaped("many_keys", "new_value");
-
-        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "aaa=1&bbb=&many_keys=new_value");
-    }
-
+        c.ScanAddAll("many_keys=1&aaa=1&many_keys=2&bbb&many_keys=3"); 
+        c.ReplaceUnescaped("many_keys", "new_value"); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "aaa=1&bbb=&many_keys=new_value"); 
+    } 
+ 
     Y_UNIT_TEST(TestReplaceUnescaped2) {
-        TCgiParameters c;
-        c.ScanAddAll("par=1&only_one=1&par=2&bbb&par=3");
-        c.ReplaceUnescaped("only_one", "new_value");
-
-        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "bbb=&only_one=new_value&par=1&par=2&par=3");
-    }
-
+        TCgiParameters c; 
+        c.ScanAddAll("par=1&only_one=1&par=2&bbb&par=3"); 
+        c.ReplaceUnescaped("only_one", "new_value"); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "bbb=&only_one=new_value&par=1&par=2&par=3"); 
+    } 
+ 
     Y_UNIT_TEST(TestReplaceUnescaped3) {
-        TCgiParameters c;
+        TCgiParameters c; 
         c.ScanAddAll("par=1&aaa=1&par=2&bbb&par=3");
-        c.ReplaceUnescaped("no_such_key", "new_value");
+        c.ReplaceUnescaped("no_such_key", "new_value"); 
 
-        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "aaa=1&bbb=&no_such_key=new_value&par=1&par=2&par=3");
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "aaa=1&bbb=&no_such_key=new_value&par=1&par=2&par=3"); 
+    } 
+ 
     Y_UNIT_TEST(TestReplaceUnescapedRange1) {
-        TCgiParameters c;
-        c.ScanAddAll("par=1&aaa=1&par=2&bbb&par=3");
-        c.ReplaceUnescaped("par", {"x", "y", "z"}); // 3 old values, 3 new values
-
-        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "aaa=1&bbb=&par=x&par=y&par=z");
-    }
-
+        TCgiParameters c; 
+        c.ScanAddAll("par=1&aaa=1&par=2&bbb&par=3"); 
+        c.ReplaceUnescaped("par", {"x", "y", "z"}); // 3 old values, 3 new values 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "aaa=1&bbb=&par=x&par=y&par=z"); 
+    } 
+ 
     Y_UNIT_TEST(TestReplaceUnescapedRange2) {
-        TCgiParameters c;
-        c.ScanAddAll("par=1&aaa=1&par=2&bbb");
-        c.ReplaceUnescaped("par", {"x", "y", "z"}); // 2 old values, 3 new values
-
-        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "aaa=1&bbb=&par=x&par=y&par=z");
-    }
-
+        TCgiParameters c; 
+        c.ScanAddAll("par=1&aaa=1&par=2&bbb"); 
+        c.ReplaceUnescaped("par", {"x", "y", "z"}); // 2 old values, 3 new values 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "aaa=1&bbb=&par=x&par=y&par=z"); 
+    } 
+ 
     Y_UNIT_TEST(TestReplaceUnescapedRange3) {
-        TCgiParameters c;
-        c.ScanAddAll("par=1&aaa=1&par=2&bbb&par=3");
-        c.ReplaceUnescaped("par", {"x", "y"}); // 3 old values, 2 new values
-
-        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "aaa=1&bbb=&par=x&par=y");
-    }
-
+        TCgiParameters c; 
+        c.ScanAddAll("par=1&aaa=1&par=2&bbb&par=3"); 
+        c.ReplaceUnescaped("par", {"x", "y"}); // 3 old values, 2 new values 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "aaa=1&bbb=&par=x&par=y"); 
+    } 
+ 
     Y_UNIT_TEST(TestNumOfValues) {
-        TCgiParameters c;
-        c.ScanAddAll("par=1&aaa=1&par=2&bbb&par=3");
-
+        TCgiParameters c; 
+        c.ScanAddAll("par=1&aaa=1&par=2&bbb&par=3"); 
+ 
         UNIT_ASSERT_VALUES_EQUAL(c.NumOfValues("par"), 3u);
     }
 

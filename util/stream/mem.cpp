@@ -58,8 +58,8 @@ void TMemoryOutput::DoWrite(const void* buf, size_t len) {
     memcpy(Buf_, buf, len);
     Buf_ = end;
 }
-
-void TMemoryOutput::DoWriteC(char c) {
+ 
+void TMemoryOutput::DoWriteC(char c) { 
     Y_ENSURE(Buf_ < End_, TStringBuf("memory output stream exhausted"));
-    *Buf_++ = c;
-}
+    *Buf_++ = c; 
+} 

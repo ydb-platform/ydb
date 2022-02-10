@@ -126,7 +126,7 @@ void NPrivate::Precharge(const void* data, size_t dataSize, size_t off, size_t s
 
 class TMemoryMap::TImpl: public TAtomicRefCount<TImpl> {
 public:
-    inline void CreateMapping() {
+    inline void CreateMapping() { 
 #if defined(_win_)
         Mapping_ = nullptr;
         if (Length_) {
@@ -134,7 +134,7 @@ public:
                                          (Mode_ & oAccessMask) == TFileMap::oRdWr ? PAGE_READWRITE : PAGE_READONLY,
                                          (DWORD)(Length_ >> 32), (DWORD)(Length_ & 0xFFFFFFFF), nullptr);
             if (Mapping_ == nullptr) {
-                ythrow yexception() << "Can't create file mapping of '" << DbgName_ << "': " << LastSystemErrorText();
+                ythrow yexception() << "Can't create file mapping of '" << DbgName_ << "': " << LastSystemErrorText(); 
             }
         } else {
             Mapping_ = MAP_FAILED;
@@ -144,7 +144,7 @@ public:
             PtrStart_ = mmap((caddr_t) nullptr, Length_, ModeToMmapProt(Mode_), ModeToMmapFlags(Mode_), File_.GetHandle(), 0);
 
             if ((MAP_FAILED == PtrStart_) && Length_) {
-                ythrow yexception() << "Can't map " << (unsigned long)Length_ << " bytes of file '" << DbgName_ << "' at offset 0: " << LastSystemErrorText();
+                ythrow yexception() << "Can't map " << (unsigned long)Length_ << " bytes of file '" << DbgName_ << "' at offset 0: " << LastSystemErrorText(); 
             }
         } else {
             PtrStart_ = nullptr;
@@ -152,58 +152,58 @@ public:
 #endif
     }
 
-    void CheckFile() const {
+    void CheckFile() const { 
         if (!File_.IsOpen()) {
-            ythrow yexception() << "TMemoryMap: FILE '" << DbgName_ << "' is not open, " << LastSystemErrorText();
+            ythrow yexception() << "TMemoryMap: FILE '" << DbgName_ << "' is not open, " << LastSystemErrorText(); 
         }
         if (Length_ < 0) {
-            ythrow yexception() << "'" << DbgName_ << "' is not a regular file";
+            ythrow yexception() << "'" << DbgName_ << "' is not a regular file"; 
         }
     }
 
     inline TImpl(FILE* f, EOpenMode om, TString dbgName)
         : File_(Duplicate(f))
-        , DbgName_(std::move(dbgName))
+        , DbgName_(std::move(dbgName)) 
         , Length_(File_.GetLength())
         , Mode_(om)
     {
-        CheckFile();
-        CreateMapping();
+        CheckFile(); 
+        CreateMapping(); 
     }
 
     inline TImpl(const TString& name, EOpenMode om)
         : File_(name, (om & oRdWr) ? OpenExisting | RdWr : OpenExisting | RdOnly)
-        , DbgName_(name)
+        , DbgName_(name) 
         , Length_(File_.GetLength())
         , Mode_(om)
     {
-        CheckFile();
-        CreateMapping();
+        CheckFile(); 
+        CreateMapping(); 
     }
 
     inline TImpl(const TString& name, i64 length, EOpenMode om)
         : File_(name, (om & oRdWr) ? OpenExisting | RdWr : OpenExisting | RdOnly)
-        , DbgName_(name)
+        , DbgName_(name) 
         , Length_(length)
         , Mode_(om)
     {
-        CheckFile();
+        CheckFile(); 
 
         if (File_.GetLength() < Length_) {
             File_.Resize(Length_);
         }
 
-        CreateMapping();
+        CreateMapping(); 
     }
 
     inline TImpl(const TFile& file, EOpenMode om, TString dbgName)
         : File_(file)
-        , DbgName_(File_.GetName() ? File_.GetName() : std::move(dbgName))
+        , DbgName_(File_.GetName() ? File_.GetName() : std::move(dbgName)) 
         , Length_(File_.GetLength())
         , Mode_(om)
     {
-        CheckFile();
-        CreateMapping();
+        CheckFile(); 
+        CreateMapping(); 
     }
 
     inline bool IsOpen() const noexcept {
@@ -218,15 +218,15 @@ public:
         return (Mode_ & oRdWr || Mode_ & oCopyOnWr);
     }
 
-    inline TMapResult Map(i64 offset, size_t size) {
+    inline TMapResult Map(i64 offset, size_t size) { 
         assert(File_.IsOpen());
 
         if (offset > Length_) {
-            ythrow yexception() << "Can't map something at offset " << offset << " of '" << DbgName_ << "' with length " << Length_;
+            ythrow yexception() << "Can't map something at offset " << offset << " of '" << DbgName_ << "' with length " << Length_; 
         }
 
         if (offset + (i64)size > Length_) {
-            ythrow yexception() << "Can't map " << (unsigned long)size << " bytes at offset " << offset << " of '" << DbgName_ << "' with length " << Length_;
+            ythrow yexception() << "Can't map " << (unsigned long)size << " bytes at offset " << offset << " of '" << DbgName_ << "' with length " << Length_; 
         }
 
         TMapResult result;
@@ -258,7 +258,7 @@ public:
         if (result.Ptr != nullptr || size == 0) { // allow map of size 0
             result.Size = size;
         } else {
-            ythrow yexception() << "Can't map " << (unsigned long)size << " bytes at offset " << offset << " of '" << DbgName_ << "': " << LastSystemErrorText();
+            ythrow yexception() << "Can't map " << (unsigned long)size << " bytes at offset " << offset << " of '" << DbgName_ << "': " << LastSystemErrorText(); 
         }
         NSan::Unpoison(result.Ptr, result.Size);
         if (Mode_ & oPrecharge) {
@@ -326,13 +326,13 @@ public:
     }
 
     inline TString GetDbgName() const {
-        return DbgName_;
-    }
-
-    inline EOpenMode GetMode() const noexcept {
-        return Mode_;
-    }
-
+        return DbgName_; 
+    } 
+ 
+    inline EOpenMode GetMode() const noexcept { 
+        return Mode_; 
+    } 
+ 
 private:
     TFile File_;
     TString DbgName_; // This string is never used to actually open a file, only in exceptions
@@ -362,29 +362,29 @@ TMemoryMap::TMemoryMap(const TString& name, i64 length, EOpenMode om)
 }
 
 TMemoryMap::TMemoryMap(FILE* f, TString dbgName)
-    : Impl_(new TImpl(f, EOpenModeFlag::oRdOnly, std::move(dbgName)))
+    : Impl_(new TImpl(f, EOpenModeFlag::oRdOnly, std::move(dbgName))) 
 {
 }
 
 TMemoryMap::TMemoryMap(FILE* f, EOpenMode om, TString dbgName)
-    : Impl_(new TImpl(f, om, std::move(dbgName)))
+    : Impl_(new TImpl(f, om, std::move(dbgName))) 
 {
 }
 
 TMemoryMap::TMemoryMap(const TFile& file, TString dbgName)
-    : Impl_(new TImpl(file, EOpenModeFlag::oRdOnly, std::move(dbgName)))
+    : Impl_(new TImpl(file, EOpenModeFlag::oRdOnly, std::move(dbgName))) 
 {
 }
 
 TMemoryMap::TMemoryMap(const TFile& file, EOpenMode om, TString dbgName)
-    : Impl_(new TImpl(file, om, std::move(dbgName)))
+    : Impl_(new TImpl(file, om, std::move(dbgName))) 
 {
 }
 
 TMemoryMap::~TMemoryMap() = default;
 
-TMemoryMap::TMapResult TMemoryMap::Map(i64 offset, size_t size) {
-    return Impl_->Map(offset, size);
+TMemoryMap::TMapResult TMemoryMap::Map(i64 offset, size_t size) { 
+    return Impl_->Map(offset, size); 
 }
 
 bool TMemoryMap::Unmap(void* ptr, size_t size) {
@@ -395,18 +395,18 @@ bool TMemoryMap::Unmap(TMapResult region) {
     return Unmap(region.Ptr, region.Size);
 }
 
-void TMemoryMap::ResizeAndReset(i64 size) {
-    EOpenMode om = Impl_->GetMode();
-    TFile file = GetFile();
-    file.Resize(size);
-    Impl_.Reset(new TImpl(file, om, Impl_->GetDbgName()));
-}
-
-TMemoryMap::TMapResult TMemoryMap::ResizeAndRemap(i64 offset, size_t size) {
-    ResizeAndReset(offset + (i64)size);
-    return Map(offset, size);
-}
-
+void TMemoryMap::ResizeAndReset(i64 size) { 
+    EOpenMode om = Impl_->GetMode(); 
+    TFile file = GetFile(); 
+    file.Resize(size); 
+    Impl_.Reset(new TImpl(file, om, Impl_->GetDbgName())); 
+} 
+ 
+TMemoryMap::TMapResult TMemoryMap::ResizeAndRemap(i64 offset, size_t size) { 
+    ResizeAndReset(offset + (i64)size); 
+    return Map(offset, size); 
+} 
+ 
 void TMemoryMap::SetSequential() {
     Impl_->SetSequential();
 }
@@ -460,12 +460,12 @@ TFileMap::TFileMap(const TString& name, i64 length, EOpenMode om)
 }
 
 TFileMap::TFileMap(FILE* f, EOpenMode om, TString dbgName)
-    : Map_(f, om, dbgName)
+    : Map_(f, om, dbgName) 
 {
 }
 
 TFileMap::TFileMap(const TFile& file, EOpenMode om, TString dbgName)
-    : Map_(file, om, dbgName)
+    : Map_(file, om, dbgName) 
 {
 }
 
@@ -491,19 +491,19 @@ void TFileMap::Flush(void* ptr, size_t size, bool sync) {
 #endif
 }
 
-TFileMap::TMapResult TFileMap::Map(i64 offset, size_t size) {
+TFileMap::TMapResult TFileMap::Map(i64 offset, size_t size) { 
     Unmap();
-    Region_ = Map_.Map(offset, size);
-    return Region_;
+    Region_ = Map_.Map(offset, size); 
+    return Region_; 
 }
 
-TFileMap::TMapResult TFileMap::ResizeAndRemap(i64 offset, size_t size) {
-    // explicit Unmap() is required because in oNotGreedy mode the Map_ object doesn't own the mapped area
-    Unmap();
-    Region_ = Map_.ResizeAndRemap(offset, size);
-    return Region_;
-}
-
+TFileMap::TMapResult TFileMap::ResizeAndRemap(i64 offset, size_t size) { 
+    // explicit Unmap() is required because in oNotGreedy mode the Map_ object doesn't own the mapped area 
+    Unmap(); 
+    Region_ = Map_.ResizeAndRemap(offset, size); 
+    return Region_; 
+} 
+ 
 void TFileMap::Unmap() {
     if (!Region_.IsMapped()) {
         return;
@@ -518,7 +518,7 @@ void TFileMap::Unmap() {
 
 TFileMap::~TFileMap() {
     try {
-        // explicit Unmap() is required because in oNotGreedy mode the Map_ object doesn't own the mapped area
+        // explicit Unmap() is required because in oNotGreedy mode the Map_ object doesn't own the mapped area 
         Unmap();
     } catch (...) {
         // ¯\_(ツ)_/¯

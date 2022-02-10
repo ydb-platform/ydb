@@ -92,7 +92,7 @@ protected:
                      {"OPTIONS", "describe the communication options for the target resource"},
                      {"TRACE", "perform a message loop-back test"},
                      {"PATCH", "apply partial modifications to the specified resource"}}));
-
+ 
         opts.AddLongOption('U', "user-agent")
             .RequiredArgument("agent-string")
             .DefaultValue("LastGetoptDemo/1.0.0")
@@ -202,8 +202,8 @@ protected:
                 << colors.Cyan()
                 << "    $ last_getopt_demo -b -U 'Wget/1.0.0' https://wordpress.org/latest.zip"
                 << colors.Reset());
-    }
-
+    } 
+ 
     int DoRun(NLastGetopt::TOptsParseResult&& parsedOptions) override {
         using namespace NColorizer;
 

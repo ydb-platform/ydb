@@ -193,16 +193,16 @@ public:
 
             using TPart = IOutputStream::TPart;
 
-            alignas(TPart) char data[2 * sizeof(TPart)];
-            TPart* parts = reinterpret_cast<TPart*>(data);
+            alignas(TPart) char data[2 * sizeof(TPart)]; 
+            TPart* parts = reinterpret_cast<TPart*>(data); 
             TPart* end = parts;
 
             if (stored) {
-                new (end++) TPart(Buf(), stored);
+                new (end++) TPart(Buf(), stored); 
             }
 
             if (write_from_buf) {
-                new (end++) TPart(buf, write_from_buf);
+                new (end++) TPart(buf, write_from_buf); 
             }
 
             Slave_->Write(parts, end - parts);
@@ -217,16 +217,16 @@ public:
         }
     }
 
-    inline void Write(char c) {
-        if (Y_UNLIKELY(MemOut_.Avail() == 0)) {
-            Slave_->Write(Buf(), Stored());
-            OnBufferExhausted();
-            Reset();
-        }
-
-        MemOut_.Write(c);
-    }
-
+    inline void Write(char c) { 
+        if (Y_UNLIKELY(MemOut_.Avail() == 0)) { 
+            Slave_->Write(Buf(), Stored()); 
+            OnBufferExhausted(); 
+            Reset(); 
+        } 
+ 
+        MemOut_.Write(c); 
+    } 
+ 
     inline void SetFlushPropagateMode(bool mode) noexcept {
         PropagateFlush_ = mode;
     }
@@ -382,11 +382,11 @@ void TBufferedOutputBase::DoWrite(const void* data, size_t len) {
     Impl_->Write(data, len);
 }
 
-void TBufferedOutputBase::DoWriteC(char c) {
+void TBufferedOutputBase::DoWriteC(char c) { 
     Y_ENSURE(Impl_.Get(), "cannot write to finished stream");
     Impl_->Write(c);
-}
-
+} 
+ 
 void TBufferedOutputBase::DoFlush() {
     if (Impl_.Get()) {
         Impl_->Flush();

@@ -6,11 +6,11 @@
 
 #include "filemap.h"
 
-#include <util/system/fs.h>
-
-#include <cstring>
-#include <cstdio>
-
+#include <util/system/fs.h> 
+ 
+#include <cstring> 
+#include <cstdio> 
+ 
 Y_UNIT_TEST_SUITE(TFileMapTest) {
     static const char* FileName_("./mappped_file");
 
@@ -32,9 +32,9 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
             }
             mappedFile.Flush();
 
-            TFileMap::TMapResult mapResult = mappedFile.Map(2, 2);
-            UNIT_ASSERT(mapResult.MappedSize() == 2);
-            UNIT_ASSERT(mapResult.MappedData() == mappedFile.Ptr());
+            TFileMap::TMapResult mapResult = mappedFile.Map(2, 2); 
+            UNIT_ASSERT(mapResult.MappedSize() == 2); 
+            UNIT_ASSERT(mapResult.MappedData() == mappedFile.Ptr()); 
             UNIT_ASSERT(mappedFile.MappedSize() == 2);
             UNIT_ASSERT(static_cast<char*>(mappedFile.Ptr())[0] == 'd' && static_cast<char*>(mappedFile.Ptr())[1] == 'e');
 
@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
             UNIT_ASSERT(static_cast<char*>(mappedFile2.Ptr())[0] == data[0] + 1);
             fclose(f);
         }
-        NFs::Remove(FileName_);
+        NFs::Remove(FileName_); 
     }
 
     Y_UNIT_TEST(TestFileMap) {
@@ -60,26 +60,26 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
     }
 
     Y_UNIT_TEST(TestFileRemap) {
-        const char data1[] = "01234";
-        const char data2[] = "abcdefg";
+        const char data1[] = "01234"; 
+        const char data2[] = "abcdefg"; 
         const char data3[] = "COPY";
-        const char dataFinal[] = "012abcdefg";
-        const size_t data2Shift = 3;
-
-        TFile file(FileName_, CreateAlways | WrOnly);
-        file.Write(static_cast<const void*>(data1), sizeof(data1));
-        file.Close();
-
-        {
-            TFileMap mappedFile(FileName_, TMemoryMapCommon::oRdWr);
-            mappedFile.Map(0, mappedFile.Length());
+        const char dataFinal[] = "012abcdefg"; 
+        const size_t data2Shift = 3; 
+ 
+        TFile file(FileName_, CreateAlways | WrOnly); 
+        file.Write(static_cast<const void*>(data1), sizeof(data1)); 
+        file.Close(); 
+ 
+        { 
+            TFileMap mappedFile(FileName_, TMemoryMapCommon::oRdWr); 
+            mappedFile.Map(0, mappedFile.Length()); 
             UNIT_ASSERT(mappedFile.MappedSize() == sizeof(data1) &&
                         mappedFile.Length() == sizeof(data1));
-
-            mappedFile.ResizeAndRemap(data2Shift, sizeof(data2));
-            memcpy(mappedFile.Ptr(), data2, sizeof(data2));
-        }
-
+ 
+            mappedFile.ResizeAndRemap(data2Shift, sizeof(data2)); 
+            memcpy(mappedFile.Ptr(), data2, sizeof(data2)); 
+        } 
+ 
         {
             TFileMap mappedFile(FileName_, TMemoryMapCommon::oCopyOnWr);
             mappedFile.Map(0, mappedFile.Length());
@@ -94,38 +94,38 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
             UNIT_ASSERT(data[3] == 'Y');
         }
 
-        TFile resFile(FileName_, RdOnly);
-        UNIT_ASSERT(resFile.GetLength() == sizeof(dataFinal));
-        char buf[sizeof(dataFinal)];
-        resFile.Read(buf, sizeof(dataFinal));
-        UNIT_ASSERT(0 == memcmp(buf, dataFinal, sizeof(dataFinal)));
-        resFile.Close();
-
-        NFs::Remove(FileName_);
-    }
-
+        TFile resFile(FileName_, RdOnly); 
+        UNIT_ASSERT(resFile.GetLength() == sizeof(dataFinal)); 
+        char buf[sizeof(dataFinal)]; 
+        resFile.Read(buf, sizeof(dataFinal)); 
+        UNIT_ASSERT(0 == memcmp(buf, dataFinal, sizeof(dataFinal))); 
+        resFile.Close(); 
+ 
+        NFs::Remove(FileName_); 
+    } 
+ 
     Y_UNIT_TEST(TestFileMapDbgName) {
-        // This test checks that dbgName passed to the TFileMap constructor is saved inside the object and appears
-        // in subsequent error messages.
-        const char* const dbgName = "THIS_IS_A_TEST";
-        FILE* f = fopen(FileName_, "w+");
-        UNIT_ASSERT(f);
-        {
-            TFileMap mappedFile(f, TFileMap::oRdWr, dbgName);
-            bool gotException = false;
-            try {
-                // trying to map an empty file to force an exception and check the message
-                mappedFile.Map(0, 1000);
-            } catch (const yexception& e) {
-                gotException = true;
-                UNIT_ASSERT_STRING_CONTAINS(e.what(), dbgName);
-            }
-            UNIT_ASSERT(gotException);
-        }
-        fclose(f);
-        NFs::Remove(FileName_);
-    }
-
+        // This test checks that dbgName passed to the TFileMap constructor is saved inside the object and appears 
+        // in subsequent error messages. 
+        const char* const dbgName = "THIS_IS_A_TEST"; 
+        FILE* f = fopen(FileName_, "w+"); 
+        UNIT_ASSERT(f); 
+        { 
+            TFileMap mappedFile(f, TFileMap::oRdWr, dbgName); 
+            bool gotException = false; 
+            try { 
+                // trying to map an empty file to force an exception and check the message 
+                mappedFile.Map(0, 1000); 
+            } catch (const yexception& e) { 
+                gotException = true; 
+                UNIT_ASSERT_STRING_CONTAINS(e.what(), dbgName); 
+            } 
+            UNIT_ASSERT(gotException); 
+        } 
+        fclose(f); 
+        NFs::Remove(FileName_); 
+    } 
+ 
 #if defined(_asan_enabled_) || defined(_msan_enabled_)
 //setrlimit incompatible with asan runtime
 #elif defined(_cygwin_)
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
             }
     #endif
             maps.clear();
-            NFs::Remove(FileName_);
+            NFs::Remove(FileName_); 
         } catch (...) {
     // TODO: RAII'ize all this stuff
     #if defined(_unix_)
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
                 throw TSystemError() << "Cannot restore rlimit for virtual memory";
             }
     #endif
-            NFs::Remove(FileName_);
+            NFs::Remove(FileName_); 
 
             throw;
         }
@@ -265,7 +265,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
             }
             UNIT_ASSERT(caught);
         }
-        NFs::Remove(FileName_);
+        NFs::Remove(FileName_); 
     }
 
     Y_UNIT_TEST(TestMappedArray) {
@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
             TString text = exc.what(); // exception should contain failed file name
             UNIT_ASSERT(text.find(FileName_) != TString::npos);
         }
-        NFs::Remove(FileName_);
+        NFs::Remove(FileName_); 
     }
 
     Y_UNIT_TEST(TestMemoryMapIsWritable) {
@@ -330,7 +330,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
             TMemoryMap mappedMem(FileName_, TMemoryMap::oRdWr);
             UNIT_ASSERT(mappedMem.IsWritable());
         }
-        NFs::Remove(FileName_);
+        NFs::Remove(FileName_); 
     }
 
     Y_UNIT_TEST(TestFileMapIsWritable) {
@@ -354,6 +354,6 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
             TFileMap fileMap(FileName_, TFileMap::oRdWr);
             UNIT_ASSERT(fileMap.IsWritable());
         }
-        NFs::Remove(FileName_);
+        NFs::Remove(FileName_); 
     }
 };

@@ -4,10 +4,10 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 
-#include <util/generic/cast.h>
+#include <util/generic/cast.h> 
 #include <util/stream/output.h>
 #include <util/stream/zlib.h>
-#include <util/system/datetime.h>
+#include <util/system/datetime.h> 
 #include <util/system/sem.h>
 
 Y_UNIT_TEST_SUITE(THttpServerTest) {
@@ -139,9 +139,9 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
     static const TString CrLf = "\r\n";
 
     struct TTestRequest {
-        TTestRequest(ui16 port, TString content = TString())
+        TTestRequest(ui16 port, TString content = TString()) 
             : Port(port)
-            , Content(std::move(content))
+            , Content(std::move(content)) 
         {
         }
 
@@ -369,59 +369,59 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
     }
 
     Y_UNIT_TEST(TestReusePortEnabled) {
-        if (!IsReusePortAvailable()) {
+        if (!IsReusePortAvailable()) { 
             return; // skip test
-        }
-        TString res = TestData();
-        TPortManager pm;
-        const ui16 port = pm.GetPort();
-
-        TEchoServer serverImpl(res);
+        } 
+        TString res = TestData(); 
+        TPortManager pm; 
+        const ui16 port = pm.GetPort(); 
+ 
+        TEchoServer serverImpl(res); 
         TVector<THolder<THttpServer>> servers;
-        for (ui32 i = 0; i < 10; i++) {
-            servers.push_back(MakeHolder<THttpServer>(&serverImpl, THttpServer::TOptions(port).EnableReusePort(true)));
-        }
-
-        for (ui32 testRun = 0; testRun < 3; testRun++) {
+        for (ui32 i = 0; i < 10; i++) { 
+            servers.push_back(MakeHolder<THttpServer>(&serverImpl, THttpServer::TOptions(port).EnableReusePort(true))); 
+        } 
+ 
+        for (ui32 testRun = 0; testRun < 3; testRun++) { 
             for (auto& server : servers) {
-                // start servers one at a time and check at least one of them is replying
-                UNIT_ASSERT(server->Start());
-
-                TTestRequest r(port, res);
-                UNIT_ASSERT_C(r.Execute() == res, "diff echo response for request:\n" + r.GetDescription());
-            }
-
+                // start servers one at a time and check at least one of them is replying 
+                UNIT_ASSERT(server->Start()); 
+ 
+                TTestRequest r(port, res); 
+                UNIT_ASSERT_C(r.Execute() == res, "diff echo response for request:\n" + r.GetDescription()); 
+            } 
+ 
             for (auto& server : servers) {
-                // ping servers and stop them one at a time
-                // at the last iteration only one server is still working and then gets stopped as well
-
-                TTestRequest r(port, res);
-                UNIT_ASSERT_C(r.Execute() == res, "diff echo response for request:\n" + r.GetDescription());
-
-                server->Stop();
-            }
-        }
-    }
-
+                // ping servers and stop them one at a time 
+                // at the last iteration only one server is still working and then gets stopped as well 
+ 
+                TTestRequest r(port, res); 
+                UNIT_ASSERT_C(r.Execute() == res, "diff echo response for request:\n" + r.GetDescription()); 
+ 
+                server->Stop(); 
+            } 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestReusePortDisabled) {
-        // check that with the ReusePort option disabled it's impossible to start two servers on the same port
-        // check that ReusePort option is disabled by default (don't set it explicitly in the test)
-        TPortManager pm;
-        const ui16 port = pm.GetPort();
-
-        TEchoServer serverImpl(TString{});
-        THttpServer server1(&serverImpl, THttpServer::TOptions(port));
-        THttpServer server2(&serverImpl, THttpServer::TOptions(port));
-
-        UNIT_ASSERT(true == server1.Start());
-        UNIT_ASSERT(false == server2.Start());
-
-        server1.Stop();
-        // Stop() is a sync call, port should be free by now
-        UNIT_ASSERT(true == server2.Start());
-        UNIT_ASSERT(false == server1.Start());
-    }
-
+        // check that with the ReusePort option disabled it's impossible to start two servers on the same port 
+        // check that ReusePort option is disabled by default (don't set it explicitly in the test) 
+        TPortManager pm; 
+        const ui16 port = pm.GetPort(); 
+ 
+        TEchoServer serverImpl(TString{}); 
+        THttpServer server1(&serverImpl, THttpServer::TOptions(port)); 
+        THttpServer server2(&serverImpl, THttpServer::TOptions(port)); 
+ 
+        UNIT_ASSERT(true == server1.Start()); 
+        UNIT_ASSERT(false == server2.Start()); 
+ 
+        server1.Stop(); 
+        // Stop() is a sync call, port should be free by now 
+        UNIT_ASSERT(true == server2.Start()); 
+        UNIT_ASSERT(false == server1.Start()); 
+    } 
+ 
     Y_UNIT_TEST(TestFailServer) {
         /**
          * Emulate request processing failures

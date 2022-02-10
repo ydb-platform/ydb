@@ -47,7 +47,7 @@ namespace NLastGetopt {
                 Func_();
             }
         };
-
+ 
         template <typename TpFunc, typename TpArg = const TOptsParser*>
         class THandlerFunctor1
            : public IOptHandler {
@@ -62,7 +62,7 @@ namespace NLastGetopt {
                 , HasDef_(false)
             {
             }
-
+ 
             template <typename T>
             THandlerFunctor1(const TpFunc& func, const T& def)
                 : Func_(func)
@@ -70,7 +70,7 @@ namespace NLastGetopt {
                 , HasDef_(true)
             {
             }
-
+ 
             void HandleOpt(const TOptsParser* parser) override;
         };
 
@@ -78,7 +78,7 @@ namespace NLastGetopt {
         class THandlerFunctor1<TpFunc, const TOptsParser*>
            : public IOptHandler {
             TpFunc Func_;
-
+ 
         public:
             THandlerFunctor1(TpFunc func)
                 : Func_(func)
@@ -89,7 +89,7 @@ namespace NLastGetopt {
                 Func_(parser);
             }
         };
-
+ 
         template <typename T, typename TpVal = T>
         class TStoreResultFunctor {
         private:
@@ -100,7 +100,7 @@ namespace NLastGetopt {
                 : Target_(target)
             {
             }
-
+ 
             void operator()(const TpVal& val) {
                 *Target_ = val;
             }
@@ -118,7 +118,7 @@ namespace NLastGetopt {
                 , Func_(func)
             {
             }
-
+ 
             void operator()(const TpVal& val) {
                 *Target_ = Func_(val);
             }

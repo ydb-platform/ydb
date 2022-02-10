@@ -169,7 +169,7 @@ class PROTOC_EXPORT GeneratorContext {
   // Returns a vector of FileDescriptors for all the files being compiled
   // in this run.  Useful for languages, such as Go, that treat files
   // differently when compiled as a set rather than individually.
-  virtual void ListParsedFiles(std::vector<const FileDescriptor*>* output); 
+  virtual void ListParsedFiles(std::vector<const FileDescriptor*>* output);
 
   // Retrieves the version number of the protocol compiler associated with
   // this GeneratorContext.

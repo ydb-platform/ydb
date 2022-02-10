@@ -178,7 +178,7 @@ class PROTOBUF_EXPORT SimpleFieldComparator : public FieldComparator {
   };
 
   // Defines the map to store the tolerances for floating point comparison.
-  typedef std::map<const FieldDescriptor*, Tolerance> ToleranceMap; 
+  typedef std::map<const FieldDescriptor*, Tolerance> ToleranceMap;
 
   friend class MessageDifferencer;
   // The following methods get executed when CompareFields is called for the

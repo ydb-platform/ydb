@@ -584,9 +584,9 @@ TProtoStringType DefaultValue(const FieldDescriptor* field, bool immutable,
              "L";
     case FieldDescriptor::CPPTYPE_DOUBLE: {
       double value = field->default_value_double();
-      if (value == std::numeric_limits<double>::infinity()) { 
+      if (value == std::numeric_limits<double>::infinity()) {
         return "Double.POSITIVE_INFINITY";
-      } else if (value == -std::numeric_limits<double>::infinity()) { 
+      } else if (value == -std::numeric_limits<double>::infinity()) {
         return "Double.NEGATIVE_INFINITY";
       } else if (value != value) {
         return "Double.NaN";
@@ -596,9 +596,9 @@ TProtoStringType DefaultValue(const FieldDescriptor* field, bool immutable,
     }
     case FieldDescriptor::CPPTYPE_FLOAT: {
       float value = field->default_value_float();
-      if (value == std::numeric_limits<float>::infinity()) { 
+      if (value == std::numeric_limits<float>::infinity()) {
         return "Float.POSITIVE_INFINITY";
-      } else if (value == -std::numeric_limits<float>::infinity()) { 
+      } else if (value == -std::numeric_limits<float>::infinity()) {
         return "Float.NEGATIVE_INFINITY";
       } else if (value != value) {
         return "Float.NaN";

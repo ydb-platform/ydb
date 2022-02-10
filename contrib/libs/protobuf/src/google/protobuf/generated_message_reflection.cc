@@ -904,7 +904,7 @@ void Reflection::Swap(Message* message1, Message* message2) const {
 template <bool unsafe_shallow_swap>
 void Reflection::SwapFieldsImpl(
     Message* message1, Message* message2,
-    const std::vector<const FieldDescriptor*>& fields) const { 
+    const std::vector<const FieldDescriptor*>& fields) const {
   if (message1 == message2) return;
 
   // TODO(kenton):  Other Reflection methods should probably check this too.
@@ -1299,7 +1299,7 @@ using internal::CreateUnknownEnumValues;
 
 void Reflection::ListFieldsMayFailOnStripped(
     const Message& message, bool should_fail,
-    std::vector<const FieldDescriptor*>* output) const { 
+    std::vector<const FieldDescriptor*>* output) const {
   output->clear();
 
   // Optimization:  The default instance never has any fields set.

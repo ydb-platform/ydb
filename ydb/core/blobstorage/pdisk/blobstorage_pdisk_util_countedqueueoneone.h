@@ -56,7 +56,7 @@ public:
         if (AtomicGet(SizeLowerEstimate)) {
             return true;
         }
-        return ProducedCondVar.WaitT(ProducedMutex, duration); 
+        return ProducedCondVar.WaitT(ProducedMutex, duration);
     }
 
     void WakeUp() {

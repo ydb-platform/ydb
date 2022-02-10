@@ -1189,12 +1189,12 @@ class PROTOBUF_EXPORT StringValue final :
   };
   // string value = 1;
   void clear_value();
-  const TProtoStringType& value() const; 
+  const TProtoStringType& value() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_value(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_value(); 
+  TProtoStringType* mutable_value();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_value();
-  void set_allocated_value(TProtoStringType* value); 
+  void set_allocated_value(TProtoStringType* value);
   private:
   const TProtoStringType& _internal_value() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_value(const TProtoStringType& value);
@@ -1333,12 +1333,12 @@ class PROTOBUF_EXPORT BytesValue final :
   };
   // bytes value = 1;
   void clear_value();
-  const TProtoStringType& value() const; 
+  const TProtoStringType& value() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_value(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_value(); 
+  TProtoStringType* mutable_value();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_value();
-  void set_allocated_value(TProtoStringType* value); 
+  void set_allocated_value(TProtoStringType* value);
   private:
   const TProtoStringType& _internal_value() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_value(const TProtoStringType& value);
@@ -1539,7 +1539,7 @@ inline void BoolValue::set_value(bool value) {
 inline void StringValue::clear_value() {
   value_.ClearToEmpty();
 }
-inline const TProtoStringType& StringValue::value() const { 
+inline const TProtoStringType& StringValue::value() const {
   // @@protoc_insertion_point(field_get:google.protobuf.StringValue.value)
   return _internal_value();
 }
@@ -1566,11 +1566,11 @@ inline TProtoStringType* StringValue::_internal_mutable_value() {
   
   return value_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* StringValue::release_value() { 
+inline TProtoStringType* StringValue::release_value() {
   // @@protoc_insertion_point(field_release:google.protobuf.StringValue.value)
   return value_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void StringValue::set_allocated_value(TProtoStringType* value) { 
+inline void StringValue::set_allocated_value(TProtoStringType* value) {
   if (value != nullptr) {
     
   } else {
@@ -1589,7 +1589,7 @@ inline void StringValue::set_allocated_value(TProtoStringType* value) {
 inline void BytesValue::clear_value() {
   value_.ClearToEmpty();
 }
-inline const TProtoStringType& BytesValue::value() const { 
+inline const TProtoStringType& BytesValue::value() const {
   // @@protoc_insertion_point(field_get:google.protobuf.BytesValue.value)
   return _internal_value();
 }
@@ -1616,11 +1616,11 @@ inline TProtoStringType* BytesValue::_internal_mutable_value() {
   
   return value_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* BytesValue::release_value() { 
+inline TProtoStringType* BytesValue::release_value() {
   // @@protoc_insertion_point(field_release:google.protobuf.BytesValue.value)
   return value_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void BytesValue::set_allocated_value(TProtoStringType* value) { 
+inline void BytesValue::set_allocated_value(TProtoStringType* value) {
   if (value != nullptr) {
     
   } else {

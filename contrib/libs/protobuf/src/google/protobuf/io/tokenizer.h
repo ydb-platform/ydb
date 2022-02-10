@@ -78,7 +78,7 @@ class PROTOBUF_EXPORT ErrorCollector {
   // Indicates that there was a warning in the input at the given line and
   // column numbers.  The numbers are zero-based, so you may want to add
   // 1 to each before printing them.
-  virtual void AddWarning(int /* line */, ColumnNumber /* column */, 
+  virtual void AddWarning(int /* line */, ColumnNumber /* column */,
                           const TProtoStringType& /* message */) {}
 
  private:

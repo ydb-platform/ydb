@@ -177,11 +177,11 @@ PROTOBUF_EXPORT void StripWhitespace(TProtoStringType* s);
 // ----------------------------------------------------------------------
 
 inline void LowerString(TProtoStringType* s) {
-  s->to_lower(); 
+  s->to_lower();
 }
 
 inline void UpperString(TProtoStringType* s) {
-  s->to_upper(); 
+  s->to_upper();
 }
 
 inline void ToUpper(TProtoStringType* s) { UpperString(s); }

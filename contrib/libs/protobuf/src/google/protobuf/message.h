@@ -338,27 +338,27 @@ class PROTOBUF_EXPORT Message : public MessageLite {
   uint8* _InternalSerialize(uint8* target,
                             io::EpsCopyOutputStream* stream) const override;
 
-  // Yandex-specific 
+  // Yandex-specific
   bool ParseFromArcadiaStream(IInputStream* input);
   bool ParsePartialFromArcadiaStream(IInputStream* input);
   bool SerializeToArcadiaStream(IOutputStream* output) const;
   bool SerializePartialToArcadiaStream(IOutputStream* output) const;
 
   virtual void PrintJSON(IOutputStream&) const;
- 
-  io::TAsJSON<Message> AsJSON() const { 
-    return io::TAsJSON<Message>(*this); 
-  } 
- 
+
+  io::TAsJSON<Message> AsJSON() const {
+    return io::TAsJSON<Message>(*this);
+  }
+
   internal::TAsBinary AsBinary() const {
     return internal::TAsBinary{*this};
-  } 
- 
+  }
+
   internal::TAsStreamSeq AsStreamSeq() const {
     return internal::TAsStreamSeq{*this};
-  } 
-  // End of Yandex-specific 
- 
+  }
+  // End of Yandex-specific
+
  private:
   // This is called only by the default implementation of ByteSize(), to
   // update the cached size.  If you override ByteSize(), you do not need

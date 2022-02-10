@@ -445,14 +445,14 @@ class PROTOC_EXPORT CodeGeneratorRequest final :
   int _internal_file_to_generate_size() const;
   public:
   void clear_file_to_generate();
-  const TProtoStringType& file_to_generate(int index) const; 
-  TProtoStringType* mutable_file_to_generate(int index); 
-  void set_file_to_generate(int index, const TProtoStringType& value); 
+  const TProtoStringType& file_to_generate(int index) const;
+  TProtoStringType* mutable_file_to_generate(int index);
+  void set_file_to_generate(int index, const TProtoStringType& value);
   void set_file_to_generate(int index, TProtoStringType&& value);
   void set_file_to_generate(int index, const char* value);
   void set_file_to_generate(int index, const char* value, size_t size);
-  TProtoStringType* add_file_to_generate(); 
-  void add_file_to_generate(const TProtoStringType& value); 
+  TProtoStringType* add_file_to_generate();
+  void add_file_to_generate(const TProtoStringType& value);
   void add_file_to_generate(TProtoStringType&& value);
   void add_file_to_generate(const char* value);
   void add_file_to_generate(const char* value, size_t size);
@@ -487,12 +487,12 @@ class PROTOC_EXPORT CodeGeneratorRequest final :
   bool _internal_has_parameter() const;
   public:
   void clear_parameter();
-  const TProtoStringType& parameter() const; 
+  const TProtoStringType& parameter() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_parameter(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_parameter(); 
+  TProtoStringType* mutable_parameter();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_parameter();
-  void set_allocated_parameter(TProtoStringType* parameter); 
+  void set_allocated_parameter(TProtoStringType* parameter);
   private:
   const TProtoStringType& _internal_parameter() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_parameter(const TProtoStringType& value);
@@ -667,12 +667,12 @@ class PROTOC_EXPORT CodeGeneratorResponse_File final :
   bool _internal_has_name() const;
   public:
   void clear_name();
-  const TProtoStringType& name() const; 
+  const TProtoStringType& name() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_name(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_name(); 
+  TProtoStringType* mutable_name();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_name();
-  void set_allocated_name(TProtoStringType* name); 
+  void set_allocated_name(TProtoStringType* name);
   private:
   const TProtoStringType& _internal_name() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_name(const TProtoStringType& value);
@@ -685,12 +685,12 @@ class PROTOC_EXPORT CodeGeneratorResponse_File final :
   bool _internal_has_insertion_point() const;
   public:
   void clear_insertion_point();
-  const TProtoStringType& insertion_point() const; 
+  const TProtoStringType& insertion_point() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_insertion_point(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_insertion_point(); 
+  TProtoStringType* mutable_insertion_point();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_insertion_point();
-  void set_allocated_insertion_point(TProtoStringType* insertion_point); 
+  void set_allocated_insertion_point(TProtoStringType* insertion_point);
   private:
   const TProtoStringType& _internal_insertion_point() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_insertion_point(const TProtoStringType& value);
@@ -703,12 +703,12 @@ class PROTOC_EXPORT CodeGeneratorResponse_File final :
   bool _internal_has_content() const;
   public:
   void clear_content();
-  const TProtoStringType& content() const; 
+  const TProtoStringType& content() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_content(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_content(); 
+  TProtoStringType* mutable_content();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_content();
-  void set_allocated_content(TProtoStringType* content); 
+  void set_allocated_content(TProtoStringType* content);
   private:
   const TProtoStringType& _internal_content() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_content(const TProtoStringType& value);
@@ -932,12 +932,12 @@ class PROTOC_EXPORT CodeGeneratorResponse final :
   bool _internal_has_error() const;
   public:
   void clear_error();
-  const TProtoStringType& error() const; 
+  const TProtoStringType& error() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_error(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_error(); 
+  TProtoStringType* mutable_error();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_error();
-  void set_allocated_error(TProtoStringType* error); 
+  void set_allocated_error(TProtoStringType* error);
   private:
   const TProtoStringType& _internal_error() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_error(const TProtoStringType& value);
@@ -1146,15 +1146,15 @@ inline TProtoStringType* CodeGeneratorRequest::add_file_to_generate() {
 inline const TProtoStringType& CodeGeneratorRequest::_internal_file_to_generate(int index) const {
   return file_to_generate_.Get(index);
 }
-inline const TProtoStringType& CodeGeneratorRequest::file_to_generate(int index) const { 
+inline const TProtoStringType& CodeGeneratorRequest::file_to_generate(int index) const {
   // @@protoc_insertion_point(field_get:google.protobuf.compiler.CodeGeneratorRequest.file_to_generate)
   return _internal_file_to_generate(index);
 }
-inline TProtoStringType* CodeGeneratorRequest::mutable_file_to_generate(int index) { 
+inline TProtoStringType* CodeGeneratorRequest::mutable_file_to_generate(int index) {
   // @@protoc_insertion_point(field_mutable:google.protobuf.compiler.CodeGeneratorRequest.file_to_generate)
   return file_to_generate_.Mutable(index);
 }
-inline void CodeGeneratorRequest::set_file_to_generate(int index, const TProtoStringType& value) { 
+inline void CodeGeneratorRequest::set_file_to_generate(int index, const TProtoStringType& value) {
   file_to_generate_.Mutable(index)->assign(value);
   // @@protoc_insertion_point(field_set:google.protobuf.compiler.CodeGeneratorRequest.file_to_generate)
 }
@@ -1175,7 +1175,7 @@ inline void CodeGeneratorRequest::set_file_to_generate(int index, const char* va
 inline TProtoStringType* CodeGeneratorRequest::_internal_add_file_to_generate() {
   return file_to_generate_.Add();
 }
-inline void CodeGeneratorRequest::add_file_to_generate(const TProtoStringType& value) { 
+inline void CodeGeneratorRequest::add_file_to_generate(const TProtoStringType& value) {
   file_to_generate_.Add()->assign(value);
   // @@protoc_insertion_point(field_add:google.protobuf.compiler.CodeGeneratorRequest.file_to_generate)
 }
@@ -1215,7 +1215,7 @@ inline void CodeGeneratorRequest::clear_parameter() {
   parameter_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000001u;
 }
-inline const TProtoStringType& CodeGeneratorRequest::parameter() const { 
+inline const TProtoStringType& CodeGeneratorRequest::parameter() const {
   // @@protoc_insertion_point(field_get:google.protobuf.compiler.CodeGeneratorRequest.parameter)
   return _internal_parameter();
 }
@@ -1242,7 +1242,7 @@ inline TProtoStringType* CodeGeneratorRequest::_internal_mutable_parameter() {
   _has_bits_[0] |= 0x00000001u;
   return parameter_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* CodeGeneratorRequest::release_parameter() { 
+inline TProtoStringType* CodeGeneratorRequest::release_parameter() {
   // @@protoc_insertion_point(field_release:google.protobuf.compiler.CodeGeneratorRequest.parameter)
   if (!_internal_has_parameter()) {
     return nullptr;
@@ -1250,7 +1250,7 @@ inline TProtoStringType* CodeGeneratorRequest::release_parameter() {
   _has_bits_[0] &= ~0x00000001u;
   return parameter_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void CodeGeneratorRequest::set_allocated_parameter(TProtoStringType* parameter) { 
+inline void CodeGeneratorRequest::set_allocated_parameter(TProtoStringType* parameter) {
   if (parameter != nullptr) {
     _has_bits_[0] |= 0x00000001u;
   } else {
@@ -1404,7 +1404,7 @@ inline void CodeGeneratorResponse_File::clear_name() {
   name_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000001u;
 }
-inline const TProtoStringType& CodeGeneratorResponse_File::name() const { 
+inline const TProtoStringType& CodeGeneratorResponse_File::name() const {
   // @@protoc_insertion_point(field_get:google.protobuf.compiler.CodeGeneratorResponse.File.name)
   return _internal_name();
 }
@@ -1431,7 +1431,7 @@ inline TProtoStringType* CodeGeneratorResponse_File::_internal_mutable_name() {
   _has_bits_[0] |= 0x00000001u;
   return name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* CodeGeneratorResponse_File::release_name() { 
+inline TProtoStringType* CodeGeneratorResponse_File::release_name() {
   // @@protoc_insertion_point(field_release:google.protobuf.compiler.CodeGeneratorResponse.File.name)
   if (!_internal_has_name()) {
     return nullptr;
@@ -1439,7 +1439,7 @@ inline TProtoStringType* CodeGeneratorResponse_File::release_name() {
   _has_bits_[0] &= ~0x00000001u;
   return name_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void CodeGeneratorResponse_File::set_allocated_name(TProtoStringType* name) { 
+inline void CodeGeneratorResponse_File::set_allocated_name(TProtoStringType* name) {
   if (name != nullptr) {
     _has_bits_[0] |= 0x00000001u;
   } else {
@@ -1462,7 +1462,7 @@ inline void CodeGeneratorResponse_File::clear_insertion_point() {
   insertion_point_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000002u;
 }
-inline const TProtoStringType& CodeGeneratorResponse_File::insertion_point() const { 
+inline const TProtoStringType& CodeGeneratorResponse_File::insertion_point() const {
   // @@protoc_insertion_point(field_get:google.protobuf.compiler.CodeGeneratorResponse.File.insertion_point)
   return _internal_insertion_point();
 }
@@ -1489,7 +1489,7 @@ inline TProtoStringType* CodeGeneratorResponse_File::_internal_mutable_insertion
   _has_bits_[0] |= 0x00000002u;
   return insertion_point_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* CodeGeneratorResponse_File::release_insertion_point() { 
+inline TProtoStringType* CodeGeneratorResponse_File::release_insertion_point() {
   // @@protoc_insertion_point(field_release:google.protobuf.compiler.CodeGeneratorResponse.File.insertion_point)
   if (!_internal_has_insertion_point()) {
     return nullptr;
@@ -1497,7 +1497,7 @@ inline TProtoStringType* CodeGeneratorResponse_File::release_insertion_point() {
   _has_bits_[0] &= ~0x00000002u;
   return insertion_point_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void CodeGeneratorResponse_File::set_allocated_insertion_point(TProtoStringType* insertion_point) { 
+inline void CodeGeneratorResponse_File::set_allocated_insertion_point(TProtoStringType* insertion_point) {
   if (insertion_point != nullptr) {
     _has_bits_[0] |= 0x00000002u;
   } else {
@@ -1520,7 +1520,7 @@ inline void CodeGeneratorResponse_File::clear_content() {
   content_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000004u;
 }
-inline const TProtoStringType& CodeGeneratorResponse_File::content() const { 
+inline const TProtoStringType& CodeGeneratorResponse_File::content() const {
   // @@protoc_insertion_point(field_get:google.protobuf.compiler.CodeGeneratorResponse.File.content)
   return _internal_content();
 }
@@ -1547,7 +1547,7 @@ inline TProtoStringType* CodeGeneratorResponse_File::_internal_mutable_content()
   _has_bits_[0] |= 0x00000004u;
   return content_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* CodeGeneratorResponse_File::release_content() { 
+inline TProtoStringType* CodeGeneratorResponse_File::release_content() {
   // @@protoc_insertion_point(field_release:google.protobuf.compiler.CodeGeneratorResponse.File.content)
   if (!_internal_has_content()) {
     return nullptr;
@@ -1555,7 +1555,7 @@ inline TProtoStringType* CodeGeneratorResponse_File::release_content() {
   _has_bits_[0] &= ~0x00000004u;
   return content_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void CodeGeneratorResponse_File::set_allocated_content(TProtoStringType* content) { 
+inline void CodeGeneratorResponse_File::set_allocated_content(TProtoStringType* content) {
   if (content != nullptr) {
     _has_bits_[0] |= 0x00000004u;
   } else {
@@ -1670,7 +1670,7 @@ inline void CodeGeneratorResponse::clear_error() {
   error_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000001u;
 }
-inline const TProtoStringType& CodeGeneratorResponse::error() const { 
+inline const TProtoStringType& CodeGeneratorResponse::error() const {
   // @@protoc_insertion_point(field_get:google.protobuf.compiler.CodeGeneratorResponse.error)
   return _internal_error();
 }
@@ -1697,7 +1697,7 @@ inline TProtoStringType* CodeGeneratorResponse::_internal_mutable_error() {
   _has_bits_[0] |= 0x00000001u;
   return error_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* CodeGeneratorResponse::release_error() { 
+inline TProtoStringType* CodeGeneratorResponse::release_error() {
   // @@protoc_insertion_point(field_release:google.protobuf.compiler.CodeGeneratorResponse.error)
   if (!_internal_has_error()) {
     return nullptr;
@@ -1705,7 +1705,7 @@ inline TProtoStringType* CodeGeneratorResponse::release_error() {
   _has_bits_[0] &= ~0x00000001u;
   return error_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void CodeGeneratorResponse::set_allocated_error(TProtoStringType* error) { 
+inline void CodeGeneratorResponse::set_allocated_error(TProtoStringType* error) {
   if (error != nullptr) {
     _has_bits_[0] |= 0x00000001u;
   } else {

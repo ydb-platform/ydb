@@ -1,10 +1,10 @@
-#include "delim_string_iter.h" 
+#include "delim_string_iter.h"
 #include <util/generic/vector.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-/// Test that TDelimStringIter build on top of given string and delimeter will produce expected sequence 
+/// Test that TDelimStringIter build on top of given string and delimeter will produce expected sequence
 static void AssertStringSplit(const TString& str, const TString& delim, const TVector<TString>& expected) {
-    TDelimStringIter it(str, delim); 
+    TDelimStringIter it(str, delim);
 
     // test iterator invariants
     for (const auto& expectedString : expected) {
@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(TDelimStrokaIterTestSuite) {
     }
 
     Y_UNIT_TEST(Cdr) {
-        TDelimStringIter it("a\tc\t", "\t"); 
+        TDelimStringIter it("a\tc\t", "\t");
         UNIT_ASSERT_STRINGS_EQUAL(*it, "a");
         UNIT_ASSERT_STRINGS_EQUAL(it.Cdr(), "c\t");
         ++it;
@@ -55,7 +55,7 @@ static void AssertKeyValueStringSplit(
     const TStringBuf str,
     const TStringBuf delim,
     const TVector<std::pair<TStringBuf, TStringBuf>>& expected) {
-    TKeyValueDelimStringIter it(str, delim); 
+    TKeyValueDelimStringIter it(str, delim);
 
     for (const auto& expectedKeyValue : expected) {
         UNIT_ASSERT(it.Valid());

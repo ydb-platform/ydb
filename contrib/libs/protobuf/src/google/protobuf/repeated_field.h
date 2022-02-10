@@ -652,7 +652,7 @@ class PROTOBUF_EXPORT RepeatedPtrFieldBase {
 
   void Reserve(int new_size);
 
-  template<typename TypeHandler> 
+  template<typename TypeHandler>
   void Truncate(int new_size) {
     GOOGLE_DCHECK_LE(new_size, current_size_);
     for (int i = new_size; i < current_size_; i++) {
@@ -660,7 +660,7 @@ class PROTOBUF_EXPORT RepeatedPtrFieldBase {
     }
     current_size_ = new_size;
   }
- 
+
   int Capacity() const;
 
   template <typename TypeHandler>
@@ -1000,7 +1000,7 @@ class RepeatedPtrField : private internal::RepeatedPtrFieldBase {
   void Truncate(int new_size) {
   	return RepeatedPtrFieldBase::Truncate<TypeHandler>(new_size);
   }
- 
+
   int Capacity() const;
 
   // Gets the underlying array.  This pointer is possibly invalidated by

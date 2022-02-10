@@ -177,46 +177,46 @@ void Message::PrintJSON(IOutputStream& out) const {
 }
 
 bool Message::ParseFromArcadiaStream(IInputStream* input) {
-  bool res = false; 
-  io::TInputStreamProxy proxy(input); 
-  { 
-    io::CopyingInputStreamAdaptor stream(&proxy); 
-    res = ParseFromZeroCopyStream(&stream); 
-  } 
-  return res && !proxy.HasError(); 
-} 
+  bool res = false;
+  io::TInputStreamProxy proxy(input);
+  {
+    io::CopyingInputStreamAdaptor stream(&proxy);
+    res = ParseFromZeroCopyStream(&stream);
+  }
+  return res && !proxy.HasError();
+}
 
 bool Message::ParsePartialFromArcadiaStream(IInputStream* input) {
-  bool res = false; 
-  io::TInputStreamProxy proxy(input); 
-  { 
-    io::CopyingInputStreamAdaptor stream(&proxy); 
-    res = ParsePartialFromZeroCopyStream(&stream); 
-  } 
-  return res && !proxy.HasError(); 
-} 
+  bool res = false;
+  io::TInputStreamProxy proxy(input);
+  {
+    io::CopyingInputStreamAdaptor stream(&proxy);
+    res = ParsePartialFromZeroCopyStream(&stream);
+  }
+  return res && !proxy.HasError();
+}
 
 bool Message::SerializeToArcadiaStream(IOutputStream* output) const {
-  bool res = false; 
-  io::TOutputStreamProxy proxy(output); 
-  { 
-    io::CopyingOutputStreamAdaptor stream(&proxy); 
-    res = SerializeToZeroCopyStream(&stream); 
-  } 
-  return res && !proxy.HasError(); 
-} 
+  bool res = false;
+  io::TOutputStreamProxy proxy(output);
+  {
+    io::CopyingOutputStreamAdaptor stream(&proxy);
+    res = SerializeToZeroCopyStream(&stream);
+  }
+  return res && !proxy.HasError();
+}
 
 bool Message::SerializePartialToArcadiaStream(IOutputStream* output) const {
-  bool res = false; 
-  io::TOutputStreamProxy proxy(output); 
-  { 
-    io::CopyingOutputStreamAdaptor stream(&proxy); 
-    res = SerializePartialToZeroCopyStream(&stream); 
-  } 
-  return res && !proxy.HasError(); 
-} 
-// End of Yandex-specific 
- 
+  bool res = false;
+  io::TOutputStreamProxy proxy(output);
+  {
+    io::CopyingOutputStreamAdaptor stream(&proxy);
+    res = SerializePartialToZeroCopyStream(&stream);
+  }
+  return res && !proxy.HasError();
+}
+// End of Yandex-specific
+
 size_t Message::ByteSizeLong() const {
   size_t size = WireFormat::ByteSize(*this);
   SetCachedSize(internal::ToCachedSize(size));

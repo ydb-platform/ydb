@@ -928,7 +928,7 @@ bool DescriptorPoolDatabase::FindAllExtensionNumbers(
   const Descriptor* extendee = pool_.FindMessageTypeByName(extendee_type);
   if (extendee == NULL) return false;
 
-  std::vector<const FieldDescriptor*> extensions; 
+  std::vector<const FieldDescriptor*> extensions;
   pool_.FindAllExtensions(extendee, &extensions);
 
   for (const FieldDescriptor* extension : extensions) {
@@ -946,7 +946,7 @@ MergedDescriptorDatabase::MergedDescriptorDatabase(
   sources_.push_back(source2);
 }
 MergedDescriptorDatabase::MergedDescriptorDatabase(
-    const std::vector<DescriptorDatabase*>& sources) 
+    const std::vector<DescriptorDatabase*>& sources)
     : sources_(sources) {}
 MergedDescriptorDatabase::~MergedDescriptorDatabase() {}
 
@@ -1006,8 +1006,8 @@ bool MergedDescriptorDatabase::FindFileContainingExtension(
 
 bool MergedDescriptorDatabase::FindAllExtensionNumbers(
     const TProtoStringType& extendee_type, std::vector<int>* output) {
-  std::set<int> merged_results; 
-  std::vector<int> results; 
+  std::set<int> merged_results;
+  std::vector<int> results;
   bool success = false;
 
   for (DescriptorDatabase* source : sources_) {
@@ -1021,7 +1021,7 @@ bool MergedDescriptorDatabase::FindAllExtensionNumbers(
   }
 
   std::copy(merged_results.begin(), merged_results.end(),
-            std::insert_iterator<std::vector<int> >(*output, output->end())); 
+            std::insert_iterator<std::vector<int> >(*output, output->end()));
 
   return success;
 }

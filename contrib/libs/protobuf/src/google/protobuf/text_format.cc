@@ -162,7 +162,7 @@ TextFormat::ParseLocation TextFormat::ParseInfoTree::GetLocation(
     index = 0;
   }
 
-  const std::vector<TextFormat::ParseLocation>* locations = 
+  const std::vector<TextFormat::ParseLocation>* locations =
       FindOrNull(locations_, field);
   if (locations == nullptr || index >= static_cast<int64>(locations->size())) {
     return TextFormat::ParseLocation();
@@ -2110,7 +2110,7 @@ void TextFormat::Printer::Print(const Message& message,
       PrintAny(message, generator)) {
     return;
   }
-  std::vector<const FieldDescriptor*> fields; 
+  std::vector<const FieldDescriptor*> fields;
   if (descriptor->options().map_entry()) {
     fields.push_back(descriptor->field(0));
     fields.push_back(descriptor->field(1));

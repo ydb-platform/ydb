@@ -11,7 +11,7 @@ RECURSE(
     async_clients
     auth_client_parser
     awssdk-extensions
-    awssdk_async_extensions 
+    awssdk_async_extensions
     base64
     base64/test
     bclclient

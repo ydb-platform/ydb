@@ -1035,7 +1035,7 @@ uint8* WireFormat::_InternalSerialize(const Message& message, uint8* target,
   const Descriptor* descriptor = message.GetDescriptor();
   const Reflection* message_reflection = message.GetReflection();
 
-  std::vector<const FieldDescriptor*> fields; 
+  std::vector<const FieldDescriptor*> fields;
 
   // Fields of map entry should always be serialized.
   if (descriptor->options().map_entry()) {
@@ -1449,7 +1449,7 @@ size_t WireFormat::ByteSize(const Message& message) {
 
   size_t our_size = 0;
 
-  std::vector<const FieldDescriptor*> fields; 
+  std::vector<const FieldDescriptor*> fields;
 
   // Fields of map entry should always be serialized.
   if (descriptor->options().map_entry()) {

@@ -12,16 +12,16 @@ RECURSE(
     enum_codegen/ut
     fgood
     fgood/ut
-    histogram 
+    histogram
     ipreg1
     ipreg1/ut
     ipreg1/ut_full
     ipreg1/util
-    iter 
+    iter
     kmp
     kmp/ut
-    mapped_file 
-    mapped_file/ut 
+    mapped_file
+    mapped_file/ut
     mbitmap
     omni
     text_norm

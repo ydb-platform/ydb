@@ -516,7 +516,7 @@ private:
         ++Free_;
 
         while (!Obj_ && !AllDone_) {
-            if (!CondReady_.WaitT(Mutex_, IdleTime_)) { 
+            if (!CondReady_.WaitT(Mutex_, IdleTime_)) {
                 break;
             }
         }

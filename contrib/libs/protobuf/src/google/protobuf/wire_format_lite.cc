@@ -562,7 +562,7 @@ bool WireFormatLite::ReadBytes(io::CodedInputStream* input,
 
 bool WireFormatLite::ReadBytes(io::CodedInputStream* input, TProtoStringType** p) {
   if (*p == &GetEmptyStringAlreadyInited()) {
-    *p = new TProtoStringType(); 
+    *p = new TProtoStringType();
   }
   return ReadBytesToString(input, *p);
 }

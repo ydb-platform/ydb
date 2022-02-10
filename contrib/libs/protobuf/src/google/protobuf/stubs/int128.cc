@@ -177,7 +177,7 @@ std::ostream& operator<<(std::ostream& o, const uint128& b) {
     if ((flags & std::ios::adjustfield) == std::ios::left) {
       rep.append(width - rep.size(), o.fill());
     } else {
-      rep.insert(static_cast<TProtoStringType::size_type>(0), 
+      rep.insert(static_cast<TProtoStringType::size_type>(0),
                  width - rep.size(), o.fill());
     }
   }

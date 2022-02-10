@@ -61,7 +61,7 @@ class PROTOBUF_EXPORT AnnotationCollector {
   // before end_offset are associated with the SourceCodeInfo-style path.
   virtual void AddAnnotation(size_t begin_offset, size_t end_offset,
                              const TProtoStringType& file_path,
-                             const std::vector<int>& path) = 0; 
+                             const std::vector<int>& path) = 0;
 
   // TODO(gerbens) I don't see why we need virtuals here. Just a vector of
   // range, payload pairs stored in a context should suffice.
@@ -213,7 +213,7 @@ class PROTOBUF_EXPORT Printer {
       // of building the location path.
       return;
     }
-    std::vector<int> path; 
+    std::vector<int> path;
     descriptor->GetLocationPath(&path);
     Annotate(begin_varname, end_varname, descriptor->file()->name(), path);
   }
@@ -234,7 +234,7 @@ class PROTOBUF_EXPORT Printer {
       // Annotations aren't turned on for this Printer.
       return;
     }
-    std::vector<int> empty_path; 
+    std::vector<int> empty_path;
     Annotate(begin_varname, end_varname, file_name, empty_path);
   }
 

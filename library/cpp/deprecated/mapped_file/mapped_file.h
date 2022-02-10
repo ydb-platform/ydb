@@ -1,16 +1,16 @@
 #pragma once
 
-#include <util/generic/flags.h> 
+#include <util/generic/flags.h>
 #include <util/generic/ptr.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/utility.h>
 #include <util/generic/yexception.h>
-#include <util/system/align.h> 
-#include <util/system/file.h> 
-#include <util/system/filemap.h> 
-#include <util/system/yassert.h> 
+#include <util/system/align.h>
+#include <util/system/file.h>
+#include <util/system/filemap.h>
+#include <util/system/yassert.h>
 
-#include <cstdio> 
+#include <cstdio>
 #include <new>
 
 /// Deprecated (by pg@), use TFileMap or TMemoryMap instead

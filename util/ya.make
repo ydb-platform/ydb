@@ -364,7 +364,7 @@ IF (MUSL)
 ELSE()
     IF (OS_LINUX OR SUN OR CYGWIN OR OS_WINDOWS)
         SRCS(
-            system/mktemp_system.cpp 
+            system/mktemp_system.cpp
         )
     ENDIF()
 ENDIF()

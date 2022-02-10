@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
- 
+
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/base/blobstorage.h>
@@ -10,7 +10,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_factory.h>
 #include <ydb/core/protos/tablet_database.pb.h>
 #include <ydb/core/tx/tx.h>
- 
+
 #include <functional>
 
 namespace NKikimr {

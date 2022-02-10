@@ -75,7 +75,7 @@ class PROTOBUF_EXPORT LogMessage {
   LogMessage(LogLevel level, const char* filename, int line);
   ~LogMessage();
 
-  LogMessage& operator<<(const TProtoStringType& value); 
+  LogMessage& operator<<(const TProtoStringType& value);
   LogMessage& operator<<(const char* value);
   LogMessage& operator<<(char value);
   LogMessage& operator<<(int value);
@@ -97,7 +97,7 @@ class PROTOBUF_EXPORT LogMessage {
   LogLevel level_;
   const char* filename_;
   int line_;
-  TProtoStringType message_; 
+  TProtoStringType message_;
 };
 
 // Used to make the entire "LOG(BLAH) << etc." expression have a void return
@@ -201,7 +201,7 @@ T* CheckNotNull(const char* /* file */, int /* line */,
 #endif  // !NDEBUG
 
 typedef void LogHandler(LogLevel level, const char* filename, int line,
-                        const TProtoStringType& message); 
+                        const TProtoStringType& message);
 
 // The protobuf library sometimes writes warning and error messages to
 // stderr.  These messages are primarily useful for developers, but may

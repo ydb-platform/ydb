@@ -218,12 +218,12 @@ class PROTOBUF_EXPORT Any final :
   };
   // string type_url = 1;
   void clear_type_url();
-  const TProtoStringType& type_url() const; 
+  const TProtoStringType& type_url() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_type_url(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_type_url(); 
+  TProtoStringType* mutable_type_url();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_type_url();
-  void set_allocated_type_url(TProtoStringType* type_url); 
+  void set_allocated_type_url(TProtoStringType* type_url);
   private:
   const TProtoStringType& _internal_type_url() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_type_url(const TProtoStringType& value);
@@ -232,12 +232,12 @@ class PROTOBUF_EXPORT Any final :
 
   // bytes value = 2;
   void clear_value();
-  const TProtoStringType& value() const; 
+  const TProtoStringType& value() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_value(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_value(); 
+  TProtoStringType* mutable_value();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_value();
-  void set_allocated_value(TProtoStringType* value); 
+  void set_allocated_value(TProtoStringType* value);
   private:
   const TProtoStringType& _internal_value() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_value(const TProtoStringType& value);
@@ -272,7 +272,7 @@ class PROTOBUF_EXPORT Any final :
 inline void Any::clear_type_url() {
   type_url_.ClearToEmpty();
 }
-inline const TProtoStringType& Any::type_url() const { 
+inline const TProtoStringType& Any::type_url() const {
   // @@protoc_insertion_point(field_get:google.protobuf.Any.type_url)
   return _internal_type_url();
 }
@@ -299,11 +299,11 @@ inline TProtoStringType* Any::_internal_mutable_type_url() {
   
   return type_url_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* Any::release_type_url() { 
+inline TProtoStringType* Any::release_type_url() {
   // @@protoc_insertion_point(field_release:google.protobuf.Any.type_url)
   return type_url_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void Any::set_allocated_type_url(TProtoStringType* type_url) { 
+inline void Any::set_allocated_type_url(TProtoStringType* type_url) {
   if (type_url != nullptr) {
     
   } else {
@@ -318,7 +318,7 @@ inline void Any::set_allocated_type_url(TProtoStringType* type_url) {
 inline void Any::clear_value() {
   value_.ClearToEmpty();
 }
-inline const TProtoStringType& Any::value() const { 
+inline const TProtoStringType& Any::value() const {
   // @@protoc_insertion_point(field_get:google.protobuf.Any.value)
   return _internal_value();
 }
@@ -345,11 +345,11 @@ inline TProtoStringType* Any::_internal_mutable_value() {
   
   return value_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* Any::release_value() { 
+inline TProtoStringType* Any::release_value() {
   // @@protoc_insertion_point(field_release:google.protobuf.Any.value)
   return value_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void Any::set_allocated_value(TProtoStringType* value) { 
+inline void Any::set_allocated_value(TProtoStringType* value) {
   if (value != nullptr) {
     
   } else {

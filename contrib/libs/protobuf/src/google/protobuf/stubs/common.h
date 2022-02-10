@@ -198,11 +198,11 @@ using string = TProtoStringType;
 }  // namespace protobuf
 }  // namespace google
 
-namespace NProtoBuf { 
-  using namespace google; 
-  using namespace google::protobuf; 
-}; 
- 
+namespace NProtoBuf {
+  using namespace google;
+  using namespace google::protobuf;
+};
+
 #include <google/protobuf/port_undef.inc>
 
 #endif  // GOOGLE_PROTOBUF_COMMON_H__

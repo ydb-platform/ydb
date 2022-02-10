@@ -242,7 +242,7 @@ bool FileOutputStream::CopyingFileOutputStream::Write(const void* buffer,
 
 // ===================================================================
 
-IstreamInputStream::IstreamInputStream(std::istream* input, int block_size) 
+IstreamInputStream::IstreamInputStream(std::istream* input, int block_size)
     : copying_input_(input), impl_(&copying_input_, block_size) {}
 
 bool IstreamInputStream::Next(const void** data, int* size) {
@@ -256,7 +256,7 @@ bool IstreamInputStream::Skip(int count) { return impl_.Skip(count); }
 int64_t IstreamInputStream::ByteCount() const { return impl_.ByteCount(); }
 
 IstreamInputStream::CopyingIstreamInputStream::CopyingIstreamInputStream(
-    std::istream* input) 
+    std::istream* input)
     : input_(input) {}
 
 IstreamInputStream::CopyingIstreamInputStream::~CopyingIstreamInputStream() {}
@@ -273,7 +273,7 @@ int IstreamInputStream::CopyingIstreamInputStream::Read(void* buffer,
 
 // ===================================================================
 
-OstreamOutputStream::OstreamOutputStream(std::ostream* output, int block_size) 
+OstreamOutputStream::OstreamOutputStream(std::ostream* output, int block_size)
     : copying_output_(output), impl_(&copying_output_, block_size) {}
 
 OstreamOutputStream::~OstreamOutputStream() { impl_.Flush(); }
@@ -287,7 +287,7 @@ void OstreamOutputStream::BackUp(int count) { impl_.BackUp(count); }
 int64_t OstreamOutputStream::ByteCount() const { return impl_.ByteCount(); }
 
 OstreamOutputStream::CopyingOstreamOutputStream::CopyingOstreamOutputStream(
-    std::ostream* output) 
+    std::ostream* output)
     : output_(output) {}
 
 OstreamOutputStream::CopyingOstreamOutputStream::~CopyingOstreamOutputStream() {

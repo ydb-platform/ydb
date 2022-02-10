@@ -103,7 +103,7 @@ class PROTOBUF_EXPORT DescriptorDatabase {
   // This method has a default implementation that always returns
   // false.
   virtual bool FindAllExtensionNumbers(const TProtoStringType& /* extendee_type */,
-                                       std::vector<int>* /* output */) { 
+                                       std::vector<int>* /* output */) {
     return false;
   }
 
@@ -205,7 +205,7 @@ class PROTOBUF_EXPORT SimpleDescriptorDatabase : public DescriptorDatabase {
     Value FindSymbol(const TProtoStringType& name);
     Value FindExtension(const TProtoStringType& containing_type, int field_number);
     bool FindAllExtensionNumbers(const TProtoStringType& containing_type,
-                                 std::vector<int>* output); 
+                                 std::vector<int>* output);
     void FindAllFileNames(std::vector<TProtoStringType>* output);
 
    private:
@@ -318,11 +318,11 @@ class PROTOBUF_EXPORT EncodedDescriptorDatabase : public DescriptorDatabase {
   // Keep DescriptorIndex by pointer to hide the implementation to keep a
   // cleaner header.
   std::unique_ptr<DescriptorIndex> index_;
-  std::vector<void*> files_to_delete_; 
+  std::vector<void*> files_to_delete_;
 
   // If encoded_file.first is non-NULL, parse the data into *output and return
   // true, otherwise return false.
-  bool MaybeParse(std::pair<const void*, int> encoded_file, 
+  bool MaybeParse(std::pair<const void*, int> encoded_file,
                   FileDescriptorProto* output);
 
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(EncodedDescriptorDatabase);
@@ -379,7 +379,7 @@ class PROTOBUF_EXPORT MergedDescriptorDatabase : public DescriptorDatabase {
 
 
  private:
-  std::vector<DescriptorDatabase*> sources_; 
+  std::vector<DescriptorDatabase*> sources_;
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(MergedDescriptorDatabase);
 };
 

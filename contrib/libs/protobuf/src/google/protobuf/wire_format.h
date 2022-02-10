@@ -372,8 +372,8 @@ inline void WireFormat::VerifyUTF8StringNamedField(const char* data, int size,
 #ifdef GOOGLE_PROTOBUF_UTF8_VALIDATION_ENABLED
   WireFormatLite::VerifyUtf8String(
       data, size, static_cast<WireFormatLite::Operation>(op), field_name);
-#else 
-  // Avoid the compiler warning about unused variables. 
+#else
+  // Avoid the compiler warning about unused variables.
   (void)data;
   (void)size;
   (void)op;

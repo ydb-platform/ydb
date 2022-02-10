@@ -96,7 +96,7 @@ class GeneratorResponseContext : public GeneratorContext {
     return new io::StringOutputStream(file->mutable_content());
   }
 
-  void ListParsedFiles(std::vector<const FileDescriptor*>* output) { 
+  void ListParsedFiles(std::vector<const FileDescriptor*>* output) {
     *output = parsed_files_;
   }
 
@@ -107,7 +107,7 @@ class GeneratorResponseContext : public GeneratorContext {
  private:
   Version compiler_version_;
   CodeGeneratorResponse* response_;
-  const std::vector<const FileDescriptor*>& parsed_files_; 
+  const std::vector<const FileDescriptor*>& parsed_files_;
 };
 
 bool GenerateCode(const CodeGeneratorRequest& request,
@@ -122,7 +122,7 @@ bool GenerateCode(const CodeGeneratorRequest& request,
     }
   }
 
-  std::vector<const FileDescriptor*> parsed_files; 
+  std::vector<const FileDescriptor*> parsed_files;
   for (int i = 0; i < request.file_to_generate_size(); i++) {
     parsed_files.push_back(pool.FindFileByName(request.file_to_generate(i)));
     if (parsed_files.back() == NULL) {

@@ -625,14 +625,14 @@ class PROTOBUF_EXPORT FileDescriptorProto final :
   int _internal_dependency_size() const;
   public:
   void clear_dependency();
-  const TProtoStringType& dependency(int index) const; 
-  TProtoStringType* mutable_dependency(int index); 
-  void set_dependency(int index, const TProtoStringType& value); 
+  const TProtoStringType& dependency(int index) const;
+  TProtoStringType* mutable_dependency(int index);
+  void set_dependency(int index, const TProtoStringType& value);
   void set_dependency(int index, TProtoStringType&& value);
   void set_dependency(int index, const char* value);
   void set_dependency(int index, const char* value, size_t size);
-  TProtoStringType* add_dependency(); 
-  void add_dependency(const TProtoStringType& value); 
+  TProtoStringType* add_dependency();
+  void add_dependency(const TProtoStringType& value);
   void add_dependency(TProtoStringType&& value);
   void add_dependency(const char* value);
   void add_dependency(const char* value, size_t size);
@@ -1494,14 +1494,14 @@ class PROTOBUF_EXPORT DescriptorProto final :
   int _internal_reserved_name_size() const;
   public:
   void clear_reserved_name();
-  const TProtoStringType& reserved_name(int index) const; 
-  TProtoStringType* mutable_reserved_name(int index); 
-  void set_reserved_name(int index, const TProtoStringType& value); 
+  const TProtoStringType& reserved_name(int index) const;
+  TProtoStringType* mutable_reserved_name(int index);
+  void set_reserved_name(int index, const TProtoStringType& value);
   void set_reserved_name(int index, TProtoStringType&& value);
   void set_reserved_name(int index, const char* value);
   void set_reserved_name(int index, const char* value, size_t size);
-  TProtoStringType* add_reserved_name(); 
-  void add_reserved_name(const TProtoStringType& value); 
+  TProtoStringType* add_reserved_name();
+  void add_reserved_name(const TProtoStringType& value);
   void add_reserved_name(TProtoStringType&& value);
   void add_reserved_name(const char* value);
   void add_reserved_name(const char* value, size_t size);
@@ -1963,12 +1963,12 @@ class PROTOBUF_EXPORT FieldDescriptorProto final :
   bool _internal_has_name() const;
   public:
   void clear_name();
-  const TProtoStringType& name() const; 
+  const TProtoStringType& name() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_name(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_name(); 
+  TProtoStringType* mutable_name();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_name();
-  void set_allocated_name(TProtoStringType* name); 
+  void set_allocated_name(TProtoStringType* name);
   private:
   const TProtoStringType& _internal_name() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_name(const TProtoStringType& value);
@@ -1999,12 +1999,12 @@ class PROTOBUF_EXPORT FieldDescriptorProto final :
   bool _internal_has_type_name() const;
   public:
   void clear_type_name();
-  const TProtoStringType& type_name() const; 
+  const TProtoStringType& type_name() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_type_name(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_type_name(); 
+  TProtoStringType* mutable_type_name();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_type_name();
-  void set_allocated_type_name(TProtoStringType* type_name); 
+  void set_allocated_type_name(TProtoStringType* type_name);
   private:
   const TProtoStringType& _internal_type_name() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_type_name(const TProtoStringType& value);
@@ -2017,12 +2017,12 @@ class PROTOBUF_EXPORT FieldDescriptorProto final :
   bool _internal_has_default_value() const;
   public:
   void clear_default_value();
-  const TProtoStringType& default_value() const; 
+  const TProtoStringType& default_value() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_default_value(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_default_value(); 
+  TProtoStringType* mutable_default_value();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_default_value();
-  void set_allocated_default_value(TProtoStringType* default_value); 
+  void set_allocated_default_value(TProtoStringType* default_value);
   private:
   const TProtoStringType& _internal_default_value() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_default_value(const TProtoStringType& value);
@@ -2035,12 +2035,12 @@ class PROTOBUF_EXPORT FieldDescriptorProto final :
   bool _internal_has_json_name() const;
   public:
   void clear_json_name();
-  const TProtoStringType& json_name() const; 
+  const TProtoStringType& json_name() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_json_name(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_json_name(); 
+  TProtoStringType* mutable_json_name();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_json_name();
-  void set_allocated_json_name(TProtoStringType* json_name); 
+  void set_allocated_json_name(TProtoStringType* json_name);
   private:
   const TProtoStringType& _internal_json_name() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_json_name(const TProtoStringType& value);
@@ -2285,12 +2285,12 @@ class PROTOBUF_EXPORT OneofDescriptorProto final :
   bool _internal_has_name() const;
   public:
   void clear_name();
-  const TProtoStringType& name() const; 
+  const TProtoStringType& name() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_name(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_name(); 
+  TProtoStringType* mutable_name();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_name();
-  void set_allocated_name(TProtoStringType* name); 
+  void set_allocated_name(TProtoStringType* name);
   private:
   const TProtoStringType& _internal_name() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_name(const TProtoStringType& value);
@@ -2692,12 +2692,12 @@ class PROTOBUF_EXPORT EnumDescriptorProto final :
   bool _internal_has_name() const;
   public:
   void clear_name();
-  const TProtoStringType& name() const; 
+  const TProtoStringType& name() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_name(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_name(); 
+  TProtoStringType* mutable_name();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_name();
-  void set_allocated_name(TProtoStringType* name); 
+  void set_allocated_name(TProtoStringType* name);
   private:
   const TProtoStringType& _internal_name() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_name(const TProtoStringType& value);
@@ -2872,12 +2872,12 @@ class PROTOBUF_EXPORT EnumValueDescriptorProto final :
   bool _internal_has_name() const;
   public:
   void clear_name();
-  const TProtoStringType& name() const; 
+  const TProtoStringType& name() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_name(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_name(); 
+  TProtoStringType* mutable_name();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_name();
-  void set_allocated_name(TProtoStringType* name); 
+  void set_allocated_name(TProtoStringType* name);
   private:
   const TProtoStringType& _internal_name() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_name(const TProtoStringType& value);
@@ -3081,12 +3081,12 @@ class PROTOBUF_EXPORT ServiceDescriptorProto final :
   bool _internal_has_name() const;
   public:
   void clear_name();
-  const TProtoStringType& name() const; 
+  const TProtoStringType& name() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_name(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_name(); 
+  TProtoStringType* mutable_name();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_name();
-  void set_allocated_name(TProtoStringType* name); 
+  void set_allocated_name(TProtoStringType* name);
   private:
   const TProtoStringType& _internal_name() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_name(const TProtoStringType& value);
@@ -3262,12 +3262,12 @@ class PROTOBUF_EXPORT MethodDescriptorProto final :
   bool _internal_has_name() const;
   public:
   void clear_name();
-  const TProtoStringType& name() const; 
+  const TProtoStringType& name() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_name(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_name(); 
+  TProtoStringType* mutable_name();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_name();
-  void set_allocated_name(TProtoStringType* name); 
+  void set_allocated_name(TProtoStringType* name);
   private:
   const TProtoStringType& _internal_name() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_name(const TProtoStringType& value);
@@ -3280,12 +3280,12 @@ class PROTOBUF_EXPORT MethodDescriptorProto final :
   bool _internal_has_input_type() const;
   public:
   void clear_input_type();
-  const TProtoStringType& input_type() const; 
+  const TProtoStringType& input_type() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_input_type(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_input_type(); 
+  TProtoStringType* mutable_input_type();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_input_type();
-  void set_allocated_input_type(TProtoStringType* input_type); 
+  void set_allocated_input_type(TProtoStringType* input_type);
   private:
   const TProtoStringType& _internal_input_type() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_input_type(const TProtoStringType& value);
@@ -3298,12 +3298,12 @@ class PROTOBUF_EXPORT MethodDescriptorProto final :
   bool _internal_has_output_type() const;
   public:
   void clear_output_type();
-  const TProtoStringType& output_type() const; 
+  const TProtoStringType& output_type() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_output_type(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_output_type(); 
+  TProtoStringType* mutable_output_type();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_output_type();
-  void set_allocated_output_type(TProtoStringType* output_type); 
+  void set_allocated_output_type(TProtoStringType* output_type);
   private:
   const TProtoStringType& _internal_output_type() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_output_type(const TProtoStringType& value);
@@ -3573,12 +3573,12 @@ class PROTOBUF_EXPORT FileOptions final :
   bool _internal_has_java_package() const;
   public:
   void clear_java_package();
-  const TProtoStringType& java_package() const; 
+  const TProtoStringType& java_package() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_java_package(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_java_package(); 
+  TProtoStringType* mutable_java_package();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_java_package();
-  void set_allocated_java_package(TProtoStringType* java_package); 
+  void set_allocated_java_package(TProtoStringType* java_package);
   private:
   const TProtoStringType& _internal_java_package() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_java_package(const TProtoStringType& value);
@@ -3591,12 +3591,12 @@ class PROTOBUF_EXPORT FileOptions final :
   bool _internal_has_java_outer_classname() const;
   public:
   void clear_java_outer_classname();
-  const TProtoStringType& java_outer_classname() const; 
+  const TProtoStringType& java_outer_classname() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_java_outer_classname(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_java_outer_classname(); 
+  TProtoStringType* mutable_java_outer_classname();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_java_outer_classname();
-  void set_allocated_java_outer_classname(TProtoStringType* java_outer_classname); 
+  void set_allocated_java_outer_classname(TProtoStringType* java_outer_classname);
   private:
   const TProtoStringType& _internal_java_outer_classname() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_java_outer_classname(const TProtoStringType& value);
@@ -5493,12 +5493,12 @@ class PROTOBUF_EXPORT UninterpretedOption_NamePart final :
   bool _internal_has_name_part() const;
   public:
   void clear_name_part();
-  const TProtoStringType& name_part() const; 
+  const TProtoStringType& name_part() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_name_part(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_name_part(); 
+  TProtoStringType* mutable_name_part();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_name_part();
-  void set_allocated_name_part(TProtoStringType* name_part); 
+  void set_allocated_name_part(TProtoStringType* name_part);
   private:
   const TProtoStringType& _internal_name_part() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_name_part(const TProtoStringType& value);
@@ -5692,12 +5692,12 @@ class PROTOBUF_EXPORT UninterpretedOption final :
   bool _internal_has_identifier_value() const;
   public:
   void clear_identifier_value();
-  const TProtoStringType& identifier_value() const; 
+  const TProtoStringType& identifier_value() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_identifier_value(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_identifier_value(); 
+  TProtoStringType* mutable_identifier_value();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_identifier_value();
-  void set_allocated_identifier_value(TProtoStringType* identifier_value); 
+  void set_allocated_identifier_value(TProtoStringType* identifier_value);
   private:
   const TProtoStringType& _internal_identifier_value() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_identifier_value(const TProtoStringType& value);
@@ -5710,12 +5710,12 @@ class PROTOBUF_EXPORT UninterpretedOption final :
   bool _internal_has_string_value() const;
   public:
   void clear_string_value();
-  const TProtoStringType& string_value() const; 
+  const TProtoStringType& string_value() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_string_value(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_string_value(); 
+  TProtoStringType* mutable_string_value();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_string_value();
-  void set_allocated_string_value(TProtoStringType* string_value); 
+  void set_allocated_string_value(TProtoStringType* string_value);
   private:
   const TProtoStringType& _internal_string_value() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_string_value(const TProtoStringType& value);
@@ -5728,12 +5728,12 @@ class PROTOBUF_EXPORT UninterpretedOption final :
   bool _internal_has_aggregate_value() const;
   public:
   void clear_aggregate_value();
-  const TProtoStringType& aggregate_value() const; 
+  const TProtoStringType& aggregate_value() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_aggregate_value(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_aggregate_value(); 
+  TProtoStringType* mutable_aggregate_value();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_aggregate_value();
-  void set_allocated_aggregate_value(TProtoStringType* aggregate_value); 
+  void set_allocated_aggregate_value(TProtoStringType* aggregate_value);
   private:
   const TProtoStringType& _internal_aggregate_value() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_aggregate_value(const TProtoStringType& value);
@@ -6001,12 +6001,12 @@ class PROTOBUF_EXPORT SourceCodeInfo_Location final :
   bool _internal_has_leading_comments() const;
   public:
   void clear_leading_comments();
-  const TProtoStringType& leading_comments() const; 
+  const TProtoStringType& leading_comments() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_leading_comments(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_leading_comments(); 
+  TProtoStringType* mutable_leading_comments();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_leading_comments();
-  void set_allocated_leading_comments(TProtoStringType* leading_comments); 
+  void set_allocated_leading_comments(TProtoStringType* leading_comments);
   private:
   const TProtoStringType& _internal_leading_comments() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_leading_comments(const TProtoStringType& value);
@@ -6019,12 +6019,12 @@ class PROTOBUF_EXPORT SourceCodeInfo_Location final :
   bool _internal_has_trailing_comments() const;
   public:
   void clear_trailing_comments();
-  const TProtoStringType& trailing_comments() const; 
+  const TProtoStringType& trailing_comments() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_trailing_comments(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_trailing_comments(); 
+  TProtoStringType* mutable_trailing_comments();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_trailing_comments();
-  void set_allocated_trailing_comments(TProtoStringType* trailing_comments); 
+  void set_allocated_trailing_comments(TProtoStringType* trailing_comments);
   private:
   const TProtoStringType& _internal_trailing_comments() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_trailing_comments(const TProtoStringType& value);
@@ -6363,12 +6363,12 @@ class PROTOBUF_EXPORT GeneratedCodeInfo_Annotation final :
   bool _internal_has_source_file() const;
   public:
   void clear_source_file();
-  const TProtoStringType& source_file() const; 
+  const TProtoStringType& source_file() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
   void set_source_file(ArgT0&& arg0, ArgT... args);
-  TProtoStringType* mutable_source_file(); 
+  TProtoStringType* mutable_source_file();
   PROTOBUF_MUST_USE_RESULT TProtoStringType* release_source_file();
-  void set_allocated_source_file(TProtoStringType* source_file); 
+  void set_allocated_source_file(TProtoStringType* source_file);
   private:
   const TProtoStringType& _internal_source_file() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_source_file(const TProtoStringType& value);
@@ -6641,7 +6641,7 @@ inline void FileDescriptorProto::clear_name() {
   name_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000001u;
 }
-inline const TProtoStringType& FileDescriptorProto::name() const { 
+inline const TProtoStringType& FileDescriptorProto::name() const {
   // @@protoc_insertion_point(field_get:google.protobuf.FileDescriptorProto.name)
   return _internal_name();
 }
@@ -6668,7 +6668,7 @@ inline TProtoStringType* FileDescriptorProto::_internal_mutable_name() {
   _has_bits_[0] |= 0x00000001u;
   return name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* FileDescriptorProto::release_name() { 
+inline TProtoStringType* FileDescriptorProto::release_name() {
   // @@protoc_insertion_point(field_release:google.protobuf.FileDescriptorProto.name)
   if (!_internal_has_name()) {
     return nullptr;
@@ -6676,7 +6676,7 @@ inline TProtoStringType* FileDescriptorProto::release_name() {
   _has_bits_[0] &= ~0x00000001u;
   return name_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void FileDescriptorProto::set_allocated_name(TProtoStringType* name) { 
+inline void FileDescriptorProto::set_allocated_name(TProtoStringType* name) {
   if (name != nullptr) {
     _has_bits_[0] |= 0x00000001u;
   } else {
@@ -6699,7 +6699,7 @@ inline void FileDescriptorProto::clear_package() {
   package_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000002u;
 }
-inline const TProtoStringType& FileDescriptorProto::package() const { 
+inline const TProtoStringType& FileDescriptorProto::package() const {
   // @@protoc_insertion_point(field_get:google.protobuf.FileDescriptorProto.package)
   return _internal_package();
 }
@@ -6726,7 +6726,7 @@ inline TProtoStringType* FileDescriptorProto::_internal_mutable_package() {
   _has_bits_[0] |= 0x00000002u;
   return package_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* FileDescriptorProto::release_package() { 
+inline TProtoStringType* FileDescriptorProto::release_package() {
   // @@protoc_insertion_point(field_release:google.protobuf.FileDescriptorProto.package)
   if (!_internal_has_package()) {
     return nullptr;
@@ -6734,7 +6734,7 @@ inline TProtoStringType* FileDescriptorProto::release_package() {
   _has_bits_[0] &= ~0x00000002u;
   return package_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void FileDescriptorProto::set_allocated_package(TProtoStringType* package) { 
+inline void FileDescriptorProto::set_allocated_package(TProtoStringType* package) {
   if (package != nullptr) {
     _has_bits_[0] |= 0x00000002u;
   } else {
@@ -6763,15 +6763,15 @@ inline TProtoStringType* FileDescriptorProto::add_dependency() {
 inline const TProtoStringType& FileDescriptorProto::_internal_dependency(int index) const {
   return dependency_.Get(index);
 }
-inline const TProtoStringType& FileDescriptorProto::dependency(int index) const { 
+inline const TProtoStringType& FileDescriptorProto::dependency(int index) const {
   // @@protoc_insertion_point(field_get:google.protobuf.FileDescriptorProto.dependency)
   return _internal_dependency(index);
 }
-inline TProtoStringType* FileDescriptorProto::mutable_dependency(int index) { 
+inline TProtoStringType* FileDescriptorProto::mutable_dependency(int index) {
   // @@protoc_insertion_point(field_mutable:google.protobuf.FileDescriptorProto.dependency)
   return dependency_.Mutable(index);
 }
-inline void FileDescriptorProto::set_dependency(int index, const TProtoStringType& value) { 
+inline void FileDescriptorProto::set_dependency(int index, const TProtoStringType& value) {
   dependency_.Mutable(index)->assign(value);
   // @@protoc_insertion_point(field_set:google.protobuf.FileDescriptorProto.dependency)
 }
@@ -6792,7 +6792,7 @@ inline void FileDescriptorProto::set_dependency(int index, const char* value, si
 inline TProtoStringType* FileDescriptorProto::_internal_add_dependency() {
   return dependency_.Add();
 }
-inline void FileDescriptorProto::add_dependency(const TProtoStringType& value) { 
+inline void FileDescriptorProto::add_dependency(const TProtoStringType& value) {
   dependency_.Add()->assign(value);
   // @@protoc_insertion_point(field_add:google.protobuf.FileDescriptorProto.dependency)
 }
@@ -7266,7 +7266,7 @@ inline void FileDescriptorProto::clear_syntax() {
   syntax_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000004u;
 }
-inline const TProtoStringType& FileDescriptorProto::syntax() const { 
+inline const TProtoStringType& FileDescriptorProto::syntax() const {
   // @@protoc_insertion_point(field_get:google.protobuf.FileDescriptorProto.syntax)
   return _internal_syntax();
 }
@@ -7293,7 +7293,7 @@ inline TProtoStringType* FileDescriptorProto::_internal_mutable_syntax() {
   _has_bits_[0] |= 0x00000004u;
   return syntax_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* FileDescriptorProto::release_syntax() { 
+inline TProtoStringType* FileDescriptorProto::release_syntax() {
   // @@protoc_insertion_point(field_release:google.protobuf.FileDescriptorProto.syntax)
   if (!_internal_has_syntax()) {
     return nullptr;
@@ -7301,7 +7301,7 @@ inline TProtoStringType* FileDescriptorProto::release_syntax() {
   _has_bits_[0] &= ~0x00000004u;
   return syntax_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void FileDescriptorProto::set_allocated_syntax(TProtoStringType* syntax) { 
+inline void FileDescriptorProto::set_allocated_syntax(TProtoStringType* syntax) {
   if (syntax != nullptr) {
     _has_bits_[0] |= 0x00000004u;
   } else {
@@ -7538,7 +7538,7 @@ inline void DescriptorProto::clear_name() {
   name_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000001u;
 }
-inline const TProtoStringType& DescriptorProto::name() const { 
+inline const TProtoStringType& DescriptorProto::name() const {
   // @@protoc_insertion_point(field_get:google.protobuf.DescriptorProto.name)
   return _internal_name();
 }
@@ -7565,7 +7565,7 @@ inline TProtoStringType* DescriptorProto::_internal_mutable_name() {
   _has_bits_[0] |= 0x00000001u;
   return name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* DescriptorProto::release_name() { 
+inline TProtoStringType* DescriptorProto::release_name() {
   // @@protoc_insertion_point(field_release:google.protobuf.DescriptorProto.name)
   if (!_internal_has_name()) {
     return nullptr;
@@ -7573,7 +7573,7 @@ inline TProtoStringType* DescriptorProto::release_name() {
   _has_bits_[0] &= ~0x00000001u;
   return name_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void DescriptorProto::set_allocated_name(TProtoStringType* name) { 
+inline void DescriptorProto::set_allocated_name(TProtoStringType* name) {
   if (name != nullptr) {
     _has_bits_[0] |= 0x00000001u;
   } else {
@@ -7972,15 +7972,15 @@ inline TProtoStringType* DescriptorProto::add_reserved_name() {
 inline const TProtoStringType& DescriptorProto::_internal_reserved_name(int index) const {
   return reserved_name_.Get(index);
 }
-inline const TProtoStringType& DescriptorProto::reserved_name(int index) const { 
+inline const TProtoStringType& DescriptorProto::reserved_name(int index) const {
   // @@protoc_insertion_point(field_get:google.protobuf.DescriptorProto.reserved_name)
   return _internal_reserved_name(index);
 }
-inline TProtoStringType* DescriptorProto::mutable_reserved_name(int index) { 
+inline TProtoStringType* DescriptorProto::mutable_reserved_name(int index) {
   // @@protoc_insertion_point(field_mutable:google.protobuf.DescriptorProto.reserved_name)
   return reserved_name_.Mutable(index);
 }
-inline void DescriptorProto::set_reserved_name(int index, const TProtoStringType& value) { 
+inline void DescriptorProto::set_reserved_name(int index, const TProtoStringType& value) {
   reserved_name_.Mutable(index)->assign(value);
   // @@protoc_insertion_point(field_set:google.protobuf.DescriptorProto.reserved_name)
 }
@@ -8001,7 +8001,7 @@ inline void DescriptorProto::set_reserved_name(int index, const char* value, siz
 inline TProtoStringType* DescriptorProto::_internal_add_reserved_name() {
   return reserved_name_.Add();
 }
-inline void DescriptorProto::add_reserved_name(const TProtoStringType& value) { 
+inline void DescriptorProto::add_reserved_name(const TProtoStringType& value) {
   reserved_name_.Add()->assign(value);
   // @@protoc_insertion_point(field_add:google.protobuf.DescriptorProto.reserved_name)
 }
@@ -8089,7 +8089,7 @@ inline void FieldDescriptorProto::clear_name() {
   name_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000001u;
 }
-inline const TProtoStringType& FieldDescriptorProto::name() const { 
+inline const TProtoStringType& FieldDescriptorProto::name() const {
   // @@protoc_insertion_point(field_get:google.protobuf.FieldDescriptorProto.name)
   return _internal_name();
 }
@@ -8116,7 +8116,7 @@ inline TProtoStringType* FieldDescriptorProto::_internal_mutable_name() {
   _has_bits_[0] |= 0x00000001u;
   return name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* FieldDescriptorProto::release_name() { 
+inline TProtoStringType* FieldDescriptorProto::release_name() {
   // @@protoc_insertion_point(field_release:google.protobuf.FieldDescriptorProto.name)
   if (!_internal_has_name()) {
     return nullptr;
@@ -8124,7 +8124,7 @@ inline TProtoStringType* FieldDescriptorProto::release_name() {
   _has_bits_[0] &= ~0x00000001u;
   return name_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void FieldDescriptorProto::set_allocated_name(TProtoStringType* name) { 
+inline void FieldDescriptorProto::set_allocated_name(TProtoStringType* name) {
   if (name != nullptr) {
     _has_bits_[0] |= 0x00000001u;
   } else {
@@ -8233,7 +8233,7 @@ inline void FieldDescriptorProto::clear_type_name() {
   type_name_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000004u;
 }
-inline const TProtoStringType& FieldDescriptorProto::type_name() const { 
+inline const TProtoStringType& FieldDescriptorProto::type_name() const {
   // @@protoc_insertion_point(field_get:google.protobuf.FieldDescriptorProto.type_name)
   return _internal_type_name();
 }
@@ -8260,7 +8260,7 @@ inline TProtoStringType* FieldDescriptorProto::_internal_mutable_type_name() {
   _has_bits_[0] |= 0x00000004u;
   return type_name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* FieldDescriptorProto::release_type_name() { 
+inline TProtoStringType* FieldDescriptorProto::release_type_name() {
   // @@protoc_insertion_point(field_release:google.protobuf.FieldDescriptorProto.type_name)
   if (!_internal_has_type_name()) {
     return nullptr;
@@ -8268,7 +8268,7 @@ inline TProtoStringType* FieldDescriptorProto::release_type_name() {
   _has_bits_[0] &= ~0x00000004u;
   return type_name_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void FieldDescriptorProto::set_allocated_type_name(TProtoStringType* type_name) { 
+inline void FieldDescriptorProto::set_allocated_type_name(TProtoStringType* type_name) {
   if (type_name != nullptr) {
     _has_bits_[0] |= 0x00000004u;
   } else {
@@ -8291,7 +8291,7 @@ inline void FieldDescriptorProto::clear_extendee() {
   extendee_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000002u;
 }
-inline const TProtoStringType& FieldDescriptorProto::extendee() const { 
+inline const TProtoStringType& FieldDescriptorProto::extendee() const {
   // @@protoc_insertion_point(field_get:google.protobuf.FieldDescriptorProto.extendee)
   return _internal_extendee();
 }
@@ -8318,7 +8318,7 @@ inline TProtoStringType* FieldDescriptorProto::_internal_mutable_extendee() {
   _has_bits_[0] |= 0x00000002u;
   return extendee_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* FieldDescriptorProto::release_extendee() { 
+inline TProtoStringType* FieldDescriptorProto::release_extendee() {
   // @@protoc_insertion_point(field_release:google.protobuf.FieldDescriptorProto.extendee)
   if (!_internal_has_extendee()) {
     return nullptr;
@@ -8326,7 +8326,7 @@ inline TProtoStringType* FieldDescriptorProto::release_extendee() {
   _has_bits_[0] &= ~0x00000002u;
   return extendee_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void FieldDescriptorProto::set_allocated_extendee(TProtoStringType* extendee) { 
+inline void FieldDescriptorProto::set_allocated_extendee(TProtoStringType* extendee) {
   if (extendee != nullptr) {
     _has_bits_[0] |= 0x00000002u;
   } else {
@@ -8349,7 +8349,7 @@ inline void FieldDescriptorProto::clear_default_value() {
   default_value_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000008u;
 }
-inline const TProtoStringType& FieldDescriptorProto::default_value() const { 
+inline const TProtoStringType& FieldDescriptorProto::default_value() const {
   // @@protoc_insertion_point(field_get:google.protobuf.FieldDescriptorProto.default_value)
   return _internal_default_value();
 }
@@ -8376,7 +8376,7 @@ inline TProtoStringType* FieldDescriptorProto::_internal_mutable_default_value()
   _has_bits_[0] |= 0x00000008u;
   return default_value_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* FieldDescriptorProto::release_default_value() { 
+inline TProtoStringType* FieldDescriptorProto::release_default_value() {
   // @@protoc_insertion_point(field_release:google.protobuf.FieldDescriptorProto.default_value)
   if (!_internal_has_default_value()) {
     return nullptr;
@@ -8384,7 +8384,7 @@ inline TProtoStringType* FieldDescriptorProto::release_default_value() {
   _has_bits_[0] &= ~0x00000008u;
   return default_value_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void FieldDescriptorProto::set_allocated_default_value(TProtoStringType* default_value) { 
+inline void FieldDescriptorProto::set_allocated_default_value(TProtoStringType* default_value) {
   if (default_value != nullptr) {
     _has_bits_[0] |= 0x00000008u;
   } else {
@@ -8435,7 +8435,7 @@ inline void FieldDescriptorProto::clear_json_name() {
   json_name_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000010u;
 }
-inline const TProtoStringType& FieldDescriptorProto::json_name() const { 
+inline const TProtoStringType& FieldDescriptorProto::json_name() const {
   // @@protoc_insertion_point(field_get:google.protobuf.FieldDescriptorProto.json_name)
   return _internal_json_name();
 }
@@ -8462,7 +8462,7 @@ inline TProtoStringType* FieldDescriptorProto::_internal_mutable_json_name() {
   _has_bits_[0] |= 0x00000010u;
   return json_name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* FieldDescriptorProto::release_json_name() { 
+inline TProtoStringType* FieldDescriptorProto::release_json_name() {
   // @@protoc_insertion_point(field_release:google.protobuf.FieldDescriptorProto.json_name)
   if (!_internal_has_json_name()) {
     return nullptr;
@@ -8470,7 +8470,7 @@ inline TProtoStringType* FieldDescriptorProto::release_json_name() {
   _has_bits_[0] &= ~0x00000010u;
   return json_name_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void FieldDescriptorProto::set_allocated_json_name(TProtoStringType* json_name) { 
+inline void FieldDescriptorProto::set_allocated_json_name(TProtoStringType* json_name) {
   if (json_name != nullptr) {
     _has_bits_[0] |= 0x00000010u;
   } else {
@@ -8615,7 +8615,7 @@ inline void OneofDescriptorProto::clear_name() {
   name_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000001u;
 }
-inline const TProtoStringType& OneofDescriptorProto::name() const { 
+inline const TProtoStringType& OneofDescriptorProto::name() const {
   // @@protoc_insertion_point(field_get:google.protobuf.OneofDescriptorProto.name)
   return _internal_name();
 }
@@ -8642,7 +8642,7 @@ inline TProtoStringType* OneofDescriptorProto::_internal_mutable_name() {
   _has_bits_[0] |= 0x00000001u;
   return name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* OneofDescriptorProto::release_name() { 
+inline TProtoStringType* OneofDescriptorProto::release_name() {
   // @@protoc_insertion_point(field_release:google.protobuf.OneofDescriptorProto.name)
   if (!_internal_has_name()) {
     return nullptr;
@@ -8650,7 +8650,7 @@ inline TProtoStringType* OneofDescriptorProto::release_name() {
   _has_bits_[0] &= ~0x00000001u;
   return name_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void OneofDescriptorProto::set_allocated_name(TProtoStringType* name) { 
+inline void OneofDescriptorProto::set_allocated_name(TProtoStringType* name) {
   if (name != nullptr) {
     _has_bits_[0] |= 0x00000001u;
   } else {
@@ -8827,7 +8827,7 @@ inline void EnumDescriptorProto::clear_name() {
   name_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000001u;
 }
-inline const TProtoStringType& EnumDescriptorProto::name() const { 
+inline const TProtoStringType& EnumDescriptorProto::name() const {
   // @@protoc_insertion_point(field_get:google.protobuf.EnumDescriptorProto.name)
   return _internal_name();
 }
@@ -8854,7 +8854,7 @@ inline TProtoStringType* EnumDescriptorProto::_internal_mutable_name() {
   _has_bits_[0] |= 0x00000001u;
   return name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* EnumDescriptorProto::release_name() { 
+inline TProtoStringType* EnumDescriptorProto::release_name() {
   // @@protoc_insertion_point(field_release:google.protobuf.EnumDescriptorProto.name)
   if (!_internal_has_name()) {
     return nullptr;
@@ -8862,7 +8862,7 @@ inline TProtoStringType* EnumDescriptorProto::release_name() {
   _has_bits_[0] &= ~0x00000001u;
   return name_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void EnumDescriptorProto::set_allocated_name(TProtoStringType* name) { 
+inline void EnumDescriptorProto::set_allocated_name(TProtoStringType* name) {
   if (name != nullptr) {
     _has_bits_[0] |= 0x00000001u;
   } else {
@@ -9134,7 +9134,7 @@ inline void EnumValueDescriptorProto::clear_name() {
   name_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000001u;
 }
-inline const TProtoStringType& EnumValueDescriptorProto::name() const { 
+inline const TProtoStringType& EnumValueDescriptorProto::name() const {
   // @@protoc_insertion_point(field_get:google.protobuf.EnumValueDescriptorProto.name)
   return _internal_name();
 }
@@ -9161,7 +9161,7 @@ inline TProtoStringType* EnumValueDescriptorProto::_internal_mutable_name() {
   _has_bits_[0] |= 0x00000001u;
   return name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* EnumValueDescriptorProto::release_name() { 
+inline TProtoStringType* EnumValueDescriptorProto::release_name() {
   // @@protoc_insertion_point(field_release:google.protobuf.EnumValueDescriptorProto.name)
   if (!_internal_has_name()) {
     return nullptr;
@@ -9169,7 +9169,7 @@ inline TProtoStringType* EnumValueDescriptorProto::release_name() {
   _has_bits_[0] &= ~0x00000001u;
   return name_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void EnumValueDescriptorProto::set_allocated_name(TProtoStringType* name) { 
+inline void EnumValueDescriptorProto::set_allocated_name(TProtoStringType* name) {
   if (name != nullptr) {
     _has_bits_[0] |= 0x00000001u;
   } else {
@@ -9314,7 +9314,7 @@ inline void ServiceDescriptorProto::clear_name() {
   name_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000001u;
 }
-inline const TProtoStringType& ServiceDescriptorProto::name() const { 
+inline const TProtoStringType& ServiceDescriptorProto::name() const {
   // @@protoc_insertion_point(field_get:google.protobuf.ServiceDescriptorProto.name)
   return _internal_name();
 }
@@ -9341,7 +9341,7 @@ inline TProtoStringType* ServiceDescriptorProto::_internal_mutable_name() {
   _has_bits_[0] |= 0x00000001u;
   return name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* ServiceDescriptorProto::release_name() { 
+inline TProtoStringType* ServiceDescriptorProto::release_name() {
   // @@protoc_insertion_point(field_release:google.protobuf.ServiceDescriptorProto.name)
   if (!_internal_has_name()) {
     return nullptr;
@@ -9349,7 +9349,7 @@ inline TProtoStringType* ServiceDescriptorProto::release_name() {
   _has_bits_[0] &= ~0x00000001u;
   return name_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void ServiceDescriptorProto::set_allocated_name(TProtoStringType* name) { 
+inline void ServiceDescriptorProto::set_allocated_name(TProtoStringType* name) {
   if (name != nullptr) {
     _has_bits_[0] |= 0x00000001u;
   } else {
@@ -9506,7 +9506,7 @@ inline void MethodDescriptorProto::clear_name() {
   name_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000001u;
 }
-inline const TProtoStringType& MethodDescriptorProto::name() const { 
+inline const TProtoStringType& MethodDescriptorProto::name() const {
   // @@protoc_insertion_point(field_get:google.protobuf.MethodDescriptorProto.name)
   return _internal_name();
 }
@@ -9533,7 +9533,7 @@ inline TProtoStringType* MethodDescriptorProto::_internal_mutable_name() {
   _has_bits_[0] |= 0x00000001u;
   return name_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* MethodDescriptorProto::release_name() { 
+inline TProtoStringType* MethodDescriptorProto::release_name() {
   // @@protoc_insertion_point(field_release:google.protobuf.MethodDescriptorProto.name)
   if (!_internal_has_name()) {
     return nullptr;
@@ -9541,7 +9541,7 @@ inline TProtoStringType* MethodDescriptorProto::release_name() {
   _has_bits_[0] &= ~0x00000001u;
   return name_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void MethodDescriptorProto::set_allocated_name(TProtoStringType* name) { 
+inline void MethodDescriptorProto::set_allocated_name(TProtoStringType* name) {
   if (name != nullptr) {
     _has_bits_[0] |= 0x00000001u;
   } else {
@@ -9564,7 +9564,7 @@ inline void MethodDescriptorProto::clear_input_type() {
   input_type_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000002u;
 }
-inline const TProtoStringType& MethodDescriptorProto::input_type() const { 
+inline const TProtoStringType& MethodDescriptorProto::input_type() const {
   // @@protoc_insertion_point(field_get:google.protobuf.MethodDescriptorProto.input_type)
   return _internal_input_type();
 }
@@ -9591,7 +9591,7 @@ inline TProtoStringType* MethodDescriptorProto::_internal_mutable_input_type() {
   _has_bits_[0] |= 0x00000002u;
   return input_type_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* MethodDescriptorProto::release_input_type() { 
+inline TProtoStringType* MethodDescriptorProto::release_input_type() {
   // @@protoc_insertion_point(field_release:google.protobuf.MethodDescriptorProto.input_type)
   if (!_internal_has_input_type()) {
     return nullptr;
@@ -9599,7 +9599,7 @@ inline TProtoStringType* MethodDescriptorProto::release_input_type() {
   _has_bits_[0] &= ~0x00000002u;
   return input_type_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void MethodDescriptorProto::set_allocated_input_type(TProtoStringType* input_type) { 
+inline void MethodDescriptorProto::set_allocated_input_type(TProtoStringType* input_type) {
   if (input_type != nullptr) {
     _has_bits_[0] |= 0x00000002u;
   } else {
@@ -9622,7 +9622,7 @@ inline void MethodDescriptorProto::clear_output_type() {
   output_type_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000004u;
 }
-inline const TProtoStringType& MethodDescriptorProto::output_type() const { 
+inline const TProtoStringType& MethodDescriptorProto::output_type() const {
   // @@protoc_insertion_point(field_get:google.protobuf.MethodDescriptorProto.output_type)
   return _internal_output_type();
 }
@@ -9649,7 +9649,7 @@ inline TProtoStringType* MethodDescriptorProto::_internal_mutable_output_type() 
   _has_bits_[0] |= 0x00000004u;
   return output_type_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* MethodDescriptorProto::release_output_type() { 
+inline TProtoStringType* MethodDescriptorProto::release_output_type() {
   // @@protoc_insertion_point(field_release:google.protobuf.MethodDescriptorProto.output_type)
   if (!_internal_has_output_type()) {
     return nullptr;
@@ -9657,7 +9657,7 @@ inline TProtoStringType* MethodDescriptorProto::release_output_type() {
   _has_bits_[0] &= ~0x00000004u;
   return output_type_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void MethodDescriptorProto::set_allocated_output_type(TProtoStringType* output_type) { 
+inline void MethodDescriptorProto::set_allocated_output_type(TProtoStringType* output_type) {
   if (output_type != nullptr) {
     _has_bits_[0] |= 0x00000004u;
   } else {
@@ -9830,7 +9830,7 @@ inline void FileOptions::clear_java_package() {
   java_package_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000001u;
 }
-inline const TProtoStringType& FileOptions::java_package() const { 
+inline const TProtoStringType& FileOptions::java_package() const {
   // @@protoc_insertion_point(field_get:google.protobuf.FileOptions.java_package)
   return _internal_java_package();
 }
@@ -9857,7 +9857,7 @@ inline TProtoStringType* FileOptions::_internal_mutable_java_package() {
   _has_bits_[0] |= 0x00000001u;
   return java_package_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* FileOptions::release_java_package() { 
+inline TProtoStringType* FileOptions::release_java_package() {
   // @@protoc_insertion_point(field_release:google.protobuf.FileOptions.java_package)
   if (!_internal_has_java_package()) {
     return nullptr;
@@ -9865,7 +9865,7 @@ inline TProtoStringType* FileOptions::release_java_package() {
   _has_bits_[0] &= ~0x00000001u;
   return java_package_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void FileOptions::set_allocated_java_package(TProtoStringType* java_package) { 
+inline void FileOptions::set_allocated_java_package(TProtoStringType* java_package) {
   if (java_package != nullptr) {
     _has_bits_[0] |= 0x00000001u;
   } else {
@@ -9888,7 +9888,7 @@ inline void FileOptions::clear_java_outer_classname() {
   java_outer_classname_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000002u;
 }
-inline const TProtoStringType& FileOptions::java_outer_classname() const { 
+inline const TProtoStringType& FileOptions::java_outer_classname() const {
   // @@protoc_insertion_point(field_get:google.protobuf.FileOptions.java_outer_classname)
   return _internal_java_outer_classname();
 }
@@ -9915,7 +9915,7 @@ inline TProtoStringType* FileOptions::_internal_mutable_java_outer_classname() {
   _has_bits_[0] |= 0x00000002u;
   return java_outer_classname_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* FileOptions::release_java_outer_classname() { 
+inline TProtoStringType* FileOptions::release_java_outer_classname() {
   // @@protoc_insertion_point(field_release:google.protobuf.FileOptions.java_outer_classname)
   if (!_internal_has_java_outer_classname()) {
     return nullptr;
@@ -9923,7 +9923,7 @@ inline TProtoStringType* FileOptions::release_java_outer_classname() {
   _has_bits_[0] &= ~0x00000002u;
   return java_outer_classname_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void FileOptions::set_allocated_java_outer_classname(TProtoStringType* java_outer_classname) { 
+inline void FileOptions::set_allocated_java_outer_classname(TProtoStringType* java_outer_classname) {
   if (java_outer_classname != nullptr) {
     _has_bits_[0] |= 0x00000002u;
   } else {
@@ -10059,7 +10059,7 @@ inline void FileOptions::clear_go_package() {
   go_package_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000004u;
 }
-inline const TProtoStringType& FileOptions::go_package() const { 
+inline const TProtoStringType& FileOptions::go_package() const {
   // @@protoc_insertion_point(field_get:google.protobuf.FileOptions.go_package)
   return _internal_go_package();
 }
@@ -10086,7 +10086,7 @@ inline TProtoStringType* FileOptions::_internal_mutable_go_package() {
   _has_bits_[0] |= 0x00000004u;
   return go_package_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* FileOptions::release_go_package() { 
+inline TProtoStringType* FileOptions::release_go_package() {
   // @@protoc_insertion_point(field_release:google.protobuf.FileOptions.go_package)
   if (!_internal_has_go_package()) {
     return nullptr;
@@ -10094,7 +10094,7 @@ inline TProtoStringType* FileOptions::release_go_package() {
   _has_bits_[0] &= ~0x00000004u;
   return go_package_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void FileOptions::set_allocated_go_package(TProtoStringType* go_package) { 
+inline void FileOptions::set_allocated_go_package(TProtoStringType* go_package) {
   if (go_package != nullptr) {
     _has_bits_[0] |= 0x00000004u;
   } else {
@@ -10285,7 +10285,7 @@ inline void FileOptions::clear_objc_class_prefix() {
   objc_class_prefix_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000008u;
 }
-inline const TProtoStringType& FileOptions::objc_class_prefix() const { 
+inline const TProtoStringType& FileOptions::objc_class_prefix() const {
   // @@protoc_insertion_point(field_get:google.protobuf.FileOptions.objc_class_prefix)
   return _internal_objc_class_prefix();
 }
@@ -10312,7 +10312,7 @@ inline TProtoStringType* FileOptions::_internal_mutable_objc_class_prefix() {
   _has_bits_[0] |= 0x00000008u;
   return objc_class_prefix_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* FileOptions::release_objc_class_prefix() { 
+inline TProtoStringType* FileOptions::release_objc_class_prefix() {
   // @@protoc_insertion_point(field_release:google.protobuf.FileOptions.objc_class_prefix)
   if (!_internal_has_objc_class_prefix()) {
     return nullptr;
@@ -10320,7 +10320,7 @@ inline TProtoStringType* FileOptions::release_objc_class_prefix() {
   _has_bits_[0] &= ~0x00000008u;
   return objc_class_prefix_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void FileOptions::set_allocated_objc_class_prefix(TProtoStringType* objc_class_prefix) { 
+inline void FileOptions::set_allocated_objc_class_prefix(TProtoStringType* objc_class_prefix) {
   if (objc_class_prefix != nullptr) {
     _has_bits_[0] |= 0x00000008u;
   } else {
@@ -10343,7 +10343,7 @@ inline void FileOptions::clear_csharp_namespace() {
   csharp_namespace_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000010u;
 }
-inline const TProtoStringType& FileOptions::csharp_namespace() const { 
+inline const TProtoStringType& FileOptions::csharp_namespace() const {
   // @@protoc_insertion_point(field_get:google.protobuf.FileOptions.csharp_namespace)
   return _internal_csharp_namespace();
 }
@@ -10370,7 +10370,7 @@ inline TProtoStringType* FileOptions::_internal_mutable_csharp_namespace() {
   _has_bits_[0] |= 0x00000010u;
   return csharp_namespace_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* FileOptions::release_csharp_namespace() { 
+inline TProtoStringType* FileOptions::release_csharp_namespace() {
   // @@protoc_insertion_point(field_release:google.protobuf.FileOptions.csharp_namespace)
   if (!_internal_has_csharp_namespace()) {
     return nullptr;
@@ -10378,7 +10378,7 @@ inline TProtoStringType* FileOptions::release_csharp_namespace() {
   _has_bits_[0] &= ~0x00000010u;
   return csharp_namespace_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void FileOptions::set_allocated_csharp_namespace(TProtoStringType* csharp_namespace) { 
+inline void FileOptions::set_allocated_csharp_namespace(TProtoStringType* csharp_namespace) {
   if (csharp_namespace != nullptr) {
     _has_bits_[0] |= 0x00000010u;
   } else {
@@ -11494,7 +11494,7 @@ inline void UninterpretedOption_NamePart::clear_name_part() {
   name_part_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000001u;
 }
-inline const TProtoStringType& UninterpretedOption_NamePart::name_part() const { 
+inline const TProtoStringType& UninterpretedOption_NamePart::name_part() const {
   // @@protoc_insertion_point(field_get:google.protobuf.UninterpretedOption.NamePart.name_part)
   return _internal_name_part();
 }
@@ -11521,7 +11521,7 @@ inline TProtoStringType* UninterpretedOption_NamePart::_internal_mutable_name_pa
   _has_bits_[0] |= 0x00000001u;
   return name_part_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* UninterpretedOption_NamePart::release_name_part() { 
+inline TProtoStringType* UninterpretedOption_NamePart::release_name_part() {
   // @@protoc_insertion_point(field_release:google.protobuf.UninterpretedOption.NamePart.name_part)
   if (!_internal_has_name_part()) {
     return nullptr;
@@ -11529,7 +11529,7 @@ inline TProtoStringType* UninterpretedOption_NamePart::release_name_part() {
   _has_bits_[0] &= ~0x00000001u;
   return name_part_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void UninterpretedOption_NamePart::set_allocated_name_part(TProtoStringType* name_part) { 
+inline void UninterpretedOption_NamePart::set_allocated_name_part(TProtoStringType* name_part) {
   if (name_part != nullptr) {
     _has_bits_[0] |= 0x00000001u;
   } else {
@@ -11624,7 +11624,7 @@ inline void UninterpretedOption::clear_identifier_value() {
   identifier_value_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000001u;
 }
-inline const TProtoStringType& UninterpretedOption::identifier_value() const { 
+inline const TProtoStringType& UninterpretedOption::identifier_value() const {
   // @@protoc_insertion_point(field_get:google.protobuf.UninterpretedOption.identifier_value)
   return _internal_identifier_value();
 }
@@ -11651,7 +11651,7 @@ inline TProtoStringType* UninterpretedOption::_internal_mutable_identifier_value
   _has_bits_[0] |= 0x00000001u;
   return identifier_value_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* UninterpretedOption::release_identifier_value() { 
+inline TProtoStringType* UninterpretedOption::release_identifier_value() {
   // @@protoc_insertion_point(field_release:google.protobuf.UninterpretedOption.identifier_value)
   if (!_internal_has_identifier_value()) {
     return nullptr;
@@ -11659,7 +11659,7 @@ inline TProtoStringType* UninterpretedOption::release_identifier_value() {
   _has_bits_[0] &= ~0x00000001u;
   return identifier_value_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void UninterpretedOption::set_allocated_identifier_value(TProtoStringType* identifier_value) { 
+inline void UninterpretedOption::set_allocated_identifier_value(TProtoStringType* identifier_value) {
   if (identifier_value != nullptr) {
     _has_bits_[0] |= 0x00000001u;
   } else {
@@ -11766,7 +11766,7 @@ inline void UninterpretedOption::clear_string_value() {
   string_value_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000002u;
 }
-inline const TProtoStringType& UninterpretedOption::string_value() const { 
+inline const TProtoStringType& UninterpretedOption::string_value() const {
   // @@protoc_insertion_point(field_get:google.protobuf.UninterpretedOption.string_value)
   return _internal_string_value();
 }
@@ -11793,7 +11793,7 @@ inline TProtoStringType* UninterpretedOption::_internal_mutable_string_value() {
   _has_bits_[0] |= 0x00000002u;
   return string_value_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* UninterpretedOption::release_string_value() { 
+inline TProtoStringType* UninterpretedOption::release_string_value() {
   // @@protoc_insertion_point(field_release:google.protobuf.UninterpretedOption.string_value)
   if (!_internal_has_string_value()) {
     return nullptr;
@@ -11801,7 +11801,7 @@ inline TProtoStringType* UninterpretedOption::release_string_value() {
   _has_bits_[0] &= ~0x00000002u;
   return string_value_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void UninterpretedOption::set_allocated_string_value(TProtoStringType* string_value) { 
+inline void UninterpretedOption::set_allocated_string_value(TProtoStringType* string_value) {
   if (string_value != nullptr) {
     _has_bits_[0] |= 0x00000002u;
   } else {
@@ -11824,7 +11824,7 @@ inline void UninterpretedOption::clear_aggregate_value() {
   aggregate_value_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000004u;
 }
-inline const TProtoStringType& UninterpretedOption::aggregate_value() const { 
+inline const TProtoStringType& UninterpretedOption::aggregate_value() const {
   // @@protoc_insertion_point(field_get:google.protobuf.UninterpretedOption.aggregate_value)
   return _internal_aggregate_value();
 }
@@ -11851,7 +11851,7 @@ inline TProtoStringType* UninterpretedOption::_internal_mutable_aggregate_value(
   _has_bits_[0] |= 0x00000004u;
   return aggregate_value_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* UninterpretedOption::release_aggregate_value() { 
+inline TProtoStringType* UninterpretedOption::release_aggregate_value() {
   // @@protoc_insertion_point(field_release:google.protobuf.UninterpretedOption.aggregate_value)
   if (!_internal_has_aggregate_value()) {
     return nullptr;
@@ -11859,7 +11859,7 @@ inline TProtoStringType* UninterpretedOption::release_aggregate_value() {
   _has_bits_[0] &= ~0x00000004u;
   return aggregate_value_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void UninterpretedOption::set_allocated_aggregate_value(TProtoStringType* aggregate_value) { 
+inline void UninterpretedOption::set_allocated_aggregate_value(TProtoStringType* aggregate_value) {
   if (aggregate_value != nullptr) {
     _has_bits_[0] |= 0x00000004u;
   } else {
@@ -11980,7 +11980,7 @@ inline void SourceCodeInfo_Location::clear_leading_comments() {
   leading_comments_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000001u;
 }
-inline const TProtoStringType& SourceCodeInfo_Location::leading_comments() const { 
+inline const TProtoStringType& SourceCodeInfo_Location::leading_comments() const {
   // @@protoc_insertion_point(field_get:google.protobuf.SourceCodeInfo.Location.leading_comments)
   return _internal_leading_comments();
 }
@@ -12007,7 +12007,7 @@ inline TProtoStringType* SourceCodeInfo_Location::_internal_mutable_leading_comm
   _has_bits_[0] |= 0x00000001u;
   return leading_comments_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* SourceCodeInfo_Location::release_leading_comments() { 
+inline TProtoStringType* SourceCodeInfo_Location::release_leading_comments() {
   // @@protoc_insertion_point(field_release:google.protobuf.SourceCodeInfo.Location.leading_comments)
   if (!_internal_has_leading_comments()) {
     return nullptr;
@@ -12015,7 +12015,7 @@ inline TProtoStringType* SourceCodeInfo_Location::release_leading_comments() {
   _has_bits_[0] &= ~0x00000001u;
   return leading_comments_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void SourceCodeInfo_Location::set_allocated_leading_comments(TProtoStringType* leading_comments) { 
+inline void SourceCodeInfo_Location::set_allocated_leading_comments(TProtoStringType* leading_comments) {
   if (leading_comments != nullptr) {
     _has_bits_[0] |= 0x00000001u;
   } else {
@@ -12038,7 +12038,7 @@ inline void SourceCodeInfo_Location::clear_trailing_comments() {
   trailing_comments_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000002u;
 }
-inline const TProtoStringType& SourceCodeInfo_Location::trailing_comments() const { 
+inline const TProtoStringType& SourceCodeInfo_Location::trailing_comments() const {
   // @@protoc_insertion_point(field_get:google.protobuf.SourceCodeInfo.Location.trailing_comments)
   return _internal_trailing_comments();
 }
@@ -12065,7 +12065,7 @@ inline TProtoStringType* SourceCodeInfo_Location::_internal_mutable_trailing_com
   _has_bits_[0] |= 0x00000002u;
   return trailing_comments_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* SourceCodeInfo_Location::release_trailing_comments() { 
+inline TProtoStringType* SourceCodeInfo_Location::release_trailing_comments() {
   // @@protoc_insertion_point(field_release:google.protobuf.SourceCodeInfo.Location.trailing_comments)
   if (!_internal_has_trailing_comments()) {
     return nullptr;
@@ -12073,7 +12073,7 @@ inline TProtoStringType* SourceCodeInfo_Location::release_trailing_comments() {
   _has_bits_[0] &= ~0x00000002u;
   return trailing_comments_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void SourceCodeInfo_Location::set_allocated_trailing_comments(TProtoStringType* trailing_comments) { 
+inline void SourceCodeInfo_Location::set_allocated_trailing_comments(TProtoStringType* trailing_comments) {
   if (trailing_comments != nullptr) {
     _has_bits_[0] |= 0x00000002u;
   } else {
@@ -12102,15 +12102,15 @@ inline TProtoStringType* SourceCodeInfo_Location::add_leading_detached_comments(
 inline const TProtoStringType& SourceCodeInfo_Location::_internal_leading_detached_comments(int index) const {
   return leading_detached_comments_.Get(index);
 }
-inline const TProtoStringType& SourceCodeInfo_Location::leading_detached_comments(int index) const { 
+inline const TProtoStringType& SourceCodeInfo_Location::leading_detached_comments(int index) const {
   // @@protoc_insertion_point(field_get:google.protobuf.SourceCodeInfo.Location.leading_detached_comments)
   return _internal_leading_detached_comments(index);
 }
-inline TProtoStringType* SourceCodeInfo_Location::mutable_leading_detached_comments(int index) { 
+inline TProtoStringType* SourceCodeInfo_Location::mutable_leading_detached_comments(int index) {
   // @@protoc_insertion_point(field_mutable:google.protobuf.SourceCodeInfo.Location.leading_detached_comments)
   return leading_detached_comments_.Mutable(index);
 }
-inline void SourceCodeInfo_Location::set_leading_detached_comments(int index, const TProtoStringType& value) { 
+inline void SourceCodeInfo_Location::set_leading_detached_comments(int index, const TProtoStringType& value) {
   leading_detached_comments_.Mutable(index)->assign(value);
   // @@protoc_insertion_point(field_set:google.protobuf.SourceCodeInfo.Location.leading_detached_comments)
 }
@@ -12131,7 +12131,7 @@ inline void SourceCodeInfo_Location::set_leading_detached_comments(int index, co
 inline TProtoStringType* SourceCodeInfo_Location::_internal_add_leading_detached_comments() {
   return leading_detached_comments_.Add();
 }
-inline void SourceCodeInfo_Location::add_leading_detached_comments(const TProtoStringType& value) { 
+inline void SourceCodeInfo_Location::add_leading_detached_comments(const TProtoStringType& value) {
   leading_detached_comments_.Add()->assign(value);
   // @@protoc_insertion_point(field_add:google.protobuf.SourceCodeInfo.Location.leading_detached_comments)
 }
@@ -12266,7 +12266,7 @@ inline void GeneratedCodeInfo_Annotation::clear_source_file() {
   source_file_.ClearToEmpty();
   _has_bits_[0] &= ~0x00000001u;
 }
-inline const TProtoStringType& GeneratedCodeInfo_Annotation::source_file() const { 
+inline const TProtoStringType& GeneratedCodeInfo_Annotation::source_file() const {
   // @@protoc_insertion_point(field_get:google.protobuf.GeneratedCodeInfo.Annotation.source_file)
   return _internal_source_file();
 }
@@ -12293,7 +12293,7 @@ inline TProtoStringType* GeneratedCodeInfo_Annotation::_internal_mutable_source_
   _has_bits_[0] |= 0x00000001u;
   return source_file_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
 }
-inline TProtoStringType* GeneratedCodeInfo_Annotation::release_source_file() { 
+inline TProtoStringType* GeneratedCodeInfo_Annotation::release_source_file() {
   // @@protoc_insertion_point(field_release:google.protobuf.GeneratedCodeInfo.Annotation.source_file)
   if (!_internal_has_source_file()) {
     return nullptr;
@@ -12301,7 +12301,7 @@ inline TProtoStringType* GeneratedCodeInfo_Annotation::release_source_file() {
   _has_bits_[0] &= ~0x00000001u;
   return source_file_.ReleaseNonDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
 }
-inline void GeneratedCodeInfo_Annotation::set_allocated_source_file(TProtoStringType* source_file) { 
+inline void GeneratedCodeInfo_Annotation::set_allocated_source_file(TProtoStringType* source_file) {
   if (source_file != nullptr) {
     _has_bits_[0] |= 0x00000001u;
   } else {

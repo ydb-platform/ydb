@@ -80,10 +80,10 @@ Y_UNIT_TEST_SUITE(TRandomNumberTest) {
         while (!RandomNumber<bool>()) {
         }
     }
-
-    Y_UNIT_TEST(TestResetSeed) {
-        SetRandomSeed(42);
-        for (const ui32 el : {
+ 
+    Y_UNIT_TEST(TestResetSeed) { 
+        SetRandomSeed(42); 
+        for (const ui32 el : { 
                  102,
                  179,
                  92,
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(TRandomNumberTest) {
                  20,
                  72,
              }) {
-            UNIT_ASSERT_EQUAL(RandomNumber<ui32>(1 << 8), el);
-        }
-    }
+            UNIT_ASSERT_EQUAL(RandomNumber<ui32>(1 << 8), el); 
+        } 
+    } 
 }

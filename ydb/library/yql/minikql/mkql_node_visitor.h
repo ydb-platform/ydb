@@ -25,7 +25,7 @@ public:
     virtual void Visit(TOptionalType& node) = 0;
     virtual void Visit(TDictType& node) = 0;
     virtual void Visit(TCallableType& node) = 0;
-    virtual void Visit(TAnyType& node) = 0;
+    virtual void Visit(TAnyType& node) = 0; 
     virtual void Visit(TTupleType& node) = 0;
     virtual void Visit(TResourceType& node) = 0;
     virtual void Visit(TVariantType& node) = 0;
@@ -39,7 +39,7 @@ public:
     virtual void Visit(TOptionalLiteral& node) = 0;
     virtual void Visit(TDictLiteral& node) = 0;
     virtual void Visit(TCallable& node) = 0;
-    virtual void Visit(TAny& node) = 0;
+    virtual void Visit(TAny& node) = 0; 
     virtual void Visit(TTupleLiteral& node) = 0;
     virtual void Visit(TVariantLiteral& node) = 0;
     virtual void Visit(TStreamType& node) = 0;
@@ -61,7 +61,7 @@ public:
     void Visit(TOptionalType& node) override;
     void Visit(TDictType& node) override;
     void Visit(TCallableType& node) override;
-    void Visit(TAnyType& node) override;
+    void Visit(TAnyType& node) override; 
     void Visit(TTupleType& node) override;
     void Visit(TResourceType& node) override;
     void Visit(TVariantType& node) override;
@@ -75,7 +75,7 @@ public:
     void Visit(TOptionalLiteral& node) override;
     void Visit(TDictLiteral& node) override;
     void Visit(TCallable& node) override;
-    void Visit(TAny& node) override;
+    void Visit(TAny& node) override; 
     void Visit(TTupleLiteral& node) override;
     void Visit(TVariantLiteral& node) override;
     void Visit(TStreamType& node) override;
@@ -100,7 +100,7 @@ public:
     void Visit(TOptionalType& node) override;
     void Visit(TDictType& node) override;
     void Visit(TCallableType& node) override;
-    void Visit(TAnyType& node) override;
+    void Visit(TAnyType& node) override; 
     void Visit(TTupleType& node) override;
     void Visit(TResourceType& node) override;
     void Visit(TVariantType& node) override;
@@ -114,7 +114,7 @@ public:
     void Visit(TOptionalLiteral& node) override;
     void Visit(TDictLiteral& node) override;
     void Visit(TCallable& node) override;
-    void Visit(TAny& node) override;
+    void Visit(TAny& node) override; 
     void Visit(TTupleLiteral& node) override;
     void Visit(TVariantLiteral& node) override;
     void Visit(TStreamType& node) override;
@@ -138,7 +138,7 @@ public:
     void Visit(TOptionalType& node) override;
     void Visit(TDictType& node) override;
     void Visit(TCallableType& node) override;
-    void Visit(TAnyType& node) override;
+    void Visit(TAnyType& node) override; 
     void Visit(TTupleType& node) override;
     void Visit(TResourceType& node) override;
     void Visit(TVariantType& node) override;
@@ -152,7 +152,7 @@ public:
     void Visit(TOptionalLiteral& node) override;
     void Visit(TDictLiteral& node) override;
     void Visit(TCallable& node) override;
-    void Visit(TAny& node) override;
+    void Visit(TAny& node) override; 
     void Visit(TTupleLiteral& node) override;
     void Visit(TVariantLiteral& node) override;
     void Visit(TStreamType& node) override;

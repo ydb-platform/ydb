@@ -31,7 +31,7 @@ struct TDataFunctionFlags {
         RequiresStringArgs = 0x80,
         RequiresHash = 0x100,
         RequiresEquals = 0x200,
-        AllowNull = 0x400,
+        AllowNull = 0x400, 
         CommonOptionalResult = 0x800,
         SupportsTuple = 0x1000,
         SameOptionalArgs = 0x2000,
@@ -45,22 +45,22 @@ struct TDataFunctionFlags {
         MKQL_ENSURE(false, "Can't convert " #NodeType " to " ScriptName " object"); \
     }
 
-class TPythonTypeChecker : public TExploringNodeVisitor {
-    using TExploringNodeVisitor::Visit;
-    MKQL_BAD_TYPE_VISIT(TAnyType, "Python");
-};
+class TPythonTypeChecker : public TExploringNodeVisitor { 
+    using TExploringNodeVisitor::Visit; 
+    MKQL_BAD_TYPE_VISIT(TAnyType, "Python"); 
+}; 
 
 class TLuaTypeChecker : public TExploringNodeVisitor {
     using TExploringNodeVisitor::Visit;
     MKQL_BAD_TYPE_VISIT(TVoidType, "Lua");
-    MKQL_BAD_TYPE_VISIT(TAnyType, "Lua");
+    MKQL_BAD_TYPE_VISIT(TAnyType, "Lua"); 
     MKQL_BAD_TYPE_VISIT(TVariantType, "Lua");
 };
 
-class TJavascriptTypeChecker : public TExploringNodeVisitor {
-    using TExploringNodeVisitor::Visit;
-    MKQL_BAD_TYPE_VISIT(TAnyType, "Javascript");
-};
+class TJavascriptTypeChecker : public TExploringNodeVisitor { 
+    using TExploringNodeVisitor::Visit; 
+    MKQL_BAD_TYPE_VISIT(TAnyType, "Javascript"); 
+}; 
 
 #undef MKQL_BAD_TYPE_VISIT
 
@@ -3047,10 +3047,10 @@ TRuntimeNode TProgramBuilder::UnaryDataFunction(TRuntimeNode data, const std::st
         MKQL_ENSURE(schemeType == NUdf::TDataType<char*>::Id, "String data is required");
     }
 
-    if (!schemeType) {
-        MKQL_ENSURE((flags & TDataFunctionFlags::AllowNull) != 0, "Null is not allowed");
-    }
-
+    if (!schemeType) { 
+        MKQL_ENSURE((flags & TDataFunctionFlags::AllowNull) != 0, "Null is not allowed"); 
+    } 
+ 
     TType* resultType;
     if (flags & TDataFunctionFlags::HasBooleanResult) {
         resultType = TDataType::Create(NUdf::TDataType<bool>::Id, Env);
@@ -3864,15 +3864,15 @@ TRuntimeNode TProgramBuilder::Callable(TType* callableType, const TArrayLambda& 
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::NewNull() {
+TRuntimeNode TProgramBuilder::NewNull() { 
     if (!UseNullType || RuntimeVersion < 11) {
         TCallableBuilder callableBuilder(Env, "Null", NewOptionalType(Env.GetVoid()->GetType()));
         return TRuntimeNode(callableBuilder.Build(), false);
     } else {
         return TRuntimeNode(Env.GetNull(), true);
     }
-}
-
+} 
+ 
 TRuntimeNode TProgramBuilder::Concat(TRuntimeNode data1, TRuntimeNode data2) {
     bool isOpt1, isOpt2;
     const auto type1 = UnpackOptionalData(data1, isOpt1)->GetSchemeType();
@@ -3924,7 +3924,7 @@ TRuntimeNode TProgramBuilder::ByteAt(TRuntimeNode data, TRuntimeNode index) {
 }
 
 TRuntimeNode TProgramBuilder::Size(TRuntimeNode data) {
-    return UnaryDataFunction(data, __func__, TDataFunctionFlags::HasUi32Result | TDataFunctionFlags::AllowNull | TDataFunctionFlags::AllowOptionalArgs | TDataFunctionFlags::CommonOptionalResult);
+    return UnaryDataFunction(data, __func__, TDataFunctionFlags::HasUi32Result | TDataFunctionFlags::AllowNull | TDataFunctionFlags::AllowOptionalArgs | TDataFunctionFlags::CommonOptionalResult); 
 }
 
 template <bool Utf8>
@@ -3943,7 +3943,7 @@ TRuntimeNode TProgramBuilder::FromString(TRuntimeNode data, TType* type) {
     const auto sourceType = UnpackOptionalData(data, isOptional);
     const auto targetType = UnpackOptionalData(type, isOptional);
     MKQL_ENSURE(sourceType->GetSchemeType() == NUdf::TDataType<char*>::Id || sourceType->GetSchemeType() == NUdf::TDataType<NUdf::TUtf8>::Id, "Expected String");
-    MKQL_ENSURE(targetType->GetSchemeType() != 0, "Null is not allowed");
+    MKQL_ENSURE(targetType->GetSchemeType() != 0, "Null is not allowed"); 
     TCallableBuilder callableBuilder(Env, __func__, type);
     callableBuilder.Add(data);
     callableBuilder.Add(NewDataLiteral(static_cast<ui32>(targetType->GetSchemeType())));
@@ -3960,7 +3960,7 @@ TRuntimeNode TProgramBuilder::StrictFromString(TRuntimeNode data, TType* type) {
     const auto sourceType = UnpackOptionalData(data, isOptional);
     const auto targetType = UnpackOptionalData(type, isOptional);
     MKQL_ENSURE(sourceType->GetSchemeType() == NUdf::TDataType<char*>::Id || sourceType->GetSchemeType() == NUdf::TDataType<NUdf::TUtf8>::Id, "Expected String");
-    MKQL_ENSURE(targetType->GetSchemeType() != 0, "Null is not allowed");
+    MKQL_ENSURE(targetType->GetSchemeType() != 0, "Null is not allowed"); 
     TCallableBuilder callableBuilder(Env, __func__, type);
     callableBuilder.Add(data);
     callableBuilder.Add(NewDataLiteral(static_cast<ui32>(targetType->GetSchemeType())));

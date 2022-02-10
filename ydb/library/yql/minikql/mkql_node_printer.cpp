@@ -345,10 +345,10 @@ namespace {
             WriteNewline();
         }
 
-        void Visit(TAnyType& node) override {
+        void Visit(TAnyType& node) override { 
             Y_UNUSED(node);
             WriteIndentation();
-            Out << "Type (Any) ";
+            Out << "Type (Any) "; 
             WriteNewline();
         }
 
@@ -680,29 +680,29 @@ namespace {
             WriteNewline();
         }
 
-        void Visit(TAny& node) override {
+        void Visit(TAny& node) override { 
             WriteIndentation();
-            Out << "Any " << (node.HasItem() ? "with data" : "empty") << " {";
+            Out << "Any " << (node.HasItem() ? "with data" : "empty") << " {"; 
             WriteNewline();
 
             {
                 TIndentScope scope(this);
                 node.GetType()->Accept(*this);
-                if (node.HasItem()) {
-                    WriteIndentation();
-                    const auto& item = node.GetItem();
-                    Out << "Item " << (item.IsImmediate() ? "immediate" : "not immediate") << " {";
-                    WriteNewline();
-
-                    {
-                        TIndentScope scope2(this);
-                        item.GetNode()->Accept(*this);
-                    }
-
-                    WriteIndentation();
-                    Out << "}";
-                    WriteNewline();
-                }
+                if (node.HasItem()) { 
+                    WriteIndentation(); 
+                    const auto& item = node.GetItem(); 
+                    Out << "Item " << (item.IsImmediate() ? "immediate" : "not immediate") << " {"; 
+                    WriteNewline(); 
+ 
+                    { 
+                        TIndentScope scope2(this); 
+                        item.GetNode()->Accept(*this); 
+                    } 
+ 
+                    WriteIndentation(); 
+                    Out << "}"; 
+                    WriteNewline(); 
+                } 
             }
 
             WriteIndentation();

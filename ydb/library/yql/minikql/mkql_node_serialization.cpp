@@ -290,7 +290,7 @@ namespace {
 
             void Visit(TAnyType& node) override {
                 Y_UNUSED(node);
-                Owner.Write(TypeMarker | (char)TType::EKind::Any);
+                Owner.Write(TypeMarker | (char)TType::EKind::Any); 
                 IsProcessed0 = true;
             }
 
@@ -481,22 +481,22 @@ namespace {
             }
 
             void Visit(TAny& node) override {
-                if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
-                    return;
-                }
-
-                TRuntimeNode item;
-                if (node.HasItem())
-                    item = node.GetItem();
-
-                Owner.Write((char)TType::EKind::Any | (item.GetNode() ? UserMarker1 : 0) | (item.IsImmediate() ? UserMarker2 : 0));
-                if (item.GetNode()) {
-                    Owner.AddChildNode(*item.GetNode());
-                }
-
-                IsProcessed0 = false;
+                if (node.GetCookie() != 0) { 
+                    Owner.WriteReference(node); 
+                    IsProcessed0 = true; 
+                    return; 
+                } 
+ 
+                TRuntimeNode item; 
+                if (node.HasItem()) 
+                    item = node.GetItem(); 
+ 
+                Owner.Write((char)TType::EKind::Any | (item.GetNode() ? UserMarker1 : 0) | (item.IsImmediate() ? UserMarker2 : 0)); 
+                if (item.GetNode()) { 
+                    Owner.AddChildNode(*item.GetNode()); 
+                } 
+ 
+                IsProcessed0 = false; 
             }
 
             void Visit(TTupleLiteral& node) override {
@@ -622,7 +622,7 @@ namespace {
                 Owner.RegisterReference(node);
             }
 
-            void Visit(TAnyType& node) override {
+            void Visit(TAnyType& node) override { 
                 Y_UNUSED(node);
             }
 
@@ -814,9 +814,9 @@ namespace {
                 Owner.RegisterReference(node);
             }
 
-            void Visit(TAny& node) override {
-                Owner.RegisterReference(node);
-            }
+            void Visit(TAny& node) override { 
+                Owner.RegisterReference(node); 
+            } 
 
             void Visit(TTupleLiteral& node) override {
                 auto type = node.GetType();
@@ -1150,7 +1150,7 @@ namespace {
                 return 2;
             case TType::EKind::Callable:
                 return TryReadCallableType(code);
-            case TType::EKind::Any:
+            case TType::EKind::Any: 
                 return 0;
             case TType::EKind::Tuple:
                 return TryReadTupleType();
@@ -1187,8 +1187,8 @@ namespace {
                 return ReadDictType();
             case TType::EKind::Callable:
                 return ReadCallableType(code);
-            case TType::EKind::Any:
-                return ReadAnyType();
+            case TType::EKind::Any: 
+                return ReadAnyType(); 
             case TType::EKind::Tuple:
                 return ReadTupleType();
             case TType::EKind::Resource:
@@ -1443,9 +1443,9 @@ namespace {
             return node;
         }
 
-        TNode* ReadAnyType() {
-            auto node = Env.GetAnyType();
-            return node;
+        TNode* ReadAnyType() { 
+            auto node = Env.GetAnyType(); 
+            return node; 
         }
 
         TNode* ReadResourceType() {
@@ -1485,8 +1485,8 @@ namespace {
                 return TryReadDictLiteral();
             case TType::EKind::Callable:
                 return TryReadCallable(code, pass);
-            case TType::EKind::Any:
-                return TryReadAny(code);
+            case TType::EKind::Any: 
+                return TryReadAny(code); 
             case TType::EKind::Tuple:
                 return TryReadTupleLiteral(pass);
             case TType::EKind::Variant:
@@ -1517,8 +1517,8 @@ namespace {
                 return ReadDictLiteral();
             case TType::EKind::Callable:
                 return ReadCallable(code);
-            case TType::EKind::Any:
-                return ReadAny(code);
+            case TType::EKind::Any: 
+                return ReadAny(code); 
             case TType::EKind::Tuple:
                 return ReadTupleLiteral();
             case TType::EKind::Variant:
@@ -1542,9 +1542,9 @@ namespace {
 
         TNode* ReadNull() {
             auto node = Env.GetNull();
-            return node;
-        }
-
+            return node; 
+        } 
+ 
         TNode* ReadDataLiteral() {
             auto type = PopNode();
             if (type->GetType()->GetKind() != TType::EKind::Type)
@@ -1935,24 +1935,24 @@ namespace {
             return node;
         }
 
-        ui32 TryReadAny(char code) {
-            const bool hasItem = (code & UserMarker1) != 0;
-            return hasItem ? 1 : 0;
-        }
-
-        TNode* ReadAny(char code) {
-            const bool hasItem = (code & UserMarker1) != 0;
-            const bool isItemImmediate = (code & UserMarker2) != 0;
-            TAny* node = TAny::Create(Env);
-            if (hasItem) {
-                auto item = PopNode();
-                node->SetItem(TRuntimeNode(item, isItemImmediate));
-            }
-
-            Nodes.push_back(node);
-            return node;
-        }
-
+        ui32 TryReadAny(char code) { 
+            const bool hasItem = (code & UserMarker1) != 0; 
+            return hasItem ? 1 : 0; 
+        } 
+ 
+        TNode* ReadAny(char code) { 
+            const bool hasItem = (code & UserMarker1) != 0; 
+            const bool isItemImmediate = (code & UserMarker2) != 0; 
+            TAny* node = TAny::Create(Env); 
+            if (hasItem) { 
+                auto item = PopNode(); 
+                node->SetItem(TRuntimeNode(item, isItemImmediate)); 
+            } 
+ 
+            Nodes.push_back(node); 
+            return node; 
+        } 
+ 
         TNode* ReadVariantLiteral(char code) {
             const bool isItemImmediate = (code & UserMarker1) != 0;
             auto type = PopNode();

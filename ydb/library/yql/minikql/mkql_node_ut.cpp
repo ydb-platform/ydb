@@ -405,37 +405,37 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         visitor.Visit(*env.GetTypeOfType());
     }
 
-    Y_UNIT_TEST(TesAnyType) {
+    Y_UNIT_TEST(TesAnyType) { 
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
-        UNIT_ASSERT(env.GetAnyType()->IsSameType(*env.GetAnyType()));
+        UNIT_ASSERT(env.GetAnyType()->IsSameType(*env.GetAnyType())); 
     }
 
-    Y_UNIT_TEST(TestAny) {
+    Y_UNIT_TEST(TestAny) { 
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
-        TAny* emptyAny = TAny::Create(env);
-        UNIT_ASSERT(!emptyAny->HasItem());
-        TAny* emptyAny2 = TAny::Create(env);
-        UNIT_ASSERT(!emptyAny->TNode::Equals(*emptyAny2));
-
-        TDataType* dtype1 = TDataType::Create(NUdf::TDataType<char*>::Id, env);
-        TString u = "34567";
-        auto item1 = TRuntimeNode(TDataLiteral::Create(
-            NUdf::TUnboxedValuePod::Embedded(u), dtype1, env), true);
-
-        TAny* any1 = TAny::Create(env);
-        any1->SetItem(item1);
-        UNIT_ASSERT(any1->HasItem());
-        UNIT_ASSERT_EQUAL(any1->GetItem().GetNode()->GetType()->GetKind(), TType::EKind::Data);
+        TAny* emptyAny = TAny::Create(env); 
+        UNIT_ASSERT(!emptyAny->HasItem()); 
+        TAny* emptyAny2 = TAny::Create(env); 
+        UNIT_ASSERT(!emptyAny->TNode::Equals(*emptyAny2)); 
+ 
+        TDataType* dtype1 = TDataType::Create(NUdf::TDataType<char*>::Id, env); 
+        TString u = "34567"; 
+        auto item1 = TRuntimeNode(TDataLiteral::Create( 
+            NUdf::TUnboxedValuePod::Embedded(u), dtype1, env), true); 
+ 
+        TAny* any1 = TAny::Create(env); 
+        any1->SetItem(item1); 
+        UNIT_ASSERT(any1->HasItem()); 
+        UNIT_ASSERT_EQUAL(any1->GetItem().GetNode()->GetType()->GetKind(), TType::EKind::Data); 
         UNIT_ASSERT_EQUAL(static_cast<const TDataLiteral&>(*any1->GetItem().GetNode()).AsValue().AsStringRef(), NUdf::TStringRef::Of("34567"));
-
-        auto item2 = TRuntimeNode(TDataLiteral::Create(
-            NUdf::TUnboxedValuePod::Embedded(u), dtype1, env), true);
-        TAny* any2 = TAny::Create(env);
-        any2->SetItem(item2);
-
-        UNIT_ASSERT(any1->TNode::Equals(*any2));
+ 
+        auto item2 = TRuntimeNode(TDataLiteral::Create( 
+            NUdf::TUnboxedValuePod::Embedded(u), dtype1, env), true); 
+        TAny* any2 = TAny::Create(env); 
+        any2->SetItem(item2); 
+ 
+        UNIT_ASSERT(any1->TNode::Equals(*any2)); 
     }
 
     Y_UNIT_TEST(TestTupleType) {

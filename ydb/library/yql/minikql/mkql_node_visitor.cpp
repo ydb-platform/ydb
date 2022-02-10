@@ -66,7 +66,7 @@ void TThrowingNodeVisitor::Visit(TCallableType& node) {
     ThrowUnexpectedNodeType();
 }
 
-void TThrowingNodeVisitor::Visit(TAnyType& node) {
+void TThrowingNodeVisitor::Visit(TAnyType& node) { 
     Y_UNUSED(node);
     ThrowUnexpectedNodeType();
 }
@@ -136,7 +136,7 @@ void TThrowingNodeVisitor::Visit(TCallable& node) {
     ThrowUnexpectedNodeType();
 }
 
-void TThrowingNodeVisitor::Visit(TAny& node) {
+void TThrowingNodeVisitor::Visit(TAny& node) { 
     Y_UNUSED(node);
     ThrowUnexpectedNodeType();
 }
@@ -219,7 +219,7 @@ void TEmptyNodeVisitor::Visit(TCallableType& node) {
     Y_UNUSED(node);
 }
 
-void TEmptyNodeVisitor::Visit(TAnyType& node) {
+void TEmptyNodeVisitor::Visit(TAnyType& node) { 
     Y_UNUSED(node);
 }
 
@@ -275,7 +275,7 @@ void TEmptyNodeVisitor::Visit(TCallable& node) {
     Y_UNUSED(node);
 }
 
-void TEmptyNodeVisitor::Visit(TAny& node) {
+void TEmptyNodeVisitor::Visit(TAny& node) { 
     Y_UNUSED(node);
 }
 
@@ -362,7 +362,7 @@ void TExploringNodeVisitor::Visit(TCallableType& node) {
     }
 }
 
-void TExploringNodeVisitor::Visit(TAnyType& node) {
+void TExploringNodeVisitor::Visit(TAnyType& node) { 
     AddChildNode(&node, *node.GetType());
 }
 
@@ -442,11 +442,11 @@ void TExploringNodeVisitor::Visit(TCallable& node) {
         AddChildNode(&node, *node.GetResult().GetNode());
 }
 
-void TExploringNodeVisitor::Visit(TAny& node) {
+void TExploringNodeVisitor::Visit(TAny& node) { 
     AddChildNode(&node, *node.GetType());
-    if (node.HasItem()) {
-        AddChildNode(&node, *node.GetItem().GetNode());
-    }
+    if (node.HasItem()) { 
+        AddChildNode(&node, *node.GetItem().GetNode()); 
+    } 
 }
 
 void TExploringNodeVisitor::Visit(TTupleLiteral& node) {

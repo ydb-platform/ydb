@@ -106,12 +106,12 @@ private:
         }
     }
 
-    void Visit(TAny& node) override {
-        if (node.HasItem()) {
-            AddNode(node.GetItem().GetNode());
-        }
-    }
-
+    void Visit(TAny& node) override { 
+        if (node.HasItem()) { 
+            AddNode(node.GetItem().GetNode()); 
+        } 
+    } 
+ 
     void Visit(TTupleLiteral& node) override {
         for (ui32 i = 0; i < node.GetValuesCount(); ++i) {
             AddNode(node.GetValue(i).GetNode());
@@ -306,8 +306,8 @@ private:
         VisitType<TCallableType>(node);
     }
 
-    void Visit(TAnyType& node) override {
-        VisitType<TAnyType>(node);
+    void Visit(TAnyType& node) override { 
+        VisitType<TAnyType>(node); 
     }
 
     void Visit(TTupleType& node) override {
@@ -443,12 +443,12 @@ private:
         AddNode(node, computationNode);
     }
 
-    void Visit(TAny& node) override {
-        if (!node.HasItem()) {
-            AddNode(node, NodeFactory->CreateImmutableNode(NUdf::TUnboxedValue::Void()));
-        } else {
-            AddNode(node, GetComputationNode(node.GetItem().GetNode()));
-        }
+    void Visit(TAny& node) override { 
+        if (!node.HasItem()) { 
+            AddNode(node, NodeFactory->CreateImmutableNode(NUdf::TUnboxedValue::Void())); 
+        } else { 
+            AddNode(node, GetComputationNode(node.GetItem().GetNode())); 
+        } 
     }
 
     void Visit(TTupleLiteral& node) override {

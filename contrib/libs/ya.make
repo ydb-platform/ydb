@@ -110,8 +110,8 @@ RECURSE(
     i18n/ut
     icu
     ImageMagick
-    inja
-    inja/ut
+    inja 
+    inja/ut 
     intel
     isa-l
     isa-l/ut

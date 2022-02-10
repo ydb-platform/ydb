@@ -12,12 +12,12 @@ namespace NPrivateStringBuilder {
         {
         }
 
-        TStringBuilder(TStringBuilder&& rhs)
-            : TString(std::move(rhs))
-            , Out(*this)
-        {
-        }
-
+        TStringBuilder(TStringBuilder&& rhs) 
+            : TString(std::move(rhs)) 
+            , Out(*this) 
+        { 
+        } 
+ 
         TStringOutput Out;
     };
 

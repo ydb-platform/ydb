@@ -2,9 +2,9 @@
 
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/deque.h>
+#include <util/generic/deque.h> 
 #include <util/generic/vector.h>
-#include <util/string/cast.h>
+#include <util/string/cast.h> 
 
 class IInputStream;
 class IOutputStream;
@@ -105,10 +105,10 @@ public:
     /// Удаляет заголовок, если он есть.
     void RemoveHeader(TStringBuf header);
 
-    /// Ищет заголовок по указанному имени
-    /// Возвращает nullptr, если не нашел
+    /// Ищет заголовок по указанному имени 
+    /// Возвращает nullptr, если не нашел 
     const THttpInputHeader* FindHeader(TStringBuf header) const;
-
+ 
     /// Записывает все заголовки контейнера в поток.
     /// @details Каждый заголовк записывается в виде "имя параметра: значение\r\n".
     void OutTo(IOutputStream* stream) const;

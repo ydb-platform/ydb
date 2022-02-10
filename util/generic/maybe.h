@@ -377,11 +377,11 @@ public:
         return Defined() ? *this : elseValue;
     }
 
-    template <typename U>
+    template <typename U> 
     TMaybe<U, Policy> Cast() const {
         return Defined() ? TMaybe<U, Policy>(*Data()) : TMaybe<U, Policy>();
-    }
-
+    } 
+ 
     constexpr explicit operator bool() const noexcept {
         return Defined();
     }

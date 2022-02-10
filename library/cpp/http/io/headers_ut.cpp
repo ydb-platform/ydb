@@ -49,7 +49,7 @@ class THttpHeadersTest: public TTestBase {
     UNIT_TEST(TestAddOrReplaceOperation1Arg);
     UNIT_TEST(TestAddOrReplaceOperation2Args);
     UNIT_TEST(TestAddHeaderTemplateness);
-    UNIT_TEST(TestFindHeader);
+    UNIT_TEST(TestFindHeader); 
     UNIT_TEST_SUITE_END();
 
 private:
@@ -62,7 +62,7 @@ public:
     void TestAddOrReplaceOperation1Arg();
     void TestAddOrReplaceOperation2Args();
     void TestAddHeaderTemplateness();
-    void TestFindHeader();
+    void TestFindHeader(); 
 
 private:
     static void AddHeaderImpl1Arg(THttpHeaders& headers, TStringBuf name, TStringBuf value) {
@@ -166,11 +166,11 @@ void THttpHeadersTest::TestAddHeaderTemplateness() {
 
     UNIT_ASSERT(h1 == h2);
 }
-
-void THttpHeadersTest::TestFindHeader() {
-    THttpHeaders sut;
-    sut.AddHeader("NaMe", "Value");
-
-    UNIT_ASSERT(sut.FindHeader("name"));
-    UNIT_ASSERT(sut.FindHeader("name")->Value() == "Value");
-}
+ 
+void THttpHeadersTest::TestFindHeader() { 
+    THttpHeaders sut; 
+    sut.AddHeader("NaMe", "Value"); 
+ 
+    UNIT_ASSERT(sut.FindHeader("name")); 
+    UNIT_ASSERT(sut.FindHeader("name")->Value() == "Value"); 
+} 

@@ -60,16 +60,16 @@ THttpHeaders::THttpHeaders(IInputStream* stream) {
 }
 
 bool THttpHeaders::HasHeader(const TStringBuf header) const {
-    return FindHeader(header);
-}
-
+    return FindHeader(header); 
+} 
+ 
 const THttpInputHeader* THttpHeaders::FindHeader(const TStringBuf header) const {
-    for (const auto& hdr : Headers_) {
+    for (const auto& hdr : Headers_) { 
         if (AsciiCompareIgnoreCase(hdr.Name(), header) == 0) {
-            return &hdr;
+            return &hdr; 
         }
     }
-    return nullptr;
+    return nullptr; 
 }
 
 void THttpHeaders::RemoveHeader(const TStringBuf header) {

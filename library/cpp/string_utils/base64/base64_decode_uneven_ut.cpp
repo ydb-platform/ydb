@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
-
+ 
 Y_UNIT_TEST_SUITE(TBase64DecodeUneven) {
     Y_UNIT_TEST(Base64DecodeUneven) {
         const TString wikipedia_slogan =

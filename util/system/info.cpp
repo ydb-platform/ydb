@@ -75,8 +75,8 @@ size_t NSystemInfo::NumberOfCpus() {
     GetSystemInfo(&info);
 
     return info.dwNumberOfProcessors;
-#elif defined(_SC_NPROCESSORS_ONLN)
-    return sysconf(_SC_NPROCESSORS_ONLN);
+#elif defined(_SC_NPROCESSORS_ONLN) 
+    return sysconf(_SC_NPROCESSORS_ONLN); 
 #elif defined(_linux_)
     unsigned ret;
     int fd, nread, column;

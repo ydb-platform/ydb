@@ -816,10 +816,10 @@ bool TryToBindAddresses(const THttpServerOptions& options, const std::function<v
 
             FixIPv6ListenSocket(socket);
 
-            if (options.ReuseAddress) {
-                int yes = 1;
-                ::setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, (const char*)&yes, sizeof(yes));
-            }
+            if (options.ReuseAddress) { 
+                int yes = 1; 
+                ::setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, (const char*)&yes, sizeof(yes)); 
+            } 
 
             if (options.ReusePort) {
                 SetReusePort(socket, true);

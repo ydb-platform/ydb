@@ -58,7 +58,7 @@ typedef unsigned __int32 uint32_t;
 #include <libxml/xmlmemory.h>
 #include <libxml/xmlerror.h>
 #include <libxml/globals.h>
-#include "rand.h" 
+#include "rand.h"
 
 /* #define DEBUG_GROW */
 /* #define DICT_DEBUG_PATTERNS */
@@ -185,7 +185,7 @@ int __xmlRandom(void) {
     if (xmlDictInitialized == 0)
         __xmlInitializeDict();
 
-    return utilRandom(); 
+    return utilRandom();
 }
 #endif
 

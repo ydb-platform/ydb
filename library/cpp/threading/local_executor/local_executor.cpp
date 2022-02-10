@@ -13,12 +13,12 @@
 #include <utility>
 
 #ifdef _win_
-static void RegularYield() { 
+static void RegularYield() {
 }
 #else
 // unix actually has cooperative multitasking! :)
 // without this function program runs slower and system lags for some magic reason
-static void RegularYield() { 
+static void RegularYield() {
     SchedYield();
 }
 #endif
@@ -28,12 +28,12 @@ namespace {
         NPar::TLocallyExecutableFunction Exec;
         TFunctionWrapper(NPar::TLocallyExecutableFunction exec)
             : Exec(std::move(exec))
-        { 
-        } 
-        void LocalExec(int id) override { 
-            Exec(id); 
-        } 
-    }; 
+        {
+        }
+        void LocalExec(int id) override {
+            Exec(id);
+        }
+    };
 
     class TFunctionWrapperWithPromise: public NPar::ILocallyExecutable {
     private:
@@ -73,7 +73,7 @@ namespace {
     struct TSingleJob {
         TIntrusivePtr<NPar::ILocallyExecutable> Exec;
         int Id{0};
- 
+
         TSingleJob() = default;
         TSingleJob(TIntrusivePtr<NPar::ILocallyExecutable> exec, int id)
             : Exec(std::move(exec))
@@ -95,7 +95,7 @@ namespace {
                     break;
             }
             AtomicAdd(WorkerCount, -1);
-        } 
+        }
 
     public:
         TLocalRangeExecutor(TIntrusivePtr<ILocallyExecutable> exec, int firstId, int lastId)
@@ -104,7 +104,7 @@ namespace {
             , WorkerCount(0)
             , LastId(lastId)
         {
-        } 
+        }
         bool DoSingleOp() {
             const int id = AtomicAdd(Counter, 1) - 1;
             if (id >= LastId)
@@ -112,14 +112,14 @@ namespace {
             Exec->LocalExec(id);
             RegularYield();
             return true;
-        } 
+        }
         void WaitComplete() {
             while (AtomicGet(WorkerCount) > 0)
                 RegularYield();
         }
         int GetRangeSize() const {
             return Max<int>(LastId - Counter, 0);
-        } 
+        }
     };
 
 }

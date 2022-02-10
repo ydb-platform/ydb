@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2005-2021 Intel Corporation 
+    Copyright (c) 2005-2021 Intel Corporation
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -16,13 +16,13 @@
 
 #include "dynamic_link.h"
 
-#include "oneapi/tbb/detail/_template_helpers.h" 
-#include "oneapi/tbb/detail/_utils.h" 
- 
+#include "oneapi/tbb/detail/_template_helpers.h"
+#include "oneapi/tbb/detail/_utils.h"
+
 /*
     This file is used by both TBB and OpenMP RTL. Do not use __TBB_ASSERT() macro
     and runtime_warning() function because they are not available in OpenMP. Use
-    __TBB_ASSERT_EX and DYNAMIC_LINK_WARNING instead. 
+    __TBB_ASSERT_EX and DYNAMIC_LINK_WARNING instead.
 */
 
 #include <cstdarg>          // va_list etc.
@@ -40,10 +40,10 @@
 #else /* _WIN32 */
     #include <dlfcn.h>
     #include <unistd.h>
- 
-    #include <cstring> 
-    #include <climits> 
-    #include <cstdlib> 
+
+    #include <cstring>
+    #include <climits>
+    #include <cstdlib>
 #endif /* _WIN32 */
 
 #if __TBB_WEAK_SYMBOLS_PRESENT && !__TBB_DYNAMIC_LOAD_ENABLED
@@ -99,9 +99,9 @@ soon as all of the symbols have been resolved.
   3. Weak symbols: if weak symbols are available they are returned.
 */
 
-namespace tbb { 
-namespace detail { 
-namespace r1 { 
+namespace tbb {
+namespace detail {
+namespace r1 {
 
 #if __TBB_WEAK_SYMBOLS_PRESENT || __TBB_DYNAMIC_LOAD_ENABLED
 
@@ -109,11 +109,11 @@ namespace r1 {
     // Report runtime errors and continue.
     #define DYNAMIC_LINK_WARNING dynamic_link_warning
     static void dynamic_link_warning( dynamic_link_error_t code, ... ) {
-        suppress_unused_warning(code); 
+        suppress_unused_warning(code);
     } // library_warning
 #endif /* !defined(DYNAMIC_LINK_WARNING) && !__TBB_WIN8UI_SUPPORT && __TBB_DYNAMIC_LOAD_ENABLED */
 
-    static bool resolve_symbols( dynamic_link_handle module, const dynamic_link_descriptor descriptors[], std::size_t required ) 
+    static bool resolve_symbols( dynamic_link_handle module, const dynamic_link_descriptor descriptors[], std::size_t required )
     {
         if ( !module )
             return false;
@@ -122,12 +122,12 @@ namespace r1 {
             if ( !dlsym ) return false;
         #endif /* !__TBB_DYNAMIC_LOAD_ENABLED */
 
-        const std::size_t n_desc=20; // Usually we don't have more than 20 descriptors per library 
-        __TBB_ASSERT_EX( required <= n_desc, "Too many descriptors is required" ); 
+        const std::size_t n_desc=20; // Usually we don't have more than 20 descriptors per library
+        __TBB_ASSERT_EX( required <= n_desc, "Too many descriptors is required" );
         if ( required > n_desc ) return false;
         pointer_to_handler h[n_desc];
 
-        for ( std::size_t k = 0; k < required; ++k ) { 
+        for ( std::size_t k = 0; k < required; ++k ) {
             dynamic_link_descriptor const & desc = descriptors[k];
             pointer_to_handler addr = (pointer_to_handler)dlsym( module, desc.name );
             if ( !addr ) {
@@ -138,13 +138,13 @@ namespace r1 {
 
         // Commit the entry points.
         // Cannot use memset here, because the writes must be atomic.
-        for( std::size_t k = 0; k < required; ++k ) 
+        for( std::size_t k = 0; k < required; ++k )
             *descriptors[k].handler = h[k];
         return true;
     }
 
 #if __TBB_WIN8UI_SUPPORT
-    bool dynamic_link( const char*  library, const dynamic_link_descriptor descriptors[], std::size_t required, dynamic_link_handle*, int flags ) { 
+    bool dynamic_link( const char*  library, const dynamic_link_descriptor descriptors[], std::size_t required, dynamic_link_handle*, int flags ) {
         dynamic_link_handle tmp_handle = NULL;
         TCHAR wlibrary[256];
         if ( MultiByteToWideChar(CP_UTF8, 0, library, -1, wlibrary, 255) == 0 ) return false;
@@ -171,8 +171,8 @@ namespace r1 {
     current one, it is the directory tbb.dll loaded from.
 
     Example:
-        Let us assume "tbb.dll" is located in "c:\program files\common\intel\" directory, e.g. 
-        absolute path of the library is "c:\program files\common\intel\tbb.dll". Absolute path for 
+        Let us assume "tbb.dll" is located in "c:\program files\common\intel\" directory, e.g.
+        absolute path of the library is "c:\program files\common\intel\tbb.dll". Absolute path for
         "tbbmalloc.dll" would be "c:\program files\common\intel\tbbmalloc.dll". Absolute path for
         "malloc\tbbmalloc.dll" would be "c:\program files\common\intel\malloc\tbbmalloc.dll".
 */
@@ -184,30 +184,30 @@ namespace r1 {
     // the constructor is called.
     #define MAX_LOADED_MODULES 8 // The number of maximum possible modules which can be loaded
 
-    using atomic_incrementer = std::atomic<std::size_t>; 
+    using atomic_incrementer = std::atomic<std::size_t>;
 
-    static struct handles_t { 
+    static struct handles_t {
         atomic_incrementer my_size;
         dynamic_link_handle my_handles[MAX_LOADED_MODULES];
 
         void add(const dynamic_link_handle &handle) {
-            const std::size_t ind = my_size++; 
-            __TBB_ASSERT_EX( ind < MAX_LOADED_MODULES, "Too many modules are loaded" ); 
+            const std::size_t ind = my_size++;
+            __TBB_ASSERT_EX( ind < MAX_LOADED_MODULES, "Too many modules are loaded" );
             my_handles[ind] = handle;
         }
 
         void free() {
-            const std::size_t size = my_size; 
-            for (std::size_t i=0; i<size; ++i) 
+            const std::size_t size = my_size;
+            for (std::size_t i=0; i<size; ++i)
                 dynamic_unlink( my_handles[i] );
         }
     } handles;
 
-    static std::once_flag init_dl_data_state; 
+    static std::once_flag init_dl_data_state;
 
     static struct ap_data_t {
         char _path[PATH_MAX+1];
-        std::size_t _len; 
+        std::size_t _len;
     } ap_data;
 
     static void init_ap_data() {
@@ -236,14 +236,14 @@ namespace r1 {
             return;
         }
         // Find the position of the last backslash.
-        char *backslash = std::strrchr( ap_data._path, '\\' ); 
+        char *backslash = std::strrchr( ap_data._path, '\\' );
 
         if ( !backslash ) {    // Backslash not found.
-            __TBB_ASSERT_EX( backslash!=NULL, "Unbelievable."); 
+            __TBB_ASSERT_EX( backslash!=NULL, "Unbelievable.");
             return;
         }
-        __TBB_ASSERT_EX( backslash >= ap_data._path, "Unbelievable."); 
-        ap_data._len = (std::size_t)(backslash - ap_data._path) + 1; 
+        __TBB_ASSERT_EX( backslash >= ap_data._path, "Unbelievable.");
+        ap_data._len = (std::size_t)(backslash - ap_data._path) + 1;
         *(backslash+1) = 0;
     #else
         // Get the library path
@@ -254,17 +254,17 @@ namespace r1 {
             DYNAMIC_LINK_WARNING( dl_sys_fail, "dladdr", err );
             return;
         } else {
-            __TBB_ASSERT_EX( dlinfo.dli_fname!=NULL, "Unbelievable." ); 
+            __TBB_ASSERT_EX( dlinfo.dli_fname!=NULL, "Unbelievable." );
         }
 
-        char const *slash = std::strrchr( dlinfo.dli_fname, '/' ); 
-        std::size_t fname_len=0; 
+        char const *slash = std::strrchr( dlinfo.dli_fname, '/' );
+        std::size_t fname_len=0;
         if ( slash ) {
-            __TBB_ASSERT_EX( slash >= dlinfo.dli_fname, "Unbelievable."); 
-            fname_len = (std::size_t)(slash - dlinfo.dli_fname) + 1; 
+            __TBB_ASSERT_EX( slash >= dlinfo.dli_fname, "Unbelievable.");
+            fname_len = (std::size_t)(slash - dlinfo.dli_fname) + 1;
         }
 
-        std::size_t rc; 
+        std::size_t rc;
         if ( dlinfo.dli_fname[0]=='/' ) {
             // The library path is absolute
             rc = 0;
@@ -275,7 +275,7 @@ namespace r1 {
                 DYNAMIC_LINK_WARNING( dl_buff_too_small );
                 return;
             }
-            ap_data._len = std::strlen( ap_data._path ); 
+            ap_data._len = std::strlen( ap_data._path );
             ap_data._path[ap_data._len++]='/';
             rc = ap_data._len;
         }
@@ -286,7 +286,7 @@ namespace r1 {
                 ap_data._len=0;
                 return;
             }
-            std::strncpy( ap_data._path+rc, dlinfo.dli_fname, fname_len ); 
+            std::strncpy( ap_data._path+rc, dlinfo.dli_fname, fname_len );
             ap_data._len += fname_len;
             ap_data._path[ap_data._len]=0;
         }
@@ -307,28 +307,28 @@ namespace r1 {
         in  len  -- Size of buffer.
         ret      -- 0         -- Error occurred.
                     > len     -- Buffer too short, required size returned.
-                    otherwise -- Ok, number of characters (incl. terminating null) written to buffer. 
+                    otherwise -- Ok, number of characters (incl. terminating null) written to buffer.
     */
-    static std::size_t abs_path( char const * name, char * path, std::size_t len ) { 
-        if ( ap_data._len == 0 ) 
+    static std::size_t abs_path( char const * name, char * path, std::size_t len ) {
+        if ( ap_data._len == 0 )
             return 0;
 
-        std::size_t name_len = std::strlen( name ); 
-        std::size_t full_len = name_len+ap_data._len; 
+        std::size_t name_len = std::strlen( name );
+        std::size_t full_len = name_len+ap_data._len;
         if ( full_len < len ) {
-            __TBB_ASSERT( ap_data._path[ap_data._len] == 0, NULL); 
-            __TBB_ASSERT( std::strlen(ap_data._path) == ap_data._len, NULL); 
-            std::strncpy( path, ap_data._path, ap_data._len + 1 ); 
-            __TBB_ASSERT( path[ap_data._len] == 0, NULL ); 
-            std::strncat( path, name, len - ap_data._len ); 
-            __TBB_ASSERT( std::strlen(path) == full_len, NULL ); 
+            __TBB_ASSERT( ap_data._path[ap_data._len] == 0, NULL);
+            __TBB_ASSERT( std::strlen(ap_data._path) == ap_data._len, NULL);
+            std::strncpy( path, ap_data._path, ap_data._len + 1 );
+            __TBB_ASSERT( path[ap_data._len] == 0, NULL );
+            std::strncat( path, name, len - ap_data._len );
+            __TBB_ASSERT( std::strlen(path) == full_len, NULL );
         }
-        return full_len+1; // +1 for null character 
+        return full_len+1; // +1 for null character
     }
 #endif  // __TBB_DYNAMIC_LOAD_ENABLED
     void init_dynamic_link_data() {
     #if __TBB_DYNAMIC_LOAD_ENABLED
-        std::call_once( init_dl_data_state, init_dl_data ); 
+        std::call_once( init_dl_data_state, init_dl_data );
     #endif
     }
 
@@ -344,19 +344,19 @@ namespace r1 {
     #endif
 
     #if __TBB_WEAK_SYMBOLS_PRESENT
-    static bool weak_symbol_link( const dynamic_link_descriptor descriptors[], std::size_t required ) 
+    static bool weak_symbol_link( const dynamic_link_descriptor descriptors[], std::size_t required )
     {
         // Check if the required entries are present in what was loaded into our process.
-        for ( std::size_t k = 0; k < required; ++k ) 
+        for ( std::size_t k = 0; k < required; ++k )
             if ( !descriptors[k].ptr )
                 return false;
         // Commit the entry points.
-        for ( std::size_t k = 0; k < required; ++k ) 
+        for ( std::size_t k = 0; k < required; ++k )
             *descriptors[k].handler = (pointer_to_handler) descriptors[k].ptr;
         return true;
     }
     #else
-    static bool weak_symbol_link( const dynamic_link_descriptor[], std::size_t ) { 
+    static bool weak_symbol_link( const dynamic_link_descriptor[], std::size_t ) {
         return false;
     }
     #endif /* __TBB_WEAK_SYMBOLS_PRESENT */
@@ -376,30 +376,30 @@ namespace r1 {
     #endif
     }
 
-    static dynamic_link_handle global_symbols_link( const char* library, const dynamic_link_descriptor descriptors[], std::size_t required ) { 
-        dynamic_link_handle library_handle{}; 
+    static dynamic_link_handle global_symbols_link( const char* library, const dynamic_link_descriptor descriptors[], std::size_t required ) {
+        dynamic_link_handle library_handle{};
 #if _WIN32
-        bool res = GetModuleHandleEx(0, library, &library_handle); 
-        __TBB_ASSERT_EX(res && library_handle || !res && !library_handle, nullptr); 
+        bool res = GetModuleHandleEx(0, library, &library_handle);
+        __TBB_ASSERT_EX(res && library_handle || !res && !library_handle, nullptr);
 #else /* _WIN32 */
     #if !__TBB_DYNAMIC_LOAD_ENABLED /* only __TBB_WEAK_SYMBOLS_PRESENT is defined */
         if ( !dlopen ) return 0;
     #endif /* !__TBB_DYNAMIC_LOAD_ENABLED */
-        // RTLD_GLOBAL - to guarantee that old TBB will find the loaded library 
-        // RTLD_NOLOAD - not to load the library without the full path 
-        library_handle = dlopen(library, RTLD_LAZY | RTLD_GLOBAL | RTLD_NOLOAD); 
-#endif /* _WIN32 */ 
-        if (library_handle) { 
-            if (!resolve_symbols(library_handle, descriptors, required)) { 
-                dynamic_unlink(library_handle); 
-                library_handle = nullptr; 
-            } 
+        // RTLD_GLOBAL - to guarantee that old TBB will find the loaded library
+        // RTLD_NOLOAD - not to load the library without the full path
+        library_handle = dlopen(library, RTLD_LAZY | RTLD_GLOBAL | RTLD_NOLOAD);
+#endif /* _WIN32 */
+        if (library_handle) {
+            if (!resolve_symbols(library_handle, descriptors, required)) {
+                dynamic_unlink(library_handle);
+                library_handle = nullptr;
+            }
         }
-        return library_handle; 
+        return library_handle;
     }
 
     static void save_library_handle( dynamic_link_handle src, dynamic_link_handle *dst ) {
-        __TBB_ASSERT_EX( src, "The library handle to store must be non-zero" ); 
+        __TBB_ASSERT_EX( src, "The library handle to store must be non-zero" );
         if ( dst )
             *dst = src;
     #if __TBB_DYNAMIC_LOAD_ENABLED
@@ -408,41 +408,41 @@ namespace r1 {
     #endif /* __TBB_DYNAMIC_LOAD_ENABLED */
     }
 
-    dynamic_link_handle dynamic_load( const char* library, const dynamic_link_descriptor descriptors[], std::size_t required ) { 
-        ::tbb::detail::suppress_unused_warning( library, descriptors, required ); 
-#if __TBB_DYNAMIC_LOAD_ENABLED 
+    dynamic_link_handle dynamic_load( const char* library, const dynamic_link_descriptor descriptors[], std::size_t required ) {
+        ::tbb::detail::suppress_unused_warning( library, descriptors, required );
+#if __TBB_DYNAMIC_LOAD_ENABLED
 
-        std::size_t const len = PATH_MAX + 1; 
-        char path[ len ]; 
-        std::size_t rc = abs_path( library, path, len ); 
-        if ( 0 < rc && rc <= len ) { 
+        std::size_t const len = PATH_MAX + 1;
+        char path[ len ];
+        std::size_t rc = abs_path( library, path, len );
+        if ( 0 < rc && rc <= len ) {
 #if _WIN32
-            // Prevent Windows from displaying silly message boxes if it fails to load library 
-            // (e.g. because of MS runtime problems - one of those crazy manifest related ones) 
-            UINT prev_mode = SetErrorMode (SEM_FAILCRITICALERRORS); 
+            // Prevent Windows from displaying silly message boxes if it fails to load library
+            // (e.g. because of MS runtime problems - one of those crazy manifest related ones)
+            UINT prev_mode = SetErrorMode (SEM_FAILCRITICALERRORS);
 #endif /* _WIN32 */
-            dynamic_link_handle library_handle = dlopen( path, RTLD_NOW | RTLD_GLOBAL ); 
+            dynamic_link_handle library_handle = dlopen( path, RTLD_NOW | RTLD_GLOBAL );
 #if _WIN32
-            SetErrorMode (prev_mode); 
+            SetErrorMode (prev_mode);
 #endif /* _WIN32 */
-            if( library_handle ) { 
-                if( !resolve_symbols( library_handle, descriptors, required ) ) { 
-                    // The loaded library does not contain all the expected entry points 
-                    dynamic_unlink( library_handle ); 
-                    library_handle = NULL; 
-                } 
-            } else 
-                DYNAMIC_LINK_WARNING( dl_lib_not_found, path, dlerror() ); 
-            return library_handle; 
-        } else if ( rc>len ) 
-                DYNAMIC_LINK_WARNING( dl_buff_too_small ); 
-                // rc == 0 means failing of init_ap_data so the warning has already been issued. 
+            if( library_handle ) {
+                if( !resolve_symbols( library_handle, descriptors, required ) ) {
+                    // The loaded library does not contain all the expected entry points
+                    dynamic_unlink( library_handle );
+                    library_handle = NULL;
+                }
+            } else
+                DYNAMIC_LINK_WARNING( dl_lib_not_found, path, dlerror() );
+            return library_handle;
+        } else if ( rc>len )
+                DYNAMIC_LINK_WARNING( dl_buff_too_small );
+                // rc == 0 means failing of init_ap_data so the warning has already been issued.
 
-#endif /* __TBB_DYNAMIC_LOAD_ENABLED */ 
-            return 0; 
+#endif /* __TBB_DYNAMIC_LOAD_ENABLED */
+            return 0;
     }
 
-    bool dynamic_link( const char* library, const dynamic_link_descriptor descriptors[], std::size_t required, dynamic_link_handle *handle, int flags ) { 
+    bool dynamic_link( const char* library, const dynamic_link_descriptor descriptors[], std::size_t required, dynamic_link_handle *handle, int flags ) {
         init_dynamic_link_data();
 
         // TODO: May global_symbols_link find weak symbols?
@@ -463,7 +463,7 @@ namespace r1 {
 
 #endif /*__TBB_WIN8UI_SUPPORT*/
 #else /* __TBB_WEAK_SYMBOLS_PRESENT || __TBB_DYNAMIC_LOAD_ENABLED */
-    bool dynamic_link( const char*, const dynamic_link_descriptor*, std::size_t, dynamic_link_handle *handle, int ) { 
+    bool dynamic_link( const char*, const dynamic_link_descriptor*, std::size_t, dynamic_link_handle *handle, int ) {
         if ( handle )
             *handle=0;
         return false;
@@ -472,6 +472,6 @@ namespace r1 {
     void dynamic_unlink_all() {}
 #endif /* __TBB_WEAK_SYMBOLS_PRESENT || __TBB_DYNAMIC_LOAD_ENABLED */
 
-} // namespace r1 
-} // namespace detail 
-} // namespace tbb 
+} // namespace r1
+} // namespace detail
+} // namespace tbb

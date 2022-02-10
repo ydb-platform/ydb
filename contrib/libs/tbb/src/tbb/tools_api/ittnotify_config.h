@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2005-2021 Intel Corporation 
+    Copyright (c) 2005-2021 Intel Corporation
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -88,17 +88,17 @@
 #endif /* UNICODE || _UNICODE */
 #endif /* ITT_PLATFORM==ITT_PLATFORM_WIN */
 
-#ifndef ITTAPI_CDECL 
+#ifndef ITTAPI_CDECL
 #  if ITT_PLATFORM==ITT_PLATFORM_WIN
-#    define ITTAPI_CDECL __cdecl 
+#    define ITTAPI_CDECL __cdecl
 #  else /* ITT_PLATFORM==ITT_PLATFORM_WIN */
 #    if defined _M_IX86 || defined __i386__
-#      define ITTAPI_CDECL __attribute__ ((cdecl)) 
+#      define ITTAPI_CDECL __attribute__ ((cdecl))
 #    else  /* _M_IX86 || __i386__ */
-#      define ITTAPI_CDECL /* actual only on x86 platform */ 
+#      define ITTAPI_CDECL /* actual only on x86 platform */
 #    endif /* _M_IX86 || __i386__ */
 #  endif /* ITT_PLATFORM==ITT_PLATFORM_WIN */
-#endif /* ITTAPI_CDECL */ 
+#endif /* ITTAPI_CDECL */
 
 #ifndef STDCALL
 #  if ITT_PLATFORM==ITT_PLATFORM_WIN
@@ -112,12 +112,12 @@
 #  endif /* ITT_PLATFORM==ITT_PLATFORM_WIN */
 #endif /* STDCALL */
 
-#define ITTAPI    ITTAPI_CDECL 
-#define LIBITTAPI ITTAPI_CDECL 
+#define ITTAPI    ITTAPI_CDECL
+#define LIBITTAPI ITTAPI_CDECL
 
 /* TODO: Temporary for compatibility! */
-#define ITTAPI_CALL    ITTAPI_CDECL 
-#define LIBITTAPI_CALL ITTAPI_CDECL 
+#define ITTAPI_CALL    ITTAPI_CDECL
+#define LIBITTAPI_CALL ITTAPI_CDECL
 
 #if ITT_PLATFORM==ITT_PLATFORM_WIN
 /* use __forceinline (VC++ specific) */
@@ -162,7 +162,7 @@
 #    define ITT_ARCH ITT_ARCH_IA32E
 #  elif defined _M_IA64 || defined __ia64__
 #    define ITT_ARCH ITT_ARCH_IA64
-#  elif defined _M_ARM || defined __arm__ 
+#  elif defined _M_ARM || defined __arm__
 #    define ITT_ARCH ITT_ARCH_ARM
 #  elif defined __powerpc64__
 #    define ITT_ARCH ITT_ARCH_PPC64
@@ -192,7 +192,7 @@
 #define ITT_MAGIC { 0xED, 0xAB, 0xAB, 0xEC, 0x0D, 0xEE, 0xDA, 0x30 }
 
 /* Replace with snapshot date YYYYMMDD for promotion build. */
-#define API_VERSION_BUILD    20180723 
+#define API_VERSION_BUILD    20180723
 
 #ifndef API_VERSION_NUM
 #define API_VERSION_NUM 0.0.0
@@ -252,10 +252,10 @@ ITT_INLINE long __itt_interlocked_increment(volatile long* ptr)
     return InterlockedIncrement(ptr);
 }
 #endif /* ITT_SIMPLE_INIT */
- 
-#define DL_SYMBOLS (1) 
-#define PTHREAD_SYMBOLS (1) 
- 
+
+#define DL_SYMBOLS (1)
+#define PTHREAD_SYMBOLS (1)
+
 #else /* ITT_PLATFORM!=ITT_PLATFORM_WIN */
 #define __itt_get_proc(lib, name) dlsym(lib, name)
 #define __itt_mutex_init(mutex)   {\
@@ -294,16 +294,16 @@ ITT_INLINE long __itt_interlocked_increment(volatile long* ptr)
 #ifdef SDL_STRNCPY_S
 #define __itt_fstrcpyn(s1, b, s2, l) SDL_STRNCPY_S(s1, b, s2, l)
 #else
-#define __itt_fstrcpyn(s1, b, s2, l) {                                      \ 
-    if (b > 0) {                                                            \ 
-        /* 'volatile' is used to suppress the warning that a destination */ \ 
-        /*  bound depends on the length of the source.                   */ \ 
-        volatile size_t num_to_copy = (size_t)(b - 1) < (size_t)(l) ?       \ 
-                (size_t)(b - 1) : (size_t)(l);                              \ 
-        strncpy(s1, s2, num_to_copy);                                       \ 
-        s1[num_to_copy] = 0;                                                \ 
-    }                                                                       \ 
-} 
+#define __itt_fstrcpyn(s1, b, s2, l) {                                      \
+    if (b > 0) {                                                            \
+        /* 'volatile' is used to suppress the warning that a destination */ \
+        /*  bound depends on the length of the source.                   */ \
+        volatile size_t num_to_copy = (size_t)(b - 1) < (size_t)(l) ?       \
+                (size_t)(b - 1) : (size_t)(l);                              \
+        strncpy(s1, s2, num_to_copy);                                       \
+        s1[num_to_copy] = 0;                                                \
+    }                                                                       \
+}
 #endif /* SDL_STRNCPY_S */
 
 #define __itt_fstrdup(s)          strdup(s)
@@ -338,22 +338,22 @@ ITT_INLINE long __itt_interlocked_increment(volatile long* ptr)
     return __TBB_machine_fetchadd4(ptr, 1) + 1L;
 }
 #endif /* ITT_SIMPLE_INIT */
- 
-void* dlopen(const char*, int) __attribute__((weak)); 
-void* dlsym(void*, const char*) __attribute__((weak)); 
-int dlclose(void*) __attribute__((weak)); 
-#define DL_SYMBOLS (dlopen && dlsym && dlclose) 
- 
-int pthread_mutex_init(pthread_mutex_t*, const pthread_mutexattr_t*) __attribute__((weak)); 
-int pthread_mutex_lock(pthread_mutex_t*) __attribute__((weak)); 
-int pthread_mutex_unlock(pthread_mutex_t*) __attribute__((weak)); 
-int pthread_mutex_destroy(pthread_mutex_t*) __attribute__((weak)); 
-int pthread_mutexattr_init(pthread_mutexattr_t*) __attribute__((weak)); 
-int pthread_mutexattr_settype(pthread_mutexattr_t*, int) __attribute__((weak)); 
-int pthread_mutexattr_destroy(pthread_mutexattr_t*) __attribute__((weak)); 
-pthread_t pthread_self(void) __attribute__((weak)); 
-#define PTHREAD_SYMBOLS (pthread_mutex_init && pthread_mutex_lock && pthread_mutex_unlock && pthread_mutex_destroy && pthread_mutexattr_init && pthread_mutexattr_settype && pthread_mutexattr_destroy && pthread_self) 
- 
+
+void* dlopen(const char*, int) __attribute__((weak));
+void* dlsym(void*, const char*) __attribute__((weak));
+int dlclose(void*) __attribute__((weak));
+#define DL_SYMBOLS (dlopen && dlsym && dlclose)
+
+int pthread_mutex_init(pthread_mutex_t*, const pthread_mutexattr_t*) __attribute__((weak));
+int pthread_mutex_lock(pthread_mutex_t*) __attribute__((weak));
+int pthread_mutex_unlock(pthread_mutex_t*) __attribute__((weak));
+int pthread_mutex_destroy(pthread_mutex_t*) __attribute__((weak));
+int pthread_mutexattr_init(pthread_mutexattr_t*) __attribute__((weak));
+int pthread_mutexattr_settype(pthread_mutexattr_t*, int) __attribute__((weak));
+int pthread_mutexattr_destroy(pthread_mutexattr_t*) __attribute__((weak));
+pthread_t pthread_self(void) __attribute__((weak));
+#define PTHREAD_SYMBOLS (pthread_mutex_init && pthread_mutex_lock && pthread_mutex_unlock && pthread_mutex_destroy && pthread_mutexattr_init && pthread_mutexattr_settype && pthread_mutexattr_destroy && pthread_self)
+
 #endif /* ITT_PLATFORM==ITT_PLATFORM_WIN */
 
 typedef enum {
@@ -402,27 +402,27 @@ typedef struct ___itt_api_info
     __itt_group_id group;
 }  __itt_api_info;
 
-typedef struct __itt_counter_info 
-{ 
-    const char* nameA;  /*!< Copy of original name in ASCII. */ 
-#if defined(UNICODE) || defined(_UNICODE) 
-    const wchar_t* nameW; /*!< Copy of original name in UNICODE. */ 
-#else  /* UNICODE || _UNICODE */ 
-    void* nameW; 
-#endif /* UNICODE || _UNICODE */ 
-    const char* domainA;  /*!< Copy of original name in ASCII. */ 
-#if defined(UNICODE) || defined(_UNICODE) 
-    const wchar_t* domainW; /*!< Copy of original name in UNICODE. */ 
-#else  /* UNICODE || _UNICODE */ 
-    void* domainW; 
-#endif /* UNICODE || _UNICODE */ 
-    int type; 
-    long index; 
-    int   extra1; /*!< Reserved to the runtime */ 
-    void* extra2; /*!< Reserved to the runtime */ 
-    struct __itt_counter_info* next; 
-}  __itt_counter_info_t; 
- 
+typedef struct __itt_counter_info
+{
+    const char* nameA;  /*!< Copy of original name in ASCII. */
+#if defined(UNICODE) || defined(_UNICODE)
+    const wchar_t* nameW; /*!< Copy of original name in UNICODE. */
+#else  /* UNICODE || _UNICODE */
+    void* nameW;
+#endif /* UNICODE || _UNICODE */
+    const char* domainA;  /*!< Copy of original name in ASCII. */
+#if defined(UNICODE) || defined(_UNICODE)
+    const wchar_t* domainW; /*!< Copy of original name in UNICODE. */
+#else  /* UNICODE || _UNICODE */
+    void* domainW;
+#endif /* UNICODE || _UNICODE */
+    int type;
+    long index;
+    int   extra1; /*!< Reserved to the runtime */
+    void* extra2; /*!< Reserved to the runtime */
+    struct __itt_counter_info* next;
+}  __itt_counter_info_t;
+
 struct ___itt_domain;
 struct ___itt_string_handle;
 
@@ -446,8 +446,8 @@ typedef struct ___itt_global
     struct ___itt_domain*  domain_list;
     struct ___itt_string_handle* string_list;
     __itt_collection_state state;
-    __itt_counter_info_t* counter_list; 
-    unsigned int           ipt_collect_events; 
+    __itt_counter_info_t* counter_list;
+    unsigned int           ipt_collect_events;
 } __itt_global;
 
 #pragma pack(pop)
@@ -548,38 +548,38 @@ typedef struct ___itt_global
     } \
 }
 
-#define NEW_COUNTER_W(gptr,h,h_tail,name,domain,type) { \ 
-    h = (__itt_counter_info_t*)malloc(sizeof(__itt_counter_info_t)); \ 
-    if (h != NULL) { \ 
-        h->nameA   = NULL; \ 
-        h->nameW   = name ? _wcsdup(name) : NULL; \ 
-        h->domainA   = NULL; \ 
-        h->domainW   = name ? _wcsdup(domain) : NULL; \ 
-        h->type = type; \ 
-        h->index = 0; \ 
-        h->next   = NULL; \ 
-        if (h_tail == NULL) \ 
-            (gptr)->counter_list = h; \ 
-        else \ 
-            h_tail->next = h; \ 
-    } \ 
-} 
- 
-#define NEW_COUNTER_A(gptr,h,h_tail,name,domain,type) { \ 
-    h = (__itt_counter_info_t*)malloc(sizeof(__itt_counter_info_t)); \ 
-    if (h != NULL) { \ 
-        h->nameA   = name ? __itt_fstrdup(name) : NULL; \ 
-        h->nameW   = NULL; \ 
-        h->domainA   = domain ? __itt_fstrdup(domain) : NULL; \ 
-        h->domainW   = NULL; \ 
-        h->type = type; \ 
-        h->index = 0; \ 
-        h->next   = NULL; \ 
-        if (h_tail == NULL) \ 
-            (gptr)->counter_list = h; \ 
-        else \ 
-            h_tail->next = h; \ 
-    } \ 
-} 
- 
+#define NEW_COUNTER_W(gptr,h,h_tail,name,domain,type) { \
+    h = (__itt_counter_info_t*)malloc(sizeof(__itt_counter_info_t)); \
+    if (h != NULL) { \
+        h->nameA   = NULL; \
+        h->nameW   = name ? _wcsdup(name) : NULL; \
+        h->domainA   = NULL; \
+        h->domainW   = name ? _wcsdup(domain) : NULL; \
+        h->type = type; \
+        h->index = 0; \
+        h->next   = NULL; \
+        if (h_tail == NULL) \
+            (gptr)->counter_list = h; \
+        else \
+            h_tail->next = h; \
+    } \
+}
+
+#define NEW_COUNTER_A(gptr,h,h_tail,name,domain,type) { \
+    h = (__itt_counter_info_t*)malloc(sizeof(__itt_counter_info_t)); \
+    if (h != NULL) { \
+        h->nameA   = name ? __itt_fstrdup(name) : NULL; \
+        h->nameW   = NULL; \
+        h->domainA   = domain ? __itt_fstrdup(domain) : NULL; \
+        h->domainW   = NULL; \
+        h->type = type; \
+        h->index = 0; \
+        h->next   = NULL; \
+        if (h_tail == NULL) \
+            (gptr)->counter_list = h; \
+        else \
+            h_tail->next = h; \
+    } \
+}
+
 #endif /* _ITTNOTIFY_CONFIG_H_ */

@@ -80,8 +80,8 @@ public:
     //! Set short command representation in Usage block
     void SetPrintShortCommandInUsage(bool printShortCommandInUsage);
 
-    void DisableSvnRevisionOption(); 
- 
+    void DisableSvnRevisionOption();
+
     void AddCompletions(TString progName, const TString& name = "completion", bool hidden = false, bool noCompletion = false);
 
     /*! Run appropriate mode.
@@ -155,9 +155,9 @@ private:
     //! When set to true, show descriptions unsorted and display separators
     bool ShowSeparated;
 
-    //! When set to true, disables --svnrevision option, useful for opensource (git hosted) projects 
-    bool SvnRevisionOptionDisabled; 
- 
+    //! When set to true, disables --svnrevision option, useful for opensource (git hosted) projects
+    bool SvnRevisionOptionDisabled;
+
     //! When true - will print only 'mode name' in 'Usage' block
     bool PrintShortCommandInUsage;
 

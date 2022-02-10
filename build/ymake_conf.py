@@ -2224,10 +2224,10 @@ class MSVCToolchainOptions(ToolchainOptions):
             sdk_dir = os.environ.get('WindowsSdkDir')
             self.sdk_version = os.environ.get('WindowsSDKVersion').replace('\\', '')
             vc_install_dir = os.environ.get('VCToolsInstallDir')
-            # fix for cxx_std detection problem introduced in r7740071 when running in native VS toolkit commandline: 
-            # in that case ya make gets 'system_cxx' configuration name and cxx_std is obviously missing in that config 
-            # so default 'c++20' is substituted and we need to hotfix it here 
-            self.cxx_std = 'c++latest' 
+            # fix for cxx_std detection problem introduced in r7740071 when running in native VS toolkit commandline:
+            # in that case ya make gets 'system_cxx' configuration name and cxx_std is obviously missing in that config
+            # so default 'c++20' is substituted and we need to hotfix it here
+            self.cxx_std = 'c++latest'
 
             if any([x is None for x in (sdk_dir, self.sdk_version, vc_install_dir)]):
                 raise ConfigureError('No %WindowsSdkDir%, %WindowsSDKVersion% or %VCINSTALLDIR% present. Please, run vcvars64.bat to setup preferred environment.')
@@ -2739,13 +2739,13 @@ class MSVCLinker(MSVC, Linker):
 
         emit('LINK_EXE_FLAGS', '$LINK_EXE_FLAGS_PER_TYPE')
 
-        emit('LINK_IMPLIB_VALUE') 
+        emit('LINK_IMPLIB_VALUE')
         emit('LINK_IMPLIB', '/IMPLIB:${output;noext;rootrel;pre=$MODULE_PREFIX:REALPRJNAME.lib}')
         if is_negative_str(preset('NO_DEBUGINFO', 'no')):
             emit('LINK_EXTRA_OUTPUT', '/PDB:${output;noext;rootrel;pre=$MODULE_PREFIX:REALPRJNAME.pdb}')
         else:
             emit('LINK_EXTRA_OUTPUT')
- 
+
         if not self.tc.under_wine:
             emit('LIB_WRAPPER', '${YMAKE_PYTHON}', '${input:"build/scripts/fix_msvc_output.py"}', 'lib')
             emit('LINK_WRAPPER', '${YMAKE_PYTHON}', '${input:"build/scripts/fix_msvc_output.py"}', 'link')

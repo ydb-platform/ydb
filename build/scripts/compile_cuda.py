@@ -50,7 +50,7 @@ def main():
         # clang coverage
         '-fprofile-instr-generate',
         '-fcoverage-mapping',
-        '/Zc:inline',  # disable unreferenced functions (kernel registrators) remove 
+        '/Zc:inline',  # disable unreferenced functions (kernel registrators) remove
         '-Wno-c++17-extensions',
         '-flto',
         '-faligned-allocation',
@@ -95,10 +95,10 @@ def main():
     while cflags_queue:
 
         arg = cflags_queue.popleft()
-        if arg == '-mllvm': 
-            compiler_args.append(arg) 
-            compiler_args.append(cflags_queue.popleft()) 
-            continue 
+        if arg == '-mllvm':
+            compiler_args.append(arg)
+            compiler_args.append(cflags_queue.popleft())
+            continue
         if arg[:2].upper() in ('-I', '/I', '-B'):
             value = arg[2:]
             if not value:

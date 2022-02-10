@@ -491,11 +491,11 @@ public:
         : TBase(s)
     {
         Y_UNUSED(cnt);
-        P_ = this->S_.begin(); 
+        P_ = this->S_.begin();
     }
 
     inline void Insert(const TValue& v) {
-        P_ = this->S_.insert(P_, v); 
+        P_ = this->S_.insert(P_, v);
     }
 
 private:

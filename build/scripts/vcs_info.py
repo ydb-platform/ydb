@@ -11,34 +11,34 @@ import zipfile
 
 class _Formatting(object):
     @staticmethod
-    def is_str(strval): 
-        if sys.version_info >= (3, 0, 0): 
-            return isinstance(strval, (bytes,str)) 
-        else: 
-            return isinstance(strval, basestring) 
- 
-    @staticmethod 
-    def encoding_needed(strval): 
-        if sys.version_info >= (3, 0, 0): 
-            return isinstance(strval, str) 
-        else: 
-            return isinstance(strval, unicode) 
- 
-    @staticmethod 
+    def is_str(strval):
+        if sys.version_info >= (3, 0, 0):
+            return isinstance(strval, (bytes,str))
+        else:
+            return isinstance(strval, basestring)
+
+    @staticmethod
+    def encoding_needed(strval):
+        if sys.version_info >= (3, 0, 0):
+            return isinstance(strval, str)
+        else:
+            return isinstance(strval, unicode)
+
+    @staticmethod
     def escape_special_symbols(strval):
-        encoding_needed = _Formatting.encoding_needed(strval) 
-        c_str = strval.encode('utf-8') if encoding_needed else strval 
-        retval = b"" 
+        encoding_needed = _Formatting.encoding_needed(strval)
+        c_str = strval.encode('utf-8') if encoding_needed else strval
+        retval = b""
         for c in c_str:
-            if sys.version_info >= (3, 0, 0): 
-                c = bytes([c]) 
+            if sys.version_info >= (3, 0, 0):
+                c = bytes([c])
             if c in ("\\", "\""):
                 retval += "\\" + c
             elif ord(c) < ord(' '):
-                retval += c.decode('latin-1').encode('unicode_escape') 
+                retval += c.decode('latin-1').encode('unicode_escape')
             else:
                 retval += c
-        return retval.decode('utf-8') if encoding_needed else retval 
+        return retval.decode('utf-8') if encoding_needed else retval
 
     @staticmethod
     def escape_line_feed(strval, indent='    '):
@@ -51,7 +51,7 @@ class _Formatting(object):
     @staticmethod
     def escaped_define(strkey, val):
         name = "#define " + strkey + " "
-        if _Formatting.is_str(val): 
+        if _Formatting.is_str(val):
             define = "\"" + _Formatting.escape_line_feed(
                 _Formatting.escape_trigraphs(_Formatting.escape_special_symbols(val))) + "\""
         else:
@@ -60,7 +60,7 @@ class _Formatting(object):
 
     @staticmethod
     def escaped_go_map_key(strkey, strval):
-        if _Formatting.is_str(strval): 
+        if _Formatting.is_str(strval):
             return '    ' + '"' + strkey + '": "' + _Formatting.escape_special_symbols(strval) + '",'
         else:
             return '    ' + '"' + strkey + '": "' + str(strval) + '",'
@@ -94,7 +94,7 @@ def get_json(file_name):
 
         # TODO: check 'tar+svn' parsing
         for i in ['ARCADIA_SOURCE_REVISION', 'ARCADIA_SOURCE_LAST_CHANGE', 'SVN_REVISION']:
-            if i in out and _Formatting.is_str(out[i]): 
+            if i in out and _Formatting.is_str(out[i]):
                 try:
                     out[i] = int(out[i])
                 except:
@@ -120,10 +120,10 @@ def print_c(json_file, output_file, argv):
     with open(interface) as c:
         c_file = c.read()
     with open(output_file, 'w') as f:
-        header = '\n'.join(gen_header(json_file)) 
-        if sys.version_info < (3, 0, 0): 
-            header = header.encode('utf-8') 
-        f.write(header + '\n' + c_file) 
+        header = '\n'.join(gen_header(json_file))
+        if sys.version_info < (3, 0, 0):
+            header = header.encode('utf-8')
+        f.write(header + '\n' + c_file)
 
 
 def merge_java_content(old_content, json_file):

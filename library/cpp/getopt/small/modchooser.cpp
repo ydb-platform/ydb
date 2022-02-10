@@ -73,7 +73,7 @@ TModChooser::TModChooser()
     : ModesHelpOption("-?") // Default help option in last_getopt
     , VersionHandler(nullptr)
     , ShowSeparated(true)
-    , SvnRevisionOptionDisabled(false) 
+    , SvnRevisionOptionDisabled(false)
     , PrintShortCommandInUsage(false)
 {
 }
@@ -152,10 +152,10 @@ void TModChooser::SetPrintShortCommandInUsage(bool printShortCommandInUsage = fa
     PrintShortCommandInUsage = printShortCommandInUsage;
 }
 
-void TModChooser::DisableSvnRevisionOption() { 
-    SvnRevisionOptionDisabled = true; 
-} 
- 
+void TModChooser::DisableSvnRevisionOption() {
+    SvnRevisionOptionDisabled = true;
+}
+
 void TModChooser::AddCompletions(TString progName, const TString& name, bool hidden, bool noCompletion) {
     if (CompletionsGenerator == nullptr) {
         CompletionsGenerator = NLastGetopt::MakeCompletionMod(this, std::move(progName), name);
@@ -188,7 +188,7 @@ int TModChooser::Run(const int argc, const char** argv) const {
         VersionHandler();
         return 0;
     }
-    if (!SvnRevisionOptionDisabled && modeName == "--svnrevision") { 
+    if (!SvnRevisionOptionDisabled && modeName == "--svnrevision") {
         NLastGetopt::PrintVersionAndExit(nullptr);
     }
 
@@ -314,9 +314,9 @@ void TModChooser::PrintHelp(const TString& progName) const {
     Cerr << "To get help for specific mode type '" << progName << " MODE " << ModesHelpOption << "'" << Endl;
     if (VersionHandler)
         Cerr << "To print program version type '" << progName << " --version'" << Endl;
-    if (!SvnRevisionOptionDisabled) { 
-        Cerr << "To print svn revision type --svnrevision" << Endl; 
-    } 
+    if (!SvnRevisionOptionDisabled) {
+        Cerr << "To print svn revision type --svnrevision" << Endl;
+    }
     return;
 }
 

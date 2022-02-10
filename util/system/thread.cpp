@@ -452,9 +452,9 @@ void TThread::SetCurrentThreadName(const char* name) {
     pthread_t thread = pthread_self();
     pthread_set_name_np(thread, name);
 #elif defined(_linux_)
-    prctl(PR_SET_NAME, name, 0, 0, 0); 
+    prctl(PR_SET_NAME, name, 0, 0, 0);
 #elif defined(_darwin_)
-    pthread_setname_np(name); 
+    pthread_setname_np(name);
 #elif defined(_win_)
     auto api = Singleton<TWinThreadDescrAPI>();
     if (api->HasAPI()) {
@@ -514,18 +514,18 @@ TCurrentThreadLimits::TCurrentThreadLimits() noexcept
     : StackBegin(nullptr)
     , StackLength(0)
 {
-#if defined(_linux_) || defined(_cygwin_) || defined(_freebsd_) 
+#if defined(_linux_) || defined(_cygwin_) || defined(_freebsd_)
     pthread_attr_t attr;
     pthread_attr_init(&attr);
 
     #if defined(_linux_) || defined(_cygwin_)
     Y_VERIFY(pthread_getattr_np(pthread_self(), &attr) == 0, "pthread_getattr failed");
     #else
-    Y_VERIFY(pthread_attr_get_np(pthread_self(), &attr) == 0, "pthread_attr_get_np failed"); 
+    Y_VERIFY(pthread_attr_get_np(pthread_self(), &attr) == 0, "pthread_attr_get_np failed");
     #endif
     pthread_attr_getstack(&attr, (void**)&StackBegin, &StackLength);
     pthread_attr_destroy(&attr);
- 
+
 #elif defined(_darwin_)
     StackBegin = pthread_get_stackaddr_np(pthread_self());
     StackLength = pthread_get_stacksize_np(pthread_self());

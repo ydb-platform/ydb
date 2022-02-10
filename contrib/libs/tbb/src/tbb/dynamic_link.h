@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2005-2021 Intel Corporation 
+    Copyright (c) 2005-2021 Intel Corporation
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -19,23 +19,23 @@
 
 // Support for dynamic loading entry points from other shared libraries.
 
-#include "oneapi/tbb/detail/_config.h" 
+#include "oneapi/tbb/detail/_config.h"
 
-#include <atomic> 
-#include <mutex> 
+#include <atomic>
+#include <mutex>
 
 /** By default, symbols declared and defined here go into namespace tbb::internal.
     To put them in other namespace, define macros OPEN_INTERNAL_NAMESPACE
     and CLOSE_INTERNAL_NAMESPACE to override the following default definitions. **/
 
-#include <cstddef> 
+#include <cstddef>
 #if _WIN32
-#include <Windows.h> 
+#include <Windows.h>
 #endif /* _WIN32 */
 
-namespace tbb { 
-namespace detail { 
-namespace r1 { 
+namespace tbb {
+namespace detail {
+namespace r1 {
 
 //! Type definition for a pointer to a void somefunc(void)
 typedef void (*pointer_to_handler)();
@@ -45,10 +45,10 @@ typedef void (*pointer_to_handler)();
 // prevent warnings from some compilers (g++ 4.1)
 #if __TBB_WEAK_SYMBOLS_PRESENT
 #define DLD(s,h) {#s, (pointer_to_handler*)(void*)(&h), (pointer_to_handler)&s}
-#define DLD_NOWEAK(s,h) {#s, (pointer_to_handler*)(void*)(&h), NULL} 
+#define DLD_NOWEAK(s,h) {#s, (pointer_to_handler*)(void*)(&h), NULL}
 #else
 #define DLD(s,h) {#s, (pointer_to_handler*)(void*)(&h)}
-#define DLD_NOWEAK(s,h) DLD(s,h) 
+#define DLD_NOWEAK(s,h) DLD(s,h)
 #endif /* __TBB_WEAK_SYMBOLS_PRESENT */
 //! Association between a handler name and location of pointer to it.
 struct dynamic_link_descriptor {
@@ -63,9 +63,9 @@ struct dynamic_link_descriptor {
 };
 
 #if _WIN32
-using dynamic_link_handle = HMODULE; 
+using dynamic_link_handle = HMODULE;
 #else
-using dynamic_link_handle = void*; 
+using dynamic_link_handle = void*;
 #endif /* _WIN32 */
 
 const int DYNAMIC_LINK_GLOBAL = 0x01;
@@ -91,7 +91,7 @@ const int DYNAMIC_LINK_ALL    = DYNAMIC_LINK_GLOBAL | DYNAMIC_LINK_LOAD | DYNAMI
 **/
 bool dynamic_link( const char* library,
                    const dynamic_link_descriptor descriptors[],
-                   std::size_t required, 
+                   std::size_t required,
                    dynamic_link_handle* handle = 0,
                    int flags = DYNAMIC_LINK_ALL );
 
@@ -108,8 +108,8 @@ enum dynamic_link_error_t {
     dl_buff_too_small     // none
 }; // dynamic_link_error_t
 
-} // namespace r1 
-} // namespace detail 
-} // namespace tbb 
+} // namespace r1
+} // namespace detail
+} // namespace tbb
 
 #endif /* __TBB_dynamic_link */

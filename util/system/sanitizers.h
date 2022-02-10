@@ -20,7 +20,7 @@ namespace NSan {
     class TFiberContext {
     public:
         TFiberContext() noexcept;
-        TFiberContext(const void* stack, size_t len, const char* contName) noexcept; 
+        TFiberContext(const void* stack, size_t len, const char* contName) noexcept;
 
         ~TFiberContext() noexcept;
 
@@ -34,11 +34,11 @@ namespace NSan {
         void* Token_;
         const void* Stack_;
         size_t Len_;
- 
+
         const bool IsMainFiber_;
-#if defined(_tsan_enabled_) 
-        void* const CurrentTSanFiberContext_; 
-#endif 
+#if defined(_tsan_enabled_)
+        void* const CurrentTSanFiberContext_;
+#endif
     };
 
     // Returns plain if no sanitizer enabled or sanitized otherwise

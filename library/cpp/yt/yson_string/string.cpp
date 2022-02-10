@@ -34,10 +34,10 @@ TYsonStringBuf::TYsonStringBuf(const TString& data, EYsonType type)
 
 TYsonStringBuf::TYsonStringBuf(TStringBuf data, EYsonType type)
     : Data_(data)
-    , Type_(type) 
+    , Type_(type)
     , Null_(false)
-{ } 
- 
+{ }
+
 TYsonStringBuf::TYsonStringBuf(const char* data, EYsonType type)
     : TYsonStringBuf(TStringBuf(data), type)
 { }

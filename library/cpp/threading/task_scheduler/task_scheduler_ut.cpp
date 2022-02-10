@@ -5,7 +5,7 @@
 #include <util/system/atomic.h>
 #include <util/generic/vector.h>
 
-#include "task_scheduler.h" 
+#include "task_scheduler.h"
 
 class TTaskSchedulerTest: public TTestBase {
         UNIT_TEST_SUITE(TTaskSchedulerTest);

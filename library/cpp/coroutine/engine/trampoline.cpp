@@ -16,7 +16,7 @@ namespace NCoro {
 
 TTrampoline::TTrampoline(NStack::IAllocator& allocator, ui32 stackSize, TFunc f, TCont* cont) noexcept
         : Stack_(allocator, stackSize, cont->Name())
-        , Clo_{this, Stack_.Get(), cont->Name()} 
+        , Clo_{this, Stack_.Get(), cont->Name()}
         , Ctx_(Clo_)
         , Func_(std::move(f))
         , Cont_(cont)

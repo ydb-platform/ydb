@@ -71,7 +71,7 @@ Y_FORCE_INLINE int TRefCounter::GetRefCount() const noexcept
 
 Y_FORCE_INLINE void TRefCounter::Ref() const noexcept
 {
-    // It is safe to use relaxed here, since new reference is always created from another live reference. 
+    // It is safe to use relaxed here, since new reference is always created from another live reference.
     StrongCount_.fetch_add(1, std::memory_order_relaxed);
 
     YT_ASSERT(WeakCount_.load(std::memory_order_relaxed) > 0);
@@ -93,7 +93,7 @@ Y_FORCE_INLINE bool TRefCounter::Unref() const
     //
     // See http://www.boost.org/doc/libs/1_55_0/doc/html/atomic/usage_examples.html#boost_atomic.usage_examples.example_reference_counters
     //
-    auto oldStrongCount = StrongCount_.fetch_sub(1, std::memory_order_release); 
+    auto oldStrongCount = StrongCount_.fetch_sub(1, std::memory_order_release);
     YT_ASSERT(oldStrongCount > 0);
     if (oldStrongCount == 1) {
         StrongCount_.load(std::memory_order_acquire);

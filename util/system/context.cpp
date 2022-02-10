@@ -140,7 +140,7 @@ TContMachineContext::TSan::TSan() noexcept
 }
 
 TContMachineContext::TSan::TSan(const TContClosure& c) noexcept
-    : NSan::TFiberContext(c.Stack.data(), c.Stack.size(), c.ContName) 
+    : NSan::TFiberContext(c.Stack.data(), c.Stack.size(), c.ContName)
     , TL(c.TrampoLine)
 {
 }

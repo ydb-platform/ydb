@@ -29,8 +29,8 @@ public:
     //! Constructs a non-null instance with given type and content.
     explicit TYsonStringBuf(
         TStringBuf data,
-        EYsonType type = EYsonType::Node); 
- 
+        EYsonType type = EYsonType::Node);
+
     //! Constructs a non-null instance with given type and content
     //! (without this overload there is no way to construct TYsonStringBuf from
     //! string literal).

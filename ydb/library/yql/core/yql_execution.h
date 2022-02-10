@@ -6,28 +6,28 @@
 #include <util/system/mutex.h>
 
 namespace NYql {
-    struct TOperationProgress { 
+    struct TOperationProgress {
 #define YQL_OPERATION_PROGRESS_STATE_MAP(xx) \
-    xx(Started, 0)                           \ 
-    xx(InProgress, 1)                        \ 
-    xx(Finished, 2)                          \ 
-    xx(Failed, 3)                            \ 
+    xx(Started, 0)                           \
+    xx(InProgress, 1)                        \
+    xx(Finished, 2)                          \
+    xx(Failed, 3)                            \
     xx(Aborted, 4)
 
-        enum class EState { 
-            YQL_OPERATION_PROGRESS_STATE_MAP(ENUM_VALUE_GEN) 
-        }; 
+        enum class EState {
+            YQL_OPERATION_PROGRESS_STATE_MAP(ENUM_VALUE_GEN)
+        };
 
         TString Category;
-        ui32 Id; 
-        EState State; 
+        ui32 Id;
+        EState State;
 
         using TStage = std::pair<TString, TInstant>;
         TStage Stage;
 
         TString RemoteId;
 
-        struct TCounters { 
+        struct TCounters {
             ui64 Completed = 0ULL;
             ui64 Running = 0ULL;
             ui64 Total = 0ULL;
@@ -35,32 +35,32 @@ namespace NYql {
             ui64 Failed = 0ULL;
             ui64 Lost = 0ULL;
             ui64 Pending = 0ULL;
-            bool operator==(const TCounters& rhs) const noexcept { 
-                return Completed == rhs.Completed && 
-                       Running == rhs.Running && 
+            bool operator==(const TCounters& rhs) const noexcept {
+                return Completed == rhs.Completed &&
+                       Running == rhs.Running &&
                        Total == rhs.Total &&
                        Aborted == rhs.Aborted &&
                        Failed == rhs.Failed &&
                        Lost == rhs.Lost &&
                        Pending == rhs.Pending;
-            } 
+            }
 
-            bool operator!=(const TCounters& rhs) const noexcept { 
-                return !operator==(rhs); 
-            } 
-        }; 
+            bool operator!=(const TCounters& rhs) const noexcept {
+                return !operator==(rhs);
+            }
+        };
 
-        TMaybe<TCounters> Counters; 
+        TMaybe<TCounters> Counters;
 
         TOperationProgress(const TString& category, ui32 id,
             EState state, const TString& stage = "")
-            : Category(category) 
-            , Id(id) 
-            , State(state) 
+            : Category(category)
+            , Id(id)
+            , State(state)
             , Stage(stage, TInstant::Now())
-        { 
-        } 
-    }; 
+        {
+        }
+    };
 
     struct TOperationStatistics {
         struct TEntry {
@@ -94,7 +94,7 @@ namespace NYql {
     };
 
     using TStatWriter = std::function<void(ui32, const TVector<TOperationStatistics::TEntry>&)>;
-    using TOperationProgressWriter = std::function<void(const TOperationProgress&)>; 
+    using TOperationProgressWriter = std::function<void(const TOperationProgress&)>;
 
     inline TStatWriter ThreadSafeStatWriter(TStatWriter base) {
         struct TState : public TThrRefBase {
@@ -111,34 +111,34 @@ namespace NYql {
         };
     }
 
-    inline void NullProgressWriter(const TOperationProgress& progress) { 
-        Y_UNUSED(progress); 
-    } 
+    inline void NullProgressWriter(const TOperationProgress& progress) {
+        Y_UNUSED(progress);
+    }
 
-    inline TOperationProgressWriter ChainProgressWriters(TOperationProgressWriter left, TOperationProgressWriter right) { 
-        return [=](const TOperationProgress& progress) { 
-            left(progress); 
-            right(progress); 
-        }; 
-    } 
+    inline TOperationProgressWriter ChainProgressWriters(TOperationProgressWriter left, TOperationProgressWriter right) {
+        return [=](const TOperationProgress& progress) {
+            left(progress);
+            right(progress);
+        };
+    }
 
-    inline TOperationProgressWriter ThreadSafeProgressWriter(TOperationProgressWriter base) { 
-        struct TState : public TThrRefBase { 
-            TOperationProgressWriter Base; 
-            TMutex Mutex; 
-        }; 
+    inline TOperationProgressWriter ThreadSafeProgressWriter(TOperationProgressWriter base) {
+        struct TState : public TThrRefBase {
+            TOperationProgressWriter Base;
+            TMutex Mutex;
+        };
 
-        auto state = MakeIntrusive<TState>(); 
-        state->Base = base; 
-        return [state](const TOperationProgress& progress) { 
-            with_lock(state->Mutex) { 
-                state->Base(progress); 
-            } 
-        }; 
-    } 
+        auto state = MakeIntrusive<TState>();
+        state->Base = base;
+        return [state](const TOperationProgress& progress) {
+            with_lock(state->Mutex) {
+                state->Base(progress);
+            }
+        };
+    }
 
     TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotationContext& types, bool checkWorld = true);
     TAutoPtr<IGraphTransformer> CreateExecutionTransformer(TTypeAnnotationContext& types, TOperationProgressWriter writer, bool withFinalize = true);
 
-    IGraphTransformer::TStatus RequireChild(const TExprNode& node, ui32 index); 
+    IGraphTransformer::TStatus RequireChild(const TExprNode& node, ui32 index);
 }

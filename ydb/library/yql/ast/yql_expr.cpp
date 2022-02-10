@@ -730,8 +730,8 @@ namespace {
         {
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Error"), pool);
             const auto& err = annotation.Cast<TErrorExprType>()->GetError();
-            auto row = TAstNode::NewAtom(TPosition(), ToString(err.Position.Row), pool); 
-            auto column = TAstNode::NewAtom(TPosition(), ToString(err.Position.Column), pool); 
+            auto row = TAstNode::NewAtom(TPosition(), ToString(err.Position.Row), pool);
+            auto column = TAstNode::NewAtom(TPosition(), ToString(err.Position.Column), pool);
             auto file = refAtoms ?
                 TAstNode::NewLiteralAtom(TPosition(), err.Position.File, pool, TNodeFlags::ArbitraryContent) :
                 TAstNode::NewAtom(TPosition(), err.Position.File, pool, TNodeFlags::ArbitraryContent);

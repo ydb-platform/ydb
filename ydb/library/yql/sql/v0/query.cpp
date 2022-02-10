@@ -52,7 +52,7 @@ public:
             key = L(key, Q(Y(Q("view"), Y("String", BuildQuotedAtom(Pos, View)))));
         }
         if (mode == ITableKeys::EBuildKeysMode::INPUT &&
-            IsQueryMode(ctx.Settings.Mode) && 
+            IsQueryMode(ctx.Settings.Mode) &&
             ctx.GetClusterProvider(Cluster).GetRef() != "kikimr" &&
             ctx.GetClusterProvider(Cluster).GetRef() != "rtmr") {
 
@@ -1023,10 +1023,10 @@ public:
                     Add(Y("let", "world", Y("Nth", *subqueryAliasPtr, Q("0"))));
                     Add(Y("let", ref, Y("Nth", *subqueryAliasPtr, Q("1"))));
                 }
-            } else { 
+            } else {
                 const auto& ref = block->GetLabel();
                 Add(Y("let", ref ? ref : "world", block));
-            } 
+            }
         }
 
         if (TopLevel) {

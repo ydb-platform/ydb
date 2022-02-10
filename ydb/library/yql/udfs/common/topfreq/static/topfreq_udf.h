@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 #include <ydb/library/yql/public/udf/udf_registrator.h>
@@ -7,14 +7,14 @@
 #include <ydb/library/yql/public/udf/udf_type_inspection.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/udf/udf_types.h>
-#include "topfreq.h" 
-#include <algorithm> 
-#include <array> 
- 
+#include "topfreq.h"
+#include <algorithm>
+#include <array>
+
 using namespace NYql;
-using namespace NUdf; 
- 
-namespace { 
+using namespace NUdf;
+
+namespace {
     extern const char TopFreqResourceNameGeneric[] = "TopFreq.TopFreqResource.Generic";
     class TTopFreqResource:
         public TBoxedResource<TTopFreqGeneric, TopFreqResourceNameGeneric>
@@ -25,16 +25,16 @@ namespace {
             : TBoxedResource(std::forward<Args>(args)...)
         {}
     };
- 
+
     template <EDataSlot Slot>
     class TTopFreqResourceData;
- 
+
     template <EDataSlot Slot>
     TTopFreqResourceData<Slot>* GetTopFreqResourceData(const TUnboxedValuePod& arg) {
         TTopFreqResourceData<Slot>::Validate(arg);
         return static_cast<TTopFreqResourceData<Slot>*>(arg.AsBoxed().Get());
-    } 
- 
+    }
+
     TTopFreqResource* GetTopFreqResource(const TUnboxedValuePod& arg) {
         TTopFreqResource::Validate(arg);
         return static_cast<TTopFreqResource*>(arg.AsBoxed().Get());
@@ -53,9 +53,9 @@ namespace {
     class TTopFreq_Create: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
-            ui32 minSize = args[1].Get<ui32>(); 
+            ui32 minSize = args[1].Get<ui32>();
             return TUnboxedValuePod(new TTopFreqResource(args[0], minSize, minSize * 2, Hash_, Equate_));
-        } 
+        }
 
     public:
         TTopFreq_Create(IHash::TPtr hash, IEquate::TPtr equate)
@@ -75,16 +75,16 @@ namespace {
             const auto topFreq = GetTopFreqResourceData<Slot>(args[0]);
             topFreq->Get()->AddValue(args[1]);
             return TUnboxedValuePod(topFreq);
-        } 
-    }; 
- 
+        }
+    };
+
     class TTopFreq_AddValue: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
             const auto topFreq = GetTopFreqResource(args[0]);
-            topFreq->Get()->AddValue(args[1]); 
+            topFreq->Get()->AddValue(args[1]);
             return TUnboxedValuePod(topFreq);
-        } 
+        }
     };
 
     template <EDataSlot Slot>
@@ -92,14 +92,14 @@ namespace {
     private:
         TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
             return GetTopFreqResourceData<Slot>(args[0])->Get()->Serialize(valueBuilder);
-        } 
-    }; 
- 
+        }
+    };
+
     class TTopFreq_Serialize: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
             return GetTopFreqResource(args[0])->Get()->Serialize(valueBuilder);
-        } 
+        }
     };
 
     template <EDataSlot Slot>
@@ -107,14 +107,14 @@ namespace {
     private:
         TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
             return TUnboxedValuePod(new TTopFreqResourceData<Slot>(args[0]));
-        } 
-    }; 
- 
+        }
+    };
+
     class TTopFreq_Deserialize: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
             return TUnboxedValuePod(new TTopFreqResource(args[0], Hash_, Equate_));
-        } 
+        }
 
     public:
         TTopFreq_Deserialize(IHash::TPtr hash, IEquate::TPtr equate)
@@ -134,16 +134,16 @@ namespace {
             const auto topFreq0 = GetTopFreqResourceData<Slot>(args[0]);
             const auto topFreq1 = GetTopFreqResourceData<Slot>(args[1]);
             return TUnboxedValuePod(new TTopFreqResourceData<Slot>(*topFreq0->Get(), *topFreq1->Get()));
-        } 
-    }; 
- 
+        }
+    };
+
     class TTopFreq_Merge: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
             const auto topFreq0 = GetTopFreqResource(args[0]);
             const auto topFreq1 = GetTopFreqResource(args[1]);
             return TUnboxedValuePod(new TTopFreqResource(*topFreq0->Get(), *topFreq1->Get(), Hash_, Equate_));
-        } 
+        }
 
     public:
         TTopFreq_Merge(IHash::TPtr hash, IEquate::TPtr equate)
@@ -154,23 +154,23 @@ namespace {
     private:
         IHash::TPtr Hash_;
         IEquate::TPtr Equate_;
-    }; 
- 
+    };
+
     template <EDataSlot Slot>
     class TTopFreq_GetData: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
             return GetTopFreqResourceData<Slot>(args[0])->Get()->Get(valueBuilder, args[1].Get<ui32>());
-        } 
+        }
     };
 
     class TTopFreq_Get: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
             return GetTopFreqResource(args[0])->Get()->Get(valueBuilder, args[1].Get<ui32>());
-        } 
-    }; 
- 
+        }
+    };
+
 
 #define MAKE_RESOURCE(slot, ...)                                                        \
     extern const char TopFreqResourceName##slot[] = "TopFreq.TopFreqResource."#slot;    \
@@ -213,14 +213,14 @@ namespace {
     static const auto GetName = TStringRef::Of("TopFreq_Get");
 
     class TTopFreqModule: public IUdfModule {
-    public: 
-        TStringRef Name() const { 
-            return TStringRef::Of("TopFreq"); 
-        } 
- 
+    public:
+        TStringRef Name() const {
+            return TStringRef::Of("TopFreq");
+        }
+
         void CleanupOnTerminate() const final {
         }
- 
+
         void GetAllFunctions(IFunctionsSink& sink) const final {
             sink.Add(CreateName)->SetTypeAwareness();
             sink.Add(AddValueName)->SetTypeAwareness();
@@ -228,21 +228,21 @@ namespace {
             sink.Add(DeserializeName)->SetTypeAwareness();
             sink.Add(MergeName)->SetTypeAwareness();
             sink.Add(GetName)->SetTypeAwareness();
-        } 
- 
-        void BuildFunctionTypeInfo( 
-            const TStringRef& name, 
+        }
+
+        void BuildFunctionTypeInfo(
+            const TStringRef& name,
             TType* userType,
-            const TStringRef& typeConfig, 
-            ui32 flags, 
+            const TStringRef& typeConfig,
+            ui32 flags,
             IFunctionTypeInfoBuilder& builder) const final
         {
-            Y_UNUSED(typeConfig); 
- 
-            try { 
+            Y_UNUSED(typeConfig);
+
+            try {
                 const bool typesOnly = (flags & TFlags::TypesOnly);
                 builder.UserType(userType);
- 
+
                 auto typeHelper = builder.TypeInfoHelper();
 
                 auto userTypeInspector = TTupleTypeInspector(*typeHelper, userType);
@@ -293,8 +293,8 @@ namespace {
 
                 if (name == CreateName) {
                     builder.Args()->Add(valueType).Add<ui32>().Done().Returns(topFreqType);
- 
-                    if (!typesOnly) { 
+
+                    if (!typesOnly) {
                         if (isGeneric) {
                             builder.Implementation(new TTopFreq_Create(hash, equate));
                         } else {
@@ -302,13 +302,13 @@ namespace {
                             UDF_TYPE_ID_MAP(MAKE_CREATE)
                             }
                         }
-                    } 
-                } 
- 
+                    }
+                }
+
                 if (name == AddValueName) {
                     builder.Args()->Add(topFreqType).Add(valueType).Done().Returns(topFreqType);
- 
-                    if (!typesOnly) { 
+
+                    if (!typesOnly) {
                         if (isGeneric) {
                             builder.Implementation(new TTopFreq_AddValue);
                         } else {
@@ -316,13 +316,13 @@ namespace {
                             UDF_TYPE_ID_MAP(MAKE_ADD_VALUE)
                             }
                         }
-                    } 
-                } 
- 
-                if (name == MergeName) {
-                    builder.Args()->Add(topFreqType).Add(topFreqType).Done().Returns(topFreqType); 
+                    }
+                }
 
-                    if (!typesOnly) { 
+                if (name == MergeName) {
+                    builder.Args()->Add(topFreqType).Add(topFreqType).Done().Returns(topFreqType);
+
+                    if (!typesOnly) {
                         if (isGeneric) {
                             builder.Implementation(new TTopFreq_Merge(hash, equate));
                         } else {
@@ -330,13 +330,13 @@ namespace {
                             UDF_TYPE_ID_MAP(MAKE_MERGE)
                             }
                         }
-                    } 
-                } 
- 
+                    }
+                }
+
                 if (name == SerializeName) {
                     builder.Args()->Add(topFreqType).Done().Returns(serializedType);
- 
-                    if (!typesOnly) { 
+
+                    if (!typesOnly) {
                         if (isGeneric) {
                             builder.Implementation(new TTopFreq_Serialize);
                         } else {
@@ -344,13 +344,13 @@ namespace {
                             UDF_TYPE_ID_MAP(MAKE_SERIALIZE)
                             }
                         }
-                    } 
-                } 
- 
+                    }
+                }
+
                 if (name == DeserializeName) {
                     builder.Args()->Add(serializedType).Done().Returns(topFreqType);
- 
-                    if (!typesOnly) { 
+
+                    if (!typesOnly) {
                         if (isGeneric) {
                             builder.Implementation(new TTopFreq_Deserialize(hash, equate));
                         } else {
@@ -358,17 +358,17 @@ namespace {
                             UDF_TYPE_ID_MAP(MAKE_DESERIALIZE)
                             }
                         }
-                    } 
-                } 
- 
+                    }
+                }
+
                 if (name == GetName) {
                     ui32 indexF, indexV;
                     auto itemType = builder.Struct()->AddField<ui64>("Frequency", &indexF).AddField("Value", valueType, &indexV).Build();
                     auto resultType = builder.List()->Item(itemType).Build();
- 
+
                     builder.Args()->Add(topFreqType).Add<ui32>().Done().Returns(resultType);
- 
-                    if (!typesOnly) { 
+
+                    if (!typesOnly) {
                         if (isGeneric) {
                             builder.Implementation(new TTopFreq_Get);
                         } else {
@@ -376,13 +376,13 @@ namespace {
                             UDF_TYPE_ID_MAP(MAKE_GET)
                             }
                         }
-                    } 
-                } 
+                    }
+                }
 
             } catch (const std::exception& e) {
-                builder.SetError(CurrentExceptionMessage()); 
-            } 
-        } 
-    }; 
+                builder.SetError(CurrentExceptionMessage());
+            }
+        }
+    };
 
 } // namespace

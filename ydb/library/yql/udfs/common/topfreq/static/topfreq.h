@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include <ydb/library/yql/public/udf/udf_allocator.h>
 #include <ydb/library/yql/public/udf/udf_helpers.h>
@@ -10,23 +10,23 @@ template <typename THash, typename TEquals>
 class TTopFreqBase {
 protected:
     using TUnboxedValuePod = NKikimr::NUdf::TUnboxedValuePod;
-    using TUnboxedValue = NKikimr::NUdf::TUnboxedValue; 
+    using TUnboxedValue = NKikimr::NUdf::TUnboxedValue;
     using IValueBuilder = NKikimr::NUdf::IValueBuilder;
 
-    using TVectorElement = std::pair<TUnboxedValue, ui64>; 
+    using TVectorElement = std::pair<TUnboxedValue, ui64>;
     using TVectorType = std::vector<TVectorElement, NKikimr::NUdf::TStdAllocatorForUdf<TVectorElement>>;
- 
-    TVectorType Freqs_; 
+
+    TVectorType Freqs_;
     std::unordered_map<TUnboxedValue, ui32, THash, TEquals, NKikimr::NUdf::TStdAllocatorForUdf<std::pair<const TUnboxedValue, ui32>>> Indices_;
     ui32 MinSize_ = 0;
     ui32 MaxSize_ = 0;
- 
+
     void Add(const TTopFreqBase& otherCalc);
     void Update(const TUnboxedValuePod& key, const ui64 value);
-    void TryCompress(); 
-    void Compress(ui32 newSize, bool sort = false); 
+    void TryCompress();
+    void Compress(ui32 newSize, bool sort = false);
     TUnboxedValue Convert(const IValueBuilder* valueBuilder) const;
- 
+
 protected:
     TTopFreqBase(THash hash, TEquals equals);
 
@@ -37,7 +37,7 @@ protected:
     TUnboxedValue Serialize(const IValueBuilder* builder);
     TUnboxedValue Get(const IValueBuilder* builder, ui32 resultSize);
     void AddValue(const TUnboxedValuePod& value);
-}; 
+};
 
 template <NKikimr::NUdf::EDataSlot Slot>
 class TTopFreqData

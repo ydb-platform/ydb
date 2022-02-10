@@ -165,12 +165,12 @@ message TYdbGatewayConfig {
 
 ///////////////////////////// ClickHouse /////////////////////////////
 
-message TClickHouseClusterConfig { 
-    optional string Name = 1; 
-    optional bool Default = 2 [default = false]; 
-    optional string Cluster = 3; 
-    optional string CHToken = 4; 
-    repeated TAttr Settings = 101; 
+message TClickHouseClusterConfig {
+    optional string Name = 1;
+    optional bool Default = 2 [default = false];
+    optional string Cluster = 3;
+    optional string CHToken = 4;
+    repeated TAttr Settings = 101;
     optional EHostScheme HostScheme = 5;
     optional uint32 HostPort = 6;
     optional string CHTokenYavSecretId = 7;
@@ -180,13 +180,13 @@ message TClickHouseClusterConfig {
     optional uint32 NativeHostPort = 11 [default = 9000];
     optional bool NativeSecure = 12 [default = false];
     optional string Id = 13;
-} 
- 
-message TClickHouseGatewayConfig { 
-    repeated TClickHouseClusterConfig ClusterMapping = 1; 
-    repeated TAttr DefaultSettings = 2; 
-} 
- 
+}
+
+message TClickHouseGatewayConfig {
+    repeated TClickHouseClusterConfig ClusterMapping = 1;
+    repeated TAttr DefaultSettings = 2;
+}
+
 ///////////////////////////// RTMR /////////////////////////////
 enum EYfArtifactType {
     AT_NONE  = 0;

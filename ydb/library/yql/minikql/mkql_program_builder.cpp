@@ -2056,14 +2056,14 @@ TRuntimeNode TProgramBuilder::NewDict(TType* dictType, const TArrayRef<const std
     return TRuntimeNode(TDictLiteral::Create(items.size(), items.data(), static_cast<TDictType*>(dictType), Env), true);
 }
 
-TRuntimeNode TProgramBuilder::NewEmptyTuple() { 
-    return TRuntimeNode(Env.GetEmptyTuple(), true); 
-} 
- 
-TType* TProgramBuilder::NewEmptyTupleType() { 
-    return Env.GetEmptyTuple()->GetGenericType(); 
-} 
- 
+TRuntimeNode TProgramBuilder::NewEmptyTuple() {
+    return TRuntimeNode(Env.GetEmptyTuple(), true);
+}
+
+TType* TProgramBuilder::NewEmptyTupleType() {
+    return Env.GetEmptyTuple()->GetGenericType();
+}
+
 TType* TProgramBuilder::NewTupleType(const TArrayRef<TType* const>& elements) {
     return TTupleType::Create(elements.size(), elements.data(), Env);
 }

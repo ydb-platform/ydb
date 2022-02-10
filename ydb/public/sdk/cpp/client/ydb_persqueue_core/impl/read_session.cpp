@@ -179,7 +179,7 @@ void TReadSession::ProceedWithoutClusterDiscovery() {
         clusterSessionInfoIter = ClusterSessions.emplace(normalizedName, normalizedName).first;
         TClusterSessionInfo& clusterSessionInfo = clusterSessionInfoIter->second;
         clusterSessionInfo.ClusterEndpoint = DbDriverState->DiscoveryEndpoint;
-        clusterSessionInfo.Topics = Settings.Topics_; 
+        clusterSessionInfo.Topics = Settings.Topics_;
         CreateClusterSessionsImpl();
     }
     ScheduleDumpCountersToLog();

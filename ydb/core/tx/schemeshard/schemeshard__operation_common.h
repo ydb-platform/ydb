@@ -1017,8 +1017,8 @@ public:
                     bool parseOk = ParseFromStringNoSizeLimit(*event->Record.MutableTabletConfig(), *tabletConfig);
                     Y_VERIFY(parseOk);
                 }
-                event->Record.MutableTabletConfig()->SetTopicName(topicName); 
-                event->Record.MutableTabletConfig()->SetTopicPath(TPath::Init(txState->TargetPathId, context.SS).PathString()); 
+                event->Record.MutableTabletConfig()->SetTopicName(topicName);
+                event->Record.MutableTabletConfig()->SetTopicPath(TPath::Init(txState->TargetPathId, context.SS).PathString());
                 event->Record.MutableTabletConfig()->MutablePartitionConfig()->SetTotalPartitions(pqGroup->AlterData ? pqGroup->AlterData->TotalGroupCount : pqGroup->TotalGroupCount);
 
                 event->Record.MutableTabletConfig()->SetVersion(pqGroup->AlterVersion + 1);
@@ -1070,7 +1070,7 @@ public:
 
                 event->Record.SetTopicName(topicName);
                 event->Record.SetPathId(txState->TargetPathId.LocalPathId);
-                event->Record.SetPath(TPath::Init(txState->TargetPathId, context.SS).PathString()); 
+                event->Record.SetPath(TPath::Init(txState->TargetPathId, context.SS).PathString());
                 event->Record.SetPartitionPerTablet(pqGroup->AlterData ? pqGroup->AlterData->MaxPartsPerTablet : pqGroup->MaxPartsPerTablet);
                 event->Record.SetSchemeShardId(context.SS->TabletID());
 

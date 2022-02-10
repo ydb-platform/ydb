@@ -740,7 +740,7 @@ TPersQueueReadBalancer::TClientGroupInfo& TPersQueueReadBalancer::TClientInfo::A
     clientInfo.ClientId = ClientId;
     clientInfo.Topic = Topic;
     clientInfo.TabletId = TabletId;
-    clientInfo.Path = Path; 
+    clientInfo.Path = Path;
     clientInfo.Generation = Generation;
     clientInfo.Step = &Step;
 
@@ -833,7 +833,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& 
         it->second.ClientId = record.GetClientId();
         it->second.Topic = Topic;
         it->second.TabletId = TabletID();
-        it->second.Path = Path; 
+        it->second.Path = Path;
         it->second.Generation = Generation;
         it->second.Step = 0;
     }
@@ -1142,7 +1142,7 @@ void TPersQueueReadBalancer::TClientGroupInfo::LockPartition(const TActorId pipe
     res->Record.SetSession(pipeInfo.Session);
     res->Record.SetPartition(partition);
     res->Record.SetTopic(Topic);
-    res->Record.SetPath(Path); 
+    res->Record.SetPath(Path);
     res->Record.SetGeneration(Generation);
     res->Record.SetStep(++(*Step));
     res->Record.SetClientId(ClientId);
@@ -1166,7 +1166,7 @@ void TPersQueueReadBalancer::TClientGroupInfo::ReleasePartition(const TActorId p
     THolder<TEvPersQueue::TEvReleasePartition> res{new TEvPersQueue::TEvReleasePartition};
     res->Record.SetSession(sessionInfo.Session);
     res->Record.SetTopic(Topic);
-    res->Record.SetPath(Path); 
+    res->Record.SetPath(Path);
     res->Record.SetGeneration(Generation);
     res->Record.SetClientId(ClientId);
     res->Record.SetCount(count);

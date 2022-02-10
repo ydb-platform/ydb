@@ -15,7 +15,7 @@ using namespace NKikimrClient;
 
 using grpc::Status;
 
-namespace NKikimr::NGRpcProxy::V1 { 
+namespace NKikimr::NGRpcProxy::V1 {
 
 constexpr TStringBuf GRPCS_ENDPOINT_PREFIX = "grpcs://";
 
@@ -24,7 +24,7 @@ constexpr TStringBuf GRPCS_ENDPOINT_PREFIX = "grpcs://";
 using namespace PersQueue::V1;
 
 
-IActor* CreatePQSchemaService(const TActorId& schemeCache, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) { 
+IActor* CreatePQSchemaService(const TActorId& schemeCache, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
     return new TPQSchemaService(schemeCache, counters);
 }
 
@@ -41,8 +41,8 @@ TPQSchemaService::TPQSchemaService(const TActorId& schemeCache,
 
 void TPQSchemaService::Bootstrap(const TActorContext& ctx) {
     if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) { // ToDo[migration]: switch to haveClusters
-        ctx.Send(NPQ::NClusterTracker::MakeClusterTrackerID(), 
-                 new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe); 
+        ctx.Send(NPQ::NClusterTracker::MakeClusterTrackerID(),
+                 new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe);
     }
 
     Become(&TThis::StateFunc);
@@ -87,7 +87,7 @@ void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQDropTopicRequest::TPtr
 
 
 TDropTopicActor::TDropTopicActor(NKikimr::NGRpcService::TEvPQDropTopicRequest* request)
-    : TBase(request, request->GetProtoRequest()->path()) 
+    : TBase(request, request->GetProtoRequest()->path())
 {
 }
 
@@ -99,10 +99,10 @@ void TDropTopicActor::Bootstrap(const NActors::TActorContext& ctx)
 }
 
 
-void TDropTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx, 
-                                         const TString& workingDir, const TString& name) 
-{ 
-    Y_UNUSED(ctx); 
+void TDropTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
+                                         const TString& workingDir, const TString& name)
+{
+    Y_UNUSED(ctx);
     NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
     modifyScheme.SetWorkingDir(workingDir);
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
@@ -110,7 +110,7 @@ void TDropTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& 
 }
 
 TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::TEvPQDescribeTopicRequest* request)
-    : TBase(request, request->GetProtoRequest()->path()) 
+    : TBase(request, request->GetProtoRequest()->path())
 {
 }
 
@@ -262,21 +262,21 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
 void TDescribeTopicActor::Bootstrap(const NActors::TActorContext& ctx)
 {
     TBase::Bootstrap(ctx);
- 
-    SendDescribeProposeRequest(ctx); 
+
+    SendDescribeProposeRequest(ctx);
     Become(&TDescribeTopicActor::StateWork);
 }
 
 
-TAddReadRuleActor::TAddReadRuleActor(NKikimr::NGRpcService::TEvPQAddReadRuleRequest* request) 
-    : TBase(request, request->GetProtoRequest()->path()) 
-{ 
-} 
+TAddReadRuleActor::TAddReadRuleActor(NKikimr::NGRpcService::TEvPQAddReadRuleRequest* request)
+    : TBase(request, request->GetProtoRequest()->path())
+{
+}
 
-void TAddReadRuleActor::Bootstrap(const NActors::TActorContext& ctx) { 
-    TBase::Bootstrap(ctx); 
-    SendDescribeProposeRequest(ctx); 
-    Become(&TBase::StateWork); 
+void TAddReadRuleActor::Bootstrap(const NActors::TActorContext& ctx) {
+    TBase::Bootstrap(ctx);
+    SendDescribeProposeRequest(ctx);
+    Become(&TBase::StateWork);
 }
 
 void TAddReadRuleActor::ModifyPersqueueConfig(
@@ -287,8 +287,8 @@ void TAddReadRuleActor::ModifyPersqueueConfig(
 ) {
     Y_UNUSED(pqGroupDescription);
 
-    auto* pqConfig = groupConfig.MutablePQTabletConfig(); 
-    auto rule = GetProtoRequest()->read_rule(); 
+    auto* pqConfig = groupConfig.MutablePQTabletConfig();
+    auto rule = GetProtoRequest()->read_rule();
 
     if (rule.version() == 0) {
         rule.set_version(selfInfo.GetVersion().GetPQVersion());
@@ -296,28 +296,28 @@ void TAddReadRuleActor::ModifyPersqueueConfig(
     auto serviceTypes = GetSupportedClientServiceTypes(ctx);
     TString error = AddReadRuleToConfig(pqConfig, rule, serviceTypes, ctx);
     bool hasDuplicates = false;
-    if (error.Empty()) { 
+    if (error.Empty()) {
         hasDuplicates = CheckReadRulesConfig(*pqConfig, serviceTypes, error);
-    } 
- 
-    if (!error.Empty()) { 
-        return ReplyWithError(hasDuplicates ? Ydb::StatusIds::ALREADY_EXISTS : Ydb::StatusIds::BAD_REQUEST, 
+    }
+
+    if (!error.Empty()) {
+        return ReplyWithError(hasDuplicates ? Ydb::StatusIds::ALREADY_EXISTS : Ydb::StatusIds::BAD_REQUEST,
                               hasDuplicates ? Ydb::PersQueue::ErrorCode::OK : Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
-    } 
-} 
- 
-TRemoveReadRuleActor::TRemoveReadRuleActor(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest* request) 
-    : TBase(request, request->GetProtoRequest()->path()) 
-{ 
-    Y_ASSERT(request); 
-} 
- 
-void TRemoveReadRuleActor::Bootstrap(const NActors::TActorContext& ctx) { 
-    TBase::Bootstrap(ctx); 
-    SendDescribeProposeRequest(ctx); 
-    Become(&TBase::StateWork); 
-} 
- 
+    }
+}
+
+TRemoveReadRuleActor::TRemoveReadRuleActor(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest* request)
+    : TBase(request, request->GetProtoRequest()->path())
+{
+    Y_ASSERT(request);
+}
+
+void TRemoveReadRuleActor::Bootstrap(const NActors::TActorContext& ctx) {
+    TBase::Bootstrap(ctx);
+    SendDescribeProposeRequest(ctx);
+    Become(&TBase::StateWork);
+}
+
 void TRemoveReadRuleActor::ModifyPersqueueConfig(
     const TActorContext& ctx,
     NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
@@ -334,11 +334,11 @@ void TRemoveReadRuleActor::ModifyPersqueueConfig(
     );
     if (!error.Empty()) {
         return ReplyWithError(Ydb::StatusIds::NOT_FOUND, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
-    } 
-} 
- 
+    }
+}
+
 TCreateTopicActor::TCreateTopicActor(NKikimr::NGRpcService::TEvPQCreateTopicRequest* request, const TString& localCluster, const TVector<TString>& clusters)
-    : TBase(request, request->GetProtoRequest()->path()) 
+    : TBase(request, request->GetProtoRequest()->path())
     , LocalCluster(localCluster)
     , Clusters(clusters)
 {
@@ -354,7 +354,7 @@ void TCreateTopicActor::Bootstrap(const NActors::TActorContext& ctx)
 
 
 TAlterTopicActor::TAlterTopicActor(NKikimr::NGRpcService::TEvPQAlterTopicRequest* request)
-    : TBase(request, request->GetProtoRequest()->path()) 
+    : TBase(request, request->GetProtoRequest()->path())
 {
     Y_ASSERT(request);
 }
@@ -366,9 +366,9 @@ void TAlterTopicActor::Bootstrap(const NActors::TActorContext& ctx)
     Become(&TAlterTopicActor::StateWork);
 }
 
-void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx, 
-                                            const TString& workingDir, const TString& name) 
-{ 
+void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
+                                            const TString& workingDir, const TString& name)
+{
     NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
     modifyScheme.SetWorkingDir(workingDir);
 
@@ -396,16 +396,16 @@ void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction
 }
 
 
-void TAlterTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx, 
-                                            const TString& workingDir, const TString& name) { 
+void TAlterTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
+                                            const TString& workingDir, const TString& name) {
     NKikimrSchemeOp::TModifyScheme &modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
     modifyScheme.SetWorkingDir(workingDir);
-    TString error; 
-    auto status = FillProposeRequestImpl(name, GetProtoRequest()->settings(), modifyScheme, ctx, true, error); 
-    if (!error.empty()) { 
-        Request_->RaiseIssue(FillIssue(error, PersQueue::ErrorCode::BAD_REQUEST)); 
- 
-        return ReplyWithResult(status, ctx); 
+    TString error;
+    auto status = FillProposeRequestImpl(name, GetProtoRequest()->settings(), modifyScheme, ctx, true, error);
+    if (!error.empty()) {
+        Request_->RaiseIssue(FillIssue(error, PersQueue::ErrorCode::BAD_REQUEST));
+
+        return ReplyWithResult(status, ctx);
     }
 }
 
@@ -417,21 +417,21 @@ void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQAlterTopicRequest::TPt
     ctx.Register(new TAlterTopicActor(ev->Release().Release()));
 }
 
-void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQAddReadRuleRequest::TPtr& ev, const TActorContext& ctx) { 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new Add read rules request"); 
-    ctx.Register(new TAddReadRuleActor(ev->Release().Release())); 
-} 
+void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQAddReadRuleRequest::TPtr& ev, const TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new Add read rules request");
+    ctx.Register(new TAddReadRuleActor(ev->Release().Release()));
+}
 
-void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest::TPtr& ev, const TActorContext& ctx) { 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new Remove read rules request"); 
-    ctx.Register(new TRemoveReadRuleActor(ev->Release().Release())); 
-} 
- 
-void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQCreateTopicRequest::TPtr& ev, const TActorContext& ctx) { 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new create topic request"); 
-    ctx.Register(new TCreateTopicActor(ev->Release().Release(), LocalCluster, Clusters)); 
-} 
- 
+void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest::TPtr& ev, const TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new Remove read rules request");
+    ctx.Register(new TRemoveReadRuleActor(ev->Release().Release()));
+}
+
+void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQCreateTopicRequest::TPtr& ev, const TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new create topic request");
+    ctx.Register(new TCreateTopicActor(ev->Release().Release(), LocalCluster, Clusters));
+}
+
 void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQDescribeTopicRequest::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new Describe topic request");
     ctx.Register(new TDescribeTopicActor(ev->Release().Release()));
@@ -456,11 +456,11 @@ void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEv
 void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQDescribeTopicRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
 }
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQAddReadRuleRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release()); 
-} 
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQAddReadRuleRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
+}

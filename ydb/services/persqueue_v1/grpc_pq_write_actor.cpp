@@ -90,7 +90,7 @@ static const TString SELECT_SOURCEID_QUERY1 =
     "DECLARE $Topic AS Utf8; "
     "DECLARE $SourceId AS Utf8; "
     "SELECT Partition, CreateTime FROM `";
-static const TString SELECT_SOURCEID_QUERY2 = "` " 
+static const TString SELECT_SOURCEID_QUERY2 = "` "
     "WHERE Hash == $Hash AND Topic == $Topic AND SourceId == $SourceId; ";
 
 static const TString UPDATE_SOURCEID_QUERY1 =
@@ -102,7 +102,7 @@ static const TString UPDATE_SOURCEID_QUERY1 =
     "DECLARE $CreateTime AS Uint64; "
     "DECLARE $AccessTime AS Uint64; "
     "UPSERT INTO `";
-static const TString UPDATE_SOURCEID_QUERY2 = "` (Hash, Topic, SourceId, CreateTime, AccessTime, Partition) VALUES " 
+static const TString UPDATE_SOURCEID_QUERY2 = "` (Hash, Topic, SourceId, CreateTime, AccessTime, Partition) VALUES "
     "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition); ";
 
 //TODO: add here tracking of bytes in/out
@@ -117,7 +117,7 @@ TWriteSessionActor::TWriteSessionActor(
     : Request(request)
     , State(ES_CREATED)
     , SchemeCache(schemeCache)
-    , NewSchemeCache(newSchemeCache) 
+    , NewSchemeCache(newSchemeCache)
     , PeerName("")
     , Cookie(cookie)
     , TopicsController(topicsController)
@@ -154,8 +154,8 @@ TWriteSessionActor::~TWriteSessionActor() = default;
 void TWriteSessionActor::Bootstrap(const TActorContext& ctx) {
 
     Y_VERIFY(Request);
-    SelectSourceIdQuery = SELECT_SOURCEID_QUERY1 + AppData(ctx)->PQConfig.GetSourceIdTablePath() + SELECT_SOURCEID_QUERY2; 
-    UpdateSourceIdQuery = UPDATE_SOURCEID_QUERY1 + AppData(ctx)->PQConfig.GetSourceIdTablePath() + UPDATE_SOURCEID_QUERY2; 
+    SelectSourceIdQuery = SELECT_SOURCEID_QUERY1 + AppData(ctx)->PQConfig.GetSourceIdTablePath() + SELECT_SOURCEID_QUERY2;
+    UpdateSourceIdQuery = UPDATE_SOURCEID_QUERY1 + AppData(ctx)->PQConfig.GetSourceIdTablePath() + UPDATE_SOURCEID_QUERY2;
 
     Request->GetStreamCtx()->Attach(ctx.SelfID);
     if (!Request->GetStreamCtx()->Read()) {
@@ -263,9 +263,9 @@ void TWriteSessionActor::CheckACL(const TActorContext& ctx) {
     //Y_VERIFY(ACLCheckInProgress);
 
     NACLib::EAccessRights rights = NACLib::EAccessRights::UpdateRow;
- 
-    Y_VERIFY(ACL); 
-    if (ACL->CheckAccess(rights, *Token)) { 
+
+    Y_VERIFY(ACL);
+    if (ACL->CheckAccess(rights, *Token)) {
         ACLCheckInProgress = false;
         if (FirstACLCheck) {
             FirstACLCheck = false;
@@ -311,7 +311,7 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
                 PersQueue::ErrorCode::BAD_REQUEST, ctx
         );
         return;
-    } 
+    }
 
     PeerName = event->PeerName;
 
@@ -333,16 +333,16 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     UserAgent = "pqv1 server";
     LogSession(ctx);
 
-    if (Request->GetInternalToken().empty()) { // session without auth 
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) { 
-            Request->ReplyUnauthenticated("Unauthenticated access is forbidden, please provide credentials"); 
-            Die(ctx); 
-            return; 
-        } 
-    } 
+    if (Request->GetInternalToken().empty()) { // session without auth
+        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+            Request->ReplyUnauthenticated("Unauthenticated access is forbidden, please provide credentials");
+            Die(ctx);
+            return;
+        }
+    }
 
-    InitCheckSchema(ctx, true); 
- 
+    InitCheckSchema(ctx, true);
+
     PreferedPartition = init.partition_group_id() > 0 ? init.partition_group_id() - 1 : Max<ui32>();
 
     InitMeta = GetInitialDataChunk(init, TopicConverter->GetFullLegacyName(), PeerName); // ToDo[migration] - check?
@@ -393,18 +393,18 @@ void TWriteSessionActor::SetupCounters(const TString& cloudId, const TString& db
     SessionsActive.Inc();
 }
 
-void TWriteSessionActor::InitCheckSchema(const TActorContext& ctx, bool needWaitSchema) { 
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "init check schema"); 
+void TWriteSessionActor::InitCheckSchema(const TActorContext& ctx, bool needWaitSchema) {
+    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "init check schema");
 
     if (!needWaitSchema) {
         ACLCheckInProgress = true;
-    } 
+    }
     ctx.Send(SchemeCache, new TEvDescribeTopicsRequest({TopicConverter->GetPrimaryPath()}));
-    if (needWaitSchema) { 
-        State = ES_WAIT_SCHEME_2; 
-    } 
-} 
- 
+    if (needWaitSchema) {
+        State = ES_WAIT_SCHEME_2;
+    }
+}
+
 void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
     auto* res = ev->Get()->Result.Get();
     Y_VERIFY(res->ResultSet.size() == 1);
@@ -452,44 +452,44 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
     } else {
         Y_VERIFY(Request->GetYdbToken());
         Auth = *Request->GetYdbToken();
- 
+
         Token = new NACLib::TUserToken(Request->GetInternalToken());
         CheckACL(ctx);
     }
 }
 
-void TWriteSessionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) { 
-    TEvTxProxySchemeCache::TEvNavigateKeySetResult* msg = ev->Get(); 
-    const NSchemeCache::TSchemeCacheNavigate* navigate = msg->Request.Get(); 
-    Y_VERIFY(navigate->ResultSet.size() == 1); 
-    if (navigate->ErrorCount > 0) { 
-        const NSchemeCache::TSchemeCacheNavigate::EStatus status = navigate->ResultSet.front().Status; 
+void TWriteSessionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
+    TEvTxProxySchemeCache::TEvNavigateKeySetResult* msg = ev->Get();
+    const NSchemeCache::TSchemeCacheNavigate* navigate = msg->Request.Get();
+    Y_VERIFY(navigate->ResultSet.size() == 1);
+    if (navigate->ErrorCount > 0) {
+        const NSchemeCache::TSchemeCacheNavigate::EStatus status = navigate->ResultSet.front().Status;
         return CloseSession(
                 TStringBuilder() << "Failed to read ACL for '" << TopicConverter->GetClientsideName()
                                  << "' Scheme cache error : " << status,
                 PersQueue::ErrorCode::ERROR, ctx
         );
-    } 
- 
+    }
+
     const auto& pqDescription = navigate->ResultSet.front().PQGroupInfo->Description;
- 
+
     Y_VERIFY(pqDescription.PartitionsSize() > 0);
     Y_VERIFY(pqDescription.HasPQTabletConfig());
     InitialPQTabletConfig = pqDescription.GetPQTabletConfig();
- 
+
     if (!pqDescription.HasBalancerTabletID()) {
         TString errorReason = Sprintf("topic '%s' has no balancer, Marker# PQ93", TopicConverter->GetClientsideName().c_str());
-        CloseSession(errorReason, PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx); 
-        return; 
-    } 
- 
+        CloseSession(errorReason, PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx);
+        return;
+    }
+
     BalancerTabletId = pqDescription.GetBalancerTabletID();
- 
+
     for (ui32 i = 0; i < pqDescription.PartitionsSize(); ++i) {
         const auto& pi = pqDescription.GetPartitions(i);
-        PartitionToTablet[pi.GetPartitionId()] = pi.GetTabletId(); 
-    } 
- 
+        PartitionToTablet[pi.GetPartitionId()] = pi.GetTabletId();
+    }
+
     if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
         const auto& tabletConfig = pqDescription.GetPQTabletConfig();
         SetupCounters(tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
@@ -497,22 +497,22 @@ void TWriteSessionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
     } else {
         SetupCounters();
     }
- 
-    Y_VERIFY(!navigate->ResultSet.empty()); 
-    ACL.Reset(new TAclWrapper(navigate->ResultSet.front().SecurityObject)); 
- 
-    if (Request->GetInternalToken().empty()) { // session without auth 
-        // We've already checked authentication flag in init request. Here we should finish it 
-        FirstACLCheck = false; 
-        DiscoverPartition(ctx); 
-    } else { 
-        Y_VERIFY(Request->GetYdbToken()); 
-        Auth = *Request->GetYdbToken(); 
-        Token = new NACLib::TUserToken(Request->GetInternalToken()); 
-        CheckACL(ctx); 
-    } 
-} 
- 
+
+    Y_VERIFY(!navigate->ResultSet.empty());
+    ACL.Reset(new TAclWrapper(navigate->ResultSet.front().SecurityObject));
+
+    if (Request->GetInternalToken().empty()) { // session without auth
+        // We've already checked authentication flag in init request. Here we should finish it
+        FirstACLCheck = false;
+        DiscoverPartition(ctx);
+    } else {
+        Y_VERIFY(Request->GetYdbToken());
+        Auth = *Request->GetYdbToken();
+        Token = new NACLib::TUserToken(Request->GetInternalToken());
+        CheckACL(ctx);
+    }
+}
+
 void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
 
     if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) { // ToDo[migration] - separate flag for having config tables
@@ -1026,14 +1026,14 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvUpdateToken::TPtr& ev, const TAct
 
 void TWriteSessionActor::Handle(NGRpcService::TGRpcRequestProxy::TEvRefreshTokenResponse::TPtr &ev , const TActorContext& ctx) {
     Y_UNUSED(ctx);
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "updating token"); 
- 
+    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "updating token");
+
     if (ev->Get()->Authenticated && !ev->Get()->InternalToken.empty()) {
         Token = new NACLib::TUserToken(ev->Get()->InternalToken);
-        Request->SetInternalToken(ev->Get()->InternalToken); 
+        Request->SetInternalToken(ev->Get()->InternalToken);
         UpdateTokenAuthenticated = true;
         if (!ACLCheckInProgress) {
-            InitCheckSchema(ctx); 
+            InitCheckSchema(ctx);
         }
     } else {
         Request->ReplyUnauthenticated("refreshed token is invalid");
@@ -1156,7 +1156,7 @@ void TWriteSessionActor::HandleWakeup(const TActorContext& ctx) {
     ctx.Schedule(CHECK_ACL_DELAY, new TEvents::TEvWakeup());
     if (Token && !ACLCheckInProgress && RequestNotChecked && (ctx.Now() - LastACLCheckTimestamp > TDuration::Seconds(AppData(ctx)->PQConfig.GetACLRetryTimeoutSec()))) {
         RequestNotChecked = false;
-        InitCheckSchema(ctx); 
+        InitCheckSchema(ctx);
     }
     // ToDo[migration] - separate flag for having config tables
     if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() && !SourceIdUpdateInfly && ctx.Now() - LastSourceIdUpdate > SOURCEID_UPDATE_PERIOD) {

@@ -2,40 +2,40 @@
 #include <ydb/services/ydb/ydb_common_ut.h>
 #include <ydb/services/persqueue_v1/ut/persqueue_test_fixture.h>
 #include <ydb/services/ydb/ydb_keys_ut.h>
- 
+
 #include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/api/grpc/draft/ydb_datastreams_v1.grpc.pb.h>
- 
+
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/digest/md5/md5.h>
 
 #include <random>
 
 
-using namespace NYdb; 
-using namespace NYdb::NTable; 
-using namespace NKikimr::NPersQueueTests; 
+using namespace NYdb;
+using namespace NYdb::NTable;
+using namespace NKikimr::NPersQueueTests;
 using namespace NKikimr::NDataStreams::V1;
 namespace YDS_V1 = Ydb::DataStreams::V1;
 namespace NYDS_V1 = NYdb::NDataStreams::V1;
-struct WithSslAndAuth : TKikimrTestSettings { 
-    static constexpr bool SSL = true; 
-    static constexpr bool AUTH = true; 
-}; 
-using TKikimrWithGrpcAndRootSchemaSecure = NYdb::TBasicKikimrWithGrpcAndRootSchema<WithSslAndAuth>; 
- 
- 
-template<class TKikimr, bool secure> 
+struct WithSslAndAuth : TKikimrTestSettings {
+    static constexpr bool SSL = true;
+    static constexpr bool AUTH = true;
+};
+using TKikimrWithGrpcAndRootSchemaSecure = NYdb::TBasicKikimrWithGrpcAndRootSchema<WithSslAndAuth>;
+
+
+template<class TKikimr, bool secure>
 class TDatastreamsTestServer {
-public: 
+public:
     TDatastreamsTestServer() {
-        NKikimrConfig::TAppConfig appConfig; 
-        appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true); 
-        appConfig.MutablePQConfig()->SetEnabled(true); 
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
+        appConfig.MutablePQConfig()->SetEnabled(true);
         appConfig.MutablePQConfig()->SetMetaCacheRefreshIntervalMilliSeconds(30000);
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(true);
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
@@ -47,51 +47,51 @@ public:
         MeteringFile = MakeHolder<TTempFileHandle>("meteringData.txt");
         appConfig.MutableMeteringConfig()->SetMeteringFilePath(MeteringFile->Name());
 
-        if (secure) { 
-            appConfig.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true); 
-        } 
-        KikimrServer = std::make_unique<TKikimr>(std::move(appConfig)); 
-        ui16 grpc = KikimrServer->GetPort(); 
-        TString location = TStringBuilder() << "localhost:" << grpc; 
+        if (secure) {
+            appConfig.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+        }
+        KikimrServer = std::make_unique<TKikimr>(std::move(appConfig));
+        ui16 grpc = KikimrServer->GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
         auto driverConfig = TDriverConfig().SetEndpoint(location).SetLog(CreateLogBackend("cerr", TLOG_DEBUG));
-        if (secure) { 
-            driverConfig.UseSecureConnection(NYdbSslTestData::CaCrt); 
-        } else { 
-            driverConfig.SetDatabase("/Root/"); 
-        } 
- 
-        Driver = std::make_unique<TDriver>(std::move(driverConfig)); 
+        if (secure) {
+            driverConfig.UseSecureConnection(NYdbSslTestData::CaCrt);
+        } else {
+            driverConfig.SetDatabase("/Root/");
+        }
+
+        Driver = std::make_unique<TDriver>(std::move(driverConfig));
         DataStreamsClient = std::make_unique<NYDS_V1::TDataStreamsClient>(*Driver,
-             TCommonClientSettings() 
-                 .AuthToken("user@builtin")); 
- 
-        { 
-            NYdb::NScheme::TSchemeClient schemeClient(*Driver); 
-            NYdb::NScheme::TPermissions permissions("user@builtin", {"ydb.generic.read", "ydb.generic.write"}); 
- 
-            auto result = schemeClient.ModifyPermissions("/Root", 
+             TCommonClientSettings()
+                 .AuthToken("user@builtin"));
+
+        {
+            NYdb::NScheme::TSchemeClient schemeClient(*Driver);
+            NYdb::NScheme::TPermissions permissions("user@builtin", {"ydb.generic.read", "ydb.generic.write"});
+
+            auto result = schemeClient.ModifyPermissions("/Root",
                 NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
-            ).ExtractValueSync(); 
+            ).ExtractValueSync();
             Cerr << result.GetIssues().ToString() << "\n";
             UNIT_ASSERT(result.IsSuccess());
-        } 
+        }
 
         TClient client(*(KikimrServer->ServerSettings));
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
                                  client.AlterUserAttributes("/", "Root", {{"folder_id", "somefolder"},{"cloud_id", "somecloud"}, {"database_id", "root"}}));
-    } 
- 
-public: 
-    std::unique_ptr<TKikimr> KikimrServer; 
-    std::unique_ptr<TDriver> Driver; 
+    }
+
+public:
+    std::unique_ptr<TKikimr> KikimrServer;
+    std::unique_ptr<TDriver> Driver;
     std::unique_ptr<NYDS_V1::TDataStreamsClient> DataStreamsClient;
     std::unique_ptr<NYDS_V1::TDataStreamsClient> UnauthenticatedClient;
     THolder<TTempFileHandle> MeteringFile;
-}; 
- 
+};
+
 using TInsecureDatastreamsTestServer = TDatastreamsTestServer<TKikimrWithGrpcAndRootSchema, false>;
 using TSecureDatastreamsTestServer = TDatastreamsTestServer<TKikimrWithGrpcAndRootSchemaSecure, true>;
- 
+
 void CheckMeteringFile(TTempFileHandle* meteringFile, const TString& streamPath) {
     Sleep(TDuration::Seconds(1));
     meteringFile->Flush();
@@ -131,29 +131,29 @@ void CheckMeteringFile(TTempFileHandle* meteringFile, const TString& streamPath)
 
 #define Y_UNIT_TEST_NAME this->Name_;
 
-Y_UNIT_TEST_SUITE(DataStreams) { 
- 
+Y_UNIT_TEST_SUITE(DataStreams) {
+
     Y_UNIT_TEST(TestControlPlaneAndMeteringData) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
-        // Trying to delete stream that doesn't exist yet 
-        { 
+        // Trying to delete stream that doesn't exist yet
+        {
             auto result = testServer.DataStreamsClient->DeleteStream("testfolder/" + streamName).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(3)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             if (result.GetStatus() != EStatus::SUCCESS) {
                 result.GetIssues().PrintTo(Cerr);
             }
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->DescribeStream(streamName).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -189,10 +189,10 @@ Y_UNIT_TEST_SUITE(DataStreams) {
 
         {
             auto result = testServer.DataStreamsClient->CreateStream("testfolder/" + streamName).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
-        } 
- 
+        }
+
         {  // for metering purposes
             std::vector<NYDS_V1::TDataRecord> records;
             for (ui32 i = 1; i <= 30; ++i) {
@@ -205,102 +205,102 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
-        { 
+        {
             auto result = testServer.DataStreamsClient->ListStreams().ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names().size(), 1); 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names(0), streamName);
-        } 
- 
-        // cannot decrease the number of shards 
-        { 
+        }
+
+        // cannot decrease the number of shards
+        {
             auto result = testServer.DataStreamsClient->UpdateShardCount(streamName,
                 NYDS_V1::TUpdateShardCountSettings().TargetShardCount(2)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->UpdateShardCount(streamName,
                 NYDS_V1::TUpdateShardCountSettings().TargetShardCount(15)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
 
-        // now when stream is created delete should work fine 
-        { 
+
+        // now when stream is created delete should work fine
+        {
             auto result = testServer.DataStreamsClient->DeleteStream(streamName).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        // Describe should fail after delete 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        // Describe should fail after delete
+        {
             auto result = testServer.DataStreamsClient->DescribeStream(streamName).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR); 
-        } 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+        }
         CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestCreateExistingStream) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
-        { 
+        {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(10)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(10)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ALREADY_EXISTS); 
-        } 
- 
-    } 
- 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ALREADY_EXISTS);
+        }
+
+    }
+
     Y_UNIT_TEST(TestStreamPagination) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
-        for (ui32 folderIdx = 0; folderIdx < 4; folderIdx++) { 
-            for (ui32 streamIdx = 0; streamIdx < 5; streamIdx++) { 
+        for (ui32 folderIdx = 0; folderIdx < 4; folderIdx++) {
+            for (ui32 streamIdx = 0; streamIdx < 5; streamIdx++) {
                 TStringBuilder streamNameX = TStringBuilder() <<  folderIdx  << streamName << streamIdx;
                 auto result = testServer.DataStreamsClient->CreateStream(streamNameX, NYDS_V1::TCreateStreamSettings().ShardCount(10)).ExtractValueSync();
                 Cerr << result.GetIssues().ToString() << "\n";
-                UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-            } 
-        } 
- 
-        TString startStream; 
-        THashSet<TString> streams; 
-        for (int i = 0; i < 3; i++) { 
+                UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            }
+        }
+
+        TString startStream;
+        THashSet<TString> streams;
+        for (int i = 0; i < 3; i++) {
             auto result = testServer.DataStreamsClient->ListStreams(NYDS_V1::TListStreamsSettings().Limit(6).ExclusiveStartStreamName(startStream)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names().size(), 6); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().has_more_streams(), true); 
-            streams.insert(result.GetResult().stream_names().begin(), result.GetResult().stream_names().end()); 
-            startStream = result.GetResult().stream_names(5); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names().size(), 6);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().has_more_streams(), true);
+            streams.insert(result.GetResult().stream_names().begin(), result.GetResult().stream_names().end());
+            startStream = result.GetResult().stream_names(5);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->ListStreams(NYDS_V1::TListStreamsSettings().Limit(6).ExclusiveStartStreamName(startStream)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names().size(), 2); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().has_more_streams(), false); 
-            streams.insert(result.GetResult().stream_names().begin(), result.GetResult().stream_names().end()); 
-        } 
- 
-        UNIT_ASSERT_VALUES_EQUAL(streams.size(), 20); 
-    } 
- 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().has_more_streams(), false);
+            streams.insert(result.GetResult().stream_names().begin(), result.GetResult().stream_names().end());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(streams.size(), 20);
+    }
+
     Y_UNIT_TEST(TestDeleteStream) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
@@ -392,130 +392,130 @@ Y_UNIT_TEST_SUITE(DataStreams) {
     Y_UNIT_TEST(TestUpdateStream) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
-        { 
+        {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(10)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        for (ui32 i = 0; i < 2; ++i) { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        for (ui32 i = 0; i < 2; ++i) {
             auto result = testServer.DataStreamsClient->UpdateStream(streamName,
                  NYDS_V1::TUpdateStreamSettings().RetentionPeriodHours(5).TargetShardCount(20).WriteQuotaKbPerSec(128)
             ).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->DescribeStream(streamName).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards_size(), 20);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().retention_period_hours(), 5);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().write_quota_kb_per_sec(), 128);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().owner(), "user@builtin");
             UNIT_ASSERT(result.GetResult().stream_description().stream_creation_timestamp() > 0);
-        } 
-    } 
- 
+        }
+    }
+
     Y_UNIT_TEST(TestStreamRetention) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
-        { 
+        {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(10)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->IncreaseStreamRetentionPeriod(streamName,
                 NYDS_V1::TIncreaseStreamRetentionPeriodSettings().RetentionPeriodHours(50)
             ).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->DecreaseStreamRetentionPeriod(streamName,
                 NYDS_V1::TDecreaseStreamRetentionPeriodSettings().RetentionPeriodHours(8)
             ).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->IncreaseStreamRetentionPeriod(streamName,
                 NYDS_V1::TIncreaseStreamRetentionPeriodSettings().RetentionPeriodHours(4)
             ).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->IncreaseStreamRetentionPeriod(streamName,
                 NYDS_V1::TIncreaseStreamRetentionPeriodSettings().RetentionPeriodHours(15)
             ).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-    } 
- 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+    }
+
     Y_UNIT_TEST(TestShardPagination) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
-        { 
+        {
             auto result = testServer.DataStreamsClient->CreateStream("/Root/" + streamName, NYDS_V1::TCreateStreamSettings().ShardCount(9)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        // describe stream 
-        { 
-            TString exclusiveStartShardId; 
-            THashSet<TString> describedShards; 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        // describe stream
+        {
+            TString exclusiveStartShardId;
+            THashSet<TString> describedShards;
             for (int i = 0; i < 8; i += 2) {
                 auto result = testServer.DataStreamsClient->DescribeStream(streamName,
                                                     NYDS_V1::TDescribeStreamSettings()
                                                         .Limit(2)
-                                                        .ExclusiveStartShardId(exclusiveStartShardId) 
-                                                    ).ExtractValueSync(); 
-                UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
+                                                        .ExclusiveStartShardId(exclusiveStartShardId)
+                                                    ).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
                 auto& description = result.GetResult().stream_description();
                 UNIT_ASSERT_VALUES_EQUAL(description.shards().size(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(description.has_more_shards(), true); 
-                for (const auto& shard : description.shards()) { 
-                    describedShards.insert(shard.shard_id()); 
-                } 
+                UNIT_ASSERT_VALUES_EQUAL(description.has_more_shards(), true);
+                for (const auto& shard : description.shards()) {
+                    describedShards.insert(shard.shard_id());
+                }
                 exclusiveStartShardId = description.shards(1).shard_id();
-            } 
- 
-            { 
+            }
+
+            {
                 auto result = testServer.DataStreamsClient->DescribeStream(streamName,
                                                     NYDS_V1::TDescribeStreamSettings()
                                                             .Limit(2)
-                                                            .ExclusiveStartShardId( 
+                                                            .ExclusiveStartShardId(
                                                                     exclusiveStartShardId)
                 ).ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
+                UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
                 auto &description = result.GetResult().stream_description();
                 UNIT_ASSERT_VALUES_EQUAL(description.shards().size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(description.has_more_shards(), false); 
-                for (const auto& shard : description.shards()) { 
-                    describedShards.insert(shard.shard_id()); 
-                } 
-            } 
- 
-            // check for total number of shards 
+                UNIT_ASSERT_VALUES_EQUAL(description.has_more_shards(), false);
+                for (const auto& shard : description.shards()) {
+                    describedShards.insert(shard.shard_id());
+                }
+            }
+
+            // check for total number of shards
             UNIT_ASSERT_EQUAL(describedShards.size(), 9);
-        } 
- 
-    } 
- 
+        }
+
+    }
+
 
 #define SET_YDS_LOCALS                               \
     auto& kikimr = testServer.KikimrServer->Server_; \
@@ -528,12 +528,12 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
         SET_YDS_LOCALS;
-        { 
+        {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(5)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::EPriority::PRI_DEBUG);
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NLog::EPriority::PRI_DEBUG);
 
@@ -547,20 +547,20 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         UNIT_ASSERT_VALUES_EQUAL(putRecordResult.IsTransportError(), false);
         UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetStatus(), EStatus::SUCCESS);
 
-        { 
+        {
             std::vector<NYDS_V1::TDataRecord> records;
-            for (ui32 i = 1; i <= 30; ++i) { 
-                TString data = Sprintf("%04u", i); 
-                records.push_back({data, data, ""}); 
-            } 
+            for (ui32 i = 1; i <= 30; ++i) {
+                TString data = Sprintf("%04u", i);
+                records.push_back({data, data, ""});
+            }
             auto result = client.PutRecords(streamName, records).ExtractValueSync();
-            Cerr << result.GetResult().DebugString() << Endl; 
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
+            Cerr << result.GetResult().DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
         NYdb::NPersQueue::TPersQueueClient pqClient(*driver);
- 
+
         {
             auto result = testServer.DataStreamsClient->RegisterStreamConsumer(streamName, "user1", NYDS_V1::TRegisterStreamConsumerSettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -570,105 +570,105 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                      YDS_V1::ConsumerDescription_ConsumerStatus_ACTIVE);
         }
 
-        auto session = pqClient.CreateReadSession(NYdb::NPersQueue::TReadSessionSettings() 
+        auto session = pqClient.CreateReadSession(NYdb::NPersQueue::TReadSessionSettings()
                                                           .ConsumerName("user1")
-                                                          .DisableClusterDiscovery(true) 
+                                                          .DisableClusterDiscovery(true)
                                                           .AppendTopics(NYdb::NPersQueue::TTopicReadSettings().Path("/Root/" + streamName)));
-        ui32 readCount = 0; 
-        while (readCount < 31) { 
-            auto event = session->GetEvent(true); 
+        ui32 readCount = 0;
+        while (readCount < 31) {
+            auto event = session->GetEvent(true);
 
-            if (auto* dataReceivedEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&*event)) { 
-                for (const auto& item : dataReceivedEvent->GetMessages()) { 
+            if (auto* dataReceivedEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                for (const auto& item : dataReceivedEvent->GetMessages()) {
                     Cerr << item.DebugString(true) << Endl;
-                    UNIT_ASSERT_VALUES_EQUAL(item.GetData(), item.GetPartitionKey()); 
+                    UNIT_ASSERT_VALUES_EQUAL(item.GetData(), item.GetPartitionKey());
                     auto hashKey = item.GetExplicitHash().empty() ? HexBytesToDecimal(MD5::Calc(item.GetPartitionKey())) : BytesToDecimal(item.GetExplicitHash());
                     UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataStreams::V1::ShardFromDecimal(hashKey, 5), item.GetPartitionStream()->GetPartitionId());
                     UNIT_ASSERT(!item.GetIp().empty());
-                    if (item.GetData() == dataStr) { 
+                    if (item.GetData() == dataStr) {
                         UNIT_ASSERT_VALUES_EQUAL(item.GetExplicitHash(), dataStr);
-                    } 
-                    readCount++; 
-                } 
-            } else if (auto* createPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*event)) { 
-                createPartitionStreamEvent->Confirm(); 
-            } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*event)) { 
-                destroyPartitionStreamEvent->Confirm(); 
-            } else if (auto* closeSessionEvent = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) { 
-                break; 
-            } 
-        } 
-        UNIT_ASSERT_VALUES_EQUAL(readCount, 31); 
-    } 
- 
+                    }
+                    readCount++;
+                }
+            } else if (auto* createPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*event)) {
+                createPartitionStreamEvent->Confirm();
+            } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*event)) {
+                destroyPartitionStreamEvent->Confirm();
+            } else if (auto* closeSessionEvent = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
+                break;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(readCount, 31);
+    }
+
     Y_UNIT_TEST(TestPutRecordsCornerCases) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
         const TString streamPath = "/Root/" + streamName;
         SET_YDS_LOCALS;
-        { 
+        {
             auto result = testServer.DataStreamsClient->CreateStream(
                 streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(5)
             ).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::EPriority::PRI_DEBUG);
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
- 
-        // Test for too long partition key 
-        TString longKey = TString(257, '1'); 
-        TString shortEnoughKey = TString(256, '1'); 
+
+        // Test for too long partition key
+        TString longKey = TString(257, '1');
+        TString shortEnoughKey = TString(256, '1');
         auto result = client.PutRecords(streamName,
                                         {{longKey,        longKey,        ""},
                                          {shortEnoughKey, shortEnoughKey, ""}}).ExtractValueSync();
-        UNIT_ASSERT(!result.IsSuccess()); 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST); 
- 
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+
         result = client.PutRecords(streamName,
                                    {{shortEnoughKey, shortEnoughKey, ""},
                                     {shortEnoughKey, shortEnoughKey, ""}}).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess()); 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
- 
-        // Test for too long data 
-        TString longData = TString(1048577, '1'); 
-        TString shortEnoughData = TString(1048576, '1'); 
- 
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        // Test for too long data
+        TString longData = TString(1048577, '1');
+        TString shortEnoughData = TString(1048576, '1');
+
         result = client.PutRecords(streamName,
                                    {{longData,        shortEnoughKey, ""},
                                     {shortEnoughData, shortEnoughKey, ""}}).ExtractValueSync();
-        UNIT_ASSERT(!result.IsSuccess()); 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST); 
- 
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+
         result = client.PutRecords(streamName,
                                    {{shortEnoughData, shortEnoughKey, ""},
                                     {"",              shortEnoughKey, ""}}).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess()); 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
- 
-        TString longExplicitHash = "340282366920938463463374607431768211456"; 
-        TString shortEnoughExplicitHash = "340282366920938463463374607431768211455"; 
-        TString badExplicitHash = "-439025493205215"; 
- 
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        TString longExplicitHash = "340282366920938463463374607431768211456";
+        TString shortEnoughExplicitHash = "340282366920938463463374607431768211455";
+        TString badExplicitHash = "-439025493205215";
+
         result = client.PutRecords(streamName,
                                    {{"", shortEnoughKey, longExplicitHash},
                                     {"", shortEnoughKey, longExplicitHash}}).ExtractValueSync();
-        UNIT_ASSERT(!result.IsSuccess()); 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST); 
- 
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+
         result = client.PutRecords(streamName,
                                    {{"", shortEnoughKey, badExplicitHash},
                                     {"", shortEnoughKey, badExplicitHash}}).ExtractValueSync();
-        UNIT_ASSERT(!result.IsSuccess()); 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST); 
- 
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+
         result = client.PutRecords(streamName,
                                    {{"", shortEnoughKey, shortEnoughExplicitHash},
                                     {"", shortEnoughKey, shortEnoughExplicitHash}}).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess()); 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         result = client.PutRecords(streamName,
                                    {{"", shortEnoughKey, "0"},
@@ -754,63 +754,63 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             }
         }
         UNIT_ASSERT_VALUES_EQUAL(readCount, 14);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestPutRecords) {
         TSecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
         SET_YDS_LOCALS;
         const TString streamPath = "/Root/" + streamName;
-        { 
+        {
             auto result = testServer.DataStreamsClient->CreateStream(streamPath,
                 NYDS_V1::TCreateStreamSettings().ShardCount(5)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        } 
- 
+        }
+
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
         NYdb::NScheme::TSchemeClient schemeClient(*driver);
-        { 
+        {
             std::vector<NYDS_V1::TDataRecord> records;
-            for (ui32 i = 1; i <= 30; ++i) { 
-                TString data = Sprintf("%04u", i); 
-                records.push_back({data, data, ""}); 
-            } 
+            for (ui32 i = 1; i <= 30; ++i) {
+                TString data = Sprintf("%04u", i);
+                records.push_back({data, data, ""});
+            }
             auto result = client.PutRecords(streamPath, records).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            if (result.GetStatus() != EStatus::SUCCESS) { 
-                result.GetIssues().PrintTo(Cerr); 
-            } 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED); 
- 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            if (result.GetStatus() != EStatus::SUCCESS) {
+                result.GetIssues().PrintTo(Cerr);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+
             {
                 NYdb::NScheme::TPermissions permissions("user2@builtin", {"ydb.generic.read", "ydb.generic.write"});
                 auto result = schemeClient.ModifyPermissions(streamPath,
                     NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)).ExtractValueSync();
                 UNIT_ASSERT(result.IsSuccess());
             }
- 
+
             result = client.PutRecords(streamPath, records).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-            Cerr << "PutRecordsResponse = " << result.GetResult().DebugString() << Endl; 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 0); 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            Cerr << "PutRecordsResponse = " << result.GetResult().DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 0);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records_size(), records.size());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().encryption_type(), YDS_V1::EncryptionType::NONE);
- 
-            TString dataStr = "9876543210"; 
+
+            TString dataStr = "9876543210";
             auto putRecordResult = client.PutRecord(streamPath, {dataStr, dataStr, ""}).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(putRecordResult.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetStatus(), EStatus::SUCCESS); 
-            Cerr << "PutRecord response = " << putRecordResult.GetResult().DebugString() << Endl; 
+            UNIT_ASSERT_VALUES_EQUAL(putRecordResult.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetStatus(), EStatus::SUCCESS);
+            Cerr << "PutRecord response = " << putRecordResult.GetResult().DebugString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetResult().shard_id(), "shard-000004");
-            UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetResult().sequence_number(), "7"); 
+            UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetResult().sequence_number(), "7");
             UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetResult().encryption_type(),
                                      YDS_V1::EncryptionType::NONE);
 
-        } 
-    } 
- 
+        }
+    }
+
     Y_UNIT_TEST(TestPutEmptyMessage) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
@@ -894,34 +894,34 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         }
 
         // List stream consumers more than allowed -> get BAD_REQUEST
-        { 
+        {
             auto result = testServer.DataStreamsClient->ListStreamConsumers(streamName,
                 NYDS_V1::TListStreamConsumersSettings().MaxResults(10001)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
-        } 
- 
+        }
+
         // List stream consumers less than allowed -> get BAD_REQUEST
-        { 
+        {
             auto result = testServer.DataStreamsClient->ListStreamConsumers(streamName,
                 NYDS_V1::TListStreamConsumersSettings().MaxResults(0)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
-        } 
- 
+        }
+
         // List not created stream -> get SCHEME_ERROR
-        { 
+        {
             auto result = testServer.DataStreamsClient->ListStreamConsumers(streamName + "_XXX",
                 NYDS_V1::TListStreamConsumersSettings().MaxResults(100)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
-        } 
- 
+        }
+
         // Deregister unregistered consumer -> get NOT_FOUND
-        { 
+        {
             auto result = testServer.DataStreamsClient->DeregisterStreamConsumer(streamName, "user1",
                 NYDS_V1::TDeregisterStreamConsumerSettings()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::NOT_FOUND);
         }
 
@@ -1079,9 +1079,9 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        } 
- 
-        { 
+        }
+
+        {
             std::vector<NYDS_V1::TDataRecord> records;
             for (ui32 i = 1; i <= 30; ++i) {
                 TString data = Sprintf("%04u", i);
@@ -1089,7 +1089,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             }
 
             auto result = testServer.DataStreamsClient->PutRecords(streamName, records).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             if (result.GetStatus() != EStatus::SUCCESS) {
                 result.GetIssues().PrintTo(Cerr);
             }
@@ -1302,8 +1302,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream("/Root/" + streamName, NYDS_V1::TCreateStreamSettings().ShardCount(1)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        } 
- 
+        }
+
         std::string data;
         data.resize(1 << 10);
         std::iota(data.begin(), data.end(), 1);
@@ -1319,7 +1319,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         NYdb::NScheme::TSchemeClient schemeClient(*driver);
 
         TString shardIterator;
-        { 
+        {
             auto result = client.GetShardIterator(
                     streamName, "shard-000000",
                     YDS_V1::ShardIteratorType::TRIM_HORIZON
@@ -1485,7 +1485,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
         {
             auto result = testServer.DataStreamsClient->CreateStream(streamName, NYDS_V1::TCreateStreamSettings().ShardCount(5)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
@@ -1574,9 +1574,9 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 NYDS_V1::TCreateStreamSettings().ShardCount(1)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        } 
- 
-        { 
+        }
+
+        {
             auto result = testServer.DataStreamsClient->ListShards(streamName, {},
                 NYDS_V1::TListShardsSettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -1630,70 +1630,70 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         TInsecureDatastreamsTestServer testServer;
         {
             auto result = testServer.DataStreamsClient->DescribeLimits().ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->DescribeStreamConsumer().ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->AddTagsToStream().ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->DisableEnhancedMonitoring().ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->EnableEnhancedMonitoring().ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->ListTagsForStream().ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->MergeShards().ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->RemoveTagsFromStream().ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->SplitShard().ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->StartStreamEncryption().ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED); 
-        } 
- 
-        { 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
+        }
+
+        {
             auto result = testServer.DataStreamsClient->StopStreamEncryption().ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED); 
-        } 
- 
-    } 
- 
-} 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
+        }
+
+    }
+
+}

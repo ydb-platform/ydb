@@ -1,15 +1,15 @@
-#include "persqueue_utils.h" 
- 
+#include "persqueue_utils.h"
+
 #include <ydb/core/base/path.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
- 
+
 TAclWrapper::TAclWrapper(THolder<NACLib::TSecurityObject> acl)
     : AclOldSchemeCache(std::move(acl))
 {
     Y_VERIFY(AclOldSchemeCache);
 }
- 
+
 TAclWrapper::TAclWrapper(TIntrusivePtr<TSecurityObject> acl)
     : AclNewSchemeCache(std::move(acl))
 {
@@ -21,9 +21,9 @@ bool TAclWrapper::CheckAccess(NACLib::EAccessRights rights, const NACLib::TUserT
         return AclOldSchemeCache->CheckAccess(rights, userToken);
     } else {
         return AclNewSchemeCache->CheckAccess(rights, userToken);
-    } 
+    }
 }
- 
+
 using namespace NSchemeCache;
 
 TProcessingResult ProcessMetaCacheTopicResponse(const TSchemeCacheNavigate::TEntry& entry) {
@@ -37,7 +37,7 @@ TProcessingResult ProcessMetaCacheTopicResponse(const TSchemeCacheNavigate::TEnt
                             fullPath.c_str(), entry.Path[0].c_str()),
                     true
             };
-        } 
+        }
         case TSchemeCacheNavigate::EStatus::PathErrorUnknown: {
             return TProcessingResult {
                     Ydb::PersQueue::ErrorCode::ErrorCode::UNKNOWN_TOPIC,
@@ -55,8 +55,8 @@ TProcessingResult ProcessMetaCacheTopicResponse(const TSchemeCacheNavigate::TEnt
                     true
             };
         }
-    } 
- 
+    }
+
     if (entry.Kind != TSchemeCacheNavigate::KindTopic) {
         return TProcessingResult {
                 Ydb::PersQueue::ErrorCode::ErrorCode::UNKNOWN_TOPIC,
@@ -81,6 +81,6 @@ TProcessingResult ProcessMetaCacheTopicResponse(const TSchemeCacheNavigate::TEnt
         };
     }
     return {};
-} 
+}
 
 } // namespace NKikimr::NGRpcProxy::V1

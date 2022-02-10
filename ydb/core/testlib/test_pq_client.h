@@ -462,15 +462,15 @@ struct TPQTestClusterInfo {
     ui64 Weight = 1000;
 };
 
-static THashMap<TString, TPQTestClusterInfo> DEFAULT_CLUSTERS_LIST = { 
-    {"dc1", {"localhost", true}}, 
-    {"dc2", {"dc2.logbroker.yandex.net", true}} 
-}; 
- 
-static THashMap<TString, TPQTestClusterInfo> CLUSTERS_LIST_ONE_DC = { 
-        {"dc1", {"localhost", true}} 
-}; 
- 
+static THashMap<TString, TPQTestClusterInfo> DEFAULT_CLUSTERS_LIST = {
+    {"dc1", {"localhost", true}},
+    {"dc2", {"dc2.logbroker.yandex.net", true}}
+};
+
+static THashMap<TString, TPQTestClusterInfo> CLUSTERS_LIST_ONE_DC = {
+        {"dc1", {"localhost", true}}
+};
+
 class TFlatMsgBusPQClient : public NFlatTests::TFlatMsgBusClient {
 private:
     static constexpr ui32 FlatDomain = 0;
@@ -523,12 +523,12 @@ public:
         , GRpcPort(grpc)
         , Kikimr(GetClientConfig())
     {
-        auto driverConfig = NYdb::TDriverConfig() 
+        auto driverConfig = NYdb::TDriverConfig()
                 .SetEndpoint(TStringBuilder() << "localhost:" << GRpcPort)
                 .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
-        if (databaseName) { 
-            driverConfig.SetDatabase(*databaseName); 
-        } 
+        if (databaseName) {
+            driverConfig.SetDatabase(*databaseName);
+        }
         Driver.Reset(MakeHolder<NYdb::TDriver>(driverConfig));
     }
 
@@ -563,9 +563,9 @@ public:
     }
 
     void InitSourceIds(const TString& path = DEFAULT_SRC_IDS_PATH) {
-        TFsPath fsPath(path); 
-        CreateTable(fsPath.Dirname(), 
-           "Name: \"" + fsPath.Basename() + "\"" 
+        TFsPath fsPath(path);
+        CreateTable(fsPath.Dirname(),
+           "Name: \"" + fsPath.Basename() + "\""
            "Columns { Name: \"Hash\"             Type: \"Uint32\"}"
            "Columns { Name: \"SourceId\"         Type: \"Utf8\"}"
            "Columns { Name: \"Topic\"            Type: \"Utf8\"}"
@@ -576,12 +576,12 @@ public:
         );
     }
 
-    void InsertSourceId(ui32 hash, TString sourceId, ui64 accessTime, const TString& path = "/Root/PQ/SourceIdMeta2") { 
+    void InsertSourceId(ui32 hash, TString sourceId, ui64 accessTime, const TString& path = "/Root/PQ/SourceIdMeta2") {
         TString query =
             "DECLARE $Hash AS Uint32; "
             "DECLARE $SourceId AS Utf8; "
             "DECLARE $AccessTime AS Uint64; "
-            "UPSERT INTO [" + path + "] (Hash, SourceId, Topic, Partition, CreateTime, AccessTime) " 
+            "UPSERT INTO [" + path + "] (Hash, SourceId, Topic, Partition, CreateTime, AccessTime) "
             "VALUES($Hash, $SourceId, \"1\", 0, 0, $AccessTime); ";
 
         NYdb::TParamsBuilder builder;
@@ -594,8 +594,8 @@ public:
         RunYqlDataQueryWithParams(query, params);
     }
 
-    THashMap<TString, TInstant> ListSourceIds(const TString& path = "/Root/PQ/SourceIdMeta2") { 
-        auto result = RunYqlDataQuery("SELECT SourceId, AccessTime FROM [" + path + "];"); 
+    THashMap<TString, TInstant> ListSourceIds(const TString& path = "/Root/PQ/SourceIdMeta2") {
+        auto result = RunYqlDataQuery("SELECT SourceId, AccessTime FROM [" + path + "];");
         NYdb::TResultSetParser parser(*result);
         THashMap<TString, TInstant> sourceIds;
         while(parser.TryNextRow()) {
@@ -606,7 +606,7 @@ public:
         return sourceIds;
     }
 
-    void InitDCs(THashMap<TString, TPQTestClusterInfo> clusters = DEFAULT_CLUSTERS_LIST, const TString& localCluster = TString()) { 
+    void InitDCs(THashMap<TString, TPQTestClusterInfo> clusters = DEFAULT_CLUSTERS_LIST, const TString& localCluster = TString()) {
         MkDir("/Root/PQ", "Config");
         MkDir("/Root/PQ/Config", "V2");
         RunYqlSchemeQuery(R"___(
@@ -896,25 +896,25 @@ public:
         const TInstant start = TInstant::Now();
 
         THolder<NMsgBusProxy::TBusPersQueue> request = createRequest.GetRequest();
- 
+
         ui32 prevVersion = TopicCreated(createRequest.Topic);
         TAutoPtr<NBus::TBusMessage> reply;
         const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request, reply);
         UNIT_ASSERT(response);
         UNIT_ASSERT_VALUES_EQUAL_C((ui32)response->Record.GetErrorCode(), (ui32)NPersQueue::NErrorCode::OK,
                                    "proxy failure");
- 
+
         AddTopic(createRequest.Topic);
         while (doWait && TopicRealCreated(createRequest.Topic) != prevVersion + 1) {
             Sleep(TDuration::MilliSeconds(500));
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
-        } 
+        }
         while (doWait && TopicCreated(createRequest.Topic, prevVersion) != prevVersion + 1) {
             Sleep(TDuration::MilliSeconds(500));
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
-    } 
- 
+    }
+
     void CreateTopic(
         const TString& name,
         ui32 nParts,

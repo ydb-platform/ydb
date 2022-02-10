@@ -1,16 +1,16 @@
-LIBRARY() 
- 
-OWNER(g:kikimr) 
- 
-SRCS( 
-    datastreams_proxy.cpp 
-    grpc_service.cpp 
+LIBRARY()
+
+OWNER(g:kikimr)
+
+SRCS(
+    datastreams_proxy.cpp
+    grpc_service.cpp
     next_token.cpp
-    put_records_actor.cpp 
+    put_records_actor.cpp
     shard_iterator.cpp
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/grpc/server
     ydb/core/base
     ydb/core/client/server
@@ -24,9 +24,9 @@ PEERDIR(
     ydb/services/lib/actors
     ydb/services/lib/sharding
     ydb/services/ydb
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE_FOR_TESTS(
     ut

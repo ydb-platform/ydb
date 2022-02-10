@@ -102,11 +102,11 @@ message TPQConfig {
 
     repeated TChannelProfile ChannelProfiles = 31;
 
-    optional bool TopicsAreFirstClassCitizen = 32 [default = false]; 
+    optional bool TopicsAreFirstClassCitizen = 32 [default = false];
 
-    optional string SourceIdTablePath = 33 [default = "/Root/PQ/SourceIdMeta2"]; 
- 
-    repeated uint32 ValidWriteSpeedLimitsKbPerSec = 34; 
+    optional string SourceIdTablePath = 33 [default = "/Root/PQ/SourceIdMeta2"];
+
+    repeated uint32 ValidWriteSpeedLimitsKbPerSec = 34;
 
     message TReadMeteringConfig {
         message TPricing {
@@ -228,7 +228,7 @@ message TPQTabletConfig {
     optional uint64 CacheSize = 1 [default = 104857600]; //100Mb, per tablet
     optional TPartitionConfig PartitionConfig = 2; //mandatory
     repeated uint32 PartitionIds = 3; //will be filled by schemeshard, don't touch. Deprecated by Partitions (id: 31)
-    optional string TopicName = 4;  // also filled by schemeshard 
+    optional string TopicName = 4;  // also filled by schemeshard
     optional uint32 Version = 5; //also filled by schemeshard
     optional bool LocalDC = 6 [default = false];
     optional bool RequireAuthWrite = 7 [default = false];
@@ -255,7 +255,7 @@ message TPQTabletConfig {
     repeated uint64 ReadRuleVersions = 22;
     repeated uint64 ReadRuleGenerations = 32;
 
-    optional string TopicPath = 23; 
+    optional string TopicPath = 23;
 
     optional uint64 AbcId = 24;
     optional string AbcSlug = 25;
@@ -457,7 +457,7 @@ message TLockPartition {
     optional string Session = 6;
     optional string ClientId = 7;
     optional NActorsProto.TActorId PipeClient = 8;
-    optional string Path = 9; 
+    optional string Path = 9;
 }
 
 message TReleasePartition {
@@ -468,7 +468,7 @@ message TReleasePartition {
     optional uint32 Count = 5;
     optional NActorsProto.TActorId PipeClient = 6;
     optional uint32 Group = 7;
-    optional string Path = 8; 
+    optional string Path = 8;
 }
 
 message TPartitionReleased {
@@ -652,7 +652,7 @@ message TBatchHeader {
         ECompressed = 1;
     }
     optional uint32 Format = 7; //for EPayloadFormat
-    optional bool HasKinesis = 8; 
+    optional bool HasKinesis = 8;
 }
 
 message TUserInfo {

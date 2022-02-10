@@ -1,12 +1,12 @@
-OWNER( 
+OWNER(
     g:kikimr
-    g:sqs 
-) 
- 
-LIBRARY() 
- 
-SRCS( 
-    error.cpp 
-) 
- 
-END() 
+    g:sqs
+)
+
+LIBRARY()
+
+SRCS(
+    error.cpp
+)
+
+END()

@@ -4,7 +4,7 @@
 #include "rpc_deferrable.h"
 
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
- 
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -66,18 +66,18 @@ protected:
                 {
                     return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, ctx);
                 }
-                break; 
+                break;
             }
             case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress: {
-                ui64 schemeShardTabletId = msg->Record.GetSchemeShardTabletId(); 
-                IActor* pipeActor = NTabletPipe::CreateClient(ctx.SelfID, schemeShardTabletId); 
-                Y_VERIFY(pipeActor); 
-                SchemePipeActorId_ = ctx.ExecutorThread.RegisterActor(pipeActor); 
+                ui64 schemeShardTabletId = msg->Record.GetSchemeShardTabletId();
+                IActor* pipeActor = NTabletPipe::CreateClient(ctx.SelfID, schemeShardTabletId);
+                Y_VERIFY(pipeActor);
+                SchemePipeActorId_ = ctx.ExecutorThread.RegisterActor(pipeActor);
 
                 auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
-                request->Record.SetTxId(msg->Record.GetTxId()); 
-                NTabletPipe::SendData(ctx, SchemePipeActorId_, request.Release()); 
-                return; 
+                request->Record.SetTxId(msg->Record.GetTxId());
+                NTabletPipe::SendData(ctx, SchemePipeActorId_, request.Release());
+                return;
             }
             case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest: {
                 return this->ReplyWithResult(Ydb::StatusIds::BAD_REQUEST, issueMessage, ctx);

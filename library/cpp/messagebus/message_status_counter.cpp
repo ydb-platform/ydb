@@ -5,7 +5,7 @@
 
 #include <library/cpp/messagebus/monitoring/mon_proto.pb.h>
 
-#include <util/stream/str.h> 
+#include <util/stream/str.h>
 
 using namespace NBus;
 using namespace NBus::NPrivate;
@@ -55,17 +55,17 @@ TString TMessageStatusCounter::PrintToString() const {
     return ss.Str();
 }
 
-void TMessageStatusCounter::FillErrorsProtobuf(TConnectionStatusMonRecord* status) const { 
-    status->clear_errorcountbystatus(); 
-    for (size_t i = 0; i < MESSAGE_STATUS_COUNT; ++i) { 
-        if (i == MESSAGE_OK) { 
+void TMessageStatusCounter::FillErrorsProtobuf(TConnectionStatusMonRecord* status) const {
+    status->clear_errorcountbystatus();
+    for (size_t i = 0; i < MESSAGE_STATUS_COUNT; ++i) {
+        if (i == MESSAGE_OK) {
             Y_VERIFY(Counts[i] == 0);
-            continue; 
-        } 
-        if (Counts[i] != 0) { 
-            TMessageStatusRecord* description = status->add_errorcountbystatus(); 
-            description->SetStatus(TMessageStatusCounter::MessageStatusToProtobuf((EMessageStatus)i)); 
-            description->SetCount(Counts[i]); 
-        } 
-    } 
-} 
+            continue;
+        }
+        if (Counts[i] != 0) {
+            TMessageStatusRecord* description = status->add_errorcountbystatus();
+            description->SetStatus(TMessageStatusCounter::MessageStatusToProtobuf((EMessageStatus)i));
+            description->SetCount(Counts[i]);
+        }
+    }
+}

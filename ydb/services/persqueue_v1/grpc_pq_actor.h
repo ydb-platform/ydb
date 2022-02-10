@@ -1,7 +1,7 @@
 #pragma once
- 
-#include "persqueue_utils.h" 
- 
+
+#include "persqueue_utils.h"
+
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
@@ -36,7 +36,7 @@
 #include <util/generic/guid.h>
 #include <util/system/compiler.h>
 
-namespace NKikimr::NGRpcProxy::V1 { 
+namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace Ydb;
 
@@ -482,7 +482,7 @@ private:
             HFunc(TEvPQProxy::TEvDieCommand, HandlePoison)
             HFunc(TEvPQProxy::TEvWriteInit,  Handle)
             HFunc(TEvPQProxy::TEvWrite, Handle)
-            HFunc(TEvPQProxy::TEvUpdateToken, Handle) 
+            HFunc(TEvPQProxy::TEvUpdateToken, Handle)
             HFunc(TEvPQProxy::TEvDone, Handle)
             HFunc(TEvPersQueue::TEvGetPartitionIdForWriteResponse, Handle)
 
@@ -516,12 +516,12 @@ private:
 
     void CheckACL(const TActorContext& ctx);
     // Requests fresh ACL from 'SchemeCache'
-    void InitCheckSchema(const TActorContext& ctx, bool needWaitSchema = false); 
+    void InitCheckSchema(const TActorContext& ctx, bool needWaitSchema = false);
     void Handle(TEvPQProxy::TEvWriteInit::TPtr& ev,  const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvWrite::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvUpdateToken::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvDone::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
     void LogSession(const TActorContext& ctx);
 
@@ -531,7 +531,7 @@ private:
 
     void ProceedPartition(const ui32 partition, const NActors::TActorContext& ctx);
     THolder<NKqp::TEvKqp::TEvQueryRequest> MakeUpdateSourceIdMetadataRequest(const NActors::TActorContext& ctx);
-    void InitCheckACL(const TActorContext& ctx); 
+    void InitCheckACL(const TActorContext& ctx);
 
     void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx);
     void Handle(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr& ev, const TActorContext& ctx);
@@ -571,7 +571,7 @@ private:
 
     EState State;
     TActorId SchemeCache;
-    TActorId NewSchemeCache; 
+    TActorId NewSchemeCache;
     TActorId Writer;
 
     TString PeerName;
@@ -591,7 +591,7 @@ private:
 
     ui32 NumReserveBytesRequests;
 
-    THolder<TAclWrapper> ACL; 
+    THolder<TAclWrapper> ACL;
 
     struct TWriteRequestBatchInfo: public TSimpleRefCount<TWriteRequestBatchInfo> {
         using TPtr = TIntrusivePtr<TWriteRequestBatchInfo>;
@@ -707,12 +707,12 @@ private:
     bool ProcessTopicSchemeCacheResponse(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
                                          THashMap<TString, TTopicHolder>::iterator topicsIter, const TActorContext& ctx);
     void HandleClientSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
-    void SendCacheNavigateRequest(const TActorContext& ctx, const TString& path); 
+    void SendCacheNavigateRequest(const TActorContext& ctx, const TString& path);
 
     void HandleTopicsDescribeResponse(TEvDescribeTopicsResponse::TPtr& ev, const NActors::TActorContext& ctx);
     void FinishInitialization(const NActors::TActorContext& ctx);
     bool CheckTopicACL(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TString& topic, const TActorContext& ctx);
-    void CheckClientACL(const TActorContext& ctx); 
+    void CheckClientACL(const TActorContext& ctx);
 
     bool CheckACLPermissionsForNavigate(const TIntrusivePtr<TSecurityObject>& secObject,
                                         const TString& path, NACLib::EAccessRights rights,
@@ -1126,23 +1126,23 @@ private:
 };
 
 
-class TDropTopicActor : public TPQGrpcSchemaBase<TDropTopicActor, NKikimr::NGRpcService::TEvPQDropTopicRequest> { 
-using TBase = TPQGrpcSchemaBase<TDropTopicActor, TEvPQDropTopicRequest>; 
- 
-public: 
+class TDropTopicActor : public TPQGrpcSchemaBase<TDropTopicActor, NKikimr::NGRpcService::TEvPQDropTopicRequest> {
+using TBase = TPQGrpcSchemaBase<TDropTopicActor, TEvPQDropTopicRequest>;
+
+public:
      TDropTopicActor(NKikimr::NGRpcService::TEvPQDropTopicRequest* request);
     ~TDropTopicActor() = default;
 
-    void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx, 
-                             const TString& workingDir, const TString& name); 
+    void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
+                             const TString& workingDir, const TString& name);
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
     void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx){ Y_UNUSED(ev); Y_UNUSED(ctx); }
 };
 
-class TDescribeTopicActor : public TPQGrpcSchemaBase<TDescribeTopicActor, NKikimr::NGRpcService::TEvPQDescribeTopicRequest> { 
-using TBase = TPQGrpcSchemaBase<TDescribeTopicActor, TEvPQDescribeTopicRequest>; 
+class TDescribeTopicActor : public TPQGrpcSchemaBase<TDescribeTopicActor, NKikimr::NGRpcService::TEvPQDescribeTopicRequest> {
+using TBase = TPQGrpcSchemaBase<TDescribeTopicActor, TEvPQDescribeTopicRequest>;
 
 public:
      TDescribeTopicActor(NKikimr::NGRpcService::TEvPQDescribeTopicRequest* request);
@@ -1156,42 +1156,42 @@ public:
 };
 
 
-class TAddReadRuleActor : public TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest> { 
-    using TBase = TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest>; 
+class TAddReadRuleActor : public TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest> {
+    using TBase = TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest>;
 
-public: 
-    TAddReadRuleActor(NKikimr::NGRpcService::TEvPQAddReadRuleRequest *request); 
-
-    void Bootstrap(const NActors::TActorContext &ctx); 
-    void ModifyPersqueueConfig(const TActorContext& ctx,
-                               NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-                               const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                               const NKikimrSchemeOp::TDirEntry& selfInfo);
-}; 
- 
-class TRemoveReadRuleActor : public TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest> { 
-    using TBase = TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest>; 
- 
 public:
-    TRemoveReadRuleActor(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest* request); 
- 
-    void Bootstrap(const NActors::TActorContext &ctx); 
+    TAddReadRuleActor(NKikimr::NGRpcService::TEvPQAddReadRuleRequest *request);
+
+    void Bootstrap(const NActors::TActorContext &ctx);
     void ModifyPersqueueConfig(const TActorContext& ctx,
                                NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
                                const NKikimrSchemeOp::TDirEntry& selfInfo);
-}; 
- 
- 
-class TCreateTopicActor : public TPQGrpcSchemaBase<TCreateTopicActor, NKikimr::NGRpcService::TEvPQCreateTopicRequest> { 
-using TBase = TPQGrpcSchemaBase<TCreateTopicActor, TEvPQCreateTopicRequest>; 
- 
-public: 
+};
+
+class TRemoveReadRuleActor : public TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest> {
+    using TBase = TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest>;
+
+public:
+    TRemoveReadRuleActor(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest* request);
+
+    void Bootstrap(const NActors::TActorContext &ctx);
+    void ModifyPersqueueConfig(const TActorContext& ctx,
+                               NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
+                               const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
+                               const NKikimrSchemeOp::TDirEntry& selfInfo);
+};
+
+
+class TCreateTopicActor : public TPQGrpcSchemaBase<TCreateTopicActor, NKikimr::NGRpcService::TEvPQCreateTopicRequest> {
+using TBase = TPQGrpcSchemaBase<TCreateTopicActor, TEvPQCreateTopicRequest>;
+
+public:
      TCreateTopicActor(NKikimr::NGRpcService::TEvPQCreateTopicRequest* request, const TString& localCluster, const TVector<TString>& clusters);
     ~TCreateTopicActor() = default;
 
-    void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx, 
-                             const TString& workingDir, const TString& name); 
+    void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
+                             const TString& workingDir, const TString& name);
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
@@ -1202,15 +1202,15 @@ private:
     TVector<TString> Clusters;
 };
 
-class TAlterTopicActor : public TPQGrpcSchemaBase<TAlterTopicActor, NKikimr::NGRpcService::TEvPQAlterTopicRequest> { 
-using TBase = TPQGrpcSchemaBase<TAlterTopicActor, TEvPQAlterTopicRequest>; 
+class TAlterTopicActor : public TPQGrpcSchemaBase<TAlterTopicActor, NKikimr::NGRpcService::TEvPQAlterTopicRequest> {
+using TBase = TPQGrpcSchemaBase<TAlterTopicActor, TEvPQAlterTopicRequest>;
 
 public:
      TAlterTopicActor(NKikimr::NGRpcService::TEvPQAlterTopicRequest* request);
     ~TAlterTopicActor() = default;
 
-    void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx, 
-                             const TString& workingDir, const TString& name); 
+    void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
+                             const TString& workingDir, const TString& name);
 
     void Bootstrap(const NActors::TActorContext& ctx);
 

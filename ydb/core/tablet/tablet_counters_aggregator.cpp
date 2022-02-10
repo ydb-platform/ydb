@@ -1749,7 +1749,7 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletLabeledCo
                     continue;
                 }
                 if (groupNames[j] == "Client") {
-                    group = group->GetSubgroup("ConsumerPath", NPersQueue::ConvertOldConsumerName(groups[j], ctx)); 
+                    group = group->GetSubgroup("ConsumerPath", NPersQueue::ConvertOldConsumerName(groups[j], ctx));
                     continue;
                 }
             }
@@ -2407,7 +2407,7 @@ public:
                 if (groups.size() == 1) { //topic case
                     ff = groups[0];
                 } else if (groups.size() == 3) { //client important topic
-                    res = NPersQueue::ConvertOldConsumerName(groups[0], ctx) + "|" + groups[1] + "|"; 
+                    res = NPersQueue::ConvertOldConsumerName(groups[0], ctx) + "|" + groups[1] + "|";
                     ff = groups[2];
                 } else {
                     continue;

@@ -273,7 +273,7 @@ def deploy(arguments):
         optionals.update({'grpc_tls_data_path': grpc_tls_data_path(arguments)})
         optionals.update({'grpc_ssl_enable': enable_tls()})
     pdisk_store_path = arguments.ydb_working_dir if arguments.ydb_working_dir else None
- 
+
     configuration = KikimrConfigGenerator(
         parse_erasure(arguments),
         arguments.ydb_binary_path,

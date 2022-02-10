@@ -128,32 +128,32 @@ size_t TRemoteConnectionWriterStatus::GetInFlight() const {
     return SendQueueSize + AckMessagesSize;
 }
 
-TConnectionStatusMonRecord TRemoteConnectionStatus::GetStatusProtobuf() const { 
-    TConnectionStatusMonRecord status; 
- 
-    // TODO: fill unfilled fields 
-    status.SetSendQueueSize(WriterStatus.SendQueueSize); 
-    status.SetAckMessagesSize(WriterStatus.AckMessagesSize); 
-    // status.SetErrorCount(); 
-    // status.SetWriteBytes(); 
-    // status.SetWriteBytesCompressed(); 
-    // status.SetWriteMessages(); 
-    status.SetWriteSyscalls(WriterStatus.Incremental.NetworkOps); 
-    status.SetWriteActs(WriterStatus.Acts); 
-    // status.SetReadBytes(); 
-    // status.SetReadBytesCompressed(); 
-    // status.SetReadMessages(); 
-    status.SetReadSyscalls(ReaderStatus.Incremental.NetworkOps); 
-    status.SetReadActs(ReaderStatus.Acts); 
- 
-    TMessageStatusCounter sumStatusCounter; 
-    sumStatusCounter += WriterStatus.Incremental.StatusCounter; 
-    sumStatusCounter += ReaderStatus.Incremental.StatusCounter; 
-    sumStatusCounter.FillErrorsProtobuf(&status); 
- 
-    return status; 
-} 
- 
+TConnectionStatusMonRecord TRemoteConnectionStatus::GetStatusProtobuf() const {
+    TConnectionStatusMonRecord status;
+
+    // TODO: fill unfilled fields
+    status.SetSendQueueSize(WriterStatus.SendQueueSize);
+    status.SetAckMessagesSize(WriterStatus.AckMessagesSize);
+    // status.SetErrorCount();
+    // status.SetWriteBytes();
+    // status.SetWriteBytesCompressed();
+    // status.SetWriteMessages();
+    status.SetWriteSyscalls(WriterStatus.Incremental.NetworkOps);
+    status.SetWriteActs(WriterStatus.Acts);
+    // status.SetReadBytes();
+    // status.SetReadBytesCompressed();
+    // status.SetReadMessages();
+    status.SetReadSyscalls(ReaderStatus.Incremental.NetworkOps);
+    status.SetReadActs(ReaderStatus.Acts);
+
+    TMessageStatusCounter sumStatusCounter;
+    sumStatusCounter += WriterStatus.Incremental.StatusCounter;
+    sumStatusCounter += ReaderStatus.Incremental.StatusCounter;
+    sumStatusCounter.FillErrorsProtobuf(&status);
+
+    return status;
+}
+
 TString TRemoteConnectionStatus::PrintToString() const {
     TStringStream ss;
 

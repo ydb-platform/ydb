@@ -228,7 +228,7 @@ void PQTabletPrepare(ui32 mcip, ui64 msip, ui32 deleteTime, const TVector<std::p
             request->Record.MutableTabletConfig()->SetCacheSize(10*1024*1024);
             request->Record.SetTxId(12345);
             auto tabletConfig = request->Record.MutableTabletConfig();
-            tabletConfig->SetTopicName("topic"); 
+            tabletConfig->SetTopicName("topic");
             tabletConfig->SetVersion(version);
             tabletConfig->SetLocalDC(localDC);
             tabletConfig->AddReadRules("user");

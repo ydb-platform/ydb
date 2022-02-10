@@ -50,7 +50,7 @@ public:
         Client = params.Get("client");
         if (Version >= 3) {
             Topic = "rt3." + DC + "--" + NPersQueue::ConvertNewTopicName(Topic);
-            Client = NPersQueue::ConvertNewConsumerName(Client, ctx); 
+            Client = NPersQueue::ConvertNewConsumerName(Client, ctx);
         } else {
             size_t pos = Topic.rfind('/');
             if (pos != TString::npos) {

@@ -1,8 +1,8 @@
-#include "datastreams_proxy.h" 
-#include "put_records_actor.h" 
+#include "datastreams_proxy.h"
+#include "put_records_actor.h"
 #include "shard_iterator.h"
 #include "next_token.h"
- 
+
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
@@ -12,227 +12,227 @@
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
-#include <util/folder/path.h> 
- 
+#include <util/folder/path.h>
+
 #include <iterator>
 
-using namespace NActors; 
-using namespace NKikimrClient; 
- 
-using grpc::Status; 
- 
-namespace NKikimr::NDataStreams::V1 { 
+using namespace NActors;
+using namespace NKikimrClient;
+
+using grpc::Status;
+
+namespace NKikimr::NDataStreams::V1 {
     const TString YDS_SERVICE_TYPE = "data-streams";
- 
-    using namespace NGRpcService; 
-    using namespace NGRpcProxy::V1; 
- 
-    namespace { 
- 
-        ui32 PartitionWriteSpeedInBytesPerSec(ui32 speedInKbPerSec) { 
-            return speedInKbPerSec == 0 ? 1024 * 1024 : speedInKbPerSec * 1024; 
-        } 
- 
-        TDuration RetentionPeriod(ui32 retentionPeriodInHours) { 
-            return retentionPeriodInHours == 0 ? TDuration::Hours(24) : TDuration::Hours(retentionPeriodInHours); 
-        } 
- 
-        template<class TRequest> 
+
+    using namespace NGRpcService;
+    using namespace NGRpcProxy::V1;
+
+    namespace {
+
+        ui32 PartitionWriteSpeedInBytesPerSec(ui32 speedInKbPerSec) {
+            return speedInKbPerSec == 0 ? 1024 * 1024 : speedInKbPerSec * 1024;
+        }
+
+        TDuration RetentionPeriod(ui32 retentionPeriodInHours) {
+            return retentionPeriodInHours == 0 ? TDuration::Hours(24) : TDuration::Hours(retentionPeriodInHours);
+        }
+
+        template<class TRequest>
         bool ValidateRetentionPeriod(const TRequest& req, const NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-                                     TMaybe<bool> increase, TString& errorText) 
-        { 
-            if (req.retention_period_hours() > 24) { 
-                errorText = TStringBuilder() << "Retention period is greater than 24 hours: " 
-                                             << req.retention_period_hours(); 
-                return false; 
-            } 
- 
-            if (increase.Defined()) { 
-                auto currentLifetime = TDuration::Seconds(groupConfig.GetPQTabletConfig().GetPartitionConfig().GetLifetimeSeconds()); 
-                auto newLifetime = TDuration::Hours(req.retention_period_hours()); 
-                if (*increase) { 
-                    if (newLifetime <= currentLifetime) { 
-                        errorText = TStringBuilder() << "Retention period is not greater than provided: " 
-                                                     << currentLifetime.Hours() << " <= " << newLifetime.Hours(); 
-                        return false; 
-                    } 
-                } else { 
-                    if (newLifetime >= currentLifetime) { 
-                        errorText = TStringBuilder() << "Retention period is not less than provided: " 
-                                                     << currentLifetime.Hours() << " <= " << newLifetime.Hours(); 
-                        return false; 
-                    } 
-                } 
-            } 
- 
-            return true; 
-        } 
- 
-        template<class TRequest> 
+                                     TMaybe<bool> increase, TString& errorText)
+        {
+            if (req.retention_period_hours() > 24) {
+                errorText = TStringBuilder() << "Retention period is greater than 24 hours: "
+                                             << req.retention_period_hours();
+                return false;
+            }
+
+            if (increase.Defined()) {
+                auto currentLifetime = TDuration::Seconds(groupConfig.GetPQTabletConfig().GetPartitionConfig().GetLifetimeSeconds());
+                auto newLifetime = TDuration::Hours(req.retention_period_hours());
+                if (*increase) {
+                    if (newLifetime <= currentLifetime) {
+                        errorText = TStringBuilder() << "Retention period is not greater than provided: "
+                                                     << currentLifetime.Hours() << " <= " << newLifetime.Hours();
+                        return false;
+                    }
+                } else {
+                    if (newLifetime >= currentLifetime) {
+                        errorText = TStringBuilder() << "Retention period is not less than provided: "
+                                                     << currentLifetime.Hours() << " <= " << newLifetime.Hours();
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        template<class TRequest>
         bool ValidateShardsCount(const TRequest& req, const NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig, TString& errorText) {
-            if (req.target_shard_count() < (i32)groupConfig.GetTotalGroupCount()) { 
-                errorText = TStringBuilder() << "Shard count must be non-decreasing, old value is " 
-                                             << groupConfig.GetTotalGroupCount() 
-                                             << " new value is " << req.target_shard_count(); 
-                return false; 
-            } 
-            return true; 
-        } 
- 
-        template<class TRequest> 
-        bool ValidateWriteSpeedLimit(const TRequest& req, TString& errorText, const TActorContext& ctx) { 
-            THashSet<ui32> validLimits {0}; 
-            if (AppData(ctx)->PQConfig.ValidWriteSpeedLimitsKbPerSecSize() == 0) { 
-                validLimits.insert(128); 
-                validLimits.insert(1024); 
-            } else { 
-                const auto& limits = AppData(ctx)->PQConfig.GetValidWriteSpeedLimitsKbPerSec(); 
-                validLimits.insert(limits.begin(), limits.end()); 
-            } 
-            if (validLimits.find(req.write_quota_kb_per_sec()) == validLimits.end()) { 
-                errorText = TStringBuilder() << "write_quota_kb_per_sec must have values from set {" << JoinSeq(",", validLimits) << ", got " << req.write_quota_kb_per_sec(); 
-                return false; 
-            } 
- 
-            return true; 
-        } 
- 
-    } 
- 
-    class TCreateStreamActor : public TPQGrpcSchemaBase<TCreateStreamActor, NKikimr::NGRpcService::TEvDataStreamsCreateStreamRequest> { 
-        using TBase = TPQGrpcSchemaBase<TCreateStreamActor, TEvDataStreamsCreateStreamRequest>; 
- 
+            if (req.target_shard_count() < (i32)groupConfig.GetTotalGroupCount()) {
+                errorText = TStringBuilder() << "Shard count must be non-decreasing, old value is "
+                                             << groupConfig.GetTotalGroupCount()
+                                             << " new value is " << req.target_shard_count();
+                return false;
+            }
+            return true;
+        }
+
+        template<class TRequest>
+        bool ValidateWriteSpeedLimit(const TRequest& req, TString& errorText, const TActorContext& ctx) {
+            THashSet<ui32> validLimits {0};
+            if (AppData(ctx)->PQConfig.ValidWriteSpeedLimitsKbPerSecSize() == 0) {
+                validLimits.insert(128);
+                validLimits.insert(1024);
+            } else {
+                const auto& limits = AppData(ctx)->PQConfig.GetValidWriteSpeedLimitsKbPerSec();
+                validLimits.insert(limits.begin(), limits.end());
+            }
+            if (validLimits.find(req.write_quota_kb_per_sec()) == validLimits.end()) {
+                errorText = TStringBuilder() << "write_quota_kb_per_sec must have values from set {" << JoinSeq(",", validLimits) << ", got " << req.write_quota_kb_per_sec();
+                return false;
+            }
+
+            return true;
+        }
+
+    }
+
+    class TCreateStreamActor : public TPQGrpcSchemaBase<TCreateStreamActor, NKikimr::NGRpcService::TEvDataStreamsCreateStreamRequest> {
+        using TBase = TPQGrpcSchemaBase<TCreateStreamActor, TEvDataStreamsCreateStreamRequest>;
+
         TActorId NewSchemeCache;
-    public: 
+    public:
         TCreateStreamActor(NKikimr::NGRpcService::TEvDataStreamsCreateStreamRequest* request, TActorId newSchemeCache);
-        ~TCreateStreamActor() = default; 
- 
-        void Bootstrap(const NActors::TActorContext& ctx); 
-        void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx, 
-                                const TString& workingDir, const TString& name); 
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx); 
+        ~TCreateStreamActor() = default;
+
+        void Bootstrap(const NActors::TActorContext& ctx);
+        void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
+                                const TString& workingDir, const TString& name);
+        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
-        void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx); 
-    }; 
- 
+        void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
+    };
+
 
     TCreateStreamActor::TCreateStreamActor(NKikimr::NGRpcService::TEvDataStreamsCreateStreamRequest* request, TActorId newSchemeCache)
-        : TBase(request, request->GetProtoRequest()->stream_name()) 
+        : TBase(request, request->GetProtoRequest()->stream_name())
         , NewSchemeCache(newSchemeCache)
-    { 
+    {
         Y_UNUSED(NewSchemeCache);
-    } 
- 
-    void TCreateStreamActor::Bootstrap(const NActors::TActorContext& ctx) { 
-        TBase::Bootstrap(ctx); 
+    }
+
+    void TCreateStreamActor::Bootstrap(const NActors::TActorContext& ctx) {
+        TBase::Bootstrap(ctx);
         SendProposeRequest(ctx);
-        Become(&TCreateStreamActor::StateWork); 
-    } 
- 
+        Become(&TCreateStreamActor::StateWork);
+    }
+
     void TCreateStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
         Y_UNUSED(ctx);
     }
 
 
-    void TCreateStreamActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, 
-            const TActorContext& ctx, const TString& workingDir, const TString& name) 
-    { 
+    void TCreateStreamActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal,
+            const TActorContext& ctx, const TString& workingDir, const TString& name)
+    {
         NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
- 
-        Ydb::PersQueue::V1::TopicSettings topicSettings; 
-        topicSettings.set_partitions_count(GetProtoRequest()->shard_count()); 
-        topicSettings.set_retention_period_ms(RetentionPeriod(GetProtoRequest()->retention_period_hours()).MilliSeconds()); 
-        topicSettings.set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE); 
+
+        Ydb::PersQueue::V1::TopicSettings topicSettings;
+        topicSettings.set_partitions_count(GetProtoRequest()->shard_count());
+        topicSettings.set_retention_period_ms(RetentionPeriod(GetProtoRequest()->retention_period_hours()).MilliSeconds());
+        topicSettings.set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
         topicSettings.add_supported_codecs(Ydb::PersQueue::V1::CODEC_RAW);
-        topicSettings.set_max_partition_write_speed(PartitionWriteSpeedInBytesPerSec(GetProtoRequest()->write_quota_kb_per_sec())); 
+        topicSettings.set_max_partition_write_speed(PartitionWriteSpeedInBytesPerSec(GetProtoRequest()->write_quota_kb_per_sec()));
         topicSettings.set_max_partition_write_burst(PartitionWriteSpeedInBytesPerSec(GetProtoRequest()->write_quota_kb_per_sec()));
- 
+
         if (workingDir != proposal.Record.GetDatabaseName() && !proposal.Record.GetDatabaseName().empty()) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, "streams can be created only at database root", ctx);
         }
-        TString error; 
-        auto status = NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(name, topicSettings, modifyScheme, ctx, false, error); 
-        modifyScheme.SetWorkingDir(workingDir); 
- 
-        if (!error.Empty()) { 
-            return ReplyWithError(status, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx); 
-        } 
-        auto pqDescr = modifyScheme.MutableCreatePersQueueGroup(); 
-        pqDescr->SetPartitionPerTablet(1); 
- 
-        if (!ValidateWriteSpeedLimit(*GetProtoRequest(), error, ctx) 
-            || !ValidateRetentionPeriod(*GetProtoRequest(), *pqDescr, Nothing(), error)) 
-        { 
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx); 
-        } 
-    } 
- 
-    void TCreateStreamActor::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) { 
-        auto msg = ev->Get(); 
-        const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(ev->Get()->Record.GetStatus()); 
-        if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete 
+        TString error;
+        auto status = NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(name, topicSettings, modifyScheme, ctx, false, error);
+        modifyScheme.SetWorkingDir(workingDir);
+
+        if (!error.Empty()) {
+            return ReplyWithError(status, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
+        }
+        auto pqDescr = modifyScheme.MutableCreatePersQueueGroup();
+        pqDescr->SetPartitionPerTablet(1);
+
+        if (!ValidateWriteSpeedLimit(*GetProtoRequest(), error, ctx)
+            || !ValidateRetentionPeriod(*GetProtoRequest(), *pqDescr, Nothing(), error))
+        {
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
+        }
+    }
+
+    void TCreateStreamActor::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
+        auto msg = ev->Get();
+        const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(ev->Get()->Record.GetStatus());
+        if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete
             && msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusAlreadyExists)
-        { 
-            return ReplyWithError(Ydb::StatusIds::ALREADY_EXISTS, 
-                                  Ydb::PersQueue::ErrorCode::ERROR, 
-                                  TStringBuilder() << "Stream with name " << GetProtoRequest()->stream_name() << " is already exists", 
-                                  ctx); 
-        } 
+        {
+            return ReplyWithError(Ydb::StatusIds::ALREADY_EXISTS,
+                                  Ydb::PersQueue::ErrorCode::ERROR,
+                                  TStringBuilder() << "Stream with name " << GetProtoRequest()->stream_name() << " is already exists",
+                                  ctx);
+        }
         return TBase::TBase::Handle(ev, ctx);
-    } 
- 
-    void TCreateStreamActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
-        switch (ev->GetTypeRewrite()) { 
-            HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle); 
-            default: TBase::StateWork(ev, ctx); 
-        } 
-    } 
- 
-    //----------------------------------------------------------------------------------- 
- 
-    class TDeleteStreamActor : public TPQGrpcSchemaBase<TDeleteStreamActor, NKikimr::NGRpcService::TEvDataStreamsDeleteStreamRequest> { 
-        using TBase = TPQGrpcSchemaBase<TDeleteStreamActor, TEvDataStreamsDeleteStreamRequest>; 
- 
-    public: 
-        TDeleteStreamActor(NKikimr::NGRpcService::TEvDataStreamsDeleteStreamRequest* request); 
-        ~TDeleteStreamActor() = default; 
- 
-        void Bootstrap(const NActors::TActorContext& ctx); 
- 
-        void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx, 
-                                const TString& workingDir, const TString& name); 
+    }
+
+    void TCreateStreamActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
+            default: TBase::StateWork(ev, ctx);
+        }
+    }
+
+    //-----------------------------------------------------------------------------------
+
+    class TDeleteStreamActor : public TPQGrpcSchemaBase<TDeleteStreamActor, NKikimr::NGRpcService::TEvDataStreamsDeleteStreamRequest> {
+        using TBase = TPQGrpcSchemaBase<TDeleteStreamActor, TEvDataStreamsDeleteStreamRequest>;
+
+    public:
+        TDeleteStreamActor(NKikimr::NGRpcService::TEvDataStreamsDeleteStreamRequest* request);
+        ~TDeleteStreamActor() = default;
+
+        void Bootstrap(const NActors::TActorContext& ctx);
+
+        void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
+                                const TString& workingDir, const TString& name);
 
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev,
                                          const TActorContext& ctx);
 
     private:
         bool EnforceDeletion;
-    }; 
- 
-    TDeleteStreamActor::TDeleteStreamActor(NKikimr::NGRpcService::TEvDataStreamsDeleteStreamRequest* request) 
-        : TBase(request, request->GetProtoRequest()->stream_name()) 
+    };
+
+    TDeleteStreamActor::TDeleteStreamActor(NKikimr::NGRpcService::TEvDataStreamsDeleteStreamRequest* request)
+        : TBase(request, request->GetProtoRequest()->stream_name())
         , EnforceDeletion{request->GetProtoRequest()->enforce_consumer_deletion()}
-    { 
-    } 
- 
-    void TDeleteStreamActor::Bootstrap(const NActors::TActorContext& ctx) { 
-        TBase::Bootstrap(ctx); 
+    {
+    }
+
+    void TDeleteStreamActor::Bootstrap(const NActors::TActorContext& ctx) {
+        TBase::Bootstrap(ctx);
         SendDescribeProposeRequest(ctx);
-        Become(&TDeleteStreamActor::StateWork); 
-    } 
- 
+        Become(&TDeleteStreamActor::StateWork);
+    }
+
     void TDeleteStreamActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal,
                                                 const TActorContext& ctx, const TString& workingDir,
                                                 const TString& name)
-    { 
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "WorkingDir = " << workingDir << ", name = " << name); 
+    {
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "WorkingDir = " << workingDir << ", name = " << name);
         NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
-        modifyScheme.SetWorkingDir(workingDir); 
+        modifyScheme.SetWorkingDir(workingDir);
         modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
-        modifyScheme.MutableDrop()->SetName(name); 
-    } 
- 
+        modifyScheme.MutableDrop()->SetName(name);
+    }
+
     void TDeleteStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev,
                                                          const TActorContext& ctx) {
         if (ReplyIfNotTopic(ev, ctx)) {
@@ -251,30 +251,30 @@ namespace NKikimr::NDataStreams::V1 {
 
         SendProposeRequest(ctx);
     }
-    //----------------------------------------------------------------------------------------------------------- 
- 
-    class TUpdateShardCountActor : public TUpdateSchemeActor<TUpdateShardCountActor, TEvDataStreamsUpdateShardCountRequest> { 
-        using TBase = TUpdateSchemeActor<TUpdateShardCountActor, TEvDataStreamsUpdateShardCountRequest>; 
- 
-    public: 
-        TUpdateShardCountActor(TEvDataStreamsUpdateShardCountRequest* request) 
-            : TBase(request, request->GetProtoRequest()->stream_name()) 
-        { 
-        } 
- 
-        void Bootstrap(const TActorContext& ctx); 
+    //-----------------------------------------------------------------------------------------------------------
+
+    class TUpdateShardCountActor : public TUpdateSchemeActor<TUpdateShardCountActor, TEvDataStreamsUpdateShardCountRequest> {
+        using TBase = TUpdateSchemeActor<TUpdateShardCountActor, TEvDataStreamsUpdateShardCountRequest>;
+
+    public:
+        TUpdateShardCountActor(TEvDataStreamsUpdateShardCountRequest* request)
+            : TBase(request, request->GetProtoRequest()->stream_name())
+        {
+        }
+
+        void Bootstrap(const TActorContext& ctx);
         void ModifyPersqueueConfig(const TActorContext& ctx,
                                    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
                                    const NKikimrSchemeOp::TDirEntry& selfInfo);
-    }; 
- 
-    void TUpdateShardCountActor::Bootstrap(const TActorContext& ctx) { 
-        TBase::Bootstrap(ctx); 
-        SendDescribeProposeRequest(ctx); 
-        Become(&TBase::StateWork); 
-    } 
- 
+    };
+
+    void TUpdateShardCountActor::Bootstrap(const TActorContext& ctx) {
+        TBase::Bootstrap(ctx);
+        SendDescribeProposeRequest(ctx);
+        Become(&TBase::StateWork);
+    }
+
     void TUpdateShardCountActor::ModifyPersqueueConfig(
         const TActorContext& ctx,
         NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
@@ -283,39 +283,39 @@ namespace NKikimr::NDataStreams::V1 {
     ) {
         Y_UNUSED(pqGroupDescription);
         Y_UNUSED(selfInfo);
- 
-        TString error; 
-        if (!ValidateShardsCount(*GetProtoRequest(), groupConfig, error)) { 
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx); 
-        } 
- 
-        groupConfig.SetTotalGroupCount(GetProtoRequest()->target_shard_count()); 
-    } 
- 
-    //----------------------------------------------------------------------------------------------------------- 
- 
-    class TUpdateStreamActor : public TUpdateSchemeActor<TUpdateStreamActor, TEvDataStreamsUpdateStreamRequest> { 
-        using TBase = TUpdateSchemeActor<TUpdateStreamActor, TEvDataStreamsUpdateStreamRequest>; 
- 
-    public: 
-        TUpdateStreamActor(TEvDataStreamsUpdateStreamRequest* request) 
-                : TBase(request, request->GetProtoRequest()->stream_name()) 
-        { 
-        } 
- 
-        void Bootstrap(const TActorContext& ctx); 
+
+        TString error;
+        if (!ValidateShardsCount(*GetProtoRequest(), groupConfig, error)) {
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
+        }
+
+        groupConfig.SetTotalGroupCount(GetProtoRequest()->target_shard_count());
+    }
+
+    //-----------------------------------------------------------------------------------------------------------
+
+    class TUpdateStreamActor : public TUpdateSchemeActor<TUpdateStreamActor, TEvDataStreamsUpdateStreamRequest> {
+        using TBase = TUpdateSchemeActor<TUpdateStreamActor, TEvDataStreamsUpdateStreamRequest>;
+
+    public:
+        TUpdateStreamActor(TEvDataStreamsUpdateStreamRequest* request)
+                : TBase(request, request->GetProtoRequest()->stream_name())
+        {
+        }
+
+        void Bootstrap(const TActorContext& ctx);
         void ModifyPersqueueConfig(const TActorContext& ctx,
                                    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
                                    const NKikimrSchemeOp::TDirEntry& selfInfo);
-    }; 
- 
-    void TUpdateStreamActor::Bootstrap(const TActorContext& ctx) { 
-        TBase::Bootstrap(ctx); 
-        SendDescribeProposeRequest(ctx); 
-        Become(&TBase::StateWork); 
-    } 
- 
+    };
+
+    void TUpdateStreamActor::Bootstrap(const TActorContext& ctx) {
+        TBase::Bootstrap(ctx);
+        SendDescribeProposeRequest(ctx);
+        Become(&TBase::StateWork);
+    }
+
     void TUpdateStreamActor::ModifyPersqueueConfig(
         const TActorContext& ctx,
         NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
@@ -324,45 +324,45 @@ namespace NKikimr::NDataStreams::V1 {
     ) {
         Y_UNUSED(pqGroupDescription);
         Y_UNUSED(selfInfo);
- 
-        TString error; 
-        if (!ValidateShardsCount(*GetProtoRequest(), groupConfig, error) 
-            || !ValidateWriteSpeedLimit(*GetProtoRequest(), error, ctx) 
-            || !ValidateRetentionPeriod(*GetProtoRequest(), groupConfig, Nothing(), error)) 
-        { 
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx); 
-        } 
- 
-        groupConfig.SetTotalGroupCount(GetProtoRequest()->target_shard_count()); 
-        groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond( 
-                PartitionWriteSpeedInBytesPerSec(GetProtoRequest()->write_quota_kb_per_sec())); 
-        groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(TInstant::Hours(this->GetProtoRequest()->retention_period_hours()).Seconds()); 
-    } 
- 
-    //----------------------------------------------------------------------------------------------------------- 
- 
-    class TSetWriteQuotaActor : public TUpdateSchemeActor<TSetWriteQuotaActor, TEvDataStreamsSetWriteQuotaRequest> { 
-        using TBase = TUpdateSchemeActor<TSetWriteQuotaActor, TEvDataStreamsSetWriteQuotaRequest>; 
- 
-    public: 
-        TSetWriteQuotaActor(TEvDataStreamsSetWriteQuotaRequest* request) 
-                : TBase(request, request->GetProtoRequest()->stream_name()) 
-        { 
-        } 
- 
-        void Bootstrap(const TActorContext& ctx); 
+
+        TString error;
+        if (!ValidateShardsCount(*GetProtoRequest(), groupConfig, error)
+            || !ValidateWriteSpeedLimit(*GetProtoRequest(), error, ctx)
+            || !ValidateRetentionPeriod(*GetProtoRequest(), groupConfig, Nothing(), error))
+        {
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
+        }
+
+        groupConfig.SetTotalGroupCount(GetProtoRequest()->target_shard_count());
+        groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(
+                PartitionWriteSpeedInBytesPerSec(GetProtoRequest()->write_quota_kb_per_sec()));
+        groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(TInstant::Hours(this->GetProtoRequest()->retention_period_hours()).Seconds());
+    }
+
+    //-----------------------------------------------------------------------------------------------------------
+
+    class TSetWriteQuotaActor : public TUpdateSchemeActor<TSetWriteQuotaActor, TEvDataStreamsSetWriteQuotaRequest> {
+        using TBase = TUpdateSchemeActor<TSetWriteQuotaActor, TEvDataStreamsSetWriteQuotaRequest>;
+
+    public:
+        TSetWriteQuotaActor(TEvDataStreamsSetWriteQuotaRequest* request)
+                : TBase(request, request->GetProtoRequest()->stream_name())
+        {
+        }
+
+        void Bootstrap(const TActorContext& ctx);
         void ModifyPersqueueConfig(const TActorContext& ctx,
                                    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
                                    const NKikimrSchemeOp::TDirEntry& selfInfo);
-    }; 
- 
-    void TSetWriteQuotaActor::Bootstrap(const TActorContext& ctx) { 
-        TBase::Bootstrap(ctx); 
-        SendDescribeProposeRequest(ctx); 
-        Become(&TBase::StateWork); 
-    } 
- 
+    };
+
+    void TSetWriteQuotaActor::Bootstrap(const TActorContext& ctx) {
+        TBase::Bootstrap(ctx);
+        SendDescribeProposeRequest(ctx);
+        Become(&TBase::StateWork);
+    }
+
     void TSetWriteQuotaActor::ModifyPersqueueConfig(
         const TActorContext& ctx,
         NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
@@ -371,34 +371,34 @@ namespace NKikimr::NDataStreams::V1 {
     ) {
         Y_UNUSED(pqGroupDescription);
         Y_UNUSED(selfInfo);
- 
-        TString error; 
-        if (!ValidateWriteSpeedLimit(*GetProtoRequest(), error, ctx)) { 
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx); 
-        } 
-        groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(GetProtoRequest()->write_quota_kb_per_sec() * 1024LL); 
+
+        TString error;
+        if (!ValidateWriteSpeedLimit(*GetProtoRequest(), error, ctx)) {
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
+        }
+        groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(GetProtoRequest()->write_quota_kb_per_sec() * 1024LL);
         groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetBurstSize(GetProtoRequest()->write_quota_kb_per_sec() * 1024LL);
-    } 
- 
-    //----------------------------------------------------------------------------------------------------------- 
- 
-    template<class TEvProto> 
-    class TSetStreamRetentionPeriodActor : public TUpdateSchemeActor<TSetStreamRetentionPeriodActor<TEvProto>, TEvProto> { 
-        using TBase = TUpdateSchemeActor<TSetStreamRetentionPeriodActor<TEvProto>, TEvProto>; 
- 
-    public: 
-        TSetStreamRetentionPeriodActor(TEvProto* request, bool shouldIncrease) 
-            : TBase(request, request->GetProtoRequest()->stream_name()) 
-            , ShouldIncrease(shouldIncrease) 
-        { 
-        } 
- 
-        void Bootstrap(const TActorContext& ctx) { 
-            TBase::Bootstrap(ctx); 
-            TBase::SendDescribeProposeRequest(ctx); 
-            TBase::Become(&TBase::StateWork); 
-        } 
- 
+    }
+
+    //-----------------------------------------------------------------------------------------------------------
+
+    template<class TEvProto>
+    class TSetStreamRetentionPeriodActor : public TUpdateSchemeActor<TSetStreamRetentionPeriodActor<TEvProto>, TEvProto> {
+        using TBase = TUpdateSchemeActor<TSetStreamRetentionPeriodActor<TEvProto>, TEvProto>;
+
+    public:
+        TSetStreamRetentionPeriodActor(TEvProto* request, bool shouldIncrease)
+            : TBase(request, request->GetProtoRequest()->stream_name())
+            , ShouldIncrease(shouldIncrease)
+        {
+        }
+
+        void Bootstrap(const TActorContext& ctx) {
+            TBase::Bootstrap(ctx);
+            TBase::SendDescribeProposeRequest(ctx);
+            TBase::Become(&TBase::StateWork);
+        }
+
         void ModifyPersqueueConfig(
             const TActorContext& ctx,
             NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
@@ -407,30 +407,30 @@ namespace NKikimr::NDataStreams::V1 {
         ) {
             Y_UNUSED(pqGroupDescription);
             Y_UNUSED(selfInfo);
- 
-            TString error; 
-            if (!ValidateRetentionPeriod(*this->GetProtoRequest(), groupConfig, ShouldIncrease, error)) { 
-                return this->ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx); 
-            } 
-            groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(TInstant::Hours(this->GetProtoRequest()->retention_period_hours()).Seconds()); 
-        } 
- 
-    private: 
-        bool ShouldIncrease; 
-    }; 
- 
-    //----------------------------------------------------------------------------------- 
- 
-    class TDescribeStreamActor : public TPQGrpcSchemaBase<TDescribeStreamActor, TEvDataStreamsDescribeStreamRequest> { 
-        using TBase = TPQGrpcSchemaBase<TDescribeStreamActor, TEvDataStreamsDescribeStreamRequest>; 
- 
-    public: 
-        TDescribeStreamActor(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamRequest* request); 
-        ~TDescribeStreamActor() = default; 
- 
-        void Bootstrap(const NActors::TActorContext& ctx); 
- 
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx); 
+
+            TString error;
+            if (!ValidateRetentionPeriod(*this->GetProtoRequest(), groupConfig, ShouldIncrease, error)) {
+                return this->ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
+            }
+            groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(TInstant::Hours(this->GetProtoRequest()->retention_period_hours()).Seconds());
+        }
+
+    private:
+        bool ShouldIncrease;
+    };
+
+    //-----------------------------------------------------------------------------------
+
+    class TDescribeStreamActor : public TPQGrpcSchemaBase<TDescribeStreamActor, TEvDataStreamsDescribeStreamRequest> {
+        using TBase = TPQGrpcSchemaBase<TDescribeStreamActor, TEvDataStreamsDescribeStreamRequest>;
+
+    public:
+        TDescribeStreamActor(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamRequest* request);
+        ~TDescribeStreamActor() = default;
+
+        void Bootstrap(const NActors::TActorContext& ctx);
+
+        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
@@ -470,28 +470,28 @@ namespace NKikimr::NDataStreams::V1 {
         std::vector<TActorId> Pipes;
         ui32 RequestsInfly = 0;
         std::map<ui64, std::pair<ui64, ui64>> StartEndOffsetsPerPartition;
-    }; 
- 
-    TDescribeStreamActor::TDescribeStreamActor(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamRequest* request) 
-            : TBase(request, request->GetProtoRequest()->stream_name()) 
-    { 
-    } 
- 
-    void TDescribeStreamActor::Bootstrap(const NActors::TActorContext& ctx) { 
-        TBase::Bootstrap(ctx); 
-        SendDescribeProposeRequest(ctx); 
-        Become(&TDescribeStreamActor::StateWork); 
-    } 
- 
-    void TDescribeStreamActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
-        switch (ev->GetTypeRewrite()) { 
+    };
+
+    TDescribeStreamActor::TDescribeStreamActor(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamRequest* request)
+            : TBase(request, request->GetProtoRequest()->stream_name())
+    {
+    }
+
+    void TDescribeStreamActor::Bootstrap(const NActors::TActorContext& ctx) {
+        TBase::Bootstrap(ctx);
+        SendDescribeProposeRequest(ctx);
+        Become(&TDescribeStreamActor::StateWork);
+    }
+
+    void TDescribeStreamActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+        switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvOffsetsResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            default: TBase::StateWork(ev, ctx); 
-        } 
-    } 
- 
+            default: TBase::StateWork(ev, ctx);
+        }
+    }
+
     void TDescribeStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
         Y_VERIFY(result->ResultSet.size() == 1); // describe only one topic
@@ -503,7 +503,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         Y_VERIFY(response.PQGroupInfo);
- 
+
         PQGroup = response.PQGroupInfo->Description;
         SelfInfo = response.Self->Info;
         std::set<ui64> tabletIds;
@@ -513,9 +513,9 @@ namespace NKikimr::NDataStreams::V1 {
         if (tabletIds.size() == 0) {
             ReplyAndDie(ctx);
         }
- 
+
         RequestsInfly = tabletIds.size();
- 
+
         NTabletPipe::TClientConfig clientConfig;
         clientConfig.RetryPolicy = {
             .RetryLimitCount = 6,
@@ -529,9 +529,9 @@ namespace NKikimr::NDataStreams::V1 {
             Pipes.push_back(ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig)));
             TAutoPtr<TEvPersQueue::TEvOffsets> req(new TEvPersQueue::TEvOffsets);
             NTabletPipe::SendData(ctx, Pipes.back(), req.Release());
-        } 
-    } 
- 
+        }
+    }
+
     void TDescribeStreamActor::ReplyAndDie(const TActorContext& ctx) {
         Ydb::DataStreams::V1::DescribeStreamResult result;
 
@@ -587,25 +587,25 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
 
-    //----------------------------------------------------------------------------------- 
- 
-    class TListStreamsActor : public TRpcSchemeRequestActor<TListStreamsActor, NKikimr::NGRpcService::TEvDataStreamsListStreamsRequest> { 
-        using TBase = TRpcSchemeRequestActor<TListStreamsActor, TEvDataStreamsListStreamsRequest>; 
- 
-    public: 
-        TListStreamsActor(NKikimr::NGRpcService::TEvDataStreamsListStreamsRequest* request, TActorId newSchemeCache); 
-        ~TListStreamsActor() = default; 
- 
-        void Bootstrap(const NActors::TActorContext& ctx); 
- 
-        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx); 
-        void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx); 
- 
-    protected: 
-        void SendNavigateRequest(const TActorContext& ctx, const TString& path); 
-        void SendPendingRequests(const TActorContext& ctx); 
-        void SendResponse(const TActorContext& ctx); 
- 
+    //-----------------------------------------------------------------------------------
+
+    class TListStreamsActor : public TRpcSchemeRequestActor<TListStreamsActor, NKikimr::NGRpcService::TEvDataStreamsListStreamsRequest> {
+        using TBase = TRpcSchemeRequestActor<TListStreamsActor, TEvDataStreamsListStreamsRequest>;
+
+    public:
+        TListStreamsActor(NKikimr::NGRpcService::TEvDataStreamsListStreamsRequest* request, TActorId newSchemeCache);
+        ~TListStreamsActor() = default;
+
+        void Bootstrap(const NActors::TActorContext& ctx);
+
+        void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+        void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
+
+    protected:
+        void SendNavigateRequest(const TActorContext& ctx, const TString& path);
+        void SendPendingRequests(const TActorContext& ctx);
+        void SendResponse(const TActorContext& ctx);
+
         void ReplyWithError(Ydb::StatusIds::StatusCode status, Ydb::PersQueue::ErrorCode::ErrorCode pqStatus,
                                  const TString& messageText, const NActors::TActorContext& ctx) {
             this->Request_->RaiseIssue(FillIssue(messageText, pqStatus));
@@ -613,27 +613,27 @@ namespace NKikimr::NDataStreams::V1 {
             this->Die(ctx);
         }
 
-    private: 
-        static constexpr ui32 MAX_IN_FLIGHT = 5; 
- 
-        ui32 RequestsInFlight = 0; 
-        std::vector<std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet>> WaitingList; 
-        std::vector<TString> Topics; 
-        TActorId NewSchemeCache; 
-    }; 
- 
-    TListStreamsActor::TListStreamsActor(NKikimr::NGRpcService::TEvDataStreamsListStreamsRequest* request, TActorId newSchemeCache) 
-        : TBase(request) 
-        , NewSchemeCache(newSchemeCache) 
-    { 
-    } 
- 
-    void TListStreamsActor::Bootstrap(const NActors::TActorContext& ctx) { 
-        TBase::Bootstrap(ctx); 
-        if (!Request_->GetDatabaseName()) { 
+    private:
+        static constexpr ui32 MAX_IN_FLIGHT = 5;
+
+        ui32 RequestsInFlight = 0;
+        std::vector<std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet>> WaitingList;
+        std::vector<TString> Topics;
+        TActorId NewSchemeCache;
+    };
+
+    TListStreamsActor::TListStreamsActor(NKikimr::NGRpcService::TEvDataStreamsListStreamsRequest* request, TActorId newSchemeCache)
+        : TBase(request)
+        , NewSchemeCache(newSchemeCache)
+    {
+    }
+
+    void TListStreamsActor::Bootstrap(const NActors::TActorContext& ctx) {
+        TBase::Bootstrap(ctx);
+        if (!Request_->GetDatabaseName()) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST,Ydb::PersQueue::ErrorCode::BAD_REQUEST,
                                           "Request without dabase is forbiden", ctx);
-        } 
+        }
 
         if (this->Request_->GetInternalToken().empty()) {
             if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
@@ -642,108 +642,108 @@ namespace NKikimr::NDataStreams::V1 {
             }
         }
 
-        SendNavigateRequest(ctx, *Request_->GetDatabaseName()); 
-        Become(&TListStreamsActor::StateWork); 
-    } 
- 
-    void TListStreamsActor::SendPendingRequests(const TActorContext& ctx) { 
-        if (RequestsInFlight < MAX_IN_FLIGHT && WaitingList.size() > 0) { 
-            ctx.Send(NewSchemeCache, WaitingList.back().release()); 
-            WaitingList.pop_back(); 
-            RequestsInFlight++; 
-        } 
-    } 
- 
-    void TListStreamsActor::SendResponse(const TActorContext& ctx) { 
-        Y_ENSURE(WaitingList.size() == 0 && RequestsInFlight == 0); 
- 
-        for (TString& topic : Topics) { 
-            topic = TFsPath(topic).RelativePath(*Request_->GetDatabaseName()).GetPath(); 
-        } 
-        Sort(Topics.begin(), Topics.end()); 
-        Ydb::DataStreams::V1::ListStreamsResult result; 
- 
-        int limit = GetProtoRequest()->limit() == 0 ? 100 : GetProtoRequest()->limit(); 
- 
-        if (limit > 10000) { 
-            Request_->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST); 
-            return Die(ctx); 
-        } 
- 
-        result.set_has_more_streams(false); 
-        for (const auto& streamName : Topics) { 
-            if (GetProtoRequest()->exclusive_start_stream_name().empty() 
-                || GetProtoRequest()->exclusive_start_stream_name() < streamName) 
-            { 
-                if (result.stream_names().size() >= limit) { 
-                    result.set_has_more_streams(true); 
-                    break; 
-                } 
-                result.add_stream_names(streamName); 
-            } 
-        } 
- 
-        Request_->SendResult(result, Ydb::StatusIds::SUCCESS); 
-        Die(ctx); 
-    } 
- 
-    void TListStreamsActor::SendNavigateRequest(const TActorContext& ctx, const TString &path) { 
-        auto schemeCacheRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>(); 
-        schemeCacheRequest->DatabaseName = Request().GetDatabaseName().GetRef(); 
-        NSchemeCache::TSchemeCacheNavigate::TEntry entry; 
-        entry.Path = NKikimr::SplitPath(path); 
- 
+        SendNavigateRequest(ctx, *Request_->GetDatabaseName());
+        Become(&TListStreamsActor::StateWork);
+    }
+
+    void TListStreamsActor::SendPendingRequests(const TActorContext& ctx) {
+        if (RequestsInFlight < MAX_IN_FLIGHT && WaitingList.size() > 0) {
+            ctx.Send(NewSchemeCache, WaitingList.back().release());
+            WaitingList.pop_back();
+            RequestsInFlight++;
+        }
+    }
+
+    void TListStreamsActor::SendResponse(const TActorContext& ctx) {
+        Y_ENSURE(WaitingList.size() == 0 && RequestsInFlight == 0);
+
+        for (TString& topic : Topics) {
+            topic = TFsPath(topic).RelativePath(*Request_->GetDatabaseName()).GetPath();
+        }
+        Sort(Topics.begin(), Topics.end());
+        Ydb::DataStreams::V1::ListStreamsResult result;
+
+        int limit = GetProtoRequest()->limit() == 0 ? 100 : GetProtoRequest()->limit();
+
+        if (limit > 10000) {
+            Request_->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+            return Die(ctx);
+        }
+
+        result.set_has_more_streams(false);
+        for (const auto& streamName : Topics) {
+            if (GetProtoRequest()->exclusive_start_stream_name().empty()
+                || GetProtoRequest()->exclusive_start_stream_name() < streamName)
+            {
+                if (result.stream_names().size() >= limit) {
+                    result.set_has_more_streams(true);
+                    break;
+                }
+                result.add_stream_names(streamName);
+            }
+        }
+
+        Request_->SendResult(result, Ydb::StatusIds::SUCCESS);
+        Die(ctx);
+    }
+
+    void TListStreamsActor::SendNavigateRequest(const TActorContext& ctx, const TString &path) {
+        auto schemeCacheRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+        schemeCacheRequest->DatabaseName = Request().GetDatabaseName().GetRef();
+        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+        entry.Path = NKikimr::SplitPath(path);
+
         if (!this->Request_->GetInternalToken().empty()) {
             schemeCacheRequest->UserToken = new NACLib::TUserToken(this->Request_->GetInternalToken());
         }
 
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList; 
-        schemeCacheRequest->ResultSet.emplace_back(entry); 
-        WaitingList.push_back(std::make_unique<TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release())); 
-        SendPendingRequests(ctx); 
-    } 
- 
-    void TListStreamsActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
-        switch (ev->GetTypeRewrite()) { 
-            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle); 
-            default: TBase::StateWork(ev, ctx); 
-        } 
-    } 
- 
-    void TListStreamsActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) { 
-        const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get(); 
-        for (const auto& entry : navigate->ResultSet) { 
-            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindPath 
-                || entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindSubdomain) 
-            { 
-                Y_ENSURE(entry.ListNodeEntry, "ListNodeEntry is zero"); 
-                for (const auto& child : entry.ListNodeEntry->Children) { 
-                    TString childFullPath = JoinPath({JoinPath(entry.Path), child.Name}); 
-                    switch (child.Kind) { 
-                        case NSchemeCache::TSchemeCacheNavigate::EKind::KindPath: 
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
+        schemeCacheRequest->ResultSet.emplace_back(entry);
+        WaitingList.push_back(std::make_unique<TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
+        SendPendingRequests(ctx);
+    }
+
+    void TListStreamsActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            default: TBase::StateWork(ev, ctx);
+        }
+    }
+
+    void TListStreamsActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
+        const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
+        for (const auto& entry : navigate->ResultSet) {
+            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindPath
+                || entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindSubdomain)
+            {
+                Y_ENSURE(entry.ListNodeEntry, "ListNodeEntry is zero");
+                for (const auto& child : entry.ListNodeEntry->Children) {
+                    TString childFullPath = JoinPath({JoinPath(entry.Path), child.Name});
+                    switch (child.Kind) {
+                        case NSchemeCache::TSchemeCacheNavigate::EKind::KindPath:
                             if (GetProtoRequest()->recurse()) {
                                 SendNavigateRequest(ctx, childFullPath);
                             }
-                            break; 
-                        case NSchemeCache::TSchemeCacheNavigate::EKind::KindTopic: 
-                            Topics.push_back(childFullPath); 
-                            break; 
-                        default: 
-                            break; 
-                            // ignore all other types 
-                    } 
-                } 
-            } 
-        } 
-        RequestsInFlight--; 
-        SendPendingRequests(ctx); 
-        if (RequestsInFlight == 0) { 
-            SendResponse(ctx); 
-        } 
-    } 
- 
-    //----------------------------------------------------------------------------------- 
- 
+                            break;
+                        case NSchemeCache::TSchemeCacheNavigate::EKind::KindTopic:
+                            Topics.push_back(childFullPath);
+                            break;
+                        default:
+                            break;
+                            // ignore all other types
+                    }
+                }
+            }
+        }
+        RequestsInFlight--;
+        SendPendingRequests(ctx);
+        if (RequestsInFlight == 0) {
+            SendResponse(ctx);
+        }
+    }
+
+    //-----------------------------------------------------------------------------------
+
     class TListStreamConsumersActor : public TPQGrpcSchemaBase<TListStreamConsumersActor, NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest> {
         using TBase = TPQGrpcSchemaBase<TListStreamConsumersActor, TEvDataStreamsListStreamConsumersRequest>;
 
@@ -1657,276 +1657,276 @@ namespace NKikimr::NDataStreams::V1 {
 
     //-----------------------------------------------------------------------------------------
 
-    template<class TEvRequest> 
-    class TNotImplementedRequestActor : public TRpcSchemeRequestActor<TNotImplementedRequestActor<TEvRequest>, TEvRequest> { 
-        using TBase = TRpcSchemeRequestActor<TNotImplementedRequestActor, TEvRequest>; 
- 
-    public: 
-        TNotImplementedRequestActor(TEvRequest* request) 
-            : TBase(request) 
-        { 
-        } 
-        ~TNotImplementedRequestActor() = default; 
- 
-        void Bootstrap(const NActors::TActorContext& ctx) { 
-            TBase::Bootstrap(ctx); 
-            this->Request_->RaiseIssue(FillIssue("Method is not implemented yet", Ydb::PersQueue::ErrorCode::ErrorCode::ERROR)); 
-            this->Request_->ReplyWithYdbStatus(Ydb::StatusIds::UNSUPPORTED); 
-            this->Die(ctx); 
-        } 
-    }; 
- 
+    template<class TEvRequest>
+    class TNotImplementedRequestActor : public TRpcSchemeRequestActor<TNotImplementedRequestActor<TEvRequest>, TEvRequest> {
+        using TBase = TRpcSchemeRequestActor<TNotImplementedRequestActor, TEvRequest>;
+
+    public:
+        TNotImplementedRequestActor(TEvRequest* request)
+            : TBase(request)
+        {
+        }
+        ~TNotImplementedRequestActor() = default;
+
+        void Bootstrap(const NActors::TActorContext& ctx) {
+            TBase::Bootstrap(ctx);
+            this->Request_->RaiseIssue(FillIssue("Method is not implemented yet", Ydb::PersQueue::ErrorCode::ErrorCode::ERROR));
+            this->Request_->ReplyWithYdbStatus(Ydb::StatusIds::UNSUPPORTED);
+            this->Die(ctx);
+        }
+    };
+
     //-----------------------------------------------------------------------------------
- 
-    IActor* CreateDataStreamsService(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TActorId newSchemeCache) { 
-        return new TDataStreamsService(counters, newSchemeCache); 
-    } 
- 
-    TDataStreamsService::TDataStreamsService(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TActorId newSchemeCache) 
-        : Counters(counters) 
-        , NewSchemeCache(newSchemeCache) 
-    { 
-    } 
- 
-    void TDataStreamsService::Bootstrap(const TActorContext&) { 
-        Become(&TThis::StateFunc); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsCreateStreamRequest::TPtr& ev, const TActorContext& ctx) { 
+
+    IActor* CreateDataStreamsService(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TActorId newSchemeCache) {
+        return new TDataStreamsService(counters, newSchemeCache);
+    }
+
+    TDataStreamsService::TDataStreamsService(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TActorId newSchemeCache)
+        : Counters(counters)
+        , NewSchemeCache(newSchemeCache)
+    {
+    }
+
+    void TDataStreamsService::Bootstrap(const TActorContext&) {
+        Become(&TThis::StateFunc);
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsCreateStreamRequest::TPtr& ev, const TActorContext& ctx) {
         ctx.Register(new TCreateStreamActor(ev->Release().Release(), NewSchemeCache));
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDeleteStreamRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TDeleteStreamActor(ev->Release().Release())); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TDescribeStreamActor(ev->Release().Release())); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) { 
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDeleteStreamRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TDeleteStreamActor(ev->Release().Release()));
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TDescribeStreamActor(ev->Release().Release()));
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) {
         ctx.Register(new TRegisterStreamConsumerActor(ev->Release().Release()));
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) { 
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) {
         ctx.Register(new TDeregisterStreamConsumerActor(ev->Release().Release()));
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsDescribeStreamConsumerRequest>(ev->Release().Release())); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsPutRecordRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TPutRecordActor(ev->Release().Release(), NewSchemeCache)); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsListStreamsRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TListStreamsActor(ev->Release().Release(), NewSchemeCache)); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsListShardsRequest::TPtr& ev, const TActorContext& ctx) { 
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsDescribeStreamConsumerRequest>(ev->Release().Release()));
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsPutRecordRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TPutRecordActor(ev->Release().Release(), NewSchemeCache));
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsListStreamsRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TListStreamsActor(ev->Release().Release(), NewSchemeCache));
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsListShardsRequest::TPtr& ev, const TActorContext& ctx) {
         ctx.Register(new TListShardsActor(ev->Release().Release(), NewSchemeCache));
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsPutRecordsRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TPutRecordsActor(ev->Release().Release(), NewSchemeCache)); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsGetRecordsRequest::TPtr& ev, const TActorContext& ctx) { 
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsPutRecordsRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TPutRecordsActor(ev->Release().Release(), NewSchemeCache));
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsGetRecordsRequest::TPtr& ev, const TActorContext& ctx) {
         ctx.Register(new TGetRecordsActor(ev->Release().Release(), NewSchemeCache));
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsGetShardIteratorRequest::TPtr& ev, const TActorContext& ctx) { 
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsGetShardIteratorRequest::TPtr& ev, const TActorContext& ctx) {
         ctx.Register(new TGetShardIteratorActor(ev->Release().Release(), NewSchemeCache));
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsSubscribeToShardRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsSubscribeToShardRequest>(ev->Release().Release())); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeLimitsRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsDescribeLimitsRequest>(ev->Release().Release())); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamSummaryRequest::TPtr& ev, const TActorContext& ctx) { 
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsSubscribeToShardRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsSubscribeToShardRequest>(ev->Release().Release()));
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeLimitsRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsDescribeLimitsRequest>(ev->Release().Release()));
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamSummaryRequest::TPtr& ev, const TActorContext& ctx) {
         ctx.Register(new TDescribeStreamSummaryActor(ev->Release().Release()));
-    } 
- 
-    void TDataStreamsService::Handle(TEvDataStreamsDecreaseStreamRetentionPeriodRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TSetStreamRetentionPeriodActor<TEvDataStreamsDecreaseStreamRetentionPeriodRequest>(ev->Release().Release(), false)); 
-    } 
- 
-    void TDataStreamsService::Handle(TEvDataStreamsIncreaseStreamRetentionPeriodRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TSetStreamRetentionPeriodActor<TEvDataStreamsIncreaseStreamRetentionPeriodRequest>(ev->Release().Release(), true)); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsUpdateShardCountRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TUpdateShardCountActor(ev->Release().Release())); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsUpdateStreamRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TUpdateStreamActor(ev->Release().Release())); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest::TPtr& ev, const TActorContext& ctx) { 
+    }
+
+    void TDataStreamsService::Handle(TEvDataStreamsDecreaseStreamRetentionPeriodRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TSetStreamRetentionPeriodActor<TEvDataStreamsDecreaseStreamRetentionPeriodRequest>(ev->Release().Release(), false));
+    }
+
+    void TDataStreamsService::Handle(TEvDataStreamsIncreaseStreamRetentionPeriodRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TSetStreamRetentionPeriodActor<TEvDataStreamsIncreaseStreamRetentionPeriodRequest>(ev->Release().Release(), true));
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsUpdateShardCountRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TUpdateShardCountActor(ev->Release().Release()));
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsUpdateStreamRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TUpdateStreamActor(ev->Release().Release()));
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest::TPtr& ev, const TActorContext& ctx) {
         ctx.Register(new TListStreamConsumersActor(ev->Release().Release()));
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsAddTagsToStreamRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsAddTagsToStreamRequest>(ev->Release().Release())); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDisableEnhancedMonitoringRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsDisableEnhancedMonitoringRequest>(ev->Release().Release())); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsEnableEnhancedMonitoringRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsEnableEnhancedMonitoringRequest>(ev->Release().Release())); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsListTagsForStreamRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsListTagsForStreamRequest>(ev->Release().Release())); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsMergeShardsRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsMergeShardsRequest>(ev->Release().Release())); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsRemoveTagsFromStreamRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsRemoveTagsFromStreamRequest>(ev->Release().Release())); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsSplitShardRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsSplitShardRequest>(ev->Release().Release())); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsStartStreamEncryptionRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsStartStreamEncryptionRequest>(ev->Release().Release())); 
-    } 
- 
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsStopStreamEncryptionRequest::TPtr& ev, const TActorContext& ctx) { 
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsStopStreamEncryptionRequest>(ev->Release().Release())); 
-    } 
- 
-} 
- 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsCreateStreamRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDeleteStreamRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsPutRecordRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsListStreamsRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsListShardsRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsPutRecordsRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsGetRecordsRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsGetShardIteratorRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsSubscribeToShardRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeLimitsRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamSummaryRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDecreaseStreamRetentionPeriodRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsIncreaseStreamRetentionPeriodRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsUpdateShardCountRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsAddTagsToStreamRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDisableEnhancedMonitoringRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsEnableEnhancedMonitoringRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsListTagsForStreamRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsUpdateStreamRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsSetWriteQuotaRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsMergeShardsRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsRemoveTagsFromStreamRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsSplitShardRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsStartStreamEncryptionRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
- 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsStopStreamEncryptionRequest::TPtr& ev, const TActorContext& ctx) { 
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release()); 
-} 
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsAddTagsToStreamRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsAddTagsToStreamRequest>(ev->Release().Release()));
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDisableEnhancedMonitoringRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsDisableEnhancedMonitoringRequest>(ev->Release().Release()));
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsEnableEnhancedMonitoringRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsEnableEnhancedMonitoringRequest>(ev->Release().Release()));
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsListTagsForStreamRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsListTagsForStreamRequest>(ev->Release().Release()));
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsMergeShardsRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsMergeShardsRequest>(ev->Release().Release()));
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsRemoveTagsFromStreamRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsRemoveTagsFromStreamRequest>(ev->Release().Release()));
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsSplitShardRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsSplitShardRequest>(ev->Release().Release()));
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsStartStreamEncryptionRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsStartStreamEncryptionRequest>(ev->Release().Release()));
+    }
+
+    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsStopStreamEncryptionRequest::TPtr& ev, const TActorContext& ctx) {
+        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsStopStreamEncryptionRequest>(ev->Release().Release()));
+    }
+
+}
+
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsCreateStreamRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDeleteStreamRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsPutRecordRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsListStreamsRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsListShardsRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsPutRecordsRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsGetRecordsRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsGetShardIteratorRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsSubscribeToShardRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeLimitsRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamSummaryRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDecreaseStreamRetentionPeriodRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsIncreaseStreamRetentionPeriodRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsUpdateShardCountRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsAddTagsToStreamRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDisableEnhancedMonitoringRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsEnableEnhancedMonitoringRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsListTagsForStreamRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsUpdateStreamRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsSetWriteQuotaRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsMergeShardsRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsRemoveTagsFromStreamRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsSplitShardRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsStartStreamEncryptionRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsStopStreamEncryptionRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+}

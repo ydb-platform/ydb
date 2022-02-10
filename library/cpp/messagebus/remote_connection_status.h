@@ -11,10 +11,10 @@
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
-namespace NBus { 
-    class TConnectionStatusMonRecord; 
-} 
- 
+namespace NBus {
+    class TConnectionStatusMonRecord;
+}
+
 namespace NBus {
     namespace NPrivate {
 #define WRITER_STATE_MAP(XX) \

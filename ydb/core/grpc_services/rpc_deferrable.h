@@ -194,11 +194,11 @@ protected:
         Reply(status, issues, ctx);
     }
 
-    void Reply(Ydb::StatusIds::StatusCode status, const TActorContext& ctx) { 
-        Request_->ReplyWithYdbStatus(status); 
-        this->Die(ctx); 
-    } 
- 
+    void Reply(Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
+        Request_->ReplyWithYdbStatus(status);
+        this->Die(ctx);
+    }
+
     void ReplyWithResult(Ydb::StatusIds::StatusCode status,
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext &ctx)
     {

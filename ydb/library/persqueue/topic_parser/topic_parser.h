@@ -1,7 +1,7 @@
 #pragma once
 
-#include <library/cpp/actors/core/actor.h> 
- 
+#include <library/cpp/actors/core/actor.h>
+
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
@@ -10,9 +10,9 @@
 
 namespace NPersQueue {
 
-TString GetFullTopicPath(const NActors::TActorContext& ctx, TMaybe<TString> database, const TString& topicPath); 
-TString ConvertNewConsumerName(const TString& consumer, const NActors::TActorContext& ctx); 
-TString ConvertOldConsumerName(const TString& consumer, const NActors::TActorContext& ctx); 
+TString GetFullTopicPath(const NActors::TActorContext& ctx, TMaybe<TString> database, const TString& topicPath);
+TString ConvertNewConsumerName(const TString& consumer, const NActors::TActorContext& ctx);
+TString ConvertOldConsumerName(const TString& consumer, const NActors::TActorContext& ctx);
 TString MakeConsumerPath(const TString& consumer);
 
 

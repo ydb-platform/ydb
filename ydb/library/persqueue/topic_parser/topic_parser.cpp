@@ -1,49 +1,49 @@
 #include "topic_parser.h"
 
 #include <ydb/core/base/appdata.h>
- 
-#include <util/folder/path.h> 
- 
+
+#include <util/folder/path.h>
+
 namespace NPersQueue {
 
-namespace { 
-    TString FullPath(const TMaybe<TString> &database, const TString &path) { 
+namespace {
+    TString FullPath(const TMaybe<TString> &database, const TString &path) {
         if (database.Defined() && !path.StartsWith(*database) && !path.Contains('\0')) {
             try {
                 return (TFsPath(*database) / path).GetPath();
             } catch(...) {
                 return path;
             }
-        } else { 
-            return path; 
-        } 
-    } 
-} 
- 
-TString GetFullTopicPath(const NActors::TActorContext& ctx, TMaybe<TString> database, const TString& topicPath) { 
-    if (NKikimr::AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) { 
-        return FullPath(database, topicPath); 
-    } else { 
-        return topicPath; 
-    } 
-} 
- 
-TString ConvertNewConsumerName(const TString& consumer, const NActors::TActorContext& ctx) { 
-    if (NKikimr::AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) { 
-        return consumer; 
-    } else { 
-        return ConvertNewConsumerName(consumer); 
-    } 
-} 
- 
-TString ConvertOldConsumerName(const TString& consumer, const NActors::TActorContext& ctx) { 
-    if (NKikimr::AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) { 
-        return consumer; 
-    } else { 
-        return ConvertOldConsumerName(consumer); 
-    } 
-} 
- 
+        } else {
+            return path;
+        }
+    }
+}
+
+TString GetFullTopicPath(const NActors::TActorContext& ctx, TMaybe<TString> database, const TString& topicPath) {
+    if (NKikimr::AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        return FullPath(database, topicPath);
+    } else {
+        return topicPath;
+    }
+}
+
+TString ConvertNewConsumerName(const TString& consumer, const NActors::TActorContext& ctx) {
+    if (NKikimr::AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        return consumer;
+    } else {
+        return ConvertNewConsumerName(consumer);
+    }
+}
+
+TString ConvertOldConsumerName(const TString& consumer, const NActors::TActorContext& ctx) {
+    if (NKikimr::AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        return consumer;
+    } else {
+        return ConvertOldConsumerName(consumer);
+    }
+}
+
 TString MakeConsumerPath(const TString& consumer) {
     TStringBuilder res;
     res.reserve(consumer.size());

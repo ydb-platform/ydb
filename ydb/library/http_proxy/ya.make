@@ -1,4 +1,4 @@
-RECURSE( 
-    authorization 
+RECURSE(
+    authorization
     error
-) 
+)

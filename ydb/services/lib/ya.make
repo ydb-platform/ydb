@@ -1,6 +1,6 @@
-OWNER(g:kikimr) 
- 
-RECURSE( 
-    actors 
-    sharding 
-) 
+OWNER(g:kikimr)
+
+RECURSE(
+    actors
+    sharding
+)

@@ -157,8 +157,8 @@ private:
                 Y_VERIFY(partResp->GetResult(partResp->ResultSize() - 1).GetSeqNo() == res.GetResult(i).GetSeqNo());
                 auto rr = partResp->MutableResult(partResp->ResultSize() - 1);
                 (*rr->MutableData()) += res.GetResult(i).GetData();
-                rr->SetPartitionKey(res.GetResult(i).GetPartitionKey()); 
-                rr->SetExplicitHash(res.GetResult(i).GetExplicitHash()); 
+                rr->SetPartitionKey(res.GetResult(i).GetPartitionKey());
+                rr->SetExplicitHash(res.GetResult(i).GetExplicitHash());
                 rr->SetPartNo(res.GetResult(i).GetPartNo());
                 rr->SetUncompressedSize(rr->GetUncompressedSize() + res.GetResult(i).GetUncompressedSize());
                 if (res.GetResult(i).GetPartNo() + 1 == res.GetResult(i).GetTotalParts()) {
@@ -595,8 +595,8 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
         cacheSize = Config.GetCacheSize();
 
     if (TopicName.empty()) { // it's the first time
-        TopicName = Config.GetTopicName(); 
-        TopicPath = Config.GetTopicPath(); 
+        TopicName = Config.GetTopicName();
+        TopicPath = Config.GetTopicPath();
         LocalDC = Config.GetLocalDC();
 
         KeySchema.clear();
@@ -608,7 +608,7 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
         Y_VERIFY(TopicName.size(), "Need topic name here");
         CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TopicName, cacheSize));
     } else {
-        Y_VERIFY(TopicName == Config.GetTopicName(), "Changing topic name is not supported"); 
+        Y_VERIFY(TopicName == Config.GetTopicName(), "Changing topic name is not supported");
         ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(cacheSize));
     }
 
@@ -703,7 +703,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
             }
         }
 
-        TopicName = Config.GetTopicName(); 
+        TopicName = Config.GetTopicName();
         LocalDC = Config.GetLocalDC();
 
         KeySchema.clear();
@@ -1415,17 +1415,17 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
 
     bool mirroredPartition = Config.GetPartitionConfig().HasMirrorFrom();
 
-    if (!req.GetIsDirectWrite()) { 
-        if (!req.HasMessageNo()) { 
-            ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "MessageNo must be set for writes"); 
-            return; 
-        } 
- 
- 
-        if (!mirroredPartition && !req.HasOwnerCookie()) { 
-            ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "OwnerCookie must be set for writes"); 
-            return; 
-        } 
+    if (!req.GetIsDirectWrite()) {
+        if (!req.HasMessageNo()) {
+            ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "MessageNo must be set for writes");
+            return;
+        }
+
+
+        if (!mirroredPartition && !req.HasOwnerCookie()) {
+            ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "OwnerCookie must be set for writes");
+            return;
+        }
     }
 
     if (req.HasCmdWriteOffset() && req.GetCmdWriteOffset() < 0) {
@@ -1457,14 +1457,14 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
         }
 
         TString errorStr = "";
-        if (!cmd.HasSeqNo() && !req.GetIsDirectWrite()) { 
+        if (!cmd.HasSeqNo() && !req.GetIsDirectWrite()) {
             errorStr = "no SeqNo";
         } else if (!cmd.HasData() || cmd.GetData().empty()){
             errorStr = "empty Data";
-        } else if ((!cmd.HasSourceId() || cmd.GetSourceId().empty()) && !req.GetIsDirectWrite()) { 
+        } else if ((!cmd.HasSourceId() || cmd.GetSourceId().empty()) && !req.GetIsDirectWrite()) {
             errorStr = "empty SourceId";
-        } else if (cmd.GetPartitionKey().size() > 256) { 
-            errorStr = "too long partition key"; 
+        } else if (cmd.GetPartitionKey().size() > 256) {
+            errorStr = "too long partition key";
         } else if (cmd.GetSeqNo() < 0) {
             errorStr = "SeqNo must be >= 0";
         } else if (cmd.HasPartNo() && (cmd.GetPartNo() < 0 || cmd.GetPartNo() >= Max<ui16>())) {
@@ -1526,7 +1526,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                 diff = 0;
                 msgs.push_back({cmd.GetSourceId(), static_cast<ui64>(cmd.GetSeqNo()), partNo,
                     totalParts, totalSize, createTimestampMs, receiveTimestampMs,
-                    disableDeduplication, writeTimestampMs, data, uncompressedSize, 
+                    disableDeduplication, writeTimestampMs, data, uncompressedSize,
                     cmd.GetPartitionKey(), cmd.GetExplicitHash(), cmd.GetExternalOperation()
                 });
                 partNo++;

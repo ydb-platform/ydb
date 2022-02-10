@@ -158,14 +158,14 @@ TAsyncStatus TPersQueueClient::DropTopic(const TString& path, const TDropTopicSe
     return Impl_->DropTopic(path, settings);
 }
 
-TAsyncStatus TPersQueueClient::AddReadRule(const TString& path, const TAddReadRuleSettings& settings) { 
-    return Impl_->AddReadRule(path, settings); 
-} 
- 
-TAsyncStatus TPersQueueClient::RemoveReadRule(const TString& path, const TRemoveReadRuleSettings& settings) { 
-    return Impl_->RemoveReadRule(path, settings); 
-} 
- 
+TAsyncStatus TPersQueueClient::AddReadRule(const TString& path, const TAddReadRuleSettings& settings) {
+    return Impl_->AddReadRule(path, settings);
+}
+
+TAsyncStatus TPersQueueClient::RemoveReadRule(const TString& path, const TRemoveReadRuleSettings& settings) {
+    return Impl_->RemoveReadRule(path, settings);
+}
+
 TAsyncDescribeTopicResult TPersQueueClient::DescribeTopic(const TString& path, const TDescribeTopicSettings& settings) {
     return Impl_->DescribeTopic(path, settings);
 }

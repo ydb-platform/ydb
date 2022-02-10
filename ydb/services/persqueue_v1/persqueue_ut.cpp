@@ -38,7 +38,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
 
 
-namespace NKikimr::NPersQueueTests { 
+namespace NKikimr::NPersQueueTests {
 
 using namespace Tests;
 using namespace NKikimrClient;
@@ -241,16 +241,16 @@ namespace {
 
         auto driver = server.Server->AnnoyingClient->GetDriver();
 
-        { 
+        {
             auto writer = CreateSimpleWriter(*driver, "acc/topic1", "source");
             for (int i = 1; i < 17; ++i) {
                 bool res = writer->Write("valuevaluevalue" + ToString(i), i);
                 UNIT_ASSERT(res);
-            } 
+            }
             bool res = writer->Close(TDuration::Seconds(10));
             UNIT_ASSERT(res);
-        } 
- 
+        }
+
         //check read results
         MigrationStreamingReadServerMessage resp;
         for (ui32 i = 10; i < 16; ++i) {
@@ -296,7 +296,7 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(res.topics_size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(res.topics(0).partitions_size(), 10);
         }
- 
+
         {
             ReadInfoRequest request;
             ReadInfoResponse response;
@@ -2597,7 +2597,7 @@ namespace {
             DescribeTopicResult res;
             response.operation().result().UnpackTo(&res);
             Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SCHEME_ERROR); 
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SCHEME_ERROR);
         }
 
         {

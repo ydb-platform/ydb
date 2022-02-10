@@ -166,7 +166,7 @@ protected:
         request->Record.MutableTabletConfig()->SetCacheSize(10*1024*1024);
         request->Record.SetTxId(12345);
         auto tabletConfig = request->Record.MutableTabletConfig();
-        tabletConfig->SetTopicName(topic); 
+        tabletConfig->SetTopicName(topic);
         tabletConfig->SetVersion(version);
         auto config = tabletConfig->MutablePartitionConfig();
         config->SetMaxCountInPartition(20000000);

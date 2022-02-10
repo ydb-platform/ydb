@@ -1,6 +1,6 @@
 #include "http.h"
 #include "xml.h"
- 
+
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
 #include <ydb/core/ymq/actor/actor.h>
@@ -1035,7 +1035,7 @@ void TAsyncHttpServer::OnException() {
 }
 
 THttpServerOptions TAsyncHttpServer::MakeHttpServerOptions(const NKikimrConfig::TSqsConfig& config) {
-    const auto& cfg = config.GetHttpServerConfig(); 
+    const auto& cfg = config.GetHttpServerConfig();
     THttpServerOptions options;
     options.SetThreads(cfg.GetThreads());
     options.SetPort(cfg.GetPort());

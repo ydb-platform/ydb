@@ -14,7 +14,7 @@ PEERDIR(
 )
 
 SRCS(
-    draft/datastreams.proto 
+    draft/datastreams.proto
     draft/persqueue_common.proto
     draft/persqueue_error_codes.proto
     draft/ydb_long_tx.proto

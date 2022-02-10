@@ -107,7 +107,7 @@ class KikimrConfigGenerator(object):
             enable_metering=False,
             grpc_tls_data_path=None,
             yql_config_path=None,
-            enable_datastreams=False, 
+            enable_datastreams=False,
             auth_config_path=None,
             disable_mvcc=False,
             enable_public_api_external_blobs=False,

@@ -365,7 +365,7 @@ void TReadSessionActor::Handle(IContext::TEvReadFinished::TPtr& ev, const TActor
         }
         case MigrationStreamingReadClientMessage::kStartRead: {
             const auto& req = request.start_read();
- 
+
             const ui64 readOffset = req.read_offset();
             const ui64 commitOffset = req.commit_offset();
             const bool verifyReadOffset = req.verify_read_offset();
@@ -703,7 +703,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
         return;
     }
 
-    ClientId = NPersQueue::ConvertNewConsumerName(init.consumer(), ctx); 
+    ClientId = NPersQueue::ConvertNewConsumerName(init.consumer(), ctx);
     ClientPath = init.consumer();
 
     TStringBuilder session;
@@ -1001,7 +1001,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
         return;
     }
 
-    if (NumPartitionsFromTopic[topic]++ == 0) { 
+    if (NumPartitionsFromTopic[topic]++ == 0) {
         if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
             SetupTopicCounters(topic, jt->second.CloudId, jt->second.DbId, jt->second.FolderId);
         } else {
@@ -1009,7 +1009,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
         }
     }
 
-    auto it = TopicCounters.find(topic); 
+    auto it = TopicCounters.find(topic);
     Y_VERIFY(it != TopicCounters.end());
 
     ui64 assignId = NextAssignId++;
@@ -1926,12 +1926,12 @@ bool FillBatchedData(MigrationStreamingReadServerMessage::DataBatch * data, cons
             continue; //TODO - no such chunks must be on prod
         }
 
-        TString sourceId; 
-        if (!r.GetSourceId().empty()) { 
+        TString sourceId;
+        if (!r.GetSourceId().empty()) {
             if (!NPQ::NSourceIdEncoding::IsValidEncoded(r.GetSourceId())) {
-                LOG_ERROR_S(ctx, NKikimrServices::PQ_READ_PROXY, "read bad sourceId from " << Partition 
-                                                                                           << " offset " << r.GetOffset() << " seqNo " << r.GetSeqNo() << " sourceId '" << r.GetSourceId() << "'"); 
-            } 
+                LOG_ERROR_S(ctx, NKikimrServices::PQ_READ_PROXY, "read bad sourceId from " << Partition
+                                                                                           << " offset " << r.GetOffset() << " seqNo " << r.GetSeqNo() << " sourceId '" << r.GetSourceId() << "'");
+            }
             sourceId = NPQ::NSourceIdEncoding::Decode(r.GetSourceId());
         }
 
@@ -1984,9 +1984,9 @@ bool FillBatchedData(MigrationStreamingReadServerMessage::DataBatch * data, cons
         message->set_create_timestamp_ms(r.GetCreateTimestampMS());
         message->set_offset(r.GetOffset());
 
-        message->set_explicit_hash(r.GetExplicitHash()); 
-        message->set_partition_key(r.GetPartitionKey()); 
- 
+        message->set_explicit_hash(r.GetExplicitHash());
+        message->set_partition_key(r.GetPartitionKey());
+
         if (proto.HasCodec()) {
             message->set_codec(NPQ::ToV1Codec((NPersQueueCommon::ECodec)proto.GetCodec()));
         }
@@ -2577,7 +2577,7 @@ TReadInitAndAuthActor::TReadInitAndAuthActor(
     , MetaCacheId(metaCache)
     , NewSchemeCache(newSchemeCache)
     , ClientId(clientId)
-    , ClientPath(NPersQueue::ConvertOldConsumerName(ClientId, ctx)) 
+    , ClientPath(NPersQueue::ConvertOldConsumerName(ClientId, ctx))
     , Token(token)
     , Counters(counters)
 {
@@ -2596,7 +2596,7 @@ void TReadInitAndAuthActor::Bootstrap(const TActorContext &ctx) {
     TVector<TString> topicNames;
     for (const auto& topic : Topics) {
         topicNames.emplace_back(topic.second.TopicNameConverter->GetPrimaryPath());
-    } 
+    }
     DoCheckACL = AppData(ctx)->PQConfig.GetCheckACL() && Token;
     ctx.Send(MetaCacheId, new TEvDescribeTopicsRequest(topicNames));
 }
@@ -2618,18 +2618,18 @@ void TReadInitAndAuthActor::CloseSession(const TString& errorReason, const PersQ
     Die(ctx);
 }
 
-void TReadInitAndAuthActor::SendCacheNavigateRequest(const TActorContext& ctx, const TString& path) { 
-    auto schemeCacheRequest = MakeHolder<NSchemeCache::TSchemeCacheNavigate>(); 
-    NSchemeCache::TSchemeCacheNavigate::TEntry entry; 
-    entry.Path = NKikimr::SplitPath(path); 
+void TReadInitAndAuthActor::SendCacheNavigateRequest(const TActorContext& ctx, const TString& path) {
+    auto schemeCacheRequest = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+    entry.Path = NKikimr::SplitPath(path);
     entry.SyncVersion = true;
-    entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath; 
-    schemeCacheRequest->ResultSet.emplace_back(entry); 
+    entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+    schemeCacheRequest->ResultSet.emplace_back(entry);
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Send client acl request");
-    ctx.Send(NewSchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.Release())); 
-} 
+    ctx.Send(NewSchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.Release()));
+}
 
- 
+
 bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, THashMap<TString, TTopicHolder>::iterator topicsIter,
         const TActorContext& ctx
@@ -2638,9 +2638,9 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     Y_VERIFY(entry.PQGroupInfo);
     topicsIter->second.TabletID = pqDescr.GetBalancerTabletID();
     return CheckTopicACL(entry, topicsIter->first, ctx);
-} 
+}
 
- 
+
 void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Handle describe topics response");
     for (const auto& entry : ev->Get()->Result->ResultSet) {
@@ -2803,7 +2803,7 @@ void TReadInfoActor::Bootstrap(const TActorContext& ctx) {
 
     auto request = dynamic_cast<const ReadInfoRequest*>(GetProtoRequest());
     Y_VERIFY(request);
-    ClientId = NPersQueue::ConvertNewConsumerName(request->consumer().path(), ctx); 
+    ClientId = NPersQueue::ConvertNewConsumerName(request->consumer().path(), ctx);
 
     bool readOnlyLocal = request->get_only_original();
 

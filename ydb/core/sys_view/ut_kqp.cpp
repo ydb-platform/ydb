@@ -1225,12 +1225,12 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 .Build();
 
             auto result = session.CreateTable("/Root/.sys/partition_stats", std::move(desc)).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR); 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
             auto result = session.CopyTable("/Root/.sys/partition_stats", "/Root/Table0").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR); 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
@@ -1238,19 +1238,19 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 .AppendDropColumns("OwnerId");
 
             auto result = session.AlterTable("/Root/.sys/partition_stats", settings).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR); 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
             auto result = session.DropTable("/Root/.sys/partition_stats").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR); 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
             auto result = session.ExecuteSchemeQuery(R"(
                 DROP TABLE `/Root/.sys/partition_stats`;
             )").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR); 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
@@ -1278,23 +1278,23 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
         {
             auto result = schemeClient.MakeDirectory("/Root/.sys/partition_stats").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR); 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
             auto result = schemeClient.RemoveDirectory("/Root/.sys").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR); 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
             auto result = schemeClient.RemoveDirectory("/Root/.sys/partition_stats").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR); 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
             TModifyPermissionsSettings settings;
             auto result = schemeClient.ModifyPermissions("/Root/.sys/partition_stats", settings).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR); 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
     }

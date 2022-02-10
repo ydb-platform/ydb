@@ -531,7 +531,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["import"] = &hasImport;
         bool hasAnalytics = false;
         names["analytics"] = &hasAnalytics;
-        bool hasDataStreams = false; 
+        bool hasDataStreams = false;
         names["datastreams"] = &hasDataStreams;
         bool hasYandexQuery = false;
         names["yq"] = &hasYandexQuery;
@@ -709,9 +709,9 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             server.AddService(new NGRpcService::TGRpcAuthService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
 
-        if (hasDataStreams) { 
-            server.AddService(new NGRpcService::TGRpcDataStreamsService(ActorSystem.Get(), Counters, grpcRequestProxyId)); 
-        } 
+        if (hasDataStreams) {
+            server.AddService(new NGRpcService::TGRpcDataStreamsService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+        }
 
         if (hasYandexQuery) {
             server.AddService(new NGRpcService::TGRpcYandexQueryService(ActorSystem.Get(), Counters, grpcRequestProxyId));

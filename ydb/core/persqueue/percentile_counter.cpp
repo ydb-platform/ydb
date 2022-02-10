@@ -46,7 +46,7 @@ TVector<TLabelsInfo> GetLabels(const TString& topic)
 
     return GetLabels(origDC, topic.substr(pos + 2));
 }
- 
+
 TVector<TLabelsInfo> GetLabels(const TString& cluster, const TString& realTopic)
 {
     TString origDC = cluster;

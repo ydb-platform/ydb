@@ -3,7 +3,7 @@
 #include "message_status.h"
 
 #include <library/cpp/messagebus/monitoring/mon_proto.pb.h>
- 
+
 #include <util/generic/string.h>
 
 #include <array>
@@ -25,9 +25,9 @@ namespace NBus {
             }
 
             TMessageStatusCounter();
- 
+
             TMessageStatusCounter& operator+=(const TMessageStatusCounter&);
- 
+
             TString PrintToString() const;
             void FillErrorsProtobuf(TConnectionStatusMonRecord*) const;
         };

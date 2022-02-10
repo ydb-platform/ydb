@@ -61,7 +61,7 @@ SRCS(
     flat_scheme_op.proto
     health.proto
     hive.proto
-    http_config.proto 
+    http_config.proto
     import.proto
     index_builder.proto
     issue_id.proto
@@ -88,7 +88,7 @@ SRCS(
     scheme_log.proto
     scheme_type_metadata.proto
     scheme_type_operation.proto
-    serverless_proxy_config.proto 
+    serverless_proxy_config.proto
     services.proto
     shared_cache.proto
     sqs.proto

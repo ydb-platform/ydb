@@ -19,8 +19,8 @@ SRCS(
     grpc_pq_write.h
     persqueue.cpp
     persqueue.h
-    persqueue_utils.cpp 
-    persqueue_utils.h 
+    persqueue_utils.cpp
+    persqueue_utils.h
 )
 
 PEERDIR(

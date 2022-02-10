@@ -47,7 +47,7 @@ public:
         Topic = NPersQueue::ConvertNewTopicName(params.Get("topic"));
         if (Topic.empty())
             Topic = "*";
-        Consumer = NPersQueue::ConvertNewConsumerName(params.Get("consumer"), ctx); 
+        Consumer = NPersQueue::ConvertNewConsumerName(params.Get("consumer"), ctx);
         DC = params.Get("dc");
         if (DC.empty())
             DC = "*";

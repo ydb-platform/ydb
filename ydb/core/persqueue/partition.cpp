@@ -460,7 +460,7 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
     , Partition(partition)
     , Config(config)
     , TopicName(topicName)
-    , TopicPath(topicPath) 
+    , TopicPath(topicPath)
     , LocalDC(localDC)
     , DCId(std::move(dcId))
     , StartOffset(0)
@@ -2249,9 +2249,9 @@ static void AddResultBlob(T* read, const TClientBlob& blob, ui64 offset)
     cc->SetWriteTimestampMS(blob.WriteTimestamp.MilliSeconds());
     cc->SetCreateTimestampMS(blob.CreateTimestamp.MilliSeconds());
     cc->SetUncompressedSize(blob.UncompressedSize);
-    cc->SetPartitionKey(blob.PartitionKey); 
-    cc->SetExplicitHash(blob.ExplicitHashKey); 
- 
+    cc->SetPartitionKey(blob.PartitionKey);
+    cc->SetExplicitHash(blob.ExplicitHashKey);
+
     if (blob.PartData) {
         cc->SetPartNo(blob.PartData->PartNo);
         cc->SetTotalParts(blob.PartData->TotalParts);
@@ -3565,7 +3565,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     ui64 decReservedSize = 0;
     TStringBuf owner;
 
-    if (!mirroredPartition && !ev->Get()->IsDirectWrite) { 
+    if (!mirroredPartition && !ev->Get()->IsDirectWrite) {
         owner = TOwnerInfo::GetOwnerFromOwnerCookie(ev->Get()->OwnerCookie);
         auto it = Owners.find(owner);
 
@@ -3614,7 +3614,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     }
     for (const auto& msg: ev->Get()->Msgs) {
         //this is checked in pq_impl when forming EvWrite request
-        Y_VERIFY(!msg.SourceId.empty() || ev->Get()->IsDirectWrite); 
+        Y_VERIFY(!msg.SourceId.empty() || ev->Get()->IsDirectWrite);
         Y_VERIFY(!msg.Data.empty());
 
         if (msg.SeqNo > (ui64)Max<i64>()) {
@@ -4144,8 +4144,8 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
         WriteTimestamp = ctx.Now();
         WriteTimestampEstimate = p.Msg.WriteTimestamp > 0 ? TInstant::MilliSeconds(p.Msg.WriteTimestamp) : WriteTimestamp;
         TClientBlob blob(p.Msg.SourceId, p.Msg.SeqNo, p.Msg.Data, std::move(partData), WriteTimestampEstimate,
-                            TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp), 
-                            p.Msg.UncompressedSize, p.Msg.PartitionKey, p.Msg.ExplicitHashKey); //remove curOffset when LB will report CTime 
+                            TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
+                            p.Msg.UncompressedSize, p.Msg.PartitionKey, p.Msg.ExplicitHashKey); //remove curOffset when LB will report CTime
 
         ui64 writeLagMs = (WriteTimestamp - TInstant::MilliSeconds(p.Msg.CreateTimestamp)).MilliSeconds();
         WriteLagMs.Update(writeLagMs, WriteTimestamp);
@@ -4689,7 +4689,7 @@ void TPartition::WriteBlobWithQuota(THolder<TEvKeyValue::TEvRequest>&& request)
 {
     // Request quota and write blob.
     // Mirrored topics are not quoted in local dc.
-    const bool skip = !IsQuotingEnabled() || TopicWriteQuotaResourcePath.empty(); 
+    const bool skip = !IsQuotingEnabled() || TopicWriteQuotaResourcePath.empty();
     if (size_t quotaRequestSize = skip ? 0 : GetQuotaRequestSize(*request)) {
         // Request with data. We should check before attempting to write data whether we have enough quota.
         Y_VERIFY(!WaitingForPreviousBlobQuota());
@@ -4712,31 +4712,31 @@ void TPartition::WriteBlobWithQuota(THolder<TEvKeyValue::TEvRequest>&& request)
 
 void TPartition::CalcTopicWriteQuotaParams()
 {
-    const auto& pqConfig = AppData()->PQConfig; 
-    const auto& quotingConfig = pqConfig.GetQuotingConfig(); 
-    if (IsQuotingEnabled()) { // Mirrored topics are not quoted in local dc. 
+    const auto& pqConfig = AppData()->PQConfig;
+    const auto& quotingConfig = pqConfig.GetQuotingConfig();
+    if (IsQuotingEnabled()) { // Mirrored topics are not quoted in local dc.
         Y_VERIFY(quotingConfig.GetTopicWriteQuotaEntityToLimit() != NKikimrPQ::TPQConfig::TQuotingConfig::UNSPECIFIED);
 
-        TString topicPath = TopicPath.empty() ? TopicName : TopicPath; 
-        TFsPath fsPath(topicPath); 
-        if (fsPath.IsSubpathOf(pqConfig.GetRoot())) { 
-            topicPath = fsPath.RelativePath(TFsPath(pqConfig.GetRoot())).GetPath(); 
-        } 
-        topicPath = NPersQueue::GetTopicPath(topicPath); 
-        auto topicParts = SplitPath(topicPath); // account/folder/topic // account is first element 
-        if (topicParts.size() < 2) { 
+        TString topicPath = TopicPath.empty() ? TopicName : TopicPath;
+        TFsPath fsPath(topicPath);
+        if (fsPath.IsSubpathOf(pqConfig.GetRoot())) {
+            topicPath = fsPath.RelativePath(TFsPath(pqConfig.GetRoot())).GetPath();
+        }
+        topicPath = NPersQueue::GetTopicPath(topicPath);
+        auto topicParts = SplitPath(topicPath); // account/folder/topic // account is first element
+        if (topicParts.size() < 2) {
             LOG_WARN_S(TActivationContext::AsActorContext(), NKikimrServices::PERSQUEUE,
-                       "tablet " << TabletID << " topic '" << topicPath << "' Bad topic name. Disable quoting for topic"); 
+                       "tablet " << TabletID << " topic '" << topicPath << "' Bad topic name. Disable quoting for topic");
             return;
         }
 
-        const TString account = topicParts[0]; 
-        topicParts[0] = WRITE_QUOTA_ROOT_PATH; // write-quota/folder/topic 
+        const TString account = topicParts[0];
+        topicParts[0] = WRITE_QUOTA_ROOT_PATH; // write-quota/folder/topic
 
-        TopicWriteQuotaResourcePath = JoinPath(topicParts); 
+        TopicWriteQuotaResourcePath = JoinPath(topicParts);
         TopicWriteQuoterPath = TStringBuilder() << quotingConfig.GetQuotersDirectoryPath() << "/" << account;
-        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PERSQUEUE, 
-                   "topicWriteQuutaResourcePath " << TopicWriteQuotaResourcePath << " topicWriteQuoterPath '" << TopicWriteQuoterPath << " account " << account); 
+        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PERSQUEUE,
+                   "topicWriteQuutaResourcePath " << TopicWriteQuotaResourcePath << " topicWriteQuoterPath '" << TopicWriteQuoterPath << " account " << account);
     }
 }
 
@@ -4747,11 +4747,11 @@ void TPartition::CreateMirrorerActor() {
     );
 }
 
-bool TPartition::IsQuotingEnabled() const { 
-    const auto& pqConfig = AppData()->PQConfig; 
-    const auto& quotingConfig = pqConfig.GetQuotingConfig(); 
-    return LocalDC && !pqConfig.GetTopicsAreFirstClassCitizen() && quotingConfig.GetEnableQuoting(); 
-} 
- 
+bool TPartition::IsQuotingEnabled() const {
+    const auto& pqConfig = AppData()->PQConfig;
+    const auto& quotingConfig = pqConfig.GetQuotingConfig();
+    return LocalDC && !pqConfig.GetTopicsAreFirstClassCitizen() && quotingConfig.GetEnableQuoting();
+}
+
 }// NPQ
 }// NKikimr

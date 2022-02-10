@@ -42,7 +42,7 @@ RECURSE(
     aiozipkin
     aiozk
     alabaster
-    alembic
+    alembic 
     allpairspy
     amqp
     aniso8601
@@ -53,7 +53,7 @@ RECURSE(
     anyio
     anytree
     apipkg
-    apispec
+    apispec 
     apispec-flask-restful
     appdirs
     APScheduler
@@ -127,7 +127,7 @@ RECURSE(
     bsddb3
     bson
     bz2file
-    cached-property
+    cached-property 
     cachelib
     cachetools
     catalogue
@@ -174,8 +174,8 @@ RECURSE(
     contextdecorator
     contextlib2
     convertdate
-    cookies
-    cov-core
+    cookies 
+    cov-core 
     coverage
     coverage/bin
     cpu-cores
@@ -192,7 +192,7 @@ RECURSE(
     cytoolz
     czipfile
     daphne
-    dask
+    dask 
     daphne
     databases
     dataclasses-json
@@ -355,13 +355,13 @@ RECURSE(
     Faker
     fakeredis
     falcon
-    falcon-cors
+    falcon-cors 
     falcon-multipart
-    fallocate
+    fallocate 
     fancycompleter
     fastapi
     fastapi-utils
-    fastdtw
+    fastdtw 
     fasteners
     fastjsonschema
     fastsnmp
@@ -416,14 +416,14 @@ RECURSE(
     Flask-UUID
     Flask-WTF
     flatbuffers
-    flex
+    flex 
     flup
     frozendict
     frozenlist
     fsspec
     ftfy
     funcparserlib
-    funcsigs
+    funcsigs 
     functools32
     furl
     future
@@ -472,7 +472,7 @@ RECURSE(
     h2
     h3
     h5py
-    hammock
+    hammock 
     hexdump
     hijri-converter
     hiredis
@@ -556,7 +556,7 @@ RECURSE(
     jsonobject
     jsonpath-rw
     jsonpickle
-    jsonpointer
+    jsonpointer 
     jsonref
     jsonschema
     jsonstreams
@@ -579,7 +579,7 @@ RECURSE(
     langcodes
     lark-parser
     lazy
-    lazy-object-proxy
+    lazy-object-proxy 
     lcov_cobertura
     lcov_cobertura/bin
     legacycontour
@@ -606,10 +606,10 @@ RECURSE(
     markdown2
     Markdown
     MarkupSafe
-    marshmallow
+    marshmallow 
     marshmallow_dataclass
     marshmallow-enum
-    marshmallow-mongoengine
+    marshmallow-mongoengine 
     marshmallow-oneofschema
     marshmallow-sqlalchemy
     marshmallow-union
@@ -681,9 +681,9 @@ RECURSE(
     openapi-codec
     openapi-core
     openapi-schema-validator
-    openapi-spec-validator
+    openapi-spec-validator 
     opencv-python
-    openpyxl
+    openpyxl 
     opensfm
     opentok
     opentracing
@@ -697,7 +697,7 @@ RECURSE(
     os-fast-reservoir
     packageurl-python
     packaging
-    paginate
+    paginate 
     pamela
     pampy
     pamqp
@@ -715,7 +715,7 @@ RECURSE(
     parsel
     Parsley
     parso
-    partd
+    partd 
     passlib
     patch
     patched
@@ -757,7 +757,7 @@ RECURSE(
     ppdeep
     pq
     pql
-    prance
+    prance 
     premailer
     preshed
     pretend
@@ -852,7 +852,7 @@ RECURSE(
     pysctp
     pysendfile
     pyserial
-    PySocks
+    PySocks 
     pystan
     pystan/pystan_model
     pysyncobj
@@ -864,7 +864,7 @@ RECURSE(
     pytest-datadir
     pytest-datafixtures
     pytest-django
-    pytest-falcon
+    pytest-falcon 
     pytest-falcon-client
     pytest-fixture-config
     pytest-flake8
@@ -872,9 +872,9 @@ RECURSE(
     pytest-flask
     pytest-forked
     pytest-freezegun
-    pytest-httpretty
+    pytest-httpretty 
     pytest-lazy-fixture
-    pytest-localserver
+    pytest-localserver 
     pytest-mock
     pytest-randomly
     pytest-responsemock
@@ -946,7 +946,7 @@ RECURSE(
     requests-oauthlib
     requests-toolbelt
     requests-unixsocket
-    responses
+    responses 
     respx
     retry
     retrying
@@ -974,7 +974,7 @@ RECURSE(
     schema
     schematics
     schwifty
-    scikit-image
+    scikit-image 
     scikit-learn
     scipy
     scour
@@ -1072,7 +1072,7 @@ RECURSE(
     tldextract
     toml
     tomli
-    toolz
+    toolz 
     toposort
     toredis
     tornado

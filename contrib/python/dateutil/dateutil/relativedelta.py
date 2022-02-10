@@ -23,7 +23,7 @@ class relativedelta(object):
 
     It is based on the specification of the excellent work done by M.-A. Lemburg
     in his
-    `mx.DateTime <https://www.egenix.com/products/python/mxBase/mxDateTime/>`_ extension.
+    `mx.DateTime <https://www.egenix.com/products/python/mxBase/mxDateTime/>`_ extension. 
     However, notice that this type does *NOT* implement the same algorithm as
     his work. Do *NOT* expect it to behave like mx.DateTime's counterpart.
 
@@ -38,7 +38,7 @@ class relativedelta(object):
 
         year, month, day, hour, minute, second, microsecond:
             Absolute information (argument is singular); adding or subtracting a
-            relativedelta with absolute information does not perform an arithmetic
+            relativedelta with absolute information does not perform an arithmetic 
             operation, but rather REPLACES the corresponding value in the
             original datetime with the value(s) in relativedelta.
 
@@ -48,7 +48,7 @@ class relativedelta(object):
             the corresponding arithmetic operation on the original datetime value
             with the information in the relativedelta.
 
-        weekday: 
+        weekday:  
             One of the weekday instances (MO, TU, etc) available in the
             relativedelta module. These instances may receive a parameter N,
             specifying the Nth weekday, which could be positive or negative
@@ -67,38 +67,38 @@ class relativedelta(object):
             Set the yearday or the non-leap year day (jump leap days).
             These are converted to day/month/leapdays information.
 
-    There are relative and absolute forms of the keyword
-    arguments. The plural is relative, and the singular is
-    absolute. For each argument in the order below, the absolute form
-    is applied first (by setting each attribute to that value) and
-    then the relative form (by adding the value to the attribute).
+    There are relative and absolute forms of the keyword 
+    arguments. The plural is relative, and the singular is 
+    absolute. For each argument in the order below, the absolute form 
+    is applied first (by setting each attribute to that value) and 
+    then the relative form (by adding the value to the attribute). 
 
-    The order of attributes considered when this relativedelta is
-    added to a datetime is:
+    The order of attributes considered when this relativedelta is 
+    added to a datetime is: 
 
-    1. Year
-    2. Month
-    3. Day
-    4. Hours
-    5. Minutes
-    6. Seconds
-    7. Microseconds
+    1. Year 
+    2. Month 
+    3. Day 
+    4. Hours 
+    5. Minutes 
+    6. Seconds 
+    7. Microseconds 
 
-    Finally, weekday is applied, using the rule described above.
+    Finally, weekday is applied, using the rule described above. 
 
-    For example
+    For example 
 
     >>> from datetime import datetime
     >>> from dateutil.relativedelta import relativedelta, MO
-    >>> dt = datetime(2018, 4, 9, 13, 37, 0)
-    >>> delta = relativedelta(hours=25, day=1, weekday=MO(1))
+    >>> dt = datetime(2018, 4, 9, 13, 37, 0) 
+    >>> delta = relativedelta(hours=25, day=1, weekday=MO(1)) 
     >>> dt + delta
     datetime.datetime(2018, 4, 2, 14, 37)
 
-    First, the day is set to 1 (the first of the month), then 25 hours
-    are added, to get to the 2nd day and 14th hour, finally the
-    weekday is applied, but since the 2nd is already a Monday there is
-    no effect.
+    First, the day is set to 1 (the first of the month), then 25 hours 
+    are added, to get to the 2nd day and 14th hour, finally the 
+    weekday is applied, but since the 2nd is already a Monday there is 
+    no effect. 
 
     """
 
@@ -168,14 +168,14 @@ class relativedelta(object):
             self.seconds = delta.seconds + delta.days * 86400
             self.microseconds = delta.microseconds
         else:
-            # Check for non-integer values in integer-only quantities
-            if any(x is not None and x != int(x) for x in (years, months)):
-                raise ValueError("Non-integer years and months are "
-                                 "ambiguous and not currently supported.")
-
+            # Check for non-integer values in integer-only quantities 
+            if any(x is not None and x != int(x) for x in (years, months)): 
+                raise ValueError("Non-integer years and months are " 
+                                 "ambiguous and not currently supported.") 
+ 
             # Relative information
-            self.years = int(years)
-            self.months = int(months)
+            self.years = int(years) 
+            self.months = int(months) 
             self.days = days + weeks * 7
             self.leapdays = leapdays
             self.hours = hours
@@ -263,7 +263,7 @@ class relativedelta(object):
 
     @property
     def weeks(self):
-        return int(self.days / 7.0)
+        return int(self.days / 7.0) 
 
     @weeks.setter
     def weeks(self, value):
@@ -436,24 +436,24 @@ class relativedelta(object):
                                           is not None else
                                           other.microsecond))
 
-    def __abs__(self):
-        return self.__class__(years=abs(self.years),
-                              months=abs(self.months),
-                              days=abs(self.days),
-                              hours=abs(self.hours),
-                              minutes=abs(self.minutes),
-                              seconds=abs(self.seconds),
-                              microseconds=abs(self.microseconds),
-                              leapdays=self.leapdays,
-                              year=self.year,
-                              month=self.month,
-                              day=self.day,
-                              weekday=self.weekday,
-                              hour=self.hour,
-                              minute=self.minute,
-                              second=self.second,
-                              microsecond=self.microsecond)
-
+    def __abs__(self): 
+        return self.__class__(years=abs(self.years), 
+                              months=abs(self.months), 
+                              days=abs(self.days), 
+                              hours=abs(self.hours), 
+                              minutes=abs(self.minutes), 
+                              seconds=abs(self.seconds), 
+                              microseconds=abs(self.microseconds), 
+                              leapdays=self.leapdays, 
+                              year=self.year, 
+                              month=self.month, 
+                              day=self.day, 
+                              weekday=self.weekday, 
+                              hour=self.hour, 
+                              minute=self.minute, 
+                              second=self.second, 
+                              microsecond=self.microsecond) 
+ 
     def __neg__(self):
         return self.__class__(years=-self.years,
                              months=-self.months,
@@ -544,25 +544,25 @@ class relativedelta(object):
                 self.second == other.second and
                 self.microsecond == other.microsecond)
 
-    def __hash__(self):
-        return hash((
-            self.weekday,
-            self.years,
-            self.months,
-            self.days,
-            self.hours,
-            self.minutes,
-            self.seconds,
-            self.microseconds,
-            self.leapdays,
-            self.year,
-            self.month,
-            self.day,
-            self.hour,
-            self.minute,
-            self.second,
-            self.microsecond,
-        ))
+    def __hash__(self): 
+        return hash(( 
+            self.weekday, 
+            self.years, 
+            self.months, 
+            self.days, 
+            self.hours, 
+            self.minutes, 
+            self.seconds, 
+            self.microseconds, 
+            self.leapdays, 
+            self.year, 
+            self.month, 
+            self.day, 
+            self.hour, 
+            self.minute, 
+            self.second, 
+            self.microsecond, 
+        )) 
 
     def __ne__(self, other):
         return not self.__eq__(other)

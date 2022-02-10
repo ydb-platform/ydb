@@ -2,14 +2,14 @@
 """
 The rrule module offers a small, complete, and very fast, implementation of
 the recurrence rules documented in the
-`iCalendar RFC <https://tools.ietf.org/html/rfc5545>`_,
+`iCalendar RFC <https://tools.ietf.org/html/rfc5545>`_, 
 including support for caching of results.
 """
 import calendar
 import datetime
 import heapq
 import itertools
-import re
+import re 
 import sys
 from functools import wraps
 # For warning about deprecation of until and count
@@ -390,11 +390,11 @@ class rrule(rrulebase):
     :param byyearday:
         If given, it must be either an integer, or a sequence of integers,
         meaning the year days to apply the recurrence to.
-    :param byeaster:
-        If given, it must be either an integer, or a sequence of integers,
-        positive or negative. Each integer will define an offset from the
-        Easter Sunday. Passing the offset 0 to byeaster will yield the Easter
-        Sunday itself. This is an extension to the RFC specification.
+    :param byeaster: 
+        If given, it must be either an integer, or a sequence of integers, 
+        positive or negative. Each integer will define an offset from the 
+        Easter Sunday. Passing the offset 0 to byeaster will yield the Easter 
+        Sunday itself. This is an extension to the RFC specification. 
     :param byweekno:
         If given, it must be either an integer, or a sequence of integers,
         meaning the week numbers to apply the recurrence to. Week numbers
@@ -420,10 +420,10 @@ class rrule(rrulebase):
     :param bysecond:
         If given, it must be either an integer, or a sequence of integers,
         meaning the seconds to apply the recurrence to.
-    :param cache:
-        If given, it must be a boolean value specifying to enable or disable
-        caching of results. If you will use the same rrule instance multiple
-        times, enabling caching will improve the performance considerably.
+    :param cache: 
+        If given, it must be a boolean value specifying to enable or disable 
+        caching of results. If you will use the same rrule instance multiple 
+        times, enabling caching will improve the performance considerably. 
      """
     def __init__(self, freq, dtstart=None,
                  interval=1, wkst=None, count=None, until=None, bysetpos=None,
@@ -434,10 +434,10 @@ class rrule(rrulebase):
         super(rrule, self).__init__(cache)
         global easter
         if not dtstart:
-            if until and until.tzinfo:
-                dtstart = datetime.datetime.now(tz=until.tzinfo).replace(microsecond=0)
+            if until and until.tzinfo: 
+                dtstart = datetime.datetime.now(tz=until.tzinfo).replace(microsecond=0) 
             else:
-                dtstart = datetime.datetime.now().replace(microsecond=0)
+                dtstart = datetime.datetime.now().replace(microsecond=0) 
         elif not isinstance(dtstart, datetime.datetime):
             dtstart = datetime.datetime.fromordinal(dtstart.toordinal())
         else:
@@ -458,22 +458,22 @@ class rrule(rrulebase):
             until = datetime.datetime.fromordinal(until.toordinal())
         self._until = until
 
-        if self._dtstart and self._until:
-            if (self._dtstart.tzinfo is not None) != (self._until.tzinfo is not None):
-                # According to RFC5545 Section 3.3.10:
-                # https://tools.ietf.org/html/rfc5545#section-3.3.10
-                #
-                # > If the "DTSTART" property is specified as a date with UTC
-                # > time or a date with local time and time zone reference,
-                # > then the UNTIL rule part MUST be specified as a date with
-                # > UTC time.
-                raise ValueError(
-                    'RRULE UNTIL values must be specified in UTC when DTSTART '
-                    'is timezone-aware'
-                )
-
+        if self._dtstart and self._until: 
+            if (self._dtstart.tzinfo is not None) != (self._until.tzinfo is not None): 
+                # According to RFC5545 Section 3.3.10: 
+                # https://tools.ietf.org/html/rfc5545#section-3.3.10 
+                # 
+                # > If the "DTSTART" property is specified as a date with UTC 
+                # > time or a date with local time and time zone reference, 
+                # > then the UNTIL rule part MUST be specified as a date with 
+                # > UTC time. 
+                raise ValueError( 
+                    'RRULE UNTIL values must be specified in UTC when DTSTART ' 
+                    'is timezone-aware' 
+                ) 
+ 
         if count is not None and until:
-            warn("Using both 'count' and 'until' is inconsistent with RFC 5545"
+            warn("Using both 'count' and 'until' is inconsistent with RFC 5545" 
                  " and has been deprecated in dateutil. Future versions will "
                  "raise an error.", DeprecationWarning)
 
@@ -610,13 +610,13 @@ class rrule(rrulebase):
                 self._byweekday = tuple(sorted(self._byweekday))
                 orig_byweekday = [weekday(x) for x in self._byweekday]
             else:
-                orig_byweekday = ()
+                orig_byweekday = () 
 
             if self._bynweekday is not None:
                 self._bynweekday = tuple(sorted(self._bynweekday))
                 orig_bynweekday = [weekday(*x) for x in self._bynweekday]
             else:
-                orig_bynweekday = ()
+                orig_bynweekday = () 
 
             if 'byweekday' not in self._original_rule:
                 self._original_rule['byweekday'] = tuple(itertools.chain(
@@ -625,7 +625,7 @@ class rrule(rrulebase):
         # byhour
         if byhour is None:
             if freq < HOURLY:
-                self._byhour = {dtstart.hour}
+                self._byhour = {dtstart.hour} 
             else:
                 self._byhour = None
         else:
@@ -645,7 +645,7 @@ class rrule(rrulebase):
         # byminute
         if byminute is None:
             if freq < MINUTELY:
-                self._byminute = {dtstart.minute}
+                self._byminute = {dtstart.minute} 
             else:
                 self._byminute = None
         else:
@@ -700,7 +700,7 @@ class rrule(rrulebase):
     def __str__(self):
         """
         Output a string that would generate this RRULE if passed to rrulestr.
-        This is mostly compatible with RFC5545, except for the
+        This is mostly compatible with RFC5545, except for the 
         dateutil-specific extension BYEASTER.
         """
 
@@ -725,7 +725,7 @@ class rrule(rrulebase):
 
         if self._original_rule.get('byweekday') is not None:
             # The str() method on weekday objects doesn't generate
-            # RFC5545-compliant strings, so we should modify that.
+            # RFC5545-compliant strings, so we should modify that. 
             original_rule = dict(self._original_rule)
             wday_strings = []
             for wday in original_rule['byweekday']:
@@ -756,7 +756,7 @@ class rrule(rrulebase):
                 parts.append(partfmt.format(name=name, vals=(','.join(str(v)
                                                              for v in value))))
 
-        output.append('RRULE:' + ';'.join(parts))
+        output.append('RRULE:' + ';'.join(parts)) 
         return '\n'.join(output)
 
     def replace(self, **kwargs):
@@ -1619,17 +1619,17 @@ class _rrulestr(object):
                    forceset=False,
                    compatible=False,
                    ignoretz=False,
-                   tzids=None,
+                   tzids=None, 
                    tzinfos=None):
         global parser
         if compatible:
             forceset = True
             unfold = True
-
-        TZID_NAMES = dict(map(
-            lambda x: (x.upper(), x),
-            re.findall('TZID=(?P<name>[^:]+):', s)
-        ))
+ 
+        TZID_NAMES = dict(map( 
+            lambda x: (x.upper(), x), 
+            re.findall('TZID=(?P<name>[^:]+):', s) 
+        )) 
         s = s.upper()
         if not s.strip():
             raise ValueError("empty string")

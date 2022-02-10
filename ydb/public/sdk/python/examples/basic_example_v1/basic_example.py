@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 
-import ydb
+import ydb 
 from . import basic_example_data
 
 FillDataQuery = """PRAGMA TablePathPrefix("{}");
@@ -204,50 +204,50 @@ def explicit_tcl(pool, path, series_id, season_id, episode_id):
 def create_tables(pool, path):
     def callee(session):
         # Creating Series table
-        session.execute_scheme(
-            """
+        session.execute_scheme( 
+            """ 
                 PRAGMA TablePathPrefix("{}");
-                CREATE table `series` (
-                    `series_id` Uint64,
-                    `title` Utf8,
-                    `series_info` Utf8,
-                    `release_date` Uint64,
-                    PRIMARY KEY (`series_id`)
-                )
+                CREATE table `series` ( 
+                    `series_id` Uint64, 
+                    `title` Utf8, 
+                    `series_info` Utf8, 
+                    `release_date` Uint64, 
+                    PRIMARY KEY (`series_id`) 
+                ) 
                 """.format(
                 path
             )
         )
 
         # Creating Seasons table
-        session.execute_scheme(
-            """
+        session.execute_scheme( 
+            """ 
                PRAGMA TablePathPrefix("{}");
-               CREATE table `seasons` (
-                   `series_id` Uint64,
-                   `season_id` Uint64,
-                   `title` Utf8,
-                   `first_aired` Uint64,
-                   `last_aired` Uint64,
-                   PRIMARY KEY (`series_id`, `season_id`)
-               )
+               CREATE table `seasons` ( 
+                   `series_id` Uint64, 
+                   `season_id` Uint64, 
+                   `title` Utf8, 
+                   `first_aired` Uint64, 
+                   `last_aired` Uint64, 
+                   PRIMARY KEY (`series_id`, `season_id`) 
+               ) 
                """.format(
                 path
             )
         )
 
         # Creating Episodes table
-        session.execute_scheme(
-            """
+        session.execute_scheme( 
+            """ 
             PRAGMA TablePathPrefix("{}");
-            CREATE table `episodes` (
-                `series_id` Uint64,
-                `season_id` Uint64,
-                `episode_id` Uint64,
-                `title` Utf8,
-                `air_date` Uint64,
-                PRIMARY KEY (`series_id`, `season_id`, `episode_id`)
-            )
+            CREATE table `episodes` ( 
+                `series_id` Uint64, 
+                `season_id` Uint64, 
+                `episode_id` Uint64, 
+                `title` Utf8, 
+                `air_date` Uint64, 
+                PRIMARY KEY (`series_id`, `season_id`, `episode_id`) 
+            ) 
             """.format(
                 path
             )

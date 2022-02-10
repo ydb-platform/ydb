@@ -316,10 +316,10 @@ class _ResultSet(object):
     @classmethod
     def from_message(cls, message, table_client_settings=None):
         rows = []
-        # prepare columnn parsers before actuall parsing
-        column_parsers = []
-        if len(message.rows) > 0:
-            for column in message.columns:
+        # prepare columnn parsers before actuall parsing 
+        column_parsers = [] 
+        if len(message.rows) > 0: 
+            for column in message.columns: 
                 column_parsers.append(_unwrap_optionality(column))
 
         for row_proto in message.rows:
@@ -343,12 +343,12 @@ class _ResultSet(object):
             rows.append(row)
         return cls(message.columns, rows, message.truncated)
 
-    @classmethod
-    def lazy_from_message(cls, message, table_client_settings=None):
-        rows = _LazyRows(message.rows, table_client_settings, message.columns)
-        return cls(message.columns, rows, message.truncated)
+    @classmethod 
+    def lazy_from_message(cls, message, table_client_settings=None): 
+        rows = _LazyRows(message.rows, table_client_settings, message.columns) 
+        return cls(message.columns, rows, message.truncated) 
 
-
+ 
 ResultSet = _ResultSet
 
 
@@ -361,66 +361,66 @@ class _Row(_DotDict):
         if isinstance(key, int):
             return self[self._columns[key].name]
         elif isinstance(key, slice):
-            return tuple(map(lambda x: self[x.name], self._columns[key]))
+            return tuple(map(lambda x: self[x.name], self._columns[key])) 
         else:
             return super(_Row, self).__getitem__(key)
 
 
-class _LazyRowItem:
-
-    __slots__ = ["_item", "_type", "_table_client_settings", "_processed", "_parser"]
-
-    def __init__(self, proto_item, proto_type, table_client_settings, parser):
-        self._item = proto_item
-        self._type = proto_type
-        self._table_client_settings = table_client_settings
-        self._processed = False
-        self._parser = parser
-
-    def get(self):
-        if not self._processed:
-
-            self._item = self._parser(
+class _LazyRowItem: 
+ 
+    __slots__ = ["_item", "_type", "_table_client_settings", "_processed", "_parser"] 
+ 
+    def __init__(self, proto_item, proto_type, table_client_settings, parser): 
+        self._item = proto_item 
+        self._type = proto_type 
+        self._table_client_settings = table_client_settings 
+        self._processed = False 
+        self._parser = parser 
+ 
+    def get(self): 
+        if not self._processed: 
+ 
+            self._item = self._parser( 
                 self._type, self._item, self._table_client_settings
-            )
-            self._processed = True
-        return self._item
-
-
-class _LazyRow(_DotDict):
-    def __init__(self, columns, proto_row, table_client_settings, parsers):
-        super(_LazyRow, self).__init__()
-        self._columns = columns
-        self._table_client_settings = table_client_settings
+            ) 
+            self._processed = True 
+        return self._item 
+ 
+ 
+class _LazyRow(_DotDict): 
+    def __init__(self, columns, proto_row, table_client_settings, parsers): 
+        super(_LazyRow, self).__init__() 
+        self._columns = columns 
+        self._table_client_settings = table_client_settings 
         for i, (column, row_item) in enumerate(
             six.moves.zip(self._columns, proto_row.items)
         ):
-            super(_LazyRow, self).__setitem__(
+            super(_LazyRow, self).__setitem__( 
                 column.name,
                 _LazyRowItem(row_item, column.type, table_client_settings, parsers[i]),
-            )
-
-    def __setitem__(self, key, value):
-        raise NotImplementedError("Cannot insert values into lazy row")
-
-    def __getitem__(self, key):
-        if isinstance(key, int):
-            return self[self._columns[key].name]
-        elif isinstance(key, slice):
-            return tuple(map(lambda x: self[x.name], self._columns[key]))
-        else:
-            return super(_LazyRow, self).__getitem__(key).get()
-
-    def __iter__(self):
-        return super(_LazyRow, self).__iter__()
-
-    def __next__(self):
-        return super(_LazyRow, self).__next__().get()
-
-    def next(self):
-        return self.__next__()
-
-
+            ) 
+ 
+    def __setitem__(self, key, value): 
+        raise NotImplementedError("Cannot insert values into lazy row") 
+ 
+    def __getitem__(self, key): 
+        if isinstance(key, int): 
+            return self[self._columns[key].name] 
+        elif isinstance(key, slice): 
+            return tuple(map(lambda x: self[x.name], self._columns[key])) 
+        else: 
+            return super(_LazyRow, self).__getitem__(key).get() 
+ 
+    def __iter__(self): 
+        return super(_LazyRow, self).__iter__() 
+ 
+    def __next__(self): 
+        return super(_LazyRow, self).__next__().get() 
+ 
+    def next(self): 
+        return self.__next__() 
+ 
+ 
 def from_native_value(type_pb, value):
     return _from_native_value(type_pb, value)
 
@@ -429,55 +429,55 @@ def to_native_value(typed_value):
     return _to_native_value(typed_value.type, typed_value.value)
 
 
-class _LazyRows:
-    def __init__(self, rows, table_client_settings, columns):
-        self._rows = rows
-        self._parsers = [_LazyParser(columns, i) for i in range(len(columns))]
-        self._table_client_settings = table_client_settings
-        self._columns = columns
-
-    def __len__(self):
-        return len(self._rows)
-
-    def fetchone(self):
+class _LazyRows: 
+    def __init__(self, rows, table_client_settings, columns): 
+        self._rows = rows 
+        self._parsers = [_LazyParser(columns, i) for i in range(len(columns))] 
+        self._table_client_settings = table_client_settings 
+        self._columns = columns 
+ 
+    def __len__(self): 
+        return len(self._rows) 
+ 
+    def fetchone(self): 
         return _LazyRow(
             self._columns, self._rows[0], self._table_client_settings, self._parsers
         )
-
-    def fetchmany(self, number):
-        for index in range(min(len(self), number)):
+ 
+    def fetchmany(self, number): 
+        for index in range(min(len(self), number)): 
             yield _LazyRow(
                 self._columns,
                 self._rows[index],
                 self._table_client_settings,
                 self._parsers,
             )
-
-    def __iter__(self):
-        for row in self.fetchmany(len(self)):
-            yield row
-
-    def fetchall(self):
-        for row in self:
-            yield row
-
-
-class _LazyParser:
-    __slots__ = ["_columns", "_column_index", "_prepared"]
-
-    def __init__(self, columns, column_index):
-        self._columns = columns
-        self._column_index = column_index
-        self._prepared = None
-
-    def __call__(self, *args, **kwargs):
-        if self._prepared is None:
-            self._prepared = _to_native_map.get(
+ 
+    def __iter__(self): 
+        for row in self.fetchmany(len(self)): 
+            yield row 
+ 
+    def fetchall(self): 
+        for row in self: 
+            yield row 
+ 
+ 
+class _LazyParser: 
+    __slots__ = ["_columns", "_column_index", "_prepared"] 
+ 
+    def __init__(self, columns, column_index): 
+        self._columns = columns 
+        self._column_index = column_index 
+        self._prepared = None 
+ 
+    def __call__(self, *args, **kwargs): 
+        if self._prepared is None: 
+            self._prepared = _to_native_map.get( 
                 self._columns[self._column_index].type.WhichOneof("type")
-            )
-        return self._prepared(*args, **kwargs)
-
-
+            ) 
+        return self._prepared(*args, **kwargs) 
+ 
+ 
 class ResultSets(list):
     def __init__(self, result_sets_pb, table_client_settings=None):
         make_lazy = (

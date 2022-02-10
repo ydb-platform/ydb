@@ -5,18 +5,18 @@ from concurrent import futures
 import collections
 import random
 
-import six
-
-from . import connection as connection_impl, issues, resolver, _utilities, tracing
-from abc import abstractmethod, ABCMeta
+import six 
+ 
+from . import connection as connection_impl, issues, resolver, _utilities, tracing 
+from abc import abstractmethod, ABCMeta 
 
 
 logger = logging.getLogger(__name__)
 
 
 class ConnectionsCache(object):
-    def __init__(self, use_all_nodes=False, tracer=tracing.Tracer(None)):
-        self.tracer = tracer
+    def __init__(self, use_all_nodes=False, tracer=tracing.Tracer(None)): 
+        self.tracer = tracer 
         self.lock = threading.RLock()
         self.connections = collections.OrderedDict()
         self.outdated = collections.OrderedDict()
@@ -123,7 +123,7 @@ class ConnectionsCache(object):
             subscription.add_done_callback(self._on_done_callback)
             return subscription
 
-    @tracing.with_trace()
+    @tracing.with_trace() 
     def get(self, preferred_endpoint=None):
         with self.lock:
             if (
@@ -286,55 +286,55 @@ class Discovery(threading.Thread):
         self.logger.info("Successfully terminated discovery process")
 
 
-@six.add_metaclass(ABCMeta)
-class IConnectionPool:
-    @abstractmethod
+@six.add_metaclass(ABCMeta) 
+class IConnectionPool: 
+    @abstractmethod 
     def __init__(self, driver_config):
         """
         An object that encapsulates discovery logic and provides ability to execute user requests
         on discovered endpoints.
         :param driver_config: An instance of DriverConfig
         """
-        pass
-
-    @abstractmethod
-    def stop(self, timeout=10):
-        """
-        Stops underlying discovery process and cleanups
-        :param timeout: A timeout to wait for stop completion
-        :return: None
-        """
-        pass
-
-    @abstractmethod
-    def wait(self, timeout=None, fail_fast=False):
-        """
-        Waits for endpoints to be are available to serve user requests
-        :param timeout: A timeout to wait in seconds
-        :param fail_fast: Should wait fail fast?
-        :return: None
-        """
-
-    @abstractmethod
-    def discovery_debug_details(self):
-        """
-        Returns debug string about last errors
-        :return:
-        """
-        pass
-
-    @abstractmethod
-    def __call__(
-        self,
-        request,
-        stub,
-        rpc_name,
-        wrap_result=None,
-        settings=None,
-        wrap_args=(),
+        pass 
+ 
+    @abstractmethod 
+    def stop(self, timeout=10): 
+        """ 
+        Stops underlying discovery process and cleanups 
+        :param timeout: A timeout to wait for stop completion 
+        :return: None 
+        """ 
+        pass 
+ 
+    @abstractmethod 
+    def wait(self, timeout=None, fail_fast=False): 
+        """ 
+        Waits for endpoints to be are available to serve user requests 
+        :param timeout: A timeout to wait in seconds 
+        :param fail_fast: Should wait fail fast? 
+        :return: None 
+        """ 
+ 
+    @abstractmethod 
+    def discovery_debug_details(self): 
+        """ 
+        Returns debug string about last errors 
+        :return: 
+        """ 
+        pass 
+ 
+    @abstractmethod 
+    def __call__( 
+        self, 
+        request, 
+        stub, 
+        rpc_name, 
+        wrap_result=None, 
+        settings=None, 
+        wrap_args=(), 
         preferred_endpoint=None,
-    ):
-        """
+    ): 
+        """ 
         Sends request constructed by client library
         :param request: A request constructed by client
         :param stub: A stub instance to wrap channel
@@ -345,22 +345,22 @@ class IConnectionPool:
         :param wrap_args: And arguments to be passed into wrap_result callable
         :return: A result of computation
         """
-        pass
-
-
-class ConnectionPool(IConnectionPool):
-    def __init__(self, driver_config):
-        """
-        An object that encapsulates discovery logic and provides ability to execute user requests
-        on discovered endpoints.
-
-        :param driver_config: An instance of DriverConfig
-        """
+        pass 
+ 
+ 
+class ConnectionPool(IConnectionPool): 
+    def __init__(self, driver_config): 
+        """ 
+        An object that encapsulates discovery logic and provides ability to execute user requests 
+        on discovered endpoints. 
+ 
+        :param driver_config: An instance of DriverConfig 
+        """ 
         self._driver_config = driver_config
         self._store = ConnectionsCache(
             driver_config.use_all_nodes, driver_config.tracer
         )
-        self.tracer = driver_config.tracer
+        self.tracer = driver_config.tracer 
         self._grpc_init = connection_impl.Connection(
             self._driver_config.endpoint, self._driver_config
         )
@@ -372,7 +372,7 @@ class ConnectionPool(IConnectionPool):
     def stop(self, timeout=10):
         """
         Stops underlying discovery process and cleanups
-
+ 
         :param timeout: A timeout to wait for stop completion
         :return: None
         """
@@ -388,7 +388,7 @@ class ConnectionPool(IConnectionPool):
     def async_wait(self, fail_fast=False):
         """
         Returns a future to subscribe on endpoints availability.
-
+ 
         :return: A concurrent.futures.Future instance.
         """
         if fail_fast:
@@ -398,7 +398,7 @@ class ConnectionPool(IConnectionPool):
     def wait(self, timeout=None, fail_fast=False):
         """
         Waits for endpoints to be are available to serve user requests
-
+ 
         :param timeout: A timeout to wait in seconds
         :return: None
         """
@@ -410,7 +410,7 @@ class ConnectionPool(IConnectionPool):
     def _on_disconnected(self, connection):
         """
         Removes bad discovered endpoint and triggers discovery process
-
+ 
         :param connection: A disconnected connection
         :return: None
         """
@@ -420,7 +420,7 @@ class ConnectionPool(IConnectionPool):
     def discovery_debug_details(self):
         return self._discovery_thread.discovery_debug_details()
 
-    @tracing.with_trace()
+    @tracing.with_trace() 
     def __call__(
         self,
         request,
@@ -433,7 +433,7 @@ class ConnectionPool(IConnectionPool):
     ):
         """
         Synchronously sends request constructed by client library
-
+ 
         :param request: A request constructed by client
         :param stub: A stub instance to wrap channel
         :param rpc_name: A name of RPC to be executed
@@ -441,7 +441,7 @@ class ConnectionPool(IConnectionPool):
         :param settings: An instance of BaseRequestSettings that can be used
         for RPC metadata construction
         :param wrap_args: And arguments to be passed into wrap_result callable
-
+ 
         :return: A result of computation
         """
         tracing.trace(
@@ -453,7 +453,7 @@ class ConnectionPool(IConnectionPool):
             self._discovery_thread.notify_disconnected()
             raise
 
-        res = connection(
+        res = connection( 
             request,
             stub,
             rpc_name,
@@ -465,7 +465,7 @@ class ConnectionPool(IConnectionPool):
         tracing.trace(
             self.tracer, {"response": res}, trace_level=tracing.TraceLevel.DEBUG
         )
-        return res
+        return res 
 
     @_utilities.wrap_async_call_exceptions
     def future(
@@ -480,15 +480,15 @@ class ConnectionPool(IConnectionPool):
     ):
         """
         Sends request constructed by client
-
+ 
         :param request: A request constructed by client
         :param stub: A stub instance to wrap channel
         :param rpc_name: A name of RPC to be executed
         :param wrap_result: A callable that intercepts call and wraps received response
-        :param settings: An instance of BaseRequestSettings that can be used\
+        :param settings: An instance of BaseRequestSettings that can be used\ 
         for RPC metadata construction
         :param wrap_args: And arguments to be passed into wrap_result callable
-
+ 
         :return: A future of computation
         """
         try:
@@ -510,7 +510,7 @@ class ConnectionPool(IConnectionPool):
     def __enter__(self):
         """
         In some cases (scripts, for example) this context manager can be used.
-
+ 
         :return:
         """
         return self

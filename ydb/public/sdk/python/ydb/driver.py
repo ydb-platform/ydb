@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-import ydb
-
+import ydb 
+ 
 from . import credentials as credentials_impl, table, scheme, pool
 import six
 import os
@@ -40,36 +40,36 @@ def parse_connection_string(connection_string):
     return p.scheme + "://" + p.netloc, database[0]
 
 
-def default_credentials(credentials=None, tracer=None):
-    tracer = tracer if tracer is not None else ydb.Tracer(None)
-    with tracer.trace("Driver.default_credentials") as ctx:
-        if credentials is not None:
-            ctx.trace({"credentials.prepared": True})
-            return credentials
+def default_credentials(credentials=None, tracer=None): 
+    tracer = tracer if tracer is not None else ydb.Tracer(None) 
+    with tracer.trace("Driver.default_credentials") as ctx: 
+        if credentials is not None: 
+            ctx.trace({"credentials.prepared": True}) 
+            return credentials 
 
-        service_account_key_file = os.getenv("YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS")
-        if service_account_key_file is not None:
-            ctx.trace({"credentials.service_account_key_file": True})
+        service_account_key_file = os.getenv("YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS") 
+        if service_account_key_file is not None: 
+            ctx.trace({"credentials.service_account_key_file": True}) 
             import ydb.iam
 
             return ydb.iam.ServiceAccountCredentials.from_file(service_account_key_file)
 
-        anonymous_credetials = os.getenv("YDB_ANONYMOUS_CREDENTIALS", "0") == "1"
-        if anonymous_credetials:
-            ctx.trace({"credentials.anonymous": True})
-            return credentials_impl.AnonymousCredentials()
+        anonymous_credetials = os.getenv("YDB_ANONYMOUS_CREDENTIALS", "0") == "1" 
+        if anonymous_credetials: 
+            ctx.trace({"credentials.anonymous": True}) 
+            return credentials_impl.AnonymousCredentials() 
 
-        metadata_credentials = os.getenv("YDB_METADATA_CREDENTIALS", "0") == "1"
-        if metadata_credentials:
-            ctx.trace({"credentials.metadata": True})
+        metadata_credentials = os.getenv("YDB_METADATA_CREDENTIALS", "0") == "1" 
+        if metadata_credentials: 
+            ctx.trace({"credentials.metadata": True}) 
             import ydb.iam
 
             return ydb.iam.MetadataUrlCredentials(tracer=tracer)
 
-        access_token = os.getenv("YDB_ACCESS_TOKEN_CREDENTIALS")
-        if access_token is not None:
-            ctx.trace({"credentials.access_token": True})
-            return credentials_impl.AuthTokenCredentials(access_token)
+        access_token = os.getenv("YDB_ACCESS_TOKEN_CREDENTIALS") 
+        if access_token is not None: 
+            ctx.trace({"credentials.access_token": True}) 
+            return credentials_impl.AuthTokenCredentials(access_token) 
 
         import ydb.iam
 
@@ -117,27 +117,27 @@ class DriverConfig(object):
         grpc_lb_policy_name="round_robin",
         discovery_request_timeout=10,
     ):
-        # type:(str, str, str, str, Any, ydb.Credentials, bool, bytes, bytes, bytes, float, ydb.TableClientSettings, list, str, ydb.Tracer) -> None
+        # type:(str, str, str, str, Any, ydb.Credentials, bool, bytes, bytes, bytes, float, ydb.TableClientSettings, list, str, ydb.Tracer) -> None 
         """
         A driver config to initialize a driver instance
-
-        :param endpoint: A endpoint specified in pattern host:port to be used for initial channel initialization and for YDB endpoint discovery mechanism
+ 
+        :param endpoint: A endpoint specified in pattern host:port to be used for initial channel initialization and for YDB endpoint discovery mechanism 
         :param database: A name of the database
         :param ca_cert: A CA certificate when SSL should be used
         :param auth_token: A authentication token
         :param credentials: An instance of AbstractCredentials
         :param use_all_nodes: A balancing policy that forces to use all available nodes.
         :param root_certificates: The PEM-encoded root certificates as a byte string.
-        :param private_key: The PEM-encoded private key as a byte string, or None if no\
+        :param private_key: The PEM-encoded private key as a byte string, or None if no\ 
         private key should be used.
-        :param certificate_chain: The PEM-encoded certificate chain as a byte string\
+        :param certificate_chain: The PEM-encoded certificate chain as a byte string\ 
         to use or or None if no certificate chain should be used.
         :param grpc_keep_alive_timeout: GRpc KeepAlive timeout, ms
-        :param ydb.Tracer tracer: ydb.Tracer instance to trace requests in driver.\
-        If tracing aio ScopeManager must be ContextVarsScopeManager
+        :param ydb.Tracer tracer: ydb.Tracer instance to trace requests in driver.\ 
+        If tracing aio ScopeManager must be ContextVarsScopeManager 
         :param grpc_lb_policy_name: A load balancing policy to be used for discovery channel construction. Default value is `round_round`
         :param discovery_request_timeout: A default timeout to complete the discovery. The default value is 10 seconds.
-
+ 
         """
         self.endpoint = endpoint
         self.database = database
@@ -158,7 +158,7 @@ class DriverConfig(object):
         self.grpc_keep_alive_timeout = grpc_keep_alive_timeout
         self.table_client_settings = table_client_settings
         self.primary_user_agent = primary_user_agent
-        self.tracer = tracer if tracer is not None else ydb.Tracer(None)
+        self.tracer = tracer if tracer is not None else ydb.Tracer(None) 
         self.grpc_lb_policy_name = grpc_lb_policy_name
         self.discovery_request_timeout = discovery_request_timeout
 
@@ -199,29 +199,29 @@ class DriverConfig(object):
 ConnectionParams = DriverConfig
 
 
-def get_config(
-    driver_config=None,
-    connection_string=None,
-    endpoint=None,
-    database=None,
-    root_certificates=None,
-    credentials=None,
-    config_class=DriverConfig,
-    **kwargs
-):
-    if driver_config is None:
-        if connection_string is not None:
+def get_config( 
+    driver_config=None, 
+    connection_string=None, 
+    endpoint=None, 
+    database=None, 
+    root_certificates=None, 
+    credentials=None, 
+    config_class=DriverConfig, 
+    **kwargs 
+): 
+    if driver_config is None: 
+        if connection_string is not None: 
             driver_config = config_class.default_from_connection_string(
                 connection_string, root_certificates, credentials, **kwargs
             )
-        else:
+        else: 
             driver_config = config_class.default_from_endpoint_and_database(
                 endpoint, database, root_certificates, credentials, **kwargs
             )
-        return driver_config
-    return driver_config
-
-
+        return driver_config 
+    return driver_config 
+ 
+ 
 class Driver(pool.ConnectionPool):
     __slots__ = ("scheme_client", "table_client")
 
@@ -235,15 +235,15 @@ class Driver(pool.ConnectionPool):
         credentials=None,
         **kwargs
     ):
-        # type:(DriverConfig, str, str, str, bytes, ydb.AbstractCredentials, **Any) -> None
-
+        # type:(DriverConfig, str, str, str, bytes, ydb.AbstractCredentials, **Any) -> None 
+ 
         """
         Constructs a driver instance to be used in table and scheme clients.
         It encapsulates endpoints discovery mechanism and provides ability to execute RPCs
         on discovered endpoints
 
         :param driver_config: A driver config
-        :param connection_string: A string in the following format: <protocol>://<hostame>:<port>/?database=/path/to/the/database
+        :param connection_string: A string in the following format: <protocol>://<hostame>:<port>/?database=/path/to/the/database 
         :param endpoint: An endpoint specified in the following format: <protocol>://<hostame>:<port>
         :param database: A database path
         :param credentials: A credentials. If not specifed credentials constructed by default.

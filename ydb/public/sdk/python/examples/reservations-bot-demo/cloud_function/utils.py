@@ -1,6 +1,6 @@
 import logging
 import contextlib
-import ydb
+import ydb 
 
 
 def make_driver_config(endpoint, database, path):

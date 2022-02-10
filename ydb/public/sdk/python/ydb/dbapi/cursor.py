@@ -56,7 +56,7 @@ def render_sql(sql, parameters):
         return sql
 
     assert sql.count("?") == len(parameters), "num of placeholders != num of params"
-
+ 
     quoted_params = [render(param) for param in parameters]
     quoted_params += [""]
     sql_pieces = sql.split("?")

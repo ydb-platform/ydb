@@ -61,7 +61,7 @@ class Daemon(object):
         self.__command = tuple(command)
         self.__stderr_on_error_lines = stderr_on_error_lines
         self.__daemon = None
-        self.__killed = False
+        self.__killed = False 
         self.logger = logger.getChild(self.__class__.__name__)
         if stdout_file is None:
             self.__stdout_file = tempfile.NamedTemporaryFile(dir=self.__cwd, prefix="stdout_", delete=False)
@@ -118,8 +118,8 @@ class Daemon(object):
                 max_stderr_lines=self.__stderr_on_error_lines,
             )
 
-        self.__killed = False
-
+        self.__killed = False 
+ 
         return self
 
     def __check_before_fail(self):
@@ -130,28 +130,28 @@ class Daemon(object):
     def _acceptable_exit_codes(self):
         return 0, -signal.SIGTERM
 
-    def __check_can_launch_stop(self, stop_type):
-        if self.__daemon is None or self.__killed:
-            return False
+    def __check_can_launch_stop(self, stop_type): 
+        if self.__daemon is None or self.__killed: 
+            return False 
 
         if self.__daemon is not None and self.__daemon.exit_code == 0:
-            return False
+            return False 
 
         if not self.is_alive():
             self.__check_before_fail()
             raise DaemonError(
-                "Unexpectedly finished before %s" % stop_type,
+                "Unexpectedly finished before %s" % stop_type, 
                 exit_code=self.__daemon.exit_code,
                 stdout=self.stdout_file_name,
                 stderr=self.stderr_file_name,
                 max_stderr_lines=self.__stderr_on_error_lines,
             )
 
-        return True
+        return True 
 
-    def __check_before_end_stop(self, stop_type):
+    def __check_before_end_stop(self, stop_type): 
         if self.is_alive():
-            msg = "Cannot {stop_type} daemon cmd = {cmd}".format(cmd=' '.join(self.__command), stop_type=stop_type)
+            msg = "Cannot {stop_type} daemon cmd = {cmd}".format(cmd=' '.join(self.__command), stop_type=stop_type) 
             self.logger.error(msg)
             raise DaemonError(
                 msg,
@@ -161,20 +161,20 @@ class Daemon(object):
                 max_stderr_lines=self.__stderr_on_error_lines,
             )
 
-    def stop(self):
-        if not self.__check_can_launch_stop("stop"):
-            return
-
-        self.__daemon.process.terminate()
-        wait_for(lambda: not self.is_alive(), self.__timeout)
-
-        is_killed = False
-        if self.is_alive():
-            self.__daemon.process.send_signal(signal.SIGKILL)
-            wait_for(lambda: not self.is_alive(), self.__timeout)
-            is_killed = True
-        self.__check_before_end_stop("stop")
-
+    def stop(self): 
+        if not self.__check_can_launch_stop("stop"): 
+            return 
+ 
+        self.__daemon.process.terminate() 
+        wait_for(lambda: not self.is_alive(), self.__timeout) 
+ 
+        is_killed = False 
+        if self.is_alive(): 
+            self.__daemon.process.send_signal(signal.SIGKILL) 
+            wait_for(lambda: not self.is_alive(), self.__timeout) 
+            is_killed = True 
+        self.__check_before_end_stop("stop") 
+ 
         if not is_killed:
             exit_code = self.__daemon.exit_code
             self.__check_before_fail()
@@ -190,17 +190,17 @@ class Daemon(object):
         else:
             self.logger.warning("Exit code is not checked, cos binary was stopped by sigkill")
 
-    def kill(self):
-        if not self.__check_can_launch_stop("kill"):
-            return
+    def kill(self): 
+        if not self.__check_can_launch_stop("kill"): 
+            return 
 
-        self.__daemon.process.send_signal(signal.SIGKILL)
-        wait_for(lambda: not self.is_alive(), self.__timeout)
-        self.__killed = True
-
-        self.__check_before_end_stop("kill")
-
-
+        self.__daemon.process.send_signal(signal.SIGKILL) 
+        wait_for(lambda: not self.is_alive(), self.__timeout) 
+        self.__killed = True 
+ 
+        self.__check_before_end_stop("kill") 
+ 
+ 
 @six.add_metaclass(abc.ABCMeta)
 class ExternalNodeDaemon(object):
     def __init__(self, host):

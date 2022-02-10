@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-import abc
+import abc 
 import enum
-import six
-from abc import abstractmethod
+import six 
+from abc import abstractmethod 
 from . import issues, operation, settings as settings_impl, _apis
 
 
@@ -342,45 +342,45 @@ def _wrap_describe_path_response(rpc_state, response):
     return _wrap_scheme_entry(message.self)
 
 
-@six.add_metaclass(abc.ABCMeta)
-class ISchemeClient:
-    @abstractmethod
+@six.add_metaclass(abc.ABCMeta) 
+class ISchemeClient: 
+    @abstractmethod 
     def __init__(self, driver):
-        pass
-
-    @abstractmethod
-    def make_directory(self, path, settings):
-        pass
-
-    @abstractmethod
-    def remove_directory(self, path, settings):
-        pass
-
-    @abstractmethod
-    def list_directory(self, path, settings):
-        pass
-
-    @abstractmethod
-    def describe_path(self, path, settings):
-        pass
-
-    @abstractmethod
-    def modify_permissions(self, path, settings):
-        """
-        Modifies permissions for provided scheme entry
-
-        :param path: A path of scheme entry
-        :param settings: An instance of ModifyPermissionsSettings
-
-        :return: An operation if success or exception on case of failure
-        """
-        pass
-
-
-class BaseSchemeClient(ISchemeClient):
+        pass 
+ 
+    @abstractmethod 
+    def make_directory(self, path, settings): 
+        pass 
+ 
+    @abstractmethod 
+    def remove_directory(self, path, settings): 
+        pass 
+ 
+    @abstractmethod 
+    def list_directory(self, path, settings): 
+        pass 
+ 
+    @abstractmethod 
+    def describe_path(self, path, settings): 
+        pass 
+ 
+    @abstractmethod 
+    def modify_permissions(self, path, settings): 
+        """ 
+        Modifies permissions for provided scheme entry 
+ 
+        :param path: A path of scheme entry 
+        :param settings: An instance of ModifyPermissionsSettings 
+ 
+        :return: An operation if success or exception on case of failure 
+        """ 
+        pass 
+ 
+ 
+class BaseSchemeClient(ISchemeClient): 
     __slots__ = ("_driver",)
-
-    def __init__(self, driver):
+ 
+    def __init__(self, driver): 
         self._driver = driver
 
     def make_directory(self, path, settings=None):
@@ -419,16 +419,16 @@ class BaseSchemeClient(ISchemeClient):
             settings,
         )
 
-    def modify_permissions(self, path, settings):
+    def modify_permissions(self, path, settings): 
         """
         Modifies permissions for provided scheme entry
-
+ 
         :param path: A path of scheme entry
         :param settings: An instance of ModifyPermissionsSettings
-
-        :return: An operation if success or exception on case of failure
+ 
+        :return: An operation if success or exception on case of failure 
         """
-        return self._driver(
+        return self._driver( 
             _modify_permissions_request_factory(path, settings),
             _apis.SchemeService.Stub,
             _apis.SchemeService.ModifyPermissions,
@@ -436,54 +436,54 @@ class BaseSchemeClient(ISchemeClient):
             settings,
         )
 
-
-class SchemeClient(BaseSchemeClient):
-    def async_make_directory(self, path, settings=None):
-        return self._driver.future(
-            _make_directory_request_factory(path),
-            _apis.SchemeService.Stub,
-            _apis.SchemeService.MakeDirectory,
-            operation.Operation,
+ 
+class SchemeClient(BaseSchemeClient): 
+    def async_make_directory(self, path, settings=None): 
+        return self._driver.future( 
+            _make_directory_request_factory(path), 
+            _apis.SchemeService.Stub, 
+            _apis.SchemeService.MakeDirectory, 
+            operation.Operation, 
+            settings, 
+        ) 
+ 
+    def async_remove_directory(self, path, settings=None): 
+        return self._driver.future( 
+            _remove_directory_request_factory(path), 
+            _apis.SchemeService.Stub, 
+            _apis.SchemeService.RemoveDirectory, 
+            operation.Operation, 
+            settings, 
+        ) 
+ 
+    def async_list_directory(self, path, settings=None): 
+        return self._driver.future( 
+            _list_directory_request_factory(path), 
+            _apis.SchemeService.Stub, 
+            _apis.SchemeService.ListDirectory, 
+            _wrap_list_directory_response, 
+            settings, 
+        ) 
+ 
+    def async_describe_path(self, path, settings=None): 
+        return self._driver.future( 
+            _describe_path_request_factory(path), 
+            _apis.SchemeService.Stub, 
+            _apis.SchemeService.DescribePath, 
+            _wrap_describe_path_response, 
             settings,
-        )
-
-    def async_remove_directory(self, path, settings=None):
-        return self._driver.future(
-            _remove_directory_request_factory(path),
-            _apis.SchemeService.Stub,
-            _apis.SchemeService.RemoveDirectory,
-            operation.Operation,
-            settings,
-        )
-
-    def async_list_directory(self, path, settings=None):
-        return self._driver.future(
-            _list_directory_request_factory(path),
-            _apis.SchemeService.Stub,
-            _apis.SchemeService.ListDirectory,
-            _wrap_list_directory_response,
-            settings,
-        )
-
-    def async_describe_path(self, path, settings=None):
-        return self._driver.future(
-            _describe_path_request_factory(path),
-            _apis.SchemeService.Stub,
-            _apis.SchemeService.DescribePath,
-            _wrap_describe_path_response,
-            settings,
-        )
-
-    def async_modify_permissions(self, path, settings):
+        ) 
+ 
+    def async_modify_permissions(self, path, settings): 
         """
         Modifies permissions for provided scheme entry
-
+ 
         :param path: A path of scheme entry
         :param settings: An instance of ModifyPermissionsSettings
-
-        :return: An future of computation
+ 
+        :return: An future of computation 
         """
-        return self._driver.future(
+        return self._driver.future( 
             _modify_permissions_request_factory(path, settings),
             _apis.SchemeService.Stub,
             _apis.SchemeService.ModifyPermissions,

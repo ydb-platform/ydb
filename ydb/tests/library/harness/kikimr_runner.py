@@ -172,12 +172,12 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             logger.info("Stopped node %s", self)
 
     def kill(self):
-        try:
-            super(KiKiMRNode, self).kill()
-            self.start()
-        finally:
+        try: 
+            super(KiKiMRNode, self).kill() 
+            self.start() 
+        finally: 
             logger.info("Killed node %s", self)
-
+ 
     def send_signal(self, signal):
         self.daemon.process.send_signal(signal)
 

@@ -4,7 +4,7 @@ from concurrent import futures
 from six.moves import queue
 import time
 import threading
-from . import settings, issues, _utilities, tracing
+from . import settings, issues, _utilities, tracing 
 
 
 class SessionPoolImpl(object):
@@ -20,10 +20,10 @@ class SessionPoolImpl(object):
         self._lock = threading.RLock()
         self._waiters = collections.OrderedDict()
         self._driver = driver
-        if hasattr(driver, "_driver_config"):
-            self.tracer = driver._driver_config.tracer
-        else:
-            self.tracer = tracing.Tracer(None)
+        if hasattr(driver, "_driver_config"): 
+            self.tracer = driver._driver_config.tracer 
+        else: 
+            self.tracer = tracing.Tracer(None) 
         self._active_queue = queue.PriorityQueue()
         self._active_count = 0
         self._size = size
@@ -193,7 +193,7 @@ class SessionPoolImpl(object):
             try:
                 _, waiter = self._waiters.popitem(last=False)
                 waiter.set_result(session)
-                tracing.trace(self.tracer, {"put.to_waiter": True})
+                tracing.trace(self.tracer, {"put.to_waiter": True}) 
                 self._logger.debug("Replying to waiter with a session %s", session)
             except KeyError:
                 priority = time.time() + 10 * 60
@@ -258,7 +258,7 @@ class SessionPoolImpl(object):
         with self._lock:
             try:
                 _, session = self._active_queue.get(block=False)
-                tracing.trace(self.tracer, {"acquire.found_free_session": True})
+                tracing.trace(self.tracer, {"acquire.found_free_session": True}) 
                 return _utilities.wrap_result_in_future(session)
             except queue.Empty:
                 self._logger.debug(
@@ -302,7 +302,7 @@ class SessionPoolImpl(object):
                     )
                     session = self._create()
                     self._prepare(session)
-                else:
+                else: 
                     tracing.trace(
                         self.tracer,
                         {
@@ -344,21 +344,21 @@ class SessionPoolImpl(object):
         waiter = self.subscribe()
         has_result = False
         if blocking:
-            tracing.trace(self.tracer, {"acquire.blocking": True})
+            tracing.trace(self.tracer, {"acquire.blocking": True}) 
             try:
-                tracing.trace(self.tracer, {"acquire.blocking.wait": True})
+                tracing.trace(self.tracer, {"acquire.blocking.wait": True}) 
                 session = waiter.result(timeout=timeout)
                 has_result = True
                 return session
             except futures.TimeoutError:
-                tracing.trace(self.tracer, {"acquire.blocking.timeout": True})
+                tracing.trace(self.tracer, {"acquire.blocking.timeout": True}) 
                 raise issues.SessionPoolEmpty("Timeout on session acquire.")
             finally:
                 if not has_result:
                     self.unsubscribe(waiter)
 
         else:
-            tracing.trace(self.tracer, {"acquire.nonblocking": True})
+            tracing.trace(self.tracer, {"acquire.nonblocking": True}) 
             try:
                 session = waiter.result(timeout=-1)
                 has_result = True

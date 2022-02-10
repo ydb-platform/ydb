@@ -103,7 +103,7 @@ ALLOW taxi/graph/libs/mapmatcher -> maps/libs/succinct_rtree/serialization
 ALLOW taxi/graph/libs/mapmatcher -> maps/routing/common
 ALLOW taxi/graph/libs/mapmatcher -> maps/routing/turn_penalties
 ALLOW taxi/graph/libs/mapmatcher -> maps/tools/easyview/lib/io
-ALLOW taxi/graph/libs/mapmatcher -> maps/analyzer/libs/guidance
+ALLOW taxi/graph/libs/mapmatcher -> maps/analyzer/libs/guidance 
 ALLOW taxi/graph/libs/nearest_edges -> maps/libs/common
 ALLOW taxi/graph/libs/nearest_edges -> maps/libs/jams/graph-spatial
 ALLOW taxi/graph/libs/nearest_edges -> maps/libs/jams/router

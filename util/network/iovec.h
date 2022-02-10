@@ -29,7 +29,7 @@ public:
         }
 
         if (len) {
-            Y_ASSERT(0 && "non zero length left"); 
+            Y_ASSERT(0 && "non zero length left");
         }
     }
 

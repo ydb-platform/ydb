@@ -60,7 +60,7 @@ namespace NPar {
 
         // Describes a range of tasks with parameters from integer range [FirstId, LastId).
         //
-        class TExecRangeParams { 
+        class TExecRangeParams {
         public:
             template <typename TFirst, typename TLast>
             TExecRangeParams(TFirst firstId, TLast lastId)
@@ -95,7 +95,7 @@ namespace NPar {
             // Partition tasks into thread count blocks of approximately equal size, each of which
             // will be executed as a separate bigger task.
             //
-            TExecRangeParams& SetBlockCountToThreadCount() { 
+            TExecRangeParams& SetBlockCountToThreadCount() {
                 BlockEqualToThreads = true;
                 return *this;
             }
@@ -147,7 +147,7 @@ namespace NPar {
         }
 
         template <typename TBody>
-        inline void ExecRange(TBody&& body, TExecRangeParams params, int flags) { 
+        inline void ExecRange(TBody&& body, TExecRangeParams params, int flags) {
             if (TryExecRangeSequentially(body, params.FirstId, params.LastId, flags)) {
                 return;
             }

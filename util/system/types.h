@@ -33,7 +33,7 @@ typedef int64_t i64;
 #define LL(number) INT64_C(number)
 #define ULL(number) UINT64_C(number)
 
-// Macro for size_t and ptrdiff_t types 
+// Macro for size_t and ptrdiff_t types
 #if defined(_32_)
     #if defined(_darwin_)
         #define PRISZT "lu"

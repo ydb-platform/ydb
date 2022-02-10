@@ -46,7 +46,7 @@ namespace {
                 (*this)[key] = &D_.back();
             }
 
-            Y_VERIFY(size() == Count(), "size mismatch"); 
+            Y_VERIFY(size() == Count(), "size mismatch");
         }
 
         bool FindExact(const TStringBuf key, TString* out) const override {

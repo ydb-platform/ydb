@@ -7,8 +7,8 @@ import uuid
 
 def main(args):
     output_file, args = args[0], args[1:]
-    # heretic@: Splits files on which could be merged( files ) and which should not be merged( expendables ) 
-    # expendables will be in output_file in form {name}{ordinal number of archive in args[]}.{extension} 
+    # heretic@: Splits files on which could be merged( files ) and which should not be merged( expendables )
+    # expendables will be in output_file in form {name}{ordinal number of archive in args[]}.{extension}
     try:
         split_i = args.index('-no-merge')
     except ValueError:

@@ -36,40 +36,40 @@ namespace {
     };
 
     class TFunctionWrapperWithPromise: public NPar::ILocallyExecutable {
-    private: 
+    private:
         NPar::TLocallyExecutableFunction Exec;
-        int FirstId, LastId; 
-        TVector<NThreading::TPromise<void>> Promises; 
+        int FirstId, LastId;
+        TVector<NThreading::TPromise<void>> Promises;
 
-    public: 
+    public:
         TFunctionWrapperWithPromise(NPar::TLocallyExecutableFunction exec, int firstId, int lastId)
             : Exec(std::move(exec))
-            , FirstId(firstId) 
-            , LastId(lastId) 
-        { 
-            Y_ASSERT(FirstId <= LastId); 
-            const int rangeSize = LastId - FirstId; 
-            Promises.resize(rangeSize, NThreading::NewPromise()); 
-            for (auto& promise : Promises) { 
-                promise = NThreading::NewPromise(); 
-            } 
-        } 
- 
-        void LocalExec(int id) override { 
-            Y_ASSERT(FirstId <= id && id < LastId); 
-            NThreading::NImpl::SetValue(Promises[id - FirstId], [=] { Exec(id); }); 
-        } 
- 
-        TVector<NThreading::TFuture<void>> GetFutures() const { 
-            TVector<NThreading::TFuture<void>> out; 
-            out.reserve(Promises.ysize()); 
-            for (auto& promise : Promises) { 
-                out.push_back(promise.GetFuture()); 
-            } 
-            return out; 
-        } 
-    }; 
- 
+            , FirstId(firstId)
+            , LastId(lastId)
+        {
+            Y_ASSERT(FirstId <= LastId);
+            const int rangeSize = LastId - FirstId;
+            Promises.resize(rangeSize, NThreading::NewPromise());
+            for (auto& promise : Promises) {
+                promise = NThreading::NewPromise();
+            }
+        }
+
+        void LocalExec(int id) override {
+            Y_ASSERT(FirstId <= id && id < LastId);
+            NThreading::NImpl::SetValue(Promises[id - FirstId], [=] { Exec(id); });
+        }
+
+        TVector<NThreading::TFuture<void>> GetFutures() const {
+            TVector<NThreading::TFuture<void>> out;
+            out.reserve(Promises.ysize());
+            for (auto& promise : Promises) {
+                out.push_back(promise.GetFuture());
+            }
+            return out;
+        }
+    };
+
     struct TSingleJob {
         TIntrusivePtr<NPar::ILocallyExecutable> Exec;
         int Id{0};

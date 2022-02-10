@@ -14,8 +14,8 @@ namespace {
         TVector<T> Examples;
 
         TExamplesHolder()
-            : Examples(N) 
-        { 
+            : Examples(N)
+        {
             TFastRng<ui64> prng{N * 42};
             for (auto& x : Examples) {
                 x = prng.GenRandReal4() + prng.Uniform(1932); // 1934 is just a random number
@@ -25,25 +25,25 @@ namespace {
 }
 
 #define DEFINE_BENCHMARK(type, count)                                            \
-    Y_CPU_BENCHMARK(libm_log2f_##type##_##count, iface) {                        \ 
-        const auto& examples = Default<TExamplesHolder<type, count>>().Examples; \ 
-        for (const auto i : xrange(iface.Iterations())) {                        \ 
-            Y_UNUSED(i);                                                         \ 
-            for (const auto e : examples) {                                      \ 
-                Y_DO_NOT_OPTIMIZE_AWAY(log2f(e));                                \ 
-            }                                                                    \ 
-        }                                                                        \ 
-    }                                                                            \ 
-                                                                                 \ 
-    Y_CPU_BENCHMARK(libm_logf_##type##_##count, iface) {                         \ 
-        const auto& examples = Default<TExamplesHolder<type, count>>().Examples; \ 
-        for (const auto i : xrange(iface.Iterations())) {                        \ 
-            Y_UNUSED(i);                                                         \ 
-            for (const auto e : examples) {                                      \ 
-                Y_DO_NOT_OPTIMIZE_AWAY(logf(e));                                 \ 
-            }                                                                    \ 
-        }                                                                        \ 
-    }                                                                            \ 
+    Y_CPU_BENCHMARK(libm_log2f_##type##_##count, iface) {                        \
+        const auto& examples = Default<TExamplesHolder<type, count>>().Examples; \
+        for (const auto i : xrange(iface.Iterations())) {                        \
+            Y_UNUSED(i);                                                         \
+            for (const auto e : examples) {                                      \
+                Y_DO_NOT_OPTIMIZE_AWAY(log2f(e));                                \
+            }                                                                    \
+        }                                                                        \
+    }                                                                            \
+                                                                                 \
+    Y_CPU_BENCHMARK(libm_logf_##type##_##count, iface) {                         \
+        const auto& examples = Default<TExamplesHolder<type, count>>().Examples; \
+        for (const auto i : xrange(iface.Iterations())) {                        \
+            Y_UNUSED(i);                                                         \
+            for (const auto e : examples) {                                      \
+                Y_DO_NOT_OPTIMIZE_AWAY(logf(e));                                 \
+            }                                                                    \
+        }                                                                        \
+    }                                                                            \
     Y_CPU_BENCHMARK(STL_Log2_##type##_##count, iface) {                          \
         const auto& examples = Default<TExamplesHolder<type, count>>().Examples; \
         for (const auto i : xrange(iface.Iterations())) {                        \
@@ -74,7 +74,7 @@ namespace {
         }                                                                        \
     }                                                                            \
                                                                                  \
-    Y_CPU_BENCHMARK(FastLogf##type##_##count, iface) {                           \ 
+    Y_CPU_BENCHMARK(FastLogf##type##_##count, iface) {                           \
         const auto& examples = Default<TExamplesHolder<type, count>>().Examples; \
         for (const auto i : xrange(iface.Iterations())) {                        \
             Y_UNUSED(i);                                                         \
@@ -89,7 +89,7 @@ namespace {
         for (const auto i : xrange(iface.Iterations())) {                        \
             Y_UNUSED(i);                                                         \
             for (const auto e : examples) {                                      \
-                Y_DO_NOT_OPTIMIZE_AWAY(FasterLog2f(e));                          \ 
+                Y_DO_NOT_OPTIMIZE_AWAY(FasterLog2f(e));                          \
             }                                                                    \
         }                                                                        \
     }                                                                            \
@@ -99,29 +99,29 @@ namespace {
         for (const auto i : xrange(iface.Iterations())) {                        \
             Y_UNUSED(i);                                                         \
             for (const auto e : examples) {                                      \
-                Y_DO_NOT_OPTIMIZE_AWAY(FasterLogf(e));                           \ 
+                Y_DO_NOT_OPTIMIZE_AWAY(FasterLogf(e));                           \
             }                                                                    \
         }                                                                        \
-    }                                                                            \ 
-                                                                                 \ 
-    Y_CPU_BENCHMARK(Fastest_Log2f_##type##_##count, iface) {                     \ 
-        const auto& examples = Default<TExamplesHolder<type, count>>().Examples; \ 
-        for (const auto i : xrange(iface.Iterations())) {                        \ 
-            Y_UNUSED(i);                                                         \ 
-            for (const auto e : examples) {                                      \ 
-                Y_DO_NOT_OPTIMIZE_AWAY(FastestLog2f(e));                         \ 
-            }                                                                    \ 
-        }                                                                        \ 
-    }                                                                            \ 
-                                                                                 \ 
-    Y_CPU_BENCHMARK(Fastest_Log_##type##_##count, iface) {                       \ 
-        const auto& examples = Default<TExamplesHolder<type, count>>().Examples; \ 
-        for (const auto i : xrange(iface.Iterations())) {                        \ 
-            Y_UNUSED(i);                                                         \ 
-            for (const auto e : examples) {                                      \ 
-                Y_DO_NOT_OPTIMIZE_AWAY(FastestLogf(e));                          \ 
-            }                                                                    \ 
-        }                                                                        \ 
+    }                                                                            \
+                                                                                 \
+    Y_CPU_BENCHMARK(Fastest_Log2f_##type##_##count, iface) {                     \
+        const auto& examples = Default<TExamplesHolder<type, count>>().Examples; \
+        for (const auto i : xrange(iface.Iterations())) {                        \
+            Y_UNUSED(i);                                                         \
+            for (const auto e : examples) {                                      \
+                Y_DO_NOT_OPTIMIZE_AWAY(FastestLog2f(e));                         \
+            }                                                                    \
+        }                                                                        \
+    }                                                                            \
+                                                                                 \
+    Y_CPU_BENCHMARK(Fastest_Log_##type##_##count, iface) {                       \
+        const auto& examples = Default<TExamplesHolder<type, count>>().Examples; \
+        for (const auto i : xrange(iface.Iterations())) {                        \
+            Y_UNUSED(i);                                                         \
+            for (const auto e : examples) {                                      \
+                Y_DO_NOT_OPTIMIZE_AWAY(FastestLogf(e));                          \
+            }                                                                    \
+        }                                                                        \
     }
 
 DEFINE_BENCHMARK(float, 1)

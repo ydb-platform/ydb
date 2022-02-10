@@ -1231,9 +1231,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TStatsCollectorInitializer(runConfig));
     }
 #endif
-    if (serviceMask.EnableSelfPing) {
-        sil->AddServiceInitializer(new TSelfPingInitializer(runConfig));
-    }
+    if (serviceMask.EnableSelfPing) { 
+        sil->AddServiceInitializer(new TSelfPingInitializer(runConfig)); 
+    } 
     if (serviceMask.EnableTabletMonitor) {
         sil->AddServiceInitializer(new NKikimrServicesInitializers::TTabletMonitorInitializer(
             runConfig,

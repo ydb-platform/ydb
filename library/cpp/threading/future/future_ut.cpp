@@ -2,9 +2,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <list>
+#include <list> 
 #include <type_traits>
-
+ 
 namespace NThreading {
 
 namespace {
@@ -317,20 +317,20 @@ namespace {
             std::list<TFuture<void>> promises;
             promises.push_back(promise1);
             promises.push_back(promise2);
-
+ 
             TFuture<void> future = WaitExceptionOrAll(promises);
             UNIT_ASSERT(!future.HasValue());
-
+ 
             promise1.SetValue();
             UNIT_ASSERT(!future.HasValue());
-
+ 
             promise2.SetValue();
             UNIT_ASSERT(future.HasValue());
         }
-
+ 
         Y_UNIT_TEST(ShouldWaitExceptionOrAllVectorEmpty) {
             TVector<TFuture<void>> promises;
-
+ 
             TFuture<void> future = WaitExceptionOrAll(promises);
             UNIT_ASSERT(future.HasValue());
         }
@@ -379,20 +379,20 @@ namespace {
             std::list<TFuture<void>> promises;
             promises.push_back(promise1);
             promises.push_back(promise2);
-
+ 
             TFuture<void> future = WaitAny(promises);
             UNIT_ASSERT(!future.HasValue());
-
+ 
             promise1.SetValue();
             UNIT_ASSERT(future.HasValue());
-
+ 
             promise2.SetValue();
             UNIT_ASSERT(future.HasValue());
         }
-
+ 
         Y_UNIT_TEST(ShouldWaitAnyVectorEmpty) {
             TVector<TFuture<void>> promises;
-
+ 
             TFuture<void> future = WaitAny(promises);
             UNIT_ASSERT(future.HasValue());
         }

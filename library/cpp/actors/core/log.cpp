@@ -741,8 +741,8 @@ namespace NActors {
 
     TAutoPtr<TLogBackend> CreateFileBackend(const TString& fileName) {
         return new TLineFileLogBackend(fileName);
-    }
-
+    } 
+ 
     TAutoPtr<TLogBackend> CreateNullBackend() {
         return new TNullLogBackend();
     }

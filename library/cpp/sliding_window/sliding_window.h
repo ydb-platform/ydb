@@ -109,7 +109,7 @@ namespace NSlidingWindow {
                 firstElemIndex = (firstElemIndex + 1) % arraySize;
             }
             return windowValue;
-        }
+        } 
     };
 
     /////////////////////////////////////////////////////////////////////////////////////////

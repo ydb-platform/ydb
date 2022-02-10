@@ -91,7 +91,7 @@ message TActorSystemConfig {
     repeated TServiceExecutor ServiceExecutor = 7;
     optional uint32 TimePerMailboxMicroSecs = 8;
     optional uint32 EventsPerMailbox = 9;
-    optional uint32 SelfPingInterval = 10; // in microseconds
+    optional uint32 SelfPingInterval = 10; // in microseconds 
 
     message TUnitedWorkers {
         optional uint32 CpuCount = 1; // Total CPUs running united workers (TExecutor.Threads analog), should be set to zero to use actorsystem 1.5, and >0 for actorsystem 2.0
@@ -283,7 +283,7 @@ message TLogConfig {
     optional string ClusterName = 7;
     optional bool AllowDropEntries = 8 [default = true];
     optional bool UseLocalTimestamps = 9 [default = false];
-    optional string BackendFileName = 10;
+    optional string BackendFileName = 10; 
     optional string SysLogService = 11;
     optional bool SysLogToStdErr = 12; // writes logs to stderr as well as in syslog
     optional TUAClientConfig UAClientConfig = 13;

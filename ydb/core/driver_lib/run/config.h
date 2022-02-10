@@ -34,7 +34,7 @@ union TBasicKikimrServicesMask {
         bool EnableMiniKQLCompileService:1;
         bool EnableMessageBusServices:1;
         bool EnableStatsCollector:1;
-        bool EnableSelfPing:1;
+        bool EnableSelfPing:1; 
         bool EnableTabletMonitor:1;
         bool EnableViewerService:1;
         bool EnableLoadService:1;

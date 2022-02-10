@@ -1,5 +1,5 @@
-#include "sliding_window.h"
-
+#include "sliding_window.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NSlidingWindow;
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TSlidingWindowTest) {
         now += TDuration::Minutes(5);
         w.Update(6, now);                          // ~ 6 ~ ~ ~
         UNIT_ASSERT_VALUES_EQUAL(w.GetValue(), 6); //   ^
-
+ 
         // update current bucket
         w.Update(5, now);                          // ~ 5 ~ ~ ~
         UNIT_ASSERT_VALUES_EQUAL(w.GetValue(), 5); //   ^

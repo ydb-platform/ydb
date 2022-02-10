@@ -470,11 +470,11 @@ i32 TFileHandle::Read(void* buffer, ui32 byteCount) noexcept {
     }
     return -1;
 #elif defined(_unix_)
-    i32 ret; 
+    i32 ret;
     do {
         ret = ::read(Fd_, buffer, byteCount);
     } while (ret == -1 && errno == EINTR);
-    return ret; 
+    return ret;
 #else
     #error unsupported platform
 #endif
@@ -491,11 +491,11 @@ i32 TFileHandle::Write(const void* buffer, ui32 byteCount) noexcept {
     }
     return -1;
 #elif defined(_unix_)
-    i32 ret; 
+    i32 ret;
     do {
         ret = ::write(Fd_, buffer, byteCount);
     } while (ret == -1 && errno == EINTR);
-    return ret; 
+    return ret;
 #else
     #error unsupported platform
 #endif
@@ -516,11 +516,11 @@ i32 TFileHandle::Pread(void* buffer, ui32 byteCount, i64 offset) const noexcept 
     }
     return -1;
 #elif defined(_unix_)
-    i32 ret; 
+    i32 ret;
     do {
         ret = ::pread(Fd_, buffer, byteCount, offset);
     } while (ret == -1 && errno == EINTR);
-    return ret; 
+    return ret;
 #else
     #error unsupported platform
 #endif
@@ -538,11 +538,11 @@ i32 TFileHandle::Pwrite(const void* buffer, ui32 byteCount, i64 offset) const no
     }
     return -1;
 #elif defined(_unix_)
-    i32 ret; 
+    i32 ret;
     do {
         ret = ::pwrite(Fd_, buffer, byteCount, offset);
     } while (ret == -1 && errno == EINTR);
-    return ret; 
+    return ret;
 #else
     #error unsupported platform
 #endif

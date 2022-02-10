@@ -113,15 +113,15 @@ TSystemEvent::TSystemEvent(ResetMode rmode)
 }
 
 TSystemEvent::TSystemEvent(const TSystemEvent& other) noexcept
-    : EvImpl_(other.EvImpl_) 
-{ 
-} 
- 
+    : EvImpl_(other.EvImpl_)
+{
+}
+
 TSystemEvent& TSystemEvent::operator=(const TSystemEvent& other) noexcept {
-    EvImpl_ = other.EvImpl_; 
-    return *this; 
-} 
- 
+    EvImpl_ = other.EvImpl_;
+    return *this;
+}
+
 TSystemEvent::~TSystemEvent() = default;
 
 void TSystemEvent::Reset() noexcept {

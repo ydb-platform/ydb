@@ -21,7 +21,7 @@ public:
     TSystemEvent(ResetMode rmode = rManual);
     TSystemEvent(const TSystemEvent& other) noexcept;
     TSystemEvent& operator=(const TSystemEvent& other) noexcept;
- 
+
     ~TSystemEvent();
 
     void Reset() noexcept;
@@ -59,7 +59,7 @@ public:
 
 private:
     class TEvImpl;
-    TIntrusivePtr<TEvImpl> EvImpl_; 
+    TIntrusivePtr<TEvImpl> EvImpl_;
 };
 
 class TAutoEvent: public TSystemEvent {

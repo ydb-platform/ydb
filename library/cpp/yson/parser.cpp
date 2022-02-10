@@ -161,19 +161,19 @@ namespace NYson {
     TYsonListParser::TYsonListParser(
         NYT::NYson::IYsonConsumer* consumer,
         IInputStream* stream,
-        bool enableLinePositionInfo, 
+        bool enableLinePositionInfo,
         TMaybe<ui64> memoryLimit)
         : Impl(new TImpl(consumer, stream, enableLinePositionInfo, memoryLimit))
-    { 
-    } 
- 
+    {
+    }
+
     TYsonListParser::~TYsonListParser() {
     }
- 
+
     bool TYsonListParser::Parse() {
         return Impl->Parse();
     }
- 
+
     ////////////////////////////////////////////////////////////////////////////////
- 
+
 } // namespace NYson

@@ -61,23 +61,23 @@ namespace NYson {
             TMaybe<ui64> memoryLimit = Nothing());
 
         ~TYsonListParser();
- 
+
         bool Parse(); // Returns false, if there is no more list items
- 
+
     private:
         class TImpl;
         THolder<TImpl> Impl;
     };
- 
+
     ////////////////////////////////////////////////////////////////////////////////
- 
+
     void ParseYsonStringBuffer(
         const TStringBuf& buffer,
         NYT::NYson::IYsonConsumer* consumer,
         EYsonType type = ::NYson::EYsonType::Node,
         bool enableLinePositionInfo = false,
         TMaybe<ui64> memoryLimit = Nothing());
- 
+
     ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYson

@@ -4,7 +4,7 @@ OWNER(
 )
 
 RECURSE(
-    abseil-cpp 
+    abseil-cpp
     abseil-cpp-tstring
     alsa-lib
     avahi

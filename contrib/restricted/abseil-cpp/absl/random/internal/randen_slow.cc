@@ -1,51 +1,51 @@
-// Copyright 2017 The Abseil Authors. 
-// 
-// Licensed under the Apache License, Version 2.0 (the "License"); 
-// you may not use this file except in compliance with the License. 
-// You may obtain a copy of the License at 
-// 
-//      https://www.apache.org/licenses/LICENSE-2.0 
-// 
-// Unless required by applicable law or agreed to in writing, software 
-// distributed under the License is distributed on an "AS IS" BASIS, 
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-// See the License for the specific language governing permissions and 
-// limitations under the License. 
- 
-#include "absl/random/internal/randen_slow.h" 
- 
-#include <cstddef> 
-#include <cstdint> 
-#include <cstring> 
- 
+// Copyright 2017 The Abseil Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "absl/random/internal/randen_slow.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+
 #include "absl/base/attributes.h"
 #include "absl/base/internal/endian.h"
 #include "absl/numeric/int128.h"
-#include "absl/random/internal/platform.h" 
+#include "absl/random/internal/platform.h"
 #include "absl/random/internal/randen_traits.h"
- 
-#if ABSL_HAVE_ATTRIBUTE(always_inline) || \ 
-    (defined(__GNUC__) && !defined(__clang__)) 
-#define ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE \ 
-  __attribute__((always_inline)) 
-#elif defined(_MSC_VER) 
-// We can achieve something similar to attribute((always_inline)) with MSVC by 
-// using the __forceinline keyword, however this is not perfect. MSVC is 
-// much less aggressive about inlining, and even with the __forceinline keyword. 
-#define ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE __forceinline 
-#else 
-#define ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE 
-#endif 
- 
-namespace { 
- 
-// AES portions based on rijndael-alg-fst.c, 
+
+#if ABSL_HAVE_ATTRIBUTE(always_inline) || \
+    (defined(__GNUC__) && !defined(__clang__))
+#define ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE \
+  __attribute__((always_inline))
+#elif defined(_MSC_VER)
+// We can achieve something similar to attribute((always_inline)) with MSVC by
+// using the __forceinline keyword, however this is not perfect. MSVC is
+// much less aggressive about inlining, and even with the __forceinline keyword.
+#define ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE __forceinline
+#else
+#define ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE
+#endif
+
+namespace {
+
+// AES portions based on rijndael-alg-fst.c,
 // https://fastcrypto.org/front/misc/rijndael-alg-fst.c, and modified for
 // platform-endianness.
-// 
-// Implementation of 
-// http://www.csrc.nist.gov/publications/fips/fips197/fips-197.pdf 
-constexpr uint32_t te0[256] = { 
+//
+// Implementation of
+// http://www.csrc.nist.gov/publications/fips/fips197/fips-197.pdf
+constexpr uint32_t te0[256] = {
     0xa56363c6, 0x847c7cf8, 0x997777ee, 0x8d7b7bf6, 0x0df2f2ff, 0xbd6b6bd6,
     0xb16f6fde, 0x54c5c591, 0x50303060, 0x03010102, 0xa96767ce, 0x7d2b2b56,
     0x19fefee7, 0x62d7d7b5, 0xe6abab4d, 0x9a7676ec, 0x45caca8f, 0x9d82821f,
@@ -89,9 +89,9 @@ constexpr uint32_t te0[256] = {
     0x8f8c8c03, 0xf8a1a159, 0x80898909, 0x170d0d1a, 0xdabfbf65, 0x31e6e6d7,
     0xc6424284, 0xb86868d0, 0xc3414182, 0xb0999929, 0x772d2d5a, 0x110f0f1e,
     0xcbb0b07b, 0xfc5454a8, 0xd6bbbb6d, 0x3a16162c,
-}; 
- 
-constexpr uint32_t te1[256] = { 
+};
+
+constexpr uint32_t te1[256] = {
     0x6363c6a5, 0x7c7cf884, 0x7777ee99, 0x7b7bf68d, 0xf2f2ff0d, 0x6b6bd6bd,
     0x6f6fdeb1, 0xc5c59154, 0x30306050, 0x01010203, 0x6767cea9, 0x2b2b567d,
     0xfefee719, 0xd7d7b562, 0xabab4de6, 0x7676ec9a, 0xcaca8f45, 0x82821f9d,
@@ -135,9 +135,9 @@ constexpr uint32_t te1[256] = {
     0x8c8c038f, 0xa1a159f8, 0x89890980, 0x0d0d1a17, 0xbfbf65da, 0xe6e6d731,
     0x424284c6, 0x6868d0b8, 0x414182c3, 0x999929b0, 0x2d2d5a77, 0x0f0f1e11,
     0xb0b07bcb, 0x5454a8fc, 0xbbbb6dd6, 0x16162c3a,
-}; 
- 
-constexpr uint32_t te2[256] = { 
+};
+
+constexpr uint32_t te2[256] = {
     0x63c6a563, 0x7cf8847c, 0x77ee9977, 0x7bf68d7b, 0xf2ff0df2, 0x6bd6bd6b,
     0x6fdeb16f, 0xc59154c5, 0x30605030, 0x01020301, 0x67cea967, 0x2b567d2b,
     0xfee719fe, 0xd7b562d7, 0xab4de6ab, 0x76ec9a76, 0xca8f45ca, 0x821f9d82,
@@ -181,9 +181,9 @@ constexpr uint32_t te2[256] = {
     0x8c038f8c, 0xa159f8a1, 0x89098089, 0x0d1a170d, 0xbf65dabf, 0xe6d731e6,
     0x4284c642, 0x68d0b868, 0x4182c341, 0x9929b099, 0x2d5a772d, 0x0f1e110f,
     0xb07bcbb0, 0x54a8fc54, 0xbb6dd6bb, 0x162c3a16,
-}; 
- 
-constexpr uint32_t te3[256] = { 
+};
+
+constexpr uint32_t te3[256] = {
     0xc6a56363, 0xf8847c7c, 0xee997777, 0xf68d7b7b, 0xff0df2f2, 0xd6bd6b6b,
     0xdeb16f6f, 0x9154c5c5, 0x60503030, 0x02030101, 0xcea96767, 0x567d2b2b,
     0xe719fefe, 0xb562d7d7, 0x4de6abab, 0xec9a7676, 0x8f45caca, 0x1f9d8282,
@@ -227,31 +227,31 @@ constexpr uint32_t te3[256] = {
     0x038f8c8c, 0x59f8a1a1, 0x09808989, 0x1a170d0d, 0x65dabfbf, 0xd731e6e6,
     0x84c64242, 0xd0b86868, 0x82c34141, 0x29b09999, 0x5a772d2d, 0x1e110f0f,
     0x7bcbb0b0, 0xa8fc5454, 0x6dd6bbbb, 0x2c3a1616,
-}; 
- 
-// Software implementation of the Vector128 class, using uint32_t 
-// as an underlying vector register. 
+};
+
+// Software implementation of the Vector128 class, using uint32_t
+// as an underlying vector register.
 struct alignas(16) Vector128 {
-  uint32_t s[4]; 
-}; 
- 
-inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE Vector128 
+  uint32_t s[4];
+};
+
+inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE Vector128
 Vector128Load(const void* from) {
-  Vector128 result; 
+  Vector128 result;
   std::memcpy(result.s, from, sizeof(Vector128));
-  return result; 
-} 
- 
-inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE void Vector128Store( 
+  return result;
+}
+
+inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE void Vector128Store(
     const Vector128& v, void* to) {
   std::memcpy(to, v.s, sizeof(Vector128));
-} 
- 
-// One round of AES. "round_key" is a public constant for breaking the 
-// symmetry of AES (ensures previously equal columns differ afterwards). 
-inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE Vector128 
-AesRound(const Vector128& state, const Vector128& round_key) { 
-  Vector128 result; 
+}
+
+// One round of AES. "round_key" is a public constant for breaking the
+// symmetry of AES (ensures previously equal columns differ afterwards).
+inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE Vector128
+AesRound(const Vector128& state, const Vector128& round_key) {
+  Vector128 result;
 #ifdef ABSL_IS_LITTLE_ENDIAN
   result.s[0] = round_key.s[0] ^                  //
                 te0[uint8_t(state.s[0])] ^        //
@@ -295,21 +295,21 @@ AesRound(const Vector128& state, const Vector128& round_key) {
                 te2[uint8_t(state.s[1] >> 16)] ^  //
                 te3[uint8_t(state.s[0] >> 24)];
 #endif
-  return result; 
-} 
- 
+  return result;
+}
+
 using ::absl::random_internal::RandenTraits;
- 
-// The improved Feistel block shuffle function for 16 blocks. 
-inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE void BlockShuffle( 
+
+// The improved Feistel block shuffle function for 16 blocks.
+inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE void BlockShuffle(
     absl::uint128* state) {
   static_assert(RandenTraits::kFeistelBlocks == 16,
-                "Feistel block shuffle only works for 16 blocks."); 
- 
+                "Feistel block shuffle only works for 16 blocks.");
+
   constexpr size_t shuffle[RandenTraits::kFeistelBlocks] = {
       7, 2, 13, 4, 11, 8, 3, 6, 15, 0, 9, 10, 1, 14, 5, 12};
- 
-  // The fully unrolled loop without the memcpy improves the speed by about 
+
+  // The fully unrolled loop without the memcpy improves the speed by about
   // 30% over the equivalent:
 #if 0
   absl::uint128 source[RandenTraits::kFeistelBlocks];
@@ -317,10 +317,10 @@ inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE void BlockShuffle(
   for (size_t i = 0; i < RandenTraits::kFeistelBlocks; i++) {
     const absl::uint128 v0 = source[shuffle[i]];
     state[i] = v0;
-  } 
+  }
   return;
 #endif
- 
+
   const absl::uint128 v0 = state[shuffle[0]];
   const absl::uint128 v1 = state[shuffle[1]];
   const absl::uint128 v2 = state[shuffle[2]];
@@ -337,64 +337,64 @@ inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE void BlockShuffle(
   const absl::uint128 w5 = state[shuffle[13]];
   const absl::uint128 w6 = state[shuffle[14]];
   const absl::uint128 w7 = state[shuffle[15]];
-  state[0] = v0; 
-  state[1] = v1; 
-  state[2] = v2; 
-  state[3] = v3; 
-  state[4] = v4; 
-  state[5] = v5; 
-  state[6] = v6; 
-  state[7] = v7; 
-  state[8] = w0; 
-  state[9] = w1; 
-  state[10] = w2; 
-  state[11] = w3; 
-  state[12] = w4; 
-  state[13] = w5; 
-  state[14] = w6; 
-  state[15] = w7; 
-} 
- 
-// Feistel round function using two AES subrounds. Very similar to F() 
-// from Simpira v2, but with independent subround keys. Uses 17 AES rounds 
-// per 16 bytes (vs. 10 for AES-CTR). Computing eight round functions in 
-// parallel hides the 7-cycle AESNI latency on HSW. Note that the Feistel 
-// XORs are 'free' (included in the second AES instruction). 
+  state[0] = v0;
+  state[1] = v1;
+  state[2] = v2;
+  state[3] = v3;
+  state[4] = v4;
+  state[5] = v5;
+  state[6] = v6;
+  state[7] = v7;
+  state[8] = w0;
+  state[9] = w1;
+  state[10] = w2;
+  state[11] = w3;
+  state[12] = w4;
+  state[13] = w5;
+  state[14] = w6;
+  state[15] = w7;
+}
+
+// Feistel round function using two AES subrounds. Very similar to F()
+// from Simpira v2, but with independent subround keys. Uses 17 AES rounds
+// per 16 bytes (vs. 10 for AES-CTR). Computing eight round functions in
+// parallel hides the 7-cycle AESNI latency on HSW. Note that the Feistel
+// XORs are 'free' (included in the second AES instruction).
 inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE const absl::uint128*
 FeistelRound(absl::uint128* ABSL_RANDOM_INTERNAL_RESTRICT state,
              const absl::uint128* ABSL_RANDOM_INTERNAL_RESTRICT keys) {
   for (size_t branch = 0; branch < RandenTraits::kFeistelBlocks; branch += 4) {
     const Vector128 s0 = Vector128Load(state + branch);
     const Vector128 s1 = Vector128Load(state + branch + 1);
-    const Vector128 f0 = AesRound(s0, Vector128Load(keys)); 
-    keys++; 
-    const Vector128 o1 = AesRound(f0, s1); 
+    const Vector128 f0 = AesRound(s0, Vector128Load(keys));
+    keys++;
+    const Vector128 o1 = AesRound(f0, s1);
     Vector128Store(o1, state + branch + 1);
- 
-    // Manually unroll this loop once. about 10% better than not unrolled. 
+
+    // Manually unroll this loop once. about 10% better than not unrolled.
     const Vector128 s2 = Vector128Load(state + branch + 2);
     const Vector128 s3 = Vector128Load(state + branch + 3);
-    const Vector128 f2 = AesRound(s2, Vector128Load(keys)); 
-    keys++; 
-    const Vector128 o3 = AesRound(f2, s3); 
+    const Vector128 f2 = AesRound(s2, Vector128Load(keys));
+    keys++;
+    const Vector128 o3 = AesRound(f2, s3);
     Vector128Store(o3, state + branch + 3);
-  } 
-  return keys; 
-} 
- 
-// Cryptographic permutation based via type-2 Generalized Feistel Network. 
-// Indistinguishable from ideal by chosen-ciphertext adversaries using less than 
-// 2^64 queries if the round function is a PRF. This is similar to the b=8 case 
-// of Simpira v2, but more efficient than its generic construction for b=16. 
-inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE void Permute( 
+  }
+  return keys;
+}
+
+// Cryptographic permutation based via type-2 Generalized Feistel Network.
+// Indistinguishable from ideal by chosen-ciphertext adversaries using less than
+// 2^64 queries if the round function is a PRF. This is similar to the b=8 case
+// of Simpira v2, but more efficient than its generic construction for b=16.
+inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE void Permute(
     absl::uint128* state,
     const absl::uint128* ABSL_RANDOM_INTERNAL_RESTRICT keys) {
   for (size_t round = 0; round < RandenTraits::kFeistelRounds; ++round) {
     keys = FeistelRound(state, keys);
-    BlockShuffle(state); 
-  } 
-} 
- 
+    BlockShuffle(state);
+  }
+}
+
 // Enables native loads in the round loop by pre-swapping.
 inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE void SwapEndian(
     absl::uint128* state) {
@@ -412,29 +412,29 @@ inline ABSL_RANDOM_INTERNAL_ATTRIBUTE_ALWAYS_INLINE void SwapEndian(
 #endif
 }
 
-}  // namespace 
- 
-namespace absl { 
+}  // namespace
+
+namespace absl {
 ABSL_NAMESPACE_BEGIN
-namespace random_internal { 
- 
-const void* RandenSlow::GetKeys() { 
-  // Round keys for one AES per Feistel round and branch. 
-  // The canonical implementation uses first digits of Pi. 
+namespace random_internal {
+
+const void* RandenSlow::GetKeys() {
+  // Round keys for one AES per Feistel round and branch.
+  // The canonical implementation uses first digits of Pi.
 #ifdef ABSL_IS_LITTLE_ENDIAN
   return kRandenRoundKeys;
 #else
   return kRandenRoundKeysBE;
 #endif
-} 
- 
-void RandenSlow::Absorb(const void* seed_void, void* state_void) { 
+}
+
+void RandenSlow::Absorb(const void* seed_void, void* state_void) {
   auto* state =
       reinterpret_cast<uint64_t * ABSL_RANDOM_INTERNAL_RESTRICT>(state_void);
   const auto* seed =
       reinterpret_cast<const uint64_t * ABSL_RANDOM_INTERNAL_RESTRICT>(
           seed_void);
- 
+
   constexpr size_t kCapacityBlocks =
       RandenTraits::kCapacityBytes / sizeof(uint64_t);
   static_assert(
@@ -443,29 +443,29 @@ void RandenSlow::Absorb(const void* seed_void, void* state_void) {
 
   for (size_t i = kCapacityBlocks;
        i < RandenTraits::kStateBytes / sizeof(uint64_t); ++i) {
-    state[i] ^= seed[i - kCapacityBlocks]; 
-  } 
-} 
- 
+    state[i] ^= seed[i - kCapacityBlocks];
+  }
+}
+
 void RandenSlow::Generate(const void* keys_void, void* state_void) {
   static_assert(RandenTraits::kCapacityBytes == sizeof(absl::uint128),
                 "Capacity mismatch");
- 
+
   auto* state = reinterpret_cast<absl::uint128*>(state_void);
   const auto* keys = reinterpret_cast<const absl::uint128*>(keys_void);
- 
+
   const absl::uint128 prev_inner = state[0];
- 
+
   SwapEndian(state);
 
   Permute(state, keys);
- 
+
   SwapEndian(state);
 
-  // Ensure backtracking resistance. 
+  // Ensure backtracking resistance.
   *state ^= prev_inner;
-} 
- 
-}  // namespace random_internal 
+}
+
+}  // namespace random_internal
 ABSL_NAMESPACE_END
-}  // namespace absl 
+}  // namespace absl

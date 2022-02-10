@@ -111,14 +111,14 @@ def get_srcdir(path, unit):
     return rootrel_arc_src(path, unit)[:-len(path)].rstrip('/')
 
 def add_python_lint_checks(unit, py_ver, files):
-    def get_resolved_files(): 
+    def get_resolved_files():
         resolved_files = []
         for path in files:
             resolved = unit.resolve_arc_path([path])
             if resolved.startswith('$S'):  # path was resolved as source file.
                 resolved_files.append(resolved)
-        return resolved_files 
- 
+        return resolved_files
+
     if unit.get('LINT_LEVEL_VALUE') == "none":
 
         no_lint_allowed_paths = (
@@ -138,11 +138,11 @@ def add_python_lint_checks(unit, py_ver, files):
             ymake.report_configure_error("NO_LINT() is allowed only in " + ", ".join(no_lint_allowed_paths))
 
     if files and unit.get('LINT_LEVEL_VALUE') not in ("none", "none_internal"):
-        resolved_files = get_resolved_files() 
+        resolved_files = get_resolved_files()
         flake8_cfg = 'build/config/tests/flake8/flake8.conf'
-        unit.onadd_check(["flake8.py{}".format(py_ver), flake8_cfg] + resolved_files) 
+        unit.onadd_check(["flake8.py{}".format(py_ver), flake8_cfg] + resolved_files)
 
- 
+
 def is_py3(unit):
     return unit.get("PYTHON3") == "yes"
 

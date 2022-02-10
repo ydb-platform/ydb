@@ -6,7 +6,7 @@
 
 #include <util/charset/utf8.h>
 #include <util/digest/numeric.h>
-#include <util/generic/hash_set.h> 
+#include <util/generic/hash_set.h>
 
 #include <algorithm>
 
@@ -146,7 +146,7 @@ public:
     void TestRecodeIntoString();
     void TestRecodeAppend();
     void TestRecode();
-    void TestUnicodeLimit(); 
+    void TestUnicodeLimit();
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TConversionTest);
@@ -192,17 +192,17 @@ void TConversionTest::TestWideToChar() {
     }
 }
 
-static void TestSurrogates(const char* str, const wchar16* wide, size_t wideSize, ECharset enc) { 
+static void TestSurrogates(const char* str, const wchar16* wide, size_t wideSize, ECharset enc) {
     TUtf16String w = UTF8ToWide(str);
- 
-    UNIT_ASSERT(w.size() == wideSize); 
-    UNIT_ASSERT(!memcmp(w.c_str(), wide, wideSize)); 
- 
+
+    UNIT_ASSERT(w.size() == wideSize);
+    UNIT_ASSERT(!memcmp(w.c_str(), wide, wideSize));
+
     TString s = WideToChar(w, enc);
- 
-    UNIT_ASSERT(s == str); 
-} 
- 
+
+    UNIT_ASSERT(s == str);
+}
+
 void TConversionTest::TestYandexEncoding() {
     TUtf16String w = UTF8ToWide(utf8CyrillicAlphabet, strlen(utf8CyrillicAlphabet), csYandex);
     UNIT_ASSERT(w == wideCyrillicAlphabet);
@@ -212,20 +212,20 @@ void TConversionTest::TestYandexEncoding() {
     const char* utf8NonBMP2 = "ab\xf4\x80\x89\x87n";
     wchar16 wNonBMPDummy2[] = {'a', 'b', 0xDBC0, 0xDE47, 'n'};
     TestSurrogates(utf8NonBMP2, wNonBMPDummy2, Y_ARRAY_SIZE(wNonBMPDummy2), CODES_UTF8);
- 
-    { 
-        const char* yandexNonBMP2 = "ab?n"; 
+
+    {
+        const char* yandexNonBMP2 = "ab?n";
         UNIT_ASSERT(yandexNonBMP2 == WideToChar(wNonBMPDummy2, Y_ARRAY_SIZE(wNonBMPDummy2), CODES_YANDEX));
 
         TString temp;
         temp.resize(Y_ARRAY_SIZE(wNonBMPDummy2));
-        size_t read = 0; 
-        size_t written = 0; 
+        size_t read = 0;
+        size_t written = 0;
         RecodeFromUnicode(CODES_YANDEX, wNonBMPDummy2, temp.begin(), Y_ARRAY_SIZE(wNonBMPDummy2), temp.size(), read, written);
-        temp.remove(written); 
- 
-        UNIT_ASSERT(yandexNonBMP2 == temp); 
-    } 
+        temp.remove(written);
+
+        UNIT_ASSERT(yandexNonBMP2 == temp);
+    }
 }
 
 void TConversionTest::TestRecodeIntoString() {
@@ -342,30 +342,30 @@ void Out<RECODE_RESULT>(IOutputStream& out, RECODE_RESULT val) {
 }
 
 void TConversionTest::TestRecode() {
-    for (int c = 0; c != CODES_MAX; ++c) { 
+    for (int c = 0; c != CODES_MAX; ++c) {
         ECharset enc = static_cast<ECharset>(c);
-        if (!SingleByteCodepage(enc)) 
-            continue; 
+        if (!SingleByteCodepage(enc))
+            continue;
 
         using THash = THashSet<char>;
-        THash hash; 
+        THash hash;
 
-        for (int i = 0; i != 256; ++i) { 
-            char ch = static_cast<char>(i); 
+        for (int i = 0; i != 256; ++i) {
+            char ch = static_cast<char>(i);
 
-            wchar32 wch; 
-            size_t read = 0; 
-            size_t written = 0; 
-            RECODE_RESULT res = RECODE_ERROR; 
+            wchar32 wch;
+            size_t read = 0;
+            size_t written = 0;
+            RECODE_RESULT res = RECODE_ERROR;
 
-            res = RecodeToUnicode(enc, &ch, &wch, 1, 1, read, written); 
-            UNIT_ASSERT(res == RECODE_OK); 
-            if (wch == BROKEN_RUNE) 
-                continue; 
- 
-            char rch = 0; 
-            res = RecodeFromUnicode(enc, &wch, &rch, 1, 1, read, written); 
-            UNIT_ASSERT(res == RECODE_OK); 
+            res = RecodeToUnicode(enc, &ch, &wch, 1, 1, read, written);
+            UNIT_ASSERT(res == RECODE_OK);
+            if (wch == BROKEN_RUNE)
+                continue;
+
+            char rch = 0;
+            res = RecodeFromUnicode(enc, &wch, &rch, 1, 1, read, written);
+            UNIT_ASSERT(res == RECODE_OK);
 
             char rch2 = 0;
             UNIT_ASSERT_VALUES_EQUAL(RECODE_OK, RecodeFromUnicode(enc, wch, &rch2, 1, written));
@@ -373,27 +373,27 @@ void TConversionTest::TestRecode() {
             UNIT_ASSERT_VALUES_EQUAL(rch2, rch);
 
             if (hash.contains(rch)) { // there are some stupid encodings with duplicate characters
-                continue; 
-            } else { 
-                hash.insert(rch); 
-            } 
- 
-            UNIT_ASSERT(ch == rch); 
-        } 
+                continue;
+            } else {
+                hash.insert(rch);
+            }
+
+            UNIT_ASSERT(ch == rch);
+        }
     }
 }
 
-void TConversionTest::TestUnicodeLimit() { 
-    for (int i = 0; i != CODES_MAX; ++i) { 
+void TConversionTest::TestUnicodeLimit() {
+    for (int i = 0; i != CODES_MAX; ++i) {
         ECharset code = static_cast<ECharset>(i);
-        if (!SingleByteCodepage(code)) 
-            continue; 
- 
+        if (!SingleByteCodepage(code))
+            continue;
+
         const CodePage* page = CodePageByCharset(code);
         Y_ASSERT(page);
- 
-        for (int c = 0; c < 256; ++c) { 
-            UNIT_ASSERT(page->unicode[c] < 1 << 16); 
-        } 
-    } 
-} 
+
+        for (int c = 0; c < 256; ++c) {
+            UNIT_ASSERT(page->unicode[c] < 1 << 16);
+        }
+    }
+}

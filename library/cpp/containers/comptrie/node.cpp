@@ -4,8 +4,8 @@
 
 #include <util/system/yassert.h>
 #include <util/generic/yexception.h>
- 
-namespace NCompactTrie { 
+
+namespace NCompactTrie {
     TNode::TNode()
         : Offset(0)
         , LeafLength(0)

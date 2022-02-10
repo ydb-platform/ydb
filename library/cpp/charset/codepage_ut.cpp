@@ -47,8 +47,8 @@ private:
 public:
     void TestUTF();
     void TestUTFFromUnknownPlane();
-    void TestBrokenMultibyte(); 
-    void TestSurrogatePairs(); 
+    void TestBrokenMultibyte();
+    void TestSurrogatePairs();
     void TestEncodingHints();
     void TestToLower();
     void TestToUpper();
@@ -67,10 +67,10 @@ public:
         TStringBuf lower(tmp, cp->ToLower(upper.begin(), upper.end(), tmp));
         UNIT_ASSERT_VALUES_EQUAL(lower, TStringBuf("abcde"));
     }
- 
-    void TestBrokenRune() { 
+
+    void TestBrokenRune() {
         UNIT_ASSERT_VALUES_EQUAL(BROKEN_RUNE, 0xFFFDu);
-    } 
+    }
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TCodepageTest);
@@ -160,23 +160,23 @@ void TCodepageTest::TestUTF() {
     }
 }
 
-void TCodepageTest::TestBrokenMultibyte() { 
+void TCodepageTest::TestBrokenMultibyte() {
     const ECharset cp = CODES_EUC_JP;
 
     const char sampletext[] = {'\xe3'};
-    wchar32 recodeResult[100]; 
+    wchar32 recodeResult[100];
 
     size_t nwritten = 0;
     size_t nread = 0;
 
     RECODE_RESULT res = RecodeToUnicode(cp, sampletext, recodeResult, Y_ARRAY_SIZE(sampletext), Y_ARRAY_SIZE(recodeResult), nread, nwritten);
-    UNIT_ASSERT(res == RECODE_OK); 
-    UNIT_ASSERT(nread == 1); 
-    UNIT_ASSERT(nwritten == 0); 
- 
+    UNIT_ASSERT(res == RECODE_OK);
+    UNIT_ASSERT(nread == 1);
+    UNIT_ASSERT(nwritten == 0);
+
     const char bigSample[] = {'\xC3', '\x87', '\xC3', '\x8E', '\xC2', '\xB0', '\xC3', '\x85', '\xC3', '\x85', '\xC3', '\xB8'};
     res = RecodeToUnicode(cp, bigSample, recodeResult, Y_ARRAY_SIZE(bigSample), Y_ARRAY_SIZE(recodeResult), nread, nwritten);
-    UNIT_ASSERT(res == RECODE_OK); 
+    UNIT_ASSERT(res == RECODE_OK);
     UNIT_ASSERT(nread == Y_ARRAY_SIZE(bigSample));
 }
 
@@ -267,37 +267,37 @@ void TCodepageTest::TestUTFFromUnknownPlane() {
     }
 }
 
-static void TestSurrogates(const char* str, const wchar16* wide, size_t wideSize) { 
-    size_t sSize = strlen(str); 
-    size_t wSize = sSize * 2; 
-    TArrayHolder<wchar16> w(new wchar16[wSize]); 
- 
-    size_t read = 0; 
-    size_t written = 0; 
-    RECODE_RESULT res = RecodeToUnicode(CODES_UTF8, str, w.Get(), sSize, wSize, read, written); 
-    UNIT_ASSERT(res == RECODE_OK); 
-    UNIT_ASSERT(read == sSize); 
-    UNIT_ASSERT(written == wideSize); 
-    UNIT_ASSERT(!memcmp(w.Get(), wide, wideSize)); 
- 
-    TArrayHolder<char> s(new char[sSize]); 
-    res = RecodeFromUnicode(CODES_UTF8, w.Get(), s.Get(), wideSize, sSize, read, written); 
-    UNIT_ASSERT(res == RECODE_OK); 
-    UNIT_ASSERT(read == wideSize); 
-    UNIT_ASSERT(written == sSize); 
-    UNIT_ASSERT(!memcmp(s.Get(), str, sSize)); 
-} 
- 
-void TCodepageTest::TestSurrogatePairs() { 
-    const char* utf8NonBMP = "\xf4\x80\x89\x84\xf4\x80\x89\x87\xf4\x80\x88\xba"; 
+static void TestSurrogates(const char* str, const wchar16* wide, size_t wideSize) {
+    size_t sSize = strlen(str);
+    size_t wSize = sSize * 2;
+    TArrayHolder<wchar16> w(new wchar16[wSize]);
+
+    size_t read = 0;
+    size_t written = 0;
+    RECODE_RESULT res = RecodeToUnicode(CODES_UTF8, str, w.Get(), sSize, wSize, read, written);
+    UNIT_ASSERT(res == RECODE_OK);
+    UNIT_ASSERT(read == sSize);
+    UNIT_ASSERT(written == wideSize);
+    UNIT_ASSERT(!memcmp(w.Get(), wide, wideSize));
+
+    TArrayHolder<char> s(new char[sSize]);
+    res = RecodeFromUnicode(CODES_UTF8, w.Get(), s.Get(), wideSize, sSize, read, written);
+    UNIT_ASSERT(res == RECODE_OK);
+    UNIT_ASSERT(read == wideSize);
+    UNIT_ASSERT(written == sSize);
+    UNIT_ASSERT(!memcmp(s.Get(), str, sSize));
+}
+
+void TCodepageTest::TestSurrogatePairs() {
+    const char* utf8NonBMP = "\xf4\x80\x89\x84\xf4\x80\x89\x87\xf4\x80\x88\xba";
     wchar16 wNonBMPDummy[] = {0xDBC0, 0xDE44, 0xDBC0, 0xDE47, 0xDBC0, 0xDE3A};
     TestSurrogates(utf8NonBMP, wNonBMPDummy, Y_ARRAY_SIZE(wNonBMPDummy));
- 
-    const char* utf8NonBMP2 = "ab\xf4\x80\x89\x87n"; 
+
+    const char* utf8NonBMP2 = "ab\xf4\x80\x89\x87n";
     wchar16 wNonBMPDummy2[] = {'a', 'b', 0xDBC0, 0xDE47, 'n'};
     TestSurrogates(utf8NonBMP2, wNonBMPDummy2, Y_ARRAY_SIZE(wNonBMPDummy2));
-} 
- 
+}
+
 void TCodepageTest::TestEncodingHints() {
     UNIT_ASSERT(CODES_WIN == EncodingHintByName("windows-1251"));
     UNIT_ASSERT(CODES_WIN == EncodingHintByName("Windows1251"));
@@ -316,14 +316,14 @@ void TCodepageTest::TestEncodingHints() {
     UNIT_ASSERT(CODES_UNKNOWN == EncodingHintByName("default"));
     UNIT_ASSERT(CODES_UNKNOWN == EncodingHintByName("$phpcharset"));
 
-    UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("ShiftJIS")); 
-    UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("Shift_JIS")); 
-    UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("Big5")); 
-    UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("euc-kr")); 
-    UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("EUC-JP")); 
-    UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("charset='Shift_JIS';;")); 
-    UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("ISO-2022-KR")); 
-    UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("ISO-2022-jp")); 
+    UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("ShiftJIS"));
+    UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("Shift_JIS"));
+    UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("Big5"));
+    UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("euc-kr"));
+    UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("EUC-JP"));
+    UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("charset='Shift_JIS';;"));
+    UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("ISO-2022-KR"));
+    UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("ISO-2022-jp"));
 }
 
 void TCodepageTest::TestToLower() {

@@ -20,10 +20,10 @@
 #define EPS 10E-7
 
 #define HEX_MACROS_MAP(mac, type, val) mac(type, val, 2) mac(type, val, 8) mac(type, val, 10) mac(type, val, 16)
- 
+
 #define OK_HEX_CHECK(type, val, base) UNIT_ASSERT_EQUAL((IntFromStringForCheck<base>(IntToString<base>(val))), val);
 #define EXC_HEX_CHECK(type, val, base) UNIT_ASSERT_EXCEPTION((IntFromString<type, base>(IntToString<base>(val))), yexception);
- 
+
 #define TRY_HEX_MACROS_MAP(mac, type, val, result, def) \
     mac(type, val, result, def, 2)                      \
         mac(type, val, result, def, 8)                  \

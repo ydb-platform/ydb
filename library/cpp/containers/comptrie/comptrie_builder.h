@@ -6,12 +6,12 @@
 
 #include <util/stream/file.h>
 
-// -------------------------------------------------------------------------------------- 
-// Data Builder 
-// To build the data buffer, we first create an automaton in memory. The automaton 
+// --------------------------------------------------------------------------------------
+// Data Builder
+// To build the data buffer, we first create an automaton in memory. The automaton
 // is created incrementally. It actually helps a lot to have the input data prefix-grouped
-// by key; otherwise, memory consumption becomes a tough issue. 
-// NOTE: building and serializing the automaton may be lengthy, and takes lots of memory. 
+// by key; otherwise, memory consumption becomes a tough issue.
+// NOTE: building and serializing the automaton may be lengthy, and takes lots of memory.
 
 // PREFIX_GROUPED means that if we, while constructing a trie, add to the builder two keys with the same prefix,
 // then all the keys that we add between these two also have the same prefix.
@@ -38,11 +38,11 @@ template <typename T>
 class TArrayWithSizeHolder;
 
 template <class T = char, class D = ui64, class S = TCompactTriePacker<D>>
-class TCompactTrieBuilder { 
-public: 
-    typedef T TSymbol; 
-    typedef D TData; 
-    typedef S TPacker; 
+class TCompactTrieBuilder {
+public:
+    typedef T TSymbol;
+    typedef D TData;
+    typedef S TPacker;
     typedef typename TCompactTrieKeySelector<TSymbol>::TKey TKey;
     typedef typename TCompactTrieKeySelector<TSymbol>::TKeyBuf TKeyBuf;
 
@@ -71,7 +71,7 @@ public:
         return AddSubtreeInBuffer(key.data(), key.size(), std::move(buffer));
     }
 
-    bool Find(const TSymbol* key, size_t keylen, TData* value) const; 
+    bool Find(const TSymbol* key, size_t keylen, TData* value) const;
     bool Find(const TKeyBuf& key, TData* value = nullptr) const {
         return Find(key.data(), key.size(), value);
     }
@@ -90,8 +90,8 @@ public:
 
     void Clear(); // Returns all memory to the system and resets the builder state.
 
-    size_t GetEntryCount() const; 
-    size_t GetNodeCount() const; 
+    size_t GetEntryCount() const;
+    size_t GetNodeCount() const;
 
     // Exact output file size in bytes.
     size_t MeasureByteSize() const {
@@ -99,8 +99,8 @@ public:
     }
 
 protected:
-    class TCompactTrieBuilderImpl; 
-    THolder<TCompactTrieBuilderImpl> Impl; 
+    class TCompactTrieBuilderImpl;
+    THolder<TCompactTrieBuilderImpl> Impl;
 };
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -117,7 +117,7 @@ protected:
 // as you expect it to, and can destroy the trie in the making.
 // If you want both minimization and fast layout, do the minimization first.
 
-template <class TPacker> 
+template <class TPacker>
 size_t CompactTrieMinimize(IOutputStream& os, const char* data, size_t datalength, bool verbose = false, const TPacker& packer = TPacker(), NCompactTrie::EMinimizeMode mode = NCompactTrie::MM_DEFAULT);
 
 template <class TTrieBuilder>

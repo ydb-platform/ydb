@@ -40,9 +40,9 @@ TPipeBase::~TPipeBase() = default;
 
 TPipeInput::TPipeInput(const TString& command)
     : TPipeBase(command, "r")
-{ 
-} 
- 
+{
+}
+
 size_t TPipeInput::DoRead(void* buf, size_t len) {
     if (Impl_->Pipe_ == nullptr) {
         return 0;
@@ -63,15 +63,15 @@ size_t TPipeInput::DoRead(void* buf, size_t len) {
 
 TPipeOutput::TPipeOutput(const TString& command)
     : TPipeBase(command, "w")
-{ 
-} 
- 
-void TPipeOutput::DoWrite(const void* buf, size_t len) { 
+{
+}
+
+void TPipeOutput::DoWrite(const void* buf, size_t len) {
     if (Impl_->Pipe_ == nullptr || len != ::fwrite(buf, 1, len, Impl_->Pipe_)) {
         ythrow TSystemError() << "fwrite failed";
     }
-} 
- 
+}
+
 void TPipeOutput::Close() {
     int exitStatus = ::pclose(Impl_->Pipe_);
     Impl_->Pipe_ = nullptr;

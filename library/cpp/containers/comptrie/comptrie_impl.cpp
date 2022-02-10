@@ -2,10 +2,10 @@
 
 #include <util/system/rusage.h>
 #include <util/stream/output.h>
- 
-// Unpack the leaf value. The algorithm can store up to 8 full bytes in leafs. 
- 
-namespace NCompactTrie { 
+
+// Unpack the leaf value. The algorithm can store up to 8 full bytes in leafs.
+
+namespace NCompactTrie {
     size_t MeasureOffset(size_t offset) {
         int n = 0;
 

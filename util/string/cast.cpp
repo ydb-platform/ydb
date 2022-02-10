@@ -29,7 +29,7 @@ using double_conversion::StringToDoubleConverter;
 /*
  * ------------------------------ formatters ------------------------------
  */
- 
+
 namespace {
     constexpr char IntToChar[] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
 
@@ -55,12 +55,12 @@ namespace {
     std::enable_if_t<std::is_signed<T>::value, std::make_unsigned_t<T>> NegateNegativeSigned(T value) noexcept {
         return std::make_unsigned_t<T>(-(value + 1)) + std::make_unsigned_t<T>(1);
     }
- 
+
     template <class T>
     std::enable_if_t<std::is_unsigned<T>::value, std::make_unsigned_t<T>> NegateNegativeSigned(T) noexcept {
         Y_UNREACHABLE();
     }
- 
+
     template <class T>
     std::make_signed_t<T> NegatePositiveSigned(T value) noexcept {
         return value > 0 ? (-std::make_signed_t<T>(value - 1) - 1) : 0;
@@ -70,7 +70,7 @@ namespace {
     struct TBasicIntFormatter {
         static_assert(1 < base && base < 17, "expect 1 < base && base < 17");
         static_assert(std::is_unsigned<T>::value, "TBasicIntFormatter can only handle unsigned integers.");
- 
+
         static inline size_t Format(T value, TChar* buf, size_t len) {
             Y_ENSURE(len, TStringBuf("zero length"));
 
@@ -421,8 +421,8 @@ namespace {
     template <>                                                         \
     size_t IntToString<BASE, TYPE>(TYPE value, char* buf, size_t len) { \
         return FormatInt<ITYPE, BASE, char>(value, buf, len);           \
-    } 
- 
+    }
+
 #define DEF_INT_SPEC_I(TYPE, ITYPE)                                \
     template <>                                                    \
     size_t ToStringImpl<TYPE>(TYPE value, char* buf, size_t len) { \
@@ -586,7 +586,7 @@ bool TryFromStringImpl<TUtf16String>(const wchar16* data, size_t len, TUtf16Stri
         }                                                                      \
         return status;                                                         \
     }
- 
+
 #define DEF_INT_SPEC_II(CHAR, TYPE, ITYPE, BOUNDS)                             \
     template <>                                                                \
     TYPE FromStringImpl<TYPE>(const CHAR* data, size_t len) {                  \

@@ -2,7 +2,7 @@ OWNER(
     g:contrib
     g:cpp-contrib
 )
- 
+
 LIBRARY()
 
 VERSION(1.13)

@@ -26,146 +26,146 @@ struct CodePage {
     wchar32 unicode[256];
     const char* DefaultChar; //[CCL_NUM]
 
-    bool IsLower(unsigned char ch) const { 
-        return ::IsLower(unicode[ch]); 
-    } 
-    bool IsUpper(unsigned char ch) const { 
-        return ::IsUpper(unicode[ch]); 
-    } 
-    bool IsAlpha(unsigned char ch) const { 
-        return ::IsAlpha(unicode[ch]); 
-    } 
-    bool IsDigit(unsigned char ch) const { 
-        return ::IsDigit(unicode[ch]); 
-    } 
+    bool IsLower(unsigned char ch) const {
+        return ::IsLower(unicode[ch]);
+    }
+    bool IsUpper(unsigned char ch) const {
+        return ::IsUpper(unicode[ch]);
+    }
+    bool IsAlpha(unsigned char ch) const {
+        return ::IsAlpha(unicode[ch]);
+    }
+    bool IsDigit(unsigned char ch) const {
+        return ::IsDigit(unicode[ch]);
+    }
     bool IsXdigit(unsigned char ch) const {
-        return ::IsXdigit(unicode[ch]); 
-    } 
-    bool IsAlnum(unsigned char ch) const { 
-        return ::IsAlnum(unicode[ch]); 
-    } 
-    bool IsSpace(unsigned char ch) const { 
-        return ::IsSpace(unicode[ch]); 
-    } 
-    bool IsPunct(unsigned char ch) const { 
-        return ::IsPunct(unicode[ch]); 
-    } 
-    bool IsCntrl(unsigned char ch) const { 
-        return ::IsCntrl(unicode[ch]); 
-    } 
-    bool IsGraph(unsigned char ch) const { 
-        return ::IsGraph(unicode[ch]); 
-    } 
-    bool IsPrint(unsigned char ch) const { 
-        return ::IsPrint(unicode[ch]); 
-    } 
-    bool IsComposed(unsigned char ch) const { 
-        return ::IsComposed(unicode[ch]); 
-    } 
+        return ::IsXdigit(unicode[ch]);
+    }
+    bool IsAlnum(unsigned char ch) const {
+        return ::IsAlnum(unicode[ch]);
+    }
+    bool IsSpace(unsigned char ch) const {
+        return ::IsSpace(unicode[ch]);
+    }
+    bool IsPunct(unsigned char ch) const {
+        return ::IsPunct(unicode[ch]);
+    }
+    bool IsCntrl(unsigned char ch) const {
+        return ::IsCntrl(unicode[ch]);
+    }
+    bool IsGraph(unsigned char ch) const {
+        return ::IsGraph(unicode[ch]);
+    }
+    bool IsPrint(unsigned char ch) const {
+        return ::IsPrint(unicode[ch]);
+    }
+    bool IsComposed(unsigned char ch) const {
+        return ::IsComposed(unicode[ch]);
+    }
 
-    // return pointer to char after the last char 
+    // return pointer to char after the last char
     char* ToLower(const char* begin, const char* end, char* to) const;
-    char* ToLower(const char* begin, char* to) const; 
- 
+    char* ToLower(const char* begin, char* to) const;
+
     // return pointer to char after the last char
     char* ToUpper(const char* begin, const char* end, char* to) const;
-    char* ToUpper(const char* begin, char* to) const; 
+    char* ToUpper(const char* begin, char* to) const;
 
     int stricmp(const char* s1, const char* s2) const;
     int strnicmp(const char* s1, const char* s2, size_t len) const;
 
-    inline unsigned char ToUpper(unsigned char ch) const; 
-    inline unsigned char ToLower(unsigned char ch) const; 
-    inline unsigned char ToTitle(unsigned char ch) const; 
+    inline unsigned char ToUpper(unsigned char ch) const;
+    inline unsigned char ToLower(unsigned char ch) const;
+    inline unsigned char ToTitle(unsigned char ch) const;
 
-    inline int ToDigit(unsigned char ch) const { 
-        return ::ToDigit(unicode[ch]); 
-    } 
- 
+    inline int ToDigit(unsigned char ch) const {
+        return ::ToDigit(unicode[ch]);
+    }
+
     static void Initialize();
- 
-    inline bool SingleByteCodepage() const { 
+
+    inline bool SingleByteCodepage() const {
         return DefaultChar != nullptr;
-    } 
-    inline bool NativeCodepage() const { 
-        return SingleByteCodepage() || CPEnum == CODES_UTF8; 
-    } 
+    }
+    inline bool NativeCodepage() const {
+        return SingleByteCodepage() || CPEnum == CODES_UTF8;
+    }
 };
 
-class TCodePageHash; 
- 
-namespace NCodepagePrivate { 
-    class TCodepagesMap { 
-    private: 
-        static const int DataShift = 2; 
-        static const int DataSize = CODES_MAX + DataShift; 
-        const CodePage* Data[DataSize]; 
- 
-    private: 
+class TCodePageHash;
+
+namespace NCodepagePrivate {
+    class TCodepagesMap {
+    private:
+        static const int DataShift = 2;
+        static const int DataSize = CODES_MAX + DataShift;
+        const CodePage* Data[DataSize];
+
+    private:
         inline const CodePage* GetPrivate(ECharset e) const {
             Y_ASSERT(e + DataShift >= 0 && e + DataShift < DataSize);
-            return Data[e + DataShift]; 
-        } 
- 
-        void SetData(const CodePage* cp); 
- 
-    public: 
-        TCodepagesMap(); 
- 
+            return Data[e + DataShift];
+        }
+
+        void SetData(const CodePage* cp);
+
+    public:
+        TCodepagesMap();
+
         inline const CodePage* Get(ECharset e) const {
-            const CodePage* res = GetPrivate(e); 
-            if (!res->SingleByteCodepage()) { 
+            const CodePage* res = GetPrivate(e);
+            if (!res->SingleByteCodepage()) {
                 ythrow yexception() << "CodePage (" << (int)e << ") structure can only be used for single byte encodings";
-            } 
- 
-            return res; 
-        } 
- 
+            }
+
+            return res;
+        }
+
         inline bool SingleByteCodepage(ECharset e) const {
-            return GetPrivate(e)->SingleByteCodepage(); 
-        } 
+            return GetPrivate(e)->SingleByteCodepage();
+        }
         inline bool NativeCodepage(ECharset e) const {
-            return GetPrivate(e)->NativeCodepage(); 
-        } 
+            return GetPrivate(e)->NativeCodepage();
+        }
         inline const char* NameByCharset(ECharset e) const {
-            return GetPrivate(e)->Names[0]; 
-        } 
- 
+            return GetPrivate(e)->Names[0];
+        }
+
         static const TCodepagesMap& Instance();
 
-        friend class ::TCodePageHash; 
-    }; 
- 
+        friend class ::TCodePageHash;
+    };
+
     inline bool NativeCodepage(ECharset e) {
         return ::NCodepagePrivate::TCodepagesMap::Instance().NativeCodepage(e);
-    } 
-} 
- 
+    }
+}
+
 inline bool SingleByteCodepage(ECharset e) {
     return ::NCodepagePrivate::TCodepagesMap::Instance().SingleByteCodepage(e);
-} 
- 
+}
+
 inline bool ValidCodepage(ECharset e) {
-    return e >= 0 && e < CODES_MAX; 
-} 
- 
+    return e >= 0 && e < CODES_MAX;
+}
+
 inline const CodePage* CodePageByCharset(ECharset e) {
     return ::NCodepagePrivate::TCodepagesMap::Instance().Get(e);
 }
- 
+
 ECharset CharsetByName(TStringBuf name);
- 
+
 // Same as CharsetByName, but throws yexception() if name is invalid
 ECharset CharsetByNameOrDie(TStringBuf name);
 
 inline ECharset CharsetByCodePage(const CodePage* CP) {
     return CP->CPEnum;
 }
- 
+
 inline const char* NameByCharset(ECharset e) {
     return ::NCodepagePrivate::TCodepagesMap::Instance().NameByCharset(e);
 }
- 
+
 inline const char* NameByCharsetSafe(ECharset e) {
     if (CODES_UNKNOWN < e && e < CODES_MAX)
         return ::NCodepagePrivate::TCodepagesMap::Instance().NameByCharset(e);
@@ -173,26 +173,26 @@ inline const char* NameByCharsetSafe(ECharset e) {
         ythrow yexception() << "unknown encoding: " << (int)e;
 }
 
-inline const char* NameByCodePage(const CodePage* CP) { 
+inline const char* NameByCodePage(const CodePage* CP) {
     return CP->Names[0];
 }
 
-inline const CodePage* CodePageByName(const char* name) { 
+inline const CodePage* CodePageByName(const char* name) {
     ECharset code = CharsetByName(name);
-    if (code == CODES_UNKNOWN) 
+    if (code == CODES_UNKNOWN)
         return nullptr;
- 
+
     return CodePageByCharset(code);
-} 
- 
+}
+
 ECharset EncodingHintByName(const char* name);
 
 /*****************************************************************\
 *                    struct Encoder                               *
 \*****************************************************************/
 struct Encoder {
-    char* Table[256]; 
-    const char* DefaultChar; 
+    char* Table[256];
+    const char* DefaultChar;
 
     inline char Code(wchar32 ch) const {
         if (ch > 0xFFFF)
@@ -212,9 +212,9 @@ struct Encoder {
         return Tr(ch);
     }
 
-    void Tr(const wchar32* in, char* out, size_t len) const; 
-    void Tr(const wchar32* in, char* out) const; 
-    char* DefaultPlane; 
+    void Tr(const wchar32* in, char* out, size_t len) const;
+    void Tr(const wchar32* in, char* out) const;
+    char* DefaultPlane;
 };
 
 /*****************************************************************\
@@ -245,62 +245,62 @@ extern const struct Encoder& WideCharToYandex;
 
 const Encoder& EncoderByCharset(ECharset enc);
 
-namespace NCodepagePrivate { 
-    class TCodePageData { 
-    private: 
+namespace NCodepagePrivate {
+    class TCodePageData {
+    private:
         static const CodePage* const AllCodePages[];
- 
-        static const Recoder rcdr_to_yandex[]; 
-        static const Recoder rcdr_from_yandex[]; 
-        static const Recoder rcdr_to_lower[]; 
-        static const Recoder rcdr_to_upper[]; 
-        static const Recoder rcdr_to_title[]; 
+
+        static const Recoder rcdr_to_yandex[];
+        static const Recoder rcdr_from_yandex[];
+        static const Recoder rcdr_to_lower[];
+        static const Recoder rcdr_to_upper[];
+        static const Recoder rcdr_to_title[];
 
         static const Encoder* const EncodeTo[];
- 
-        friend struct ::CodePage; 
-        friend class TCodepagesMap; 
+
+        friend struct ::CodePage;
+        friend class TCodepagesMap;
         friend RECODE_RESULT _recodeToYandex(ECharset, const char*, char*, size_t, size_t, size_t&, size_t&);
         friend RECODE_RESULT _recodeFromYandex(ECharset, const char*, char*, size_t, size_t, size_t&, size_t&);
         friend const Encoder& ::EncoderByCharset(ECharset enc);
-    }; 
+    };
 }
 
 inline const Encoder& EncoderByCharset(ECharset enc) {
-    if (!SingleByteCodepage(enc)) { 
-        ythrow yexception() << "Encoder structure can only be used for single byte encodings"; 
-    } 
- 
-    return *NCodepagePrivate::TCodePageData::EncodeTo[enc]; 
-} 
- 
-inline unsigned char CodePage::ToUpper(unsigned char ch) const { 
-    return NCodepagePrivate::TCodePageData::rcdr_to_upper[CPEnum].Table[ch]; 
-}
-inline unsigned char CodePage::ToLower(unsigned char ch) const { 
-    return NCodepagePrivate::TCodePageData::rcdr_to_lower[CPEnum].Table[ch]; 
-}
-inline unsigned char CodePage::ToTitle(unsigned char ch) const { 
-    return NCodepagePrivate::TCodePageData::rcdr_to_title[CPEnum].Table[ch]; 
+    if (!SingleByteCodepage(enc)) {
+        ythrow yexception() << "Encoder structure can only be used for single byte encodings";
+    }
+
+    return *NCodepagePrivate::TCodePageData::EncodeTo[enc];
 }
 
-extern const CodePage& csYandex; 
+inline unsigned char CodePage::ToUpper(unsigned char ch) const {
+    return NCodepagePrivate::TCodePageData::rcdr_to_upper[CPEnum].Table[ch];
+}
+inline unsigned char CodePage::ToLower(unsigned char ch) const {
+    return NCodepagePrivate::TCodePageData::rcdr_to_lower[CPEnum].Table[ch];
+}
+inline unsigned char CodePage::ToTitle(unsigned char ch) const {
+    return NCodepagePrivate::TCodePageData::rcdr_to_title[CPEnum].Table[ch];
+}
+
+extern const CodePage& csYandex;
 
 /// these functions change (lowers) [end] position in case of utf-8
 /// null character is NOT assumed or written at [*end]
 void DecodeUnknownPlane(wchar16* start, wchar16*& end, const ECharset enc4unk);
-void DecodeUnknownPlane(wchar32* start, wchar32*& end, const ECharset enc4unk); 
+void DecodeUnknownPlane(wchar32* start, wchar32*& end, const ECharset enc4unk);
 
 inline void ToLower(char* s, size_t n, const CodePage& cp = csYandex) {
     char* const e = s + n;
     for (; s != e; ++s)
-        *s = cp.ToLower(*s); 
+        *s = cp.ToLower(*s);
 }
 
 inline void ToUpper(char* s, size_t n, const CodePage& cp = csYandex) {
     char* const e = s + n;
     for (; s != e; ++s)
-        *s = cp.ToUpper(*s); 
+        *s = cp.ToUpper(*s);
 }
 
 inline TString ToLower(TString s, const CodePage& cp, size_t pos = 0, size_t n = TString::npos) {

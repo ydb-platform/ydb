@@ -38,7 +38,7 @@ char* mkdtemp(char* path);
 #endif
 
 bool IsDir(const TString& path);
- 
+
 int mkpath(char* path, int mode = 0777);
 
 TString GetHomeDir();

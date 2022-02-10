@@ -311,18 +311,18 @@ inline T FromStringWithDefault(const TStringType& s) {
 double StrToD(const char* b, char** se);
 double StrToD(const char* b, const char* e, char** se);
 
-template <int base, class T> 
-size_t IntToString(T t, char* buf, size_t len); 
- 
-template <int base, class T> 
+template <int base, class T>
+size_t IntToString(T t, char* buf, size_t len);
+
+template <int base, class T>
 inline TString IntToString(T t) {
     static_assert(std::is_arithmetic<std::remove_cv_t<T>>::value, "expect std::is_arithmetic<std::remove_cv_t<T>>::value");
- 
-    char buf[256]; 
- 
+
+    char buf[256];
+
     return TString(buf, IntToString<base>(t, buf, sizeof(buf)));
-} 
- 
+}
+
 template <int base, class TInt, class TChar>
 bool TryIntFromString(const TChar* data, size_t len, TInt& result);
 
@@ -331,18 +331,18 @@ inline bool TryIntFromString(const TStringType& s, TInt& result) {
     return TryIntFromString<base>(s.data(), s.size(), result);
 }
 
-template <class TInt, int base, class TChar> 
-TInt IntFromString(const TChar* str, size_t len); 
- 
-template <class TInt, int base, class TChar> 
-inline TInt IntFromString(const TChar* str) { 
+template <class TInt, int base, class TChar>
+TInt IntFromString(const TChar* str, size_t len);
+
+template <class TInt, int base, class TChar>
+inline TInt IntFromString(const TChar* str) {
     return IntFromString<TInt, base>(str, std::char_traits<TChar>::length(str));
-} 
- 
+}
+
 template <class TInt, int base, class TStringType>
 inline TInt IntFromString(const TStringType& str) {
     return IntFromString<TInt, base>(str.data(), str.size());
-} 
+}
 
 static inline TString ToString(const TStringBuf str) {
     return TString(str);

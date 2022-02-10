@@ -45,14 +45,14 @@ namespace {
         0x202F, 0x205F, 0x3000,
         0x00A0};
 
-    const size_t CaseTestDataSize = 10; 
-    wchar32 WideStringTestData[][CaseTestDataSize] = { 
+    const size_t CaseTestDataSize = 10;
+    wchar32 WideStringTestData[][CaseTestDataSize] = {
         {0x01C4, 0x10428, 0x10429, 0x10447, 0x10441, 0x1C03, 0x00A0, 0x10400, 0x10415, 0x10437}, // original
         {0x01C6, 0x10428, 0x10429, 0x10447, 0x10441, 0x1C03, 0x00A0, 0x10428, 0x1043D, 0x10437}, // lower
         {0x01C4, 0x10400, 0x10401, 0x1041F, 0x10419, 0x1C03, 0x00A0, 0x10400, 0x10415, 0x1040F}, // upper
         {0x01C5, 0x10428, 0x10429, 0x10447, 0x10441, 0x1C03, 0x00A0, 0x10428, 0x1043D, 0x10437}, // title
-    }; 
- 
+    };
+
     TUtf16String CreateUnicodeText() {
         const int len = 256;
         wchar16 text[len] = {
@@ -194,8 +194,8 @@ public:
     void TestWideToUTF8();
     void TestGetNumOfUTF8Chars();
     void TestSubstrUTF8();
-    void TestUnicodeCase(); 
-    void TestUnicodeDetails(); 
+    void TestUnicodeCase();
+    void TestUnicodeDetails();
     void TestHexConversion();
 };
 
@@ -456,15 +456,15 @@ void TConversionTest::TestWriteUTF8Char() {
 
 static void TestSurrogates(const char* str, const wchar16* wide, size_t wideSize) {
     TUtf16String w = UTF8ToWide(str);
- 
-    UNIT_ASSERT(w.size() == wideSize); 
-    UNIT_ASSERT(!memcmp(w.c_str(), wide, wideSize)); 
- 
+
+    UNIT_ASSERT(w.size() == wideSize);
+    UNIT_ASSERT(!memcmp(w.c_str(), wide, wideSize));
+
     TString s = WideToUTF8(w);
- 
-    UNIT_ASSERT(s == str); 
-} 
- 
+
+    UNIT_ASSERT(s == str);
+}
+
 void TConversionTest::TestUTF8ToWide() {
     TUtf16String w = UTF8ToWide(Utf8Text_);
 
@@ -508,7 +508,7 @@ void TConversionTest::TestUTF8ToWide() {
     const char* utf8NonBMP2 = "ab\xf4\x80\x89\x87n";
     wchar16 wNonBMPDummy2[] = {'a', 'b', 0xDBC0, 0xDE47, 'n'};
     TestSurrogates(utf8NonBMP2, wNonBMPDummy2, Y_ARRAY_SIZE(wNonBMPDummy2));
- 
+
     UNIT_ASSERT_VALUES_EQUAL(WideToUTF8(UTF8ToWide(WideToUTF8(UTF8ToWide<true>(
                                  "m\xFB\xB2\xA5\xAA\xAFyeuse.sexwebcamz.com")))),
                              TString(
@@ -557,28 +557,28 @@ void TConversionTest::TestSubstrUTF8() {
     UNIT_ASSERT(SubstrUTF8(utextBuf, 1, 3) == utextBuf.substr(2, 6));
 }
 
-inline bool MustBeSurrogate(wchar32 ch) { 
-    return ch > 0xFFFF; 
-} 
- 
-void TConversionTest::TestUnicodeCase() { 
-    // ToLower, ToUpper, ToTitle functions depend on equal size of both original and changed characters 
-    for (wchar32 i = 0; i != NUnicode::UnicodeInstancesLimit(); ++i) { 
-        UNIT_ASSERT(MustBeSurrogate(i) == MustBeSurrogate(ToLower(i))); 
-        UNIT_ASSERT(MustBeSurrogate(i) == MustBeSurrogate(ToUpper(i))); 
-        UNIT_ASSERT(MustBeSurrogate(i) == MustBeSurrogate(ToTitle(i))); 
-    } 
-} 
- 
-void TConversionTest::TestUnicodeDetails() { 
+inline bool MustBeSurrogate(wchar32 ch) {
+    return ch > 0xFFFF;
+}
+
+void TConversionTest::TestUnicodeCase() {
+    // ToLower, ToUpper, ToTitle functions depend on equal size of both original and changed characters
+    for (wchar32 i = 0; i != NUnicode::UnicodeInstancesLimit(); ++i) {
+        UNIT_ASSERT(MustBeSurrogate(i) == MustBeSurrogate(ToLower(i)));
+        UNIT_ASSERT(MustBeSurrogate(i) == MustBeSurrogate(ToUpper(i)));
+        UNIT_ASSERT(MustBeSurrogate(i) == MustBeSurrogate(ToTitle(i)));
+    }
+}
+
+void TConversionTest::TestUnicodeDetails() {
     TUtf16String temp;
-    for (wchar32 i = 0; i != NUnicode::UnicodeInstancesLimit(); ++i) { 
-        temp.clear(); 
-        WriteSymbol(i, temp); 
+    for (wchar32 i = 0; i != NUnicode::UnicodeInstancesLimit(); ++i) {
+        temp.clear();
+        WriteSymbol(i, temp);
         UNIT_ASSERT(temp.size() == W16SymbolSize(temp.c_str(), temp.c_str() + temp.size()));
-    } 
-} 
- 
+    }
+}
+
 class TWideUtilTest: public TTestBase {
     UNIT_TEST_SUITE(TWideUtilTest);
     UNIT_TEST(TestCollapse);
@@ -876,45 +876,45 @@ public:
         UNIT_ASSERT(TWtringBuf(lowerCase, n) == TWtringBuf(wideCyrillicAlphabet, n));
     }
 
-    void TestWideString() { 
+    void TestWideString() {
         const TUtf16String original = UTF32ToWide(WideStringTestData[0], CaseTestDataSize);
         const TUtf16String lower = UTF32ToWide(WideStringTestData[1], CaseTestDataSize);
         const TUtf16String upper = UTF32ToWide(WideStringTestData[2], CaseTestDataSize);
         const TUtf16String title = UTF32ToWide(WideStringTestData[3], CaseTestDataSize);
         TUtf16String temp;
- 
-        temp = original; 
-        temp.to_lower(); 
-        UNIT_ASSERT(temp == lower); 
 
-        temp = original; 
-        ToLower(temp.begin(), temp.size()); 
-        UNIT_ASSERT(temp == lower); 
+        temp = original;
+        temp.to_lower();
+        UNIT_ASSERT(temp == lower);
 
-        temp = original; 
-        temp.to_upper(); 
-        UNIT_ASSERT(temp == upper); 
- 
-        temp = original; 
-        ToUpper(temp.begin(), temp.size()); 
-        UNIT_ASSERT(temp == upper); 
- 
-        temp = original; 
-        temp.to_title(); 
-        UNIT_ASSERT(temp == title); 
- 
-        temp = original; 
-        ToTitle(temp.begin(), temp.size()); 
-        UNIT_ASSERT(temp == title); 
- 
+        temp = original;
+        ToLower(temp.begin(), temp.size());
+        UNIT_ASSERT(temp == lower);
+
+        temp = original;
+        temp.to_upper();
+        UNIT_ASSERT(temp == upper);
+
+        temp = original;
+        ToUpper(temp.begin(), temp.size());
+        UNIT_ASSERT(temp == upper);
+
+        temp = original;
+        temp.to_title();
+        UNIT_ASSERT(temp == title);
+
+        temp = original;
+        ToTitle(temp.begin(), temp.size());
+        UNIT_ASSERT(temp == title);
+
         TVector<wchar32> buffer(WideStringTestData[0], WideStringTestData[0] + CaseTestDataSize);
         std::reverse(buffer.begin(), buffer.end());
         const TUtf16String reversed = UTF32ToWide(buffer.data(), buffer.size());
- 
-        temp = original; 
+
+        temp = original;
         ReverseInPlace(temp);
-        UNIT_ASSERT(temp == reversed); 
-    } 
+        UNIT_ASSERT(temp == reversed);
+    }
 
     void TestCountWideChars() {
         UNIT_ASSERT_EQUAL(CountWideChars(UTF8ToWide("привет!")), 7);

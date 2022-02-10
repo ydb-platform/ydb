@@ -15,7 +15,7 @@
 /**
  * Base class for starting a process and communicating with it via pipes.
  */
-class TPipeBase { 
+class TPipeBase {
 protected:
     /**
      * Starts a new process and opens a pipe.
@@ -26,12 +26,12 @@ protected:
      */
     TPipeBase(const TString& command, const char* mode);
     virtual ~TPipeBase();
- 
+
 protected:
     class TImpl;
     THolder<TImpl> Impl_;
-}; 
- 
+};
+
 /**
  * Input stream that binds to a standard output stream of a newly started process.
  *
@@ -49,7 +49,7 @@ public:
 
 private:
     size_t DoRead(void* buf, size_t len) override;
-}; 
+};
 
 /**
  * Output stream that binds to a standard input stream of a newly started process.
@@ -71,7 +71,7 @@ public:
      * with a non-zero exit status.
      */
     void Close();
- 
+
 private:
     void DoWrite(const void* buf, size_t len) override;
 };

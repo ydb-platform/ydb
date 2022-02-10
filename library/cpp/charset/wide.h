@@ -12,7 +12,7 @@
 #include <util/generic/yexception.h>
 #include <util/memory/tempbuf.h>
 #include <util/system/yassert.h>
- 
+
 //! converts text from unicode to yandex codepage
 //! @attention destination buffer must be long enough to fit all characters of the text
 //! @note @c dest buffer must fit at least @c len number of characters
@@ -20,15 +20,15 @@ template <typename TCharType>
 inline size_t WideToChar(const TCharType* text, size_t len, char* dest, ECharset enc) {
     Y_ASSERT(SingleByteCodepage(enc));
 
-    const char* start = dest; 
- 
+    const char* start = dest;
+
     const Encoder* const encoder = &EncoderByCharset(enc);
     const TCharType* const last = text + len;
     for (const TCharType* cur = text; cur != last; ++dest) {
-        *dest = encoder->Tr(ReadSymbolAndAdvance(cur, last)); 
+        *dest = encoder->Tr(ReadSymbolAndAdvance(cur, last));
     }
- 
-    return dest - start; 
+
+    return dest - start;
 }
 
 //! converts text to unicode using a codepage object
@@ -224,24 +224,24 @@ inline TStringBuf WideToChar(const TWtringBuf src, TString& dst, ECharset encodi
 
 //! calls either to @c WideToUTF8 or @c WideToChar depending on the encoding type
 inline TString WideToChar(const wchar16* text, size_t len, ECharset enc) {
-    if (NCodepagePrivate::NativeCodepage(enc)) { 
-        if (enc == CODES_UTF8) 
-            return WideToUTF8(text, len); 
- 
+    if (NCodepagePrivate::NativeCodepage(enc)) {
+        if (enc == CODES_UTF8)
+            return WideToUTF8(text, len);
+
         TString s = TString::Uninitialized(len);
-        s.remove(WideToChar(text, len, s.begin(), enc)); 
- 
+        s.remove(WideToChar(text, len, s.begin(), enc));
+
         return s;
     }
- 
+
     TString s = TString::Uninitialized(len * 3);
- 
-    size_t read = 0; 
-    size_t written = 0; 
-    NICONVPrivate::RecodeFromUnicode(enc, text, s.begin(), len, s.size(), read, written); 
-    s.remove(written); 
- 
-    return s; 
+
+    size_t read = 0;
+    size_t written = 0;
+    NICONVPrivate::RecodeFromUnicode(enc, text, s.begin(), len, s.size(), read, written);
+    s.remove(written);
+
+    return s;
 }
 
 inline TUtf16String CharToWide(const char* text, size_t len, const CodePage& cp) {
@@ -253,21 +253,21 @@ inline TUtf16String CharToWide(const char* text, size_t len, const CodePage& cp)
 //! calls either to @c UTF8ToWide or @c CharToWide depending on the encoding type
 template <bool robust>
 inline TUtf16String CharToWide(const char* text, size_t len, ECharset enc) {
-    if (NCodepagePrivate::NativeCodepage(enc)) { 
-        if (enc == CODES_UTF8) 
+    if (NCodepagePrivate::NativeCodepage(enc)) {
+        if (enc == CODES_UTF8)
             return UTF8ToWide<robust>(text, len);
- 
+
         return CharToWide(text, len, *CodePageByCharset(enc));
-    } 
- 
+    }
+
     TUtf16String w = TUtf16String::Uninitialized(len * 2);
- 
-    size_t read = 0; 
-    size_t written = 0; 
-    NICONVPrivate::RecodeToUnicode(enc, text, w.begin(), len, len, read, written); 
-    w.remove(written); 
- 
-    return w; 
+
+    size_t read = 0;
+    size_t written = 0;
+    NICONVPrivate::RecodeToUnicode(enc, text, w.begin(), len, len, read, written);
+    w.remove(written);
+
+    return w;
 }
 
 //! converts text from UTF8 to unicode, if conversion fails it uses codepage to convert the text
@@ -286,8 +286,8 @@ inline TUtf16String UTF8ToWide(const char* text, size_t len, const CodePage& cp)
 
 inline TString WideToChar(const TWtringBuf w, ECharset enc) {
     return WideToChar(w.data(), w.size(), enc);
-} 
- 
+}
+
 inline TUtf16String CharToWide(const TStringBuf s, ECharset enc) {
     return CharToWide<false>(s.data(), s.size(), enc);
 }
@@ -295,8 +295,8 @@ inline TUtf16String CharToWide(const TStringBuf s, ECharset enc) {
 template <bool robust>
 inline TUtf16String CharToWide(const TStringBuf s, ECharset enc) {
     return CharToWide<robust>(s.data(), s.size(), enc);
-} 
- 
+}
+
 inline TUtf16String CharToWide(const TStringBuf s, const CodePage& cp) {
     return CharToWide(s.data(), s.size(), cp);
 }

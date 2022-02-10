@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/set.h>
@@ -8,28 +8,28 @@
 #include <util/generic/bitops.h>
 
 #include <array>
-// Data serialization strategy class. 
-// Default realization can pack only limited range of types, but you can pack any data other using your own strategy class. 
- 
-template <class T> 
+// Data serialization strategy class.
+// Default realization can pack only limited range of types, but you can pack any data other using your own strategy class.
+
+template <class T>
 class TNullPacker { // Very effective package class - pack any data into zero bytes :)
-public: 
+public:
     void UnpackLeaf(const char*, T& t) const {
         t = T();
-    } 
- 
+    }
+
     void PackLeaf(char*, const T&, size_t) const {
     }
- 
+
     size_t MeasureLeaf(const T&) const {
-        return 0; 
-    } 
- 
+        return 0;
+    }
+
     size_t SkipLeaf(const char*) const {
-        return 0; 
-    } 
-}; 
- 
+        return 0;
+    }
+};
+
 template <typename T>
 class TAsIsPacker { // this packer is not really a packer...
 public:
@@ -49,21 +49,21 @@ public:
     }
 };
 
-// Implementation 
- 
+// Implementation
+
 namespace NPackers {
-    template <class T> 
-    inline ui64 ConvertIntegral(const T& data); 
- 
-    template <> 
-    inline ui64 ConvertIntegral(const i64& data) { 
-        if (data < 0) { 
-            return (static_cast<ui64>(-1 * data) << 1) | 1; 
-        } else { 
-            return static_cast<ui64>(data) << 1; 
-        } 
-    } 
- 
+    template <class T>
+    inline ui64 ConvertIntegral(const T& data);
+
+    template <>
+    inline ui64 ConvertIntegral(const i64& data) {
+        if (data < 0) {
+            return (static_cast<ui64>(-1 * data) << 1) | 1;
+        } else {
+            return static_cast<ui64>(data) << 1;
+        }
+    }
+
     namespace NImpl {
         template <class T, bool isSigned>
         struct TConvertImpl {
@@ -85,52 +85,52 @@ namespace NPackers {
         };
     }
 
-    template <class T> 
-    inline ui64 ConvertIntegral(const T& data) { 
+    template <class T>
+    inline ui64 ConvertIntegral(const T& data) {
         static_assert(std::is_integral<T>::value, "T must be integral type");
         return NImpl::TConvertImpl<T, std::is_signed<T>::value>::Convert(data);
-    } 
- 
+    }
+
     //---------------------------------
     // TIntegralPacker --- for integral types.
 
-    template <class T> 
+    template <class T>
     class TIntegralPacker { // can pack only integral types <= ui64
-    public: 
+    public:
         void UnpackLeaf(const char* p, T& t) const;
         void PackLeaf(char* buffer, const T& data, size_t size) const;
         size_t MeasureLeaf(const T& data) const;
         size_t SkipLeaf(const char* p) const;
-    }; 
- 
-    template <> 
+    };
+
+    template <>
     inline size_t TIntegralPacker<ui64>::MeasureLeaf(const ui64& val) const {
         constexpr size_t MAX_SIZE = sizeof(ui64) + sizeof(ui64) / 8;
- 
-        ui64 value = val; 
-        size_t len = 1; 
- 
-        value >>= 7; 
+
+        ui64 value = val;
+        size_t len = 1;
+
+        value >>= 7;
         for (; value && len < MAX_SIZE; value >>= 7)
-            ++len; 
- 
-        return len; 
-    } 
- 
-    template <> 
+            ++len;
+
+        return len;
+    }
+
+    template <>
     inline void TIntegralPacker<ui64>::PackLeaf(char* buffer, const ui64& val, size_t len) const {
-        ui64 value = val; 
-        int lenmask = 0; 
- 
+        ui64 value = val;
+        int lenmask = 0;
+
         for (size_t i = len - 1; i; --i) {
-            buffer[i] = (char)(value & 0xFF); 
-            value >>= 8; 
-            lenmask = ((lenmask >> 1) | (1 << 7)); 
-        } 
- 
-        buffer[0] = (char)(lenmask | value); 
-    } 
- 
+            buffer[i] = (char)(value & 0xFF);
+            value >>= 8;
+            lenmask = ((lenmask >> 1) | (1 << 7));
+        }
+
+        buffer[0] = (char)(lenmask | value);
+    }
+
     extern const ui8 SkipTable[];
 
     template <>
@@ -144,11 +144,11 @@ namespace NPackers {
             result = ((result << 8) | (*(p++) & 0xFF));
     }
 
-    template <> 
+    template <>
     inline size_t TIntegralPacker<ui64>::SkipLeaf(const char* p) const {
         return SkipTable[(ui8)*p];
-    } 
- 
+    }
+
     namespace NImpl {
         template <class T, bool isSigned>
         struct TUnpackLeafImpl {
@@ -176,26 +176,26 @@ namespace NPackers {
         };
     }
 
-    template <class T> 
+    template <class T>
     inline void TIntegralPacker<T>::UnpackLeaf(const char* p, T& t) const {
         NImpl::TUnpackLeafImpl<T, std::is_signed<T>::value>().UnpackLeaf(p, t);
-    } 
- 
-    template <class T> 
+    }
+
+    template <class T>
     inline void TIntegralPacker<T>::PackLeaf(char* buffer, const T& data, size_t size) const {
         TIntegralPacker<ui64>().PackLeaf(buffer, ConvertIntegral<T>(data), size);
-    } 
- 
-    template <class T> 
+    }
+
+    template <class T>
     inline size_t TIntegralPacker<T>::MeasureLeaf(const T& data) const {
         return TIntegralPacker<ui64>().MeasureLeaf(ConvertIntegral<T>(data));
-    } 
- 
-    template <class T> 
+    }
+
+    template <class T>
     inline size_t TIntegralPacker<T>::SkipLeaf(const char* p) const {
         return TIntegralPacker<ui64>().SkipLeaf(p);
-    } 
- 
+    }
+
     //-------------------------------------------
     // TFPPacker --- for float/double
     namespace NImpl {
@@ -253,36 +253,36 @@ namespace NPackers {
 
     template <class TStringType>
     class TStringPacker {
-    public: 
+    public:
         void UnpackLeaf(const char* p, TStringType& t) const;
         void PackLeaf(char* buffer, const TStringType& data, size_t size) const;
         size_t MeasureLeaf(const TStringType& data) const;
         size_t SkipLeaf(const char* p) const;
-    }; 
- 
+    };
+
     template <class TStringType>
     inline void TStringPacker<TStringType>::UnpackLeaf(const char* buf, TStringType& t) const {
         size_t len;
         TIntegralPacker<size_t>().UnpackLeaf(buf, len);
         size_t start = TIntegralPacker<size_t>().SkipLeaf(buf);
         t = TStringType((const typename TStringType::char_type*)(buf + start), len);
-    } 
- 
+    }
+
     template <class TStringType>
     inline void TStringPacker<TStringType>::PackLeaf(char* buf, const TStringType& str, size_t size) const {
-        size_t len = str.size(); 
+        size_t len = str.size();
         size_t lenChar = len * sizeof(typename TStringType::char_type);
-        size_t start = size - lenChar; 
+        size_t start = size - lenChar;
         TIntegralPacker<size_t>().PackLeaf(buf, len, TIntegralPacker<size_t>().MeasureLeaf(len));
         memcpy(buf + start, str.data(), lenChar);
-    } 
- 
+    }
+
     template <class TStringType>
     inline size_t TStringPacker<TStringType>::MeasureLeaf(const TStringType& str) const {
-        size_t len = str.size(); 
+        size_t len = str.size();
         return TIntegralPacker<size_t>().MeasureLeaf(len) + len * sizeof(typename TStringType::char_type);
-    } 
- 
+    }
+
     template <class TStringType>
     inline size_t TStringPacker<TStringType>::SkipLeaf(const char* buf) const {
         size_t result = TIntegralPacker<size_t>().SkipLeaf(buf);
@@ -292,8 +292,8 @@ namespace NPackers {
             result += len * sizeof(typename TStringType::char_type);
         }
         return result;
-    } 
- 
+    }
+
     template <class T>
     class TPacker;
 
@@ -543,38 +543,38 @@ namespace NPackers {
     template <class T, bool IsIntegral>
     class TPackerImpl;
 
-    template <class T> 
+    template <class T>
     class TPackerImpl<T, true>: public TIntegralPacker<T> {
     };
     // No implementation for non-integral types.
- 
-    template <class T> 
+
+    template <class T>
     class TPacker: public TPackerImpl<T, std::is_integral<T>::value> {
     };
- 
+
     template <>
     class TPacker<float>: public TAsIsPacker<float> {
     };
- 
+
     template <>
     class TPacker<double>: public TAsIsPacker<double> {
     };
- 
+
     template <>
     class TPacker<TString>: public TStringPacker<TString> {
     };
 
     template <>
     class TPacker<TUtf16String>: public TStringPacker<TUtf16String> {
-    }; 
- 
-    template <> 
+    };
+
+    template <>
     class TPacker<TStringBuf>: public TStringPacker<TStringBuf> {
     };
 
-    template <> 
+    template <>
     class TPacker<TWtringBuf>: public TStringPacker<TWtringBuf> {
-    }; 
+    };
 
     template <class T>
     class TPacker<std::vector<T>>: public TContainerPacker<std::vector<T>> {

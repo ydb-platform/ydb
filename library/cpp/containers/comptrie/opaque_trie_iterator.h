@@ -20,13 +20,13 @@ namespace NCompactTrie {
 
     public:
         TFork(const char* data, size_t offset, size_t limit, const ILeafSkipper& skipper);
- 
+
         bool operator==(const TFork& rhs) const;
- 
+
         bool HasLabelInKey() const {
             return CurrentDirection == D_NEXT || CurrentDirection == D_FINAL;
         }
- 
+
         bool NextDirection();
         bool PrevDirection();
         void LastDirection();
@@ -39,7 +39,7 @@ namespace NCompactTrie {
         // Otherwise returns true.
         bool SetDirection(TDirection direction);
         TFork NextFork(const ILeafSkipper& skipper) const;
- 
+
         char GetLabel() const;
         size_t GetValueOffset() const;
     };
@@ -59,7 +59,7 @@ namespace NCompactTrie {
             }
             Forks.push_back(fork);
         }
- 
+
         void Pop() {
             Forks.pop_back();
             if (TopHasLabelInKey()) {
@@ -73,7 +73,7 @@ namespace NCompactTrie {
         const TFork& Top() const {
             return Forks.back();
         }
- 
+
         bool Empty() const {
             return Forks.empty();
         }
@@ -160,24 +160,24 @@ namespace NCompactTrie {
 
         template <class TSymbol>
         bool UpperBound(const typename TCompactTrieKeySelector<TSymbol>::TKeyBuf& key); // True if matched exactly.
- 
+
         template <class TSymbol>
         typename TCompactTrieKeySelector<TSymbol>::TKey GetKey() const {
             return TConvertRawKey<TSymbol>::Get(GetNarrowKey());
         }
- 
+
         template <class TSymbol>
         size_t MeasureKey() const {
             return TConvertRawKey<TSymbol>::Size(MeasureNarrowKey());
         }
- 
+
         TString GetNarrowKey() const {
             return Forks.GetKey();
         }
         size_t MeasureNarrowKey() const {
             return Forks.MeasureKey();
         }
- 
+
         const char* GetValuePtr() const; // 0 if none
         const TNode& GetNode() const {   // Could be called for non-empty key and not AtEnd.
             return Forks.Top().Node;
@@ -199,7 +199,7 @@ namespace NCompactTrie {
         template <class TSymbol>
         int LongestPrefix(const typename TCompactTrieKeySelector<TSymbol>::TKeyBuf& key); // Used in UpperBound.
     };
- 
+
     template <class TSymbol>
     int TOpaqueTrieIterator::LongestPrefix(const typename TCompactTrieKeySelector<TSymbol>::TKeyBuf& key) {
         Forks.Clear();

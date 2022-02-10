@@ -6,7 +6,7 @@
 #include <util/generic/buffer.h>
 #include <util/generic/vector.h>
 
-namespace NCompactTrie { 
+namespace NCompactTrie {
     size_t WriteTrieBackwards(IOutputStream& os, TReverseNodeEnumerator& enumerator, bool verbose) {
         if (verbose) {
             Cerr << "Writing down the trie..." << Endl;
@@ -37,7 +37,7 @@ namespace NCompactTrie {
             Y_ASSERT(nodelength <= bufferLength);
 
             resultLength += nodelength;
- 
+
             if (chunkLength + nodelength <= chunksize) {
                 chunkLength += nodelength;
                 memcpy(chunkend - chunkLength, buffer, nodelength);
@@ -55,11 +55,11 @@ namespace NCompactTrie {
                     resultData.push_back(new char[chunksize]);
                     chunkend = resultData.back() + chunksize;
                 }
- 
+
                 memcpy(chunkend - chunkLength, buffer, chunkLength);
-            } 
+            }
         }
- 
+
         if (verbose)
             Cerr << counter << Endl;
 
@@ -79,7 +79,7 @@ namespace NCompactTrie {
         char* data = const_cast<char*>(trie.Data);
         char* end = data + trie.Length;
         char* pos = end;
- 
+
         TVector<char> buf(64);
         while (enumerator.Move()) {
             size_t nodeLength = enumerator.RecreateNode(nullptr, end - pos);

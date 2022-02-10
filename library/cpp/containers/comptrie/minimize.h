@@ -5,7 +5,7 @@
 
 class IOutputStream;
 
-namespace NCompactTrie { 
+namespace NCompactTrie {
     size_t MeasureOffset(size_t offset);
 
     enum EMinimizeMode {
@@ -13,7 +13,7 @@ namespace NCompactTrie {
         MM_NOALLOC, // minimize tree in the same buffer
         MM_INPLACE  // do not write tree to the stream, but move to the buffer beginning
     };
- 
+
     // Return value: size of the minimized trie.
     size_t RawCompactTrieMinimizeImpl(IOutputStream& os, TOpaqueTrie& trie, bool verbose, size_t minMergeSize, EMinimizeMode mode);
 
@@ -25,5 +25,5 @@ namespace NCompactTrie {
         TOpaqueTrie trie(data, datalength, skipper);
         return RawCompactTrieMinimizeImpl(os, trie, verbose, minmerge, mode);
     }
- 
-} 
+
+}

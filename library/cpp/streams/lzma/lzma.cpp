@@ -386,23 +386,23 @@ public:
 
 private:
     virtual bool Fill() = 0;
-
+ 
 protected:
     CLzmaDec H_;
     char* InBegin_;
     char* InEnd_;
-};
-
-class TLzmaDecompress::TImplStream: public TImpl {
+}; 
+ 
+class TLzmaDecompress::TImplStream: public TImpl { 
 public:
     inline TImplStream(IInputStream* slave)
         : Slave_(slave)
     {
         Byte buf[LZMA_PROPS_SIZE];
-
+ 
         if (Slave_->Load(buf, sizeof(buf)) != sizeof(buf))
             ythrow yexception() << "can't read lzma header";
-
+ 
         Check(LzmaDec_Allocate(&H_, buf, sizeof(buf), Alloc()));
         LzmaDec_Init(&H_);
     }
@@ -412,23 +412,23 @@ private:
         size_t size = Slave_->Read(In_, sizeof(In_));
         InBegin_ = In_;
         InEnd_ = In_ + size;
-
+ 
         return size;
     }
-
+ 
 private:
     IInputStream* Slave_;
     char In_[4096];
 };
 
-class TLzmaDecompress::TImplZeroCopy: public TLzmaDecompress::TImpl {
-public:
+class TLzmaDecompress::TImplZeroCopy: public TLzmaDecompress::TImpl { 
+public: 
     inline TImplZeroCopy(IZeroCopyInput* in)
-        : Input_(in)
+        : Input_(in) 
     {
         if (!Fill())
             ythrow yexception() << "can't read lzma header";
-
+ 
         char buf[LZMA_PROPS_SIZE];
         char* header;
         if (InEnd_ - InBegin_ >= LZMA_PROPS_SIZE) {
@@ -451,18 +451,18 @@ public:
                     pos += avail;
                     if (!Fill()) {
                         ythrow yexception() << "can't read lzma header";
-                    }
-                }
-            }
+                    } 
+                } 
+            } 
             header = buf;
         }
-
+ 
         Check(LzmaDec_Allocate(&H_, (Byte*)header, LZMA_PROPS_SIZE, Alloc()));
-
+ 
         LzmaDec_Init(&H_);
     }
-
-private:
+ 
+private: 
     bool Fill() override {
         size_t size = Input_->Next(&InBegin_);
 
@@ -474,10 +474,10 @@ private:
 
         return false;
     }
-
+ 
     IZeroCopyInput* Input_;
-};
-
+}; 
+ 
 TLzmaCompress::TLzmaCompress(IOutputStream* slave, size_t level)
     : Impl_(new TImpl(slave, level))
 {
@@ -503,15 +503,15 @@ void TLzmaCompress::DoFinish() {
 }
 
 TLzmaDecompress::TLzmaDecompress(IInputStream* slave)
-    : Impl_(new TImplStream(slave))
+    : Impl_(new TImplStream(slave)) 
 {
 }
 
 TLzmaDecompress::TLzmaDecompress(IZeroCopyInput* input)
-    : Impl_(new TImplZeroCopy(input))
-{
-}
-
+    : Impl_(new TImplZeroCopy(input)) 
+{ 
+} 
+ 
 TLzmaDecompress::~TLzmaDecompress() {
 }
 

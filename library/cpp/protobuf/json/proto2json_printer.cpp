@@ -3,7 +3,7 @@
 #include "util.h"
 
 #include <util/generic/yexception.h>
-#include <util/string/ascii.h>
+#include <util/string/ascii.h> 
 #include <util/string/cast.h>
 
 namespace NProtobufJson {
@@ -36,7 +36,7 @@ namespace NProtobufJson {
                     NewKeyBuf = field.name();
                     break;
                 }
-
+ 
                 case TProto2JsonConfig::FieldNameLowerCase: {
                     NewKeyStr = field.name();
                     NewKeyStr.to_lower();
@@ -76,9 +76,9 @@ namespace NProtobufJson {
 
                 default:
                     Y_VERIFY_DEBUG(false, "Unknown FieldNameMode.");
-            }
-        }
-
+            } 
+        } 
+ 
         const TStringBuf& GetKey() const {
             return NewKeyBuf;
         }

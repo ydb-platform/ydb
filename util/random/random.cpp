@@ -49,7 +49,7 @@ namespace {
 
     template <class T>
     static inline TRndGen<T>* GetRndGen() {
-        return FastTlsSingletonWithPriority<TRndGen<T>, 2>();
+        return FastTlsSingletonWithPriority<TRndGen<T>, 2>(); 
     }
 
     template <unsigned N>

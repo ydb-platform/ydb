@@ -226,32 +226,32 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
     Y_UNIT_TEST(TestIO) {
         // descriptive test: use all options
         TShellCommandOptions options;
-        options.SetAsync(true);
+        options.SetAsync(true); 
         options.SetQuoteArguments(false);
         options.SetLatency(10);
         options.SetClearSignalMask(true);
         options.SetCloseAllFdsOnExec(true);
-        options.SetCloseInput(false);
+        options.SetCloseInput(false); 
         TGuardedStringStream write;
         options.SetInputStream(&write);
         TGuardedStringStream read;
         options.SetOutputStream(&read);
         options.SetUseShell(true);
 
-        TShellCommand cmd("cat", options);
+        TShellCommand cmd("cat", options); 
         cmd.Run();
-
-        write << "alpha" << NL;
-        while (read.Str() != "alpha" NL) {
-            Sleep(TDuration::MilliSeconds(10));
-        }
-
-        write << "omega" << NL;
-        while (read.Str() != "alpha" NL "omega" NL) {
-            Sleep(TDuration::MilliSeconds(10));
-        }
-
-        write << "zeta" << NL;
+ 
+        write << "alpha" << NL; 
+        while (read.Str() != "alpha" NL) { 
+            Sleep(TDuration::MilliSeconds(10)); 
+        } 
+ 
+        write << "omega" << NL; 
+        while (read.Str() != "alpha" NL "omega" NL) { 
+            Sleep(TDuration::MilliSeconds(10)); 
+        } 
+ 
+        write << "zeta" << NL; 
         cmd.CloseInput();
         cmd.Wait();
 

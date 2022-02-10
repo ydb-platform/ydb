@@ -8,30 +8,30 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
-#include <util/string/ascii.h>
+#include <util/string/ascii.h> 
 #include <util/string/cast.h>
 
 #define JSON_TO_FIELD(EProtoCppType, name, json, JsonCheckType, ProtoSet, JsonGet)        \
-    case FieldDescriptor::EProtoCppType: {                                          \
+    case FieldDescriptor::EProtoCppType: {                                          \ 
         if (config.CastRobust) {                                                    \
             reflection->ProtoSet(&proto, &field, json.JsonGet##Robust());           \
             break;                                                                  \
         }                                                                           \
-        if (!json.JsonCheckType()) {                                                \
-            if (config.CastFromString && json.IsString()) {                         \
+        if (!json.JsonCheckType()) {                                                \ 
+            if (config.CastFromString && json.IsString()) {                         \ 
                 if (config.DoNotCastEmptyStrings && json.GetString().empty()) {     \
                     /* Empty string is same as "no value" for scalar types.*/   \
                     break;                                                          \
                 }                                                                   \
-                reflection->ProtoSet(&proto, &field, FromString(json.GetString())); \
-                break;                                                              \
-            }                                                                       \
+                reflection->ProtoSet(&proto, &field, FromString(json.GetString())); \ 
+                break;                                                              \ 
+            }                                                                       \ 
             ythrow yexception() << "Invalid type of JSON field " << name << ": "    \
-                                << #JsonCheckType << "() failed while "             \
-                                << #EProtoCppType << " is expected.";               \
-        }                                                                           \
-        reflection->ProtoSet(&proto, &field, json.JsonGet());                       \
-        break;                                                                      \
+                                << #JsonCheckType << "() failed while "             \ 
+                                << #EProtoCppType << " is expected.";               \ 
+        }                                                                           \ 
+        reflection->ProtoSet(&proto, &field, json.JsonGet());                       \ 
+        break;                                                                      \ 
     }
 
 static TString GetFieldName(const google::protobuf::FieldDescriptor& field,
@@ -40,16 +40,16 @@ static TString GetFieldName(const google::protobuf::FieldDescriptor& field,
         return config.NameGenerator(field);
     }
 
-    if (config.UseJsonName) {
-        Y_ASSERT(!field.json_name().empty());
+    if (config.UseJsonName) { 
+        Y_ASSERT(!field.json_name().empty()); 
         TString name = field.json_name();
         if (!field.has_json_name() && !name.empty()) {
             // FIXME: https://st.yandex-team.ru/CONTRIB-139
             name[0] = AsciiToLower(name[0]);
         }
         return name;
-    }
-
+    } 
+ 
     TString name = field.name();
     switch (config.FieldNameMode) {
         case NProtobufJson::TJson2ProtoConfig::FieldNameOriginalCase:
@@ -60,11 +60,11 @@ static TString GetFieldName(const google::protobuf::FieldDescriptor& field,
         case NProtobufJson::TJson2ProtoConfig::FieldNameUpperCase:
             name.to_upper();
             break;
-        case NProtobufJson::TJson2ProtoConfig::FieldNameCamelCase:
+        case NProtobufJson::TJson2ProtoConfig::FieldNameCamelCase: 
             if (!name.empty()) {
-                name[0] = AsciiToLower(name[0]);
-            }
-            break;
+                name[0] = AsciiToLower(name[0]); 
+            } 
+            break; 
         case NProtobufJson::TJson2ProtoConfig::FieldNameSnakeCase:
             NProtobufJson::ToSnakeCase(&name);
             break;

@@ -28,9 +28,9 @@ message TFlatOptional {
 
     optional float Float = 15;
     optional double Double = 16;
-
-    optional string OneString = 17;
-    optional string OneTwoString = 18;
+ 
+    optional string OneString = 17; 
+    optional string OneTwoString = 18; 
     optional string ABC = 19;
     optional string UserID = 20;
 };
@@ -56,9 +56,9 @@ message TFlatRequired {
 
     required float Float = 15;
     required double Double = 16;
-
-    required string OneString = 17;
-    required string OneTwoString = 18;
+ 
+    required string OneString = 17; 
+    required string OneTwoString = 18; 
     required string ABC = 19;
     required string UserID = 20;
 };
@@ -84,9 +84,9 @@ message TFlatRepeated {
 
     repeated float Float = 15;
     repeated double Double = 16;
-
-    repeated string OneString = 17;
-    repeated string OneTwoString = 18;
+ 
+    repeated string OneString = 17; 
+    repeated string OneTwoString = 18; 
     repeated string ABC = 19;
     repeated string UserID = 20;
 };
@@ -112,9 +112,9 @@ message TFlatDefault {
 
     optional float Float = 15 [default = 0.123];
     optional double Double = 16 [default = 0.456];
-
-    optional string OneString = 17 [default = "string"];
-    optional string OneTwoString = 18 [default = "string"];
+ 
+    optional string OneString = 17 [default = "string"]; 
+    optional string OneTwoString = 18 [default = "string"]; 
     optional string ABC = 19 [default = "abc"];
     optional string UserID = 20 [default = "some_id"];
 };
@@ -134,7 +134,7 @@ message TCompositeRepeated {
 message TMapType {
     map<string, string> Items = 1;
 };
-
+ 
 message TNameGeneratorType {
     optional int32 Field = 1;
 };
@@ -171,12 +171,12 @@ message TComplexMapType {
     map<string, TComplexMapType> Nested = 16;
 };
 
-message TWithJsonName {
+message TWithJsonName { 
     optional int32 my_upper = 1 [json_name = "My-Upper"];
     optional int32 My_lower = 2 [json_name = "my-lower"];
     optional int32 Def_upper = 3; // json_name = "DefUpper"
     optional int32 def_lower = 4; // json_name = "defLower"
-}
+} 
 
 message TSingleRequiredString {
     required string String = 1;

@@ -16,7 +16,7 @@
 #include <util/generic/string.h>
 #include <util/generic/ylimits.h>
 #include <util/stream/str.h>
-#include <util/string/cast.h>
+#include <util/string/cast.h> 
 #include <util/system/defaults.h>
 #include <util/system/yassert.h>
 
@@ -33,7 +33,7 @@ namespace google {
     }     // namespace protobuf
 }
 
-namespace {
+namespace { 
     class TInit {
     public:
         TInit() {
@@ -41,15 +41,15 @@ namespace {
         }
     } Init;
 
-    template <typename T>
-    TString ConvertToString(T value) {
-        return ToString(value);
-    }
-
-    // default ToString<double>() implementation loses precision
-    TString ConvertToString(double value) {
-        return FloatToString(value);
-    }
+    template <typename T> 
+    TString ConvertToString(T value) { 
+        return ToString(value); 
+    } 
+ 
+    // default ToString<double>() implementation loses precision 
+    TString ConvertToString(double value) { 
+        return FloatToString(value); 
+    } 
 
     TString JsonValueToString(const NJson::TJsonValue& json) {
         NJsonWriter::TBuf buf(NJsonWriter::HEM_UNSAFE);
@@ -68,8 +68,8 @@ namespace {
 
         UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
     }
-}
-
+} 
+ 
 Y_UNIT_TEST_SUITE(TJson2ProtoTest) {
     Y_UNIT_TEST(TestFlatOptional){
         {const NJson::TJsonValue& json = CreateFlatJson();
@@ -369,35 +369,35 @@ Y_UNIT_TEST(TestFieldNameMode) {
     // Camelcase
     {
         TString modelStr(R"_({"string":"value"})_");
-
+ 
         TFlatOptional proto;
         TJson2ProtoConfig config;
         config.FieldNameMode = TJson2ProtoConfig::FieldNameCamelCase;
-
+ 
         UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TFlatOptional>(modelStr, config));
         UNIT_ASSERT(proto.GetString() == "value");
     }
     {
         TString modelStr(R"_({"oneString":"value"})_");
-
+ 
         TFlatOptional proto;
         TJson2ProtoConfig config;
         config.FieldNameMode = TJson2ProtoConfig::FieldNameCamelCase;
-
+ 
         UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TFlatOptional>(modelStr, config));
         UNIT_ASSERT(proto.GetOneString() == "value");
     }
     {
         TString modelStr(R"_({"oneTwoString":"value"})_");
-
+ 
         TFlatOptional proto;
         TJson2ProtoConfig config;
         config.FieldNameMode = TJson2ProtoConfig::FieldNameCamelCase;
-
+ 
         UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TFlatOptional>(modelStr, config));
         UNIT_ASSERT(proto.GetOneTwoString() == "value");
     }
-
+ 
     // snake_case
     {
         TString modelStr(R"_({"string":"value"})_");
@@ -457,7 +457,7 @@ Y_UNIT_TEST(TestFieldNameMode) {
         UNIT_ASSERT(proto.GetI32(0) == 1);
         UNIT_ASSERT(proto.GetI32(1) == 2);
     }
-
+ 
     // UseJsonName
     {
         // FIXME(CONTRIB-139): since protobuf 3.1, Def_upper json name is
@@ -465,18 +465,18 @@ Y_UNIT_TEST(TestFieldNameMode) {
         // updated, library/cpp/protobuf/json preserves compatibility with
         // protobuf 3.0 by lowercasing default names, making it "defUpper".
         TString modelStr(R"_({"My-Upper":1,"my-lower":2,"defUpper":3,"defLower":4})_");
-
+ 
         TWithJsonName proto;
         TJson2ProtoConfig config;
         config.SetUseJsonName(true);
-
+ 
         UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TWithJsonName>(modelStr, config));
         UNIT_ASSERT_EQUAL(proto.Getmy_upper(), 1);
         UNIT_ASSERT_EQUAL(proto.GetMy_lower(), 2);
         UNIT_ASSERT_EQUAL(proto.GetDef_upper(), 3);
         UNIT_ASSERT_EQUAL(proto.Getdef_lower(), 4);
     }
-
+ 
     // FieldNameMode with UseJsonName
     {
         TJson2ProtoConfig config;
@@ -589,23 +589,23 @@ Y_UNIT_TEST(TestCastFromString) {
     // single fields
     {
         NJson::TJsonValue json;
-#define DEFINE_FIELD(name, value) \
+#define DEFINE_FIELD(name, value) \ 
     json.InsertValue(#name, ConvertToString(value));
 #include <library/cpp/protobuf/json/ut/fields.incl>
-#undef DEFINE_FIELD
-
+#undef DEFINE_FIELD 
+ 
         TFlatOptional proto;
         UNIT_ASSERT_EXCEPTION_CONTAINS(Json2Proto(json, proto), yexception, "Invalid type");
-
+ 
         TJson2ProtoConfig config;
         config.SetCastFromString(true);
         Json2Proto(json, proto, config);
-
+ 
         TFlatOptional modelProto;
         FillFlatProto(&modelProto);
         UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
     }
-
+ 
     // repeated fields
     {
         NJson::TJsonValue json;
@@ -619,21 +619,21 @@ Y_UNIT_TEST(TestCastFromString) {
         json.InsertValue(#name, array);                                \
     }
 #include <library/cpp/protobuf/json/ut/repeated_fields.incl>
-#undef DEFINE_REPEATED_FIELD
-
+#undef DEFINE_REPEATED_FIELD 
+ 
         TFlatRepeated proto;
         UNIT_ASSERT_EXCEPTION_CONTAINS(Json2Proto(json, proto), yexception, "Invalid type");
-
+ 
         TJson2ProtoConfig config;
         config.SetCastFromString(true);
         Json2Proto(json, proto, config);
-
+ 
         TFlatRepeated modelProto;
         FillRepeatedProto(&modelProto);
         UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
     }
 } // TestCastFromString
-
+ 
 Y_UNIT_TEST(TestMap) {
     TMapType modelProto;
 

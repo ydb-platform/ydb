@@ -299,7 +299,7 @@ public:
         , QuoteArguments(options.QuoteArguments)
         , DetachSession(options.DetachSession)
         , CloseStreams(options.CloseStreams)
-        , ShouldCloseInput(options.ShouldCloseInput)
+        , ShouldCloseInput(options.ShouldCloseInput) 
         , InputMode(options.InputMode)
         , OutputMode(options.OutputMode)
         , ErrorMode(options.ErrorMode)
@@ -414,10 +414,10 @@ public:
         }
     }
 
-    inline void CloseInput() {
+    inline void CloseInput() { 
         AtomicSet(ShouldCloseInput, true);
-    }
-
+    } 
+ 
     inline static bool TerminateIsRequired(void* processInfo) {
         TProcessInfo* pi = reinterpret_cast<TProcessInfo*>(processInfo);
         if (!pi->Parent->TerminateFlag) {
@@ -1036,8 +1036,8 @@ void TShellCommand::TImpl::Communicate(TProcessInfo* pi) {
                     bytesToWrite = input->Read(inputBuffer.Data(), inputBuffer.Capacity());
                     if (bytesToWrite == 0) {
                         if (AtomicGet(pi->Parent->ShouldCloseInput)) {
-                            input = nullptr;
-                        }
+                            input = nullptr; 
+                        } 
                         continue;
                     }
                     bufPos = inputBuffer.Data();
@@ -1189,11 +1189,11 @@ TShellCommand& TShellCommand::Wait() {
     Impl->Wait();
     return *this;
 }
-
-TShellCommand& TShellCommand::CloseInput() {
-    Impl->CloseInput();
-    return *this;
-}
+ 
+TShellCommand& TShellCommand::CloseInput() { 
+    Impl->CloseInput(); 
+    return *this; 
+} 
 
 TString TShellCommand::GetQuotedCommand() const {
     return Impl->GetQuotedCommand();

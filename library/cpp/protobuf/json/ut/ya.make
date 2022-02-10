@@ -14,8 +14,8 @@ SRCS(
     util_ut.cpp
 )
 
-GENERATE_ENUM_SERIALIZATION(test.pb.h)
-
+GENERATE_ENUM_SERIALIZATION(test.pb.h) 
+ 
 PEERDIR(
     library/cpp/protobuf/json
 )

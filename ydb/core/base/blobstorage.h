@@ -906,7 +906,7 @@ struct TEvBlobStorage {
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.Data(), buffer.size());
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&deadline, sizeof(deadline));
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&handleClass, sizeof(handleClass));
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&tactic, sizeof(tactic));
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&tactic, sizeof(tactic)); 
         }
 
         TString Print(bool isFull) const {

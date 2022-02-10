@@ -70,8 +70,8 @@ namespace NKikimr {
                     " BlocksInIndexSection# %" PRIu32, State.BlockSize, State.BlocksInChunk, State.BlocksInMinBlob,
                     State.MaxBlobsPerChunk, State.BlocksInDataSection, State.BlocksInIndexSection);
 
-            auto chunksIt = msg->StartingPoints.find(TLogSignature::SignatureIncrHugeChunks); 
-            auto deletesIt = msg->StartingPoints.find(TLogSignature::SignatureIncrHugeDeletes); 
+            auto chunksIt = msg->StartingPoints.find(TLogSignature::SignatureIncrHugeChunks);
+            auto deletesIt = msg->StartingPoints.find(TLogSignature::SignatureIncrHugeDeletes);
             auto end = msg->StartingPoints.end();
             Recovery.ApplyYardInit(msg->Status, chunksIt != end ? &chunksIt->second : nullptr,
                     deletesIt != end ? &deletesIt->second : nullptr, ctx);

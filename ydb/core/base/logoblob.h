@@ -38,12 +38,12 @@ namespace NKikimr {
             Set(tabletId, generation, step, channel, blobSize, cookie, partId, 0);
         }
 
-        explicit TLogoBlobID(ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie, 
-                ui32 partId, ui32 crcMode) 
-        { 
-            Set(tabletId, generation, step, channel, blobSize, cookie, partId, crcMode); 
-        } 
- 
+        explicit TLogoBlobID(ui64 tabletId, ui32 generation, ui32 step, ui32 channel, ui32 blobSize, ui32 cookie,
+                ui32 partId, ui32 crcMode)
+        {
+            Set(tabletId, generation, step, channel, blobSize, cookie, partId, crcMode);
+        }
+
         explicit TLogoBlobID(ui64 raw1, ui64 raw2, ui64 raw3)
         {
             Raw.X[0] = raw1;

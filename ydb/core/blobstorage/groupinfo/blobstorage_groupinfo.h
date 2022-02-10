@@ -29,8 +29,8 @@ namespace NBlobMapper {
 } // NBlobMapper
 
 static constexpr ui8 MaxHandoffNodes = 6;
-static constexpr ui8 MaxNodesPerBlob = 10; 
-static constexpr ui8 MaxTotalPartCount = 7; 
+static constexpr ui8 MaxNodesPerBlob = 10;
+static constexpr ui8 MaxTotalPartCount = 7;
 static constexpr ui8 MaxVDisksInGroup = 32;
 
 // mapper interface forward declaration
@@ -312,7 +312,7 @@ public:
     TBlobStorageGroupInfo(const TIntrusivePtr<TBlobStorageGroupInfo>& info, const TVDiskID& vdiskId, const TActorId& actorId);
 
     ~TBlobStorageGroupInfo();
- 
+
     static TIntrusivePtr<TBlobStorageGroupInfo> Parse(const NKikimrBlobStorage::TGroupInfo& group,
         const TEncryptionKey *key, IOutputStream *err);
 
@@ -324,12 +324,12 @@ public:
         return StoragePoolName ? StoragePoolName : "static";
     }
 
-    TPDiskCategory::EDeviceType GetDeviceType() const { 
-        return DeviceType; 
-    } 
- 
-    TVDiskID CreateVDiskID(const TVDiskIdShort &id) const; 
- 
+    TPDiskCategory::EDeviceType GetDeviceType() const {
+        return DeviceType;
+    }
+
+    TVDiskID CreateVDiskID(const TVDiskIdShort &id) const;
+
     static TString BlobStateToString(EBlobState);
     EBlobState BlobState(ui32 effectiveReplicas, ui32 errorDomains) const;
     void PickSubgroup(ui32 hash, TVDiskIds *outVDisk, TServiceIds *outServiceIds) const;
@@ -428,7 +428,7 @@ private:
     // access control
     TMaybe<TKikimrScopeId> AcceptedScope;
     TString StoragePoolName;
-    TPDiskCategory::EDeviceType DeviceType = TPDiskCategory::DEVICE_TYPE_UNKNOWN; 
+    TPDiskCategory::EDeviceType DeviceType = TPDiskCategory::DEVICE_TYPE_UNKNOWN;
 };
 
 // physical fail domain description
@@ -465,44 +465,44 @@ struct TFailDomain {
 
 template<>
 inline void Out<NKikimr::TBlobStorageGroupInfo::EEncryptionMode>(IOutputStream& o, NKikimr::TBlobStorageGroupInfo::EEncryptionMode e) {
-    using E = NKikimr::TBlobStorageGroupInfo::EEncryptionMode; 
-    switch (e) { 
-    case E::EEM_NONE: 
-        o << "NONE"; 
-        break; 
-    case E::EEM_ENC_V1: 
-        o << "ENC_V1"; 
-        break; 
-    } 
-} 
- 
+    using E = NKikimr::TBlobStorageGroupInfo::EEncryptionMode;
+    switch (e) {
+    case E::EEM_NONE:
+        o << "NONE";
+        break;
+    case E::EEM_ENC_V1:
+        o << "ENC_V1";
+        break;
+    }
+}
+
 template<>
 inline void Out<NKikimr::TBlobStorageGroupInfo::ELifeCyclePhase>(IOutputStream& o, NKikimr::TBlobStorageGroupInfo::ELifeCyclePhase e) {
-    using E = NKikimr::TBlobStorageGroupInfo::ELifeCyclePhase; 
-    switch (e) { 
-    case E::ELCP_INITIAL: 
-        o << "INITIAL"; 
-        break; 
-    case E::ELCP_PROPOSE: 
-        o << "PROPOSE"; 
-        break; 
-    case E::ELCP_IN_TRANSITION: 
-        o << "IN_TRANSITION"; 
-        break; 
-    case E::ELCP_IN_USE: 
-        o << "IN_USE"; 
-        break; 
-    case E::ELCP_KEY_CRC_ERROR: 
-        o << "KEY_CRC_ERROR"; 
-        break; 
-    case E::ELCP_KEY_VERSION_ERROR: 
-        o << "KEY_VERSION_ERROR"; 
-        break; 
-    case E::ELCP_KEY_ID_ERROR: 
-        o << "KEY_ID_ERROR"; 
-        break; 
+    using E = NKikimr::TBlobStorageGroupInfo::ELifeCyclePhase;
+    switch (e) {
+    case E::ELCP_INITIAL:
+        o << "INITIAL";
+        break;
+    case E::ELCP_PROPOSE:
+        o << "PROPOSE";
+        break;
+    case E::ELCP_IN_TRANSITION:
+        o << "IN_TRANSITION";
+        break;
+    case E::ELCP_IN_USE:
+        o << "IN_USE";
+        break;
+    case E::ELCP_KEY_CRC_ERROR:
+        o << "KEY_CRC_ERROR";
+        break;
+    case E::ELCP_KEY_VERSION_ERROR:
+        o << "KEY_VERSION_ERROR";
+        break;
+    case E::ELCP_KEY_ID_ERROR:
+        o << "KEY_ID_ERROR";
+        break;
     case E::ELCP_KEY_NOT_LOADED:
         o << "KEY_NOT_LOADED";
         break;
-    } 
-} 
+    }
+}

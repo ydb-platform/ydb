@@ -57,10 +57,10 @@ namespace NKikimr {
             }
         }
 
-        mutable THashMap<ui64, TCell> Stat[EMsgType::Last + 1]; 
+        mutable THashMap<ui64, TCell> Stat[EMsgType::Last + 1];
 
-        TCell &Lookup(EMsgType msgType, ESpaceColor color) { 
-            return Stat[msgType][static_cast<ui64>(color)]; 
+        TCell &Lookup(EMsgType msgType, ESpaceColor color) {
+            return Stat[msgType][static_cast<ui64>(color)];
         }
 
         void RenderHtml(IOutputStream &str, const char *tableName, std::function<ui64(const TCell&)> &&func) const {
@@ -74,9 +74,9 @@ namespace NKikimr {
                             TABLEHEAD() {
                                 TABLER() {
                                     TABLEH() {str << "Message";}
-                                    for (int j = 0; j < TSpaceColor::E_descriptor()->value_count(); ++j) { 
-                                        auto color = TSpaceColor::E_descriptor()->value(j)->name(); 
-                                        TABLEH() {str << color;} 
+                                    for (int j = 0; j < TSpaceColor::E_descriptor()->value_count(); ++j) {
+                                        auto color = TSpaceColor::E_descriptor()->value(j)->name();
+                                        TABLEH() {str << color;}
                                     }
                                 }
                             }
@@ -85,10 +85,10 @@ namespace NKikimr {
                                     TABLER() {
                                         auto msgType = (EMsgType)i;
                                         TABLED() {str << MsgTypeToStr(msgType);}
-                                        for (int j = 0; j < TSpaceColor::E_descriptor()->value_count(); ++j) { 
-                                            auto color = TSpaceColor::E_descriptor()->value(j)->number(); 
+                                        for (int j = 0; j < TSpaceColor::E_descriptor()->value_count(); ++j) {
+                                            auto color = TSpaceColor::E_descriptor()->value(j)->number();
                                             TABLED() {
-                                                str << func(Stat[i][color]); 
+                                                str << func(Stat[i][color]);
                                             }
                                         }
                                     }
@@ -112,7 +112,7 @@ namespace NKikimr {
     ===============================================================================================
      Green    |  No restrictions.
     -----------------------------------------------------------------------------------------------
-     Yellow   |  No restrictions, translate Yellow color to tablet and other VDisks in the group. 
+     Yellow   |  No restrictions, translate Yellow color to tablet and other VDisks in the group.
     -----------------------------------------------------------------------------------------------
      Orange   |  Disk space for tablet is over. Tablet can boot (i.e. make TEvVPut for discovery
               |  with IgnoreBlock, block generation, delete data via garbage collection commands).
@@ -135,26 +135,26 @@ namespace NKikimr {
     template <typename TPutEventPtr>
     bool AllowImpl(const TOutOfSpaceLogic &logic, const TActorContext &ctx, TPutEventPtr &ev) {
         Y_UNUSED(ctx);
-        auto color = logic.VCtx->GetOutOfSpaceState().GetGlobalColor(); 
-        auto &stat = logic.Stat->Lookup(TOutOfSpaceLogic::TStat::Put, color).HandleMsg(ev->Get()->GetCachedByteSize()); 
-        switch (color) { 
-            case TSpaceColor::GREEN: 
-            case TSpaceColor::CYAN: 
+        auto color = logic.VCtx->GetOutOfSpaceState().GetGlobalColor();
+        auto &stat = logic.Stat->Lookup(TOutOfSpaceLogic::TStat::Put, color).HandleMsg(ev->Get()->GetCachedByteSize());
+        switch (color) {
+            case TSpaceColor::GREEN:
+            case TSpaceColor::CYAN:
             case TSpaceColor::LIGHT_YELLOW:
-            case TSpaceColor::YELLOW: 
-            case TSpaceColor::LIGHT_ORANGE: 
+            case TSpaceColor::YELLOW:
+            case TSpaceColor::LIGHT_ORANGE:
                 return stat.Allow();
-            case TSpaceColor::ORANGE: 
+            case TSpaceColor::ORANGE:
             {
                 // allow writes with IgnoreBlock=true
                 auto &record = ev->Get()->Record;
                 const bool allow = record.GetIgnoreBlock();
                 return stat.Pass(allow);
             }
-            case TSpaceColor::RED: 
-            case TSpaceColor::BLACK: 
-            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MIN_SENTINEL_DO_NOT_USE_: 
-            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MAX_SENTINEL_DO_NOT_USE_: 
+            case TSpaceColor::RED:
+            case TSpaceColor::BLACK:
+            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MAX_SENTINEL_DO_NOT_USE_:
                 return stat.NotAllow();
         }
     }
@@ -169,105 +169,105 @@ namespace NKikimr {
 
     bool TOutOfSpaceLogic::Allow(const TActorContext &ctx, TEvBlobStorage::TEvVBlock::TPtr &ev) const {
         Y_UNUSED(ctx);
-        auto color = VCtx->GetOutOfSpaceState().GetGlobalColor(); 
-        auto &stat = Stat->Lookup(TStat::Block, color).HandleMsg(ev->Get()->GetCachedByteSize()); 
-        switch (color) { 
-            case TSpaceColor::GREEN: 
-            case TSpaceColor::CYAN: 
+        auto color = VCtx->GetOutOfSpaceState().GetGlobalColor();
+        auto &stat = Stat->Lookup(TStat::Block, color).HandleMsg(ev->Get()->GetCachedByteSize());
+        switch (color) {
+            case TSpaceColor::GREEN:
+            case TSpaceColor::CYAN:
             case TSpaceColor::LIGHT_YELLOW:
-            case TSpaceColor::YELLOW: 
-            case TSpaceColor::LIGHT_ORANGE: 
+            case TSpaceColor::YELLOW:
+            case TSpaceColor::LIGHT_ORANGE:
                 return stat.Allow();
-            case TSpaceColor::ORANGE: 
+            case TSpaceColor::ORANGE:
             {
                 NKikimrBlobStorage::TEvVBlock &record = ev->Get()->Record;
                 const ui64 tabletId = record.GetTabletId();
                 const bool allow = Hull->HasBlockRecordFor(tabletId);
                 return stat.Pass(allow);
             }
-            case TSpaceColor::RED: { 
+            case TSpaceColor::RED: {
                 // FIXME: handle complete removal only
                 return stat.NotAllow();
             }
-            case TSpaceColor::BLACK: 
-            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MIN_SENTINEL_DO_NOT_USE_: 
-            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MAX_SENTINEL_DO_NOT_USE_: 
+            case TSpaceColor::BLACK:
+            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MAX_SENTINEL_DO_NOT_USE_:
                 return stat.NotAllow();
         }
     }
 
     bool TOutOfSpaceLogic::Allow(const TActorContext &ctx, TEvBlobStorage::TEvVCollectGarbage::TPtr &ev) const {
         Y_UNUSED(ctx);
-        // FIXME: accept hard barriers in red color 
-        auto color = VCtx->GetOutOfSpaceState().GetGlobalColor(); 
-        auto &stat = Stat->Lookup(TStat::CollectGarbage, color).HandleMsg(ev->Get()->GetCachedByteSize()); 
-        return stat.Pass(DefaultAllow(color)); 
+        // FIXME: accept hard barriers in red color
+        auto color = VCtx->GetOutOfSpaceState().GetGlobalColor();
+        auto &stat = Stat->Lookup(TStat::CollectGarbage, color).HandleMsg(ev->Get()->GetCachedByteSize());
+        return stat.Pass(DefaultAllow(color));
     }
 
     bool TOutOfSpaceLogic::Allow(const TActorContext &ctx, TEvLocalSyncData::TPtr &ev) const {
         Y_UNUSED(ctx);
-        auto color = VCtx->GetOutOfSpaceState().GetGlobalColor(); 
-        auto &stat = Stat->Lookup(TStat::LocalSyncData, color).HandleMsg(ev->Get()->ByteSize()); 
-        return stat.Pass(DefaultAllow(color)); 
+        auto color = VCtx->GetOutOfSpaceState().GetGlobalColor();
+        auto &stat = Stat->Lookup(TStat::LocalSyncData, color).HandleMsg(ev->Get()->ByteSize());
+        return stat.Pass(DefaultAllow(color));
     }
 
     bool TOutOfSpaceLogic::Allow(const TActorContext &ctx, TEvAnubisOsirisPut::TPtr &ev) const {
-        auto color = VCtx->GetOutOfSpaceState().GetGlobalColor(); 
-        auto &stat = Stat->Lookup(TStat::AnubisOsirisPut, color).HandleMsg(ev->Get()->ByteSize()); 
-        switch (color) { 
-            case TSpaceColor::GREEN: 
-            case TSpaceColor::CYAN: 
+        auto color = VCtx->GetOutOfSpaceState().GetGlobalColor();
+        auto &stat = Stat->Lookup(TStat::AnubisOsirisPut, color).HandleMsg(ev->Get()->ByteSize());
+        switch (color) {
+            case TSpaceColor::GREEN:
+            case TSpaceColor::CYAN:
             case TSpaceColor::LIGHT_YELLOW:
-            case TSpaceColor::YELLOW: 
-            case TSpaceColor::LIGHT_ORANGE: 
+            case TSpaceColor::YELLOW:
+            case TSpaceColor::LIGHT_ORANGE:
                 return stat.Allow();
-            case TSpaceColor::ORANGE: 
+            case TSpaceColor::ORANGE:
             {
                 TEvAnubisOsirisPut *msg = ev->Get();
                 if (msg->IsAnubis()) {
-                    LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix 
-                            << "OUT OF SPACE while removing LogoBlob we got from Anubis;" 
+                    LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
+                            << "OUT OF SPACE while removing LogoBlob we got from Anubis;"
                             << " LogoBlobId# " << msg->LogoBlobId
                             << " Marker# BSVSOOSL01");
                     return stat.NotAllow();
                 } else {
                     // We MUST allow Osiris writes. W/o Osiris we can't work.
                     // There should not be too much of them.
-                    LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix 
-                            << "OUT OF SPACE while adding resurrected by Osiris LogoBlob;" 
+                    LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
+                            << "OUT OF SPACE while adding resurrected by Osiris LogoBlob;"
                             << " FORCING addition: LogoBlobId# " << msg->LogoBlobId
                             << " Marker# BSVSOOSL02");
                     return stat.Allow();
                 }
             }
-            case TSpaceColor::RED: 
-            case TSpaceColor::BLACK: 
-            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MIN_SENTINEL_DO_NOT_USE_: 
-            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MAX_SENTINEL_DO_NOT_USE_: 
+            case TSpaceColor::RED:
+            case TSpaceColor::BLACK:
+            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MAX_SENTINEL_DO_NOT_USE_:
                 return stat.NotAllow();
         }
     }
 
     bool TOutOfSpaceLogic::Allow(const TActorContext &ctx, TEvRecoveredHugeBlob::TPtr &ev) const {
         Y_UNUSED(ctx);
-        auto color = VCtx->GetOutOfSpaceState().GetGlobalColor(); 
-        auto &stat = Stat->Lookup(TStat::RecoveredHugeBlob, color).HandleMsg(ev->Get()->ByteSize()); 
-        return stat.Pass(DefaultAllow(color)); 
+        auto color = VCtx->GetOutOfSpaceState().GetGlobalColor();
+        auto &stat = Stat->Lookup(TStat::RecoveredHugeBlob, color).HandleMsg(ev->Get()->ByteSize());
+        return stat.Pass(DefaultAllow(color));
     }
 
     bool TOutOfSpaceLogic::Allow(const TActorContext &ctx, TEvDetectedPhantomBlob::TPtr &ev) const {
         Y_UNUSED(ctx);
-        auto color = VCtx->GetOutOfSpaceState().GetGlobalColor(); 
-        auto &stat = Stat->Lookup(TStat::DetectedPhantomBlob, color).HandleMsg(ev->Get()->ByteSize()); 
-        return stat.Pass(DefaultAllow(color)); 
+        auto color = VCtx->GetOutOfSpaceState().GetGlobalColor();
+        auto &stat = Stat->Lookup(TStat::DetectedPhantomBlob, color).HandleMsg(ev->Get()->ByteSize());
+        return stat.Pass(DefaultAllow(color));
     }
 
     void TOutOfSpaceLogic::RenderHtml(IOutputStream &str) const {
         Stat->RenderHtml(str);
     }
 
-    bool TOutOfSpaceLogic::DefaultAllow(ESpaceColor color) const { 
-        return color <= TSpaceColor::ORANGE; 
+    bool TOutOfSpaceLogic::DefaultAllow(ESpaceColor color) const {
+        return color <= TSpaceColor::ORANGE;
     }
 
 } // NKikimr

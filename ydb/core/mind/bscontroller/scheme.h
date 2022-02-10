@@ -25,7 +25,7 @@ struct Schema : NIceDb::Schema {
         struct NodeID : Column<1, Node::ID::ColumnType> {}; // PK
         struct PDiskID : Column<2, Node::NextPDiskID::ColumnType> {}; // PK
         struct Path : Column<3, NScheme::NTypeIds::Utf8> {};
-        struct Category : Column<4, NScheme::NTypeIds::Uint64> { using Type = TPDiskCategory;}; 
+        struct Category : Column<4, NScheme::NTypeIds::Uint64> { using Type = TPDiskCategory;};
         //struct SystemConfig : Column<5, NScheme::NTypeIds::String> {};
         //struct PhysicalLocation : Column<6, NScheme::NTypeIds::String> {};
         struct Guid : Column<7, NScheme::NTypeIds::Uint64> {};
@@ -35,13 +35,13 @@ struct Schema : NIceDb::Schema {
         struct PDiskConfig : Column<11, NScheme::NTypeIds::String> {};
         struct Status : Column<12, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::EDriveStatus; };
         struct Timestamp : Column<13, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
-        struct ExpectedSerial : Column<14, NScheme::NTypeIds::String> {}; 
-        struct LastSeenSerial : Column<15, NScheme::NTypeIds::String> {}; 
-        struct LastSeenPath : Column<16, NScheme::NTypeIds::String> {}; 
+        struct ExpectedSerial : Column<14, NScheme::NTypeIds::String> {};
+        struct LastSeenSerial : Column<15, NScheme::NTypeIds::String> {};
+        struct LastSeenPath : Column<16, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<NodeID, PDiskID>; // order is important
         using TColumns = TableColumns<NodeID, PDiskID, Path, Category, Guid, SharedWithOs, ReadCentric, NextVSlotId,
-              Status, Timestamp, PDiskConfig, ExpectedSerial, LastSeenSerial, LastSeenPath>; 
+              Status, Timestamp, PDiskConfig, ExpectedSerial, LastSeenSerial, LastSeenPath>;
     };
 
     struct Group : Table<4> {
@@ -49,7 +49,7 @@ struct Schema : NIceDb::Schema {
         struct Generation : Column<2, NScheme::NTypeIds::Uint32> {};
         struct ErasureSpecies : Column<3, NScheme::NTypeIds::Uint32> { using Type = TErasureType::EErasureSpecies; };
         struct Owner : Column<4, NScheme::NTypeIds::Uint64> {};
-        struct DesiredPDiskCategory : Column<5, NScheme::NTypeIds::Uint64> { using Type = TPDiskCategory; }; 
+        struct DesiredPDiskCategory : Column<5, NScheme::NTypeIds::Uint64> { using Type = TPDiskCategory; };
         struct DesiredVDiskCategory : Column<6, NScheme::NTypeIds::Uint64> { using Type = NKikimrBlobStorage::TVDiskKind::EVDiskKind; };
         struct EncryptionMode : Column<7, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
         struct LifeCyclePhase : Column<8, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
@@ -77,18 +77,18 @@ struct Schema : NIceDb::Schema {
         struct SelfHealEnable : Column<8, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct DonorModeEnable : Column<9, NScheme::NTypeIds::Bool> { static constexpr Type Default = true; };
         struct ScrubPeriodicity : Column<10, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 86400 * 30; };
-        struct SerialManagementStage : Column<11, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TSerialManagementStage::E; }; 
+        struct SerialManagementStage : Column<11, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TSerialManagementStage::E; };
         struct NextStoragePoolId : Column<12, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
         struct PDiskSpaceMarginPromille : Column<13, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 150; }; // 15% default margin (85% max usage)
         struct GroupReserveMin : Column<14, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
         struct GroupReservePart : Column<15, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; }; // parts per million
         struct MaxScrubbedDisksAtOnce : Column<16, NScheme::NTypeIds::Uint32> { static constexpr Type Default = Max<ui32>(); }; // no limit
-        struct PDiskSpaceColorBorder : Column<17, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; }; 
+        struct PDiskSpaceColorBorder : Column<17, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
 
         using TKey = TableKey<FixedKey>;
         using TColumns = TableColumns<FixedKey, NextGroupID, SchemaVersion, NextOperationLogIndex, DefaultMaxSlots,
               InstanceId, SelfHealEnable, DonorModeEnable, ScrubPeriodicity, SerialManagementStage, NextStoragePoolId,
-              PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder>; 
+              PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder>;
     };
 
     struct VSlot : Table<5> {
@@ -354,21 +354,21 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<NodeId, PDiskId, VSlotId, State, ScrubCycleStartTime, ScrubCycleFinishTime, Success>;
     };
 
-    struct DriveSerial : Table<129> { 
-        struct Serial : Column<1, NScheme::NTypeIds::String> {}; // PK 
-        struct BoxId : Column<2, Box::BoxId::ColumnType> {}; 
-        struct NodeId : Column<3, Node::ID::ColumnType> {}; // FK PDisk.NodeID 
-        struct PDiskId : Column<4, Node::NextPDiskID::ColumnType> {}; // FK PDisk.PDiskID 
-        struct Guid : Column<5, PDisk::Guid::ColumnType> {}; // Check-only column for PDisk.Guid 
-        struct LifeStage : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TDriveLifeStage::E; }; 
-        struct Kind : Column<7, HostConfigDrive::Kind::ColumnType> {}; 
-        struct PDiskType : Column<8, HostConfigDrive::TypeCol::ColumnType> { using Type = NKikimrBlobStorage::EPDiskType; }; 
-        struct PDiskConfig : Column<9, NScheme::NTypeIds::String> {}; 
- 
-        using TKey = TableKey<Serial>; 
-        using TColumns = TableColumns<Serial, BoxId, NodeId, PDiskId, Guid, LifeStage, Kind, PDiskType, PDiskConfig>; 
-    }; 
- 
+    struct DriveSerial : Table<129> {
+        struct Serial : Column<1, NScheme::NTypeIds::String> {}; // PK
+        struct BoxId : Column<2, Box::BoxId::ColumnType> {};
+        struct NodeId : Column<3, Node::ID::ColumnType> {}; // FK PDisk.NodeID
+        struct PDiskId : Column<4, Node::NextPDiskID::ColumnType> {}; // FK PDisk.PDiskID
+        struct Guid : Column<5, PDisk::Guid::ColumnType> {}; // Check-only column for PDisk.Guid
+        struct LifeStage : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TDriveLifeStage::E; };
+        struct Kind : Column<7, HostConfigDrive::Kind::ColumnType> {};
+        struct PDiskType : Column<8, HostConfigDrive::TypeCol::ColumnType> { using Type = NKikimrBlobStorage::EPDiskType; };
+        struct PDiskConfig : Column<9, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<Serial>;
+        using TColumns = TableColumns<Serial, BoxId, NodeId, PDiskId, Guid, LifeStage, Kind, PDiskType, PDiskConfig>;
+    };
+
     using TTables = SchemaTables<
                                 Node,
                                 PDisk,
@@ -390,8 +390,8 @@ struct Schema : NIceDb::Schema {
                                 OperationLog,
                                 MigrationPlan,
                                 MigrationEntry,
-                                ScrubState, 
-                                DriveSerial 
+                                ScrubState,
+                                DriveSerial
                                 >;
 
     using TSettings = SchemaSettings<

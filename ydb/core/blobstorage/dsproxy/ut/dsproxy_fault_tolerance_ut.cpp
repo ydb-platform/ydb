@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(TBsProxyFaultToleranceTest) {
     //ERASURE_TEST(Erasure4Plus2Stripe)
     //ERASURE_TEST(Erasure3Plus2Stripe)
     //ERASURE_TEST(ErasureMirror3Plus2)
-    ERASURE_TEST(ErasureMirror3dc) 
+    ERASURE_TEST(ErasureMirror3dc)
     ERASURE_TEST(ErasureMirror3of4)
 
     Y_UNIT_TEST(CheckGetHardenedErasureMirror3dcCount4Idx0) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::ErasureMirror3dc, true, 4, 0); }

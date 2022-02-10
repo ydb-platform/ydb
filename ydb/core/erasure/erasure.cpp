@@ -1,12 +1,12 @@
 #include "erasure.h"
 
 #include <util/generic/yexception.h>
-#include <util/system/unaligned_mem.h> 
+#include <util/system/unaligned_mem.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
 
 #define MAX_TOTAL_PARTS 8
-#define MAX_LINES_IN_BLOCK 8 
+#define MAX_LINES_IN_BLOCK 8
 
 #define IS_VERBOSE 0
 #define IS_TRACE 0
@@ -28,9 +28,9 @@ static TString DebugFormatBits(ui64 value) {
     return s.Str();
 }
 #else
-#   define VERBOSE_COUT(a)  \ 
-       do {                 \ 
-       } while (false) 
+#   define VERBOSE_COUT(a)  \
+       do {                 \
+       } while (false)
 #endif
 
 #if IS_TRACE
@@ -100,14 +100,14 @@ static const std::array<TErasureParameters, TErasureType::ErasureSpeciesCount> E
     ,{TErasureType::ErasureParityStripe, 3, 2, 3} // 7 = ErasureSpicies::Erasure3Plus2Stipe
     ,{TErasureType::ErasureMirror,       1, 2, 1} // 8 = ErasureSpicies::ErasureMirror3Plus2
     ,{TErasureType::ErasureMirror,       1, 2, 1} // 9 = ErasureSpicies::ErasureMirror3dc
-    ,{TErasureType::ErasureParityBlock,  4, 3, 5} // 10 = ErasureSpicies::Erasure4Plus3Block 
-    ,{TErasureType::ErasureParityStripe, 4, 3, 5} // 11 = ErasureSpicies::Erasure4Plus3Stripe 
-    ,{TErasureType::ErasureParityBlock,  3, 3, 3} // 12 = ErasureSpicies::Erasure3Plus3Block 
-    ,{TErasureType::ErasureParityStripe, 3, 3, 3} // 13 = ErasureSpicies::Erasure3Plus3Stripe 
-    ,{TErasureType::ErasureParityBlock,  2, 3, 3} // 14 = ErasureSpicies::Erasure2Plus3Block 
-    ,{TErasureType::ErasureParityStripe, 2, 3, 3} // 15 = ErasureSpicies::Erasure2Plus3Stripe 
-    ,{TErasureType::ErasureParityBlock,  2, 2, 3} // 16 = ErasureSpicies::Erasure2Plus2Block 
-    ,{TErasureType::ErasureParityStripe, 2, 2, 3} // 17 = ErasureSpicies::Erasure2Plus2Stripe 
+    ,{TErasureType::ErasureParityBlock,  4, 3, 5} // 10 = ErasureSpicies::Erasure4Plus3Block
+    ,{TErasureType::ErasureParityStripe, 4, 3, 5} // 11 = ErasureSpicies::Erasure4Plus3Stripe
+    ,{TErasureType::ErasureParityBlock,  3, 3, 3} // 12 = ErasureSpicies::Erasure3Plus3Block
+    ,{TErasureType::ErasureParityStripe, 3, 3, 3} // 13 = ErasureSpicies::Erasure3Plus3Stripe
+    ,{TErasureType::ErasureParityBlock,  2, 3, 3} // 14 = ErasureSpicies::Erasure2Plus3Block
+    ,{TErasureType::ErasureParityStripe, 2, 3, 3} // 15 = ErasureSpicies::Erasure2Plus3Stripe
+    ,{TErasureType::ErasureParityBlock,  2, 2, 3} // 16 = ErasureSpicies::Erasure2Plus2Block
+    ,{TErasureType::ErasureParityStripe, 2, 2, 3} // 17 = ErasureSpicies::Erasure2Plus2Stripe
     ,{TErasureType::ErasureMirror,       1, 2, 1} // 18 = ErasureSpicies::ErasureMirror3of4
 }};
 
@@ -120,24 +120,24 @@ void PadAndCrcAtTheEnd(char *data, ui64 dataSize, ui64 bufferSize) {
     memcpy(data + bufferSize - sizeof(ui32), &hash, sizeof(ui32));
 }
 
-bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TString& buf) { 
-    switch (crcMode) { 
-    case TErasureType::CrcModeNone: 
-        return true; 
-    case TErasureType::CrcModeWholePart: 
+bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TString& buf) {
+    switch (crcMode) {
+    case TErasureType::CrcModeNone:
+        return true;
+    case TErasureType::CrcModeWholePart:
         if (buf.size() == 0) {
-                return true; 
-        } else { 
+                return true;
+        } else {
             Y_VERIFY(buf.size() > sizeof(ui32), "Error in CheckWholeBlobCrc: blob part size# %" PRIu64
                     " is less then crcSize# %" PRIu64, (ui64)buf.size(), (ui64)sizeof(ui32));
             ui32 crc = Crc32c(buf.data(), buf.size() - sizeof(ui32));
             ui32 expectedCrc = ReadUnaligned<ui32>(buf.data() + buf.size() - sizeof(ui32));
-            return crc == expectedCrc; 
-        } 
-    } 
-    ythrow TWithBackTrace<yexception>() << "Unknown crcMode = " << (i32)crcMode; 
-} 
- 
+            return crc == expectedCrc;
+        }
+    }
+    ythrow TWithBackTrace<yexception>() << "Unknown crcMode = " << (i32)crcMode;
+}
+
 class TBlockParams {
 public:
     ui64 DataSize;
@@ -286,7 +286,7 @@ public:
     }
 
 #if IS_VERBOSE
-#   define VERBOSE_COUT_BLOCK(IS_FULL_DATA, FULL_DATA_ELEM, PART_ELEM, COL_M, COL_M1) \ 
+#   define VERBOSE_COUT_BLOCK(IS_FULL_DATA, FULL_DATA_ELEM, PART_ELEM, COL_M, COL_M1) \
     do { \
         for (ui32 row = 0; row < LineCount; ++row) { \
             VERBOSE_COUT(Endl); \
@@ -302,37 +302,37 @@ public:
         } \
         VERBOSE_COUT(Endl); \
     } while (false)
-#   define VERBOSE_COUT_BLOCK_M2(IS_FULL_DATA, FULL_DATA_ELEM, PART_ELEM, COL_M, COL_M1, COL_M2) \ 
-    do { \ 
-        for (ui32 row = 0; row < LineCount; ++row) { \ 
-            VERBOSE_COUT(Endl); \ 
-            for (ui32 col = 0; col < DataParts; ++col) { \ 
-                if (IS_FULL_DATA) { \ 
-                    VERBOSE_COUT(DebugFormatBits(FULL_DATA_ELEM(row, col)) << ", "); \ 
-                } else { \ 
-                    VERBOSE_COUT(DebugFormatBits(PART_ELEM(row, col)) << ", "); \ 
-                } \ 
-            } \ 
-            VERBOSE_COUT(DebugFormatBits(COL_M(row)) << ", "); \ 
-            VERBOSE_COUT(DebugFormatBits(COL_M1(row)) << ", "); \ 
-            VERBOSE_COUT(DebugFormatBits(COL_M2(row))); \ 
-        } \ 
-        VERBOSE_COUT(Endl); \ 
-    } while (false) 
+#   define VERBOSE_COUT_BLOCK_M2(IS_FULL_DATA, FULL_DATA_ELEM, PART_ELEM, COL_M, COL_M1, COL_M2) \
+    do { \
+        for (ui32 row = 0; row < LineCount; ++row) { \
+            VERBOSE_COUT(Endl); \
+            for (ui32 col = 0; col < DataParts; ++col) { \
+                if (IS_FULL_DATA) { \
+                    VERBOSE_COUT(DebugFormatBits(FULL_DATA_ELEM(row, col)) << ", "); \
+                } else { \
+                    VERBOSE_COUT(DebugFormatBits(PART_ELEM(row, col)) << ", "); \
+                } \
+            } \
+            VERBOSE_COUT(DebugFormatBits(COL_M(row)) << ", "); \
+            VERBOSE_COUT(DebugFormatBits(COL_M1(row)) << ", "); \
+            VERBOSE_COUT(DebugFormatBits(COL_M2(row))); \
+        } \
+        VERBOSE_COUT(Endl); \
+    } while (false)
 #else
-#   define VERBOSE_COUT_BLOCK(IS_FULL_DATA, FULL_DATA_ELEM, PART_ELEM, COL_M, COL_M1) \ 
-    do { \ 
-    } while (false) 
-#   define VERBOSE_COUT_BLOCK_M2(IS_FULL_DATA, FULL_DATA_ELEM, PART_ELEM, COL_M, COL_M1, COL_M2) \ 
-    do { \ 
-    } while (false) 
+#   define VERBOSE_COUT_BLOCK(IS_FULL_DATA, FULL_DATA_ELEM, PART_ELEM, COL_M, COL_M1) \
+    do { \
+    } while (false)
+#   define VERBOSE_COUT_BLOCK_M2(IS_FULL_DATA, FULL_DATA_ELEM, PART_ELEM, COL_M, COL_M1, COL_M2) \
+    do { \
+    } while (false)
 #endif
 
- 
+
     template <bool isStripe, bool isFromDataParts>
     void EoSplitWhole(char *data, TBufferDataPart &bufferDataPart, TDataPartSet &outPartSet, ui64 writePosition, ui64 firstBlock, ui64 lastBlock) {
-        const ui32 lastPartIdx = DataParts + 1; 
-        const ui32 m = Prime; 
+        const ui32 lastPartIdx = DataParts + 1;
+        const ui32 m = Prime;
         for (ui64 blockIdx = firstBlock; blockIdx != lastBlock; ++blockIdx) {
 
 #define IN_EL_STRIPE(row, column) *((ui64*)data + (blockIdx * LineCount + (row)) * DataParts + (column))
@@ -349,128 +349,128 @@ public:
             } else {
                 VERBOSE_COUT_BLOCK(true, IN_EL_BLOCK, IN_EL_BLOCK, OUT_M, OUT_M1);
             }
-            ui64 adj = 0; 
-            const ui32 mint = (m - 2 < LineCount ? 1 : m - 2 - LineCount); 
-            VERBOSE_COUT("mint = " << mint << " m - 1 - t = " << (m - 1 - mint) << Endl); 
-            for (ui32 t = mint; t < DataParts; ++t) { 
+            ui64 adj = 0;
+            const ui32 mint = (m - 2 < LineCount ? 1 : m - 2 - LineCount);
+            VERBOSE_COUT("mint = " << mint << " m - 1 - t = " << (m - 1 - mint) << Endl);
+            for (ui32 t = mint; t < DataParts; ++t) {
                 adj ^= IN_EL(m - 1 - t, t);
-                VERBOSE_COUT("s: " << adj << " el[" << (m - 1 - t) << ", " << t << "]: " << 
+                VERBOSE_COUT("s: " << adj << " el[" << (m - 1 - t) << ", " << t << "]: " <<
                     DebugFormatBits(IN_EL(m - 1 - t, t)) << Endl);
-            } 
+            }
             for (ui32 l = 0; l < LineCount; ++l) {
                 ui64 sourceData = IN_EL(l, 0);
-                OUT_M1(l) = adj ^ sourceData; 
-                OUT_M(l) = sourceData; 
+                OUT_M1(l) = adj ^ sourceData;
+                OUT_M(l) = sourceData;
                 if (!isFromDataParts) {
                     OUT_EL(l, 0) = sourceData;
                 }
-            } 
-            for (ui32 t = 1; t < DataParts; ++t) { 
-                for (ui32 l = 0; l < LineCount; ++l) { 
+            }
+            for (ui32 t = 1; t < DataParts; ++t) {
+                for (ui32 l = 0; l < LineCount; ++l) {
                     ui64 sourceData = IN_EL(l, t);
-                    OUT_M(l) ^= sourceData; 
+                    OUT_M(l) ^= sourceData;
                     if (!isFromDataParts) {
                         OUT_EL(l, t) = sourceData;
                     }
-                    VERBOSE_COUT("OUT_M(" << l << ") = " << DebugFormatBits(OUT_M(l)) << Endl); 
+                    VERBOSE_COUT("OUT_M(" << l << ") = " << DebugFormatBits(OUT_M(l)) << Endl);
                 }
             }
-            for (ui32 t = 1; t < DataParts; ++t) { 
-                for (ui32 l = 0; l < LineCount - t; ++l) { 
-                    ui32 row = l + t; 
+            for (ui32 t = 1; t < DataParts; ++t) {
+                for (ui32 l = 0; l < LineCount - t; ++l) {
+                    ui32 row = l + t;
                     OUT_M1(row) ^= IN_EL(l, t);
                     VERBOSE_COUT(DebugFormatBits(IN_EL(row, t)) << Endl);
-                } 
-                for (ui32 l = LineCount - t + 1; l < LineCount; ++l) { 
-                    ui32 row = l + t - m; 
+                }
+                for (ui32 l = LineCount - t + 1; l < LineCount; ++l) {
+                    ui32 row = l + t - m;
                     OUT_M1(row) ^= IN_EL(l, t);
                     VERBOSE_COUT(DebugFormatBits(IN_EL(row, t)) << Endl);
-                } 
-            } 
-            VERBOSE_COUT_BLOCK(true, OUT_EL, OUT_EL, OUT_M, OUT_M1); 
+                }
+            }
+            VERBOSE_COUT_BLOCK(true, OUT_EL, OUT_EL, OUT_M, OUT_M1);
 #undef IN_EL
-#undef OUT_M1 
-#undef OUT_M 
-#undef OUT_EL 
-#undef IN_EL_BLOCK 
-#undef IN_EL_STRIPE 
-            writePosition += ColumnSize; 
-        } 
-    } 
- 
+#undef OUT_M1
+#undef OUT_M
+#undef OUT_EL
+#undef IN_EL_BLOCK
+#undef IN_EL_STRIPE
+            writePosition += ColumnSize;
+        }
+    }
+
     template <bool isStripe, bool isFromDataParts>
     void StarSplitWhole(char *data, TBufferDataPart &bufferDataPart, TDataPartSet &outPartSet,
             ui64 writePosition, ui32 blocks) {
-        const ui32 m = Prime; 
-#define IN_EL_STRIPE(row, column) *((ui64*)data + (blockIdx * LineCount + (row)) * DataParts + (column)) 
-#define IN_EL_BLOCK(row, column) bufferDataPart[column][blockIdx * LineCount + (row)] 
+        const ui32 m = Prime;
+#define IN_EL_STRIPE(row, column) *((ui64*)data + (blockIdx * LineCount + (row)) * DataParts + (column))
+#define IN_EL_BLOCK(row, column) bufferDataPart[column][blockIdx * LineCount + (row)]
 #define IN_EL_SB(row, column) (isStripe ? IN_EL_STRIPE(row, column) : IN_EL_BLOCK(row, column))
 #define OUT_EL(row, column) *((ui64*)(outPartSet.Parts[column].GetDataAt(writePosition + (row) * sizeof(ui64))))
 #define IN_EL(row, column) (isFromDataParts ? OUT_EL(row, column) : IN_EL_SB(row, column))
 #define OUT_M(row) *((ui64*)(outPartSet.Parts[DataParts].GetDataAt(writePosition + (row) * sizeof(ui64))))
 #define OUT_M1(row) *((ui64*)(outPartSet.Parts[DataParts + 1].GetDataAt(writePosition + (row) * sizeof(ui64))))
 #define OUT_M2(row) *((ui64*)(outPartSet.Parts[DataParts + 2].GetDataAt(writePosition + (row) * sizeof(ui64))))
-        for (ui64 blockIdx = 0; blockIdx < blocks; ++blockIdx) { 
-            if (isStripe) { 
-                VERBOSE_COUT_BLOCK(true, IN_EL_STRIPE, IN_EL_STRIPE, OUT_M, OUT_M1); 
-            } else { 
-                VERBOSE_COUT_BLOCK(true, IN_EL_BLOCK, IN_EL_BLOCK, OUT_M, OUT_M1); 
-            } 
-            ui64 s1 = 0; 
+        for (ui64 blockIdx = 0; blockIdx < blocks; ++blockIdx) {
+            if (isStripe) {
+                VERBOSE_COUT_BLOCK(true, IN_EL_STRIPE, IN_EL_STRIPE, OUT_M, OUT_M1);
+            } else {
+                VERBOSE_COUT_BLOCK(true, IN_EL_BLOCK, IN_EL_BLOCK, OUT_M, OUT_M1);
+            }
+            ui64 s1 = 0;
             const ui32 mint = (m - 2 < LineCount ? 1 : m - 2 - LineCount);
             VERBOSE_COUT("mint = " << mint << " m - 1 - t = " << (m - 1 - mint) << Endl);
             for (ui32 t = mint; t < DataParts; ++t) {
-                s1 ^= IN_EL(m - 1 - t, t); 
-                VERBOSE_COUT("s1: " << s1 << " el[" << (m - 1 - t) << ", " << t << "]: " << 
-                    DebugFormatBits(isStripe ? IN_EL_STRIPE(m - 1 - t, t): IN_EL_BLOCK(m - 1 - t, t)) << Endl); 
+                s1 ^= IN_EL(m - 1 - t, t);
+                VERBOSE_COUT("s1: " << s1 << " el[" << (m - 1 - t) << ", " << t << "]: " <<
+                    DebugFormatBits(isStripe ? IN_EL_STRIPE(m - 1 - t, t): IN_EL_BLOCK(m - 1 - t, t)) << Endl);
             }
-            ui64 s2 = 0; 
-            for (ui32 t = 1; t < DataParts; ++t) { 
-                s2 ^= IN_EL(t - 1, t); 
-                VERBOSE_COUT("s2: " << s2 << " el[" << (t - 1) << ", " << t << "]: " << 
-                    DebugFormatBits(IN_EL(t - 1, t)) << Endl); 
-            } 
+            ui64 s2 = 0;
+            for (ui32 t = 1; t < DataParts; ++t) {
+                s2 ^= IN_EL(t - 1, t);
+                VERBOSE_COUT("s2: " << s2 << " el[" << (t - 1) << ", " << t << "]: " <<
+                    DebugFormatBits(IN_EL(t - 1, t)) << Endl);
+            }
             for (ui32 l = 0; l < LineCount; ++l) {
-                ui64 dataIN_EL = IN_EL(l, 0); 
-                OUT_M(l) = dataIN_EL; 
-                OUT_M1(l) = s1 ^ dataIN_EL; 
-                OUT_M2(l) = s2 ^ dataIN_EL; 
+                ui64 dataIN_EL = IN_EL(l, 0);
+                OUT_M(l) = dataIN_EL;
+                OUT_M1(l) = s1 ^ dataIN_EL;
+                OUT_M2(l) = s2 ^ dataIN_EL;
                 if (!isFromDataParts) {
                     OUT_EL(l, 0) = dataIN_EL;
                 }
-            } 
-            for (ui32 t = 1; t < DataParts; ++t) { 
-                for (ui32 l = 0; l < LineCount; ++l) { 
-                    ui64 dataIN_EL = IN_EL(l, t); 
-                    ui32 row1 = (l + t) % m; 
-                    OUT_M(l) ^= dataIN_EL; 
-                    if (row1 < LineCount) { 
-                        OUT_M1(row1) ^= dataIN_EL; 
-                        VERBOSE_COUT(IN_EL(row1, t) << Endl); 
+            }
+            for (ui32 t = 1; t < DataParts; ++t) {
+                for (ui32 l = 0; l < LineCount; ++l) {
+                    ui64 dataIN_EL = IN_EL(l, t);
+                    ui32 row1 = (l + t) % m;
+                    OUT_M(l) ^= dataIN_EL;
+                    if (row1 < LineCount) {
+                        OUT_M1(row1) ^= dataIN_EL;
+                        VERBOSE_COUT(IN_EL(row1, t) << Endl);
                     }
-                    ui32 row2 = (m + l - t) % m; 
-                    if (row2 < LineCount) { 
-                        OUT_M2(row2) ^= dataIN_EL; 
-                        VERBOSE_COUT(IN_EL(row2, t) << Endl); 
-                    } 
+                    ui32 row2 = (m + l - t) % m;
+                    if (row2 < LineCount) {
+                        OUT_M2(row2) ^= dataIN_EL;
+                        VERBOSE_COUT(IN_EL(row2, t) << Endl);
+                    }
                     if (!isFromDataParts) {
                         OUT_EL(l, t) = dataIN_EL;
                     }
                 }
             }
-#if IS_VERBOSE 
-            for (ui32 l = 0; l < LineCount; ++l) { 
-                VERBOSE_COUT("OUT_M1(" << l << ") = " << DebugFormatBits(OUT_M1(l)) << Endl); 
-            } 
-            VERBOSE_COUT_BLOCK_M2(true, OUT_EL, OUT_EL, OUT_M, OUT_M1, OUT_M2); 
-#endif 
-            writePosition += ColumnSize; 
-        } 
-#undef OUT_M2 
+#if IS_VERBOSE
+            for (ui32 l = 0; l < LineCount; ++l) {
+                VERBOSE_COUT("OUT_M1(" << l << ") = " << DebugFormatBits(OUT_M1(l)) << Endl);
+            }
+            VERBOSE_COUT_BLOCK_M2(true, OUT_EL, OUT_EL, OUT_M, OUT_M1, OUT_M2);
+#endif
+            writePosition += ColumnSize;
+        }
+#undef OUT_M2
 #undef OUT_M1
 #undef OUT_M
 #undef OUT_EL
-#undef IN_EL 
+#undef IN_EL
 #undef IN_EL_BLOCK
 #undef IN_EL_STRIPE
     }
@@ -527,23 +527,23 @@ public:
     }
 
     template <bool isStripe, bool isFromDataParts>
-    void StarSplit(TDataPartSet &outPartSet) { 
-        // Use all whole columns of all the parts 
+    void StarSplit(TDataPartSet &outPartSet) {
+        // Use all whole columns of all the parts
         StarSplitWhole<isStripe, isFromDataParts>(Data, BufferDataPart, outPartSet, 0ull, WholeBlocks);
- 
-        // Use the remaining parts to fill in the last block 
-        // Write the tail of the data 
-        if (TailSize) { 
+
+        // Use the remaining parts to fill in the last block
+        // Write the tail of the data
+        if (TailSize) {
             char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
             TBufferDataPart bufferDataPart;
             if (!isFromDataParts) {
                 PrepareLastBlockData<isStripe>(lastBlockSource, bufferDataPart);
             }
- 
+
             StarSplitWhole<isStripe, isFromDataParts>(lastBlockSource, bufferDataPart, outPartSet, WholeBlocks * ColumnSize, 1);
-        } 
-    } 
- 
+        }
+    }
+
     template <bool isStripe, bool isFromDataParts, bool isIncremental = false>
     void EoSplit(TDataPartSet &outPartSet) {
         ui64 readPosition = isIncremental? ColumnSize * outPartSet.CurBlockIdx: 0;
@@ -621,24 +621,24 @@ public:
     template <bool isStripe, bool restoreParts, bool restoreFullData, bool reversed, bool restoreParityParts>
     void EoDiagonalRestorePartWhole(char *data, TBufferDataPart &bufferDataPart, TDataPartSet &partSet, ui64 readPosition,
             ui32 beginBlockIdx, ui32 endBlockIdx, ui32 missingDataPartIdx) {
-        ui32 lastColumn = reversed ? DataParts + 2 : DataParts + 1; 
-        const ui32 m = Prime; 
+        ui32 lastColumn = reversed ? DataParts + 2 : DataParts + 1;
+        const ui32 m = Prime;
         // Use all whole columns of all the parts
         for (ui64 blockIdx = beginBlockIdx; blockIdx < endBlockIdx; ++blockIdx) {
-#define RIGHT_ROW(row) (reversed ? LineCount - 1 - (row) : (row)) 
-#define OUT_EL_BLOCK(row, column) bufferDataPart[column][blockIdx * LineCount + RIGHT_ROW(row)] 
-#define OUT_EL_STRIPE(row, column) *((ui64*)data + (blockIdx * LineCount + RIGHT_ROW(row)) * DataParts + (column)) 
+#define RIGHT_ROW(row) (reversed ? LineCount - 1 - (row) : (row))
+#define OUT_EL_BLOCK(row, column) bufferDataPart[column][blockIdx * LineCount + RIGHT_ROW(row)]
+#define OUT_EL_STRIPE(row, column) *((ui64*)data + (blockIdx * LineCount + RIGHT_ROW(row)) * DataParts + (column))
 #define IN_EL(row, column) *((ui64*)(partSet.Parts[column].GetDataAt(readPosition + RIGHT_ROW(row) * sizeof(ui64))))
 #define IN_M(row) *((ui64*)(partSet.Parts[DataParts].GetDataAt(readPosition + RIGHT_ROW(row) * sizeof(ui64))))
 #define IN_M12(row) *((ui64*)(partSet.Parts[lastColumn].GetDataAt(readPosition + RIGHT_ROW(row) * sizeof(ui64))))
-            VERBOSE_COUT_BLOCK(true, IN_EL, IN_EL, IN_M, IN_M12); 
+            VERBOSE_COUT_BLOCK(true, IN_EL, IN_EL, IN_M, IN_M12);
             ui64 s = 0;
             ui32 colLimit = DataParts;
             ui32 rowLimit = LineCount;
             {
                 ui32 idx = (m + missingDataPartIdx - 1) % m;
                 if (idx < rowLimit) {
-                    s = IN_M12(idx); 
+                    s = IN_M12(idx);
                     VERBOSE_COUT("s(" << idx << ", m1): " << DebugFormatBits(s) << Endl);
                 }
             }
@@ -693,7 +693,7 @@ public:
                 ui32 idx = (m + k + missingDataPartIdx) % m;
                 if (idx < LineCount) {
                     VERBOSE_COUT("idx = " << idx);
-                    res ^= IN_M12(idx); // This is missing in the article! 
+                    res ^= IN_M12(idx); // This is missing in the article!
                 }
                 if (restoreFullData) {
                     VERBOSE_COUT("out [" << k << ", " << missingDataPartIdx << "] = " << DebugFormatBits(res) << Endl);
@@ -711,21 +711,21 @@ public:
                             tmp ^= IN_EL(k, l);
                         }
                         IN_M(k) = tmp;
-                    } 
+                    }
                 }
             }
             if (isStripe) {
-                VERBOSE_COUT_BLOCK(restoreFullData, OUT_EL_STRIPE, IN_EL, IN_M, IN_M12); 
+                VERBOSE_COUT_BLOCK(restoreFullData, OUT_EL_STRIPE, IN_EL, IN_M, IN_M12);
             } else {
-                VERBOSE_COUT_BLOCK(restoreFullData, OUT_EL_BLOCK, IN_EL, IN_M, IN_M12); 
+                VERBOSE_COUT_BLOCK(restoreFullData, OUT_EL_BLOCK, IN_EL, IN_M, IN_M12);
             }
-#undef IN_M12 
+#undef IN_M12
 #undef IN_M
 #undef IN_EL
 #undef OUT_EL_BLOCK
 #undef OUT_EL_STRIPE
-#undef RIGHT_ROW 
- 
+#undef RIGHT_ROW
+
             readPosition += ColumnSize;
         }
     }
@@ -758,7 +758,7 @@ public:
             PrepareLastBlockPointers<isStripe>(lastBlock, bufferDataPart);
 
             EoDiagonalRestorePartWhole<isStripe, restoreParts, restoreFullData, reversed, restoreParityParts>(lastBlock, bufferDataPart,
-                            partSet, WholeBlocks * ColumnSize, 0, 1, missingDataPartIdx); 
+                            partSet, WholeBlocks * ColumnSize, 0, 1, missingDataPartIdx);
 
             if (restoreFullData) {
                 PlaceLastBlock<isStripe>(bufferDataPart, lastBlock);
@@ -771,254 +771,254 @@ public:
 
     template <bool isStripe, bool restoreParts, bool restoreFullData, bool restoreParityParts>
     void StarMainRestorePartsWholeSymmetric(char *data, TBufferDataPart &bufferDataPart, TDataPartSet& partSet,
-                ui64 readPosition, ui32 endBlockIdx, ui32 missingDataPartIdxA, ui32 missingDataPartIdxB, 
-                ui32 missingDataPartIdxC) { 
-        VERBOSE_COUT("Start of StarMainRestorePartsWholeSymmetric for blocks "  << missingDataPartIdxA 
-                                        << " " << missingDataPartIdxB << " " <<missingDataPartIdxC << Endl); 
-        // Notation used in this function is taken from article 
-        // Cheng Huang, Lihao Xu (2005, 4th USENIX Conf.) - STAR: An Efficient Coding Scheme... 
-        ui64 readPositionStart = readPosition; 
-        const ui32 m = Prime; 
-        const ui32 r = missingDataPartIdxA; 
-        const ui32 s = missingDataPartIdxB; 
-        const ui32 t = missingDataPartIdxC; 
-        const ui32 dr = (m + s - r) % m; 
-        // Use all whole columns of all the parts 
-#define OUT_EL_BLOCK(row, column) bufferDataPart[column][blockIdx * LineCount + (row)] 
-#define OUT_EL_STRIPE(row, column) *((ui64*)data + (blockIdx * LineCount + (row)) * DataParts + (column)) 
-#define OUT_EL(row, column) (isStripe ? OUT_EL_STRIPE(row, column) : OUT_EL_BLOCK(row, column)) 
-#define IN_EL(row, column) *((ui64*)(partSet.Parts[column].GetDataAt(readPosition + (row) * sizeof(ui64))))
-#define IN_M(row) *((ui64*)(partSet.Parts[DataParts].GetDataAt(readPosition + (row) * sizeof(ui64))))
-#define IN_M1(row) *((ui64*)(partSet.Parts[DataParts + 1].GetDataAt(readPosition + (row) * sizeof(ui64))))
-#define IN_M2(row) *((ui64*)(partSet.Parts[DataParts + 2].GetDataAt(readPosition + (row) * sizeof(ui64))))
-        for (ui64 blockIdx = 0; blockIdx < endBlockIdx; ++blockIdx) { 
-            VERBOSE_COUT_BLOCK_M2(true, IN_EL, IN_EL, IN_M, IN_M1, IN_M2); 
-            // 1) Adjusters recovery   adj0 is for S0 
-            ui64 adj0 = 0; 
-            ui64 adj1 = 0; 
-            ui64 adj2 = 0; 
-            for (ui32 i = 0; i < LineCount; ++i) { 
-                adj0 ^= IN_M(i); 
-                adj1 ^= IN_M1(i); 
-                adj2 ^= IN_M2(i); 
-            } 
-            adj1 = adj0 ^ adj1; 
-            adj2 = adj0 ^ adj2; 
-            // 2) Syndrome calculation 
-            ui64 s0[MAX_LINES_IN_BLOCK]; 
-            ui64 s1[MAX_LINES_IN_BLOCK]; 
-            ui64 s2[MAX_LINES_IN_BLOCK]; 
-            ui32 row; 
-            for (ui32 i = 0; i < LineCount; ++i) { 
-                s0[i] = IN_M(i); 
-                s1[i] = IN_M1(i) ^ adj1; 
-                s2[i] = IN_M2(i) ^ adj2; 
-                VERBOSE_COUT("IN_M[" << i << "] = " << DebugFormatBits(IN_M(i)) << ", ");
-                VERBOSE_COUT("IN_M1[" << i << "] ^ adj1 = " << DebugFormatBits(IN_M1(i) ^ adj1) << ", ");
-                VERBOSE_COUT("IN_M2[" << i << "] ^ adj2 = " << DebugFormatBits(IN_M2(i) ^ adj2) << Endl);
-            } 
-            s0[m - 1] = 0; 
-            s1[m - 1] = adj1; 
-            s2[m - 1] = adj2; 
-            for (ui32 j = 0; j < DataParts; ++j) { 
-                if (j == r || j == s || j == t) { 
-                    continue; 
-                } 
-                for (ui32 i = 0; i < LineCount; ++i) { 
-                    ui64 data_tmp = IN_EL(i, j); 
-                    if (restoreFullData) { 
-                        OUT_EL(i, j) = data_tmp; 
-                    } 
-                    s0[i] ^= data_tmp; 
-                    row = (i + j) % m; 
-                    if (row < m) { 
-                        s1[row] ^= IN_EL(i, j); 
-                    } 
-                    row = (m + i - j) % m; 
-                    if (row < m) { 
-                        s2[row] ^= IN_EL(i, j); 
-                        VERBOSE_COUT("s2[" << i << "] ^= IN_EL(" << row << "," << j << ");" << Endl;); 
-
-                    } 
-                } 
-            } 
-            for (ui32 i = 0; i < m; ++i) { 
-                VERBOSE_COUT("s0[" << i << "] = " << DebugFormatBits(s0[i]) << ", "); 
-                VERBOSE_COUT("s1[" << i << "] = " << DebugFormatBits(s1[i]) << ", "); 
-                VERBOSE_COUT("s2[" << i << "] = " << DebugFormatBits(s2[i]) << Endl); 
-            } 
-            // 3) Compute all rows in s 
-            ui32 row1 = (m - 1 + r) % m; 
-            ui32 row2 = (m + m - 1 - 2*dr - r) % m; 
-            ui32 row01 = (m + row1 - r) % m; 
-            ui32 row02 = (row2 + r) % m; 
-            ui64 res = 0; 
-            for (ui32 i = 0; i < LineCount; ++i) { 
-                res = s0[row01] ^ s1[row1] ^ s0[row02] ^ s2[row2] ^ res; 
-                if (restoreFullData) { 
-                    OUT_EL(row02, s) = res; 
-                } 
-                IN_EL(row02, s) = res; 
-                VERBOSE_COUT("IN_EL(" << row02 << ", " << s << ") = " << DebugFormatBits(res) << Endl); 
-                row1 = (m + row1 - 2*dr) % m; 
-                row2 = (m + row2 - 2*dr) % m; 
-                row01 = (m + row1 - r) % m; 
-                row02 = (row2 + r) % m; 
-            } 
-            VERBOSE_COUT_BLOCK_M2(true, IN_EL, IN_EL, IN_M, IN_M1, IN_M2); 
-            readPosition += ColumnSize; 
-        } 
-        VERBOSE_COUT("End of StarMainRestorePartsWholeSymmetric" << Endl); 
-        EoMainRestorePartsWhole<isStripe, restoreParts, restoreFullData, false, restoreParityParts>(data, bufferDataPart,
-                                        partSet, readPositionStart, endBlockIdx, Min(r, t), Max(r,t)); 
-#undef IN_M2 
-#undef IN_M1 
-#undef IN_M 
-#undef IN_EL 
-#undef OUT_EL 
-#undef OUT_EL_BLOCK 
-#undef OUT_EL_STRIPE 
-    } 
- 
-    template <bool isStripe, bool restoreParts, bool restoreFullData, bool restoreParityParts>
-    void StarRestoreHorizontalPartWhole(char *data, TBufferDataPart &bufferDataPart, TDataPartSet& partSet,
-                ui64 readPosition, ui32 endBlockIdx, ui32 missingDataPartIdxA, ui32 missingDataPartIdxB) { 
-        VERBOSE_COUT("Start of StarRestoreHorizontalPartWhole for blocks " 
-                        << missingDataPartIdxA << " " << missingDataPartIdxB << Endl); 
-        // Notation ised in this function is taken from article 
-        // Cheng Huang, Lihao Xu (2005, 4th USENIX Conf.) - STAR: An Efficient Coding Scheme... 
-        ui64 readPositionStart = readPosition; 
-        const ui32 m = Prime; 
-        const ui32 r = missingDataPartIdxA; 
-        const ui32 s = missingDataPartIdxB; 
-        const ui32 dr = (m + s - r) % m; 
+                ui64 readPosition, ui32 endBlockIdx, ui32 missingDataPartIdxA, ui32 missingDataPartIdxB,
+                ui32 missingDataPartIdxC) {
+        VERBOSE_COUT("Start of StarMainRestorePartsWholeSymmetric for blocks "  << missingDataPartIdxA
+                                        << " " << missingDataPartIdxB << " " <<missingDataPartIdxC << Endl);
+        // Notation used in this function is taken from article
+        // Cheng Huang, Lihao Xu (2005, 4th USENIX Conf.) - STAR: An Efficient Coding Scheme...
+        ui64 readPositionStart = readPosition;
+        const ui32 m = Prime;
+        const ui32 r = missingDataPartIdxA;
+        const ui32 s = missingDataPartIdxB;
+        const ui32 t = missingDataPartIdxC;
+        const ui32 dr = (m + s - r) % m;
         // Use all whole columns of all the parts
 #define OUT_EL_BLOCK(row, column) bufferDataPart[column][blockIdx * LineCount + (row)]
 #define OUT_EL_STRIPE(row, column) *((ui64*)data + (blockIdx * LineCount + (row)) * DataParts + (column))
-#define OUT_EL(row, column) (isStripe ? OUT_EL_STRIPE(row, column) : OUT_EL_BLOCK(row, column)) 
+#define OUT_EL(row, column) (isStripe ? OUT_EL_STRIPE(row, column) : OUT_EL_BLOCK(row, column))
 #define IN_EL(row, column) *((ui64*)(partSet.Parts[column].GetDataAt(readPosition + (row) * sizeof(ui64))))
 #define IN_M(row) *((ui64*)(partSet.Parts[DataParts].GetDataAt(readPosition + (row) * sizeof(ui64))))
 #define IN_M1(row) *((ui64*)(partSet.Parts[DataParts + 1].GetDataAt(readPosition + (row) * sizeof(ui64))))
 #define IN_M2(row) *((ui64*)(partSet.Parts[DataParts + 2].GetDataAt(readPosition + (row) * sizeof(ui64))))
-        for (ui64 blockIdx = 0; blockIdx < endBlockIdx; ++blockIdx) { 
-            VERBOSE_COUT_BLOCK_M2(true, IN_EL, IN_EL, IN_M, IN_M1, IN_M2); 
-            // 1) Adjusters recovery 
-            ui64 adj12 = 0; 
-            for (ui32 i = 0; i < LineCount; ++i) { 
-                adj12 ^= IN_M1(i) ^ IN_M2(i); 
-            } 
-            VERBOSE_COUT("adj12# " << DebugFormatBits(adj12) << Endl); 
-            // 2) Syndrome calculation 
-            ui64 s1[MAX_LINES_IN_BLOCK]; 
-            ui64 s2[MAX_LINES_IN_BLOCK]; 
-            //ui32 row_adj; 
-            for (ui32 i = 0; i < LineCount; ++i) { 
-                IN_M(i) = 0; 
-                s1[i] = IN_M1(i); 
-                s2[i] = IN_M2(i); 
-            } 
-            s1[m - 1] = 0; 
-            s2[m - 1] = 0; 
-            ui32 row; 
-            for (ui32 j = 0; j < DataParts; ++j) { 
-                if (j == r || j == s) { 
-                    continue; 
-                } 
-                for (ui32 i = 0; i < LineCount; ++i) { 
-                        ui64 data_tmp = IN_EL(i, j); 
-                        IN_M(i) ^= data_tmp; // Store horizontal syndrome directly in M-column 
-                        if (restoreFullData) { 
-                            OUT_EL(i, j) = data_tmp; 
-                        } 
-                        row = (i + j) % m; 
-                        s1[row] ^= data_tmp; 
-                        row = (m + i - j) % m; 
-                        s2[row] ^= data_tmp; 
-                } 
-            } 
-            for (ui32 i = 0; i < m; ++i) { 
-                VERBOSE_COUT("s1[" << i << "] = " << DebugFormatBits(s1[i]) << ", "); 
-                VERBOSE_COUT("s2[" << i << "] = " << DebugFormatBits(s2[i]) << Endl); 
-            } 
-            // 3) Compute all row pairs 
-            ui32 row1 = (m - 1 + r) % m; 
-            ui32 row2 = (m + m - 1 - r - dr) % m; 
-            ui32 row3 = (row2 + r) % m; 
-            ui64 res = 0; 
-            for (ui32 i = 0; i < LineCount; ++i) { 
-                res = s1[row1] ^ s2[row2] ^ adj12 ^ res; 
-                IN_M(row3) ^= res; 
-                VERBOSE_COUT("IN_M(" << row3 << ") = " << DebugFormatBits(IN_M(row3)) << Endl); 
-                //row1 = (m + row1 - dr) % m; 
-                VERBOSE_COUT("row1,2,3# " << row1 << " " << row2 << " " << row3 << Endl); 
-                row1 = (m + row1 - dr) % m; 
-                row2 = (m + row2 - dr) % m; 
-                row3 = (m + row3 - dr) % m; 
-            } 
-            VERBOSE_COUT_BLOCK_M2(true, IN_EL, IN_EL, IN_M, IN_M1, IN_M2); 
-            readPosition += ColumnSize; 
-        } 
-        VERBOSE_COUT("End of StarRestoreHorizontalPartWhole" << Endl); 
+        for (ui64 blockIdx = 0; blockIdx < endBlockIdx; ++blockIdx) {
+            VERBOSE_COUT_BLOCK_M2(true, IN_EL, IN_EL, IN_M, IN_M1, IN_M2);
+            // 1) Adjusters recovery   adj0 is for S0
+            ui64 adj0 = 0;
+            ui64 adj1 = 0;
+            ui64 adj2 = 0;
+            for (ui32 i = 0; i < LineCount; ++i) {
+                adj0 ^= IN_M(i);
+                adj1 ^= IN_M1(i);
+                adj2 ^= IN_M2(i);
+            }
+            adj1 = adj0 ^ adj1;
+            adj2 = adj0 ^ adj2;
+            // 2) Syndrome calculation
+            ui64 s0[MAX_LINES_IN_BLOCK];
+            ui64 s1[MAX_LINES_IN_BLOCK];
+            ui64 s2[MAX_LINES_IN_BLOCK];
+            ui32 row;
+            for (ui32 i = 0; i < LineCount; ++i) {
+                s0[i] = IN_M(i);
+                s1[i] = IN_M1(i) ^ adj1;
+                s2[i] = IN_M2(i) ^ adj2;
+                VERBOSE_COUT("IN_M[" << i << "] = " << DebugFormatBits(IN_M(i)) << ", ");
+                VERBOSE_COUT("IN_M1[" << i << "] ^ adj1 = " << DebugFormatBits(IN_M1(i) ^ adj1) << ", ");
+                VERBOSE_COUT("IN_M2[" << i << "] ^ adj2 = " << DebugFormatBits(IN_M2(i) ^ adj2) << Endl);
+            }
+            s0[m - 1] = 0;
+            s1[m - 1] = adj1;
+            s2[m - 1] = adj2;
+            for (ui32 j = 0; j < DataParts; ++j) {
+                if (j == r || j == s || j == t) {
+                    continue;
+                }
+                for (ui32 i = 0; i < LineCount; ++i) {
+                    ui64 data_tmp = IN_EL(i, j);
+                    if (restoreFullData) {
+                        OUT_EL(i, j) = data_tmp;
+                    }
+                    s0[i] ^= data_tmp;
+                    row = (i + j) % m;
+                    if (row < m) {
+                        s1[row] ^= IN_EL(i, j);
+                    }
+                    row = (m + i - j) % m;
+                    if (row < m) {
+                        s2[row] ^= IN_EL(i, j);
+                        VERBOSE_COUT("s2[" << i << "] ^= IN_EL(" << row << "," << j << ");" << Endl;);
+
+                    }
+                }
+            }
+            for (ui32 i = 0; i < m; ++i) {
+                VERBOSE_COUT("s0[" << i << "] = " << DebugFormatBits(s0[i]) << ", ");
+                VERBOSE_COUT("s1[" << i << "] = " << DebugFormatBits(s1[i]) << ", ");
+                VERBOSE_COUT("s2[" << i << "] = " << DebugFormatBits(s2[i]) << Endl);
+            }
+            // 3) Compute all rows in s
+            ui32 row1 = (m - 1 + r) % m;
+            ui32 row2 = (m + m - 1 - 2*dr - r) % m;
+            ui32 row01 = (m + row1 - r) % m;
+            ui32 row02 = (row2 + r) % m;
+            ui64 res = 0;
+            for (ui32 i = 0; i < LineCount; ++i) {
+                res = s0[row01] ^ s1[row1] ^ s0[row02] ^ s2[row2] ^ res;
+                if (restoreFullData) {
+                    OUT_EL(row02, s) = res;
+                }
+                IN_EL(row02, s) = res;
+                VERBOSE_COUT("IN_EL(" << row02 << ", " << s << ") = " << DebugFormatBits(res) << Endl);
+                row1 = (m + row1 - 2*dr) % m;
+                row2 = (m + row2 - 2*dr) % m;
+                row01 = (m + row1 - r) % m;
+                row02 = (row2 + r) % m;
+            }
+            VERBOSE_COUT_BLOCK_M2(true, IN_EL, IN_EL, IN_M, IN_M1, IN_M2);
+            readPosition += ColumnSize;
+        }
+        VERBOSE_COUT("End of StarMainRestorePartsWholeSymmetric" << Endl);
         EoMainRestorePartsWhole<isStripe, restoreParts, restoreFullData, false, restoreParityParts>(data, bufferDataPart,
-                                        partSet, readPositionStart, endBlockIdx, r, s); 
-#undef IN_M2 
-#undef IN_M1 
-#undef IN_M 
-#undef IN_EL 
-#undef OUT_EL 
-#undef OUT_EL_BLOCK 
-#undef OUT_EL_STRIPE 
-    } 
- 
- 
+                                        partSet, readPositionStart, endBlockIdx, Min(r, t), Max(r,t));
+#undef IN_M2
+#undef IN_M1
+#undef IN_M
+#undef IN_EL
+#undef OUT_EL
+#undef OUT_EL_BLOCK
+#undef OUT_EL_STRIPE
+    }
+
+    template <bool isStripe, bool restoreParts, bool restoreFullData, bool restoreParityParts>
+    void StarRestoreHorizontalPartWhole(char *data, TBufferDataPart &bufferDataPart, TDataPartSet& partSet,
+                ui64 readPosition, ui32 endBlockIdx, ui32 missingDataPartIdxA, ui32 missingDataPartIdxB) {
+        VERBOSE_COUT("Start of StarRestoreHorizontalPartWhole for blocks "
+                        << missingDataPartIdxA << " " << missingDataPartIdxB << Endl);
+        // Notation ised in this function is taken from article
+        // Cheng Huang, Lihao Xu (2005, 4th USENIX Conf.) - STAR: An Efficient Coding Scheme...
+        ui64 readPositionStart = readPosition;
+        const ui32 m = Prime;
+        const ui32 r = missingDataPartIdxA;
+        const ui32 s = missingDataPartIdxB;
+        const ui32 dr = (m + s - r) % m;
+        // Use all whole columns of all the parts
+#define OUT_EL_BLOCK(row, column) bufferDataPart[column][blockIdx * LineCount + (row)]
+#define OUT_EL_STRIPE(row, column) *((ui64*)data + (blockIdx * LineCount + (row)) * DataParts + (column))
+#define OUT_EL(row, column) (isStripe ? OUT_EL_STRIPE(row, column) : OUT_EL_BLOCK(row, column))
+#define IN_EL(row, column) *((ui64*)(partSet.Parts[column].GetDataAt(readPosition + (row) * sizeof(ui64))))
+#define IN_M(row) *((ui64*)(partSet.Parts[DataParts].GetDataAt(readPosition + (row) * sizeof(ui64))))
+#define IN_M1(row) *((ui64*)(partSet.Parts[DataParts + 1].GetDataAt(readPosition + (row) * sizeof(ui64))))
+#define IN_M2(row) *((ui64*)(partSet.Parts[DataParts + 2].GetDataAt(readPosition + (row) * sizeof(ui64))))
+        for (ui64 blockIdx = 0; blockIdx < endBlockIdx; ++blockIdx) {
+            VERBOSE_COUT_BLOCK_M2(true, IN_EL, IN_EL, IN_M, IN_M1, IN_M2);
+            // 1) Adjusters recovery
+            ui64 adj12 = 0;
+            for (ui32 i = 0; i < LineCount; ++i) {
+                adj12 ^= IN_M1(i) ^ IN_M2(i);
+            }
+            VERBOSE_COUT("adj12# " << DebugFormatBits(adj12) << Endl);
+            // 2) Syndrome calculation
+            ui64 s1[MAX_LINES_IN_BLOCK];
+            ui64 s2[MAX_LINES_IN_BLOCK];
+            //ui32 row_adj;
+            for (ui32 i = 0; i < LineCount; ++i) {
+                IN_M(i) = 0;
+                s1[i] = IN_M1(i);
+                s2[i] = IN_M2(i);
+            }
+            s1[m - 1] = 0;
+            s2[m - 1] = 0;
+            ui32 row;
+            for (ui32 j = 0; j < DataParts; ++j) {
+                if (j == r || j == s) {
+                    continue;
+                }
+                for (ui32 i = 0; i < LineCount; ++i) {
+                        ui64 data_tmp = IN_EL(i, j);
+                        IN_M(i) ^= data_tmp; // Store horizontal syndrome directly in M-column
+                        if (restoreFullData) {
+                            OUT_EL(i, j) = data_tmp;
+                        }
+                        row = (i + j) % m;
+                        s1[row] ^= data_tmp;
+                        row = (m + i - j) % m;
+                        s2[row] ^= data_tmp;
+                }
+            }
+            for (ui32 i = 0; i < m; ++i) {
+                VERBOSE_COUT("s1[" << i << "] = " << DebugFormatBits(s1[i]) << ", ");
+                VERBOSE_COUT("s2[" << i << "] = " << DebugFormatBits(s2[i]) << Endl);
+            }
+            // 3) Compute all row pairs
+            ui32 row1 = (m - 1 + r) % m;
+            ui32 row2 = (m + m - 1 - r - dr) % m;
+            ui32 row3 = (row2 + r) % m;
+            ui64 res = 0;
+            for (ui32 i = 0; i < LineCount; ++i) {
+                res = s1[row1] ^ s2[row2] ^ adj12 ^ res;
+                IN_M(row3) ^= res;
+                VERBOSE_COUT("IN_M(" << row3 << ") = " << DebugFormatBits(IN_M(row3)) << Endl);
+                //row1 = (m + row1 - dr) % m;
+                VERBOSE_COUT("row1,2,3# " << row1 << " " << row2 << " " << row3 << Endl);
+                row1 = (m + row1 - dr) % m;
+                row2 = (m + row2 - dr) % m;
+                row3 = (m + row3 - dr) % m;
+            }
+            VERBOSE_COUT_BLOCK_M2(true, IN_EL, IN_EL, IN_M, IN_M1, IN_M2);
+            readPosition += ColumnSize;
+        }
+        VERBOSE_COUT("End of StarRestoreHorizontalPartWhole" << Endl);
+        EoMainRestorePartsWhole<isStripe, restoreParts, restoreFullData, false, restoreParityParts>(data, bufferDataPart,
+                                        partSet, readPositionStart, endBlockIdx, r, s);
+#undef IN_M2
+#undef IN_M1
+#undef IN_M
+#undef IN_EL
+#undef OUT_EL
+#undef OUT_EL_BLOCK
+#undef OUT_EL_STRIPE
+    }
+
+
     template <bool isStripe, bool restoreParts, bool restoreFullData, bool reversed, bool restoreParityParts>
     void EoMainRestorePartsWhole(char *data, TBufferDataPart &bufferDataPart, TDataPartSet& partSet, ui64 readPosition,
-            ui32 endBlockIdx, ui32 missingDataPartIdxA, ui32 missingDataPartIdxB) { 
-        VERBOSE_COUT("Start of EoMainRestorePartsWhole" << Endl); 
-        ui32 lastColumn = reversed ? DataParts + 2 : DataParts + 1; 
-        const ui32 m = Prime; 
-        // Use all whole columns of all the parts 
-#define RIGHT_ROW(row) (reversed ? LineCount - 1 - (row) : (row)) 
-#define OUT_EL_BLOCK(row, column) bufferDataPart[column][blockIdx * LineCount + RIGHT_ROW(row)] 
-#define OUT_EL_STRIPE(row, column) *((ui64*)data + (blockIdx * LineCount + RIGHT_ROW(row)) * DataParts + (column)) 
+            ui32 endBlockIdx, ui32 missingDataPartIdxA, ui32 missingDataPartIdxB) {
+        VERBOSE_COUT("Start of EoMainRestorePartsWhole" << Endl);
+        ui32 lastColumn = reversed ? DataParts + 2 : DataParts + 1;
+        const ui32 m = Prime;
+        // Use all whole columns of all the parts
+#define RIGHT_ROW(row) (reversed ? LineCount - 1 - (row) : (row))
+#define OUT_EL_BLOCK(row, column) bufferDataPart[column][blockIdx * LineCount + RIGHT_ROW(row)]
+#define OUT_EL_STRIPE(row, column) *((ui64*)data + (blockIdx * LineCount + RIGHT_ROW(row)) * DataParts + (column))
 #define OUT_EL(row, column) (isStripe ? OUT_EL_STRIPE((row), column) : OUT_EL_BLOCK((row), (column)))
 #define IN_EL(row, column) *((ui64*)(partSet.Parts[column].GetDataAt(readPosition + RIGHT_ROW(row) * sizeof(ui64))))
 #define IN_M(row) *((ui64*)(partSet.Parts[DataParts].GetDataAt(readPosition + RIGHT_ROW(row) * sizeof(ui64))))
 #define IN_M12(row) *((ui64*)(partSet.Parts[lastColumn].GetDataAt(readPosition + RIGHT_ROW(row) * sizeof(ui64))))
-        for (ui64 blockIdx = 0; blockIdx < endBlockIdx; ++blockIdx) { 
-            VERBOSE_COUT_BLOCK(true, IN_EL, IN_EL, IN_M, IN_M12); 
+        for (ui64 blockIdx = 0; blockIdx < endBlockIdx; ++blockIdx) {
+            VERBOSE_COUT_BLOCK(true, IN_EL, IN_EL, IN_M, IN_M12);
             // compute diagonal partiy s
             ui64 s = 0;
-            ui64 s0[MAX_LINES_IN_BLOCK]; 
+            ui64 s0[MAX_LINES_IN_BLOCK];
             for (ui32 l = 0; l < LineCount; ++l) {
-                ui64 tmp = IN_M(l); 
-                s0[l] = tmp; 
-                s ^= tmp; 
-                s ^= IN_M12(l); 
+                ui64 tmp = IN_M(l);
+                s0[l] = tmp;
+                s ^= tmp;
+                s ^= IN_M12(l);
                 VERBOSE_COUT("Diag [l,m] s:" << DebugFormatBits(s) << Endl);
             }
 
             // compute horizontal syndromes s0
-            for (ui32 t = 0; t < DataParts; ++t) { 
-                if (t == missingDataPartIdxA || t == missingDataPartIdxB) { 
-                    continue; 
+            for (ui32 t = 0; t < DataParts; ++t) {
+                if (t == missingDataPartIdxA || t == missingDataPartIdxB) {
+                    continue;
                 }
-                for (ui32 l = 0; l < LineCount; ++l) { 
-                    ui64 val = IN_EL(l, t); 
-                    s0[l] ^= val; 
+                for (ui32 l = 0; l < LineCount; ++l) {
+                    ui64 val = IN_EL(l, t);
+                    s0[l] ^= val;
                     if (restoreFullData) {
-                        OUT_EL(l, t) = val; 
+                        OUT_EL(l, t) = val;
                     }
                 }
             }
 
             // compute diagonal syndromes s1
-            ui64 s1[MAX_LINES_IN_BLOCK]; 
+            ui64 s1[MAX_LINES_IN_BLOCK];
             for (ui32 u = 0; u < m; ++u) {
                 s1[u] = s;
                 VERBOSE_COUT("S1 = s = " << DebugFormatBits(s1[u]) << Endl);
                 if (u < LineCount) {
-                    s1[u] ^= IN_M12(u); 
+                    s1[u] ^= IN_M12(u);
                     VERBOSE_COUT("S1 ^= a[" << u << ", m+1] = " << DebugFormatBits(s1[u]) << Endl);
                 }
                 for (ui32 l = 0; l < missingDataPartIdxA; ++l) {
@@ -1049,7 +1049,7 @@ public:
             }
 
             s = (m - (missingDataPartIdxB - missingDataPartIdxA) - 1) % m;
-            ui64 aVal = 0; 
+            ui64 aVal = 0;
             do {
                 if (s < LineCount) {
                     ui64 bVal = s1[(missingDataPartIdxB + s) % m];
@@ -1058,11 +1058,11 @@ public:
                     ui32 bRow = (m + s + (missingDataPartIdxB - missingDataPartIdxA)) % m;
                     if (bRow < LineCount) {
                         VERBOSE_COUT("read [" << bRow << ", " << missingDataPartIdxA << "] = ");
-                        bVal ^= aVal; 
+                        bVal ^= aVal;
                         if (restoreParts) {
                             VERBOSE_COUT("i " << DebugFormatBits(IN_EL(bRow, missingDataPartIdxA)) << Endl);
                         } else {
-                            VERBOSE_COUT("o " << DebugFormatBits(OUT_EL_STRIPE(bRow,missingDataPartIdxA)) << Endl); 
+                            VERBOSE_COUT("o " << DebugFormatBits(OUT_EL_STRIPE(bRow,missingDataPartIdxA)) << Endl);
                         }
                     }
                     if (restoreParts) {
@@ -1071,19 +1071,19 @@ public:
                             << Endl);
                     }
                     if (restoreFullData) {
-                        OUT_EL(s, missingDataPartIdxB) = bVal; 
+                        OUT_EL(s, missingDataPartIdxB) = bVal;
                         VERBOSE_COUT("write [" << s << ", " << missingDataPartIdxB << "] = " << DebugFormatBits(bVal)
                             << Endl);
                     }
 
-                    aVal = s0[s]; 
+                    aVal = s0[s];
                     VERBOSE_COUT("aVal = s0[" << s << "] = " << DebugFormatBits(aVal) << Endl);
                     VERBOSE_COUT("read [" << s << ", " << missingDataPartIdxB << "] = ");
-                    aVal ^= bVal; 
+                    aVal ^= bVal;
                     if (restoreParts) {
                         VERBOSE_COUT("i " << DebugFormatBits(IN_EL(s,missingDataPartIdxB)) << Endl);
                     } else {
-                        VERBOSE_COUT("o " << DebugFormatBits(OUT_EL_STRIPE(s,missingDataPartIdxB)) << Endl); 
+                        VERBOSE_COUT("o " << DebugFormatBits(OUT_EL_STRIPE(s,missingDataPartIdxB)) << Endl);
                     }
 
                     if (restoreParts) {
@@ -1092,7 +1092,7 @@ public:
                             << Endl);
                     }
                     if (restoreFullData) {
-                        OUT_EL(s, missingDataPartIdxA) = aVal; 
+                        OUT_EL(s, missingDataPartIdxA) = aVal;
                         VERBOSE_COUT("write [" << s << ", " << missingDataPartIdxA << "] = " << DebugFormatBits(bVal)
                             << Endl);
                     }
@@ -1100,8 +1100,8 @@ public:
 
                 s = (m + s - (missingDataPartIdxB - missingDataPartIdxA)) % m;
             } while (s != m - 1);
-                VERBOSE_COUT_BLOCK(restoreFullData, OUT_EL, IN_EL, IN_M, IN_M12); 
-#undef IN_M12 
+                VERBOSE_COUT_BLOCK(restoreFullData, OUT_EL, IN_EL, IN_M, IN_M12);
+#undef IN_M12
 #undef IN_M
 #undef IN_EL
 #undef OUT_EL_BLOCK
@@ -1111,26 +1111,26 @@ public:
     }
 
     template <bool isStripe, bool restoreParts, bool restoreFullData, bool restoreParityParts>
-    void StarRestoreHorizontalPart(TDataPartSet& partSet, ui32 missingDataPartIdxA, 
-                                        ui32 missingDataPartIdxB) { 
-        // Read data and parity 
-        VERBOSE_COUT("StarRestoreHorizontalPart for " << missingDataPartIdxA << " " << missingDataPartIdxB << Endl); 
+    void StarRestoreHorizontalPart(TDataPartSet& partSet, ui32 missingDataPartIdxA,
+                                        ui32 missingDataPartIdxB) {
+        // Read data and parity
+        VERBOSE_COUT("StarRestoreHorizontalPart for " << missingDataPartIdxA << " " << missingDataPartIdxB << Endl);
         StarRestoreHorizontalPartWhole<isStripe, restoreParts, restoreFullData, restoreParityParts>(Data, BufferDataPart,
-                    partSet, 0ull, WholeBlocks, missingDataPartIdxA, missingDataPartIdxB); 
- 
-        if (TailSize) { 
+                    partSet, 0ull, WholeBlocks, missingDataPartIdxA, missingDataPartIdxB);
+
+        if (TailSize) {
             char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
             TBufferDataPart bufferDataPart;
-            PrepareLastBlockPointers<isStripe>(lastBlockSource, bufferDataPart); 
- 
+            PrepareLastBlockPointers<isStripe>(lastBlockSource, bufferDataPart);
+
             StarRestoreHorizontalPartWhole<isStripe, restoreParts, restoreFullData, restoreParityParts>(lastBlockSource,
-                        bufferDataPart, partSet, WholeBlocks * ColumnSize, 1, missingDataPartIdxA, 
-                        missingDataPartIdxB); 
- 
-            if (restoreFullData) { 
-                PlaceLastBlock<isStripe>(bufferDataPart, lastBlockSource); 
-            } 
-        } 
+                        bufferDataPart, partSet, WholeBlocks * ColumnSize, 1, missingDataPartIdxA,
+                        missingDataPartIdxB);
+
+            if (restoreFullData) {
+                PlaceLastBlock<isStripe>(bufferDataPart, lastBlockSource);
+            }
+        }
         if (restoreParts) {
             if (missingDataPartIdxA < partSet.Parts.size()) {
                 PadAndCrcPart(partSet, missingDataPartIdxA);
@@ -1139,30 +1139,30 @@ public:
                 PadAndCrcPart(partSet, missingDataPartIdxB);
             }
         }
-    } 
- 
- 
+    }
+
+
     template <bool isStripe, bool restoreParts, bool restoreFullData, bool restoreParityParts>
-    void StarMainRestorePartsSymmetric(TDataPartSet& partSet, ui32 missingDataPartIdxA, 
-                                        ui32 missingDataPartIdxB, ui32 missingDataPartIdxC) { 
-        // Read data and parity 
-        VERBOSE_COUT("StarMainRestorePartsSymmetric" << Endl); 
+    void StarMainRestorePartsSymmetric(TDataPartSet& partSet, ui32 missingDataPartIdxA,
+                                        ui32 missingDataPartIdxB, ui32 missingDataPartIdxC) {
+        // Read data and parity
+        VERBOSE_COUT("StarMainRestorePartsSymmetric" << Endl);
         StarMainRestorePartsWholeSymmetric<isStripe, restoreParts, restoreFullData, restoreParityParts>(Data, BufferDataPart,
-                    partSet, 0ull, WholeBlocks, missingDataPartIdxA, missingDataPartIdxB, missingDataPartIdxC); 
- 
-        if (TailSize) { 
+                    partSet, 0ull, WholeBlocks, missingDataPartIdxA, missingDataPartIdxB, missingDataPartIdxC);
+
+        if (TailSize) {
             char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
             TBufferDataPart bufferDataPart;
-            PrepareLastBlockPointers<isStripe>(lastBlockSource, bufferDataPart); 
- 
+            PrepareLastBlockPointers<isStripe>(lastBlockSource, bufferDataPart);
+
             StarMainRestorePartsWholeSymmetric<isStripe, restoreParts, restoreFullData, restoreParityParts>(lastBlockSource,
-                        bufferDataPart, partSet, WholeBlocks * ColumnSize, 1, missingDataPartIdxA, 
-                        missingDataPartIdxB, missingDataPartIdxC); 
- 
-            if (restoreFullData) { 
-                PlaceLastBlock<isStripe>(bufferDataPart, lastBlockSource); 
-            } 
-        } 
+                        bufferDataPart, partSet, WholeBlocks * ColumnSize, 1, missingDataPartIdxA,
+                        missingDataPartIdxB, missingDataPartIdxC);
+
+            if (restoreFullData) {
+                PlaceLastBlock<isStripe>(bufferDataPart, lastBlockSource);
+            }
+        }
         if (restoreParts) {
             if (missingDataPartIdxA < partSet.Parts.size()) {
                 PadAndCrcPart(partSet, missingDataPartIdxA);
@@ -1174,8 +1174,8 @@ public:
                 PadAndCrcPart(partSet, missingDataPartIdxC);
             }
         }
-    } 
- 
+    }
+
     template <bool isStripe, bool restoreParts, bool restoreFullData, bool reversed, bool restoreParityParts>
     void EoMainRestoreParts(TDataPartSet& partSet, ui32 missingDataPartIdxA, ui32 missingDataPartIdxB) {
         // Read data and parity
@@ -1202,7 +1202,7 @@ public:
             PrepareLastBlockPointers<isStripe>(lastBlockSource, bufferDataPart);
 
             EoMainRestorePartsWhole<isStripe, restoreParts, restoreFullData, reversed, restoreParityParts>(lastBlockSource,
-                    bufferDataPart, partSet, WholeBlocks * ColumnSize, 1, missingDataPartIdxA, missingDataPartIdxB); 
+                    bufferDataPart, partSet, WholeBlocks * ColumnSize, 1, missingDataPartIdxA, missingDataPartIdxB);
 
             if (restoreFullData) {
                 PlaceLastBlock<isStripe>(bufferDataPart, lastBlockSource);
@@ -1381,24 +1381,24 @@ template <bool isStripe>
 void StarBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, const TString &buffer,
         TDataPartSet &outPartSet) {
     TBlockParams p(crcMode, type, buffer.size());
- 
-    // Prepare input data pointers 
+
+    // Prepare input data pointers
     p.PrepareInputDataPointers<isStripe>(const_cast<char*>(buffer.data()));
- 
+
     outPartSet.FullDataSize = buffer.size();
-    outPartSet.PartsMask = ~((~(ui32)0) << p.TotalParts); 
-    outPartSet.Parts.resize(p.TotalParts); 
-    for (ui32 i = 0; i < p.TotalParts; ++i) { 
+    outPartSet.PartsMask = ~((~(ui32)0) << p.TotalParts);
+    outPartSet.Parts.resize(p.TotalParts);
+    for (ui32 i = 0; i < p.TotalParts; ++i) {
         TRACE("Line# " << __LINE__ << Endl);
         Refurbish(outPartSet.Parts[i], p.PartContainerSize);
-    } 
+    }
     outPartSet.MemoryConsumed = p.TotalParts * outPartSet.Parts[0].MemoryConsumed();
- 
+
     p.StarSplit<isStripe, false>(outPartSet);
     PadAndCrcParts(crcMode, p, outPartSet);
-} 
- 
-template <bool isStripe> 
+}
+
+template <bool isStripe>
 void EoBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, const TString &buffer,
         TDataPartSet &outPartSet) {
     TBlockParams p(crcMode, type, buffer.size());
@@ -1453,7 +1453,7 @@ template <bool isStripe, bool restoreParts, bool restoreFullData, bool restorePa
 void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TDataPartSet& partSet) {
     TString &outBuffer = partSet.FullDataFragment.OwnedString;
     ui32 totalParts = type.TotalPartCount();
-    Y_VERIFY(partSet.Parts.size() >= totalParts); 
+    Y_VERIFY(partSet.Parts.size() >= totalParts);
 
     ui32 missingDataPartIdxA = totalParts;
     ui32 missingDataPartIdxB = totalParts;
@@ -1512,7 +1512,7 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
 
     // Restore the fast way if all data parts are present
     if (missingDataPartCount == 0 ||
-                (!restoreParts && missingDataPartIdxA >= p.TotalParts - 2)) { 
+                (!restoreParts && missingDataPartIdxA >= p.TotalParts - 2)) {
         VERBOSE_COUT(__LINE__ << " of " << __FILE__ << Endl);
         if (isStripe) {
             p.PrepareInputDataPointers<isStripe>(outBuffer.Detach());
@@ -1580,7 +1580,7 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
     //    TODO: 1-pass
     //    just glue the data
     //    use 'eo split' to restore the missing part
-    if (missingDataPartIdxA == p.TotalParts - 1 && missingDataPartIdxB == p.TotalParts) { 
+    if (missingDataPartIdxA == p.TotalParts - 1 && missingDataPartIdxB == p.TotalParts) {
         TRACE("case# c" << Endl);
         VERBOSE_COUT(__LINE__ << " of " << __FILE__ << Endl);
         TString temp;
@@ -1651,139 +1651,139 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
 template <bool isStripe, bool restoreParts, bool restoreFullData, bool restoreParityParts>
 void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TDataPartSet& partSet) {
     TString &outBuffer = partSet.FullDataFragment.OwnedString;
- 
-    ui32 totalParts = type.TotalPartCount(); 
-    Y_VERIFY(partSet.Parts.size() == totalParts); 
- 
-    ui32 missingDataPartIdxA = totalParts; 
-    ui32 missingDataPartIdxB = totalParts; 
-    ui32 missingDataPartIdxC = totalParts; 
-    ui32 missingDataPartCount = 0; 
+
+    ui32 totalParts = type.TotalPartCount();
+    Y_VERIFY(partSet.Parts.size() == totalParts);
+
+    ui32 missingDataPartIdxA = totalParts;
+    ui32 missingDataPartIdxB = totalParts;
+    ui32 missingDataPartIdxC = totalParts;
+    ui32 missingDataPartCount = 0;
     ui64 expectedPartSize = type.PartSize(crcMode, partSet.FullDataSize); // ???
-    ui32 i = 0; 
-    for (; i < totalParts; ++i) { 
-        if (!(partSet.PartsMask & (1 << i))) { 
-            missingDataPartIdxA = i; 
-            ++missingDataPartCount; 
-            break; 
-        } else { 
-            Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size(): %" PRIu64 
-                " expectedPartSize: %" PRIu64 " erasure: %s partSet.FullDataSize: %" PRIu64, 
+    ui32 i = 0;
+    for (; i < totalParts; ++i) {
+        if (!(partSet.PartsMask & (1 << i))) {
+            missingDataPartIdxA = i;
+            ++missingDataPartCount;
+            break;
+        } else {
+            Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size(): %" PRIu64
+                " expectedPartSize: %" PRIu64 " erasure: %s partSet.FullDataSize: %" PRIu64,
                 (ui32)i, (ui64)partSet.Parts[i].size(), expectedPartSize, type.ErasureName[type.GetErasure()].data(),
-                (ui64)partSet.FullDataSize); 
-        } 
-    } 
-    ++i; 
-    for (; i < totalParts; ++i) { 
-        if (!(partSet.PartsMask & (1 << i))) { 
-            missingDataPartIdxB = i; 
-            ++missingDataPartCount; 
-            break; 
-        } else { 
-            Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size()# %" PRIu32 
-                " != expectedPartSize# %" PRIu32 " erasure: %s partSet.FullDataSize: %" PRIu64, 
+                (ui64)partSet.FullDataSize);
+        }
+    }
+    ++i;
+    for (; i < totalParts; ++i) {
+        if (!(partSet.PartsMask & (1 << i))) {
+            missingDataPartIdxB = i;
+            ++missingDataPartCount;
+            break;
+        } else {
+            Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size()# %" PRIu32
+                " != expectedPartSize# %" PRIu32 " erasure: %s partSet.FullDataSize: %" PRIu64,
                 (ui32)i, (ui32)partSet.Parts[i].size(), (ui32)expectedPartSize, type.ErasureName[type.GetErasure()].data(),
-                (ui64)partSet.FullDataSize); 
-        } 
-    } 
-    ++i; 
-    for (; i < totalParts; ++i) { 
-        if (!(partSet.PartsMask & (1 << i))) { 
-            missingDataPartIdxC = i; 
-            ++missingDataPartCount; 
-            break; 
-        } else { 
-            Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size()# %" PRIu32 
-                " != expectedPartSize# %" PRIu32 " erasure: %s partSet.FullDataSize: %" PRIu64, 
+                (ui64)partSet.FullDataSize);
+        }
+    }
+    ++i;
+    for (; i < totalParts; ++i) {
+        if (!(partSet.PartsMask & (1 << i))) {
+            missingDataPartIdxC = i;
+            ++missingDataPartCount;
+            break;
+        } else {
+            Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size()# %" PRIu32
+                " != expectedPartSize# %" PRIu32 " erasure: %s partSet.FullDataSize: %" PRIu64,
                 (ui32)i, (ui32)partSet.Parts[i].size(), (ui32)expectedPartSize, type.ErasureName[type.GetErasure()].data(),
-                (ui64)partSet.FullDataSize); 
-        } 
-    } 
-    Y_VERIFY(missingDataPartCount <= 3); 
- 
-    if (restoreParts) { 
-        if (missingDataPartIdxA != totalParts) { 
+                (ui64)partSet.FullDataSize);
+        }
+    }
+    Y_VERIFY(missingDataPartCount <= 3);
+
+    if (restoreParts) {
+        if (missingDataPartIdxA != totalParts) {
             TRACE("Line# " << __LINE__ << Endl);
             Refurbish(partSet.Parts[missingDataPartIdxA], expectedPartSize);
-        } 
-        if (missingDataPartIdxB != totalParts) { 
+        }
+        if (missingDataPartIdxB != totalParts) {
             TRACE("Line# " << __LINE__ << Endl);
             Refurbish(partSet.Parts[missingDataPartIdxB], expectedPartSize);
-        } 
-        if (missingDataPartIdxC != totalParts) { 
+        }
+        if (missingDataPartIdxC != totalParts) {
             TRACE("Line# " << __LINE__ << Endl);
             Refurbish(partSet.Parts[missingDataPartIdxC], expectedPartSize);
-        } 
-    } 
-    if (missingDataPartCount == 3) { 
-        VERBOSE_COUT("missing parts " << missingDataPartIdxA << " and " << missingDataPartIdxB << 
-            " and " << missingDataPartIdxC << Endl); 
-    } else if (missingDataPartCount == 2) { 
-        VERBOSE_COUT("missing parts " << missingDataPartIdxA << " and " << missingDataPartIdxB << Endl); 
-    } else if (missingDataPartCount == 1) { 
-        VERBOSE_COUT("missing part " << missingDataPartIdxA << Endl); 
-    } 
- 
-    ui64 dataSize = partSet.FullDataSize; 
+        }
+    }
+    if (missingDataPartCount == 3) {
+        VERBOSE_COUT("missing parts " << missingDataPartIdxA << " and " << missingDataPartIdxB <<
+            " and " << missingDataPartIdxC << Endl);
+    } else if (missingDataPartCount == 2) {
+        VERBOSE_COUT("missing parts " << missingDataPartIdxA << " and " << missingDataPartIdxB << Endl);
+    } else if (missingDataPartCount == 1) {
+        VERBOSE_COUT("missing part " << missingDataPartIdxA << Endl);
+    }
+
+    ui64 dataSize = partSet.FullDataSize;
     TBlockParams p(crcMode, type, dataSize);
-    if (restoreFullData) { 
+    if (restoreFullData) {
         Refurbish(outBuffer, dataSize);
         p.PrepareInputDataPointers<isStripe>(outBuffer.Detach());
-    } else if (missingDataPartCount == 0) { 
-        return; 
-    } 
- 
-    // Restore the fast way if all data parts are present 
-    if (missingDataPartCount == 0 || 
-            (!restoreParts && missingDataPartIdxA >= p.DataParts)) { 
-        VERBOSE_COUT(__LINE__ << " of " << __FILE__ << Endl); 
-        if (isStripe) { 
+    } else if (missingDataPartCount == 0) {
+        return;
+    }
+
+    // Restore the fast way if all data parts are present
+    if (missingDataPartCount == 0 ||
+            (!restoreParts && missingDataPartIdxA >= p.DataParts)) {
+        VERBOSE_COUT(__LINE__ << " of " << __FILE__ << Endl);
+        if (isStripe) {
             p.PrepareInputDataPointers<isStripe>(outBuffer.Detach());
             p.XorRestorePart<isStripe, false, true, false>(partSet, p.DataParts);
-        } else { 
+        } else {
             p.GlueBlockParts(outBuffer.Detach(), partSet);
-        } 
-        return; 
-    } 
- 
- 
-    // All possible failures of 2 disks which EVENODD capable to handle 
-    if (missingDataPartCount <= 2 && missingDataPartIdxA != p.TotalParts - 1 
-            && missingDataPartIdxB != p.TotalParts - 1) { 
-        if (p.DataParts == 4) { 
-            TErasureType typeEO(TErasureType::EErasureSpecies::Erasure4Plus2Block); 
+        }
+        return;
+    }
+
+
+    // All possible failures of 2 disks which EVENODD capable to handle
+    if (missingDataPartCount <= 2 && missingDataPartIdxA != p.TotalParts - 1
+            && missingDataPartIdxB != p.TotalParts - 1) {
+        if (p.DataParts == 4) {
+            TErasureType typeEO(TErasureType::EErasureSpecies::Erasure4Plus2Block);
             EoBlockRestore<isStripe, restoreParts, restoreFullData, restoreParityParts>(crcMode, typeEO, partSet);
-        } else if (p.DataParts == 3) { 
-            TErasureType typeEO(TErasureType::EErasureSpecies::Erasure3Plus2Block); 
+        } else if (p.DataParts == 3) {
+            TErasureType typeEO(TErasureType::EErasureSpecies::Erasure3Plus2Block);
             EoBlockRestore<isStripe, restoreParts, restoreFullData, restoreParityParts>(crcMode, typeEO, partSet);
-        } else if (p.DataParts == 2) { 
-            TErasureType typeEO(TErasureType::EErasureSpecies::Erasure2Plus2Block); 
+        } else if (p.DataParts == 2) {
+            TErasureType typeEO(TErasureType::EErasureSpecies::Erasure2Plus2Block);
             EoBlockRestore<isStripe, restoreParts, restoreFullData, restoreParityParts>(crcMode, typeEO, partSet);
-        } 
-        return; 
-    } 
-    if (missingDataPartIdxA == p.TotalParts - 1 
-            || missingDataPartIdxB == p.TotalParts - 1 
-            || missingDataPartIdxC == p.TotalParts - 1) { 
-        // Possible combinations handled in this branch 
+        }
+        return;
+    }
+    if (missingDataPartIdxA == p.TotalParts - 1
+            || missingDataPartIdxB == p.TotalParts - 1
+            || missingDataPartIdxC == p.TotalParts - 1) {
+        // Possible combinations handled in this branch
         // '+' stands for part, which is present for sure,
         // '-' stands for part, which is missing for sure,
         // series of 0, 1 and 2 means that there are n missing parts in this region
-        // 0 0 0 0   0 0 -    or     1 1 1 1   1 1 -    or     2 2 2 2   2 2 - 
-        if (p.DataParts == 4) { 
-            TErasureType typeEO(TErasureType::EErasureSpecies::Erasure4Plus2Block); 
+        // 0 0 0 0   0 0 -    or     1 1 1 1   1 1 -    or     2 2 2 2   2 2 -
+        if (p.DataParts == 4) {
+            TErasureType typeEO(TErasureType::EErasureSpecies::Erasure4Plus2Block);
             EoBlockRestore<isStripe, restoreParts, restoreFullData, restoreParityParts>(crcMode, typeEO, partSet);
-        } else if (p.DataParts == 3) { 
-            TErasureType typeEO(TErasureType::EErasureSpecies::Erasure3Plus2Block); 
+        } else if (p.DataParts == 3) {
+            TErasureType typeEO(TErasureType::EErasureSpecies::Erasure3Plus2Block);
             EoBlockRestore<isStripe, restoreParts, restoreFullData, restoreParityParts>(crcMode, typeEO, partSet);
-        } else if (p.DataParts == 2) { 
-            TErasureType typeEO(TErasureType::EErasureSpecies::Erasure2Plus2Block); 
+        } else if (p.DataParts == 2) {
+            TErasureType typeEO(TErasureType::EErasureSpecies::Erasure2Plus2Block);
             EoBlockRestore<isStripe, restoreParts, restoreFullData, restoreParityParts>(crcMode, typeEO, partSet);
-        } 
-        if (restoreParts) { 
+        }
+        if (restoreParts) {
             if (restoreParityParts) {
                 p.StarSplit<isStripe, true>(partSet);
-            } 
+            }
             if (missingDataPartIdxA < (restoreParityParts ? p.TotalParts : p.DataParts)) {
                 p.PadAndCrcPart(partSet, missingDataPartIdxA);
             }
@@ -1793,21 +1793,21 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
             if (missingDataPartIdxC < (restoreParityParts ? p.TotalParts : p.DataParts)) {
                 p.PadAndCrcPart(partSet, missingDataPartIdxC);
             }
-        } 
-        return; 
-    } 
-    // There are remain only cases with missingDataPartCount == 3 
-    if ( missingDataPartIdxC == p.DataParts + 1) { 
-        if (missingDataPartIdxB < p.DataParts) { 
-            // 2 2 2 2   + - + 
-            // "It can be decoded with slightly modification of the EVENODD decoding" (c) 
+        }
+        return;
+    }
+    // There are remain only cases with missingDataPartCount == 3
+    if ( missingDataPartIdxC == p.DataParts + 1) {
+        if (missingDataPartIdxB < p.DataParts) {
+            // 2 2 2 2   + - +
+            // "It can be decoded with slightly modification of the EVENODD decoding" (c)
             p.EoMainRestoreParts<isStripe, restoreParts, restoreFullData, true, restoreParityParts>(partSet, missingDataPartIdxA,
-                    missingDataPartIdxB); 
-        } else { 
-            // 1 1 1 1   - - + 
+                    missingDataPartIdxB);
+        } else {
+            // 1 1 1 1   - - +
             p.EoDiagonalRestorePart<isStripe, restoreParts, restoreFullData, true, restoreParityParts>(partSet, missingDataPartIdxA);
-        } 
-        if (restoreParts) { 
+        }
+        if (restoreParts) {
             if (restoreParityParts) {
                 p.StarSplit<isStripe, !restoreFullData>(partSet);
             }
@@ -1820,17 +1820,17 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
             if (missingDataPartIdxC < (restoreParityParts ? p.TotalParts : p.DataParts)) {
                 p.PadAndCrcPart(partSet, missingDataPartIdxC);
             }
-        } 
-        return; 
-    } 
-    if (missingDataPartIdxC == p.DataParts) { 
-        // 2 2 2 2   - + + 
-        if (! restoreParts) { 
+        }
+        return;
+    }
+    if (missingDataPartIdxC == p.DataParts) {
+        // 2 2 2 2   - + +
+        if (! restoreParts) {
             TRACE("Line# " << __LINE__ << Endl);
             Refurbish(partSet.Parts[missingDataPartIdxC], expectedPartSize);
-        } 
+        }
         p.StarRestoreHorizontalPart<isStripe, restoreParts, restoreFullData, restoreParityParts>(partSet,
-                                                    missingDataPartIdxA, missingDataPartIdxB); 
+                                                    missingDataPartIdxA, missingDataPartIdxB);
         if (restoreParts) {
             if (missingDataPartIdxA < (restoreParityParts ? p.TotalParts : p.DataParts)) {
                 p.PadAndCrcPart(partSet, missingDataPartIdxA);
@@ -1842,29 +1842,29 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
                 p.PadAndCrcPart(partSet, missingDataPartIdxC);
             }
         }
-        return; 
-    } 
- 
-    VERBOSE_COUT(__LINE__ << " of " << __FILE__ << Endl); 
-    Y_VERIFY(missingDataPartIdxA < p.DataParts && missingDataPartIdxB < p.DataParts 
-                    && missingDataPartIdxC < p.DataParts); 
-    // Two possible cases: 
-    //     - Symmetric 
-    //     - Asymmetric 
-    // But for m = 5 it is always possible to change asymmetric to symmetric by shifting 
-    ui32 m = ErasureSpeciesParameters[TErasureType::EErasureSpecies::Erasure4Plus3Block].Prime; 
-    while ((m + missingDataPartIdxB - missingDataPartIdxA) % m != (m + missingDataPartIdxC - missingDataPartIdxB) % m ) { 
-        ui32 tmp = missingDataPartIdxA; 
-        missingDataPartIdxA = missingDataPartIdxB; 
-        missingDataPartIdxB = missingDataPartIdxC; 
-        missingDataPartIdxC = tmp; 
-    } 
-    if (! restoreParts) { 
+        return;
+    }
+
+    VERBOSE_COUT(__LINE__ << " of " << __FILE__ << Endl);
+    Y_VERIFY(missingDataPartIdxA < p.DataParts && missingDataPartIdxB < p.DataParts
+                    && missingDataPartIdxC < p.DataParts);
+    // Two possible cases:
+    //     - Symmetric
+    //     - Asymmetric
+    // But for m = 5 it is always possible to change asymmetric to symmetric by shifting
+    ui32 m = ErasureSpeciesParameters[TErasureType::EErasureSpecies::Erasure4Plus3Block].Prime;
+    while ((m + missingDataPartIdxB - missingDataPartIdxA) % m != (m + missingDataPartIdxC - missingDataPartIdxB) % m ) {
+        ui32 tmp = missingDataPartIdxA;
+        missingDataPartIdxA = missingDataPartIdxB;
+        missingDataPartIdxB = missingDataPartIdxC;
+        missingDataPartIdxC = tmp;
+    }
+    if (! restoreParts) {
         TRACE("Line# " << __LINE__ << Endl);
         Refurbish(partSet.Parts[missingDataPartIdxB], expectedPartSize);
-    } 
+    }
     p.StarMainRestorePartsSymmetric<isStripe, restoreParts, restoreFullData, restoreParityParts>(partSet,
-                                missingDataPartIdxA, missingDataPartIdxB, missingDataPartIdxC); 
+                                missingDataPartIdxA, missingDataPartIdxB, missingDataPartIdxC);
     if (restoreParts) {
         if (missingDataPartIdxA < (restoreParityParts ? p.TotalParts : p.DataParts)) {
             p.PadAndCrcPart(partSet, missingDataPartIdxA);
@@ -1876,8 +1876,8 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
             p.PadAndCrcPart(partSet, missingDataPartIdxC);
         }
     }
-} 
- 
+}
+
 template <bool isStripe, bool restoreParts, bool restoreFullData, bool restoreParityParts>
 void XorBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TDataPartSet &partSet) {
     TString &outBuffer = partSet.FullDataFragment.OwnedString;
@@ -1944,15 +1944,15 @@ const std::array<TString, TErasureType::ErasureSpeciesCount> TErasureType::Erasu
     "stripe-4-2",
     "stripe-3-2",
     "mirror-3-2",
-    "mirror-3-dc", 
-    "block-4-3", 
-    "stripe-4-3", 
-    "block-3-3", 
-    "stripe-3-3", 
-    "block-2-3", 
-    "stripe-2-3", 
-    "block-2-2", 
-    "stripe-2-2", 
+    "mirror-3-dc",
+    "block-4-3",
+    "stripe-4-3",
+    "block-3-3",
+    "stripe-3-3",
+    "block-2-3",
+    "stripe-2-3",
+    "block-2-2",
+    "stripe-2-2",
     "mirror-3of4",
 }};
 
@@ -2025,13 +2025,13 @@ ui32 TErasureType::MinimalBlockSize() const {
         if (erasure.ParityParts == 1) {
             return erasure.DataParts * sizeof(ui64);
         }
-        if (erasure.ParityParts == 2) { 
-            return (erasure.Prime - 1) * erasure.DataParts * sizeof(ui64); 
-        } 
-        if (erasure.ParityParts == 3) { 
-            return (erasure.Prime - 1) * erasure.DataParts * sizeof(ui64); 
-        } 
-        ythrow TWithBackTrace<yexception>() << "Unsupported partiy part count = " << erasure.ParityParts << 
+        if (erasure.ParityParts == 2) {
+            return (erasure.Prime - 1) * erasure.DataParts * sizeof(ui64);
+        }
+        if (erasure.ParityParts == 3) {
+            return (erasure.Prime - 1) * erasure.DataParts * sizeof(ui64);
+        }
+        ythrow TWithBackTrace<yexception>() << "Unsupported partiy part count = " << erasure.ParityParts <<
                 " for ErasureFamily = " << (i32)erasure.ErasureFamily;
     }
     ythrow TWithBackTrace<yexception>() << "Unknown ErasureFamily = " << (i32)erasure.ErasureFamily;
@@ -2607,9 +2607,9 @@ void TErasureType::IncrementalSplitData(ECrcMode crcMode, const TString& buffer,
                 case 2:
                     EoBlockSplit<true>(crcMode, *this, buffer, outPartSet);
                     break;
-                case 3: 
+                case 3:
                     StarBlockSplit<true>(crcMode, *this, buffer, outPartSet);
-                    break; 
+                    break;
                 default:
                     ythrow TWithBackTrace<yexception>() << "Unsupported number of parity parts: "
                         << erasure.ParityParts;
@@ -2624,9 +2624,9 @@ void TErasureType::IncrementalSplitData(ECrcMode crcMode, const TString& buffer,
                 case 2:
                     EoBlockSplit<false>(crcMode, *this, buffer, outPartSet);
                     break;
-                case 3: 
+                case 3:
                     StarBlockSplit<false>(crcMode, *this, buffer, outPartSet);
-                    break; 
+                    break;
                 default:
                     ythrow TWithBackTrace<yexception>() << "Unsupported number of parity parts: "
                         << erasure.ParityParts;
@@ -2987,7 +2987,7 @@ void TErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool res
             << " while expected " << (erasure.DataParts + erasure.ParityParts);
     }
     Y_VERIFY_DEBUG(restoreFullData || restoreParts);
-    Y_VERIFY_DEBUG(erasure.Prime <= MAX_LINES_IN_BLOCK); 
+    Y_VERIFY_DEBUG(erasure.Prime <= MAX_LINES_IN_BLOCK);
     switch (erasure.ErasureFamily) {
         case TErasureType::ErasureMirror:
             if (restoreParts) {
@@ -3056,9 +3056,9 @@ void TErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool res
                         EoBlockRestore<true, false, true, false>(crcMode, *this, partSet);
                     }
                     break;
-                case 3: 
-                    if (restoreParts) { 
-                        if (restoreFullData) { 
+                case 3:
+                    if (restoreParts) {
+                        if (restoreFullData) {
                             if (restoreParityParts) {
                                 StarBlockRestore<true, true, true, true>(crcMode, *this, partSet);
                                 VerifyPartSizes(partSet, Max<size_t>());
@@ -3066,7 +3066,7 @@ void TErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool res
                                 StarBlockRestore<true, true, true, false>(crcMode, *this, partSet);
                                 VerifyPartSizes(partSet, erasure.DataParts);
                             }
-                        } else { 
+                        } else {
                             if (restoreParityParts) {
                                 StarBlockRestore<true, true, false, true>(crcMode, *this, partSet);
                                 VerifyPartSizes(partSet, Max<size_t>());
@@ -3074,12 +3074,12 @@ void TErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool res
                                 StarBlockRestore<true, true, false, false>(crcMode, *this, partSet);
                                 VerifyPartSizes(partSet, erasure.DataParts);
                             }
-                        } 
+                        }
                         partSet.MemoryConsumed = partSet.Parts[0].MemoryConsumed() * partSet.Parts.size();
-                    } else if (restoreFullData) { 
+                    } else if (restoreFullData) {
                         StarBlockRestore<true, false, true, false>(crcMode, *this, partSet);
-                    } 
-                    break; 
+                    }
+                    break;
                 default:
                     ythrow TWithBackTrace<yexception>() << "Unsupported number of parity parts: "
                         << erasure.ParityParts;
@@ -3136,9 +3136,9 @@ void TErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool res
                         EoBlockRestore<false, false, true, false>(crcMode, *this, partSet);
                     }
                     break;
-                case 3: 
-                    if (restoreParts) { 
-                        if (restoreFullData) { 
+                case 3:
+                    if (restoreParts) {
+                        if (restoreFullData) {
                             if (restoreParityParts) {
                                 // isStripe, restoreParts, restoreFullData, restoreParityParts
                                 StarBlockRestore<false, true, true, true>(crcMode, *this, partSet);
@@ -3147,7 +3147,7 @@ void TErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool res
                                 StarBlockRestore<false, true, true, false>(crcMode, *this, partSet);
                                 VerifyPartSizes(partSet, erasure.DataParts);
                             }
-                        } else { 
+                        } else {
                             if (restoreParityParts) {
                                 StarBlockRestore<false, true, false, true>(crcMode, *this, partSet);
                                 VerifyPartSizes(partSet, Max<size_t>());
@@ -3155,12 +3155,12 @@ void TErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool res
                                 StarBlockRestore<false, true, false, false>(crcMode, *this, partSet);
                                 VerifyPartSizes(partSet, erasure.DataParts);
                             }
-                        } 
+                        }
                         partSet.MemoryConsumed = partSet.Parts[0].MemoryConsumed() * partSet.Parts.size();
-                    } else if (restoreFullData) { 
+                    } else if (restoreFullData) {
                         StarBlockRestore<false, false, true, false>(crcMode, *this, partSet);
-                    } 
-                    break; 
+                    }
+                    break;
                 default:
                     ythrow TWithBackTrace<yexception>() << "Unsupported number of parity parts: "
                         << erasure.ParityParts;

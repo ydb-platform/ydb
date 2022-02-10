@@ -51,12 +51,12 @@ namespace NKikimr {
 
             // just trim log based by TrimTailLsn (which is confirmed lsn from peers)
             bool PerformTrimTailAction() {
-                const bool hasToCommit = KeepState.PerformTrimTailAction(); 
+                const bool hasToCommit = KeepState.PerformTrimTailAction();
 
                 // we don't need to commit because we either remove mem pages or
                 // schedule to remove some chunks (but they may be used by snapshots,
                 // so wait until TEvSyncLogFreeChunk message)
-                Y_VERIFY(!hasToCommit); 
+                Y_VERIFY(!hasToCommit);
                 return false;
             }
 

@@ -77,7 +77,7 @@ namespace NKikimr {
                 }
 
                 TInstant now = TAppData::TimeProvider->Now();
-                const ui64 bufferSizeBytes = Event->Get()->GetBufferBytes(); 
+                const ui64 bufferSizeBytes = Event->Get()->GetBufferBytes();
                 auto vMultiPutResult = std::make_unique<TEvBlobStorage::TEvVMultiPutResult>(NKikimrProto::OK, vdisk, cookie,
                     now, Event->Get()->GetCachedByteSize(), &vMultiPutRecord, SkeletonFrontIDPtr, MultiPutResMsgsPtr,
                     nullptr, bufferSizeBytes, std::move(Event->TraceId), IncarnationGuid, TString());

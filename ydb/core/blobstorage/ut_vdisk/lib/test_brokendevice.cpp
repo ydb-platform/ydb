@@ -107,7 +107,7 @@ private:
         HFunc(TEvBlobStorage::TEvVPutResult, BrokenState_Handle);
         CFunc(TEvents::TSystem::Wakeup, BrokenState_Timeout);
         IgnoreFunc(TEvBlobStorage::TEvVWindowChange);
-        IgnoreFunc(NPDisk::TEvYardControlResult); 
+        IgnoreFunc(NPDisk::TEvYardControlResult);
         IgnoreFunc(TEvents::TEvUndelivered);
     )
 

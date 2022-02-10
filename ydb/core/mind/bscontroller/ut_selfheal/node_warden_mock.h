@@ -98,9 +98,9 @@ public:
             startedDynamicGroups.push_back(groupId);
             groupGenerations.push_back(gen);
         }
- 
+
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerRegisterNode>(NodeId, startedDynamicGroups,
-            groupGenerations, TVector<NPDisk::TDriveData>{}); 
+            groupGenerations, TVector<NPDisk::TDriveData>{});
         auto& record = ev->Record;
         for (const auto& [id, vdisk] : VDisks) {
             vdisk->Serialize(record.AddVDiskStatus());

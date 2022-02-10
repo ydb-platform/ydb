@@ -1160,9 +1160,9 @@ private:
         TKqpWorkerSettings workerSettings(cluster, database, TableServiceConfig, dbCounters);
         workerSettings.LongSession = longSession;
 
-        IActor* workerActor = AppData()->FeatureFlags.GetEnableKqpSessionActor() 
-                ? CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters) 
-                : CreateKqpWorkerActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters); 
+        IActor* workerActor = AppData()->FeatureFlags.GetEnableKqpSessionActor()
+                ? CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters)
+                : CreateKqpWorkerActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters);
         auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(workerActor, TMailboxType::HTSwap, AppData()->UserPoolId);
         TKqpSessionInfo* sessionInfo = LocalSessions.Create(sessionId, workerId, database, dbCounters);
 

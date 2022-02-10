@@ -6,7 +6,7 @@ OWNER(
     g:kikimr
 )
 
-IF (KIKIMR_DEFAULT_SHARDED_COMPACTION) 
+IF (KIKIMR_DEFAULT_SHARDED_COMPACTION)
     # Makes it easier to test sharded compaction
     CFLAGS(
         -DKIKIMR_DEFAULT_SHARDED_COMPACTION=1
@@ -21,7 +21,7 @@ SRCS(
     board_publish.cpp
     board_replica.cpp
     blobstorage.h
-    blobstorage.cpp 
+    blobstorage.cpp
     channel_profiles.h
     counters.cpp
     counters.h
@@ -85,7 +85,7 @@ SRCS(
     tx_processing.h
     tx_processing.cpp
     user_registry.h
-    blobstorage_grouptype.cpp 
+    blobstorage_grouptype.cpp
 )
 
 PEERDIR(

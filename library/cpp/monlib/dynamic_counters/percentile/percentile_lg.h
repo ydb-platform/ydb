@@ -6,8 +6,8 @@
 
 #include <cmath>
 
-#include "percentile_base.h" 
- 
+#include "percentile_base.h"
+
 namespace NMonitoring {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -15,14 +15,14 @@ namespace NMonitoring {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <size_t BASE_BITS, size_t EXP_BITS, size_t FRAME_COUNT>
-struct TPercentileTrackerLg : public TPercentileBase { 
-    static constexpr size_t BUCKET_COUNT = size_t(1) << EXP_BITS; 
-    static constexpr size_t BUCKET_SIZE = size_t(1) << BASE_BITS; 
+struct TPercentileTrackerLg : public TPercentileBase {
+    static constexpr size_t BUCKET_COUNT = size_t(1) << EXP_BITS;
+    static constexpr size_t BUCKET_SIZE = size_t(1) << BASE_BITS;
     static constexpr size_t ITEMS_COUNT = BUCKET_COUNT * BUCKET_SIZE;
-    static constexpr size_t TRACKER_LIMIT = BUCKET_SIZE * ((size_t(1) << BUCKET_COUNT) - 1) 
-                                            - (size_t(1) << (BUCKET_COUNT - 1)); 
-    static constexpr size_t MAX_GRANULARITY = size_t(1) << (BUCKET_COUNT - 1); 
- 
+    static constexpr size_t TRACKER_LIMIT = BUCKET_SIZE * ((size_t(1) << BUCKET_COUNT) - 1)
+                                            - (size_t(1) << (BUCKET_COUNT - 1));
+    static constexpr size_t MAX_GRANULARITY = size_t(1) << (BUCKET_COUNT - 1);
+
     size_t Borders[BUCKET_COUNT];
     TAtomic Items[ITEMS_COUNT];
     TAtomicBase Frame[FRAME_COUNT][ITEMS_COUNT];
@@ -132,7 +132,7 @@ struct TPercentileTrackerLg : public TPercentileBase {
     }
 
     void Increment(size_t value) {
-        size_t bucket_idx = BucketIdxMostSignificantBit(value); 
+        size_t bucket_idx = BucketIdxMostSignificantBit(value);
         size_t inside_bucket_idx = (value - Borders[bucket_idx] + (1 << bucket_idx) - 1) >> bucket_idx;
         size_t idx = bucket_idx * BUCKET_SIZE + inside_bucket_idx;
         AtomicIncrement(Items[Min(idx, ITEMS_COUNT - 1)]);

@@ -32,7 +32,7 @@ void TestRun(TTest *test,
              ui32 disksInDomain = DefDisksInDomain,
              NKikimr::TErasureType::EErasureSpecies erasure = DefErasure)
 {
-    TConfiguration Conf(TAllPDisksConfiguration::MkOneTmp(chunkSize, diskSize, "ROT"), 
+    TConfiguration Conf(TAllPDisksConfiguration::MkOneTmp(chunkSize, diskSize, "ROT"),
                         domainsNum,
                         disksInDomain,
                         erasure);
@@ -668,7 +668,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl1) {
         ui32 domainsNum = 4u;
         ui32 disksInDomain = 2u;
         ui32 pDisksNum = domainsNum * disksInDomain;
-        TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 512u << 10u, 16ull << 30ull, "ROT"), 
+        TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 512u << 10u, 16ull << 30ull, "ROT"),
                             domainsNum, disksInDomain);
         TFastVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
@@ -691,7 +691,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl2) {
         ui32 domainsNum = 4u;
         ui32 disksInDomain = 2u;
         ui32 pDisksNum = domainsNum * disksInDomain;
-        TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 512u << 10u, 16ull << 30ull, "ROT"), 
+        TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 512u << 10u, 16ull << 30ull, "ROT"),
                             domainsNum, disksInDomain);
         TFastVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
@@ -715,7 +715,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
         ui32 domainsNum = 4u;
         ui32 disksInDomain = 1u;
         ui32 pDisksNum = domainsNum * disksInDomain;
-        TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 512u << 10u, 16ull << 30ull, "ROT"), 
+        TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 512u << 10u, 16ull << 30ull, "ROT"),
                             domainsNum, disksInDomain);
         TFastVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
@@ -739,7 +739,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
         ui32 domainsNum = 4u;
         ui32 disksInDomain = 1u;
         ui32 pDisksNum = domainsNum * disksInDomain;
-        TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 512u << 10u, 1ull << 30ull, "ROT"), 
+        TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 512u << 10u, 1ull << 30ull, "ROT"),
                             domainsNum, disksInDomain);
         // Write some data to each disk
         {
@@ -787,7 +787,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
         ui32 domainsNum = 4u;
         ui32 disksInDomain = 2u;
         ui32 pDisksNum = domainsNum * disksInDomain;
-        TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 16u << 20u, 16ull << 30ull, "ROT"), 
+        TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 16u << 20u, 16ull << 30ull, "ROT"),
                             domainsNum, disksInDomain);
         TFastVDiskSetupRepl vdiskSetup;
         Conf.Prepare(&vdiskSetup);

@@ -211,7 +211,7 @@ public:
     }
 };
 
-void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseConfig *config, 
+void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseConfig *config,
         ui32 pdisks, ui32 vdiskPerPdisk = 4, const TNodeTenantsMap &tenants = {})
 {
     TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
@@ -226,7 +226,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
 
     auto now = Now();
     for (ui32 groupId = 0; groupId < numGroups; ++groupId) {
-        auto &group = *config->AddGroup(); 
+        auto &group = *config->AddGroup();
         group.SetGroupId(groupId);
         group.SetGroupGeneration(1);
         if (numNodes >= 8)
@@ -267,7 +267,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
             pdisk.SetTotalSize(200ULL << 30);
             pdisk.SetState(NKikimrBlobStorage::TPDiskState::Normal);
 
-            auto &pdiskConfig = *config->AddPDisk(); 
+            auto &pdiskConfig = *config->AddPDisk();
             pdiskConfig.SetNodeId(nodeId);
             pdiskConfig.SetPDiskId(pdiskId);
             pdiskConfig.SetPath("/pdisk.data");
@@ -288,7 +288,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
                 vdisk.SetVDiskState(NKikimrWhiteboard::OK);
                 vdisk.SetReplicated(true);
 
-                auto &vdiskConfig = *config->AddVSlot(); 
+                auto &vdiskConfig = *config->AddVSlot();
                 vdiskConfig.MutableVSlotId()->SetNodeId(nodeId);
                 vdiskConfig.MutableVSlotId()->SetPDiskId(pdiskId);
                 vdiskConfig.MutableVSlotId()->SetVSlotId(1000 + vdiskIndex);
@@ -296,7 +296,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
                 vdiskConfig.SetGroupGeneration(1);
                 vdiskConfig.SetFailDomainIdx(nodeIndex % 8);
 
-                config->MutableGroup(groupId)->AddVSlotId() 
+                config->MutableGroup(groupId)->AddVSlotId()
                     ->CopyFrom(vdiskConfig.GetVSlotId());
             }
         }
@@ -447,7 +447,7 @@ TCmsTestEnv::TCmsTestEnv(ui32 nodeCount,
     TFakeNodeWhiteboardService::Config.MutableResponse()->ClearStatus();
     auto &status = *TFakeNodeWhiteboardService::Config.MutableResponse()->AddStatus();
     status.SetSuccess(true);
-    auto *config = status.MutableBaseConfig(); 
+    auto *config = status.MutableBaseConfig();
 
     GenerateExtendedInfo(*this, config, pdisks, 4, tenants);
 
@@ -471,10 +471,10 @@ TCmsTestEnv::TCmsTestEnv(ui32 nodeCount,
 
     Sender = AllocateEdgeActor();
 
-    NKikimrCms::TCmsConfig cmsConfig; 
-    cmsConfig.MutableTenantLimits()->SetDisabledNodesRatioLimit(0); 
-    cmsConfig.MutableClusterLimits()->SetDisabledNodesRatioLimit(0); 
-    SetCmsConfig(cmsConfig); 
+    NKikimrCms::TCmsConfig cmsConfig;
+    cmsConfig.MutableTenantLimits()->SetDisabledNodesRatioLimit(0);
+    cmsConfig.MutableClusterLimits()->SetDisabledNodesRatioLimit(0);
+    SetCmsConfig(cmsConfig);
 }
 
 TCmsTestEnv::TCmsTestEnv(ui32 nodeCount,

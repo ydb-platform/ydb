@@ -7,7 +7,7 @@ Public domain.
 #include "chacha_vec.h"
 #include "secured_block.h"
 
-#include <util/system/align.h> 
+#include <util/system/align.h>
 #include <util/system/yassert.h>
 
 
@@ -50,10 +50,10 @@ Public domain.
 #   define ROTV3(x)  (vec)_mm_shuffle_epi32((__m128i)x,_MM_SHUFFLE(2,1,0,3))
 #   define ROTW7(x)  (vec)(_mm_slli_epi32((__m128i)x, 7) ^ _mm_srli_epi32((__m128i)x,25))
 #   define ROTW12(x) (vec)(_mm_slli_epi32((__m128i)x,12) ^ _mm_srli_epi32((__m128i)x,20))
-#   define SHIFT_LEFT(x) (vec)_mm_bslli_si128((__m128i)(x), 8) 
-#   define SHIFT_RIGHT(x) (vec)_mm_bsrli_si128((__m128i)(x), 8) 
-#   define SET(x0, x1) (vec)_mm_set_epi64x((x0), (x1)) 
- 
+#   define SHIFT_LEFT(x) (vec)_mm_bslli_si128((__m128i)(x), 8)
+#   define SHIFT_RIGHT(x) (vec)_mm_bsrli_si128((__m128i)(x), 8)
+#   define SET(x0, x1) (vec)_mm_set_epi64x((x0), (x1))
+
 #   if __SSSE3__
 #       include <tmmintrin.h>
 #       define ROTW8(x)  (vec)_mm_shuffle_epi8((__m128i)x,_mm_set_epi8(14,13,12,15,10,9,8,11,6,5,4,7,2,1,0,3))
@@ -63,7 +63,7 @@ Public domain.
 #       define ROTW16(x) (vec)(_mm_slli_epi32((__m128i)x,16) ^ _mm_srli_epi32((__m128i)x,16))
 #   endif
 #else
-#   error -- Implementation supports only machines with neon or SSE2 
+#   error -- Implementation supports only machines with neon or SSE2
 #endif
 
 #ifndef REVV_BE
@@ -93,62 +93,62 @@ Public domain.
     c = c+d; b ^= c; b = b<< 7 | b>>25;
 
 #define WRITE_XOR(in, op, d, v0, v1, v2, v3)                        \
-    *(vec *)(op + d +  0) = *(vec *)(in + d +  0) ^ v0;             \ 
-    *(vec *)(op + d +  4) = *(vec *)(in + d +  4) ^ v1;             \ 
-    *(vec *)(op + d +  8) = *(vec *)(in + d +  8) ^ v2;             \ 
-    *(vec *)(op + d + 12) = *(vec *)(in + d + 12) ^ v3; 
+    *(vec *)(op + d +  0) = *(vec *)(in + d +  0) ^ v0;             \
+    *(vec *)(op + d +  4) = *(vec *)(in + d +  4) ^ v1;             \
+    *(vec *)(op + d +  8) = *(vec *)(in + d +  8) ^ v2;             \
+    *(vec *)(op + d + 12) = *(vec *)(in + d + 12) ^ v3;
 
-template<bool Aligned> 
-Y_FORCE_INLINE void WriteXor(ui32 *op, ui32 *ip, 
-        vec v0, vec v1, vec v2, vec v3, 
-        const vec i_v[4]) { 
-    if constexpr (Aligned) { 
-        *(vec *)(op +  0) = *(vec *)(ip +  0) ^ v0; 
-        *(vec *)(op +  4) = *(vec *)(ip +  4) ^ v1; 
-        *(vec *)(op +  8) = *(vec *)(ip +  8) ^ v2; 
-        *(vec *)(op + 12) = *(vec *)(ip + 12) ^ v3; 
-    } else { 
-        *(vec *)(op +  0) = i_v[0] ^ v0; 
-        *(vec *)(op +  4) = i_v[1] ^ v1; 
-        *(vec *)(op +  8) = i_v[2] ^ v2; 
-        *(vec *)(op + 12) = i_v[3] ^ v3; 
-    } 
-} 
+template<bool Aligned>
+Y_FORCE_INLINE void WriteXor(ui32 *op, ui32 *ip,
+        vec v0, vec v1, vec v2, vec v3,
+        const vec i_v[4]) {
+    if constexpr (Aligned) {
+        *(vec *)(op +  0) = *(vec *)(ip +  0) ^ v0;
+        *(vec *)(op +  4) = *(vec *)(ip +  4) ^ v1;
+        *(vec *)(op +  8) = *(vec *)(ip +  8) ^ v2;
+        *(vec *)(op + 12) = *(vec *)(ip + 12) ^ v3;
+    } else {
+        *(vec *)(op +  0) = i_v[0] ^ v0;
+        *(vec *)(op +  4) = i_v[1] ^ v1;
+        *(vec *)(op +  8) = i_v[2] ^ v2;
+        *(vec *)(op + 12) = i_v[3] ^ v3;
+    }
+}
 
-template<bool Aligned, bool IsFirst, bool IsLast> 
-Y_FORCE_INLINE void ReadW(ui32 *ip, vec i_v[4], vec& next_i_v) { 
-    if constexpr (Aligned) { 
-        return; 
-    } 
- 
-    vec tmp; 
- 
-    if constexpr (IsFirst) { 
-        next_i_v = SET(0, *(ui64*)(ip - 2)); 
-    } 
- 
-    tmp = *(vec*)(ip + 0); 
-    i_v[1] = SHIFT_RIGHT(tmp); 
-    i_v[0] = next_i_v | SHIFT_LEFT(tmp); 
- 
-    tmp = *(vec*)(ip + 4); 
-    i_v[2] = SHIFT_RIGHT(tmp); 
-    i_v[1] = i_v[1] | SHIFT_LEFT(tmp); 
- 
-    tmp = *(vec*)(ip + 8); 
-    i_v[3] = SHIFT_RIGHT(tmp); 
-    i_v[2] = i_v[2] | SHIFT_LEFT(tmp); 
- 
-    if constexpr (IsLast) { 
-        i_v[3] = i_v[3] | SET(*(ui64*)(ip + 12), 0); 
-    } else { 
-        tmp = *(vec*)(ip + 12); 
-        next_i_v = SHIFT_RIGHT(tmp); 
-        i_v[3] = i_v[3] | SHIFT_LEFT(tmp); 
-    } 
-} 
- 
- 
+template<bool Aligned, bool IsFirst, bool IsLast>
+Y_FORCE_INLINE void ReadW(ui32 *ip, vec i_v[4], vec& next_i_v) {
+    if constexpr (Aligned) {
+        return;
+    }
+
+    vec tmp;
+
+    if constexpr (IsFirst) {
+        next_i_v = SET(0, *(ui64*)(ip - 2));
+    }
+
+    tmp = *(vec*)(ip + 0);
+    i_v[1] = SHIFT_RIGHT(tmp);
+    i_v[0] = next_i_v | SHIFT_LEFT(tmp);
+
+    tmp = *(vec*)(ip + 4);
+    i_v[2] = SHIFT_RIGHT(tmp);
+    i_v[1] = i_v[1] | SHIFT_LEFT(tmp);
+
+    tmp = *(vec*)(ip + 8);
+    i_v[3] = SHIFT_RIGHT(tmp);
+    i_v[2] = i_v[2] | SHIFT_LEFT(tmp);
+
+    if constexpr (IsLast) {
+        i_v[3] = i_v[3] | SET(*(ui64*)(ip + 12), 0);
+    } else {
+        tmp = *(vec*)(ip + 12);
+        next_i_v = SHIFT_RIGHT(tmp);
+        i_v[3] = i_v[3] | SHIFT_LEFT(tmp);
+    }
+}
+
+
 constexpr size_t ChaChaVec::KEY_SIZE;
 constexpr size_t ChaChaVec::BLOCK_SIZE;
 
@@ -168,8 +168,8 @@ void ChaChaVec::SetKey(const ui8* key, size_t size)
         kp = (ui32*)aligned_key;
     #else
         alignas(16) ui32 k[4];
-        ((vec *)k)[0] = ((vec *)aligned_key)[0]; 
-        ((vec *)k)[1] = ((vec *)aligned_key)[1]; 
+        ((vec *)k)[0] = ((vec *)aligned_key)[0];
+        ((vec *)k)[1] = ((vec *)aligned_key)[1];
         kp = (ui32*)k;
     #endif
     s0_ = *(vec *)chacha_const;
@@ -199,186 +199,186 @@ void ChaChaVec::SetIV(const ui8* iv, const ui8* blockIdx)
     s3_ = NONCE(np, bp);
 }
 
- 
+
 void ChaChaVec::SetIV(const ui8* iv) {
     const ui8 zero[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     SetIV(iv, zero);
 }
 
-template<bool Aligned> 
-void ChaChaVec::EncipherImpl(const ui8* plaintext, ui8* ciphertext, size_t len) 
+template<bool Aligned>
+void ChaChaVec::EncipherImpl(const ui8* plaintext, ui8* ciphertext, size_t len)
 {
     size_t iters, i;
-    ui32* ip = (ui32*)AlignUp<intptr_t>(intptr_t(plaintext), 16); 
-    ui32 *op = (ui32*)ciphertext; 
- 
-    const ui32 unalignment = intptr_t(plaintext) % 16; 
-    if constexpr (!Aligned) { 
-        Y_VERIFY(unalignment == 8, "Unalignment# %d", (int)unalignment); 
-    } 
- 
-    Y_VERIFY(intptr_t(ip) % 16 == 0); 
-    Y_VERIFY(intptr_t(op) % 16 == 0); 
- 
-    // Unused if Aligned 
-    vec i_v[4]; 
-    vec next_i_v; 
- 
-    for (iters = 0; iters < len/(CHACHA_BPI * BLOCK_SIZE); iters++) { 
-        vec v0,v1,v2,v3,v4,v5,v6,v7; 
-        v4 = v0 = s0_; v5 = v1 = s1_; v6 = v2 = s2_; v3 = s3_; 
-        v7 = v3 + ONE; 
-        #if CHACHA_VBPI > 2 
-            vec v8,v9,v10,v11; 
-            v8 = v4; v9 = v5; v10 = v6; 
-            v11 =  v7 + ONE; 
-        #endif 
-        #if CHACHA_VBPI > 3 
-            vec v12,v13,v14,v15; 
-            v12 = v8; v13 = v9; v14 = v10; 
-            v15 = v11 + ONE; 
-        #endif 
-        #if CHACHA_GPR_TOO 
-            ui32* kp = (ui32*)&s1_; 
-            ui32* np = (ui32*)&s3_ + 2; 
- 
-            ui32 x0, x1, x2, x3, x4, x5, x6, x7, x8, 
-                          x9, x10, x11, x12, x13, x14, x15; 
-            x0 = chacha_const[0]; x1 = chacha_const[1]; 
-            x2 = chacha_const[2]; x3 = chacha_const[3]; 
-            x4 = kp[0]; x5 = kp[1]; x6  = kp[2]; x7  = kp[3]; 
-            x8 = kp[4]; x9 = kp[5]; x10 = kp[6]; x11 = kp[7]; 
-            x12 = CHACHA_BPI*iters+(CHACHA_BPI-1); x13 = 0; x14 = np[0]; x15 = np[1]; 
-        #endif 
-        for (i = rounds_/2; i; i--) { 
-            DQROUND_VECTORS(v0,v1,v2,v3) 
-            DQROUND_VECTORS(v4,v5,v6,v7) 
-            #if CHACHA_VBPI > 2 
-                DQROUND_VECTORS(v8,v9,v10,v11) 
-            #endif 
-            #if CHACHA_VBPI > 3 
-                DQROUND_VECTORS(v12,v13,v14,v15) 
-            #endif 
-            #if CHACHA_GPR_TOO 
-                QROUND_WORDS(x0, x4,  x8, x12) 
-                QROUND_WORDS(x1, x5,  x9, x13) 
-                QROUND_WORDS(x2, x6, x10, x14) 
-                QROUND_WORDS(x3, x7, x11, x15) 
-                QROUND_WORDS(x0, x5, x10, x15) 
-                QROUND_WORDS(x1, x6, x11, x12) 
-                QROUND_WORDS(x2, x7,  x8, x13) 
-                QROUND_WORDS(x3, x4,  x9, x14) 
-            #endif 
-        } 
-        ReadW<Aligned, true, false>(ip + 0, i_v, next_i_v); 
-        WriteXor<Aligned>(op + 0, ip + 0, v0+s0_, v1+s1_, v2+s2_, v3+s3_, i_v); 
-        s3_ += ONE; 
-        ReadW<Aligned, false, CHACHA_VBPI == 2>(ip + 16, i_v, next_i_v); 
-        WriteXor<Aligned>(op + 16, ip + 16, v4+s0_, v5+s1_, v6+s2_, v7+s3_, i_v); 
-        s3_ += ONE; 
-        #if CHACHA_VBPI > 2 
-            ReadW<Aligned, false, CHACHA_VBPI == 3>(ip + 32, i_v, next_i_v); 
-            WriteXor<Aligned>(op + 32, ip + 32, v8+s0_, v9+s1_, v10+s2_, v11+s3_, i_v); 
-            s3_ += ONE; 
-        #endif 
-        #if CHACHA_VBPI > 3 
-            ReadW<Aligned, false, CHACHA_VBPI == 4>(ip + 48, i_v, next_i_v); 
-            WriteXor<Aligned>(op + 48, ip + 48, v12+s0_, v13+s1_, v14+s2_, v15+s3_, i_v); 
-            s3_ += ONE; 
-        #endif 
-        ip += CHACHA_VBPI*16; 
-        Y_ASSERT(intptr_t(ip) % 16 == 0); 
-        op += CHACHA_VBPI*16; 
-        Y_ASSERT(intptr_t(op) % 16 == 0); 
-        #if CHACHA_GPR_TOO 
-            op[0]  = REVW_BE(REVW_BE(ip[0])  ^ (x0  + chacha_const[0])); 
-            op[1]  = REVW_BE(REVW_BE(ip[1])  ^ (x1  + chacha_const[1])); 
-            op[2]  = REVW_BE(REVW_BE(ip[2])  ^ (x2  + chacha_const[2])); 
-            op[3]  = REVW_BE(REVW_BE(ip[3])  ^ (x3  + chacha_const[3])); 
-            op[4]  = REVW_BE(REVW_BE(ip[4])  ^ (x4  + kp[0])); 
-            op[5]  = REVW_BE(REVW_BE(ip[5])  ^ (x5  + kp[1])); 
-            op[6]  = REVW_BE(REVW_BE(ip[6])  ^ (x6  + kp[2])); 
-            op[7]  = REVW_BE(REVW_BE(ip[7])  ^ (x7  + kp[3])); 
-            op[8]  = REVW_BE(REVW_BE(ip[8])  ^ (x8  + kp[4])); 
-            op[9]  = REVW_BE(REVW_BE(ip[9])  ^ (x9  + kp[5])); 
-            op[10] = REVW_BE(REVW_BE(ip[10]) ^ (x10 + kp[6])); 
-            op[11] = REVW_BE(REVW_BE(ip[11]) ^ (x11 + kp[7])); 
-            op[12] = REVW_BE(REVW_BE(ip[12]) ^ (x12 + CHACHA_BPI*iters+(CHACHA_BPI-1))); 
-            op[13] = REVW_BE(REVW_BE(ip[13]) ^ (x13)); 
-            op[14] = REVW_BE(REVW_BE(ip[14]) ^ (x14 + np[0])); 
-            op[15] = REVW_BE(REVW_BE(ip[15]) ^ (x15 + np[1])); 
-            s3_ += ONE; 
-            ip += 16; 
-            op += 16; 
-        #endif 
-    } 
- 
-    for (iters = len % (CHACHA_BPI*BLOCK_SIZE)/BLOCK_SIZE; iters != 0; iters--) { 
-        vec v0 = s0_, v1 = s1_, v2 = s2_, v3 = s3_; 
-        for (i = rounds_/2; i; i--) { 
-            DQROUND_VECTORS(v0,v1,v2,v3) 
-        } 
-        ReadW<Aligned, true, true>(ip, i_v, next_i_v); 
-        WriteXor<Aligned>(op, ip, v0+s0_, v1+s1_, v2+s2_, v3+s3_, i_v); 
-        s3_ += ONE; 
-        ip += 16; 
-        op += 16; 
-    } 
- 
-    len = len % BLOCK_SIZE; 
-    if (len) { 
-        if (!Aligned) { 
-            // Unaligned version can work only on full blocks 
-            alignas(16) ui8 buf[BLOCK_SIZE]; 
-            memcpy(buf, ip - 2, len); 
-            EncipherImpl<true>(buf, buf, len); 
-            memcpy(op, buf, len); 
-            SecureWipeBuffer(buf, BLOCK_SIZE); 
-        } else { 
-            alignas(16) char buf[16]; 
-            vec tail; 
-            vec v0, v1, v2, v3; 
-            v0 = s0_; v1 = s1_; v2 = s2_; v3 = s3_; 
-            for (i = rounds_/2; i; i--) { 
-                DQROUND_VECTORS(v0,v1,v2,v3) 
-            } 
-            if (len >= 32) { 
-                *(vec *)(op + 0) = *(vec *)(ip + 0) ^ (v0 + s0_); 
-                *(vec *)(op + 4) = *(vec *)(ip + 4) ^ (v1 + s1_); 
-                if (len >= 48) { 
-                    *(vec *)(op + 8) = *(vec *)(ip + 8) ^ (v2 + s2_); 
-                    tail = v3 + s3_; 
-                    op += 12; 
-                    ip += 12; 
-                    len -= 48; 
-                } else { 
-                    tail = v2 + s2_; 
-                    op += 8; 
-                    ip += 8; 
-                    len -= 32; 
-                } 
-            } else if (len >= 16) { 
-                *(vec *)(op + 0) = *(vec *)(ip + 0) ^ (v0 + s0_); 
-                tail = v1 + s1_; 
-                op += 4; 
-                ip += 4; 
-                len -= 16; 
-            } else { 
-                tail = v0 + s0_; 
-            } 
-            memcpy(buf, ip, len); 
-            void *bp = buf; 
-            *(vec *)bp = tail ^ *(vec *)bp; 
-            memcpy(op, buf, len); 
-            SecureWipeBuffer(buf, 16); 
-        } 
-    } 
-} 
- 
-// Old version, used only for compatibility tests 
-void ChaChaVec::EncipherOld(const ui8* plaintext, ui8* ciphertext, size_t len) 
-{ 
-    size_t iters, i; 
+    ui32* ip = (ui32*)AlignUp<intptr_t>(intptr_t(plaintext), 16);
+    ui32 *op = (ui32*)ciphertext;
+
+    const ui32 unalignment = intptr_t(plaintext) % 16;
+    if constexpr (!Aligned) {
+        Y_VERIFY(unalignment == 8, "Unalignment# %d", (int)unalignment);
+    }
+
+    Y_VERIFY(intptr_t(ip) % 16 == 0);
+    Y_VERIFY(intptr_t(op) % 16 == 0);
+
+    // Unused if Aligned
+    vec i_v[4];
+    vec next_i_v;
+
+    for (iters = 0; iters < len/(CHACHA_BPI * BLOCK_SIZE); iters++) {
+        vec v0,v1,v2,v3,v4,v5,v6,v7;
+        v4 = v0 = s0_; v5 = v1 = s1_; v6 = v2 = s2_; v3 = s3_;
+        v7 = v3 + ONE;
+        #if CHACHA_VBPI > 2
+            vec v8,v9,v10,v11;
+            v8 = v4; v9 = v5; v10 = v6;
+            v11 =  v7 + ONE;
+        #endif
+        #if CHACHA_VBPI > 3
+            vec v12,v13,v14,v15;
+            v12 = v8; v13 = v9; v14 = v10;
+            v15 = v11 + ONE;
+        #endif
+        #if CHACHA_GPR_TOO
+            ui32* kp = (ui32*)&s1_;
+            ui32* np = (ui32*)&s3_ + 2;
+
+            ui32 x0, x1, x2, x3, x4, x5, x6, x7, x8,
+                          x9, x10, x11, x12, x13, x14, x15;
+            x0 = chacha_const[0]; x1 = chacha_const[1];
+            x2 = chacha_const[2]; x3 = chacha_const[3];
+            x4 = kp[0]; x5 = kp[1]; x6  = kp[2]; x7  = kp[3];
+            x8 = kp[4]; x9 = kp[5]; x10 = kp[6]; x11 = kp[7];
+            x12 = CHACHA_BPI*iters+(CHACHA_BPI-1); x13 = 0; x14 = np[0]; x15 = np[1];
+        #endif
+        for (i = rounds_/2; i; i--) {
+            DQROUND_VECTORS(v0,v1,v2,v3)
+            DQROUND_VECTORS(v4,v5,v6,v7)
+            #if CHACHA_VBPI > 2
+                DQROUND_VECTORS(v8,v9,v10,v11)
+            #endif
+            #if CHACHA_VBPI > 3
+                DQROUND_VECTORS(v12,v13,v14,v15)
+            #endif
+            #if CHACHA_GPR_TOO
+                QROUND_WORDS(x0, x4,  x8, x12)
+                QROUND_WORDS(x1, x5,  x9, x13)
+                QROUND_WORDS(x2, x6, x10, x14)
+                QROUND_WORDS(x3, x7, x11, x15)
+                QROUND_WORDS(x0, x5, x10, x15)
+                QROUND_WORDS(x1, x6, x11, x12)
+                QROUND_WORDS(x2, x7,  x8, x13)
+                QROUND_WORDS(x3, x4,  x9, x14)
+            #endif
+        }
+        ReadW<Aligned, true, false>(ip + 0, i_v, next_i_v);
+        WriteXor<Aligned>(op + 0, ip + 0, v0+s0_, v1+s1_, v2+s2_, v3+s3_, i_v);
+        s3_ += ONE;
+        ReadW<Aligned, false, CHACHA_VBPI == 2>(ip + 16, i_v, next_i_v);
+        WriteXor<Aligned>(op + 16, ip + 16, v4+s0_, v5+s1_, v6+s2_, v7+s3_, i_v);
+        s3_ += ONE;
+        #if CHACHA_VBPI > 2
+            ReadW<Aligned, false, CHACHA_VBPI == 3>(ip + 32, i_v, next_i_v);
+            WriteXor<Aligned>(op + 32, ip + 32, v8+s0_, v9+s1_, v10+s2_, v11+s3_, i_v);
+            s3_ += ONE;
+        #endif
+        #if CHACHA_VBPI > 3
+            ReadW<Aligned, false, CHACHA_VBPI == 4>(ip + 48, i_v, next_i_v);
+            WriteXor<Aligned>(op + 48, ip + 48, v12+s0_, v13+s1_, v14+s2_, v15+s3_, i_v);
+            s3_ += ONE;
+        #endif
+        ip += CHACHA_VBPI*16;
+        Y_ASSERT(intptr_t(ip) % 16 == 0);
+        op += CHACHA_VBPI*16;
+        Y_ASSERT(intptr_t(op) % 16 == 0);
+        #if CHACHA_GPR_TOO
+            op[0]  = REVW_BE(REVW_BE(ip[0])  ^ (x0  + chacha_const[0]));
+            op[1]  = REVW_BE(REVW_BE(ip[1])  ^ (x1  + chacha_const[1]));
+            op[2]  = REVW_BE(REVW_BE(ip[2])  ^ (x2  + chacha_const[2]));
+            op[3]  = REVW_BE(REVW_BE(ip[3])  ^ (x3  + chacha_const[3]));
+            op[4]  = REVW_BE(REVW_BE(ip[4])  ^ (x4  + kp[0]));
+            op[5]  = REVW_BE(REVW_BE(ip[5])  ^ (x5  + kp[1]));
+            op[6]  = REVW_BE(REVW_BE(ip[6])  ^ (x6  + kp[2]));
+            op[7]  = REVW_BE(REVW_BE(ip[7])  ^ (x7  + kp[3]));
+            op[8]  = REVW_BE(REVW_BE(ip[8])  ^ (x8  + kp[4]));
+            op[9]  = REVW_BE(REVW_BE(ip[9])  ^ (x9  + kp[5]));
+            op[10] = REVW_BE(REVW_BE(ip[10]) ^ (x10 + kp[6]));
+            op[11] = REVW_BE(REVW_BE(ip[11]) ^ (x11 + kp[7]));
+            op[12] = REVW_BE(REVW_BE(ip[12]) ^ (x12 + CHACHA_BPI*iters+(CHACHA_BPI-1)));
+            op[13] = REVW_BE(REVW_BE(ip[13]) ^ (x13));
+            op[14] = REVW_BE(REVW_BE(ip[14]) ^ (x14 + np[0]));
+            op[15] = REVW_BE(REVW_BE(ip[15]) ^ (x15 + np[1]));
+            s3_ += ONE;
+            ip += 16;
+            op += 16;
+        #endif
+    }
+
+    for (iters = len % (CHACHA_BPI*BLOCK_SIZE)/BLOCK_SIZE; iters != 0; iters--) {
+        vec v0 = s0_, v1 = s1_, v2 = s2_, v3 = s3_;
+        for (i = rounds_/2; i; i--) {
+            DQROUND_VECTORS(v0,v1,v2,v3)
+        }
+        ReadW<Aligned, true, true>(ip, i_v, next_i_v);
+        WriteXor<Aligned>(op, ip, v0+s0_, v1+s1_, v2+s2_, v3+s3_, i_v);
+        s3_ += ONE;
+        ip += 16;
+        op += 16;
+    }
+
+    len = len % BLOCK_SIZE;
+    if (len) {
+        if (!Aligned) {
+            // Unaligned version can work only on full blocks
+            alignas(16) ui8 buf[BLOCK_SIZE];
+            memcpy(buf, ip - 2, len);
+            EncipherImpl<true>(buf, buf, len);
+            memcpy(op, buf, len);
+            SecureWipeBuffer(buf, BLOCK_SIZE);
+        } else {
+            alignas(16) char buf[16];
+            vec tail;
+            vec v0, v1, v2, v3;
+            v0 = s0_; v1 = s1_; v2 = s2_; v3 = s3_;
+            for (i = rounds_/2; i; i--) {
+                DQROUND_VECTORS(v0,v1,v2,v3)
+            }
+            if (len >= 32) {
+                *(vec *)(op + 0) = *(vec *)(ip + 0) ^ (v0 + s0_);
+                *(vec *)(op + 4) = *(vec *)(ip + 4) ^ (v1 + s1_);
+                if (len >= 48) {
+                    *(vec *)(op + 8) = *(vec *)(ip + 8) ^ (v2 + s2_);
+                    tail = v3 + s3_;
+                    op += 12;
+                    ip += 12;
+                    len -= 48;
+                } else {
+                    tail = v2 + s2_;
+                    op += 8;
+                    ip += 8;
+                    len -= 32;
+                }
+            } else if (len >= 16) {
+                *(vec *)(op + 0) = *(vec *)(ip + 0) ^ (v0 + s0_);
+                tail = v1 + s1_;
+                op += 4;
+                ip += 4;
+                len -= 16;
+            } else {
+                tail = v0 + s0_;
+            }
+            memcpy(buf, ip, len);
+            void *bp = buf;
+            *(vec *)bp = tail ^ *(vec *)bp;
+            memcpy(op, buf, len);
+            SecureWipeBuffer(buf, 16);
+        }
+    }
+}
+
+// Old version, used only for compatibility tests
+void ChaChaVec::EncipherOld(const ui8* plaintext, ui8* ciphertext, size_t len)
+{
+    size_t iters, i;
     ui32 *op=(ui32*)ciphertext, *ip=(ui32*)plaintext;
 
     for (iters = 0; iters < len/(CHACHA_BPI * BLOCK_SIZE); iters++) {
@@ -508,22 +508,22 @@ void ChaChaVec::EncipherOld(const ui8* plaintext, ui8* ciphertext, size_t len)
         void *bp = buf;
         *(vec *)bp = tail ^ *(vec *)bp;
         memcpy(op, buf, len);
-        SecureWipeBuffer(buf, 16); 
+        SecureWipeBuffer(buf, 16);
     }
 }
 
-void ChaChaVec::Encipher(const ui8* plaintext, ui8* ciphertext, size_t len) 
-{ 
-    const ui32 input_unalignment = intptr_t(plaintext) % 16; 
-    if (input_unalignment == 0) { 
-        EncipherImpl<true>(plaintext, ciphertext, len); 
-    } else if (input_unalignment == 8) { 
-        EncipherImpl<false>(plaintext, ciphertext, len); 
-    } else { 
-        Y_FAIL("ChaChaVec can work only with input aligned on 8, 16 or more bytes"); 
-    } 
-} 
- 
+void ChaChaVec::Encipher(const ui8* plaintext, ui8* ciphertext, size_t len)
+{
+    const ui32 input_unalignment = intptr_t(plaintext) % 16;
+    if (input_unalignment == 0) {
+        EncipherImpl<true>(plaintext, ciphertext, len);
+    } else if (input_unalignment == 8) {
+        EncipherImpl<false>(plaintext, ciphertext, len);
+    } else {
+        Y_FAIL("ChaChaVec can work only with input aligned on 8, 16 or more bytes");
+    }
+}
+
 void ChaChaVec::Decipher(const ui8* ciphertext, ui8* plaintext, size_t len)
 {
     Encipher(ciphertext, plaintext, len);

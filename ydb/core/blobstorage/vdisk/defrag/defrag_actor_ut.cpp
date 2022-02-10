@@ -12,24 +12,24 @@ namespace NKikimr {
     Y_UNIT_TEST_SUITE(TVDiskDefrag) {
         Y_UNIT_TEST(HugeHeapDefragmentationRequired) {
             {
-                TOutOfSpaceState oos(1, 0); 
-                ui32 hugeCanBeFreedChunks = 9; 
-                ui32 hugeUsedChunks = 20; 
-                bool defrag = HugeHeapDefragmentationRequired(oos, hugeCanBeFreedChunks, hugeUsedChunks); 
-                UNIT_ASSERT(!defrag); 
-            }
-            {
-                TOutOfSpaceState oos(1, 0); 
-                ui32 hugeCanBeFreedChunks = 200;
-                ui32 hugeUsedChunks = 1000; 
-                bool defrag = HugeHeapDefragmentationRequired(oos, hugeCanBeFreedChunks, hugeUsedChunks); 
+                TOutOfSpaceState oos(1, 0);
+                ui32 hugeCanBeFreedChunks = 9;
+                ui32 hugeUsedChunks = 20;
+                bool defrag = HugeHeapDefragmentationRequired(oos, hugeCanBeFreedChunks, hugeUsedChunks);
                 UNIT_ASSERT(!defrag);
             }
             {
-                TOutOfSpaceState oos(1, 0); 
-                ui32 hugeCanBeFreedChunks = 301; 
-                ui32 hugeUsedChunks = 1000; 
-                bool defrag = HugeHeapDefragmentationRequired(oos, hugeCanBeFreedChunks, hugeUsedChunks); 
+                TOutOfSpaceState oos(1, 0);
+                ui32 hugeCanBeFreedChunks = 200;
+                ui32 hugeUsedChunks = 1000;
+                bool defrag = HugeHeapDefragmentationRequired(oos, hugeCanBeFreedChunks, hugeUsedChunks);
+                UNIT_ASSERT(!defrag);
+            }
+            {
+                TOutOfSpaceState oos(1, 0);
+                ui32 hugeCanBeFreedChunks = 301;
+                ui32 hugeUsedChunks = 1000;
+                bool defrag = HugeHeapDefragmentationRequired(oos, hugeCanBeFreedChunks, hugeUsedChunks);
                 UNIT_ASSERT(defrag);
             }
         }

@@ -201,7 +201,7 @@ namespace NKikimr {
                                 break;
 
                             case NKikimrBlobStorage::EDriveStatus::FAULTY:
-                            case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED: 
+                            case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
                                 // groups are moved out asynchronously
                                 break;
 

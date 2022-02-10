@@ -59,7 +59,7 @@ namespace NKikimr {
             if (!msg) {
                 msg = std::make_unique<NPDisk::TEvConfigureScheduler>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound);
             }
-            msg->SchedulerCfg.FreshWeight = status.Weight; 
+            msg->SchedulerCfg.FreshWeight = status.Weight;
         }
         // level
         status = LevelWeight.Update(LevelRank.GetRank());
@@ -67,7 +67,7 @@ namespace NKikimr {
             if (!msg) {
                 msg = std::make_unique<NPDisk::TEvConfigureScheduler>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound);
             }
-            msg->SchedulerCfg.CompWeight = status.Weight; 
+            msg->SchedulerCfg.CompWeight = status.Weight;
         }
         // send msg if any
         if (msg) {

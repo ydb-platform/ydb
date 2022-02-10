@@ -7,7 +7,7 @@
 #include "interconnect.h"
 #include "servicemap.h"
 #include "scheduler_queue.h"
-#include "scheduler_actor.h" 
+#include "scheduler_actor.h"
 #include "log.h"
 #include "probes.h"
 #include "ask.h"

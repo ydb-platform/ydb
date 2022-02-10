@@ -14,8 +14,8 @@
 namespace NKikimr {
 
     // FIXME
-    // Split this factory 
-    class TDataShardExportFactory : public NKikimr::NDataShard::IExportFactory { 
+    // Split this factory
+    class TDataShardExportFactory : public NKikimr::NDataShard::IExportFactory {
     public:
         NKikimr::NDataShard::IExport* CreateExportToYt(bool useTypeV3) const override {
             Y_UNUSED(useTypeV3);
@@ -39,8 +39,8 @@ namespace NKikimr {
             TIntrusivePtr<NScheme::TTypeRegistry> Types;
             TIntrusivePtr<NMiniKQL::IFunctionRegistry> Funcs;
             TIntrusivePtr<TFormatFactory> Formats;
-            std::shared_ptr<NDataShard::IExportFactory> DataShardExportFactory; 
-            std::shared_ptr<NPDisk::IIoContextFactory> IoContext; 
+            std::shared_ptr<NDataShard::IExportFactory> DataShardExportFactory;
+            std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
 
             ~TMine();
         };

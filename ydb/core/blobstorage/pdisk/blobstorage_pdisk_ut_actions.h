@@ -4,10 +4,10 @@
 #include "blobstorage_pdisk_ut.h"
 #include "blobstorage_pdisk_ut_base_test.h"
 #include "blobstorage_pdisk_ut_http_request.h"
-#include "blobstorage_pdisk_chunk_id_formatter.h" 
+#include "blobstorage_pdisk_chunk_id_formatter.h"
 
-#include <util/random/mersenne64.h> 
- 
+#include <util/random/mersenne64.h>
+
 namespace NKikimr {
 
 template <bool IsNewOwner, ui32 GroupGeneration>
@@ -50,10 +50,10 @@ public:
     {}
 };
 
-class TTestInitCorruptedError : public TBaseTest { 
+class TTestInitCorruptedError : public TBaseTest {
     void TestFSM(const TActorContext &ctx);
 public:
-    TTestInitCorruptedError(const TIntrusivePtr<TTestConfig> &cfg) 
+    TTestInitCorruptedError(const TIntrusivePtr<TTestConfig> &cfg)
         : TBaseTest(cfg)
     {}
 };
@@ -114,50 +114,50 @@ public:
     {}
 };
 
-class TTestWholeLogRead : public TBaseTest { 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
- 
-    void TestFSM(const TActorContext &ctx) { 
-        Ctest << "Test step " << TestStep << Endl; 
-        switch (TestStep) { 
-        case 0: 
-            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status)); 
-            Ctest << " Sending TEvInit" << Endl; 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(5, VDiskID, *PDiskGuid)); 
-            break; 
-        case 10: 
-            TEST_RESPONSE(EvYardInitResult, OK); 
-            Owner = LastResponse.Owner; 
-            OwnerRound = LastResponse.OwnerRound; 
-            Ctest << " Sending TEvLogRead" << Endl; 
-            ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound)); 
-            break; 
-        case 20: 
-            TEST_RESPONSE(EvReadLogResult, OK); 
-            if (!LastResponse.IsEndOfLog) { 
-                TestStep -= 10; 
-                ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, LastResponse.NextPosition)); 
-                break; 
-            } else { 
-                Ctest << "Done" << Endl; 
-                SignalDoneEvent(); 
-                break; 
-            } 
-            break; 
-        default: 
-            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl; 
-            break; 
-        } 
-        TestStep += 10; 
-    } 
- 
-public: 
-    TTestWholeLogRead(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    {} 
-}; 
- 
+class TTestWholeLogRead : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+
+    void TestFSM(const TActorContext &ctx) {
+        Ctest << "Test step " << TestStep << Endl;
+        switch (TestStep) {
+        case 0:
+            ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
+            Ctest << " Sending TEvInit" << Endl;
+            ctx.Send(Yard, new NPDisk::TEvYardInit(5, VDiskID, *PDiskGuid));
+            break;
+        case 10:
+            TEST_RESPONSE(EvYardInitResult, OK);
+            Owner = LastResponse.Owner;
+            OwnerRound = LastResponse.OwnerRound;
+            Ctest << " Sending TEvLogRead" << Endl;
+            ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound));
+            break;
+        case 20:
+            TEST_RESPONSE(EvReadLogResult, OK);
+            if (!LastResponse.IsEndOfLog) {
+                TestStep -= 10;
+                ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, LastResponse.NextPosition));
+                break;
+            } else {
+                Ctest << "Done" << Endl;
+                SignalDoneEvent();
+                break;
+            }
+            break;
+        default:
+            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+            break;
+        }
+        TestStep += 10;
+    }
+
+public:
+    TTestWholeLogRead(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
 template <ui32 Size>
 class TTestLogWriteRead : public TBaseTest {
     NPDisk::TOwner Owner;
@@ -189,14 +189,14 @@ class TTestLogWriteRead : public TBaseTest {
             Owner = LastResponse.Owner;
             OwnerRound = LastResponse.OwnerRound;
             VERBOSE_COUT(" Sending TEvLogRead");
-            ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, NPDisk::TLogPosition{0, 0})); 
+            ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, NPDisk::TLogPosition{0, 0}));
             break;
         case 40:
             TEST_RESPONSE(EvReadLogResult, OK);
             ASSERT_YTHROW(LastResponse.LogRecords.size() == 1,
                 "Unexpected LogRecords size == " << LastResponse.LogRecords.size());
             TEST_LOG_RECORD(LastResponse.LogRecords[0], 123, 0, data);
-            ASSERT_YTHROW(LastResponse.IsEndOfLog, 
+            ASSERT_YTHROW(LastResponse.IsEndOfLog,
                 "Unexpected IsEndOfLog = " << (int)LastResponse.IsEndOfLog);
             VERBOSE_COUT("Done");
             SignalDoneEvent();
@@ -251,248 +251,248 @@ public:
     {}
 };
 
-template<bool Equal> 
-class TTestLogWriteCut : public TBaseTest { 
-    static constexpr ui32 VDiskCount = 2; 
- 
-public: 
-    static TAtomic VDiskNum; 
-    static TVector<TChunkIdx> CommitedChunks[VDiskCount]; 
- 
-    static void Reset() { 
-        VDiskNum = 0; 
-        for (ui32 i = 0; i < VDiskCount; ++i) { 
-            CommitedChunks[i].clear(); 
-        } 
-    } 
- 
-private: 
- 
-    ui32 MyNum = 0; 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    ui64 Lsn = 100; 
-    ui32 LogRecordSizeMin = 16 << 10; 
-    ui32 LogRecordSizeMax = 32 << 10; 
-    ui32 ChunkSize; 
-    ui32 EvLogsToSend; 
-    ui32 EvLogsReceived = 0; 
- 
-    const ui32 LogRecordsToKeep = 100; 
- 
-    ui32 ChunksToReserve; 
-    TVector<TChunkIdx> ReservedChunks; 
-    ui64 LastCommitLsn = 0; 
- 
- 
-    NPrivate::TMersenne64 RandGen = Seed(); 
- 
-    void CheckOwnedChunks(TVector<TChunkIdx>& owned) { 
-        std::sort(CommitedChunks[MyNum].begin(), CommitedChunks[MyNum].end()); 
-        std::sort(owned.begin(), owned.end()); 
- 
-        TStringStream str; 
-        str << "MyNum# " << MyNum << " CommitedChunks# "; 
-        NPDisk::TChunkIdFormatter(str).PrintBracedChunksList(CommitedChunks[MyNum]); 
-        str << " owned# "; 
-        NPDisk::TChunkIdFormatter(str).PrintBracedChunksList(owned); 
-        str << Endl; 
-        Ctest << str.Str(); 
-        ASSERT_YTHROW(CommitedChunks[MyNum].size() <= owned.size(), "MyNum# " << MyNum << " size mismatch, " 
-                << CommitedChunks[MyNum].size() << " > " << owned.size()); 
-        for (size_t i = 0; i < CommitedChunks[MyNum].size(); ++i) { 
-            ASSERT_YTHROW(owned[i] == CommitedChunks[MyNum][i], 
-                    "MyNum# " << MyNum << " lost CommitedChunks, chunkIdx# " 
-                    << CommitedChunks[MyNum][i] << " != " << owned[i]); 
-        } 
-    } 
- 
-    void TestFSM(const TActorContext &ctx) { 
-        //Ctest << "Test step " << TestStep << Endl; 
-        switch (TestStep) { 
-        case 0: 
-            Ctest << " Sending TEvInit" << Endl; 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid)); 
-            break; 
-        case 10: 
-        { 
-            auto *ev = Event->Get<NPDisk::TEvYardInitResult>(); 
-            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString()); 
-            Owner = ev->PDiskParams->Owner; 
-            OwnerRound = ev->PDiskParams->OwnerRound; 
-            ChunkSize = ev->PDiskParams->ChunkSize; 
-            CheckOwnedChunks(ev->OwnedChunks); 
-            ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound)); 
-            break; 
-        } 
-        case 20: 
-        { 
-            auto *ev = Event->Get<NPDisk::TEvReadLogResult>(); 
-            ASSERT_YTHROW(ev->Status == NKikimrProto::OK && ev->IsEndOfLog, ev->ToString()); 
- 
-            for (const auto& res : ev->Results) { 
-                Lsn = Max(Lsn, res.Lsn + 1); 
-            } 
-            ctx.Send(Yard, new NPDisk::TEvCheckSpace(Owner, OwnerRound)); 
-            Ctest << " Sending TEvLog" << Endl; 
-            break; 
-        } 
-        case 30: 
-        { 
-            auto *ev = Event->Get<NPDisk::TEvCheckSpaceResult>(); 
-            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString()); 
-            ui32 totalChunks = ev->TotalChunks; 
-            ui32 logRecordSizeMean = LogRecordSizeMin + (LogRecordSizeMax - LogRecordSizeMin) / 2; 
-            if (Equal) { 
-                EvLogsToSend = totalChunks / 4 * ChunkSize / logRecordSizeMean; 
-            } else { 
-                if (MyNum == 0) { 
-                    // First VDisk writes only one record to first LogChunk 
-                    EvLogsToSend = ChunkSize / 2 / logRecordSizeMean; 
-                } else { 
-                    // Second VDisk writes full device 
-                    EvLogsToSend = totalChunks / 2 * ChunkSize / logRecordSizeMean + 67; 
-                } 
-            } 
-            Ctest << "totalChunks# " << totalChunks << " ChunkSize# " << ChunkSize << " MyNum# " << MyNum 
-                << " EvLogsToSend# " << EvLogsToSend << Endl; 
- 
-            ChunksToReserve = ev->FreeChunks / 4; 
-            ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, ChunksToReserve)); 
-            break; 
-        } 
-        case 40: 
-        { 
-            auto *ev = Event->Get<NPDisk::TEvChunkReserveResult>(); 
-            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString()); 
- 
-            ASSERT_YTHROW(ev->ChunkIds.size() == ChunksToReserve, 
-                "Unexpected ChunkIds.size() == " << ev->ChunkIds.size()); 
-            ReservedChunks = std::move(ev->ChunkIds); 
-            ui32 logRecordSize = LogRecordSizeMin + RandGen.GenRand() % (LogRecordSizeMax - LogRecordSizeMin); 
-            TString data = PrepareData(logRecordSize); 
-            NPDisk::TCommitRecord comRec{}; 
-            comRec.FirstLsnToKeep = Lsn; 
-            comRec.IsStartingPoint = true; 
-            if (ReservedChunks) { 
-                comRec.CommitChunks.push_back(ReservedChunks.back()); 
-                LastCommitLsn = Lsn; 
-                Ctest << "MyNum# " << MyNum << " try commit chunkIdx# " << ReservedChunks.back() 
-                    << " Lsn# " << Lsn << Endl; 
-            } 
-            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, comRec, data, TLsnSeg(Lsn, Lsn), (void*)0)); 
-            ++Lsn; 
-            break; 
-        } 
-        case 50: 
-        { 
-            auto *ev = Event->Get<NPDisk::TEvLogResult>(); 
-            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString()); 
- 
-            if (LastCommitLsn == Lsn - 1) { 
-                CommitedChunks[MyNum].push_back(ReservedChunks.back()); 
-                Ctest << "MyNum# " << MyNum << " done commit chunkIdx# " << ReservedChunks.back() 
-                    << " LastCommitLsn# " << LastCommitLsn << Endl; 
-                ReservedChunks.pop_back(); 
-            } 
-            ++EvLogsReceived; 
-            //Ctest << "MyNum# " << MyNum << " recieve event num# " << EvLogsReceived << " Lsn# " << Lsn << Endl; 
-            if (EvLogsReceived < EvLogsToSend - 1) { 
-                TestStep -= 10; 
-            } 
-            ui32 logRecordSize = LogRecordSizeMin + RandGen.GenRand() % (LogRecordSizeMax - LogRecordSizeMin); 
-            TString data = PrepareData(logRecordSize); 
-            if (Lsn % LogRecordsToKeep == 0) { 
-                NPDisk::TCommitRecord comRec{}; 
-                comRec.FirstLsnToKeep = Lsn - LogRecordsToKeep; 
-                if (ReservedChunks) { 
-                    comRec.CommitChunks.push_back(ReservedChunks.back()); 
-                    LastCommitLsn = Lsn; 
-                    Ctest << "try commit chunkIdx# " << ReservedChunks.back() << " Lsn# " << Lsn << Endl; 
-                } 
-                comRec.IsStartingPoint = true; 
-                ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, comRec, data, TLsnSeg(Lsn, Lsn), (void*)0)); 
-            } else { 
-                ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, data, TLsnSeg(Lsn, Lsn), (void*)0)); 
-            } 
-            ++Lsn; 
-            break; 
-        } 
-        case 60: 
-        { 
-            auto *ev = Event->Get<NPDisk::TEvLogResult>(); 
-            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString()); 
-            ++EvLogsReceived; 
-            ASSERT_YTHROW(EvLogsReceived == EvLogsToSend, "PDUT-0001"); 
-            Ctest << "MyNum# " << MyNum << " recieve event num# " << EvLogsReceived << Endl; 
- 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, *PDiskGuid)); 
-            break; 
-        } 
-        case 70: 
-        { 
-            auto *ev = Event->Get<NPDisk::TEvYardInitResult>(); 
-            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString()); 
-            Owner = ev->PDiskParams->Owner; 
-            OwnerRound = ev->PDiskParams->OwnerRound; 
-            ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound)); 
-            break; 
-        } 
-        case 80: 
-        { 
-            auto *ev = Event->Get<NPDisk::TEvReadLogResult>(); 
-            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString()); 
-            Ctest << "MyNum# " << MyNum << Endl; 
-            for (const NKikimr::NPDisk::TLogRecord &log : ev->Results) { 
-                Ctest << "Read log record# " << log.ToString(); 
-            } 
-            Ctest << Endl; 
- 
-            const ui64 firstLsnToKeep = Lsn - Lsn % LogRecordsToKeep; 
-            const ui64 lastLsnToKeep = Lsn - 1; 
-            bool isInsideLsnToKeep = false; 
-            TMaybe<const NKikimr::NPDisk::TLogRecord*> prevLog; 
-            for (const NKikimr::NPDisk::TLogRecord &log : ev->Results) { 
-                if (firstLsnToKeep <= log.Lsn) { 
-                    isInsideLsnToKeep = true; 
-                } 
-                ASSERT_YTHROW(log.Lsn <= lastLsnToKeep, "TestVDisk didn't wrote log with such lsn# " << log.Lsn); 
- 
-                if (isInsideLsnToKeep && prevLog) { 
-                    ASSERT_YTHROW((**prevLog).Lsn == log.Lsn - 1, "PDisk must send log record with strongly" 
-                            << " increasing Lsn, prevLsn# " << (**prevLog).Lsn << " currentLsn# " << log.Lsn); 
-                } 
-                prevLog = &log; 
-            } 
-            ASSERT_YTHROW(isInsideLsnToKeep, "PDisk didn't send expected log records to TestVDisk"); 
-            ASSERT_YTHROW(ev->Results.back().Lsn == lastLsnToKeep, "PDisk didn't send last log record with" 
-                    << " Lsn# " << lastLsnToKeep << " last recieved lsn# " << ev->Results.back().Lsn); 
- 
-            Ctest << "Done" << Endl; 
-            SignalDoneEvent(); 
-            break; 
-        } 
-        default: 
-            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl; 
-            break; 
-        } 
-        TestStep += 10; 
-    } 
-public: 
-    TTestLogWriteCut(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    { 
-        MyNum = AtomicGetAndIncrement(VDiskNum); 
-        ASSERT_YTHROW(MyNum < VDiskCount, "MyNum should be less than VDiskCount"); 
-    } 
-}; 
- 
-template<bool Equal> 
-TAtomic TTestLogWriteCut<Equal>::VDiskNum = 0; 
- 
-template<bool Equal> 
-TVector<TChunkIdx> TTestLogWriteCut<Equal>::CommitedChunks[VDiskCount]; 
- 
+template<bool Equal>
+class TTestLogWriteCut : public TBaseTest {
+    static constexpr ui32 VDiskCount = 2;
+
+public:
+    static TAtomic VDiskNum;
+    static TVector<TChunkIdx> CommitedChunks[VDiskCount];
+
+    static void Reset() {
+        VDiskNum = 0;
+        for (ui32 i = 0; i < VDiskCount; ++i) {
+            CommitedChunks[i].clear();
+        }
+    }
+
+private:
+
+    ui32 MyNum = 0;
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui64 Lsn = 100;
+    ui32 LogRecordSizeMin = 16 << 10;
+    ui32 LogRecordSizeMax = 32 << 10;
+    ui32 ChunkSize;
+    ui32 EvLogsToSend;
+    ui32 EvLogsReceived = 0;
+
+    const ui32 LogRecordsToKeep = 100;
+
+    ui32 ChunksToReserve;
+    TVector<TChunkIdx> ReservedChunks;
+    ui64 LastCommitLsn = 0;
+
+
+    NPrivate::TMersenne64 RandGen = Seed();
+
+    void CheckOwnedChunks(TVector<TChunkIdx>& owned) {
+        std::sort(CommitedChunks[MyNum].begin(), CommitedChunks[MyNum].end());
+        std::sort(owned.begin(), owned.end());
+
+        TStringStream str;
+        str << "MyNum# " << MyNum << " CommitedChunks# ";
+        NPDisk::TChunkIdFormatter(str).PrintBracedChunksList(CommitedChunks[MyNum]);
+        str << " owned# ";
+        NPDisk::TChunkIdFormatter(str).PrintBracedChunksList(owned);
+        str << Endl;
+        Ctest << str.Str();
+        ASSERT_YTHROW(CommitedChunks[MyNum].size() <= owned.size(), "MyNum# " << MyNum << " size mismatch, "
+                << CommitedChunks[MyNum].size() << " > " << owned.size());
+        for (size_t i = 0; i < CommitedChunks[MyNum].size(); ++i) {
+            ASSERT_YTHROW(owned[i] == CommitedChunks[MyNum][i],
+                    "MyNum# " << MyNum << " lost CommitedChunks, chunkIdx# "
+                    << CommitedChunks[MyNum][i] << " != " << owned[i]);
+        }
+    }
+
+    void TestFSM(const TActorContext &ctx) {
+        //Ctest << "Test step " << TestStep << Endl;
+        switch (TestStep) {
+        case 0:
+            Ctest << " Sending TEvInit" << Endl;
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            break;
+        case 10:
+        {
+            auto *ev = Event->Get<NPDisk::TEvYardInitResult>();
+            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString());
+            Owner = ev->PDiskParams->Owner;
+            OwnerRound = ev->PDiskParams->OwnerRound;
+            ChunkSize = ev->PDiskParams->ChunkSize;
+            CheckOwnedChunks(ev->OwnedChunks);
+            ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound));
+            break;
+        }
+        case 20:
+        {
+            auto *ev = Event->Get<NPDisk::TEvReadLogResult>();
+            ASSERT_YTHROW(ev->Status == NKikimrProto::OK && ev->IsEndOfLog, ev->ToString());
+
+            for (const auto& res : ev->Results) {
+                Lsn = Max(Lsn, res.Lsn + 1);
+            }
+            ctx.Send(Yard, new NPDisk::TEvCheckSpace(Owner, OwnerRound));
+            Ctest << " Sending TEvLog" << Endl;
+            break;
+        }
+        case 30:
+        {
+            auto *ev = Event->Get<NPDisk::TEvCheckSpaceResult>();
+            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString());
+            ui32 totalChunks = ev->TotalChunks;
+            ui32 logRecordSizeMean = LogRecordSizeMin + (LogRecordSizeMax - LogRecordSizeMin) / 2;
+            if (Equal) {
+                EvLogsToSend = totalChunks / 4 * ChunkSize / logRecordSizeMean;
+            } else {
+                if (MyNum == 0) {
+                    // First VDisk writes only one record to first LogChunk
+                    EvLogsToSend = ChunkSize / 2 / logRecordSizeMean;
+                } else {
+                    // Second VDisk writes full device
+                    EvLogsToSend = totalChunks / 2 * ChunkSize / logRecordSizeMean + 67;
+                }
+            }
+            Ctest << "totalChunks# " << totalChunks << " ChunkSize# " << ChunkSize << " MyNum# " << MyNum
+                << " EvLogsToSend# " << EvLogsToSend << Endl;
+
+            ChunksToReserve = ev->FreeChunks / 4;
+            ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, ChunksToReserve));
+            break;
+        }
+        case 40:
+        {
+            auto *ev = Event->Get<NPDisk::TEvChunkReserveResult>();
+            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString());
+
+            ASSERT_YTHROW(ev->ChunkIds.size() == ChunksToReserve,
+                "Unexpected ChunkIds.size() == " << ev->ChunkIds.size());
+            ReservedChunks = std::move(ev->ChunkIds);
+            ui32 logRecordSize = LogRecordSizeMin + RandGen.GenRand() % (LogRecordSizeMax - LogRecordSizeMin);
+            TString data = PrepareData(logRecordSize);
+            NPDisk::TCommitRecord comRec{};
+            comRec.FirstLsnToKeep = Lsn;
+            comRec.IsStartingPoint = true;
+            if (ReservedChunks) {
+                comRec.CommitChunks.push_back(ReservedChunks.back());
+                LastCommitLsn = Lsn;
+                Ctest << "MyNum# " << MyNum << " try commit chunkIdx# " << ReservedChunks.back()
+                    << " Lsn# " << Lsn << Endl;
+            }
+            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, comRec, data, TLsnSeg(Lsn, Lsn), (void*)0));
+            ++Lsn;
+            break;
+        }
+        case 50:
+        {
+            auto *ev = Event->Get<NPDisk::TEvLogResult>();
+            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString());
+
+            if (LastCommitLsn == Lsn - 1) {
+                CommitedChunks[MyNum].push_back(ReservedChunks.back());
+                Ctest << "MyNum# " << MyNum << " done commit chunkIdx# " << ReservedChunks.back()
+                    << " LastCommitLsn# " << LastCommitLsn << Endl;
+                ReservedChunks.pop_back();
+            }
+            ++EvLogsReceived;
+            //Ctest << "MyNum# " << MyNum << " recieve event num# " << EvLogsReceived << " Lsn# " << Lsn << Endl;
+            if (EvLogsReceived < EvLogsToSend - 1) {
+                TestStep -= 10;
+            }
+            ui32 logRecordSize = LogRecordSizeMin + RandGen.GenRand() % (LogRecordSizeMax - LogRecordSizeMin);
+            TString data = PrepareData(logRecordSize);
+            if (Lsn % LogRecordsToKeep == 0) {
+                NPDisk::TCommitRecord comRec{};
+                comRec.FirstLsnToKeep = Lsn - LogRecordsToKeep;
+                if (ReservedChunks) {
+                    comRec.CommitChunks.push_back(ReservedChunks.back());
+                    LastCommitLsn = Lsn;
+                    Ctest << "try commit chunkIdx# " << ReservedChunks.back() << " Lsn# " << Lsn << Endl;
+                }
+                comRec.IsStartingPoint = true;
+                ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, comRec, data, TLsnSeg(Lsn, Lsn), (void*)0));
+            } else {
+                ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, data, TLsnSeg(Lsn, Lsn), (void*)0));
+            }
+            ++Lsn;
+            break;
+        }
+        case 60:
+        {
+            auto *ev = Event->Get<NPDisk::TEvLogResult>();
+            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString());
+            ++EvLogsReceived;
+            ASSERT_YTHROW(EvLogsReceived == EvLogsToSend, "PDUT-0001");
+            Ctest << "MyNum# " << MyNum << " recieve event num# " << EvLogsReceived << Endl;
+
+            ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, *PDiskGuid));
+            break;
+        }
+        case 70:
+        {
+            auto *ev = Event->Get<NPDisk::TEvYardInitResult>();
+            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString());
+            Owner = ev->PDiskParams->Owner;
+            OwnerRound = ev->PDiskParams->OwnerRound;
+            ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound));
+            break;
+        }
+        case 80:
+        {
+            auto *ev = Event->Get<NPDisk::TEvReadLogResult>();
+            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString());
+            Ctest << "MyNum# " << MyNum << Endl;
+            for (const NKikimr::NPDisk::TLogRecord &log : ev->Results) {
+                Ctest << "Read log record# " << log.ToString();
+            }
+            Ctest << Endl;
+
+            const ui64 firstLsnToKeep = Lsn - Lsn % LogRecordsToKeep;
+            const ui64 lastLsnToKeep = Lsn - 1;
+            bool isInsideLsnToKeep = false;
+            TMaybe<const NKikimr::NPDisk::TLogRecord*> prevLog;
+            for (const NKikimr::NPDisk::TLogRecord &log : ev->Results) {
+                if (firstLsnToKeep <= log.Lsn) {
+                    isInsideLsnToKeep = true;
+                }
+                ASSERT_YTHROW(log.Lsn <= lastLsnToKeep, "TestVDisk didn't wrote log with such lsn# " << log.Lsn);
+
+                if (isInsideLsnToKeep && prevLog) {
+                    ASSERT_YTHROW((**prevLog).Lsn == log.Lsn - 1, "PDisk must send log record with strongly"
+                            << " increasing Lsn, prevLsn# " << (**prevLog).Lsn << " currentLsn# " << log.Lsn);
+                }
+                prevLog = &log;
+            }
+            ASSERT_YTHROW(isInsideLsnToKeep, "PDisk didn't send expected log records to TestVDisk");
+            ASSERT_YTHROW(ev->Results.back().Lsn == lastLsnToKeep, "PDisk didn't send last log record with"
+                    << " Lsn# " << lastLsnToKeep << " last recieved lsn# " << ev->Results.back().Lsn);
+
+            Ctest << "Done" << Endl;
+            SignalDoneEvent();
+            break;
+        }
+        default:
+            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+            break;
+        }
+        TestStep += 10;
+    }
+public:
+    TTestLogWriteCut(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {
+        MyNum = AtomicGetAndIncrement(VDiskNum);
+        ASSERT_YTHROW(MyNum < VDiskCount, "MyNum should be less than VDiskCount");
+    }
+};
+
+template<bool Equal>
+TAtomic TTestLogWriteCut<Equal>::VDiskNum = 0;
+
+template<bool Equal>
+TVector<TChunkIdx> TTestLogWriteCut<Equal>::CommitedChunks[VDiskCount];
+
 template<ui64 LogRequests>
 class TTestLogWriteLsnConsistency : public TBaseTest {
     NPDisk::TOwner Owner;
@@ -571,7 +571,7 @@ class TTestLog3Read : public TBaseTest {
             Owner = LastResponse.Owner;
             OwnerRound = LastResponse.OwnerRound;
             VERBOSE_COUT(" Sending TEvLogRead");
-            ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, NPDisk::TLogPosition{0, 0}, Size1+Size2+Size3)); 
+            ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, NPDisk::TLogPosition{0, 0}, Size1+Size2+Size3));
             break;
         case 20:
         {
@@ -1049,24 +1049,24 @@ class TTestChunk3WriteRead : public TBaseTest {
             ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
             break;
         case 10:
-            TEST_RESPONSE(EvYardInitResult, OK); 
-            Owner = LastResponse.Owner; 
-            OwnerRound = LastResponse.OwnerRound; 
-            BlockSize = LastResponse.AppendBlockSize; 
-            DataSize = (WishDataSize + BlockSize - 1) / BlockSize * BlockSize; 
-            ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1)); 
-            break; 
+            TEST_RESPONSE(EvYardInitResult, OK);
+            Owner = LastResponse.Owner;
+            OwnerRound = LastResponse.OwnerRound;
+            BlockSize = LastResponse.AppendBlockSize;
+            DataSize = (WishDataSize + BlockSize - 1) / BlockSize * BlockSize;
+            ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
+            break;
         case 20:
-            TEST_RESPONSE(EvChunkReserveResult, OK); 
-            ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1, 
-                "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size()); 
-            ChunkIdx = LastResponse.ChunkIds[0]; 
-            Iteration = 0; 
+            TEST_RESPONSE(EvChunkReserveResult, OK);
+            ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1,
+                "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
+            ChunkIdx = LastResponse.ChunkIds[0];
+            Iteration = 0;
             [[fallthrough]]; // AUTOGENERATED_FALLTHROUGH_FIXME
         case 30:
-        case 40: 
+        case 40:
         {
-            if (Iteration) { 
+            if (Iteration) {
                 TEST_RESPONSE(EvChunkWriteResult, OK);
                 ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie);
             }
@@ -1077,10 +1077,10 @@ class TTestChunk3WriteRead : public TBaseTest {
             ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
             ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, DataSize * Iteration,
                 new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
-            ++Iteration; 
+            ++Iteration;
             break;
         }
-        case 50: 
+        case 50:
         {
             TEST_RESPONSE(EvChunkWriteResult, OK);
             ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie);
@@ -1091,12 +1091,12 @@ class TTestChunk3WriteRead : public TBaseTest {
             ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, data, TLsnSeg(1, 1), (void*)43));
             break;
         }
-        case 60: 
+        case 60:
             TEST_RESPONSE(EvLogResult, OK);
             VERBOSE_COUT(" Sending TEvChunkRead");
             ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 0, DataSize*3, 1, nullptr));
             break;
-        case 70: 
+        case 70:
         {
             TString fullData = PrepareData(DataSize) + PrepareData(DataSize) + PrepareData(DataSize);
             TEST_RESPONSE(EvChunkReadResult, OK);
@@ -1169,7 +1169,7 @@ class TTestLogMultipleWriteRead : public TBaseTest {
             ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, *PDiskGuid));
             TestStep += 10;
         } else if (TestStep == 30) {
-            NPDisk::TLogPosition position{0, 0}; 
+            NPDisk::TLogPosition position{0, 0};
             if (IsFirstReadLog) {
                 TEST_RESPONSE(EvYardInitResult, OK);
                 Owner = LastResponse.Owner;
@@ -1305,7 +1305,7 @@ public:
 class TTestWhiteboard : public TBaseTest {
     bool IsPDiskResultReceived = false;
     const int ExpectedOwnerCount = 5;
-    int RemainingVDiskResults = ExpectedOwnerCount; 
+    int RemainingVDiskResults = ExpectedOwnerCount;
     bool IsDiskMetricsResultReceived = false;
     bool IsPDiskLightsResultReceived = false;
 
@@ -1419,8 +1419,8 @@ class TTestChunkPriorityBlock : public TBaseTest {
     ui32 SafeSize;
     TString ChunkWriteData;
     TArrayHolder<NPDisk::TEvChunkWrite::TPart> ChunkWriteParts;
-    TVector<ui32> ChunkIds; 
-    ui32 PausedChunkWrites = 5; 
+    TVector<ui32> ChunkIds;
+    ui32 PausedChunkWrites = 5;
     ui32 Iteration;
 
     void TestFSM(const TActorContext &ctx);
@@ -1554,269 +1554,269 @@ public:
     {}
 };
 
-class TTestSysLogReordering : public TBaseTest { 
-    friend class TTestSysLogReorderingLogCheck; 
- 
-public: 
-    static std::atomic<ui32> VDiskNum; 
- 
-private: 
-    static constexpr ui32 ChunksToReserve = 20; 
- 
-    enum ELogRecType : ui8 { 
-        EGarbage = 0, 
-        ECommittedChunks = 1, 
-        EDeleteChunk = 2, 
-    }; 
- 
-#pragma pack(push, 1) 
-    struct TLogRecAboutChunks { 
-        ELogRecType Type; 
- 
-        union { 
-            ui32 CommittedChunks[ChunksToReserve]; 
-            ui32 DeletedChunk; 
-        } Data; 
+class TTestSysLogReordering : public TBaseTest {
+    friend class TTestSysLogReorderingLogCheck;
+
+public:
+    static std::atomic<ui32> VDiskNum;
+
+private:
+    static constexpr ui32 ChunksToReserve = 20;
+
+    enum ELogRecType : ui8 {
+        EGarbage = 0,
+        ECommittedChunks = 1,
+        EDeleteChunk = 2,
+    };
+
+#pragma pack(push, 1)
+    struct TLogRecAboutChunks {
+        ELogRecType Type;
+
+        union {
+            ui32 CommittedChunks[ChunksToReserve];
+            ui32 DeletedChunk;
+        } Data;
 
         TLogRecAboutChunks() {
             memset(static_cast<void*>(this), 0, sizeof(TLogRecAboutChunks));
         }
-    }; 
-#pragma pack(pop) 
- 
-    ui32 MyNum = 0; 
-    TVDiskID VDiskID; 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TVector<ui32> CommittedChunks; 
-    const ui32 LogRecordSize = 2000; 
-    const ui32 LogRecordsToWrite = 2000; 
-    const ui32 ReleaseLsnStepSize = LogRecordsToWrite / ChunksToReserve; 
-    ui32 LogRecordsWritten = 0; 
-    ui32 DeletedChunks = 0; 
-    TString Garbage; 
-    ui32 Lsn = 0; // First written Lsn will be 1, last EvLog with data will be LogRecordsToWrite 
- 
-    TLsnSeg GenLsnSeg() { 
-        ++Lsn; 
-        return {Lsn, Lsn}; 
-    } 
- 
-    void SendEvLog(const TActorContext& ctx, TMaybe<NPDisk::TCommitRecord> commit, TString data) { 
-        if (commit) { 
-            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, *commit, data, GenLsnSeg(), nullptr)); 
-        } else { 
-            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, data, GenLsnSeg(), nullptr)); 
-        } 
-    } 
- 
-    void TestFSM(const TActorContext &ctx) { 
-        VERBOSE_COUT("Test step " << TestStep); 
-        switch (TestStep) { 
-        case 0: 
-            VERBOSE_COUT(" Sending TEvInit"); 
-            VDiskID.GroupID = MyNum; 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid)); 
-            break; 
-        case 10: 
-        { 
-            auto* ev = Event->Get<NPDisk::TEvYardInitResult>(); 
-            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString()); 
-            Owner = ev->PDiskParams->Owner; 
-            OwnerRound = ev->PDiskParams->OwnerRound; 
-            ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, ChunksToReserve)); 
-            break; 
-        } 
-        case 20: 
-        { 
-            auto* ev = Event->Get<NPDisk::TEvChunkReserveResult>(); 
-            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString()); 
-            ASSERT_YTHROW(ev->ChunkIds.size() == ChunksToReserve, 
-                "Unexpected ChunkIds.size() == " << ev->ChunkIds.size()); 
-            VERBOSE_COUT(" Sending TEvLog to commit"); 
- 
-            CommittedChunks = ev->ChunkIds; 
- 
-            NPDisk::TCommitRecord commitRecord; 
-            commitRecord.CommitChunks = ev->ChunkIds; 
-            commitRecord.IsStartingPoint = true; 
-            SendEvLog(ctx, commitRecord, {}); 
-            break; 
-        } 
-        case 30: 
-        { 
-            auto* ev = Event->Get<NPDisk::TEvLogResult>(); 
-            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString()); 
-            VERBOSE_COUT(" Sending TEvLog to commit"); 
-            ++LogRecordsWritten; 
- 
-            if (LogRecordsWritten < LogRecordsToWrite) { 
-                SendEvLog(ctx, {}, Garbage); 
-                TestStep -= 10; 
-            } else { 
-                TLogRecAboutChunks log; 
-                log.Type = ECommittedChunks; 
-                for (ui32 i = 0; i < CommittedChunks.size(); ++i) { 
-                    log.Data.CommittedChunks[i] = CommittedChunks[i]; 
-                } 
-                TString commitedChunksList = TString::Uninitialized(sizeof(log)); 
-                memcpy(commitedChunksList.Detach(), &log, sizeof(log)); 
-                NPDisk::TCommitRecord commitRecord; 
-                commitRecord.IsStartingPoint = true; 
-                SendEvLog(ctx, commitRecord, commitedChunksList); 
-            } 
-            break; 
-        } 
-        case 40: 
-        { 
-            auto* ev = Event->Get<NPDisk::TEvLogResult>(); 
-            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString()); 
- 
-            if (DeletedChunks < ChunksToReserve / 2) { 
-                NPDisk::TCommitRecord commitRecord; 
-                commitRecord.FirstLsnToKeep = 1 + ReleaseLsnStepSize * (DeletedChunks + 1); 
-                Y_VERIFY(commitRecord.FirstLsnToKeep <= LogRecordsToWrite + 1); 
-                TLogRecAboutChunks log; 
-                log.Type = EDeleteChunk; 
-                log.Data.DeletedChunk = CommittedChunks.back(); 
-                Ctest << "MyNum# " << MyNum << " Delete chunk# " << CommittedChunks.back() << Endl; 
-                TString deleteChunkLog = TString::Uninitialized(sizeof(log)); 
-                memcpy(deleteChunkLog.Detach(), &log, sizeof(log)); 
-                commitRecord.DeleteChunks.push_back(CommittedChunks.back()); 
-                CommittedChunks.pop_back(); 
- 
-                SendEvLog(ctx, commitRecord, deleteChunkLog); 
-                ++DeletedChunks; 
-                TestStep -= 10; 
-            } else { 
-                SignalDoneEvent(); 
-            } 
-            break; 
-        } 
-        default: 
-            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl; 
-            break; 
-        } 
-        TestStep += 10; 
-    } 
- 
-public: 
-    TTestSysLogReordering(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    { 
-        MyNum = VDiskNum.fetch_add(1); 
-        Garbage = PrepareData(LogRecordSize); 
-        TLogRecAboutChunks log; 
-        log.Type = EGarbage; 
-        Y_VERIFY(LogRecordSize >= sizeof(log)); 
-        memcpy(Garbage.Detach(), &log, sizeof(log)); 
-    } 
-}; 
- 
-class TTestSysLogReorderingLogCheck : public TBaseTest { 
-public: 
-    static std::atomic<ui32> VDiskNum; 
- 
-private: 
-    ui32 MyNum = 0; 
-    TVDiskID VDiskID; 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    TVector<ui32> CommittedChunks; 
-    TVector<ui32> DeletedChunks; // Delete CommitRecords that was written to disk 
-    TVector<ui32> OwnedChunks; // PDisk version of which chunks is owned 
- 
-    void CheckChunksNotMissed() { 
-        std::sort(CommittedChunks.begin(), CommittedChunks.end()); 
-        std::sort(DeletedChunks.begin(), DeletedChunks.end()); 
-        std::sort(OwnedChunks.begin(), OwnedChunks.end()); 
-        TVector<ui32> knownChunks(DeletedChunks.begin(), DeletedChunks.end()); 
-        knownChunks.insert(knownChunks.end(), OwnedChunks.begin(), OwnedChunks.end()); 
- 
-        std::sort(knownChunks.begin(), knownChunks.end()); 
- 
-        TStringStream str; 
-        str << "MyNum# " << MyNum << " "; 
-        str << Endl; 
-        str << "CommittedChunks# "; 
-        NPDisk::TChunkIdFormatter(str).PrintBracedChunksList(CommittedChunks); 
-        str << Endl; 
-        str << "OwnedChunks# "; 
-        NPDisk::TChunkIdFormatter(str).PrintBracedChunksList(OwnedChunks); 
-        str << Endl; 
-        str << "DeletedChunks# "; 
-        NPDisk::TChunkIdFormatter(str).PrintBracedChunksList(DeletedChunks); 
-        str << Endl; 
-        Ctest << str.Str(); 
- 
-        ASSERT_YTHROW(CommittedChunks == knownChunks, "Some chunks missed " << str.Str()); 
-    } 
- 
-    void TestFSM(const TActorContext &ctx) { 
-        VERBOSE_COUT("Test step " << TestStep); 
-        switch (TestStep) { 
-        case 0: 
-            VERBOSE_COUT(" Sending TEvInit"); 
-            VDiskID.GroupID = MyNum; 
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid)); 
-            break; 
-        case 10: 
-        { 
-            auto* ev = Event->Get<NPDisk::TEvYardInitResult>(); 
-            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString()); 
-            Owner = ev->PDiskParams->Owner; 
-            OwnerRound = ev->PDiskParams->OwnerRound; 
-            OwnedChunks = ev->OwnedChunks; 
-            ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, NPDisk::TLogPosition{0, 0})); 
-            break; 
-        } 
-        case 20: 
-        { 
-            auto* ev = Event->Get<NPDisk::TEvReadLogResult>(); 
-            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString()); 
-            ASSERT_YTHROW(ev->IsEndOfLog, ev->ToString()); 
- 
-            for (const NKikimr::NPDisk::TLogRecord &logRec : LastResponse.LogRecords) { 
-                auto *log = reinterpret_cast<const TTestSysLogReordering::TLogRecAboutChunks*>(logRec.Data.data()); 
-                switch (log->Type) { 
-                case TTestSysLogReordering::EGarbage: 
-                    break; 
-                case TTestSysLogReordering::ECommittedChunks: 
-                    for (ui32 i = 0; i < TTestSysLogReordering::ChunksToReserve; ++i) { 
-                        const ui32 chunk = log->Data.CommittedChunks[i]; 
-                        CommittedChunks.push_back(chunk); 
-                    } 
-                    break; 
-                case TTestSysLogReordering::EDeleteChunk: 
-                    const ui32 chunk = log->Data.DeletedChunk; 
-                    DeletedChunks.push_back(chunk); 
-                    break; 
-                } 
-            } 
- 
-            CheckChunksNotMissed(); 
-            SignalDoneEvent(); 
-            break; 
-        } 
-        case 30: 
-        { 
-            break; 
-        } 
-        default: 
-            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl; 
-            break; 
-        } 
-        TestStep += 10; 
-    } 
- 
-public: 
-    TTestSysLogReorderingLogCheck(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TBaseTest(cfg) 
-    { 
-        MyNum = VDiskNum.fetch_add(1); 
-    } 
-}; 
- 
+    };
+#pragma pack(pop)
+
+    ui32 MyNum = 0;
+    TVDiskID VDiskID;
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TVector<ui32> CommittedChunks;
+    const ui32 LogRecordSize = 2000;
+    const ui32 LogRecordsToWrite = 2000;
+    const ui32 ReleaseLsnStepSize = LogRecordsToWrite / ChunksToReserve;
+    ui32 LogRecordsWritten = 0;
+    ui32 DeletedChunks = 0;
+    TString Garbage;
+    ui32 Lsn = 0; // First written Lsn will be 1, last EvLog with data will be LogRecordsToWrite
+
+    TLsnSeg GenLsnSeg() {
+        ++Lsn;
+        return {Lsn, Lsn};
+    }
+
+    void SendEvLog(const TActorContext& ctx, TMaybe<NPDisk::TCommitRecord> commit, TString data) {
+        if (commit) {
+            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, *commit, data, GenLsnSeg(), nullptr));
+        } else {
+            ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, data, GenLsnSeg(), nullptr));
+        }
+    }
+
+    void TestFSM(const TActorContext &ctx) {
+        VERBOSE_COUT("Test step " << TestStep);
+        switch (TestStep) {
+        case 0:
+            VERBOSE_COUT(" Sending TEvInit");
+            VDiskID.GroupID = MyNum;
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            break;
+        case 10:
+        {
+            auto* ev = Event->Get<NPDisk::TEvYardInitResult>();
+            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString());
+            Owner = ev->PDiskParams->Owner;
+            OwnerRound = ev->PDiskParams->OwnerRound;
+            ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, ChunksToReserve));
+            break;
+        }
+        case 20:
+        {
+            auto* ev = Event->Get<NPDisk::TEvChunkReserveResult>();
+            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString());
+            ASSERT_YTHROW(ev->ChunkIds.size() == ChunksToReserve,
+                "Unexpected ChunkIds.size() == " << ev->ChunkIds.size());
+            VERBOSE_COUT(" Sending TEvLog to commit");
+
+            CommittedChunks = ev->ChunkIds;
+
+            NPDisk::TCommitRecord commitRecord;
+            commitRecord.CommitChunks = ev->ChunkIds;
+            commitRecord.IsStartingPoint = true;
+            SendEvLog(ctx, commitRecord, {});
+            break;
+        }
+        case 30:
+        {
+            auto* ev = Event->Get<NPDisk::TEvLogResult>();
+            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString());
+            VERBOSE_COUT(" Sending TEvLog to commit");
+            ++LogRecordsWritten;
+
+            if (LogRecordsWritten < LogRecordsToWrite) {
+                SendEvLog(ctx, {}, Garbage);
+                TestStep -= 10;
+            } else {
+                TLogRecAboutChunks log;
+                log.Type = ECommittedChunks;
+                for (ui32 i = 0; i < CommittedChunks.size(); ++i) {
+                    log.Data.CommittedChunks[i] = CommittedChunks[i];
+                }
+                TString commitedChunksList = TString::Uninitialized(sizeof(log));
+                memcpy(commitedChunksList.Detach(), &log, sizeof(log));
+                NPDisk::TCommitRecord commitRecord;
+                commitRecord.IsStartingPoint = true;
+                SendEvLog(ctx, commitRecord, commitedChunksList);
+            }
+            break;
+        }
+        case 40:
+        {
+            auto* ev = Event->Get<NPDisk::TEvLogResult>();
+            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString());
+
+            if (DeletedChunks < ChunksToReserve / 2) {
+                NPDisk::TCommitRecord commitRecord;
+                commitRecord.FirstLsnToKeep = 1 + ReleaseLsnStepSize * (DeletedChunks + 1);
+                Y_VERIFY(commitRecord.FirstLsnToKeep <= LogRecordsToWrite + 1);
+                TLogRecAboutChunks log;
+                log.Type = EDeleteChunk;
+                log.Data.DeletedChunk = CommittedChunks.back();
+                Ctest << "MyNum# " << MyNum << " Delete chunk# " << CommittedChunks.back() << Endl;
+                TString deleteChunkLog = TString::Uninitialized(sizeof(log));
+                memcpy(deleteChunkLog.Detach(), &log, sizeof(log));
+                commitRecord.DeleteChunks.push_back(CommittedChunks.back());
+                CommittedChunks.pop_back();
+
+                SendEvLog(ctx, commitRecord, deleteChunkLog);
+                ++DeletedChunks;
+                TestStep -= 10;
+            } else {
+                SignalDoneEvent();
+            }
+            break;
+        }
+        default:
+            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+            break;
+        }
+        TestStep += 10;
+    }
+
+public:
+    TTestSysLogReordering(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {
+        MyNum = VDiskNum.fetch_add(1);
+        Garbage = PrepareData(LogRecordSize);
+        TLogRecAboutChunks log;
+        log.Type = EGarbage;
+        Y_VERIFY(LogRecordSize >= sizeof(log));
+        memcpy(Garbage.Detach(), &log, sizeof(log));
+    }
+};
+
+class TTestSysLogReorderingLogCheck : public TBaseTest {
+public:
+    static std::atomic<ui32> VDiskNum;
+
+private:
+    ui32 MyNum = 0;
+    TVDiskID VDiskID;
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TVector<ui32> CommittedChunks;
+    TVector<ui32> DeletedChunks; // Delete CommitRecords that was written to disk
+    TVector<ui32> OwnedChunks; // PDisk version of which chunks is owned
+
+    void CheckChunksNotMissed() {
+        std::sort(CommittedChunks.begin(), CommittedChunks.end());
+        std::sort(DeletedChunks.begin(), DeletedChunks.end());
+        std::sort(OwnedChunks.begin(), OwnedChunks.end());
+        TVector<ui32> knownChunks(DeletedChunks.begin(), DeletedChunks.end());
+        knownChunks.insert(knownChunks.end(), OwnedChunks.begin(), OwnedChunks.end());
+
+        std::sort(knownChunks.begin(), knownChunks.end());
+
+        TStringStream str;
+        str << "MyNum# " << MyNum << " ";
+        str << Endl;
+        str << "CommittedChunks# ";
+        NPDisk::TChunkIdFormatter(str).PrintBracedChunksList(CommittedChunks);
+        str << Endl;
+        str << "OwnedChunks# ";
+        NPDisk::TChunkIdFormatter(str).PrintBracedChunksList(OwnedChunks);
+        str << Endl;
+        str << "DeletedChunks# ";
+        NPDisk::TChunkIdFormatter(str).PrintBracedChunksList(DeletedChunks);
+        str << Endl;
+        Ctest << str.Str();
+
+        ASSERT_YTHROW(CommittedChunks == knownChunks, "Some chunks missed " << str.Str());
+    }
+
+    void TestFSM(const TActorContext &ctx) {
+        VERBOSE_COUT("Test step " << TestStep);
+        switch (TestStep) {
+        case 0:
+            VERBOSE_COUT(" Sending TEvInit");
+            VDiskID.GroupID = MyNum;
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            break;
+        case 10:
+        {
+            auto* ev = Event->Get<NPDisk::TEvYardInitResult>();
+            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString());
+            Owner = ev->PDiskParams->Owner;
+            OwnerRound = ev->PDiskParams->OwnerRound;
+            OwnedChunks = ev->OwnedChunks;
+            ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, NPDisk::TLogPosition{0, 0}));
+            break;
+        }
+        case 20:
+        {
+            auto* ev = Event->Get<NPDisk::TEvReadLogResult>();
+            ASSERT_YTHROW(ev->Status == NKikimrProto::OK, ev->ToString());
+            ASSERT_YTHROW(ev->IsEndOfLog, ev->ToString());
+
+            for (const NKikimr::NPDisk::TLogRecord &logRec : LastResponse.LogRecords) {
+                auto *log = reinterpret_cast<const TTestSysLogReordering::TLogRecAboutChunks*>(logRec.Data.data());
+                switch (log->Type) {
+                case TTestSysLogReordering::EGarbage:
+                    break;
+                case TTestSysLogReordering::ECommittedChunks:
+                    for (ui32 i = 0; i < TTestSysLogReordering::ChunksToReserve; ++i) {
+                        const ui32 chunk = log->Data.CommittedChunks[i];
+                        CommittedChunks.push_back(chunk);
+                    }
+                    break;
+                case TTestSysLogReordering::EDeleteChunk:
+                    const ui32 chunk = log->Data.DeletedChunk;
+                    DeletedChunks.push_back(chunk);
+                    break;
+                }
+            }
+
+            CheckChunksNotMissed();
+            SignalDoneEvent();
+            break;
+        }
+        case 30:
+        {
+            break;
+        }
+        default:
+            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+            break;
+        }
+        TestStep += 10;
+    }
+
+public:
+    TTestSysLogReorderingLogCheck(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {
+        MyNum = VDiskNum.fetch_add(1);
+    }
+};
+
 template <ui32 Size>
 class TTestCommitChunks : public TBaseTest {
     NPDisk::TOwner Owner;
@@ -1981,7 +1981,7 @@ public:
     {}
 };
 
-class TTestCheckLog : public TBaseTest { 
+class TTestCheckLog : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;
     ui32 AppendBlockSize;
@@ -1992,7 +1992,7 @@ class TTestCheckLog : public TBaseTest {
 
     void TestFSM(const TActorContext &ctx);
 public:
-    TTestCheckLog(const TIntrusivePtr<TTestConfig> &cfg) 
+    TTestCheckLog(const TIntrusivePtr<TTestConfig> &cfg)
         : TBaseTest(cfg)
     {}
 };
@@ -2140,107 +2140,107 @@ public:
     {}
 };
 
- 
- 
-class TActorTestSlayLogWriteRace final : public TCommonBaseTest { 
-    void HandleBoot(TEvTablet::TEvBoot::TPtr &, const TActorContext &ctx) { 
-        ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, *PDiskGuid)); 
-    } 
- 
-    void Handle(NPDisk::TEvYardInitResult::TPtr &event, const TActorContext &ctx) { 
-        auto *ev = event->Get(); 
-        if (ev->Status != NKikimrProto::OK) { 
-            SignalError(ev->ToString()); 
-            return; 
-        } 
- 
-        Owner = ev->PDiskParams->Owner; 
-        OwnerRound = ev->PDiskParams->OwnerRound; 
-        if (FirstRound) { 
-            for (size_t i = 0; i < LogWriteCount; ++i) { 
-                if (i == LogWriteCount - 10) { 
-                    ctx.Send(Yard, new NPDisk::TEvSlay(VDiskID, OwnerRound + 1, 1, 1)); 
-                } 
-                TString data = PrepareData(842); 
-                if (i == 0) { 
-                    NPDisk::TCommitRecord commit; 
-                    commit.IsStartingPoint = true; 
-                    ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 1, commit, data, TLsnSeg(i+1, i+1), nullptr)); 
-                } else { 
-                    ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 1, data, TLsnSeg(i+1, i+1), nullptr)); 
-                } 
-            } 
-        } else { 
-            if (!ev->OwnedChunks.empty()) { 
-                SignalError(ev->ToString()); 
-                return; 
-            } 
-            // This sleep doesn't fix a problem with old VDisk's log enteries after slay 
-            // Sleep(TDuration::Seconds(5)); 
-            ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound)); 
-        } 
-    } 
- 
-    void Handle(NPDisk::TEvLogResult::TPtr &event, const TActorContext &) { 
-        auto *ev = event->Get(); 
-        if (ev->Status != NKikimrProto::OK) { 
-            return; 
-        } 
- 
-        RecievedLogWrites += ev->Results.size(); 
-    } 
- 
-    void Handle(NPDisk::TEvReadLogResult::TPtr &event, const TActorContext &) { 
-        auto *ev = event->Get(); 
-        if (ev->Status != NKikimrProto::OK) { 
-            SignalError(ev->ToString()); 
-            return; 
-        } 
- 
-        if (ev->Results) { 
-            SignalError("Non empty result for newly created Owner" + ev->ToString()); 
-        } else { 
-            SignalDoneEvent(); 
-        } 
-    } 
- 
-    void Handle(NPDisk::TEvSlayResult::TPtr &event, const TActorContext &ctx) { 
-        auto *ev = event->Get(); 
-        if (ev->Status != NKikimrProto::OK) { 
-            SignalError(ev->ToString()); 
-            return; 
-        } 
-        FirstRound = false; 
-        // This sleep prevents the problem 
-        // Sleep(TDuration::Seconds(5)); 
-        ctx.Send(Yard, new NPDisk::TEvYardInit(OwnerRound + 1, VDiskID, *PDiskGuid)); 
-    } 
- 
-public: 
-    STFUNC(StateFunc) { 
-        switch (ev->GetTypeRewrite()) { 
-            HFunc(TEvTablet::TEvBoot, HandleBoot); 
-            HFunc(NPDisk::TEvYardInitResult, Handle); 
-            HFunc(NPDisk::TEvLogResult, Handle); 
-            HFunc(NPDisk::TEvReadLogResult, Handle); 
-            HFunc(NPDisk::TEvSlayResult, Handle); 
-        } 
-    } 
- 
-    TActorTestSlayLogWriteRace(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TCommonBaseTest(cfg) 
-    { 
-        Become(&TActorTestSlayLogWriteRace::StateFunc); 
-    } 
- 
-private: 
-    NPDisk::TOwner Owner; 
-    NPDisk::TOwnerRound OwnerRound; 
-    const size_t LogWriteCount = 1e5; 
-    size_t RecievedLogWrites = 0; 
-    bool FirstRound = true; 
-}; 
- 
+
+
+class TActorTestSlayLogWriteRace final : public TCommonBaseTest {
+    void HandleBoot(TEvTablet::TEvBoot::TPtr &, const TActorContext &ctx) {
+        ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, *PDiskGuid));
+    }
+
+    void Handle(NPDisk::TEvYardInitResult::TPtr &event, const TActorContext &ctx) {
+        auto *ev = event->Get();
+        if (ev->Status != NKikimrProto::OK) {
+            SignalError(ev->ToString());
+            return;
+        }
+
+        Owner = ev->PDiskParams->Owner;
+        OwnerRound = ev->PDiskParams->OwnerRound;
+        if (FirstRound) {
+            for (size_t i = 0; i < LogWriteCount; ++i) {
+                if (i == LogWriteCount - 10) {
+                    ctx.Send(Yard, new NPDisk::TEvSlay(VDiskID, OwnerRound + 1, 1, 1));
+                }
+                TString data = PrepareData(842);
+                if (i == 0) {
+                    NPDisk::TCommitRecord commit;
+                    commit.IsStartingPoint = true;
+                    ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 1, commit, data, TLsnSeg(i+1, i+1), nullptr));
+                } else {
+                    ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 1, data, TLsnSeg(i+1, i+1), nullptr));
+                }
+            }
+        } else {
+            if (!ev->OwnedChunks.empty()) {
+                SignalError(ev->ToString());
+                return;
+            }
+            // This sleep doesn't fix a problem with old VDisk's log enteries after slay
+            // Sleep(TDuration::Seconds(5));
+            ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound));
+        }
+    }
+
+    void Handle(NPDisk::TEvLogResult::TPtr &event, const TActorContext &) {
+        auto *ev = event->Get();
+        if (ev->Status != NKikimrProto::OK) {
+            return;
+        }
+
+        RecievedLogWrites += ev->Results.size();
+    }
+
+    void Handle(NPDisk::TEvReadLogResult::TPtr &event, const TActorContext &) {
+        auto *ev = event->Get();
+        if (ev->Status != NKikimrProto::OK) {
+            SignalError(ev->ToString());
+            return;
+        }
+
+        if (ev->Results) {
+            SignalError("Non empty result for newly created Owner" + ev->ToString());
+        } else {
+            SignalDoneEvent();
+        }
+    }
+
+    void Handle(NPDisk::TEvSlayResult::TPtr &event, const TActorContext &ctx) {
+        auto *ev = event->Get();
+        if (ev->Status != NKikimrProto::OK) {
+            SignalError(ev->ToString());
+            return;
+        }
+        FirstRound = false;
+        // This sleep prevents the problem
+        // Sleep(TDuration::Seconds(5));
+        ctx.Send(Yard, new NPDisk::TEvYardInit(OwnerRound + 1, VDiskID, *PDiskGuid));
+    }
+
+public:
+    STFUNC(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvTablet::TEvBoot, HandleBoot);
+            HFunc(NPDisk::TEvYardInitResult, Handle);
+            HFunc(NPDisk::TEvLogResult, Handle);
+            HFunc(NPDisk::TEvReadLogResult, Handle);
+            HFunc(NPDisk::TEvSlayResult, Handle);
+        }
+    }
+
+    TActorTestSlayLogWriteRace(const TIntrusivePtr<TTestConfig> &cfg)
+        : TCommonBaseTest(cfg)
+    {
+        Become(&TActorTestSlayLogWriteRace::StateFunc);
+    }
+
+private:
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    const size_t LogWriteCount = 1e5;
+    size_t RecievedLogWrites = 0;
+    bool FirstRound = true;
+};
+
 class TTestDestructionWhileWritingChunk : public TBaseTest {
     NPDisk::TOwner Owner;
     NPDisk::TOwnerRound OwnerRound;

@@ -1,5 +1,5 @@
-#include <util/random/fast.h> 
- 
+#include <util/random/fast.h>
+
 #include "chacha_vec.h"
 #include "secured_block.h"
 #include <ydb/core/blobstorage/crypto/ut/ut_helpers.h>
@@ -137,43 +137,43 @@ Y_UNIT_TEST_SUITE(TChaChaVec)
             UNIT_ASSERT_EQUAL(((ui8*)buf)[i], plaintext.data()[i]);
         }
     }
- 
-    Y_UNIT_TEST(CompatibilityTest) { 
-        ui64 offset = 0; 
- 
-        ChaChaVec cipher1; 
-        cipher1.SetIV(tc8_iv, (ui8*)&offset); 
-        cipher1.SetKey(tc8_key, KEY_SIZE); 
- 
-        ChaChaVec cipher2; 
-        cipher2.SetIV(tc8_iv, (ui8*)&offset); 
-        cipher2.SetKey(tc8_key, KEY_SIZE); 
- 
-        TReallyFastRng32 rng(5124); 
-        UNIT_ASSERT_EQUAL(ChaChaVec::BLOCK_SIZE, 64); 
-        for (size_t size = 51; size < 67953; size += 113) { 
-            TAlignedBuf bufOrig(size, 16); 
-            TAlignedBuf bufNew(size, 16); 
- 
-            for (ui32 i = 0; i < size; ++i) { 
-                bufNew.Data()[i] = bufOrig.Data()[i] = (rng.GenRand() % 256); 
-            } 
-            cipher1.EncipherOld(bufOrig.Data(), bufOrig.Data(), size); 
-            cipher2.Encipher(bufNew.Data(), bufNew.Data(), size); 
-            UNIT_ASSERT_ARRAYS_EQUAL(bufOrig.Data(), bufNew.Data(), size); 
-        } 
- 
-        for (size_t size = 51; size < 67953; size += 113) { 
-            TAlignedBuf bufOrig(size, 16); 
-            TAlignedBuf bufInNew(size, 8); 
-            TAlignedBuf bufOutNew(size, 16); 
- 
-            for (ui32 i = 0; i < size; ++i) { 
-                (bufInNew.Data() + 8)[i] = bufOrig.Data()[i] = (rng.GenRand() % 256); 
-            } 
-            cipher1.EncipherOld(bufOrig.Data(), bufOrig.Data(), size); 
-            cipher2.Encipher(bufInNew.Data() + 8, bufOutNew.Data(), size); 
-            UNIT_ASSERT_ARRAYS_EQUAL(bufOrig.Data(), bufOutNew.Data(), size); 
-        } 
-    } 
+
+    Y_UNIT_TEST(CompatibilityTest) {
+        ui64 offset = 0;
+
+        ChaChaVec cipher1;
+        cipher1.SetIV(tc8_iv, (ui8*)&offset);
+        cipher1.SetKey(tc8_key, KEY_SIZE);
+
+        ChaChaVec cipher2;
+        cipher2.SetIV(tc8_iv, (ui8*)&offset);
+        cipher2.SetKey(tc8_key, KEY_SIZE);
+
+        TReallyFastRng32 rng(5124);
+        UNIT_ASSERT_EQUAL(ChaChaVec::BLOCK_SIZE, 64);
+        for (size_t size = 51; size < 67953; size += 113) {
+            TAlignedBuf bufOrig(size, 16);
+            TAlignedBuf bufNew(size, 16);
+
+            for (ui32 i = 0; i < size; ++i) {
+                bufNew.Data()[i] = bufOrig.Data()[i] = (rng.GenRand() % 256);
+            }
+            cipher1.EncipherOld(bufOrig.Data(), bufOrig.Data(), size);
+            cipher2.Encipher(bufNew.Data(), bufNew.Data(), size);
+            UNIT_ASSERT_ARRAYS_EQUAL(bufOrig.Data(), bufNew.Data(), size);
+        }
+
+        for (size_t size = 51; size < 67953; size += 113) {
+            TAlignedBuf bufOrig(size, 16);
+            TAlignedBuf bufInNew(size, 8);
+            TAlignedBuf bufOutNew(size, 16);
+
+            for (ui32 i = 0; i < size; ++i) {
+                (bufInNew.Data() + 8)[i] = bufOrig.Data()[i] = (rng.GenRand() % 256);
+            }
+            cipher1.EncipherOld(bufOrig.Data(), bufOrig.Data(), size);
+            cipher2.Encipher(bufInNew.Data() + 8, bufOutNew.Data(), size);
+            UNIT_ASSERT_ARRAYS_EQUAL(bufOrig.Data(), bufOutNew.Data(), size);
+        }
+    }
 }

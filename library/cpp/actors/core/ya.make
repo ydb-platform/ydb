@@ -89,8 +89,8 @@ SRCS(
     probes.h
     process_stats.cpp
     process_stats.h
-    scheduler_actor.cpp 
-    scheduler_actor.h 
+    scheduler_actor.cpp
+    scheduler_actor.h
     scheduler_basic.cpp
     scheduler_basic.h
     scheduler_cookie.cpp

@@ -1,5 +1,5 @@
 #include "skeleton_oos_tracker.h"
- 
+
 #include <ydb/core/blobstorage/base/html.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
@@ -29,35 +29,35 @@ namespace NKikimr {
         friend class TActorBootstrapped<TDskSpaceTrackerActor>;
 
         void CheckState(const TActorContext &ctx) {
-            auto zone = VCtx->OutOfSpaceState.GetGlobalColor(); 
+            auto zone = VCtx->OutOfSpaceState.GetGlobalColor();
             MonGroup.DskOutOfSpace() = zone;
 
-            auto priority = NActors::NLog::PRI_TRACE; 
- 
-            switch (zone) { 
-                case TSpaceColor::YELLOW: 
-                    priority = NActors::NLog::PRI_WARN; 
-                    ++YellowZonePeriods; 
-                    break; 
-                case TSpaceColor::LIGHT_ORANGE: 
-                case TSpaceColor::ORANGE: 
-                    priority = NActors::NLog::PRI_ERROR; 
-                    ++OrangeZonePeriods; 
-                    break; 
-                case TSpaceColor::RED: 
-                    priority = NActors::NLog::PRI_CRIT; 
-                    ++RedZonePeriods; 
-                    break; 
-                case TSpaceColor::BLACK: 
-                    priority = NActors::NLog::PRI_CRIT; 
-                    ++BlackZonePeriods; 
-                    break; 
-                default: 
-                    break; 
-            } 
+            auto priority = NActors::NLog::PRI_TRACE;
 
-            LOG_LOG_S(ctx, priority, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix 
-                    << "TDskSpaceTrackerActor: " << zone << " ZONE" << " Marker# BSVSOOST01"); 
+            switch (zone) {
+                case TSpaceColor::YELLOW:
+                    priority = NActors::NLog::PRI_WARN;
+                    ++YellowZonePeriods;
+                    break;
+                case TSpaceColor::LIGHT_ORANGE:
+                case TSpaceColor::ORANGE:
+                    priority = NActors::NLog::PRI_ERROR;
+                    ++OrangeZonePeriods;
+                    break;
+                case TSpaceColor::RED:
+                    priority = NActors::NLog::PRI_CRIT;
+                    ++RedZonePeriods;
+                    break;
+                case TSpaceColor::BLACK:
+                    priority = NActors::NLog::PRI_CRIT;
+                    ++BlackZonePeriods;
+                    break;
+                default:
+                    break;
+            }
+
+            LOG_LOG_S(ctx, priority, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
+                    << "TDskSpaceTrackerActor: " << zone << " ZONE" << " Marker# BSVSOOST01");
             // send message to PDisk
             Become(&TThis::AskFunc);
             ctx.Send(PDiskCtx->PDiskId,
@@ -74,7 +74,7 @@ namespace NKikimr {
 
         void Handle(NPDisk::TEvCheckSpaceResult::TPtr &ev, const TActorContext &ctx) {
             const auto *msg = ev->Get();
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix 
+            LOG_DEBUG_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
                     << "TDskSpaceTrackerActor:handle TEvCheckSpaceResult; msg# " << msg->ToString()
                     << " Marker# BSVSOOST02");
 
@@ -119,20 +119,20 @@ namespace NKikimr {
                                 TABLER() {
                                     auto flags = VCtx->OutOfSpaceState.GetLocalStatusFlags();
                                     TABLED() {str << "Local Disk State";}
-                                    TABLED() {str << StatusFlagToSpaceColor(flags);} 
+                                    TABLED() {str << StatusFlagToSpaceColor(flags);}
                                 }
                                 TABLER() {
                                     TABLED() {str << "Global BlobStorage Group State";}
-                                    TABLED() {str << StatusFlagToSpaceColor(oosStatus.Flags);} 
+                                    TABLED() {str << StatusFlagToSpaceColor(oosStatus.Flags);}
                                 }
                                 TABLER() {
-                                    TABLED() {str << "Global Whiteboard Flag";} 
-                                    TABLED() { 
-                                        auto wb_flag = VCtx->OutOfSpaceState.GlobalWhiteboardFlag(); 
-                                        THtmlLightSignalRenderer(wb_flag, TStringBuilder() << wb_flag).Output(str); 
-                                    } 
-                                } 
-                                TABLER() { 
+                                    TABLED() {str << "Global Whiteboard Flag";}
+                                    TABLED() {
+                                        auto wb_flag = VCtx->OutOfSpaceState.GlobalWhiteboardFlag();
+                                        THtmlLightSignalRenderer(wb_flag, TStringBuilder() << wb_flag).Output(str);
+                                    }
+                                }
+                                TABLER() {
                                     TABLED() {str << "Local Disk Approximate Free Space Share";}
                                     TABLED() {str << oosStatus.ApproximateFreeSpaceShare * 100 << "%";}
                                 }

@@ -49,11 +49,11 @@ namespace NMiniKQL {
 }
 
 namespace NDataShard {
-    class IExportFactory; 
+    class IExportFactory;
 }
 
 namespace NSQS {
-    class IEventsWriterFactory; 
+    class IEventsWriterFactory;
     class IAuthFactory;
 }
 
@@ -75,9 +75,9 @@ struct TAppData {
 
     const NScheme::TTypeRegistry* TypeRegistry = nullptr;
     const NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
-    const NDataShard::IExportFactory *DataShardExportFactory = nullptr; 
+    const NDataShard::IExportFactory *DataShardExportFactory = nullptr;
     const TFormatFactory* FormatFactory = nullptr;
-    const NSQS::IEventsWriterFactory* SqsEventsWriterFactory = nullptr; 
+    const NSQS::IEventsWriterFactory* SqsEventsWriterFactory = nullptr;
 
     NSQS::IAuthFactory* SqsAuthFactory = nullptr;
 
@@ -85,7 +85,7 @@ struct TAppData {
 
     const NPQ::IPersQueueMirrorReaderFactory* PersQueueMirrorReaderFactory = nullptr;
     NYdb::TDriver* YdbDriver = nullptr;
-    const NPDisk::IIoContextFactory* IoContextFactory = nullptr; 
+    const NPDisk::IIoContextFactory* IoContextFactory = nullptr;
 
     struct TDefaultTabletTypes {
         TTabletTypes::EType SchemeShard;
@@ -124,7 +124,7 @@ struct TAppData {
     NActors::TMon* Mon;
     NMonitoring::TDynamicCounterPtr Counters;
     NMonitoring::TBusNgMonPage* BusMonPage;
-    TIntrusivePtr<NKikimr::TControlBoard> Icb; 
+    TIntrusivePtr<NKikimr::TControlBoard> Icb;
     TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry;
 
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
@@ -140,7 +140,7 @@ struct TAppData {
     NKikimrConfig::TSqsConfig SqsConfig;
     NKikimrProto::TAuthConfig AuthConfig;
     NKikimrProto::TKeyConfig KeyConfig;
-    NKikimrProto::TKeyConfig PDiskKeyConfig; 
+    NKikimrProto::TKeyConfig PDiskKeyConfig;
     TFeatureFlags FeatureFlags;
     NKikimrConfig::THiveConfig HiveConfig;
     NKikimrConfig::TDataShardConfig DataShardConfig;

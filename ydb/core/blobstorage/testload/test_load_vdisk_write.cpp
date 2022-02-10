@@ -25,7 +25,7 @@ namespace NKikimr {
             {};
 
             const TActorId ParentActorId;
-            const ui64 Tag; 
+            const ui64 Tag;
 
             const TIntrusivePtr<TBlobStorageGroupInfo> Info;
             const TVDiskID VDiskId;
@@ -37,7 +37,7 @@ namespace NKikimr {
             const ui32 Channel;
             const ui32 Generation;
 
-            const ui64 DurationSeconds; 
+            const ui64 DurationSeconds;
             const ui32 InFlightPutsMax;
             const ui64 InFlightPutBytesMax;
 
@@ -48,8 +48,8 @@ namespace NKikimr {
             TIntervalGenerator PutIntervalGenerator;
             TIntervalGenerator CollectIntervalGenerator;
 
-            TInstant StartTime; 
- 
+            TInstant StartTime;
+
             bool IsConnected = false;
 
             ui32 CollectStep = 0;
@@ -61,9 +61,9 @@ namespace NKikimr {
             ui32 BlobCookie = 0;
             TInstant NextWriteRequestTimestamp;
             ui32 InFlightPuts = 0;
-            ui32 TEvVPutsSent = 0; 
+            ui32 TEvVPutsSent = 0;
             ui64 InFlightPutBytes = 0;
-            ui64 BytesWritten = 0; 
+            ui64 BytesWritten = 0;
             TMap<ui64, ui32> InFlightRequests;
             ui64 PutCookie = 1;
             bool EvTryToIssuePutsScheduled = false;
@@ -78,7 +78,7 @@ namespace NKikimr {
             TVDiskLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TVDiskLoadStart& cmd,
                     const NActors::TActorId& parent, ui64 tag)
                 : ParentActorId(parent)
-                , Tag(tag) 
+                , Tag(tag)
                 , Info(TBlobStorageGroupInfo::Parse(cmd.GetGroupInfo(), nullptr, nullptr))
                 , VDiskId(VDiskIDFromVDiskID(cmd.GetVDiskId()))
                 , VDiskActorId(Info->GetActorId(VDiskId))
@@ -86,7 +86,7 @@ namespace NKikimr {
                 , TabletId(cmd.GetTabletId())
                 , Channel(cmd.GetChannel())
                 , Generation(cmd.GetGeneration())
-                , DurationSeconds(cmd.GetDurationSeconds()) 
+                , DurationSeconds(cmd.GetDurationSeconds())
                 , InFlightPutsMax(cmd.GetInFlightPutsMax())
                 , InFlightPutBytesMax(cmd.GetInFlightPutBytesMax())
                 , PutHandleClass(cmd.GetPutHandleClass())
@@ -98,11 +98,11 @@ namespace NKikimr {
             }
 
             void Bootstrap(const TActorContext& ctx) {
-                LOG_INFO(ctx, NKikimrServices::BS_LOAD_TEST, "Load actor starter, erasure# %s", 
+                LOG_INFO(ctx, NKikimrServices::BS_LOAD_TEST, "Load actor starter, erasure# %s",
                         GType.ToString().data());
                 Become(&TVDiskLoadActor::StateFunc);
-                StartTime = TAppData::TimeProvider->Now(); 
-                ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill); 
+                StartTime = TAppData::TimeProvider->Now();
+                ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
                 CreateQueueBackpressure(ctx);
             }
 
@@ -190,7 +190,7 @@ namespace NKikimr {
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(logoBlobId,
                         parts.Parts[logoBlobId.PartId() - 1].OwnedString, VDiskId, true, &cookie, TInstant::Max(), PutHandleClass);
                 ctx.Send(QueueActorId, ev.release());
-                ++TEvVPutsSent; 
+                ++TEvVPutsSent;
             }
 
             void HandleTryToIssuePuts(const TActorContext& ctx) {
@@ -210,9 +210,9 @@ namespace NKikimr {
 
                 --InFlightPuts;
                 InFlightPutBytes -= size;
-                if (record.GetStatus() == NKikimrProto::OK) { 
-                    BytesWritten += size; 
-                } 
+                if (record.GetStatus() == NKikimrProto::OK) {
+                    BytesWritten += size;
+                }
 
                 TryToIssuePuts(ctx);
             }
@@ -266,16 +266,16 @@ namespace NKikimr {
             void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
                 TStringStream str;
 
-#define NAMED_PARAM(NAME, PARAM)            \ 
-                TABLER() {                  \ 
-                    TABLED() {              \ 
-                        str << NAME;        \ 
-                    }                       \ 
-                    TABLED() {              \ 
-                        str << PARAM;       \ 
-                    }                       \ 
-                } 
- 
+#define NAMED_PARAM(NAME, PARAM)            \
+                TABLER() {                  \
+                    TABLED() {              \
+                        str << NAME;        \
+                    }                       \
+                    TABLED() {              \
+                        str << PARAM;       \
+                    }                       \
+                }
+
 #define PARAM(NAME)                    \
                 TABLER() {               \
                     TABLED() {           \
@@ -299,8 +299,8 @@ namespace NKikimr {
                             }
                         }
                         TABLEBODY() {
-                            NAMED_PARAM("Elapsed time / Duration", (TAppData::TimeProvider->Now() - StartTime).Seconds() 
-                                    << "s / " << DurationSeconds << "s"); 
+                            NAMED_PARAM("Elapsed time / Duration", (TAppData::TimeProvider->Now() - StartTime).Seconds()
+                                    << "s / " << DurationSeconds << "s");
                             PARAM(TabletId)
                             PARAM(Channel)
                             PARAM(Generation)
@@ -315,11 +315,11 @@ namespace NKikimr {
                             PARAM(IsConnected)
                             PARAM(VDiskId)
                             PARAM(VDiskActorId)
-                            PARAM(BytesWritten) 
-                            PARAM(TEvVPutsSent) 
-                            TString avgSpeed = Sprintf("%.3lf %s", (double) BytesWritten / (1 << 20) / 
-                                    (TAppData::TimeProvider->Now() - StartTime).Seconds(), "MB/s"); 
-                            NAMED_PARAM("Average speed", avgSpeed); 
+                            PARAM(BytesWritten)
+                            PARAM(TEvVPutsSent)
+                            TString avgSpeed = Sprintf("%.3lf %s", (double) BytesWritten / (1 << 20) /
+                                    (TAppData::TimeProvider->Now() - StartTime).Seconds(), "MB/s");
+                            NAMED_PARAM("Average speed", avgSpeed);
                         }
                     }
                 }
@@ -341,7 +341,7 @@ namespace NKikimr {
 
     IActor *CreateVDiskWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TVDiskLoadStart& cmd,
             const NActors::TActorId& parent, ui64 tag) {
-        return new TVDiskLoadActor(cmd, parent, tag); 
+        return new TVDiskLoadActor(cmd, parent, tag);
     }
 
 } // NKikimr

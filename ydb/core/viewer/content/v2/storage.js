@@ -233,8 +233,8 @@ Storage.prototype.update = function() {
     this.storageLatency.empty().append(this.getImageFromLatency());
 
     var nodes = this.group.view.nodes;
-    var allocatedSize; 
-    var availableSize; 
+    var allocatedSize;
+    var availableSize;
     var readSpeed = 0;
     var writeSpeed = 0;
 
@@ -244,18 +244,18 @@ Storage.prototype.update = function() {
         vDisk.CellId = this.Id;
         vDisk.StoragePoolName = this.StoragePool.Name;
         vDisk = this.vDiskMap.updateVDiskInfo(vDisk);
-        if (vDisk.AllocatedSize !== undefined) { 
-            if (allocatedSize === undefined) { 
-                allocatedSize = 0; 
-            } 
+        if (vDisk.AllocatedSize !== undefined) {
+            if (allocatedSize === undefined) {
+                allocatedSize = 0;
+            }
             allocatedSize += vDisk.AllocatedSize;
         }
-        if (vDisk.AvailableSize !== undefined) { 
-            if (availableSize === undefined) { 
-                availableSize = 0; 
-            } 
-            availableSize += vDisk.AvailableSize; 
-        } 
+        if (vDisk.AvailableSize !== undefined) {
+            if (availableSize === undefined) {
+                availableSize = 0;
+            }
+            availableSize += vDisk.AvailableSize;
+        }
         if (vDisk.ReadThroughput) {
             readSpeed += vDisk.ReadThroughput;
         }
@@ -277,13 +277,13 @@ Storage.prototype.update = function() {
 
     this.vDiskMap.resizeVDisks();
 
-    if (allocatedSize === undefined) { 
-        this.allocatedSize.text('-'); 
-    } else { 
+    if (allocatedSize === undefined) {
+        this.allocatedSize.text('-');
+    } else {
         this.allocatedSize.text(bytesToGB(allocatedSize));
-    } 
-    if (availableSize === undefined) { 
-        this.availableSize.text('-'); 
+    }
+    if (availableSize === undefined) {
+        this.availableSize.text('-');
     } else {
         this.availableSize.text(bytesToGB(availableSize));
     }
@@ -299,21 +299,21 @@ Storage.prototype.update = function() {
     }
 }
 
-function isVDiskInErrorState(state) { 
-    if (!state) { 
-        return false; 
-    } 
- 
-    switch (state) { 
-    case "LocalRecoveryError": 
-    case "SyncGuidRecoveryError": 
-    case "PDiskError": 
-        return true; 
-    default: 
-        return false; 
-    } 
-} 
- 
+function isVDiskInErrorState(state) {
+    if (!state) {
+        return false;
+    }
+
+    switch (state) {
+    case "LocalRecoveryError":
+    case "SyncGuidRecoveryError":
+    case "PDiskError":
+        return true;
+    default:
+        return false;
+    }
+}
+
 Storage.prototype.updateFromStorage = function(update) {
     if (this.GroupGeneration < update.GroupGeneration && this.visible) {
         this.disappear();
@@ -350,11 +350,11 @@ Storage.prototype.updateFromStorage = function(update) {
             if (vDisk.AllocatedSize) {
                 vDisk.AllocatedSize = Number(vDisk.AllocatedSize);
             }
-            if (vDisk.AvailableSize) { 
-                vDisk.AvailableSize = Number(vDisk.AvailableSize); 
-            } 
-            // meaingful only if hard disk space division is enabled 
-            //usage = Math.max(usage, vDisk.AllocatedSize / (vDisk.AllocatedSize + vDisk.AvailableSize)); 
+            if (vDisk.AvailableSize) {
+                vDisk.AvailableSize = Number(vDisk.AvailableSize);
+            }
+            // meaingful only if hard disk space division is enabled
+            //usage = Math.max(usage, vDisk.AllocatedSize / (vDisk.AllocatedSize + vDisk.AvailableSize));
             if (vDisk.ReadThroughput) {
                 vDisk.ReadThroughput = Number(vDisk.ReadThroughput);
             }
@@ -362,18 +362,18 @@ Storage.prototype.updateFromStorage = function(update) {
                 vDisk.WriteThroughput = Number(vDisk.WriteThroughput);
             }
         }
- 
+
         var pDisk = vDisk.PDisk;
         if (pDisk) {
-            if (pDisk.TotalSize) { 
-                pDisk.TotalSize = Number(pDisk.TotalSize); 
-            } 
-            if (pDisk.AvailableSize) { 
-                pDisk.AvailableSize = Number(pDisk.AvailableSize); 
-            } 
-        } 
-        if (pDisk && pDisk.AvailableSize && pDisk.TotalSize) { 
-            usage = Math.max(usage, 1 - pDisk.AvailableSize / pDisk.TotalSize); 
+            if (pDisk.TotalSize) {
+                pDisk.TotalSize = Number(pDisk.TotalSize);
+            }
+            if (pDisk.AvailableSize) {
+                pDisk.AvailableSize = Number(pDisk.AvailableSize);
+            }
+        }
+        if (pDisk && pDisk.AvailableSize && pDisk.TotalSize) {
+            usage = Math.max(usage, 1 - pDisk.AvailableSize / pDisk.TotalSize);
             if (!pDisk.State || (vDisk.Replicated === false && !vDisk.DonorMode) || isVDiskInErrorState(vDisk.VDiskState) === true) {
                 missingDisks++;
             }

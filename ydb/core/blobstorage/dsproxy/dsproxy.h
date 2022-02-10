@@ -23,8 +23,8 @@
 
 namespace NKikimr {
 
-LWTRACE_USING(BLOBSTORAGE_PROVIDER); 
- 
+LWTRACE_USING(BLOBSTORAGE_PROVIDER);
+
 constexpr ui32 TypicalPartsInBlob = 6;
 constexpr ui32 TypicalDisksInSubring = 8;
 
@@ -100,32 +100,32 @@ struct TNodeLayoutInfo : TThrRefBase {
 
 using TNodeLayoutInfoPtr = TIntrusivePtr<TNodeLayoutInfo>;
 
-inline TStoragePoolCounters::EHandleClass HandleClassToHandleClass(NKikimrBlobStorage::EGetHandleClass handleClass) { 
-    switch (handleClass) { 
-        case NKikimrBlobStorage::FastRead: 
-            return TStoragePoolCounters::EHandleClass::HcGetFast; 
-        case NKikimrBlobStorage::AsyncRead: 
-            return TStoragePoolCounters::EHandleClass::HcGetAsync; 
-        case NKikimrBlobStorage::Discover: 
-            return TStoragePoolCounters::EHandleClass::HcGetDiscover; 
+inline TStoragePoolCounters::EHandleClass HandleClassToHandleClass(NKikimrBlobStorage::EGetHandleClass handleClass) {
+    switch (handleClass) {
+        case NKikimrBlobStorage::FastRead:
+            return TStoragePoolCounters::EHandleClass::HcGetFast;
+        case NKikimrBlobStorage::AsyncRead:
+            return TStoragePoolCounters::EHandleClass::HcGetAsync;
+        case NKikimrBlobStorage::Discover:
+            return TStoragePoolCounters::EHandleClass::HcGetDiscover;
         case NKikimrBlobStorage::LowRead:
             return TStoragePoolCounters::EHandleClass::HcGetLow;
-    } 
-    return TStoragePoolCounters::EHandleClass::HcCount; 
-} 
- 
-inline TStoragePoolCounters::EHandleClass HandleClassToHandleClass(NKikimrBlobStorage::EPutHandleClass handleClass) { 
-    switch (handleClass) { 
-        case NKikimrBlobStorage::TabletLog: 
-            return TStoragePoolCounters::EHandleClass::HcPutTabletLog; 
-        case NKikimrBlobStorage::UserData: 
-            return TStoragePoolCounters::EHandleClass::HcPutUserData; 
-        case NKikimrBlobStorage::AsyncBlob: 
-            return TStoragePoolCounters::EHandleClass::HcPutAsync; 
-    } 
-    return TStoragePoolCounters::EHandleClass::HcCount; 
-} 
- 
+    }
+    return TStoragePoolCounters::EHandleClass::HcCount;
+}
+
+inline TStoragePoolCounters::EHandleClass HandleClassToHandleClass(NKikimrBlobStorage::EPutHandleClass handleClass) {
+    switch (handleClass) {
+        case NKikimrBlobStorage::TabletLog:
+            return TStoragePoolCounters::EHandleClass::HcPutTabletLog;
+        case NKikimrBlobStorage::UserData:
+            return TStoragePoolCounters::EHandleClass::HcPutUserData;
+        case NKikimrBlobStorage::AsyncBlob:
+            return TStoragePoolCounters::EHandleClass::HcPutAsync;
+    }
+    return TStoragePoolCounters::EHandleClass::HcCount;
+}
+
 NActors::NLog::EPriority PriorityForStatusOutbound(NKikimrProto::EReplyStatus status);
 NActors::NLog::EPriority PriorityForStatusResult(NKikimrProto::EReplyStatus status);
 NActors::NLog::EPriority PriorityForStatusInbound(NKikimrProto::EReplyStatus status);
@@ -380,9 +380,9 @@ public:
             const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
             request->Record.MutableTimestamps()->SetSentByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
             TLogoBlobID id = GetBlobId(request);
-            TVDiskID vDiskId = VDiskIDFromVDiskID(request->Record.GetVDiskID()); 
-            LWTRACK(DSProxyPutVPutIsSent, request->Orbit, Info->GetFailDomainOrderNumber(vDiskId), 
-                    Info->GroupID, id.Channel(), id.PartId(), id.ToString(), id.BlobSize()); 
+            TVDiskID vDiskId = VDiskIDFromVDiskID(request->Record.GetVDiskID());
+            LWTRACK(DSProxyPutVPutIsSent, request->Orbit, Info->GetFailDomainOrderNumber(vDiskId),
+                    Info->GroupID, id.Channel(), id.PartId(), id.ToString(), id.BlobSize());
             SendToQueue(std::move(request), messageCookie, TraceId.SeparateBranch(), timeStatsEnabled);
         }
     }
@@ -532,7 +532,7 @@ IActor* CreateBlobStorageGroupPutRequest(const TIntrusivePtr<TBlobStorageGroupIn
     const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
     const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvPut *ev,
     ui64 cookie, NWilson::TTraceId traceId, bool timeStatsEnabled,
-    TDiskResponsivenessTracker::TPerDiskStatsPtr stats, 
+    TDiskResponsivenessTracker::TPerDiskStatsPtr stats,
     TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
     bool enableRequestMod3x3ForMinLatecy);
 

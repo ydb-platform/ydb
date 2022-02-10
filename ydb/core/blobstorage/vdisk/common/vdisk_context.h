@@ -35,7 +35,7 @@ namespace NKikimr {
         const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
         const TIntrusivePtr<NMonitoring::TDynamicCounters> VDiskCounters;
         const TIntrusivePtr<NMonitoring::TDynamicCounters> VDiskMemCounters;
-        // latency histograms 
+        // latency histograms
         NVDiskMon::THistograms Histograms;
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
         // Self VDisk related info

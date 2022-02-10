@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-#include "blobstorage_pdisk_defs.h" 
+#include "blobstorage_pdisk_defs.h"
 #include <util/stream/output.h>
 
 namespace NKikimr {
@@ -10,7 +10,7 @@ namespace NKikimr {
     // PDisk related constants, obtained from PDisk during initialization
     ////////////////////////////////////////////////////////////////////////////
     struct TPDiskParams : public TThrRefBase {
-        const NPDisk::TOwner Owner; 
+        const NPDisk::TOwner Owner;
         const ui64 OwnerRound;
         const ui64 ChunkSize;
         const ui32 AppendBlockSize;
@@ -31,7 +31,7 @@ namespace NKikimr {
         static ui64 CalculatePrefetchSizeBytes(ui64 seekTimeUs, ui64 readSpeedBps);
         static ui64 CalculateGlueRequestDistanceBytes(ui64 seekTimeUs, ui64 readSpeedBps);
 
-        TPDiskParams(NPDisk::TOwner owner, ui64 ownerRound, ui32 chunkSize, ui32 appendBlockSize, 
+        TPDiskParams(NPDisk::TOwner owner, ui64 ownerRound, ui32 chunkSize, ui32 appendBlockSize,
                      ui64 seekTimeUs, ui64 readSpeedBps, ui64 writeSpeedBps, ui64 readBlockSize,
                      ui64 writeBlockSize, ui64 bulkWriteBlockSize);
         void OutputHtml(IOutputStream &str) const;

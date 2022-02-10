@@ -15,7 +15,7 @@
 #include <library/cpp/digest/crc32c/crc32c.h>
 
 namespace NKikimr {
-namespace NErasureRope { 
+namespace NErasureRope {
 
 class TRopeHelpers {
 public:
@@ -521,6 +521,6 @@ protected:
 
 bool CheckCrcAtTheEnd(TRopeErasureType::ECrcMode crcMode, const TRope& buf);
 
-} // NKikimr 
-} // NErasureRope 
+} // NKikimr
+} // NErasureRope
 

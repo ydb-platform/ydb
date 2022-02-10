@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/util/queue_oneone_inplace.h>
 #include <util/system/condvar.h>
-#include <util/system/mutex.h> 
+#include <util/system/mutex.h>
 
 namespace NKikimr {
 namespace NPDisk {
@@ -21,7 +21,7 @@ public:
     {}
 
     virtual ~TCountedQueueOneOne() {
-        Y_VERIFY_S(AtomicGet(SizeLowerEstimate) == 0, "Unexpected SizeLowerEstimate# " << AtomicGet(SizeLowerEstimate)); 
+        Y_VERIFY_S(AtomicGet(SizeLowerEstimate) == 0, "Unexpected SizeLowerEstimate# " << AtomicGet(SizeLowerEstimate));
     }
 
     void Push(T x) noexcept {

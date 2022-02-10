@@ -28,7 +28,7 @@ enum EServiceKikimr {
     BS_SYNCER = 272;
     BS_REPL = 273;
     BS_PDISK = 274;
-    BS_PDISK_TEST = 1102; 
+    BS_PDISK_TEST = 1102;
     BS_YARD = 275;
     BS_PROXY = 276;
     BS_NODE = 277;
@@ -218,7 +218,7 @@ enum EServiceKikimr {
     KQP_COMPILE_REQUEST = 542;
     KQP_NODE = 543;
     KQP_LOAD_TEST = 544;
-    KQP_SESSION = 545; 
+    KQP_SESSION = 545;
 
     TABLET_RESOURCE_BROKER = 540;
 
@@ -600,7 +600,7 @@ message TActivity {
         INTERCONNECT_POLLER = 285;
         INTERCONNECT_SESSION_KILLER = 286;
         IMMEDIATE_CONTROL_BOARD = 287;
-        DS_PROXY_OVERSEER_ACTOR = 288; // deprecated 
+        DS_PROXY_OVERSEER_ACTOR = 288; // deprecated
         KQP_REQUEST_HANDLER = 289;
         KESUS_RESOLVE_ACTOR = 290;
         HIVE_MON_REQUEST = 291;
@@ -856,7 +856,7 @@ message TActivity {
         KQP_TEST_WORKLOAD = 550;
         PQ_PARTITION_WRITER_ACTOR = 551;
         CHANGE_SENDER_CDC_ACTOR_PARTITION = 552;
-        KQP_SESSION_ACTOR = 553; 
+        KQP_SESSION_ACTOR = 553;
         CHANGE_EXCHANGE_SPLIT_ACTOR = 554;
         BS_DEFRAG_REWRITER = 555;
         BS_DEFRAG_SCHEDULER = 556;

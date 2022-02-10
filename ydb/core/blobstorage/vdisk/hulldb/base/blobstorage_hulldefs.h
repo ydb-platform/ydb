@@ -18,7 +18,7 @@
 namespace NKikimr {
 
     template <class TKey>
-    TLogSignature PDiskSignatureForHullDbKey(); 
+    TLogSignature PDiskSignatureForHullDbKey();
 
     ///////////////////////////////////////////////////////////////////////////////////////
     // TDiskDataExtractor

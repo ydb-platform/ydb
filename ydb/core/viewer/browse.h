@@ -615,7 +615,7 @@ public:
         }
 
         for (auto pDiskKind : PDiskCategories) {
-            pbCommon.AddPDiskKind(TPDiskCategory(pDiskKind).TypeStrShort()); 
+            pbCommon.AddPDiskKind(TPDiskCategory(pDiskKind).TypeStrShort());
         }
 
         for (auto vDiskKind : VDiskCategories) {

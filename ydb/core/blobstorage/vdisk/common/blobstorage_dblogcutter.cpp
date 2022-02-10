@@ -130,7 +130,7 @@ namespace NKikimr {
                 commitRec.FirstLsnToKeep = *freeUpToLsn;
                 commitRec.IsStartingPoint = false;
                 TLsnSeg seg = LogCutterCtx.LsnMngr->AllocLsnForLocalUse();
-                ui8 signature = TLogSignature::SignatureHullCutLog; 
+                ui8 signature = TLogSignature::SignatureHullCutLog;
                 ctx.Send(LogCutterCtx.LoggerId,
                     new NPDisk::TEvLog(LogCutterCtx.PDiskCtx->Dsk->Owner,
                         LogCutterCtx.PDiskCtx->Dsk->OwnerRound, signature, commitRec, TString(), seg, nullptr));

@@ -46,9 +46,9 @@ namespace NKikimr {
             const ui64 cookie = Ev->Cookie;
             TSyncState clientSyncState(SyncStateFromSyncState(Record.GetSyncState()));
 
-            LOG_DEBUG_S(ctx, BS_SYNCJOB, Db->VCtx->VDiskLogPrefix 
-                    << "TVSyncFullHandler: Bootstrap: fromVDisk# " 
-                    << VDiskIDFromVDiskID(Record.GetSourceVDiskID()) 
+            LOG_DEBUG_S(ctx, BS_SYNCJOB, Db->VCtx->VDiskLogPrefix
+                    << "TVSyncFullHandler: Bootstrap: fromVDisk# "
+                    << VDiskIDFromVDiskID(Record.GetSourceVDiskID())
                     << " fromSyncState# " << clientSyncState.ToString()
                     << " Marker# BSVSFH01");
 
@@ -66,7 +66,7 @@ namespace NKikimr {
 
             // check disk guid and start from the beginning if it has changed
             if (Db->GetVDiskIncarnationGuid() != clientSyncState.Guid) {
-                LOG_DEBUG_S(ctx, BS_SYNCJOB, Db->VCtx->VDiskLogPrefix 
+                LOG_DEBUG_S(ctx, BS_SYNCJOB, Db->VCtx->VDiskLogPrefix
                         << "TVSyncFullHandler: GUID CHANGED;"
                         << " SourceVDisk# " << SourceVDisk
                         << " DbBirthLsn# " << DbBirthLsn
@@ -110,9 +110,9 @@ namespace NKikimr {
 
             // snapshotLsn is _always_ the last confirmed lsn
             THullDsSnap fullSnap = Hull->GetIndexSnapshot();
-            LOG_DEBUG_S(ctx, BS_SYNCJOB, Db->VCtx->VDiskLogPrefix 
+            LOG_DEBUG_S(ctx, BS_SYNCJOB, Db->VCtx->VDiskLogPrefix
                     << "TVSyncFullHandler: ourConfirmedLsn# " << ConfirmedLsn
-                    << " syncedLsn# " << syncedLsn 
+                    << " syncedLsn# " << syncedLsn
                     << " SourceVDisk# " << SourceVDisk
                     << " Marker# BSVSFH03");
 

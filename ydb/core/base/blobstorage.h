@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 
-#include "blobstorage_pdisk_category.h" 
+#include "blobstorage_pdisk_category.h"
 #include "events.h"
 #include "tablet_types.h"
 #include "logoblob.h"
@@ -17,7 +17,7 @@
 #include <ydb/library/wilson/wilson_event.h>
 
 #include <library/cpp/lwtrace/shuttle.h>
- 
+
 #include <util/stream/str.h>
 #include <util/generic/xrange.h>
 
@@ -84,10 +84,10 @@ struct TStorageStatusFlags {
     }
 };
 
-NKikimrBlobStorage::EPDiskType PDiskTypeToPDiskType(const TPDiskCategory::EDeviceType type); 
- 
-TPDiskCategory::EDeviceType PDiskTypeToPDiskType(const NKikimrBlobStorage::EPDiskType type); 
- 
+NKikimrBlobStorage::EPDiskType PDiskTypeToPDiskType(const TPDiskCategory::EDeviceType type);
+
+TPDiskCategory::EDeviceType PDiskTypeToPDiskType(const NKikimrBlobStorage::EPDiskType type);
+
 enum EGroupConfigurationType {
     GroupConfigurationTypeStatic = 0,
     GroupConfigurationTypeDynamic = 1
@@ -522,13 +522,13 @@ struct TEvBlobStorage {
         // vdisk <-> controller interface,
         EvCnt = EvPut + 6 * 512,                                /// 268 635 136
         EvVGenerationChange,
-        EvRegisterPDiskLoadActor, 
+        EvRegisterPDiskLoadActor,
         EvStatusUpdate,
         EvDropDonor,
 
         EvCntReply = EvPut + 7 * 512,                           /// 268 635 648
         EvVGenerationChangeResult,
-        EvRegisterPDiskLoadActorResult, 
+        EvRegisterPDiskLoadActorResult,
 
         // internal vdisk interface
         EvYardInit = EvPut + 8 * 512,                           /// 268 636 160
@@ -630,16 +630,16 @@ struct TEvBlobStorage {
         EvAnubisQuantumDone,
         EvAnubisCandidates,
         EvAnubisVGet,
-        EvChunksLock, 
+        EvChunksLock,
         EvChunksUnlock,                                         // 268 636 260
-        EvWhiteboardReportResult, 
-        EvHttpInfoResult, 
-        EvReadLogContinue, 
-        EvLogSectorRestore, 
-        EvLogInitResult, 
+        EvWhiteboardReportResult,
+        EvHttpInfoResult,
+        EvReadLogContinue,
+        EvLogSectorRestore,
+        EvLogInitResult,
         EvAskForCutLog,
         EvDelLogoBlobDataSyncLog,
-        EvPDiskFormattingFinished, 
+        EvPDiskFormattingFinished,
         EvRecoveryLogReplayDone,
         EvMonStreamQuery,                                       // 268 636 270
         EvMonStreamActorDeathNote,
@@ -700,8 +700,8 @@ struct TEvBlobStorage {
         EvOsirisDone,
         EvSyncLogWriteDone,
         EvAnubisVGetResult,
-        EvChunksLockResult, 
-        EvChunksUnlockResult, 
+        EvChunksLockResult,
+        EvChunksUnlockResult,
         EvDelLogoBlobDataSyncLogResult,
         EvAddBulkSstResult,                                     /// 268 636 702
         EvAddBulkSstCommitted,
@@ -713,7 +713,7 @@ struct TEvBlobStorage {
         EvReplResume,
         EvReplDone,
         EvFreshAppendixCompactionDone,
-        EvDeviceError, 
+        EvDeviceError,
         EvHugeLockChunksResult,
         EvHugeStatResult,
 
@@ -732,9 +732,9 @@ struct TEvBlobStorage {
         EvAbortOperation,
         EvResume,
         EvTimeStats,
-        EvOverseerRequest,                 // Not used 
-        EvOverseerLogLastLsn,              // Not used 
-        EvOverseerConfirm,                 // Not used 
+        EvOverseerRequest,                 // Not used
+        EvOverseerLogLastLsn,              // Not used
+        EvOverseerConfirm,                 // Not used
         EvLatencyReport,
         EvGroupStatReport,
         EvAccelerateGet,
@@ -774,7 +774,7 @@ struct TEvBlobStorage {
         EvControllerScrubQueryStartQuantum,
         EvControllerScrubQuantumFinished,
         EvControllerScrubReportQuantumInProgress,
-        EvControllerUpdateNodeDrives, 
+        EvControllerUpdateNodeDrives,
 
         // EvControllerReadSchemeStringResult = EvPut + 12 * 512,
         // EvControllerReadDataStringResult,
@@ -809,9 +809,9 @@ struct TEvBlobStorage {
 
         // node controller internal messages
         EvRegisterNodeRetry = EvPut + 14 * 512,
-        EvAskRestartPDisk, 
-        EvRestartPDisk, 
-        EvRestartPDiskResult, 
+        EvAskRestartPDisk,
+        EvRestartPDisk,
+        EvRestartPDiskResult,
         EvNodeWardenQueryGroupInfo,
         EvNodeWardenGroupInfo,
 
@@ -883,7 +883,7 @@ struct TEvBlobStorage {
         const TInstant Deadline;
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
         const ETactic Tactic;
-        mutable NLWTrace::TOrbit Orbit; 
+        mutable NLWTrace::TOrbit Orbit;
         ui32 RestartCounter = 0;
 
         TEvPut(const TLogoBlobID &id, const TString &buffer, TInstant deadline,
@@ -2036,7 +2036,7 @@ struct TEvBlobStorage {
     struct TEvControllerGetGroup;
     struct TEvControllerUpdateDiskStatus;
     struct TEvControllerUpdateGroupStat;
-    struct TEvControllerUpdateNodeDrives; 
+    struct TEvControllerUpdateNodeDrives;
     struct TEvControllerNodeServiceSetUpdate;
     struct TEvControllerProposeGroupKey;
     struct TEvControllerSelectGroupsResult;
@@ -2059,10 +2059,10 @@ struct TEvBlobStorage {
 
     struct TEvDropDonor;
     struct TEvBunchOfEvents;
- 
-    struct TEvAskRestartPDisk; 
-    struct TEvRestartPDisk; 
-    struct TEvRestartPDiskResult; 
+
+    struct TEvAskRestartPDisk;
+    struct TEvRestartPDisk;
+    struct TEvRestartPDiskResult;
 };
 
 // EPutHandleClass defines BlobStorage queue to a request to

@@ -5,9 +5,9 @@
 #include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
 
 namespace NKikimr {
-TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &counters, bool initForAllDeviceTypes) 
-        : Group(GetServiceCounters(counters, "dsproxynode")) 
-{ 
+TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &counters, bool initForAllDeviceTypes)
+        : Group(GetServiceCounters(counters, "dsproxynode"))
+{
     TVector<float> percentiles4;
     percentiles4.push_back(0.50f);
     percentiles4.push_back(0.90f);
@@ -17,34 +17,34 @@ TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &c
     TVector<float> percentiles1;
     percentiles1.push_back(1.0f);
 
-    PutResponseTime.Initialize(Group, "event", "put", "latency", percentiles4); 
-    PutTabletLogResponseTime.Initialize(Group, "event", "putTabletLogAll", "latency", percentiles1); 
-    PutTabletLogResponseTime256.Initialize(Group, "event", "putTabletLog256", "latency", percentiles1); 
-    PutTabletLogResponseTime512.Initialize(Group, "event", "putTabletLog512", "latency", percentiles1); 
-    PutAsyncBlobResponseTime.Initialize(Group, "event", "putAsyncBlob", "latency", percentiles1); 
-    PutUserDataResponseTime.Initialize(Group, "event", "putUserData", "latency", percentiles1); 
+    PutResponseTime.Initialize(Group, "event", "put", "latency", percentiles4);
+    PutTabletLogResponseTime.Initialize(Group, "event", "putTabletLogAll", "latency", percentiles1);
+    PutTabletLogResponseTime256.Initialize(Group, "event", "putTabletLog256", "latency", percentiles1);
+    PutTabletLogResponseTime512.Initialize(Group, "event", "putTabletLog512", "latency", percentiles1);
+    PutAsyncBlobResponseTime.Initialize(Group, "event", "putAsyncBlob", "latency", percentiles1);
+    PutUserDataResponseTime.Initialize(Group, "event", "putUserData", "latency", percentiles1);
 
-    GetResponseTime.Initialize(Group, "event", "get", "latency", percentiles1); 
-    GetAsyncReadResponseTime.Initialize(Group, "event", "getAsyncRead", "latency", percentiles1); 
-    GetFastReadResponseTime256Ki.Initialize(Group, "event", "getFastRead256Ki", "latency", percentiles1); 
-    GetFastReadResponseTimeInf.Initialize(Group, "event", "getFastReadInf", "latency", percentiles1); 
-    GetDiscoverResponseTime.Initialize(Group, "event", "getDiscover", "latency", percentiles1); 
+    GetResponseTime.Initialize(Group, "event", "get", "latency", percentiles1);
+    GetAsyncReadResponseTime.Initialize(Group, "event", "getAsyncRead", "latency", percentiles1);
+    GetFastReadResponseTime256Ki.Initialize(Group, "event", "getFastRead256Ki", "latency", percentiles1);
+    GetFastReadResponseTimeInf.Initialize(Group, "event", "getFastReadInf", "latency", percentiles1);
+    GetDiscoverResponseTime.Initialize(Group, "event", "getDiscover", "latency", percentiles1);
     GetLowReadResponseTime.Initialize(Group, "event", "getLowRead", "latency", percentiles1);
 
-    BlockResponseTime.Initialize(Group, "event", "block", "latency", percentiles1); 
-    DiscoverResponseTime.Initialize(Group, "event", "discover", "latency", percentiles1); 
-    IndexRestoreGetResponseTime.Initialize(Group, "event", "indexRestoreGet", "latency", 
+    BlockResponseTime.Initialize(Group, "event", "block", "latency", percentiles1);
+    DiscoverResponseTime.Initialize(Group, "event", "discover", "latency", percentiles1);
+    IndexRestoreGetResponseTime.Initialize(Group, "event", "indexRestoreGet", "latency",
             percentiles1);
-    RangeResponseTime.Initialize(Group, "event", "range", "latency", percentiles1); 
+    RangeResponseTime.Initialize(Group, "event", "range", "latency", percentiles1);
     PatchResponseTime.Initialize(Group, "event", "patch", "latency", percentiles4);
- 
-    IsCountersPresentedForIdx.fill(false); 
-    if (initForAllDeviceTypes) { 
-        CheckNodeMonCountersForDeviceType(TPDiskCategory::DEVICE_TYPE_ROT); 
-        CheckNodeMonCountersForDeviceType(TPDiskCategory::DEVICE_TYPE_SSD); 
-        CheckNodeMonCountersForDeviceType(TPDiskCategory::DEVICE_TYPE_NVME); 
-        CheckNodeMonCountersForDeviceType(TPDiskCategory::DEVICE_TYPE_UNKNOWN); 
-    } 
+
+    IsCountersPresentedForIdx.fill(false);
+    if (initForAllDeviceTypes) {
+        CheckNodeMonCountersForDeviceType(TPDiskCategory::DEVICE_TYPE_ROT);
+        CheckNodeMonCountersForDeviceType(TPDiskCategory::DEVICE_TYPE_SSD);
+        CheckNodeMonCountersForDeviceType(TPDiskCategory::DEVICE_TYPE_NVME);
+        CheckNodeMonCountersForDeviceType(TPDiskCategory::DEVICE_TYPE_UNKNOWN);
+    }
 
     // restart counters
     {
@@ -84,92 +84,92 @@ TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &c
     }
 }
 
-ui32 IdxForType(TPDiskCategory::EDeviceType type) { 
-    switch (type) { 
-        case TPDiskCategory::DEVICE_TYPE_ROT: return 0; 
-        case TPDiskCategory::DEVICE_TYPE_SSD: return 1; 
-        case TPDiskCategory::DEVICE_TYPE_NVME: return 2; 
-        case TPDiskCategory::DEVICE_TYPE_UNKNOWN: return 3; 
-    } 
-    return 3; 
-} 
- 
-void TDsProxyNodeMon::CountPutPesponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EPutHandleClass cls, 
-        ui32 size, TDuration duration) { 
-    const ui32 durationMs = duration.MilliSeconds(); 
-    const double durationMsFloat = duration.MicroSeconds() / 1000.0; 
-    PutResponseTime.Increment(durationMs); 
-    const ui32 idx = IdxForType(type); 
-    Y_VERIFY(IsCountersPresentedForIdx[idx]); 
-    switch (cls) { 
-        case NKikimrBlobStorage::EPutHandleClass::TabletLog: 
-            PutTabletLogResponseTime.Increment(durationMs); 
-            if (size < (256 << 10)) { 
-                PutTabletLogResponseTime256.Increment(durationMs); 
-                Y_VERIFY_DEBUG(PutTabletLogResponseTimeHist256Ki[idx]); 
-                PutTabletLogResponseTimeHist256Ki[idx]->Collect(durationMsFloat); 
-            } else { 
-                Y_VERIFY_DEBUG(PutTabletLogResponseTimeHistInf[idx]); 
-                PutTabletLogResponseTimeHistInf[idx]->Collect(durationMsFloat); 
-                if (size < (512 << 10)) { 
-                    PutTabletLogResponseTime512.Increment(durationMs); 
-                } 
-            } 
-            break; 
-        case NKikimrBlobStorage::EPutHandleClass::AsyncBlob: 
-            PutAsyncBlobResponseTime.Increment(durationMs); 
-            Y_VERIFY_DEBUG(PutAsyncBlobResponseTimeHist[idx]); 
-            PutAsyncBlobResponseTimeHist[idx]->Collect(durationMsFloat); 
-            break; 
-        case NKikimrBlobStorage::EPutHandleClass::UserData: 
-            PutUserDataResponseTime.Increment(durationMs); 
-            Y_VERIFY_DEBUG(PutUserDataResponseTimeHist[idx]); 
-            PutUserDataResponseTimeHist[idx]->Collect(durationMsFloat); 
-            break; 
-        default: 
-            Y_FAIL("Unexpected case, HandleClass# %" PRIu64, (ui64)cls); 
-    } 
-} 
- 
-void TDsProxyNodeMon::CountGetResponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EGetHandleClass cls, 
-        ui32 size, TDuration duration) { 
-    const ui32 durationMs = duration.MilliSeconds(); 
-    const double durationMsFloat = duration.MicroSeconds() / 1000.0; 
-    GetResponseTime.Increment(durationMs); 
-    const ui32 idx = IdxForType(type); 
-    Y_VERIFY(IsCountersPresentedForIdx[idx]); 
-    switch (cls) { 
-        case NKikimrBlobStorage::EGetHandleClass::AsyncRead: 
-            GetAsyncReadResponseTime.Increment(durationMs); 
-            Y_VERIFY_DEBUG(GetAsyncReadResponseTimeHist[idx]); 
-            GetAsyncReadResponseTimeHist[idx]->Collect(durationMsFloat); 
-            break; 
-        case NKikimrBlobStorage::EGetHandleClass::FastRead: 
-            if (size < (256 << 10)) { 
-                GetFastReadResponseTime256Ki.Increment(durationMs); 
-                Y_VERIFY_DEBUG(GetFastReadResponseTimeHist256Ki[idx]); 
-                GetFastReadResponseTimeHist256Ki[idx]->Collect(durationMsFloat); 
-            } else { 
-                GetFastReadResponseTimeInf.Increment(durationMs); 
-                Y_VERIFY_DEBUG(GetFastReadResponseTimeHistInf[idx]); 
-                GetFastReadResponseTimeHistInf[idx]->Collect(durationMsFloat); 
-            } 
-            break; 
-        case NKikimrBlobStorage::EGetHandleClass::Discover: 
-            GetDiscoverResponseTime.Increment(durationMs); 
-            Y_VERIFY_DEBUG(GetDiscoverResponseTimeHist[idx]); 
-            GetDiscoverResponseTimeHist[idx]->Collect(durationMsFloat); 
-            break; 
+ui32 IdxForType(TPDiskCategory::EDeviceType type) {
+    switch (type) {
+        case TPDiskCategory::DEVICE_TYPE_ROT: return 0;
+        case TPDiskCategory::DEVICE_TYPE_SSD: return 1;
+        case TPDiskCategory::DEVICE_TYPE_NVME: return 2;
+        case TPDiskCategory::DEVICE_TYPE_UNKNOWN: return 3;
+    }
+    return 3;
+}
+
+void TDsProxyNodeMon::CountPutPesponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EPutHandleClass cls,
+        ui32 size, TDuration duration) {
+    const ui32 durationMs = duration.MilliSeconds();
+    const double durationMsFloat = duration.MicroSeconds() / 1000.0;
+    PutResponseTime.Increment(durationMs);
+    const ui32 idx = IdxForType(type);
+    Y_VERIFY(IsCountersPresentedForIdx[idx]);
+    switch (cls) {
+        case NKikimrBlobStorage::EPutHandleClass::TabletLog:
+            PutTabletLogResponseTime.Increment(durationMs);
+            if (size < (256 << 10)) {
+                PutTabletLogResponseTime256.Increment(durationMs);
+                Y_VERIFY_DEBUG(PutTabletLogResponseTimeHist256Ki[idx]);
+                PutTabletLogResponseTimeHist256Ki[idx]->Collect(durationMsFloat);
+            } else {
+                Y_VERIFY_DEBUG(PutTabletLogResponseTimeHistInf[idx]);
+                PutTabletLogResponseTimeHistInf[idx]->Collect(durationMsFloat);
+                if (size < (512 << 10)) {
+                    PutTabletLogResponseTime512.Increment(durationMs);
+                }
+            }
+            break;
+        case NKikimrBlobStorage::EPutHandleClass::AsyncBlob:
+            PutAsyncBlobResponseTime.Increment(durationMs);
+            Y_VERIFY_DEBUG(PutAsyncBlobResponseTimeHist[idx]);
+            PutAsyncBlobResponseTimeHist[idx]->Collect(durationMsFloat);
+            break;
+        case NKikimrBlobStorage::EPutHandleClass::UserData:
+            PutUserDataResponseTime.Increment(durationMs);
+            Y_VERIFY_DEBUG(PutUserDataResponseTimeHist[idx]);
+            PutUserDataResponseTimeHist[idx]->Collect(durationMsFloat);
+            break;
+        default:
+            Y_FAIL("Unexpected case, HandleClass# %" PRIu64, (ui64)cls);
+    }
+}
+
+void TDsProxyNodeMon::CountGetResponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EGetHandleClass cls,
+        ui32 size, TDuration duration) {
+    const ui32 durationMs = duration.MilliSeconds();
+    const double durationMsFloat = duration.MicroSeconds() / 1000.0;
+    GetResponseTime.Increment(durationMs);
+    const ui32 idx = IdxForType(type);
+    Y_VERIFY(IsCountersPresentedForIdx[idx]);
+    switch (cls) {
+        case NKikimrBlobStorage::EGetHandleClass::AsyncRead:
+            GetAsyncReadResponseTime.Increment(durationMs);
+            Y_VERIFY_DEBUG(GetAsyncReadResponseTimeHist[idx]);
+            GetAsyncReadResponseTimeHist[idx]->Collect(durationMsFloat);
+            break;
+        case NKikimrBlobStorage::EGetHandleClass::FastRead:
+            if (size < (256 << 10)) {
+                GetFastReadResponseTime256Ki.Increment(durationMs);
+                Y_VERIFY_DEBUG(GetFastReadResponseTimeHist256Ki[idx]);
+                GetFastReadResponseTimeHist256Ki[idx]->Collect(durationMsFloat);
+            } else {
+                GetFastReadResponseTimeInf.Increment(durationMs);
+                Y_VERIFY_DEBUG(GetFastReadResponseTimeHistInf[idx]);
+                GetFastReadResponseTimeHistInf[idx]->Collect(durationMsFloat);
+            }
+            break;
+        case NKikimrBlobStorage::EGetHandleClass::Discover:
+            GetDiscoverResponseTime.Increment(durationMs);
+            Y_VERIFY_DEBUG(GetDiscoverResponseTimeHist[idx]);
+            GetDiscoverResponseTimeHist[idx]->Collect(durationMsFloat);
+            break;
         case NKikimrBlobStorage::EGetHandleClass::LowRead:
             GetLowReadResponseTime.Increment(durationMs);
             Y_VERIFY_DEBUG(GetLowReadResponseTimeHist[idx]);
             GetLowReadResponseTimeHist[idx]->Collect(durationMsFloat);
             break;
-        default: 
-            Y_FAIL("Unexpected case, HandleClass# %" PRIu64, (ui64)cls); 
-    } 
-} 
- 
+        default:
+            Y_FAIL("Unexpected case, HandleClass# %" PRIu64, (ui64)cls);
+    }
+}
+
 void TDsProxyNodeMon::CountPatchResponseTime(TPDiskCategory::EDeviceType type, TDuration duration) {
     const ui32 durationMs = duration.MilliSeconds();
     const double durationMsFloat = duration.MicroSeconds() / 1000.0;
@@ -179,29 +179,29 @@ void TDsProxyNodeMon::CountPatchResponseTime(TPDiskCategory::EDeviceType type, T
     PatchResponseTimeHist[idx]->Collect(durationMsFloat);
 }
 
-void TDsProxyNodeMon::CheckNodeMonCountersForDeviceType(TPDiskCategory::EDeviceType type) { 
-    const ui32 idx = IdxForType(type); 
- 
-    if (!IsCountersPresentedForIdx[idx]) { 
-        IsCountersPresentedForIdx[idx] = true; 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> subGroup = 
-            Group->GetSubgroup("media", to_lower(TPDiskCategory::DeviceTypeStr(type, true))); 
- 
-        auto getNamedHisto = [&subGroup, &type] (const TString& name) { 
-            auto buckets = NMonitoring::ExplicitHistogram(GetCommonLatencyHistBounds(type)); 
+void TDsProxyNodeMon::CheckNodeMonCountersForDeviceType(TPDiskCategory::EDeviceType type) {
+    const ui32 idx = IdxForType(type);
+
+    if (!IsCountersPresentedForIdx[idx]) {
+        IsCountersPresentedForIdx[idx] = true;
+        TIntrusivePtr<NMonitoring::TDynamicCounters> subGroup =
+            Group->GetSubgroup("media", to_lower(TPDiskCategory::DeviceTypeStr(type, true)));
+
+        auto getNamedHisto = [&subGroup, &type] (const TString& name) {
+            auto buckets = NMonitoring::ExplicitHistogram(GetCommonLatencyHistBounds(type));
             return subGroup->GetHistogram(name, std::move(buckets));
-        }; 
- 
-        PutTabletLogResponseTimeHist256Ki[idx] = getNamedHisto("putTabletLog256KiMs"); 
-        PutTabletLogResponseTimeHistInf[idx] = getNamedHisto("putTabletLogInfMs"); 
-        PutAsyncBlobResponseTimeHist[idx] = getNamedHisto("putAsyncBlobMs"); 
-        PutUserDataResponseTimeHist[idx] = getNamedHisto("putUserDataMs"); 
-        GetAsyncReadResponseTimeHist[idx] = getNamedHisto("getAsyncReadMs"); 
-        GetFastReadResponseTimeHist256Ki[idx] = getNamedHisto("getFastRead256KiMs"); 
-        GetFastReadResponseTimeHistInf[idx] = getNamedHisto("getFastReadInfMs"); 
-        GetDiscoverResponseTimeHist[idx] = getNamedHisto("getDiscoverMs"); 
+        };
+
+        PutTabletLogResponseTimeHist256Ki[idx] = getNamedHisto("putTabletLog256KiMs");
+        PutTabletLogResponseTimeHistInf[idx] = getNamedHisto("putTabletLogInfMs");
+        PutAsyncBlobResponseTimeHist[idx] = getNamedHisto("putAsyncBlobMs");
+        PutUserDataResponseTimeHist[idx] = getNamedHisto("putUserDataMs");
+        GetAsyncReadResponseTimeHist[idx] = getNamedHisto("getAsyncReadMs");
+        GetFastReadResponseTimeHist256Ki[idx] = getNamedHisto("getFastRead256KiMs");
+        GetFastReadResponseTimeHistInf[idx] = getNamedHisto("getFastReadInfMs");
+        GetDiscoverResponseTimeHist[idx] = getNamedHisto("getDiscoverMs");
         GetLowReadResponseTimeHist[idx] = getNamedHisto("getLowReadMs");
         PatchResponseTimeHist[idx] = getNamedHisto("patchMs");
-    } 
-} 
+    }
+}
 } // NKikimr

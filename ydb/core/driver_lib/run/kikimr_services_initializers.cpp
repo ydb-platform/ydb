@@ -342,14 +342,14 @@ static TCpuManagerConfig CreateCpuManagerConfig(const NKikimrConfig::TActorSyste
     return cpuManager;
 }
 
-static TSchedulerConfig CreateSchedulerConfig(const NKikimrConfig::TActorSystemConfig::TScheduler &config) { 
+static TSchedulerConfig CreateSchedulerConfig(const NKikimrConfig::TActorSystemConfig::TScheduler &config) {
     const ui64 resolution = config.HasResolution() ? config.GetResolution() : 1024;
     Y_VERIFY_DEBUG((resolution & (resolution - 1)) == 0);  // resolution must be power of 2
     const ui64 spinThreshold = config.HasSpinThreshold() ? config.GetSpinThreshold() : 0;
     const ui64 progressThreshold = config.HasProgressThreshold() ? config.GetProgressThreshold() : 10000;
     const bool useSchedulerActor = config.HasUseSchedulerActor() ? config.GetUseSchedulerActor() : false;
 
-    return TSchedulerConfig(resolution, spinThreshold, progressThreshold, useSchedulerActor); 
+    return TSchedulerConfig(resolution, spinThreshold, progressThreshold, useSchedulerActor);
 }
 
 TBasicServicesInitializer::TBasicServicesInitializer(const TKikimrRunConfig& runConfig)
@@ -762,27 +762,27 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     }
 }
 
-// TImmediateControlBoardInitializer 
+// TImmediateControlBoardInitializer
 
-TImmediateControlBoardInitializer::TImmediateControlBoardInitializer(const TKikimrRunConfig& runConfig) 
-    : IKikimrServicesInitializer(runConfig) { 
-} 
- 
-void TImmediateControlBoardInitializer::InitializeServices(NActors::TActorSystemSetup* setup, 
-        const NKikimr::TAppData* appData) { 
+TImmediateControlBoardInitializer::TImmediateControlBoardInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TImmediateControlBoardInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
+        const NKikimr::TAppData* appData) {
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
-        MakeIcbId(NodeId), 
+        MakeIcbId(NodeId),
         TActorSetupCmd(CreateImmediateControlActor(appData->Icb, appData->Counters), TMailboxType::ReadAsFilled, appData->UserPoolId)
-    )); 
+    ));
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
         TActorId(),
         TActorSetupCmd(NConsole::CreateImmediateControlsConfigurator(appData->Icb,
                                                                      Config.GetImmediateControlsConfig()),
                        TMailboxType::ReadAsFilled, appData->UserPoolId)
     ));
-} 
- 
- 
+}
+
+
 // TBSNodeWardenInitializer
 
 TBSNodeWardenInitializer::TBSNodeWardenInitializer(const TKikimrRunConfig& runConfig)
@@ -813,7 +813,7 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
 
     ObtainTenantKey(&nodeWardenConfig->TenantKey, Config.GetKeyConfig());
     ObtainStaticKey(&nodeWardenConfig->StaticKey);
-    ObtainPDiskKey(&nodeWardenConfig->PDiskKey, Config.GetPDiskKeyConfig()); 
+    ObtainPDiskKey(&nodeWardenConfig->PDiskKey, Config.GetPDiskKeyConfig());
 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeBlobStorageNodeWardenID(NodeId),
                                                                        TActorSetupCmd(CreateBSNodeWarden(nodeWardenConfig.Release()),
@@ -1047,23 +1047,23 @@ void TLoggerInitializer::InitializeServices(
                                       TActorSetupCmd(configurator, TMailboxType::HTSwap, appData->UserPoolId));
 }
 
-// TSchedulerActorInitializer 
- 
-TSchedulerActorInitializer::TSchedulerActorInitializer(const TKikimrRunConfig& runConfig) 
-    : IKikimrServicesInitializer(runConfig) { 
-} 
- 
-void TSchedulerActorInitializer::InitializeServices( 
-            NActors::TActorSystemSetup* setup, 
-            const NKikimr::TAppData* appData) { 
-    auto& systemConfig = Config.GetActorSystemConfig(); 
-    NActors::IActor *schedulerActor = CreateSchedulerActor(CreateSchedulerConfig(systemConfig.GetScheduler())); 
-    if (schedulerActor) { 
+// TSchedulerActorInitializer
+
+TSchedulerActorInitializer::TSchedulerActorInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TSchedulerActorInitializer::InitializeServices(
+            NActors::TActorSystemSetup* setup,
+            const NKikimr::TAppData* appData) {
+    auto& systemConfig = Config.GetActorSystemConfig();
+    NActors::IActor *schedulerActor = CreateSchedulerActor(CreateSchedulerConfig(systemConfig.GetScheduler()));
+    if (schedulerActor) {
         NActors::TActorSetupCmd schedulerActorCmd(schedulerActor, NActors::TMailboxType::ReadAsFilled, appData->SystemPoolId);
         setup->LocalServices.emplace_back(MakeSchedulerActorId(), schedulerActorCmd);
-    } 
-} 
- 
+    }
+}
+
 // TProfilerInitializer
 
 TProfilerInitializer::TProfilerInitializer(const TKikimrRunConfig& runConfig)
@@ -1773,7 +1773,7 @@ TLoadInitializer::TLoadInitializer(const TKikimrRunConfig& runConfig)
 {}
 
 void TLoadInitializer::InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) {
-    IActor *actor = CreateTestLoadActor(appData->Counters); 
+    IActor *actor = CreateTestLoadActor(appData->Counters);
     setup->LocalServices.emplace_back(MakeBlobStorageLoadID(NodeId), TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId));
     // FIXME: correct service id
 }

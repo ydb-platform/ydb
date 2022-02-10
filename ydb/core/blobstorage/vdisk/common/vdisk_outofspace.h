@@ -9,9 +9,9 @@
 
 namespace NKikimr {
 
-    using TSpaceColor = NKikimrBlobStorage::TPDiskSpaceColor; 
-    using ESpaceColor = TSpaceColor::E; 
- 
+    using TSpaceColor = NKikimrBlobStorage::TPDiskSpaceColor;
+    using ESpaceColor = TSpaceColor::E;
+
     ////////////////////////////////////////////////////////////////////////////
     // TOutOfSpaceState -- global state for disk space availability
     ////////////////////////////////////////////////////////////////////////////
@@ -19,26 +19,26 @@ namespace NKikimr {
     public:
 
         TOutOfSpaceState(ui32 totalVDisks, ui32 selfOrderNum);
-        static NKikimrWhiteboard::EFlag ToWhiteboardFlag(const ESpaceColor color); 
+        static NKikimrWhiteboard::EFlag ToWhiteboardFlag(const ESpaceColor color);
         // update flags for vdisk with vdiskOrderNum
         void Update(ui32 vdiskOrderNum, NPDisk::TStatusFlags flags);
 
-        NKikimrWhiteboard::EFlag GlobalWhiteboardFlag() const { 
-            return ToWhiteboardFlag(GetGlobalColor()); 
-        } 
- 
-        NKikimrWhiteboard::EFlag LocalWhiteboardFlag() const { 
-            return ToWhiteboardFlag(GetLocalColor()); 
-        } 
- 
-        ESpaceColor GetGlobalColor() const { 
-            return StatusFlagToSpaceColor(static_cast<NPDisk::TStatusFlags>(AtomicGet(GlobalFlags))); 
+        NKikimrWhiteboard::EFlag GlobalWhiteboardFlag() const {
+            return ToWhiteboardFlag(GetGlobalColor());
         }
 
-        ESpaceColor GetLocalColor() const { 
-            return StatusFlagToSpaceColor(GetLocalStatusFlags()); 
-        } 
- 
+        NKikimrWhiteboard::EFlag LocalWhiteboardFlag() const {
+            return ToWhiteboardFlag(GetLocalColor());
+        }
+
+        ESpaceColor GetGlobalColor() const {
+            return StatusFlagToSpaceColor(static_cast<NPDisk::TStatusFlags>(AtomicGet(GlobalFlags)));
+        }
+
+        ESpaceColor GetLocalColor() const {
+            return StatusFlagToSpaceColor(GetLocalStatusFlags());
+        }
+
         // update state with flags received from local PDisk
         void UpdateLocal(NPDisk::TStatusFlags flags) {
             Update(SelfOrderNum, flags);

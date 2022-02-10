@@ -42,7 +42,7 @@ namespace NKikimr {
                     LOG_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                                 "%s: StorageRatio: timeSpent# %s stat# %s",
-                                PDiskSignatureForHullDbKey<TKey>().ToString().data(), 
+                                PDiskSignatureForHullDbKey<TKey>().ToString().data(),
                                 (finishTime - startTime).ToString().data(), stat.ToString().data()));
                 }
 

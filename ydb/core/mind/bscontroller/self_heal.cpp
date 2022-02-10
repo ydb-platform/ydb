@@ -635,60 +635,60 @@ namespace NKikimr::NBsController {
         const TInstant now = TActivationContext::Now();
         bool reschedule = false;
 
-        auto updateDiskCounters = [&]( 
-                NKikimrBlobStorage::EDriveStatus status, 
-                NBlobStorageController::EPercentileCounters histCounter, 
-                NBlobStorageController::ESimpleCounters groups, 
-                NBlobStorageController::ESimpleCounters slots, 
-                NBlobStorageController::ESimpleCounters bytes) { 
- 
-            // build histogram of PDisks in faulty state with VSlots over 'em 
-            auto& histo = TabletCounters->Percentile()[histCounter]; 
-            histo.Clear(); 
-            const auto& ranges = histo.GetRanges(); // a sorted vector of ranges 
-            for (const auto& [pdiskId, pdisk] : PDisks) { 
-               if (pdisk->Status == status && pdisk->NumActiveSlots) { 
-                    const ui64 passed = (now - pdisk->StatusTimestamp).Seconds(); 
-                    auto comp = [](const ui64 value, const auto& range) { return value < range.RangeVal; }; 
-                    const size_t idx = std::upper_bound(ranges.begin(), ranges.end(), passed, comp) - ranges.begin() - 1; 
-                    histo.IncrementForRange(idx); 
-                    reschedule = true; 
-                } 
+        auto updateDiskCounters = [&](
+                NKikimrBlobStorage::EDriveStatus status,
+                NBlobStorageController::EPercentileCounters histCounter,
+                NBlobStorageController::ESimpleCounters groups,
+                NBlobStorageController::ESimpleCounters slots,
+                NBlobStorageController::ESimpleCounters bytes) {
+
+            // build histogram of PDisks in faulty state with VSlots over 'em
+            auto& histo = TabletCounters->Percentile()[histCounter];
+            histo.Clear();
+            const auto& ranges = histo.GetRanges(); // a sorted vector of ranges
+            for (const auto& [pdiskId, pdisk] : PDisks) {
+               if (pdisk->Status == status && pdisk->NumActiveSlots) {
+                    const ui64 passed = (now - pdisk->StatusTimestamp).Seconds();
+                    auto comp = [](const ui64 value, const auto& range) { return value < range.RangeVal; };
+                    const size_t idx = std::upper_bound(ranges.begin(), ranges.end(), passed, comp) - ranges.begin() - 1;
+                    histo.IncrementForRange(idx);
+                    reschedule = true;
+                }
             }
 
-            // calculate some simple counters 
-            ui64 vslotsOnFaultyPDisks = 0; 
-            ui64 bytesOnFaultyPDisks = 0; 
-            std::unordered_set<TGroupId> groupsWithSlotsOnFaultyPDisks; 
-            for (const auto& [vslotId, vslot] : VSlots) { 
-                if (!vslot->IsBeingDeleted() && vslot->PDisk->Status == status) { 
-                    ++vslotsOnFaultyPDisks; 
-                    bytesOnFaultyPDisks += vslot->Metrics.GetAllocatedSize(); 
-                    groupsWithSlotsOnFaultyPDisks.insert(vslot->GroupId); 
-                } 
+            // calculate some simple counters
+            ui64 vslotsOnFaultyPDisks = 0;
+            ui64 bytesOnFaultyPDisks = 0;
+            std::unordered_set<TGroupId> groupsWithSlotsOnFaultyPDisks;
+            for (const auto& [vslotId, vslot] : VSlots) {
+                if (!vslot->IsBeingDeleted() && vslot->PDisk->Status == status) {
+                    ++vslotsOnFaultyPDisks;
+                    bytesOnFaultyPDisks += vslot->Metrics.GetAllocatedSize();
+                    groupsWithSlotsOnFaultyPDisks.insert(vslot->GroupId);
+                }
             }
-            auto& s = TabletCounters->Simple(); 
-            s[groups].Set(groupsWithSlotsOnFaultyPDisks.size()); 
-            s[slots].Set(vslotsOnFaultyPDisks); 
-            s[bytes].Set(bytesOnFaultyPDisks); 
-        }; 
+            auto& s = TabletCounters->Simple();
+            s[groups].Set(groupsWithSlotsOnFaultyPDisks.size());
+            s[slots].Set(vslotsOnFaultyPDisks);
+            s[bytes].Set(bytesOnFaultyPDisks);
+        };
 
-        updateDiskCounters( 
-            NKikimrBlobStorage::EDriveStatus::FAULTY, 
-            NBlobStorageController::COUNTER_FAULTY_USETTLED_PDISKS, 
-            NBlobStorageController::COUNTER_GROUPS_WITH_SLOTS_ON_FAULTY_DISKS, 
-            NBlobStorageController::COUNTER_SLOTS_ON_FAULTY_DISKS, 
-            NBlobStorageController::COUNTER_BYTES_ON_FAULTY_DISKS 
-        ); 
- 
-        updateDiskCounters( 
-            NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED, 
-            NBlobStorageController::COUNTER_TO_BE_REMOVED_USETTLED_PDISKS, 
-            NBlobStorageController::COUNTER_GROUPS_WITH_SLOTS_ON_TO_BE_REMOVED_DISKS, 
-            NBlobStorageController::COUNTER_SLOTS_ON_TO_BE_REMOVED_DISKS, 
-            NBlobStorageController::COUNTER_BYTES_ON_TO_BE_REMOVED_DISKS 
-        ); 
- 
+        updateDiskCounters(
+            NKikimrBlobStorage::EDriveStatus::FAULTY,
+            NBlobStorageController::COUNTER_FAULTY_USETTLED_PDISKS,
+            NBlobStorageController::COUNTER_GROUPS_WITH_SLOTS_ON_FAULTY_DISKS,
+            NBlobStorageController::COUNTER_SLOTS_ON_FAULTY_DISKS,
+            NBlobStorageController::COUNTER_BYTES_ON_FAULTY_DISKS
+        );
+
+        updateDiskCounters(
+            NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED,
+            NBlobStorageController::COUNTER_TO_BE_REMOVED_USETTLED_PDISKS,
+            NBlobStorageController::COUNTER_GROUPS_WITH_SLOTS_ON_TO_BE_REMOVED_DISKS,
+            NBlobStorageController::COUNTER_SLOTS_ON_TO_BE_REMOVED_DISKS,
+            NBlobStorageController::COUNTER_BYTES_ON_TO_BE_REMOVED_DISKS
+        );
+
         TabletCounters->Simple()[NBlobStorageController::COUNTER_SELF_HEAL_UNREASSIGNABLE_GROUPS] = SelfHealUnreassignableGroups->load();
 
         Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateSelfHealCounters);

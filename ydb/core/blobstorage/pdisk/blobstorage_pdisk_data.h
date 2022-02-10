@@ -3,7 +3,7 @@
 #include "blobstorage_pdisk.h"
 #include "blobstorage_pdisk_crypto.h"
 #include "blobstorage_pdisk_defs.h"
-#include "blobstorage_pdisk_state.h" 
+#include "blobstorage_pdisk_state.h"
 
 #include <ydb/core/util/text.h>
 
@@ -14,16 +14,16 @@ namespace NPDisk {
 // PDisk On-disk structures
 ////////////////////////////////////////////////////////////////////////////
 
-static_assert(sizeof(TOwner) == 1, "TOwner size mismatch."); 
-static_assert(sizeof(TLogSignature) == 1, "TSignature size mismatch."); 
+static_assert(sizeof(TOwner) == 1, "TOwner size mismatch.");
+static_assert(sizeof(TLogSignature) == 1, "TSignature size mismatch.");
 
 const ui64 MagicNextLogChunkReferenceId = 0x709DA7A709DA7A11;
 const ui64 MagicLogChunkId = 0x11170915A71FE111;
 const ui64 MagicDataChunkId = 0xDA7AC8A2CDA7AC8A;
 const ui64 MagicSysLogChunkId = 0x5957095957095957;
 const ui64 MagicFormatChunkId = 0xF088A7F088A7F088;
-constexpr ui64 MagicIncompleteFormat = 0x5b48add808b31984; 
-constexpr ui64 MagicIncompleteFormatSize = 512; // Bytes 
+constexpr ui64 MagicIncompleteFormat = 0x5b48add808b31984;
+constexpr ui64 MagicIncompleteFormatSize = 512; // Bytes
 
 const ui64 Canary = 0x0123456789abcdef;
 constexpr ui32 CanarySize = 8;
@@ -38,12 +38,12 @@ constexpr ui32 RecordsInSysLog = 16;
 #define PDISK_FORMAT_VERSION 3
 #define PDISK_DATA_VERSION 2
 #define PDISK_DATA_VERSION_2 3
-#define PDISK_DATA_VERSION_3 4 
+#define PDISK_DATA_VERSION_3 4
 #define PDISK_SYS_LOG_RECORD_VERSION_2 2
 #define PDISK_SYS_LOG_RECORD_VERSION_3 3
-#define PDISK_SYS_LOG_RECORD_VERSION_4 4 
-// #define PDISK_SYS_LOG_RECORD_VERSION_5 5 // It was used in reverted commits, just avoid this version 
-#define PDISK_SYS_LOG_RECORD_VERSION_6 6 
+#define PDISK_SYS_LOG_RECORD_VERSION_4 4
+// #define PDISK_SYS_LOG_RECORD_VERSION_5 5 // It was used in reverted commits, just avoid this version
+#define PDISK_SYS_LOG_RECORD_VERSION_6 6
 #define PDISK_SYS_LOG_RECORD_INCOMPATIBLE_VERSION_1000 1000
 #define FORMAT_TEXT_SIZE 1024
 
@@ -123,10 +123,10 @@ struct TLogRecordHeader {
     TOwner OwnerId;
     ui8 A;
     ui8 B;
-    TLogSignature Signature; 
+    TLogSignature Signature;
     ui64 OwnerLsn;
 
-    TLogRecordHeader(TOwner ownerId, TLogSignature signature, ui64 ownerLsn) 
+    TLogRecordHeader(TOwner ownerId, TLogSignature signature, ui64 ownerLsn)
         : Version(PDISK_DATA_VERSION)
         , OwnerId(ownerId)
         , A('A')
@@ -146,7 +146,7 @@ struct TFirstLogPageHeader {
     ui64 DataSize;
     TLogRecordHeader LogRecordHeader;
 
-    TFirstLogPageHeader(ui8 flags, ui32 size, ui64 dataSize, TOwner ownerId, TLogSignature signature, ui64 ownerLsn) 
+    TFirstLogPageHeader(ui8 flags, ui32 size, ui64 dataSize, TOwner ownerId, TLogSignature signature, ui64 ownerLsn)
         : Version(PDISK_DATA_VERSION)
         , Flags(flags)
         , A('A')
@@ -179,8 +179,8 @@ struct TNonceJumpLogPageHeader2 {
     ui8 A;
     ui8 B;
     ui64 PreviousNonce;
- 
-    // For debug only 
+
+    // For debug only
     ui32 PreviousLogTails[NONCE_JUMP_DLOG_RECORDS][NONCE_JUMP_DLOG_CHUNKS];
     ui32 PreviousNonces[NONCE_JUMP_DLOG_RECORDS];
     ui64 PreviousInstants[NONCE_JUMP_DLOG_RECORDS];
@@ -203,7 +203,7 @@ struct TNonceJumpLogPageHeader2 {
     }
 
     TNonceJumpLogPageHeader2(ui8 flags, ui64 previousNonce, TNonceJumpLogPageHeader2 &prevHeader,
-            TList<TLogChunkInfo> &logChunkList) 
+            TList<TLogChunkInfo> &logChunkList)
         : Version(PDISK_DATA_VERSION)
         , Flags(flags)
         , A('A')
@@ -322,13 +322,13 @@ struct TSysLogRecord {
     // TODO: use atomics here
     ui64 Version;
     TNonceSet Nonces;
-    TChunkIdx LogHeadChunkIdx; 
+    TChunkIdx LogHeadChunkIdx;
     ui32 Reserved1;
     ui64 LogHeadChunkPreviousNonce;
     TVDiskID OwnerVDisks[256];
 
     TSysLogRecord()
-        : Version(PDISK_SYS_LOG_RECORD_VERSION_6) 
+        : Version(PDISK_SYS_LOG_RECORD_VERSION_6)
         , LogHeadChunkIdx(0)
         , Reserved1(0)
         , LogHeadChunkPreviousNonce((ui64)-1)
@@ -408,77 +408,77 @@ struct TChunkInfo {
 };
 static_assert(sizeof(TOwner) == 1, "TOwner size is intended to be 1 byte (range 0..255)"); // Owner[256]
 
-struct TChunkTrimInfo { 
-    ui8 TrimMask; 
- 
-    static constexpr ui64 ChunksPerRecord = 8; 
- 
-    static ui64 RecordsForChunkCount(ui32 chunkCount) { 
-        return (chunkCount + ChunksPerRecord - 1) / ChunksPerRecord; 
-    } 
- 
-    static ui64 SizeForChunkCount(ui32 chunkCount) { 
-        // Write chunkCount in first 64 bits of chunk trim record 
-        return RecordsForChunkCount(chunkCount) * sizeof(TChunkTrimInfo); 
-    } 
- 
-    TChunkTrimInfo(ui64 mask) 
-        : TrimMask(mask) 
-    {} 
- 
-    void SetChunkTrimmed(ui8 idx) { 
-        Y_VERIFY(idx < ChunksPerRecord); 
-        TrimMask |= (1 << idx); 
-    } 
- 
-    void SetChunkUntrimmed(ui8 idx) { 
-        Y_VERIFY(idx < ChunksPerRecord); 
-        TrimMask &= ~(1 << idx); 
-    } 
- 
-    bool IsChunkTrimmed(ui8 idx) { 
-        Y_VERIFY(idx < ChunksPerRecord); 
-        return TrimMask & (1 << idx); 
-    } 
-}; 
- 
+struct TChunkTrimInfo {
+    ui8 TrimMask;
+
+    static constexpr ui64 ChunksPerRecord = 8;
+
+    static ui64 RecordsForChunkCount(ui32 chunkCount) {
+        return (chunkCount + ChunksPerRecord - 1) / ChunksPerRecord;
+    }
+
+    static ui64 SizeForChunkCount(ui32 chunkCount) {
+        // Write chunkCount in first 64 bits of chunk trim record
+        return RecordsForChunkCount(chunkCount) * sizeof(TChunkTrimInfo);
+    }
+
+    TChunkTrimInfo(ui64 mask)
+        : TrimMask(mask)
+    {}
+
+    void SetChunkTrimmed(ui8 idx) {
+        Y_VERIFY(idx < ChunksPerRecord);
+        TrimMask |= (1 << idx);
+    }
+
+    void SetChunkUntrimmed(ui8 idx) {
+        Y_VERIFY(idx < ChunksPerRecord);
+        TrimMask &= ~(1 << idx);
+    }
+
+    bool IsChunkTrimmed(ui8 idx) {
+        Y_VERIFY(idx < ChunksPerRecord);
+        return TrimMask & (1 << idx);
+    }
+};
+
 struct TNextLogChunkReference2 {
     ui32 Version;
-    TChunkIdx NextChunk; 
+    TChunkIdx NextChunk;
     TInstant CreatedAt; // Absent in Reference 1
 
     TNextLogChunkReference2()
         : Version(PDISK_DATA_VERSION_2)
         , NextChunk(0)
-        , CreatedAt(TInstant::Now()) 
-    {} 
+        , CreatedAt(TInstant::Now())
+    {}
 };
 
-struct TNextLogChunkReference3 : public TNextLogChunkReference2 { 
-    // Version should be PDISK_DATA_VERSION_3 
- 
-    // In typical case should be zero 
-    // In case of splicing means first nonce of next chunk 
-    ui64 NextChunkFirstNonce; 
-    // Should be zero 
-    ui8 IsNotCompatible; 
- 
-    TNextLogChunkReference3() { 
-        Version = PDISK_DATA_VERSION_3; 
-        IsNotCompatible = 0; 
-    } 
-}; 
- 
+struct TNextLogChunkReference3 : public TNextLogChunkReference2 {
+    // Version should be PDISK_DATA_VERSION_3
+
+    // In typical case should be zero
+    // In case of splicing means first nonce of next chunk
+    ui64 NextChunkFirstNonce;
+    // Should be zero
+    ui8 IsNotCompatible;
+
+    TNextLogChunkReference3() {
+        Version = PDISK_DATA_VERSION_3;
+        IsNotCompatible = 0;
+    }
+};
+
 #pragma pack(pop)
 
 enum EFormatFlags {
-    FormatFlagErasureEncodeUserChunks = 1, // Deprecated, user chunks is never erasure encoded 
+    FormatFlagErasureEncodeUserChunks = 1, // Deprecated, user chunks is never erasure encoded
     FormatFlagErasureEncodeUserLog = 1 << 1, // Deprecated, user log is never erasure encoded
-    FormatFlagErasureEncodeSysLog = 1 << 2,  // Always on, flag is useless 
-    FormatFlagErasureEncodeFormat = 1 << 3,  // Always on, flag is useless 
-    FormatFlagErasureEncodeNextChunkReference = 1 << 4,  // Always on, flag is useless 
-    FormatFlagEncryptFormat = 1 << 5,  // Always on, flag is useless 
-    FormatFlagEncryptData = 1 << 6,  // Always on, flag is useless 
+    FormatFlagErasureEncodeSysLog = 1 << 2,  // Always on, flag is useless
+    FormatFlagErasureEncodeFormat = 1 << 3,  // Always on, flag is useless
+    FormatFlagErasureEncodeNextChunkReference = 1 << 4,  // Always on, flag is useless
+    FormatFlagEncryptFormat = 1 << 5,  // Always on, flag is useless
+    FormatFlagEncryptData = 1 << 6,  // Always on, flag is useless
     FormatFlagFormatInProgress = 1 << 7,  // Not implemented (Must be OFF for a formatted disk)
 };
 
@@ -602,36 +602,36 @@ struct TDiskFormat {
         }
     }
 
-    ui64 Offset(TChunkIdx chunkIdx, ui32 sectorIdx, ui64 offset) const { 
-        return (ui64)ChunkSize * chunkIdx + (ui64)SectorSize * sectorIdx + offset; 
+    ui64 Offset(TChunkIdx chunkIdx, ui32 sectorIdx, ui64 offset) const {
+        return (ui64)ChunkSize * chunkIdx + (ui64)SectorSize * sectorIdx + offset;
     }
 
-    ui64 Offset(TChunkIdx chunkIdx, ui32 sectorIdx) const { 
-        return (ui64)ChunkSize * chunkIdx + (ui64)SectorSize * sectorIdx; 
+    ui64 Offset(TChunkIdx chunkIdx, ui32 sectorIdx) const {
+        return (ui64)ChunkSize * chunkIdx + (ui64)SectorSize * sectorIdx;
     }
 
     ui64 SectorPayloadSize() const {
-        return SectorSize - sizeof(TDataSectorFooter) - CanarySize; 
+        return SectorSize - sizeof(TDataSectorFooter) - CanarySize;
     }
 
     ui32 DiskSizeChunks() const {
-        return DiskSize / ChunkSize; 
+        return DiskSize / ChunkSize;
     }
 
     ui32 GetUserAccessibleChunkSize() const {
-        const ui32 userSectors = ChunkSize / SectorSize; 
-        return userSectors * SectorPayloadSize(); 
+        const ui32 userSectors = ChunkSize / SectorSize;
+        return userSectors * SectorPayloadSize();
     }
 
     ui32 SysLogSectorsPerRecord() const {
-        ui32 sectorPayload = SectorSize - CanarySize - sizeof(TDataSectorFooter); 
-        ui32 diskChunks = DiskSizeChunks(); 
-        ui32 baseSysLogRecordSize = sizeof(TSysLogRecord) 
+        ui32 sectorPayload = SectorSize - CanarySize - sizeof(TDataSectorFooter);
+        ui32 diskChunks = DiskSizeChunks();
+        ui32 baseSysLogRecordSize = sizeof(TSysLogRecord)
                 + diskChunks * sizeof(TChunkInfo)
-                + sizeof(TSysLogFirstNoncesToKeep) 
-                + TChunkTrimInfo::SizeForChunkCount(diskChunks); 
-        ui32 sysLogFirstSectorPayload = sectorPayload - sizeof(TFirstLogPageHeader); 
-        ui32 sysLogExtraSectorPayload = sectorPayload - sizeof(TLogPageHeader); 
+                + sizeof(TSysLogFirstNoncesToKeep)
+                + TChunkTrimInfo::SizeForChunkCount(diskChunks);
+        ui32 sysLogFirstSectorPayload = sectorPayload - sizeof(TFirstLogPageHeader);
+        ui32 sysLogExtraSectorPayload = sectorPayload - sizeof(TLogPageHeader);
         ui32 sysLogExtraSectorCount = 0;
         if (baseSysLogRecordSize > sysLogFirstSectorPayload) {
             ui32 extraSize = baseSysLogRecordSize - sysLogFirstSectorPayload;
@@ -647,15 +647,15 @@ struct TDiskFormat {
     }
 
     void PrepareMagic(TKey &key, ui64 nonce, ui64 &magic) {
-        NPDisk::TPDiskStreamCypher cypher(true); 
-        cypher.SetKey(key); 
-        cypher.StartMessage(nonce); 
-        cypher.InplaceEncrypt(&magic, sizeof(magic)); 
+        NPDisk::TPDiskStreamCypher cypher(true);
+        cypher.SetKey(key);
+        cypher.StartMessage(nonce);
+        cypher.InplaceEncrypt(&magic, sizeof(magic));
     }
 
     void InitMagic() {
         MagicFormatChunk = MagicFormatChunkId;
-        NPDisk::TPDiskHashCalculator hash(false); 
+        NPDisk::TPDiskHashCalculator hash(false);
         hash.Hash(&Guid, sizeof(Guid));
         hash.Hash(&MagicNextLogChunkReferenceId, sizeof(MagicNextLogChunkReferenceId));
         MagicNextLogChunkReference = hash.GetHashResult();
@@ -682,7 +682,7 @@ struct TDiskFormat {
     }
 
     bool IsHashOk(ui64 bufferSize) const {
-        NPDisk::TPDiskHashCalculator hashCalculator(false); 
+        NPDisk::TPDiskHashCalculator hashCalculator(false);
         if (Version == 2) {
             ui64 size = (char*)&HashVersion2 - (char*)this;
             hashCalculator.Hash(this, size);
@@ -705,7 +705,7 @@ struct TDiskFormat {
     void SetHash() {
         // Set an invalid HashVersion2 to prevent Version2 code from trying to read incompatible disks
         {
-            NPDisk::TPDiskHashCalculator hashCalculator(false); 
+            NPDisk::TPDiskHashCalculator hashCalculator(false);
             ui64 size = (char*)&HashVersion2 - (char*)this;
             hashCalculator.Hash(this, size);
             HashVersion2 = hashCalculator.GetHashResult();
@@ -714,7 +714,7 @@ struct TDiskFormat {
         }
         // Set Hash
         {
-            NPDisk::TPDiskHashCalculator hashCalculator(false); 
+            NPDisk::TPDiskHashCalculator hashCalculator(false);
             Y_VERIFY(DiskFormatSize > sizeof(THash));
             ui64 size = DiskFormatSize - sizeof(THash);
             hashCalculator.Hash(this, size);

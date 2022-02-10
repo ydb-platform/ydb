@@ -6,11 +6,11 @@ OWNER(
 IF (OS_LINUX AND NOT WITH_VALGRIND)
     UNITTEST()
 
-    TIMEOUT(1200) 
+    TIMEOUT(1200)
 
-    SIZE(LARGE) 
+    SIZE(LARGE)
 
-    TAG(ya:fat) 
+    TAG(ya:fat)
 
     IF (BUILD_TYPE == "RELEASE")
         SRCS(

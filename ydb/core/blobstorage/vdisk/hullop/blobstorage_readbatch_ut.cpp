@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(ReadBatcher) {
                 ui32 index = rng() % pendingReads.size();
                 std::unique_ptr<NPDisk::TEvChunkRead> msg = std::move(pendingReads[index]);
                 pendingReads.erase(pendingReads.begin() + index);
-                NPDisk::TEvChunkReadResult result(NKikimrProto::OK, msg->ChunkIdx, msg->Offset, msg->Cookie, 0, ""); 
+                NPDisk::TEvChunkReadResult result(NKikimrProto::OK, msg->ChunkIdx, msg->Offset, msg->Cookie, 0, "");
                 UNIT_ASSERT(msg->Offset + msg->Size <= chunkSize);
                 result.Data.SetData(chunks.at(msg->ChunkIdx).substr(msg->Offset, msg->Size));
                 batcher.Apply(&result);

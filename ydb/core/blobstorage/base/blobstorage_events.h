@@ -37,7 +37,7 @@ namespace NKikimr {
         {}
 
         TEvControllerRegisterNode(ui32 nodeID, const TVector<ui32>& startedDynamicGroups,
-                const TVector<ui32>& groupGenerations, const TVector<NPDisk::TDriveData>& drivesData) { 
+                const TVector<ui32>& groupGenerations, const TVector<NPDisk::TDriveData>& drivesData) {
             Record.SetNodeID(nodeID);
             for (auto groupId: startedDynamicGroups) {
                 Record.AddGroups(groupId);
@@ -45,43 +45,43 @@ namespace NKikimr {
             for (auto generation : groupGenerations) {
                 Record.AddGroupGenerations(generation);
             }
-            for (const auto& data : drivesData) { 
-                data.ToProto(Record.AddDrivesData()); 
-            } 
+            for (const auto& data : drivesData) {
+                data.ToProto(Record.AddDrivesData());
+            }
         }
 
         TString ToString() const override {
             TStringStream str;
-            str << "{TEvRegisterNode Record# " << Record.DebugString(); 
+            str << "{TEvRegisterNode Record# " << Record.DebugString();
             str << "}";
             return str.Str();
         }
     };
 
-    struct TEvBlobStorage::TEvControllerUpdateNodeDrives : public TEventPB< 
-        TEvBlobStorage::TEvControllerUpdateNodeDrives, 
-        NKikimrBlobStorage::TEvControllerUpdateNodeDrives, 
-        TEvBlobStorage::EvControllerUpdateNodeDrives> 
-    { 
-        TEvControllerUpdateNodeDrives() 
-        {} 
- 
-        TEvControllerUpdateNodeDrives(ui32 nodeId, const TVector<NPDisk::TDriveData>& drivesData) { 
-            Record.SetNodeId(nodeId); 
-            for (const auto& data : drivesData) { 
-                data.ToProto(Record.AddDrivesData()); 
-            } 
-        } 
- 
-        TString ToString() const override { 
-            TStringStream str; 
-            str << "{TEvControllerUpdateNodeDrives Record# " << Record.DebugString(); 
-            str << "}"; 
-            return str.Str(); 
-        } 
-    }; 
- 
- 
+    struct TEvBlobStorage::TEvControllerUpdateNodeDrives : public TEventPB<
+        TEvBlobStorage::TEvControllerUpdateNodeDrives,
+        NKikimrBlobStorage::TEvControllerUpdateNodeDrives,
+        TEvBlobStorage::EvControllerUpdateNodeDrives>
+    {
+        TEvControllerUpdateNodeDrives()
+        {}
+
+        TEvControllerUpdateNodeDrives(ui32 nodeId, const TVector<NPDisk::TDriveData>& drivesData) {
+            Record.SetNodeId(nodeId);
+            for (const auto& data : drivesData) {
+                data.ToProto(Record.AddDrivesData());
+            }
+        }
+
+        TString ToString() const override {
+            TStringStream str;
+            str << "{TEvControllerUpdateNodeDrives Record# " << Record.DebugString();
+            str << "}";
+            return str.Str();
+        }
+    };
+
+
     struct TEvBlobStorage::TEvControllerNodeServiceSetUpdate : public TEventPB<
         TEvBlobStorage::TEvControllerNodeServiceSetUpdate,
         NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate,
@@ -419,35 +419,35 @@ namespace NKikimr {
         std::vector<std::unique_ptr<IEventHandle>> Bunch;
     };
 
-    struct TEvBlobStorage::TEvAskRestartPDisk : TEventLocal<TEvAskRestartPDisk, EvAskRestartPDisk> { 
-        const ui32 PDiskId; 
- 
-        TEvAskRestartPDisk(const ui32& pdiskId) 
-            : PDiskId(pdiskId) 
-        {} 
-    }; 
- 
-    struct TEvBlobStorage::TEvRestartPDisk : TEventLocal<TEvRestartPDisk, EvRestartPDisk> { 
-        const ui32 PDiskId; 
+    struct TEvBlobStorage::TEvAskRestartPDisk : TEventLocal<TEvAskRestartPDisk, EvAskRestartPDisk> {
+        const ui32 PDiskId;
+
+        TEvAskRestartPDisk(const ui32& pdiskId)
+            : PDiskId(pdiskId)
+        {}
+    };
+
+    struct TEvBlobStorage::TEvRestartPDisk : TEventLocal<TEvRestartPDisk, EvRestartPDisk> {
+        const ui32 PDiskId;
         NPDisk::TKey MainKey;
-        TIntrusivePtr<TPDiskConfig> Config; 
- 
-        TEvRestartPDisk(const ui32& pdiskId, const NPDisk::TKey& mainKey, const TIntrusivePtr<TPDiskConfig>& config) 
-            : PDiskId(pdiskId) 
+        TIntrusivePtr<TPDiskConfig> Config;
+
+        TEvRestartPDisk(const ui32& pdiskId, const NPDisk::TKey& mainKey, const TIntrusivePtr<TPDiskConfig>& config)
+            : PDiskId(pdiskId)
             , MainKey(mainKey)
-            , Config(config) 
-        {} 
-    }; 
- 
-    struct TEvBlobStorage::TEvRestartPDiskResult : TEventLocal<TEvRestartPDiskResult, EvRestartPDiskResult> { 
-        const ui32 PDiskId; 
-        NKikimrProto::EReplyStatus Status; 
- 
-        TEvRestartPDiskResult(const ui32& pdiskId, NKikimrProto::EReplyStatus status = NKikimrProto::EReplyStatus::OK) 
-            : PDiskId(pdiskId) 
-            , Status(status) 
-        {} 
-    }; 
+            , Config(config)
+        {}
+    };
+
+    struct TEvBlobStorage::TEvRestartPDiskResult : TEventLocal<TEvRestartPDiskResult, EvRestartPDiskResult> {
+        const ui32 PDiskId;
+        NKikimrProto::EReplyStatus Status;
+
+        TEvRestartPDiskResult(const ui32& pdiskId, NKikimrProto::EReplyStatus status = NKikimrProto::EReplyStatus::OK)
+            : PDiskId(pdiskId)
+            , Status(status)
+        {}
+    };
 
     struct TEvBlobStorage::TEvControllerScrubQueryStartQuantum : TEventPB<TEvControllerScrubQueryStartQuantum,
             NKikimrBlobStorage::TEvControllerScrubQueryStartQuantum, EvControllerScrubQueryStartQuantum> {

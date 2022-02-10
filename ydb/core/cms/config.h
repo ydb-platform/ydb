@@ -115,15 +115,15 @@ struct TCmsSentinelConfig {
     {
         TMap<EPDiskState, ui32> stateLimits;
         // error states
-        stateLimits[NKikimrBlobStorage::TPDiskState::InitialFormatReadError] = 60; 
-        stateLimits[NKikimrBlobStorage::TPDiskState::InitialSysLogReadError] = 60; 
-        stateLimits[NKikimrBlobStorage::TPDiskState::InitialSysLogParseError] = 60; 
-        stateLimits[NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError] = 60; 
-        stateLimits[NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError] = 60; 
-        stateLimits[NKikimrBlobStorage::TPDiskState::CommonLoggerInitError] = 60; 
-        stateLimits[NKikimrBlobStorage::TPDiskState::OpenFileError] = 60; 
-        stateLimits[NKikimrBlobStorage::TPDiskState::ChunkQuotaError] = 60; 
-        stateLimits[NKikimrBlobStorage::TPDiskState::DeviceIoError] = 60; 
+        stateLimits[NKikimrBlobStorage::TPDiskState::InitialFormatReadError] = 60;
+        stateLimits[NKikimrBlobStorage::TPDiskState::InitialSysLogReadError] = 60;
+        stateLimits[NKikimrBlobStorage::TPDiskState::InitialSysLogParseError] = 60;
+        stateLimits[NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError] = 60;
+        stateLimits[NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError] = 60;
+        stateLimits[NKikimrBlobStorage::TPDiskState::CommonLoggerInitError] = 60;
+        stateLimits[NKikimrBlobStorage::TPDiskState::OpenFileError] = 60;
+        stateLimits[NKikimrBlobStorage::TPDiskState::ChunkQuotaError] = 60;
+        stateLimits[NKikimrBlobStorage::TPDiskState::DeviceIoError] = 60;
         // node online, pdisk missing
         stateLimits[NKikimrBlobStorage::TPDiskState::Missing] = 60;
         // node timeout

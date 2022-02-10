@@ -12,11 +12,11 @@ namespace NPDisk {
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-struct TOwnerInfo { 
-    i64 ChunksOwned; 
-    TVDiskID VDiskId; 
-}; 
- 
+struct TOwnerInfo {
+    i64 ChunksOwned;
+    TVDiskID VDiskId;
+};
+
 struct TKeeperParams {
     // Total number of chunks of the disk
     i64 TotalChunks = 0;
@@ -34,9 +34,9 @@ struct TKeeperParams {
     bool HasStaticGroups = false;
 
     // Initially owned chunk count for each owner, must be present for all currently present owners
-    TMap<TOwner, TOwnerInfo> OwnersInfo; 
- 
-    NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; 
+    TMap<TOwner, TOwnerInfo> OwnersInfo;
+
+    NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 };
 
 } // NPDisk

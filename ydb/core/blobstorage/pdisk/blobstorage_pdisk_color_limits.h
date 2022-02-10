@@ -40,13 +40,13 @@ struct TColorLimits {
     i64 CyanAddend = 0;
 
     void Print(IOutputStream &str) {
-        str << "  Black = Total * " << BlackMultiplier << " / " << BlackDivisor << " + " << BlackAddend << "\n"; 
-        str << "  Red = Total * " << RedMultiplier << " / " << RedDivisor << " + " << RedAddend << "\n"; 
-        str << "  Orange = Total * " << OrangeMultiplier << " / " << OrangeDivisor << " + " << OrangeAddend << "\n"; 
-        str << "  LightOrange = Total * " << LightOrangeMultiplier << " / " << LightOrangeDivisor << " + " << LightOrangeAddend << "\n"; 
-        str << "  Yellow = Total * " << YellowMultiplier << " / " << YellowDivisor << " + " << YellowAddend << "\n"; 
+        str << "  Black = Total * " << BlackMultiplier << " / " << BlackDivisor << " + " << BlackAddend << "\n";
+        str << "  Red = Total * " << RedMultiplier << " / " << RedDivisor << " + " << RedAddend << "\n";
+        str << "  Orange = Total * " << OrangeMultiplier << " / " << OrangeDivisor << " + " << OrangeAddend << "\n";
+        str << "  LightOrange = Total * " << LightOrangeMultiplier << " / " << LightOrangeDivisor << " + " << LightOrangeAddend << "\n";
+        str << "  Yellow = Total * " << YellowMultiplier << " / " << YellowDivisor << " + " << YellowAddend << "\n";
         str << "  LightYellow = Total * " << LightYellowMultiplier << " / " << LightYellowDivisor << " + " << LightYellowAddend << "\n";
-        str << "  Cyan = Total * " << CyanMultiplier << " / " << CyanDivisor << " + " << CyanAddend << "\n"; 
+        str << "  Cyan = Total * " << CyanMultiplier << " / " << CyanDivisor << " + " << CyanAddend << "\n";
     }
 
     static TColorLimits MakeChunkLimits() {

@@ -289,7 +289,7 @@ namespace NKikimr {
                             "COMMIT: type# HugeChunkAllocator msg# %s", commitRecord.ToString().data()));
 
             ctx.Send(HugeKeeperCtx->LoggerId, new NPDisk::TEvLog(HugeKeeperCtx->PDiskCtx->Dsk->Owner,
-                HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureHugeBlobAllocChunk, 
+                HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureHugeBlobAllocChunk,
                 commitRecord, data, TLsnSeg(Lsn, Lsn), nullptr));
 
             // commit changes to the persistent state at once
@@ -367,7 +367,7 @@ namespace NKikimr {
 
             // send log message
             ctx.Send(HugeKeeperCtx->LoggerId, new NPDisk::TEvLog(HugeKeeperCtx->PDiskCtx->Dsk->Owner,
-                HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureHugeBlobFreeChunk, 
+                HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureHugeBlobFreeChunk,
                 commitRecord, data, TLsnSeg(Lsn, Lsn), nullptr));
             TThis::Become(&TThis::StateFunc);
         }
@@ -430,7 +430,7 @@ namespace NKikimr {
             TLsnSeg seg(EntryPointLsn, EntryPointLsn);
             ctx.Send(HugeKeeperCtx->LoggerId,
                     new NPDisk::TEvLog(HugeKeeperCtx->PDiskCtx->Dsk->Owner, HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound,
-                        TLogSignature::SignatureHugeBlobEntryPoint, commitRecord, Serialized, seg, nullptr)); 
+                        TLogSignature::SignatureHugeBlobEntryPoint, commitRecord, Serialized, seg, nullptr));
             TThis::Become(&TThis::StateFunc);
         }
 
@@ -785,13 +785,13 @@ namespace NKikimr {
             };
 
             switch (msg->Signature) {
-                case TLogSignature::SignatureHullLogoBlobsDB: 
+                case TLogSignature::SignatureHullLogoBlobsDB:
                     checkAndSet(State.Pers->LogPos.LogoBlobsDbSlotDelLsn);
                     break;
-                case TLogSignature::SignatureHullBlocksDB: 
+                case TLogSignature::SignatureHullBlocksDB:
                     checkAndSet(State.Pers->LogPos.BlocksDbSlotDelLsn);
                     break;
-                case TLogSignature::SignatureHullBarriersDB: 
+                case TLogSignature::SignatureHullBarriersDB:
                     checkAndSet(State.Pers->LogPos.BarriersDbSlotDelLsn);
                     break;
                 default:
@@ -913,7 +913,7 @@ namespace NKikimr {
             // update mon counters
             HugeKeeperCtx->DskOutOfSpaceGroup.HugeUsedChunks() = stat.CurrentlyUsedChunks;
             HugeKeeperCtx->DskOutOfSpaceGroup.HugeCanBeFreedChunks() = stat.CanBeFreedChunks;
-            HugeKeeperCtx->DskOutOfSpaceGroup.HugeLockedChunks() = stat.LockedChunks.size(); 
+            HugeKeeperCtx->DskOutOfSpaceGroup.HugeLockedChunks() = stat.LockedChunks.size();
             // update global stat
             HugeKeeperCtx->VCtx->GetHugeHeapFragmentation().Set(stat.CurrentlyUsedChunks, stat.CanBeFreedChunks);
         }

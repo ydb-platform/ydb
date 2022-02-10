@@ -4,7 +4,7 @@ OWNER(
     cthulhu
     ddoarn
     fomichev
-    va-kuznecov 
+    va-kuznecov
     g:kikimr
 )
 

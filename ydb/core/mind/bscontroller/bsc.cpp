@@ -76,13 +76,13 @@ void TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
     auto deriveStatus = [&](const auto& failed) {
         auto& checker = *Topology->QuorumChecker;
         if (!failed.GetNumSetItems()) { // all disks of group are operational
-            return NKikimrBlobStorage::TGroupStatus::FULL; 
+            return NKikimrBlobStorage::TGroupStatus::FULL;
         } else if (!checker.CheckFailModelForGroup(failed)) { // fail model exceeded
-            return NKikimrBlobStorage::TGroupStatus::DISINTEGRATED; 
+            return NKikimrBlobStorage::TGroupStatus::DISINTEGRATED;
         } else if (checker.IsDegraded(failed)) { // group degraded
-            return NKikimrBlobStorage::TGroupStatus::DEGRADED; 
+            return NKikimrBlobStorage::TGroupStatus::DEGRADED;
         } else if (failed.GetNumSetItems()) { // group partially available, but not degraded
-            return NKikimrBlobStorage::TGroupStatus::PARTIAL; 
+            return NKikimrBlobStorage::TGroupStatus::PARTIAL;
         } else {
             Y_FAIL("unexpected case");
         }
@@ -260,7 +260,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         case TEvBlobStorage::EvControllerScrubQueryStartQuantum:       return 2;
         case TEvBlobStorage::EvControllerScrubQuantumFinished:         return 2;
         case TEvBlobStorage::EvControllerScrubReportQuantumInProgress: return 2;
-        case TEvBlobStorage::EvControllerUpdateNodeDrives:             return 2; 
+        case TEvBlobStorage::EvControllerUpdateNodeDrives:             return 2;
 
         // hive-related commands
         case TEvBlobStorage::EvControllerSelectGroups:                 return 4;
@@ -356,11 +356,11 @@ void Out<NKikimr::NBsController::TPDiskId>(IOutputStream &str, const NKikimr::NB
 }
 
 template<>
-void Out<NKikimr::NBsController::TPDiskLocation>(IOutputStream &str, const NKikimr::NBsController::TPDiskLocation &value) { 
+void Out<NKikimr::NBsController::TPDiskLocation>(IOutputStream &str, const NKikimr::NBsController::TPDiskLocation &value) {
     str << value.NodeId << ":" << value.Path.Quote();
-} 
- 
-template<> 
+}
+
+template<>
 void Out<NKikimr::NBsController::TVSlotId>(IOutputStream &str, const NKikimr::NBsController::TVSlotId &value) {
     str << value.ToString();
 }
@@ -369,7 +369,7 @@ template<>
 void Out<NKikimr::NBsController::TResourceNormalizedValues>(IOutputStream &str, const NKikimr::NBsController::TResourceNormalizedValues &value) {
     str << value.ToString();
 }
- 
+
 template<>
 void Out<NKikimr::NBsController::TResourceRawValues>(IOutputStream &str, const NKikimr::NBsController::TResourceRawValues &value) {
     str << value.ToString();

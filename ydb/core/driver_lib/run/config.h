@@ -13,7 +13,7 @@ namespace NKikimr {
 union TBasicKikimrServicesMask {
     struct {
         bool EnableBasicServices:1;
-        bool EnableIcbService:1; 
+        bool EnableIcbService:1;
         bool EnableWhiteBoard:1;
         bool EnableBSNodeWarden:1;
         bool EnableStateStorageService:1;
@@ -21,7 +21,7 @@ union TBasicKikimrServicesMask {
         bool EnableSharedCache:1;
         bool EnableBlobCache:1;
         bool EnableLogger:1;
-        bool EnableSchedulerActor:1; 
+        bool EnableSchedulerActor:1;
         bool EnableProfiler:1;
         bool EnableResourceBroker:1;
         bool EnableTabletResolver:1;

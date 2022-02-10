@@ -108,7 +108,7 @@ namespace NKikimr {
                 LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                          VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                                 "%s: Selector actor: action# %s timeSpent# %s",
-                                PDiskSignatureForHullDbKey<TKey>().ToString().data(), 
+                                PDiskSignatureForHullDbKey<TKey>().ToString().data(),
                                 ActionToStr(action), (finishTime - startTime).ToString().data()));
                 TThis::Die(ctx);
             }

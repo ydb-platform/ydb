@@ -2,7 +2,7 @@
 #include "defs.h"
 
 #include <ydb/library/pdisk_io/sector_map.h>
- 
+
 #include <util/folder/tempdir.h>
 #include <util/folder/dirut.h>
 
@@ -18,7 +18,7 @@ public:
     TTestContext(bool makeTempDir, bool useSectorMap) {
         if (makeTempDir) {
             TempDir.Reset(new TTempDir);
-            Dir = TempDir->Name().c_str(); 
+            Dir = TempDir->Name().c_str();
         }
         if (useSectorMap) {
             SectorMap = new NPDisk::TSectorMap;

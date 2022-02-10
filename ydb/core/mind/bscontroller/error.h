@@ -113,9 +113,9 @@ namespace NKikimr::NBsController {
             *this << "PDisk not found"
                 << TErrorParams::Fqdn(hostKey.GetFqdn())
                 << TErrorParams::IcPort(hostKey.GetIcPort())
-                << TErrorParams::NodeId(hostKey.GetNodeId()) 
-                << TErrorParams::PDiskId(pdiskId) 
-                << TErrorParams::Path(path); 
+                << TErrorParams::NodeId(hostKey.GetNodeId())
+                << TErrorParams::PDiskId(pdiskId)
+                << TErrorParams::Path(path);
         }
 
         NKikimrBlobStorage::TConfigResponse::TStatus::EFailReason GetFailReason() const override {
@@ -199,10 +199,10 @@ namespace NKikimr::NBsController {
         }
     };
 
-    struct TExAlready : TExError { 
-        NKikimrBlobStorage::TConfigResponse::TStatus::EFailReason GetFailReason() const override { 
-            return NKikimrBlobStorage::TConfigResponse::TStatus::kAlready; 
-        } 
-    }; 
- 
+    struct TExAlready : TExError {
+        NKikimrBlobStorage::TConfigResponse::TStatus::EFailReason GetFailReason() const override {
+            return NKikimrBlobStorage::TConfigResponse::TStatus::kAlready;
+        }
+    };
+
 } // NKikimr::NBsController

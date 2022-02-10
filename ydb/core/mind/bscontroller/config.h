@@ -62,9 +62,9 @@ namespace NKikimr {
             TCowHolder<Schema::State::NextStoragePoolId::Type> NextStoragePoolId;
 
             // helper classes
-            using TLocationMap = THashMap<TPDiskLocation, TPDiskId>; 
-            TLocationMap PDiskLocationMap; 
-            TLocationMap StaticPDiskLocationMap; 
+            using TLocationMap = THashMap<TPDiskLocation, TPDiskId>;
+            TLocationMap PDiskLocationMap;
+            TLocationMap StaticPDiskLocationMap;
 
             THostRecordMap HostRecords;
 
@@ -95,10 +95,10 @@ namespace NKikimr {
             // static pdisk/vdisk states
             std::map<TVSlotId, TStaticVSlotInfo>& StaticVSlots;
             std::map<TPDiskId, TStaticPDiskInfo>& StaticPDisks;
-            const std::map<TString, TNodeId>& NodeForSerial; 
+            const std::map<TString, TNodeId>& NodeForSerial;
 
-            TCowHolder<Schema::State::SerialManagementStage::Type> SerialManagementStage; 
- 
+            TCowHolder<Schema::State::SerialManagementStage::Type> SerialManagementStage;
+
             TStoragePoolStat& StoragePoolStat;
 
         public:
@@ -122,8 +122,8 @@ namespace NKikimr {
                 , DefaultMaxSlots(controller.DefaultMaxSlots)
                 , StaticVSlots(controller.StaticVSlots)
                 , StaticPDisks(controller.StaticPDisks)
-                , NodeForSerial(controller.NodeForSerial) 
-                , SerialManagementStage(&controller.SerialManagementStage) 
+                , NodeForSerial(controller.NodeForSerial)
+                , SerialManagementStage(&controller.SerialManagementStage)
                 , StoragePoolStat(*controller.StoragePoolStat)
             {
                 Y_VERIFY(HostRecords);
@@ -136,14 +136,14 @@ namespace NKikimr {
                 StoragePools.Commit();
                 StoragePoolGroups.Commit();
                 PDisks.Commit();
-                DrivesSerials.Commit(); 
+                DrivesSerials.Commit();
                 Nodes.Commit();
                 VSlots.Commit();
                 Groups.Commit();
                 IndexGroupSpeciesToGroup.Commit();
                 NextGroupId.Commit();
                 NextStoragePoolId.Commit();
-                SerialManagementStage.Commit(); 
+                SerialManagementStage.Commit();
             }
 
             void Rollback() {
@@ -154,8 +154,8 @@ namespace NKikimr {
 
             bool Changed() const {
                 return HostConfigs.Changed() || Boxes.Changed() || StoragePools.Changed() ||
-                    StoragePoolGroups.Changed() || PDisks.Changed() || DrivesSerials.Changed() || Nodes.Changed() || 
-                    VSlots.Changed() || Groups.Changed() || IndexGroupSpeciesToGroup.Changed() || NextGroupId.Changed() || 
+                    StoragePoolGroups.Changed() || PDisks.Changed() || DrivesSerials.Changed() || Nodes.Changed() ||
+                    VSlots.Changed() || Groups.Changed() || IndexGroupSpeciesToGroup.Changed() || NextGroupId.Changed() ||
                     NextStoragePoolId.Changed() || SerialManagementStage.Changed();
             }
 
@@ -202,12 +202,12 @@ namespace NKikimr {
             void Init() {
                 PDisks.ForEach([this](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
                     const TNodeId &nodeId = pdiskId.NodeId;
-                    TPDiskLocation location{nodeId, pdiskInfo.PathOrSerial()}; 
-                    PDiskLocationMap.emplace(location, pdiskId); 
+                    TPDiskLocation location{nodeId, pdiskInfo.PathOrSerial()};
+                    PDiskLocationMap.emplace(location, pdiskId);
                 });
                 for (const auto& [pdiskId, pdisk] : StaticPDisks) {
-                    TPDiskLocation location{pdiskId.NodeId, pdisk.Path}; 
-                    StaticPDiskLocationMap.emplace(location, pdiskId); 
+                    TPDiskLocation location{pdiskId.NodeId, pdisk.Path};
+                    StaticPDiskLocationMap.emplace(location, pdiskId);
                 }
             }
 
@@ -242,10 +242,10 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TMoveGroups& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TQueryBaseConfig& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDropDonorDisk& cmd, TStatus& status);
-            void ExecuteStep(const NKikimrBlobStorage::TAddDriveSerial& cmd, TStatus& status); 
-            void ExecuteStep(const NKikimrBlobStorage::TRemoveDriveSerial& cmd, TStatus& status); 
-            void ExecuteStep(const NKikimrBlobStorage::TForgetDriveSerial& cmd, TStatus& status); 
-            void ExecuteStep(const NKikimrBlobStorage::TMigrateToSerial& cmd, TStatus& status); 
+            void ExecuteStep(const NKikimrBlobStorage::TAddDriveSerial& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TRemoveDriveSerial& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TForgetDriveSerial& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TMigrateToSerial& cmd, TStatus& status);
         };
 
     } // NBsController

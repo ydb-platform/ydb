@@ -69,18 +69,18 @@ Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::EDriveStatus, stream, value) {
     stream << NKikimrBlobStorage::EDriveStatus_Name(value);
 }
 
-Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TGroupStatus::E, stream, value) { 
-    stream << NKikimrBlobStorage::TGroupStatus::E_Name(value); 
-} 
- 
-Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TDriveLifeStage::E, stream, value) { 
-    stream << NKikimrBlobStorage::TDriveLifeStage::E_Name(value); 
-} 
- 
-Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TSerialManagementStage::E, stream, value) { 
-    stream << NKikimrBlobStorage::TSerialManagementStage::E_Name(value); 
-} 
- 
+Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TGroupStatus::E, stream, value) {
+    stream << NKikimrBlobStorage::TGroupStatus::E_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TDriveLifeStage::E, stream, value) {
+    stream << NKikimrBlobStorage::TDriveLifeStage::E_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TSerialManagementStage::E, stream, value) {
+    stream << NKikimrBlobStorage::TSerialManagementStage::E_Name(value);
+}
+
 Y_DECLARE_OUT_SPEC(, NKikimrResourceBroker::EResourceType, stream, value) {
     stream << NKikimrResourceBroker::EResourceType_Name(value);
 }
@@ -105,10 +105,10 @@ Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::EPDiskType, stream, value) {
     stream << NKikimrBlobStorage::EPDiskType_Name(value);
 }
 
-Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::EVDiskStatus, stream, value) { 
-    stream << NKikimrBlobStorage::EVDiskStatus_Name(value); 
-} 
- 
+Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::EVDiskStatus, stream, value) {
+    stream << NKikimrBlobStorage::EVDiskStatus_Name(value);
+}
+
 Y_DECLARE_OUT_SPEC(, NKikimrNodeBroker::TStatus::ECode, stream, value) {
     stream << NKikimrNodeBroker::TStatus::ECode_Name(value);
 }
@@ -144,23 +144,23 @@ Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::EDatashardState, stream, value) {
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TPDiskState::E, stream, value) {
     stream << NKikimrBlobStorage::TPDiskState::E_Name(value);
 }
- 
-Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TPDiskSpaceColor::E, stream, value) { 
-    stream << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(value); 
-} 
- 
-Y_DECLARE_OUT_SPEC(, NKikimrWhiteboard::EFlag, stream, value) { 
-    stream << NKikimrWhiteboard::EFlag_Name(value); 
-} 
+
+Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TPDiskSpaceColor::E, stream, value) {
+    stream << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrWhiteboard::EFlag, stream, value) {
+    stream << NKikimrWhiteboard::EFlag_Name(value);
+}
 
 Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::TEvCompactTableResult::EStatus, stream, value) {
     stream << NKikimrTxDataShard::TEvCompactTableResult::EStatus_Name(value);
 }
- 
-Y_DECLARE_OUT_SPEC(, NKikimrKqp::EQueryAction, stream, value) { 
-        stream << NKikimrKqp::EQueryAction_Name(value); 
-} 
- 
-Y_DECLARE_OUT_SPEC(, NKikimrKqp::EQueryType, stream, value) { 
-        stream << NKikimrKqp::EQueryType_Name(value); 
-} 
+
+Y_DECLARE_OUT_SPEC(, NKikimrKqp::EQueryAction, stream, value) {
+        stream << NKikimrKqp::EQueryAction_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrKqp::EQueryType, stream, value) {
+        stream << NKikimrKqp::EQueryType_Name(value);
+}

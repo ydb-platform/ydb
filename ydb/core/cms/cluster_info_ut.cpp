@@ -376,7 +376,7 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         permission.Deadline = now - TDuration::Seconds(30);
         cluster.SetNodeState(2, DOWN, MakeSystemStateInfo("1"));
         UNIT_ASSERT_VALUES_EQUAL(cluster.AddLocks(permission, nullptr), 1);
-        UNIT_ASSERT_VALUES_EQUAL(cluster.Node(2).State, EState::RESTART); 
+        UNIT_ASSERT_VALUES_EQUAL(cluster.Node(2).State, EState::RESTART);
         UNIT_ASSERT_VALUES_EQUAL(cluster.Node(2).Lock->ActionDeadline, now + TDuration::Seconds(30));
 
         cluster.ClearNode(1);

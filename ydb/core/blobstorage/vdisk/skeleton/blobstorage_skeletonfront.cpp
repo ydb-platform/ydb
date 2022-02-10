@@ -657,8 +657,8 @@ namespace NKikimr {
         void Bootstrap(const TActorContext &ctx) {
             const auto& baseInfo = Config->BaseInfo;
             VCtx = MakeIntrusive<TVDiskContext>(ctx.SelfID, GInfo->PickTopology(), VDiskCounters, SelfVDiskId,
-                        ctx.ExecutorThread.ActorSystem, baseInfo.DeviceType, baseInfo.DonorMode, 
-                        baseInfo.ReplPDiskReadQuoter, baseInfo.ReplPDiskWriteQuoter, baseInfo.ReplNodeRequestQuoter, 
+                        ctx.ExecutorThread.ActorSystem, baseInfo.DeviceType, baseInfo.DonorMode,
+                        baseInfo.ReplPDiskReadQuoter, baseInfo.ReplPDiskWriteQuoter, baseInfo.ReplNodeRequestQuoter,
                         baseInfo.ReplNodeResponseQuoter);
 
             // create IntQueues
@@ -769,7 +769,7 @@ namespace NKikimr {
                             }
                             TABLEBODY() {
                                 TABLER() {
-                                    auto v = VDiskMonGroup.VDiskState(); 
+                                    auto v = VDiskMonGroup.VDiskState();
                                     auto s = NKikimrWhiteboard::EVDiskState_Name(v);
                                     auto light = ToLightSignal(v);
                                     TABLED() {str << "VDisk";}
@@ -782,7 +782,7 @@ namespace NKikimr {
                                     TABLED() {str << "VDisk LocalDb Recovery";}
                                     TABLED() {THtmlLightSignalRenderer(light, s).Output(str);}
                                 }
-                                if (VDiskMonGroup.VDiskState() == NKikimrWhiteboard::PDiskError) { 
+                                if (VDiskMonGroup.VDiskState() == NKikimrWhiteboard::PDiskError) {
                                     TABLER() {
                                         TABLED() {str << "Error Details";}
                                         TABLED() {
@@ -900,9 +900,9 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         void UpdateWhiteboard(const TActorContext &ctx, bool schedule = true) {
             // out of space
-            const auto outOfSpaceFlags = VCtx->GetOutOfSpaceState().LocalWhiteboardFlag(); 
+            const auto outOfSpaceFlags = VCtx->GetOutOfSpaceState().LocalWhiteboardFlag();
             // skeleton state
-            const auto state = VDiskMonGroup.VDiskState(); 
+            const auto state = VDiskMonGroup.VDiskState();
             // replicated?
             bool replicated = !ReplMonGroup.ReplUnreplicatedVDisks() && !HasUnreadableBlobs;
             bool unreplicatedPhantoms = ReplMonGroup.ReplCurrentNumUnrecoveredPhantomBlobs() +
@@ -936,15 +936,15 @@ namespace NKikimr {
 
         template <class TEventPtr>
         void DatabaseAccessDeniedHandle(TEventPtr &ev, const TActorContext &ctx) {
-            LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix 
-                    << "Access denied Type# " << Sprintf("0x%08" PRIx32, ev->GetTypeRewrite()) 
-                    << " Sender# " << ev->Sender.ToString() 
-                    << " OriginScopeId# " << ScopeIdToString(ev->OriginScopeId) 
+            LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
+                    << "Access denied Type# " << Sprintf("0x%08" PRIx32, ev->GetTypeRewrite())
+                    << " Sender# " << ev->Sender.ToString()
+                    << " OriginScopeId# " << ScopeIdToString(ev->OriginScopeId)
                     << " LocalScopeId# " << ScopeIdToString(AppData(ctx)->LocalScopeId.GetInterconnectScopeId())
                     << " Marker# BSVSF01");
             ++*AccessDeniedMessages;
-            TInstant now = TAppData::TimeProvider->Now(); 
-            FillInCostSettingsAndTimestampIfApplicable(ev->Get()->Record, now); 
+            TInstant now = TAppData::TimeProvider->Now();
+            FillInCostSettingsAndTimestampIfApplicable(ev->Get()->Record, now);
             Reply(ev, ctx, NKikimrProto::ERROR, "access denied", now);
         }
 
@@ -952,7 +952,7 @@ namespace NKikimr {
         void DatabaseErrorHandle(TEventPtr &ev, const TActorContext &ctx) {
             SetReceivedTime(ev);
             TInstant now = TAppData::TimeProvider->Now();
-            FillInCostSettingsAndTimestampIfApplicable(ev->Get()->Record, now); 
+            FillInCostSettingsAndTimestampIfApplicable(ev->Get()->Record, now);
             Reply(ev, ctx, NKikimrProto::VDISK_ERROR_STATE, "VDisk is in error state", now);
             // NOTE: VDisk is in StateDatabaseError state, it means recovery failed.
             //       VDisk returns VDISK_ERROR_STATE status to all requests (outside).
@@ -963,7 +963,7 @@ namespace NKikimr {
             SetReceivedTime(ev);
             TInstant now = TAppData::TimeProvider->Now();
             NotifyIfNotReady(ev, ctx);
-            FillInCostSettingsAndTimestampIfApplicable(ev->Get()->Record, now); 
+            FillInCostSettingsAndTimestampIfApplicable(ev->Get()->Record, now);
             Reply(ev, ctx, NKikimrProto::NOTREADY, "VDisk is not ready", now);
             // NOTE: when database is not ready, we reply with NOTREADY and we do not
             //       pass this message to the Backpressure management subsystem
@@ -1006,8 +1006,8 @@ namespace NKikimr {
             }
         }
 
-        void FillInCostSettingsAndTimestampIfRequired(NKikimrBlobStorage::TMsgQoS *qos, TInstant now) const { 
-            qos->MutableExecTimeStats()->SetReceivedTimestamp(now.GetValue()); 
+        void FillInCostSettingsAndTimestampIfRequired(NKikimrBlobStorage::TMsgQoS *qos, TInstant now) const {
+            qos->MutableExecTimeStats()->SetReceivedTimestamp(now.GetValue());
             if (qos->GetSendMeCostSettings() && CostModel) {
                 CostModel->FillInSettings(*qos->MutableCostSettings());
             }
@@ -1019,7 +1019,7 @@ namespace NKikimr {
             CheckEvent(ev, msgName);
             const ui32 recByteSize = ev->Get()->GetCachedByteSize();
             auto &record = ev->Get()->Record;
-            auto &msgQoS = *record.MutableMsgQoS(); 
+            auto &msgQoS = *record.MutableMsgQoS();
 
             // set up reception time
             TInstant now = TAppData::TimeProvider->Now();
@@ -1031,7 +1031,7 @@ namespace NKikimr {
             msgQoS.SetCost(cost);
             msgQoS.SetIntQueueId(intQueueId);
             ActorIdToProto(ev->Sender, msgQoS.MutableSenderActorId());
-            FillInCostSettingsAndTimestampIfRequired(&msgQoS, now); 
+            FillInCostSettingsAndTimestampIfRequired(&msgQoS, now);
 
             // check queue compatibility: it's a contract between BlobStorage Proxy and VDisk,
             // we don't work if queues are incompatible
@@ -1124,11 +1124,11 @@ namespace NKikimr {
         void Handle(TEvBlobStorage::TEvVPut::TPtr &ev, const TActorContext &ctx) {
             bool logPutInternalQueue = true;
             const ui64 cost = CostModel->GetCost(*ev->Get(), &logPutInternalQueue);
- 
-            const NKikimrBlobStorage::TEvVPut &record = ev->Get()->Record; 
-            const TLogoBlobID blob = LogoBlobIDFromLogoBlobID(record.GetBlobID()); 
-            LWTRACK(VDiskSkeletonFrontVPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId, 
-                   VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), blob.TabletID(), blob.BlobSize()); 
+
+            const NKikimrBlobStorage::TEvVPut &record = ev->Get()->Record;
+            const TLogoBlobID blob = LogoBlobIDFromLogoBlobID(record.GetBlobID());
+            LWTRACK(VDiskSkeletonFrontVPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId,
+                   VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), blob.TabletID(), blob.BlobSize());
 
             if (logPutInternalQueue) {
                 HandleRequestWithQoS(ctx, ev, "TEvVPut", cost, *IntQueueLogPuts);
@@ -1416,15 +1416,15 @@ namespace NKikimr {
         }
 
         void Handle(TEvPDiskErrorStateChange::TPtr &ev, const TActorContext &ctx) {
-            LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix 
-                    << "SkeletonFront: got TEvPDiskErrorStateChange;" 
+            LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
+                    << "SkeletonFront: got TEvPDiskErrorStateChange;"
                     << " state# " << TPDiskErrorState::StateToString(ev->Get()->State)
                     << " Marker# BSVSF03");
 
 
             // switch skeleton state to PDiskError
-            SkeletonFrontGroup->ResetCounters(); 
-            VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::PDiskError); 
+            SkeletonFrontGroup->ResetCounters();
+            VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::PDiskError);
             // send poison pill to Skeleton to shutdown it
             ctx.Send(SkeletonId, new TEvents::TEvPoisonPill());
             SkeletonId = {};
@@ -1815,7 +1815,7 @@ namespace NKikimr {
             auto vdiskCounters = GetServiceCounters(counters, "vdisks");
 
             // add 'storagePool' label
-            vdiskCounters = vdiskCounters->GetSubgroup("storagePool", cfg->BaseInfo.StoragePoolName); 
+            vdiskCounters = vdiskCounters->GetSubgroup("storagePool", cfg->BaseInfo.StoragePoolName);
 
             // add 'group' label
             const ui32 blobstorageGroupId = info->GroupID;
@@ -1827,11 +1827,11 @@ namespace NKikimr {
 
             // add 'pdisk' label as a local id of pdisk
             const ui32 pdiskId = cfg->BaseInfo.PDiskId;
-            vdiskCounters = vdiskCounters->GetSubgroup("pdisk", Sprintf("%09" PRIu32, pdiskId)); 
+            vdiskCounters = vdiskCounters->GetSubgroup("pdisk", Sprintf("%09" PRIu32, pdiskId));
 
             // add 'media'
             const auto media = cfg->BaseInfo.DeviceType;
-            vdiskCounters = vdiskCounters->GetSubgroup("media", to_lower(TPDiskCategory::DeviceTypeStr(media, true))); 
+            vdiskCounters = vdiskCounters->GetSubgroup("media", to_lower(TPDiskCategory::DeviceTypeStr(media, true)));
 
             return vdiskCounters;
         }
@@ -1897,7 +1897,7 @@ namespace NKikimr {
             , VDiskMonGroup(VDiskCounters, "subsystem", "state")
         {
             ReplMonGroup.ReplUnreplicatedVDisks() = 1;
-            VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::Initial); 
+            VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::Initial);
         }
     };
 

@@ -1,13 +1,13 @@
 #include "defs.h"
 
-#include "blobstorage_pdisk_blockdevice.h" 
+#include "blobstorage_pdisk_blockdevice.h"
 #include <ydb/library/pdisk_io/buffers.h>
-#include "blobstorage_pdisk_actorsystem_creator.h" 
-#include "blobstorage_pdisk_mon.h" 
-#include "blobstorage_pdisk_ut_defs.h" 
+#include "blobstorage_pdisk_actorsystem_creator.h"
+#include "blobstorage_pdisk_mon.h"
+#include "blobstorage_pdisk_ut_defs.h"
 
 #include <ydb/core/control/immediate_control_board_wrapper.h>
- 
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/folder/dirut.h>
 #include <util/folder/tempdir.h>
@@ -19,15 +19,15 @@
 
 namespace NKikimr {
 
-class TWriter : public NPDisk::TCompletionAction { 
+class TWriter : public NPDisk::TCompletionAction {
     NPDisk::IBlockDevice &Device;
-    NPDisk::TBuffer *Buffer; 
+    NPDisk::TBuffer *Buffer;
     const i32 GenerationsToSpawn;
     TAtomic *Counter;
 public:
-    TWriter(NPDisk::IBlockDevice &device, NPDisk::TBuffer *data, const i32 generationsToSpawn, TAtomic *counter) 
+    TWriter(NPDisk::IBlockDevice &device, NPDisk::TBuffer *data, const i32 generationsToSpawn, TAtomic *counter)
         : Device(device)
-        , Buffer(data) 
+        , Buffer(data)
         , GenerationsToSpawn(generationsToSpawn)
         , Counter(counter)
     {}
@@ -36,10 +36,10 @@ public:
         Y_UNUSED(actorSystem);
         AtomicIncrement(*Counter);
         if (GenerationsToSpawn > 0) {
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(Buffer->Data(), Buffer->Size()); 
-            Device.PwriteAsync(Buffer->Data(), Buffer->Size(), 0, new TWriter(Device, Buffer, GenerationsToSpawn - 1, Counter), 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(Buffer->Data(), Buffer->Size());
+            Device.PwriteAsync(Buffer->Data(), Buffer->Size(), 0, new TWriter(Device, Buffer, GenerationsToSpawn - 1, Counter),
                     NPDisk::TReqId(NPDisk::TReqId::Test1, 0), {});
-            Device.PwriteAsync(Buffer->Data(), Buffer->Size(), 0, new TWriter(Device, Buffer, GenerationsToSpawn - 1, Counter), 
+            Device.PwriteAsync(Buffer->Data(), Buffer->Size(), 0, new TWriter(Device, Buffer, GenerationsToSpawn - 1, Counter),
                     NPDisk::TReqId(NPDisk::TReqId::Test2, 0), {});
         }
         delete this;
@@ -51,7 +51,7 @@ public:
     }
 };
 
-class TFlusher : public NPDisk::TCompletionAction { 
+class TFlusher : public NPDisk::TCompletionAction {
     NPDisk::IBlockDevice &Device;
     const i32 GenerationsToSpawn;
     TAtomic *Counter;
@@ -78,15 +78,15 @@ public:
     }
 };
 
-class TRabbit : public NPDisk::TCompletionAction { 
+class TRabbit : public NPDisk::TCompletionAction {
     NPDisk::IBlockDevice &Device;
-    NPDisk::TBuffer *Buffer; 
+    NPDisk::TBuffer *Buffer;
     const i32 GenerationsToSpawn;
     TAtomic *Counter;
 public:
-    TRabbit(NPDisk::IBlockDevice &device, NPDisk::TBuffer *data, const i32 generationsToSpawn, TAtomic *counter) 
+    TRabbit(NPDisk::IBlockDevice &device, NPDisk::TBuffer *data, const i32 generationsToSpawn, TAtomic *counter)
         : Device(device)
-        , Buffer(data) 
+        , Buffer(data)
         , GenerationsToSpawn(generationsToSpawn)
         , Counter(counter)
     {}
@@ -95,11 +95,11 @@ public:
         Y_UNUSED(actorSystem);
         AtomicIncrement(*Counter);
         if (GenerationsToSpawn > 0) {
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(Buffer->Data(), Buffer->Size()); 
-            Device.PwriteAsync(Buffer->Data(), Buffer->Size(), 0, new TRabbit(Device, Buffer, GenerationsToSpawn - 1, Counter), 
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(Buffer->Data(), Buffer->Size());
+            Device.PwriteAsync(Buffer->Data(), Buffer->Size(), 0, new TRabbit(Device, Buffer, GenerationsToSpawn - 1, Counter),
                     NPDisk::TReqId(NPDisk::TReqId::Test0, 0), {});
             Device.FlushAsync(new TRabbit(Device, Buffer, GenerationsToSpawn - 1, Counter), NPDisk::TReqId(NPDisk::TReqId::Test1, 0));
-            Device.PreadAsync(Buffer->Data(), Buffer->Size(), 0, new TRabbit(Device, Buffer, GenerationsToSpawn - 1, Counter), 
+            Device.PreadAsync(Buffer->Data(), Buffer->Size(), 0, new TRabbit(Device, Buffer, GenerationsToSpawn - 1, Counter),
                     NPDisk::TReqId(NPDisk::TReqId::Test3, 0), {});
         }
         delete this;
@@ -149,100 +149,100 @@ void WaitForValue(TAtomic *counter, TDuration maxDuration, TAtomicBase expectedV
     }
 }
 
-void RunTestMultipleRequestsFromCompletionAction() { 
-    const TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters; 
+void RunTestMultipleRequestsFromCompletionAction() {
+    const TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
     THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
-    const ui32 dataSize = 4 << 10; 
-    const ui64 generations = 8; 
-    TAtomic counter = 0; 
+    const ui32 dataSize = 4 << 10;
+    const ui64 generations = 8;
+    TAtomic counter = 0;
 
 
-    TTempDir tempDir; 
-    TString path = CreateFile(tempDir().c_str(), dataSize); 
+    TTempDir tempDir;
+    TString path = CreateFile(tempDir().c_str(), dataSize);
 
-    { 
-        TActorSystemCreator creator; 
-        THolder<NPDisk::TBufferPool> bufferPool(NPDisk::CreateBufferPool(dataSize, 1, false, {})); 
-        NPDisk::TBuffer::TPtr alignedBuffer(bufferPool->Pop()); 
-        memset(alignedBuffer->Data(), 0, dataSize); 
-        THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDevice(path, 0, *mon, 0, 0, 4, 
-                NPDisk::TDeviceMode::LockFile, 2 << generations, nullptr)); 
-        device->Initialize(creator.GetActorSystem(), {}); 
+    {
+        TActorSystemCreator creator;
+        THolder<NPDisk::TBufferPool> bufferPool(NPDisk::CreateBufferPool(dataSize, 1, false, {}));
+        NPDisk::TBuffer::TPtr alignedBuffer(bufferPool->Pop());
+        memset(alignedBuffer->Data(), 0, dataSize);
+        THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDevice(path, 0, *mon, 0, 0, 4,
+                NPDisk::TDeviceMode::LockFile, 2 << generations, nullptr));
+        device->Initialize(creator.GetActorSystem(), {});
 
-        (new TWriter(*device, alignedBuffer.Get(), (i32)generations, &counter))->Exec(nullptr); 
+        (new TWriter(*device, alignedBuffer.Get(), (i32)generations, &counter))->Exec(nullptr);
 
-        TAtomicBase expectedCounter = 0; 
-        for (ui64 i = 0; i <= generations; ++i) { 
-            expectedCounter += 1ull << i; 
-        } 
-        WaitForValue(&counter, TIMEOUT, expectedCounter); 
+        TAtomicBase expectedCounter = 0;
+        for (ui64 i = 0; i <= generations; ++i) {
+            expectedCounter += 1ull << i;
+        }
+        WaitForValue(&counter, TIMEOUT, expectedCounter);
 
-        TAtomicBase resultingCounter = AtomicGet(counter); 
+        TAtomicBase resultingCounter = AtomicGet(counter);
 
-        UNIT_ASSERT_VALUES_EQUAL( 
-            resultingCounter, 
-            expectedCounter 
-        ); 
-    } 
-    Ctest << "Done" << Endl; 
-} 
-
-void RunTestDestructionWithMultipleFlushesFromCompletionAction() { 
-    const TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters; 
-    THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
-    const ui32 dataSize = 4 << 10; 
-    const i32 generations = 8; 
-    TAtomic counter = 0; 
- 
-    TTempDir tempDir; 
-    TString path = CreateFile(tempDir().c_str(), dataSize); 
- 
-    TActorSystemCreator creator; 
-    THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDevice(path, 0, *mon, 0, 0, 4, 
-                NPDisk::TDeviceMode::LockFile, 2 << generations, nullptr)); 
-    device->Initialize(creator.GetActorSystem(), {}); 
- 
-    (new TFlusher(*device, generations, &counter))->Exec(nullptr); 
-    device->Stop(); 
-    for (int i = 0; i < 10000; ++i) { 
-        (new TFlusher(*device, generations, &counter))->Exec(nullptr); 
+        UNIT_ASSERT_VALUES_EQUAL(
+            resultingCounter,
+            expectedCounter
+        );
     }
-    device.Destroy(); 
+    Ctest << "Done" << Endl;
+}
 
-    Ctest << "Done" << Endl; 
-} 
+void RunTestDestructionWithMultipleFlushesFromCompletionAction() {
+    const TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
+    THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+    const ui32 dataSize = 4 << 10;
+    const i32 generations = 8;
+    TAtomic counter = 0;
+
+    TTempDir tempDir;
+    TString path = CreateFile(tempDir().c_str(), dataSize);
+
+    TActorSystemCreator creator;
+    THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDevice(path, 0, *mon, 0, 0, 4,
+                NPDisk::TDeviceMode::LockFile, 2 << generations, nullptr));
+    device->Initialize(creator.GetActorSystem(), {});
+
+    (new TFlusher(*device, generations, &counter))->Exec(nullptr);
+    device->Stop();
+    for (int i = 0; i < 10000; ++i) {
+        (new TFlusher(*device, generations, &counter))->Exec(nullptr);
+    }
+    device.Destroy();
+
+    Ctest << "Done" << Endl;
+}
 
 Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
 
-    Y_UNIT_TEST(TestMultipleRequestsFromCompletionAction) { 
-        RunTestMultipleRequestsFromCompletionAction(); 
-    } 
+    Y_UNIT_TEST(TestMultipleRequestsFromCompletionAction) {
+        RunTestMultipleRequestsFromCompletionAction();
+    }
 
-    Y_UNIT_TEST(TestDestructionWithMultipleFlushesFromCompletionAction) { 
-        RunTestDestructionWithMultipleFlushesFromCompletionAction(); 
-    } 
+    Y_UNIT_TEST(TestDestructionWithMultipleFlushesFromCompletionAction) {
+        RunTestDestructionWithMultipleFlushesFromCompletionAction();
+    }
 
-    Y_UNIT_TEST(TestDeviceWithSubmitGetThread) { 
-        const TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters; 
-        THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr)); 
-        const ui32 fileSize = 4 << 20; 
-        const ui32 dataSize = 4 << 10; 
-        NPDisk::TAlignedData data(dataSize); 
- 
-        TTempDir tempDir; 
-        TString path = CreateFile(tempDir().c_str(), fileSize); 
- 
-        TActorSystemCreator creator; 
-        THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon, 
-                    NPDisk::TDeviceMode::LockFile | NPDisk::TDeviceMode::UseSubmitGetThread, nullptr, creator.GetActorSystem())); 
- 
-        device->PreadSync(data.Get(), data.Size(), 0, {}, nullptr); 
-        device->PwriteSync(data.Get(), data.Size(), 0, {}, nullptr); 
- 
-        device.Destroy(); 
-        Ctest << "Done" << Endl; 
-    } 
- 
+    Y_UNIT_TEST(TestDeviceWithSubmitGetThread) {
+        const TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
+        THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+        const ui32 fileSize = 4 << 20;
+        const ui32 dataSize = 4 << 10;
+        NPDisk::TAlignedData data(dataSize);
+
+        TTempDir tempDir;
+        TString path = CreateFile(tempDir().c_str(), fileSize);
+
+        TActorSystemCreator creator;
+        THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
+                    NPDisk::TDeviceMode::LockFile | NPDisk::TDeviceMode::UseSubmitGetThread, nullptr, creator.GetActorSystem()));
+
+        device->PreadSync(data.Get(), data.Size(), 0, {}, nullptr);
+        device->PwriteSync(data.Get(), data.Size(), 0, {}, nullptr);
+
+        device.Destroy();
+        Ctest << "Done" << Endl;
+    }
+
     /*
     Y_UNIT_TEST(TestRabbitCompletionAction) {
         const TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
@@ -257,7 +257,7 @@ Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
             NPDisk::TAlignedData alignedBuffer;
             alignedBuffer.Resize(dataSize);
             memset(alignedBuffer.Get(), 0, dataSize);
-            THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDevice(path, 0, *mon)); 
+            THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDevice(path, 0, *mon));
             device->Initialize(nullptr);
 
             (new TRabbit(*device, alignedBuffer, generations, &counter))->Exec(nullptr);
@@ -278,7 +278,7 @@ Y_UNIT_TEST_SUITE(TBlockDeviceTest) {
 
             device.Destroy();
         }
-        Ctest << "Done" << Endl; 
+        Ctest << "Done" << Endl;
     }
     */
 }

@@ -98,7 +98,7 @@ namespace NKikimr {
             Info.Reset(new TBlobStorageGroupInfo(TBlobStorageGroupType::ErasureNone, 1, 1, 1, &vdiskIds));
 
             // create vdisk config
-            TVDiskConfig::TBaseInfo baseInfo(VDiskId, PDiskServiceId, PDiskGuid, PDiskId, 
+            TVDiskConfig::TBaseInfo baseInfo(VDiskId, PDiskServiceId, PDiskGuid, PDiskId,
                 TPDiskCategory::DEVICE_TYPE_SSD, VSlotId, NKikimrBlobStorage::TVDiskKind::Default, 1,
                 "static");
             VDiskConfig = AllVDiskKinds->MakeVDiskConfig(baseInfo);

@@ -25,14 +25,14 @@ void TColumn::Out(IOutputStream& o) const {
       << " }";
 }
 
-bool operator==(const TColumn& col1, const TColumn& col2) { 
-    return col1.Name == col2.Name && TypesEqual(col1.Type, col2.Type); 
-} 
- 
-bool operator!=(const TColumn& col1, const TColumn& col2) { 
-    return !(col1 == col2); 
-} 
- 
+bool operator==(const TColumn& col1, const TColumn& col2) {
+    return col1.Name == col2.Name && TypesEqual(col1.Type, col2.Type);
+}
+
+bool operator!=(const TColumn& col1, const TColumn& col2) {
+    return !(col1 == col2);
+}
+
 class TResultSet::TImpl {
 public:
     TImpl(const Ydb::ResultSet& proto)

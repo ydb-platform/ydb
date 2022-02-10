@@ -1,8 +1,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include "mv_object_map.h" 
-#include "ut_helpers.h" 
- 
+#include "mv_object_map.h"
+#include "ut_helpers.h"
+
 using namespace NKikimr::NBsController;
 
 Y_UNIT_TEST_SUITE(TMultiversionObjectMap) {
@@ -22,12 +22,12 @@ Y_UNIT_TEST_SUITE(TMultiversionObjectMap) {
             m = prev;
             test.BeginTx(version);
 
-            Ctest << "begin version " << version << Endl; 
+            Ctest << "begin version " << version << Endl;
 
             for (size_t iter = 0; iter < 100; ++iter) {
                 ui32 key = RandomNumber<ui32>(1000);
                 ui32 value = RandomNumber<ui32>();
-//                Ctest << key << " -> " << value << Endl; 
+//                Ctest << key << " -> " << value << Endl;
                 m[key] = value;
                 if (ui32 *p = test.FindForUpdate(key)) {
                     *p = value;
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(TMultiversionObjectMap) {
                 if (m.size() >= 50 && RandomNumber(2u) == 0) {
                     auto it = m.begin();
                     std::advance(it, RandomNumber(m.size()));
-//                    Ctest << "delete " << it->first << Endl; 
+//                    Ctest << "delete " << it->first << Endl;
                     test.DeleteExistingEntry(it->first);
                     m.erase(it);
                 } else if (!m.size() || RandomNumber(2u) == 0) {
@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(TMultiversionObjectMap) {
                             ui32 value = RandomNumber<ui32>();
                             m.emplace(key, value);
                             test.CreateNewEntry(key, value);
-//                            Ctest << "new " << key << " -> " << value << Endl; 
+//                            Ctest << "new " << key << " -> " << value << Endl;
                             break;
                         }
                     }
@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(TMultiversionObjectMap) {
                     UNIT_ASSERT(readp);
                     UNIT_ASSERT_VALUES_EQUAL(*readp, it->second);
                     const ui32 value = RandomNumber<ui32>();
-//                    Ctest << "modify " << it->first << " -> " << value << Endl; 
+//                    Ctest << "modify " << it->first << " -> " << value << Endl;
                     auto *p = test.FindForUpdate(it->first);
                     UNIT_ASSERT(p);
                     UNIT_ASSERT_VALUES_EQUAL(*p, it->second);
@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(TMultiversionObjectMap) {
             test.FinishTx();
 
             if (version % 2 == 0) {
-                Ctest << "drop version " << version << Endl; 
+                Ctest << "drop version " << version << Endl;
                 test.Drop(version);
                 vm.erase(version);
             }
@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(TMultiversionObjectMap) {
             if (vm.size() >= 3 && RandomNumber(2u) == 0) {
                 auto it = vm.begin();
                 ui32 version = it->first;
-                Ctest << "commit version " << version << Endl; 
+                Ctest << "commit version " << version << Endl;
                 test.Commit(version);
                 TMap& x = it->second;
                 for (ui32 key = 0; key < 1000; ++key) {

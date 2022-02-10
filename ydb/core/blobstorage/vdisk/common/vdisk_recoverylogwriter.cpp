@@ -5,8 +5,8 @@
 
 namespace NKikimr {
 
-LWTRACE_USING(BLOBSTORAGE_PROVIDER); 
- 
+LWTRACE_USING(BLOBSTORAGE_PROVIDER);
+
     ////////////////////////////////////////////////////////////////////////////////
     // TRecoveryLogWriter -- it makes all records to recovery log go sequentially
     // according to lsns
@@ -26,7 +26,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                     , Bytes()
                 {}
 
-                TItem(const TString &prefix, const TString& name, TIntrusivePtr<NMonitoring::TDynamicCounters> mon) { 
+                TItem(const TString &prefix, const TString& name, TIntrusivePtr<NMonitoring::TDynamicCounters> mon) {
                     Msgs = mon->GetCounter(prefix + name + "Msgs", true);
                     Bytes = mon->GetCounter(prefix + name + "Bytes", true);
                 }
@@ -41,21 +41,21 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
             TCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> mon) {
                 auto group = mon->GetSubgroup("subsystem", "logrecs");
-                Counters.reserve(static_cast<size_t>(TLogSignature::Max)); 
+                Counters.reserve(static_cast<size_t>(TLogSignature::Max));
                 TString prefix("Log");
 
-                for (int i = static_cast<int>(TLogSignature::First); 
-                     i < static_cast<int>(TLogSignature::Max); i++) { 
-                    TLogSignature s(i); 
-                    if (s == TLogSignature::First) { 
+                for (int i = static_cast<int>(TLogSignature::First);
+                     i < static_cast<int>(TLogSignature::Max); i++) {
+                    TLogSignature s(i);
+                    if (s == TLogSignature::First) {
                         Counters.emplace_back(TItem());
                     } else {
-                        Counters.emplace_back(TItem(prefix, s.ToString(), group)); 
+                        Counters.emplace_back(TItem(prefix, s.ToString(), group));
                     }
                 }
             }
 
-            void Update(TLogSignature signature, i64 size) { 
+            void Update(TLogSignature signature, i64 size) {
                 Counters[static_cast<int>(signature)].Update(size);
             }
         };
@@ -128,19 +128,19 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         void Handle(NPDisk::TEvLog::TPtr &ev, const TActorContext &ctx) {
             ui64 lsnSegmentStart = ev->Get()->LsnSegmentStart;
             ui64 lsn = ev->Get()->Lsn;
-            LWTRACK(VDiskRecoveryLogWriterVPutIsRecieved, ev->Get()->Orbit, Owner, lsn); 
-            TLogSignature signature = ev->Get()->Signature.GetUnmasked(); 
-            Y_VERIFY(TLogSignature::First < signature && signature < TLogSignature::Max); 
+            LWTRACK(VDiskRecoveryLogWriterVPutIsRecieved, ev->Get()->Orbit, Owner, lsn);
+            TLogSignature signature = ev->Get()->Signature.GetUnmasked();
+            Y_VERIFY(TLogSignature::First < signature && signature < TLogSignature::Max);
             i64 msgSize = ev->Get()->ApproximateSize();
             // count written bytes
             *LsmLogBytesWritten += msgSize;
             // update generic counters
-            Counters.Update(signature, msgSize); 
+            Counters.Update(signature, msgSize);
             std::unique_ptr<IEventHandle> converted(ev->Forward(YardID).Release());
 
             if (lsnSegmentStart == CurSentLsn + 1) {
                 // rewrite and send message;
-                LWTRACK(VDiskRecoveryLogWriterVPutIsSent, converted->Get<NPDisk::TEvLog>()->Orbit, Owner, lsn); 
+                LWTRACK(VDiskRecoveryLogWriterVPutIsSent, converted->Get<NPDisk::TEvLog>()->Orbit, Owner, lsn);
                 ctx.ExecutorThread.Send(converted.release());
                 CurSentLsn = lsn;
                 // proceed with elements waiting in the queue
@@ -161,13 +161,13 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                     << "Logs.back().Lsn# " << logs->Logs.back()->Lsn);
             for (auto &log : logs->Logs) {
                 LWTRACK(VDiskRecoveryLogWriterVPutIsRecieved, log->Orbit, Owner, log->Lsn);
-                TLogSignature signature = log->Signature.GetUnmasked(); 
-                Y_VERIFY(TLogSignature::First < signature && signature < TLogSignature::Max); 
+                TLogSignature signature = log->Signature.GetUnmasked();
+                Y_VERIFY(TLogSignature::First < signature && signature < TLogSignature::Max);
                 i64 msgSize = log->ApproximateSize();
                 // count written bytes
                 *LsmLogBytesWritten += msgSize;
                 // update generic counters
-                Counters.Update(signature, msgSize); 
+                Counters.Update(signature, msgSize);
                 LWTRACK(VDiskRecoveryLogWriterVPutIsSent, log->Orbit, Owner, lsn);
             }
             std::unique_ptr<IEventHandle> converted(ev->Forward(YardID).Release());

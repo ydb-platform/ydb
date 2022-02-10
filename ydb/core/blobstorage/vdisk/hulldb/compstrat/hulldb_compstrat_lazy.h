@@ -305,7 +305,7 @@ namespace NKikimr {
                     LOG_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                                 "%s: Balance: action# %s timeSpent# %s ScoreThreshold# %e",
-                                PDiskSignatureForHullDbKey<TKey>().ToString().data(), 
+                                PDiskSignatureForHullDbKey<TKey>().ToString().data(),
                                 ActionToStr(action), (finishTime - startTime).ToString().data(),
                                 ScoreThreshold));
                 }

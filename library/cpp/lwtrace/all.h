@@ -130,8 +130,8 @@
 // NOTE: #define MY_PROBE(name, ...) GLOBAL_LWPROBE(MY_PROVIDER, name, ## __VA_ARGS__)
 #define GLOBAL_LWPROBE(provider, probe, ...) LWPROBE_I(LWTRACE_GET_NAMESPACE(provider)::LWTRACE_GET_NAME(probe), ##__VA_ARGS__)
 #define LWPROBE(probe, ...) LWPROBE_I(LWTRACE_GET_NAME(probe), ##__VA_ARGS__)
-#define GLOBAL_LWPROBE_ENABLED(provider, probe) LWPROBE_ENABLED_I(LWTRACE_GET_NAMESPACE(provider)::LWTRACE_GET_NAME(probe)) 
-#define LWPROBE_ENABLED(probe) LWPROBE_ENABLED_I(LWTRACE_GET_NAME(probe)) 
+#define GLOBAL_LWPROBE_ENABLED(provider, probe) LWPROBE_ENABLED_I(LWTRACE_GET_NAMESPACE(provider)::LWTRACE_GET_NAME(probe))
+#define LWPROBE_ENABLED(probe) LWPROBE_ENABLED_I(LWTRACE_GET_NAME(probe))
 #define LWPROBE_OBJ(probe, ...) LWPROBE_I(probe, ##__VA_ARGS__)
 
 // Calls a probe when scope is beeing left
@@ -149,8 +149,8 @@
 #else
 #define GLOBAL_LWPROBE(provider, probe, ...)
 #define LWPROBE(probe, ...)
-#define GLOBAL_LWPROBE_ENABLED(provider, probe) false 
-#define LWPROBE_ENABLED(probe) false 
+#define GLOBAL_LWPROBE_ENABLED(provider, probe) false
+#define LWPROBE_ENABLED(probe) false
 #define LWPROBE_OBJ(probe, ...) Y_UNUSED(probe)
 #define GLOBAL_LWPROBE_DURATION(provider, probe, ...)
 #define LWPROBE_DURATION(probe, ...)
@@ -183,8 +183,8 @@
 #define LWTRACE_GET_EVENTS(provider) NULL
 #define GLOBAL_LWPROBE(provider, probe, ...)
 #define LWPROBE(probe, ...)
-#define GLOBAL_LWPROBE_ENABLED(provider, probe) false 
-#define LWPROBE_ENABLED(probe) false 
+#define GLOBAL_LWPROBE_ENABLED(provider, probe) false
+#define LWPROBE_ENABLED(probe) false
 #define GLOBAL_LWPROBE_DURATION(provider, probe, ...)
 #define LWPROBE_DURATION(probe, ...)
 #define GLOBAL_LWTRACK(provider, probe, orbit, ...)

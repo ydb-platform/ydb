@@ -49,33 +49,33 @@ namespace NActors {
         void PrepareStop() override;
         void Stop() override;
     };
- 
+
     class TMockSchedulerThread: public ISchedulerThread {
-    public: 
-        virtual ~TMockSchedulerThread() override { 
-        } 
- 
+    public:
+        virtual ~TMockSchedulerThread() override {
+        }
+
         void Prepare(TActorSystem* actorSystem, volatile ui64* currentTimestamp, volatile ui64* currentMonotonic) override {
-            Y_UNUSED(actorSystem); 
+            Y_UNUSED(actorSystem);
             *currentTimestamp = TInstant::Now().MicroSeconds();
             *currentMonotonic = GetMonotonicMicroSeconds();
-        } 
- 
+        }
+
         void PrepareSchedules(NSchedulerQueue::TReader** readers, ui32 scheduleReadersCount) override {
-            Y_UNUSED(readers); 
-            Y_UNUSED(scheduleReadersCount); 
-        } 
- 
-        void Start() override { 
-        } 
- 
-        void PrepareStop() override { 
-        } 
- 
-        void Stop() override { 
-        } 
-    }; 
- 
+            Y_UNUSED(readers);
+            Y_UNUSED(scheduleReadersCount);
+        }
+
+        void Start() override {
+        }
+
+        void PrepareStop() override {
+        }
+
+        void Stop() override {
+        }
+    };
+
     ISchedulerThread* CreateSchedulerThread(const TSchedulerConfig& cfg);
- 
+
 }

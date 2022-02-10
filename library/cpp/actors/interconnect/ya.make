@@ -16,7 +16,7 @@ SRCS(
     channel_scheduler.h
     event_filter.h
     event_holder_pool.h
-    events_local.h 
+    events_local.h
     interconnect_address.cpp
     interconnect_address.h
     interconnect_channel.cpp

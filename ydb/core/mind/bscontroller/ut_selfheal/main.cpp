@@ -1,7 +1,7 @@
 #include <ydb/core/mind/bscontroller/ut_helpers.h>
- 
+
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include "env.h"
 
 Y_UNIT_TEST_SUITE(BsControllerTest) {
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
         auto move = [&](auto& from, auto& to, NKikimrBlobStorage::EDriveStatus status) {
             auto it = from.begin();
             std::advance(it, RandomNumber(from.size()));
-            Ctest << "PDisk# " << *it 
+            Ctest << "PDisk# " << *it
                 << " setting status to " << NKikimrBlobStorage::EDriveStatus_Name(status)
                 << Endl;
             request = {};

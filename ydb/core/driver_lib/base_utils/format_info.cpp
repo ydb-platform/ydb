@@ -52,7 +52,7 @@ int MainFormatInfo(const TCommandConfig &cmdConf, int argc, char** argv) {
             Cout << "nonceReversalCount: " << nonceReversalCount << Endl;
         }
     } else {
-        Cout << "Error. Can't read PDisk format info. Reason# " << info.ErrorReason << Endl; 
+        Cout << "Error. Can't read PDisk format info. Reason# " << info.ErrorReason << Endl;
     }
     return 0;
 }

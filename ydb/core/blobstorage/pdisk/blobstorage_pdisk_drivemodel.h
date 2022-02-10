@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 #include <ydb/core/protos/drivemodel.pb.h>
-#include <cmath> 
+#include <cmath>
 
 namespace NKikimr {
 namespace NPDisk {
@@ -11,26 +11,26 @@ namespace NPDisk {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 class TDriveModel : public TThrRefBase {
 public:
-    enum EOperationType { 
-        OP_TYPE_READ = 0, 
-        OP_TYPE_WRITE = 1, 
-        OP_TYPE_AVG = 2, 
-        OP_TYPE_COUNT = 3, 
-    }; 
- 
+    enum EOperationType {
+        OP_TYPE_READ = 0,
+        OP_TYPE_WRITE = 1,
+        OP_TYPE_AVG = 2,
+        OP_TYPE_COUNT = 3,
+    };
+
 protected:
     // Model data
     ui64 SeekTimeNsec;
     ui64 BulkReadBlockSizeBytes;
     ui64 BulkWriteBlockSizeBytes;
     ui64 TrimSpeedBps;
-    ui32 TotalChunksCount; 
-    ui64 SpeedBps[OP_TYPE_COUNT]; 
-    ui64 SpeedBpsMin[OP_TYPE_COUNT]; 
-    ui64 SpeedBpsMax[OP_TYPE_COUNT]; 
-    TVector<ui64> ChunkSpeedBps[OP_TYPE_COUNT]; 
-    ui32 OptimalQueueDepth[OP_TYPE_COUNT]; 
-    ui32 GlueingDeadline[OP_TYPE_COUNT]; 
+    ui32 TotalChunksCount;
+    ui64 SpeedBps[OP_TYPE_COUNT];
+    ui64 SpeedBpsMin[OP_TYPE_COUNT];
+    ui64 SpeedBpsMax[OP_TYPE_COUNT];
+    TVector<ui64> ChunkSpeedBps[OP_TYPE_COUNT];
+    ui32 OptimalQueueDepth[OP_TYPE_COUNT];
+    ui32 GlueingDeadline[OP_TYPE_COUNT];
     // Model metadata
     NKikimrBlobStorage::TDriveModel::EModelSource ModelSource;
     TString SourceModelNumber;
@@ -38,13 +38,13 @@ protected:
     TString SourceSerialNumber;
     bool IsSourceWriteCacheEnabled;
     bool IsSourceSharedWithOs;
- 
+
     friend class TDriveEstimator;
 public:
-    TDriveModel() { 
-        Clear(); 
-    } 
- 
+    TDriveModel() {
+        Clear();
+    }
+
     TDriveModel(ui64 seekTimeNs, ui64 speedBps, ui64 bulkWriteBlockSize, ui64 trimSpeedBps,
                 ui64 speedBpsMin, ui64 speedBpsMax, ui32 queueDepth) {
         Clear();
@@ -52,46 +52,46 @@ public:
         BulkReadBlockSizeBytes = bulkWriteBlockSize;
         BulkWriteBlockSizeBytes = bulkWriteBlockSize;
         TrimSpeedBps = trimSpeedBps;
-        for (ui32 type = OP_TYPE_READ; type <= OP_TYPE_WRITE; ++type) { 
-            SpeedBps[type] = speedBps; 
-            SpeedBpsMin[type] = speedBpsMin > 100ull ? speedBpsMin : 100ull; 
-            SpeedBpsMax[type] = speedBpsMax < 1000000000000ull ? speedBpsMax : 1000000000000ull; 
-            OptimalQueueDepth[type] = queueDepth; 
-        } 
+        for (ui32 type = OP_TYPE_READ; type <= OP_TYPE_WRITE; ++type) {
+            SpeedBps[type] = speedBps;
+            SpeedBpsMin[type] = speedBpsMin > 100ull ? speedBpsMin : 100ull;
+            SpeedBpsMax[type] = speedBpsMax < 1000000000000ull ? speedBpsMax : 1000000000000ull;
+            OptimalQueueDepth[type] = queueDepth;
+        }
 
         CalculateAvgs();
     }
 
     void CalculateAvgs() {
-        SpeedBps[OP_TYPE_AVG] = (SpeedBps[OP_TYPE_READ] + SpeedBps[OP_TYPE_WRITE]) / 2; 
-        SpeedBpsMin[OP_TYPE_AVG] = (SpeedBpsMin[OP_TYPE_READ] + SpeedBpsMin[OP_TYPE_WRITE]) / 2; 
-        SpeedBpsMax[OP_TYPE_AVG] = (SpeedBpsMax[OP_TYPE_READ] + SpeedBpsMax[OP_TYPE_WRITE]) / 2; 
-        OptimalQueueDepth[OP_TYPE_AVG] = (OptimalQueueDepth[OP_TYPE_READ] + OptimalQueueDepth[OP_TYPE_WRITE]) / 2; 
-        GlueingDeadline[OP_TYPE_AVG] = (GlueingDeadline[OP_TYPE_READ] + GlueingDeadline[OP_TYPE_WRITE]) / 2; 
-    } 
- 
-    void Clear() { 
-        SeekTimeNsec = 0; 
+        SpeedBps[OP_TYPE_AVG] = (SpeedBps[OP_TYPE_READ] + SpeedBps[OP_TYPE_WRITE]) / 2;
+        SpeedBpsMin[OP_TYPE_AVG] = (SpeedBpsMin[OP_TYPE_READ] + SpeedBpsMin[OP_TYPE_WRITE]) / 2;
+        SpeedBpsMax[OP_TYPE_AVG] = (SpeedBpsMax[OP_TYPE_READ] + SpeedBpsMax[OP_TYPE_WRITE]) / 2;
+        OptimalQueueDepth[OP_TYPE_AVG] = (OptimalQueueDepth[OP_TYPE_READ] + OptimalQueueDepth[OP_TYPE_WRITE]) / 2;
+        GlueingDeadline[OP_TYPE_AVG] = (GlueingDeadline[OP_TYPE_READ] + GlueingDeadline[OP_TYPE_WRITE]) / 2;
+    }
+
+    void Clear() {
+        SeekTimeNsec = 0;
         BulkReadBlockSizeBytes = 0;
-        BulkWriteBlockSizeBytes = 0; 
-        TrimSpeedBps = 0; 
-        TotalChunksCount = 0; 
-        for (ui32 type = OP_TYPE_READ; type <= OP_TYPE_AVG; ++type) { 
-            SpeedBps[type] = 0; 
-            SpeedBpsMin[type] = 0; 
-            SpeedBpsMax[type] = 0; 
-            ChunkSpeedBps[type].clear(); 
-            OptimalQueueDepth[type] = 0; 
-            GlueingDeadline[type] = 0; 
-        } 
+        BulkWriteBlockSizeBytes = 0;
+        TrimSpeedBps = 0;
+        TotalChunksCount = 0;
+        for (ui32 type = OP_TYPE_READ; type <= OP_TYPE_AVG; ++type) {
+            SpeedBps[type] = 0;
+            SpeedBpsMin[type] = 0;
+            SpeedBpsMax[type] = 0;
+            ChunkSpeedBps[type].clear();
+            OptimalQueueDepth[type] = 0;
+            GlueingDeadline[type] = 0;
+        }
         ModelSource = NKikimrBlobStorage::TDriveModel::SourceClear;
         SourceModelNumber = "";
         SourceFirmwareRevision = "";
         SourceSerialNumber = "";
         IsSourceWriteCacheEnabled = false;
         IsSourceSharedWithOs = false;
-    } 
- 
+    }
+
     void Apply(const NKikimrBlobStorage::TDriveModel *cfg) {
         if (!cfg) {
             return;
@@ -151,43 +151,43 @@ public:
         outCfg->SetIsSourceSharedWithOs(IsSourceSharedWithOs);
     }
 
-    void SetTotalChunksCount(ui32 totalChunksCount) { 
-        TotalChunksCount = totalChunksCount; 
-        for (ui32 type = OP_TYPE_READ; type <= OP_TYPE_AVG; ++type) { 
-            ChunkSpeedBps[type].resize(totalChunksCount); 
-            double SpeedPerChunkSqr; 
-            for (ui32 i = 0; i < totalChunksCount; ++i) { 
-                SpeedPerChunkSqr = ((double)SpeedBpsMax[type] * SpeedBpsMax[type] - 
-                        (double)SpeedBpsMin[type] * SpeedBpsMin[type]) / totalChunksCount; 
-                ChunkSpeedBps[type][i] = std::sqrt((double)SpeedBpsMax[type] * SpeedBpsMax[type] - i * SpeedPerChunkSqr); 
-            } 
-        } 
-    } 
- 
+    void SetTotalChunksCount(ui32 totalChunksCount) {
+        TotalChunksCount = totalChunksCount;
+        for (ui32 type = OP_TYPE_READ; type <= OP_TYPE_AVG; ++type) {
+            ChunkSpeedBps[type].resize(totalChunksCount);
+            double SpeedPerChunkSqr;
+            for (ui32 i = 0; i < totalChunksCount; ++i) {
+                SpeedPerChunkSqr = ((double)SpeedBpsMax[type] * SpeedBpsMax[type] -
+                        (double)SpeedBpsMin[type] * SpeedBpsMin[type]) / totalChunksCount;
+                ChunkSpeedBps[type][i] = std::sqrt((double)SpeedBpsMax[type] * SpeedBpsMax[type] - i * SpeedPerChunkSqr);
+            }
+        }
+    }
+
     ui64 SeekTimeNs() const {
         return SeekTimeNsec;
     }
 
-    ui64 Speed(EOperationType type) const { 
-        return SpeedBps[type]; 
+    ui64 Speed(EOperationType type) const {
+        return SpeedBps[type];
     }
 
-    ui64 Speed(ui32 chunkIdx, EOperationType type) const { 
-        if (chunkIdx < TotalChunksCount) { 
-            return ChunkSpeedBps[type][chunkIdx]; 
-        } else { 
-            return SpeedBps[type]; 
-        } 
-    } 
- 
-    ui64 TimeForSizeNs(ui64 bytesToProcess, EOperationType type) const { 
-        return (ui64)bytesToProcess * 1000000000ull / SpeedBps[type]; 
-    } 
- 
-    ui64 TimeForSizeNs(ui64 bytesToProcess, ui32 chunkIdx, EOperationType type) const { 
-        return (ui64)bytesToProcess * 1000000000ull / Speed(chunkIdx, type); 
-    } 
- 
+    ui64 Speed(ui32 chunkIdx, EOperationType type) const {
+        if (chunkIdx < TotalChunksCount) {
+            return ChunkSpeedBps[type][chunkIdx];
+        } else {
+            return SpeedBps[type];
+        }
+    }
+
+    ui64 TimeForSizeNs(ui64 bytesToProcess, EOperationType type) const {
+        return (ui64)bytesToProcess * 1000000000ull / SpeedBps[type];
+    }
+
+    ui64 TimeForSizeNs(ui64 bytesToProcess, ui32 chunkIdx, EOperationType type) const {
+        return (ui64)bytesToProcess * 1000000000ull / Speed(chunkIdx, type);
+    }
+
     ui64 TrimTimeForSizeNs(ui64 bytesToTrim) const {
         return (ui64)bytesToTrim * 1000000000ull / TrimSpeedBps;
     }
@@ -196,8 +196,8 @@ public:
         return TrimSpeedBps > 0;
     }
 
-    ui64 SizeForTimeNs(ui64 durationNs, ui32 chunkIdx, EOperationType type) const { 
-        return Speed(chunkIdx, type) * durationNs / 1000000000ull; 
+    ui64 SizeForTimeNs(ui64 durationNs, ui32 chunkIdx, EOperationType type) const {
+        return Speed(chunkIdx, type) * durationNs / 1000000000ull;
     }
 
     ui64 BulkWriteBlockSize() const {
@@ -216,19 +216,19 @@ public:
         TStringStream str;
         const char *x = isMultiline ? "\n" : "";
         str << "{TDriveModel" << x;
-        str << " SeekTimeNsec# " << SeekTimeNsec << x; 
-        str << " TrimSpeedBps# " << TrimSpeedBps << x; 
+        str << " SeekTimeNsec# " << SeekTimeNsec << x;
+        str << " TrimSpeedBps# " << TrimSpeedBps << x;
         str << " BulkWriteBlockSizeBytes# " << BulkWriteBlockSizeBytes << x;
-        str << " SpeedBps[OP_TYPE_READ]# " << SpeedBps[OP_TYPE_READ] << x; 
-        str << " SpeedBps[OP_TYPE_WRITE]# " << SpeedBps[OP_TYPE_WRITE] << x; 
-        str << " SpeedBpsMin[OP_TYPE_READ]# " << SpeedBpsMin[OP_TYPE_READ] << x; 
-        str << " SpeedBpsMin[OP_TYPE_WRITE]# " << SpeedBpsMin[OP_TYPE_WRITE] << x; 
-        str << " SpeedBpsMax[OP_TYPE_READ]# " << SpeedBpsMax[OP_TYPE_READ] << x; 
-        str << " SpeedBpsMax[OP_TYPE_WRITE]# " << SpeedBpsMax[OP_TYPE_WRITE] << x; 
-        str << " OptimalQueueDepth[OP_TYPE_READ]# " << OptimalQueueDepth[OP_TYPE_READ] << x; 
-        str << " OptimalQueueDepth[OP_TYPE_WRITE]# " << OptimalQueueDepth[OP_TYPE_WRITE] << x; 
-        str << " GlueingDeadline[OP_TYPE_READ]# " << GlueingDeadline[OP_TYPE_READ] << x; 
-        str << " GlueingDeadline[OP_TYPE_WRITE]# " << GlueingDeadline[OP_TYPE_WRITE] << x; 
+        str << " SpeedBps[OP_TYPE_READ]# " << SpeedBps[OP_TYPE_READ] << x;
+        str << " SpeedBps[OP_TYPE_WRITE]# " << SpeedBps[OP_TYPE_WRITE] << x;
+        str << " SpeedBpsMin[OP_TYPE_READ]# " << SpeedBpsMin[OP_TYPE_READ] << x;
+        str << " SpeedBpsMin[OP_TYPE_WRITE]# " << SpeedBpsMin[OP_TYPE_WRITE] << x;
+        str << " SpeedBpsMax[OP_TYPE_READ]# " << SpeedBpsMax[OP_TYPE_READ] << x;
+        str << " SpeedBpsMax[OP_TYPE_WRITE]# " << SpeedBpsMax[OP_TYPE_WRITE] << x;
+        str << " OptimalQueueDepth[OP_TYPE_READ]# " << OptimalQueueDepth[OP_TYPE_READ] << x;
+        str << " OptimalQueueDepth[OP_TYPE_WRITE]# " << OptimalQueueDepth[OP_TYPE_WRITE] << x;
+        str << " GlueingDeadline[OP_TYPE_READ]# " << GlueingDeadline[OP_TYPE_READ] << x;
+        str << " GlueingDeadline[OP_TYPE_WRITE]# " << GlueingDeadline[OP_TYPE_WRITE] << x;
         str << " ModelSource# " << (ui64)ModelSource << x;
         str << " SourceModelNumber# \"" << SourceModelNumber << "\"" << x;
         str << " SourceFirmwareRevision# \"" << SourceFirmwareRevision << "\"" << x;

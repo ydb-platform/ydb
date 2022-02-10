@@ -1,22 +1,22 @@
 #pragma once
 #include "defs.h"
- 
-#include "blobstorage_pdisk_blockdevice.h" 
+
+#include "blobstorage_pdisk_blockdevice.h"
 #include <ydb/library/pdisk_io/buffers.h>
-#include "blobstorage_pdisk_chunk_tracker.h" 
+#include "blobstorage_pdisk_chunk_tracker.h"
 #include "blobstorage_pdisk_crypto.h"
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_delayed_cost_loop.h"
 #include "blobstorage_pdisk_drivemodel.h"
 #include "blobstorage_pdisk_free_chunks.h"
 #include "blobstorage_pdisk_gate.h"
-#include "blobstorage_pdisk_keeper.h" 
-#include "blobstorage_pdisk_req_creator.h" 
+#include "blobstorage_pdisk_keeper.h"
+#include "blobstorage_pdisk_req_creator.h"
 #include "blobstorage_pdisk_requestimpl.h"
 #include "blobstorage_pdisk_state.h"
 #include "blobstorage_pdisk_tact.h"
 #include "blobstorage_pdisk_thread.h"
-#include "blobstorage_pdisk_util_countedqueuemanyone.h" 
+#include "blobstorage_pdisk_util_countedqueuemanyone.h"
 #include "blobstorage_pdisk_writer.h"
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -49,12 +49,12 @@ public:
     // Monitoring
     TPDiskMon Mon;
 
- 
+
     // Static state
     TDriveModel DriveModel;
 
-    TReqCreator ReqCreator; 
- 
+    TReqCreator ReqCreator;
+
     // Real-Time Scheduler
     ui64 ReorderingMs;
 
@@ -64,12 +64,12 @@ public:
     ui64 ForsetiPrevTimeNs = 0;
     NSchLab::TScheduler ForsetiScheduler;
 
-    // Request queue 
-    TCountedQueueManyOne<TRequestBase, 4096> InputQueue; 
-    TAtomic InputQueueCost = 0; 
+    // Request queue
+    TCountedQueueManyOne<TRequestBase, 4096> InputQueue;
+    TAtomic InputQueueCost = 0;
 
-    TVector<TRequestBase*> JointLogReads; 
-    TVector<TIntrusivePtr<TRequestBase>> JointChunkReads; 
+    TVector<TRequestBase*> JointLogReads;
+    TVector<TIntrusivePtr<TRequestBase>> JointChunkReads;
     TVector<TRequestBase*> JointChunkWrites;
     TVector<TLogWrite*> JointLogWrites;
     TVector<TLogWrite*> JointCommits;
@@ -111,59 +111,59 @@ public:
     TPDiskCategory PDiskCategory;
     TNonceJumpLogPageHeader2 LastNonceJumpLogPageHeader2;
 
-    THolder<TBufferPool> BufferPool; 
- 
+    THolder<TBufferPool> BufferPool;
+
     // In-memory dynamic state
     TMutex StateMutex; // The state is modified mainly by the PDisk thread, but can be accessed by other threads.
     const TOwnerRound NextOwnerRound;  // Next unique-id to use for owner creation
-    TOwner LastOwnerId = OwnerBeginUser; 
+    TOwner LastOwnerId = OwnerBeginUser;
     TVector<TOwnerData> OwnerData; // Per-owner information
-    TMap<TVDiskID, TOwner> VDiskOwners; // For fast VDisk -> OwnerID mapping 
+    TMap<TVDiskID, TOwner> VDiskOwners; // For fast VDisk -> OwnerID mapping
     TVector<TChunkState> ChunkState; // Per-chunk information
     TKeeper Keeper; // Chunk data manager
     bool TrimInFly = false; // TChunkTrim request is present somewhere in pdisk
     TAtomic ChunkBeingTrimmed = 0;
     TAtomic TrimOffset = 0;
-    TList<TLogChunkInfo> LogChunks; // Log chunk list + log-specific information 
-    bool IsLogChunksReleaseInflight = false; 
+    TList<TLogChunkInfo> LogChunks; // Log chunk list + log-specific information
+    bool IsLogChunksReleaseInflight = false;
     ui64 InsaneLogChunks = 0;  // Set when pdisk sees insanely large log, to give vdisks a chance to cut it
-    ui32 FirstLogChunkToParseCommits = 0; 
+    ui32 FirstLogChunkToParseCommits = 0;
 
-    // Chunks that is owned by killed owner, but has operations InFlight 
-    TVector<TChunkIdx> QuarantineChunks; 
-    TVector<TOwner> QuarantineOwners; 
+    // Chunks that is owned by killed owner, but has operations InFlight
+    TVector<TChunkIdx> QuarantineChunks;
+    TVector<TOwner> QuarantineOwners;
 
- 
+
     TSysLogRecord SysLogRecord; // Current sys log record state, part 1 of 2
     TSysLogFirstNoncesToKeep SysLogFirstNoncesToKeep; // Current sys log record state, part 2 of 2
     ui64 SysLogLsn = 0;
     TNonceSet LoggedNonces; // Latest on-disk Nonce set
     ui64 CostLimitNs;
-    TControlWrapper UseT1ha0HashInFooter; 
+    TControlWrapper UseT1ha0HashInFooter;
 
     TDriveData DriveData;
     TAtomic EstimatedLogChunkIdx = 0; // For cost estimation only TDriveData DriveData;
 
-    TString ErrorStr; 
- 
+    TString ErrorStr;
+
     // Incapsulated components
     TPDiskThread PDiskThread;
-    THolder<IBlockDevice> BlockDevice; 
-    THolder<TLogWriter> CommonLogger; 
-    THolder<TSysLogWriter> SysLogger; 
+    THolder<IBlockDevice> BlockDevice;
+    THolder<TLogWriter> CommonLogger;
+    THolder<TSysLogWriter> SysLogger;
 
     // Initialization data
     ui64 InitialSysLogWritePosition = 0;
-    EInitPhase InitPhase = EInitPhase::Uninitialized; 
+    EInitPhase InitPhase = EInitPhase::Uninitialized;
     TBuffer *InitialTailBuffer = nullptr;
-    TLogPosition InitialLogPosition{0, 0}; 
+    TLogPosition InitialLogPosition{0, 0};
     volatile ui64 InitialPreviousNonce = 0;
     volatile ui64 InitialNonceJumpSize = 0;
     TAtomic IsStarted = false;
     TMutex StopMutex;
 
     TIntrusivePtr<TPDiskConfig> Cfg;
-    TInstant CreationTime; 
+    TInstant CreationTime;
 
     ui64 ExpectedSlotCount = 0; // Number of slots to use for space limit calculation.
 
@@ -172,30 +172,30 @@ public:
     // stats
     TAtomic NonRealTimeMs = 0;
     TAtomic SlowDeviceMs = 0;
- 
-    const bool UseHugePages; 
+
+    const bool UseHugePages;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Initialization
-    TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters); 
+    TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters);
     TString DynamicStateToString(bool isMultiline);
     bool ReadChunk0Format(ui8* formatSectors, const TKey& mainKey); // Called by actor
     bool IsFormatMagicValid(ui8 *magicData, ui32 magicDataSize); // Called by actor
-    bool CheckGuid(TString *outReason); // Called by actor 
+    bool CheckGuid(TString *outReason); // Called by actor
     bool CheckFormatComplete(); // Called by actor
     void ReadSysLog(const TActorId &pDiskActor); // Called by actor
-    void ProcessChunk0(const TEvReadLogResult &readLogResult); 
-    void PrintChunksDebugInfo(); 
-    TString ProcessReadSysLogResult(ui64 &outWritePosition, ui64 &outLsn, const TEvReadLogResult &readLogResult); 
+    void ProcessChunk0(const TEvReadLogResult &readLogResult);
+    void PrintChunksDebugInfo();
+    TString ProcessReadSysLogResult(ui64 &outWritePosition, ui64 &outLsn, const TEvReadLogResult &readLogResult);
     void ReadAndParseMainLog(const TActorId &pDiskActor);
     // Called by the log reader on success with the current chunkOwnerMap.
     void ProcessChunkOwnerMap(TMap<ui32, TChunkState> &chunkOwnerMap);
     void InitLogChunksInfo();
-    void PrintLogChunksInfo(const TString& msg); 
+    void PrintLogChunksInfo(const TString& msg);
     void InitFreeChunks();
-    void InitSysLogger(); 
+    void InitSysLogger();
     bool InitCommonLogger();
     bool LogNonceJump(ui64 previousNonce);
-    void GetStartingPoints(TOwner owner, TMap<TLogSignature, TLogRecord> &outStartingPoints); 
+    void GetStartingPoints(TOwner owner, TMap<TLogSignature, TLogRecord> &outStartingPoints);
     TString StartupOwnerInfo();
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Destruction
@@ -209,17 +209,17 @@ public:
     ui32 SystemChunkSize(const TDiskFormat& format, ui32 userAccessibleChunkSizeBytes, ui32 sectorSizeBytes) const;
     ui64 UsableSectorsPerLogChunk() const;
     void CheckLogCanary(ui8* sector, ui32 chunkIdx = 0, ui64 sectorIdx = 0) const;
-    TLogPosition LogPosition(ui32 chunkIdx, ui64 sectorIdx, ui64 offsetInSector) const; 
+    TLogPosition LogPosition(ui32 chunkIdx, ui64 sectorIdx, ui64 offsetInSector) const;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Common operations
-    bool ReleaseUnusedLogChunks(TCompletionEventSender *completion); 
-    void MarkChunksAsReleased(TReleaseChunks& req); 
+    bool ReleaseUnusedLogChunks(TCompletionEventSender *completion);
+    void MarkChunksAsReleased(TReleaseChunks& req);
     void OnNonceChange(ui32 idx, TReqId reqId, NWilson::TTraceId *traceId);
     ui32 GetTotalChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const;
     ui32 GetFreeChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const;
     ui32 GetUsedChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const;
-    TStatusFlags GetStatusFlags(TOwner ownerId, const EOwnerGroupType ownerGroupType) const; 
-    TStatusFlags NotEnoughDiskSpaceStatusFlags(ui32 ownerId, const EOwnerGroupType ownerGroupType) const; 
+    TStatusFlags GetStatusFlags(TOwner ownerId, const EOwnerGroupType ownerGroupType) const;
+    TStatusFlags NotEnoughDiskSpaceStatusFlags(ui32 ownerId, const EOwnerGroupType ownerGroupType) const;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Generic log writing
@@ -239,20 +239,20 @@ public:
     void OnLogCommitDone(TLogCommitDone &req);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk commit log writing
-    NKikimrProto::EReplyStatus BeforeLoggingCommitRecord(const TLogWrite &evLog, TStringStream& outErrorReason); 
-    bool ValidateCommitChunk(ui32 chunkIdx, TOwner owner, TStringStream& outErrorReason); 
+    NKikimrProto::EReplyStatus BeforeLoggingCommitRecord(const TLogWrite &evLog, TStringStream& outErrorReason);
+    bool ValidateCommitChunk(ui32 chunkIdx, TOwner owner, TStringStream& outErrorReason);
     void CommitChunk(ui32 chunkIdx);
-    bool ValidateDeleteChunk(ui32 chunkIdx, TOwner owner, TStringStream& outErrorReason); 
-    void DeleteChunk(ui32 chunkIdx, TOwner owner); 
+    bool ValidateDeleteChunk(ui32 chunkIdx, TOwner owner, TStringStream& outErrorReason);
+    void DeleteChunk(ui32 chunkIdx, TOwner owner);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Log reading
-    void ProcessReadLogRecord(TLogRecordHeader &header, TString &data, TOwner owner, ui64 nonce, 
-        TEvReadLogResult* result, TMap<ui32, TChunkState> *outChunkOwnerMap, bool isInitial, 
-        bool parseCommitMessage); 
+    void ProcessReadLogRecord(TLogRecordHeader &header, TString &data, TOwner owner, ui64 nonce,
+        TEvReadLogResult* result, TMap<ui32, TChunkState> *outChunkOwnerMap, bool isInitial,
+        bool parseCommitMessage);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk writing
     bool ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize);
-    void SendChunkWriteError(TChunkWrite &evChunkWrite, const TString &errorReason, NKikimrProto::EReplyStatus status); 
+    void SendChunkWriteError(TChunkWrite &evChunkWrite, const TString &errorReason, NKikimrProto::EReplyStatus status);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk reading
     enum EChunkReadPieceResult {
@@ -261,44 +261,44 @@ public:
         ReadPieceResultError = 2
     };
 
-    void SendChunkReadError(const TIntrusivePtr<TChunkRead>& read, TStringStream& errorReason, 
-            NKikimrProto::EReplyStatus status); 
-    EChunkReadPieceResult ChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector, ui64 pieceSizeLimit, 
-            ui64 *reallyReadBytes); 
+    void SendChunkReadError(const TIntrusivePtr<TChunkRead>& read, TStringStream& errorReason,
+            NKikimrProto::EReplyStatus status);
+    EChunkReadPieceResult ChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector, ui64 pieceSizeLimit,
+            ui64 *reallyReadBytes);
     void SplitChunkJobSize(ui32 totalSize, ui32 *outSmallJobSize, ui32 *outLargeJObSize, ui32 *outSmallJobCount);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     void ChunksLockByRange(TFreeChunks &freeChunks, ui32 begin, ui32 end, TVector<ui32> &lockedChunks);
     void ChunksLockByNumber(ui32 begin, ui32 number, TVector<ui32> &lockedChunks);
-    void ChunksLock(TChunksLock &evChunksLock); 
-    void ChunksUnlock(TChunksUnlock &evChunksUnlock); 
+    void ChunksLock(TChunksLock &evChunksLock);
+    void ChunksUnlock(TChunksUnlock &evChunksUnlock);
     // Chunk reservation
-    TVector<TChunkIdx> AllocateChunkForOwner(const TRequestBase *req, const ui32 count, TString &errorReason); 
+    TVector<TChunkIdx> AllocateChunkForOwner(const TRequestBase *req, const ui32 count, TString &errorReason);
     void ChunkReserve(TChunkReserve &evChunkReserve);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Whiteboard and HTTP reports creation 
+    // Whiteboard and HTTP reports creation
     void WhiteboardReport(TWhiteboardReport &whiteboardReport); // Called by actor
     void RenderState(IOutputStream &str, THttpInfo &httpInfo);
-    void OutputHtmlOwners(TStringStream &str); 
-    void OutputHtmlLogChunksDetails(TStringStream &str); 
-    void OutputHtmlChunksLockUnlockInfo(TStringStream &str); 
+    void OutputHtmlOwners(TStringStream &str);
+    void OutputHtmlLogChunksDetails(TStringStream &str);
+    void OutputHtmlChunksLockUnlockInfo(TStringStream &str);
     void HttpInfo(THttpInfo &httpInfo); // Called by actor
-    void EventUndelivered(TUndelivered &req); 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+    void EventUndelivered(TUndelivered &req);
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // PDisk formatting
     void WriteApplyFormatRecord(TDiskFormat format, const TKey &mainKey);
-    void WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes, const ui64 &diskGuid, 
+    void WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes, const ui64 &diskGuid,
             const TKey &chunkKey, const TKey &logKey, const TKey &sysLogKey, const TKey &mainKey,
-            TString textMessage, const bool isErasureEncodeUserLog, const bool trimEntireDevice); 
+            TString textMessage, const bool isErasureEncodeUserLog, const bool trimEntireDevice);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Owner initialization
     void ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str);
-    TOwner FindNextOwnerId(); 
-    bool YardInitStart(TYardInit &evYardInit); 
-    void YardInitFinish(TYardInit &evYardInit); 
-    bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner); 
+    TOwner FindNextOwnerId();
+    bool YardInitStart(TYardInit &evYardInit);
+    void YardInitFinish(TYardInit &evYardInit);
+    bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
     // Scheduler weight configuration
     void ConfigureCbs(ui32 ownerId, EGate gate, ui64 weight);
-    void SchedulerConfigure(const TConfigureScheduler &conf); 
+    void SchedulerConfigure(const TConfigureScheduler &conf);
     void SendCutLog(TAskForCutLog &reqest);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Free space check
@@ -309,7 +309,7 @@ public:
     // Owner destruction
     void Slay(TSlay &evSlay);
     // Common implementation details
-    void ForceDeleteChunk(TChunkIdx chunkIdx); 
+    void ForceDeleteChunk(TChunkIdx chunkIdx);
     void KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEventSender *completionAction);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Update process
@@ -317,10 +317,10 @@ public:
     void ProcessChunkWriteQueue();
     void ProcessChunkReadQueue();
     void ProcessLogReadQueue();
-    void ProcessYardInitSet(); 
-    void TrimAllUntrimmedChunks(); 
+    void ProcessYardInitSet();
+    void TrimAllUntrimmedChunks();
     void ProcessChunkTrimQueue();
-    void ClearQuarantineChunks(); 
+    void ClearQuarantineChunks();
     // Should be called to initiate TRIM (on chunk delete or prev trim done)
     void TryTrimChunk(bool prevDone, ui64 trimmedSize);
     void ProcessFastOperationsQueue();
@@ -331,22 +331,22 @@ public:
     // Internal interface
 
     // Schedules EvReadLogResult event for the system log
-    void ResetInit(); 
-    bool Initialize(TActorSystem *actorSystem, const TActorId &pDiskActorId); // Called by actor 
-    void InitiateReadSysLog(const TActorId &pDiskActor); // Called by actor 
-    void ProcessReadLogResult(const TEvReadLogResult &evReadLogResult, const TActorId &pDiskActor); 
- 
-    NKikimrProto::EReplyStatus ValidateRequest(TLogWrite *logWrite, TStringStream& outErrorReason); 
-    void PrepareLogError(TLogWrite *logWrite, TStringStream& errorReason, NKikimrProto::EReplyStatus status); 
-    template<typename T> 
-    bool PreprocessRequestImpl(T *req); // const; 
-    NKikimrProto::EReplyStatus CheckOwnerAndRound(TRequestBase* req, TStringStream& err); 
-    bool PreprocessRequest(TRequestBase *request); 
-    void PushRequestToForseti(TRequestBase *request); 
+    void ResetInit();
+    bool Initialize(TActorSystem *actorSystem, const TActorId &pDiskActorId); // Called by actor
+    void InitiateReadSysLog(const TActorId &pDiskActor); // Called by actor
+    void ProcessReadLogResult(const TEvReadLogResult &evReadLogResult, const TActorId &pDiskActor);
+
+    NKikimrProto::EReplyStatus ValidateRequest(TLogWrite *logWrite, TStringStream& outErrorReason);
+    void PrepareLogError(TLogWrite *logWrite, TStringStream& errorReason, NKikimrProto::EReplyStatus status);
+    template<typename T>
+    bool PreprocessRequestImpl(T *req); // const;
+    NKikimrProto::EReplyStatus CheckOwnerAndRound(TRequestBase* req, TStringStream& err);
+    bool PreprocessRequest(TRequestBase *request);
+    void PushRequestToForseti(TRequestBase *request);
     void AddJobToForseti(NSchLab::TCbs *cbs, TRequestBase *request, NSchLab::EJobKind jobKind);
     void RouteRequest(TRequestBase *request);
     void ProcessPausedQueue();
-    void ProcessPendingActivities(); 
+    void ProcessPendingActivities();
     void EnqueueAll();
     void Update() override;
     void Wakeup() override;
@@ -361,12 +361,12 @@ private:
     void UpdateMinLogCostNs();
 };
 
-void ParsePayloadFromSectorOffset(const TDiskFormat& format, ui64 firstSector, ui64 lastSector, ui64 currentSector, 
-        ui64 *outPayloadBytes, ui64 *outPayloadOffset); 
- 
-bool ParseSectorOffset(const TDiskFormat& format, TActorSystem *actorSystem, ui32 pDiskId, ui64 offset, ui64 size, 
-        ui64 &outSectorIdx, ui64 &outLastSectorIdx, ui64 &outSectorOffset); 
- 
+void ParsePayloadFromSectorOffset(const TDiskFormat& format, ui64 firstSector, ui64 lastSector, ui64 currentSector,
+        ui64 *outPayloadBytes, ui64 *outPayloadOffset);
+
+bool ParseSectorOffset(const TDiskFormat& format, TActorSystem *actorSystem, ui32 pDiskId, ui64 offset, ui64 size,
+        ui64 &outSectorIdx, ui64 &outLastSectorIdx, ui64 &outSectorOffset);
+
 } // NPDisk
 } // NKikimr
 

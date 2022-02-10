@@ -107,7 +107,7 @@ namespace NKikimr {
                 LOG_INFO(ctx, NKikimrServices::BS_SKELETON,
                         VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "commit %s signature# %s CommitChunks# %s"
                             " DeleteChunks# %s", THullCommitFinished::TypeToString(NotifyType),
-                            PDiskSignatureForHullDbKey<TKey>().ToString().data(), 
+                            PDiskSignatureForHullDbKey<TKey>().ToString().data(),
                             FormatList(CommitRecord.CommitChunks).data(),
                             FormatList(CommitRecord.DeleteChunks).data()));
             }

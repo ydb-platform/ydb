@@ -121,14 +121,14 @@ public:
         : TClientCommandConfig("execute", { "exec" }, "Execute schema protobuf")
     {}
 
-    bool ReturnTxId; 
- 
+    bool ReturnTxId;
+
     TList<TAutoPtr<NKikimrClient::TSchemeOperation>> Requests;
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
-        ReturnTxId = false; 
-        config.Opts->AddLongOption('t', "txid", "Print TxId").NoArgument().SetFlag(&ReturnTxId); 
+        ReturnTxId = false;
+        config.Opts->AddLongOption('t', "txid", "Print TxId").NoArgument().SetFlag(&ReturnTxId);
         config.SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<SCHEMA-PROTO>", "Schema protobuf or file with schema protobuf");
     }
@@ -151,18 +151,18 @@ public:
             TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
             request->Record.MergeFrom(*pbRequest);
             result = MessageBusCall<NMsgBusProxy::TBusSchemeOperation, NMsgBusProxy::TBusResponse>(config, request,
-                [this](const NMsgBusProxy::TBusResponse& response) -> int { 
+                [this](const NMsgBusProxy::TBusResponse& response) -> int {
                     if (response.Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
                         Cerr << ToCString(static_cast<NMsgBusProxy::EResponseStatus>(response.Record.GetStatus())) << " " << response.Record.GetErrorReason() << Endl;
                         return 1;
                     }
-                    if (ReturnTxId) { 
-                        if (response.Record.HasFlatTxId() && response.Record.GetFlatTxId().HasTxId()) { 
-                            Cout << "TxId: " << response.Record.GetFlatTxId().GetTxId() << Endl; 
-                        } else { 
-                            Cout << "TxId: not returned" << Endl; 
-                        } 
-                    } 
+                    if (ReturnTxId) {
+                        if (response.Record.HasFlatTxId() && response.Record.GetFlatTxId().HasTxId()) {
+                            Cout << "TxId: " << response.Record.GetFlatTxId().GetTxId() << Endl;
+                        } else {
+                            Cout << "TxId: not returned" << Endl;
+                        }
+                    }
                     return 0;
             });
             if (result != 0) {
@@ -357,29 +357,29 @@ public:
                 NKikimrSchemeOp::TBackupProgress backup = path.GetBackupProgress();
                 ui32 total = backup.GetTotal();
                 ui32 notYet = backup.GetNotCompleteYet();
-                Cout << "backup in progress: " << (total - notYet) << "/" << total; 
-                if (backup.HasTxId()) { 
-                    Cout << " txId: " << backup.GetTxId(); 
-                } 
-                Cout << Endl; 
+                Cout << "backup in progress: " << (total - notYet) << "/" << total;
+                if (backup.HasTxId()) {
+                    Cout << " txId: " << backup.GetTxId();
+                }
+                Cout << Endl;
             }
             for (const auto& backupResult : path.GetLastBackupResult()) {
                 Cout << "backup done: " << backupResult.GetCompleteTimeStamp()
-                    << " txId: " << backupResult.GetTxId() 
-                    << " errors: " << backupResult.GetErrorCount(); 
-                if (backupResult.ErrorsSize()) { 
-                    Cout << " errorsExplain: { "; 
-                    bool first = true; 
-                    for (const auto &shardError : backupResult.GetErrors()) { 
-                        Cout << shardError.GetExplain().Quote(); 
-                        if (!first) { 
-                            Cout << ", "; 
-                        } 
-                        first = false; 
-                    } 
-                    Cout << " }"; 
-                } 
-                Cout << Endl; 
+                    << " txId: " << backupResult.GetTxId()
+                    << " errors: " << backupResult.GetErrorCount();
+                if (backupResult.ErrorsSize()) {
+                    Cout << " errorsExplain: { ";
+                    bool first = true;
+                    for (const auto &shardError : backupResult.GetErrors()) {
+                        Cout << shardError.GetExplain().Quote();
+                        if (!first) {
+                            Cout << ", ";
+                        }
+                        first = false;
+                    }
+                    Cout << " }";
+                }
+                Cout << Endl;
             }
         }
         if (Protobuf) {

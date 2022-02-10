@@ -66,10 +66,10 @@ public:
         }
     }
 
-    NKikimrProto::EReplyStatus PutWithResult(const TLogoBlobID& id, const TString& buffer, TEvBlobStorage::TEvPut::ETactic tactic 
-            = TEvBlobStorage::TEvPut::TacticDefault) { 
-        SendToBSProxy(GetActorContext(), Info->GroupID, new TEvBlobStorage::TEvPut(id, buffer, TInstant::Max(), 
-                    NKikimrBlobStorage::TabletLog, tactic)); 
+    NKikimrProto::EReplyStatus PutWithResult(const TLogoBlobID& id, const TString& buffer, TEvBlobStorage::TEvPut::ETactic tactic
+            = TEvBlobStorage::TEvPut::TacticDefault) {
+        SendToBSProxy(GetActorContext(), Info->GroupID, new TEvBlobStorage::TEvPut(id, buffer, TInstant::Max(),
+                    NKikimrBlobStorage::TabletLog, tactic));
         auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvPutResult>();
         CTEST << (TStringBuilder() << "PutResult: " << resp->Get()->ToString() << Endl);
         if (resp->Get()->Status == NKikimrProto::OK && Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3of4) {

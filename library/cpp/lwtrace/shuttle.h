@@ -176,13 +176,13 @@ namespace NLWTrace {
     private:
         TShuttlePtr HeadNoLock;
     public:
-        TOrbit() = default; 
-        TOrbit(const TOrbit&) = delete; 
-        TOrbit(TOrbit&&) = default; 
- 
-        TOrbit& operator=(const TOrbit&) = delete; 
-        TOrbit& operator=(TOrbit&&) = default; 
- 
+        TOrbit() = default;
+        TOrbit(const TOrbit&) = delete;
+        TOrbit(TOrbit&&) = default;
+
+        TOrbit& operator=(const TOrbit&) = delete;
+        TOrbit& operator=(TOrbit&&) = default;
+
         ~TOrbit() {
             Reset();
         }

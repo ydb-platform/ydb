@@ -58,7 +58,7 @@ SRCS(
     ulid.cpp
     ulid.h
     wildcard.h
-    yverify_stream.h 
+    yverify_stream.h
 )
 
 PEERDIR(

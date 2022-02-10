@@ -35,7 +35,7 @@ private:
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     std::unique_ptr<NActors::TMon> Monitoring;
     std::unique_ptr<NKikimr::TAppData> AppData;
-    std::shared_ptr<NKikimr::NPDisk::IIoContextFactory> IoContext; 
+    std::shared_ptr<NKikimr::NPDisk::IIoContextFactory> IoContext;
     std::unique_ptr<NActors::TActorSystem> ActorSystem1;
     TSystemEvent DoneEvent { TSystemEvent::rAuto };
 public:
@@ -121,8 +121,8 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
                                         nullptr, nullptr, &KikimrShouldContinue));
     AppData->Counters = Counters;
     AppData->Mon = Monitoring.get();
-    IoContext = std::make_shared<NKikimr::NPDisk::TIoContextFactoryOSS>(); 
-    AppData->IoContextFactory = IoContext.get(); 
+    IoContext = std::make_shared<NKikimr::NPDisk::TIoContextFactoryOSS>();
+    AppData->IoContextFactory = IoContext.get();
     ActorSystem1.reset(new TActorSystem(setup1, AppData.get(), logSettings));
     loggerActor->Log(Now(), NKikimr::NLog::PRI_NOTICE, NActorsServices::TEST, "Actor system created");
 

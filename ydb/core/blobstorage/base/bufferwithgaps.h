@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include <util/generic/string.h>
-#include <util/generic/set.h> 
+#include <util/generic/set.h>
 #include <util/generic/map.h>
 #include <util/generic/vector.h>
 #include <util/generic/algorithm.h>
@@ -20,49 +20,49 @@ namespace NKikimr {
 
     class TBufferWithGaps {
         TString Data;
-        // <begin, size> 
-        TMap<ui32, ui32> Gaps; 
+        // <begin, size>
+        TMap<ui32, ui32> Gaps;
         ui32 Offset; // Data's offset in Gaps space
-        bool IsCommited; 
+        bool IsCommited;
 
     public:
         TBufferWithGaps()
             : Offset(0)
-            , IsCommited(false) 
+            , IsCommited(false)
         {}
 
         TBufferWithGaps(ui32 offset)
             : Offset(offset)
-            , IsCommited(false) 
+            , IsCommited(false)
         {}
 
-        TBufferWithGaps(ui32 offset, ui32 size) 
-            : Data(TString::Uninitialized(size)) 
-            , Offset(offset) 
-            , IsCommited(false) 
-        {} 
- 
+        TBufferWithGaps(ui32 offset, ui32 size)
+            : Data(TString::Uninitialized(size))
+            , Offset(offset)
+            , IsCommited(false)
+        {}
+
         TBufferWithGaps(TBufferWithGaps &&) = default;
         TBufferWithGaps &operator=(TBufferWithGaps &&) = default;
 
         void AddGap(ui32 begin, ui32 end) {
-            // ensure gaps never overlap 
-            ui32 size = end - begin; 
-            auto f = Gaps.upper_bound(begin); 
-            if (!Gaps.empty() && f != Gaps.begin()) { 
-                auto prev = std::prev(f); 
-                if (prev->first + prev->second == begin) { 
-                    prev->second += size; 
-                    return; 
-                } 
+            // ensure gaps never overlap
+            ui32 size = end - begin;
+            auto f = Gaps.upper_bound(begin);
+            if (!Gaps.empty() && f != Gaps.begin()) {
+                auto prev = std::prev(f);
+                if (prev->first + prev->second == begin) {
+                    prev->second += size;
+                    return;
+                }
             }
-            // add new gap 
-            Gaps.emplace(begin, size); 
+            // add new gap
+            Gaps.emplace(begin, size);
         }
 
         void SetData(TString&& data) {
             Data = std::move(data);
-            IsCommited = true; 
+            IsCommited = true;
         }
 
         TString ToString() const {
@@ -83,48 +83,48 @@ namespace NKikimr {
             return reinterpret_cast<T *>(Data.data() + offset);
         }
 
-        ui8 *RawDataPtr(ui32 offset, ui32 len) { 
+        ui8 *RawDataPtr(ui32 offset, ui32 len) {
             Y_VERIFY(offset + len <= Data.size(), "Buffer has size# %zu less then requested offset# %" PRIu32
                     " len# %" PRIu32, Data.size(), offset, len);
-            IsCommited = false; 
-            return reinterpret_cast<ui8 *>(Data.Detach() + offset); 
-        } 
- 
-        void Commit() { 
-            IsCommited = true; 
-        } 
- 
+            IsCommited = false;
+            return reinterpret_cast<ui8 *>(Data.Detach() + offset);
+        }
+
+        void Commit() {
+            IsCommited = true;
+        }
+
         bool IsReadable() const {
-            Y_VERIFY(IsCommited, "returned data was not commited"); 
+            Y_VERIFY(IsCommited, "returned data was not commited");
             return Gaps.empty();
         }
 
         bool IsReadable(ui32 offset, ui32 len) const {
-            Y_VERIFY(IsCommited, "returned data was not commited"); 
+            Y_VERIFY(IsCommited, "returned data was not commited");
             if (offset + len > Data.size()) {
                 return false;
             }
             const ui32 begin = Offset + offset;
             const ui32 end = begin + len;
 
-            auto f = Gaps.upper_bound(begin); 
-            if (Gaps.empty()) { 
-                return true; 
-            } else if (f == Gaps.begin()) { 
-                // intersection occurs only when 'end > f->Begin' 
-                //  [begin            ) end 
-                //                      [ f->Begin     ) f->End 
-                return end <= f->first; 
-            } else { 
-                // There are two possible intersections can occur: 
-                // 1. The gap before (there are always such one) f can have prev->end > begin 
-                // 2. f may be either Gaps.end() or the last element. If it is the last element, check that f->begin >= end 
-                // [ prev->begin     ) prev->end 
-                //                      [begin            ) end 
-                //                                          [ f->Begin     ) f->End 
-                auto prev = std::prev(f); 
-                return prev->first + prev->second <= begin && (f == Gaps.end() || end <= f->first); 
-            } 
+            auto f = Gaps.upper_bound(begin);
+            if (Gaps.empty()) {
+                return true;
+            } else if (f == Gaps.begin()) {
+                // intersection occurs only when 'end > f->Begin'
+                //  [begin            ) end
+                //                      [ f->Begin     ) f->End
+                return end <= f->first;
+            } else {
+                // There are two possible intersections can occur:
+                // 1. The gap before (there are always such one) f can have prev->end > begin
+                // 2. f may be either Gaps.end() or the last element. If it is the last element, check that f->begin >= end
+                // [ prev->begin     ) prev->end
+                //                      [begin            ) end
+                //                                          [ f->Begin     ) f->End
+                auto prev = std::prev(f);
+                return prev->first + prev->second <= begin && (f == Gaps.end() || end <= f->first);
+            }
         }
 
         ui32 Size() const {
@@ -135,20 +135,20 @@ namespace NKikimr {
             Data.swap(other.Data);
             Gaps.swap(other.Gaps);
             DoSwap(Offset, other.Offset);
-            DoSwap(IsCommited, other.IsCommited); 
+            DoSwap(IsCommited, other.IsCommited);
         }
 
         void Clear() {
             Data.clear();
             Gaps.clear();
-            Offset = 0; 
-            IsCommited = false; 
+            Offset = 0;
+            IsCommited = false;
         }
 
-        bool IsDetached() const { 
-            return Data.IsDetached(); 
-        } 
- 
+        bool IsDetached() const {
+            return Data.IsDetached();
+        }
+
         bool Empty() const {
             return Data.empty();
         }
@@ -156,14 +156,14 @@ namespace NKikimr {
         void Sanitize() const {
             if (Data.size()) {
                 ui64 a = 0;
-                for (const auto &gap : Gaps) { 
-                    ui64 b = gap.first - Offset; 
+                for (const auto &gap : Gaps) {
+                    ui64 b = gap.first - Offset;
                     if (a < b) {
-                        ui64 size = gap.second; 
+                        ui64 size = gap.second;
                         Y_UNUSED(size);
                         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(DataPtr<const char>(a, size), size);
                     }
-                    a = b + gap.second; 
+                    a = b + gap.second;
                 }
                 ui64 b = Data.size();
                 if (a < b) {

@@ -29,7 +29,7 @@ namespace NKikimr {
             auto endTime = TAppData::TimeProvider->Now();
 
             LOG_INFO_S(ctx, NKikimrServices::BS_HULLCOMP, VCtx->VDiskLogPrefix
-                    << PDiskSignatureForHullDbKey<TKey>().ToString().data() 
+                    << PDiskSignatureForHullDbKey<TKey>().ToString().data()
                     << ": FreshAppendix Compaction Job finished: duration# " << (endTime - startTime));
 
             ctx.Send(Recipient, new TFreshAppendixCompactionDone(std::move(Job)));

@@ -23,70 +23,70 @@ void TRequestBase::AbortDelete(TRequestBase* request, TActorSystem* actorSystem)
         break;
     }
     default:
-        request->Abort(actorSystem); 
-        delete request; 
+        request->Abort(actorSystem);
+        delete request;
         break;
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// TChunkWrite 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
- 
-TAtomic TChunkWrite::LastIndex = 0; 
- 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-// TChunkRead
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+// TChunkWrite
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TAtomic TChunkRead::LastIndex = 0; 
- 
-void TChunkRead::Abort(TActorSystem* actorSystem) { 
-    if (FinalCompletion) { 
-        FinalCompletion->PartDeleted(actorSystem); 
-    } else { 
-        Y_VERIFY(!IsReplied); 
-        TStringStream error; 
-        error << "ReqId# " << ReqId << " ChunkRead is deleted because of PDisk stoppage"; 
+TAtomic TChunkWrite::LastIndex = 0;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TChunkRead
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+TAtomic TChunkRead::LastIndex = 0;
+
+void TChunkRead::Abort(TActorSystem* actorSystem) {
+    if (FinalCompletion) {
+        FinalCompletion->PartDeleted(actorSystem);
+    } else {
+        Y_VERIFY(!IsReplied);
+        TStringStream error;
+        error << "ReqId# " << ReqId << " ChunkRead is deleted because of PDisk stoppage";
         THolder<NPDisk::TEvChunkReadResult> result = MakeHolder
             <NPDisk::TEvChunkReadResult>(NKikimrProto::ERROR,
-                    ChunkIdx, Offset, Cookie, 
-                    NKikimrBlobStorage::StatusIsValid, error.Str()); 
-        actorSystem->Send(Sender, result.Release()); 
-        IsReplied = true; 
-    } 
+                    ChunkIdx, Offset, Cookie,
+                    NKikimrBlobStorage::StatusIsValid, error.Str());
+        actorSystem->Send(Sender, result.Release());
+        IsReplied = true;
+    }
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TChunkReadPiece
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TChunkReadPiece::TChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector, ui64 pieceSizeLimit,
-        bool isTheLastPiece) 
-        : TRequestBase(read->Sender, read->ReqId, read->Owner, read->OwnerRound, read->PriorityClass) 
-        , ChunkRead(read) 
-        , PieceCurrentSector(pieceCurrentSector) 
-        , PieceSizeLimit(pieceSizeLimit) 
-        , IsTheLastPiece(isTheLastPiece) 
-{ 
-    Y_VERIFY(ChunkRead->FinalCompletion); 
-    if (!IsTheLastPiece) { 
-        ChunkRead->FinalCompletion->AddPart(); 
-    } 
-} 
- 
-void TChunkReadPiece::Abort(TActorSystem* actorSystem) { 
-    ChunkRead->FinalCompletion->PartDeleted(actorSystem); 
+        bool isTheLastPiece)
+        : TRequestBase(read->Sender, read->ReqId, read->Owner, read->OwnerRound, read->PriorityClass)
+        , ChunkRead(read)
+        , PieceCurrentSector(pieceCurrentSector)
+        , PieceSizeLimit(pieceSizeLimit)
+        , IsTheLastPiece(isTheLastPiece)
+{
+    Y_VERIFY(ChunkRead->FinalCompletion);
+    if (!IsTheLastPiece) {
+        ChunkRead->FinalCompletion->AddPart();
+    }
 }
 
-void TChunkReadPiece::OnSuccessfulDestroy(TActorSystem* actorSystem) { 
-    if (!IsTheLastPiece) { 
-        ChunkRead->FinalCompletion->PartReadComplete(actorSystem); 
-    } 
-} 
- 
- 
+void TChunkReadPiece::Abort(TActorSystem* actorSystem) {
+    ChunkRead->FinalCompletion->PartDeleted(actorSystem);
+}
+
+void TChunkReadPiece::OnSuccessfulDestroy(TActorSystem* actorSystem) {
+    if (!IsTheLastPiece) {
+        ChunkRead->FinalCompletion->PartReadComplete(actorSystem);
+    }
+}
+
+
 } // NPDisk
 } // NKikimr
 

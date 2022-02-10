@@ -78,10 +78,10 @@ IActor* CreateKqpWorkerActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters);
 
-IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId, 
-    const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings, 
-    TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters); 
- 
+IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
+    const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
+    TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters);
+
 TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, const TString& database,
     std::shared_ptr<IKqpGateway::IKqpTableMetadataLoader>&& metadataLoader, NActors::TActorSystem* actorSystem, ui32 nodeId, TKqpRequestCounters::TPtr counters,
     const TActorId& MkqlCompileService);

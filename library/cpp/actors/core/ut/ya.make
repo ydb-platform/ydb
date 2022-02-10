@@ -23,11 +23,11 @@ ELSE()
 ENDIF()
 
 
-PEERDIR( 
+PEERDIR(
     library/cpp/actors/interconnect
     library/cpp/actors/testlib
-) 
- 
+)
+
 SRCS(
     actor_coroutine_ut.cpp
     actor_ut.cpp

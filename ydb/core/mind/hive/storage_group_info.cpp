@@ -11,13 +11,13 @@ TStorageGroupInfo::TStorageGroupInfo(const TStoragePoolInfo& storagePool, TStora
 
 bool TStorageGroupInfo::AcquireAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel) {
     Y_VERIFY(tablet->BoundChannels.size() > channel);
-    bool acquired = Units.insert({tablet, channel}).second; 
-    if (acquired) { 
+    bool acquired = Units.insert({tablet, channel}).second;
+    if (acquired) {
         AcquiredIOPS += tablet->BoundChannels[channel].GetIOPS();
         AcquiredThroughput += tablet->BoundChannels[channel].GetThroughput();
         AcquiredSize += tablet->BoundChannels[channel].GetSize();
     }
-    return acquired; 
+    return acquired;
 }
 
 bool TStorageGroupInfo::ReleaseAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel) {

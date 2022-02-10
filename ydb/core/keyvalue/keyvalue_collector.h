@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-#include "keyvalue_collect_operation.h" 
+#include "keyvalue_collect_operation.h"
 
 namespace NKikimr {
 namespace NKeyValue {

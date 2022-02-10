@@ -18,22 +18,22 @@ namespace NKikimr {
         }
     }
 
-    NKikimrWhiteboard::EFlag TOutOfSpaceState::ToWhiteboardFlag(const ESpaceColor color) { 
-        switch (color) { 
-            case TSpaceColor::GREEN: 
-            case TSpaceColor::CYAN: 
-                return NKikimrWhiteboard::EFlag::Green; 
+    NKikimrWhiteboard::EFlag TOutOfSpaceState::ToWhiteboardFlag(const ESpaceColor color) {
+        switch (color) {
+            case TSpaceColor::GREEN:
+            case TSpaceColor::CYAN:
+                return NKikimrWhiteboard::EFlag::Green;
             case TSpaceColor::LIGHT_YELLOW:
-            case TSpaceColor::YELLOW: 
-            case TSpaceColor::LIGHT_ORANGE: 
-                return NKikimrWhiteboard::EFlag::Yellow; 
-            case TSpaceColor::ORANGE: 
-                return NKikimrWhiteboard::EFlag::Orange; 
-            case TSpaceColor::RED: 
-            case TSpaceColor::BLACK: 
-            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MIN_SENTINEL_DO_NOT_USE_: 
-            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MAX_SENTINEL_DO_NOT_USE_: 
-                return NKikimrWhiteboard::EFlag::Red; 
+            case TSpaceColor::YELLOW:
+            case TSpaceColor::LIGHT_ORANGE:
+                return NKikimrWhiteboard::EFlag::Yellow;
+            case TSpaceColor::ORANGE:
+                return NKikimrWhiteboard::EFlag::Orange;
+            case TSpaceColor::RED:
+            case TSpaceColor::BLACK:
+            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MAX_SENTINEL_DO_NOT_USE_:
+                return NKikimrWhiteboard::EFlag::Red;
         }
     }
 

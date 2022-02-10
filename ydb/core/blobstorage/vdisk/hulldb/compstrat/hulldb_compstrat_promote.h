@@ -46,7 +46,7 @@ namespace NKikimr {
                     LOG_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                                 "%s: PromoteSsts: action# %s timeSpent# %s",
-                                PDiskSignatureForHullDbKey<TKey>().ToString().data(), 
+                                PDiskSignatureForHullDbKey<TKey>().ToString().data(),
                                 ActionToStr(action), (finishTime - startTime).ToString().data()));
                 }
 

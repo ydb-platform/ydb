@@ -1,10 +1,10 @@
 #pragma once
 #include "defs.h"
- 
+
 #include "blobstorage_pdisk_defs.h"
 #include "blobstorage_pdisk_params.h"
-#include "blobstorage_pdisk_config.h" 
- 
+#include "blobstorage_pdisk_config.h"
+
 #include <ydb/core/blobstorage/base/vdisk_lsn.h>
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/blobstorage/base/bufferwithgaps.h>
@@ -95,11 +95,11 @@ protected:
 
 class TLogRecord {
 public:
-    TLogSignature Signature; 
+    TLogSignature Signature;
     TString Data;
     ui64 Lsn;
 
-    TLogRecord(TLogSignature signature, const TString &data, ui64 lsn) 
+    TLogRecord(TLogSignature signature, const TString &data, ui64 lsn)
         : Signature(signature)
         , Data(data)
         , Lsn(lsn)
@@ -118,7 +118,7 @@ public:
 
     TString ToString() const {
         TStringStream str;
-        str << "{TLogRecord Signature# " << Signature.ToString(); 
+        str << "{TLogRecord Signature# " << Signature.ToString();
         str << " Data.Size()# " << Data.size();
         str << " Lsn# " << Lsn;
         str << "}";
@@ -167,7 +167,7 @@ struct TEvYardInit : public TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit>
 
 struct TEvYardInitResult : public TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYardInitResult> {
     NKikimrProto::EReplyStatus Status;
-    TMap<TLogSignature, TLogRecord> StartingPoints; 
+    TMap<TLogSignature, TLogRecord> StartingPoints;
     TStatusFlags StatusFlags;
     TIntrusivePtr<TPDiskParams> PDiskParams;
     TVector<TChunkIdx> OwnedChunks;  // Sorted vector of owned chunk identifiers.
@@ -245,12 +245,12 @@ struct TEvLogResult;
 struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
     struct ICallback {
         virtual ~ICallback() = default;
-        virtual void operator ()(TActorSystem *actorSystem, const TEvLogResult &ev) = 0; 
+        virtual void operator ()(TActorSystem *actorSystem, const TEvLogResult &ev) = 0;
     };
 
     using TCallback = std::unique_ptr<ICallback>;
 
-    explicit TEvLog(TOwner owner, TOwnerRound ownerRound, TLogSignature signature, 
+    explicit TEvLog(TOwner owner, TOwnerRound ownerRound, TLogSignature signature,
                     const TString &data, TLsnSeg seg, void *cookie, TCallback &&cb = TCallback())
         : Owner(owner)
         , OwnerRound(ownerRound)
@@ -270,12 +270,12 @@ struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&cookie, sizeof(cookie));
     }
 
-    explicit TEvLog(TOwner owner, TOwnerRound ownerRound, TLogSignature signature, 
+    explicit TEvLog(TOwner owner, TOwnerRound ownerRound, TLogSignature signature,
                     const TCommitRecord &commitRecord,
                     const TString &data, TLsnSeg seg, void *cookie, TCallback &&cb = TCallback())
         : Owner(owner)
         , OwnerRound(ownerRound)
-        , Signature(signature, /*commitRecord*/ true) 
+        , Signature(signature, /*commitRecord*/ true)
         , Data(data)
         , LsnSegmentStart(seg.First)
         , Lsn(seg.Last)
@@ -304,7 +304,7 @@ struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
         str << " Lsn# " << (ui64)record.Lsn;
         str << " LsnSegmentStart# " << (ui32)record.LsnSegmentStart;
         str << " Cookie# " << (ui64)record.Cookie;
-        if (record.Signature.HasCommitRecord()) { 
+        if (record.Signature.HasCommitRecord()) {
             str << record.CommitRecord.ToString();
         }
         str << "}";
@@ -317,7 +317,7 @@ struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
 
     TOwner Owner;
     TOwnerRound OwnerRound;
-    TLogSignature Signature; 
+    TLogSignature Signature;
     TString Data;
     ui64 LsnSegmentStart;   // we may write a log record for diapason of lsns [LsnSegmentStart, Lsn];
                             // usually LsnSegmentStart=Lsn and this diapason is a single point
@@ -325,8 +325,8 @@ struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
     void *Cookie;
     TCallback LogCallback;
     TCommitRecord CommitRecord;
- 
-    mutable NLWTrace::TOrbit Orbit; 
+
+    mutable NLWTrace::TOrbit Orbit;
 };
 
 struct TEvMultiLog : public TEventLocal<TEvMultiLog, TEvBlobStorage::EvMultiLog> {
@@ -364,7 +364,7 @@ struct TEvLogResult : public TEventLocal<TEvLogResult, TEvBlobStorage::EvLogResu
     struct TRecord {
         ui64 Lsn;
         void *Cookie;
-        mutable NLWTrace::TOrbit Orbit; 
+        mutable NLWTrace::TOrbit Orbit;
 
         TRecord(ui64 lsn, void *cookie)
             : Lsn(lsn)
@@ -412,10 +412,10 @@ struct TEvLogResult : public TEventLocal<TEvLogResult, TEvBlobStorage::EvLogResu
 struct TEvReadLog : public TEventLocal<TEvReadLog, TEvBlobStorage::EvReadLog> {
     TOwner Owner;
     TOwnerRound OwnerRound;
-    TLogPosition Position; 
+    TLogPosition Position;
     ui64 SizeLimit;
 
-    TEvReadLog(TOwner owner, TOwnerRound ownerRound, TLogPosition position = TLogPosition{0, 0}, ui64 sizeLimit = 16 << 20) 
+    TEvReadLog(TOwner owner, TOwnerRound ownerRound, TLogPosition position = TLogPosition{0, 0}, ui64 sizeLimit = 16 << 20)
         : Owner(owner)
         , OwnerRound(ownerRound)
         , Position(position)
@@ -441,22 +441,22 @@ struct TEvReadLogResult : public TEventLocal<TEvReadLogResult, TEvBlobStorage::E
     typedef TVector<TLogRecord> TResults;
     TResults Results;
     NKikimrProto::EReplyStatus Status;
-    TLogPosition Position; 
-    TLogPosition NextPosition; 
+    TLogPosition Position;
+    TLogPosition NextPosition;
     bool IsEndOfLog;
     TStatusFlags StatusFlags;
     TString ErrorReason;
-    TOwner Owner; 
+    TOwner Owner;
 
-    TEvReadLogResult(NKikimrProto::EReplyStatus status, TLogPosition position, TLogPosition nextPosition, 
-            bool isEndOfLog, TStatusFlags statusFlags, const TString &errorReason, TOwner owner) 
+    TEvReadLogResult(NKikimrProto::EReplyStatus status, TLogPosition position, TLogPosition nextPosition,
+            bool isEndOfLog, TStatusFlags statusFlags, const TString &errorReason, TOwner owner)
         : Status(status)
         , Position(position)
         , NextPosition(nextPosition)
         , IsEndOfLog(isEndOfLog)
         , StatusFlags(statusFlags)
         , ErrorReason(errorReason)
-        , Owner(owner) 
+        , Owner(owner)
     {}
 
     TString ToString() const {
@@ -932,12 +932,12 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
         return str.Str();
     }
 
-    void Validate() const { 
-        const ui32 count = PartsPtr ? PartsPtr->Size() : 0; 
-        for (ui32 idx = 0; idx < count; ++idx) { 
+    void Validate() const {
+        const ui32 count = PartsPtr ? PartsPtr->Size() : 0;
+        for (ui32 idx = 0; idx < count; ++idx) {
             Y_VERIFY((*PartsPtr)[idx].second);
-            if ((*PartsPtr)[idx].first) { 
-                REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED((*PartsPtr)[idx].first, (*PartsPtr)[idx].second); 
+            if ((*PartsPtr)[idx].first) {
+                REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED((*PartsPtr)[idx].first, (*PartsPtr)[idx].second);
             }
         }
     }
@@ -1166,7 +1166,7 @@ struct TEvConfigureScheduler : public TEventLocal<TEvConfigureScheduler, TEvBlob
     TOwner Owner;
     TOwnerRound OwnerRound;
 
-    TPDiskSchedulerConfig SchedulerCfg; 
+    TPDiskSchedulerConfig SchedulerCfg;
 
     TEvConfigureScheduler(TOwner owner, TOwnerRound ownerRound)
         : Owner(owner)
@@ -1177,7 +1177,7 @@ struct TEvConfigureScheduler : public TEventLocal<TEvConfigureScheduler, TEvBlob
         TStringStream str;
         str << "{TEvConfigureScheduler ownerId# " << (ui32)Owner;
         str << " ownerRound# " << OwnerRound;
-        str << " SchedulerCfg# " << SchedulerCfg.ToString(false); 
+        str << " SchedulerCfg# " << SchedulerCfg.ToString(false);
         str << "}";
         return str.Str();
     }
@@ -1210,13 +1210,13 @@ struct TEvYardControl : public TEventLocal<TEvYardControl, TEvBlobStorage::EvYar
         ActionPause = 0,
         ActionStep = 1,
         ActionResume = 2,
-        Brake = 3, 
-        PDiskStop = 4, 
-        // If pdisk is working now successfull responce will be sent immediately 
-        // Else responce will be sent only when PDisk is fully initialized or come in error state 
-        PDiskStart = 5, 
-        // Return pointer to TPDisk instance in TEvYardControlResult::Cookie 
-        GetPDiskPointer = 6, 
+        Brake = 3,
+        PDiskStop = 4,
+        // If pdisk is working now successfull responce will be sent immediately
+        // Else responce will be sent only when PDisk is fully initialized or come in error state
+        PDiskStart = 5,
+        // Return pointer to TPDisk instance in TEvYardControlResult::Cookie
+        GetPDiskPointer = 6,
     };
 
     ui32 Action;

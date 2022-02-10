@@ -94,13 +94,13 @@ class KiKiMRMessageBusClient(object):
     def close(self):
         self._channel.close()
 
-    def update_self_heal(self, enable, domain=1): 
-        request = msgbus.TBlobStorageConfigRequest() 
-        request.Domain = domain 
-        command = request.Request.Command.add() 
-        command.EnableSelfHeal.Enable = enable 
-        return self.send(request, 'BlobStorageConfig') 
- 
+    def update_self_heal(self, enable, domain=1):
+        request = msgbus.TBlobStorageConfigRequest()
+        request.Domain = domain
+        command = request.Request.Command.add()
+        command.EnableSelfHeal.Enable = enable
+        return self.send(request, 'BlobStorageConfig')
+
     def read_drive_status(self, hostname, interconnect_port, drive_path=None, domain=1):
         request = msgbus.TBlobStorageConfigRequest()
         request.Domain = domain
@@ -237,7 +237,7 @@ class KiKiMRMessageBusClient(object):
 
             if tablet.allowed_node_ids:
                 create_tablet_cmd.AllowedNodeIDs.extend(tablet.allowed_node_ids)
-        request.DomainUid = self.__domain_id 
+        request.DomainUid = self.__domain_id
         return self.invoke(
             request,
             'HiveCreateTablet'

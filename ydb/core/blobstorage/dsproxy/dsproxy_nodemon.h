@@ -11,10 +11,10 @@
 #include <ydb/core/base/group_stat.h>
 #include <ydb/core/util/throughput_meter.h>
 #include <ydb/core/mon/mon.h>
- 
+
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile.h>
 #include <library/cpp/monlib/metrics/histogram_snapshot.h>
- 
+
 #include <util/generic/ptr.h>
 
 namespace NKikimr {
@@ -24,7 +24,7 @@ namespace NKikimr {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 struct TDsProxyNodeMon : public TThrRefBase {
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Group; 
+    TIntrusivePtr<NMonitoring::TDynamicCounters> Group;
     TIntrusivePtr<NMonitoring::TDynamicCounters> LatencyOverview;
 
     NMonitoring::TPercentileTracker<4, 512, 15> PutResponseTime;
@@ -33,25 +33,25 @@ struct TDsProxyNodeMon : public TThrRefBase {
     NMonitoring::TPercentileTracker<4, 512, 15> PutTabletLogResponseTime256;
     NMonitoring::TPercentileTracker<4, 512, 15> PutTabletLogResponseTime512;
 
-    static constexpr ui32 KnownDeviceTypesCount = 4; 
-    using THistoPtrForDeviceType = std::array<NMonitoring::THistogramPtr, KnownDeviceTypesCount>; 
-    THistoPtrForDeviceType PutTabletLogResponseTimeHist256Ki; 
-    THistoPtrForDeviceType PutTabletLogResponseTimeHistInf; 
- 
+    static constexpr ui32 KnownDeviceTypesCount = 4;
+    using THistoPtrForDeviceType = std::array<NMonitoring::THistogramPtr, KnownDeviceTypesCount>;
+    THistoPtrForDeviceType PutTabletLogResponseTimeHist256Ki;
+    THistoPtrForDeviceType PutTabletLogResponseTimeHistInf;
+
     NMonitoring::TPercentileTracker<4, 512, 15> PutAsyncBlobResponseTime;
-    THistoPtrForDeviceType PutAsyncBlobResponseTimeHist; 
+    THistoPtrForDeviceType PutAsyncBlobResponseTimeHist;
     NMonitoring::TPercentileTracker<4, 512, 15> PutUserDataResponseTime;
-    THistoPtrForDeviceType PutUserDataResponseTimeHist; 
+    THistoPtrForDeviceType PutUserDataResponseTimeHist;
 
     NMonitoring::TPercentileTracker<16, 512, 15> GetResponseTime;
-    NMonitoring::TPercentileTracker<16, 512, 15> GetAsyncReadResponseTime; 
-    THistoPtrForDeviceType GetAsyncReadResponseTimeHist; 
-    NMonitoring::TPercentileTracker<16, 512, 15> GetFastReadResponseTime256Ki; 
-    THistoPtrForDeviceType GetFastReadResponseTimeHist256Ki; 
-    NMonitoring::TPercentileTracker<16, 512, 15> GetFastReadResponseTimeInf; 
-    THistoPtrForDeviceType GetFastReadResponseTimeHistInf; 
-    NMonitoring::TPercentileTracker<16, 512, 15> GetDiscoverResponseTime; 
-    THistoPtrForDeviceType GetDiscoverResponseTimeHist; 
+    NMonitoring::TPercentileTracker<16, 512, 15> GetAsyncReadResponseTime;
+    THistoPtrForDeviceType GetAsyncReadResponseTimeHist;
+    NMonitoring::TPercentileTracker<16, 512, 15> GetFastReadResponseTime256Ki;
+    THistoPtrForDeviceType GetFastReadResponseTimeHist256Ki;
+    NMonitoring::TPercentileTracker<16, 512, 15> GetFastReadResponseTimeInf;
+    THistoPtrForDeviceType GetFastReadResponseTimeHistInf;
+    NMonitoring::TPercentileTracker<16, 512, 15> GetDiscoverResponseTime;
+    THistoPtrForDeviceType GetDiscoverResponseTimeHist;
     NMonitoring::TPercentileTracker<16, 512, 15> GetLowReadResponseTime;
     THistoPtrForDeviceType GetLowReadResponseTimeHist;
 
@@ -63,7 +63,7 @@ struct TDsProxyNodeMon : public TThrRefBase {
     NMonitoring::TPercentileTracker<16, 512, 15> IndexRestoreGetResponseTime;
     NMonitoring::TPercentileTracker<16, 512, 15> RangeResponseTime;
 
-    std::array<bool, KnownDeviceTypesCount> IsCountersPresentedForIdx; 
+    std::array<bool, KnownDeviceTypesCount> IsCountersPresentedForIdx;
 
     // restart counters
     NMonitoring::TDynamicCounters::TCounterPtr RestartPut;
@@ -90,15 +90,15 @@ struct TDsProxyNodeMon : public TThrRefBase {
     NMonitoring::TDynamicCounters::TCounterPtr UnconfiguredTimeout;
     NMonitoring::TDynamicCounters::TCounterPtr UnconfiguredTimeout5min;
 
-    TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &counters, bool initForAllDeviceTypes); 
-    void CountPutPesponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EPutHandleClass cls, ui32 size, 
-            TDuration duration); 
-    void CountGetResponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EGetHandleClass cls, ui32 size, 
-            TDuration duration); 
+    TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &counters, bool initForAllDeviceTypes);
+    void CountPutPesponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EPutHandleClass cls, ui32 size,
+            TDuration duration);
+    void CountGetResponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EGetHandleClass cls, ui32 size,
+            TDuration duration);
     void CountPatchResponseTime(TPDiskCategory::EDeviceType type, TDuration duration);
- 
-    // Called only from NodeWarder 
-    void CheckNodeMonCountersForDeviceType(TPDiskCategory::EDeviceType type); 
+
+    // Called only from NodeWarder
+    void CheckNodeMonCountersForDeviceType(TPDiskCategory::EDeviceType type);
 };
 
 } // NKikimr

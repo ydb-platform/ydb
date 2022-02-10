@@ -807,72 +807,72 @@ namespace NKikimr {
             RecoveredLsn = record.Lsn;
 
             switch (record.Signature) {
-                case TLogSignature::SignatureLogoBlob: 
+                case TLogSignature::SignatureLogoBlob:
                     LocRecCtx->RecovInfo->DispatchSignatureLogoBlob(record);
                     return HandleLogoBlob(ctx, record);
-                case TLogSignature::SignatureBlock: 
+                case TLogSignature::SignatureBlock:
                     LocRecCtx->RecovInfo->DispatchSignatureBlock(record);
                     return HandleBlock(ctx, record);
-                case TLogSignature::SignatureGC: 
+                case TLogSignature::SignatureGC:
                     LocRecCtx->RecovInfo->DispatchSignatureGC(record);
                     return HandleGC(ctx, record);
-                case TLogSignature::SignatureSyncLogIdx: 
+                case TLogSignature::SignatureSyncLogIdx:
                     LocRecCtx->RecovInfo->DispatchSignatureSyncLogIdx(record);
                     return EDispatchStatus::Success; // entry point, already handled
-                case TLogSignature::SignatureHullLogoBlobsDB: 
+                case TLogSignature::SignatureHullLogoBlobsDB:
                     LocRecCtx->RecovInfo->DispatchSignatureHullLogoBlobsDB(record);
                     return HandleHugeSlotsDelLogoBlobsDB(ctx, record);
-                case TLogSignature::SignatureHullBlocksDB: 
+                case TLogSignature::SignatureHullBlocksDB:
                     LocRecCtx->RecovInfo->DispatchSignatureHullBlocksDB(record);
                     // entry point already handled, take care of huge slots
                     return HandleHugeSlotsDelBlocksDB(ctx, record);
-                case TLogSignature::SignatureHullBarriersDB: 
+                case TLogSignature::SignatureHullBarriersDB:
                     LocRecCtx->RecovInfo->DispatchSignatureHullBarriersDB(record);
                     // entry point already handled, take care of huge slots
                     return HandleHugeSlotsDelBarriersDB(ctx, record);
-                case TLogSignature::SignatureHullCutLog: 
+                case TLogSignature::SignatureHullCutLog:
                     LocRecCtx->RecovInfo->DispatchSignatureHullCutLog(record);
                     return EDispatchStatus::Success;
-                case TLogSignature::SignatureLocalSyncData: 
+                case TLogSignature::SignatureLocalSyncData:
                     LocRecCtx->RecovInfo->DispatchSignatureLocalSyncData(record);
                     return HandleSyncData(ctx, record);
-                case TLogSignature::SignatureSyncerState: 
+                case TLogSignature::SignatureSyncerState:
                     LocRecCtx->RecovInfo->DispatchSignatureSyncerState(record);
                     return EDispatchStatus::Success; // entry point, already handled
-                case TLogSignature::SignatureHandoffDelLogoBlob: 
+                case TLogSignature::SignatureHandoffDelLogoBlob:
                     LocRecCtx->RecovInfo->DispatchSignatureHandoffDelLogoBlob(record);
                     return HandleHandoffDel(ctx, record);
-                case TLogSignature::SignatureHugeBlobAllocChunk: 
+                case TLogSignature::SignatureHugeBlobAllocChunk:
                     LocRecCtx->RecovInfo->DispatchSignatureHugeBlobAllocChunk(record);
                     return HandleHugeBlobAllocChunk(ctx, record);
-                case TLogSignature::SignatureHugeBlobFreeChunk: 
+                case TLogSignature::SignatureHugeBlobFreeChunk:
                     LocRecCtx->RecovInfo->DispatchSignatureHugeBlobFreeChunk(record);
                     return HandleHugeBlobFreeChunk(ctx, record);
-                case TLogSignature::SignatureHugeBlobEntryPoint: 
+                case TLogSignature::SignatureHugeBlobEntryPoint:
                     LocRecCtx->RecovInfo->DispatchSignatureHugeBlobEntryPoint(record);
                     return HandleHugeBlobEntryPoint(ctx, record);
-                case TLogSignature::SignatureHugeLogoBlob: 
+                case TLogSignature::SignatureHugeLogoBlob:
                     LocRecCtx->RecovInfo->DispatchSignatureHugeLogoBlob(record);
                     return HandleHugeLogoBlob(ctx, record);
-                case TLogSignature::SignatureLogoBlobOpt: 
+                case TLogSignature::SignatureLogoBlobOpt:
                     LocRecCtx->RecovInfo->DispatchSignatureLogoBlobOpt(record);
                     return HandleOptLogoBlob(ctx, record);
-                case TLogSignature::SignaturePhantomBlobs: 
+                case TLogSignature::SignaturePhantomBlobs:
                     LocRecCtx->RecovInfo->DispatchSignaturePhantomBlobs(record);
                     return HandlePhantomLogoBlobs(ctx, record);
-                case TLogSignature::SignatureAnubisOsirisPut: 
+                case TLogSignature::SignatureAnubisOsirisPut:
                     LocRecCtx->RecovInfo->DispatchSignatureAnubisOsirisPut(record);
                     return HandleAnubisOsirisPut(ctx, record);
-                case TLogSignature::SignatureAddBulkSst: 
+                case TLogSignature::SignatureAddBulkSst:
                     LocRecCtx->RecovInfo->DispatchSignatureAddBulkSst(record);
                     return HandleAddBulkSst(ctx, record);
                 case TLogSignature::SignatureScrub:
                     LocRecCtx->RecovInfo->DispatchSignatureScrub(record);
                     return HandleScrub(ctx, record);
-                case TLogSignature::Max: 
+                case TLogSignature::Max:
                     break;
             }
-            Y_FAIL_S("Unexpected case: " << record.Signature.ToString()); 
+            Y_FAIL_S("Unexpected case: " << record.Signature.ToString());
         }
 
         void VerifyOwnedChunks(const TActorContext& ctx) {

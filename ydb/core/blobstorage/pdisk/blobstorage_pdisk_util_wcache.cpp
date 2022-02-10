@@ -2,64 +2,64 @@
 #include <library/cpp/actors/core/log.h>
 #include <ydb/core/protos/services.pb.h>
 
-#include <util/stream/file.h> 
-#include <util/string/strip.h> 
+#include <util/stream/file.h>
+#include <util/string/strip.h>
 #include <util/system/file.h>
 
 #ifdef _linux_
-#include <libgen.h> 
-#include <limits.h> 
-#include <linux/fs.h> 
-#include <linux/nvme_ioctl.h> 
-#include <stdlib.h> 
+#include <libgen.h>
+#include <limits.h>
+#include <linux/fs.h>
+#include <linux/nvme_ioctl.h>
+#include <stdlib.h>
 #include <sys/ioctl.h>
-#include <sys/stat.h> 
-#include <sys/types.h> 
+#include <sys/stat.h>
+#include <sys/types.h>
 //#include <linux/hdreg.h>
 #define HDIO_GET_WCACHE         0x030e  /* get write cache mode on|off */
 #define HDIO_SET_WCACHE         0x032b  /* change write cache enable-disable */
 #endif
 
-#include <regex> 
- 
+#include <regex>
+
 namespace NKikimr {
 namespace NPDisk {
 
 #ifndef _linux_
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Compatibility version
-EWriteCacheResult FlushWriteCache(FHANDLE file, const TString &path, TStringStream *outDetails) { 
+EWriteCacheResult FlushWriteCache(FHANDLE file, const TString &path, TStringStream *outDetails) {
     Y_UNUSED(file);
     if (outDetails) {
         (*outDetails) << "FlushWriteCache is not implemented, path# \"" << path << "\"";
     }
-    return WriteCacheResultErrorPersistent; 
+    return WriteCacheResultErrorPersistent;
 }
 
-std::optional<TDriveData> GetDriveData(const TString &path, TStringStream *outDetails) { 
-    if (outDetails) { 
-        (*outDetails) << "GetDriveData is not implemented, path# \"" << path << "\""; 
-    } 
-    return std::nullopt; 
-} 
- 
-EWriteCacheResult GetWriteCache(FHANDLE file, const TString &path, TDriveData *outDriveData, TStringStream *outDetails) { 
+std::optional<TDriveData> GetDriveData(const TString &path, TStringStream *outDetails) {
+    if (outDetails) {
+        (*outDetails) << "GetDriveData is not implemented, path# \"" << path << "\"";
+    }
+    return std::nullopt;
+}
+
+EWriteCacheResult GetWriteCache(FHANDLE file, const TString &path, TDriveData *outDriveData, TStringStream *outDetails) {
     Y_VERIFY(outDriveData);
     Y_UNUSED(file);
     if (outDetails) {
         (*outDetails) << "GetWriteCache is not implemented, path# \"" << path << "\"";
     }
-    *outDriveData = TDriveData{}; 
- 
-    return WriteCacheResultErrorPersistent; 
+    *outDriveData = TDriveData{};
+
+    return WriteCacheResultErrorPersistent;
 }
 
-EWriteCacheResult SetWriteCache(FHANDLE file, const TString &path, bool isEnable, TStringStream *outDetails) { 
+EWriteCacheResult SetWriteCache(FHANDLE file, const TString &path, bool isEnable, TStringStream *outDetails) {
     Y_UNUSED(file);
     if (outDetails) {
         (*outDetails) << "SetWriteCache is not implemented, path# \"" << path << "\" isEnable# " << isEnable;
     }
-    return WriteCacheResultErrorPersistent; 
+    return WriteCacheResultErrorPersistent;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -297,7 +297,7 @@ enum EAtaOperationCode {
     AOC_ATA_16 = 0x85
 };
 
-EWriteCacheResult AtaPassThrough(FHANDLE file, ui8 command, ui8 features, ui8 dataCount, ui8 *data, bool preferAta12, 
+EWriteCacheResult AtaPassThrough(FHANDLE file, ui8 command, ui8 features, ui8 dataCount, ui8 *data, bool preferAta12,
         ui32 timeoutMs, TStringStream *outDetails) {
     Y_VERIFY(!dataCount || data);
     ui32 dataBytes = dataCount * 512;
@@ -351,30 +351,30 @@ EWriteCacheResult AtaPassThrough(FHANDLE file, ui8 command, ui8 features, ui8 da
     ioHdr.sbp = sb.Raw;
     ioHdr.timeout = timeoutMs;
 
- 
-    if (ioctl(file, SG_IO, &ioHdr) == -1) { 
+
+    if (ioctl(file, SG_IO, &ioHdr) == -1) {
         if (outDetails) {
             (*outDetails) << "SG_IO not supported (?)";
         }
-        return WriteCacheResultErrorPersistent; 
+        return WriteCacheResultErrorPersistent;
     }
     if (ioHdr.status && ioHdr.status != SG_CHECK_CONDITION) {
         if (outDetails) {
             (*outDetails) << "SG_IO: bad status# " << (ui32)ioHdr.status;
         }
-        return WriteCacheResultErrorTemporary; 
+        return WriteCacheResultErrorTemporary;
     }
     if (ioHdr.host_status) {
         if (outDetails) {
             (*outDetails) << "SG_IO: bad host status# " << (ui32)ioHdr.host_status;
         }
-        return WriteCacheResultErrorTemporary; 
+        return WriteCacheResultErrorTemporary;
     }
     if (ioHdr.driver_status && (ioHdr.driver_status != SG_DRIVER_SENSE)) {
         if (outDetails) {
             (*outDetails) << "SG_IO: bad driver_status# " << (ui32)ioHdr.driver_status;
         }
-        return WriteCacheResultErrorPersistent; 
+        return WriteCacheResultErrorPersistent;
     }
     if (sb.Desc.Status.ErrorCheckCondition || sb.Desc.Status.DataRequest) {
         if (ioHdr.driver_status != SG_DRIVER_SENSE) {
@@ -383,7 +383,7 @@ EWriteCacheResult AtaPassThrough(FHANDLE file, ui8 command, ui8 features, ui8 da
                 if (outDetails) {
                     (*outDetails) << "SG_IO: questionable sense data, results may be incorrect.";
                 }
-                return WriteCacheResultErrorPersistent; 
+                return WriteCacheResultErrorPersistent;
             }
         } else if (sb.Raw[0] != 0x72 || sb.Raw[7] < 14 ||
                 sb.Desc.DescriptorCode != 0x09 || sb.Desc.AdditionalDescriptorLength < 0x0c) {
@@ -395,9 +395,9 @@ EWriteCacheResult AtaPassThrough(FHANDLE file, ui8 command, ui8 features, ui8 da
             (*outDetails) << "I/O error, command# " << (ui32)command << " status# " << (ui32)sb.Desc.Status.Raw
                 << "error# " << (ui32)sb.Desc.Error;
         }
-        return WriteCacheResultErrorTemporary; 
+        return WriteCacheResultErrorTemporary;
     }
-    return WriteCacheResultOk; 
+    return WriteCacheResultOk;
 }
 
 enum EThreeValuedLogic {
@@ -436,15 +436,15 @@ struct TIdentifyData {
     TString GetString(ui32 offsetWords, ui32 sizeBytes) const {
         Y_VERIFY(Id);
         TString string;
-        string.resize(sizeBytes); 
-        char *dst = string.Detach(); 
+        string.resize(sizeBytes);
+        char *dst = string.Detach();
         char *src = reinterpret_cast<char*>(&Id[offsetWords]);
         Y_VERIFY((sizeBytes & 1) == 0);
         for (ui32 i = 0; i < sizeBytes; i += 2) {
             dst[i + 0] = src[i + 1];
             dst[i + 1] = src[i + 0];
         }
-        return StripString(string); 
+        return StripString(string);
     }
 
     TString GetSerialNumber() const {
@@ -459,17 +459,17 @@ struct TIdentifyData {
         return GetString(27, 40);
     }
 
-    TPDiskCategory::EDeviceType GetDeviceType() const { 
-        // "nominal media rotation rate" of HDD devices, equals to 1 for SSD 
-        if (Id[217] > 0x401) { 
-            return TPDiskCategory::DEVICE_TYPE_ROT; 
-        } else if (Id[217] == 1) { 
-            return TPDiskCategory::DEVICE_TYPE_SSD; 
-        } else { 
-            return TPDiskCategory::DEVICE_TYPE_UNKNOWN; 
-        } 
-    } 
- 
+    TPDiskCategory::EDeviceType GetDeviceType() const {
+        // "nominal media rotation rate" of HDD devices, equals to 1 for SSD
+        if (Id[217] > 0x401) {
+            return TPDiskCategory::DEVICE_TYPE_ROT;
+        } else if (Id[217] == 1) {
+            return TPDiskCategory::DEVICE_TYPE_SSD;
+        } else {
+            return TPDiskCategory::DEVICE_TYPE_UNKNOWN;
+        }
+    }
+
     EThreeValuedLogic Is3WriteCacheSuppored() const {
         if (IsKnowable(83)) {
             return ((Id[82] & (1 << 5)) ? TVL_TRUE : TVL_FALSE);
@@ -506,36 +506,36 @@ struct TIdentifyData {
         }
     }
 
-    EWriteCacheResult Gather(FHANDLE file, TStringStream *outDetails) { 
+    EWriteCacheResult Gather(FHANDLE file, TStringStream *outDetails) {
         if (IsGathered) {
-            return WriteCacheResultOk; 
+            return WriteCacheResultOk;
         }
-        EWriteCacheResult res1 = AtaPassThrough(file, ATA_OP_IDENTIFY, 0, 1, Data, true, 60000, outDetails); 
-        if (res1 != WriteCacheResultOk) { 
+        EWriteCacheResult res1 = AtaPassThrough(file, ATA_OP_IDENTIFY, 0, 1, Data, true, 60000, outDetails);
+        if (res1 != WriteCacheResultOk) {
             IsAta12 = false;
-            EWriteCacheResult res2 = AtaPassThrough(file, ATA_OP_PIDENTIFY, 0, 1, Data, false, 60000, outDetails); 
-            if (res2 != WriteCacheResultOk) { 
+            EWriteCacheResult res2 = AtaPassThrough(file, ATA_OP_PIDENTIFY, 0, 1, Data, false, 60000, outDetails);
+            if (res2 != WriteCacheResultOk) {
                 if (outDetails) {
                     (*outDetails) << "GetIdentifyData failed both ATA_OP_IDENTIFY and ATA_OP_PIDENTIFY.";
                 }
-                if (res1 == WriteCacheResultErrorPersistent && res2 == WriteCacheResultErrorPersistent) { 
-                    return WriteCacheResultErrorPersistent; 
+                if (res1 == WriteCacheResultErrorPersistent && res2 == WriteCacheResultErrorPersistent) {
+                    return WriteCacheResultErrorPersistent;
                 } else {
-                    return WriteCacheResultErrorTemporary; 
+                    return WriteCacheResultErrorTemporary;
                 }
             }
         }
         ToHostByteOrder();
         IsGathered = true;
         Id = (ui16*)(void*)Data;
-        return WriteCacheResultOk; 
+        return WriteCacheResultOk;
     }
 };
 
-EWriteCacheResult FlushWriteCache(FHANDLE file, const TString &path, TStringStream *outDetails) { 
+EWriteCacheResult FlushWriteCache(FHANDLE file, const TString &path, TStringStream *outDetails) {
     TIdentifyData identify;
-    EWriteCacheResult res = identify.Gather(file, outDetails); 
-    if (res != WriteCacheResultOk) { 
+    EWriteCacheResult res = identify.Gather(file, outDetails);
+    if (res != WriteCacheResultOk) {
         if (outDetails) {
             (*outDetails) << "FlushWriteCache failed, path# \"" << path << "\"";
         }
@@ -545,7 +545,7 @@ EWriteCacheResult FlushWriteCache(FHANDLE file, const TString &path, TStringStre
     bool useExt = (identify.Is3FlushCacheExtSuppored() == TVL_TRUE);
     res = AtaPassThrough(file, useExt ? ATA_OP_FLUSHCACHE_EXT : ATA_OP_FLUSHCACHE,
             0, 0, nullptr, useExt, 60000, outDetails);
-    if (res != WriteCacheResultOk) { 
+    if (res != WriteCacheResultOk) {
         if (outDetails) {
             (*outDetails) << "FlushWriteCache failed, path# \"" << path << "\"";
             (*outDetails) << " op# " << (useExt ? "ATA_OP_FLUSHCACHE_EXT" : "ATA_OP_FLUSHCACHE");
@@ -553,147 +553,147 @@ EWriteCacheResult FlushWriteCache(FHANDLE file, const TString &path, TStringStre
         }
         return res;
     }
-    return WriteCacheResultOk; 
+    return WriteCacheResultOk;
 }
 
-//////////////////////////////////////////////////////////////////////////////// 
-// NVMe admin command 
-//////////////////////////////////////////////////////////////////////////////// 
- 
-static constexpr ui64 NVME_ADMIN_IDENTIFY_OPCODE = 0x06; 
-static constexpr ui64 NVME_IDENTIFY_DATA_SIZE = 4096; 
- 
-static constexpr ui64 NVME_ID_MODEL_NUMBER_OFFSET = 4; 
-static constexpr ui64 NVME_ID_MODEL_NUMBER_SIZE = 20; 
-static constexpr ui64 NVME_ID_SERIAL_NUMBER_OFFSET = 24; 
-static constexpr ui64 NVME_ID_SERIAL_NUMBER_SIZE = 40; 
-static constexpr ui64 NVME_ID_FIRMWARE_REVISION_OFFSET = 64; 
-static constexpr ui64 NVME_ID_FIRMWARE_REVISION_SIZE = 8; 
- 
-static TArrayHolder<char> GetNvmeIdentifyStruct(int fd, TStringStream *outDetails) 
-{ 
+////////////////////////////////////////////////////////////////////////////////
+// NVMe admin command
+////////////////////////////////////////////////////////////////////////////////
+
+static constexpr ui64 NVME_ADMIN_IDENTIFY_OPCODE = 0x06;
+static constexpr ui64 NVME_IDENTIFY_DATA_SIZE = 4096;
+
+static constexpr ui64 NVME_ID_MODEL_NUMBER_OFFSET = 4;
+static constexpr ui64 NVME_ID_MODEL_NUMBER_SIZE = 20;
+static constexpr ui64 NVME_ID_SERIAL_NUMBER_OFFSET = 24;
+static constexpr ui64 NVME_ID_SERIAL_NUMBER_SIZE = 40;
+static constexpr ui64 NVME_ID_FIRMWARE_REVISION_OFFSET = 64;
+static constexpr ui64 NVME_ID_FIRMWARE_REVISION_SIZE = 8;
+
+static TArrayHolder<char> GetNvmeIdentifyStruct(int fd, TStringStream *outDetails)
+{
     TArrayHolder<char> id_ctrl_buffer{new char[NVME_IDENTIFY_DATA_SIZE]};
-    memset(id_ctrl_buffer.Get(), 0, NVME_IDENTIFY_DATA_SIZE); 
-    struct nvme_admin_cmd cmd; 
-    memset(&cmd, 0, sizeof(struct nvme_admin_cmd)); 
- 
-    cmd.opcode = NVME_ADMIN_IDENTIFY_OPCODE; 
-    cmd.addr = reinterpret_cast<__u64>(id_ctrl_buffer.Get()); 
-    cmd.data_len = NVME_IDENTIFY_DATA_SIZE; 
-    cmd.nsid = 0; 
-    //  bits 31:16 -- Controller Identifier (CNTID) 
-    //  bits 15:08 -- Reserved 
-    //  bits 07:00 -- Controller or Namespace Structure (CNS). 
-    cmd.cdw10 = 0x01; // CNS == 01h -- Identify Controller data structure for the controller processing the command. 
-    //  bits 31:16 -- Reserved 
-    //  bits 15:00 -- NVM Set Identifier (NVMSETID). This field is used for Identify operations with a CNS value of 04h 
-    cmd.cdw11 = 0; 
- 
-    if (ioctl(fd, NVME_IOCTL_ADMIN_CMD, &cmd) == 0) { 
-        return id_ctrl_buffer; 
-    } else { 
-        if (outDetails) { 
-            *outDetails  << "error in NVME_IOCTL_ADMIN_CMD ioctl, errno# " << errno << " strerror# " << strerror(errno); 
-        } 
-        return nullptr; 
-    } 
-} 
- 
-static TString RenderCharField(const char *s, size_t n) { 
-    TString str(s, n); 
-    if (size_t end = str.find('\0'); end != TString::npos) { 
-        str.resize(end); 
-    } 
-    return StripString(str); 
-} 
- 
-static std::optional<TDriveData> GetNvmeDriveData(int fd, TStringStream *outDetails) { 
-    if (TArrayHolder<char> id_data = GetNvmeIdentifyStruct(fd, outDetails)) { 
-        TDriveData data; 
-        data.IsWriteCacheValid = false; 
-        const char *id = id_data.Get(); 
-        data.SerialNumber = RenderCharField(id + NVME_ID_SERIAL_NUMBER_OFFSET, NVME_ID_SERIAL_NUMBER_SIZE); 
-        data.ModelNumber = RenderCharField(id + NVME_ID_MODEL_NUMBER_OFFSET, NVME_ID_MODEL_NUMBER_SIZE); 
-        data.FirmwareRevision = RenderCharField(id + NVME_ID_FIRMWARE_REVISION_OFFSET, NVME_ID_FIRMWARE_REVISION_SIZE); 
-        data.DeviceType = TPDiskCategory::DEVICE_TYPE_NVME; 
-        return data; 
-    } else { 
-        return std::nullopt; 
-    } 
-} 
- 
-static std::optional<TDriveData> GetSysfsDriveData(const TString &path, TStringStream *outDetails) { 
-    char realPath[PATH_MAX]; 
-    char *res = realpath(path.Data(), realPath); 
-    if (res == NULL) { 
-        if (errno == ENOENT) { 
-            ythrow TFileError() << "no such file# " << path; 
-        } 
-        *outDetails << "erron in realpath(), details# " << strerror(errno); 
-        return std::nullopt; 
-    } 
-    std::regex name_regex(R"__(nvme\d+n\d+)__"); 
-    std::cmatch match; 
-    if (!std::regex_search(realPath, match, name_regex)) { 
-        *outDetails << "regex_search failed, realPath# " << realPath; 
-        return std::nullopt; 
-    } 
-    if (match.size() != 1) { 
-        *outDetails << "regex_match size not equals to 1, realPath# " << realPath; 
-        return std::nullopt; 
-    } 
-    TString nvme_sysfs = TStringBuilder() << "/sys/block/" << match[0].str() << "/"; 
- 
-    auto readField = [&] (TStringBuf subpath) { 
-        return StripString(TFileInput(nvme_sysfs + subpath).ReadAll()); 
-    }; 
- 
-    try { 
-        TDriveData data; 
-        data.IsWriteCacheValid = false; 
-        data.SerialNumber = readField("device/serial"); 
-        data.ModelNumber = readField("device/model"); 
-        data.FirmwareRevision = readField("device/firmware_rev"); 
-        data.DeviceType = TPDiskCategory::DEVICE_TYPE_NVME; 
-        return data; 
-    } catch (const TFileError& err) { 
-        *outDetails << "can't open sysfs files, caught TFileError, what# " << err.what(); 
-        return std::nullopt; 
-    } 
-} 
- 
-std::optional<TDriveData> GetDriveData(const TString &path, TStringStream *outDetails) { 
-    try { 
-        TFile f(path, OpenExisting | RdOnly); 
-        TDriveData data; 
-        EWriteCacheResult res = GetWriteCache(f.GetHandle(), path, &data, outDetails); 
-        if (res == EWriteCacheResult::WriteCacheResultOk) { 
-            data.Path = path; 
-            return data; 
-        } 
-        *outDetails << "; "; 
-        if (std::optional<TDriveData> nvmeData = GetSysfsDriveData(path, outDetails)) { 
-            nvmeData->Path = path; 
-            return nvmeData; 
-        } 
-        *outDetails << "; "; 
-        if (std::optional<TDriveData> nvmeData = GetNvmeDriveData(f.GetHandle(), outDetails)) { 
-            nvmeData->Path = path; 
-            return nvmeData; 
-        } 
-        return std::nullopt; 
-    } catch (const TFileError& err) { 
-        *outDetails << "caught TFileError, what# " << err.what(); 
-        return std::nullopt; 
-    } 
-} 
- 
-EWriteCacheResult GetWriteCache(FHANDLE file, const TString &path, TDriveData *outDriveData, 
+    memset(id_ctrl_buffer.Get(), 0, NVME_IDENTIFY_DATA_SIZE);
+    struct nvme_admin_cmd cmd;
+    memset(&cmd, 0, sizeof(struct nvme_admin_cmd));
+
+    cmd.opcode = NVME_ADMIN_IDENTIFY_OPCODE;
+    cmd.addr = reinterpret_cast<__u64>(id_ctrl_buffer.Get());
+    cmd.data_len = NVME_IDENTIFY_DATA_SIZE;
+    cmd.nsid = 0;
+    //  bits 31:16 -- Controller Identifier (CNTID)
+    //  bits 15:08 -- Reserved
+    //  bits 07:00 -- Controller or Namespace Structure (CNS).
+    cmd.cdw10 = 0x01; // CNS == 01h -- Identify Controller data structure for the controller processing the command.
+    //  bits 31:16 -- Reserved
+    //  bits 15:00 -- NVM Set Identifier (NVMSETID). This field is used for Identify operations with a CNS value of 04h
+    cmd.cdw11 = 0;
+
+    if (ioctl(fd, NVME_IOCTL_ADMIN_CMD, &cmd) == 0) {
+        return id_ctrl_buffer;
+    } else {
+        if (outDetails) {
+            *outDetails  << "error in NVME_IOCTL_ADMIN_CMD ioctl, errno# " << errno << " strerror# " << strerror(errno);
+        }
+        return nullptr;
+    }
+}
+
+static TString RenderCharField(const char *s, size_t n) {
+    TString str(s, n);
+    if (size_t end = str.find('\0'); end != TString::npos) {
+        str.resize(end);
+    }
+    return StripString(str);
+}
+
+static std::optional<TDriveData> GetNvmeDriveData(int fd, TStringStream *outDetails) {
+    if (TArrayHolder<char> id_data = GetNvmeIdentifyStruct(fd, outDetails)) {
+        TDriveData data;
+        data.IsWriteCacheValid = false;
+        const char *id = id_data.Get();
+        data.SerialNumber = RenderCharField(id + NVME_ID_SERIAL_NUMBER_OFFSET, NVME_ID_SERIAL_NUMBER_SIZE);
+        data.ModelNumber = RenderCharField(id + NVME_ID_MODEL_NUMBER_OFFSET, NVME_ID_MODEL_NUMBER_SIZE);
+        data.FirmwareRevision = RenderCharField(id + NVME_ID_FIRMWARE_REVISION_OFFSET, NVME_ID_FIRMWARE_REVISION_SIZE);
+        data.DeviceType = TPDiskCategory::DEVICE_TYPE_NVME;
+        return data;
+    } else {
+        return std::nullopt;
+    }
+}
+
+static std::optional<TDriveData> GetSysfsDriveData(const TString &path, TStringStream *outDetails) {
+    char realPath[PATH_MAX];
+    char *res = realpath(path.Data(), realPath);
+    if (res == NULL) {
+        if (errno == ENOENT) {
+            ythrow TFileError() << "no such file# " << path;
+        }
+        *outDetails << "erron in realpath(), details# " << strerror(errno);
+        return std::nullopt;
+    }
+    std::regex name_regex(R"__(nvme\d+n\d+)__");
+    std::cmatch match;
+    if (!std::regex_search(realPath, match, name_regex)) {
+        *outDetails << "regex_search failed, realPath# " << realPath;
+        return std::nullopt;
+    }
+    if (match.size() != 1) {
+        *outDetails << "regex_match size not equals to 1, realPath# " << realPath;
+        return std::nullopt;
+    }
+    TString nvme_sysfs = TStringBuilder() << "/sys/block/" << match[0].str() << "/";
+
+    auto readField = [&] (TStringBuf subpath) {
+        return StripString(TFileInput(nvme_sysfs + subpath).ReadAll());
+    };
+
+    try {
+        TDriveData data;
+        data.IsWriteCacheValid = false;
+        data.SerialNumber = readField("device/serial");
+        data.ModelNumber = readField("device/model");
+        data.FirmwareRevision = readField("device/firmware_rev");
+        data.DeviceType = TPDiskCategory::DEVICE_TYPE_NVME;
+        return data;
+    } catch (const TFileError& err) {
+        *outDetails << "can't open sysfs files, caught TFileError, what# " << err.what();
+        return std::nullopt;
+    }
+}
+
+std::optional<TDriveData> GetDriveData(const TString &path, TStringStream *outDetails) {
+    try {
+        TFile f(path, OpenExisting | RdOnly);
+        TDriveData data;
+        EWriteCacheResult res = GetWriteCache(f.GetHandle(), path, &data, outDetails);
+        if (res == EWriteCacheResult::WriteCacheResultOk) {
+            data.Path = path;
+            return data;
+        }
+        *outDetails << "; ";
+        if (std::optional<TDriveData> nvmeData = GetSysfsDriveData(path, outDetails)) {
+            nvmeData->Path = path;
+            return nvmeData;
+        }
+        *outDetails << "; ";
+        if (std::optional<TDriveData> nvmeData = GetNvmeDriveData(f.GetHandle(), outDetails)) {
+            nvmeData->Path = path;
+            return nvmeData;
+        }
+        return std::nullopt;
+    } catch (const TFileError& err) {
+        *outDetails << "caught TFileError, what# " << err.what();
+        return std::nullopt;
+    }
+}
+
+EWriteCacheResult GetWriteCache(FHANDLE file, const TString &path, TDriveData *outDriveData,
         TStringStream *outDetails) {
     Y_VERIFY(outDriveData);
     TIdentifyData identify;
-    EWriteCacheResult res = identify.Gather(file, outDetails); 
-    if (res != WriteCacheResultOk) { 
+    EWriteCacheResult res = identify.Gather(file, outDetails);
+    if (res != WriteCacheResultOk) {
         if (outDetails) {
             (*outDetails) << "GetWriteCache failed, path# \"" << path << "\"";
         }
@@ -704,26 +704,26 @@ EWriteCacheResult GetWriteCache(FHANDLE file, const TString &path, TDriveData *o
     if (wcache == TVL_UNKNOWABLE) {
         (*outDetails) << "GetWriteCache failed, write cache state is unknowable, path# \"" << path << "\"";
 
-        return WriteCacheResultErrorPersistent; 
+        return WriteCacheResultErrorPersistent;
     }
-    outDriveData->Path = path; 
+    outDriveData->Path = path;
     outDriveData->IsWriteCacheValid = true;
     outDriveData->IsWriteCacheEnabled = (wcache == TVL_TRUE);
     outDriveData->SerialNumber = identify.GetSerialNumber();
     outDriveData->FirmwareRevision = identify.GetFirmwareRevision();
     outDriveData->ModelNumber = identify.GetModelNumber();
-    outDriveData->DeviceType = identify.GetDeviceType(); 
-    return WriteCacheResultOk; 
+    outDriveData->DeviceType = identify.GetDeviceType();
+    return WriteCacheResultOk;
 }
 
-EWriteCacheResult SetWriteCache(FHANDLE file, const TString &path, bool isEnable, TStringStream *outDetails) { 
+EWriteCacheResult SetWriteCache(FHANDLE file, const TString &path, bool isEnable, TStringStream *outDetails) {
     ui8 features = (isEnable ? 0x02 : 0x82);  // 0x02 and 0x82 are magic numbers from ATA specificaton 6.49.8
-    EWriteCacheResult res = AtaPassThrough(file, ATA_OP_SETFEATURES, features, 0, nullptr, false, 60000, outDetails); 
-    if (res != WriteCacheResultOk) { 
+    EWriteCacheResult res = AtaPassThrough(file, ATA_OP_SETFEATURES, features, 0, nullptr, false, 60000, outDetails);
+    if (res != WriteCacheResultOk) {
         (*outDetails) << "SetWriteCache failed, path# \"" << path << "\" isEnable# " << isEnable;
         return res;
     }
-    return WriteCacheResultOk; 
+    return WriteCacheResultOk;
 }
 
 #endif

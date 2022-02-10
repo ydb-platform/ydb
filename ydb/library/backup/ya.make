@@ -1,15 +1,15 @@
-LIBRARY(kikimr_backup) 
- 
+LIBRARY(kikimr_backup)
+
 OWNER(
     va-kuznecov
     g:kikimr
 )
- 
-PEERDIR( 
+
+PEERDIR(
     library/cpp/bucket_quoter
     library/cpp/regex/pcre
     library/cpp/string_utils/quote
-    util 
+    util
     ydb/library/dynumber
     ydb/public/api/grpc
     ydb/public/api/protos
@@ -18,17 +18,17 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_proto
     ydb/public/sdk/cpp/client/ydb_scheme
     ydb/public/sdk/cpp/client/ydb_table
-) 
- 
-SRCS( 
-    backup.cpp 
-    query_builder.cpp 
-    query_uploader.cpp 
-    util.cpp 
-) 
- 
-END() 
- 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+)
+
+SRCS(
+    backup.cpp
+    query_builder.cpp
+    query_uploader.cpp
+    util.cpp
+)
+
+END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

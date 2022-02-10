@@ -7,24 +7,24 @@ namespace NKikimr {
 namespace NPDisk {
 
 struct TChunkIdFormatter {
-    TChunkIdFormatter(IOutputStream& str) 
+    TChunkIdFormatter(IOutputStream& str)
         : Str(str)
         , FirstOutput(true)
         , FirstChunkId(-1)
         , RunLen(0)
     {}
 
-    template <class T> 
-    void PrintBracedChunksList(const T& chunkIds) { 
-        Str << "{"; 
-        for (ui32 idx : chunkIds) { 
-            PrintChunk(idx); 
-        } 
-        Finish(); 
-        Str << "}"; 
-    } 
- 
-    void PrintChunk(ui32 chunkId) { 
+    template <class T>
+    void PrintBracedChunksList(const T& chunkIds) {
+        Str << "{";
+        for (ui32 idx : chunkIds) {
+            PrintChunk(idx);
+        }
+        Finish();
+        Str << "}";
+    }
+
+    void PrintChunk(ui32 chunkId) {
         if (chunkId == FirstChunkId + RunLen) {
             ++RunLen;
         } else {
@@ -50,12 +50,12 @@ struct TChunkIdFormatter {
         Str << FirstChunkId;
         if (RunLen > 2) {
             Str << ".." << FirstChunkId + RunLen - 1;
-        } else if (RunLen == 2) { 
+        } else if (RunLen == 2) {
             Str << ", " << FirstChunkId + 1;
         }
     }
 
-    IOutputStream& Str; 
+    IOutputStream& Str;
     bool FirstOutput;
     ui32 FirstChunkId;
     ui32 RunLen;

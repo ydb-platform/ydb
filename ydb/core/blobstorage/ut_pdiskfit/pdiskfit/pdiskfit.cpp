@@ -87,7 +87,7 @@ int main(int argc, char *argv[]) {
     fit.ErasureEncode = erasureEncode;
 
     if (test == "basic") {
-        fit.RunCycle<TBasicTest>(false, numVDisks, false); 
+        fit.RunCycle<TBasicTest>(false, numVDisks, false);
     } else {
         Cerr << "unknown test type " << test << Endl;
         return 1;

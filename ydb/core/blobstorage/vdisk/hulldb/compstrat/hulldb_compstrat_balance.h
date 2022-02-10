@@ -235,7 +235,7 @@ namespace NKikimr {
                     LOG_DEBUG(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                                 "%s: TBalancePartiallySortedLevels::CalculateRank: %s",
-                                PDiskSignatureForHullDbKey<TKey>().ToString().data(), 
+                                PDiskSignatureForHullDbKey<TKey>().ToString().data(),
                                 ToString().data()));
                 }
 
@@ -553,7 +553,7 @@ namespace NKikimr {
                     LOG_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                                 "%s: Balance: action# %s timeSpent# %s RankThreshold# %e ranks# %s",
-                                PDiskSignatureForHullDbKey<TKey>().ToString().data(), 
+                                PDiskSignatureForHullDbKey<TKey>().ToString().data(),
                                 ActionToStr(action), (finishTime - startTime).ToString().data(),
                                 RankThreshold, ranks.ToString().data()));
                 }

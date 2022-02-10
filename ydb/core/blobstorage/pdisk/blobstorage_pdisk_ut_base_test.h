@@ -7,63 +7,63 @@
 
 namespace NKikimr {
 
-class TCommonBaseTest : public TActor<TCommonBaseTest> { 
+class TCommonBaseTest : public TActor<TCommonBaseTest> {
 protected:
-    void SignalDoneEvent() { 
-        AtomicIncrement(*DoneCounter); 
-        DoneEvent->Signal(); 
-    } 
- 
-    void SignalError(const TString& error) { 
-        SignalExceptionEvent(TWithBackTrace<yexception>() << error); 
-    } 
- 
-    void SignalExceptionEvent(const yexception& ex) { 
-        *LastException = ex; 
-        AtomicSet(*IsLastExceptionSet, 1); 
-        SignalDoneEvent(); 
-    } 
- 
-public: 
-    TCommonBaseTest(const TIntrusivePtr<TTestConfig> &cfg) 
-        : TActor(&TThis::FakeState) 
-        , Yard(cfg->YardActorID) 
-        , VDiskID(cfg->VDiskID) 
-        , TestStep(0) 
-    {} 
- 
-    void Init(TAtomic *doneCounter, TSystemEvent *doneEvent, yexception *lastException, TAtomic *isLastExceptionSet, 
-            ui64 *pDiskGuid) { 
-        DoneCounter = doneCounter; 
-        DoneEvent = doneEvent; 
-        LastException = lastException; 
-        IsLastExceptionSet = isLastExceptionSet; 
-        PDiskGuid = pDiskGuid; 
-    } 
- 
-    STFUNC(FakeState) { 
-        Y_UNUSED(ev); 
-        Y_UNUSED(ctx); 
-        Y_FAIL("This class cannot be used directly. For tests inherit from it"); 
-    } 
- 
-protected: 
+    void SignalDoneEvent() {
+        AtomicIncrement(*DoneCounter);
+        DoneEvent->Signal();
+    }
+
+    void SignalError(const TString& error) {
+        SignalExceptionEvent(TWithBackTrace<yexception>() << error);
+    }
+
+    void SignalExceptionEvent(const yexception& ex) {
+        *LastException = ex;
+        AtomicSet(*IsLastExceptionSet, 1);
+        SignalDoneEvent();
+    }
+
+public:
+    TCommonBaseTest(const TIntrusivePtr<TTestConfig> &cfg)
+        : TActor(&TThis::FakeState)
+        , Yard(cfg->YardActorID)
+        , VDiskID(cfg->VDiskID)
+        , TestStep(0)
+    {}
+
+    void Init(TAtomic *doneCounter, TSystemEvent *doneEvent, yexception *lastException, TAtomic *isLastExceptionSet,
+            ui64 *pDiskGuid) {
+        DoneCounter = doneCounter;
+        DoneEvent = doneEvent;
+        LastException = lastException;
+        IsLastExceptionSet = isLastExceptionSet;
+        PDiskGuid = pDiskGuid;
+    }
+
+    STFUNC(FakeState) {
+        Y_UNUSED(ev);
+        Y_UNUSED(ctx);
+        Y_FAIL("This class cannot be used directly. For tests inherit from it");
+    }
+
+protected:
     const TActorId Yard;
-    const TVDiskID VDiskID; 
-    int TestStep; 
- 
-    TAtomic *DoneCounter = nullptr; 
-    TSystemEvent *DoneEvent = nullptr; 
-    yexception *LastException = nullptr; 
-    TAtomic *IsLastExceptionSet = nullptr; 
-    ui64 *PDiskGuid = nullptr; 
-}; 
- 
-class TBaseTest : public TCommonBaseTest { 
- 
-protected: 
+    const TVDiskID VDiskID;
+    int TestStep;
+
+    TAtomic *DoneCounter = nullptr;
+    TSystemEvent *DoneEvent = nullptr;
+    yexception *LastException = nullptr;
+    TAtomic *IsLastExceptionSet = nullptr;
+    ui64 *PDiskGuid = nullptr;
+};
+
+class TBaseTest : public TCommonBaseTest {
+
+protected:
     struct TResponseData {
-        TMap<TLogSignature, NPDisk::TLogRecord> StartingPoints; 
+        TMap<TLogSignature, NPDisk::TLogRecord> StartingPoints;
         TBufferWithGaps Data;
         TVector<NPDisk::TLogRecord> LogRecords;
         NPDisk::TEvLogResult::TResults LogResults;
@@ -71,7 +71,7 @@ protected:
         TVector<TChunkIdx> OwnedChunks;
 
         void *Cookie;
-        NPDisk::TLogPosition NextPosition; 
+        NPDisk::TLogPosition NextPosition;
         ui32 ChunkIdx;
         ui32 Offset;
         ui32 ChunkSize;
@@ -83,7 +83,7 @@ protected:
         NKikimrProto::EReplyStatus Status;
         NPDisk::TOwner Owner;
         NPDisk::TOwnerRound OwnerRound;
-        TLogSignature Signature; 
+        TLogSignature Signature;
         bool IsEndOfLog;
         NPDisk::TStatusFlags StatusFlags;
         NMon::TEvHttpInfoRes *HttpResult;
@@ -104,7 +104,7 @@ protected:
             OwnedChunks.clear();
 
             Cookie = (void*)((ui64)-1);
-            NextPosition = NPDisk::TLogPosition{0, 0}; 
+            NextPosition = NPDisk::TLogPosition{0, 0};
             ChunkIdx = 0;
             Offset = (ui32)-1;
             ChunkSize = (ui32)-1;
@@ -123,7 +123,7 @@ protected:
         }
 
         void Check() {
-            for (TMap<TLogSignature, NPDisk::TLogRecord>::iterator it = StartingPoints.begin(); 
+            for (TMap<TLogSignature, NPDisk::TLogRecord>::iterator it = StartingPoints.begin();
                 it != StartingPoints.end(); ++it) {
                 REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&it->first, sizeof(it->first));
                 it->second.Verify();
@@ -164,7 +164,7 @@ protected:
     };
 
     TResponseData LastResponse;
-    IEventHandle *Event; 
+    IEventHandle *Event;
 
     virtual void TestFSM(const TActorContext &ctx) = 0;
 
@@ -174,8 +174,8 @@ protected:
         try {
             TestFSM(ctx);
             LastResponse.Clear();
-        } catch (const yexception& ex) { 
-            SignalExceptionEvent(ex); 
+        } catch (const yexception& ex) {
+            SignalExceptionEvent(ex);
         }
     }
 
@@ -213,10 +213,10 @@ protected:
 
     void Handle(NPDisk::TEvLogResult::TPtr &ev, const TActorContext &ctx) {
         NPDisk::TEvLogResult &result = *(ev->Get());
-        // Print before move 
-        VERBOSE_COUT("Got " << result.ToString()); 
+        // Print before move
+        VERBOSE_COUT("Got " << result.ToString());
         LastResponse.Status = result.Status;
-        LastResponse.LogResults = std::move(result.Results); 
+        LastResponse.LogResults = std::move(result.Results);
         LastResponse.EventType = (TEvBlobStorage::EEv)result.Type();
         LastResponse.StatusFlags = result.StatusFlags;
         ActTestFSM(ctx);
@@ -346,14 +346,14 @@ protected:
 
 public:
     TBaseTest(const TIntrusivePtr<TTestConfig> &cfg)
-        : TCommonBaseTest(cfg) 
-    { 
-        Become(&TBaseTest::StateRegister); 
+        : TCommonBaseTest(cfg)
+    {
+        Become(&TBaseTest::StateRegister);
     }
 
- 
+
     STFUNC(StateRegister) {
-        Event = ev.Get(); 
+        Event = ev.Get();
         switch (ev->GetTypeRewrite()) {
             HFunc(NPDisk::TEvYardInitResult, Handle);
             HFunc(NPDisk::TEvCheckSpaceResult, Handle);

@@ -94,19 +94,19 @@ namespace NKikimr::NBsController {
                 NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk *pdisk = service.AddPDisks();
                 pdisk->SetNodeID(nodeId);
                 pdisk->SetPDiskID(pdiskId);
-                if (pdiskInfo.Path) { 
-                    pdisk->SetPath(pdiskInfo.Path); 
-                } else if (pdiskInfo.LastSeenPath) { 
-                    pdisk->SetPath(pdiskInfo.LastSeenPath); 
-                } 
+                if (pdiskInfo.Path) {
+                    pdisk->SetPath(pdiskInfo.Path);
+                } else if (pdiskInfo.LastSeenPath) {
+                    pdisk->SetPath(pdiskInfo.LastSeenPath);
+                }
                 pdisk->SetPDiskGuid(pdiskInfo.Guid);
-                pdisk->SetPDiskCategory(pdiskInfo.Kind.GetRaw()); 
-                pdisk->SetExpectedSerial(pdiskInfo.ExpectedSerial); 
-                pdisk->SetManagementStage(Self->SerialManagementStage); 
+                pdisk->SetPDiskCategory(pdiskInfo.Kind.GetRaw());
+                pdisk->SetExpectedSerial(pdiskInfo.ExpectedSerial);
+                pdisk->SetManagementStage(Self->SerialManagementStage);
                 if (pdiskInfo.PDiskConfig && !pdisk->MutablePDiskConfig()->ParseFromString(pdiskInfo.PDiskConfig)) {
                     // TODO(alexvru): report this somehow
                 }
-                pdisk->SetSpaceColorBorder(Self->PDiskSpaceColorBorder); 
+                pdisk->SetSpaceColorBorder(Self->PDiskSpaceColorBorder);
 
                 return pdisk;
             }
@@ -270,10 +270,10 @@ namespace NKikimr::NBsController {
                 if (base && overlay->second) {
                     const TGroupInfo::TGroupStatus& prev = base->second->Status;
                     const TGroupInfo::TGroupStatus& status = overlay->second->Status;
-                    if (status.ExpectedStatus == NKikimrBlobStorage::TGroupStatus::DISINTEGRATED && 
+                    if (status.ExpectedStatus == NKikimrBlobStorage::TGroupStatus::DISINTEGRATED &&
                             status.ExpectedStatus != prev.ExpectedStatus) { // status did really change
                         *errorDescription = TStringBuilder() << "GroupId# " << overlay->first
-                            << " ExpectedStatus# DISINTEGRATED"; 
+                            << " ExpectedStatus# DISINTEGRATED";
                         return false;
                     }
                 }
@@ -376,10 +376,10 @@ namespace NKikimr::NBsController {
             if (state.NextStoragePoolId.Changed()) {
                 db.Table<Schema::State>().Key(true).Update<Schema::State::NextStoragePoolId>(state.NextStoragePoolId.Get());
             }
-            if (state.SerialManagementStage.Changed()) { 
+            if (state.SerialManagementStage.Changed()) {
                 db.Table<Schema::State>().Key(true).Update<Schema::State::SerialManagementStage>(state.SerialManagementStage.Get());
-            } 
- 
+            }
+
             CommitSelfHealUpdates(state);
             CommitScrubUpdates(state, txc);
             CommitStoragePoolStatUpdates(state);

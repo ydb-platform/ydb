@@ -1,19 +1,19 @@
 #pragma once
- 
+
 #include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
- 
-#include <library/cpp/bucket_quoter/bucket_quoter.h> 
-#include <library/cpp/containers/stack_vector/stack_vec.h> 
-#include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h> 
 
- 
+#include <library/cpp/bucket_quoter/bucket_quoter.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
+
+
 namespace NKikimr {
 
-struct TPDiskConfig; 
- 
+struct TPDiskConfig;
+
 inline NHPTimer::STime HPNow() {
     NHPTimer::STime ret;
     GetTimeFast(&ret);
@@ -28,28 +28,28 @@ inline double HPSecondsFloat(i64 cycles) {
     }
 }
 
-inline double HPMilliSecondsFloat(i64 cycles) { 
+inline double HPMilliSecondsFloat(i64 cycles) {
     if (cycles > 0) {
-        return double(cycles) * 1000.0 / NHPTimer::GetClockRate(); 
+        return double(cycles) * 1000.0 / NHPTimer::GetClockRate();
     } else {
         return 0;
     }
 }
 
-inline ui64 HPMilliSeconds(i64 cycles) { 
-    return (ui64)HPMilliSecondsFloat(cycles); 
-} 
- 
-inline ui64 HPMicroSecondsFloat(i64 cycles) { 
+inline ui64 HPMilliSeconds(i64 cycles) {
+    return (ui64)HPMilliSecondsFloat(cycles);
+}
+
+inline ui64 HPMicroSecondsFloat(i64 cycles) {
     if (cycles > 0) {
-        return double(cycles) * 1000000.0 / NHPTimer::GetClockRate(); 
+        return double(cycles) * 1000000.0 / NHPTimer::GetClockRate();
     } else {
         return 0;
     }
 }
 
 inline ui64 HPMicroSeconds(i64 cycles) {
-    return (ui64)HPMicroSecondsFloat(cycles); 
+    return (ui64)HPMicroSecondsFloat(cycles);
 }
 
 inline ui64 HPNanoSeconds(i64 cycles) {
@@ -96,15 +96,15 @@ public:
         AdvancedTill = Now();
     }
 
-    void Initialize(TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, const TString& countName, 
-            const TString& redMsName,const TString& greenMsName) { 
-        Count = counters->GetCounter(countName, true); 
-        RedMs = counters->GetCounter(redMsName, true); 
-        GreenMs = counters->GetCounter(greenMsName, true); 
-        UpdateThreshold = HPCyclesMs(100); 
-        AdvancedTill = Now(); 
-    } 
- 
+    void Initialize(TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, const TString& countName,
+            const TString& redMsName,const TString& greenMsName) {
+        Count = counters->GetCounter(countName, true);
+        RedMs = counters->GetCounter(redMsName, true);
+        GreenMs = counters->GetCounter(greenMsName, true);
+        UpdateThreshold = HPCyclesMs(100);
+        AdvancedTill = Now();
+    }
+
     ui64 GetCount() const {
         return *Count;
     }
@@ -119,16 +119,16 @@ public:
 protected:
     void Modify(bool state, bool prevState) {
         if (state && !prevState) { // Switched to ON state
-            if (State) { 
-                *State = true; 
-            } 
+            if (State) {
+                *State = true;
+            }
             (*Count)++;
             return;
         }
         if (!state && prevState) { // Switched to OFF state
-            if (State) { 
-                *State = false; 
-            } 
+            if (State) {
+                *State = false;
+            }
             return;
         }
     }
@@ -304,176 +304,176 @@ public:
     }
 };
 
-class THistogram { 
-private: 
-    NMonitoring::THistogramPtr Histo; 
- 
-public: 
-    void Initialize(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, 
-            const TString &name, TPDiskCategory::EDeviceType deviceType) { 
-        TString histName = name + "Ms"; 
-        // Histogram backets in milliseconds 
-        auto h = NMonitoring::ExplicitHistogram(GetCommonLatencyHistBounds(deviceType)); 
-        Histo = counters->GetNamedHistogram("sensor", histName, std::move(h)); 
-    } 
- 
-    void Increment(double timeMs) { 
-        if (Histo) { 
-            Histo->Collect(timeMs); 
-        } 
-    } 
-}; 
- 
+class THistogram {
+private:
+    NMonitoring::THistogramPtr Histo;
+
+public:
+    void Initialize(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+            const TString &name, TPDiskCategory::EDeviceType deviceType) {
+        TString histName = name + "Ms";
+        // Histogram backets in milliseconds
+        auto h = NMonitoring::ExplicitHistogram(GetCommonLatencyHistBounds(deviceType));
+        Histo = counters->GetNamedHistogram("sensor", histName, std::move(h));
+    }
+
+    void Increment(double timeMs) {
+        if (Histo) {
+            Histo->Collect(timeMs);
+        }
+    }
+};
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // PDisk monitoring counters
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 struct TPDiskMon {
     struct TPDisk {
-        enum EBriefState { 
-            Booting, 
-            OK, 
-            Error, 
-        }; 
- 
-        enum EDetailedState { 
-            EverythingIsOk, 
-            BootingFormatRead, 
-            BootingSysLogRead, 
-            BootingCommonLogRead, 
-            BootingFormatMagicChecking, 
-            BootingDeviceFormattingAndTrimming, 
-            ErrorInitialFormatRead, 
+        enum EBriefState {
+            Booting,
+            OK,
+            Error,
+        };
+
+        enum EDetailedState {
+            EverythingIsOk,
+            BootingFormatRead,
+            BootingSysLogRead,
+            BootingCommonLogRead,
+            BootingFormatMagicChecking,
+            BootingDeviceFormattingAndTrimming,
+            ErrorInitialFormatRead,
             ErrorInitialFormatReadDueToGuid,
-            ErrorInitialFormatReadIncompleteFormat, 
-            ErrorDiskCannotBeFormated, 
-            ErrorPDiskCannotBeInitialised, 
-            ErrorInitialSysLogRead, 
-            ErrorInitialSysLogParse, 
-            ErrorInitialCommonLogRead, 
-            ErrorInitialCommonLogParse, 
-            ErrorCommonLoggerInit, 
-            ErrorOpenNonexistentFile, 
-            ErrorOpenFileWithoutPermissions, 
-            ErrorOpenFileUnknown, 
+            ErrorInitialFormatReadIncompleteFormat,
+            ErrorDiskCannotBeFormated,
+            ErrorPDiskCannotBeInitialised,
+            ErrorInitialSysLogRead,
+            ErrorInitialSysLogParse,
+            ErrorInitialCommonLogRead,
+            ErrorInitialCommonLogParse,
+            ErrorCommonLoggerInit,
+            ErrorOpenNonexistentFile,
+            ErrorOpenFileWithoutPermissions,
+            ErrorOpenFileUnknown,
             ErrorCalculatingChunkQuotas,
-            ErrorDeviceIoError, 
-            ErrorNoDeviceWithSuchSerial, 
-            ErrorDeviceSerialMismatch, 
-            ErrorFake, 
-        }; 
- 
-        static TString StateToStr(i64 val) { 
+            ErrorDeviceIoError,
+            ErrorNoDeviceWithSuchSerial,
+            ErrorDeviceSerialMismatch,
+            ErrorFake,
+        };
+
+        static TString StateToStr(i64 val) {
             return NKikimrBlobStorage::TPDiskState::E_Name(static_cast<NKikimrBlobStorage::TPDiskState::E>(val));
         }
- 
-        static const char *BriefStateToStr(i64 val) { 
-            switch (val) { 
-                case Booting: return "Booting"; 
-                case OK: return "OK"; 
-                case Error: return "Error"; 
-                default: return "Unknown"; 
-            } 
-        } 
- 
-        static const char *DetailedStateToStr(i64 val) { 
-            switch (val) { 
-                case EverythingIsOk: return "EverythingIsOk"; 
-                case BootingFormatRead: return "BootingSysLogRead"; 
-                case BootingSysLogRead: return "BootingSysLogRead"; 
-                case BootingCommonLogRead: return "BootingCommonLogRead"; 
-                case BootingFormatMagicChecking: return "BootingFormatMagicChecking"; 
-                case BootingDeviceFormattingAndTrimming: return "BootingDeviceFormattingAndTrimming"; 
-                case ErrorInitialFormatRead: return "ErrorInitialFormatRead"; 
+
+        static const char *BriefStateToStr(i64 val) {
+            switch (val) {
+                case Booting: return "Booting";
+                case OK: return "OK";
+                case Error: return "Error";
+                default: return "Unknown";
+            }
+        }
+
+        static const char *DetailedStateToStr(i64 val) {
+            switch (val) {
+                case EverythingIsOk: return "EverythingIsOk";
+                case BootingFormatRead: return "BootingSysLogRead";
+                case BootingSysLogRead: return "BootingSysLogRead";
+                case BootingCommonLogRead: return "BootingCommonLogRead";
+                case BootingFormatMagicChecking: return "BootingFormatMagicChecking";
+                case BootingDeviceFormattingAndTrimming: return "BootingDeviceFormattingAndTrimming";
+                case ErrorInitialFormatRead: return "ErrorInitialFormatRead";
                 case ErrorInitialFormatReadDueToGuid: return "ErrorInitialFormatReadDueToGuid";
-                case ErrorInitialFormatReadIncompleteFormat: return "ErrorInitialFormatReadIncompleteFormat"; 
-                case ErrorDiskCannotBeFormated: return "ErrorDiskCannotBeFormated"; 
-                case ErrorPDiskCannotBeInitialised: return "ErrorPDiskCannotBeInitialised"; 
-                case ErrorInitialSysLogRead: return "ErrorInitialSysLogRead"; 
-                case ErrorInitialSysLogParse: return "ErrorInitialSysLogParse"; 
-                case ErrorInitialCommonLogRead: return "ErrorInitialCommonLogRead"; 
-                case ErrorInitialCommonLogParse: return "ErrorInitialCommonLogParse"; 
-                case ErrorCommonLoggerInit: return "ErrorCommonLoggerInit"; 
-                case ErrorOpenNonexistentFile: return "ErrorOpenNonexistentFile"; 
-                case ErrorOpenFileWithoutPermissions: return "ErrorOpenFileWithoutPermissions"; 
-                case ErrorOpenFileUnknown: return "ErrorOpenFileUnknown"; 
+                case ErrorInitialFormatReadIncompleteFormat: return "ErrorInitialFormatReadIncompleteFormat";
+                case ErrorDiskCannotBeFormated: return "ErrorDiskCannotBeFormated";
+                case ErrorPDiskCannotBeInitialised: return "ErrorPDiskCannotBeInitialised";
+                case ErrorInitialSysLogRead: return "ErrorInitialSysLogRead";
+                case ErrorInitialSysLogParse: return "ErrorInitialSysLogParse";
+                case ErrorInitialCommonLogRead: return "ErrorInitialCommonLogRead";
+                case ErrorInitialCommonLogParse: return "ErrorInitialCommonLogParse";
+                case ErrorCommonLoggerInit: return "ErrorCommonLoggerInit";
+                case ErrorOpenNonexistentFile: return "ErrorOpenNonexistentFile";
+                case ErrorOpenFileWithoutPermissions: return "ErrorOpenFileWithoutPermissions";
+                case ErrorOpenFileUnknown: return "ErrorOpenFileUnknown";
                 case ErrorCalculatingChunkQuotas: return "ErrorCalculatingChunkQuotas";
-                case ErrorDeviceIoError: return "ErrorDeviceIoError"; 
-                case ErrorNoDeviceWithSuchSerial: return "ErrorNoDeviceWithSuchSerial"; 
-                case ErrorDeviceSerialMismatch: return "ErrorDeviceSerialMismatch"; 
-                case ErrorFake: return "ErrorFake"; 
-                default: return "Unknown"; 
-            } 
-        } 
+                case ErrorDeviceIoError: return "ErrorDeviceIoError";
+                case ErrorNoDeviceWithSuchSerial: return "ErrorNoDeviceWithSuchSerial";
+                case ErrorDeviceSerialMismatch: return "ErrorDeviceSerialMismatch";
+                case ErrorFake: return "ErrorFake";
+                default: return "Unknown";
+            }
+        }
     };
 
-    class TUpdateDurationTracker { 
+    class TUpdateDurationTracker {
         bool IsLwProbeEnabled = false;
         NHPTimer::STime BeginUpdateAt = 0;
         NHPTimer::STime SchedulingStartAt = 0;
         NHPTimer::STime ProcessingStartAt = 0;
         NHPTimer::STime WaitingStartAt = 0;
- 
-        NMonitoring::TDynamicCounters::TCounterPtr PDiskThreadBusyTimeNs; 
- 
-    public: 
+
+        NMonitoring::TDynamicCounters::TCounterPtr PDiskThreadBusyTimeNs;
+
+    public:
         NMonitoring::TPercentileTrackerLg<5, 4, 15> UpdateCycleTime;
- 
-    public: 
-        TUpdateDurationTracker() 
-            : BeginUpdateAt(HPNow()) 
-        {} 
- 
-        void SetCounter(const NMonitoring::TDynamicCounters::TCounterPtr& pDiskThreadBusyTimeNs) { 
-            PDiskThreadBusyTimeNs = pDiskThreadBusyTimeNs; 
-        } 
- 
-        void UpdateStarted() { 
-            // BeginUpdateAt is set on the end of previous update cycle 
-            IsLwProbeEnabled = GLOBAL_LWPROBE_ENABLED(BLOBSTORAGE_PROVIDER, PDiskUpdateCycleDetails); 
-        } 
- 
-        void SchedulingStart() { 
-            if (IsLwProbeEnabled) { 
-                SchedulingStartAt = HPNow(); 
-            } 
-        } 
- 
-        void ProcessingStart() { 
-            if (IsLwProbeEnabled) { 
-                ProcessingStartAt = HPNow(); 
-            } 
-        } 
- 
-        void WaitingStart(bool isNothingToDo) { 
-            const auto now = HPNow(); 
-            if (PDiskThreadBusyTimeNs) { 
-                *PDiskThreadBusyTimeNs += HPNanoSeconds(now - BeginUpdateAt); 
-            } 
-            if (IsLwProbeEnabled || !isNothingToDo) { 
-                WaitingStartAt = now; 
-                if (!isNothingToDo) { 
-                    ui64 durationMs = HPMilliSeconds(WaitingStartAt - BeginUpdateAt); 
-                    UpdateCycleTime.Increment(durationMs); 
-                } 
-            } 
-        } 
- 
-        void UpdateEnded() { 
-            NHPTimer::STime updateEndedAt = HPNow(); 
-            if (IsLwProbeEnabled) { 
-                float entireUpdateMs = HPMilliSecondsFloat(updateEndedAt - BeginUpdateAt); 
-                float inputQueueMs = HPMilliSecondsFloat(SchedulingStartAt - BeginUpdateAt); 
-                float schedulingMs = HPMilliSecondsFloat(ProcessingStartAt - SchedulingStartAt); 
-                float processingMs = HPMilliSecondsFloat(WaitingStartAt - ProcessingStartAt); 
-                float waitingMs = HPMilliSecondsFloat(updateEndedAt - WaitingStartAt); 
-                GLOBAL_LWPROBE(BLOBSTORAGE_PROVIDER, PDiskUpdateCycleDetails, entireUpdateMs, inputQueueMs, 
-                        schedulingMs, processingMs, waitingMs); 
-            } 
-            BeginUpdateAt = updateEndedAt; 
-        } 
-    }; 
- 
+
+    public:
+        TUpdateDurationTracker()
+            : BeginUpdateAt(HPNow())
+        {}
+
+        void SetCounter(const NMonitoring::TDynamicCounters::TCounterPtr& pDiskThreadBusyTimeNs) {
+            PDiskThreadBusyTimeNs = pDiskThreadBusyTimeNs;
+        }
+
+        void UpdateStarted() {
+            // BeginUpdateAt is set on the end of previous update cycle
+            IsLwProbeEnabled = GLOBAL_LWPROBE_ENABLED(BLOBSTORAGE_PROVIDER, PDiskUpdateCycleDetails);
+        }
+
+        void SchedulingStart() {
+            if (IsLwProbeEnabled) {
+                SchedulingStartAt = HPNow();
+            }
+        }
+
+        void ProcessingStart() {
+            if (IsLwProbeEnabled) {
+                ProcessingStartAt = HPNow();
+            }
+        }
+
+        void WaitingStart(bool isNothingToDo) {
+            const auto now = HPNow();
+            if (PDiskThreadBusyTimeNs) {
+                *PDiskThreadBusyTimeNs += HPNanoSeconds(now - BeginUpdateAt);
+            }
+            if (IsLwProbeEnabled || !isNothingToDo) {
+                WaitingStartAt = now;
+                if (!isNothingToDo) {
+                    ui64 durationMs = HPMilliSeconds(WaitingStartAt - BeginUpdateAt);
+                    UpdateCycleTime.Increment(durationMs);
+                }
+            }
+        }
+
+        void UpdateEnded() {
+            NHPTimer::STime updateEndedAt = HPNow();
+            if (IsLwProbeEnabled) {
+                float entireUpdateMs = HPMilliSecondsFloat(updateEndedAt - BeginUpdateAt);
+                float inputQueueMs = HPMilliSecondsFloat(SchedulingStartAt - BeginUpdateAt);
+                float schedulingMs = HPMilliSecondsFloat(ProcessingStartAt - SchedulingStartAt);
+                float processingMs = HPMilliSecondsFloat(WaitingStartAt - ProcessingStartAt);
+                float waitingMs = HPMilliSecondsFloat(updateEndedAt - WaitingStartAt);
+                GLOBAL_LWPROBE(BLOBSTORAGE_PROVIDER, PDiskUpdateCycleDetails, entireUpdateMs, inputQueueMs,
+                        schedulingMs, processingMs, waitingMs);
+            }
+            BeginUpdateAt = updateEndedAt;
+        }
+    };
+
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     ui32 PDiskId;
 
@@ -484,39 +484,39 @@ struct TPDiskMon {
     NMonitoring::TDynamicCounters::TCounterPtr LogChunks;
     NMonitoring::TDynamicCounters::TCounterPtr UncommitedDataChunks;
     NMonitoring::TDynamicCounters::TCounterPtr CommitedDataChunks;
-    NMonitoring::TDynamicCounters::TCounterPtr LockedChunks; 
-    NMonitoring::TDynamicCounters::TCounterPtr QuarantineChunks; 
-    NMonitoring::TDynamicCounters::TCounterPtr QuarantineOwners; 
+    NMonitoring::TDynamicCounters::TCounterPtr LockedChunks;
+    NMonitoring::TDynamicCounters::TCounterPtr QuarantineChunks;
+    NMonitoring::TDynamicCounters::TCounterPtr QuarantineOwners;
 
     // statistics subgroup
     TIntrusivePtr<NMonitoring::TDynamicCounters> StatsGroup;
     NMonitoring::TDynamicCounters::TCounterPtr FreeSpacePerMile;
     NMonitoring::TDynamicCounters::TCounterPtr UsedSpacePerMile;
-    NMonitoring::TDynamicCounters::TCounterPtr SplicedLogChunks; 
+    NMonitoring::TDynamicCounters::TCounterPtr SplicedLogChunks;
 
-    NMonitoring::TDynamicCounters::TCounterPtr TotalSpaceBytes; 
-    NMonitoring::TDynamicCounters::TCounterPtr FreeSpaceBytes; 
-    NMonitoring::TDynamicCounters::TCounterPtr UsedSpaceBytes; 
-    NMonitoring::TDynamicCounters::TCounterPtr SectorMapAllocatedBytes; 
- 
+    NMonitoring::TDynamicCounters::TCounterPtr TotalSpaceBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr FreeSpaceBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr UsedSpaceBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr SectorMapAllocatedBytes;
+
     // states subgroup
     TIntrusivePtr<NMonitoring::TDynamicCounters> StateGroup;
     NMonitoring::TDynamicCounters::TCounterPtr PDiskState;
-    NMonitoring::TDynamicCounters::TCounterPtr PDiskBriefState; 
-    NMonitoring::TDynamicCounters::TCounterPtr PDiskDetailedState; 
-    NMonitoring::TDynamicCounters::TCounterPtr AtLeastOneVDiskNotLogged; 
-    NMonitoring::TDynamicCounters::TCounterPtr TooMuchLogChunks; 
-    NMonitoring::TDynamicCounters::TCounterPtr SerialNumberMismatched; 
+    NMonitoring::TDynamicCounters::TCounterPtr PDiskBriefState;
+    NMonitoring::TDynamicCounters::TCounterPtr PDiskDetailedState;
+    NMonitoring::TDynamicCounters::TCounterPtr AtLeastOneVDiskNotLogged;
+    NMonitoring::TDynamicCounters::TCounterPtr TooMuchLogChunks;
+    NMonitoring::TDynamicCounters::TCounterPtr SerialNumberMismatched;
     TLight L6;
-    TLight L7; 
-    TLight IdleLight; 
-    NMonitoring::TDynamicCounters::TCounterPtr OwnerIdsIssued; 
-    NMonitoring::TDynamicCounters::TCounterPtr LastOwnerId; 
-    NMonitoring::TDynamicCounters::TCounterPtr PendingYardInits; 
+    TLight L7;
+    TLight IdleLight;
+    NMonitoring::TDynamicCounters::TCounterPtr OwnerIdsIssued;
+    NMonitoring::TDynamicCounters::TCounterPtr LastOwnerId;
+    NMonitoring::TDynamicCounters::TCounterPtr PendingYardInits;
 
-    TAtomic SeqnoL6; 
-    TAtomic LastDoneOperationTimestamp; 
- 
+    TAtomic SeqnoL6;
+    TAtomic LastDoneOperationTimestamp;
+
     // device subgroup
     TIntrusivePtr<NMonitoring::TDynamicCounters> DeviceGroup;
     NMonitoring::TDynamicCounters::TCounterPtr DeviceBytesRead;
@@ -528,25 +528,25 @@ struct TPDiskMon {
     NMonitoring::TDynamicCounters::TCounterPtr DeviceInFlightReads;
     NMonitoring::TDynamicCounters::TCounterPtr DeviceInFlightWrites;
     NMonitoring::TDynamicCounters::TCounterPtr DeviceTakeoffs;
-    NMonitoring::TDynamicCounters::TCounterPtr DeviceLandings; 
+    NMonitoring::TDynamicCounters::TCounterPtr DeviceLandings;
     NMonitoring::TDynamicCounters::TCounterPtr DeviceHaltDetected;
     NMonitoring::TDynamicCounters::TCounterPtr DeviceExpectedSeeks;
     NMonitoring::TDynamicCounters::TCounterPtr DeviceReadCacheHits;
     NMonitoring::TDynamicCounters::TCounterPtr DeviceReadCacheMisses;
     NMonitoring::TDynamicCounters::TCounterPtr DeviceWriteCacheIsValid;
     NMonitoring::TDynamicCounters::TCounterPtr DeviceWriteCacheIsEnabled;
-    NMonitoring::TDynamicCounters::TCounterPtr DeviceOperationPoolTotalAllocations; 
-    NMonitoring::TDynamicCounters::TCounterPtr DeviceOperationPoolFreeObjectsMin; 
-    NMonitoring::TDynamicCounters::TCounterPtr DeviceBufferPoolFailedAllocations; 
-    NMonitoring::TDynamicCounters::TCounterPtr DeviceErasureSectorRestorations; 
+    NMonitoring::TDynamicCounters::TCounterPtr DeviceOperationPoolTotalAllocations;
+    NMonitoring::TDynamicCounters::TCounterPtr DeviceOperationPoolFreeObjectsMin;
+    NMonitoring::TDynamicCounters::TCounterPtr DeviceBufferPoolFailedAllocations;
+    NMonitoring::TDynamicCounters::TCounterPtr DeviceErasureSectorRestorations;
     NMonitoring::TDynamicCounters::TCounterPtr DeviceEstimatedCostNs;
     NMonitoring::TDynamicCounters::TCounterPtr DeviceActualCostNs;
     NMonitoring::TDynamicCounters::TCounterPtr DeviceOverestimationRatio;
     NMonitoring::TDynamicCounters::TCounterPtr DeviceNonperformanceMs;
     NMonitoring::TDynamicCounters::TCounterPtr DeviceInterruptedSystemCalls;
-    NMonitoring::TDynamicCounters::TCounterPtr DeviceSubmitThreadBusyTimeNs; 
-    NMonitoring::TDynamicCounters::TCounterPtr DeviceCompletionThreadBusyTimeNs; 
-    NMonitoring::TDynamicCounters::TCounterPtr DeviceIoErrors; 
+    NMonitoring::TDynamicCounters::TCounterPtr DeviceSubmitThreadBusyTimeNs;
+    NMonitoring::TDynamicCounters::TCounterPtr DeviceCompletionThreadBusyTimeNs;
+    NMonitoring::TDynamicCounters::TCounterPtr DeviceIoErrors;
 
     // queue subgroup
     TIntrusivePtr<NMonitoring::TDynamicCounters> QueueGroup;
@@ -554,29 +554,29 @@ struct TPDiskMon {
     NMonitoring::TDynamicCounters::TCounterPtr QueueBytes;
 
     // Update cycle time
-    TUpdateDurationTracker UpdateDurationTracker; 
+    TUpdateDurationTracker UpdateDurationTracker;
 
     // Device times
-    THistogram DeviceReadDuration; 
-    THistogram DeviceWriteDuration; 
-    THistogram DeviceTrimDuration; 
+    THistogram DeviceReadDuration;
+    THistogram DeviceWriteDuration;
+    THistogram DeviceTrimDuration;
 
-    // <BASE_BITS, EXP_BITS, FRAME_COUNT> 
-    using TDurationTracker = NMonitoring::TPercentileTrackerLg<5, 4, 15>; 
+    // <BASE_BITS, EXP_BITS, FRAME_COUNT>
+    using TDurationTracker = NMonitoring::TPercentileTrackerLg<5, 4, 15>;
     // log queue duration
-    TDurationTracker LogQueueTime; 
+    TDurationTracker LogQueueTime;
     // get queue duration
-    TDurationTracker GetQueueSyncLog; 
-    TDurationTracker GetQueueHullComp; 
-    TDurationTracker GetQueueHullOnlineRt; 
-    TDurationTracker GetQueueHullOnlineOther; 
-    TDurationTracker GetQueueHullLoad; 
+    TDurationTracker GetQueueSyncLog;
+    TDurationTracker GetQueueHullComp;
+    TDurationTracker GetQueueHullOnlineRt;
+    TDurationTracker GetQueueHullOnlineOther;
+    TDurationTracker GetQueueHullLoad;
     TDurationTracker GetQueueHullLow;
     // write queue duration
-    TDurationTracker WriteQueueSyncLog; 
-    TDurationTracker WriteQueueHullFresh; 
-    TDurationTracker WriteQueueHullHuge; 
-    TDurationTracker WriteQueueHullComp; 
+    TDurationTracker WriteQueueSyncLog;
+    TDurationTracker WriteQueueHullFresh;
+    TDurationTracker WriteQueueHullHuge;
+    TDurationTracker WriteQueueHullComp;
 
     // incoming flow burstiness
     TBurstmeter SensitiveBurst;
@@ -593,34 +593,34 @@ struct TPDiskMon {
     // log cumulative size bytes
     // <BASE_BITS, EXP_BITS, FRAME_COUNT>
     using TSizeTracker = NMonitoring::TPercentileTrackerLg<5, 4, 15>;
-    TSizeTracker LogOperationSizeBytes; 
-    TSizeTracker GetSyncLogSizeBytes; 
+    TSizeTracker LogOperationSizeBytes;
+    TSizeTracker GetSyncLogSizeBytes;
 
-    TSizeTracker GetHullCompSizeBytes; 
-    TSizeTracker GetHullOnlineRtSizeBytes; 
-    TSizeTracker GetHullOnlineOtherSizeBytes; 
-    TSizeTracker GetHullLoadSizeBytes; 
+    TSizeTracker GetHullCompSizeBytes;
+    TSizeTracker GetHullOnlineRtSizeBytes;
+    TSizeTracker GetHullOnlineOtherSizeBytes;
+    TSizeTracker GetHullLoadSizeBytes;
     TSizeTracker GetHullLowSizeBytes;
 
-    TSizeTracker WriteSyncLogSizeBytes; 
-    TSizeTracker WriteHullFreshSizeBytes; 
-    TSizeTracker WriteHullHugeSizeBytes; 
-    TSizeTracker WriteHullCompSizeBytes; 
+    TSizeTracker WriteSyncLogSizeBytes;
+    TSizeTracker WriteHullFreshSizeBytes;
+    TSizeTracker WriteHullHugeSizeBytes;
+    TSizeTracker WriteHullCompSizeBytes;
 
     // log response time
-    THistogram LogResponseTime; 
+    THistogram LogResponseTime;
     // get response time
-    THistogram GetResponseSyncLog; 
-    THistogram GetResponseHullComp; 
-    THistogram GetResponseHullOnlineRt; 
-    THistogram GetResponseHullOnlineOther; 
-    THistogram GetResponseHullLoad; 
-    THistogram GetResponseHullLow; 
+    THistogram GetResponseSyncLog;
+    THistogram GetResponseHullComp;
+    THistogram GetResponseHullOnlineRt;
+    THistogram GetResponseHullOnlineOther;
+    THistogram GetResponseHullLoad;
+    THistogram GetResponseHullLow;
     // write response time
-    THistogram WriteResponseSyncLog; 
-    THistogram WriteResponseHullFresh; 
-    THistogram WriteResponseHullHuge; 
-    THistogram WriteResponseHullComp; 
+    THistogram WriteResponseSyncLog;
+    THistogram WriteResponseHullFresh;
+    THistogram WriteResponseHullHuge;
+    THistogram WriteResponseHullComp;
 
     // scheduler subgroup
     TIntrusivePtr<NMonitoring::TDynamicCounters> SchedulerGroup;
@@ -703,10 +703,10 @@ struct TPDiskMon {
     // yard subgroup
     TIntrusivePtr<NMonitoring::TDynamicCounters> PDiskGroup;
     TReqCounters YardInit;
-    TReqCounters CheckSpace; 
+    TReqCounters CheckSpace;
     TReqCounters YardConfigureScheduler;
-    TReqCounters ChunkReserve; 
-    TReqCounters Harakiri; 
+    TReqCounters ChunkReserve;
+    TReqCounters Harakiri;
     TReqCounters YardSlay;
     TReqCounters YardControl;
 
@@ -727,7 +727,7 @@ struct TPDiskMon {
 
     TIoCounters WriteLog;
     TReqCounters WriteHugeLog;
-    TIoCounters LogRead; 
+    TIoCounters LogRead;
 
 
     // Halter
@@ -735,22 +735,22 @@ struct TPDiskMon {
     i64 LastHaltDeviceLandings = 0;
     NHPTimer::STime LastHaltTimestamp = 0;
 
-    // System counters - for tracking usage of CPU, memory etc. 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> SystemGroup; 
-    NMonitoring::TDynamicCounters::TCounterPtr PDiskThreadCPU; 
-    NMonitoring::TDynamicCounters::TCounterPtr SubmitThreadCPU; 
-    NMonitoring::TDynamicCounters::TCounterPtr GetThreadCPU; 
-    NMonitoring::TDynamicCounters::TCounterPtr TrimThreadCPU; 
-    NMonitoring::TDynamicCounters::TCounterPtr CompletionThreadCPU; 
- 
-    TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui32 pdiskId, TPDiskConfig *cfg); 
+    // System counters - for tracking usage of CPU, memory etc.
+    TIntrusivePtr<NMonitoring::TDynamicCounters> SystemGroup;
+    NMonitoring::TDynamicCounters::TCounterPtr PDiskThreadCPU;
+    NMonitoring::TDynamicCounters::TCounterPtr SubmitThreadCPU;
+    NMonitoring::TDynamicCounters::TCounterPtr GetThreadCPU;
+    NMonitoring::TDynamicCounters::TCounterPtr TrimThreadCPU;
+    NMonitoring::TDynamicCounters::TCounterPtr CompletionThreadCPU;
+
+    TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui32 pdiskId, TPDiskConfig *cfg);
 
     NMonitoring::TDynamicCounters::TCounterPtr GetBusyPeriod(const TString& owner, const TString& queue);
     void IncrementQueueTime(ui8 priorityClass, size_t timeMs);
-    void IncrementResponseTime(ui8 priorityClass, double timeMs, size_t sizeBytes); 
+    void IncrementResponseTime(ui8 priorityClass, double timeMs, size_t sizeBytes);
     void UpdatePercentileTrackers();
     void UpdateLights();
-    bool UpdateDeviceHaltCounters(); 
+    bool UpdateDeviceHaltCounters();
     void UpdateStats();
     TIoCounters *GetWriteCounter(ui8 priority);
     TIoCounters *GetReadCounter(ui8 priority);

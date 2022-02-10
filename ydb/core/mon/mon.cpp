@@ -364,7 +364,7 @@ namespace NActors {
         void Output(IMonHttpRequest &request, const NMon::IEvHttpInfoRes &result) const {
             if (result.GetContentType() == NMon::IEvHttpInfoRes::Html) {
                 THtmlResultMonPage resultPage(Path, Title, Host, PreTag, result);
-                resultPage.Parent = this->Parent; 
+                resultPage.Parent = this->Parent;
                 resultPage.Output(request);
             } else {
                 result.Output(request.Output());

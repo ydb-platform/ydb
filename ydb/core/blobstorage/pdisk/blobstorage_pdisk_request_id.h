@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include <util/stream/output.h>
 
 class IOutputStream;
@@ -81,17 +81,17 @@ struct TReqId {
         TrimAllUntrimmedChunks = 62,
         TryTrimChunk = 63,
         ReleaseChunks = 64,
-        StopDevice = 65, 
+        StopDevice = 65,
     };
 
     // 56 bit idx, 8 bit source
 
     ui64 Id;
 
-    explicit TReqId(ui64 idx) 
-        : Id(ui64(EReqSource::Invalid) | (idx << 8)) 
-    {} 
- 
+    explicit TReqId(ui64 idx)
+        : Id(ui64(EReqSource::Invalid) | (idx << 8))
+    {}
+
     explicit TReqId(EReqSource source, ui64 idx)
         : Id(ui64(source) | (idx << 8))
     {}
@@ -109,42 +109,42 @@ struct TReqId {
     }
 };
 
-enum class ERequestType { 
-    RequestLogRead, 
-    RequestLogReadContinue, 
-    RequestLogReadResultProcess, 
-    RequestLogSectorRestore, 
-    RequestLogWrite, 
-    RequestChunkRead, 
-    RequestChunkReadPiece, 
-    RequestChunkWrite, 
-    RequestChunkWritePiece, 
-    RequestChunkTrim, 
-    RequestYardInit, 
-    RequestCheckSpace, 
-    RequestHarakiri, 
-    RequestYardSlay, 
-    RequestChunkReserve, 
-    RequestChunksLock, 
-    RequestChunksUnlock, 
-    RequestYardControl, 
-    RequestAskForCutLog, 
-    RequestConfigureScheduler, 
-    RequestWhiteboartReport, 
-    RequestHttpInfo, 
-    RequestUndelivered, 
-    RequestNop, 
-    RequestCommitLogChunks, 
-    RequestLogCommitDone, 
-    RequestTryTrimChunk, 
-    RequestReleaseChunks, 
-    RequestStopDevice, 
-}; 
- 
-inline IOutputStream& operator <<(IOutputStream& out, const TReqId& reqId) { 
-    return out << reqId.Id; 
-} 
+enum class ERequestType {
+    RequestLogRead,
+    RequestLogReadContinue,
+    RequestLogReadResultProcess,
+    RequestLogSectorRestore,
+    RequestLogWrite,
+    RequestChunkRead,
+    RequestChunkReadPiece,
+    RequestChunkWrite,
+    RequestChunkWritePiece,
+    RequestChunkTrim,
+    RequestYardInit,
+    RequestCheckSpace,
+    RequestHarakiri,
+    RequestYardSlay,
+    RequestChunkReserve,
+    RequestChunksLock,
+    RequestChunksUnlock,
+    RequestYardControl,
+    RequestAskForCutLog,
+    RequestConfigureScheduler,
+    RequestWhiteboartReport,
+    RequestHttpInfo,
+    RequestUndelivered,
+    RequestNop,
+    RequestCommitLogChunks,
+    RequestLogCommitDone,
+    RequestTryTrimChunk,
+    RequestReleaseChunks,
+    RequestStopDevice,
+};
 
- 
+inline IOutputStream& operator <<(IOutputStream& out, const TReqId& reqId) {
+    return out << reqId.Id;
+}
+
+
 } // NPDisk
 } // NKikimr

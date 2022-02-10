@@ -13,11 +13,11 @@ class TRangeFaultToleranceTest : public TFaultToleranceTestBase<TRangeFaultToler
 public:
     using TFaultToleranceTestBase::TFaultToleranceTestBase;
 
-    void Check(ui64 tabletId, const TBlobStorageGroupInfo::TGroupVDisks& disks, 
-            NKikimrProto::EReplyStatus defaultExpectedStatus = NKikimrProto::OK) { 
+    void Check(ui64 tabletId, const TBlobStorageGroupInfo::TGroupVDisks& disks,
+            NKikimrProto::EReplyStatus defaultExpectedStatus = NKikimrProto::OK) {
         // Cerr << (TStringBuilder() << "]] " << disks.ToString() << Endl);
         for (ui32 generation = 1; generation <= 4; ++generation) {
-            NKikimrProto::EReplyStatus expectedStatus = defaultExpectedStatus; 
+            NKikimrProto::EReplyStatus expectedStatus = defaultExpectedStatus;
             TVector<TEvBlobStorage::TEvRangeResult::TResponse> expectedResponse;
 
             ui32 statusMap = generation - 1;
@@ -32,11 +32,11 @@ public:
                 }
                 buffer += b;
                 TLogoBlobID id(tabletId, generation, step, 0 /*channel*/, buffer.size(), 0);
-                if (defaultExpectedStatus == NKikimrProto::OK) { 
-                    UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::OK, PutWithResult(id, buffer, TEvBlobStorage::TEvPut::TacticMaxThroughput)); 
-                } else { 
-                    PutWithResult(id, buffer, TEvBlobStorage::TEvPut::TacticMaxThroughput); 
-                } 
+                if (defaultExpectedStatus == NKikimrProto::OK) {
+                    UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::OK, PutWithResult(id, buffer, TEvBlobStorage::TEvPut::TacticMaxThroughput));
+                } else {
+                    PutWithResult(id, buffer, TEvBlobStorage::TEvPut::TacticMaxThroughput);
+                }
 
                 TBlobStorageGroupInfo::TVDiskIds vdisks;
                 TBlobStorageGroupInfo::TServiceIds services;
@@ -152,10 +152,10 @@ public:
             SetFailedDisks(disks);
             Check(tabletId++, TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology()));
         }
-        for (const auto& disks : FaultsExceedingFailModel) { 
-            SetFailedDisks(disks); 
-            Check(tabletId++, TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology()), NKikimrProto::ERROR); 
-        } 
+        for (const auto& disks : FaultsExceedingFailModel) {
+            SetFailedDisks(disks);
+            Check(tabletId++, TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology()), NKikimrProto::ERROR);
+        }
     }
 };
 

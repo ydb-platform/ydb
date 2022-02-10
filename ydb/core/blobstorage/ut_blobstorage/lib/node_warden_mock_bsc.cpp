@@ -119,8 +119,8 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
             case NKikimrBlobStorage::EEntityStatus::DESTROY:
                 pdiskIdsToRemove.insert(pdiskId);
                 break;
-            case NKikimrBlobStorage::EEntityStatus::RESTART: 
-                break; 
+            case NKikimrBlobStorage::EEntityStatus::RESTART:
+                break;
         }
     }
 

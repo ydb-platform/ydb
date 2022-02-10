@@ -161,7 +161,7 @@ public:
         PDiskGuid = 1;
         PDiskKey = 1;
         FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, PDiskKey, "queue_test",
-                false, false, SectorMap); 
+                false, false, SectorMap);
 
         PDiskId = MakeBlobStoragePDiskID(1, 1);
         ui64 pDiskCategory = 0;
@@ -169,7 +169,7 @@ public:
         pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->SectorMap = SectorMap;
-        pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap; 
+        pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
         TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(), PDiskKey, Counters), TMailboxType::Revolving, 0);
         setup->LocalServices.emplace_back(PDiskId, pDiskSetup);
 

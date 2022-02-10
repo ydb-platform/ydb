@@ -1,74 +1,74 @@
-#pragma once 
- 
-#include "ydb_command.h" 
-#include "ydb_common.h" 
+#pragma once
+
+#include "ydb_command.h"
+#include "ydb_common.h"
 #include "ydb_service_table.h"
- 
+
 #include <ydb/public/lib/ydb_cli/common/examples.h>
 #include <ydb/public/lib/ydb_cli/common/parseable_struct.h>
 
 #include <library/cpp/regex/pcre/regexp.h>
 
-namespace NYdb { 
-namespace NConsoleClient { 
- 
-class TCommandTools : public TClientCommandTree { 
-public: 
-    TCommandTools(); 
-}; 
- 
-class TToolsCommand : public TYdbCommand { 
-public: 
-    TToolsCommand( 
-        const TString& name, 
-        const std::initializer_list<TString>& aliases = std::initializer_list<TString>(), 
-        const TString& description = TString() 
-    ); 
- 
-    virtual void Config(TConfig& config) override; 
-}; 
- 
+namespace NYdb {
+namespace NConsoleClient {
+
+class TCommandTools : public TClientCommandTree {
+public:
+    TCommandTools();
+};
+
+class TToolsCommand : public TYdbCommand {
+public:
+    TToolsCommand(
+        const TString& name,
+        const std::initializer_list<TString>& aliases = std::initializer_list<TString>(),
+        const TString& description = TString()
+    );
+
+    virtual void Config(TConfig& config) override;
+};
+
 class TCommandDump : public TToolsCommand, public TCommandWithPath {
-public: 
-    TCommandDump(); 
-    virtual void Config(TConfig& config) override; 
-    virtual void Parse(TConfig& config) override; 
-    virtual int Run(TConfig& config) override; 
- 
-private: 
+public:
+    TCommandDump();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+
+private:
     TVector<TRegExMatch> ExclusionPatterns;
-    TString FilePath; 
-    bool IsSchemeOnly; 
+    TString FilePath;
+    bool IsSchemeOnly;
     bool AvoidCopy = false;
     bool SavePartialResult = false;
-    TString ConsistencyLevel; 
+    TString ConsistencyLevel;
     bool PreservePoolKinds = false;
-}; 
- 
+};
+
 class TCommandRestore : public TToolsCommand, public TCommandWithPath {
-public: 
-    TCommandRestore(); 
-    virtual void Config(TConfig& config) override; 
-    virtual void Parse(TConfig& config) override; 
-    virtual int Run(TConfig& config) override; 
- 
-private: 
-    TString FilePath; 
-    bool IsDryRun = false; 
+public:
+    TCommandRestore();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+
+private:
+    TString FilePath;
+    bool IsDryRun = false;
     bool RestoreData = true;
     bool RestoreIndexes = true;
     bool SkipDocumentTables = false;
     bool SavePartialResult = false;
-    TString UploadBandwidth; 
+    TString UploadBandwidth;
     TString UploadRps;
     TString RowsPerRequest;
     TString BytesPerRequest;
     TString RequestUnitsPerRequest;
     ui32 InFly;
-    bool UseBulkUpsert = false; 
+    bool UseBulkUpsert = false;
     bool UseImportData = false;
-}; 
- 
+};
+
 class TCommandCopy : public TTableCommand {
 public:
     TCommandCopy();
@@ -106,5 +106,5 @@ private:
     TString DatabaseName;
 };
 
-} 
-} 
+}
+}

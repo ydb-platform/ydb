@@ -4,124 +4,124 @@
 
 namespace NKikimr {
 
-void TestMissingPartWithRandomData(TErasureType &groupType, ui32 *missingPartIdx, ui32 missingParts, 
-                        ui32 dataSize, bool isRestoreParts, bool isRestoreFullData, TString &info) { 
- 
-    NPrivate::TMersenne64 randGen(Seed()); 
- 
-    ui32 partMask = ~(ui32)0; 
-    for (ui32 i = 0; i < missingParts; ++i) { 
-        partMask &= ~(ui32)(1ul << missingPartIdx[i]); 
-    } 
- 
-    TString mode = Sprintf(" restoreParts=%s restoreFullData=%s ", 
-            (isRestoreParts ? "true" : "false"), 
-            (isRestoreFullData ? "true" : "false")); 
-    VERBOSE_COUT(" dataSize# " << dataSize << Endl); 
-    TString testString; 
-    testString.resize(dataSize); 
+void TestMissingPartWithRandomData(TErasureType &groupType, ui32 *missingPartIdx, ui32 missingParts,
+                        ui32 dataSize, bool isRestoreParts, bool isRestoreFullData, TString &info) {
+
+    NPrivate::TMersenne64 randGen(Seed());
+
+    ui32 partMask = ~(ui32)0;
+    for (ui32 i = 0; i < missingParts; ++i) {
+        partMask &= ~(ui32)(1ul << missingPartIdx[i]);
+    }
+
+    TString mode = Sprintf(" restoreParts=%s restoreFullData=%s ",
+            (isRestoreParts ? "true" : "false"),
+            (isRestoreFullData ? "true" : "false"));
+    VERBOSE_COUT(" dataSize# " << dataSize << Endl);
+    TString testString;
+    testString.resize(dataSize);
     char *writePosChar = (char *)testString.data();
     ui32 charParts = testString.size() % sizeof(ui64);
-    for (ui32 i = 0; i < charParts; ++i) { 
-        writePosChar[i] = (char)randGen.GenRand(); 
-    } 
-    ui64 *writePos64 = (ui64 *)writePosChar; 
+    for (ui32 i = 0; i < charParts; ++i) {
+        writePosChar[i] = (char)randGen.GenRand();
+    }
+    ui64 *writePos64 = (ui64 *)writePosChar;
     ui32 ui64Parts = testString.size() / sizeof(ui64);
-    for (ui32 i = 0; i < ui64Parts; ++i) { 
-        writePos64[i] = randGen.GenRand(); 
-    } 
- 
-    // Split the data into parts 
-    TDataPartSet partSet; 
+    for (ui32 i = 0; i < ui64Parts; ++i) {
+        writePos64[i] = randGen.GenRand();
+    }
+
+    // Split the data into parts
+    TDataPartSet partSet;
     groupType.SplitData(TErasureType::CrcModeNone, testString, partSet);
     ui64 partSize = groupType.PartSize(TErasureType::CrcModeNone, dataSize);
-    for (ui32 part = 0; part < groupType.TotalPartCount(); ++part) { 
-        UNIT_ASSERT_EQUAL(partSize, partSet.Parts[part].size()); 
-    } 
- 
-    // Save the original parts for the future checks 
-    TDataPartSet originalPartSet = partSet; 
- 
-    // Remove the 'missing' parts 
-    partSet.PartsMask &= partMask; 
-    for (ui32 i = 0; i < missingParts; ++i) { 
+    for (ui32 part = 0; part < groupType.TotalPartCount(); ++part) {
+        UNIT_ASSERT_EQUAL(partSize, partSet.Parts[part].size());
+    }
+
+    // Save the original parts for the future checks
+    TDataPartSet originalPartSet = partSet;
+
+    // Remove the 'missing' parts
+    partSet.PartsMask &= partMask;
+    for (ui32 i = 0; i < missingParts; ++i) {
         partSet.Parts[missingPartIdx[i]].clear();
-    } 
-    // Restore the data 
-    TString restoredString; 
+    }
+    // Restore the data
+    TString restoredString;
     groupType.RestoreData(TErasureType::CrcModeNone, partSet, restoredString,
             isRestoreParts, isRestoreFullData, isRestoreParts);
- 
-    // Make sure the restored data matches the original 
-    TString errorInfo = Sprintf("dataSize=%d partMask=0x%x", dataSize, partMask); 
-    if (isRestoreFullData) { 
-        UNIT_ASSERT_EQUAL_C(testString.size(), restoredString.size(), errorInfo); 
-        UNIT_ASSERT_EQUAL(testString, restoredString); 
-    } 
- 
-    if (isRestoreParts) { 
-        for (ui32 idx = 0; idx < missingParts; ++idx) { 
-            if (missingPartIdx[idx] < partSet.Parts.size()) { 
-                UNIT_ASSERT_EQUAL_C(partSet.Parts[missingPartIdx[idx]].size(), 
-                        originalPartSet.Parts[missingPartIdx[idx]].size(), info + errorInfo); 
-                ui32 size = (ui32)originalPartSet.Parts[missingPartIdx[idx]].size(); 
+
+    // Make sure the restored data matches the original
+    TString errorInfo = Sprintf("dataSize=%d partMask=0x%x", dataSize, partMask);
+    if (isRestoreFullData) {
+        UNIT_ASSERT_EQUAL_C(testString.size(), restoredString.size(), errorInfo);
+        UNIT_ASSERT_EQUAL(testString, restoredString);
+    }
+
+    if (isRestoreParts) {
+        for (ui32 idx = 0; idx < missingParts; ++idx) {
+            if (missingPartIdx[idx] < partSet.Parts.size()) {
+                UNIT_ASSERT_EQUAL_C(partSet.Parts[missingPartIdx[idx]].size(),
+                        originalPartSet.Parts[missingPartIdx[idx]].size(), info + errorInfo);
+                ui32 size = (ui32)originalPartSet.Parts[missingPartIdx[idx]].size();
                 char *restored = (char*)partSet.Parts[missingPartIdx[idx]].GetDataAt(0);
                 char *original = (char*)originalPartSet.Parts[missingPartIdx[idx]].GetDataAt(0);
-                for (ui32 i = 0; i < size; ++i) { 
-                    UNIT_ASSERT_EQUAL_C(restored[i], original[i], 
-                            (info + errorInfo + mode + Sprintf(" (part %d byte %d)", missingPartIdx[idx], i))); 
-                } 
-            } 
-        } 
-    } 
-} 
- 
-template <ui32 maxMissingParts> 
-void TestAllLossesDifferentSizes(TErasureType &groupType, ui32 maxParts) { 
-    for (ui32 missingParts = 0; missingParts <= maxMissingParts; ++missingParts) { 
-        ui32 missingPartIdx[maxMissingParts]; 
-        GenFirstCombination(&missingPartIdx[0], missingParts); 
-        ui32 maxMissingVariants = Fact(maxParts)/Fact(missingParts)/Fact(maxParts-missingParts); 
-        //printf("k=%u, n=%u,  variants=%u\n", missingParts, maxParts, maxMissingVariants); 
-        for (ui32 missingVariant = 0; missingVariant < maxMissingVariants; ++missingVariant) { 
-            VERBOSE_COUT(PrintArr(missingPartIdx, missingParts)); 
-            ui32 partMask = ~(ui32)0; 
-            for (ui32 i = 0; i < missingParts; ++i) { 
-                partMask &= ~(ui32)(1ul << missingPartIdx[i]); 
-            } 
-            for (ui32 dataSize = 1; dataSize < 600; ++dataSize) { 
-                VERBOSE_COUT("dataSize# " << dataSize << Endl); 
-                for (ui32 type = 0; type < 3; ++type) { 
-                    bool isRestoreParts = false; 
-                    bool isRestoreFullData = false; 
-                    switch (type) { 
-                        case 0: 
-                            isRestoreParts = true; 
-                            isRestoreFullData = true; 
-                            break; 
-                        case 1: 
-                            isRestoreFullData = true; 
-                            break; 
-                        case 2: 
-                            isRestoreParts = true; 
-                            break; 
-                    } 
-                    TStringStream info; 
-                    info << "Type# " << groupType.ToString() << " "; 
-                    info << "maxMissingParts# " << maxMissingParts << " "; 
-                    info << "missingVariant# " << missingVariant << " "; 
-                    info << "dataSize# " << dataSize << " "; 
-                    info << "case# " << BoolToStr(isRestoreParts) << "," << BoolToStr(isRestoreFullData) << " "; 
-                    VERBOSE_COUT(info.Str() << Endl); 
-                    TestMissingPartWithRandomData(groupType, missingPartIdx, missingParts, dataSize, 
-                            isRestoreParts, isRestoreFullData, info.Str()); 
-                } 
-            } // dataSize 
-            GenNextCombination(&missingPartIdx[0], missingParts, maxParts); 
-        } 
-    } // missingVariant 
-} 
- 
+                for (ui32 i = 0; i < size; ++i) {
+                    UNIT_ASSERT_EQUAL_C(restored[i], original[i],
+                            (info + errorInfo + mode + Sprintf(" (part %d byte %d)", missingPartIdx[idx], i)));
+                }
+            }
+        }
+    }
+}
+
+template <ui32 maxMissingParts>
+void TestAllLossesDifferentSizes(TErasureType &groupType, ui32 maxParts) {
+    for (ui32 missingParts = 0; missingParts <= maxMissingParts; ++missingParts) {
+        ui32 missingPartIdx[maxMissingParts];
+        GenFirstCombination(&missingPartIdx[0], missingParts);
+        ui32 maxMissingVariants = Fact(maxParts)/Fact(missingParts)/Fact(maxParts-missingParts);
+        //printf("k=%u, n=%u,  variants=%u\n", missingParts, maxParts, maxMissingVariants);
+        for (ui32 missingVariant = 0; missingVariant < maxMissingVariants; ++missingVariant) {
+            VERBOSE_COUT(PrintArr(missingPartIdx, missingParts));
+            ui32 partMask = ~(ui32)0;
+            for (ui32 i = 0; i < missingParts; ++i) {
+                partMask &= ~(ui32)(1ul << missingPartIdx[i]);
+            }
+            for (ui32 dataSize = 1; dataSize < 600; ++dataSize) {
+                VERBOSE_COUT("dataSize# " << dataSize << Endl);
+                for (ui32 type = 0; type < 3; ++type) {
+                    bool isRestoreParts = false;
+                    bool isRestoreFullData = false;
+                    switch (type) {
+                        case 0:
+                            isRestoreParts = true;
+                            isRestoreFullData = true;
+                            break;
+                        case 1:
+                            isRestoreFullData = true;
+                            break;
+                        case 2:
+                            isRestoreParts = true;
+                            break;
+                    }
+                    TStringStream info;
+                    info << "Type# " << groupType.ToString() << " ";
+                    info << "maxMissingParts# " << maxMissingParts << " ";
+                    info << "missingVariant# " << missingVariant << " ";
+                    info << "dataSize# " << dataSize << " ";
+                    info << "case# " << BoolToStr(isRestoreParts) << "," << BoolToStr(isRestoreFullData) << " ";
+                    VERBOSE_COUT(info.Str() << Endl);
+                    TestMissingPartWithRandomData(groupType, missingPartIdx, missingParts, dataSize,
+                            isRestoreParts, isRestoreFullData, info.Str());
+                }
+            } // dataSize
+            GenNextCombination(&missingPartIdx[0], missingParts, maxParts);
+        }
+    } // missingVariant
+}
+
 void PrintBuffer(const TString &buffer) {
     Cerr << " [";
     for (ui32 idx = 0; idx < buffer.size(); ++idx) {
@@ -229,82 +229,82 @@ TVector<TDiff> GenerateRandomDiff(NPrivate::TMersenne64 &randGen, ui32 dataSize,
 }
 
 Y_UNIT_TEST_SUITE(TErasureTypeTest) {
-// Test if new version is capable to restore data splited by current version (which is right by definition) 
+// Test if new version is capable to restore data splited by current version (which is right by definition)
     Y_UNIT_TEST(isSplittedDataEqualsToOldVerion) {
         TVector<TVector<ui8>> dataPool {
-                        {49,184,130,19,181,231,130}, 
- 
-                        {249,122,57,146,140,30,69,51,88,81,92,29,220,192,18,14,195,162,244,139,59,141,161,14, 
-                        202,194,28,123,179,195,60,101,56,157,176,150,23,105,123,62,101,19,56,168,222,81,172, 
-                        251,199,223,85,60,99,184,45,90,84,68,1,131,199,36,64,103,150,221,18,236,86,15,142}, 
- 
-                        {46,173,157,247,36,205,150,116,82,10,212,7,45,29,93,90,49,233,170,207,198,219,215, 
-                        187,220,220,48,228,83,53,50,37,153,214,149,28,231,171,92,176,230,139,168,126, 
-                        138,227,106,92,38,23,87,62,20,192,151,15,170,34,248,199,220,250,108,47,54,217,36, 
-                        56,146,224,21,148,133,155,49,199,101,250,173,93,104,205,67,222,132,104,187,231,53, 
-                        206,247,46,22,73,11,70,87,124,4,242,9,165,99,82,83,40,165,55,53,187,238,96,248,16, 
-                        103,197,132,216,107,191,229,140,90,129,81,63,232,85,19,232,59,96,193,5,133,139,251, 
-                        148,144,0,147,22,247,36,221,244,117,144,98,173,40} }; 
+                        {49,184,130,19,181,231,130},
+
+                        {249,122,57,146,140,30,69,51,88,81,92,29,220,192,18,14,195,162,244,139,59,141,161,14,
+                        202,194,28,123,179,195,60,101,56,157,176,150,23,105,123,62,101,19,56,168,222,81,172,
+                        251,199,223,85,60,99,184,45,90,84,68,1,131,199,36,64,103,150,221,18,236,86,15,142},
+
+                        {46,173,157,247,36,205,150,116,82,10,212,7,45,29,93,90,49,233,170,207,198,219,215,
+                        187,220,220,48,228,83,53,50,37,153,214,149,28,231,171,92,176,230,139,168,126,
+                        138,227,106,92,38,23,87,62,20,192,151,15,170,34,248,199,220,250,108,47,54,217,36,
+                        56,146,224,21,148,133,155,49,199,101,250,173,93,104,205,67,222,132,104,187,231,53,
+                        206,247,46,22,73,11,70,87,124,4,242,9,165,99,82,83,40,165,55,53,187,238,96,248,16,
+                        103,197,132,216,107,191,229,140,90,129,81,63,232,85,19,232,59,96,193,5,133,139,251,
+                        148,144,0,147,22,247,36,221,244,117,144,98,173,40} };
         TVector<TVector<TVector<ui8>>> partsPool {
-            { 
-                {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,}, 
-                {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,}, 
-                {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,}, 
-                {49,184,130,19,181,231,130,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,}, 
-                {49,184,130,19,181,231,130,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,}, 
-                {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,49,184,130,19,181,231,130,0, }, 
-            },{ 
-                {249,122,57,146,140,30,69,51,88,81,92,29,220,192,18,14,195,162,244,139,59,141,161,14,202, 
-                                                                                   194,28,123,179,195,60,101,}, 
-                {56,157,176,150,23,105,123,62,101,19,56,168,222,81,172,251,199,223,85,60,99,184,45,90,84, 
-                                                                                   68,1,131,199,36,64,103,}, 
-                {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,}, 
- 
-                {150,221,18,236,86,15,142,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,}, 
-                {87,58,155,232,205,120,176,13,61,66,100,181,2,145,190,245,4,125,161,183,88,53,140,84, 
-                                                                           158,134,29,248,116,231,124,2,}, 
-                {173,62,56,17,75,58,5,84,52,136,237,8,12,141,41,87,242,245,205,160,34,248,77,146,207, 
-                                                                                     132,90,40,65,80,223,88,}, 
-            },{ 
-                {46,173,157,247,36,205,150,116,82,10,212,7,45,29,93,90,49,233,170,207,198,219,215,187,220,220, 
-                    48,228,83,53,50,37,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,}, 
-                {153,214,149,28,231,171,92,176,230,139,168,126,138,227,106,92,38,23,87,62,20,192,151,15,170, 
-                    34,248,199,220,250,108,47,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,}, 
-                {54,217,36,56,146,224,21,148,133,155,49,199,101,250,173,93,104,205,67,222,132,104,187,231,53, 
-                    206,247,46,22,73,11,70,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,}, 
-                {87,124,4,242,9,165,99,82,83,40,165,55,53,187,238,96,248,16,103,197,132,216,107,191,229,140, 
-                    90,129,81,63,232,85,19,232,59,96,193,5,133,139,251,148,144,0,147,22,247,36,221,244,117,144, 
-                    98,173,40,0,0,0,0,0,0,0,0,0,}, 
-                {214,222,40,33,88,35,188,2,98,50,232,137,247,191,116,59,135,35,217,234,210,171,144,236,166, 
-                    188,101,140,200,185,189,25,19,232,59,96,193,5,133,139,251,148,144,0,147,22,247,36,221, 
-                    244,117,144,98,173,40,0,0,0,0,0,0,0,0,0,}, 
-                {114,180,19,50,219,117,207,37,191,151,5,180,246,160,208,23,112,124,56,167,179,241,145,219, 
-                    185,235,76,193,70,131,82,141,38,96,229,144,241,187,223,36,251,148,144,0,147,22,247,36, 
-                    251,148,144,0,147,22,247,36,232,124,171,96,82,19,114,175,}, 
-            } 
-        }; 
-        TErasureType type(TErasureType::EErasureSpecies::Erasure4Plus2Block); 
-        for (ui32 variant = 0; variant < dataPool.size(); ++variant) { 
+            {
+                {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,},
+                {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,},
+                {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,},
+                {49,184,130,19,181,231,130,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,},
+                {49,184,130,19,181,231,130,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,},
+                {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,49,184,130,19,181,231,130,0, },
+            },{
+                {249,122,57,146,140,30,69,51,88,81,92,29,220,192,18,14,195,162,244,139,59,141,161,14,202,
+                                                                                   194,28,123,179,195,60,101,},
+                {56,157,176,150,23,105,123,62,101,19,56,168,222,81,172,251,199,223,85,60,99,184,45,90,84,
+                                                                                   68,1,131,199,36,64,103,},
+                {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,},
+
+                {150,221,18,236,86,15,142,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,},
+                {87,58,155,232,205,120,176,13,61,66,100,181,2,145,190,245,4,125,161,183,88,53,140,84,
+                                                                           158,134,29,248,116,231,124,2,},
+                {173,62,56,17,75,58,5,84,52,136,237,8,12,141,41,87,242,245,205,160,34,248,77,146,207,
+                                                                                     132,90,40,65,80,223,88,},
+            },{
+                {46,173,157,247,36,205,150,116,82,10,212,7,45,29,93,90,49,233,170,207,198,219,215,187,220,220,
+                    48,228,83,53,50,37,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,},
+                {153,214,149,28,231,171,92,176,230,139,168,126,138,227,106,92,38,23,87,62,20,192,151,15,170,
+                    34,248,199,220,250,108,47,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,},
+                {54,217,36,56,146,224,21,148,133,155,49,199,101,250,173,93,104,205,67,222,132,104,187,231,53,
+                    206,247,46,22,73,11,70,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,},
+                {87,124,4,242,9,165,99,82,83,40,165,55,53,187,238,96,248,16,103,197,132,216,107,191,229,140,
+                    90,129,81,63,232,85,19,232,59,96,193,5,133,139,251,148,144,0,147,22,247,36,221,244,117,144,
+                    98,173,40,0,0,0,0,0,0,0,0,0,},
+                {214,222,40,33,88,35,188,2,98,50,232,137,247,191,116,59,135,35,217,234,210,171,144,236,166,
+                    188,101,140,200,185,189,25,19,232,59,96,193,5,133,139,251,148,144,0,147,22,247,36,221,
+                    244,117,144,98,173,40,0,0,0,0,0,0,0,0,0,},
+                {114,180,19,50,219,117,207,37,191,151,5,180,246,160,208,23,112,124,56,167,179,241,145,219,
+                    185,235,76,193,70,131,82,141,38,96,229,144,241,187,223,36,251,148,144,0,147,22,247,36,
+                    251,148,144,0,147,22,247,36,232,124,171,96,82,19,114,175,},
+            }
+        };
+        TErasureType type(TErasureType::EErasureSpecies::Erasure4Plus2Block);
+        for (ui32 variant = 0; variant < dataPool.size(); ++variant) {
             TVector<ui8> &data = dataPool[variant];
             TVector<TVector<ui8>> &expectedParts = partsPool[variant];
-            TString testString; 
-            testString.resize(data.size()); 
+            TString testString;
+            testString.resize(data.size());
             for (ui32 i = 0; i < testString.size(); ++i) {
-                testString[i] = (char)data[i]; 
-            } 
-            TDataPartSet partSet; 
+                testString[i] = (char)data[i];
+            }
+            TDataPartSet partSet;
             type.SplitData(TErasureType::CrcModeNone, testString, partSet);
-            for (ui32 i = 0; i < 6; ++i) { 
+            for (ui32 i = 0; i < 6; ++i) {
                 UNIT_ASSERT_EQUAL_C(partSet.Parts[i].size(), expectedParts[i].size(), Sprintf("%lu == %lu",
                                                                 partSet.Parts[i].size(), expectedParts[i].size()));
                 for (ui32 j = 0; j < partSet.Parts[i].size(); ++j) {
                     UNIT_ASSERT_EQUAL( (ui8)partSet.Parts[i].OwnedString[j], expectedParts[i][j]);
-                } 
-            } 
-        } 
-    } 
- 
- 
+                }
+            }
+        }
+    }
+
+
     Y_UNIT_TEST(TestEo) {
         ui32 species = (ui32)TErasureType::Erasure4Plus2Block;
         {
@@ -400,14 +400,14 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                             throw ex;
                         }
 
-                        VERBOSE_COUT("testing " << errorInfo << mode << " (full data)" << Endl); 
+                        VERBOSE_COUT("testing " << errorInfo << mode << " (full data)" << Endl);
                         if (isRestoreFullData) {
                             UNIT_ASSERT_EQUAL_C(testString.size(), restoredString.size(), errorInfo);
                             for (ui32 i = 0; i < testString.size(); ++i) {
                                 UNIT_ASSERT_EQUAL_C(((char*)testString.data())[i], ((char*)restoredString.data())[i],
                                     (errorInfo + mode + " (full data)"));
                                 if (((char*)testString.data())[i] != ((char*)restoredString.data())[i]) {
-                                    VERBOSE_COUT("mismatch " << errorInfo << mode << " (full data)" << Endl); 
+                                    VERBOSE_COUT("mismatch " << errorInfo << mode << " (full data)" << Endl);
                                     break;
                                 }
                             }
@@ -424,8 +424,8 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
                                         UNIT_ASSERT_EQUAL_C(restored[i], original[i],
                                             (errorInfo + mode + Sprintf(" (part %d byte %d)", missingPartIdx[idx], i)));
                                         if (restored[i] != original[i]) {
-                                           VERBOSE_COUT(" wrong part " << errorInfo << mode << 
-                                                   Sprintf(" (part %d byte %d)", missingPartIdx[idx], i) << Endl); 
+                                           VERBOSE_COUT(" wrong part " << errorInfo << mode <<
+                                                   Sprintf(" (part %d byte %d)", missingPartIdx[idx], i) << Endl);
                                            break;
                                         }
                                     }
@@ -494,132 +494,132 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
         RunTestDiff(groupType, dataSize, testString, diffs);
     }
 
-    // Mirror tests 
+    // Mirror tests
     Y_UNIT_TEST(TestMirror3LossOfAllPossible3) {
-        // Set up the erasure 
-        TErasureType groupType(TErasureType::EErasureSpecies::ErasureMirror3); 
-        constexpr ui32 maxMissingParts = 2; 
-        constexpr ui32 maxParts = 1 + 2; 
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts); 
-    } 
+        // Set up the erasure
+        TErasureType groupType(TErasureType::EErasureSpecies::ErasureMirror3);
+        constexpr ui32 maxMissingParts = 2;
+        constexpr ui32 maxParts = 1 + 2;
+        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
+    }
 
-    // Block tests 
+    // Block tests
     Y_UNIT_TEST(TestBlock31LossOfAllPossible1) {
-        // Set up the erasure 
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus1Block); 
-        constexpr ui32 maxMissingParts = 1; 
-        constexpr ui32 maxParts = 3 + 1; 
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts); 
-    } 
- 
+        // Set up the erasure
+        TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus1Block);
+        constexpr ui32 maxMissingParts = 1;
+        constexpr ui32 maxParts = 3 + 1;
+        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
+    }
+
     Y_UNIT_TEST(TestBlock42LossOfAllPossible2) {
-        // Set up the erasure 
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure4Plus2Block); 
-        // Specify 
-        constexpr ui32 maxMissingParts = 2; 
-        constexpr ui32 maxParts = 4 + 2; 
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts); 
-    } 
- 
+        // Set up the erasure
+        TErasureType groupType(TErasureType::EErasureSpecies::Erasure4Plus2Block);
+        // Specify
+        constexpr ui32 maxMissingParts = 2;
+        constexpr ui32 maxParts = 4 + 2;
+        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
+    }
+
     Y_UNIT_TEST(TestBlock32LossOfAllPossible2) {
-        // Set up the erasure 
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus2Block); 
-        constexpr ui32 maxMissingParts = 2; 
-        constexpr ui32 maxParts = 3 + 2; 
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts); 
-    } 
- 
+        // Set up the erasure
+        TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus2Block);
+        constexpr ui32 maxMissingParts = 2;
+        constexpr ui32 maxParts = 3 + 2;
+        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
+    }
+
     Y_UNIT_TEST(TestBlock43LossOfAllPossible3) {
-        // Set up the erasure 
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure4Plus3Block); 
-        constexpr ui32 maxMissingParts = 3; 
-        constexpr ui32 maxParts = 4 + 3; 
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts); 
-    } 
- 
+        // Set up the erasure
+        TErasureType groupType(TErasureType::EErasureSpecies::Erasure4Plus3Block);
+        constexpr ui32 maxMissingParts = 3;
+        constexpr ui32 maxParts = 4 + 3;
+        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
+    }
+
     Y_UNIT_TEST(TestBlock33LossOfAllPossible3) {
-        // Set up the erasure 
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus3Block); 
-        constexpr ui32 maxMissingParts = 3; 
-        constexpr ui32 maxParts = 3 + 3; 
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts); 
-    } 
- 
+        // Set up the erasure
+        TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus3Block);
+        constexpr ui32 maxMissingParts = 3;
+        constexpr ui32 maxParts = 3 + 3;
+        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
+    }
+
     Y_UNIT_TEST(TestBlock23LossOfAllPossible3) {
-        // Set up the erasure 
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure2Plus3Block); 
-        constexpr ui32 maxMissingParts = 3; 
-        constexpr ui32 maxParts = 2 + 3; 
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts); 
-    } 
- 
+        // Set up the erasure
+        TErasureType groupType(TErasureType::EErasureSpecies::Erasure2Plus3Block);
+        constexpr ui32 maxMissingParts = 3;
+        constexpr ui32 maxParts = 2 + 3;
+        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
+    }
+
     Y_UNIT_TEST(TestBlock22LossOfAllPossible2) {
-        // Set up the erasure 
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure2Plus2Block); 
-        constexpr ui32 maxMissingParts = 2; 
-        constexpr ui32 maxParts = 2 + 2; 
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts); 
-    } 
- 
- 
-    // Stripe tests 
+        // Set up the erasure
+        TErasureType groupType(TErasureType::EErasureSpecies::Erasure2Plus2Block);
+        constexpr ui32 maxMissingParts = 2;
+        constexpr ui32 maxParts = 2 + 2;
+        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
+    }
+
+
+    // Stripe tests
     Y_UNIT_TEST(TestStripe31LossOfAllPossible1) {
-        // Set up the erasure 
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus1Stripe); 
-        constexpr ui32 maxMissingParts = 1; 
-        constexpr ui32 maxParts = 3 + 1; 
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts); 
-    } 
- 
+        // Set up the erasure
+        TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus1Stripe);
+        constexpr ui32 maxMissingParts = 1;
+        constexpr ui32 maxParts = 3 + 1;
+        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
+    }
+
     Y_UNIT_TEST(TestStripe42LossOfAllPossible2) {
-        // Set up the erasure 
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure4Plus2Stripe); 
-        // Specify 
-        constexpr ui32 maxMissingParts = 2; 
-        constexpr ui32 maxParts = 4 + 2; 
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts); 
-    } 
- 
+        // Set up the erasure
+        TErasureType groupType(TErasureType::EErasureSpecies::Erasure4Plus2Stripe);
+        // Specify
+        constexpr ui32 maxMissingParts = 2;
+        constexpr ui32 maxParts = 4 + 2;
+        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
+    }
+
     Y_UNIT_TEST(TestStripe32LossOfAllPossible2) {
-        // Set up the erasure 
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus2Stripe); 
-        constexpr ui32 maxMissingParts = 2; 
-        constexpr ui32 maxParts = 3 + 2; 
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts); 
-    } 
- 
+        // Set up the erasure
+        TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus2Stripe);
+        constexpr ui32 maxMissingParts = 2;
+        constexpr ui32 maxParts = 3 + 2;
+        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
+    }
+
     Y_UNIT_TEST(TestStripe43LossOfAllPossible3) {
-        // Set up the erasure 
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure4Plus3Stripe); 
-        constexpr ui32 maxMissingParts = 3; 
-        constexpr ui32 maxParts = 4 + 3; 
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts); 
-    } 
- 
+        // Set up the erasure
+        TErasureType groupType(TErasureType::EErasureSpecies::Erasure4Plus3Stripe);
+        constexpr ui32 maxMissingParts = 3;
+        constexpr ui32 maxParts = 4 + 3;
+        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
+    }
+
     Y_UNIT_TEST(TestStripe33LossOfAllPossible3) {
-        // Set up the erasure 
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus3Stripe); 
-        constexpr ui32 maxMissingParts = 3; 
-        constexpr ui32 maxParts = 3 + 3; 
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts); 
-    } 
- 
+        // Set up the erasure
+        TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus3Stripe);
+        constexpr ui32 maxMissingParts = 3;
+        constexpr ui32 maxParts = 3 + 3;
+        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
+    }
+
     Y_UNIT_TEST(TestStripe23LossOfAllPossible3) {
-        // Set up the erasure 
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure2Plus3Stripe); 
-        constexpr ui32 maxMissingParts = 3; 
-        constexpr ui32 maxParts = 2 + 3; 
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts); 
-    } 
- 
+        // Set up the erasure
+        TErasureType groupType(TErasureType::EErasureSpecies::Erasure2Plus3Stripe);
+        constexpr ui32 maxMissingParts = 3;
+        constexpr ui32 maxParts = 2 + 3;
+        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
+    }
+
     Y_UNIT_TEST(TestStripe22LossOfAllPossible2) {
-        // Set up the erasure 
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure2Plus2Stripe); 
-        constexpr ui32 maxMissingParts = 2; 
-        constexpr ui32 maxParts = 2 + 2; 
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts); 
-    } 
- 
+        // Set up the erasure
+        TErasureType groupType(TErasureType::EErasureSpecies::Erasure2Plus2Stripe);
+        constexpr ui32 maxMissingParts = 2;
+        constexpr ui32 maxParts = 2 + 2;
+        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
+    }
+
     void TestErasure(TErasureType::ECrcMode crcMode, ui32 species) {
         TErasureType groupType((TErasureType::EErasureSpecies)species);
         TString erasureName = TErasureType::ErasureName[species];

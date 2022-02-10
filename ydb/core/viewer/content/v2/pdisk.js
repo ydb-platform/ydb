@@ -179,8 +179,8 @@ PDisk.prototype.updatePDiskInfo = function(update) {
     case 'InitialCommonLogParseError':
     case 'CommonLoggerInitError':
     case 'OpenFileError':
-    case 'ChunkQuotaError': 
-    case 'DeviceIoError': 
+    case 'ChunkQuotaError':
+    case 'DeviceIoError':
         pDisk.css('background-color', red);
         this.color = red;
         break;

@@ -55,13 +55,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TImmediateControlBoardInitializer : public IKikimrServicesInitializer { 
-public: 
-    TImmediateControlBoardInitializer(const TKikimrRunConfig& runConfig); 
- 
+class TImmediateControlBoardInitializer : public IKikimrServicesInitializer {
+public:
+    TImmediateControlBoardInitializer(const TKikimrRunConfig& runConfig);
+
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
-}; 
- 
+};
+
 class TBSNodeWardenInitializer : public IKikimrServicesInitializer {
 public:
     TBSNodeWardenInitializer(const TKikimrRunConfig& runConfig);
@@ -111,13 +111,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TSchedulerActorInitializer : public IKikimrServicesInitializer { 
-public: 
-    TSchedulerActorInitializer(const TKikimrRunConfig& runConfig); 
- 
+class TSchedulerActorInitializer : public IKikimrServicesInitializer {
+public:
+    TSchedulerActorInitializer(const TKikimrRunConfig& runConfig);
+
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
-}; 
- 
+};
+
 class TProfilerInitializer : public IKikimrServicesInitializer {
 public:
     TProfilerInitializer(const TKikimrRunConfig& runConfig);

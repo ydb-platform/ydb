@@ -11,7 +11,7 @@ namespace NPDisk {
 ////////////////////////////////////////////////////////////////////////////
 
 void TBufferedWriter::WriteBufferWithFlush(TReqId reqId, NWilson::TTraceId *traceId,
-        TCompletionAction *flushAction, ui32 chunkIdx) { 
+        TCompletionAction *flushAction, ui32 chunkIdx) {
     static NWilson::TTraceId noTrace;
     if (DirtyFrom != DirtyTo) {
         ui8 *source = CurrentBuffer->Data() + DirtyFrom - StartOffset;
@@ -25,9 +25,9 @@ void TBufferedWriter::WriteBufferWithFlush(TReqId reqId, NWilson::TTraceId *trac
         CurrentSector = CurrentBuffer->Data();
         StartOffset = DirtyTo;
         DirtyFrom = DirtyTo;
-    } else if (flushAction) { 
+    } else if (flushAction) {
         flushAction->CostNs = 1;
-        BlockDevice.FlushAsync(flushAction, reqId); 
+        BlockDevice.FlushAsync(flushAction, reqId);
     }
 }
 
@@ -42,7 +42,7 @@ TBufferedWriter::TBufferedWriter(ui64 sectorSize, IBlockDevice &blockDevice, TDi
     , DirtyTo(0)
     , CurrentSector(nullptr)
     , Pool(pool)
-    , CurrentBuffer(Pool->Pop()) 
+    , CurrentBuffer(Pool->Pop())
     , ActorSystem(actorSystem)
     , LastReqId(TReqId::InitialTSectorWriterReqId, 0)
     , DriveModel(driveModel)
@@ -50,7 +50,7 @@ TBufferedWriter::TBufferedWriter(ui64 sectorSize, IBlockDevice &blockDevice, TDi
 }
 
 void TBufferedWriter::SetupWithBuffer(ui64 startOffset, ui64 currentOffset, TBuffer *buffer, ui32 count, TReqId reqId) {
-    CurrentBuffer.Reset(buffer); 
+    CurrentBuffer.Reset(buffer);
     CurrentSector = CurrentBuffer->Data() + (currentOffset - startOffset);
 
     StartOffset = startOffset;
@@ -88,7 +88,7 @@ ui8* TBufferedWriter::RawData() const {
 }
 
 void TBufferedWriter::Flush(TReqId reqId, NWilson::TTraceId *traceId,
-        TCompletionAction *flushAction, ui32 chunkIdx) { 
+        TCompletionAction *flushAction, ui32 chunkIdx) {
     WriteBufferWithFlush(reqId, traceId, flushAction, chunkIdx);
 }
 

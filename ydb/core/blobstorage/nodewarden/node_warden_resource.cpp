@@ -2,11 +2,11 @@
 
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_wcache.h>
- 
+
 #include <ydb/library/pdisk_io/file_params.h>
- 
-#include <util/string/split.h> 
- 
+
+#include <util/string/split.h>
+
 using namespace NKikimr;
 using namespace NStorage;
 
@@ -98,7 +98,7 @@ void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {
     NIncrHuge::TKeeperSettings settings{
         it->first.PDiskId,
         MakeBlobStoragePDiskID(it->first.NodeId, it->first.PDiskId),
-        it->second.Record.GetPDiskGuid(), 
+        it->second.Record.GetPDiskGuid(),
         config.GetMinHugeBlobInBytes(),
         config.GetMinCleanChunks(),
         config.GetMinAllocationBatch(),

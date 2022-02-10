@@ -56,9 +56,9 @@ namespace NKikimr {
         struct TRemovedHugeBlobsQueueItem {
             ui64 RecordLsn;
             TDiskPartVec RemovedHugeBlobs;
-            TLogSignature Signature; 
+            TLogSignature Signature;
 
-            TRemovedHugeBlobsQueueItem(ui64 recordLsn, TDiskPartVec&& removedHugeBlobs, TLogSignature signature) 
+            TRemovedHugeBlobsQueueItem(ui64 recordLsn, TDiskPartVec&& removedHugeBlobs, TLogSignature signature)
                 : RecordLsn(recordLsn)
                 , RemovedHugeBlobs(std::move(removedHugeBlobs))
                 , Signature(signature)
@@ -86,7 +86,7 @@ namespace NKikimr {
         // this function is called every time when compaction is about to commit new entrypoint containing at least
         // one removed huge blob; recordLsn is allocated LSN of this entrypoint
         void Update(ui64 recordLsn, TDiskPartVec&& removedHugeBlobs, const TActorContext& ctx,
-                const TActorId& hugeKeeperId, TLogSignature signature) { 
+                const TActorId& hugeKeeperId, TLogSignature signature) {
             Y_VERIFY(recordLsn > LastDeletionLsn);
             LastDeletionLsn = recordLsn;
             RemovedHugeBlobsQueue.emplace_back(recordLsn, std::move(removedHugeBlobs), signature);

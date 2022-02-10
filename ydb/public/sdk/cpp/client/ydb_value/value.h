@@ -140,8 +140,8 @@ private:
     std::unique_ptr<TImpl> Impl_;
 };
 
-bool TypesEqual(const TType& t1, const TType& t2); 
- 
+bool TypesEqual(const TType& t1, const TType& t2);
+
 TString FormatType(const TType& type);
 
 //! Used to create arbitrary type.

@@ -167,7 +167,7 @@ namespace NKikimr {
         OutputCounters(str, " ", "", "");
         str << " StartingPoints# {";
         for (const auto &x : StartingPoints) {
-            str << "[" << x.first.ToString() 
+            str << "[" << x.first.ToString()
                 << " " << x.second << "]";
         }
         str << "}";
@@ -217,7 +217,7 @@ namespace NKikimr {
         RecoveryLogLastLsn = r.Lsn;
     }
 
-    void TLocalRecoveryInfo::SetStartingPoint(TLogSignature signature, ui64 lsn) { 
+    void TLocalRecoveryInfo::SetStartingPoint(TLogSignature signature, ui64 lsn) {
         bool success = StartingPoints.insert(TSignatureToLsn::value_type(signature, lsn)).second;
         Y_VERIFY(success);
     }

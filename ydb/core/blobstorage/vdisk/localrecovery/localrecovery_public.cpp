@@ -60,7 +60,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TDatabaseLocalRecovery : public TActorBootstrapped<TDatabaseLocalRecovery> {
         friend class TActorBootstrapped<TDatabaseLocalRecovery>;
-        using TStartingPoints = TMap<TLogSignature, NPDisk::TLogRecord>; 
+        using TStartingPoints = TMap<TLogSignature, NPDisk::TLogRecord>;
         using THullSegLoadedLogoBlob = THullSegLoaded<TLogoBlobsSst>;
 
         TIntrusivePtr<TVDiskConfig> Config;
@@ -257,7 +257,7 @@ namespace NKikimr {
                 NKikimrVDiskData::THullDbEntryPoint pb;
                 const bool good = THullDbSignatureRoutines::Parse(pb, data, explanation);
                 if (!good) {
-                    TString dbtype = TLogSignature(signature).ToString(); 
+                    TString dbtype = TLogSignature(signature).ToString();
                     explanation = "Entry point for Hull (" + dbtype + ") check failed: " + explanation;
                     SignalErrorAndDie(ctx, NKikimrProto::ERROR, explanation);
                     return false;
@@ -274,7 +274,7 @@ namespace NKikimr {
 
         bool InitLogoBlobsMetabase(const TStartingPoints &startingPoints, const TActorContext &ctx) {
             using TLoader = TLevelIndexLoader<TKeyLogoBlob, TMemRecLogoBlob, EHullDbType::LogoBlobs>;
-            const int signature = TLogSignature::SignatureHullLogoBlobsDB; 
+            const int signature = TLogSignature::SignatureHullLogoBlobsDB;
             return InitMetabase<TLogoBlobsDs, TLoader, signature>(
                             startingPoints,
                             LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs,
@@ -288,7 +288,7 @@ namespace NKikimr {
 
         bool InitBlocksMetabase(const TStartingPoints &startingPoints, const TActorContext &ctx) {
             using TLoader = TLevelIndexLoader<TKeyBlock, TMemRecBlock, EHullDbType::Blocks>;
-            const int signature = TLogSignature::SignatureHullBlocksDB; 
+            const int signature = TLogSignature::SignatureHullBlocksDB;
             return InitMetabase<TBlocksDs, TLoader, signature>(
                             startingPoints,
                             LocRecCtx->HullDbRecovery->GetHullDs()->Blocks,
@@ -302,7 +302,7 @@ namespace NKikimr {
 
         bool InitBarriersMetabase(const TStartingPoints &startingPoints, const TActorContext &ctx) {
             using TLoader = TLevelIndexLoader<TKeyBarrier, TMemRecBarrier, EHullDbType::Barriers>;
-            const int signature = TLogSignature::SignatureHullBarriersDB; 
+            const int signature = TLogSignature::SignatureHullBarriersDB;
             return InitMetabase<TBarriersDs, TLoader, signature>(
                             startingPoints,
                             LocRecCtx->HullDbRecovery->GetHullDs()->Barriers,
@@ -316,7 +316,7 @@ namespace NKikimr {
 
         bool InitSyncLogData(const TStartingPoints &startingPoints, const TActorContext &ctx) {
             TStartingPoints::const_iterator it;
-            it = startingPoints.find(TLogSignature::SignatureSyncLogIdx); 
+            it = startingPoints.find(TLogSignature::SignatureSyncLogIdx);
             TString entryPoint;
             ui64 entryPointLsn = 0;
 
@@ -360,7 +360,7 @@ namespace NKikimr {
 
         bool InitSyncer(const TStartingPoints &startingPoints, const TActorContext &ctx) {
             TStartingPoints::const_iterator it;
-            it = startingPoints.find(TLogSignature::SignatureSyncerState); 
+            it = startingPoints.find(TLogSignature::SignatureSyncerState);
             if (it == startingPoints.end()) {
                 // create an empty DB
                 LocRecCtx->RecovInfo->EmptySyncer = true;
@@ -404,7 +404,7 @@ namespace NKikimr {
                 LOG_DEBUG(ctx, BS_HULLHUGE, msg);
             };
             TStartingPoints::const_iterator it;
-            it = startingPoints.find(TLogSignature::SignatureHugeBlobEntryPoint); 
+            it = startingPoints.find(TLogSignature::SignatureHugeBlobEntryPoint);
             if (it == startingPoints.end()) {
                 LocRecCtx->RecovInfo->EmptyHuge = true;
 
@@ -508,12 +508,12 @@ namespace NKikimr {
                                     ui32(x.first), x.second.ToString().data()));
                     LocRecCtx->RecovInfo->SetStartingPoint(x.first, x.second.Lsn);
                     switch (x.first) {
-                        case TLogSignature::SignatureSyncLogIdx: 
-                        case TLogSignature::SignatureHullLogoBlobsDB: 
-                        case TLogSignature::SignatureHullBlocksDB: 
-                        case TLogSignature::SignatureHullBarriersDB: 
-                        case TLogSignature::SignatureSyncerState: 
-                        case TLogSignature::SignatureHugeBlobEntryPoint: 
+                        case TLogSignature::SignatureSyncLogIdx:
+                        case TLogSignature::SignatureHullLogoBlobsDB:
+                        case TLogSignature::SignatureHullBlocksDB:
+                        case TLogSignature::SignatureHullBarriersDB:
+                        case TLogSignature::SignatureSyncerState:
+                        case TLogSignature::SignatureHugeBlobEntryPoint:
                         case TLogSignature::SignatureScrub:
                             break;
 

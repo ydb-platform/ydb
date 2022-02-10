@@ -42,7 +42,7 @@ namespace NKikimr {
                 TLsnSeg seg = SlCtx->LsnMngr->AllocLsnForLocalUse();
                 // commit msg
                 auto commitMsg = std::make_unique<NPDisk::TEvLog>(SlCtx->PDiskCtx->Dsk->Owner,
-                        SlCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureSyncLogIdx, 
+                        SlCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureSyncLogIdx,
                         CommitRecord, EntryPointSerializer.GetSerializedData(), seg, nullptr);
 
                 if (CommitRecord.CommitChunks || CommitRecord.DeleteChunks) {

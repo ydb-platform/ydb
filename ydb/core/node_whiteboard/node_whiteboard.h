@@ -55,7 +55,7 @@ struct TEvWhiteboard{
         EvTraceResponse,
         EvSignalBodyRequest,
         EvSignalBodyResponse,
-        EvPDiskStateDelete, 
+        EvPDiskStateDelete,
         EvVDiskStateGenerationChange,
         EvEnd
     };
@@ -192,8 +192,8 @@ struct TEvWhiteboard{
             Record.SetIncarnationGuid(incarnationGuid);
         }
 
-        explicit TEvVDiskStateUpdate(NKikimrWhiteboard::TVDiskStateInfo&& rec) { 
-            Record = std::move(rec); 
+        explicit TEvVDiskStateUpdate(NKikimrWhiteboard::TVDiskStateInfo&& rec) {
+            Record = std::move(rec);
         }
     };
 
@@ -217,15 +217,15 @@ struct TEvWhiteboard{
         {}
     };
 
-    struct TEvPDiskStateDelete : TEventPB<TEvPDiskStateDelete, NKikimrWhiteboard::TPDiskStateInfo, EvPDiskStateDelete> { 
-        TEvPDiskStateDelete() = default; 
- 
-        explicit TEvPDiskStateDelete(const ui32& pdiskId) { 
-            Record.SetPDiskId(pdiskId); 
-        } 
-    }; 
- 
- 
+    struct TEvPDiskStateDelete : TEventPB<TEvPDiskStateDelete, NKikimrWhiteboard::TPDiskStateInfo, EvPDiskStateDelete> {
+        TEvPDiskStateDelete() = default;
+
+        explicit TEvPDiskStateDelete(const ui32& pdiskId) {
+            Record.SetPDiskId(pdiskId);
+        }
+    };
+
+
     struct TEvVDiskStateRequest : public TEventPB<TEvVDiskStateRequest, NKikimrWhiteboard::TEvVDiskStateRequest, EvVDiskStateRequest> {};
 
     struct TEvVDiskStateResponse : public TEventPB<TEvVDiskStateResponse, NKikimrWhiteboard::TEvVDiskStateResponse, EvVDiskStateResponse> {};

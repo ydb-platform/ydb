@@ -26,26 +26,26 @@ void TRequestTypeField::ToString(ui32 value, TString *out) {
 }
 
 }}
- 
-namespace NKikimr { 
- 
-void TBlobPutTactics::ToString(ui64 value, TString *out) { 
-    *out = TEvBlobStorage::TEvPut::TacticName(TEvBlobStorage::TEvPut::ETactic(value)); 
-} 
- 
-void TEventTypeField::ToString(ui64 value, TString* out) { 
-#define CASE(EVENT) case TEvBlobStorage::EVENT: *out = #EVENT; break; 
-    switch(TEvBlobStorage::EEv(value)) { 
+
+namespace NKikimr {
+
+void TBlobPutTactics::ToString(ui64 value, TString *out) {
+    *out = TEvBlobStorage::TEvPut::TacticName(TEvBlobStorage::TEvPut::ETactic(value));
+}
+
+void TEventTypeField::ToString(ui64 value, TString* out) {
+#define CASE(EVENT) case TEvBlobStorage::EVENT: *out = #EVENT; break;
+    switch(TEvBlobStorage::EEv(value)) {
     CASE(EvPatch);
-    CASE(EvPut); 
-    CASE(EvVPut); 
-    CASE(EvGet); 
-    CASE(EvVGet); 
-    CASE(EvDiscover); 
-    default: *out = "Unknown"; 
-    } 
-    *out += "(" + ::ToString(value) + ")"; 
-#undef CASE 
-} 
- 
-} 
+    CASE(EvPut);
+    CASE(EvVPut);
+    CASE(EvGet);
+    CASE(EvVGet);
+    CASE(EvDiscover);
+    default: *out = "Unknown";
+    }
+    *out += "(" + ::ToString(value) + ")";
+#undef CASE
+}
+
+}

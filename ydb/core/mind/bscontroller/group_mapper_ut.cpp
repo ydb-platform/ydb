@@ -1,8 +1,8 @@
 #include <library/cpp/testing/unittest/registar.h>
- 
-#include "group_geometry_info.h" 
+
+#include "group_geometry_info.h"
 #include "group_mapper.h"
-#include "ut_helpers.h" 
+#include "ut_helpers.h"
 
 using namespace NKikimr;
 using namespace NKikimr::NBsController;
@@ -144,7 +144,7 @@ public:
             return 0;
         }
         if (!success) {
-            Ctest << "error# " << error << Endl; 
+            Ctest << "error# " << error << Endl;
         }
         UNIT_ASSERT(success);
         TGroupRecord& record = Groups[groupId];
@@ -182,7 +182,7 @@ public:
             }
         }
 
-        Ctest << "groupId# " << groupId << " reallocating group# " << FormatGroup(group.Group) << Endl; 
+        Ctest << "groupId# " << groupId << " reallocating group# " << FormatGroup(group.Group) << Endl;
 
         TString error;
         bool success = mapper.AllocateGroup(groupId, group.Group, replaced.data(), replaced.size(), std::move(forbid),
@@ -191,7 +191,7 @@ public:
             if (requireError) {
                 return {};
             }
-            Ctest << "error# " << error << Endl; 
+            Ctest << "error# " << error << Endl;
         } else {
             UNIT_ASSERT(!requireError);
         }
@@ -321,7 +321,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         TGroupMapper globalMapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::Erasure4Plus2Block, 1, 8, 2));
         globalContext.PopulateGroupMapper(globalMapper, 16);
         for (ui32 i = 0; i < globalContext.GetTotalDisks(); ++i) {
-            Ctest << i << "/" << globalContext.GetTotalDisks() << Endl; 
+            Ctest << i << "/" << globalContext.GetTotalDisks() << Endl;
 
             TGroupMapper::TGroupDefinition group;
             globalContext.AllocateGroup(globalMapper, group);
@@ -340,7 +340,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::Erasure4Plus2Block, 1, 8, numVDisksPerFailDomain));
         context.PopulateGroupMapper(mapper, 8 * numVDisksPerFailDomain);
         for (ui32 i = 0; i < context.GetTotalDisks(); ++i) {
-            Ctest << i << "/" << context.GetTotalDisks() << Endl; 
+            Ctest << i << "/" << context.GetTotalDisks() << Endl;
             TGroupMapper::TGroupDefinition group;
             context.AllocateGroup(mapper, group);
             context.CheckGroupErasure(group);
@@ -365,7 +365,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureMirror3dc));
         context.PopulateGroupMapper(mapper, 9);
         for (ui32 i = 0; i < context.GetTotalDisks(); ++i) {
-            Ctest << i << "/" << context.GetTotalDisks() << Endl; 
+            Ctest << i << "/" << context.GetTotalDisks() << Endl;
             TGroupMapper::TGroupDefinition group;
             context.AllocateGroup(mapper, group);
             context.CheckGroupErasure(group);
@@ -390,7 +390,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::Erasure4Plus2Block));
         context.PopulateGroupMapper(mapper, 8);
         for (ui32 i = 0; i < context.GetTotalDisks(); ++i) {
-            Ctest << i << "/" << context.GetTotalDisks() << Endl; 
+            Ctest << i << "/" << context.GetTotalDisks() << Endl;
             TGroupMapper::TGroupDefinition group;
             context.AllocateGroup(mapper, group);
             context.CheckGroupErasure(group);
@@ -420,7 +420,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::Erasure4Plus2Block));
         context.PopulateGroupMapper(mapper, 8);
         for (ui32 i = 0; i < context.GetTotalDisks(); ++i) {
-            Ctest << i << "/" << context.GetTotalDisks() << Endl; 
+            Ctest << i << "/" << context.GetTotalDisks() << Endl;
             TGroupMapper::TGroupDefinition group;
             context.AllocateGroup(mapper, group);
             context.CheckGroupErasure(group);
@@ -447,7 +447,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureMirror3dc));
         context.PopulateGroupMapper(mapper, 9);
         for (ui32 i = 0; i < context.GetTotalDisks(); ++i) {
-            Ctest << i << "/" << context.GetTotalDisks() << Endl; 
+            Ctest << i << "/" << context.GetTotalDisks() << Endl;
             TGroupMapper::TGroupDefinition group;
             context.AllocateGroup(mapper, group);
             context.CheckGroupErasure(group);
@@ -478,12 +478,12 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
                 TGroupMapper::TGroupDefinition group;
                 ui32 groupId = context.AllocateGroup(mapper, group);
                 groupIds.push_back(groupId);
-                Ctest << "groupId# " << groupId << " content# " << context.FormatGroup(group) << Endl; 
+                Ctest << "groupId# " << groupId << " content# " << context.FormatGroup(group) << Endl;
                 context.CheckGroupErasure(group);
                 context.ReallocateGroup(mapper, groupId, {});
             }
         }
-        Ctest << "remapping disks" << Endl; 
+        Ctest << "remapping disks" << Endl;
         {
             TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::Erasure4Plus2Block));
             TSet<TPDiskId> unusableDisks;
@@ -491,7 +491,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
                 for (const TPDiskId& pdiskId : pdisks) {
                     if (unusableDisks.size() < 2) {
                         if (unusableDisks.insert(pdiskId).second) {
-                            Ctest << "making unusable disk# " << pdiskId.ToString() << Endl; 
+                            Ctest << "making unusable disk# " << pdiskId.ToString() << Endl;
                         }
                     }
                 }
@@ -499,7 +499,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
             context.PopulateGroupMapper(mapper, 10, unusableDisks);
             for (ui32 groupId : groupIds) {
                 auto group = context.ReallocateGroup(mapper, groupId, unusableDisks);
-                Ctest << "groupId# " << groupId << " new content# " << context.FormatGroup(group) << Endl; 
+                Ctest << "groupId# " << groupId << " new content# " << context.FormatGroup(group) << Endl;
                 context.CheckGroupErasure(group);
             }
         }
@@ -604,15 +604,15 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
                 }
             }
 
-            Ctest << "iteration# " << k << " numBodies# " << disks.size() << " numDisks# " << numDisks << Endl; 
- 
+            Ctest << "iteration# " << k << " numBodies# " << disks.size() << " numDisks# " << numDisks << Endl;
+
             const ui32 maxSlots = 16;
             TTestContext context(std::move(disks));
             context.IteratePDisks([&](auto&, auto& v) {
                 v.NumSlots = rand(0, maxSlots);
             });
             for (;;) {
-                Ctest << "spawning new mapper" << Endl; 
+                Ctest << "spawning new mapper" << Endl;
                 TGroupMapper mapper(TTestContext::CreateGroupGeometry(numDataCenters >= 3
                     ? TBlobStorageGroupType::ErasureMirror3dc
                     : TBlobStorageGroupType::Erasure4Plus2Block));

@@ -1,11 +1,11 @@
 #pragma once
 #include "defs.h"
 
-#include <util/stream/null.h> 
+#include <util/stream/null.h>
 #include <util/system/valgrind.h>
 
-#include <cassert> 
- 
+#include <cassert>
+
 namespace NKikimr {
 
 #define ENABLE_SPEED_TESTS 0
@@ -18,11 +18,11 @@ constexpr ui32 TEST_TIMEOUT = NSan::PlainOrUnderSanitizer(
 );
 
 constexpr ui32 MIN_CHUNK_SIZE = 1620 << 10;
-#ifdef NDEBUG 
-constexpr bool IsLowVerbose = false; 
-#else 
-constexpr bool IsLowVerbose = true; 
-#endif 
+#ifdef NDEBUG
+constexpr bool IsLowVerbose = false;
+#else
+constexpr bool IsLowVerbose = true;
+#endif
 constexpr bool IsVerbose = false;
 constexpr bool IsMonitoringEnabled = false;
 constexpr bool IsRealBlockDevice = false;
@@ -53,14 +53,14 @@ do { \
     ui32 eventGroup = ((int)LastResponse.EventType & 0xffff) >> 9; \
     ui32 eventId = ((int)LastResponse.EventType & 0x1ff); \
     ASSERT_YTHROW(LastResponse.EventType == TEvBlobStorage::msg, \
-        "Unexpected message in space " << eventSpace << ": 512 * " << eventGroup << " + " << eventId << "\n"); \ 
+        "Unexpected message in space " << eventSpace << ": 512 * " << eventGroup << " + " << eventId << "\n"); \
     ASSERT_YTHROW(LastResponse.Status == NKikimrProto::st, \
-        "Unexpected status, got# " << StatusToString(LastResponse.Status) << \ 
-            " expect# " << StatusToString(NKikimrProto::st) << "\n"); \ 
+        "Unexpected status, got# " << StatusToString(LastResponse.Status) << \
+            " expect# " << StatusToString(NKikimrProto::st) << "\n"); \
 } while(false)
 
-#define Ctest (IsVerbose ? Cerr : Cnull) 
- 
+#define Ctest (IsVerbose ? Cerr : Cnull)
+
 #define VERBOSE_COUT(str) \
 do { \
     if (IsVerbose) { \

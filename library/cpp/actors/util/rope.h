@@ -4,8 +4,8 @@
 #include <util/generic/string.h>
 #include <util/generic/hash_set.h>
 #include <util/stream/str.h>
-#include <util/system/sanitizers.h> 
-#include <util/system/valgrind.h> 
+#include <util/system/sanitizers.h>
+#include <util/system/valgrind.h>
 
 // exactly one of them must be included
 #include "rope_cont_list.h"
@@ -1135,27 +1135,27 @@ inline TRope TRope::CopySpaceOptimized(TRope&& origin, size_t worstRatioPer1k, T
     return res;
 }
 
- 
-#if defined(WITH_VALGRIND) || defined(_msan_enabled_) 
- 
-inline void CheckRopeIsDefined(TRope::TConstIterator begin, ui64 size) { 
-    while (size) { 
-        ui64 contiguousSize = Min(size, begin.ContiguousSize()); 
-#   if defined(WITH_VALGRIND) 
-        VALGRIND_CHECK_MEM_IS_DEFINED(begin.ContiguousData(), contiguousSize); 
-#   endif 
-#   if defined(_msan_enabled_) 
-        NSan::CheckMemIsInitialized(begin.ContiguousData(), contiguousSize); 
-#   endif 
-        size -= contiguousSize; 
-        begin += contiguousSize; 
-    } 
-} 
- 
-#   define CHECK_ROPE_IS_DEFINED(begin, size) CheckRopeIsDefined(begin, size) 
- 
-#else 
- 
-#   define CHECK_ROPE_IS_DEFINED(begin, size) do {} while (false) 
- 
-#endif 
+
+#if defined(WITH_VALGRIND) || defined(_msan_enabled_)
+
+inline void CheckRopeIsDefined(TRope::TConstIterator begin, ui64 size) {
+    while (size) {
+        ui64 contiguousSize = Min(size, begin.ContiguousSize());
+#   if defined(WITH_VALGRIND)
+        VALGRIND_CHECK_MEM_IS_DEFINED(begin.ContiguousData(), contiguousSize);
+#   endif
+#   if defined(_msan_enabled_)
+        NSan::CheckMemIsInitialized(begin.ContiguousData(), contiguousSize);
+#   endif
+        size -= contiguousSize;
+        begin += contiguousSize;
+    }
+}
+
+#   define CHECK_ROPE_IS_DEFINED(begin, size) CheckRopeIsDefined(begin, size)
+
+#else
+
+#   define CHECK_ROPE_IS_DEFINED(begin, size) do {} while (false)
+
+#endif

@@ -25,7 +25,7 @@ TAppData::TAppData(
     , CompilerSchemeCacheTables(Max<ui64>() / 4)
     , Mon(nullptr)
     , BusMonPage(nullptr)
-    , Icb(new TControlBoard()) 
+    , Icb(new TControlBoard())
     , InFlightLimiterRegistry(new NGRpcService::TInFlightLimiterRegistry(Icb))
     , StaticBlobStorageConfig(new NKikimrBlobStorage::TNodeWardenServiceSet)
     , KikimrShouldContinue(kikimrShouldContinue)

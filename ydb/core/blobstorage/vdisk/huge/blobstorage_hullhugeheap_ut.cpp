@@ -59,7 +59,7 @@ namespace NKikimr {
 
             res = chain.Allocate(&id);
             UNIT_ASSERT_EQUAL(res, false);
-            UNIT_ASSERT_EQUAL(chain.GetStat(), THeapStat(1, 0, {})); 
+            UNIT_ASSERT_EQUAL(chain.GetStat(), THeapStat(1, 0, {}));
             STR << "All allocated\n";
         }
 

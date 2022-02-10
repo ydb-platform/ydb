@@ -350,8 +350,8 @@ Node.prototype.getUptime = function() {
 }
 
 Node.prototype.getDiskUsage = function() {
-    if (this.sysInfo !== undefined && this.sysInfo.MaxDiskUsage !== undefined) { 
-        return this.sysInfo.MaxDiskUsage; 
+    if (this.sysInfo !== undefined && this.sysInfo.MaxDiskUsage !== undefined) {
+        return this.sysInfo.MaxDiskUsage;
     } else {
         return 0;
     }

@@ -69,7 +69,7 @@ public:
     class TTxScrubStart;
     class TTxScrubQuantumFinished;
     class TTxUpdateLastSeenReady;
-    class TTxUpdateNodeDrives; 
+    class TTxUpdateNodeDrives;
 
     class TVSlotInfo;
     class TPDiskInfo;
@@ -293,9 +293,9 @@ public:
 
         NKikimrBlobStorage::EDriveStatus Status;
         TInstant StatusTimestamp;
-        TString ExpectedSerial; 
-        TString LastSeenSerial; 
-        TString LastSeenPath; 
+        TString ExpectedSerial;
+        TString LastSeenSerial;
+        TString LastSeenPath;
         const ui32 StaticSlotUsage = 0;
 
         template<typename T>
@@ -309,10 +309,10 @@ public:
                     Table::NextVSlotId,
                     Table::PDiskConfig,
                     Table::Status,
-                    Table::Timestamp, 
-                    Table::ExpectedSerial, 
-                    Table::LastSeenSerial, 
-                    Table::LastSeenPath 
+                    Table::Timestamp,
+                    Table::ExpectedSerial,
+                    Table::LastSeenSerial,
+                    Table::LastSeenPath
                 > adapter(
                     &TPDiskInfo::Path,
                     &TPDiskInfo::Kind,
@@ -322,10 +322,10 @@ public:
                     &TPDiskInfo::NextVSlotId,
                     &TPDiskInfo::PDiskConfig,
                     &TPDiskInfo::Status,
-                    &TPDiskInfo::StatusTimestamp, 
-                    &TPDiskInfo::ExpectedSerial, 
-                    &TPDiskInfo::LastSeenSerial, 
-                    &TPDiskInfo::LastSeenPath 
+                    &TPDiskInfo::StatusTimestamp,
+                    &TPDiskInfo::ExpectedSerial,
+                    &TPDiskInfo::LastSeenSerial,
+                    &TPDiskInfo::LastSeenPath
                 );
             callback(&adapter);
         }
@@ -341,9 +341,9 @@ public:
                    TBoxId boxId,
                    ui32 defaultMaxSlots,
                    NKikimrBlobStorage::EDriveStatus status,
-                   TInstant statusTimestamp, 
-                   const TString& expectedSerial, 
-                   const TString& lastSeenSerial, 
+                   TInstant statusTimestamp,
+                   const TString& expectedSerial,
+                   const TString& lastSeenSerial,
                    const TString& lastSeenPath,
                    ui32 staticSlotUsage)
             : HostId(hostId)
@@ -357,9 +357,9 @@ public:
             , BoxId(boxId)
             , Status(status)
             , StatusTimestamp(statusTimestamp)
-            , ExpectedSerial(expectedSerial) 
-            , LastSeenSerial(lastSeenSerial) 
-            , LastSeenPath(lastSeenPath) 
+            , ExpectedSerial(expectedSerial)
+            , LastSeenSerial(lastSeenSerial)
+            , LastSeenPath(lastSeenPath)
             , StaticSlotUsage(staticSlotUsage)
         {
             ExtractConfig(defaultMaxSlots);
@@ -399,16 +399,16 @@ public:
                 Metrics.GetState() == NKikimrBlobStorage::TPDiskState::Normal);
         }
 
-        bool ShouldBeSettledBySelfHeal() const { 
-            switch (Status) { 
-                case NKikimrBlobStorage::EDriveStatus::FAULTY: 
-                case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED: 
-                    return true; 
-                default: 
-                    return false; 
-            } 
-        } 
- 
+        bool ShouldBeSettledBySelfHeal() const {
+            switch (Status) {
+                case NKikimrBlobStorage::EDriveStatus::FAULTY:
+                case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         bool BadInTermsOfSelfHeal() const {
             return ShouldBeSettledBySelfHeal() || Status == NKikimrBlobStorage::EDriveStatus::INACTIVE;
         }
@@ -427,7 +427,7 @@ public:
                 case NKikimrBlobStorage::EDriveStatus::INACTIVE:
                 case NKikimrBlobStorage::EDriveStatus::SPARE:
                 case NKikimrBlobStorage::EDriveStatus::FAULTY:
-                case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED: 
+                case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
                     return true;
 
                 case NKikimrBlobStorage::EDriveStatus::EDriveStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
@@ -437,10 +437,10 @@ public:
             Y_FAIL("unexpected EDriveStatus");
         }
 
-        TString PathOrSerial() const { 
-            return Path ? Path : ExpectedSerial; 
-        } 
- 
+        TString PathOrSerial() const {
+            return Path ? Path : ExpectedSerial;
+        }
+
         void OnCommit();
     };
 
@@ -486,9 +486,9 @@ public:
 
         struct TGroupStatus {
             // status derived from the actual state of VDisks (IsReady() to be exact)
-            NKikimrBlobStorage::TGroupStatus::E OperatingStatus = NKikimrBlobStorage::TGroupStatus::UNKNOWN; 
+            NKikimrBlobStorage::TGroupStatus::E OperatingStatus = NKikimrBlobStorage::TGroupStatus::UNKNOWN;
             // status derived by adding underlying PDisk status (FAULTY&BROKEN are assumed to be not working ones)
-            NKikimrBlobStorage::TGroupStatus::E ExpectedStatus = NKikimrBlobStorage::TGroupStatus::UNKNOWN; 
+            NKikimrBlobStorage::TGroupStatus::E ExpectedStatus = NKikimrBlobStorage::TGroupStatus::UNKNOWN;
         } Status;
 
         // group status depends on the IsReady value for every VDisk; so it has to be updated every time there is possible
@@ -608,20 +608,20 @@ public:
             return values;
         }
 
-        TPDiskCategory::EDeviceType GetCommonDeviceType() const { 
+        TPDiskCategory::EDeviceType GetCommonDeviceType() const {
             if (VDisksInGroup) {
                 const TPDiskCategory::EDeviceType type = VDisksInGroup.front()->PDisk->Kind.Type();
                 for (const TVSlotInfo *vslot : VDisksInGroup) {
-                    if (type != vslot->PDisk->Kind.Type()) { 
-                        return TPDiskCategory::DEVICE_TYPE_UNKNOWN; 
-                    } 
-                } 
-                return type; 
-            } else { 
-                return TPDiskCategory::DEVICE_TYPE_UNKNOWN; 
-            } 
-        } 
- 
+                    if (type != vslot->PDisk->Kind.Type()) {
+                        return TPDiskCategory::DEVICE_TYPE_UNKNOWN;
+                    }
+                }
+                return type;
+            } else {
+                return TPDiskCategory::DEVICE_TYPE_UNKNOWN;
+            }
+        }
+
         void FillInGroupParameters(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params) const {
             FillInResources(params->MutableAssuredResources(), true);
             FillInResources(params->MutableCurrentResources(), false);
@@ -732,8 +732,8 @@ public:
 
         bool IsRegistered = false;
         Table::NextPDiskID::Type NextPDiskID;
-        // in-mem only 
-        std::map<TString, NPDisk::TDriveData> KnownDrives; 
+        // in-mem only
+        std::map<TString, NPDisk::TDriveData> KnownDrives;
 
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
@@ -755,7 +755,7 @@ public:
 
     };
 
-    std::map<TString, TNodeId> NodeForSerial; 
+    std::map<TString, TNodeId> NodeForSerial;
     TMap<ui32, TSet<ui32>> NodesAwaitingKeysForGroup;
 
     struct THostConfigInfo {
@@ -1149,82 +1149,82 @@ public:
         }
     };
 
-    struct TSerial { 
-        TString Serial; 
- 
-        TSerial(const TString& serial) 
-            : Serial(serial) 
-        {} 
- 
-        auto GetKey() const { 
-            return std::tie(Serial); 
-        } 
- 
-        operator TString() const { 
-            return Serial; 
-        } 
- 
-        friend bool operator<(const TSerial &x, const TSerial &y) { 
-            return x.GetKey() < y.GetKey(); 
-        } 
- 
-        friend bool operator==(const TSerial &x, const TSerial &y) { 
-            return x.GetKey() == y.GetKey(); 
-        } 
- 
-        friend bool operator!=(const TSerial &x, const TSerial &y) { 
-            return !(x == y); 
-        } 
-    }; 
- 
-    struct TDriveSerialInfo { 
-        using Table = Schema::DriveSerial; 
- 
-        Table::BoxId::Type BoxId; 
-        TMaybe<Table::NodeId::Type> NodeId; 
-        TMaybe<Table::PDiskId::Type> PDiskId; 
-        TMaybe<Table::Guid::Type> Guid; 
-        Table::LifeStage::Type LifeStage = NKikimrBlobStorage::TDriveLifeStage::UNKNOWN; 
-        Table::Kind::Type Kind = 0; 
-        Table::PDiskType::Type PDiskType = PDiskTypeToPDiskType(TPDiskCategory::DEVICE_TYPE_UNKNOWN); 
-        TMaybe<Table::PDiskConfig::Type> PDiskConfig; 
- 
-        TDriveSerialInfo() = default; 
-        TDriveSerialInfo(const TDriveSerialInfo&) = default; 
- 
-        TDriveSerialInfo(Table::BoxId::Type boxId) 
-          : BoxId(boxId) 
-          , LifeStage(NKikimrBlobStorage::TDriveLifeStage::NOT_SEEN) 
-        {} 
- 
-        template<typename T> 
-        static void Apply(TBlobStorageController* /*controller*/, T&& callback) { 
-            static TTableAdapter<Table, TDriveSerialInfo, 
-                    Table::BoxId, 
-                    Table::NodeId, 
-                    Table::PDiskId, 
-                    Table::Guid, 
-                    Table::LifeStage, 
-                    Table::Kind, 
-                    Table::PDiskType, 
-                    Table::PDiskConfig 
-                > adapter( 
-                    &TDriveSerialInfo::BoxId, 
-                    &TDriveSerialInfo::NodeId, 
-                    &TDriveSerialInfo::PDiskId, 
-                    &TDriveSerialInfo::Guid, 
-                    &TDriveSerialInfo::LifeStage, 
-                    &TDriveSerialInfo::Kind, 
-                    &TDriveSerialInfo::PDiskType, 
-                    &TDriveSerialInfo::PDiskConfig 
-                ); 
-            callback(&adapter); 
-        } 
+    struct TSerial {
+        TString Serial;
+
+        TSerial(const TString& serial)
+            : Serial(serial)
+        {}
+
+        auto GetKey() const {
+            return std::tie(Serial);
+        }
+
+        operator TString() const {
+            return Serial;
+        }
+
+        friend bool operator<(const TSerial &x, const TSerial &y) {
+            return x.GetKey() < y.GetKey();
+        }
+
+        friend bool operator==(const TSerial &x, const TSerial &y) {
+            return x.GetKey() == y.GetKey();
+        }
+
+        friend bool operator!=(const TSerial &x, const TSerial &y) {
+            return !(x == y);
+        }
+    };
+
+    struct TDriveSerialInfo {
+        using Table = Schema::DriveSerial;
+
+        Table::BoxId::Type BoxId;
+        TMaybe<Table::NodeId::Type> NodeId;
+        TMaybe<Table::PDiskId::Type> PDiskId;
+        TMaybe<Table::Guid::Type> Guid;
+        Table::LifeStage::Type LifeStage = NKikimrBlobStorage::TDriveLifeStage::UNKNOWN;
+        Table::Kind::Type Kind = 0;
+        Table::PDiskType::Type PDiskType = PDiskTypeToPDiskType(TPDiskCategory::DEVICE_TYPE_UNKNOWN);
+        TMaybe<Table::PDiskConfig::Type> PDiskConfig;
+
+        TDriveSerialInfo() = default;
+        TDriveSerialInfo(const TDriveSerialInfo&) = default;
+
+        TDriveSerialInfo(Table::BoxId::Type boxId)
+          : BoxId(boxId)
+          , LifeStage(NKikimrBlobStorage::TDriveLifeStage::NOT_SEEN)
+        {}
+
+        template<typename T>
+        static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
+            static TTableAdapter<Table, TDriveSerialInfo,
+                    Table::BoxId,
+                    Table::NodeId,
+                    Table::PDiskId,
+                    Table::Guid,
+                    Table::LifeStage,
+                    Table::Kind,
+                    Table::PDiskType,
+                    Table::PDiskConfig
+                > adapter(
+                    &TDriveSerialInfo::BoxId,
+                    &TDriveSerialInfo::NodeId,
+                    &TDriveSerialInfo::PDiskId,
+                    &TDriveSerialInfo::Guid,
+                    &TDriveSerialInfo::LifeStage,
+                    &TDriveSerialInfo::Kind,
+                    &TDriveSerialInfo::PDiskType,
+                    &TDriveSerialInfo::PDiskConfig
+                );
+            callback(&adapter);
+        }
 
         void OnCommit() {}
         void OnClone(const THolder<TDriveSerialInfo>&) {}
-    }; 
- 
+    };
+
     struct THostRecord {
         TNodeId NodeId;
         TNodeLocation Location;
@@ -1482,9 +1482,9 @@ private:
 
     void ReadGroups(TSet<ui32>& groupIDsToRead, bool discard, TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result);
 
-    void ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo& pdisk, 
-            TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result, 
-            const NKikimrBlobStorage::EEntityStatus entityStatus); 
+    void ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo& pdisk,
+            TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result,
+            const NKikimrBlobStorage::EEntityStatus entityStatus);
 
     void ReadVSlot(const TVSlotInfo& vslot, TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result);
 
@@ -1526,7 +1526,7 @@ private:
     void RenderHeader(IOutputStream& out);
     void RenderFooter(IOutputStream& out);
     void RenderMonPage(IOutputStream& out);
-    void RenderInternalTables(IOutputStream& out, const TString& table); 
+    void RenderInternalTables(IOutputStream& out, const TString& table);
     void RenderGroupDetail(IOutputStream &out, TGroupId groupId);
     void RenderGroupsInStoragePool(IOutputStream &out, const TBoxStoragePoolId& id);
     void RenderVSlotTable(IOutputStream& out, std::function<void()> callback);
@@ -1552,7 +1552,7 @@ private:
     void Handle(TEvBlobStorage::TEvControllerSelectGroups::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerUpdateGroupStat::TPtr &ev);
-    void Handle(TEvBlobStorage::TEvControllerUpdateNodeDrives::TPtr &ev); 
+    void Handle(TEvBlobStorage::TEvControllerUpdateNodeDrives::TPtr &ev);
     void Handle(TEvControllerCommitGroupLatencies::TPtr &ev);
     void Handle(TEvBlobStorage::TEvRequestControllerInfo::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerGroupReconfigureWipe::TPtr &ev);
@@ -1643,7 +1643,7 @@ private:
 
     void Handle(TEvPrivate::TEvDropDonor::TPtr ev);
 
-    Schema::PDisk::Guid::Type CheckStaticPDisk(TConfigState &state, TPDiskId pdiskId, const TPDiskCategory& category, 
+    Schema::PDisk::Guid::Type CheckStaticPDisk(TConfigState &state, TPDiskId pdiskId, const TPDiskCategory& category,
             const TMaybe<Schema::PDisk::PDiskConfig::Type>& pdiskConfig, ui32 *staticSlotUsage);
     void AllocatePDiskWithSerial(TConfigState& state, ui32 nodeId, const TSerial& serial, TDriveSerialInfo *driveInfo);
     void ValidatePDiskWithSerial(TConfigState& state, ui32 nodeId, const TSerial& serial, const TDriveSerialInfo& driveInfo,
@@ -1721,7 +1721,7 @@ public:
             hFunc(TEvBlobStorage::TEvControllerSelectGroups, Handle);
             hFunc(TEvBlobStorage::TEvControllerUpdateDiskStatus, Handle);
             hFunc(TEvBlobStorage::TEvControllerUpdateGroupStat, Handle);
-            hFunc(TEvBlobStorage::TEvControllerUpdateNodeDrives, Handle); 
+            hFunc(TEvBlobStorage::TEvControllerUpdateNodeDrives, Handle);
             hFunc(TEvControllerCommitGroupLatencies, Handle);
             hFunc(TEvBlobStorage::TEvRequestControllerInfo, Handle);
             hFunc(TEvBlobStorage::TEvControllerGroupReconfigureWipe, Handle);
@@ -1754,7 +1754,7 @@ public:
             fFunc(TEvBlobStorage::EvControllerSelectGroups, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvControllerUpdateDiskStatus, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvControllerUpdateGroupStat, EnqueueIncomingEvent);
-            fFunc(TEvBlobStorage::EvControllerUpdateNodeDrives, EnqueueIncomingEvent); 
+            fFunc(TEvBlobStorage::EvControllerUpdateNodeDrives, EnqueueIncomingEvent);
             fFunc(TEvControllerCommitGroupLatencies::EventType, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvRequestControllerInfo, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvControllerGroupReconfigureWipe, EnqueueIncomingEvent);
@@ -1812,7 +1812,7 @@ public:
         }
 
         ValidateInternalState();
-        UpdatePDisksCounters(); 
+        UpdatePDisksCounters();
         IssueInitialGroupContent();
         InitializeSelfHealState();
         UpdateSystemViews();
@@ -1820,21 +1820,21 @@ public:
         SignalTabletActive(TActivationContext::AsActorContext());
     }
 
-    void UpdatePDisksCounters() { 
-        ui32 numWithoutSlotCount = 0; 
-        ui32 numWithoutSerial = 0; 
+    void UpdatePDisksCounters() {
+        ui32 numWithoutSlotCount = 0;
+        ui32 numWithoutSerial = 0;
         for (const auto& [id, pdisk] : PDisks) {
-            numWithoutSlotCount += !pdisk->HasExpectedSlotCount; 
-            numWithoutSerial += !pdisk->ExpectedSerial; 
+            numWithoutSlotCount += !pdisk->HasExpectedSlotCount;
+            numWithoutSerial += !pdisk->ExpectedSerial;
         }
-        auto& counters = TabletCounters->Simple(); 
-        counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_EXPECTED_SLOT_COUNT].Set(numWithoutSlotCount); 
-        counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_EXPECTED_SERIAL].Set(numWithoutSerial); 
- 
-        ui32 numNotSeen = 0; 
-        ui32 numRemoved = 0; 
-        ui32 numError = 0; 
-        for (const auto& [serial, driveInfo] : DrivesSerials) { 
+        auto& counters = TabletCounters->Simple();
+        counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_EXPECTED_SLOT_COUNT].Set(numWithoutSlotCount);
+        counters[NBlobStorageController::COUNTER_PDISKS_WITHOUT_EXPECTED_SERIAL].Set(numWithoutSerial);
+
+        ui32 numNotSeen = 0;
+        ui32 numRemoved = 0;
+        ui32 numError = 0;
+        for (const auto& [serial, driveInfo] : DrivesSerials) {
             switch (driveInfo->LifeStage) {
                 case NKikimrBlobStorage::TDriveLifeStage::NOT_SEEN:
                     ++numNotSeen;
@@ -1847,12 +1847,12 @@ public:
                     break;
                 default:
                     break;
-            } 
-        } 
- 
-        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_NOT_SEEN].Set(numNotSeen); 
-        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_REMOVED].Set(numRemoved); 
-        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_ERROR].Set(numError); 
+            }
+        }
+
+        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_NOT_SEEN].Set(numNotSeen);
+        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_REMOVED].Set(numRemoved);
+        counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_ERROR].Set(numError);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1937,8 +1937,8 @@ public:
         const TString Path;
         const TPDiskCategory Category;
         const Schema::PDisk::Guid::Type Guid;
-        Schema::PDisk::PDiskConfig::Type PDiskConfig; 
-        ui32 ExpectedSlotCount = 0; 
+        Schema::PDisk::PDiskConfig::Type PDiskConfig;
+        ui32 ExpectedSlotCount = 0;
 
         // runtime info
         ui32 StaticSlotUsage = 0;
@@ -1950,14 +1950,14 @@ public:
             , Path(pdisk.GetPath())
             , Category(pdisk.GetPDiskCategory())
             , Guid(pdisk.GetPDiskGuid())
-        { 
-            if (pdisk.HasPDiskConfig()) { 
-                const auto& cfg = pdisk.GetPDiskConfig(); 
-                bool success = cfg.SerializeToString(&PDiskConfig); 
-                Y_VERIFY(success); 
-                ExpectedSlotCount = cfg.GetExpectedSlotCount(); 
-            } 
-        } 
+        {
+            if (pdisk.HasPDiskConfig()) {
+                const auto& cfg = pdisk.GetPDiskConfig();
+                bool success = cfg.SerializeToString(&PDiskConfig);
+                Y_VERIFY(success);
+                ExpectedSlotCount = cfg.GetExpectedSlotCount();
+            }
+        }
     };
 
     std::map<TPDiskId, TStaticPDiskInfo> StaticPDisks;
@@ -1972,7 +1972,7 @@ public:
     void OnRegisterNode(const TActorId& serverId, TNodeId nodeId);
     void OnWardenConnected(TNodeId nodeId);
     void OnWardenDisconnected(TNodeId nodeId);
-    void EraseKnownDrivesOnDisconnected(TNodeInfo *nodeInfo); 
+    void EraseKnownDrivesOnDisconnected(TNodeInfo *nodeInfo);
 
     using TVSlotFinder = std::function<void(const TVSlotId&, const std::function<void(const TVSlotInfo&)>&)>;
 

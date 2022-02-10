@@ -25,7 +25,7 @@
 #include <ydb/core/actorlib_impl/mad_squirrel.h>
 
 #include <ydb/core/control/immediate_control_board_actor.h>
- 
+
 #include <library/cpp/actors/protos/services_common.pb.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/formats/clickhouse_block.h>
@@ -391,13 +391,13 @@ void TKikimrRunner::InitializeMonitoringLogin(const TKikimrRunConfig&)
     }
 }
 
-void TKikimrRunner::InitializeControlBoard(const TKikimrRunConfig& runConfig) 
-{ 
-    if (Monitoring) { 
-        Monitoring->RegisterActorPage(ActorsMonPage, "icb", "Immediate Control Board", false, ActorSystem.Get(), MakeIcbId(runConfig.NodeId)); 
-    } 
-} 
- 
+void TKikimrRunner::InitializeControlBoard(const TKikimrRunConfig& runConfig)
+{
+    if (Monitoring) {
+        Monitoring->RegisterActorPage(ActorsMonPage, "icb", "Immediate Control Board", false, ActorSystem.Get(), MakeIcbId(runConfig.NodeId));
+    }
+}
+
 void TKikimrRunner::InitializeMessageBus(
     const TKikimrRunConfig& runConfig,
     std::shared_ptr<TModuleFactories> factories
@@ -850,10 +850,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
                                FunctionRegistry.Get(),
                                FormatFactory.Get(),
                                &KikimrShouldContinue));
-    AppData->DataShardExportFactory = ModuleFactories ? ModuleFactories->DataShardExportFactory.get() : nullptr; 
-    AppData->SqsEventsWriterFactory = ModuleFactories ? ModuleFactories->SqsEventsWriterFactory.get() : nullptr; 
+    AppData->DataShardExportFactory = ModuleFactories ? ModuleFactories->DataShardExportFactory.get() : nullptr;
+    AppData->SqsEventsWriterFactory = ModuleFactories ? ModuleFactories->SqsEventsWriterFactory.get() : nullptr;
     AppData->PersQueueMirrorReaderFactory = ModuleFactories ? ModuleFactories->PersQueueMirrorReaderFactory.get() : nullptr;
-    AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr; 
+    AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
 
     AppData->SqsAuthFactory = ModuleFactories
         ? ModuleFactories->SqsAuthFactory.get()
@@ -898,10 +898,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->KeyConfig.CopyFrom(runConfig.AppConfig.GetKeyConfig());
     }
 
-    if (runConfig.AppConfig.HasPDiskKeyConfig()) { 
-        AppData->PDiskKeyConfig.CopyFrom(runConfig.AppConfig.GetPDiskKeyConfig()); 
-    } 
- 
+    if (runConfig.AppConfig.HasPDiskKeyConfig()) {
+        AppData->PDiskKeyConfig.CopyFrom(runConfig.AppConfig.GetPDiskKeyConfig());
+    }
+
     if (runConfig.AppConfig.HasHiveConfig()) {
         AppData->HiveConfig.CopyFrom(runConfig.AppConfig.GetHiveConfig());
     }
@@ -1141,9 +1141,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnableBasicServices) {
         sil->AddServiceInitializer(new TBasicServicesInitializer(runConfig));
     }
-    if (serviceMask.EnableIcbService) { 
-        sil->AddServiceInitializer(new TImmediateControlBoardInitializer(runConfig)); 
-    } 
+    if (serviceMask.EnableIcbService) {
+        sil->AddServiceInitializer(new TImmediateControlBoardInitializer(runConfig));
+    }
     if (serviceMask.EnableWhiteBoard) {
         sil->AddServiceInitializer(new TWhiteBoardServiceInitializer(runConfig));
     }
@@ -1171,9 +1171,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnableLogger) {
         sil->AddServiceInitializer(new TLoggerInitializer(runConfig, LogSettings, LogBackend));
     }
-    if (serviceMask.EnableSchedulerActor) { 
-        sil->AddServiceInitializer(new TSchedulerActorInitializer(runConfig)); 
-    } 
+    if (serviceMask.EnableSchedulerActor) {
+        sil->AddServiceInitializer(new TSchedulerActorInitializer(runConfig));
+    }
     if (serviceMask.EnableProfiler) {
         sil->AddServiceInitializer(new TProfilerInitializer(runConfig));
     }
@@ -1486,8 +1486,8 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     }
 
     if (ModuleFactories) {
-        if (ModuleFactories->DataShardExportFactory) { 
-            ModuleFactories->DataShardExportFactory->Shutdown(); 
+        if (ModuleFactories->DataShardExportFactory) {
+            ModuleFactories->DataShardExportFactory->Shutdown();
         }
     }
 }

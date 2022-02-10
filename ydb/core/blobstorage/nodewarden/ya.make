@@ -12,7 +12,7 @@ SRCS(
     node_warden_group.cpp
     node_warden_group_resolver.cpp
     node_warden_impl.cpp
-    node_warden_mon.cpp 
+    node_warden_mon.cpp
     node_warden_pdisk.cpp
     node_warden_pipe.cpp
     node_warden_proxy.cpp
@@ -23,7 +23,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/json 
+    library/cpp/json
     ydb/core/base
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/pdisk

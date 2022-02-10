@@ -44,7 +44,7 @@ RECURSE(
     dsproxy
     groupinfo
     incrhuge
-    lwtrace_probes 
+    lwtrace_probes
     nodewarden
     other
     pdisk

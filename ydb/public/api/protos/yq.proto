@@ -32,16 +32,16 @@ message Acl {
 
 message Limits {
     // Used only for streaming queries
-    int64 vcpu_rate_limit = 1 [(Ydb.value) = ">= 0"]; // 0.01 vcpu per second
-    int64 flow_rate_limit = 2 [(Ydb.value) = ">= 0"]; // Bytes per second
-    int64 vcpu_time_limit = 3 [(Ydb.value) = ">= 0"]; // Milliseconds per second
+    int64 vcpu_rate_limit = 1 [(Ydb.value) = ">= 0"]; // 0.01 vcpu per second 
+    int64 flow_rate_limit = 2 [(Ydb.value) = ">= 0"]; // Bytes per second 
+    int64 vcpu_time_limit = 3 [(Ydb.value) = ">= 0"]; // Milliseconds per second 
 
     // Used only for analytics queries
-    int64 max_result_size = 4 [(Ydb.value) = ">= 0"]; // Bytes
-    int64 max_result_rows = 5 [(Ydb.value) = ">= 0"]; // Count
+    int64 max_result_size = 4 [(Ydb.value) = ">= 0"]; // Bytes 
+    int64 max_result_rows = 5 [(Ydb.value) = ">= 0"]; // Count 
 
     // Common limits
-    int64 memory_limit = 6 [(Ydb.value) = ">= 0"]; // Bytes
+    int64 memory_limit = 6 [(Ydb.value) = ">= 0"]; // Bytes 
     google.protobuf.Duration result_ttl = 7;
 }
 
@@ -147,13 +147,13 @@ message QueryMeta {
     ComputeStatus status = 5;
     int64 last_job_query_revision = 6;
     string last_job_id = 7;
-    google.protobuf.Timestamp expire_at = 8;
-    google.protobuf.Timestamp result_expire_at = 9;
-    string started_by = 10;
-    oneof action {
-        string aborted_by = 11;
-        string paused_by = 12;
-    }
+    google.protobuf.Timestamp expire_at = 8; 
+    google.protobuf.Timestamp result_expire_at = 9; 
+    string started_by = 10; 
+    oneof action { 
+        string aborted_by = 11; 
+        string paused_by = 12; 
+    } 
     // One of the versions of this query has fully saved checkpoint.
     // If this flag is not set streaming disposition mode "from last checkpoint" can't be used.
     bool has_saved_checkpoints = 13;
@@ -171,10 +171,10 @@ message QueryPlan {
     string json = 1; // No validation because generated on server side
 }
 
-message QueryAst {
-    string data = 1;
-}
-
+message QueryAst { 
+    string data = 1; 
+} 
+ 
 message ResultSetMeta {
     repeated Ydb.Column column = 1;
     int64 rows_count = 2 [(Ydb.value) = ">= 0"];
@@ -189,7 +189,7 @@ message Query {
     repeated Ydb.Issue.IssueMessage transient_issue = 5;
     QueryStatistics statistics = 6;
     repeated ResultSetMeta result_set_meta = 7;
-    QueryAst ast = 8;
+    QueryAst ast = 8; 
 }
 
 message QueryStatistics {
@@ -213,12 +213,12 @@ message CreateQueryResult {
     string query_id = 1 [(Ydb.length).le = 1024];
 }
 
-enum AutomaticType {
-    AUTOMATIC_TYPE_UNSPECIFIED = 0;
-    AUTOMATIC = 1;
-    NOT_AUTOMATIC = 2;
-}
-
+enum AutomaticType { 
+    AUTOMATIC_TYPE_UNSPECIFIED = 0; 
+    AUTOMATIC = 1; 
+    NOT_AUTOMATIC = 2; 
+} 
+ 
 // Getting brief information about queries
 message ListQueriesRequest {
     Ydb.Operations.OperationParams operation_params = 1;
@@ -231,8 +231,8 @@ message ListQueriesRequest {
         repeated ExecuteMode mode = 3 [(Ydb.size).le = 20];
         string name = 4 [(Ydb.length).le = 1024]; // queries whose name contains the filter.name substring
         bool created_by_me = 5;
-        Acl.Visibility visibility = 6;
-        AutomaticType automatic = 7;
+        Acl.Visibility visibility = 6; 
+        AutomaticType automatic = 7; 
     }
     Filter filter = 4;
 }
@@ -260,21 +260,21 @@ message DescribeQueryResult {
     Query query = 1;
 }
 
-// Getting status of the query
-message GetQueryStatusRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-    string query_id = 2 [(Ydb.length).range = {min: 1, max: 1024}];
-}
-
-message GetQueryStatusResponse {
-    Ydb.Operations.Operation operation = 1; // GetQueryStatusResult
-}
-
-message GetQueryStatusResult {
-    QueryMeta.ComputeStatus status = 1;
-    int64 meta_revision = 2;
-}
-
+// Getting status of the query 
+message GetQueryStatusRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+    string query_id = 2 [(Ydb.length).range = {min: 1, max: 1024}]; 
+} 
+ 
+message GetQueryStatusResponse { 
+    Ydb.Operations.Operation operation = 1; // GetQueryStatusResult 
+} 
+ 
+message GetQueryStatusResult { 
+    QueryMeta.ComputeStatus status = 1; 
+    int64 meta_revision = 2; 
+} 
+ 
 // Complete removal of query. Recovery of the query after this operation is not possible
 message DeleteQueryRequest {
     Ydb.Operations.OperationParams operation_params = 1;
@@ -327,15 +327,15 @@ message ControlQueryResult {
 
 // === Job API ===
 
-message BriefJob {
-    CommonMeta meta = 1;
-    QueryMeta query_meta = 3;
-    string query_name = 9;
-    Acl.Visibility visibility = 10;
-    bool automatic = 11;
-    google.protobuf.Timestamp expire_at = 12;
-}
-
+message BriefJob { 
+    CommonMeta meta = 1; 
+    QueryMeta query_meta = 3; 
+    string query_name = 9; 
+    Acl.Visibility visibility = 10; 
+    bool automatic = 11; 
+    google.protobuf.Timestamp expire_at = 12; 
+} 
+ 
 message Job {
     CommonMeta meta = 1;
     string text = 2;
@@ -344,11 +344,11 @@ message Job {
     repeated Ydb.Issue.IssueMessage issue = 5;
     QueryStatistics statistics = 6;
     repeated ResultSetMeta result_set_meta = 7;
-    QueryAst ast = 8;
-    string query_name = 9;
-    Acl acl = 10;
-    bool automatic = 11;
-    google.protobuf.Timestamp expire_at = 12;
+    QueryAst ast = 8; 
+    string query_name = 9; 
+    Acl acl = 10; 
+    bool automatic = 11; 
+    google.protobuf.Timestamp expire_at = 12; 
 }
 
 // Information about recent query runs
@@ -370,24 +370,24 @@ message ListJobsResponse {
 }
 
 message ListJobsResult {
-    repeated BriefJob job = 1;
+    repeated BriefJob job = 1; 
     string next_page_token = 2 [(Ydb.length).le = 1024];
 }
 
-// Getting information about the job
-message DescribeJobRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-    string job_id = 2 [(Ydb.length).range = {min: 1, max: 1024}];
-}
-
-message DescribeJobResponse {
-    Ydb.Operations.Operation operation = 1; // DescribeJobResult
-}
-
-message DescribeJobResult {
-    Job job = 1;
-}
-
+// Getting information about the job 
+message DescribeJobRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+    string job_id = 2 [(Ydb.length).range = {min: 1, max: 1024}]; 
+} 
+ 
+message DescribeJobResponse { 
+    Ydb.Operations.Operation operation = 1; // DescribeJobResult 
+} 
+ 
+message DescribeJobResult { 
+    Job job = 1; 
+} 
+ 
 // === Connection API ===
 
 message CurrentIAMTokenAuth {
@@ -452,15 +452,15 @@ message ObjectStorageConnection {
 }
 
 message ConnectionSetting {
-    enum ConnectionType {
-        CONNECTION_TYPE_UNSPECIFIED = 0;
-        YDB_DATABASE = 1;
-        CLICKHOUSE_CLUSTER = 2;
-        DATA_STREAMS = 3;
-        OBJECT_STORAGE = 4;
-        MONITORING = 5;
-    }
-
+    enum ConnectionType { 
+        CONNECTION_TYPE_UNSPECIFIED = 0; 
+        YDB_DATABASE = 1; 
+        CLICKHOUSE_CLUSTER = 2; 
+        DATA_STREAMS = 3; 
+        OBJECT_STORAGE = 4; 
+        MONITORING = 5; 
+    } 
+ 
     oneof connection {
         YdbDatabase ydb_database = 1;
         ClickHouseCluster clickhouse_cluster = 2;
@@ -506,7 +506,7 @@ message ListConnectionsRequest {
     message Filter {
         string name = 1 [(Ydb.length).le = 1024]; // connections whose name contains the filter.name substring
         bool created_by_me = 2;
-        ConnectionSetting.ConnectionType connection_type = 3;
+        ConnectionSetting.ConnectionType connection_type = 3; 
     }
     Filter filter = 4;
 }
@@ -585,7 +585,7 @@ message GetResultDataRequest {
     string query_id = 2 [(Ydb.length).range = {min: 1, max: 1024}];
     int32 result_set_index = 3 [(Ydb.value) = ">= 0"];
     int64 offset = 4 [(Ydb.value) = ">= 0"];
-    int64 limit = 5 [(Ydb.value) = "[1; 1000]"];
+    int64 limit = 5 [(Ydb.value) = "[1; 1000]"]; 
 }
 
 message GetResultDataResponse {
@@ -623,12 +623,12 @@ message ObjectStorageBinding {
 }
 
 message BindingSetting {
-    enum BindingType {
-        BINDING_TYPE_UNSPECIFIED = 0;
-        DATA_STREAMS = 1;
-        OBJECT_STORAGE = 2;
-    }
-
+    enum BindingType { 
+        BINDING_TYPE_UNSPECIFIED = 0; 
+        DATA_STREAMS = 1; 
+        OBJECT_STORAGE = 2; 
+    } 
+ 
     oneof binding {
         DataStreamsBinding data_streams = 1;
         ObjectStorageBinding object_storage = 2;
@@ -639,7 +639,7 @@ message BriefBinding {
     string name = 1 [(Ydb.length).range = {min: 1, max: 1024}];
     string connection_id = 2 [(Ydb.length).range = {min: 1, max: 1024}];
     CommonMeta meta = 3;
-    BindingSetting.BindingType type = 4;
+    BindingSetting.BindingType type = 4; 
 }
 
 message BindingContent {

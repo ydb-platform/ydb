@@ -42,7 +42,7 @@ TRunActorParams::TRunActorParams(
     int32_t dqGraphIndex,
     TVector<Yq::Private::TopicConsumer> createdTopicConsumers,
     bool automatic,
-    const TString& queryName,
+    const TString& queryName, 
     const TInstant& deadline,
     const NMonitoring::TDynamicCounterPtr& clientCounters
     )
@@ -84,7 +84,7 @@ TRunActorParams::TRunActorParams(
     , CreatedTopicConsumers(std::move(createdTopicConsumers))
     , Automatic(automatic)
     , QueryName(queryName)
-    , Deadline(deadline)
+    , Deadline(deadline) 
     , ClientCounters(clientCounters)
     {
     }

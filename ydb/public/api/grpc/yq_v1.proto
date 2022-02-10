@@ -17,9 +17,9 @@ service YandexQueryService {
     // Get full information about the object of the query
     rpc DescribeQuery(YandexQuery.DescribeQueryRequest) returns (YandexQuery.DescribeQueryResponse);
 
-    // Get status of the query
-    rpc GetQueryStatus(YandexQuery.GetQueryStatusRequest) returns (YandexQuery.GetQueryStatusResponse);
-
+    // Get status of the query 
+    rpc GetQueryStatus(YandexQuery.GetQueryStatusRequest) returns (YandexQuery.GetQueryStatusResponse); 
+ 
     // Change the attributes of the query (acl, name, ...)
     rpc ModifyQuery(YandexQuery.ModifyQueryRequest) returns (YandexQuery.ModifyQueryResponse);
 
@@ -34,12 +34,12 @@ service YandexQueryService {
 
     // Job
     // Job - appears immediately after starting the request and contains the request metadata
-    // Get a list of jobs
+    // Get a list of jobs 
     rpc ListJobs(YandexQuery.ListJobsRequest) returns (YandexQuery.ListJobsResponse);
 
-    // Get information about the job
-    rpc DescribeJob(YandexQuery.DescribeJobRequest) returns (YandexQuery.DescribeJobResponse);
-
+    // Get information about the job 
+    rpc DescribeJob(YandexQuery.DescribeJobRequest) returns (YandexQuery.DescribeJobResponse); 
+ 
     // Connection
     // Connection - entity that describes connection points. This can be imagined as an analogue of a network address.
     // Create a connection object (ObjectStorage, YDB, YDS, ...)

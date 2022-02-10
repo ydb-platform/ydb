@@ -66,7 +66,7 @@ message GetTaskResult {
 
         bool automatic = 22;
         string query_name = 23;
-        google.protobuf.Timestamp deadline = 24;
+        google.protobuf.Timestamp deadline = 24; 
         YandexQuery.StreamingDisposition disposition = 25;
     }
     repeated Task tasks = 1;
@@ -100,7 +100,7 @@ message PingTaskRequest {
     string scope = 100; //TODO remove
     google.protobuf.Timestamp started_at = 101;
     google.protobuf.Timestamp finished_at = 102;
-    google.protobuf.Timestamp deadline = 103;
+    google.protobuf.Timestamp deadline = 103; 
 }
 
 message PingTaskResult {
@@ -119,7 +119,7 @@ message WriteTaskResultRequest {
     uint64 offset = 5;
     uint64 request_id = 6;
     Ydb.Operations.OperationParams operation_params = 7;
-    google.protobuf.Timestamp deadline = 8;
+    google.protobuf.Timestamp deadline = 8; 
 }
 
 message WriteTaskResultResult {

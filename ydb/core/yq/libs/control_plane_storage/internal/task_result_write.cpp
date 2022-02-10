@@ -16,11 +16,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
     const Ydb::ResultSet& resultSet = request.ResultSet;
     const int byteSize = resultSet.ByteSize();
 
-    CPS_LOG_T("WriteResultDataRequest: " << resultId << " " << resultSetId << " " << startRowId << " " << resultSet.ByteSize() << " " << deadline);
+    CPS_LOG_T("WriteResultDataRequest: " << resultId << " " << resultSetId << " " << startRowId << " " << resultSet.ByteSize() << " " << deadline); 
 
-    NYql::TIssues issues = ValidateWriteResultData(resultId, resultSet, deadline, Config.ResultSetsTtl);
+    NYql::TIssues issues = ValidateWriteResultData(resultId, resultSet, deadline, Config.ResultSetsTtl); 
     if (issues) {
-        CPS_LOG_D("WriteResultDataRequest, validation failed: " << resultId << " " << resultSetId << " " << startRowId << " " << resultSet.DebugString() << " " << deadline << " error: " << issues.ToString());
+        CPS_LOG_D("WriteResultDataRequest, validation failed: " << resultId << " " << resultSetId << " " << startRowId << " " << resultSet.DebugString() << " " << deadline << " error: " << issues.ToString()); 
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvWriteResultDataResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(WriteResultDataRequest, resultId, resultSetId, startRowId, resultSet.rows().size(), delta, deadline, byteSize, false);

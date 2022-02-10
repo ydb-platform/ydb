@@ -2,7 +2,7 @@
 
 namespace NYq {
 
-NYql::TIssues ValidateWriteResultData(const TString& resultId, const Ydb::ResultSet& resultSet, const TInstant& deadline, const TDuration& ttl)
+NYql::TIssues ValidateWriteResultData(const TString& resultId, const Ydb::ResultSet& resultSet, const TInstant& deadline, const TDuration& ttl) 
 {
     NYql::TIssues issues;
     if (!resultId) {
@@ -13,11 +13,11 @@ NYql::TIssues ValidateWriteResultData(const TString& resultId, const Ydb::Result
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "result set rows count is empty"));
     }
 
-    const auto hardLimit = TInstant::Now() + ttl;
-    if (deadline > hardLimit) {
-        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "deadline " + deadline.ToString() + " must be less than " + hardLimit.ToString()));
-    }
-
+    const auto hardLimit = TInstant::Now() + ttl; 
+    if (deadline > hardLimit) { 
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "deadline " + deadline.ToString() + " must be less than " + hardLimit.ToString())); 
+    } 
+ 
     return issues;
 }
 
@@ -35,7 +35,7 @@ NYql::TIssues ValidateGetTask(const TString& owner, const TString& hostName)
     return issues;
 }
 
-NYql::TIssues ValidatePingTask(const TString& scope, const TString& queryId, const TString& owner, const TInstant& deadline, const TDuration& ttl)
+NYql::TIssues ValidatePingTask(const TString& scope, const TString& queryId, const TString& owner, const TInstant& deadline, const TDuration& ttl) 
 {
     NYql::TIssues issues;
     if (!scope) {
@@ -50,11 +50,11 @@ NYql::TIssues ValidatePingTask(const TString& scope, const TString& queryId, con
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "owner is not specified"));
     }
 
-    const auto hardLimit = TInstant::Now() + ttl;
-    if (deadline > hardLimit) {
-        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "deadline " + deadline.ToString() + " must be less than " + hardLimit.ToString()));
-    }
-
+    const auto hardLimit = TInstant::Now() + ttl; 
+    if (deadline > hardLimit) { 
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "deadline " + deadline.ToString() + " must be less than " + hardLimit.ToString())); 
+    } 
+ 
     return issues;
 }
 

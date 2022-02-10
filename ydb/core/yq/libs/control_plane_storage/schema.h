@@ -15,10 +15,10 @@ namespace NYq {
 // columns
 #define SCOPE_COLUMN_NAME "scope"
 #define VISIBILITY_COLUMN_NAME "visibility"
-#define AUTOMATIC_COLUMN_NAME "automatic"
+#define AUTOMATIC_COLUMN_NAME "automatic" 
 #define USER_COLUMN_NAME "user"
 #define REVISION_COLUMN_NAME "revision"
-#define META_REVISION_COLUMN_NAME "meta_revision"
+#define META_REVISION_COLUMN_NAME "meta_revision" 
 #define INTERNAL_COLUMN_NAME "internal"
 #define GENERATION_COLUMN_NAME "generation"
 #define RETRY_COUNTER_COLUMN_NAME "retry_counter"
@@ -29,14 +29,14 @@ namespace NYq {
 #define QUERY_TYPE_COLUMN_NAME "query_type"
 #define EXECUTE_MODE_COLUMN_NAME "execute_mode"
 #define LAST_JOB_ID_COLUMN_NAME "last_job_id"
-#define RESULT_SETS_EXPIRE_AT_COLUMN_NAME "result_sets_expire_at"
+#define RESULT_SETS_EXPIRE_AT_COLUMN_NAME "result_sets_expire_at" 
 
 #define QUERY_ID_COLUMN_NAME "query_id"
 #define QUERY_COLUMN_NAME "query"
 
-#define CONNECTION_ID_COLUMN_NAME "connection_id"
+#define CONNECTION_ID_COLUMN_NAME "connection_id" 
 #define CONNECTION_COLUMN_NAME "connection"
-#define CONNECTION_TYPE_COLUMN_NAME "connection_type"
+#define CONNECTION_TYPE_COLUMN_NAME "connection_type" 
 #define NAME_COLUMN_NAME "name"
 
 #define BINDING_ID_COLUMN_NAME "binding_id"

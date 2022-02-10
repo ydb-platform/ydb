@@ -17,7 +17,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/lwtrace
-    library/cpp/protobuf/interop
+    library/cpp/protobuf/interop 
     ydb/core/base
     ydb/core/mon
     ydb/core/yq/libs/actors/logging

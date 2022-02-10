@@ -8,7 +8,7 @@
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/protobuf/interop/cast.h>
+#include <library/cpp/protobuf/interop/cast.h> 
 #include <ydb/core/protos/services.pb.h>
 
 #include <ydb/library/yql/ast/yql_expr.h>
@@ -259,7 +259,7 @@ private:
             task.dq_graph_index(),
             VectorFromProto(task.created_topic_consumers()),
             task.automatic(),
-            task.query_name(),
+            task.query_name(), 
             NProtoInterop::CastFromProto(task.deadline()),
             ClientCounters);
 

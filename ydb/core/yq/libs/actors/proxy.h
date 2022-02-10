@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/yq/libs/config/protos/pinger.pb.h>
 #include "run_actor_params.h"
-#include <util/datetime/base.h>
+#include <util/datetime/base.h> 
 
 #include <ydb/core/yq/libs/events/events.h>
 #include <ydb/core/yq/libs/private_client/private_client.h>
@@ -71,7 +71,7 @@ NActors::IActor* CreateResultWriter(
     const NConfig::TPrivateApiConfig& privateApiConfig,
     const TResultId& resultId,
     const TVector<TString>& columns,
-    const TString& traceId,
+    const TString& traceId, 
     const TInstant& deadline,
     const NMonitoring::TDynamicCounterPtr& clientCounters
     );
@@ -83,8 +83,8 @@ NActors::IActor* CreatePingerActor(
     const TString& owner,
     const NYq::TPrivateClient& client,
     const NActors::TActorId parent,
-    const NConfig::TPingerConfig& config,
-    const TInstant& deadline);
+    const NConfig::TPingerConfig& config, 
+    const TInstant& deadline); 
 
 TString MakeInternalError(const TString& text);
 

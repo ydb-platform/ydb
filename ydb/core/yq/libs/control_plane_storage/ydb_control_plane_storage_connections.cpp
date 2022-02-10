@@ -79,7 +79,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
     InsertIdempotencyKey(queryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), startTime + Config.IdempotencyKeyTtl);
 
     queryBuilder.AddText(
-        "INSERT INTO `" CONNECTIONS_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" CONNECTION_ID_COLUMN_NAME "`, `" USER_COLUMN_NAME "`, `" VISIBILITY_COLUMN_NAME "`, `" NAME_COLUMN_NAME "`, `" CONNECTION_TYPE_COLUMN_NAME "`, `" CONNECTION_COLUMN_NAME "`, `" REVISION_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "`) VALUES\n"
+        "INSERT INTO `" CONNECTIONS_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" CONNECTION_ID_COLUMN_NAME "`, `" USER_COLUMN_NAME "`, `" VISIBILITY_COLUMN_NAME "`, `" NAME_COLUMN_NAME "`, `" CONNECTION_TYPE_COLUMN_NAME "`, `" CONNECTION_COLUMN_NAME "`, `" REVISION_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "`) VALUES\n" 
         "    ($scope, $connection_id, $user, $visibility, $name, $connection_type, $connection, $revision, $internal);"
     );
 
@@ -187,12 +187,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
             filters.push_back("`" USER_COLUMN_NAME "` = $user");
         }
 
-        if (request.filter().connection_type() != YandexQuery::ConnectionSetting::CONNECTION_TYPE_UNSPECIFIED) {
+        if (request.filter().connection_type() != YandexQuery::ConnectionSetting::CONNECTION_TYPE_UNSPECIFIED) { 
             queryBuilder.AddInt64("connection_type", request.filter().connection_type());
             filters.push_back("`" CONNECTION_TYPE_COLUMN_NAME "` = $connection_type");
-        }
-
-        filter = JoinSeq(" AND ", filters);
+        } 
+ 
+        filter = JoinSeq(" AND ", filters); 
     }
 
     PrepareViewAccessCondition(queryBuilder, permissions, user);
@@ -411,7 +411,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
         auto& meta = *connection.mutable_meta();
         meta.set_revision(meta.revision() + 1);
         meta.set_modified_by(user);
-        *meta.mutable_modified_at() = NProtoInterop::CastToProto(TInstant::Now());
+        *meta.mutable_modified_at() = NProtoInterop::CastToProto(TInstant::Now()); 
 
         auto& content = *connection.mutable_content();
 

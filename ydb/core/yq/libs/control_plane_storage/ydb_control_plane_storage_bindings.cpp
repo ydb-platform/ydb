@@ -200,7 +200,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListBinding
             filters.push_back("`" USER_COLUMN_NAME "` = $user");
         }
 
-        filter = JoinSeq(" AND ", filters);
+        filter = JoinSeq(" AND ", filters); 
     }
 
     PrepareViewAccessCondition(queryBuilder, permissions, user);
@@ -427,7 +427,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
         auto& meta = *binding.mutable_meta();
         meta.set_revision(meta.revision() + 1);
         meta.set_modified_by(user);
-        *meta.mutable_modified_at() = NProtoInterop::CastToProto(TInstant::Now());
+        *meta.mutable_modified_at() = NProtoInterop::CastToProto(TInstant::Now()); 
 
         auto& content = *binding.mutable_content();
 

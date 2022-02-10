@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/maybe.h>
-#include <util/system/types.h> 
+#include <util/system/types.h>
 
 namespace NYsonPull {
     struct TPositionInfo {

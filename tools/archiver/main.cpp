@@ -590,10 +590,10 @@ int main(int argc, char** argv) {
         .StoreResult(&cppBase);
 
     TString forceKeys;
-    opts.AddLongOption('k', "keys", "Set explicit list of keys for elements") 
-        .RequiredArgument("<keys>") 
-        .StoreResult(&forceKeys); 
- 
+    opts.AddLongOption('k', "keys", "Set explicit list of keys for elements")
+        .RequiredArgument("<keys>")
+        .StoreResult(&forceKeys);
+
     opts.SetFreeArgDefaultTitle("<file>");
     opts.SetFreeArgsMin(1);
     NLastGetopt::TOptsParseResult optsRes(&opts, argc, argv);
@@ -603,18 +603,18 @@ int main(int argc, char** argv) {
 
     TVector<TRec> recs;
     const auto& files = optsRes.GetFreeArgs();
- 
+
     TVector<TStringBuf> keys;
     if (forceKeys.size())
         StringSplitter(forceKeys).Split(':').SkipEmpty().Collect(&keys);
- 
+
     if (keys.size() && keys.size() != files.size()) {
         Cerr << "Invalid number of keys=" << keys.size() << " (!= number of files=" << files.size() << ")" << Endl;
-        return 1; 
-    } 
- 
+        return 1;
+    }
+
     for (size_t i = 0; i < files.size(); ++i) {
-        const auto& path = files[i]; 
+        const auto& path = files[i];
         size_t off = 0;
 #ifdef _win_
         if (path[0] > 0 && isalpha(path[0]) && path[1] == ':')
@@ -626,7 +626,7 @@ int main(int argc, char** argv) {
         if (pos != TString::npos)
             cur.Prefix = path.substr(pos + 1);
         if (keys.size())
-            cur.Key = keys[i]; 
+            cur.Key = keys[i];
         cur.Recursive = recursive;
         cur.Fix();
         recs.push_back(cur);

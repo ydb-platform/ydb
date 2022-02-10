@@ -394,7 +394,7 @@ IF (OS_LINUX)
         ibdrv/ut
         proc
         luajit
-        luajit_21 
+        luajit_21
         libaio
         libcap
         libmnl

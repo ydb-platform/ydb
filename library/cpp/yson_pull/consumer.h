@@ -3,7 +3,7 @@
 #include "event.h"
 
 #include <util/generic/strbuf.h>
-#include <util/system/types.h> 
+#include <util/system/types.h>
 
 namespace NYsonPull {
     class IConsumer {

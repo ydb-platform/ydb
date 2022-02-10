@@ -75,7 +75,7 @@ namespace NYsonPull {
             none = 3 + (5 << 2),    // = 10111b
         };
 
-#define CHAR_SUBCLASS(x) (static_cast<ui8>(x) >> 2) 
+#define CHAR_SUBCLASS(x) (static_cast<ui8>(x) >> 2)
 
         inline char_class get_char_class(ui8 ch) {
 #define NN char_class::none

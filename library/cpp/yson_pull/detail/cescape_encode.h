@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/system/types.h> 
+#include <util/system/types.h>
 
 // Whether to ensure strict ASCII compatibility
 // Turns UTF-8 strings into unreadable garbage for no known reason

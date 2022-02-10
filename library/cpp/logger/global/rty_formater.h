@@ -54,7 +54,7 @@ class TLoggerFormatterOperator : public NLoggingImpl::TOperatorBase<ILoggerForma
 };
 
 struct TRTYMessageFormater {
-    static bool CheckLoggingContext(TLog& logger, const TLogRecordContext& context); 
+    static bool CheckLoggingContext(TLog& logger, const TLogRecordContext& context);
     static TSimpleSharedPtr<TLogElement> StartRecord(TLog& logger, const TLogRecordContext& context, TSimpleSharedPtr<TLogElement> earlier);
 };
 

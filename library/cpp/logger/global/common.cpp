@@ -23,10 +23,10 @@ namespace NLoggingImpl {
     }
 }
 
-bool TLogFilter::CheckLoggingContext(TLog& log, const TLogRecordContext& context) { 
-    return context.Priority <= log.FiltrationLevel(); 
-} 
- 
+bool TLogFilter::CheckLoggingContext(TLog& log, const TLogRecordContext& context) {
+    return context.Priority <= log.FiltrationLevel();
+}
+
 TSimpleSharedPtr<TLogElement> TLogFilter::StartRecord(TLog& logger, const TLogRecordContext& context, TSimpleSharedPtr<TLogElement> earlier) {
     if (earlier)
         return earlier;

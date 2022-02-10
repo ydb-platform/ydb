@@ -80,10 +80,10 @@ ILoggerFormatter* CreateRtyLoggerFormatter() {
     return new TRtyLoggerFormatter();
 }
 
-bool TRTYMessageFormater::CheckLoggingContext(TLog& /*logger*/, const TLogRecordContext& /*context*/) { 
-    return true; 
-} 
- 
+bool TRTYMessageFormater::CheckLoggingContext(TLog& /*logger*/, const TLogRecordContext& /*context*/) {
+    return true;
+}
+
 TSimpleSharedPtr<TLogElement> TRTYMessageFormater::StartRecord(TLog& logger, const TLogRecordContext& context, TSimpleSharedPtr<TLogElement> earlier) {
     if (!earlier) {
         earlier.Reset(new TLogElement(&logger));

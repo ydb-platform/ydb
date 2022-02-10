@@ -34,7 +34,7 @@ def construct_credentials_from_environ(tracer=None):
 
         tracing.trace(tracer, {"credentials.metadata": True})
         return ydb.iam.MetadataUrlCredentials()
-
+ 
     if os.getenv("YDB_TOKEN") is not None:
         tracing.trace(tracer, {"credentials.access_token": True})
         return credentials.AuthTokenCredentials(os.getenv("YDB_TOKEN"))

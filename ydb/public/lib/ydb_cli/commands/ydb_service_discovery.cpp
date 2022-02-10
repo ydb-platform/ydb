@@ -33,11 +33,11 @@ void TCommandListEndpoints::PrintResponse(NDiscovery::TListEndpointsResult& resu
     const TVector<NDiscovery::TEndpointInfo>& endpoints = result.GetEndpointsInfo();
     if (endpoints.size()) {
         for (auto& endpoint : endpoints) {
-            if (endpoint.Ssl) {
-                Cout << "grpcs://";
-            } else {
-                Cout << "grpc://";
-            }
+            if (endpoint.Ssl) { 
+                Cout << "grpcs://"; 
+            } else { 
+                Cout << "grpc://"; 
+            } 
             Cout << endpoint.Address << ":" << endpoint.Port;
             if (endpoint.Location) {
                 Cout << " [" << endpoint.Location << "]";

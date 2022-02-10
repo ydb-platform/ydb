@@ -1,26 +1,26 @@
 import "ydb/core/protos/base.proto";
 
 package NKikimr.NTable.NProto;
-option java_package = "ru.yandex.kikimr.proto"; 
- 
+option java_package = "ru.yandex.kikimr.proto";
+
 message TEvol {
     required uint32 Tail  = 1;
     required uint32 Head  = 2;
 }
 
 message TPartColumn {
-    optional uint32 Tag = 1; 
-    optional uint32 Type = 2; 
+    optional uint32 Tag = 1;
+    optional uint32 Type = 2;
     optional uint32 Key = 3;
     optional uint32 Group = 4;
-} 
- 
+}
+
 message TPartScheme {
     repeated TPartColumn Columns = 1;
-    repeated uint32 KeyTags = 2; 
+    repeated uint32 KeyTags = 2;
     optional uint32 Legacy0_ = 3;
-} 
- 
+}
+
 message TLayout {
     optional uint32 Index = 1;
     optional uint32 Globs = 2;  // EPage::Globs, external blobs catalog
@@ -52,7 +52,7 @@ message TRoot { // NTable::TPart page collection metablob
     optional TLayout Layout = 8;// Non-data pages layout information
     optional NKikimrProto.TRowVersion MinRowVersion = 9;
     optional NKikimrProto.TRowVersion MaxRowVersion = 10;
-} 
+}
 
 message TSliceBounds {
     optional bytes FirstKey = 1;

@@ -1,4 +1,4 @@
-#include "balance_coverage_builder.h" 
+#include "balance_coverage_builder.h"
 
 namespace NKikimr {
 

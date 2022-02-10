@@ -1,12 +1,12 @@
 #include "datashard_txs.h"
 #include "datashard_failpoints.h"
 #include "operation.h"
- 
+
 #include <ydb/core/util/pb.h>
 
-namespace NKikimr { 
+namespace NKikimr {
 namespace NDataShard {
- 
+
 TDataShard::TTxProposeTransactionBase::TTxProposeTransactionBase(TDataShard *self,
                                                                         TEvDataShard::TEvProposeTransaction::TPtr &&ev,
                                                                         TInstant receivedAt, ui64 tieBreakerIndex,
@@ -33,7 +33,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
         Acked = true;
     }
 
-    try { 
+    try {
         TOutputOpData::TResultPtr result = nullptr;
         // If tablet is in follower mode then we should sync scheme
         // before we build and check operation.
@@ -137,23 +137,23 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
         }
 
         // Commit all side effects
-        return true; 
-    } catch (const TNotReadyTabletException &) { 
+        return true;
+    } catch (const TNotReadyTabletException &) {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
             "TX [" << 0 << " : " << TxId << "] can't prepare (tablet's not ready) at tablet " << Self->TabletID());
-        return false; 
-    } catch (const TSchemeErrorTabletException &ex) { 
+        return false;
+    } catch (const TSchemeErrorTabletException &ex) {
         Y_UNUSED(ex);
         Y_FAIL();
     } catch (const TMemoryLimitExceededException &ex) {
         Y_FAIL("there must be no leaked exceptions: TMemoryLimitExceededException");
     } catch (const std::exception &e) {
         Y_FAIL("there must be no leaked exceptions: %s", e.what());
-    } catch (...) { 
+    } catch (...) {
         Y_FAIL("there must be no leaked exceptions");
-    } 
-} 
- 
+    }
+}
+
 void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxProposeTransactionBase::Complete at " << Self->TabletID());
@@ -181,6 +181,6 @@ void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
 
     Self->CheckSplitCanStart(ctx);
     Self->CheckMvccStateChangeCanStart(ctx);
-} 
- 
-}} 
+}
+
+}}

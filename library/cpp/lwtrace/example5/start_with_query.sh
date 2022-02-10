@@ -1,3 +1,3 @@
-#!/bin/bash 
-export LWTRACE="example_query.tr" 
-./lwtrace-example5 
+#!/bin/bash
+export LWTRACE="example_query.tr"
+./lwtrace-example5

@@ -8,7 +8,7 @@
 #include <library/cpp/actors/util/threadparkpad.h>
 
 namespace NActors {
-    class TExecutorPoolBaseMailboxed: public IExecutorPool { 
+    class TExecutorPoolBaseMailboxed: public IExecutorPool {
     protected:
         TActorSystem* ActorSystem;
         THolder<TMailboxTable> MailboxTable;
@@ -17,33 +17,33 @@ namespace NActors {
         // registrations might be done in threads from other pools)
         TExecutorThreadStats Stats;
 #endif
-        TAtomic RegisterRevolvingCounter = 0; 
-        ui64 AllocateID(); 
+        TAtomic RegisterRevolvingCounter = 0;
+        ui64 AllocateID();
     public:
-        TExecutorPoolBaseMailboxed(ui32 poolId, ui32 maxActivityType); 
-        ~TExecutorPoolBaseMailboxed(); 
-        void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingWriteCounter) override; 
+        TExecutorPoolBaseMailboxed(ui32 poolId, ui32 maxActivityType);
+        ~TExecutorPoolBaseMailboxed();
+        void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingWriteCounter) override;
         bool Send(TAutoPtr<IEventHandle>& ev) override;
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingWriteCounter, const TActorId& parentId) override;
         TActorId Register(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId) override;
         bool Cleanup() override;
-    }; 
+    };
 
-    class TExecutorPoolBase: public TExecutorPoolBaseMailboxed { 
-    protected: 
-        const ui32 PoolThreads; 
-        TIntrusivePtr<TAffinity> ThreadsAffinity; 
-        TAtomic Semaphore = 0; 
-        TUnorderedCache<ui32, 512, 4> Activations; 
-        TAtomic ActivationsRevolvingCounter = 0; 
-        volatile bool StopFlag = false; 
-    public: 
-        TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, ui32 maxActivityType); 
-        ~TExecutorPoolBase(); 
-        void ScheduleActivation(ui32 activation) override; 
+    class TExecutorPoolBase: public TExecutorPoolBaseMailboxed {
+    protected:
+        const ui32 PoolThreads;
+        TIntrusivePtr<TAffinity> ThreadsAffinity;
+        TAtomic Semaphore = 0;
+        TUnorderedCache<ui32, 512, 4> Activations;
+        TAtomic ActivationsRevolvingCounter = 0;
+        volatile bool StopFlag = false;
+    public:
+        TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, ui32 maxActivityType);
+        ~TExecutorPoolBase();
+        void ScheduleActivation(ui32 activation) override;
         TAffinity* Affinity() const override;
         ui32 GetThreads() const override;
     };
- 
-    void DoActorInit(TActorSystem*, IActor*, const TActorId&, const TActorId&); 
+
+    void DoActorInit(TActorSystem*, IActor*, const TActorId&, const TActorId&);
 }

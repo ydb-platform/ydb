@@ -6,7 +6,7 @@
 #include <library/cpp/actors/core/executor_pool_io.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/core/scheduler_basic.h>
-#include <library/cpp/actors/util/datetime.h> 
+#include <library/cpp/actors/util/datetime.h>
 #include <library/cpp/actors/protos/services_common.pb.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
@@ -248,7 +248,7 @@ namespace NActors {
             Node->ActorSystemMonotonic = currentMonotonic;
         }
 
-        void PrepareSchedules(NSchedulerQueue::TReader **readers, ui32 scheduleReadersCount) override { 
+        void PrepareSchedules(NSchedulerQueue::TReader **readers, ui32 scheduleReadersCount) override {
             Y_UNUSED(readers);
             Y_UNUSED(scheduleReadersCount);
         }
@@ -282,33 +282,33 @@ namespace NActors {
         }
 
         // for threads
-        ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) override { 
-            Y_UNUSED(wctx); 
+        ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) override {
+            Y_UNUSED(wctx);
             Y_UNUSED(revolvingCounter);
             Y_FAIL();
         }
 
-        void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingCounter) override { 
-            Y_UNUSED(workerId); 
+        void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingCounter) override {
+            Y_UNUSED(workerId);
             Node->MailboxTable->ReclaimMailbox(mailboxType, hint, revolvingCounter);
         }
 
-        void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie, TWorkerId workerId) override { 
-            DoSchedule(deadline, ev, cookie, workerId); 
+        void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie, TWorkerId workerId) override {
+            DoSchedule(deadline, ev, cookie, workerId);
         }
 
-        void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie, TWorkerId workerId) override { 
-            DoSchedule(TInstant::FromValue(deadline.GetValue()), ev, cookie, workerId); 
+        void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie, TWorkerId workerId) override {
+            DoSchedule(TInstant::FromValue(deadline.GetValue()), ev, cookie, workerId);
         }
 
-        void Schedule(TDuration delay, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie, TWorkerId workerId) override { 
+        void Schedule(TDuration delay, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie, TWorkerId workerId) override {
             TInstant deadline = Runtime->GetTimeProvider()->Now() + delay;
-            DoSchedule(deadline, ev, cookie, workerId); 
+            DoSchedule(deadline, ev, cookie, workerId);
         }
 
-        void DoSchedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie, TWorkerId workerId) { 
-            Y_UNUSED(workerId); 
- 
+        void DoSchedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie, TWorkerId workerId) {
+            Y_UNUSED(workerId);
+
             TGuard<TMutex> guard(Runtime->Mutex);
             bool verbose = (Runtime->CurrentDispatchContext ? !Runtime->CurrentDispatchContext->Options->Quiet : true) && VERBOSE;
             if (Runtime->BlockedOutput.find(ev->Sender) != Runtime->BlockedOutput.end()) {
@@ -372,7 +372,7 @@ namespace NActors {
                         TMailboxHeader* mailbox = node->MailboxTable->Get(mailboxHint);
                         IActor* recipientActor = mailbox->FindActor(ev->GetRecipientRewrite().LocalId());
                         if (recipientActor) {
-                            TActorContext ctx(*mailbox, *node->ExecutorThread, GetCycleCountFast(), ev->GetRecipientRewrite()); 
+                            TActorContext ctx(*mailbox, *node->ExecutorThread, GetCycleCountFast(), ev->GetRecipientRewrite());
                             TActivationContext *prevTlsActivationContext = TlsActivationContext;
                             TlsActivationContext = &ctx;
                             recipientActor->Receive(ev, ctx);
@@ -412,7 +412,7 @@ namespace NActors {
         }
 
         // lifecycle stuff
-        void Prepare(TActorSystem *actorSystem, NSchedulerQueue::TReader **scheduleReaders, ui32 *scheduleSz) override { 
+        void Prepare(TActorSystem *actorSystem, NSchedulerQueue::TReader **scheduleReaders, ui32 *scheduleSz) override {
             Y_UNUSED(actorSystem);
             Y_UNUSED(scheduleReaders);
             Y_UNUSED(scheduleSz);
@@ -507,7 +507,7 @@ namespace NActors {
             node->SchedulerPool.Reset(CreateExecutorPoolStub(this, nodeIndex, node, 0));
             node->MailboxTable.Reset(new TMailboxTable());
             node->ActorSystem = MakeActorSystem(nodeIndex, node);
-            node->ExecutorThread.Reset(new TExecutorThread(0, 0, node->ActorSystem.Get(), node->SchedulerPool.Get(), node->MailboxTable.Get(), "TestExecutor")); 
+            node->ExecutorThread.Reset(new TExecutorThread(0, 0, node->ActorSystem.Get(), node->SchedulerPool.Get(), node->MailboxTable.Get(), "TestExecutor"));
         } else {
             node->ActorSystem = MakeActorSystem(nodeIndex, node);
         }
@@ -904,19 +904,19 @@ namespace NActors {
 
         switch (mailboxType) {
         case TMailboxType::Simple:
-            UnlockFromExecution((TMailboxTable::TSimpleMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter); 
+            UnlockFromExecution((TMailboxTable::TSimpleMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter);
             break;
         case TMailboxType::Revolving:
-            UnlockFromExecution((TMailboxTable::TRevolvingMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter); 
+            UnlockFromExecution((TMailboxTable::TRevolvingMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter);
             break;
         case TMailboxType::HTSwap:
-            UnlockFromExecution((TMailboxTable::THTSwapMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter); 
+            UnlockFromExecution((TMailboxTable::THTSwapMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter);
             break;
         case TMailboxType::ReadAsFilled:
-            UnlockFromExecution((TMailboxTable::TReadAsFilledMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter); 
+            UnlockFromExecution((TMailboxTable::TReadAsFilledMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter);
             break;
         case TMailboxType::TinyReadAsFilled:
-            UnlockFromExecution((TMailboxTable::TTinyReadAsFilledMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter); 
+            UnlockFromExecution((TMailboxTable::TTinyReadAsFilledMailbox *)mailbox, node->ExecutorPools[0], false, hint, MaxWorkers, ++revolvingCounter);
             break;
         default:
             Y_FAIL("Unsupported mailbox type");
@@ -1029,13 +1029,13 @@ namespace NActors {
     }
 
     bool TTestActorRuntimeBase::DispatchEvents(const TDispatchOptions& options) {
-        return DispatchEvents(options, TInstant::Max()); 
-    } 
- 
+        return DispatchEvents(options, TInstant::Max());
+    }
+
     bool TTestActorRuntimeBase::DispatchEvents(const TDispatchOptions& options, TDuration simTimeout) {
-        return DispatchEvents(options, TInstant::MicroSeconds(CurrentTimestamp) + simTimeout); 
-    } 
- 
+        return DispatchEvents(options, TInstant::MicroSeconds(CurrentTimestamp) + simTimeout);
+    }
+
     bool TTestActorRuntimeBase::DispatchEvents(const TDispatchOptions& options, TInstant simDeadline) {
         TGuard<TMutex> guard(Mutex);
         return DispatchEventsInternal(options, simDeadline);
@@ -1251,7 +1251,7 @@ namespace NActors {
             }
 
             if (!localContext.FoundNonEmptyMailboxes.empty())
-                return true; 
+                return true;
 
             if (options.CustomFinalCondition && options.CustomFinalCondition())
                 return true;
@@ -1266,15 +1266,15 @@ namespace NActors {
                             Cerr << "Dispatch complete with non-empty queue at " << TInstant::MicroSeconds(CurrentTimestamp) << "\n";
                         }
 
-                        return true; 
+                        return true;
                     }
                 }
             }
 
-            if (TInstant::MicroSeconds(CurrentTimestamp) > simDeadline) { 
-                return false; 
-            } 
- 
+            if (TInstant::MicroSeconds(CurrentTimestamp) > simDeadline) {
+                return false;
+            }
+
             if (dispatchTime >= deadline) {
                 if (verbose) {
                     Cerr << "Reach deadline at " << TInstant::MicroSeconds(CurrentTimestamp) << "\n";
@@ -1333,7 +1333,7 @@ namespace NActors {
                         Cerr << "Process selected events at " << TInstant::MicroSeconds(CurrentTimestamp) << "\n";
                     }
 
-                    deadline = dispatchTime +  DispatchTimeout; 
+                    deadline = dispatchTime +  DispatchTimeout;
                     continue;
                 }
 
@@ -1351,7 +1351,7 @@ namespace NActors {
             dispatchTime += waitDelay;
             MailboxesHasEvents.WaitT(Mutex, waitDelay);
         }
-        return false; 
+        return false;
     }
 
     void TTestActorRuntimeBase::HandleNonEmptyMailboxesForEachContext(TEventMailboxId mboxId) {
@@ -1452,8 +1452,8 @@ namespace NActors {
             ++dispatchCount;
             {
                 if (!DispatchEventsInternal(TDispatchOptions(), deadline)) {
-                    return; // Timed out; event was not found 
-                } 
+                    return; // Timed out; event was not found
+                }
             }
 
             Y_VERIFY(dispatchCount < 1000, "Hard limit to prevent endless loop");
@@ -1572,7 +1572,7 @@ namespace NActors {
             // Save actorId by value in order to prevent ctx from being invalidated during another Send call.
             TActorId actorId = ev->GetRecipientRewrite();
             node->ActorToActorId[recipientActor] = ev->GetRecipientRewrite();
-            TActorContext ctx(*mailbox, *node->ExecutorThread, GetCycleCountFast(), actorId); 
+            TActorContext ctx(*mailbox, *node->ExecutorThread, GetCycleCountFast(), actorId);
             TActivationContext *prevTlsActivationContext = TlsActivationContext;
             TlsActivationContext = &ctx;
             CurrentRecipient = actorId;

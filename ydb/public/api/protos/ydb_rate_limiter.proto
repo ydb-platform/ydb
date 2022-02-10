@@ -32,17 +32,17 @@ message HierarchicalDrrSettings {
     // 0 is equivalent to not set.
     // Must be nonnegative.
     double max_burst_size_coefficient = 2;
- 
-    // Prefetch in local bucket up to prefetch_coefficient*max_units_per_second units (full size). 
-    // Default value is inherited from parent or 0.2 for root. 
-    // Disables prefetching if any negative value is set 
-    // (It is useful to avoid bursts in case of large number of local buckets). 
-    double prefetch_coefficient = 3; 
- 
-    // Prefetching starts if there is less than prefetch_watermark fraction of full local bucket left. 
-    // Default value is inherited from parent or 0.75 for root. 
-    // Must be nonnegative and less than or equal to 1. 
-    double prefetch_watermark = 4; 
+
+    // Prefetch in local bucket up to prefetch_coefficient*max_units_per_second units (full size).
+    // Default value is inherited from parent or 0.2 for root.
+    // Disables prefetching if any negative value is set
+    // (It is useful to avoid bursts in case of large number of local buckets).
+    double prefetch_coefficient = 3;
+
+    // Prefetching starts if there is less than prefetch_watermark fraction of full local bucket left.
+    // Default value is inherited from parent or 0.75 for root.
+    // Must be nonnegative and less than or equal to 1.
+    double prefetch_watermark = 4;
 }
 
 // Rate limiter resource description.

@@ -1,11 +1,11 @@
 #include "packet.h"
 
-#include <library/cpp/actors/core/probes.h> 
- 
+#include <library/cpp/actors/core/probes.h>
+
 #include <util/system/datetime.h>
 
-LWTRACE_USING(ACTORLIB_PROVIDER); 
- 
+LWTRACE_USING(ACTORLIB_PROVIDER);
+
 ui32 TEventHolder::Fill(IEventHandle& ev) {
     Serial = 0;
     Descr.Type = ev.Type;
@@ -27,6 +27,6 @@ ui32 TEventHolder::Fill(IEventHandle& ev) {
     } else {
         EventSerializedSize = 0;
     }
- 
+
     return EventSerializedSize;
 }

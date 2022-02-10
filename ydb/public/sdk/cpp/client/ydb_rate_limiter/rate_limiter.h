@@ -27,21 +27,21 @@ struct THierarchicalDrrSettings : public TOperationRequestSettings<TDerived> {
     // This means that maximum burst size might be equal to max_units_per_second.
     // Must be nonnegative.
     FLUENT_SETTING_OPTIONAL(double, MaxBurstSizeCoefficient);
- 
-    // Prefetch in local bucket up to PrefetchCoefficient*MaxUnitsPerSecond units (full size). 
-    // Default value is inherited from parent or 0.2 for root. 
-    // Disables prefetching if any negative value is set 
-    // (It is useful to avoid bursts in case of large number of local buckets). 
-    FLUENT_SETTING_OPTIONAL(double, PrefetchCoefficient); 
- 
-    void DisablePrefetching() { 
-        PrefetchCoefficient_ = -1.0; 
-    } 
- 
-    // Prefetching starts if there is less than PrefetchWatermark fraction of full local bucket left. 
-    // Default value is inherited from parent or 0.75 for root. 
-    // Must be nonnegative and less than or equal to 1. 
-    FLUENT_SETTING_OPTIONAL(double, PrefetchWatermark); 
+
+    // Prefetch in local bucket up to PrefetchCoefficient*MaxUnitsPerSecond units (full size).
+    // Default value is inherited from parent or 0.2 for root.
+    // Disables prefetching if any negative value is set
+    // (It is useful to avoid bursts in case of large number of local buckets).
+    FLUENT_SETTING_OPTIONAL(double, PrefetchCoefficient);
+
+    void DisablePrefetching() {
+        PrefetchCoefficient_ = -1.0;
+    }
+
+    // Prefetching starts if there is less than PrefetchWatermark fraction of full local bucket left.
+    // Default value is inherited from parent or 0.75 for root.
+    // Must be nonnegative and less than or equal to 1.
+    FLUENT_SETTING_OPTIONAL(double, PrefetchWatermark);
 };
 
 // Settings for create resource request.
@@ -105,21 +105,21 @@ struct TDescribeResourceResult : public TStatus {
             return MaxBurstSizeCoefficient_;
         }
 
-        // Prefetch in local bucket up to PrefetchCoefficient*MaxUnitsPerSecond units (full size). 
-        TMaybe<double> GetPrefetchCoefficient() const { 
-            return PrefetchCoefficient_; 
-        } 
- 
-        // Prefetching starts if there is less than PrefetchWatermark fraction of full local bucket left. 
-        TMaybe<double> GetPrefetchWatermark() const { 
-            return PrefetchWatermark_; 
-        } 
- 
+        // Prefetch in local bucket up to PrefetchCoefficient*MaxUnitsPerSecond units (full size).
+        TMaybe<double> GetPrefetchCoefficient() const {
+            return PrefetchCoefficient_;
+        }
+
+        // Prefetching starts if there is less than PrefetchWatermark fraction of full local bucket left.
+        TMaybe<double> GetPrefetchWatermark() const {
+            return PrefetchWatermark_;
+        }
+
     private:
         TMaybe<double> MaxUnitsPerSecond_;
         TMaybe<double> MaxBurstSizeCoefficient_;
-        TMaybe<double> PrefetchCoefficient_; 
-        TMaybe<double> PrefetchWatermark_; 
+        TMaybe<double> PrefetchCoefficient_;
+        TMaybe<double> PrefetchWatermark_;
     };
 
     TDescribeResourceResult(TStatus status, const Ydb::RateLimiter::DescribeResourceResult& result);

@@ -165,37 +165,37 @@ void TKesusTablet::Handle(TEvKesus::TEvUpdateConsumptionState::TPtr& ev) {
     HandleQuoterTick();
 }
 
-void TKesusTablet::Handle(TEvKesus::TEvAccountResources::TPtr& ev) { 
-    auto ack = MakeHolder<TEvKesus::TEvAccountResourcesAck>(); 
-    const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetActorID()); 
-    const TInstant now = TActivationContext::Now(); 
-    TTickProcessorQueue queue; 
-    for (const NKikimrKesus::TEvAccountResources::TResourceInfo& resource : ev->Get()->Record.GetResourcesInfo()) { 
-        auto* result = ack->Record.AddResourcesInfo(); 
-        result->SetResourceId(resource.GetResourceId()); 
-        if (TQuoterSession* session = QuoterResources.FindSession(clientId, resource.GetResourceId())) { 
-            TInstant accepted = session->Account( 
-                TInstant::MicroSeconds(resource.GetStartUs()), 
-                TDuration::MicroSeconds(resource.GetIntervalUs()), 
-                resource.GetAmount().data(), 
-                resource.GetAmount().size(), 
-                queue, now); 
-            result->SetAcceptedUs(accepted.MicroSeconds()); 
-        } else { 
-            TEvKesus::FillError(result->MutableStateNotification(), Ydb::StatusIds::BAD_SESSION, "No such session exists."); 
-        } 
-    } 
-    QuoterTickProcessorQueue.Merge(std::move(queue)); 
-    TRACE_LOG_EVENT(TabletID(), "TEvAccountResourcesAck", ack->Record, ev->Sender, ev->Cookie); 
-    Send(ev->Sender, std::move(ack), 0, ev->Cookie); 
- 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET, 
-        "[" << TabletID() << "] Account quoter resources (sender=" << ev->Sender 
-            << ", cookie=" << ev->Cookie << ")"); 
- 
-    HandleQuoterTick(); 
-} 
- 
+void TKesusTablet::Handle(TEvKesus::TEvAccountResources::TPtr& ev) {
+    auto ack = MakeHolder<TEvKesus::TEvAccountResourcesAck>();
+    const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetActorID());
+    const TInstant now = TActivationContext::Now();
+    TTickProcessorQueue queue;
+    for (const NKikimrKesus::TEvAccountResources::TResourceInfo& resource : ev->Get()->Record.GetResourcesInfo()) {
+        auto* result = ack->Record.AddResourcesInfo();
+        result->SetResourceId(resource.GetResourceId());
+        if (TQuoterSession* session = QuoterResources.FindSession(clientId, resource.GetResourceId())) {
+            TInstant accepted = session->Account(
+                TInstant::MicroSeconds(resource.GetStartUs()),
+                TDuration::MicroSeconds(resource.GetIntervalUs()),
+                resource.GetAmount().data(),
+                resource.GetAmount().size(),
+                queue, now);
+            result->SetAcceptedUs(accepted.MicroSeconds());
+        } else {
+            TEvKesus::FillError(result->MutableStateNotification(), Ydb::StatusIds::BAD_SESSION, "No such session exists.");
+        }
+    }
+    QuoterTickProcessorQueue.Merge(std::move(queue));
+    TRACE_LOG_EVENT(TabletID(), "TEvAccountResourcesAck", ack->Record, ev->Sender, ev->Cookie);
+    Send(ev->Sender, std::move(ack), 0, ev->Cookie);
+
+    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET,
+        "[" << TabletID() << "] Account quoter resources (sender=" << ev->Sender
+            << ", cookie=" << ev->Cookie << ")");
+
+    HandleQuoterTick();
+}
+
 void TKesusTablet::Handle(TEvKesus::TEvResourcesAllocatedAck::TPtr& ev) {
     Y_UNUSED(ev);
 }
@@ -213,7 +213,7 @@ void TKesusTablet::ScheduleQuoterTick() {
 }
 
 void TKesusTablet::HandleQuoterTick() {
-    const NHPTimer::STime hpprev = GetCycleCountFast(); 
+    const NHPTimer::STime hpprev = GetCycleCountFast();
     NextQuoterTickTime = TInstant::Max();
     i64 processedTasks = 0;
     while (!QuoterTickProcessorQueue.Empty()) {
@@ -240,7 +240,7 @@ void TKesusTablet::HandleQuoterTick() {
     }
     ScheduleQuoterTick();
     QuoterResourceSessionsAccumulator.SendAll(TActivationContext::AsActorContext(), TabletID());
-    const NHPTimer::STime hpnow = GetCycleCountFast(); 
+    const NHPTimer::STime hpnow = GetCycleCountFast();
     *QuoterResources.GetCounters().ElapsedMicrosecOnResourceAllocation += NHPTimer::GetSeconds(hpnow - hpprev) * 1000000;
     if (processedTasks) {
         *QuoterResources.GetCounters().TickProcessorTasksProcessed += processedTasks;

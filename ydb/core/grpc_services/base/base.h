@@ -4,7 +4,7 @@
 #include <grpc++/support/slice.h>
 
 #include <library/cpp/grpc/server/grpc_request_base.h>
-#include <library/cpp/string_utils/quote/quote.h> 
+#include <library/cpp/string_utils/quote/quote.h>
 
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -26,20 +26,20 @@ class TAppConfig;
 }
 
 namespace NKikimr {
- 
+
 namespace NSchemeCache {
 struct TSchemeCacheNavigate;
 }
 
-namespace NRpcService { 
- 
-struct TRlPath { 
-    TString CoordinationNode; 
-    TString ResourcePath; 
-}; 
- 
-} 
- 
+namespace NRpcService {
+
+struct TRlPath {
+    TString CoordinationNode;
+    TString ResourcePath;
+};
+
+}
+
 namespace NGRpcService {
 
 using TYdbIssueMessageType = Ydb::Issue::IssueMessage;
@@ -202,12 +202,12 @@ struct TRpcServices {
         EvAnalyticsInternalGetTask,
         EvAnalyticsInternalWriteTaskResult,
         EvAnalyticsInternalNodesHealthCheck,
-        EvCreateYndxRateLimiterResource, 
-        EvAlterYndxRateLimiterResource, 
-        EvDropYndxRateLimiterResource, 
-        EvListYndxRateLimiterResources, 
-        EvDescribeYndxRateLimiterResource, 
-        EvAcquireYndxRateLimiterResource, 
+        EvCreateYndxRateLimiterResource,
+        EvAlterYndxRateLimiterResource,
+        EvDropYndxRateLimiterResource,
+        EvListYndxRateLimiterResources,
+        EvDescribeYndxRateLimiterResource,
+        EvAcquireYndxRateLimiterResource,
         EvGrpcRuntimeRequest // !!! DO NOT ADD NEW REQUEST !!!
     };
 
@@ -222,9 +222,9 @@ struct TRpcServices {
     struct TEvForgetOperation : public TEventLocal<TEvForgetOperation, TRpcServices::EvForgetOperation> {};
 };
 
-// Should be specialized for real responses 
-template <class T> 
-void FillYdbStatus(T& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status); 
+// Should be specialized for real responses
+template <class T>
+void FillYdbStatus(T& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status);
 
 class TProtoResponseHelper {
 public:

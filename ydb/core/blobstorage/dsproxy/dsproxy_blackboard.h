@@ -48,19 +48,19 @@ struct TBlobState {
     };
     struct TState {
         TFragmentedBuffer Data;
-        TIntervalSet<i32> Here;    // Present in the Data buffer 
+        TIntervalSet<i32> Here;    // Present in the Data buffer
 
         void AddResponseData(ui32 fullSize, ui32 shift, TString &data);
         void AddPartToPut(TString &data);
         TString ToString() const;
     };
-    struct TWholeState : TState { 
-        TIntervalSet<i32> Needed;  // Requested by the external user 
-        TIntervalSet<i32> NotHere; // Requested by the external user, but not present in the Data buffer yet 
-        TString ToString() const; 
-    }; 
+    struct TWholeState : TState {
+        TIntervalSet<i32> Needed;  // Requested by the external user
+        TIntervalSet<i32> NotHere; // Requested by the external user, but not present in the Data buffer yet
+        TString ToString() const;
+    };
     struct TDiskPart {
-        TIntervalSet<i32> Requested; 
+        TIntervalSet<i32> Requested;
         ESituation Situation = ESituation::Unknown;
         TString ToString() const;
     };
@@ -72,7 +72,7 @@ struct TBlobState {
     };
 
     TLogoBlobID Id;
-    TWholeState Whole; 
+    TWholeState Whole;
     ESituation WholeSituation = ESituation::Unknown;  // TODO(cthulhu): Use a specially tailored enum here
     TStackVec<TState, TypicalPartsInBlob> Parts;
     TStackVec<TDisk, TypicalDisksInSubring> Disks;
@@ -139,7 +139,7 @@ struct TDiskPutRequest {
 
 struct TDiskRequests {
     TDeque<TDiskGetRequest> GetsToSend;
-    TStackVec<TDiskPutRequest, TypicalPartsInBlob> PutsToSend; 
+    TStackVec<TDiskPutRequest, TypicalPartsInBlob> PutsToSend;
     ui32 FirstUnsentRequestIdx = 0;
     ui32 FirstUnsentPutIdx = 0;
 };
@@ -148,7 +148,7 @@ struct TGroupDiskRequests {
     TStackVec<TDiskRequests, TypicalDisksInGroup> DiskRequestsForOrderNumber;
 
     TGroupDiskRequests(ui32 disks);
-    void AddGet(const ui32 diskOrderNumber, const TLogoBlobID &id, const TIntervalSet<i32> &intervalSet); 
+    void AddGet(const ui32 diskOrderNumber, const TLogoBlobID &id, const TIntervalSet<i32> &intervalSet);
     void AddGet(const ui32 diskOrderNumber, const TLogoBlobID &id, const ui32 shift, const ui32 size);
     void AddPut(const ui32 diskOrderNumber, const TLogoBlobID &id, TString buffer,
         TDiskPutRequest::EPutReason putReason, bool isHandoff, ui8 blobIdx = 0);

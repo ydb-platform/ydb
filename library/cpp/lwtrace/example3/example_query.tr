@@ -4,10 +4,10 @@ Blocks {
        Provider: "LWTRACE_EXAMPLE_PROVIDER"
     }
     Action {
-        CustomAction { 
-	    Name: "MyAction" 
-            Opts: "/dev/stdout" 
-	} 
+        CustomAction {
+	    Name: "MyAction"
+            Opts: "/dev/stdout"
+	}
     }
 }
 

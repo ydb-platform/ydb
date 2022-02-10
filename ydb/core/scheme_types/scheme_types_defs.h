@@ -44,9 +44,9 @@ public:
         return Name_;
     }
 
-    static constexpr ui32 GetFixedSize() { 
-        return sizeof(T); 
-    } 
+    static constexpr ui32 GetFixedSize() {
+        return sizeof(T);
+    }
     TTypeId GetTypeId() const override { return TypeId; }
     static TRawTypeValue ToRawTypeValue(const T& value) {
         return TRawTypeValue((void*)&value, sizeof(T), TypeId);
@@ -146,10 +146,10 @@ template <typename TDerived, TTypeId TypeId, const char* Name>
 class TStringBase : public TTypedType<::TString, TDerived, TypeId, Name>
 {
 public:
-    static constexpr ui32 GetFixedSize() { 
-        return 0; 
-    } 
- 
+    static constexpr ui32 GetFixedSize() {
+        return 0;
+    }
+
     static TRawTypeValue ToRawTypeValue(const ::TString& value) {
         return TRawTypeValue((const void*)value.data(), value.size(), TypeId);
     }
@@ -192,10 +192,10 @@ template <ui32 TMaxSize, TTypeId TypeId, const char* Name>
 class TBoundedString : public TStringBase<TBoundedString<TMaxSize, TypeId, Name>, TypeId, Name> {
 public:
     static constexpr ui32 MaxSize = TMaxSize;
-    static constexpr ui32 GetFixedSize() { 
-        return 0; 
-    } 
- 
+    static constexpr ui32 GetFixedSize() {
+        return 0;
+    }
+
     static TRawTypeValue ToRawTypeValue(const ::TString& value) {
         Y_VERIFY(value.size() <= MaxSize);
         return TRawTypeValue((const void*)value.data(), value.size(), TypeId);

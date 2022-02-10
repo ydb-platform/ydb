@@ -655,7 +655,7 @@ public:
 
             Y_VERIFY(!Responded);
             const TDuration duration = TActivationContext::Now() - StartTime;
-            LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvDiscover, 0, duration.SecondsFloat() * 1000.0, 
+            LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvDiscover, 0, duration.SecondsFloat() * 1000.0,
                     TabletId, Info->GroupID, TLogoBlobID::MaxChannel, "", true);
             SendResponseAndDie(std::move(response));
             Responded = true;
@@ -668,7 +668,7 @@ public:
         Y_VERIFY(!Responded);
         Y_VERIFY(status != NKikimrProto::OK);
         const TDuration duration = TActivationContext::Now() - StartTime;
-        LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvDiscover, 0, duration.SecondsFloat() * 1000.0, 
+        LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvDiscover, 0, duration.SecondsFloat() * 1000.0,
                 TabletId, Info->GroupID, TLogoBlobID::MaxChannel, "", false);
         std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> response(new TEvBlobStorage::TEvDiscoverResult(
                     status, MinGeneration, 0U));

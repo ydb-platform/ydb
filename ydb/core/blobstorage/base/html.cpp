@@ -16,11 +16,11 @@ namespace NKikimr {
     };
 
     void THtmlLightSignalRenderer::Output(IOutputStream &str) const {
-        HTML(str) { 
-            SPAN_CLASS_STYLE (Lights[Light].first, Lights[Light].second) { 
+        HTML(str) {
+            SPAN_CLASS_STYLE (Lights[Light].first, Lights[Light].second) {
                 str << Value;
-            } 
-        } 
+            }
+        }
     }
 
 } // NKikimr

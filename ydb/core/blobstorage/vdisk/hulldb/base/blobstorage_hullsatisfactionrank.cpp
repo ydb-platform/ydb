@@ -98,26 +98,26 @@ namespace NKikimr {
     }
 
     void TDynamicPDiskWeightsManager::RenderHtml(IOutputStream &str) const {
-        HTML(str) { 
-            TABLE_CLASS ("table table-condensed") { 
-                TABLEHEAD() { 
-                    TABLER() { 
-                        TABLEH() { str << "Component"; } 
-                        TABLEH() { str << "Status"; } 
-                    } 
-                } 
-                TABLEBODY() { 
-                    TABLER() { 
-                        TABLED() { str << "FreshRank"; } 
-                        TABLED() { FreshWeight.RenderHtml(str); } 
-                    } 
-                    TABLER() { 
-                        TABLED() { str << "LevelRank"; } 
-                        TABLED() { LevelWeight.RenderHtml(str); } 
-                    } 
-                } 
-            } 
-        } 
+        HTML(str) {
+            TABLE_CLASS ("table table-condensed") {
+                TABLEHEAD() {
+                    TABLER() {
+                        TABLEH() { str << "Component"; }
+                        TABLEH() { str << "Status"; }
+                    }
+                }
+                TABLEBODY() {
+                    TABLER() {
+                        TABLED() { str << "FreshRank"; }
+                        TABLED() { FreshWeight.RenderHtml(str); }
+                    }
+                    TABLER() {
+                        TABLED() { str << "LevelRank"; }
+                        TABLED() { LevelWeight.RenderHtml(str); }
+                    }
+                }
+            }
+        }
     }
 
     void TDynamicPDiskWeightsManager::ToWhiteboard(

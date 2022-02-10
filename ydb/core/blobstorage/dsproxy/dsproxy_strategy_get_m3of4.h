@@ -128,7 +128,7 @@ namespace NKikimr {
             for (ui32 i = 0; i < totalParts; ++i) {
                 if (const ui32 partSize = info.Type.PartSize(TLogoBlobID(state.Id, i + 1))) {
                     TBlobState::TState& part = state.Parts[i];
-                    if (const TIntervalSet<i32> pending = part.Here & state.Whole.NotHere) { 
+                    if (const TIntervalSet<i32> pending = part.Here & state.Whole.NotHere) {
                         state.Whole.Data.CopyFrom(part.Data, pending);
                         state.Whole.Here |= pending;
                         state.Whole.NotHere -= pending;

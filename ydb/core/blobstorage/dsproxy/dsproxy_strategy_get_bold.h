@@ -57,7 +57,7 @@ public:
                 TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
                 if (partSituation == TBlobState::ESituation::Unknown ||
                         partSituation == TBlobState::ESituation::Present) {
-                    TIntervalSet<i32> fullPartInterval(0, partSize); 
+                    TIntervalSet<i32> fullPartInterval(0, partSize);
                     fullPartInterval.Subtract(state.Parts[partIdx].Here);
                     fullPartInterval.Subtract(disk.DiskParts[partIdx].Requested);
                     if (!fullPartInterval.IsEmpty()) {

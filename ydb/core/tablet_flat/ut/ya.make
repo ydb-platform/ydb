@@ -25,7 +25,7 @@ SRCS(
     flat_range_cache_ut.cpp
     flat_row_versions_ut.cpp
     flat_sausagecache_ut.cpp
-    flat_table_part_ut.cpp 
+    flat_table_part_ut.cpp
     flat_test_db.h
     flat_test_db.cpp
     flat_test_db_helpers.h

@@ -1,28 +1,28 @@
-#include <library/cpp/testing/unittest/registar.h> 
-#include "time_series_vec.h" 
- 
-namespace NKikimr { 
- 
-Y_UNIT_TEST_SUITE(TTimeSeriesVecTest) { 
-    Y_UNIT_TEST(Smoke) { 
-        constexpr TDuration Interval = TDuration::MilliSeconds(1); 
-        constexpr size_t Size = 3; 
-        TTimeSeriesVec<int, Interval.MicroSeconds()> tsv(Size); 
-        UNIT_ASSERT(tsv.Size() == Size); 
-        TInstant now = TInstant::Now(); 
-        tsv.Add(now, 10); 
-        tsv.Add(now, 20); 
-        UNIT_ASSERT(tsv.Get(now) == 30); 
-        tsv.Add(now + Interval, 40); 
-        UNIT_ASSERT(tsv.Get(now) == 30); 
-        UNIT_ASSERT(tsv.Get(now + Interval) == 40); 
- 
-        int total = 0; 
-        for (TInstant i = tsv.Begin(), e = tsv.End(); i != e; i = tsv.Next(i)) { 
-            total += tsv.Get(i); 
-        } 
-        UNIT_ASSERT(total == 70); 
-    } 
+#include <library/cpp/testing/unittest/registar.h>
+#include "time_series_vec.h"
+
+namespace NKikimr {
+
+Y_UNIT_TEST_SUITE(TTimeSeriesVecTest) {
+    Y_UNIT_TEST(Smoke) {
+        constexpr TDuration Interval = TDuration::MilliSeconds(1);
+        constexpr size_t Size = 3;
+        TTimeSeriesVec<int, Interval.MicroSeconds()> tsv(Size);
+        UNIT_ASSERT(tsv.Size() == Size);
+        TInstant now = TInstant::Now();
+        tsv.Add(now, 10);
+        tsv.Add(now, 20);
+        UNIT_ASSERT(tsv.Get(now) == 30);
+        tsv.Add(now + Interval, 40);
+        UNIT_ASSERT(tsv.Get(now) == 30);
+        UNIT_ASSERT(tsv.Get(now + Interval) == 40);
+
+        int total = 0;
+        for (TInstant i = tsv.Begin(), e = tsv.End(); i != e; i = tsv.Next(i)) {
+            total += tsv.Get(i);
+        }
+        UNIT_ASSERT(total == 70);
+    }
 
     Y_UNIT_TEST(IndexesArePositive) {
         constexpr TDuration Interval = TDuration::MilliSeconds(1);
@@ -80,12 +80,12 @@ Y_UNIT_TEST_SUITE(TTimeSeriesVecTest) {
         }
 
         int data[3] = {5, 6, 7};
-        tsv.Add(tsv.Interval(), tsv.End(), data, 3); 
+        tsv.Add(tsv.Interval(), tsv.End(), data, 3);
 
         UNIT_ASSERT(tsv.Get(tsv.Begin()) == 3);
         UNIT_ASSERT(tsv.Get(tsv.End() - Interval) == 7);
 
-        tsv.Add(tsv.Interval(), tsv.Begin(), data, 3); 
+        tsv.Add(tsv.Interval(), tsv.Begin(), data, 3);
 
         UNIT_ASSERT(tsv.Get(tsv.Begin()) == 8); // 3 + 5
         UNIT_ASSERT(tsv.Get(tsv.Begin() + Interval) == 10); // 4 + 6
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(TTimeSeriesVecTest) {
 
         int data2[7] = {8, 9, 10, 11, 12, 13, 14};
 
-        tsv.Add(tsv.Interval(), tsv.End() - Interval, data2, 7); 
+        tsv.Add(tsv.Interval(), tsv.End() - Interval, data2, 7);
 
         UNIT_ASSERT(tsv.Get(tsv.Begin()) == 10);
         UNIT_ASSERT(tsv.Get(tsv.End() - Interval) == 14);
@@ -119,6 +119,6 @@ Y_UNIT_TEST_SUITE(TTimeSeriesVecTest) {
         UNIT_ASSERT(tsv.Get(tsv.Begin() + Interval * 3) == 3); // 3
         UNIT_ASSERT(tsv.Get(tsv.Begin() + Interval * 4) == 11); // 4 + 7
     }
-} 
- 
-} // NKikimr 
+}
+
+} // NKikimr

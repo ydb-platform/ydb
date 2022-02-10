@@ -171,7 +171,7 @@ bool TSecurityObject::CheckAccess(ui32 access, const TUserToken& user) const {
                     switch(static_cast<EAccessType>(ace.GetAccessType())) {
                     case EAccessType::Deny:
                         if (access && ace.GetAccessRight() != 0)
-                            return false; // deny entries have precedence over allow entries 
+                            return false; // deny entries have precedence over allow entries
                         break;
                     case EAccessType::Allow:
                         accessRightsLeft &= ~(accessRightsLeft & ace.GetAccessRight()); // some rights allowed
@@ -263,26 +263,26 @@ TInstant TSecurityObject::GetExpireTime() const {
     return TInstant::MilliSeconds(static_cast<const NACLibProto::TSecurityObject&>(*this).GetExpireTime());
 }
 
-TString TSecurityObject::ToString() const Y_NO_SANITIZE("undefined") { 
-    return static_cast<const TACL&>(GetACL()).ToString(); 
-} 
- 
-void TSecurityObject::FromString(const TString& string) Y_NO_SANITIZE("undefined") { 
-    static_cast<TACL*>(MutableACL())->FromString(string); 
-} 
- 
+TString TSecurityObject::ToString() const Y_NO_SANITIZE("undefined") {
+    return static_cast<const TACL&>(GetACL()).ToString();
+}
+
+void TSecurityObject::FromString(const TString& string) Y_NO_SANITIZE("undefined") {
+    static_cast<TACL*>(MutableACL())->FromString(string);
+}
+
 void TSecurityObject::ApplyDiff(const NACLibProto::TDiffACL& diffACL) Y_NO_SANITIZE("undefined") {
     static_cast<TACL*>(MutableACL())->ApplyDiff(diffACL);
 }
 
-bool TSecurityObject::operator ==(const NACLib::TSecurityObject& rhs) const { 
-    return IsContainer == rhs.IsContainer && NProtoBuf::IsEqual(*this, rhs); 
-} 
- 
-bool TSecurityObject::operator !=(const NACLib::TSecurityObject& rhs) const { 
-    return !(*this == rhs); 
-} 
- 
+bool TSecurityObject::operator ==(const NACLib::TSecurityObject& rhs) const {
+    return IsContainer == rhs.IsContainer && NProtoBuf::IsEqual(*this, rhs);
+}
+
+bool TSecurityObject::operator !=(const NACLib::TSecurityObject& rhs) const {
+    return !(*this == rhs);
+}
+
 std::pair<ui32, ui32> TACL::AddAccess(NACLib::EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance) Y_NO_SANITIZE("undefined") {
     for (int i = 0; i < static_cast<int>(ACESize()); ++i) {
         const NACLibProto::TACE& ace(GetACE(i));
@@ -646,7 +646,7 @@ void TACL::FromString(const TString& string) {
         FromString(ace, string.substr(start_pos, end_pos == TString::npos ? end_pos : end_pos - start_pos));
         if (end_pos == TString::npos)
             break;
-        it = string.begin() + end_pos; 
+        it = string.begin() + end_pos;
     }
 }
 

@@ -41,7 +41,7 @@ namespace NPrivate {
         using typename Alloc::value_type;
 
         template <class U>
-        struct rebind: public ::NPrivate::TRebind<Alloc, TSelf, T, U> { 
+        struct rebind: public ::NPrivate::TRebind<Alloc, TSelf, T, U> {
         };
 
     public:
@@ -82,7 +82,7 @@ namespace NPrivate {
 
     private:
         std::aligned_storage_t<sizeof(T), alignof(T)> StackBasedStorage[CountOnStack];
-        bool IsStorageUsed = false; 
+        bool IsStorageUsed = false;
 
     private:
         Alloc& FallbackAllocator() noexcept {

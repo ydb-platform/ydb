@@ -61,5 +61,5 @@ struct TCbsBin {
     };
 };
 
-} // NSchLab 
-} // NKikimr 
+} // NSchLab
+} // NKikimr

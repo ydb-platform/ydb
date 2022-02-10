@@ -17,27 +17,27 @@ void TResourceMonPage::Output(NMonitoring::IMonHttpRequest& request) {
         case JAVASCRIPT:
             out << HTTPOKJAVASCRIPT;
             break;
-        case FONT_EOT: 
-            out << HTTPOKFONTEOT; 
-            break; 
-        case FONT_TTF: 
-            out << HTTPOKFONTTTF; 
-            break; 
-        case FONT_WOFF: 
-            out << HTTPOKFONTWOFF; 
-            break; 
-        case FONT_WOFF2: 
-            out << HTTPOKFONTWOFF2; 
-            break; 
-        case PNG: 
-            out << HTTPOKPNG; 
-            break; 
-        case SVG: 
-            out << HTTPOKSVG; 
-            break; 
+        case FONT_EOT:
+            out << HTTPOKFONTEOT;
+            break;
+        case FONT_TTF:
+            out << HTTPOKFONTTTF;
+            break;
+        case FONT_WOFF:
+            out << HTTPOKFONTWOFF;
+            break;
+        case FONT_WOFF2:
+            out << HTTPOKFONTWOFF2;
+            break;
+        case PNG:
+            out << HTTPOKPNG;
+            break;
+        case SVG:
+            out << HTTPOKSVG;
+            break;
         default:
             out << HTTPOKBIN;
-            break; 
+            break;
     }
     out << NResource::Find(ResourceName);
 }

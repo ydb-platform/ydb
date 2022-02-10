@@ -344,7 +344,7 @@ bool TKesusProxyTestSetup::ConsumeResource(ui64 resId, double amount, TDuration 
     const TInstant start = Runtime->GetCurrentTime();
     while (updatesGot < maxUpdates) {
         ++updatesGot;
-        SendProxyStats({TEvQuota::TProxyStat(resId, 1, 0, {}, 1, amount, 0, 0)}); 
+        SendProxyStats({TEvQuota::TProxyStat(resId, 1, 0, {}, 1, amount, 0, 0)});
         WaitEvent<TEvQuota::TEvProxyStats>(); // wait event to be processed
 
         afterStat();
@@ -374,7 +374,7 @@ bool TKesusProxyTestSetup::ConsumeResource(ui64 resId, double amount, TDuration 
                     const TDuration timeToCharge = amount / updateTick.Rate * tickSize;
                     if (Runtime->GetCurrentTime() - start >= timeToCharge || amount <= updateTick.Rate) {
                         // spend and exit
-                        SendProxyStats({TEvQuota::TProxyStat(resId, 1, amount, {}, 0, 0, 0, 0)}); 
+                        SendProxyStats({TEvQuota::TProxyStat(resId, 1, amount, {}, 0, 0, 0, 0)});
                         return true;
                     }
                 }

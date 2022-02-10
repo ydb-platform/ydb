@@ -893,12 +893,12 @@ namespace NKikimr {
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
             Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::HugeKeeperId);
             TStringStream str;
-            HTML(str) { 
-                DIV_CLASS("panel panel-default") { 
-                    DIV_CLASS("panel-heading") {str << "Huge Blob Keeper";} 
-                    DIV_CLASS("panel-body") {State.RenderHtml(str);} 
-                } 
-            } 
+            HTML(str) {
+                DIV_CLASS("panel panel-default") {
+                    DIV_CLASS("panel-heading") {str << "Huge Blob Keeper";}
+                    DIV_CLASS("panel-body") {State.RenderHtml(str);}
+                }
+            }
             ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), TDbMon::HugeKeeperId));
         }
 

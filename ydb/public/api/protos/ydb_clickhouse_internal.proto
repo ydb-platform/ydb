@@ -23,11 +23,11 @@ message ScanRequest {
     uint64 max_bytes = 9;
 
     string snapshot_id = 10;
-} 
+}
 
 message ScanResponse {
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 message ScanResult {
     repeated bytes blocks = 1;
@@ -35,18 +35,18 @@ message ScanResult {
     bool eos = 2; // no more rows
     bytes last_key = 3;
     bool last_key_inclusive = 4;
-} 
+}
 
 
 message GetShardLocationsRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
     repeated uint64 tablet_ids = 2;
-} 
+}
 
 message GetShardLocationsResponse {
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 message TabletInfo {
     uint64 tablet_id = 1;
@@ -56,7 +56,7 @@ message TabletInfo {
 
 message GetShardLocationsResult {
     repeated TabletInfo tablets = 1;
-} 
+}
 
 message DescribeTableRequest {
     Ydb.Operations.OperationParams operation_params = 1;

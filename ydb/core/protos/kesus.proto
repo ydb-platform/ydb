@@ -247,75 +247,75 @@ message TEvSessionStolen {
 //
 // Quoter control API.
 //
-message TAccountingConfig { 
-    // Account consumed resources and send billing metrics. 
-    // Default value is false (not inherited). 
-    bool Enabled = 1; 
- 
-    // Period to report consumption history from clients to kesus 
-    // Default value is inherited from parent or equals 5000 ms for root. 
-    uint64 ReportPeriodMs = 2; 
- 
-    // Consumption history period that is sent in one message to accounting actor. 
-    // Default value is inherited from parent or equals 1000 ms for root. 
-    uint64 AccountPeriodMs = 3; 
- 
-    // Time window to collect data from every client. 
-    // Any client account message that is `CollectPeriod` late is discarded (not accounted or billed). 
-    // Default value is inherited from parent or equals 30 seconds for root. 
-    uint64 CollectPeriodSec = 4; 
- 
-    // Provisioned consumption limit in units per second. 
-    // Effective value is limited by corresponding MaxUnitsPerSecond. 
-    // Default value is 0 (not inherited). 
-    double ProvisionedUnitsPerSecond = 5; 
- 
-    // Provisioned allowed burst equals ProvisionedCoefficient*ProvisionedUnitsPerSecond units. 
-    // Effective value is limited by corresponding PrefetchCoefficient. 
-    // Default value is inherited from parent or equals 60 for root. 
-    double ProvisionedCoefficient = 6; 
- 
-    // On-demand allowed burst equals OvershootCoefficient*PrefetchCoefficient*MaxUnitsPerSecond units. 
-    // Should be greater or equal to 1.0 
-    // Default value is inherited from parent or equals 1.1 for root 
-    double OvershootCoefficient = 7; 
- 
-    // Billing metric description. 
-    message TMetric { 
-        // Send this metric to billing. 
-        // Default value is false (not inherited). 
-        bool Enabled = 1; 
- 
-        // Billing metric period (aligned to hour boundary). 
-        // Default value is inherited from parent or equals 60 seconds for root. 
-        uint64 BillingPeriodSec = 2; 
- 
-        // Billing metric JSON fields (inherited from parent if not set) 
-        string Version = 3; 
-        string Schema = 5; 
-        string CloudId = 6; 
-        string FolderId = 7; 
-        string ResourceId = 8; 
-        string SourceId = 9; 
-        map<string, string> Tags = 10; 
-    } 
- 
-    // Consumption within provisioned limit. 
-    // Informative metric that should be sent to billing (not billed). 
-    TMetric Provisioned = 8; 
- 
-    // Consumption that exceeds provisioned limit is billed as on-demand. 
-    TMetric OnDemand = 9; 
- 
-    // Consumption that exceeds even on-demand limit. 
-    // Normally it is free and should not be billed. 
-    TMetric Overshoot = 10; 
-} 
- 
+message TAccountingConfig {
+    // Account consumed resources and send billing metrics.
+    // Default value is false (not inherited).
+    bool Enabled = 1;
+
+    // Period to report consumption history from clients to kesus
+    // Default value is inherited from parent or equals 5000 ms for root.
+    uint64 ReportPeriodMs = 2;
+
+    // Consumption history period that is sent in one message to accounting actor.
+    // Default value is inherited from parent or equals 1000 ms for root.
+    uint64 AccountPeriodMs = 3;
+
+    // Time window to collect data from every client.
+    // Any client account message that is `CollectPeriod` late is discarded (not accounted or billed).
+    // Default value is inherited from parent or equals 30 seconds for root.
+    uint64 CollectPeriodSec = 4;
+
+    // Provisioned consumption limit in units per second.
+    // Effective value is limited by corresponding MaxUnitsPerSecond.
+    // Default value is 0 (not inherited).
+    double ProvisionedUnitsPerSecond = 5;
+
+    // Provisioned allowed burst equals ProvisionedCoefficient*ProvisionedUnitsPerSecond units.
+    // Effective value is limited by corresponding PrefetchCoefficient.
+    // Default value is inherited from parent or equals 60 for root.
+    double ProvisionedCoefficient = 6;
+
+    // On-demand allowed burst equals OvershootCoefficient*PrefetchCoefficient*MaxUnitsPerSecond units.
+    // Should be greater or equal to 1.0
+    // Default value is inherited from parent or equals 1.1 for root
+    double OvershootCoefficient = 7;
+
+    // Billing metric description.
+    message TMetric {
+        // Send this metric to billing.
+        // Default value is false (not inherited).
+        bool Enabled = 1;
+
+        // Billing metric period (aligned to hour boundary).
+        // Default value is inherited from parent or equals 60 seconds for root.
+        uint64 BillingPeriodSec = 2;
+
+        // Billing metric JSON fields (inherited from parent if not set)
+        string Version = 3;
+        string Schema = 5;
+        string CloudId = 6;
+        string FolderId = 7;
+        string ResourceId = 8;
+        string SourceId = 9;
+        map<string, string> Tags = 10;
+    }
+
+    // Consumption within provisioned limit.
+    // Informative metric that should be sent to billing (not billed).
+    TMetric Provisioned = 8;
+
+    // Consumption that exceeds provisioned limit is billed as on-demand.
+    TMetric OnDemand = 9;
+
+    // Consumption that exceeds even on-demand limit.
+    // Normally it is free and should not be billed.
+    TMetric Overshoot = 10;
+}
+
 message THierarchicalDRRResourceConfig {
     // Resource consumption speed limit.
     // Value is required for root resource.
-    // 0 is equivalent to not set (inherit value from parent). 
+    // 0 is equivalent to not set (inherit value from parent).
     // Must be nonnegative.
     double MaxUnitsPerSecond = 3;
 
@@ -332,16 +332,16 @@ message THierarchicalDRRResourceConfig {
     // Default value is 1.
     uint32 Weight = 5;
 
-    // Prefetch in local bucket up to PrefetchCoefficient*MaxUnitsPerSecond units (full size). 
-    // Default value is inherited from parent or equals 0.2 for root. 
-    // Disables prefetching if any negative value is set 
-    // (It is useful to avoid bursts in case of large number of local buckets). 
-    double PrefetchCoefficient = 6; 
+    // Prefetch in local bucket up to PrefetchCoefficient*MaxUnitsPerSecond units (full size).
+    // Default value is inherited from parent or equals 0.2 for root.
+    // Disables prefetching if any negative value is set
+    // (It is useful to avoid bursts in case of large number of local buckets).
+    double PrefetchCoefficient = 6;
 
-    // Prefetching starts if there is less than PrefetchWatermark fraction of full local bucket left. 
-    // Default value is inherited from parent or equals 0.75 for root. 
-    // Must be nonnegative and less than or equal to 1. 
-    double PrefetchWatermark = 7; 
+    // Prefetching starts if there is less than PrefetchWatermark fraction of full local bucket left.
+    // Default value is inherited from parent or equals 0.75 for root.
+    // Must be nonnegative and less than or equal to 1.
+    double PrefetchWatermark = 7;
 
     // deprecated settings {
     message TSpeedSettings {
@@ -364,7 +364,7 @@ message TStreamingQuoterResource {
         // For Hierarhical DRR algorithm.
         THierarchicalDRRResourceConfig HierarhicalDRRResourceConfig = 3;
     }
-    TAccountingConfig AccountingConfig = 4; 
+    TAccountingConfig AccountingConfig = 4;
 }
 
 message TEvDescribeQuoterResources {
@@ -430,7 +430,7 @@ message TEvSubscribeOnResourcesResult {
         TKesusError Error = 2;
         TStreamingQuoterResource EffectiveProps = 3;
     }
-    repeated TResourceSubscribeResult Results = 1; // Resources are in the same order that they were specified in request. 
+    repeated TResourceSubscribeResult Results = 1; // Resources are in the same order that they were specified in request.
 }
 
 // Notification about resources consumption state update.
@@ -478,26 +478,26 @@ message TEvGetQuoterResourceCountersResult {
 
     repeated TResourceCounters ResourceCounters = 1;
 }
- 
-// Account consumed resources into metering. 
-// Event is sent from client to Kesus. 
-message TEvAccountResources { 
-    message TResourceInfo { 
-        uint64 ResourceId = 1; 
-        uint64 StartUs = 2; // The first interval start time in microseconds since epoch 
-        uint64 IntervalUs = 3; // Intervals duration in microseconds 
-        repeated double Amount = 4; // Amounts of resources consumed during intervals 
-    } 
-    repeated TResourceInfo ResourcesInfo = 1; 
-    NActorsProto.TActorId ActorID = 2; 
-} 
- 
-// Ack for TEvAccountResources event. 
-message TEvAccountResourcesAck { 
-    message TResourceInfo { 
-        uint64 ResourceId = 1; 
-        uint64 AcceptedUs = 2; // Timestamp to drop client's data before (i.e. StartUs for the next request) 
-        TKesusError StateNotification = 4; // Resource can be deleted before accounting. In this case Kesus will send an error for resource. 
-    } 
-    repeated TResourceInfo ResourcesInfo = 1; 
-} 
+
+// Account consumed resources into metering.
+// Event is sent from client to Kesus.
+message TEvAccountResources {
+    message TResourceInfo {
+        uint64 ResourceId = 1;
+        uint64 StartUs = 2; // The first interval start time in microseconds since epoch
+        uint64 IntervalUs = 3; // Intervals duration in microseconds
+        repeated double Amount = 4; // Amounts of resources consumed during intervals
+    }
+    repeated TResourceInfo ResourcesInfo = 1;
+    NActorsProto.TActorId ActorID = 2;
+}
+
+// Ack for TEvAccountResources event.
+message TEvAccountResourcesAck {
+    message TResourceInfo {
+        uint64 ResourceId = 1;
+        uint64 AcceptedUs = 2; // Timestamp to drop client's data before (i.e. StartUs for the next request)
+        TKesusError StateNotification = 4; // Resource can be deleted before accounting. In this case Kesus will send an error for resource.
+    }
+    repeated TResourceInfo ResourcesInfo = 1;
+}

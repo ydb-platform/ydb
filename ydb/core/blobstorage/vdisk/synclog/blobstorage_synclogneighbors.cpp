@@ -22,9 +22,9 @@ namespace NKikimr {
             {}
 
             void operator() (IOutputStream &str, TNeighbors::TConstIterator it) {
-                HTML(str) { 
-                    SMALL() { 
-                        STRONG() { 
+                HTML(str) {
+                    SMALL() {
+                        STRONG() {
                             // output VDiskID
                             auto vd = GInfo.GetVDiskId(it->VDiskIdShort);
                             str << "VDiskId: " << vd.ToStringWOGeneration() << "<br>";
@@ -38,24 +38,24 @@ namespace NKikimr {
                             } else {
                                 str << "Node: " << info->Host << ":" << info->Port << "<br>";
                             }
-                        } 
-                    } 
+                        }
+                    }
 
                     if (it->Myself) {
-                        PARA_CLASS("text-info") {str << "Self";} 
+                        PARA_CLASS("text-info") {str << "Self";}
                     } else {
-                        SMALL() { 
-                            SMALL() { 
+                        SMALL() {
+                            SMALL() {
                                 str << "SyncedLsn: " << it->Get().SyncedLsn << "<br>";
                                 ui64 lockedLsn = it->Get().LockedLsn;
                                 if (lockedLsn == ui64(-1))
                                     str << "LockedLsn: no<br>";
                                 else
                                     str << "LockedLsn: " << lockedLsn << "<br>";
-                            } 
-                        } 
+                            }
+                        }
                     }
-                } 
+                }
             }
         };
 

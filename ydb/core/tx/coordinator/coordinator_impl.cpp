@@ -66,13 +66,13 @@ TTxCoordinator::TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet)
     Config.RapidSlotFlushSize = 1000; // todo: something meaningful
 
     MonCounters.CurrentTxInFly = 0;
-    TabletCountersPtr.Reset(new TProtobufTabletCounters< 
-        ESimpleCounters_descriptor, 
-        ECumulativeCounters_descriptor, 
-        EPercentileCounters_descriptor, 
-        ETxTypes_descriptor 
-    >()); 
-    TabletCounters = TabletCountersPtr.Get(); 
+    TabletCountersPtr.Reset(new TProtobufTabletCounters<
+        ESimpleCounters_descriptor,
+        ECumulativeCounters_descriptor,
+        EPercentileCounters_descriptor,
+        ETxTypes_descriptor
+    >());
+    TabletCounters = TabletCountersPtr.Get();
 }
 
 void TTxCoordinator::PlanTx(TAutoPtr<TTransactionProposal> &proposal, const TActorContext &ctx) {
@@ -307,7 +307,7 @@ void TTxCoordinator::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& 
 
 void TTxCoordinator::OnActivateExecutor(const TActorContext &ctx) {
     TryInitMonCounters(ctx);
-    Executor()->RegisterExternalTabletCounters(TabletCountersPtr); 
+    Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Execute(CreateTxSchema(), ctx);
 }
 

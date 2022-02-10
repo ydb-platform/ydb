@@ -147,16 +147,16 @@ struct TPartFragment {
 };
 
 struct TDataPartSet {
-    ui64 FullDataSize = 0; 
-    ui32 PartsMask = 0; 
+    ui64 FullDataSize = 0;
+    ui32 PartsMask = 0;
     TStackVec<TPartFragment, 8> Parts;
     TPartFragment FullDataFragment;
-    ui64 MemoryConsumed = 0; 
-    bool IsFragment = false; 
+    ui64 MemoryConsumed = 0;
+    bool IsFragment = false;
 
-    // Incremental split KIKIMR-10794 
-    ui64 WholeBlocks = 0; // Blocks to be split (not including tail) 
-    ui64 CurBlockIdx = 0; // Blocks have been already split 
+    // Incremental split KIKIMR-10794
+    ui64 WholeBlocks = 0; // Blocks to be split (not including tail)
+    ui64 CurBlockIdx = 0; // Blocks have been already split
 
     void Detach() {
         for (size_t i = 0; i < Parts.size(); ++i) {
@@ -164,26 +164,26 @@ struct TDataPartSet {
         }
         FullDataFragment.Detach();
     }
- 
-    void StartSplit(ui64 wholeBlocks) { 
-        WholeBlocks = wholeBlocks; 
-    } 
- 
-    bool IsSplitStarted() const { 
-        return WholeBlocks != 0; 
-    } 
- 
-    bool IsSplitDone() const { 
-        // True if either: 
-        //  - split is not started 
-        //  - split is done 
-        return CurBlockIdx >= WholeBlocks; 
-    } 
- 
-    void ResetSplit() { 
-        WholeBlocks = 0; 
-        CurBlockIdx = 0; 
-    } 
+
+    void StartSplit(ui64 wholeBlocks) {
+        WholeBlocks = wholeBlocks;
+    }
+
+    bool IsSplitStarted() const {
+        return WholeBlocks != 0;
+    }
+
+    bool IsSplitDone() const {
+        // True if either:
+        //  - split is not started
+        //  - split is done
+        return CurBlockIdx >= WholeBlocks;
+    }
+
+    void ResetSplit() {
+        WholeBlocks = 0;
+        CurBlockIdx = 0;
+    }
 };
 
 struct TPartOffsetRange {  // [Begin, End)
@@ -318,7 +318,7 @@ struct TErasureType {
     ui32 Prime() const;
 
     void SplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const;
-    void IncrementalSplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const; 
+    void IncrementalSplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const;
 
     void SplitDiffs(ECrcMode crcMode, ui32 dataSize, const TVector<TDiff> &diffs, TPartDiffSet& outDiffSet) const;
     void ApplyDiff(ECrcMode crcMode, ui8 *dst, const TVector<TDiff> &diffs) const;

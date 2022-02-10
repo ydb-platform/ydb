@@ -1,12 +1,12 @@
 import "ydb/core/protos/counters.proto";
- 
+
 package NKikimr.NSchemeShard;
- 
-option java_package = "ru.yandex.kikimr.proto"; 
- 
-option (TabletTypeName) = "SchemeShard"; // Used as prefix for all counters 
- 
-enum ESimpleCounters { 
+
+option java_package = "ru.yandex.kikimr.proto";
+
+option (TabletTypeName) = "SchemeShard"; // Used as prefix for all counters
+
+enum ESimpleCounters {
     COUNTER_SIMPLE_IGNORE = 0;
 
     COUNTER_RESPONSE_TIME_USEC = 1                        [(CounterOpts) = {Name: "ResponseTimeMicrosec"}];
@@ -148,9 +148,9 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxCreateReplication = 120       [(CounterOpts) = {Name: "InFlightOps/CreateReplication"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterReplication = 121        [(CounterOpts) = {Name: "InFlightOps/AlterReplication"}];
     COUNTER_IN_FLIGHT_OPS_TxDropReplication = 122         [(CounterOpts) = {Name: "InFlightOps/DropReplication"}];
-} 
- 
-enum ECumulativeCounters { 
+}
+
+enum ECumulativeCounters {
     COUNTER_CUMULATIVE_IGNORE = 0;
 
     COUNTER_FINISHED_OPS_TxInvalid = 1                    [(CounterOpts) = {Name: "FinishedOps/Invalid"}];
@@ -235,10 +235,10 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCreateReplication = 70         [(CounterOpts) = {Name: "FinishedOps/CreateReplication"}];
     COUNTER_FINISHED_OPS_TxAlterReplication = 71          [(CounterOpts) = {Name: "FinishedOps/AlterReplication"}];
     COUNTER_FINISHED_OPS_TxDropReplication = 72           [(CounterOpts) = {Name: "FinishedOps/DropReplication"}];
-} 
- 
-enum EPercentileCounters { 
-    option (GlobalCounterOpts) = { 
+}
+
+enum EPercentileCounters {
+    option (GlobalCounterOpts) = {
         Ranges { Value: 0           Name: "(1) < 500 us"        }
         Ranges { Value: 500         Name: "(2) 0.5-1 ms"        }
         Ranges { Value: 1000        Name: "(3) 1-2 ms"          }
@@ -257,8 +257,8 @@ enum EPercentileCounters {
         Ranges { Value: 8000000     Name: "(16) 8-16 s"         }
         Ranges { Value: 16000000    Name: "(17) 16-32 s"        }
         Ranges { Value: 32000000    Name: "(18) 32 < s"         }
-    }; 
- 
+    };
+
     COUNTER_BACKGROUND_COMPACTION_OK_LATENCY = 0          [(CounterOpts) = {Name: "BackgroundCompactionOkLatency"}];
 
     COUNTER_NUM_SHARDS_BY_TTL_LAG = 1 [(CounterOpts) = {
@@ -274,12 +274,12 @@ enum EPercentileCounters {
         Ranges { Value: 57600 Name: "57600" }
         Ranges { Value: 86400 Name: "inf"   }
     }];
-} 
- 
-enum ETxTypes { 
-    TXTYPE_INIT = 0                                       [(TxTypeOpts) = {Name: "TxInit"}]; 
-    TXTYPE_INIT_ROOT = 1                                  [(TxTypeOpts) = {Name: "TxInitRoot"}]; 
-    TXTYPE_PLAN_STEP = 2                                  [(TxTypeOpts) = {Name: "TxPlanStep"}]; 
+}
+
+enum ETxTypes {
+    TXTYPE_INIT = 0                                       [(TxTypeOpts) = {Name: "TxInit"}];
+    TXTYPE_INIT_ROOT = 1                                  [(TxTypeOpts) = {Name: "TxInitRoot"}];
+    TXTYPE_PLAN_STEP = 2                                  [(TxTypeOpts) = {Name: "TxPlanStep"}];
     TXTYPE_DESCRIBE_SCHEME = 3                            [(TxTypeOpts) = {Name: "TxDescribeScheme"}];
     TXTYPE_DATASHARD_PROPOSE_RESULT = 4                   [(TxTypeOpts) = {Name: "TxDataShardProposeResult"}];
     TXTYPE_CREATE_TABLET_REPLY = 5                        [(TxTypeOpts) = {Name: "TxCreateTabletReply"}];
@@ -369,4 +369,4 @@ enum ETxTypes {
     TXTYPE_CREATE_REPLICATION_RESULT = 74                 [(TxTypeOpts) = {Name: "TxCreateReplicationResult"}];
     TXTYPE_ALTER_REPLICATION_RESULT = 75                  [(TxTypeOpts) = {Name: "TxAlterReplicationResult"}];
     TXTYPE_DROP_REPLICATION_RESULT = 76                   [(TxTypeOpts) = {Name: "TxDropReplicationResult"}];
-} 
+}

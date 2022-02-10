@@ -540,33 +540,33 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         bool hasAuth = services.empty();
         names["auth"] = &hasAuth;
 
-        std::unordered_set<TString> enabled; 
+        std::unordered_set<TString> enabled;
         for (const auto& name : services) {
-            enabled.insert(name); 
+            enabled.insert(name);
         }
-        for (const auto& name : grpcConfig.GetServicesEnabled()) { 
-            enabled.insert(name); 
-        } 
+        for (const auto& name : grpcConfig.GetServicesEnabled()) {
+            enabled.insert(name);
+        }
 
-        std::unordered_set<TString> disabled; 
-        for (const auto& name : grpcConfig.GetServicesDisabled()) { 
-            disabled.insert(name); 
-        } 
- 
-        for (const auto& name : enabled) { 
+        std::unordered_set<TString> disabled;
+        for (const auto& name : grpcConfig.GetServicesDisabled()) {
+            disabled.insert(name);
+        }
+
+        for (const auto& name : enabled) {
             auto itName = names.find(name);
             if (itName != names.end()) {
                 *(itName->second) = true;
-            } else if (!ModuleFactories || !ModuleFactories->GrpcServiceFactory.Has(name)) { 
+            } else if (!ModuleFactories || !ModuleFactories->GrpcServiceFactory.Has(name)) {
                 Cerr << "Unknown grpc service \"" << name << "\" was not enabled!" << Endl;
             }
         }
 
-        for (const auto& name : disabled) { 
+        for (const auto& name : disabled) {
             auto itName = names.find(name);
             if (itName != names.end()) {
                 *(itName->second) = false;
-            } else if (!ModuleFactories || !ModuleFactories->GrpcServiceFactory.Has(name)) { 
+            } else if (!ModuleFactories || !ModuleFactories->GrpcServiceFactory.Has(name)) {
                 Cerr << "Unknown grpc service \"" << name << "\" was not disabled!" << Endl;
             }
         }
@@ -593,14 +593,14 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             hasImport = true;
         }
 
-        for (const auto& [name, isEnabled] : names) { 
-            if (*isEnabled) { 
-                enabled.insert(name); 
-            } else { 
-                disabled.insert(name); 
-            } 
-        } 
- 
+        for (const auto& [name, isEnabled] : names) {
+            if (*isEnabled) {
+                enabled.insert(name);
+            } else {
+                disabled.insert(name);
+            }
+        }
+
         const auto grpcRequestProxyId = NGRpcService::CreateGRpcRequestProxyId();
 
         if (hasLegacy) {
@@ -697,8 +697,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             server.AddService(new NGRpcService::TGRpcDiscoveryService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
 
-        if (hasRateLimiter) { 
-            server.AddService(new NQuoter::TRateLimiterGRpcService(ActorSystem.Get(), Counters, grpcRequestProxyId)); 
+        if (hasRateLimiter) {
+            server.AddService(new NQuoter::TRateLimiterGRpcService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
 
         if (hasMonitoring) {
@@ -721,12 +721,12 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasLogStore) {
             server.AddService(new NGRpcService::TGRpcYdbLogStoreService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
- 
-        if (ModuleFactories) { 
-            for (const auto& service : ModuleFactories->GrpcServiceFactory.Create(enabled, disabled, ActorSystem.Get(), Counters, grpcRequestProxyId)) { 
-                server.AddService(service); 
-            } 
-        } 
+
+        if (ModuleFactories) {
+            for (const auto& service : ModuleFactories->GrpcServiceFactory.Create(enabled, disabled, ActorSystem.Get(), Counters, grpcRequestProxyId)) {
+                server.AddService(service);
+            }
+        }
     };
 
     if (appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().GetStartGRpcProxy()) {
@@ -1199,8 +1199,8 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnableBootstrapper) {
         sil->AddServiceInitializer(new TBootstrapperInitializer(runConfig));
     }
-    if (serviceMask.EnableMediatorTimeCastProxy) { 
-        sil->AddServiceInitializer(new TMediatorTimeCastProxyInitializer(runConfig)); 
+    if (serviceMask.EnableMediatorTimeCastProxy) {
+        sil->AddServiceInitializer(new TMediatorTimeCastProxyInitializer(runConfig));
     }
     if (serviceMask.EnableTxProxy) {
         sil->AddServiceInitializer(new TTxProxyInitializer(runConfig));

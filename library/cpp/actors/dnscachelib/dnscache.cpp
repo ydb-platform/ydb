@@ -1,5 +1,5 @@
 #include "dnscache.h"
-#include "probes.h" 
+#include "probes.h"
 #include "timekeeper.h"
 
 #include <contrib/libs/c-ares/ares.h>
@@ -8,8 +8,8 @@
 
 const TDnsCache::THost TDnsCache::NullHost;
 
-LWTRACE_USING(DNSCACHELIB_PROVIDER); 
- 
+LWTRACE_USING(DNSCACHELIB_PROVIDER);
+
 static_assert(sizeof(ares_channel) == sizeof(void*), "expect sizeof(ares_channel) == sizeof(void *)");
 
 TDnsCache::TDnsCache(bool allowIpv4, bool allowIpv6, time_t lifetime, time_t neg, ui32 timeout)
@@ -33,11 +33,11 @@ TDnsCache::TDnsCache(bool allowIpv4, bool allowIpv6, time_t lifetime, time_t neg
     ares_channel chan;
 
     if (ares_init(&chan) != ARES_SUCCESS) {
-        LWPROBE(AresInitFailed); 
+        LWPROBE(AresInitFailed);
         ythrow yexception() << "ares_init() failed";
     }
     Channel = chan;
-    LWPROBE(Created); 
+    LWPROBE(Created);
 }
 
 TDnsCache::~TDnsCache(void) {
@@ -45,7 +45,7 @@ TDnsCache::~TDnsCache(void) {
 
     ares_cancel(chan);
     ares_destroy(chan);
-    LWPROBE(Destroyed); 
+    LWPROBE(Destroyed);
 
 #ifdef _win_
     ares_library_cleanup();
@@ -112,7 +112,7 @@ NAddr::IRemoteAddrPtr TDnsCache::GetAddr(
         }
     }
 
-    LWPROBE(FamilyMismatch, family, AllowIpV4, AllowIpV6); 
+    LWPROBE(FamilyMismatch, family, AllowIpV4, AllowIpV6);
     return nullptr;
 }
 
@@ -170,7 +170,7 @@ bool TDnsCache::THost::IsStale(int family, const TDnsCache* ctx) const noexcept 
 const TDnsCache::THost&
 TDnsCache::Resolve(const TString& hostname, int family, bool cacheOnly) {
     if (!ValidateHName(hostname)) {
-        LWPROBE(ResolveNullHost, hostname, family); 
+        LWPROBE(ResolveNullHost, hostname, family);
         return NullHost;
     }
 
@@ -185,15 +185,15 @@ TDnsCache::Resolve(const TString& hostname, int family, bool cacheOnly) {
             if (!p->second.IsStale(family, this)) {
                 /* Recently resolved, just return cached value */
                 ACacheHits += 1;
-                THost& host = p->second; 
-                LWPROBE(ResolveFromCache, hostname, family, host.AddrsV4ToString(), host.AddrsV6ToString(), ACacheHits); 
-                return host; 
-            } else { 
-                LWPROBE(ResolveCacheTimeout, hostname); 
+                THost& host = p->second;
+                LWPROBE(ResolveFromCache, hostname, family, host.AddrsV4ToString(), host.AddrsV6ToString(), ACacheHits);
+                return host;
+            } else {
+                LWPROBE(ResolveCacheTimeout, hostname);
             }
         } else {
             /* Never resolved, create cache entry */
-            LWPROBE(ResolveCacheNew, hostname); 
+            LWPROBE(ResolveCacheNew, hostname);
             p = HostCache.insert(std::make_pair(hostname, THost())).first;
         }
         ACacheMisses += 1;
@@ -227,7 +227,7 @@ TDnsCache::Resolve(const TString& hostname, int family, bool cacheOnly) {
 
     WaitTask(inprogress);
 
-    LWPROBE(ResolveDone, hostname, family, p->second.AddrsV4ToString(), p->second.AddrsV6ToString()); 
+    LWPROBE(ResolveDone, hostname, family, p->second.AddrsV4ToString(), p->second.AddrsV6ToString());
     return p->second;
 }
 
@@ -415,31 +415,31 @@ void TDnsCache::GHBACallback(void* arg, int status, int, struct hostent* info) {
     }
     AtomicSet(p->second.InProgress, 0);
 }
- 
+
 TString TDnsCache::THost::AddrsV4ToString() const {
-    TStringStream ss; 
-    bool first = false; 
-    for (TIpHost addr : AddrsV4) { 
+    TStringStream ss;
+    bool first = false;
+    for (TIpHost addr : AddrsV4) {
         ss << (first ? "" : " ") << IpToString(addr);
-        first = false; 
-    } 
-    return ss.Str(); 
-} 
- 
+        first = false;
+    }
+    return ss.Str();
+}
+
 TString TDnsCache::THost::AddrsV6ToString() const {
-    TStringStream ss; 
-    bool first = false; 
-    for (in6_addr addr : AddrsV6) { 
-        struct sockaddr_in6 sin6; 
-        Zero(sin6); 
-        sin6.sin6_family = AF_INET6; 
-        sin6.sin6_addr = addr; 
- 
-        NAddr::TIPv6Addr addr6(sin6); 
+    TStringStream ss;
+    bool first = false;
+    for (in6_addr addr : AddrsV6) {
+        struct sockaddr_in6 sin6;
+        Zero(sin6);
+        sin6.sin6_family = AF_INET6;
+        sin6.sin6_addr = addr;
+
+        NAddr::TIPv6Addr addr6(sin6);
         ss << (first ? "" : " ") << NAddr::PrintHost(addr6);
-        first = false; 
-    } 
-    return ss.Str(); 
-} 
+        first = false;
+    }
+    return ss.Str();
+}
 
 TDnsCache::TAresLibInit TDnsCache::InitAresLib;

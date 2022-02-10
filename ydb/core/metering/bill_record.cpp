@@ -1,4 +1,4 @@
-#include "bill_record.h" 
+#include "bill_record.h"
 
 #include <library/cpp/json/json_writer.h>
 
@@ -59,4 +59,4 @@ TBillRecord::TUsage TBillRecord::RequestUnits(ui64 quantity, TInstant now) {
     return RequestUnits(quantity, now, now);
 }
 
-}   // NKikimr 
+}   // NKikimr

@@ -1,9 +1,9 @@
-PROGRAM(lwtrace-example4) 
+PROGRAM(lwtrace-example4)
 
-OWNER(serxa) 
+OWNER(serxa)
 
 SRCS(
-    lwtrace_example4.cpp 
+    lwtrace_example4.cpp
 )
 
 PEERDIR(

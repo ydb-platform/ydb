@@ -1,11 +1,11 @@
-#include "all.h" 
- 
+#include "all.h"
+
 #include <library/cpp/lwtrace/protos/lwtrace.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <google/protobuf/text_format.h>
- 
+
 enum ESimpleEnum {
     ValueA,
     ValueB,
@@ -27,53 +27,53 @@ enum class EEnumClass {
     PROBE(DurationParam, GROUPS("Group"), TYPES(TDuration), NAMES("value"))                              \
     PROBE(ProtoEnum, GROUPS("Group"), TYPES(NLWTrace::EOperatorType), NAMES("value"))                    \
     PROBE(IntIntParams, GROUPS("Group"), TYPES(ui32, ui64), NAMES("value1", "value2"))                   \
-    /**/ 
- 
-LWTRACE_DECLARE_PROVIDER(LWTRACE_UT_PROVIDER) 
-LWTRACE_DEFINE_PROVIDER(LWTRACE_UT_PROVIDER) 
-LWTRACE_USING(LWTRACE_UT_PROVIDER) 
- 
-using namespace NLWTrace; 
- 
+    /**/
+
+LWTRACE_DECLARE_PROVIDER(LWTRACE_UT_PROVIDER)
+LWTRACE_DEFINE_PROVIDER(LWTRACE_UT_PROVIDER)
+LWTRACE_USING(LWTRACE_UT_PROVIDER)
+
+using namespace NLWTrace;
+
 Y_UNIT_TEST_SUITE(LWTraceTrace) {
 #ifndef LWTRACE_DISABLE
     Y_UNIT_TEST(Smoke) {
-        TManager mngr(*Singleton<TProbeRegistry>(), true); 
-        TQuery q; 
-        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END( 
-            Blocks { 
-                ProbeDesc { 
-                    Name: "NoParam" 
-                    Provider: "LWTRACE_UT_PROVIDER" 
-                } 
-                Action { 
-                    LogAction { } 
-                } 
-            } 
-        )END", 
-                                                             &q); 
-        UNIT_ASSERT(parsed); 
-        mngr.New("Query1", q); 
-        LWPROBE(NoParam); 
-        struct { 
-            void Push(TThread::TId, const TLogItem& item) { 
-                UNIT_ASSERT(TString(item.Probe->Event.Name) == "NoParam"); 
-            } 
-        } reader; 
-        mngr.ReadLog("Query1", reader); 
+        TManager mngr(*Singleton<TProbeRegistry>(), true);
+        TQuery q;
+        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(
+            Blocks {
+                ProbeDesc {
+                    Name: "NoParam"
+                    Provider: "LWTRACE_UT_PROVIDER"
+                }
+                Action {
+                    LogAction { }
+                }
+            }
+        )END",
+                                                             &q);
+        UNIT_ASSERT(parsed);
+        mngr.New("Query1", q);
+        LWPROBE(NoParam);
+        struct {
+            void Push(TThread::TId, const TLogItem& item) {
+                UNIT_ASSERT(TString(item.Probe->Event.Name) == "NoParam");
+            }
+        } reader;
+        mngr.ReadLog("Query1", reader);
 
         LWPROBE(EnumParams, ValueA, EEnumClass::ValueC);
         LWPROBE(InstantParam, TInstant::Seconds(42));
         LWPROBE(DurationParam, TDuration::MilliSeconds(146));
         LWPROBE(ProtoEnum, OT_EQ);
-    } 
+    }
 
     Y_UNIT_TEST(Predicate) {
         TManager mngr(*Singleton<TProbeRegistry>(), true);
         TQuery q;
         bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(
             Blocks {
-                ProbeDesc { 
+                ProbeDesc {
                     Name: "IntParam"
                     Provider: "LWTRACE_UT_PROVIDER"
                 }
@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
                     }
                 }
                 Action {
-                    LogAction { } 
+                    LogAction { }
                 }
             }
         )END", &q);
@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
         TQuery q;
         bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(
             Blocks {
-                ProbeDesc { 
+                ProbeDesc {
                     Name: "IntParam"
                     Provider: "LWTRACE_UT_PROVIDER"
                 }
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
                 }
             }
             Blocks {
-                ProbeDesc { 
+                ProbeDesc {
                     Name: "IntParam"
                     Provider: "LWTRACE_UT_PROVIDER"
                 }
@@ -216,53 +216,53 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
                     Operators {
                         Type: OT_EQ
                         Argument { Variable: "varDec" }
-                        Argument { Value: "-1" } 
+                        Argument { Value: "-1" }
                     }
                     Operators {
                         Type: OT_EQ
                         Argument { Variable: "varMov" }
-                        Argument { Value: "3" } 
+                        Argument { Value: "3" }
                     }
                     Operators {
                         Type: OT_EQ
                         Argument { Variable: "varAddEq" }
-                        Argument { Value: "5" } 
+                        Argument { Value: "5" }
                     }
                     Operators {
                         Type: OT_EQ
                         Argument { Variable: "varSubEq" }
-                        Argument { Value: "-5" } 
+                        Argument { Value: "-5" }
                     }
                     Operators {
                         Type: OT_EQ
                         Argument { Variable: "varAdd" }
-                        Argument { Value: "5" } 
+                        Argument { Value: "5" }
                     }
                     Operators {
                         Type: OT_EQ
                         Argument { Variable: "varSub" }
-                        Argument { Value: "1" } 
+                        Argument { Value: "1" }
                     }
                     Operators {
                         Type: OT_EQ
                         Argument { Variable: "varMul" }
-                        Argument { Value: "12" } 
+                        Argument { Value: "12" }
                     }
                     Operators {
                         Type: OT_EQ
                         Argument { Variable: "varDiv" }
-                        Argument { Value: "3" } 
+                        Argument { Value: "3" }
                     }
                     Operators {
                         Type: OT_EQ
                         Argument { Variable: "varMod" }
-                        Argument { Value: "2" } 
+                        Argument { Value: "2" }
                     }
                 }
                 Action {
                     LogAction { }
                 }
-            } 
+            }
         )END", &q);
         UNIT_ASSERT(parsed);
         mngr.New("QueryName", q);
@@ -286,7 +286,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
         TQuery q;
         bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(
             Blocks {
-                ProbeDesc { 
+                ProbeDesc {
                     Name: "IntIntParams"
                     Provider: "LWTRACE_UT_PROVIDER"
                 }
@@ -353,7 +353,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
                 }
             }
             Blocks {
-                ProbeDesc { 
+                ProbeDesc {
                     Name: "IntIntParams"
                     Provider: "LWTRACE_UT_PROVIDER"
                 }
@@ -361,48 +361,48 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
                     Operators {
                         Type: OT_EQ
                         Argument { Variable: "varMov" }
-                        Argument { Param: "value1" } 
+                        Argument { Param: "value1" }
                     }
                     Operators {
                         Type: OT_EQ
                         Argument { Variable: "varAddEq" }
-                        Argument { Param: "value1" } 
+                        Argument { Param: "value1" }
                     }
                     Operators {
                         Type: OT_EQ
                         Argument { Variable: "varSubEq" }
-                        Argument { Value: "-22" } 
+                        Argument { Value: "-22" }
                     }
                     Operators {
                         Type: OT_EQ
                         Argument { Variable: "varAdd" }
-                        Argument { Value: "25" } 
+                        Argument { Value: "25" }
                     }
                     Operators {
                         Type: OT_EQ
                         Argument { Variable: "varSub" }
-                        Argument { Value: "19" } 
+                        Argument { Value: "19" }
                     }
                     Operators {
                         Type: OT_EQ
                         Argument { Variable: "varMul" }
-                        Argument { Value: "66" } 
+                        Argument { Value: "66" }
                     }
                     Operators {
                         Type: OT_EQ
                         Argument { Variable: "varDiv" }
-                        Argument { Value: "7" } 
+                        Argument { Value: "7" }
                     }
                     Operators {
                         Type: OT_EQ
                         Argument { Variable: "varMod" }
-                        Argument { Value: "1" } 
+                        Argument { Value: "1" }
                     }
                 }
                 Action {
                     LogAction { }
                 }
-            } 
+            }
         )END", &q);
         UNIT_ASSERT(parsed);
         mngr.New("QueryName", q);
@@ -424,12 +424,12 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
         bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(
             PerThreadLogSize: 3
             Blocks {
-                ProbeDesc { 
+                ProbeDesc {
                     Name: "IntParam"
                     Provider: "LWTRACE_UT_PROVIDER"
                 }
                 Action {
-                    LogAction { } 
+                    LogAction { }
                 }
             }
         )END", &q);
@@ -501,7 +501,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
         TQuery q;
         bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(
             Blocks {
-                ProbeDesc { 
+                ProbeDesc {
                     Name: "NoParam"
                     Provider: "LWTRACE_UT_PROVIDER"
                 }
@@ -521,7 +521,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
         TQuery q;
         bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(
             Blocks {
-                ProbeDesc { 
+                ProbeDesc {
                     Name: "NoParam"
                     Provider: "LWTRACE_UT_PROVIDER"
                 }
@@ -539,7 +539,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
         TInstant t0 = Now();
         LWPROBE(NoParam);
         TInstant t1 = Now();
-        UNIT_ASSERT(t1.NanoSeconds() - t0.NanoSeconds() >= sleepTimeNs); 
+        UNIT_ASSERT(t1.NanoSeconds() - t0.NanoSeconds() >= sleepTimeNs);
     }
 
     Y_UNIT_TEST(ProtoEnumTraits) {
@@ -550,37 +550,37 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
     }
 
     Y_UNIT_TEST(Track) {
-        TManager mngr(*Singleton<TProbeRegistry>(), true); 
-        TQuery q; 
-        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END( 
-            Blocks { 
-                ProbeDesc { 
-                    Name: "IntParam" 
-                    Provider: "LWTRACE_UT_PROVIDER" 
-                } 
-                Action { 
-                    RunLogShuttleAction { } 
-                } 
-            } 
+        TManager mngr(*Singleton<TProbeRegistry>(), true);
+        TQuery q;
+        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(
+            Blocks {
+                ProbeDesc {
+                    Name: "IntParam"
+                    Provider: "LWTRACE_UT_PROVIDER"
+                }
+                Action {
+                    RunLogShuttleAction { }
+                }
+            }
         )END", &q);
-        UNIT_ASSERT(parsed); 
-        mngr.New("Query1", q); 
- 
-        { 
-            TOrbit orbit; 
-            LWTRACK(IntParam, orbit, 1); 
-            LWTRACK(StringParam, orbit, "str"); 
-        } 
- 
-        struct { 
-            void Push(TThread::TId, const TTrackLog& tl) { 
-                UNIT_ASSERT(tl.Items.size() == 2); 
-                UNIT_ASSERT(TString(tl.Items[0].Probe->Event.Name) == "IntParam"); 
-                UNIT_ASSERT(TString(tl.Items[1].Probe->Event.Name) == "StringParam"); 
-            } 
-        } reader; 
-        mngr.ReadDepot("Query1", reader); 
-    } 
+        UNIT_ASSERT(parsed);
+        mngr.New("Query1", q);
+
+        {
+            TOrbit orbit;
+            LWTRACK(IntParam, orbit, 1);
+            LWTRACK(StringParam, orbit, "str");
+        }
+
+        struct {
+            void Push(TThread::TId, const TTrackLog& tl) {
+                UNIT_ASSERT(tl.Items.size() == 2);
+                UNIT_ASSERT(TString(tl.Items[0].Probe->Event.Name) == "IntParam");
+                UNIT_ASSERT(TString(tl.Items[1].Probe->Event.Name) == "StringParam");
+            }
+        } reader;
+        mngr.ReadDepot("Query1", reader);
+    }
 
     Y_UNIT_TEST(ShouldSerializeTracks)
     {
@@ -877,4 +877,4 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
         mngr.ReadDepot("Query1", reader);
     }
 #endif // LWTRACE_DISABLE
-} 
+}

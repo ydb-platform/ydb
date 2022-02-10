@@ -44,8 +44,8 @@ SRCS(
     queue_inplace_ut.cpp
     queue_oneone_inplace_ut.cpp
     simple_cache_ut.cpp
-    time_series_vec_ut.cpp 
-    token_bucket_ut.cpp 
+    time_series_vec_ut.cpp
+    token_bucket_ut.cpp
     ulid_ut.cpp
     wildcard_ut.cpp
 )

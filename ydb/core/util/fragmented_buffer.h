@@ -7,8 +7,8 @@
 namespace NKikimr {
 
 class TFragmentedBuffer {
-    TMap<i32, TString> BufferForOffset; 
-    void Insert(i32 begin, const char* source, i32 bytesToCopy); 
+    TMap<i32, TString> BufferForOffset;
+    void Insert(i32 begin, const char* source, i32 bytesToCopy);
 
 public:
     TFragmentedBuffer();
@@ -17,12 +17,12 @@ public:
     TString GetMonolith();
     void SetMonolith(TString &data);
 
-    void Write(i32 begin, const char* buffer, i32 size); 
-    void Read(i32 begin, char* buffer, i32 size) const; 
+    void Write(i32 begin, const char* buffer, i32 size);
+    void Read(i32 begin, char* buffer, i32 size) const;
     TString Print() const;
 
-    std::pair<const char*, i32> Get(i32 begin) const; 
-    void CopyFrom(const TFragmentedBuffer& from, const TIntervalSet<i32>& range); 
+    std::pair<const char*, i32> Get(i32 begin) const;
+    void CopyFrom(const TFragmentedBuffer& from, const TIntervalSet<i32>& range);
 
     explicit operator bool() const {
         return !BufferForOffset.empty();

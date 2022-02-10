@@ -71,7 +71,7 @@ namespace NKikimr {
 
     private:
         static void PrepareGets(TLogContext& logCtx, TBlobState& state, TGroupDiskRequests& groupDiskRequests) {
-            const TIntervalVec<i32> needed(0, state.Id.BlobSize()); // we need to query this interval 
+            const TIntervalVec<i32> needed(0, state.Id.BlobSize()); // we need to query this interval
             for (ui32 diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
                 TBlobState::TDisk& disk = state.Disks[diskIdx];
                 const ui32 partIdx = diskIdx % NumRings;
@@ -112,10 +112,10 @@ namespace NKikimr {
         static void CreateOutputBlob(TBlobState& state) {
             for (const TBlobState::TState& part : state.Parts) {
                 // calculate the interval of the part buffer we have to copy into the output buffer
-                TIntervalSet<i32> dataToAdd(part.Here); 
+                TIntervalSet<i32> dataToAdd(part.Here);
                 dataToAdd.Subtract(state.Whole.Here);
                 state.Whole.Here.Add(dataToAdd);
-                for (const auto& range : dataToAdd) { 
+                for (const auto& range : dataToAdd) {
                     ui32 begin = range.first;
                     const ui32 end = range.second;
                     char buffer[4096];

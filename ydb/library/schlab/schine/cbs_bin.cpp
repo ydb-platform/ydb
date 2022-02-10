@@ -75,5 +75,5 @@ bool TCbsBin::AppendKeyframe(const TCbs &cur) {
     return false;
 }
 
-} // NSchLab 
-} // NKikimr 
+} // NSchLab
+} // NKikimr

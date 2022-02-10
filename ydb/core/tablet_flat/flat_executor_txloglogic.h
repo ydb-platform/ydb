@@ -58,7 +58,7 @@ public:
     ~TLogicRedo();
 
     void Describe(IOutputStream &out) const noexcept;
-    void InstallCounters(TExecutorCounters *counters, TTabletCountersWithTxTypes* appTxCounters); 
+    void InstallCounters(TExecutorCounters *counters, TTabletCountersWithTxTypes* appTxCounters);
     bool TerminateTransaction(TAutoPtr<TSeat>, const TActorContext &ctx, const TActorId &ownerId);
     bool CommitROTransaction(TAutoPtr<TSeat> seat, const TActorContext &ownerCtx);
     TCommitRWTransactionResult CommitRWTransaction(TAutoPtr<TSeat> seat, NTable::TChange &change, bool force);

@@ -4,7 +4,7 @@
 
 namespace NKikimr {
 
-    // Time grid taking into account the features of billing slots 
+    // Time grid taking into account the features of billing slots
     struct  TTimeGrid {
         struct TSlot {
             TInstant Start;
@@ -16,14 +16,14 @@ namespace NKikimr {
             {}
         };
 
-        TDuration Period; 
+        TDuration Period;
 
         TTimeGrid(TDuration period)
             : Period(period)
         {
             Y_VERIFY(Period >= TDuration::Seconds(1));
-            Y_VERIFY(Period <= TDuration::Hours(1)); 
-            Y_VERIFY(TDuration::Hours(1).MicroSeconds() % Period.MicroSeconds() == 0); 
+            Y_VERIFY(Period <= TDuration::Hours(1));
+            Y_VERIFY(TDuration::Hours(1).MicroSeconds() % Period.MicroSeconds() == 0);
         }
 
         const TSlot Get(TInstant now) const {
@@ -45,4 +45,4 @@ namespace NKikimr {
         }
     };
 
-}   // namespace NKikimr 
+}   // namespace NKikimr

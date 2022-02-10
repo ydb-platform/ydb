@@ -24,5 +24,5 @@ struct TJob : TSimpleRefCount<TJob> {
     bool IsNew = true;
 };
 
-} // NSchLab 
-} // NKikimr 
+} // NSchLab
+} // NKikimr

@@ -5,7 +5,7 @@
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/core/probes.h> 
+#include <library/cpp/actors/core/probes.h>
 #include <library/cpp/actors/protos/services_common.pb.h>
 #include <library/cpp/actors/util/funnel_queue.h>
 
@@ -17,9 +17,9 @@
 #include <variant>
 
 namespace NActors {
- 
-    LWTRACE_USING(ACTORLIB_PROVIDER); 
- 
+
+    LWTRACE_USING(ACTORLIB_PROVIDER);
+
     namespace {
         int LastSocketError() {
 #if defined(_win_)

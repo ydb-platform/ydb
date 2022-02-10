@@ -29,7 +29,7 @@ namespace NMonitoring {
     // Images
     static const char HTTPOKPNG[] = "HTTP/1.1 200 Ok\r\nContent-Type: image/png\r\nConnection: Close\r\n\r\n";
     static const char HTTPOKSVG[] = "HTTP/1.1 200 Ok\r\nContent-Type: image/svg+xml\r\nConnection: Close\r\n\r\n";
- 
+
     class IMonPage;
 
     using TMonPagePtr = TIntrusivePtr<IMonPage>;

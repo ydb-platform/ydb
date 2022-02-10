@@ -7,7 +7,7 @@ namespace NKikimr {
 TPDiskMon::TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui32 pDiskId,
         TPDiskConfig *cfg)
     : Counters(counters)
-    , PDiskId(pDiskId) 
+    , PDiskId(pDiskId)
     , ChunksGroup(Counters->GetSubgroup("subsystem", "chunks"))
     , StateGroup(Counters->GetSubgroup("subsystem", "state"))
     , DeviceGroup(Counters->GetSubgroup("subsystem", "device"))
@@ -48,7 +48,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counter
     AtLeastOneVDiskNotLogged = StateGroup->GetCounter("AtLeastOneVDiskNotLogged");
     TooMuchLogChunks = StateGroup->GetCounter("TooMuchLogChunks");
     SerialNumberMismatched = StateGroup->GetCounter("SerialNumberMismatched");
-    L6. Initialize(StateGroup, "L6"); 
+    L6. Initialize(StateGroup, "L6");
     L7. Initialize(StateGroup, "L7");
     IdleLight.Initialize(StateGroup, "DeviceBusyPeriods", "DeviceIdleTimeMsPerSec", "DeviceBusyTimeMsPerSec");
 
@@ -125,12 +125,12 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counter
     WriteQueueHullHuge.Initialize(counters, "subsystem", "writeQueueHullHuge", "Time in millisec", percentiles);
     WriteQueueHullComp.Initialize(counters, "subsystem", "writeQueueHullComp", "Time in millisec", percentiles);
 
-    SensitiveBurst.Initialize(counters, "subsystem", "sensitiveBurst", "Time in millisec", percentiles); 
-    BestEffortBurst.Initialize(counters, "subsystem", "bestEffortBurst", "Time in millisec", percentiles); 
+    SensitiveBurst.Initialize(counters, "subsystem", "sensitiveBurst", "Time in millisec", percentiles);
+    BestEffortBurst.Initialize(counters, "subsystem", "bestEffortBurst", "Time in millisec", percentiles);
 
-    InputQLA.Initialize(counters, "subsystem", "inputQLA", "Queue length seen by arrivals", percentiles); 
-    InputQCA.Initialize(counters, "subsystem", "inputQCA", "Queue cost seen by arrivals", percentiles); 
- 
+    InputQLA.Initialize(counters, "subsystem", "inputQLA", "Queue length seen by arrivals", percentiles);
+    InputQCA.Initialize(counters, "subsystem", "inputQCA", "Queue cost seen by arrivals", percentiles);
+
     LogOperationSizeBytes.Initialize(counters, "subsystem", "logOperationSize", "Size in bytes", percentiles);
     GetSyncLogSizeBytes.Initialize(counters, "subsystem", "getSyncLogSize", "Size in bytes", percentiles);
 
@@ -219,7 +219,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counter
 }
 
 NMonitoring::TDynamicCounters::TCounterPtr TPDiskMon::GetBusyPeriod(const TString& owner, const TString& queue) {
-    return SchedulerGroup->GetCounter("SchedulerBusyPeriod_" + owner + "_" + queue, true); 
+    return SchedulerGroup->GetCounter("SchedulerBusyPeriod_" + owner + "_" + queue, true);
 }
 
 void TPDiskMon::IncrementQueueTime(ui8 priorityClass, size_t timeMs) {
@@ -344,11 +344,11 @@ void TPDiskMon::UpdatePercentileTrackers() {
     WriteQueueHullHuge.Update();
     WriteQueueHullComp.Update();
 
-    SensitiveBurst.Update(); 
-    BestEffortBurst.Update(); 
+    SensitiveBurst.Update();
+    BestEffortBurst.Update();
 
-    InputQLA.Update(); 
-    InputQCA.Update(); 
+    InputQLA.Update();
+    InputQCA.Update();
 }
 
 void TPDiskMon::UpdateLights() {
@@ -357,7 +357,7 @@ void TPDiskMon::UpdateLights() {
         L6.Set(false, seqnoL6);
     }
 
-    L6. Update(); 
+    L6. Update();
     L7. Update();
     IdleLight.Update();
 }

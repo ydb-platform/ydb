@@ -1,12 +1,12 @@
 import "ydb/core/protos/counters.proto";
- 
-package NKikimr.NHive; 
- 
-option java_package = "ru.yandex.kikimr.proto"; 
- 
-option (TabletTypeName) = "Hive"; // Used as prefix for all counters 
- 
-enum ESimpleCounters { 
+
+package NKikimr.NHive;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+option (TabletTypeName) = "Hive"; // Used as prefix for all counters
+
+enum ESimpleCounters {
     COUNTER_TABLETS_TOTAL = 0   [(CounterOpts) = {Name: "TabletsTotal"}];
     COUNTER_TABLETS_ALIVE = 1   [(CounterOpts) = {Name: "TabletsAlive"}];
     COUNTER_BOOTQUEUE_SIZE = 2   [(CounterOpts) = {Name: "BootQueueSize"}];
@@ -20,9 +20,9 @@ enum ESimpleCounters {
     COUNTER_WAITQUEUE_SIZE = 10 [(CounterOpts) = {Name: "WaitQueueSize"}];
     COUNTER_BALANCE_USAGE_MIN = 11 [(CounterOpts) = {Name: "BalanceUsageMin"}];
     COUNTER_BALANCE_USAGE_MAX = 12 [(CounterOpts) = {Name: "BalanceUsageMax"}];
-} 
- 
-enum ECumulativeCounters { 
+}
+
+enum ECumulativeCounters {
     COUNTER_BOOTQUEUE_PROCESSED = 0 [(CounterOpts) = {Name: "BootQueueProcessed"}];
     COUNTER_BOOTQUEUE_TIME = 1 [(CounterOpts) = {Name: "BootQueueTime"}];
     COUNTER_AUTOKICK_EXECUTED = 2 [(CounterOpts) = {Name: "AutokickExecuted"}]; // obsolete
@@ -35,25 +35,25 @@ enum ECumulativeCounters {
     COUNTER_TABLETS_MOVED = 9 [(CounterOpts) = {Name: "TabletsMoved"}];
     COUNTER_SUGGESTED_SCALE_UP = 10 [(CounterOpts) = {Name: "SuggestedScaleUp"}];
     COUNTER_SUGGESTED_SCALE_DOWN = 11 [(CounterOpts) = {Name: "SuggestedScaleDown"}];
-} 
- 
-enum EPercentileCounters { 
-    option (GlobalCounterOpts) = { 
-        Ranges { Value: 0      Name: "0 ms"      } 
-        Ranges { Value: 1      Name: "1 ms"      } 
-    }; 
- 
+}
+
+enum EPercentileCounters {
+    option (GlobalCounterOpts) = {
+        Ranges { Value: 0      Name: "0 ms"      }
+        Ranges { Value: 1      Name: "1 ms"      }
+    };
+
     COUNTER_PERCENTILE_IGNORE = 0;
-} 
- 
-enum ETxTypes { 
-    TXTYPE_CREATE_TABLET = 0                              [(TxTypeOpts) = {Name: "TxCreateTablet"}]; 
-    TXTYPE_SYNC_TABLETS = 1                               [(TxTypeOpts) = {Name: "TxSyncTablets"}]; 
-    TXTYPE_KILL_TABLET = 2                                [(TxTypeOpts) = {Name: "TxKillTablet"}]; 
-    TXTYPE_UPDATE_TABLET_GROUP = 3                        [(TxTypeOpts) = {Name: "TxUpdateTabletGroup"}]; 
-    TXTYPE_UPDATE_TABLET_STATUS = 4                       [(TxTypeOpts) = {Name: "TxUpdateTabletStatus"}]; 
-    TXTYPE_REGISTER_NODE = 5                              [(TxTypeOpts) = {Name: "TxRegisterNode"}]; 
-    TXTYPE_KILL_NODE = 6                                  [(TxTypeOpts) = {Name: "TxKillNode"}]; 
+}
+
+enum ETxTypes {
+    TXTYPE_CREATE_TABLET = 0                              [(TxTypeOpts) = {Name: "TxCreateTablet"}];
+    TXTYPE_SYNC_TABLETS = 1                               [(TxTypeOpts) = {Name: "TxSyncTablets"}];
+    TXTYPE_KILL_TABLET = 2                                [(TxTypeOpts) = {Name: "TxKillTablet"}];
+    TXTYPE_UPDATE_TABLET_GROUP = 3                        [(TxTypeOpts) = {Name: "TxUpdateTabletGroup"}];
+    TXTYPE_UPDATE_TABLET_STATUS = 4                       [(TxTypeOpts) = {Name: "TxUpdateTabletStatus"}];
+    TXTYPE_REGISTER_NODE = 5                              [(TxTypeOpts) = {Name: "TxRegisterNode"}];
+    TXTYPE_KILL_NODE = 6                                  [(TxTypeOpts) = {Name: "TxKillNode"}];
     TXTYPE_ADOPT_TABLET = 7                               [(TxTypeOpts) = {Name: "TxAdoptTablet"}];
     TXTYPE_UPDATE_TABLET_METRIC = 8                       [(TxTypeOpts) = {Name: "TxUpdateTabletMetric"}];
     TXTYPE_UPDATE_TABLET_GROUPS = 9                       [(TxTypeOpts) = {Name: "TxUpdateTabletGroups"}];
@@ -104,4 +104,4 @@ enum ETxTypes {
     TXTYPE_STOP_TABLET = 54                               [(TxTypeOpts) = {Name: "TxStopTablet"}];
     TXTYPE_RESUME_TABLET = 55                             [(TxTypeOpts) = {Name: "TxResumeTablet"}];
     TXTYPE_RESTART_TABLET = 56                            [(TxTypeOpts) = {Name: "TxRestartTablet"}];
-} 
+}

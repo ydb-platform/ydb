@@ -75,5 +75,5 @@ public:
 };
 
 
-} // NSchLab 
-} // NKikimr 
+} // NSchLab
+} // NKikimr

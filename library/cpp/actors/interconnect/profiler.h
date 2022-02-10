@@ -1,7 +1,7 @@
 #pragma once
 
-#include <library/cpp/actors/util/datetime.h> 
- 
+#include <library/cpp/actors/util/datetime.h>
+
 namespace NActors {
 
     class TProfiled {
@@ -14,7 +14,7 @@ namespace NActors {
             EType Type; // entry kind
             int Line;
             const char *Marker; // name of the profiled function/part
-            ui64 Timestamp; // cycles 
+            ui64 Timestamp; // cycles
         };
 
         bool Enable = false;
@@ -44,7 +44,7 @@ namespace NActors {
                         type,
                         line,
                         marker,
-                        GetCycleCountFast() 
+                        GetCycleCountFast()
                     });
                 }
             }

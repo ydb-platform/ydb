@@ -23,7 +23,7 @@ namespace NKikimr {
         void SetCorruptedArea(ui32 chunkIdx, ui32 begin, ui32 end, bool enabled);
         std::set<ui32> GetChunks();
         ui32 GetChunkSize() const;
-        TIntervalSet<i64> GetWrittenAreas(ui32 chunkIdx) const; 
+        TIntervalSet<i64> GetWrittenAreas(ui32 chunkIdx) const;
         void TrimQuery();
 
         TPtr Snapshot(); // create a copy of PDisk whole state

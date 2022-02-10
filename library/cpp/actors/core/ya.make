@@ -30,16 +30,16 @@ SRCS(
     actorsystem.h
     ask.cpp
     ask.h
-    balancer.h 
-    balancer.cpp 
+    balancer.h
+    balancer.cpp
     buffer.cpp
     buffer.h
     callstack.cpp
     callstack.h
-    config.h 
-    cpu_manager.cpp 
-    cpu_manager.h 
-    cpu_state.h 
+    config.h
+    cpu_manager.cpp
+    cpu_manager.h
+    cpu_state.h
     defs.h
     event.cpp
     event.h
@@ -56,8 +56,8 @@ SRCS(
     executor_pool_basic.h
     executor_pool_io.cpp
     executor_pool_io.h
-    executor_pool_united.cpp 
-    executor_pool_united.h 
+    executor_pool_united.cpp
+    executor_pool_united.h
     executor_thread.cpp
     executor_thread.h
     hfunc.h
@@ -66,7 +66,7 @@ SRCS(
     invoke.h
     io_dispatcher.cpp
     io_dispatcher.h
-    lease.h 
+    lease.h
     log.cpp
     log.h
     log_settings.cpp
@@ -82,9 +82,9 @@ SRCS(
     mon.h
     mon_stats.h
     monotonic.cpp
-    monotonic.h 
-    worker_context.cpp 
-    worker_context.h 
+    monotonic.h
+    worker_context.cpp
+    worker_context.h
     probes.cpp
     probes.h
     process_stats.cpp

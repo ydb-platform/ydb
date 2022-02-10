@@ -5,7 +5,7 @@
 #include <library/cpp/actors/core/probes.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/util/datetime.h> 
+#include <library/cpp/actors/util/datetime.h>
 #include <library/cpp/actors/protos/services_common.pb.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -128,20 +128,20 @@ namespace NActors {
         auto& oChannel = ChannelScheduler->GetOutputChannel(evChannel);
         const bool wasWorking = oChannel.IsWorking();
 
-        const auto [dataSize, event] = oChannel.Push(*ev); 
-        LWTRACK(ForwardEvent, event->Orbit, Proxy->PeerNodeId, event->Descr.Type, event->Descr.Flags, LWACTORID(event->Descr.Recipient), LWACTORID(event->Descr.Sender), event->Descr.Cookie, event->EventSerializedSize); 
- 
-        TotalOutputQueueSize += dataSize; 
+        const auto [dataSize, event] = oChannel.Push(*ev);
+        LWTRACK(ForwardEvent, event->Orbit, Proxy->PeerNodeId, event->Descr.Type, event->Descr.Flags, LWACTORID(event->Descr.Recipient), LWACTORID(event->Descr.Sender), event->Descr.Cookie, event->EventSerializedSize);
+
+        TotalOutputQueueSize += dataSize;
         Proxy->Metrics->AddOutputBuffersTotalSize(dataSize);
-        if (!wasWorking) { 
-            // this channel has returned to work -- it was empty and this we have just put first event in the queue 
-            ChannelScheduler->AddToHeap(oChannel, EqualizeCounter); 
+        if (!wasWorking) {
+            // this channel has returned to work -- it was empty and this we have just put first event in the queue
+            ChannelScheduler->AddToHeap(oChannel, EqualizeCounter);
         }
 
         SetOutputStuckFlag(true);
         ++NumEventsInReadyChannels;
 
-        LWTRACK(EnqueueEvent, event->Orbit, Proxy->PeerNodeId, NumEventsInReadyChannels, GetWriteBlockedTotal(), evChannel, oChannel.GetQueueSize(), oChannel.GetBufferedAmountOfData()); 
+        LWTRACK(EnqueueEvent, event->Orbit, Proxy->PeerNodeId, NumEventsInReadyChannels, GetWriteBlockedTotal(), evChannel, oChannel.GetQueueSize(), oChannel.GetBufferedAmountOfData());
         WILSON_TRACE(*TlsActivationContext, &ev->TraceId, OutputQueuePush,
                      QueueSizeInEvents = oChannel.GetQueueSize(),
                      QueueSizeInBytes = oChannel.GetBufferedAmountOfData());
@@ -179,7 +179,7 @@ namespace NActors {
             } else {
                 TActivationContext::Send(ev);
             }
-            LWPROBE(StartBatching, Proxy->PeerNodeId, batchPeriod.MillisecondsFloat()); 
+            LWPROBE(StartBatching, Proxy->PeerNodeId, batchPeriod.MillisecondsFloat());
             LOG_DEBUG_IC_SESSION("ICS17", "batching started");
         }
     }
@@ -315,7 +315,7 @@ namespace NActors {
 
             // update ping time
             Ping = msg.Ping;
-            LWPROBE(UpdateFromInputSession, Proxy->PeerNodeId, Ping.MillisecondsFloat()); 
+            LWPROBE(UpdateFromInputSession, Proxy->PeerNodeId, Ping.MillisecondsFloat());
 
             bool needConfirm = false;
 
@@ -342,7 +342,7 @@ namespace NActors {
 
             // generate more traffic if we have unblocked state now
             if (unblockedSomething) {
-                LWPROBE(UnblockByDropConfirmed, Proxy->PeerNodeId, NHPTimer::GetSeconds(GetCycleCountFast() - ev->SendTime) * 1000.0); 
+                LWPROBE(UnblockByDropConfirmed, Proxy->PeerNodeId, NHPTimer::GetSeconds(GetCycleCountFast() - ev->SendTime) * 1000.0);
                 GenerateTraffic();
             }
 
@@ -380,7 +380,7 @@ namespace NActors {
 
     void TInterconnectSessionTCP::HandleRam(TEvRam::TPtr& ev) {
         if (ev->Get() == RamInQueue) {
-            LWPROBE(FinishRam, Proxy->PeerNodeId, NHPTimer::GetSeconds(GetCycleCountFast() - ev->SendTime) * 1000.0); 
+            LWPROBE(FinishRam, Proxy->PeerNodeId, NHPTimer::GetSeconds(GetCycleCountFast() - ev->SendTime) * 1000.0);
             RamInQueue = nullptr;
             GenerateTraffic();
         }
@@ -391,7 +391,7 @@ namespace NActors {
         IssuePingRequest();
 
         if (RamInQueue && !RamInQueue->Batching) {
-            LWPROBE(SkipGenerateTraffic, Proxy->PeerNodeId, NHPTimer::GetSeconds(GetCycleCountFast() - RamStartedCycles) * 1000.0); 
+            LWPROBE(SkipGenerateTraffic, Proxy->PeerNodeId, NHPTimer::GetSeconds(GetCycleCountFast() - RamStartedCycles) * 1000.0);
             return; // we'll do it a bit later
         } else {
             RamInQueue = nullptr;
@@ -399,51 +399,51 @@ namespace NActors {
 
         LOG_DEBUG_IC_SESSION("ICS19", "GenerateTraffic");
 
-        // There is a tradeoff between fairness and efficiency. 
-        // The less traffic is generated here, the less buffering is after fair scheduler, 
-        // the more fair system is, the less latency is present. 
-        // The more traffic is generated here, the less syscalls and actor-system overhead occurs, 
-        // the less cpu is consumed. 
-        static const ui64 generateLimit = 64 * 1024; 
- 
+        // There is a tradeoff between fairness and efficiency.
+        // The less traffic is generated here, the less buffering is after fair scheduler,
+        // the more fair system is, the less latency is present.
+        // The more traffic is generated here, the less syscalls and actor-system overhead occurs,
+        // the less cpu is consumed.
+        static const ui64 generateLimit = 64 * 1024;
+
         const ui64 sizeBefore = TotalOutputQueueSize;
-        ui32 generatedPackets = 0; 
-        ui64 generatedBytes = 0; 
-        ui64 generateStarted = GetCycleCountFast(); 
+        ui32 generatedPackets = 0;
+        ui64 generatedBytes = 0;
+        ui64 generateStarted = GetCycleCountFast();
 
         // apply traffic changes
         auto accountTraffic = [&] { ChannelScheduler->ForEach([](TEventOutputChannel& channel) { channel.AccountTraffic(); }); };
 
-        // first, we create as many data packets as we can generate under certain conditions; they include presence 
-        // of events in channels queues and in flight fitting into requested limit; after we hit one of these conditions 
-        // we exit cycle 
-        while (Socket && NumEventsInReadyChannels && InflightDataAmount < GetTotalInflightAmountOfData() && !ReceiveContext->WriteBlockedByFullSendBuffer) { 
-            if (generatedBytes >= generateLimit) { 
-                // resume later but ensure that we have issued at least one packet 
+        // first, we create as many data packets as we can generate under certain conditions; they include presence
+        // of events in channels queues and in flight fitting into requested limit; after we hit one of these conditions
+        // we exit cycle
+        while (Socket && NumEventsInReadyChannels && InflightDataAmount < GetTotalInflightAmountOfData() && !ReceiveContext->WriteBlockedByFullSendBuffer) {
+            if (generatedBytes >= generateLimit) {
+                // resume later but ensure that we have issued at least one packet
                 RamInQueue = new TEvRam(false);
                 Send(SelfId(), RamInQueue);
-                RamStartedCycles = GetCycleCountFast(); 
-                LWPROBE(StartRam, Proxy->PeerNodeId); 
-                break; 
+                RamStartedCycles = GetCycleCountFast();
+                LWPROBE(StartRam, Proxy->PeerNodeId);
+                break;
             }
 
-            try { 
-                generatedBytes += MakePacket(true); 
-                ++generatedPackets; 
-            } catch (const TExSerializedEventTooLarge& ex) { 
-                // terminate session if the event can't be serialized properly 
-                accountTraffic(); 
-                LOG_CRIT_IC("ICS31", "serialized event Type# 0x%08" PRIx32 " is too large", ex.Type); 
-                return Terminate(TDisconnectReason::EventTooLarge()); 
+            try {
+                generatedBytes += MakePacket(true);
+                ++generatedPackets;
+            } catch (const TExSerializedEventTooLarge& ex) {
+                // terminate session if the event can't be serialized properly
+                accountTraffic();
+                LOG_CRIT_IC("ICS31", "serialized event Type# 0x%08" PRIx32 " is too large", ex.Type);
+                return Terminate(TDisconnectReason::EventTooLarge());
             }
         }
 
-        if (Socket) { 
-            WriteData(); 
-        } 
- 
-        LWPROBE(GenerateTraffic, Proxy->PeerNodeId, NHPTimer::GetSeconds(GetCycleCountFast() - generateStarted) * 1000.0, sizeBefore - TotalOutputQueueSize, generatedPackets, generatedBytes); 
- 
+        if (Socket) {
+            WriteData();
+        }
+
+        LWPROBE(GenerateTraffic, Proxy->PeerNodeId, NHPTimer::GetSeconds(GetCycleCountFast() - generateStarted) * 1000.0, sizeBefore - TotalOutputQueueSize, generatedPackets, generatedBytes);
+
         accountTraffic();
         EqualizeCounter += ChannelScheduler->Equalize();
     }
@@ -520,10 +520,10 @@ namespace NActors {
             ReceiveContext->WriteBlockedByFullSendBuffer ? "true" : "false");
         if (std::exchange(ReceiveContext->WriteBlockedByFullSendBuffer, false)) {
             Proxy->Metrics->IncUsefulWriteWakeups();
-            ui64 nowCycles = GetCycleCountFast(); 
-            double blockedUs = NHPTimer::GetSeconds(nowCycles - WriteBlockedCycles) * 1000000.0; 
-            LWPROBE(ReadyWrite, Proxy->PeerNodeId, NHPTimer::GetSeconds(nowCycles - ev->SendTime) * 1000.0, blockedUs / 1000.0); 
-            WriteBlockedTotal += TDuration::MicroSeconds(blockedUs); 
+            ui64 nowCycles = GetCycleCountFast();
+            double blockedUs = NHPTimer::GetSeconds(nowCycles - WriteBlockedCycles) * 1000000.0;
+            LWPROBE(ReadyWrite, Proxy->PeerNodeId, NHPTimer::GetSeconds(nowCycles - ev->SendTime) * 1000.0, blockedUs / 1000.0);
+            WriteBlockedTotal += TDuration::MicroSeconds(blockedUs);
             GenerateTraffic();
         } else if (!ev->Cookie) {
             Proxy->Metrics->IncSpuriousWriteWakeups();
@@ -602,7 +602,7 @@ namespace NActors {
                     Y_VERIFY(static_cast<size_t>(r) <= BytesUnwritten);
                     BytesUnwritten -= r;
                     written += r;
-                    ui64 packets = 0; 
+                    ui64 packets = 0;
 
                     // advance SendQueuePos to eat all processed items
                     for (size_t amount = r; amount && SendQueuePos->DropBufs(amount); ++SendQueuePos) {
@@ -610,11 +610,11 @@ namespace NActors {
                             LastSentSerial = Max(LastSentSerial, SendQueuePos->GetSerial());
                         }
                         ++PacketsWrittenToSocket;
-                        ++packets; 
-                        LWTRACK(PacketWrittenToSocket, SendQueuePos->Orbit, Proxy->PeerNodeId, PacketsWrittenToSocket, SendQueuePos->TriedWriting, SendQueuePos->GetDataSize(), BytesUnwritten, GetWriteBlockedTotal(), (SOCKET)*Socket); 
+                        ++packets;
+                        LWTRACK(PacketWrittenToSocket, SendQueuePos->Orbit, Proxy->PeerNodeId, PacketsWrittenToSocket, SendQueuePos->TriedWriting, SendQueuePos->GetDataSize(), BytesUnwritten, GetWriteBlockedTotal(), (SOCKET)*Socket);
                     }
- 
-                    LWPROBE(WriteToSocket, Proxy->PeerNodeId, r, packets, PacketsWrittenToSocket, BytesUnwritten, GetWriteBlockedTotal(), (SOCKET)*Socket); 
+
+                    LWPROBE(WriteToSocket, Proxy->PeerNodeId, r, packets, PacketsWrittenToSocket, BytesUnwritten, GetWriteBlockedTotal(), (SOCKET)*Socket);
                 } else if (-r != EAGAIN && -r != EWOULDBLOCK) {
                     const TString message = r == 0 ? "connection closed by peer"
                         : err ? err
@@ -635,8 +635,8 @@ namespace NActors {
                     // TEvPollerReadyWrite event from poller; set up flag meaning this and wait for that event
                     Y_VERIFY(!ReceiveContext->WriteBlockedByFullSendBuffer);
                     ReceiveContext->WriteBlockedByFullSendBuffer = true;
-                    WriteBlockedCycles = GetCycleCountFast(); 
-                    LWPROBE(BlockedWrite, Proxy->PeerNodeId, SendQueue.size(), written); 
+                    WriteBlockedCycles = GetCycleCountFast();
+                    LWPROBE(BlockedWrite, Proxy->PeerNodeId, SendQueue.size(), written);
                     LOG_DEBUG_IC_SESSION("ICS18", "hit send buffer limit");
 
                     if (PollerToken) {
@@ -718,7 +718,7 @@ namespace NActors {
         }
     }
 
-    ui64 TInterconnectSessionTCP::MakePacket(bool data, TMaybe<ui64> pingMask) { 
+    ui64 TInterconnectSessionTCP::MakePacket(bool data, TMaybe<ui64> pingMask) {
         Y_VERIFY(Socket);
 
         TSendQueue::iterator packet;
@@ -759,7 +759,7 @@ namespace NActors {
             }
 
             if (AtomicGet(ReceiveContext->ControlPacketId) == 0) {
-                AtomicSet(ReceiveContext->ControlPacketSendTimer, GetCycleCountFast()); 
+                AtomicSet(ReceiveContext->ControlPacketSendTimer, GetCycleCountFast());
                 AtomicSet(ReceiveContext->ControlPacketId, OutputCounter);
             }
 
@@ -788,8 +788,8 @@ namespace NActors {
         packet->Sign();
 
         // count number of bytes pending for write
-        ui64 packetSize = (Params.UseModernFrame ? sizeof(TTcpPacketHeader_v2) : sizeof(TTcpPacketHeader_v1)) + packet->GetDataSize(); 
-        BytesUnwritten += packetSize; 
+        ui64 packetSize = (Params.UseModernFrame ? sizeof(TTcpPacketHeader_v2) : sizeof(TTcpPacketHeader_v1)) + packet->GetDataSize();
+        BytesUnwritten += packetSize;
 
         LOG_DEBUG_IC_SESSION("ICS22", "outgoing packet Serial# %" PRIu64 " Confirm# %" PRIu64 " DataSize# %zu"
             " InflightDataAmount# %" PRIu64 " BytesUnwritten# %" PRIu64, serial, lastInputSerial, packet->GetDataSize(),
@@ -799,13 +799,13 @@ namespace NActors {
         ResetFlushLogic();
 
         ++PacketsGenerated;
-        LWTRACK(PacketGenerated, packet->Orbit, Proxy->PeerNodeId, BytesUnwritten, InflightDataAmount, PacketsGenerated, packetSize); 
+        LWTRACK(PacketGenerated, packet->Orbit, Proxy->PeerNodeId, BytesUnwritten, InflightDataAmount, PacketsGenerated, packetSize);
 
         if (!data) {
             WriteData();
         }
- 
-        return packetSize; 
+
+        return packetSize;
     }
 
     bool TInterconnectSessionTCP::DropConfirmed(ui64 confirm) {
@@ -836,14 +836,14 @@ namespace NActors {
             channel.DropConfirmed(lastDroppedSerial);
         });
 
-        const ui64 current = InflightDataAmount; 
-        const ui64 limit = GetTotalInflightAmountOfData(); 
-        const bool unblockedSomething = current >= limit && current < limit + droppedDataAmount; 
+        const ui64 current = InflightDataAmount;
+        const ui64 limit = GetTotalInflightAmountOfData();
+        const bool unblockedSomething = current >= limit && current < limit + droppedDataAmount;
 
         PacketsConfirmed += numDropped;
         InflightDataAmount -= droppedDataAmount;
         Proxy->Metrics->SubInflightDataAmount(droppedDataAmount);
-        LWPROBE(DropConfirmed, Proxy->PeerNodeId, droppedDataAmount, InflightDataAmount); 
+        LWPROBE(DropConfirmed, Proxy->PeerNodeId, droppedDataAmount, InflightDataAmount);
 
         LOG_DEBUG_IC_SESSION("ICS24", "exit InflightDataAmount: %" PRIu64 " bytes droppedDataAmount: %" PRIu64 " bytes"
             " dropped %" PRIu32 " packets", InflightDataAmount, droppedDataAmount, numDropped);
@@ -896,7 +896,7 @@ namespace NActors {
             }
         }
 
-        LWTRACK(FillSendingBuffer, task.Orbit, Proxy->PeerNodeId, bytesGenerated, NumEventsInReadyChannels, WriteBlockedTotal); 
+        LWTRACK(FillSendingBuffer, task.Orbit, Proxy->PeerNodeId, bytesGenerated, NumEventsInReadyChannels, WriteBlockedTotal);
         Y_VERIFY(bytesGenerated); // ensure we are not stalled in serialization
     }
 
@@ -967,15 +967,15 @@ namespace NActors {
 
         auto& lastpair = OutputQueueUtilization.Last();
         if (state)
-            lastpair.first -= GetCycleCountFast(); 
+            lastpair.first -= GetCycleCountFast();
         else
-            lastpair.first += GetCycleCountFast(); 
+            lastpair.first += GetCycleCountFast();
 
         OutputStuckFlag = state;
     }
 
     void TInterconnectSessionTCP::SwitchStuckPeriod() {
-        auto now = GetCycleCountFast(); 
+        auto now = GetCycleCountFast();
         if (OutputQueueUtilization.Size() != 0) {
             auto& lastpair = OutputQueueUtilization.Last();
             lastpair.second = now - lastpair.second;
@@ -1005,7 +1005,7 @@ namespace NActors {
     }
 
     ui64 TInterconnectSessionTCP::GetMaxCyclesPerEvent() const {
-        return DurationToCycles(TDuration::MicroSeconds(50)); 
+        return DurationToCycles(TDuration::MicroSeconds(50));
     }
 
     void TInterconnectSessionTCP::IssuePingRequest() {
@@ -1013,7 +1013,7 @@ namespace NActors {
         if (now >= LastPingTimestamp + PingPeriodicity) {
             LOG_DEBUG_IC_SESSION("ICS22", "Issuing ping request");
             if (Socket) {
-                MakePacket(false, GetCycleCountFast() | TTcpPacketBuf::PingRequestMask); 
+                MakePacket(false, GetCycleCountFast() | TTcpPacketBuf::PingRequestMask);
             }
             if (Socket) {
                 MakePacket(false, TInstant::Now().MicroSeconds() | TTcpPacketBuf::ClockMask);

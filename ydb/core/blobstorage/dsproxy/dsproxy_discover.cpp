@@ -300,7 +300,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
         Mon->CountDiscoverResponseTime(duration);
         const bool success = result->Status == NKikimrProto::OK;
         WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvDiscoverResultSent);
-        LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvDiscover, 0, duration.SecondsFloat() * 1000.0, 
+        LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvDiscover, 0, duration.SecondsFloat() * 1000.0,
                 TabletId, Info->GroupID, TLogoBlobID::MaxChannel, "", success);
         SendResponseAndDie(std::move(result));
     }

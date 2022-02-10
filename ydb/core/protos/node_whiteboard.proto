@@ -108,8 +108,8 @@ message TPDiskStateInfo {
     optional NKikimrBlobStorage.TPDiskState.E State = 9;
     optional uint32 NodeId = 10; // filled during merge
     optional uint32 Count = 13; // filled during group count
-    optional EFlag Device = 14; 
-    optional EFlag Realtime = 15; 
+    optional EFlag Device = 14;
+    optional EFlag Realtime = 15;
     // State as flag - to be filled
     optional EFlag StateFlag = 16;
     // overall state - to be filled

@@ -4,33 +4,33 @@
 
 #include <library/cpp/lwtrace/all.h>
 
-// Helper class for printing pdisk id in the same was as it done for counters 
-struct TPDiskIdField { 
-    typedef ui32 TStoreType; 
+// Helper class for printing pdisk id in the same was as it done for counters
+struct TPDiskIdField {
+    typedef ui32 TStoreType;
     typedef ui32 TFuncParam;
 
     static void ToString(ui32 value, TString* out) {
-        *out = Sprintf("%09" PRIu32, value); 
-    } 
+        *out = Sprintf("%09" PRIu32, value);
+    }
     static ui32 ToStoreType(ui32 value) {
         return value;
     }
-}; 
- 
-namespace NKikimr { namespace NPDisk { 
- 
-struct TRequestTypeField { 
-    typedef ui32 TStoreType; 
+};
+
+namespace NKikimr { namespace NPDisk {
+
+struct TRequestTypeField {
+    typedef ui32 TStoreType;
     typedef ui32 TFuncParam;
 
     static void ToString(ui32 value, TString* out);
     static ui32 ToStoreType(ui32 value) {
         return value;
     }
-}; 
- 
-}} 
- 
+};
+
+}}
+
 namespace NKikimr {
 
 struct TBlobPutTactics {
@@ -62,16 +62,16 @@ struct TEventTypeField {
     PROBE(DSProxyBatchedGetRequest, GROUPS("DSProxy"), \
         TYPES(ui64, ui32), \
         NAMES("count" , "groupId")) \
-    PROBE(ProxyPutBootstrapPart, GROUPS("Durations"), \ 
-      TYPES(ui64, double, double, ui64, double), \ 
-      NAMES("size", "waitMs", "splitMs", "splitCount", "splitElapsedMs")) \ 
+    PROBE(ProxyPutBootstrapPart, GROUPS("Durations"), \
+      TYPES(ui64, double, double, ui64, double), \
+      NAMES("size", "waitMs", "splitMs", "splitCount", "splitElapsedMs")) \
     PROBE(DSProxyRequestDuration, GROUPS("DSProxyRequest", "DSProxy"), \
-      TYPES(NKikimr::TEventTypeField, ui64, double, ui64, ui32, ui32, TString, bool), \ 
+      TYPES(NKikimr::TEventTypeField, ui64, double, ui64, ui32, ui32, TString, bool), \
       NAMES("type", "size", "durationMs", "tabletId", "groupId", "channel", "handleClass", "isOk")) \
     PROBE(DSProxyVDiskRequestDuration, GROUPS("VDisk", "DSProxy"), \
-      TYPES(NKikimr::TEventTypeField, ui64, ui64, ui32, ui32, ui32, double, double, double, double, TString, TString), \ 
+      TYPES(NKikimr::TEventTypeField, ui64, ui64, ui32, ui32, ui32, double, double, double, double, TString, TString), \
       NAMES("type", "size", "tabletId", "groupId", "channel", "vdiskOrderNum", "startTime", "totalDurationMs", \
-          "vdiskDurationMs", "transferDurationMs", "handleClass", "status")) \ 
+          "vdiskDurationMs", "transferDurationMs", "handleClass", "status")) \
     PROBE(VDiskSkeletonFrontVMovedPatchRecieved, GROUPS("VDisk", "DSProxy"), \
       TYPES(ui32, ui32, ui32, ui64, ui64), \
       NAMES("nodeId", "groupId", "vdiskOrderNum", "tabletId", "size")) \
@@ -126,18 +126,18 @@ struct TEventTypeField {
       TYPES(double, ui32, bool), \
       NAMES("processingTimeMs", "size", "isDiscarded")) \
     PROBE(PDiskNewRequest, GROUPS("PDisk", "PDiskRequest", "LWTrackStart"), \
-      TYPES(TPDiskIdField, ui64, double, double, bool, bool, ui64, ui64, NKikimr::NPDisk::TRequestTypeField), \ 
-      NAMES("pdisk", "reqId", "creationTimeSec", "costMs", "isSensitive", "isFast", "owner", "priorityClass", "type")) \ 
-    PROBE(PDiskFairSchedulerPush, GROUPS("PDisk", "PDiskRequest"), \ 
+      TYPES(TPDiskIdField, ui64, double, double, bool, bool, ui64, ui64, NKikimr::NPDisk::TRequestTypeField), \
+      NAMES("pdisk", "reqId", "creationTimeSec", "costMs", "isSensitive", "isFast", "owner", "priorityClass", "type")) \
+    PROBE(PDiskFairSchedulerPush, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, TString, ui64, ui64, NKikimr::NPDisk::TRequestTypeField, ui64, double), \
-      NAMES("pdisk", "reqId", "queueType", "owner", "priorityClass", "type", "fairQLA", "fairQCA")) \ 
-    PROBE(PDiskFairSchedulerPop, GROUPS("PDisk", "PDiskRequest"), \ 
+      NAMES("pdisk", "reqId", "queueType", "owner", "priorityClass", "type", "fairQLA", "fairQCA")) \
+    PROBE(PDiskFairSchedulerPop, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, TString, ui64, ui64, NKikimr::NPDisk::TRequestTypeField, ui64, double, bool), \
-      NAMES("pdisk", "reqId", "queueType", "owner", "priorityClass", "type", "fairQLD", "fairQCD", "guarantyLost")) \ 
-    PROBE(PDiskInputRequestTimeout, GROUPS("PDisk", "PDiskRequest"), \ 
-      TYPES(TPDiskIdField, ui64, double), \ 
-      NAMES("pdisk", "reqId", "deadlineSec")) \ 
-    PROBE(PDiskInputRequest, GROUPS("PDisk", "PDiskRequest"), \ 
+      NAMES("pdisk", "reqId", "queueType", "owner", "priorityClass", "type", "fairQLD", "fairQCD", "guarantyLost")) \
+    PROBE(PDiskInputRequestTimeout, GROUPS("PDisk", "PDiskRequest"), \
+      TYPES(TPDiskIdField, ui64, double), \
+      NAMES("pdisk", "reqId", "deadlineSec")) \
+    PROBE(PDiskInputRequest, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, double, double, ui64, double, double, ui64, bool, ui64, ui64), \
       NAMES("pdisk", "reqId", "creationTimeSec", "costMs", "inputQLA", "inputQCA", "deadlineSec", "owner", "isFast", \
           "priorityClass", "inputQueueSize")) \
@@ -150,49 +150,49 @@ struct TEventTypeField {
     PROBE(PDiskLogWriteFlush, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, double, double, double, ui64, bool, ui64), \
       NAMES("pdisk", "reqId", "creationTimeSec", "costMs", "deadlineSec", "owner", "isFast", "priorityClass")) \
-    PROBE(PDiskBurst, GROUPS("PDisk", "PDiskRequest"), \ 
-      TYPES(TPDiskIdField, ui64, double, bool, double, double), \ 
-      NAMES("pdisk", "reqId", "creationTimeSec", "isSensitive", "costMs", "burstMs")) \ 
-    PROBE(PDiskSchedulerPack, GROUPS("PDisk", "PDiskSchedulerStep"), \ 
-      TYPES(TPDiskIdField, ui64, ui64, double, ui64), \ 
-      NAMES("pdisk", "schedStep", "schedPack", "totalCostMs", "reqCount")) \ 
-    PROBE(PDiskSchedulerAdhesion, GROUPS("PDisk"), \ 
-      TYPES(TPDiskIdField, ui32, double, ui64, ui64), \ 
-      NAMES("pdisk", "chunkIdx", "adhesionCostMs", "adhesionWrites", "adhesionReorderings")) \ 
-    PROBE(PDiskSchedulerAdhesionLookup, GROUPS("PDisk"), \ 
-      TYPES(TPDiskIdField, bool, bool, bool, bool, bool, bool, bool, bool), \ 
-      NAMES("pdisk", "found", "queueEnd", "skipCostLimit", "skipCountLimit", "orderConstraint", "disabled", "adhesionSizeLimit", "interrupted")) \ 
-    PROBE(PDiskSchedulerDispatch, GROUPS("PDisk", "PDiskSchedulerStep", "PDiskSchedulerSubStep", "PDiskRequest"), \ 
-      TYPES(TPDiskIdField, ui64, ui64, ui64, ui64, bool, double), \ 
-      NAMES("pdisk", "schedStep", "schedSubStep", "reqId", "reqDispatched", "isSensitive", "costMs")) \ 
-    PROBE(PDiskSchedulerSlack, GROUPS("PDisk", "PDiskSchedulerStep", "PDiskSchedulerSubStep"), \ 
-      TYPES(TPDiskIdField, ui64, ui64, double, double, double, double), \ 
-      NAMES("pdisk", "schedStep", "schedSubStep", "slackMs", "nonscheduledMs", "burstMs", "reorderingMs")) \ 
-    PROBE(PDiskSchedulerInject, GROUPS("PDisk", "PDiskSchedulerStep"), \ 
-      TYPES(TPDiskIdField, ui64, double, double, double, double), \ 
-      NAMES("pdisk", "schedStep", "sensitiveQueueMs", "bestEffortQueueMs", "unusedBurstMs", "injectedMs")) \ 
-    PROBE(PDiskSchedulerAllocIdleSlack, GROUPS("PDisk", "PDiskSchedulerStep"), \ 
-      TYPES(TPDiskIdField, ui64, double, double, double), \ 
-      NAMES("pdisk", "schedStep", "allocIdleSlackMaxMs", "slackMs", "allocatedIdleSlackMs")) \ 
-    PROBE(PDiskSchedulerStepCost, GROUPS("PDisk", "PDiskSchedulerStep"), \ 
-      TYPES(TPDiskIdField, ui64, ui64, double, ui64, double, ui64, double, ui64), \ 
-      NAMES("pdisk", "schedStep", "schedPacks", "stepSensitiveCost", "stepSensitiveCount", "stepBestEffortCost", "stepBestEffortCount" \ 
-          , "stepCost", "stepCount")) \ 
-    PROBE(PDiskSchedulerStepInjected, GROUPS("PDisk", "PDiskSchedulerStep"), \ 
-      TYPES(TPDiskIdField, ui64, double, ui64), \ 
-      NAMES("pdisk", "schedStep", "stepInjectedCost", "stepInjectedCount")) \ 
-    PROBE(PDiskSchedulerStepBlocks, GROUPS("PDisk", "PDiskSchedulerStep"), \ 
-      TYPES(TPDiskIdField, ui64, ui64, ui64, ui64, ui64), \ 
-      NAMES("pdisk", "schedStep", "bestEffortBlocks", "bestEffortUnblocks", "sensitiveBlocks", "sensitiveUnblocks")) \ 
-    PROBE(PDiskSchedulerStepIdleSlack, GROUPS("PDisk", "PDiskSchedulerStep"), \ 
-      TYPES(TPDiskIdField, ui64, double, ui64), \ 
-      NAMES("pdisk", "schedStep", "stepAllocatedIdleSlackMs", "stepAllocatedIdleSlackCount")) \ 
-    PROBE(PDiskSchedulerSubStep, GROUPS("PDisk", "PDiskSchedulerStep", "PDiskSchedulerSubStep"), \ 
-      TYPES(TPDiskIdField, ui64, ui64, double, double), \ 
-      NAMES("pdisk", "schedStep", "schedSubStep", "subStepCost", "subStepCount")) \ 
+    PROBE(PDiskBurst, GROUPS("PDisk", "PDiskRequest"), \
+      TYPES(TPDiskIdField, ui64, double, bool, double, double), \
+      NAMES("pdisk", "reqId", "creationTimeSec", "isSensitive", "costMs", "burstMs")) \
+    PROBE(PDiskSchedulerPack, GROUPS("PDisk", "PDiskSchedulerStep"), \
+      TYPES(TPDiskIdField, ui64, ui64, double, ui64), \
+      NAMES("pdisk", "schedStep", "schedPack", "totalCostMs", "reqCount")) \
+    PROBE(PDiskSchedulerAdhesion, GROUPS("PDisk"), \
+      TYPES(TPDiskIdField, ui32, double, ui64, ui64), \
+      NAMES("pdisk", "chunkIdx", "adhesionCostMs", "adhesionWrites", "adhesionReorderings")) \
+    PROBE(PDiskSchedulerAdhesionLookup, GROUPS("PDisk"), \
+      TYPES(TPDiskIdField, bool, bool, bool, bool, bool, bool, bool, bool), \
+      NAMES("pdisk", "found", "queueEnd", "skipCostLimit", "skipCountLimit", "orderConstraint", "disabled", "adhesionSizeLimit", "interrupted")) \
+    PROBE(PDiskSchedulerDispatch, GROUPS("PDisk", "PDiskSchedulerStep", "PDiskSchedulerSubStep", "PDiskRequest"), \
+      TYPES(TPDiskIdField, ui64, ui64, ui64, ui64, bool, double), \
+      NAMES("pdisk", "schedStep", "schedSubStep", "reqId", "reqDispatched", "isSensitive", "costMs")) \
+    PROBE(PDiskSchedulerSlack, GROUPS("PDisk", "PDiskSchedulerStep", "PDiskSchedulerSubStep"), \
+      TYPES(TPDiskIdField, ui64, ui64, double, double, double, double), \
+      NAMES("pdisk", "schedStep", "schedSubStep", "slackMs", "nonscheduledMs", "burstMs", "reorderingMs")) \
+    PROBE(PDiskSchedulerInject, GROUPS("PDisk", "PDiskSchedulerStep"), \
+      TYPES(TPDiskIdField, ui64, double, double, double, double), \
+      NAMES("pdisk", "schedStep", "sensitiveQueueMs", "bestEffortQueueMs", "unusedBurstMs", "injectedMs")) \
+    PROBE(PDiskSchedulerAllocIdleSlack, GROUPS("PDisk", "PDiskSchedulerStep"), \
+      TYPES(TPDiskIdField, ui64, double, double, double), \
+      NAMES("pdisk", "schedStep", "allocIdleSlackMaxMs", "slackMs", "allocatedIdleSlackMs")) \
+    PROBE(PDiskSchedulerStepCost, GROUPS("PDisk", "PDiskSchedulerStep"), \
+      TYPES(TPDiskIdField, ui64, ui64, double, ui64, double, ui64, double, ui64), \
+      NAMES("pdisk", "schedStep", "schedPacks", "stepSensitiveCost", "stepSensitiveCount", "stepBestEffortCost", "stepBestEffortCount" \
+          , "stepCost", "stepCount")) \
+    PROBE(PDiskSchedulerStepInjected, GROUPS("PDisk", "PDiskSchedulerStep"), \
+      TYPES(TPDiskIdField, ui64, double, ui64), \
+      NAMES("pdisk", "schedStep", "stepInjectedCost", "stepInjectedCount")) \
+    PROBE(PDiskSchedulerStepBlocks, GROUPS("PDisk", "PDiskSchedulerStep"), \
+      TYPES(TPDiskIdField, ui64, ui64, ui64, ui64, ui64), \
+      NAMES("pdisk", "schedStep", "bestEffortBlocks", "bestEffortUnblocks", "sensitiveBlocks", "sensitiveUnblocks")) \
+    PROBE(PDiskSchedulerStepIdleSlack, GROUPS("PDisk", "PDiskSchedulerStep"), \
+      TYPES(TPDiskIdField, ui64, double, ui64), \
+      NAMES("pdisk", "schedStep", "stepAllocatedIdleSlackMs", "stepAllocatedIdleSlackCount")) \
+    PROBE(PDiskSchedulerSubStep, GROUPS("PDisk", "PDiskSchedulerStep", "PDiskSchedulerSubStep"), \
+      TYPES(TPDiskIdField, ui64, ui64, double, double), \
+      NAMES("pdisk", "schedStep", "schedSubStep", "subStepCost", "subStepCount")) \
     PROBE(PDiskSchedulerStartStep, GROUPS("PDisk", "PDiskSchedulerStep", "LWTrackStart"), \
-      TYPES(TPDiskIdField, ui64), \ 
-      NAMES("pdisk", "schedStep")) \ 
+      TYPES(TPDiskIdField, ui64), \
+      NAMES("pdisk", "schedStep")) \
     PROBE(PDiskChunkReadPieceAddToScheduler, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui32, ui64, ui64), \
       NAMES("pdisk", "pieceIdx", "size", "offset")) \
@@ -208,33 +208,33 @@ struct TEventTypeField {
     PROBE(PDiskChunkWritePieceSendToDevice, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, ui64, ui64, ui64), \
       NAMES("pdisk", "owner", "chunkIdx", "pieceOffset", "pieceSize")) \
-    PROBE(PDiskLogWriteComplete, GROUPS("PDisk", "PDiskRequest"), \ 
-      TYPES(TPDiskIdField, ui64, double, double, double, double, double, double), \ 
-      NAMES("pdisk", "reqId", "creationTimeSec", "costMs", "responseTimeMs", "inputTimeMs", "scheduleTimeMs", "deviceTotalTimeMs")) \ 
-    PROBE(PDiskChunkResponseTime, GROUPS("PDisk", "PDiskRequest"), \ 
-      TYPES(TPDiskIdField, ui64, ui64, double, ui64), \ 
-      NAMES("pdisk", "reqId", "priorityClass", "responseTimeMs", "sizeBytes")) \ 
-    PROBE(PDiskTrimResponseTime, GROUPS("PDisk", "PDiskRequest"), \ 
-      TYPES(TPDiskIdField, ui64, double, ui64), \ 
-      NAMES("pdisk", "reqId", "responseTimeMs", "sizeBytes")) \ 
-    PROBE(PDiskDeviceReadDuration, GROUPS("PDisk"), \ 
+    PROBE(PDiskLogWriteComplete, GROUPS("PDisk", "PDiskRequest"), \
+      TYPES(TPDiskIdField, ui64, double, double, double, double, double, double), \
+      NAMES("pdisk", "reqId", "creationTimeSec", "costMs", "responseTimeMs", "inputTimeMs", "scheduleTimeMs", "deviceTotalTimeMs")) \
+    PROBE(PDiskChunkResponseTime, GROUPS("PDisk", "PDiskRequest"), \
+      TYPES(TPDiskIdField, ui64, ui64, double, ui64), \
+      NAMES("pdisk", "reqId", "priorityClass", "responseTimeMs", "sizeBytes")) \
+    PROBE(PDiskTrimResponseTime, GROUPS("PDisk", "PDiskRequest"), \
+      TYPES(TPDiskIdField, ui64, double, ui64), \
+      NAMES("pdisk", "reqId", "responseTimeMs", "sizeBytes")) \
+    PROBE(PDiskDeviceReadDuration, GROUPS("PDisk"), \
       TYPES(TPDiskIdField, double, ui64), \
       NAMES("pdisk", "deviceTimeMs", "size")) \
-    PROBE(PDiskDeviceWriteDuration, GROUPS("PDisk"), \ 
+    PROBE(PDiskDeviceWriteDuration, GROUPS("PDisk"), \
       TYPES(TPDiskIdField, double, ui64), \
       NAMES("pdisk", "deviceTimeMs", "size")) \
-    PROBE(PDiskDeviceTrimDuration, GROUPS("PDisk"), \ 
-      TYPES(TPDiskIdField, double, ui64), \ 
-      NAMES("pdisk", "trimTimeMs", "trimOffset")) \ 
+    PROBE(PDiskDeviceTrimDuration, GROUPS("PDisk"), \
+      TYPES(TPDiskIdField, double, ui64), \
+      NAMES("pdisk", "trimTimeMs", "trimOffset")) \
     PROBE(PDiskDeviceOperationSizeAndType, GROUPS("PDisk"), \
       TYPES(TPDiskIdField, ui64, ui64), \
       NAMES("pdisk", "operationSize", "operationType")) \
-    PROBE(PDiskMilliBatchSize, GROUPS("PDisk"), \ 
-      TYPES(TPDiskIdField, ui64, ui64, ui64, ui64), \ 
-      NAMES("pdisk", "milliBatchLogCost", "milliBatchNonLogCost", "milliBatchLogReqs", "milliBatchNonLogReqs")) \ 
-    PROBE(PDiskHandleWakeup, GROUPS("PDisk"), \ 
-      TYPES(TPDiskIdField, double, double, double), \ 
-      NAMES("pdisk", "updatePercentileTrackersMs", "whiteboardReportMs", "updateSchedulerMs")) \ 
+    PROBE(PDiskMilliBatchSize, GROUPS("PDisk"), \
+      TYPES(TPDiskIdField, ui64, ui64, ui64, ui64), \
+      NAMES("pdisk", "milliBatchLogCost", "milliBatchNonLogCost", "milliBatchLogReqs", "milliBatchNonLogReqs")) \
+    PROBE(PDiskHandleWakeup, GROUPS("PDisk"), \
+      TYPES(TPDiskIdField, double, double, double), \
+      NAMES("pdisk", "updatePercentileTrackersMs", "whiteboardReportMs", "updateSchedulerMs")) \
     PROBE(PDiskForsetiCycle, GROUPS("PDisk"), \
       TYPES(TPDiskIdField, ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui64), \
       NAMES("pdisk", "realTimeNs", "uncorrectedForsetiTimeNs", "correctedForsetiTimeNs", "timeCorrectionNs", \
@@ -251,10 +251,10 @@ struct TEventTypeField {
     PROBE(DSProxyGetReply, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(DSProxyPutEnqueue, GROUPS("DSProxy", "LWTrackStart"), TYPES(), NAMES()) \
     PROBE(DSProxyPutHandle, GROUPS("DSProxyRequest", "DSProxy", "LWTrackStart"), TYPES(), NAMES()) \
-    PROBE(DSProxyPutBootstrapStart, GROUPS("DSProxy"), TYPES(), NAMES()) \ 
-    PROBE(DSProxyPutBootstrapDone, GROUPS("DSProxy","Durations"), \ 
-      TYPES(ui64, double, double, double, double, ui64, ui64), \ 
-      NAMES("size", "wilsonMs", "allocateMs", "waitTotalMs", "splitTotalMs", "splitTotalCount", "blobIdx")) \ 
+    PROBE(DSProxyPutBootstrapStart, GROUPS("DSProxy"), TYPES(), NAMES()) \
+    PROBE(DSProxyPutBootstrapDone, GROUPS("DSProxy","Durations"), \
+      TYPES(ui64, double, double, double, double, ui64, ui64), \
+      NAMES("size", "wilsonMs", "allocateMs", "waitTotalMs", "splitTotalMs", "splitTotalCount", "blobIdx")) \
     PROBE(DSProxyPutReply, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(DSProxyPutResumeBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(DSProxyPutPauseBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \

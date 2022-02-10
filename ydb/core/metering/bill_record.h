@@ -65,6 +65,6 @@ struct TBillRecord {
 #undef BILL_RECORD_FIELD_DEFAULT
 #undef BILL_RECORD_FIELD
 #undef BILL_RECORD_FIELD_SETTER
-}; 
+};
 
-}   // NKikimr 
+}   // NKikimr

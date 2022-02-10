@@ -32,7 +32,7 @@ protected:
     std::optional<EStrategyOutcome> ProcessPessimistic(const TBlobStorageGroupInfo &info, TBlobStorageGroupInfo::EBlobState pessimisticState,
             bool doVerify, TBlobState &state);
     void AddGetRequest(TLogContext &logCtx, TGroupDiskRequests &groupDiskRequests, TLogoBlobID &fullId, ui32 partIdx,
-            TBlobState::TDisk &disk, TIntervalSet<i32> &intervalSet, const char *logMarker); 
+            TBlobState::TDisk &disk, TIntervalSet<i32> &intervalSet, const char *logMarker);
     bool VerifyTheWholeSituation(TBlobState &state);
     void PreparePartLayout(const TBlobState &state, const TBlobStorageGroupInfo &info,
             TBlobStorageGroupType::TPartLayout *layout, ui32 slowDiskIdx);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "format.h" 
+#include "format.h"
 
 namespace NKikimr {
 namespace NTable {

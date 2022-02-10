@@ -1,10 +1,10 @@
 #include "tablet.h"
 #include "events.h"
 #include "ut_helpers.h"
-#include "rate_accounting.h" 
+#include "rate_accounting.h"
 
 #include <ydb/core/metering/metering.h>
- 
+
 #include <library/cpp/actors/interconnect/interconnect_impl.h>
 
 #include <util/random/random.h>
@@ -1675,415 +1675,415 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         } while (allocated < 49.99);
     }
 
-    Y_UNIT_TEST(TestQuoterAccountResourcesOnDemand) { 
-        TTestContext ctx; 
-        ctx.Setup(); 
- 
-        TString billRecord; 
-        ctx.Runtime->SetObserverFunc([&billRecord](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) { 
-            if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) { 
-                billRecord = ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson; 
-            } 
-            return TTestActorRuntime::EEventAction::PROCESS; 
-        }); 
- 
-        NKikimrKesus::TStreamingQuoterResource cfg; 
-        cfg.SetResourcePath("/Root"); 
-        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(100.0); 
-        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(300.0); 
-        cfg.MutableAccountingConfig()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->SetReportPeriodMs(1000); 
-        cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000); 
-        cfg.MutableAccountingConfig()->SetCollectPeriodSec(2); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetBillingPeriodSec(2); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetVersion("version"); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetSchema("schema"); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetCloudId("cloud"); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetFolderId("folder"); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetResourceId("resource"); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetSourceId("source"); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->MutableTags()->insert({"key", "value"}); 
-        ctx.AddQuoterResource(cfg); 
-        ctx.AddQuoterResource("/Root/Res"); // With inherited settings. 
- 
-        auto edge = ctx.Runtime->AllocateEdgeActor(); 
-        auto client = ctx.Runtime->AllocateEdgeActor(); 
-        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult = ctx.SubscribeOnResource(client, edge, "/Root/Res", false, 0); 
- 
-        TInstant start = ctx.Runtime->GetCurrentTime(); 
-        TDuration interval = TConsumptionHistory::Interval(); 
-        ctx.AccountResources(client, edge, subscribeResult.GetResults(0).GetResourceId(), start, interval, {50.0}); 
- 
-        if (billRecord.empty()) { 
-            TDispatchOptions opts; 
-            opts.FinalEvents.emplace_back([&billRecord](IEventHandle&) -> bool { 
-                return !billRecord.empty(); 
-            }); 
-            ctx.Runtime->DispatchEvents(opts); 
-        } 
- 
-        const TString expectedBillRecord = R"({"usage":{"start":0,"quantity":50,"finish":1,"unit":"request_unit","type":"delta"},"tags":{"key":"value"},"id":"Root-ondemand-0-1","cloud_id":"cloud","source_wt":5,"source_id":"source","resource_id":"resource","schema":"schema","folder_id":"folder","version":"version"})"; 
- 
-        UNIT_ASSERT_NO_DIFF(billRecord, expectedBillRecord + "\n"); 
-    } 
- 
-    Y_UNIT_TEST(TestQuoterAccountResourcesBurst) { 
-        TTestContext ctx; 
-        ctx.Setup(); 
- 
-        std::vector<TString> bills; 
-        ctx.Runtime->SetObserverFunc([&bills](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) { 
-            if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) { 
-                bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson); 
-            } 
-            return TTestActorRuntime::EEventAction::PROCESS; 
-        }); 
- 
-        NKikimrKesus::TStreamingQuoterResource cfg; 
-        cfg.SetResourcePath("/Root"); 
-        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0); 
-        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(1.0); 
-        cfg.MutableAccountingConfig()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->SetReportPeriodMs(1000); 
-        cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000); 
-        cfg.MutableAccountingConfig()->SetCollectPeriodSec(2); 
-        cfg.MutableAccountingConfig()->SetProvisionedUnitsPerSecond(100.0); 
-        cfg.MutableAccountingConfig()->SetProvisionedCoefficient(1.0); 
-        cfg.MutableAccountingConfig()->SetOvershootCoefficient(1.0); 
-        cfg.MutableAccountingConfig()->MutableProvisioned()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->MutableProvisioned()->SetBillingPeriodSec(2); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetBillingPeriodSec(2); 
-        cfg.MutableAccountingConfig()->MutableOvershoot()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->MutableOvershoot()->SetBillingPeriodSec(2); 
-        ctx.AddQuoterResource(cfg); 
-        ctx.AddQuoterResource("/Root/Res"); // With inherited settings. 
- 
-        auto edge = ctx.Runtime->AllocateEdgeActor(); 
-        auto client = ctx.Runtime->AllocateEdgeActor(); 
-        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult = ctx.SubscribeOnResource(client, edge, "/Root/Res", false, 0); 
- 
-        TInstant start = ctx.Runtime->GetCurrentTime(); 
-        TDuration interval = TConsumptionHistory::Interval(); 
-        ctx.AccountResources(client, edge, subscribeResult.GetResults(0).GetResourceId(), start, interval, {600.0}); 
- 
-        if (bills.size() < 3) { 
-            TDispatchOptions opts; 
-            opts.FinalEvents.emplace_back([&bills](IEventHandle&) -> bool { 
-                return bills.size() >= 3; 
-            }); 
-            ctx.Runtime->DispatchEvents(opts); 
-        } 
- 
-        UNIT_ASSERT_NO_DIFF(bills[0], TString(R"({"usage":{"start":0,"quantity":100,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-provisioned-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n"); 
-        UNIT_ASSERT_NO_DIFF(bills[1], TString(R"({"usage":{"start":0,"quantity":200,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-ondemand-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n"); 
-        UNIT_ASSERT_NO_DIFF(bills[2], TString(R"({"usage":{"start":0,"quantity":300,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-overshoot-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n"); 
-    } 
- 
-    Y_UNIT_TEST(TestQuoterAccountResourcesPaced) { 
-        TTestContext ctx; 
-        ctx.Setup(); 
- 
-        std::vector<TString> bills; 
-        ctx.Runtime->SetObserverFunc([&bills](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) { 
-            if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) { 
-                bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson); 
-            } 
-            return TTestActorRuntime::EEventAction::PROCESS; 
-        }); 
- 
-        NKikimrKesus::TStreamingQuoterResource cfg; 
-        cfg.SetResourcePath("/Root"); 
-        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0); 
-        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(1.0); 
-        cfg.MutableAccountingConfig()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->SetReportPeriodMs(1000); 
-        cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000); 
-        cfg.MutableAccountingConfig()->SetCollectPeriodSec(2); 
-        cfg.MutableAccountingConfig()->SetProvisionedUnitsPerSecond(100.0); 
-        cfg.MutableAccountingConfig()->SetProvisionedCoefficient(1.0); 
-        cfg.MutableAccountingConfig()->SetOvershootCoefficient(1.0); 
-        cfg.MutableAccountingConfig()->MutableProvisioned()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->MutableProvisioned()->SetBillingPeriodSec(2); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetBillingPeriodSec(2); 
-        cfg.MutableAccountingConfig()->MutableOvershoot()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->MutableOvershoot()->SetBillingPeriodSec(2); 
-        ctx.AddQuoterResource(cfg); 
-        ctx.AddQuoterResource("/Root/Res"); // With inherited settings. 
- 
-        auto edge = ctx.Runtime->AllocateEdgeActor(); 
-        auto client = ctx.Runtime->AllocateEdgeActor(); 
-        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult = ctx.SubscribeOnResource(client, edge, "/Root/Res", false, 0); 
- 
-        TInstant start = ctx.Runtime->GetCurrentTime(); 
-        TDuration interval = TConsumptionHistory::Interval(); 
-        std::vector<double> values; 
-        for (int i = 0; i < 100; i++) { 
-            values.push_back(6); 
-        } 
-        ctx.AccountResources(client, edge, subscribeResult.GetResults(0).GetResourceId(), start, interval, std::move(values)); 
- 
-        if (bills.size() < 3) { 
-            TDispatchOptions opts; 
-            opts.FinalEvents.emplace_back([&bills](IEventHandle&) -> bool { 
-                return bills.size() >= 3; 
-            }); 
-            ctx.Runtime->DispatchEvents(opts); 
-        } 
- 
-        UNIT_ASSERT_NO_DIFF(bills[0], TString(R"({"usage":{"start":0,"quantity":199,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-provisioned-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n"); 
-        UNIT_ASSERT_NO_DIFF(bills[1], TString(R"({"usage":{"start":0,"quantity":398,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-ondemand-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n"); 
-        UNIT_ASSERT_NO_DIFF(bills[2], TString(R"({"usage":{"start":0,"quantity":3,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-overshoot-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n"); 
-    } 
- 
-    Y_UNIT_TEST(TestQuoterAccountResourcesAggregateClients) { 
-        TTestContext ctx; 
-        ctx.Setup(); 
- 
-        std::vector<TString> bills; 
-        ctx.Runtime->SetObserverFunc([&bills](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) { 
-            if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) { 
-                bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson); 
-            } 
-            return TTestActorRuntime::EEventAction::PROCESS; 
-        }); 
- 
-        NKikimrKesus::TStreamingQuoterResource cfg; 
-        cfg.SetResourcePath("/Root"); 
-        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0); 
-        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(1.0); 
-        cfg.MutableAccountingConfig()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->SetReportPeriodMs(1000); 
-        cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000); 
-        cfg.MutableAccountingConfig()->SetCollectPeriodSec(2); 
-        cfg.MutableAccountingConfig()->SetProvisionedUnitsPerSecond(100.0); 
-        cfg.MutableAccountingConfig()->SetProvisionedCoefficient(1.0); 
-        cfg.MutableAccountingConfig()->SetOvershootCoefficient(1.0); 
-        cfg.MutableAccountingConfig()->MutableProvisioned()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->MutableProvisioned()->SetBillingPeriodSec(2); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetBillingPeriodSec(2); 
-        cfg.MutableAccountingConfig()->MutableOvershoot()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->MutableOvershoot()->SetBillingPeriodSec(2); 
-        ctx.AddQuoterResource(cfg); 
- 
-        auto edge = ctx.Runtime->AllocateEdgeActor(); 
-        auto client1 = ctx.Runtime->AllocateEdgeActor(); 
-        auto client2 = ctx.Runtime->AllocateEdgeActor(); 
-        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult1 = ctx.SubscribeOnResource(client1, edge, "/Root", false, 0); 
-        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult2 = ctx.SubscribeOnResource(client2, edge, "/Root", false, 0); 
- 
-        TInstant start = ctx.Runtime->GetCurrentTime(); 
-        TDuration interval = TConsumptionHistory::Interval(); 
-        std::vector<double> values1; 
-        std::vector<double> values2; 
-        for (int i = 0; i < 100; i++) { 
-            values1.push_back(3); 
-            values2.push_back(3); 
-        } 
-        ctx.AccountResources(client1, edge, subscribeResult1.GetResults(0).GetResourceId(), start, interval, std::move(values1)); 
-        ctx.AccountResources(client2, edge, subscribeResult2.GetResults(0).GetResourceId(), start, interval, std::move(values2)); 
- 
-        if (bills.size() < 3) { 
-            TDispatchOptions opts; 
-            opts.FinalEvents.emplace_back([&bills](IEventHandle&) -> bool { 
-                return bills.size() >= 3; 
-            }); 
-            ctx.Runtime->DispatchEvents(opts); 
-        } 
- 
-        UNIT_ASSERT_NO_DIFF(bills[0], TString(R"({"usage":{"start":0,"quantity":199,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-provisioned-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n"); 
-        UNIT_ASSERT_NO_DIFF(bills[1], TString(R"({"usage":{"start":0,"quantity":398,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-ondemand-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n"); 
-        UNIT_ASSERT_NO_DIFF(bills[2], TString(R"({"usage":{"start":0,"quantity":3,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-overshoot-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n"); 
-    } 
- 
-    Y_UNIT_TEST(TestQuoterAccountResourcesAggregateResources) { 
-        TTestContext ctx; 
-        ctx.Setup(); 
- 
-        std::vector<TString> bills; 
-        ctx.Runtime->SetObserverFunc([&bills](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) { 
-            if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) { 
-                bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson); 
-            } 
-            return TTestActorRuntime::EEventAction::PROCESS; 
-        }); 
- 
-        NKikimrKesus::TStreamingQuoterResource cfg; 
-        cfg.SetResourcePath("/Root"); 
-        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0); 
-        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(1.0); 
-        cfg.MutableAccountingConfig()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->SetReportPeriodMs(1000); 
-        cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000); 
-        cfg.MutableAccountingConfig()->SetCollectPeriodSec(2); 
-        cfg.MutableAccountingConfig()->SetProvisionedUnitsPerSecond(100.0); 
-        cfg.MutableAccountingConfig()->SetProvisionedCoefficient(1.0); 
-        cfg.MutableAccountingConfig()->SetOvershootCoefficient(1.0); 
-        cfg.MutableAccountingConfig()->MutableProvisioned()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->MutableProvisioned()->SetBillingPeriodSec(2); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetBillingPeriodSec(2); 
-        cfg.MutableAccountingConfig()->MutableOvershoot()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->MutableOvershoot()->SetBillingPeriodSec(2); 
-        ctx.AddQuoterResource(cfg); 
-        ctx.AddQuoterResource("/Root/Res1"); // With inherited settings. 
-        ctx.AddQuoterResource("/Root/Res2"); // With inherited settings. 
- 
-        auto edge = ctx.Runtime->AllocateEdgeActor(); 
-        auto client = ctx.Runtime->AllocateEdgeActor(); 
-        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult1 = ctx.SubscribeOnResource(client, edge, "/Root/Res1", false, 0); 
-        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult2 = ctx.SubscribeOnResource(client, edge, "/Root/Res2", false, 0); 
- 
-        TInstant start = ctx.Runtime->GetCurrentTime(); 
-        TDuration interval = TConsumptionHistory::Interval(); 
-        std::vector<double> values1; 
-        std::vector<double> values2; 
-        for (int i = 0; i < 100; i++) { 
-            values1.push_back(3); 
-            values2.push_back(3); 
-        } 
-        ctx.AccountResources(client, edge, { 
-            {subscribeResult1.GetResults(0).GetResourceId(), start, interval, std::move(values1)}, 
-            {subscribeResult2.GetResults(0).GetResourceId(), start, interval, std::move(values2)} 
-        }); 
- 
-        if (bills.size() < 3) { 
-            TDispatchOptions opts; 
-            opts.FinalEvents.emplace_back([&bills](IEventHandle&) -> bool { 
-                return bills.size() >= 3; 
-            }); 
-            ctx.Runtime->DispatchEvents(opts); 
-        } 
- 
-        UNIT_ASSERT_NO_DIFF(bills[0], TString(R"({"usage":{"start":0,"quantity":199,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-provisioned-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n"); 
-        UNIT_ASSERT_NO_DIFF(bills[1], TString(R"({"usage":{"start":0,"quantity":398,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-ondemand-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n"); 
-        UNIT_ASSERT_NO_DIFF(bills[2], TString(R"({"usage":{"start":0,"quantity":3,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-overshoot-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n"); 
-    } 
- 
-    Y_UNIT_TEST(TestQuoterAccountResourcesDeduplicateClient) { 
-        TTestContext ctx; 
-        ctx.Setup(); 
- 
-        std::vector<TString> bills; 
-        ctx.Runtime->SetObserverFunc([&bills](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) { 
-            if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) { 
-                bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson); 
-            } 
-            return TTestActorRuntime::EEventAction::PROCESS; 
-        }); 
- 
-        NKikimrKesus::TStreamingQuoterResource cfg; 
-        cfg.SetResourcePath("/Root"); 
-        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0); 
-        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(1.0); 
-        cfg.MutableAccountingConfig()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->SetReportPeriodMs(1000); 
-        cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000); 
-        cfg.MutableAccountingConfig()->SetCollectPeriodSec(2); 
-        cfg.MutableAccountingConfig()->SetProvisionedUnitsPerSecond(100.0); 
-        cfg.MutableAccountingConfig()->SetProvisionedCoefficient(1.0); 
-        cfg.MutableAccountingConfig()->SetOvershootCoefficient(1.0); 
-        cfg.MutableAccountingConfig()->MutableProvisioned()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->MutableProvisioned()->SetBillingPeriodSec(2); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetBillingPeriodSec(2); 
-        cfg.MutableAccountingConfig()->MutableOvershoot()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->MutableOvershoot()->SetBillingPeriodSec(2); 
-        ctx.AddQuoterResource(cfg); 
- 
-        auto edge = ctx.Runtime->AllocateEdgeActor(); 
-        auto client = ctx.Runtime->AllocateEdgeActor(); 
-        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult = ctx.SubscribeOnResource(client, edge, "/Root", false, 0); 
- 
-        TInstant start = ctx.Runtime->GetCurrentTime(); 
-        TDuration interval = TConsumptionHistory::Interval(); 
-        std::vector<double> values1; 
-        std::vector<double> values2; 
-        for (int i = 0; i < 100; i++) { 
-            values1.push_back(6); 
-            values2.push_back(6); 
-        } 
-        ctx.AccountResources(client, edge, subscribeResult.GetResults(0).GetResourceId(), start, interval, std::move(values1)); 
-        ctx.AccountResources(client, edge, subscribeResult.GetResults(0).GetResourceId(), start, interval, std::move(values2)); 
- 
-        if (bills.size() < 3) { 
-            TDispatchOptions opts; 
-            opts.FinalEvents.emplace_back([&bills](IEventHandle&) -> bool { 
-                return bills.size() >= 3; 
-            }); 
-            ctx.Runtime->DispatchEvents(opts); 
-        } 
- 
-        UNIT_ASSERT_NO_DIFF(bills[0], TString(R"({"usage":{"start":0,"quantity":199,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-provisioned-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n"); 
-        UNIT_ASSERT_NO_DIFF(bills[1], TString(R"({"usage":{"start":0,"quantity":398,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-ondemand-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n"); 
-        UNIT_ASSERT_NO_DIFF(bills[2], TString(R"({"usage":{"start":0,"quantity":3,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-overshoot-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n"); 
-    } 
- 
-    Y_UNIT_TEST(TestQuoterAccountResourcesForgetClient) { 
-        TTestContext ctx; 
-        ctx.Setup(); 
- 
-        std::vector<TString> bills; 
-        ctx.Runtime->SetObserverFunc([&bills](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) { 
-            if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) { 
-                bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson); 
-            } 
-            return TTestActorRuntime::EEventAction::PROCESS; 
-        }); 
- 
-        NKikimrKesus::TStreamingQuoterResource cfg; 
-        cfg.SetResourcePath("/Root"); 
-        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0); 
-        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(1.0); 
-        cfg.MutableAccountingConfig()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->SetReportPeriodMs(1000); 
-        cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000); 
-        cfg.MutableAccountingConfig()->SetCollectPeriodSec(2); 
-        cfg.MutableAccountingConfig()->SetProvisionedUnitsPerSecond(100.0); 
-        cfg.MutableAccountingConfig()->SetProvisionedCoefficient(1.0); 
-        cfg.MutableAccountingConfig()->SetOvershootCoefficient(1.0); 
-        cfg.MutableAccountingConfig()->MutableProvisioned()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->MutableProvisioned()->SetBillingPeriodSec(2); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->MutableOnDemand()->SetBillingPeriodSec(2); 
-        cfg.MutableAccountingConfig()->MutableOvershoot()->SetEnabled(true); 
-        cfg.MutableAccountingConfig()->MutableOvershoot()->SetBillingPeriodSec(2); 
-        ctx.AddQuoterResource(cfg); 
- 
-        for (int i = 0; i < 3; i++) { 
-            auto edge = ctx.Runtime->AllocateEdgeActor(); 
-            auto client = ctx.Runtime->AllocateEdgeActor(); 
-            const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult = ctx.SubscribeOnResource(client, edge, "/Root", false, 0); 
- 
-            TInstant begin = TInstant::Seconds(2) + i * TDuration::Seconds(6); 
-            TDuration interval = TConsumptionHistory::Interval(); 
-            std::vector<double> values; 
-            for (int i = 0; i < 100; i++) { 
-                values.push_back(6); 
-            } 
-            ctx.AccountResources(client, edge, subscribeResult.GetResults(0).GetResourceId(), begin, interval, std::move(values)); 
- 
-            if (bills.size() < 3) { 
-                TDispatchOptions opts; 
-                opts.FinalEvents.emplace_back([&bills](IEventHandle&) -> bool { 
-                    return bills.size() >= 3; 
-                }); 
-                ctx.Runtime->DispatchEvents(opts); 
-            } 
- 
-            int start = 2 + i * 6; 
-            int finish = start + 1; 
-            int source_wt = start + 5; 
-            UNIT_ASSERT_NO_DIFF(bills[0], Sprintf(R"({"usage":{"start":%d,"quantity":199,"finish":%d,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-provisioned-%d-%d","cloud_id":"","source_wt":%d,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})", start, finish, start, finish, source_wt) + "\n"); 
-            UNIT_ASSERT_NO_DIFF(bills[1], Sprintf(R"({"usage":{"start":%d,"quantity":398,"finish":%d,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-ondemand-%d-%d","cloud_id":"","source_wt":%d,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})", start, finish, start, finish, source_wt) + "\n"); 
-            UNIT_ASSERT_NO_DIFF(bills[2], Sprintf(R"({"usage":{"start":%d,"quantity":3,"finish":%d,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-overshoot-%d-%d","cloud_id":"","source_wt":%d,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})", start, finish, start, finish, source_wt) + "\n"); 
-            bills.clear(); 
-        } 
-    } 
- 
+    Y_UNIT_TEST(TestQuoterAccountResourcesOnDemand) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        TString billRecord;
+        ctx.Runtime->SetObserverFunc([&billRecord](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) {
+                billRecord = ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        NKikimrKesus::TStreamingQuoterResource cfg;
+        cfg.SetResourcePath("/Root");
+        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(100.0);
+        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(300.0);
+        cfg.MutableAccountingConfig()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->SetReportPeriodMs(1000);
+        cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000);
+        cfg.MutableAccountingConfig()->SetCollectPeriodSec(2);
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetBillingPeriodSec(2);
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetVersion("version");
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetSchema("schema");
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetCloudId("cloud");
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetFolderId("folder");
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetResourceId("resource");
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetSourceId("source");
+        cfg.MutableAccountingConfig()->MutableOnDemand()->MutableTags()->insert({"key", "value"});
+        ctx.AddQuoterResource(cfg);
+        ctx.AddQuoterResource("/Root/Res"); // With inherited settings.
+
+        auto edge = ctx.Runtime->AllocateEdgeActor();
+        auto client = ctx.Runtime->AllocateEdgeActor();
+        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult = ctx.SubscribeOnResource(client, edge, "/Root/Res", false, 0);
+
+        TInstant start = ctx.Runtime->GetCurrentTime();
+        TDuration interval = TConsumptionHistory::Interval();
+        ctx.AccountResources(client, edge, subscribeResult.GetResults(0).GetResourceId(), start, interval, {50.0});
+
+        if (billRecord.empty()) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&billRecord](IEventHandle&) -> bool {
+                return !billRecord.empty();
+            });
+            ctx.Runtime->DispatchEvents(opts);
+        }
+
+        const TString expectedBillRecord = R"({"usage":{"start":0,"quantity":50,"finish":1,"unit":"request_unit","type":"delta"},"tags":{"key":"value"},"id":"Root-ondemand-0-1","cloud_id":"cloud","source_wt":5,"source_id":"source","resource_id":"resource","schema":"schema","folder_id":"folder","version":"version"})";
+
+        UNIT_ASSERT_NO_DIFF(billRecord, expectedBillRecord + "\n");
+    }
+
+    Y_UNIT_TEST(TestQuoterAccountResourcesBurst) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        std::vector<TString> bills;
+        ctx.Runtime->SetObserverFunc([&bills](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) {
+                bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        NKikimrKesus::TStreamingQuoterResource cfg;
+        cfg.SetResourcePath("/Root");
+        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0);
+        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(1.0);
+        cfg.MutableAccountingConfig()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->SetReportPeriodMs(1000);
+        cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000);
+        cfg.MutableAccountingConfig()->SetCollectPeriodSec(2);
+        cfg.MutableAccountingConfig()->SetProvisionedUnitsPerSecond(100.0);
+        cfg.MutableAccountingConfig()->SetProvisionedCoefficient(1.0);
+        cfg.MutableAccountingConfig()->SetOvershootCoefficient(1.0);
+        cfg.MutableAccountingConfig()->MutableProvisioned()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableProvisioned()->SetBillingPeriodSec(2);
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetBillingPeriodSec(2);
+        cfg.MutableAccountingConfig()->MutableOvershoot()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableOvershoot()->SetBillingPeriodSec(2);
+        ctx.AddQuoterResource(cfg);
+        ctx.AddQuoterResource("/Root/Res"); // With inherited settings.
+
+        auto edge = ctx.Runtime->AllocateEdgeActor();
+        auto client = ctx.Runtime->AllocateEdgeActor();
+        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult = ctx.SubscribeOnResource(client, edge, "/Root/Res", false, 0);
+
+        TInstant start = ctx.Runtime->GetCurrentTime();
+        TDuration interval = TConsumptionHistory::Interval();
+        ctx.AccountResources(client, edge, subscribeResult.GetResults(0).GetResourceId(), start, interval, {600.0});
+
+        if (bills.size() < 3) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&bills](IEventHandle&) -> bool {
+                return bills.size() >= 3;
+            });
+            ctx.Runtime->DispatchEvents(opts);
+        }
+
+        UNIT_ASSERT_NO_DIFF(bills[0], TString(R"({"usage":{"start":0,"quantity":100,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-provisioned-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n");
+        UNIT_ASSERT_NO_DIFF(bills[1], TString(R"({"usage":{"start":0,"quantity":200,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-ondemand-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n");
+        UNIT_ASSERT_NO_DIFF(bills[2], TString(R"({"usage":{"start":0,"quantity":300,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-overshoot-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n");
+    }
+
+    Y_UNIT_TEST(TestQuoterAccountResourcesPaced) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        std::vector<TString> bills;
+        ctx.Runtime->SetObserverFunc([&bills](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) {
+                bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        NKikimrKesus::TStreamingQuoterResource cfg;
+        cfg.SetResourcePath("/Root");
+        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0);
+        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(1.0);
+        cfg.MutableAccountingConfig()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->SetReportPeriodMs(1000);
+        cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000);
+        cfg.MutableAccountingConfig()->SetCollectPeriodSec(2);
+        cfg.MutableAccountingConfig()->SetProvisionedUnitsPerSecond(100.0);
+        cfg.MutableAccountingConfig()->SetProvisionedCoefficient(1.0);
+        cfg.MutableAccountingConfig()->SetOvershootCoefficient(1.0);
+        cfg.MutableAccountingConfig()->MutableProvisioned()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableProvisioned()->SetBillingPeriodSec(2);
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetBillingPeriodSec(2);
+        cfg.MutableAccountingConfig()->MutableOvershoot()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableOvershoot()->SetBillingPeriodSec(2);
+        ctx.AddQuoterResource(cfg);
+        ctx.AddQuoterResource("/Root/Res"); // With inherited settings.
+
+        auto edge = ctx.Runtime->AllocateEdgeActor();
+        auto client = ctx.Runtime->AllocateEdgeActor();
+        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult = ctx.SubscribeOnResource(client, edge, "/Root/Res", false, 0);
+
+        TInstant start = ctx.Runtime->GetCurrentTime();
+        TDuration interval = TConsumptionHistory::Interval();
+        std::vector<double> values;
+        for (int i = 0; i < 100; i++) {
+            values.push_back(6);
+        }
+        ctx.AccountResources(client, edge, subscribeResult.GetResults(0).GetResourceId(), start, interval, std::move(values));
+
+        if (bills.size() < 3) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&bills](IEventHandle&) -> bool {
+                return bills.size() >= 3;
+            });
+            ctx.Runtime->DispatchEvents(opts);
+        }
+
+        UNIT_ASSERT_NO_DIFF(bills[0], TString(R"({"usage":{"start":0,"quantity":199,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-provisioned-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n");
+        UNIT_ASSERT_NO_DIFF(bills[1], TString(R"({"usage":{"start":0,"quantity":398,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-ondemand-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n");
+        UNIT_ASSERT_NO_DIFF(bills[2], TString(R"({"usage":{"start":0,"quantity":3,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-overshoot-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n");
+    }
+
+    Y_UNIT_TEST(TestQuoterAccountResourcesAggregateClients) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        std::vector<TString> bills;
+        ctx.Runtime->SetObserverFunc([&bills](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) {
+                bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        NKikimrKesus::TStreamingQuoterResource cfg;
+        cfg.SetResourcePath("/Root");
+        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0);
+        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(1.0);
+        cfg.MutableAccountingConfig()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->SetReportPeriodMs(1000);
+        cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000);
+        cfg.MutableAccountingConfig()->SetCollectPeriodSec(2);
+        cfg.MutableAccountingConfig()->SetProvisionedUnitsPerSecond(100.0);
+        cfg.MutableAccountingConfig()->SetProvisionedCoefficient(1.0);
+        cfg.MutableAccountingConfig()->SetOvershootCoefficient(1.0);
+        cfg.MutableAccountingConfig()->MutableProvisioned()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableProvisioned()->SetBillingPeriodSec(2);
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetBillingPeriodSec(2);
+        cfg.MutableAccountingConfig()->MutableOvershoot()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableOvershoot()->SetBillingPeriodSec(2);
+        ctx.AddQuoterResource(cfg);
+
+        auto edge = ctx.Runtime->AllocateEdgeActor();
+        auto client1 = ctx.Runtime->AllocateEdgeActor();
+        auto client2 = ctx.Runtime->AllocateEdgeActor();
+        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult1 = ctx.SubscribeOnResource(client1, edge, "/Root", false, 0);
+        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult2 = ctx.SubscribeOnResource(client2, edge, "/Root", false, 0);
+
+        TInstant start = ctx.Runtime->GetCurrentTime();
+        TDuration interval = TConsumptionHistory::Interval();
+        std::vector<double> values1;
+        std::vector<double> values2;
+        for (int i = 0; i < 100; i++) {
+            values1.push_back(3);
+            values2.push_back(3);
+        }
+        ctx.AccountResources(client1, edge, subscribeResult1.GetResults(0).GetResourceId(), start, interval, std::move(values1));
+        ctx.AccountResources(client2, edge, subscribeResult2.GetResults(0).GetResourceId(), start, interval, std::move(values2));
+
+        if (bills.size() < 3) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&bills](IEventHandle&) -> bool {
+                return bills.size() >= 3;
+            });
+            ctx.Runtime->DispatchEvents(opts);
+        }
+
+        UNIT_ASSERT_NO_DIFF(bills[0], TString(R"({"usage":{"start":0,"quantity":199,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-provisioned-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n");
+        UNIT_ASSERT_NO_DIFF(bills[1], TString(R"({"usage":{"start":0,"quantity":398,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-ondemand-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n");
+        UNIT_ASSERT_NO_DIFF(bills[2], TString(R"({"usage":{"start":0,"quantity":3,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-overshoot-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n");
+    }
+
+    Y_UNIT_TEST(TestQuoterAccountResourcesAggregateResources) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        std::vector<TString> bills;
+        ctx.Runtime->SetObserverFunc([&bills](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) {
+                bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        NKikimrKesus::TStreamingQuoterResource cfg;
+        cfg.SetResourcePath("/Root");
+        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0);
+        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(1.0);
+        cfg.MutableAccountingConfig()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->SetReportPeriodMs(1000);
+        cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000);
+        cfg.MutableAccountingConfig()->SetCollectPeriodSec(2);
+        cfg.MutableAccountingConfig()->SetProvisionedUnitsPerSecond(100.0);
+        cfg.MutableAccountingConfig()->SetProvisionedCoefficient(1.0);
+        cfg.MutableAccountingConfig()->SetOvershootCoefficient(1.0);
+        cfg.MutableAccountingConfig()->MutableProvisioned()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableProvisioned()->SetBillingPeriodSec(2);
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetBillingPeriodSec(2);
+        cfg.MutableAccountingConfig()->MutableOvershoot()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableOvershoot()->SetBillingPeriodSec(2);
+        ctx.AddQuoterResource(cfg);
+        ctx.AddQuoterResource("/Root/Res1"); // With inherited settings.
+        ctx.AddQuoterResource("/Root/Res2"); // With inherited settings.
+
+        auto edge = ctx.Runtime->AllocateEdgeActor();
+        auto client = ctx.Runtime->AllocateEdgeActor();
+        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult1 = ctx.SubscribeOnResource(client, edge, "/Root/Res1", false, 0);
+        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult2 = ctx.SubscribeOnResource(client, edge, "/Root/Res2", false, 0);
+
+        TInstant start = ctx.Runtime->GetCurrentTime();
+        TDuration interval = TConsumptionHistory::Interval();
+        std::vector<double> values1;
+        std::vector<double> values2;
+        for (int i = 0; i < 100; i++) {
+            values1.push_back(3);
+            values2.push_back(3);
+        }
+        ctx.AccountResources(client, edge, {
+            {subscribeResult1.GetResults(0).GetResourceId(), start, interval, std::move(values1)},
+            {subscribeResult2.GetResults(0).GetResourceId(), start, interval, std::move(values2)}
+        });
+
+        if (bills.size() < 3) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&bills](IEventHandle&) -> bool {
+                return bills.size() >= 3;
+            });
+            ctx.Runtime->DispatchEvents(opts);
+        }
+
+        UNIT_ASSERT_NO_DIFF(bills[0], TString(R"({"usage":{"start":0,"quantity":199,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-provisioned-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n");
+        UNIT_ASSERT_NO_DIFF(bills[1], TString(R"({"usage":{"start":0,"quantity":398,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-ondemand-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n");
+        UNIT_ASSERT_NO_DIFF(bills[2], TString(R"({"usage":{"start":0,"quantity":3,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-overshoot-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n");
+    }
+
+    Y_UNIT_TEST(TestQuoterAccountResourcesDeduplicateClient) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        std::vector<TString> bills;
+        ctx.Runtime->SetObserverFunc([&bills](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) {
+                bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        NKikimrKesus::TStreamingQuoterResource cfg;
+        cfg.SetResourcePath("/Root");
+        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0);
+        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(1.0);
+        cfg.MutableAccountingConfig()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->SetReportPeriodMs(1000);
+        cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000);
+        cfg.MutableAccountingConfig()->SetCollectPeriodSec(2);
+        cfg.MutableAccountingConfig()->SetProvisionedUnitsPerSecond(100.0);
+        cfg.MutableAccountingConfig()->SetProvisionedCoefficient(1.0);
+        cfg.MutableAccountingConfig()->SetOvershootCoefficient(1.0);
+        cfg.MutableAccountingConfig()->MutableProvisioned()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableProvisioned()->SetBillingPeriodSec(2);
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetBillingPeriodSec(2);
+        cfg.MutableAccountingConfig()->MutableOvershoot()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableOvershoot()->SetBillingPeriodSec(2);
+        ctx.AddQuoterResource(cfg);
+
+        auto edge = ctx.Runtime->AllocateEdgeActor();
+        auto client = ctx.Runtime->AllocateEdgeActor();
+        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult = ctx.SubscribeOnResource(client, edge, "/Root", false, 0);
+
+        TInstant start = ctx.Runtime->GetCurrentTime();
+        TDuration interval = TConsumptionHistory::Interval();
+        std::vector<double> values1;
+        std::vector<double> values2;
+        for (int i = 0; i < 100; i++) {
+            values1.push_back(6);
+            values2.push_back(6);
+        }
+        ctx.AccountResources(client, edge, subscribeResult.GetResults(0).GetResourceId(), start, interval, std::move(values1));
+        ctx.AccountResources(client, edge, subscribeResult.GetResults(0).GetResourceId(), start, interval, std::move(values2));
+
+        if (bills.size() < 3) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&bills](IEventHandle&) -> bool {
+                return bills.size() >= 3;
+            });
+            ctx.Runtime->DispatchEvents(opts);
+        }
+
+        UNIT_ASSERT_NO_DIFF(bills[0], TString(R"({"usage":{"start":0,"quantity":199,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-provisioned-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n");
+        UNIT_ASSERT_NO_DIFF(bills[1], TString(R"({"usage":{"start":0,"quantity":398,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-ondemand-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n");
+        UNIT_ASSERT_NO_DIFF(bills[2], TString(R"({"usage":{"start":0,"quantity":3,"finish":1,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-overshoot-0-1","cloud_id":"","source_wt":5,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})") + "\n");
+    }
+
+    Y_UNIT_TEST(TestQuoterAccountResourcesForgetClient) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        std::vector<TString> bills;
+        ctx.Runtime->SetObserverFunc([&bills](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) {
+                bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        NKikimrKesus::TStreamingQuoterResource cfg;
+        cfg.SetResourcePath("/Root");
+        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0);
+        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(1.0);
+        cfg.MutableAccountingConfig()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->SetReportPeriodMs(1000);
+        cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000);
+        cfg.MutableAccountingConfig()->SetCollectPeriodSec(2);
+        cfg.MutableAccountingConfig()->SetProvisionedUnitsPerSecond(100.0);
+        cfg.MutableAccountingConfig()->SetProvisionedCoefficient(1.0);
+        cfg.MutableAccountingConfig()->SetOvershootCoefficient(1.0);
+        cfg.MutableAccountingConfig()->MutableProvisioned()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableProvisioned()->SetBillingPeriodSec(2);
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableOnDemand()->SetBillingPeriodSec(2);
+        cfg.MutableAccountingConfig()->MutableOvershoot()->SetEnabled(true);
+        cfg.MutableAccountingConfig()->MutableOvershoot()->SetBillingPeriodSec(2);
+        ctx.AddQuoterResource(cfg);
+
+        for (int i = 0; i < 3; i++) {
+            auto edge = ctx.Runtime->AllocateEdgeActor();
+            auto client = ctx.Runtime->AllocateEdgeActor();
+            const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult = ctx.SubscribeOnResource(client, edge, "/Root", false, 0);
+
+            TInstant begin = TInstant::Seconds(2) + i * TDuration::Seconds(6);
+            TDuration interval = TConsumptionHistory::Interval();
+            std::vector<double> values;
+            for (int i = 0; i < 100; i++) {
+                values.push_back(6);
+            }
+            ctx.AccountResources(client, edge, subscribeResult.GetResults(0).GetResourceId(), begin, interval, std::move(values));
+
+            if (bills.size() < 3) {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&bills](IEventHandle&) -> bool {
+                    return bills.size() >= 3;
+                });
+                ctx.Runtime->DispatchEvents(opts);
+            }
+
+            int start = 2 + i * 6;
+            int finish = start + 1;
+            int source_wt = start + 5;
+            UNIT_ASSERT_NO_DIFF(bills[0], Sprintf(R"({"usage":{"start":%d,"quantity":199,"finish":%d,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-provisioned-%d-%d","cloud_id":"","source_wt":%d,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})", start, finish, start, finish, source_wt) + "\n");
+            UNIT_ASSERT_NO_DIFF(bills[1], Sprintf(R"({"usage":{"start":%d,"quantity":398,"finish":%d,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-ondemand-%d-%d","cloud_id":"","source_wt":%d,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})", start, finish, start, finish, source_wt) + "\n");
+            UNIT_ASSERT_NO_DIFF(bills[2], Sprintf(R"({"usage":{"start":%d,"quantity":3,"finish":%d,"unit":"request_unit","type":"delta"},"tags":{},"id":"Root-overshoot-%d-%d","cloud_id":"","source_wt":%d,"source_id":"","resource_id":"","schema":"","folder_id":"","version":""})", start, finish, start, finish, source_wt) + "\n");
+            bills.clear();
+        }
+    }
+
     Y_UNIT_TEST(TestPassesUpdatedPropsToSession) {
         TTestContext ctx;
         ctx.Setup();

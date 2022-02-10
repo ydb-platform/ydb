@@ -20,32 +20,32 @@ option java_package = "com.yandex.ydb.table";
 // Create new session
 message CreateSessionRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-} 
+}
 
 // Create new session
 message CreateSessionResponse {
     // Holds CreateSessionResult in case of CreateSessionResult
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 message CreateSessionResult {
     // Session identifier
     string session_id = 1;
-} 
+}
 
 // Delete session with given id string
 message DeleteSessionRequest {
     // Session identifier
     string session_id = 1;
     Ydb.Operations.OperationParams operation_params = 2;
-} 
+}
 
 message DeleteSessionResponse {
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 message GlobalIndex {
-} 
+}
 
 message GlobalAsyncIndex {
 }
@@ -63,7 +63,7 @@ message TableIndex {
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
-} 
+}
 
 // Represent secondary index with index state
 message TableIndexDescription {
@@ -119,7 +119,7 @@ message IndexBuildMetadata {
 
 message StoragePool {
     string media = 1;
-} 
+}
 
 message StoragePolicy {
     string preset_name = 1;
@@ -129,7 +129,7 @@ message StoragePolicy {
     StoragePool external = 5;
     Ydb.FeatureFlag.Status keep_in_memory = 6;
     repeated ColumnFamilyPolicy column_families = 7;
-} 
+}
 
 message ColumnFamilyPolicy {
     enum Compression {
@@ -156,7 +156,7 @@ message ColumnFamilyPolicy {
 
 message CompactionPolicy {
     string preset_name = 1;
-} 
+}
 
 message ExplicitPartitions {
     // Specify key values used to split table into partitions.
@@ -165,7 +165,7 @@ message ExplicitPartitions {
     // Total number of created partitions is number of specified
     // keys + 1.
     repeated TypedValue split_points = 1;
-} 
+}
 
 message PartitionStats {
     // Approximate number of rows in shard
@@ -207,11 +207,11 @@ message PartitioningPolicy {
         // created partitions.
         ExplicitPartitions explicit_partitions = 4;
     }
-} 
+}
 
 message ExecutionPolicy {
     string preset_name = 1;
-} 
+}
 
 message ReplicationPolicy {
     string preset_name = 1;
@@ -225,11 +225,11 @@ message ReplicationPolicy {
     // If this feature in enabled then read-only replicas can be promoted
     // to leader.
     Ydb.FeatureFlag.Status allow_promotion = 4;
-} 
+}
 
 message CachingPolicy {
     string preset_name = 1;
-} 
+}
 
 message TableProfile {
     string preset_name = 1;
@@ -239,7 +239,7 @@ message TableProfile {
     ExecutionPolicy execution_policy = 5;
     ReplicationPolicy replication_policy = 6;
     CachingPolicy caching_policy = 7;
-} 
+}
 
 message ColumnMeta {
     // Name of column
@@ -248,7 +248,7 @@ message ColumnMeta {
     Type type = 2;
     // Column family name of the column
     string family = 3;
-} 
+}
 
 message DateTypeColumnModeSettings {
     // The row will be considered as expired at the moment of time, when the value
@@ -431,11 +431,11 @@ message CreateTableRequest {
     Ydb.FeatureFlag.Status key_bloom_filter = 16;
     // Read replicas settings for table
     ReadReplicasSettings read_replicas_settings = 17;
-} 
+}
 
 message CreateTableResponse {
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 // Drop table with given path
 message DropTableRequest {
@@ -445,11 +445,11 @@ message DropTableRequest {
     string path = 2;
     reserved 3;
     Ydb.Operations.OperationParams operation_params = 4;
-} 
+}
 
 message DropTableResponse {
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 // Alter table with given path
 message AlterTableRequest {
@@ -490,11 +490,11 @@ message AlterTableRequest {
     Ydb.FeatureFlag.Status set_key_bloom_filter = 17;
     // Set read replicas settings for table
     ReadReplicasSettings set_read_replicas_settings = 18;
-} 
+}
 
 message AlterTableResponse {
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 // Copy table with given path
 message CopyTableRequest {
@@ -505,11 +505,11 @@ message CopyTableRequest {
     // Copy to path
     string destination_path = 3;
     Ydb.Operations.OperationParams operation_params = 4;
-} 
+}
 
 message CopyTableResponse {
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 message CopyTableItem {
     // Copy from path
@@ -518,7 +518,7 @@ message CopyTableItem {
     string destination_path = 2;
     // Copy options
     bool omit_indexes = 3;
-} 
+}
 
 // Creates consistent copy of given tables.
 message CopyTablesRequest {
@@ -527,11 +527,11 @@ message CopyTablesRequest {
     string session_id = 2;
     // Source and destination paths which describe copies
     repeated CopyTableItem tables = 3;
-} 
+}
 
 message CopyTablesResponse {
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 message RenameTableItem {
     // Full path
@@ -568,12 +568,12 @@ message DescribeTableRequest {
     bool include_table_stats = 6;
     // Includes partition statistics (required include_table_statistics)
     bool include_partition_stats = 7;
-} 
+}
 
 message DescribeTableResponse {
     // Holds DescribeTableResult in case of successful call
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 message DescribeTableResult {
     // Description of scheme object
@@ -604,7 +604,7 @@ message DescribeTableResult {
     Ydb.FeatureFlag.Status key_bloom_filter = 13;
     // Read replicas settings for table
     ReadReplicasSettings read_replicas_settings = 14;
-} 
+}
 
 message Query {
     // Text of query or id prepared query
@@ -617,11 +617,11 @@ message Query {
 }
 
 message SerializableModeSettings {
-} 
+}
 
 message OnlineModeSettings {
     bool allow_inconsistent_reads = 1;
-} 
+}
 
 message StaleModeSettings {
 }
@@ -645,7 +645,7 @@ message TransactionControl {
 
 message QueryCachePolicy {
     bool keep_in_cache = 1;
-} 
+}
 
 // Collect and return query execution stats
 message QueryStatsCollection {
@@ -667,11 +667,11 @@ message ExecuteDataQueryRequest {
     QueryCachePolicy query_cache_policy = 5;
     Ydb.Operations.OperationParams operation_params = 6;
     QueryStatsCollection.Mode collect_stats = 7;
-} 
+}
 
 message ExecuteDataQueryResponse {
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 message ExecuteSchemeQueryRequest {
     // Session identifier
@@ -679,11 +679,11 @@ message ExecuteSchemeQueryRequest {
     // SQL text
     string yql_text = 2;
     Ydb.Operations.OperationParams operation_params = 3;
-} 
+}
 
 message ExecuteSchemeQueryResponse {
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 // Holds transaction id
 message TransactionMeta {
@@ -709,7 +709,7 @@ message ExecuteQueryResult {
     QueryMeta query_meta = 3;
     // Query execution statistics
     Ydb.TableStats.QueryStats query_stats = 4;
-} 
+}
 
 // Explain data query
 message ExplainDataQueryRequest {
@@ -718,17 +718,17 @@ message ExplainDataQueryRequest {
     // SQL text to explain
     string yql_text = 2;
     Ydb.Operations.OperationParams operation_params = 3;
-} 
+}
 
 message ExplainDataQueryResponse {
     // Holds ExplainQueryResult in case of successful call
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 message ExplainQueryResult {
     string query_ast = 1;
     string query_plan = 2;
-} 
+}
 
 // Prepare given program to execute
 message PrepareDataQueryRequest {
@@ -737,30 +737,30 @@ message PrepareDataQueryRequest {
     // SQL text
     string yql_text = 2;
     Ydb.Operations.OperationParams operation_params = 3;
-} 
+}
 
 message PrepareDataQueryResponse {
     // Holds PrepareQueryResult in case of successful call
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 message PrepareQueryResult {
     // Query id, used to perform ExecuteDataQuery
     string query_id = 1;
     // Parameters type, used to fill in parameter values
     map<string, Type> parameters_types = 2;
-} 
+}
 
 // Keep session alive
 message KeepAliveRequest {
     // Session identifier
     string session_id = 1;
     Ydb.Operations.OperationParams operation_params = 2;
-} 
+}
 
 message KeepAliveResponse {
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 message KeepAliveResult {
     enum SessionStatus {
@@ -770,7 +770,7 @@ message KeepAliveResult {
     }
 
     SessionStatus session_status = 1;
-} 
+}
 
 // Begin transaction on given session with given settings
 message BeginTransactionRequest {
@@ -778,16 +778,16 @@ message BeginTransactionRequest {
     string session_id = 1;
     TransactionSettings tx_settings = 2;
     Ydb.Operations.OperationParams operation_params = 3;
-} 
+}
 
 message BeginTransactionResponse {
     // Holds BeginTransactionResult in case of successful call
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 message BeginTransactionResult {
     TransactionMeta tx_meta = 1;
-} 
+}
 
 // Commit transaction with given session and tx id
 message CommitTransactionRequest {
@@ -797,11 +797,11 @@ message CommitTransactionRequest {
     string tx_id = 2;
     Ydb.Operations.OperationParams operation_params = 3;
     QueryStatsCollection.Mode collect_stats = 4;
-} 
+}
 
 message CommitTransactionResponse {
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 message CommitTransactionResult {
     Ydb.TableStats.QueryStats query_stats = 1;
@@ -814,11 +814,11 @@ message RollbackTransactionRequest {
     // Transaction identifier
     string tx_id = 2;
     Ydb.Operations.OperationParams operation_params = 3;
-} 
+}
 
 message RollbackTransactionResponse {
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 message StoragePolicyDescription {
     string name = 1;
@@ -904,7 +904,7 @@ message KeyRange {
         // Specify if we want to include given key
         TypedValue less_or_equal = 4;
     }
-} 
+}
 
 // Request to read table (without SQL)
 message ReadTableRequest {
@@ -922,7 +922,7 @@ message ReadTableRequest {
     uint64 row_limit = 6;
     // Use a server-side snapshot
     Ydb.FeatureFlag.Status use_snapshot = 7;
-} 
+}
 
 // ReadTable doesn't use Operation, returns result directly
 message ReadTableResponse {
@@ -932,13 +932,13 @@ message ReadTableResponse {
     repeated Ydb.Issue.IssueMessage issues = 2;
     // Read table result
     ReadTableResult result = 3;
-} 
+}
 
 // Result of read table request
 message ReadTableResult {
     // Result set (same as result of sql request)
     Ydb.ResultSet result_set = 1;
-} 
+}
 
 message BulkUpsertRequest {
     string table = 1;

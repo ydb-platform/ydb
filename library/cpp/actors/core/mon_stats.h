@@ -63,15 +63,15 @@ namespace NActors {
     };
 
     struct TExecutorThreadStats {
-        ui64 SentEvents = 0; 
-        ui64 ReceivedEvents = 0; 
-        ui64 PreemptedEvents = 0; // Number of events experienced hard preemption 
-        ui64 NonDeliveredEvents = 0; 
-        ui64 EmptyMailboxActivation = 0; 
-        ui64 CpuNs = 0; // nanoseconds thread was executing on CPU (accounts for preemtion) 
-        NHPTimer::STime ElapsedTicks = 0; 
-        NHPTimer::STime ParkedTicks = 0; 
-        NHPTimer::STime BlockedTicks = 0; 
+        ui64 SentEvents = 0;
+        ui64 ReceivedEvents = 0;
+        ui64 PreemptedEvents = 0; // Number of events experienced hard preemption
+        ui64 NonDeliveredEvents = 0;
+        ui64 EmptyMailboxActivation = 0;
+        ui64 CpuNs = 0; // nanoseconds thread was executing on CPU (accounts for preemtion)
+        NHPTimer::STime ElapsedTicks = 0;
+        NHPTimer::STime ParkedTicks = 0;
+        NHPTimer::STime BlockedTicks = 0;
         TLogHistogram ActivationTimeHistogram;
         TLogHistogram EventDeliveryTimeHistogram;
         TLogHistogram EventProcessingCountHistogram;
@@ -80,19 +80,19 @@ namespace NActors {
         TVector<ui64> ReceivedEventsByActivity;
         TVector<i64> ActorsAliveByActivity; // the sum should be positive, but per-thread might be negative
         TVector<ui64> ScheduledEventsByActivity;
-        ui64 PoolActorRegistrations = 0; 
-        ui64 PoolDestroyedActors = 0; 
-        ui64 PoolAllocatedMailboxes = 0; 
-        ui64 MailboxPushedOutBySoftPreemption = 0; 
-        ui64 MailboxPushedOutByTime = 0; 
-        ui64 MailboxPushedOutByEventCount = 0; 
+        ui64 PoolActorRegistrations = 0;
+        ui64 PoolDestroyedActors = 0;
+        ui64 PoolAllocatedMailboxes = 0;
+        ui64 MailboxPushedOutBySoftPreemption = 0;
+        ui64 MailboxPushedOutByTime = 0;
+        ui64 MailboxPushedOutByEventCount = 0;
 
         TExecutorThreadStats(size_t activityVecSize = 1) // must be not empty as 0 used as default
-            : ElapsedTicksByActivity(activityVecSize) 
+            : ElapsedTicksByActivity(activityVecSize)
             , ReceivedEventsByActivity(activityVecSize)
             , ActorsAliveByActivity(activityVecSize)
             , ScheduledEventsByActivity(activityVecSize)
-        {} 
+        {}
 
         template <typename T>
         static void AggregateOne(TVector<T>& self, const TVector<T>& other) {
@@ -107,14 +107,14 @@ namespace NActors {
         void Aggregate(const TExecutorThreadStats& other) {
             SentEvents += RelaxedLoad(&other.SentEvents);
             ReceivedEvents += RelaxedLoad(&other.ReceivedEvents);
-            PreemptedEvents += RelaxedLoad(&other.PreemptedEvents); 
+            PreemptedEvents += RelaxedLoad(&other.PreemptedEvents);
             NonDeliveredEvents += RelaxedLoad(&other.NonDeliveredEvents);
             EmptyMailboxActivation += RelaxedLoad(&other.EmptyMailboxActivation);
-            CpuNs += RelaxedLoad(&other.CpuNs); 
+            CpuNs += RelaxedLoad(&other.CpuNs);
             ElapsedTicks += RelaxedLoad(&other.ElapsedTicks);
             ParkedTicks += RelaxedLoad(&other.ParkedTicks);
             BlockedTicks += RelaxedLoad(&other.BlockedTicks);
-            MailboxPushedOutBySoftPreemption += RelaxedLoad(&other.MailboxPushedOutBySoftPreemption); 
+            MailboxPushedOutBySoftPreemption += RelaxedLoad(&other.MailboxPushedOutBySoftPreemption);
             MailboxPushedOutByTime += RelaxedLoad(&other.MailboxPushedOutByTime);
             MailboxPushedOutByEventCount += RelaxedLoad(&other.MailboxPushedOutByEventCount);
 

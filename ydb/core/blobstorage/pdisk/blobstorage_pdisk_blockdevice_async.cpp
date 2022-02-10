@@ -33,8 +33,8 @@
 namespace NKikimr {
 namespace NPDisk {
 
-LWTRACE_USING(BLOBSTORAGE_PROVIDER); 
- 
+LWTRACE_USING(BLOBSTORAGE_PROVIDER);
+
 constexpr ui64 MaxWaitingNoops = 256;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -305,7 +305,7 @@ class TRealBlockDevice : public IBlockDevice {
 
             TAsyncIoOperationResult events[MaxEvents];
 
-            while(!Device.QuitCounter.IsBlocked() || Device.QuitCounter.Get()) { 
+            while(!Device.QuitCounter.IsBlocked() || Device.QuitCounter.Get()) {
                 i64 ret = Device.IoContext->GetEvents(1, MaxEvents, events, TDuration::MilliSeconds(WaitTimeoutMs));
                 if (ret == -static_cast<i64>(EIoResult::InterruptedSystemCall)) {
                     Device.Mon.DeviceInterruptedSystemCalls->Inc();
@@ -699,7 +699,7 @@ private:
 
     bool IsFileOpened;
     bool IsInitialized;
-    ui64 Reordering; 
+    ui64 Reordering;
     ui64 SeekCostNs;
     bool IsTrimEnabled;
     ui32 MaxQueuedCompletionActions;
@@ -716,7 +716,7 @@ private:
 
     ui64 DeviceInFlight;
     TFlightControl FlightControl;
-    TAtomicBlockCounter QuitCounter; 
+    TAtomicBlockCounter QuitCounter;
     TString LastWarning;
     TDeque<IAsyncIoOperation*> Trash;
     TMutex TrashMutex;
@@ -738,7 +738,7 @@ public:
         , SubmitThread(nullptr)
         , IsFileOpened(false)
         , IsInitialized(false)
-        , Reordering(reorderingCycles) 
+        , Reordering(reorderingCycles)
         , SeekCostNs(seekCostNs)
         , IsTrimEnabled(true)
         , MaxQueuedCompletionActions(maxQueuedCompletionActions)

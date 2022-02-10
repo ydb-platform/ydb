@@ -23,7 +23,7 @@ protected:
     ui64 SeekTimeNsec;
     ui64 BulkReadBlockSizeBytes;
     ui64 BulkWriteBlockSizeBytes;
-    ui64 TrimSpeedBps; 
+    ui64 TrimSpeedBps;
     ui32 TotalChunksCount;
     ui64 SpeedBps[OP_TYPE_COUNT];
     ui64 SpeedBpsMin[OP_TYPE_COUNT];
@@ -188,14 +188,14 @@ public:
         return (ui64)bytesToProcess * 1000000000ull / Speed(chunkIdx, type);
     }
 
-    ui64 TrimTimeForSizeNs(ui64 bytesToTrim) const { 
-        return (ui64)bytesToTrim * 1000000000ull / TrimSpeedBps; 
-    } 
- 
-    bool IsTrimSupported() const { 
-        return TrimSpeedBps > 0; 
-    } 
- 
+    ui64 TrimTimeForSizeNs(ui64 bytesToTrim) const {
+        return (ui64)bytesToTrim * 1000000000ull / TrimSpeedBps;
+    }
+
+    bool IsTrimSupported() const {
+        return TrimSpeedBps > 0;
+    }
+
     ui64 SizeForTimeNs(ui64 durationNs, ui32 chunkIdx, EOperationType type) const {
         return Speed(chunkIdx, type) * durationNs / 1000000000ull;
     }

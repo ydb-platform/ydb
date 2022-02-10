@@ -72,7 +72,7 @@ namespace NKikimr {
         ui32 InFlight;
         TVector<ui64> RwSpeedBps;
         ELoadType LoadType;
-        NMonitoring::TPercentileTrackerLg<10, 4, 1> LatencyUs; // Upper threshold of this tracker is ~134 seconds, size is 256kB 
+        NMonitoring::TPercentileTrackerLg<10, 4, 1> LatencyUs; // Upper threshold of this tracker is ~134 seconds, size is 256kB
         TMap<double, ui64> DeviceLatency;
 
         double GetAverageSpeed() const {

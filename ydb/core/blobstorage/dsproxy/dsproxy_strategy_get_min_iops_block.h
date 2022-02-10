@@ -9,18 +9,18 @@ class TMinIopsBlockStrategy : public TStrategyBase {
 public:
     std::optional<EStrategyOutcome> RestoreWholeFromDataParts(TLogContext& /*logCtx*/, TBlobState &state,
             const TBlobStorageGroupInfo &info) {
-        TIntervalSet<i32> missing(state.Whole.NotHere); 
+        TIntervalSet<i32> missing(state.Whole.NotHere);
         TString tmp;
-        for (auto [begin, end] : missing) { 
+        for (auto [begin, end] : missing) {
             TBlockSplitRange range;
-            info.Type.BlockSplitRange((TErasureType::ECrcMode)state.Id.CrcMode(), state.Id.BlobSize(), begin, 
-                    end, &range); 
+            info.Type.BlockSplitRange((TErasureType::ECrcMode)state.Id.CrcMode(), state.Id.BlobSize(), begin,
+                    end, &range);
             for (ui32 partIdx = range.BeginPartIdx; partIdx < range.EndPartIdx; ++partIdx) {
                 TPartOffsetRange &partRange = range.PartRanges[partIdx];
                 if (partRange.Begin != partRange.End && partRange.WholeBegin < partRange.WholeEnd) {
                     if (!state.Parts[partIdx].Here.IsEmpty()) {
-                        TIntervalVec<i32> partInterval(partRange.Begin, partRange.End); 
-                        if (partInterval.IsSubsetOf(state.Parts[partIdx].Here)) { 
+                        TIntervalVec<i32> partInterval(partRange.Begin, partRange.End);
+                        if (partInterval.IsSubsetOf(state.Parts[partIdx].Here)) {
                             i64 sizeToCopy = partRange.End - partRange.Begin;
                             if (tmp.size() < (ui64)sizeToCopy) {
                                 tmp = TString::Uninitialized(sizeToCopy);
@@ -60,7 +60,7 @@ public:
                 ui32 diskIdx = (niche < 0 ? partIdx : totalPartCount + niche);
                 TBlobState::TDisk &disk = state.Disks[diskIdx];
                 TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
-                TIntervalSet<i32> &requested = disk.DiskParts[partIdx].Requested; 
+                TIntervalSet<i32> &requested = disk.DiskParts[partIdx].Requested;
                 if (partSituation == TBlobState::ESituation::Present) {
                     isMissing = false;
                 }
@@ -78,11 +78,11 @@ public:
         }
 
         // get intervals needed to restore the requested full data
-        TIntervalSet<i32> toRestore; 
-        for (auto it = state.Whole.NotHere.begin(); it != state.Whole.NotHere.end(); ++it) { 
-            auto [begin, end] = *it; 
+        TIntervalSet<i32> toRestore;
+        for (auto it = state.Whole.NotHere.begin(); it != state.Whole.NotHere.end(); ++it) {
+            auto [begin, end] = *it;
             TBlockSplitRange range;
-            info.Type.BlockSplitRange((TErasureType::ECrcMode)state.Id.CrcMode(), state.Id.BlobSize(), begin, end, &range); 
+            info.Type.BlockSplitRange((TErasureType::ECrcMode)state.Id.CrcMode(), state.Id.BlobSize(), begin, end, &range);
             for (ui32 partIdx = range.BeginPartIdx; partIdx < range.EndPartIdx; ++partIdx) {
                 TPartOffsetRange &partRange = range.PartRanges[partIdx];
                 if (partRange.Begin != partRange.End) {
@@ -106,11 +106,11 @@ public:
         const ui32 partSize = info.Type.PartSize(state.Id);
 
         // Gather part ranges that need to be restored
-        TIntervalSet<i32> partIntervals; 
-        for (auto it = state.Whole.NotHere.begin(); it != state.Whole.NotHere.end(); ++it) { 
-            auto [begin, end] = *it; // missing 
+        TIntervalSet<i32> partIntervals;
+        for (auto it = state.Whole.NotHere.begin(); it != state.Whole.NotHere.end(); ++it) {
+            auto [begin, end] = *it; // missing
             TBlockSplitRange range;
-            info.Type.BlockSplitRange((TErasureType::ECrcMode)state.Id.CrcMode(), state.Id.BlobSize(), begin, end, &range); 
+            info.Type.BlockSplitRange((TErasureType::ECrcMode)state.Id.CrcMode(), state.Id.BlobSize(), begin, end, &range);
             for (ui32 partIdx = range.BeginPartIdx; partIdx < range.EndPartIdx; ++partIdx) {
                 TPartOffsetRange &partRange = range.PartRanges[partIdx];
                 if (partRange.Begin != partRange.End) {
@@ -132,9 +132,9 @@ public:
             TDataPartSet partSet;
             partSet.Parts.resize(totalPartCount);
             i64 maxSize = 0;
-            for (auto it = partIntervals.begin(); it != partIntervals.end(); ++it) { 
-                auto [begin, end] = *it; 
-                i64 size = end - begin; 
+            for (auto it = partIntervals.begin(); it != partIntervals.end(); ++it) {
+                auto [begin, end] = *it;
+                i64 size = end - begin;
                 maxSize = Max(size, maxSize);
             }
             for (ui32 i = 0; i < totalPartCount; ++i) {
@@ -143,10 +143,10 @@ public:
             }
             partSet.FullDataSize = state.Id.BlobSize();
             partSet.IsFragment = true;
-            for (auto it = partIntervals.begin(); it != partIntervals.end(); ++it) { 
-                auto [alignedBegin, alignedEnd] = *it; 
-                TIntervalVec<i32> needRange(alignedBegin, alignedEnd); 
-                i32 needSize = alignedEnd - alignedBegin; 
+            for (auto it = partIntervals.begin(); it != partIntervals.end(); ++it) {
+                auto [alignedBegin, alignedEnd] = *it;
+                TIntervalVec<i32> needRange(alignedBegin, alignedEnd);
+                i32 needSize = alignedEnd - alignedBegin;
                 if (info.Type.ErasureFamily() == TErasureType::ErasureParityBlock) {
                     partSet.PartsMask = 0;
                     for (ui32 i = 0; i < totalPartCount; ++i) {
@@ -164,12 +164,12 @@ public:
 
                     for (ui32 partIdx = wholeRange.BeginPartIdx; partIdx < wholeRange.EndPartIdx; ++partIdx) {
                         TPartOffsetRange &partRange = wholeRange.PartRanges[partIdx];
-                        i32 begin = Max<i32>(partRange.Begin, alignedBegin); 
-                        i32 end = Min<i32>(partRange.End, alignedEnd); 
+                        i32 begin = Max<i32>(partRange.Begin, alignedBegin);
+                        i32 end = Min<i32>(partRange.End, alignedEnd);
                         if (begin < end) {
-                            i32 offset = partRange.WholeBegin + begin - partRange.Begin; 
-                            TIntervalVec<i32> x(offset, offset + end - begin); 
-                            if (!x.IsSubsetOf(state.Whole.Here)) { 
+                            i32 offset = partRange.WholeBegin + begin - partRange.Begin;
+                            TIntervalVec<i32> x(offset, offset + end - begin);
+                            if (!x.IsSubsetOf(state.Whole.Here)) {
                                 // Cerr << "copy from# " << partRange.WholeBegin << " to# " << partRange.WholeEnd << Endl;
                                 state.Whole.Data.Write(offset, partSet.Parts[partIdx].GetDataAt(begin), end - begin);
                                 state.Whole.Here.Add(offset, offset + end - begin);
@@ -212,10 +212,10 @@ public:
                 if (toRestore.IsSubsetOf(state.Parts[i].Here)) {
                     partSet.PartsMask |= (1 << i);
                     TString tmp = TString::Uninitialized(partSize);
-                    for (auto it = toRestore.begin(); it != toRestore.end(); ++it) { 
-                        auto [begin, end] = *it; 
-                        i32 offset = begin; 
-                        i32 size = end - begin; 
+                    for (auto it = toRestore.begin(); it != toRestore.end(); ++it) {
+                        auto [begin, end] = *it;
+                        i32 offset = begin;
+                        i32 size = end - begin;
                         // Cerr << "part# " << i << " partSize# " << partSize << " offset# " << offset << " size# " << size << Endl;
                         state.Parts[i].Data.Read(offset, const_cast<char*>(tmp.data()) + offset, size);
                     }
@@ -226,11 +226,11 @@ public:
             TString whole;
             info.Type.RestoreData((TErasureType::ECrcMode)state.Id.CrcMode(), partSet, whole, false, true, false);
 
-            TIntervalSet<i32> missing(state.Whole.NotHere); 
-            for (auto it = missing.begin(); it != missing.end(); ++it) { 
-                auto [begin, end] = *it; 
-                i32 offset = begin; 
-                i32 size = end - begin; 
+            TIntervalSet<i32> missing(state.Whole.NotHere);
+            for (auto it = missing.begin(); it != missing.end(); ++it) {
+                auto [begin, end] = *it;
+                i32 offset = begin;
+                i32 size = end - begin;
                 const char *source = whole.data() + offset;
                 // Cerr << "LINE " << __LINE__ << " copy whole [" << offset << ", " << (offset + size) << ")" << Endl;
                 state.Whole.Data.Write(offset, source, size);
@@ -247,15 +247,15 @@ public:
             bool considerSlowAsError, TGroupDiskRequests &groupDiskRequests) {
         const ui32 totalPartCount = info.Type.TotalPartCount();
         const i32 handoff = info.Type.Handoff();
-        for (auto it = state.Whole.NotHere.begin(); it != state.Whole.NotHere.end(); ++it) { 
-            auto [begin, end] = *it; 
+        for (auto it = state.Whole.NotHere.begin(); it != state.Whole.NotHere.end(); ++it) {
+            auto [begin, end] = *it;
             TBlockSplitRange range;
             info.Type.BlockSplitRange((TErasureType::ECrcMode)state.Id.CrcMode(), state.Id.BlobSize(),
-                    begin, end, &range); 
+                    begin, end, &range);
             for (ui32 partIdx = range.BeginPartIdx; partIdx < range.EndPartIdx; ++partIdx) {
                 TPartOffsetRange &partRange = range.PartRanges[partIdx];
                 if (partRange.Begin != partRange.End) {
-                    TIntervalSet<i32> partInterval(partRange.AlignedBegin, partRange.AlignedEnd); 
+                    TIntervalSet<i32> partInterval(partRange.AlignedBegin, partRange.AlignedEnd);
                     partInterval.Subtract(state.Parts[partIdx].Here);
                     if (!partInterval.IsEmpty()) {
                         for (i32 niche = -1; niche < handoff; ++niche) {
@@ -265,7 +265,7 @@ public:
                                 TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
                                 if (partSituation == TBlobState::ESituation::Unknown ||
                                         partSituation == TBlobState::ESituation::Present) {
-                                    TIntervalSet<i32> unrequestedInterval(partInterval); 
+                                    TIntervalSet<i32> unrequestedInterval(partInterval);
                                     unrequestedInterval.Subtract(disk.DiskParts[partIdx].Requested);
                                     if (!unrequestedInterval.IsEmpty()) {
                                         AddGetRequest(logCtx, groupDiskRequests, state.Id, partIdx, disk,
@@ -284,16 +284,16 @@ public:
         const ui32 totalPartCount = info.Type.TotalPartCount();
         const i32 handoff = info.Type.Handoff();
         bool isMinimalPossible = true;
-        for (auto it = state.Whole.NotHere.begin(); it != state.Whole.NotHere.end(); ++it) { 
-            auto [begin, end] = *it; 
+        for (auto it = state.Whole.NotHere.begin(); it != state.Whole.NotHere.end(); ++it) {
+            auto [begin, end] = *it;
             TBlockSplitRange range;
-            info.Type.BlockSplitRange((TErasureType::ECrcMode)state.Id.CrcMode(), state.Id.BlobSize(), begin, 
-                    end, &range); 
+            info.Type.BlockSplitRange((TErasureType::ECrcMode)state.Id.CrcMode(), state.Id.BlobSize(), begin,
+                    end, &range);
             for (ui32 partIdx = range.BeginPartIdx; partIdx < range.EndPartIdx; ++partIdx) {
                 TPartOffsetRange &partRange = range.PartRanges[partIdx];
                 if (partRange.Begin != partRange.End) {
-                    TIntervalVec<i32> partInterval(partRange.AlignedBegin, partRange.AlignedEnd); 
-                    if (!partInterval.IsSubsetOf(state.Parts[partIdx].Here)) { 
+                    TIntervalVec<i32> partInterval(partRange.AlignedBegin, partRange.AlignedEnd);
+                    if (!partInterval.IsSubsetOf(state.Parts[partIdx].Here)) {
                         bool isThereAGoodPart = false;
                         for (i32 niche = -1; niche < handoff; ++niche) {
                             ui32 diskIdx = (niche < 0 ? partIdx : totalPartCount + niche);
@@ -317,13 +317,13 @@ public:
     }
 
     void FillIntervalsToRestoreRequestedFullData(TBlobState &state, const TBlobStorageGroupInfo &info,
-            TIntervalSet<i32> &outToRestore) { 
+            TIntervalSet<i32> &outToRestore) {
         // get intervals needed to restore the requested full data
-        for (auto it = state.Whole.NotHere.begin(); it != state.Whole.NotHere.end(); ++it) { 
-            auto [begin, end] = *it; 
+        for (auto it = state.Whole.NotHere.begin(); it != state.Whole.NotHere.end(); ++it) {
+            auto [begin, end] = *it;
             TBlockSplitRange range;
             info.Type.BlockSplitRange((TErasureType::ECrcMode)state.Id.CrcMode(), state.Id.BlobSize(),
-                    begin, end, &range); 
+                    begin, end, &range);
             for (ui32 partIdx = range.BeginPartIdx; partIdx < range.EndPartIdx; ++partIdx) {
                 TPartOffsetRange &partRange = range.PartRanges[partIdx];
                 if (partRange.Begin != partRange.End) {
@@ -360,7 +360,7 @@ public:
 
     void IssueGetRequestsForRestoration(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
             bool considerSlowAsError, TGroupDiskRequests &groupDiskRequests) {
-        TIntervalSet<i32> toRestore; 
+        TIntervalSet<i32> toRestore;
         FillIntervalsToRestoreRequestedFullData(state, info, toRestore);
 
         ui32 partsMissing = CountPartsMissing(state, info, considerSlowAsError);
@@ -379,7 +379,7 @@ public:
                     TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
                     if (partSituation == TBlobState::ESituation::Unknown ||
                             partSituation == TBlobState::ESituation::Present) {
-                        TIntervalSet<i32> partIntervals(toRestore); 
+                        TIntervalSet<i32> partIntervals(toRestore);
                         partIntervals.Subtract(state.Parts[partIdx].Here);
                         partIntervals.Subtract(disk.DiskParts[partIdx].Requested);
                         if (!partIntervals.IsEmpty()) {

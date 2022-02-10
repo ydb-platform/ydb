@@ -51,5 +51,5 @@ protected:
     void DeleteJobs();
 };
 
-} // NSchLab 
-} // NKikimr 
+} // NSchLab
+} // NKikimr

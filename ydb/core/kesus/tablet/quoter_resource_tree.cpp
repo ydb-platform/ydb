@@ -1,5 +1,5 @@
 #include "quoter_resource_tree.h"
- 
+
 #include "probes.h"
 
 #include <ydb/core/base/path.h>
@@ -160,7 +160,7 @@ public:
     bool ValidateProps(const NKikimrKesus::TStreamingQuoterResource& props, TString& errorMessage) override;
 
     void CalcParameters() override;
-    void CalcParametersForAccounting(); 
+    void CalcParametersForAccounting();
 
     THolder<TQuoterSession> DoCreateSession(const NActors::TActorId& clientId) override;
 
@@ -212,13 +212,13 @@ public:
 
     void RemoveChild(TQuoterResourceTree* child) override;
 
-    TInstant Report(const NActors::TActorId& clientId, ui64 resourceId, TInstant start, TDuration interval, const double* values, size_t size, TTickProcessorQueue& queue, TInstant now); 
-    void RunAccounting(); 
- 
+    TInstant Report(const NActors::TActorId& clientId, ui64 resourceId, TInstant start, TDuration interval, const double* values, size_t size, TTickProcessorQueue& queue, TInstant now);
+    void RunAccounting();
+
 private:
     double MaxUnitsPerSecond = 0.0;
-    double PrefetchCoefficient = 0.0; 
-    double PrefetchWatermark = 0.0; 
+    double PrefetchCoefficient = 0.0;
+    double PrefetchWatermark = 0.0;
     ui32 Weight = 1;
     TDuration TickSize;
     ui64 ActiveChildrenWeight = 0;
@@ -233,14 +233,14 @@ private:
     bool Active = false;
     THierarchicalDRRResourceConsumer* CurrentActiveChild = nullptr;
     size_t ActiveChildrenCount = 0;
- 
-    THolder<TRateAccounting> RateAccounting; 
-    bool ActiveAccounting = false; 
+
+    THolder<TRateAccounting> RateAccounting;
+    bool ActiveAccounting = false;
 };
 
-THolder<TQuoterResourceTree> CreateResource(ui64 resourceId, ui64 parentId, NActors::TActorId kesus, const IBillSink::TPtr& billSink, const NKikimrKesus::TStreamingQuoterResource& props) { 
+THolder<TQuoterResourceTree> CreateResource(ui64 resourceId, ui64 parentId, NActors::TActorId kesus, const IBillSink::TPtr& billSink, const NKikimrKesus::TStreamingQuoterResource& props) {
     Y_VERIFY(resourceId != parentId);
-    return MakeHolder<THierarhicalDRRQuoterResourceTree>(resourceId, parentId, kesus, billSink, props); 
+    return MakeHolder<THierarhicalDRRQuoterResourceTree>(resourceId, parentId, kesus, billSink, props);
 }
 
 // Session in case of hierarchical DRR algorithm.
@@ -260,7 +260,7 @@ public:
     }
 
     void UpdateConsumptionState(bool consume, double amount, TTickProcessorQueue& queue, TInstant now) override;
-    TInstant Account(TInstant start, TDuration interval, const double* values, size_t size, TTickProcessorQueue& queue, TInstant now) override; 
+    TInstant Account(TInstant start, TDuration interval, const double* values, size_t size, TTickProcessorQueue& queue, TInstant now) override;
     void DoProcess(TTickProcessorQueue& queue, TInstant now) override;
 
     void ScheduleNextTick(TTickProcessorQueue& queue, TInstant now);
@@ -383,10 +383,10 @@ void THierarhicalDRRQuoterSession::UpdateConsumptionState(bool consume, double a
     }
 }
 
-TInstant THierarhicalDRRQuoterSession::Account(TInstant start, TDuration interval, const double* values, size_t size, TTickProcessorQueue& queue, TInstant now) { 
-    return GetResource()->Report(ClientId, GetResource()->GetResourceId(), start, interval, values, size, queue, now); 
-} 
- 
+TInstant THierarhicalDRRQuoterSession::Account(TInstant start, TDuration interval, const double* values, size_t size, TTickProcessorQueue& queue, TInstant now) {
+    return GetResource()->Report(ClientId, GetResource()->GetResourceId(), start, interval, values, size, queue, now);
+}
+
 void THierarhicalDRRQuoterSession::SendAvailableResource() {
     if (FreeResource >= GetResource()->GetResourceFillingEpsilon()) {
         if (AmountRequested >= GetResource()->GetResourceFillingEpsilon()) {
@@ -462,11 +462,11 @@ void TQuoterSession::AddAllocatedCounter(double spent) {
     } while (resource != nullptr);
 }
 
-TQuoterResourceTree::TQuoterResourceTree(ui64 resourceId, ui64 parentId, NActors::TActorId kesus, const IBillSink::TPtr& billSink, const NKikimrKesus::TStreamingQuoterResource& props) 
+TQuoterResourceTree::TQuoterResourceTree(ui64 resourceId, ui64 parentId, NActors::TActorId kesus, const IBillSink::TPtr& billSink, const NKikimrKesus::TStreamingQuoterResource& props)
     : ResourceId(resourceId)
     , ParentId(parentId)
-    , Kesus(kesus) 
-    , BillSink(billSink) 
+    , Kesus(kesus)
+    , BillSink(billSink)
     , Props(props)
     , EffectiveProps(props)
 {
@@ -501,7 +501,7 @@ bool TQuoterResourceTree::Update(const NKikimrKesus::TStreamingQuoterResource& p
 }
 
 bool TQuoterResourceTree::ValidateProps(const NKikimrKesus::TStreamingQuoterResource& props, TString& errorMessage) {
-    Y_UNUSED(props, errorMessage); 
+    Y_UNUSED(props, errorMessage);
     return true;
 }
 
@@ -511,7 +511,7 @@ void TQuoterResourceTree::CalcParameters() {
         ResourceLevel = Parent->ResourceLevel + 1;
     }
 
-    // Recurse into children 
+    // Recurse into children
     for (TQuoterResourceTree* child : Children) {
         child->CalcParameters();
     }
@@ -579,45 +579,45 @@ bool THierarhicalDRRQuoterResourceTree::ValidateProps(const NKikimrKesus::TStrea
     const auto& hdrrConfig = props.GetHierarhicalDRRResourceConfig();
     const double maxUnitsPerSecond = hdrrConfig.GetMaxUnitsPerSecond() ?
         hdrrConfig.GetMaxUnitsPerSecond() : hdrrConfig.GetSpeedSettings().GetMaxUnitsPerSecond();
-    if (!std::isfinite(maxUnitsPerSecond)) { 
-        errorMessage = "MaxUnitsPerSecond must be finite."; 
-        return false; 
-    } 
+    if (!std::isfinite(maxUnitsPerSecond)) {
+        errorMessage = "MaxUnitsPerSecond must be finite.";
+        return false;
+    }
     if (maxUnitsPerSecond < 0.0) {
         errorMessage = "MaxUnitsPerSecond can't be less than 0.";
         return false;
     }
 
-    // Validate prefetch settings 
-    const double prefetchCoefficient = hdrrConfig.GetPrefetchCoefficient(); 
-    if (!std::isfinite(prefetchCoefficient)) { 
-        errorMessage = "PrefetchCoefficient must be finite."; 
-        return false; 
-    } 
-    const double prefetchWatermark = hdrrConfig.GetPrefetchWatermark(); 
-    if (!std::isfinite(prefetchWatermark)) { 
-        errorMessage = "PrefetchWatermark must be finite."; 
-        return false; 
-    } 
-    if (prefetchWatermark < 0.0) { 
-        errorMessage = "PrefetchWatermark can't be less than 0."; 
-        return false; 
-    } 
-    if (prefetchWatermark > 1.0) { 
-        errorMessage = "PrefetchWatermark can't be greater than 1."; 
-        return false; 
-    } 
- 
+    // Validate prefetch settings
+    const double prefetchCoefficient = hdrrConfig.GetPrefetchCoefficient();
+    if (!std::isfinite(prefetchCoefficient)) {
+        errorMessage = "PrefetchCoefficient must be finite.";
+        return false;
+    }
+    const double prefetchWatermark = hdrrConfig.GetPrefetchWatermark();
+    if (!std::isfinite(prefetchWatermark)) {
+        errorMessage = "PrefetchWatermark must be finite.";
+        return false;
+    }
+    if (prefetchWatermark < 0.0) {
+        errorMessage = "PrefetchWatermark can't be less than 0.";
+        return false;
+    }
+    if (prefetchWatermark > 1.0) {
+        errorMessage = "PrefetchWatermark can't be greater than 1.";
+        return false;
+    }
+
     if (!ParentId && !maxUnitsPerSecond) {
         errorMessage = "No MaxUnitsPerSecond parameter in root resource.";
         return false;
     }
- 
-    if (!TRateAccounting::ValidateProps(props, errorMessage)) { 
-        return false; 
-    } 
- 
-    return TQuoterResourceTree::ValidateProps(props, errorMessage); 
+
+    if (!TRateAccounting::ValidateProps(props, errorMessage)) {
+        return false;
+    }
+
+    return TQuoterResourceTree::ValidateProps(props, errorMessage);
 }
 
 void THierarhicalDRRQuoterResourceTree::CalcParameters() {
@@ -626,7 +626,7 @@ void THierarhicalDRRQuoterResourceTree::CalcParameters() {
         Props.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(Props.GetHierarhicalDRRResourceConfig().GetSpeedSettings().GetMaxUnitsPerSecond());
     }
 
-    // speed settings 
+    // speed settings
     THierarhicalDRRQuoterResourceTree* const parent = GetParent();
     const auto& config = GetProps().GetHierarhicalDRRResourceConfig();
     if (config.GetMaxUnitsPerSecond()) {
@@ -639,18 +639,18 @@ void THierarhicalDRRQuoterResourceTree::CalcParameters() {
         MaxUnitsPerSecond = parent->MaxUnitsPerSecond;
     }
 
-    // prefetch settings 
-    if (config.GetPrefetchCoefficient()) { 
-        PrefetchCoefficient = config.GetPrefetchCoefficient(); 
-    } else if (parent) { 
-        PrefetchCoefficient = parent->PrefetchCoefficient; 
-    } 
-    if (config.GetPrefetchWatermark()) { 
-        PrefetchWatermark = config.GetPrefetchWatermark(); 
-    } else if (parent) { 
-        PrefetchWatermark = parent->PrefetchWatermark; 
-    } 
- 
+    // prefetch settings
+    if (config.GetPrefetchCoefficient()) {
+        PrefetchCoefficient = config.GetPrefetchCoefficient();
+    } else if (parent) {
+        PrefetchCoefficient = parent->PrefetchCoefficient;
+    }
+    if (config.GetPrefetchWatermark()) {
+        PrefetchWatermark = config.GetPrefetchWatermark();
+    } else if (parent) {
+        PrefetchWatermark = parent->PrefetchWatermark;
+    }
+
     ResourceTickQuantum = MaxUnitsPerSecond >= 0.0 ? MaxUnitsPerSecond / TICKS_PER_SECOND : 0.0;
     ResourceFillingEpsilon = ResourceTickQuantum * EPSILON_COEFFICIENT;
     TickSize = TDuration::Seconds(1) / TICKS_PER_SECOND;
@@ -671,72 +671,72 @@ void THierarhicalDRRQuoterResourceTree::CalcParameters() {
     effectiveConfig->SetMaxUnitsPerSecond(MaxUnitsPerSecond);
     effectiveConfig->SetWeight(Weight);
     effectiveConfig->SetMaxBurstSizeCoefficient(1);
-    effectiveConfig->SetPrefetchCoefficient(PrefetchCoefficient); 
-    effectiveConfig->SetPrefetchWatermark(PrefetchWatermark); 
+    effectiveConfig->SetPrefetchCoefficient(PrefetchCoefficient);
+    effectiveConfig->SetPrefetchWatermark(PrefetchWatermark);
 
     SetLimitCounter();
 
-    CalcParametersForAccounting(); 
- 
+    CalcParametersForAccounting();
+
     TQuoterResourceTree::CalcParameters(); // recalc for children
 }
 
-void THierarhicalDRRQuoterResourceTree::CalcParametersForAccounting() { 
-    const auto* accCfgParent = Parent ? &Parent->GetEffectiveProps().GetAccountingConfig() : nullptr; 
-    auto* accCfg = EffectiveProps.MutableAccountingConfig(); 
- 
-    // Calc rate accouting effective props 
-    if (!accCfg->GetReportPeriodMs()) { 
-        accCfg->SetReportPeriodMs(accCfgParent ? accCfgParent->GetReportPeriodMs() : 5000); 
-    } 
- 
-    if (!accCfg->GetAccountPeriodMs()) { 
-        accCfg->SetAccountPeriodMs(accCfgParent ? accCfgParent->GetAccountPeriodMs() : 1000); 
-    } 
- 
-    if (!accCfg->GetCollectPeriodSec()) { 
-        accCfg->SetCollectPeriodSec(accCfgParent ? accCfgParent->GetCollectPeriodSec() : 30); 
-    } 
- 
-    if (!accCfg->GetProvisionedCoefficient()) { 
-        accCfg->SetProvisionedCoefficient(accCfgParent ? accCfgParent->GetProvisionedCoefficient() : 60); 
-    } 
- 
-    if (!accCfg->GetOvershootCoefficient()) { 
-        accCfg->SetOvershootCoefficient(accCfgParent ? accCfgParent->GetOvershootCoefficient() : 1.1); 
-    } 
- 
-    auto calcMetricsParams = [] (auto* cfg, const auto* parent) { 
-        // NOTE: `Enabled` is not inherited, skipped here 
-        if (!cfg->GetBillingPeriodSec()) { 
-            cfg->SetBillingPeriodSec(parent ? parent->GetBillingPeriodSec() : 60); 
-        } 
-        if (!cfg->GetVersion() && parent) { cfg->SetVersion(parent->GetVersion()); } 
-        if (!cfg->GetSchema() && parent) { cfg->SetSchema(parent->GetSchema()); } 
-        if (!cfg->GetCloudId() && parent) { cfg->SetCloudId(parent->GetCloudId()); } 
-        if (!cfg->GetFolderId() && parent) { cfg->SetFolderId(parent->GetFolderId()); } 
-        if (!cfg->GetResourceId() && parent) { cfg->SetResourceId(parent->GetResourceId()); } 
-        if (!cfg->GetSourceId() && parent) { cfg->SetSourceId(parent->GetSourceId()); } 
-        if (cfg->GetTags().empty() && parent) { *cfg->MutableTags() = parent->GetTags(); } 
-    }; 
-    calcMetricsParams(accCfg->MutableProvisioned(), accCfgParent ? &accCfgParent->GetProvisioned() : nullptr); 
-    calcMetricsParams(accCfg->MutableOnDemand(), accCfgParent ? &accCfgParent->GetOnDemand() : nullptr); 
-    calcMetricsParams(accCfg->MutableOvershoot(), accCfgParent ? &accCfgParent->GetOvershoot() : nullptr); 
- 
-    // Create/update/delete rate accounting 
-    if (accCfg->GetEnabled()) { 
-        if (!RateAccounting) { // create 
-            RateAccounting.Reset(new TRateAccounting(Kesus, BillSink, EffectiveProps, QuoterPath)); 
-            RateAccounting->SetResourceCounters(Counters.ResourceCounters); 
-        } else { // update 
-            RateAccounting->Configure(EffectiveProps); 
-        } 
-    } else if (RateAccounting) { // delete 
-        RateAccounting->Stop(); 
-        RateAccounting.Destroy(); 
-    } 
-} 
- 
+void THierarhicalDRRQuoterResourceTree::CalcParametersForAccounting() {
+    const auto* accCfgParent = Parent ? &Parent->GetEffectiveProps().GetAccountingConfig() : nullptr;
+    auto* accCfg = EffectiveProps.MutableAccountingConfig();
+
+    // Calc rate accouting effective props
+    if (!accCfg->GetReportPeriodMs()) {
+        accCfg->SetReportPeriodMs(accCfgParent ? accCfgParent->GetReportPeriodMs() : 5000);
+    }
+
+    if (!accCfg->GetAccountPeriodMs()) {
+        accCfg->SetAccountPeriodMs(accCfgParent ? accCfgParent->GetAccountPeriodMs() : 1000);
+    }
+
+    if (!accCfg->GetCollectPeriodSec()) {
+        accCfg->SetCollectPeriodSec(accCfgParent ? accCfgParent->GetCollectPeriodSec() : 30);
+    }
+
+    if (!accCfg->GetProvisionedCoefficient()) {
+        accCfg->SetProvisionedCoefficient(accCfgParent ? accCfgParent->GetProvisionedCoefficient() : 60);
+    }
+
+    if (!accCfg->GetOvershootCoefficient()) {
+        accCfg->SetOvershootCoefficient(accCfgParent ? accCfgParent->GetOvershootCoefficient() : 1.1);
+    }
+
+    auto calcMetricsParams = [] (auto* cfg, const auto* parent) {
+        // NOTE: `Enabled` is not inherited, skipped here
+        if (!cfg->GetBillingPeriodSec()) {
+            cfg->SetBillingPeriodSec(parent ? parent->GetBillingPeriodSec() : 60);
+        }
+        if (!cfg->GetVersion() && parent) { cfg->SetVersion(parent->GetVersion()); }
+        if (!cfg->GetSchema() && parent) { cfg->SetSchema(parent->GetSchema()); }
+        if (!cfg->GetCloudId() && parent) { cfg->SetCloudId(parent->GetCloudId()); }
+        if (!cfg->GetFolderId() && parent) { cfg->SetFolderId(parent->GetFolderId()); }
+        if (!cfg->GetResourceId() && parent) { cfg->SetResourceId(parent->GetResourceId()); }
+        if (!cfg->GetSourceId() && parent) { cfg->SetSourceId(parent->GetSourceId()); }
+        if (cfg->GetTags().empty() && parent) { *cfg->MutableTags() = parent->GetTags(); }
+    };
+    calcMetricsParams(accCfg->MutableProvisioned(), accCfgParent ? &accCfgParent->GetProvisioned() : nullptr);
+    calcMetricsParams(accCfg->MutableOnDemand(), accCfgParent ? &accCfgParent->GetOnDemand() : nullptr);
+    calcMetricsParams(accCfg->MutableOvershoot(), accCfgParent ? &accCfgParent->GetOvershoot() : nullptr);
+
+    // Create/update/delete rate accounting
+    if (accCfg->GetEnabled()) {
+        if (!RateAccounting) { // create
+            RateAccounting.Reset(new TRateAccounting(Kesus, BillSink, EffectiveProps, QuoterPath));
+            RateAccounting->SetResourceCounters(Counters.ResourceCounters);
+        } else { // update
+            RateAccounting->Configure(EffectiveProps);
+        }
+    } else if (RateAccounting) { // delete
+        RateAccounting->Stop();
+        RateAccounting.Destroy();
+    }
+}
+
 void THierarhicalDRRQuoterResourceTree::RemoveChild(TQuoterResourceTree* childBase) {
     THierarhicalDRRQuoterResourceTree* child = static_cast<THierarhicalDRRQuoterResourceTree*>(childBase);
     if (child->Active) {
@@ -829,48 +829,48 @@ void THierarhicalDRRQuoterResourceTree::DoProcess(TTickProcessorQueue& queue, TI
         }
 
         DeactivateIfFull(now);
-    } 
-
-    if (ActiveAccounting) { 
-        RunAccounting(); 
     }
- 
-    if (Active || ActiveAccounting) { 
-        ScheduleNextTick(queue, now); 
-    } 
+
+    if (ActiveAccounting) {
+        RunAccounting();
+    }
+
+    if (Active || ActiveAccounting) {
+        ScheduleNextTick(queue, now);
+    }
 }
 
-TInstant THierarhicalDRRQuoterResourceTree::Report( 
-    const NActors::TActorId& clientId, 
-    ui64 resourceId, 
-    TInstant start, 
-    TDuration interval, 
-    const double* values, 
-    size_t size, 
-    TTickProcessorQueue& queue, 
-    TInstant now) 
-{ 
-    if (RateAccounting) { 
-        TInstant result = RateAccounting->Report(clientId, resourceId, start, interval, values, size); 
-        ActiveAccounting = true; 
-        ScheduleNextTick(queue, now); 
-        return result; 
-    } else if (GetParent()) { 
-        return GetParent()->Report(clientId, resourceId, start, interval, values, size, queue, now); 
-    } else { 
-        // We have no rate accounting enabled -- skip data 
-        return TInstant::Zero(); 
-    } 
-} 
- 
-void THierarhicalDRRQuoterResourceTree::RunAccounting() { 
-    if (RateAccounting) { 
-        ActiveAccounting = RateAccounting->RunAccounting(); 
-    } else { 
-        ActiveAccounting = false; 
-    } 
-} 
- 
+TInstant THierarhicalDRRQuoterResourceTree::Report(
+    const NActors::TActorId& clientId,
+    ui64 resourceId,
+    TInstant start,
+    TDuration interval,
+    const double* values,
+    size_t size,
+    TTickProcessorQueue& queue,
+    TInstant now)
+{
+    if (RateAccounting) {
+        TInstant result = RateAccounting->Report(clientId, resourceId, start, interval, values, size);
+        ActiveAccounting = true;
+        ScheduleNextTick(queue, now);
+        return result;
+    } else if (GetParent()) {
+        return GetParent()->Report(clientId, resourceId, start, interval, values, size, queue, now);
+    } else {
+        // We have no rate accounting enabled -- skip data
+        return TInstant::Zero();
+    }
+}
+
+void THierarhicalDRRQuoterResourceTree::RunAccounting() {
+    if (RateAccounting) {
+        ActiveAccounting = RateAccounting->RunAccounting();
+    } else {
+        ActiveAccounting = false;
+    }
+}
+
 void THierarhicalDRRQuoterResourceTree::AddActiveChild(THierarchicalDRRResourceConsumer* child, TTickProcessorQueue& queue, TInstant now) {
     UpdateActiveTime(now);
     if (!HasActiveChildren()) {
@@ -931,9 +931,9 @@ THolder<TQuoterSession> THierarhicalDRRQuoterResourceTree::DoCreateSession(const
 
 void THierarhicalDRRQuoterResourceTree::SetResourceCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> resourceCounters) {
     TQuoterResourceTree::SetResourceCounters(std::move(resourceCounters));
-    if (RateAccounting) { 
-        RateAccounting->SetResourceCounters(Counters.ResourceCounters); 
-    } 
+    if (RateAccounting) {
+        RateAccounting->SetResourceCounters(Counters.ResourceCounters);
+    }
     SetLimitCounter();
 }
 
@@ -951,7 +951,7 @@ bool TQuoterResources::Exists(ui64 resourceId) const {
 }
 
 TQuoterResourceTree* TQuoterResources::LoadResource(ui64 resourceId, ui64 parentId, const NKikimrKesus::TStreamingQuoterResource& props) {
-    auto resource = CreateResource(resourceId, parentId, Kesus, BillSink, props); 
+    auto resource = CreateResource(resourceId, parentId, Kesus, BillSink, props);
     Y_VERIFY(!Exists(resource->GetResourceId()),
          "Resource \"%s\" has duplicated id: %" PRIu64, resource->GetPath().c_str(), resourceId);
     Y_VERIFY(!props.GetResourcePath().empty(),
@@ -1000,7 +1000,7 @@ TQuoterResourceTree* TQuoterResources::AddResource(ui64 resourceId, const NKikim
     resProps.SetResourceId(resourceId);
     resProps.SetResourcePath(canonPath);
     const ui64 parentId = parent ? parent->GetResourceId() : 0;
-    THolder<TQuoterResourceTree> resource = CreateResource(resourceId, parentId, Kesus, BillSink, resProps); 
+    THolder<TQuoterResourceTree> resource = CreateResource(resourceId, parentId, Kesus, BillSink, resProps);
     if (!resource->ValidateProps(resProps, errorMessage)) {
         return nullptr;
     }
@@ -1055,11 +1055,11 @@ bool TQuoterResources::DeleteResource(TQuoterResourceTree* resource, TString& er
     return true;
 }
 
-void TQuoterResources::SetupBilling(NActors::TActorId kesus, const IBillSink::TPtr& billSink) { 
-    Kesus = kesus; 
-    BillSink = billSink; 
-} 
- 
+void TQuoterResources::SetupBilling(NActors::TActorId kesus, const IBillSink::TPtr& billSink) {
+    Kesus = kesus;
+    BillSink = billSink;
+}
+
 void TQuoterResources::ConstructTrees() {
     // connect with parents
     std::vector<TQuoterResourceTree*> roots;

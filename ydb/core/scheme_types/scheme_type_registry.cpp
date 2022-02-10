@@ -6,7 +6,7 @@
 #include <util/generic/algorithm.h>
 
 
-#define REGISTER_TYPE(name, size, ...) RegisterType<T##name>(); 
+#define REGISTER_TYPE(name, size, ...) RegisterType<T##name>();
 
 namespace NKikimr {
 namespace NScheme {

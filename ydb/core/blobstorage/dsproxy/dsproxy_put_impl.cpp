@@ -69,7 +69,7 @@ void TPutImpl::PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logC
         outPutResults.emplace_back(idx, new TEvBlobStorage::TEvPutResult(status, BlobIds[idx], StatusFlags, Info->GroupID,
                     ApproximateFreeSpaceShare));
         outPutResults.back().second->ErrorReason = errorReason;
- 
+
         NLog::EPriority priority = GetPriorityForReply(Info->PutErrorMuteChecker, status);
         A_LOG_LOG_SX(logCtx, true, priority, "BPP38",
                 "PrepareReply Result# " << outPutResults.back().second->Print(false));

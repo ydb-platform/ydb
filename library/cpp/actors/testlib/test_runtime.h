@@ -253,9 +253,9 @@ namespace NActors {
         void PushEventsFront(TEventsList& events);
         void PushMailboxEventsFront(ui32 hint, ui32 nodeId, TEventsList& events);
         // doesn't dispatch events for edge actors
-        bool DispatchEvents(const TDispatchOptions& options = TDispatchOptions()); 
-        bool DispatchEvents(const TDispatchOptions& options, TDuration simTimeout); 
-        bool DispatchEvents(const TDispatchOptions& options, TInstant simDeadline); 
+        bool DispatchEvents(const TDispatchOptions& options = TDispatchOptions());
+        bool DispatchEvents(const TDispatchOptions& options, TDuration simTimeout);
+        bool DispatchEvents(const TDispatchOptions& options, TInstant simDeadline);
         void Send(IEventHandle* ev, ui32 senderNodeIndex = 0, bool viaActorSystem = false);
         void Schedule(IEventHandle* ev, const TDuration& duration, ui32 nodeIndex = 0);
         void ClearCounters();
@@ -288,7 +288,7 @@ namespace NActors {
         TActorSystem* GetAnyNodeActorSystem();
         TActorSystem* GetActorSystem(ui32 nodeId);
         template <typename TEvent>
-        TEvent* GrabEdgeEventIf(TAutoPtr<IEventHandle>& handle, std::function<bool(const TEvent&)> predicate, TDuration simTimeout = TDuration::Max()) { 
+        TEvent* GrabEdgeEventIf(TAutoPtr<IEventHandle>& handle, std::function<bool(const TEvent&)> predicate, TDuration simTimeout = TDuration::Max()) {
             handle.Destroy();
             const ui32 eventType = TEvent::EventType;
             WaitForEdgeEvents([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
@@ -305,14 +305,14 @@ namespace NActors {
                 return false;
             }, {}, simTimeout);
 
-            if (simTimeout == TDuration::Max()) 
+            if (simTimeout == TDuration::Max())
                 Y_VERIFY(handle);
- 
-            if (handle) { 
-                return reinterpret_cast<TAutoPtr<TEventHandle<TEvent>>&>(handle)->Get(); 
-            } else { 
-                return nullptr; 
-            } 
+
+            if (handle) {
+                return reinterpret_cast<TAutoPtr<TEventHandle<TEvent>>&>(handle)->Get();
+            } else {
+                return nullptr;
+            }
         }
 
         template<class TEvent>
@@ -354,9 +354,9 @@ namespace NActors {
         }
 
         template <typename TEvent>
-        TEvent* GrabEdgeEvent(TAutoPtr<IEventHandle>& handle, TDuration simTimeout = TDuration::Max()) { 
+        TEvent* GrabEdgeEvent(TAutoPtr<IEventHandle>& handle, TDuration simTimeout = TDuration::Max()) {
             std::function<bool(const TEvent&)> truth = [](const TEvent&) { return true; };
-            return GrabEdgeEventIf(handle, truth, simTimeout); 
+            return GrabEdgeEventIf(handle, truth, simTimeout);
         }
 
         template <typename TEvent>
@@ -400,9 +400,9 @@ namespace NActors {
         }
 
         template <typename TEvent>
-        TEvent* GrabEdgeEventRethrow(TAutoPtr<IEventHandle>& handle, TDuration simTimeout = TDuration::Max()) { 
+        TEvent* GrabEdgeEventRethrow(TAutoPtr<IEventHandle>& handle, TDuration simTimeout = TDuration::Max()) {
             try {
-                return GrabEdgeEvent<TEvent>(handle, simTimeout); 
+                return GrabEdgeEvent<TEvent>(handle, simTimeout);
             } catch (...) {
                 ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << CurrentExceptionMessage();
             }

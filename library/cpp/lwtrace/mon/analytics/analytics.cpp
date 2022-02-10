@@ -1,5 +1,5 @@
-#include "all.h" 
- 
-namespace NAnalytics { 
- 
-} 
+#include "all.h"
+
+namespace NAnalytics {
+
+}

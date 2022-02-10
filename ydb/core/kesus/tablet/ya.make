@@ -10,7 +10,7 @@ SRCS(
     probes.cpp
     quoter_resource_tree.cpp
     quoter_runtime.cpp
-    rate_accounting.cpp 
+    rate_accounting.cpp
     schema.cpp
     tablet_db.cpp
     tablet_html.cpp

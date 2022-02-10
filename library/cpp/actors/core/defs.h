@@ -13,30 +13,30 @@
 #define ACTORSLIB_COLLECT_EXEC_STATS
 
 namespace NActors {
-    using TPoolId = ui8; 
-    using TPoolsMask = ui64; 
-    static constexpr TPoolId PoolBits = 6; 
-    static constexpr TPoolId MaxPools = (1 << PoolBits) - 1; // maximum amount of pools (poolid=63 is reserved) 
-    static constexpr TPoolsMask WaitPoolsFlag = (1ull << MaxPools); // wait-for-slow-workers flag bitmask 
+    using TPoolId = ui8;
+    using TPoolsMask = ui64;
+    static constexpr TPoolId PoolBits = 6;
+    static constexpr TPoolId MaxPools = (1 << PoolBits) - 1; // maximum amount of pools (poolid=63 is reserved)
+    static constexpr TPoolsMask WaitPoolsFlag = (1ull << MaxPools); // wait-for-slow-workers flag bitmask
 
-    // Special TPoolId values used by TCpuState 
-    static constexpr TPoolId CpuSpinning = MaxPools; // fast-worker is actively spinning, no slow-workers 
-    static constexpr TPoolId CpuBlocked = MaxPools + 1; // fast-worker is blocked, no slow-workers 
-    static constexpr TPoolId CpuStopped = TPoolId(-1); // special value indicating worker should stop 
-    static constexpr TPoolId CpuShared = MaxPools; // special value for `assigned` meaning balancer disabled, pool scheduler is used instead 
- 
-    using TPoolWeight = ui16; 
-    static constexpr TPoolWeight MinPoolWeight = 1; 
-    static constexpr TPoolWeight DefPoolWeight = 32; 
-    static constexpr TPoolWeight MaxPoolWeight = 1024; 
- 
-    using TWorkerId = ui16; 
-    static constexpr TWorkerId WorkerBits = 11; 
-    static constexpr TWorkerId MaxWorkers = 1 << WorkerBits; 
- 
-    using TThreadId = ui64; 
-    static constexpr TThreadId UnknownThreadId = ui64(-1); 
- 
+    // Special TPoolId values used by TCpuState
+    static constexpr TPoolId CpuSpinning = MaxPools; // fast-worker is actively spinning, no slow-workers
+    static constexpr TPoolId CpuBlocked = MaxPools + 1; // fast-worker is blocked, no slow-workers
+    static constexpr TPoolId CpuStopped = TPoolId(-1); // special value indicating worker should stop
+    static constexpr TPoolId CpuShared = MaxPools; // special value for `assigned` meaning balancer disabled, pool scheduler is used instead
+
+    using TPoolWeight = ui16;
+    static constexpr TPoolWeight MinPoolWeight = 1;
+    static constexpr TPoolWeight DefPoolWeight = 32;
+    static constexpr TPoolWeight MaxPoolWeight = 1024;
+
+    using TWorkerId = ui16;
+    static constexpr TWorkerId WorkerBits = 11;
+    static constexpr TWorkerId MaxWorkers = 1 << WorkerBits;
+
+    using TThreadId = ui64;
+    static constexpr TThreadId UnknownThreadId = ui64(-1);
+
     struct TMailboxType {
         enum EType {
             Inherited = -1, // inherit mailbox from parent

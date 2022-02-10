@@ -147,8 +147,8 @@ public:
 
     inline const TColumn* GetColumnInfo(const TTableInfo* ptable, ui32 id) const {
         return ptable ? ptable->Columns.FindPtr(id) : nullptr;
-    } 
- 
+    }
+
     bool IsEmpty() const {
         return Tables.empty();
     }

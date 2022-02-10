@@ -16,10 +16,10 @@ SRCS(
 )
 
 END()
- 
-RECURSE( 
-    mon 
-    probes 
+
+RECURSE(
+    mon
+    probes
     protos
     schemu
     schine
@@ -28,4 +28,4 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     ut
-) 
+)

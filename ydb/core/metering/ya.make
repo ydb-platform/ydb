@@ -1,7 +1,7 @@
 RECURSE_FOR_TESTS(
     ut
 )
- 
+
 LIBRARY()
 
 OWNER(
@@ -10,18 +10,18 @@ OWNER(
 )
 
 SRCS(
-    bill_record.cpp 
-    bill_record.h 
+    bill_record.cpp
+    bill_record.h
     metering.cpp
     metering.h
-    time_grid.h 
+    time_grid.h
 )
 
 GENERATE_ENUM_SERIALIZATION(bill_record.h)
- 
+
 PEERDIR(
     library/cpp/actors/core
-    library/cpp/json 
+    library/cpp/json
     library/cpp/logger
     ydb/core/base
 )

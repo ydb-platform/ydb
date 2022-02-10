@@ -337,11 +337,11 @@ public:
                         str << "<option value=\"" << ui32(NKikimrBlobStorage::NAME) << "\">" << #NAME << "</option>";
 
         TStringStream str;
-        HTML(str) { 
+        HTML(str) {
             if (info.ErrorMessage) {
-                DIV() { 
+                DIV() {
                     str << "<h1>" << info.ErrorMessage << "</h1>";
-                } 
+                }
             }
 
             if (!nodata) {
@@ -350,12 +350,12 @@ public:
                     DIV_CLASS("panel panel-info") {
                         DIV_CLASS("panel-heading") {
                             str << "Tag# " << perActorInfo.Tag;
-                        } 
+                        }
                         DIV_CLASS("panel-body") {
                             str << perActorInfo.Data;
-                        } 
-                    } 
-                } 
+                        }
+                    }
+                }
 
                 COLLAPSED_BUTTON_CONTENT("finished_tests_info", "Finished tests") {
                     for (const auto& req : FinishedTests) {
@@ -373,8 +373,8 @@ public:
                     }
                 }
             }
-        } 
- 
+        }
+
         ctx.Send(info.Origin, new NMon::TEvHttpInfoRes(str.Str(), info.SubRequestId));
 
         InfoRequests.erase(it);

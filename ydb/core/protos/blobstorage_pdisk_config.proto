@@ -64,7 +64,7 @@ message TPDiskConfig {
 
     // Once SortFreeChunksPerItems chunks are released, free chuks are sorted
     optional uint64 SortFreeChunksPerItems = 4;
- 
+
 
     optional uint32 SectorSize = 6;
     optional uint32 ChunkSize = 7;

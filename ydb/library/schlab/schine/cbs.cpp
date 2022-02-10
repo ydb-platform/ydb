@@ -82,5 +82,5 @@ void TCbs::DeleteJobs() {
     JobsSize = 0;
 }
 
-} // NSchLab 
-} // NKikimr 
+} // NSchLab
+} // NKikimr

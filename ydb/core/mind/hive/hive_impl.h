@@ -359,7 +359,7 @@ protected:
 
     THashMap<ui32, TEvInterconnect::TNodeInfo> NodesInfo;
     TTabletCountersBase* TabletCounters;
-    TAutoPtr<TTabletCountersBase> TabletCountersPtr; 
+    TAutoPtr<TTabletCountersBase> TabletCountersPtr;
     i32 BalancerProgress; // all values below 0 mean that balancer is not active (-1 = dead, -2 = starting)
     std::unordered_set<TNodeId> BalancerNodes; // all nodes, affected by running balancers
 

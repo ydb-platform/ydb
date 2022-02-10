@@ -58,10 +58,10 @@ public:
         }
     }
 
-    explicit TCell(const TRawTypeValue* v) 
-        : TCell((const char*)v->Data(), v->Size()) 
-    {} 
- 
+    explicit TCell(const TRawTypeValue* v)
+        : TCell((const char*)v->Data(), v->Size())
+    {}
+
     explicit operator bool() const
     {
         return !IsNull();
@@ -102,7 +102,7 @@ public:
     static constexpr bool CanInline(ui32 sz) { return sz <= 8; }
     static constexpr size_t MaxInlineSize() { return 8; }
     const char* InlineData() const                  { Y_VERIFY_DEBUG(IsInline_); return IsNull_ ? nullptr : (char*)&IntVal; }
-    const char* Data() const                        { return IsNull_ ? nullptr : (IsInline_ ? (char*)&IntVal : Ptr); } 
+    const char* Data() const                        { return IsNull_ ? nullptr : (IsInline_ ? (char*)&IntVal : Ptr); }
 #else
     // Non-inlinable version for perf comparisons
     static bool CanInline(ui32)                     { return false; }
@@ -117,7 +117,7 @@ static_assert(sizeof(TCell) == 12, "TCell must be 12 bytes");
 using TCellsRef = TConstArrayRef<const TCell>;
 
 
-// NULL is considered equal to another NULL and less than non-NULL 
+// NULL is considered equal to another NULL and less than non-NULL
 // ATTENTION!!! return value is int!! (NOT just -1,0,1)
 inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrder type) {
     using TPair = std::pair<ui64, ui64>;

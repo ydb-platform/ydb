@@ -10,12 +10,12 @@
 using namespace NLWTrace;
 using namespace NLWTrace::NPrivate;
 
-bool TKillActionExecutor::DoExecute(TOrbit&, const TParams&) { 
+bool TKillActionExecutor::DoExecute(TOrbit&, const TParams&) {
 #ifdef _win_
     abort();
 #else
     int r = kill(getpid(), SIGABRT);
     Y_VERIFY(r == 0, "kill failed");
-    return true; 
+    return true;
 #endif
 }

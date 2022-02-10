@@ -203,9 +203,9 @@ public:
 
     TShardDeleter ShardDeleter;
 
-    // Counter-strike stuff 
+    // Counter-strike stuff
     TTabletCountersBase* TabletCounters = nullptr;
-    TAutoPtr<TTabletCountersBase> TabletCountersPtr; 
+    TAutoPtr<TTabletCountersBase> TabletCountersPtr;
 
     TAutoPtr<TSelfPinger> SelfPinger;
 

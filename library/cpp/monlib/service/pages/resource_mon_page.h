@@ -18,11 +18,11 @@ namespace NMonitoring {
             FONT_TTF,
             FONT_WOFF,
             FONT_WOFF2,
- 
+
             PNG,
             SVG
         };
- 
+
         TResourceMonPage(const TString& path, const TString& resourceName,
                          const EResourceType& resourceType = BINARY)
             : IMonPage(path, "")

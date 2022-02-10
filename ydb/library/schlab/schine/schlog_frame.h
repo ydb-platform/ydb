@@ -13,5 +13,5 @@ enum EFrameType {
   FrameTypeRemoveJob
 };
 
-} // NSchLab 
-} // NKikimr 
+} // NSchLab
+} // NKikimr

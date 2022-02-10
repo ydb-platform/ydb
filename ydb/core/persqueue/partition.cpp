@@ -175,35 +175,35 @@ private:
 
 void HtmlOutput(IOutputStream& out, const TString& line, const std::deque<std::pair<TKey, ui32>>& keys)
 {
-    HTML(out) { 
-        TABLE() { 
-        TABLEHEAD() { 
-            TABLER() { 
-                TABLEH() {out << line;} 
-            } 
-        } 
-        TABLEBODY() { 
-            TABLER() { 
-                TABLEH() {out << "offset";} 
+    HTML(out) {
+        TABLE() {
+        TABLEHEAD() {
+            TABLER() {
+                TABLEH() {out << line;}
+            }
+        }
+        TABLEBODY() {
+            TABLER() {
+                TABLEH() {out << "offset";}
                 for (auto& p: keys) {
-                    TABLED() {out << p.first.GetOffset();} 
+                    TABLED() {out << p.first.GetOffset();}
                 }
-            } 
-            TABLER() { 
-                TABLEH() {out << "partNo";} 
+            }
+            TABLER() {
+                TABLEH() {out << "partNo";}
                 for (auto& p: keys) {
-                    TABLED() {out << p.first.GetPartNo();} 
+                    TABLED() {out << p.first.GetPartNo();}
                 }
-            } 
-            TABLER() { 
-                TABLEH() {out << "size";} 
+            }
+            TABLER() {
+                TABLEH() {out << "size";}
                 for (auto& p: keys) {
-                    TABLED() {out << p.second;} 
+                    TABLED() {out << p.second;}
                 }
-            } 
-        } 
-        } 
-    } 
+            }
+        }
+        }
+    }
 }
 
 
@@ -566,35 +566,35 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
         res.push_back(out.Str()); out.Clear();
     }
     out << Config.DebugString(); res.push_back(out.Str()); out.Clear();
-    HTML(out) 
+    HTML(out)
     {
-        DIV_CLASS_ID("tab-pane fade", Sprintf("partition_%u", ui32(Partition))) { 
-            TABLE_SORTABLE_CLASS("table") { 
-                TABLEHEAD() { 
-                    TABLER() { 
-                        TABLEH() {out << "Type";} 
-                        TABLEH() {out << "Pos";} 
-                        TABLEH() {out << "timestamp";} 
-                        TABLEH() {out << "Offset";} 
-                        TABLEH() {out << "PartNo";} 
-                        TABLEH() {out << "Count";} 
-                        TABLEH() {out << "InternalPartsCount";} 
-                        TABLEH() {out << "Size";} 
-                    } 
-                } 
-                TABLEBODY() { 
+        DIV_CLASS_ID("tab-pane fade", Sprintf("partition_%u", ui32(Partition))) {
+            TABLE_SORTABLE_CLASS("table") {
+                TABLEHEAD() {
+                    TABLER() {
+                        TABLEH() {out << "Type";}
+                        TABLEH() {out << "Pos";}
+                        TABLEH() {out << "timestamp";}
+                        TABLEH() {out << "Offset";}
+                        TABLEH() {out << "PartNo";}
+                        TABLEH() {out << "Count";}
+                        TABLEH() {out << "InternalPartsCount";}
+                        TABLEH() {out << "Size";}
+                    }
+                }
+                TABLEBODY() {
                     ui32 i = 0;
                     for (auto& d: DataKeysBody) {
-                        TABLER() { 
-                            TABLED() {out << "DataBody";} 
-                            TABLED() {out << i++;} 
+                        TABLER() {
+                            TABLED() {out << "DataBody";}
+                            TABLED() {out << i++;}
                             TABLED() {out << ToStringLocalTimeUpToSeconds(d.Timestamp);}
-                            TABLED() {out << d.Key.GetOffset();} 
-                            TABLED() {out << d.Key.GetPartNo();} 
-                            TABLED() {out << d.Key.GetCount();} 
-                            TABLED() {out << d.Key.GetInternalPartsCount();} 
-                            TABLED() {out << d.Size;} 
-                        } 
+                            TABLED() {out << d.Key.GetOffset();}
+                            TABLED() {out << d.Key.GetPartNo();}
+                            TABLED() {out << d.Key.GetCount();}
+                            TABLED() {out << d.Key.GetInternalPartsCount();}
+                            TABLED() {out << d.Size;}
+                        }
                     }
                     ui32 currentLevel = 0;
                     for (ui32 p = 0; p < HeadKeys.size(); ++p) {
@@ -602,67 +602,67 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                         while (currentLevel + 1 < TotalLevels && size < CompactLevelBorder[currentLevel + 1])
                             ++currentLevel;
                         Y_VERIFY(size < CompactLevelBorder[currentLevel]);
-                        TABLER() { 
-                            TABLED() {out << "DataHead[" << currentLevel << "]";} 
-                            TABLED() {out << i++;} 
+                        TABLER() {
+                            TABLED() {out << "DataHead[" << currentLevel << "]";}
+                            TABLED() {out << i++;}
                             TABLED() {out << ToStringLocalTimeUpToSeconds(HeadKeys[p].Timestamp);}
-                            TABLED() {out << HeadKeys[p].Key.GetOffset();} 
-                            TABLED() {out << HeadKeys[p].Key.GetPartNo();} 
-                            TABLED() {out << HeadKeys[p].Key.GetCount();} 
-                            TABLED() {out << HeadKeys[p].Key.GetInternalPartsCount();} 
-                            TABLED() {out << size;} 
-                        } 
+                            TABLED() {out << HeadKeys[p].Key.GetOffset();}
+                            TABLED() {out << HeadKeys[p].Key.GetPartNo();}
+                            TABLED() {out << HeadKeys[p].Key.GetCount();}
+                            TABLED() {out << HeadKeys[p].Key.GetInternalPartsCount();}
+                            TABLED() {out << size;}
+                        }
                     }
-                } 
-            } 
+                }
+            }
 
-            TABLE_SORTABLE_CLASS("table") { 
-                TABLEHEAD() { 
-                    TABLER() { 
-                        TABLEH() {out << "GapStartOffset";} 
-                        TABLEH() {out << "GapEndOffset";} 
-                        TABLEH() {out << "GapSize";} 
-                        TABLEH() {out << "id";} 
-                    } 
-                } 
+            TABLE_SORTABLE_CLASS("table") {
+                TABLEHEAD() {
+                    TABLER() {
+                        TABLEH() {out << "GapStartOffset";}
+                        TABLEH() {out << "GapEndOffset";}
+                        TABLEH() {out << "GapSize";}
+                        TABLEH() {out << "id";}
+                    }
+                }
                 ui32 i = 0;
-                TABLEBODY() { 
+                TABLEBODY() {
                     for (auto& d: GapOffsets) {
-                        TABLER() { 
-                            TABLED() {out << d.first;} 
-                            TABLED() {out << d.second;} 
-                            TABLED() {out << (d.second - d.first);} 
-                            TABLED() {out << (i++);} 
-                        } 
+                        TABLER() {
+                            TABLED() {out << d.first;}
+                            TABLED() {out << d.second;}
+                            TABLED() {out << (d.second - d.first);}
+                            TABLED() {out << (i++);}
+                        }
                     }
                     if (!DataKeysBody.empty() && DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount() < Head.Offset) {
-                        TABLER() { 
-                            TABLED() {out << (DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount());} 
-                            TABLED() {out << Head.Offset;} 
-                            TABLED() {out << (Head.Offset - (DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount()));} 
-                            TABLED() {out << (i++);} 
-                        } 
+                        TABLER() {
+                            TABLED() {out << (DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount());}
+                            TABLED() {out << Head.Offset;}
+                            TABLED() {out << (Head.Offset - (DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount()));}
+                            TABLED() {out << (i++);}
+                        }
 
                     }
-                } 
-            } 
+                }
+            }
 
 
-            TABLE_SORTABLE_CLASS("table") { 
-                TABLEHEAD() { 
-                    TABLER() { 
-                        TABLEH() {out << "SourceId";} 
-                        TABLEH() {out << "SeqNo";} 
-                        TABLEH() {out << "Offset";} 
-                        TABLEH() {out << "WriteTimestamp";} 
+            TABLE_SORTABLE_CLASS("table") {
+                TABLEHEAD() {
+                    TABLER() {
+                        TABLEH() {out << "SourceId";}
+                        TABLEH() {out << "SeqNo";}
+                        TABLEH() {out << "Offset";}
+                        TABLEH() {out << "WriteTimestamp";}
                         TABLEH() {out << "CreateTimestamp";}
                         TABLEH() {out << "Explicit";}
                         TABLEH() {out << "State";}
-                    } 
-                } 
-                TABLEBODY() { 
+                    }
+                }
+                TABLEBODY() {
                     for (const auto& [sourceId, sourceIdInfo]: SourceIdStorage.GetInMemorySourceIds()) {
-                        TABLER() { 
+                        TABLER() {
                             TABLED() {out << EncodeHtmlPcdata(EscapeC(sourceId));}
                             TABLED() {out << sourceIdInfo.SeqNo;}
                             TABLED() {out << sourceIdInfo.Offset;}
@@ -670,33 +670,33 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                             TABLED() {out << ToStringLocalTimeUpToSeconds(sourceIdInfo.CreateTimestamp);}
                             TABLED() {out << (sourceIdInfo.Explicit ? "true" : "false");}
                             TABLED() {out << sourceIdInfo.State;}
-                        } 
+                        }
                     }
-                } 
-            } 
-            TABLE_SORTABLE_CLASS("table") { 
-                TABLEHEAD() { 
-                    TABLER() { 
-                        TABLEH() {out << "user";} 
-                        TABLEH() {out << "offset";} 
-                        TABLEH() {out << "lag";} 
+                }
+            }
+            TABLE_SORTABLE_CLASS("table") {
+                TABLEHEAD() {
+                    TABLER() {
+                        TABLEH() {out << "user";}
+                        TABLEH() {out << "offset";}
+                        TABLEH() {out << "lag";}
                         TABLEH() {out << "ReadFromTimestamp";}
-                        TABLEH() {out << "WriteTimestamp";} 
-                        TABLEH() {out << "CreateTimestamp";} 
+                        TABLEH() {out << "WriteTimestamp";}
+                        TABLEH() {out << "CreateTimestamp";}
                         TABLEH() {out << "ReadOffset";}
                         TABLEH() {out << "ReadWriteTimestamp";}
                         TABLEH() {out << "ReadCreateTimestamp";}
                         TABLEH() {out << "ReadOffsetRewindSum";}
                         TABLEH() {out << "ActiveReads";}
                         TABLEH() {out << "Subscriptions";}
-                    } 
-                } 
-                TABLEBODY() { 
+                    }
+                }
+                TABLEBODY() {
                     for (auto& d: UsersInfoStorage.GetAll()) {
-                        TABLER() { 
-                            TABLED() {out << EncodeHtmlPcdata(d.first);} 
-                            TABLED() {out << d.second.Offset;} 
-                            TABLED() {out << (EndOffset - d.second.Offset);} 
+                        TABLER() {
+                            TABLED() {out << EncodeHtmlPcdata(d.first);}
+                            TABLED() {out << d.second.Offset;}
+                            TABLED() {out << (EndOffset - d.second.Offset);}
                             TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.ReadFromTimestamp);}
                             TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.WriteTimestamp);}
                             TABLED() {out << ToStringLocalTimeUpToSeconds(d.second.CreateTimestamp);}
@@ -706,12 +706,12 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                             TABLED() {out << (d.second.ReadOffsetRewindSum);}
                             TABLED() {out << d.second.ActiveReads;}
                             TABLED() {out << d.second.Subscriptions;}
-                        } 
+                        }
                     }
-                } 
-            } 
-        } 
-    } 
+                }
+            }
+        }
+    }
 
     ctx.Send(ev->Sender, new TEvPQ::TEvMonResponse(Partition, res, out.Str()));
 }

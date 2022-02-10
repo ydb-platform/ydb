@@ -9,7 +9,7 @@
 #include "flat_part_laid.h"
 #include "flat_part_slice.h"
 #include "flat_table_committed.h"
-#include "flat_table_part.h" 
+#include "flat_table_part.h"
 #include "flat_table_stats.h"
 #include "flat_table_subset.h"
 #include "flat_table_misc.h"
@@ -217,7 +217,7 @@ public:
 
         return size;
     }
- 
+
     ui64 GetMemWaste() const noexcept
     {
         return Stat_.FrozenWaste + (Mutable ? Mutable->GetWastedMem() : 0);

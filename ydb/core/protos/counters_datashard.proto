@@ -1,12 +1,12 @@
 import "ydb/core/protos/counters.proto";
- 
+
 package NKikimr.NDataShard;
- 
-option java_package = "ru.yandex.kikimr.proto"; 
- 
-option (TabletTypeName) = "DataShard"; // Used as prefix for all counters 
- 
-enum ESimpleCounters { 
+
+option java_package = "ru.yandex.kikimr.proto";
+
+option (TabletTypeName) = "DataShard"; // Used as prefix for all counters
+
+enum ESimpleCounters {
     COUNTER_TX_IN_FLY = 0                                          [(CounterOpts) = {Name: "TxInFly"}];
     COUNTER_STATE_WORK = 1                                         [(CounterOpts) = {Name: "StateWork"}];
     COUNTER_TX_COMPLETE_LAG = 2                                    [(CounterOpts) = {Name: "TxCompleteLag"}];
@@ -20,32 +20,32 @@ enum ESimpleCounters {
     COUNTER_MVCC_STATE_CHANGE_WAIT_TX_IN_FLY = 10                  [(CounterOpts) = {Name: "MvccStateChangeWaitTxInFly"}];
     COUNTER_MVCC_STATE_CHANGE_WAIT_IMMEDIATE_TX_IN_FLY = 11        [(CounterOpts) = {Name: "MvccStateChangeWaitImmediateTxInFly"}];
     COUNTER_MVCC_ENABLED = 12                                      [(CounterOpts) = {Name: "MvccEnabled"}];
-} 
- 
-enum ECumulativeCounters { 
-    COUNTER_REQ_RO = 0                                    [(CounterOpts) = {Name: "ReqRo"}]; 
-    COUNTER_PREPARE_REQUEST = 1                           [(CounterOpts) = {Name: "PrepareRequests"}]; 
-    COUNTER_PREPARE_ERROR =  2                            [(CounterOpts) = {Name: "PrepareErrors"}]; 
-    COUNTER_PREPARE_IMMEDIATE = 3                         [(CounterOpts) = {Name: "PrepareImmediate"}]; 
-    COUNTER_PREPARE_SUCCESS = 4                           [(CounterOpts) = {Name: "PrepareSuccess"}]; 
-    COUNTER_PREPARE_COMPLETE = 5                          [(CounterOpts) = {Name: "PrepareComplete"}]; 
-    COUNTER_PREPARE_DIRTY = 6                             [(CounterOpts) = {Name: "PrepareDirty"}]; 
-    COUNTER_PREPARE_OVERLOADED = 7                        [(CounterOpts) = {Name: "PrepareOverloaded"}]; 
-    COUNTER_PLAN_STEP_IGNORED = 8                         [(CounterOpts) = {Name: "PlanStepIgnored"}]; 
-    COUNTER_PLAN_STEP_ACCEPTED = 9                        [(CounterOpts) = {Name: "PlanStepAccepted"}]; 
-    COUNTER_TX_PROGRESS_SHARD_INACTIVE = 10               [(CounterOpts) = {Name: "TxProgressShardInactive"}]; 
-    COUNTER_TX_PROGRESS_QUEUE_EMPTY = 11                  [(CounterOpts) = {Name: "TxProgressQueueEmpty"}]; 
+}
+
+enum ECumulativeCounters {
+    COUNTER_REQ_RO = 0                                    [(CounterOpts) = {Name: "ReqRo"}];
+    COUNTER_PREPARE_REQUEST = 1                           [(CounterOpts) = {Name: "PrepareRequests"}];
+    COUNTER_PREPARE_ERROR =  2                            [(CounterOpts) = {Name: "PrepareErrors"}];
+    COUNTER_PREPARE_IMMEDIATE = 3                         [(CounterOpts) = {Name: "PrepareImmediate"}];
+    COUNTER_PREPARE_SUCCESS = 4                           [(CounterOpts) = {Name: "PrepareSuccess"}];
+    COUNTER_PREPARE_COMPLETE = 5                          [(CounterOpts) = {Name: "PrepareComplete"}];
+    COUNTER_PREPARE_DIRTY = 6                             [(CounterOpts) = {Name: "PrepareDirty"}];
+    COUNTER_PREPARE_OVERLOADED = 7                        [(CounterOpts) = {Name: "PrepareOverloaded"}];
+    COUNTER_PLAN_STEP_IGNORED = 8                         [(CounterOpts) = {Name: "PlanStepIgnored"}];
+    COUNTER_PLAN_STEP_ACCEPTED = 9                        [(CounterOpts) = {Name: "PlanStepAccepted"}];
+    COUNTER_TX_PROGRESS_SHARD_INACTIVE = 10               [(CounterOpts) = {Name: "TxProgressShardInactive"}];
+    COUNTER_TX_PROGRESS_QUEUE_EMPTY = 11                  [(CounterOpts) = {Name: "TxProgressQueueEmpty"}];
     COUNTER_TX_PROGRESS_CLEANUP = 12                      [(CounterOpts) = {Name: "TxProgressCleanup"}];
-    COUNTER_TX_PROGRESS_OUTDATED = 13                     [(CounterOpts) = {Name: "TxProgressOutdated"}]; 
-    COUNTER_TX_PROGRESS_DUPLICATE = 14                    [(CounterOpts) = {Name: "TxProgressDuplicate"}]; 
-    COUNTER_TX_PROGRESS_DIRTY = 15                        [(CounterOpts) = {Name: "TxProgressDirty"}]; 
-    COUNTER_TX_PROGRESS_EV = 16                           [(CounterOpts) = {Name: "TxProgressEvents"}]; 
+    COUNTER_TX_PROGRESS_OUTDATED = 13                     [(CounterOpts) = {Name: "TxProgressOutdated"}];
+    COUNTER_TX_PROGRESS_DUPLICATE = 14                    [(CounterOpts) = {Name: "TxProgressDuplicate"}];
+    COUNTER_TX_PROGRESS_DIRTY = 15                        [(CounterOpts) = {Name: "TxProgressDirty"}];
+    COUNTER_TX_PROGRESS_EV = 16                           [(CounterOpts) = {Name: "TxProgressEvents"}];
     COUNTER_TX_CLEANUP_SCHEDULED = 17                     [(CounterOpts) = {Name: "TxCleanupScheduled"}];
     COUNTER_TX_PROGRESS_IDLE = 18                         [(CounterOpts) = {Name: "TxProgressIdle"}];
-    COUNTER_ACK_SENT = 19                                 [(CounterOpts) = {Name: "AckSent"}]; 
-    COUNTER_ACK_SENT_DELAYED = 20                         [(CounterOpts) = {Name: "AckSentDelayed"}]; 
-    COUNTER_CANCEL_TX_NOTFOUND = 21                       [(CounterOpts) = {Name: "CancelTxNotFound"}]; 
-    COUNTER_MINIKQL_PROGRAM_SIZE = 22                     [(CounterOpts) = {Name: "MiniKQLProgramSize"}]; 
+    COUNTER_ACK_SENT = 19                                 [(CounterOpts) = {Name: "AckSent"}];
+    COUNTER_ACK_SENT_DELAYED = 20                         [(CounterOpts) = {Name: "AckSentDelayed"}];
+    COUNTER_CANCEL_TX_NOTFOUND = 21                       [(CounterOpts) = {Name: "CancelTxNotFound"}];
+    COUNTER_MINIKQL_PROGRAM_SIZE = 22                     [(CounterOpts) = {Name: "MiniKQLProgramSize"}];
     COUNTER_ENGINE_HOST_SELECT_ROW = 23                   [(CounterOpts) = {Name: "EngineHostRowReads"}];
     COUNTER_ENGINE_HOST_SELECT_RANGE = 24                 [(CounterOpts) = {Name: "EngineHostRangeReads"}];
     COUNTER_ENGINE_HOST_UPDATE_ROW = 25                   [(CounterOpts) = {Name: "EngineHostRowUpdates"}];
@@ -108,10 +108,10 @@ enum ECumulativeCounters {
     COUNTER_TX_BACKGROUND_COMPACTION_NOT_NEEDED = 82      [(CounterOpts) = {Name: "TxCompactTableNotNeeded"}];
     COUNTER_TX_BACKGROUND_COMPACTION_FAILED_BORROWED = 83 [(CounterOpts) = {Name: "TxCompactTableFailedBorrowed"}];
     COUNTER_TX_BACKGROUND_COMPACTION_FAILED_START = 84    [(CounterOpts) = {Name: "TxCompactTableFailedStart"}];
-} 
- 
-enum EPercentileCounters { 
-    option (GlobalCounterOpts) = { 
+}
+
+enum EPercentileCounters {
+    option (GlobalCounterOpts) = {
         Ranges { Value: 0           Name: "(1) < 500 us"        }
         Ranges { Value: 500         Name: "(2) 0.5-1 ms"        }
         Ranges { Value: 1000        Name: "(3) 1-2 ms"          }
@@ -130,14 +130,14 @@ enum EPercentileCounters {
         Ranges { Value: 8000000     Name: "(16) 8-16 s"         }
         Ranges { Value: 16000000    Name: "(17) 16-32 s"        }
         Ranges { Value: 32000000    Name: "(18) 32 < s"         }
-    }; 
- 
-    COUNTER_PREPARE_SUCCESS_COMPLETE_LATENCY = 0          [(CounterOpts) = {Name: "PrepareSuccessCompleteLatency"}]; 
-    COUNTER_ACCEPTED_PLAN_STEP_COMPLETE_LATENCY = 1       [(CounterOpts) = {Name: "AcceptedPlanStepCompleteLatency"}]; 
-    COUNTER_TX_PROGRESS_COMPLETE_LATENCY = 2              [(CounterOpts) = {Name: "TxProgressCompleteLatency"}]; 
-    COUNTER_PLAN_TO_EXECUTE_LATENCY = 3                   [(CounterOpts) = {Name: "PlanToExecuteLatency"}]; 
-    COUNTER_PREPARE_EXEC_LATENCY = 4                      [(CounterOpts) = {Name: "PrepareExecLatency"}]; 
-    COUNTER_TX_PROGRESS_EXEC_LATENCY = 5                  [(CounterOpts) = {Name: "TxProgressExecLatency"}]; 
+    };
+
+    COUNTER_PREPARE_SUCCESS_COMPLETE_LATENCY = 0          [(CounterOpts) = {Name: "PrepareSuccessCompleteLatency"}];
+    COUNTER_ACCEPTED_PLAN_STEP_COMPLETE_LATENCY = 1       [(CounterOpts) = {Name: "AcceptedPlanStepCompleteLatency"}];
+    COUNTER_TX_PROGRESS_COMPLETE_LATENCY = 2              [(CounterOpts) = {Name: "TxProgressCompleteLatency"}];
+    COUNTER_PLAN_TO_EXECUTE_LATENCY = 3                   [(CounterOpts) = {Name: "PlanToExecuteLatency"}];
+    COUNTER_PREPARE_EXEC_LATENCY = 4                      [(CounterOpts) = {Name: "PrepareExecLatency"}];
+    COUNTER_TX_PROGRESS_EXEC_LATENCY = 5                  [(CounterOpts) = {Name: "TxProgressExecLatency"}];
 
     COUNTER_LOCKS_ACTIVE_PER_SHARD = 6                    [(CounterOpts) = {Name: "LocksActivePerShard",
                                                               Ranges: { Value: 0     Name: "0"},
@@ -343,17 +343,17 @@ enum EPercentileCounters {
                                                               Ranges: { Value: 72       Name: "72"},
                                                               Ranges: { Value: 168      Name: "inf"},
                                                           }];
-} 
- 
-enum ETxTypes { 
-    TXTYPE_INIT = 0                                       [(TxTypeOpts) = {Name: "TxInit"}]; 
-    TXTYPE_READSET = 1                                    [(TxTypeOpts) = {Name: "TxReadSet"}]; 
-    TXTYPE_PLAN_STEP = 2                                  [(TxTypeOpts) = {Name: "TxPlanStep"}]; 
-    TXTYPE_PROPOSE_DATA = 3                               [(TxTypeOpts) = {Name: "TxProposeData"}]; 
-    TXTYPE_PROPOSE_SCHEME = 4                             [(TxTypeOpts) = {Name: "TxProposeScheme"}]; 
-    TXTYPE_PROGRESS_START = 5                             [(TxTypeOpts) = {Name: "TxProgressStart"}]; 
-    TXTYPE_PROGRESS_WAIT = 6                              [(TxTypeOpts) = {Name: "TxProgressWait"}]; 
-    TXTYPE_PROGRESS_COMPLETE = 7                          [(TxTypeOpts) = {Name: "TxProgressComplete"}]; 
+}
+
+enum ETxTypes {
+    TXTYPE_INIT = 0                                       [(TxTypeOpts) = {Name: "TxInit"}];
+    TXTYPE_READSET = 1                                    [(TxTypeOpts) = {Name: "TxReadSet"}];
+    TXTYPE_PLAN_STEP = 2                                  [(TxTypeOpts) = {Name: "TxPlanStep"}];
+    TXTYPE_PROPOSE_DATA = 3                               [(TxTypeOpts) = {Name: "TxProposeData"}];
+    TXTYPE_PROPOSE_SCHEME = 4                             [(TxTypeOpts) = {Name: "TxProposeScheme"}];
+    TXTYPE_PROGRESS_START = 5                             [(TxTypeOpts) = {Name: "TxProgressStart"}];
+    TXTYPE_PROGRESS_WAIT = 6                              [(TxTypeOpts) = {Name: "TxProgressWait"}];
+    TXTYPE_PROGRESS_COMPLETE = 7                          [(TxTypeOpts) = {Name: "TxProgressComplete"}];
     TXTYPE_GET_STARD_STATE = 8                            [(TxTypeOpts) = {Name: "TxGetShardState"}];
     TXTYPE_PROGRESS_RESEND_RS = 9                         [(TxTypeOpts) = {Name: "TxProgressResendRS"}];
     TXTYPE_CANCEL_TX_PROPOSAL = 10                        [(TxTypeOpts) = {Name: "TxCancelTxProposal"}];
@@ -417,4 +417,4 @@ enum ETxTypes {
     TXTYPE_APPLY_REPLICATION_CHANGES = 68                 [(TxTypeOpts) = {Name: "TxApplyReplicationChanges"}];
     TXTYPE_READ = 69                                      [(TxTypeOpts) = {Name: "TxRead"}];
     TXTYPE_SPLIT_REPLICATION_SOURCE_OFFSETS = 70          [(TxTypeOpts) = {Name: "TxSplitReplicationSourceOffsets"}];
-} 
+}

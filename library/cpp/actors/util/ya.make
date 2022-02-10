@@ -8,8 +8,8 @@ OWNER(
 SRCS(
     affinity.cpp
     affinity.h
-    cpumask.h 
-    datetime.h 
+    cpumask.h
+    datetime.h
     defs.h
     funnel_queue.h
     futex.h
@@ -26,7 +26,7 @@ SRCS(
     threadparkpad.cpp
     threadparkpad.h
     ticket_lock.h
-    timerfd.h 
+    timerfd.h
     unordered_cache.h
 )
 

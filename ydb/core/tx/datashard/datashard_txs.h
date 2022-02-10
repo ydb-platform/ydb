@@ -1,12 +1,12 @@
-#pragma once 
- 
+#pragma once
+
 #include "datashard_common_upload.h"
 #include "datashard_impl.h"
 #include "execution_unit_kind.h"
- 
-namespace NKikimr { 
+
+namespace NKikimr {
 namespace NDataShard {
- 
+
 using NTabletFlatExecutor::TTransactionContext;
 
 class TDataShard::TTxStopGuard : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -27,75 +27,75 @@ public:
 };
 
 class TDataShard::TTxGetShardState : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public: 
+public:
     TTxGetShardState(TDataShard* ds, TEvDataShard::TEvGetShardState::TPtr ev);
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override; 
-    void Complete(const TActorContext &ctx) override; 
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_GET_STARD_STATE; }
-private: 
-    TEvDataShard::TEvGetShardState::TPtr Ev; 
+private:
+    TEvDataShard::TEvGetShardState::TPtr Ev;
     THolder<TEvDataShard::TEvGetShardStateResult> Result;
-}; 
- 
+};
+
 class TDataShard::TTxInit : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public: 
+public:
     TTxInit(TDataShard* ds);
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override; 
-    void Complete(const TActorContext &ctx) override; 
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_INIT; }
-private: 
-    bool CreateScheme(TTransactionContext &txc); 
-    bool ReadEverything(TTransactionContext &txc); 
+private:
+    bool CreateScheme(TTransactionContext &txc);
+    bool ReadEverything(TTransactionContext &txc);
 private:
     TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> ChangeRecords;
-}; 
- 
+};
+
 class TDataShard::TTxPlanStep : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public: 
+public:
     TTxPlanStep(TDataShard *self, TEvTxProcessing::TEvPlanStep::TPtr ev);
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override; 
-    void Complete(const TActorContext &ctx) override; 
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
+    void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_PLAN_STEP; }
- 
-private: 
-    TEvTxProcessing::TEvPlanStep::TPtr Ev; 
-    bool IsAccepted; 
-    TInstant RequestStartTime; 
+
+private:
+    TEvTxProcessing::TEvPlanStep::TPtr Ev;
+    bool IsAccepted;
+    TInstant RequestStartTime;
     TMap<TActorId, TVector<ui64>> TxByAck;
-}; 
- 
+};
+
 class TDataShard::TTxProgressTransaction : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public: 
+public:
     explicit TTxProgressTransaction(TDataShard *self, TOperation::TPtr op = nullptr);
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override; 
-    void Complete(const TActorContext &ctx) override; 
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
+    void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_PROGRESS_START; }
- 
-private: 
+
+private:
     TOperation::TPtr ActiveOp;
     TVector<EExecutionUnitKind> CompleteList;
     TInstant CommitStart;
     bool Rescheduled = false;
-}; 
- 
+};
+
 class TDataShard::TTxProposeTransactionBase : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxProposeTransactionBase(TDataShard *self,
                               TEvDataShard::TEvProposeTransaction::TPtr &&ev,
                               TInstant receivedAt, ui64 tieBreakerIndex,
                               bool delayed);
- 
+
     bool Execute(NTabletFlatExecutor::TTransactionContext &txc,
                  const TActorContext &ctx) override;
-    void Complete(const TActorContext &ctx) override; 
+    void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_PROPOSE; }
- 
-private: 
+
+private:
     bool SyncSchemeOnFollower(TOutputOpData::TResultPtr &result,
                            TTransactionContext &txc,
                            const TActorContext &ctx);
- 
-protected: 
+
+protected:
     TOperation::TPtr Op;
     TEvDataShard::TEvProposeTransaction::TPtr Ev;
     const TInstant ReceivedAt;
@@ -106,32 +106,32 @@ protected:
     TInstant CommitStart;
     bool Acked;
     bool Rescheduled = false;
-}; 
- 
+};
+
 class TDataShard::TTxReadSet : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public: 
+public:
     TTxReadSet(TDataShard *self, TEvTxProcessing::TEvReadSet::TPtr ev);
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override; 
-    void Complete(const TActorContext &ctx) override; 
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
+    void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_READSET; }
- 
-private: 
+
+private:
     TEvTxProcessing::TEvReadSet::TPtr Ev;
     THolder<IEventHandle> Ack;
 
     THolder<IEventHandle> MakeAck(const TActorContext &ctx);
-}; 
- 
+};
+
 class TDataShard::TTxProgressResendRS : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public: 
+public:
     TTxProgressResendRS(TDataShard *self, ui64 seqno);
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override; 
-    void Complete(const TActorContext &ctx) override; 
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
+    void Complete(const TActorContext &ctx) override;
     TTxType GetTxType() const override { return TXTYPE_PROGRESS_RESEND_RS; }
-private: 
-    const ui64 Seqno; 
-}; 
- 
+private:
+    const ui64 Seqno;
+};
+
 class TDataShard::TTxCancelTransactionProposal : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxCancelTransactionProposal(TDataShard *self, ui64 txId);
@@ -294,4 +294,4 @@ private:
     bool ActivateWaitingOps = false;
 };
 
-}} 
+}}

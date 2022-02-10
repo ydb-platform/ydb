@@ -181,10 +181,10 @@ namespace NKikimr {
 
     void TLocalRecoveryInfo::OutputHtml(IOutputStream &str) const {
         str << "\n";
-        HTML(str) { 
-            DIV_CLASS("panel panel-default") { 
-                DIV_CLASS("panel-heading") {str << "Local Recovery Info";} 
-                DIV_CLASS("panel-body") { 
+        HTML(str) {
+            DIV_CLASS("panel panel-default") {
+                DIV_CLASS("panel-heading") {str << "Local Recovery Info";}
+                DIV_CLASS("panel-body") {
                     str << "LocalRecoveryStartTime: " << LocalRecoveryStartTime << "<br>";
                     if (LocalRecoveryFinishTime.GetValue() == 0) {
                         // recovery is in progress
@@ -196,9 +196,9 @@ namespace NKikimr {
                         str << "LocalRecoveryDuration: " << duration << "<br>";
                     }
                     OutputCounters(str, "", "<br>", "<hr>\n");
-                } 
-            } 
-        } 
+                }
+            }
+        }
         str << "\n";
     }
 

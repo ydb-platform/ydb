@@ -1,27 +1,27 @@
 #pragma once
 
 #include "defs.h"
- 
-#include "actor.h" 
-#include "balancer.h" 
-#include "config.h" 
+
+#include "actor.h"
+#include "balancer.h"
+#include "config.h"
 #include "event.h"
 #include "log_settings.h"
 #include "scheduler_cookie.h"
 #include "mon_stats.h"
- 
+
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/actors/util/ticket_lock.h>
- 
+
 #include <util/generic/vector.h>
 #include <util/datetime/base.h>
 #include <util/system/mutex.h>
 
 namespace NActors {
     class TActorSystem;
-    class TCpuManager; 
+    class TCpuManager;
     class IExecutorPool;
-    struct TWorkerContext; 
+    struct TWorkerContext;
 
     inline TActorId MakeInterconnectProxyId(ui32 destNodeId) {
         char data[12];
@@ -62,9 +62,9 @@ namespace NActors {
         virtual ~IExecutorPool() {
         }
 
-        // for workers 
-        virtual ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) = 0; 
-        virtual void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingCounter) = 0; 
+        // for workers
+        virtual ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) = 0;
+        virtual void ReclaimMailbox(TMailboxType::EType mailboxType, ui32 hint, TWorkerId workerId, ui64 revolvingCounter) = 0;
 
         /**
          * Schedule one-shot event that will be send at given time point in the future.
@@ -72,9 +72,9 @@ namespace NActors {
          * @param deadline   the wallclock time point in future when event must be send
          * @param ev         the event to send
          * @param cookie     cookie that will be piggybacked with event
-         * @param workerId   index of thread which will perform event dispatching 
+         * @param workerId   index of thread which will perform event dispatching
          */
-        virtual void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) = 0; 
+        virtual void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) = 0;
 
         /**
          * Schedule one-shot event that will be send at given time point in the future.
@@ -82,9 +82,9 @@ namespace NActors {
          * @param deadline   the monotonic time point in future when event must be send
          * @param ev         the event to send
          * @param cookie     cookie that will be piggybacked with event
-         * @param workerId   index of thread which will perform event dispatching 
+         * @param workerId   index of thread which will perform event dispatching
          */
-        virtual void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) = 0; 
+        virtual void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) = 0;
 
         /**
          * Schedule one-shot event that will be send after given delay.
@@ -92,9 +92,9 @@ namespace NActors {
          * @param delta      the time from now to delay event sending
          * @param ev         the event to send
          * @param cookie     cookie that will be piggybacked with event
-         * @param workerId   index of thread which will perform event dispatching 
+         * @param workerId   index of thread which will perform event dispatching
          */
-        virtual void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) = 0; 
+        virtual void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) = 0;
 
         // for actorsystem
         virtual bool Send(TAutoPtr<IEventHandle>& ev) = 0;
@@ -104,7 +104,7 @@ namespace NActors {
         virtual TActorId Register(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId) = 0;
 
         // lifecycle stuff
-        virtual void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) = 0; 
+        virtual void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) = 0;
         virtual void Start() = 0;
         virtual void PrepareStop() = 0;
         virtual void Shutdown() = 0;
@@ -115,7 +115,7 @@ namespace NActors {
             Y_UNUSED(poolStats);
             Y_UNUSED(statsCopy);
         }
- 
+
         virtual TString GetName() const {
             return TString();
         }
@@ -127,7 +127,7 @@ namespace NActors {
         // generic
         virtual TAffinity* Affinity() const = 0;
 
-        virtual void SetRealTimeMode() const {} 
+        virtual void SetRealTimeMode() const {}
     };
 
     // could be proxy to in-pool schedulers (for NUMA-aware executors)
@@ -137,7 +137,7 @@ namespace NActors {
         }
 
         virtual void Prepare(TActorSystem* actorSystem, volatile ui64* currentTimestamp, volatile ui64* currentMonotonic) = 0;
-        virtual void PrepareSchedules(NSchedulerQueue::TReader** readers, ui32 scheduleReadersCount) = 0; 
+        virtual void PrepareSchedules(NSchedulerQueue::TReader** readers, ui32 scheduleReadersCount) = 0;
         virtual void PrepareStart() { /* empty */ }
         virtual void Start() = 0;
         virtual void PrepareStop() = 0;
@@ -180,14 +180,14 @@ namespace NActors {
     struct TActorSystemSetup {
         ui32 NodeId = 0;
 
-        // Either Executors or CpuManager must be initialized 
+        // Either Executors or CpuManager must be initialized
         ui32 ExecutorsCount = 0;
         TArrayHolder<TAutoPtr<IExecutorPool>> Executors;
- 
-        TAutoPtr<IBalancer> Balancer; // main implementation will be implicitly created if not set 
- 
-        TCpuManagerConfig CpuManager; 
- 
+
+        TAutoPtr<IBalancer> Balancer; // main implementation will be implicitly created if not set
+
+        TCpuManagerConfig CpuManager;
+
         TAutoPtr<ISchedulerThread> Scheduler;
         ui32 MaxActivityType = 5; // for default entries
 
@@ -195,18 +195,18 @@ namespace NActors {
 
         using TLocalServices = TVector<std::pair<TActorId, TActorSetupCmd>>;
         TLocalServices LocalServices;
- 
-        ui32 GetExecutorsCount() const { 
-            return Executors ? ExecutorsCount : CpuManager.GetExecutorsCount(); 
-        } 
- 
-        TString GetPoolName(ui32 poolId) const { 
-            return Executors ? Executors[poolId]->GetName() : CpuManager.GetPoolName(poolId); 
-        } 
- 
-        ui32 GetThreads(ui32 poolId) const { 
-            return Executors ? Executors[poolId]->GetThreads() : CpuManager.GetThreads(poolId); 
-        } 
+
+        ui32 GetExecutorsCount() const {
+            return Executors ? ExecutorsCount : CpuManager.GetExecutorsCount();
+        }
+
+        TString GetPoolName(ui32 poolId) const {
+            return Executors ? Executors[poolId]->GetName() : CpuManager.GetPoolName(poolId);
+        }
+
+        ui32 GetThreads(ui32 poolId) const {
+            return Executors ? Executors[poolId]->GetThreads() : CpuManager.GetThreads(poolId);
+        }
     };
 
     class TActorSystem : TNonCopyable {
@@ -214,9 +214,9 @@ namespace NActors {
 
     public:
         const ui32 NodeId;
- 
+
     private:
-        THolder<TCpuManager> CpuManager; 
+        THolder<TCpuManager> CpuManager;
         const ui32 ExecutorPoolCount;
 
         TAutoPtr<ISchedulerThread> Scheduler;
@@ -353,7 +353,7 @@ namespace NActors {
             return LoggerSettings0.Get();
         }
 
-        void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const; 
+        void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const;
 
         void DeferPreStop(std::function<void()> fn) {
             DeferredPreStop.push_back(std::move(fn));

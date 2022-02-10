@@ -465,7 +465,7 @@ struct TConvertValueFromRawTypeValueToPod {
         return static_cast<TargetType>(static_cast<typename NSchemeTypeMapper<TColumnType::ColumnType>::Type>(Value));
     }
 };
- 
+
 template <typename ColumnType, typename VectorType>
 struct TConvertValue<ColumnType, TVector<VectorType>, TRawTypeValue> {
     TVector<VectorType> Value;

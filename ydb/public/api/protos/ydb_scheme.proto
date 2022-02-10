@@ -12,38 +12,38 @@ import "ydb/public/api/protos/ydb_operation.proto";
 message MakeDirectoryRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     string path = 2;
-} 
+}
 
 message MakeDirectoryResponse {
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 // Remove directory
 message RemoveDirectoryRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     string path = 2;
-} 
+}
 
 message RemoveDirectoryResponse {
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 // List directory
 message ListDirectoryRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     string path = 2;
-} 
+}
 
 message ListDirectoryResponse {
     // Holds ListDirectoryResult in case of successful call
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 message Permissions {
     // SID (Security ID) of user or group
     string subject = 1;
     repeated string permission_names = 2;
-} 
+}
 
 message Entry {
     enum Type {
@@ -57,7 +57,7 @@ message Entry {
         COORDINATION_NODE = 7;
         SEQUENCE = 15;
         REPLICATION = 16;
-    } 
+    }
     
     // Name of scheme entry (dir2 of /dir1/dir2)
     string name = 1;
@@ -72,27 +72,27 @@ message Entry {
     // - DATABASE.
     // Empty (zero) in other cases.
     uint64 size_bytes = 8;
-} 
+}
 
 message ListDirectoryResult {
     Entry self = 1;
     repeated Entry children = 2;
-} 
+}
 
 // Returns information about object with given path
 message DescribePathRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     string path = 2;
-} 
+}
 
 message DescribePathResponse {
     // Holds DescribePathResult in case of DescribePathResult
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 message DescribePathResult {
     Entry self = 1;
-} 
+}
 
 message PermissionsAction {
     oneof action {
@@ -105,7 +105,7 @@ message PermissionsAction {
         // New owner for object
         string change_owner = 4;
     }
-} 
+}
 
 // Modify permissions of given object
 message ModifyPermissionsRequest {
@@ -114,8 +114,8 @@ message ModifyPermissionsRequest {
     repeated PermissionsAction actions = 3;
     // Clear all permissions on the object for all subjects
     bool clear_permissions = 4;
-} 
+}
 
 message ModifyPermissionsResponse {
     Ydb.Operations.Operation operation = 1;
-} 
+}

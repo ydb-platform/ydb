@@ -40,7 +40,7 @@ namespace NKikimr {
             HTML(str) {
                 DIV_CLASS(".narrow-line70") {
                     SMALL() {
-                        SMALL() { 
+                        SMALL() {
                             HTML_OUTPUT_PARAM(str, LocalHandoffSendRightAway);
                             HTML_OUTPUT_PARAM(str, LocalHandoffPostpone);
                             HTML_OUTPUT_PARAM(str, LocalHandoffDiscard);
@@ -54,9 +54,9 @@ namespace NKikimr {
                             HTML_OUTPUT_PARAM(str, WakeupsStillBad);
                             HTML_OUTPUT_PARAM(str, StateGoodToBadTransition);
                             HTML_OUTPUT_PARAM(str, StateBadToGoodTransition);
-                        } 
-                    } 
-                } 
+                        }
+                    }
+                }
             }
             str << "\n";
         }
@@ -147,7 +147,7 @@ namespace NKikimr {
             HTML(str) {
                 DIV_CLASS(".narrow-line70") {
                     SMALL() {
-                        SMALL() { 
+                        SMALL() {
                             HTML_OUTPUT_PARAM(str, WaitQueueSize);
                             HTML_OUTPUT_PARAM(str, WaitQueueByteSize);
                             HTML_OUTPUT_PARAM(str, InFlightQueueSize);
@@ -156,9 +156,9 @@ namespace NKikimr {
                             HTML_OUTPUT_TIME_PARAM(str, LastSendTime);
                             HTML_OUTPUT_PARAM(str, WaitQueueSize);
                             HTML_OUTPUT_PARAM(str, WakeupCounter);
-                        } 
-                    } 
-                } 
+                        }
+                    }
+                }
             }
             str << "\n";
         }

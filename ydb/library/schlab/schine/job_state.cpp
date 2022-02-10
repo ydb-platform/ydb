@@ -16,5 +16,5 @@ const char* JobStateName(EJobState state) {
     }
 }
 
-} // NSchLab 
-} // NKikimr 
+} // NSchLab
+} // NKikimr

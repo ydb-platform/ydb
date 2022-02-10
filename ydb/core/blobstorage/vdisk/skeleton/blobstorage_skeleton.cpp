@@ -1921,66 +1921,66 @@ namespace NKikimr {
             constexpr ui32 threshold = 10000u;
             std::pair<ui32, ui32> actorQueues = ctx.CountMailboxEvents(threshold);
 
-            HTML(str) { 
-                DIV_CLASS("panel panel-info") { 
-                    DIV_CLASS("panel-heading") { 
+            HTML(str) {
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
                         str << "Skeleton";
-                    } 
-                    DIV_CLASS("panel-body") { 
+                    }
+                    DIV_CLASS("panel-body") {
                         if (OverloadHandler) {
                             OverloadHandler->RenderHtml(str);
                         }
 
-                        TABLE_CLASS ("table table-condensed") { 
-                            TABLEHEAD() { 
-                                TABLER() { 
-                                    TABLEH() {str << "Queues";} 
-                                    TABLEH() {str << "Size";} 
-                                } 
-                            } 
-                            TABLEBODY() { 
-                                TABLER() { 
-                                    TABLED() {str << "ActorQueue";} 
-                                    TABLED() { 
+                        TABLE_CLASS ("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() {str << "Queues";}
+                                    TABLEH() {str << "Size";}
+                                }
+                            }
+                            TABLEBODY() {
+                                TABLER() {
+                                    TABLED() {str << "ActorQueue";}
+                                    TABLED() {
                                         if (actorQueues.first >= threshold)
                                             str << "More than " << threshold;
                                         else
                                             str << actorQueues.first;
-                                    } 
-                                } 
-                                TABLER() { 
-                                    TABLED() {str << "MailboxQueue";} 
-                                    TABLED() { 
+                                    }
+                                }
+                                TABLER() {
+                                    TABLED() {str << "MailboxQueue";}
+                                    TABLED() {
                                         if (actorQueues.second >= threshold)
                                             str << "More than " << threshold;
                                         else
                                             str << actorQueues.second;
-                                    } 
-                                } 
-                                TABLER() { 
-                                    TABLED() {str << "ElapsedTicksAsSeconds";} 
-                                    TABLED() {str << GetElapsedTicksAsSeconds();} 
-                                } 
-                                TABLER() { 
-                                    TABLED() {str << "HandledEvents";} 
-                                    TABLED() {str << GetHandledEvents();} 
-                                } 
-                            } 
-                        } 
+                                    }
+                                }
+                                TABLER() {
+                                    TABLED() {str << "ElapsedTicksAsSeconds";}
+                                    TABLED() {str << GetElapsedTicksAsSeconds();}
+                                }
+                                TABLER() {
+                                    TABLED() {str << "HandledEvents";}
+                                    TABLED() {str << GetHandledEvents();}
+                                }
+                            }
+                        }
 
-                        TABLE_CLASS("table table-condensed") { 
-                            TABLEHEAD() { 
-                                TABLER() { 
-                                    TABLEH() {str << "Setting";} 
-                                    TABLEH() {str << "Value";} 
-                                } 
-                            } 
-                            TABLEBODY() { 
-                                TABLER() { 
-                                    TABLED() {str << "SelfVDiskID";} 
-                                    TABLED() {str << SelfVDiskId.ToString();} 
-                                } 
-                                TABLER() { 
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() {str << "Setting";}
+                                    TABLEH() {str << "Value";}
+                                }
+                            }
+                            TABLEBODY() {
+                                TABLER() {
+                                    TABLED() {str << "SelfVDiskID";}
+                                    TABLED() {str << SelfVDiskId.ToString();}
+                                }
+                                TABLER() {
                                     TABLED() {str << "StoragePoolName";}
                                     TABLED() {str << Config->BaseInfo.StoragePoolName;}
                                 }
@@ -1989,7 +1989,7 @@ namespace NKikimr {
                                     TABLED() {str << Db->GType.GetErasure();}
                                 }
                                 TABLER() {
-                                    TABLED() {str << "OrderNum/TotalVDisks";} 
+                                    TABLED() {str << "OrderNum/TotalVDisks";}
                                     TABLED() {
                                         if (HullCtx && HullCtx->IngressCache) {
                                             str << ui32(HullCtx->IngressCache->VDiskOrderNum) << "/"
@@ -1998,25 +1998,25 @@ namespace NKikimr {
                                             str << "Unknown/Unknown";
                                         }
                                     }
-                                } 
-                                TABLER() { 
-                                    TABLED() {str << "VDiskKind";} 
+                                }
+                                TABLER() {
+                                    TABLED() {str << "VDiskKind";}
                                     TABLED() {str << Config->BaseInfo.Kind;}
-                                } 
-                                TABLER() { 
-                                    TABLED() {str << "PDiskId";} 
+                                }
+                                TABLER() {
+                                    TABLED() {str << "PDiskId";}
                                     TABLED() {str << Config->BaseInfo.PDiskId;}
-                                } 
-                                TABLER() { 
-                                    TABLED() {str << "BlobStorage GroupId (decimal)";} 
-                                    TABLED() {str << GInfo->GroupID;} 
-                                } 
+                                }
+                                TABLER() {
+                                    TABLED() {str << "BlobStorage GroupId (decimal)";}
+                                    TABLED() {str << GInfo->GroupID;}
+                                }
                                 TABLER() {
                                     TABLED() {str << "VDiskIncarnationGuid";}
                                     TABLED() {str << Db->GetVDiskIncarnationGuid();}
                                 }
-                            } 
-                        } 
+                            }
+                        }
 
                         if (PDiskCtx && PDiskCtx->Dsk)
                             PDiskCtx->Dsk->OutputHtml(str);
@@ -2027,10 +2027,10 @@ namespace NKikimr {
                                 OutOfSpaceLogic->RenderHtml(str);
                             }
                         }
-                    } 
-                } 
-            } 
- 
+                    }
+                }
+            }
+
         }
 
         ////////////////////////////////////////////////////////////////////////

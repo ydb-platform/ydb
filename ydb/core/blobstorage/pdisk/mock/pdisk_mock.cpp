@@ -177,8 +177,8 @@ struct TPDiskMockState::TImpl {
         return ChunkSize;
     }
 
-    TIntervalSet<i64> GetWrittenAreas(ui32 chunkIdx) const { 
-        TIntervalSet<i64> res; 
+    TIntervalSet<i64> GetWrittenAreas(ui32 chunkIdx) const {
+        TIntervalSet<i64> res;
         for (auto& [ownerId, owner] : Owners) {
             if (const auto it = owner.ChunkData.find(chunkIdx); it != owner.ChunkData.end()) {
                 for (const auto& [idx, data] : it->second.Blocks) {
@@ -224,7 +224,7 @@ ui32 TPDiskMockState::GetChunkSize() const {
     return Impl->GetChunkSize();
 }
 
-TIntervalSet<i64> TPDiskMockState::GetWrittenAreas(ui32 chunkIdx) const { 
+TIntervalSet<i64> TPDiskMockState::GetWrittenAreas(ui32 chunkIdx) const {
     return Impl->GetWrittenAreas(chunkIdx);
 }
 

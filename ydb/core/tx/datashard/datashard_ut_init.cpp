@@ -6,11 +6,11 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/util/pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
- 
+
 #include <util/string/printf.h>
 
-namespace NKikimr { 
- 
+namespace NKikimr {
+
 using namespace NSchemeShard;
 using namespace Tests;
 using NClient::TValue;
@@ -97,22 +97,22 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
     Y_UNIT_TEST(TestGetShardStateAfterInitialization) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
- 
+
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::FLAT_DATASHARD), &CreateDataShard);
- 
-        TDispatchOptions options; 
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot)); 
-        runtime.DispatchEvents(options); 
- 
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
         Y_UNUSED(sender);
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvGetShardState(sender));
-        TAutoPtr<IEventHandle> handle; 
-        auto event = runtime.GrabEdgeEvent<TEvDataShard::TEvGetShardStateResult>(handle); 
-        UNIT_ASSERT(event); 
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime.GrabEdgeEvent<TEvDataShard::TEvGetShardStateResult>(handle);
+        UNIT_ASSERT(event);
         UNIT_ASSERT_EQUAL(event->GetOrigin(), TTestTxConfig::TxTablet0);
         UNIT_ASSERT_EQUAL(event->GetState(), NDataShard::TShardState::WaitScheme);
-    } 
+    }
 
     void TestTablePath(bool oldCreate, bool restart)
     {
@@ -198,6 +198,6 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
     Y_UNIT_TEST(TestResolvePathAfterRestart) {
         TestTablePath(true, true);
     }
-} 
- 
-} 
+}
+
+}

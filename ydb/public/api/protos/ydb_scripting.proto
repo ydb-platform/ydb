@@ -19,16 +19,16 @@ message ExecuteYqlRequest {
     string script = 2;
     map<string, TypedValue> parameters = 3;
     Ydb.Table.QueryStatsCollection.Mode collect_stats = 4;
-} 
+}
 
 message ExecuteYqlResponse {
     Ydb.Operations.Operation operation = 1;
-} 
+}
 
 message ExecuteYqlResult {
     repeated Ydb.ResultSet result_sets = 1;
     Ydb.TableStats.QueryStats query_stats = 2;
-} 
+}
 
 // Response for StreamExecuteYql is a stream of ExecuteYqlPartialResponse messages.
 // These responses can contain ExecuteYqlPartialResult messages with

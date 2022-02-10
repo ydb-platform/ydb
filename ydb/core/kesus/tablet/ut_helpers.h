@@ -291,29 +291,29 @@ struct TTestContext {
         Ydb::StatusIds::StatusCode ExpectedStatus;
     };
 
-    struct TResourceAccountInfo { 
-        ui64 Id = 0; 
-        TInstant Start; 
-        TDuration Interval; 
-        std::vector<double> Amount; 
- 
-        TResourceAccountInfo(ui64 id, TInstant start, TDuration interval, std::vector<double>&& amount) 
-            : Id(id) 
-            , Start(start) 
-            , Interval(interval) 
-            , Amount(std::move(amount)) 
-        {} 
-    }; 
- 
+    struct TResourceAccountInfo {
+        ui64 Id = 0;
+        TInstant Start;
+        TDuration Interval;
+        std::vector<double> Amount;
+
+        TResourceAccountInfo(ui64 id, TInstant start, TDuration interval, std::vector<double>&& amount)
+            : Id(id)
+            , Start(start)
+            , Interval(interval)
+            , Amount(std::move(amount))
+        {}
+    };
+
     NKikimrKesus::TEvSubscribeOnResourcesResult SubscribeOnResources(const TActorId& client, const TActorId& edge, const std::vector<TResourceConsumingInfo>& info);
     NKikimrKesus::TEvSubscribeOnResourcesResult SubscribeOnResource(const TActorId& client, const TActorId& edge, const TString& path, bool startConsuming, double amount = 0.0, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
 
     void UpdateConsumptionState(const TActorId& client, const TActorId& edge, const std::vector<TResourceConsumingInfo>& info);
     void UpdateConsumptionState(const TActorId& client, const TActorId& edge, ui64 id, bool consume, double amount = 0.0, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
 
-    void AccountResources(const TActorId& client, const TActorId& edge, const std::vector<TResourceAccountInfo>& info); 
-    void AccountResources(const TActorId& client, const TActorId& edge, ui64 id, TInstant start, TDuration interval, std::vector<double>&& amount); 
- 
+    void AccountResources(const TActorId& client, const TActorId& edge, const std::vector<TResourceAccountInfo>& info);
+    void AccountResources(const TActorId& client, const TActorId& edge, ui64 id, TInstant start, TDuration interval, std::vector<double>&& amount);
+
     NKikimrKesus::TEvGetQuoterResourceCountersResult GetQuoterResourceCounters();
 };
 

@@ -1,9 +1,9 @@
 #include "scheduler_basic.h"
 #include "scheduler_queue.h"
 
-#include <library/cpp/actors/util/datetime.h> 
+#include <library/cpp/actors/util/datetime.h>
 #include <library/cpp/actors/util/thread.h>
- 
+
 #ifdef BALLOC
 #include <library/cpp/balloc/optional/operators.h>
 #endif
@@ -61,7 +61,7 @@ namespace NActors {
         ui64 activeTick = AlignUp<ui64>(throttledMonotonic, IntrasecondThreshold);
         TAutoPtr<TMomentMap> activeSec;
 
-        NHPTimer::STime hpprev = GetCycleCountFast(); 
+        NHPTimer::STime hpprev = GetCycleCountFast();
         ui64 nextTimestamp = TInstant::Now().MicroSeconds();
         ui64 nextMonotonic = Max(currentMonotonic, GetMonotonicMicroSeconds());
 
@@ -170,7 +170,7 @@ namespace NActors {
                 }
             }
 
-            NHPTimer::STime hpnow = GetCycleCountFast(); 
+            NHPTimer::STime hpnow = GetCycleCountFast();
 
             if (MonCounters) {
                 *MonCounters->QueueSize -= eventsSent + eventsDropped;
@@ -202,7 +202,7 @@ namespace NActors {
                 NanoSleep(delta * 1000); // ok, looks like we should sleep a bit.
 
                 // Don't count sleep in elapsed microseconds
-                hpprev = GetCycleCountFast(); 
+                hpprev = GetCycleCountFast();
                 nextTimestamp = TInstant::Now().MicroSeconds();
                 nextMonotonic = Max(currentMonotonic, GetMonotonicMicroSeconds());
             }
@@ -218,7 +218,7 @@ namespace NActors {
         *CurrentMonotonic = GetMonotonicMicroSeconds();
     }
 
-    void TBasicSchedulerThread::PrepareSchedules(NSchedulerQueue::TReader** readers, ui32 scheduleReadersCount) { 
+    void TBasicSchedulerThread::PrepareSchedules(NSchedulerQueue::TReader** readers, ui32 scheduleReadersCount) {
         Y_VERIFY(scheduleReadersCount > 0);
         TotalReaders = scheduleReadersCount;
         Readers.Reset(new NSchedulerQueue::TReader*[scheduleReadersCount]);

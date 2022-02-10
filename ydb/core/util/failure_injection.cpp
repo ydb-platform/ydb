@@ -54,34 +54,34 @@ namespace NKikimr {
             }
 
             void DumpQueue(IOutputStream& str) {
-                HTML(str) { 
-                    TABLE() { 
-                        TABLEHEAD() { 
-                            TABLER() { 
-                                TABLEH() { 
+                HTML(str) {
+                    TABLE() {
+                        TABLEHEAD() {
+                            TABLER() {
+                                TABLEH() {
                                     str << "Probe name";
-                                } 
-                                TABLEH() { 
+                                }
+                                TABLEH() {
                                     str << "Remaining hit count";
-                                } 
-                            } 
-                        } 
-                        TABLEBODY() { 
-                            with_lock (Mutex) {
-                                for (const TFailureQueueItem& item : FailureQ) {
-                                    TABLER() { 
-                                        TABLED() { 
-                                            str << item.Name;
-                                        } 
-                                        TABLED() { 
-                                            str << item.HitCount;
-                                        } 
-                                    } 
                                 }
                             }
-                        } 
-                    } 
-                } 
+                        }
+                        TABLEBODY() {
+                            with_lock (Mutex) {
+                                for (const TFailureQueueItem& item : FailureQ) {
+                                    TABLER() {
+                                        TABLED() {
+                                            str << item.Name;
+                                        }
+                                        TABLED() {
+                                            str << item.HitCount;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
         private:
@@ -106,14 +106,14 @@ namespace NKikimr {
             {}
 
         private:
-            bool DoExecute(TOrbit&, const TParams& params) override { 
+            bool DoExecute(TOrbit&, const TParams& params) override {
                 Manager->Inject(Name, params);
                 return true;
             }
         };
 
         class TFailureInjectionActor : public TActorBootstrapped<TFailureInjectionActor> {
-            TManager TraceManager; 
+            TManager TraceManager;
             TVector<TString> Probes;
             TFailureInjectionManager Manager;
             bool Enabled = false;
@@ -162,7 +162,7 @@ namespace NKikimr {
                         auto& custom = *action.MutableCustomAction();
                         custom.SetName(actionName);
 
-                        auto factory = [=](TProbe *probe, const TCustomAction& /*action*/, TSession* /*trace*/) { 
+                        auto factory = [=](TProbe *probe, const TCustomAction& /*action*/, TSession* /*trace*/) {
                             return new TTraceActionExecutor(probe, &Manager, name);
                         };
                         TraceManager.RegisterCustomAction(actionName, factory);
@@ -197,11 +197,11 @@ namespace NKikimr {
                             ui32 hitCount = hc ? FromString<ui32>(hc) : 1;
                             Manager.EnqueueFailureItem(probe, {}, hitCount);
                         } catch (const yexception& ex) {
-                            HTML(str) { 
-                                DIV() { 
+                            HTML(str) {
+                                DIV() {
                                     str << "<h1><font color=red>" << ex.what() << "</font></h1>";
-                                } 
-                            } 
+                                }
+                            }
                         }
                     }
                 }
@@ -209,52 +209,52 @@ namespace NKikimr {
                     Enable();
                 }
 
-                HTML(str) { 
-                    DIV() { 
+                HTML(str) {
+                    DIV() {
                         Manager.DumpQueue(str);
-                    } 
+                    }
 
-                    FORM_CLASS("form-horizontal") { 
-                        DIV_CLASS("control-group") { 
-                            LABEL_CLASS_FOR("control-label", "probe") { 
+                    FORM_CLASS("form-horizontal") {
+                        DIV_CLASS("control-group") {
+                            LABEL_CLASS_FOR("control-label", "probe") {
                                 str << "Probe";
-                            } 
-                            DIV_CLASS("controls") { 
+                            }
+                            DIV_CLASS("controls") {
                                 str << "<select id=\"probe\" name=\"probe\">";
                                 for (const TString& probe : Probes) {
                                     str << "<option value=\"" << probe << "\">" << probe << "</option>";
                                 }
                                 str << "</select>";
-                            } 
+                            }
 
-                            LABEL_CLASS_FOR("control-label", "hitcount") { 
+                            LABEL_CLASS_FOR("control-label", "hitcount") {
                                 str << "Hit count";
-                            } 
-                            DIV_CLASS("controls") { 
+                            }
+                            DIV_CLASS("controls") {
                                 str << "<input type=\"number\" id=\"hitcount\" name=\"hitcount\">";
-                            } 
+                            }
 
-                            LABEL_CLASS_FOR("control-label", "queue") { 
+                            LABEL_CLASS_FOR("control-label", "queue") {
                                 str << "Queue definition string";
-                            } 
-                            DIV_CLASS("controls") { 
+                            }
+                            DIV_CLASS("controls") {
                                 str << "<input id=\"queue\" name=\"queue\">";
-                            } 
-                        } 
-                        DIV_CLASS("control-group") { 
-                            DIV_CLASS("controls") { 
+                            }
+                        }
+                        DIV_CLASS("control-group") {
+                            DIV_CLASS("controls") {
                                 str << "<button type=\"submit\" name=\"submit\" class=\"btn btn-default\">Add to queue</button>";
-                            } 
-                        } 
-                    } 
-                } 
+                            }
+                        }
+                    }
+                }
                 ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), ev->Get()->SubRequestId));
             }
 
             void ProcessQueue(IOutputStream& str, const TString& queue) {
                 TVector<std::tuple<TString, TMaybe<TParams>, ui32>> items;
 
-                HTML(str) { 
+                HTML(str) {
                     size_t pos = 0;
                     for (;;) {
                         TString probe;
@@ -262,9 +262,9 @@ namespace NKikimr {
                             probe.append(queue[pos]);
                         }
                         if (std::find(Probes.begin(), Probes.end(), probe) == Probes.end()) {
-                            DIV() { 
+                            DIV() {
                                 str << "<h1><font color=red>Probe " << probe << " does not exist</font></h1>";
-                            } 
+                            }
                             return;
                         }
                         ui32 hitCount = 1;
@@ -274,9 +274,9 @@ namespace NKikimr {
                             }
                         }
                         if (pos < queue.size() && queue[pos] != ';') {
-                            DIV() { 
+                            DIV() {
                                 str << "<h1><font color=red>Missing semicolon</font></h1>";
-                            } 
+                            }
                             return;
                         }
                         items.emplace_back(std::move(probe), Nothing(), hitCount);
@@ -286,7 +286,7 @@ namespace NKikimr {
                             break;
                         }
                     }
-                } 
+                }
 
                 for (const auto& item : items) {
                     Manager.EnqueueFailureItem(std::get<0>(item), std::get<1>(item), std::get<2>(item));

@@ -5,18 +5,18 @@
 #include <google/protobuf/text_format.h>
 #include <util/stream/file.h>
 
-#define LWTRACE_EXAMPLE_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES)                           \ 
-    PROBE(StartupProbe, GROUPS(), TYPES(), NAMES())                                            \ 
-    PROBE(IterationProbe, GROUPS(), TYPES(i64, double), NAMES("n", "result"))                  \ 
+#define LWTRACE_EXAMPLE_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES)                           \
+    PROBE(StartupProbe, GROUPS(), TYPES(), NAMES())                                            \
+    PROBE(IterationProbe, GROUPS(), TYPES(i64, double), NAMES("n", "result"))                  \
     PROBE(DurationProbe, GROUPS(), TYPES(ui64, i64, double), NAMES("duration", "n", "result")) \
-    PROBE(ResultProbe, GROUPS(), TYPES(double), NAMES("factN"))                                \ 
-    PROBE(AfterInputProbe, GROUPS(), TYPES(i32), NAMES("n"))                                   \ 
+    PROBE(ResultProbe, GROUPS(), TYPES(double), NAMES("factN"))                                \
+    PROBE(AfterInputProbe, GROUPS(), TYPES(i32), NAMES("n"))                                   \
     /**/
 
 LWTRACE_DECLARE_PROVIDER(LWTRACE_EXAMPLE_PROVIDER)
 LWTRACE_DEFINE_PROVIDER(LWTRACE_EXAMPLE_PROVIDER)
 
-THolder<NLWTrace::TManager> traceManager; 
+THolder<NLWTrace::TManager> traceManager;
 
 struct TConfig {
     bool UnsafeLWTrace;
@@ -24,7 +24,7 @@ struct TConfig {
 };
 
 void InitLWTrace(TConfig& cfg) {
-    traceManager.Reset(new NLWTrace::TManager(*Singleton<NLWTrace::TProbeRegistry>(), cfg.UnsafeLWTrace)); 
+    traceManager.Reset(new NLWTrace::TManager(*Singleton<NLWTrace::TProbeRegistry>(), cfg.UnsafeLWTrace));
 }
 
 void AddLWTraceRequest(TConfig& cfg) {
@@ -36,7 +36,7 @@ void AddLWTraceRequest(TConfig& cfg) {
 
 class TLogReader {
 public:
-    void Push(TThread::TId tid, const NLWTrace::TCyclicLog::TItem& item) { 
+    void Push(TThread::TId tid, const NLWTrace::TCyclicLog::TItem& item) {
         Cout << "tid=" << tid << " probe=" << item.Probe->Event.Name;
         if (item.Timestamp != TInstant::Zero()) {
             Cout << " time=" << item.Timestamp;
@@ -59,7 +59,7 @@ void DisplayLWTraceLog() {
     traceManager->ReadLog("TraceRequest1", reader);
 }
 
-long double Fact(i64 n) { 
+long double Fact(i64 n) {
     if (n < 0) {
         ythrow yexception() << "N! is undefined for negative N (" << n << ")";
     }
@@ -94,14 +94,14 @@ int main(int argc, char** argv) {
     using namespace NLastGetopt;
     TOpts opts = NLastGetopt::TOpts::Default();
     opts.AddLongOption('u', "unsafe-lwtrace",
-                       "allow destructive LWTrace actions") 
-        .OptionalValue(ToString(true)) 
-        .DefaultValue(ToString(false)) 
-        .StoreResult(&cfg.UnsafeLWTrace); 
+                       "allow destructive LWTrace actions")
+        .OptionalValue(ToString(true))
+        .DefaultValue(ToString(false))
+        .StoreResult(&cfg.UnsafeLWTrace);
     opts.AddLongOption('f', "trace-request",
-                       "specify a file containing LWTrace request") 
-        .DefaultValue("example_query.tr") 
-        .StoreResult(&cfg.TraceRequestPath); 
+                       "specify a file containing LWTrace request")
+        .DefaultValue("example_query.tr")
+        .StoreResult(&cfg.TraceRequestPath);
     opts.AddHelpOption('h');
     TOptsParseResult res(&opts, argc, argv);
 

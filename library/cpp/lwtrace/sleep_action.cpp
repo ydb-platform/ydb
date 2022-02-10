@@ -9,7 +9,7 @@
 using namespace NLWTrace;
 using namespace NLWTrace::NPrivate;
 
-bool TSleepActionExecutor::DoExecute(TOrbit&, const TParams&) { 
+bool TSleepActionExecutor::DoExecute(TOrbit&, const TParams&) {
     NanoSleep(NanoSeconds);
     return true;
 }

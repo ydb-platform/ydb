@@ -18,7 +18,7 @@ void TBlobState::TState::AddResponseData(ui32 fullSize, ui32 shift, TString &dat
 void TBlobState::TState::AddPartToPut(TString &data) {
     Y_VERIFY(data.size());
     Data.SetMonolith(data);
-    Here.Assign(0, data.size()); 
+    Here.Assign(0, data.size());
 }
 
 
@@ -60,7 +60,7 @@ void TBlobState::MarkBlobReadyToPut(ui8 blobIdx) {
 }
 
 bool TBlobState::Restore(const TBlobStorageGroupInfo &info) {
-    TIntervalVec<i32> fullBlobInterval(0, Id.BlobSize()); 
+    TIntervalVec<i32> fullBlobInterval(0, Id.BlobSize());
     if (fullBlobInterval.IsSubsetOf(Whole.Here)) {
         return true;
     }
@@ -69,7 +69,7 @@ bool TBlobState::Restore(const TBlobStorageGroupInfo &info) {
     ui32 partsPresent = 0;
     for (ui32 i = 0; i < parts; ++i) {
         if (const ui32 partSize = info.Type.PartSize(TLogoBlobID(Id, i + 1))) {
-            if (TIntervalVec<i32>(0, partSize).IsSubsetOf(Parts[i].Here)) { 
+            if (TIntervalVec<i32>(0, partSize).IsSubsetOf(Parts[i].Here)) {
                 ++partsPresent;
             }
         }
@@ -82,7 +82,7 @@ bool TBlobState::Restore(const TBlobStorageGroupInfo &info) {
     partSet.Parts.resize(parts);
     for (ui32 i = 0; i < parts; ++i) {
         if (const ui32 partSize = info.Type.PartSize(TLogoBlobID(Id, i + 1))) {
-            if (TIntervalVec<i32>(0, partSize).IsSubsetOf(Parts[i].Here)) { 
+            if (TIntervalVec<i32>(0, partSize).IsSubsetOf(Parts[i].Here)) {
                 partSet.PartsMask |= (1 << i);
                 TString tmp = TString::Uninitialized(partSize);
                 Parts[i].Data.Read(0, const_cast<char*>(tmp.data()), partSize);
@@ -308,16 +308,16 @@ TString TBlobState::TDiskPart::ToString() const {
 TString TBlobState::TState::ToString() const {
     TStringStream str;
     str << "{Data# " << Data.Print();
-    str << " Here# " << Here.ToString(); 
-    str << "}"; 
-    return str.Str(); 
-} 
- 
-TString TBlobState::TWholeState::ToString() const { 
-    TStringStream str; 
-    str << "{Data# " << Data.Print(); 
-    str << " Here# " << Here.ToString(); 
-    str << " Needed# " << Needed.ToString(); 
+    str << " Here# " << Here.ToString();
+    str << "}";
+    return str.Str();
+}
+
+TString TBlobState::TWholeState::ToString() const {
+    TStringStream str;
+    str << "{Data# " << Data.Print();
+    str << " Here# " << Here.ToString();
+    str << " Needed# " << Needed.ToString();
     str << " NotHere# " << NotHere.ToString();
     str << "}";
     return str.Str();
@@ -331,10 +331,10 @@ TGroupDiskRequests::TGroupDiskRequests(ui32 disks) {
     DiskRequestsForOrderNumber.resize(disks);
 }
 
-void TGroupDiskRequests::AddGet(const ui32 diskOrderNumber, const TLogoBlobID &id, const TIntervalSet<i32> &intervalSet) { 
+void TGroupDiskRequests::AddGet(const ui32 diskOrderNumber, const TLogoBlobID &id, const TIntervalSet<i32> &intervalSet) {
     Y_VERIFY(diskOrderNumber < DiskRequestsForOrderNumber.size());
     auto &requestsToSend = DiskRequestsForOrderNumber[diskOrderNumber].GetsToSend;
-    for (auto pair: intervalSet) { 
+    for (auto pair: intervalSet) {
         requestsToSend.emplace_back(id, pair.first, pair.second - pair.first);
     }
 }

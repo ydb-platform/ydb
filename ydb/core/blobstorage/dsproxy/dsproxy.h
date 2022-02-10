@@ -340,7 +340,7 @@ public:
             ui64 messageCookie = request->Record.GetCookie();
             CountEvent(*request);
             const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
-            request->Record.MutableTimestamps()->SetSentByDSProxyUs(GetCycleCountFast() / cyclesPerUs); 
+            request->Record.MutableTimestamps()->SetSentByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
             SendToQueue(std::move(request), messageCookie, TraceId.SeparateBranch(), timeStatsEnabled);
         }
     }
@@ -378,7 +378,7 @@ public:
             ui64 messageCookie = request->Record.GetCookie();
             CountEvent(*request);
             const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
-            request->Record.MutableTimestamps()->SetSentByDSProxyUs(GetCycleCountFast() / cyclesPerUs); 
+            request->Record.MutableTimestamps()->SetSentByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
             TLogoBlobID id = GetBlobId(request);
             TVDiskID vDiskId = VDiskIDFromVDiskID(request->Record.GetVDiskID());
             LWTRACK(DSProxyPutVPutIsSent, request->Orbit, Info->GetFailDomainOrderNumber(vDiskId),

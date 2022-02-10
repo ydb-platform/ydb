@@ -82,5 +82,5 @@ protected:
     ui32 NewCbs();
 };
 
-} // NSchLab 
-} // NKikimr 
+} // NSchLab
+} // NKikimr

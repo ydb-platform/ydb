@@ -406,8 +406,8 @@ class TExecutor
     // Used control number of in flight events to the counter aggregator
     TIntrusivePtr<TEvTabletCounters::TInFlightCookie> CounterEventsInFlight;
 
-    TTabletCountersWithTxTypes* AppTxCounters = nullptr; 
- 
+    TTabletCountersWithTxTypes* AppTxCounters = nullptr;
+
     TActorId Launcher;
 
     THashMap<TPrivatePageCacheWaitPad*, THolder<TTransactionWaitPad>> TransactionWaitPads;
@@ -609,7 +609,7 @@ public:
     const TExecutorStats& GetStats() const override;
     NMetrics::TResourceMetrics* GetResourceMetrics() const override;
 
-    void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> appCounters) override; 
+    void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> appCounters) override;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::FLAT_EXECUTOR;

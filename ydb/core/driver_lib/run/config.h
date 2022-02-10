@@ -29,7 +29,7 @@ union TBasicKikimrServicesMask {
         bool EnableTabletCountersAggregator:1;
         bool EnableRestartsCountPublisher:1;
         bool EnableBootstrapper:1;
-        bool EnableMediatorTimeCastProxy:1; 
+        bool EnableMediatorTimeCastProxy:1;
         bool EnableTxProxy:1;
         bool EnableMiniKQLCompileService:1;
         bool EnableMessageBusServices:1;

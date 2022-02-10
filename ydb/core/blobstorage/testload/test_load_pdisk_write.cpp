@@ -78,13 +78,13 @@ class TPDiskWriterTestLoadActor : public TActorBootstrapped<TPDiskWriterTestLoad
     const TActorId Parent;
     ui64 Tag;
     ui32 DurationSeconds;
-    ui32 IntervalMsMin = 0; 
-    ui32 IntervalMsMax = 0; 
+    ui32 IntervalMsMin = 0;
+    ui32 IntervalMsMax = 0;
     TControlWrapper MaxInFlight;
     ui32 InFlight = 0;
     ui32 LogInFlight = 0;
-    TInstant LastRequest; 
-    ui32 IntervalMs = 0; 
+    TInstant LastRequest;
+    ui32 IntervalMs = 0;
     ui32 PDiskId;
     TVDiskID VDiskId;
     NPDisk::TOwnerRound OwnerRound;
@@ -146,9 +146,9 @@ public:
         Y_ASSERT(DurationSeconds > DelayBeforeMeasurements.Seconds());
         Report->Duration = TDuration::Seconds(DurationSeconds);
 
-        IntervalMsMin = cmd.GetIntervalMsMin(); 
-        IntervalMsMax = cmd.GetIntervalMsMax(); 
- 
+        IntervalMsMin = cmd.GetIntervalMsMin();
+        IntervalMsMax = cmd.GetIntervalMsMax();
+
         VERIFY_PARAM(InFlightWrites);
         MaxInFlight = cmd.GetInFlightWrites();
         Report->InFlight = MaxInFlight;
@@ -213,7 +213,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TPDiskWriterTestLoadActor::StateFunc);
-        ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill); 
+        ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
         AppData(ctx)->Icb->RegisterLocalControl(MaxInFlight, Sprintf("PDiskWriteLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
         if (IsWardenlessTest) {
@@ -311,18 +311,18 @@ public:
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Rate management 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
- 
-    void HandleWakeup(const TActorContext& ctx) { 
-        SendWriteRequests(ctx); 
-    } 
- 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+    // Rate management
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    void HandleWakeup(const TActorContext& ctx) {
+        SendWriteRequests(ctx);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Death management
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    void HandlePoisonPill(const TActorContext& ctx) { 
+    void HandlePoisonPill(const TActorContext& ctx) {
         Report->LoadType = TLoadReport::LOAD_WRITE;
         MaxInFlight = 0;
         CheckDie(ctx);
@@ -377,28 +377,28 @@ public:
 
     void SendWriteRequests(const TActorContext& ctx) {
         while (InFlight < MaxInFlight) {
-            // Randomize interval (if required) 
-            if (!IntervalMs && IntervalMsMax && IntervalMsMin) { 
-                IntervalMs = IntervalMsMin; 
-                if (ui32 delta = (IntervalMsMax > IntervalMsMin? IntervalMsMax - IntervalMsMin: 0)) { 
-                    IntervalMs += Rng() % delta; 
-                } 
-            } 
- 
-            if (IntervalMs) { 
-                // Enforce intervals between requests 
+            // Randomize interval (if required)
+            if (!IntervalMs && IntervalMsMax && IntervalMsMin) {
+                IntervalMs = IntervalMsMin;
+                if (ui32 delta = (IntervalMsMax > IntervalMsMin? IntervalMsMax - IntervalMsMin: 0)) {
+                    IntervalMs += Rng() % delta;
+                }
+            }
+
+            if (IntervalMs) {
+                // Enforce intervals between requests
                 TInstant now = TAppData::TimeProvider->Now();
-                TInstant nextRequest = LastRequest + TDuration::MilliSeconds(IntervalMs); 
-                if (now < nextRequest) { 
-                    // Suspend sending until interval will elapse 
-                    ctx.Schedule(nextRequest - now, new TEvents::TEvWakeup); 
-                    break; 
-                } 
-                LastRequest = now; 
-                IntervalMs = 0; // To enforce regeneration of new random interval 
-            } 
- 
-            // Prepare to send request 
+                TInstant nextRequest = LastRequest + TDuration::MilliSeconds(IntervalMs);
+                if (now < nextRequest) {
+                    // Suspend sending until interval will elapse
+                    ctx.Schedule(nextRequest - now, new TEvents::TEvWakeup);
+                    break;
+                }
+                LastRequest = now;
+                IntervalMs = 0; // To enforce regeneration of new random interval
+            }
+
+            // Prepare to send request
             ui64 accumWeight = 0;
             for (TChunkInfo& chunkInfo : Chunks) {
                 chunkInfo.AccumWeight = accumWeight;
@@ -513,7 +513,7 @@ public:
         TRequestInfo *request = &RequestInfo[requestIdx];
 
         if (now > MeasurementStartTime) {
-            Report->LatencyUs.Increment((now - request->StartTime).MicroSeconds()); 
+            Report->LatencyUs.Increment((now - request->StartTime).MicroSeconds());
             for(const auto& perc : DevicePercentiles) {
                 Report->DeviceLatency[perc.first] = Max(Report->DeviceLatency[perc.first], (ui64)*perc.second);
             }
@@ -552,24 +552,24 @@ public:
     void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
         TStringStream str;
 #define PARAM(NAME, VALUE) \
-    TABLER() { \ 
-        TABLED() { str << NAME; } \ 
-        TABLED() { str << VALUE; } \ 
-    } 
+    TABLER() { \
+        TABLED() { str << NAME; } \
+        TABLED() { str << VALUE; } \
+    }
         TMap<ui32, TVector<TDuration>> latmap;
         for (const auto& pair : TimeSeries) {
             const TRequestStat& stat = pair.second;
             latmap[stat.Size].push_back(stat.Latency);
         }
-        HTML(str) { 
-            TABLE() { 
-                TABLEHEAD() { 
-                    TABLER() { 
-                        TABLEH() { str << "Parameter"; } 
-                        TABLEH() { str << "Value"; } 
-                    } 
-                } 
-                TABLEBODY() { 
+        HTML(str) {
+            TABLE() {
+                TABLEHEAD() {
+                    TABLER() {
+                        TABLEH() { str << "Parameter"; }
+                        TABLEH() { str << "Value"; }
+                    }
+                }
+                TABLEBODY() {
 
                     PARAM("Elapsed time / Duration", (TAppData::TimeProvider->Now() - TestStartTime).Seconds() << "s / "
                             << DurationSeconds << "s");
@@ -614,13 +614,13 @@ public:
                     PARAM("Average speed since start, MB/s", Report->GetAverageSpeed() / 1e6);
                     PARAM("Speed standard deviation since start, MB/s", Report->GetSpeedDeviation() / 1e6);
                     for (double percentile : {0.5, 0.9, 0.95, 0.99, 0.999, 1.0}) {
-                        size_t value = Report->LatencyUs.GetPercentile(percentile); 
+                        size_t value = Report->LatencyUs.GetPercentile(percentile);
                         PARAM(Sprintf("percentile# %.3f since start, ms", percentile), value / 1000.0);
                     }
-                } 
-            } 
-        } 
- 
+                }
+            }
+        }
+
         ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), ev->Get()->SubRequestId));
     }
 

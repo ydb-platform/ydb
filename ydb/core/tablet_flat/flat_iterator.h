@@ -404,15 +404,15 @@ private:
         Inactive = Active;
     }
 
-    // ITERATORS STORAGE 
+    // ITERATORS STORAGE
     // Range [ IteratorsHeap.begin(); Active ) form a heap
     // Range [ Active; IteratorsHeap.end() ) are currently active iterators (i.e. that have key equal to current key)
-    // Also note that active iterators should be traversed in reverse order 
+    // Also note that active iterators should be traversed in reverse order
     TComparator Comparator;
     using TIterators = TSmallVec<TElement>;
     using TForwardIter = typename TIterators::iterator;
     using TReverseIter = typename TIterators::reverse_iterator;
- 
+
     TIterators Iterators;
     TForwardIter Active;
     TForwardIter Inactive;
@@ -420,7 +420,7 @@ private:
     TRowVersion DeltaVersion;
     bool Delta = false;
     bool Uncommitted = false;
- 
+
     EReady Start() noexcept;
     EReady Turn() noexcept;
     EReady Snap() noexcept;
@@ -428,7 +428,7 @@ private:
     EReady DoSkipUncommitted() noexcept;
     EReady Apply() noexcept;
     void AddReadyIterator(TArrayRef<const TCell> key, TIteratorId itId);
-    void AddNotReadyIterator(TIteratorId itId); 
+    void AddNotReadyIterator(TIteratorId itId);
 
     bool SeekInternal(TArrayRef<const TCell> key, ESeek seek) noexcept;
 };
@@ -481,16 +481,16 @@ inline void TTableItBase<TIteratorOps>::AddReadyIterator(TArrayRef<const TCell> 
     ++Active;
     std::push_heap(Iterators.begin(), Active, Comparator);
     Inactive = Active;
-} 
- 
+}
+
 template<class TIteratorOps>
 inline void TTableItBase<TIteratorOps>::AddNotReadyIterator(TIteratorId itId) {
     size_t actPos = Active - Iterators.begin();
     Iterators.emplace_back(TElement({{ }, itId}));
     Active = Iterators.begin() + actPos;
     Inactive = Active;
-} 
- 
+}
+
 template<class TIteratorOps>
 inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TMemIt> it)
 {
@@ -566,7 +566,7 @@ inline EReady TTableItBase<TIteratorOps>::Start() noexcept
     {
         return EReady::Gone;
     }
- 
+
     auto key = Iterators.front().Key;
     PopHeap(Iterators.begin(), Active--, Comparator);
     while (Active != Iterators.begin()) {
@@ -581,7 +581,7 @@ inline EReady TTableItBase<TIteratorOps>::Start() noexcept
 
         PopHeap(Iterators.begin(), Active--, Comparator);
     }
- 
+
     Stage = EStage::Snap;
     Inactive = Iterators.end();
     return EReady::Data;
@@ -651,7 +651,7 @@ inline EReady TTableItBase<TIteratorOps>::Turn() noexcept
         return EReady::Page;
     }
 
-    return Start(); 
+    return Start();
 }
 
 template<class TIteratorOps>
@@ -868,7 +868,7 @@ inline EReady TTableItBase<TIteratorOps>::Apply() noexcept
 
     bool committed = false;
     for (auto i = TReverseIter(Inactive), e = TReverseIter(Active); i != e; ++i) {
-        TIteratorId ai = i->IteratorId; 
+        TIteratorId ai = i->IteratorId;
         switch (ai.Type) {
             case EType::Mem: {
                 auto& it = *MemIters[ai.Index];
@@ -929,7 +929,7 @@ inline EReady TTableItBase<TIteratorOps>::Apply() noexcept
 template<class TIteratorOps>
 inline TDbTupleRef TTableItBase<TIteratorOps>::GetKey() const noexcept
 {
-    TIteratorId ai = Iterators.back().IteratorId; 
+    TIteratorId ai = Iterators.back().IteratorId;
     switch (ai.Type) {
         case EType::Mem:
             return MemIters[ai.Index]->GetKey();

@@ -291,10 +291,10 @@ namespace NActors {
         }
 
     public:
-        void ReservePayload(size_t size) { 
-            Payload.reserve(size); 
-        } 
- 
+        void ReservePayload(size_t size) {
+            Payload.reserve(size);
+        }
+
         ui32 AddPayload(TRope&& rope) {
             const ui32 id = Payload.size();
             Payload.push_back(std::move(rope));

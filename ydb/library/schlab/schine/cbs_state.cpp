@@ -20,5 +20,5 @@ const char* CbsStateName(ECbsState state) {
     }
 }
 
-} // NSchLab 
-} // NKikimr 
+} // NSchLab
+} // NKikimr

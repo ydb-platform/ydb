@@ -1,23 +1,23 @@
 #include "flat_page_label.h"
 #include "flat_part_iface.h"
-#include "flat_table_part.h" 
+#include "flat_table_part.h"
 #include "util_basics.h"
 
 #include <ydb/core/util/pb.h>
 #include <ydb/core/tablet_flat/protos/flat_table_part.pb.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/map.h>
- 
-namespace NKikimr { 
+
+namespace NKikimr {
 namespace NTable {
- 
+
 TPartScheme::TPartScheme(TArrayRef<const TColInfo> cols)
 {
     ui32 maxGroup = 0;
     for (auto& col : cols) {
         maxGroup = Max(maxGroup, col.Group);
     }
- 
+
     ui32 pos = 0;
     Groups.resize(size_t(maxGroup) + 1);
     for (auto& col : cols) {
@@ -27,8 +27,8 @@ TPartScheme::TPartScheme(TArrayRef<const TColInfo> cols)
 
     FillKeySlots();
     FillHistoricSlots();
-} 
- 
+}
+
 TIntrusiveConstPtr<TPartScheme> TPartScheme::Parse(TArrayRef<const char> raw, bool labeled)
 {
     if (labeled) {
@@ -72,8 +72,8 @@ TIntrusiveConstPtr<TPartScheme> TPartScheme::Parse(TArrayRef<const char> raw, bo
     }
 
     return new TPartScheme(cols);
-} 
- 
+}
+
 void TPartScheme::FillKeySlots()
 {
     for (auto& group : Groups) {
@@ -197,12 +197,12 @@ TSharedData TPartScheme::Serialize() const
         if (col.IsKey()) {
             pb->SetKey(col.Key);
         }
-    } 
- 
-    TStringStream ss; 
+    }
+
+    TStringStream ss;
     proto.SerializeToArcadiaStream(&ss);
 
     return NPage::THello::Wrap(ss.Str(), EPage::Schem2, Groups.size() > 1 ? 1 : 0);
-} 
- 
-}} 
+}
+
+}}

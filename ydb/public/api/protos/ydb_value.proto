@@ -148,14 +148,14 @@ message Value {
 message TypedValue {
     Type type = 1;
     Value value = 2;
-} 
+}
 
 message Column {
     // Name of column
     string name = 1;
     // Type of column
     Type type = 2;
-} 
+}
 
 // Represents table-like structure with ordered set of rows and columns
 message ResultSet {
@@ -165,4 +165,4 @@ message ResultSet {
     repeated Value rows = 2;
     // Flag indicates the result was truncated
     bool truncated = 3;
-} 
+}

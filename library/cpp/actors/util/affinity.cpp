@@ -16,17 +16,17 @@ public:
 #endif
     }
 
-    explicit TImpl(const ui8* cpus, ui32 size) { 
+    explicit TImpl(const ui8* cpus, ui32 size) {
 #ifdef _linux_
         CPU_ZERO(&Mask);
-        for (ui32 i = 0; i != size; ++i) { 
-            if (cpus[i]) { 
-                CPU_SET(i, &Mask); 
-            } 
-        } 
+        for (ui32 i = 0; i != size; ++i) {
+            if (cpus[i]) {
+                CPU_SET(i, &Mask);
+            }
+        }
 #else
-        Y_UNUSED(cpus); 
-        Y_UNUSED(size); 
+        Y_UNUSED(cpus);
+        Y_UNUSED(size);
 #endif
     }
 
@@ -36,18 +36,18 @@ public:
         Y_VERIFY_DEBUG(ar == 0);
 #endif
     }
- 
-    operator TCpuMask() const { 
-        TCpuMask result; 
-#ifdef _linux_ 
-        for (ui32 i = 0; i != CPU_SETSIZE; ++i) { 
-            result.Cpus.emplace_back(CPU_ISSET(i, &Mask)); 
-        } 
-        result.RemoveTrailingZeros(); 
-#endif 
-        return result; 
-    } 
- 
+
+    operator TCpuMask() const {
+        TCpuMask result;
+#ifdef _linux_
+        for (ui32 i = 0; i != CPU_SETSIZE; ++i) {
+            result.Cpus.emplace_back(CPU_ISSET(i, &Mask));
+        }
+        result.RemoveTrailingZeros();
+#endif
+        return result;
+    }
+
 };
 
 TAffinity::TAffinity() {
@@ -57,37 +57,37 @@ TAffinity::~TAffinity() {
 }
 
 TAffinity::TAffinity(const ui8* x, ui32 sz) {
-    if (x && sz) { 
+    if (x && sz) {
         Impl.Reset(new TImpl(x, sz));
-    } 
+    }
 }
 
-TAffinity::TAffinity(const TCpuMask& mask) { 
-    if (!mask.IsEmpty()) { 
-        static_assert(sizeof(ui8) == sizeof(mask.Cpus[0])); 
-        const ui8* x = reinterpret_cast<const ui8*>(&mask.Cpus[0]); 
-        const ui32 sz = mask.Size(); 
-        Impl.Reset(new TImpl(x, sz)); 
-    } 
-} 
- 
+TAffinity::TAffinity(const TCpuMask& mask) {
+    if (!mask.IsEmpty()) {
+        static_assert(sizeof(ui8) == sizeof(mask.Cpus[0]));
+        const ui8* x = reinterpret_cast<const ui8*>(&mask.Cpus[0]);
+        const ui32 sz = mask.Size();
+        Impl.Reset(new TImpl(x, sz));
+    }
+}
+
 void TAffinity::Current() {
     Impl.Reset(new TImpl());
 }
 
 void TAffinity::Set() const {
-    if (!!Impl) { 
+    if (!!Impl) {
         Impl->Set();
-    } 
+    }
 }
 
 bool TAffinity::Empty() const {
-    return !Impl; 
+    return !Impl;
 }
- 
-TAffinity::operator TCpuMask() const { 
-    if (!!Impl) { 
-        return *Impl; 
-    } 
-    return TCpuMask(); 
-} 
+
+TAffinity::operator TCpuMask() const {
+    if (!!Impl) {
+        return *Impl;
+    }
+    return TCpuMask();
+}

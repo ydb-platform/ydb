@@ -1,38 +1,38 @@
-#pragma once 
- 
-#include "tablet_counters.h" 
+#pragma once
+
+#include "tablet_counters.h"
 #include "tablet_counters_aggregator.h"
 #include <ydb/core/tablet_flat/defs.h>
 #include <util/string/vector.h>
 #include <util/string/split.h>
- 
-namespace NKikimr { 
- 
-namespace NAux { 
- 
+
+namespace NKikimr {
+
+namespace NAux {
+
 // Class that incapsulates protobuf options parsing for app counters
 template <const NProtoBuf::EnumDescriptor* AppCountersDesc()>
 struct TAppParsedOpts {
-public: 
-    const size_t Size; 
+public:
+    const size_t Size;
 protected:
     TVector<TString> NamesStrings;
     TVector<const char*> Names;
     TVector<TVector<TTabletPercentileCounter::TRangeDef>> Ranges;
     TVector<TTabletPercentileCounter::TRangeDef> AppGlobalRanges;
     TVector<bool> Integral;
-public: 
+public:
     explicit TAppParsedOpts(const size_t diff = 0)
         : Size(AppCountersDesc()->value_count() + diff)
-    { 
+    {
         const NProtoBuf::EnumDescriptor* appDesc = AppCountersDesc();
-        NamesStrings.reserve(Size); 
-        Names.reserve(Size); 
-        Ranges.reserve(Size); 
- 
-        // Parse protobuf options for enum values for app counters 
-        for (int i = 0; i < appDesc->value_count(); i++) { 
-            const NProtoBuf::EnumValueDescriptor* vdesc = appDesc->value(i); 
+        NamesStrings.reserve(Size);
+        Names.reserve(Size);
+        Ranges.reserve(Size);
+
+        // Parse protobuf options for enum values for app counters
+        for (int i = 0; i < appDesc->value_count(); i++) {
+            const NProtoBuf::EnumValueDescriptor* vdesc = appDesc->value(i);
             Y_VERIFY(vdesc->number() == vdesc->index(), "counter '%s' number (%d) != index (%d)",
                    vdesc->full_name().c_str(), vdesc->number(), vdesc->index());
             if (!vdesc->options().HasExtension(CounterOpts)) {
@@ -41,7 +41,7 @@ public:
                 Integral.push_back(false);
                 continue;
             }
-            const TCounterOptions& co = vdesc->options().GetExtension(CounterOpts); 
+            const TCounterOptions& co = vdesc->options().GetExtension(CounterOpts);
             TString cntName = co.GetName();
             Y_VERIFY(!cntName.empty(), "counter '%s' number (%d) cannot have an empty counter name",
                     vdesc->full_name().c_str(), vdesc->number());
@@ -52,10 +52,10 @@ public:
                 nameString = GetFilePrefix(appDesc->file()) + cntName;
             }
             NamesStrings.emplace_back(nameString);
-            Ranges.push_back(ParseRanges(co)); 
+            Ranges.push_back(ParseRanges(co));
             Integral.push_back(co.GetIntegral());
-        } 
- 
+        }
+
         // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase
         for (const TString& s : NamesStrings) {
             Names.push_back(s.empty() ? nullptr : s.c_str());
@@ -136,19 +136,19 @@ public:
         const NProtoBuf::EnumDescriptor* txDesc = TxCountersDesc();
         const NProtoBuf::EnumDescriptor* typesDesc = TxTypesDesc();
 
-        // Parse protobuf options for enum values for tx counters 
-        // Create a group of tx counters for each tx type 
-        for (int j = 0; j < typesDesc->value_count(); j++) { 
-            const NProtoBuf::EnumValueDescriptor* tt = typesDesc->value(j); 
-            TTxType txType = tt->number(); 
+        // Parse protobuf options for enum values for tx counters
+        // Create a group of tx counters for each tx type
+        for (int j = 0; j < typesDesc->value_count(); j++) {
+            const NProtoBuf::EnumValueDescriptor* tt = typesDesc->value(j);
+            TTxType txType = tt->number();
             Y_VERIFY((int)txType == tt->index(), "tx type '%s' number (%d) != index (%d)",
                    tt->full_name().c_str(), txType, tt->index());
             Y_VERIFY(tt->options().HasExtension(TxTypeOpts), "tx type '%s' number (%d) is missing TxTypeOpts",
                     tt->full_name().c_str(), txType);
-            const TTxTypeOptions& tto = tt->options().GetExtension(TxTypeOpts); 
+            const TTxTypeOptions& tto = tt->options().GetExtension(TxTypeOpts);
             TString txPrefix = tto.GetName() + "/";
-            for (int i = 0; i < txDesc->value_count(); i++) { 
-                const NProtoBuf::EnumValueDescriptor* v = txDesc->value(i); 
+            for (int i = 0; i < txDesc->value_count(); i++) {
+                const NProtoBuf::EnumValueDescriptor* v = txDesc->value(i);
                 Y_VERIFY(v->number() == v->index(), "counter '%s' number (%d) != index (%d)",
                        v->full_name().c_str(), v->number(), v->index());
                 if (!v->options().HasExtension(CounterOpts)) {
@@ -157,54 +157,54 @@ public:
                     Integral.push_back(false);
                     continue;
                 }
-                const TCounterOptions& co = v->options().GetExtension(CounterOpts); 
+                const TCounterOptions& co = v->options().GetExtension(CounterOpts);
                 Y_VERIFY(!co.GetName().empty(), "counter '%s' number (%d) has an empty name",
                         v->full_name().c_str(), v->number());
                 TVector<TTabletPercentileCounter::TRangeDef> ranges = TBase::ParseRanges(co);
                 NamesStrings.push_back(TBase::GetFilePrefix(typesDesc->file()) + txPrefix + co.GetName());
                 Ranges.push_back(TBase::ParseRanges(co));
                 Integral.push_back(co.GetIntegral());
-            } 
-        } 
-        // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase 
+            }
+        }
+        // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase
         for (size_t i = TxOffset; i < Size; ++i) {
             const TString& s = NamesStrings[i];
             Names.push_back(s.empty() ? nullptr : s.c_str());
-        } 
- 
-        // Parse protobuf options for enums itself 
+        }
+
+        // Parse protobuf options for enums itself
         TxGlobalRanges = TBase::ParseRanges(txDesc->options().GetExtension(GlobalCounterOpts));
-    } 
- 
+    }
+
     virtual ~TParsedOpts()
     {}
- 
+
     virtual const TVector<TTabletPercentileCounter::TRangeDef>& GetRanges(size_t idx) const
-    { 
+    {
         Y_VERIFY(idx < Size);
-        if (!Ranges[idx].empty()) { 
-            return Ranges[idx]; 
-        } else { 
-            if (idx < TxOffset) { 
+        if (!Ranges[idx].empty()) {
+            return Ranges[idx];
+        } else {
+            if (idx < TxOffset) {
                 if (!AppGlobalRanges.empty())
-                    return AppGlobalRanges; 
+                    return AppGlobalRanges;
             } else if (!TxGlobalRanges.empty()) {
-                return TxGlobalRanges; 
-            } 
-        } 
-        if (idx < TxOffset) { 
+                return TxGlobalRanges;
+            }
+        }
+        if (idx < TxOffset) {
             Y_FAIL("Ranges for percentile counter '%s' are not defined", AppCountersDesc()->value(idx)->full_name().c_str());
-        } else { 
-            size_t idx2 = (idx - TxOffset) % TxCountersSize; 
+        } else {
+            size_t idx2 = (idx - TxOffset) % TxCountersSize;
             Y_FAIL("Ranges for percentile counter '%s' are not defined", TxCountersDesc()->value(idx2)->full_name().c_str());
-        } 
-    } 
+        }
+    }
 };
- 
+
 
 template <class T1, class T2>
 struct TParsedOptsPair {
-private: 
+private:
     T1 Opts1;
     T2 Opts2;
     TVector<const char*> Names;
@@ -219,16 +219,16 @@ public:
         Names.reserve(Size);
         for (size_t i = 0; i < Opts1.Size; ++i) {
             Names.push_back(Opts1.GetNames()[i]);
-        } 
+        }
         for (size_t i = 0; i < Opts2.Size; ++i) {
             Names.push_back(Opts2.GetNames()[i]);
         }
-    } 
- 
+    }
+
     const char* const * GetNames() const
-    { 
+    {
         return Names.begin();
-    } 
+    }
 
     const TVector<TTabletPercentileCounter::TRangeDef>& GetRanges(size_t idx) const
     {
@@ -237,22 +237,22 @@ public:
             return Opts1.GetRanges(idx);
         return Opts2.GetRanges(idx - Opts1.Size);
     }
-}; 
- 
-template <const NProtoBuf::EnumDescriptor* AppCountersDesc(), 
-          const NProtoBuf::EnumDescriptor* TxCountersDesc(), 
-          const NProtoBuf::EnumDescriptor* TxTypesDesc()> 
-TParsedOpts<AppCountersDesc, TxCountersDesc, TxTypesDesc>* GetOpts() { 
-    // Use singleton to avoid thread-safety issues and parse enum descriptor once 
-    return Singleton<TParsedOpts<AppCountersDesc, TxCountersDesc, TxTypesDesc>>(); 
-} 
+};
+
+template <const NProtoBuf::EnumDescriptor* AppCountersDesc(),
+          const NProtoBuf::EnumDescriptor* TxCountersDesc(),
+          const NProtoBuf::EnumDescriptor* TxTypesDesc()>
+TParsedOpts<AppCountersDesc, TxCountersDesc, TxTypesDesc>* GetOpts() {
+    // Use singleton to avoid thread-safety issues and parse enum descriptor once
+    return Singleton<TParsedOpts<AppCountersDesc, TxCountersDesc, TxTypesDesc>>();
+}
 
 template <const NProtoBuf::EnumDescriptor* AppCountersDesc()>
 TAppParsedOpts<AppCountersDesc>* GetAppOpts() {
     // Use singleton to avoid thread-safety issues and parse enum descriptor once
     return Singleton<TAppParsedOpts<AppCountersDesc>>();
 }
- 
+
 template <class T1, class T2>
 TParsedOptsPair<T1,T2>* GetOptsPair() {
     // Use singleton to avoid thread-safety issues and parse enum descriptor once
@@ -357,93 +357,93 @@ TLabeledCounterParsedOpts<LabeledCountersDesc>* GetLabeledCounterOpts() {
     return Singleton<TLabeledCounterParsedOpts<LabeledCountersDesc>>();
 }
 
-} // NAux 
- 
-// Base class for all tablet counters classes with tx type counters 
-// (Needed just to distinguish them in executor code using dynamic_cast) 
-class TTabletCountersWithTxTypes : public TTabletCountersBase { 
-protected: 
-    enum ECounterType { 
-        CT_SIMPLE, 
-        CT_CUMULATIVE, 
-        CT_PERCENTILE, 
-        CT_MAX 
-    }; 
-    size_t Size[CT_MAX]; 
-    size_t TxOffset[CT_MAX]; 
-    size_t TxCountersSize[CT_MAX]; 
-public: 
-    TTabletCountersWithTxTypes() {} 
- 
-    template <class... TArgs> 
-    explicit TTabletCountersWithTxTypes(TArgs... args) 
-        : TTabletCountersBase(args...) 
-    {} 
- 
-    TTabletSimpleCounter& TxSimple(TTxType txType, ui32 txCounter) { 
-        return Simple()[IndexOf<CT_SIMPLE>(txType, txCounter)]; 
-    } 
- 
-    const TTabletSimpleCounter& TxSimple(TTxType txType, ui32 txCounter) const { 
-        return Simple()[IndexOf<CT_SIMPLE>(txType, txCounter)]; 
-    } 
- 
-    TTabletCumulativeCounter& TxCumulative(TTxType txType, ui32 txCounter) { 
-        return Cumulative()[IndexOf<CT_CUMULATIVE>(txType, txCounter)]; 
-    } 
- 
-    const TTabletCumulativeCounter& TxCumulative(TTxType txType, ui32 txCounter) const { 
-        return Cumulative()[IndexOf<CT_CUMULATIVE>(txType, txCounter)]; 
-    } 
- 
-    TTabletPercentileCounter& TxPercentile(TTxType txType, ui32 txCounter) { 
-        return Percentile()[IndexOf<CT_PERCENTILE>(txType, txCounter)]; 
-    } 
- 
-    const TTabletPercentileCounter& TxPercentile(TTxType txType, ui32 txCounter) const { 
-        return Percentile()[IndexOf<CT_PERCENTILE>(txType, txCounter)]; 
-    } 
-protected: 
-    template <ECounterType counterType> 
-    size_t IndexOf(TTxType txType, ui32 txCounter) const { 
-        // Note that enum values are used only inside a process, not on disc/messages 
-        // so there are no backward compatibility issues 
+} // NAux
+
+// Base class for all tablet counters classes with tx type counters
+// (Needed just to distinguish them in executor code using dynamic_cast)
+class TTabletCountersWithTxTypes : public TTabletCountersBase {
+protected:
+    enum ECounterType {
+        CT_SIMPLE,
+        CT_CUMULATIVE,
+        CT_PERCENTILE,
+        CT_MAX
+    };
+    size_t Size[CT_MAX];
+    size_t TxOffset[CT_MAX];
+    size_t TxCountersSize[CT_MAX];
+public:
+    TTabletCountersWithTxTypes() {}
+
+    template <class... TArgs>
+    explicit TTabletCountersWithTxTypes(TArgs... args)
+        : TTabletCountersBase(args...)
+    {}
+
+    TTabletSimpleCounter& TxSimple(TTxType txType, ui32 txCounter) {
+        return Simple()[IndexOf<CT_SIMPLE>(txType, txCounter)];
+    }
+
+    const TTabletSimpleCounter& TxSimple(TTxType txType, ui32 txCounter) const {
+        return Simple()[IndexOf<CT_SIMPLE>(txType, txCounter)];
+    }
+
+    TTabletCumulativeCounter& TxCumulative(TTxType txType, ui32 txCounter) {
+        return Cumulative()[IndexOf<CT_CUMULATIVE>(txType, txCounter)];
+    }
+
+    const TTabletCumulativeCounter& TxCumulative(TTxType txType, ui32 txCounter) const {
+        return Cumulative()[IndexOf<CT_CUMULATIVE>(txType, txCounter)];
+    }
+
+    TTabletPercentileCounter& TxPercentile(TTxType txType, ui32 txCounter) {
+        return Percentile()[IndexOf<CT_PERCENTILE>(txType, txCounter)];
+    }
+
+    const TTabletPercentileCounter& TxPercentile(TTxType txType, ui32 txCounter) const {
+        return Percentile()[IndexOf<CT_PERCENTILE>(txType, txCounter)];
+    }
+protected:
+    template <ECounterType counterType>
+    size_t IndexOf(TTxType txType, ui32 txCounter) const {
+        // Note that enum values are used only inside a process, not on disc/messages
+        // so there are no backward compatibility issues
         Y_VERIFY(txCounter < TxCountersSize[counterType]);
-        size_t ret = TxOffset[counterType] + txType * TxCountersSize[counterType] + txCounter; 
+        size_t ret = TxOffset[counterType] + txType * TxCountersSize[counterType] + txCounter;
         Y_VERIFY(ret < Size[counterType]);
-        return ret; 
-    } 
-}; 
- 
-// Tablet counters with app counters (SimpleDesc, CumulativeDesc, PercentileDesc) and counters per each tx type (TxTypeDesc) 
-template <const NProtoBuf::EnumDescriptor* SimpleDesc(), 
-          const NProtoBuf::EnumDescriptor* CumulativeDesc(), 
-          const NProtoBuf::EnumDescriptor* PercentileDesc(), 
-          const NProtoBuf::EnumDescriptor* TxTypeDesc()> 
-class TProtobufTabletCounters : public TTabletCountersWithTxTypes { 
+        return ret;
+    }
+};
+
+// Tablet counters with app counters (SimpleDesc, CumulativeDesc, PercentileDesc) and counters per each tx type (TxTypeDesc)
+template <const NProtoBuf::EnumDescriptor* SimpleDesc(),
+          const NProtoBuf::EnumDescriptor* CumulativeDesc(),
+          const NProtoBuf::EnumDescriptor* PercentileDesc(),
+          const NProtoBuf::EnumDescriptor* TxTypeDesc()>
+class TProtobufTabletCounters : public TTabletCountersWithTxTypes {
 public:
     typedef NAux::TParsedOpts<SimpleDesc, ETxTypeSimpleCounters_descriptor, TxTypeDesc> TSimpleOpts;
     typedef NAux::TParsedOpts<CumulativeDesc, ETxTypeCumulativeCounters_descriptor, TxTypeDesc> TCumulativeOpts;
     typedef NAux::TParsedOpts<PercentileDesc, ETxTypePercentileCounters_descriptor, TxTypeDesc> TPercentileOpts;
 
     static TSimpleOpts* SimpleOpts() {
-        return NAux::GetOpts<SimpleDesc, ETxTypeSimpleCounters_descriptor, TxTypeDesc>(); 
-    } 
- 
-    static TCumulativeOpts* CumulativeOpts() {
-        return NAux::GetOpts<CumulativeDesc, ETxTypeCumulativeCounters_descriptor, TxTypeDesc>(); 
-    } 
- 
-    static TPercentileOpts* PercentileOpts() {
-        return NAux::GetOpts<PercentileDesc, ETxTypePercentileCounters_descriptor, TxTypeDesc>(); 
-    } 
+        return NAux::GetOpts<SimpleDesc, ETxTypeSimpleCounters_descriptor, TxTypeDesc>();
+    }
 
-    TProtobufTabletCounters() 
-        : TTabletCountersWithTxTypes( 
-              SimpleOpts()->Size,       CumulativeOpts()->Size,       PercentileOpts()->Size, 
-              SimpleOpts()->GetNames(), CumulativeOpts()->GetNames(), PercentileOpts()->GetNames() 
-        ) 
-    { 
+    static TCumulativeOpts* CumulativeOpts() {
+        return NAux::GetOpts<CumulativeDesc, ETxTypeCumulativeCounters_descriptor, TxTypeDesc>();
+    }
+
+    static TPercentileOpts* PercentileOpts() {
+        return NAux::GetOpts<PercentileDesc, ETxTypePercentileCounters_descriptor, TxTypeDesc>();
+    }
+
+    TProtobufTabletCounters()
+        : TTabletCountersWithTxTypes(
+              SimpleOpts()->Size,       CumulativeOpts()->Size,       PercentileOpts()->Size,
+              SimpleOpts()->GetNames(), CumulativeOpts()->GetNames(), PercentileOpts()->GetNames()
+        )
+    {
         FillOffsets();
         InitCounters();
     }
@@ -459,32 +459,32 @@ public:
 private:
     void FillOffsets()
     {
-        // Initialize stuff for counter addressing 
-        Size[CT_SIMPLE] = SimpleOpts()->Size; 
-        TxOffset[CT_SIMPLE] = SimpleOpts()->TxOffset; 
-        TxCountersSize[CT_SIMPLE] = SimpleOpts()->TxCountersSize; 
-        Size[CT_CUMULATIVE] = CumulativeOpts()->Size; 
-        TxOffset[CT_CUMULATIVE] = CumulativeOpts()->TxOffset; 
-        TxCountersSize[CT_CUMULATIVE] = CumulativeOpts()->TxCountersSize; 
-        Size[CT_PERCENTILE] = PercentileOpts()->Size; 
-        TxOffset[CT_PERCENTILE] = PercentileOpts()->TxOffset; 
-        TxCountersSize[CT_PERCENTILE] = PercentileOpts()->TxCountersSize; 
+        // Initialize stuff for counter addressing
+        Size[CT_SIMPLE] = SimpleOpts()->Size;
+        TxOffset[CT_SIMPLE] = SimpleOpts()->TxOffset;
+        TxCountersSize[CT_SIMPLE] = SimpleOpts()->TxCountersSize;
+        Size[CT_CUMULATIVE] = CumulativeOpts()->Size;
+        TxOffset[CT_CUMULATIVE] = CumulativeOpts()->TxOffset;
+        TxCountersSize[CT_CUMULATIVE] = CumulativeOpts()->TxCountersSize;
+        Size[CT_PERCENTILE] = PercentileOpts()->Size;
+        TxOffset[CT_PERCENTILE] = PercentileOpts()->TxOffset;
+        TxCountersSize[CT_PERCENTILE] = PercentileOpts()->TxCountersSize;
     }
- 
+
     void InitCounters()
     {
-        // Initialize percentile counters 
-        const auto* opts = PercentileOpts(); 
-        for (size_t i = 0; i < opts->Size; i++) { 
+        // Initialize percentile counters
+        const auto* opts = PercentileOpts();
+        for (size_t i = 0; i < opts->Size; i++) {
             if (!opts->GetNames()[i]) {
                 continue;
             }
-            const auto& vec = opts->GetRanges(i); 
+            const auto& vec = opts->GetRanges(i);
             Percentile()[i].Initialize(vec.size(), vec.begin(), opts->GetIntegral(i));
-        } 
-    } 
-}; 
- 
+        }
+    }
+};
+
 // Tablet counters with app counters (SimpleDesc, CumulativeDesc, PercentileDesc) only
 template <const NProtoBuf::EnumDescriptor* SimpleDesc(),
           const NProtoBuf::EnumDescriptor* CumulativeDesc(),
@@ -638,4 +638,4 @@ private:
 
 
 
-} // end of NKikimr 
+} // end of NKikimr

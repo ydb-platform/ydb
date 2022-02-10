@@ -14,9 +14,9 @@
 
 namespace NKikimr {
 
-using TTxType = ui32; // App-specific transaction type number (protobuf enum values like TXTYPE_*) 
-constexpr TTxType UnknownTxType = TTxType(-1); 
- 
+using TTxType = ui32; // App-specific transaction type number (protobuf enum values like TXTYPE_*)
+constexpr TTxType UnknownTxType = TTxType(-1);
+
 namespace NScheme {
 
     class TTypeRegistry;

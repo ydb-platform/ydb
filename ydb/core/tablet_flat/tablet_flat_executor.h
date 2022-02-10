@@ -523,7 +523,7 @@ namespace NFlatExecutorSetup {
         virtual void RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr&) const = 0;
         virtual void RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr&) const = 0;
         virtual void RenderHtmlDb(NMon::TEvRemoteHttpInfo::TPtr &ev, const TActorContext &ctx) const = 0;
-        virtual void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> appCounters) = 0; 
+        virtual void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> appCounters) = 0;
         virtual void GetTabletCounters(TEvTablet::TEvGetCounters::TPtr&) = 0;
 
         virtual void UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr&) = 0;

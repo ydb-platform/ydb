@@ -311,13 +311,13 @@ namespace NActors {
 
     void TLoggerActor::RenderComponentPriorities(IOutputStream& str) {
         using namespace NLog;
-        HTML(str) { 
+        HTML(str) {
             H4() {
                 str << "Priority Settings for the Components";
             }
-            TABLE_SORTABLE_CLASS("table") { 
-                TABLEHEAD() { 
-                    TABLER() { 
+            TABLE_SORTABLE_CLASS("table") {
+                TABLEHEAD() {
+                    TABLER() {
                         TABLEH() {
                             str << "Component";
                         }
@@ -330,16 +330,16 @@ namespace NActors {
                         TABLEH() {
                             str << "Sampling Rate";
                         }
-                    } 
-                } 
-                TABLEBODY() { 
+                    }
+                }
+                TABLEBODY() {
                     for (EComponent i = Settings->MinVal; i < Settings->MaxVal; i++) {
                         auto name = Settings->ComponentName(i);
                         if (!*name)
                             continue;
                         NLog::TComponentSettings componentSettings = Settings->GetComponentSettings(i);
 
-                        TABLER() { 
+                        TABLER() {
                             TABLED() {
                                 str << "<a href='logger?c=" << i << "'>" << name << "</a>";
                             }
@@ -352,11 +352,11 @@ namespace NActors {
                             TABLED() {
                                 str << componentSettings.Raw.X.SamplingRate;
                             }
-                        } 
+                        }
                     }
-                } 
-            } 
-        } 
+                }
+            }
+        }
     }
 
     /*
@@ -412,53 +412,53 @@ namespace NActors {
         if (hasComponent && !hasPriority && !hasSamplingPriority && !hasSamplingRate) {
             NLog::TComponentSettings componentSettings = Settings->GetComponentSettings(component);
             ui32 samplingRate = componentSettings.Raw.X.SamplingRate;
-            HTML(str) { 
-                DIV_CLASS("row") { 
-                    DIV_CLASS("col-md-12") { 
+            HTML(str) {
+                DIV_CLASS("row") {
+                    DIV_CLASS("col-md-12") {
                         H4() {
                             str << "Current log settings for " << Settings->ComponentName(component) << Endl;
                         }
-                        UL() { 
-                            LI() { 
+                        UL() {
+                            LI() {
                                 str << "Priority: "
                                     << NLog::PriorityToString(NLog::EPrio(componentSettings.Raw.X.Level));
-                            } 
-                            LI() { 
+                            }
+                            LI() {
                                 str << "Sampling priority: "
                                     << NLog::PriorityToString(NLog::EPrio(componentSettings.Raw.X.SamplingLevel));
-                            } 
-                            LI() { 
+                            }
+                            LI() {
                                 str << "Sampling rate: "
                                     << samplingRate;
-                            } 
-                        } 
-                    } 
-                } 
+                            }
+                        }
+                    }
+                }
 
-                DIV_CLASS("row") { 
-                    DIV_CLASS("col-md-12") { 
+                DIV_CLASS("row") {
+                    DIV_CLASS("col-md-12") {
                         H4() {
                             str << "Change priority" << Endl;
                         }
-                        UL() { 
+                        UL() {
                             for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) {
-                                LI() { 
+                                LI() {
                                     str << "<a href='logger?c=" << component << "&p=" << p << "'>"
                                         << NLog::PriorityToString(NLog::EPrio(p)) << "</a>";
-                                } 
+                                }
                             }
-                        } 
+                        }
                         H4() {
                             str << "Change sampling priority" << Endl;
                         }
-                        UL() { 
+                        UL() {
                             for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) {
-                                LI() { 
+                                LI() {
                                     str << "<a href='logger?c=" << component << "&sp=" << p << "'>"
                                         << NLog::PriorityToString(NLog::EPrio(p)) << "</a>";
-                                } 
+                                }
                             }
-                        } 
+                        }
                         H4() {
                             str << "Change sampling rate" << Endl;
                         }
@@ -470,9 +470,9 @@ namespace NActors {
                         H4() {
                             str << "<a href='logger'>Cancel</a>" << Endl;
                         }
-                    } 
-                } 
-            } 
+                    }
+                }
+            }
 
         } else {
             TString explanation;
@@ -489,64 +489,64 @@ namespace NActors {
                 Settings->SetAllowDrop(allowDrop);
             }
 
-            HTML(str) { 
+            HTML(str) {
                 if (!explanation.empty()) {
-                    DIV_CLASS("row") { 
+                    DIV_CLASS("row") {
                         DIV_CLASS("col-md-12 alert alert-info") {
                             str << explanation;
                         }
-                    } 
+                    }
                 }
 
-                DIV_CLASS("row") { 
-                    DIV_CLASS("col-md-6") { 
+                DIV_CLASS("row") {
+                    DIV_CLASS("col-md-6") {
                         RenderComponentPriorities(str);
                     }
                     DIV_CLASS("col-md-6") {
                         H4() {
                             str << "Change priority for all components";
                         }
-                        TABLE_CLASS("table table-condensed") { 
-                            TABLEHEAD() { 
-                                TABLER() { 
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
                                     TABLEH() {
                                         str << "Priority";
                                     }
-                                } 
-                            } 
-                            TABLEBODY() { 
+                                }
+                            }
+                            TABLEBODY() {
                                 for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) {
-                                    TABLER() { 
+                                    TABLER() {
                                         TABLED() {
                                             str << "<a href = 'logger?c=-1&p=" << p << "'>"
                                                 << NLog::PriorityToString(NLog::EPrio(p)) << "</a>";
-                                        } 
-                                    } 
+                                        }
+                                    }
                                 }
-                            } 
-                        } 
+                            }
+                        }
                         H4() {
                             str << "Change sampling priority for all components";
                         }
-                        TABLE_CLASS("table table-condensed") { 
-                            TABLEHEAD() { 
-                                TABLER() { 
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
                                     TABLEH() {
                                         str << "Priority";
                                     }
-                                } 
-                            } 
-                            TABLEBODY() { 
+                                }
+                            }
+                            TABLEBODY() {
                                 for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) {
-                                    TABLER() { 
+                                    TABLER() {
                                         TABLED() {
                                             str << "<a href = 'logger?c=-1&sp=" << p << "'>"
                                                 << NLog::PriorityToString(NLog::EPrio(p)) << "</a>";
-                                        } 
-                                    } 
+                                        }
+                                    }
                                 }
-                            } 
-                        } 
+                            }
+                        }
                         H4() {
                             str << "Change sampling rate for all components";
                         }
@@ -563,27 +563,27 @@ namespace NActors {
                         str << "<input type=\"hidden\" name=\"allowdrop\" value=\"" << (Settings->AllowDrop ? "0" : "1") << "\"/>" << Endl;
                         str << "<input class=\"btn btn-primary\" type=\"submit\" value=\"" << (Settings->AllowDrop ? "Disable" : "Enable") << "\"/>" << Endl;
                         str << "</form>" << Endl;
-                    } 
-                } 
+                    }
+                }
                 Metrics->GetOutputHtml(str);
-            } 
+            }
         }
 
         ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
     }
 
-    constexpr size_t TimeBufSize = 512; 
- 
+    constexpr size_t TimeBufSize = 512;
+
     bool TLoggerActor::OutputRecord(TInstant time, NLog::EPrio priority, NLog::EComponent component,
                                     const TString& formatted) noexcept try {
         const auto logPrio = ::ELogPriority(ui16(priority));
 
-        char buf[TimeBufSize]; 
+        char buf[TimeBufSize];
         switch (Settings->Format) {
             case NActors::NLog::TSettings::PLAIN_FULL_FORMAT: {
                 TStringBuilder logRecord;
                 if (Settings->UseLocalTimestamps) {
-                    logRecord << FormatLocalTimestamp(time, buf); 
+                    logRecord << FormatLocalTimestamp(time, buf);
                 } else {
                     logRecord << time;
                 }
@@ -649,12 +649,12 @@ namespace NActors {
         Become(&TThis::StateFunc);
     }
 
-    const char* TLoggerActor::FormatLocalTimestamp(TInstant time, char* buf) { 
+    const char* TLoggerActor::FormatLocalTimestamp(TInstant time, char* buf) {
         struct tm localTime;
         time.LocalTime(&localTime);
-        int r = strftime(buf, TimeBufSize, "%Y-%m-%d-%H-%M-%S", &localTime); 
-        Y_VERIFY(r != 0); 
-        return buf; 
+        int r = strftime(buf, TimeBufSize, "%Y-%m-%d-%H-%M-%S", &localTime);
+        Y_VERIFY(r != 0);
+        return buf;
     }
 
     TAutoPtr<TLogBackend> CreateSysLogBackend(const TString& ident,

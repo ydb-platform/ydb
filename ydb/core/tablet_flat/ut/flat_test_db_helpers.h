@@ -40,9 +40,9 @@ public:
     }
 
     void SetOp(ECellOp op) {
-        Op = op; 
-    } 
- 
+        Op = op;
+    }
+
     TCell operator*() const
     {
         return TCell((const char*)Val.Data(), Val.Size());
@@ -51,10 +51,10 @@ public:
     const TRawTypeValue& Get() const {
         return Val;
     }
- 
+
     ECellOp GetOp() const {
-        return Op; 
-    } 
+        return Op;
+    }
 };
 
 // TODO: properly support all types
@@ -77,11 +77,11 @@ inline TFakeTableCell FromVal(NScheme::TTypeId t, i64 val) {
 }
 
 inline TFakeTableCell MakeNull(ECellOp op) {
-    TFakeTableCell c; 
-    c.SetOp(op); 
-    return c; 
-} 
- 
+    TFakeTableCell c;
+    c.SetOp(op);
+    return c;
+}
+
 inline TFakeTableCell FromVal(NScheme::TTypeId, std::nullptr_t) {
     return MakeNull(ECellOp::Set);
 }
@@ -152,16 +152,16 @@ public:
     }
 
     TDbRowUpdate& Erase(TString tagName) {
-        const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(GetRoot()); 
+        const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(GetRoot());
         Y_VERIFY(tableInfo, "Unknown table id %u", GetRoot());
-        const ui32* tagId = tableInfo->ColumnNames.FindPtr(tagName); 
+        const ui32* tagId = tableInfo->ColumnNames.FindPtr(tagName);
         Y_VERIFY(tagId, "Unknown column \"%s\" in table %u", tagName.data(), GetRoot());
         const auto * colInfo = Scheme.GetColumnInfo(GetRoot(), *tagId);
         Y_VERIFY(colInfo, "Column info not found for table id %u, column id %u", GetRoot(), *tagId);
         TagOps[*tagId] = MakeNull(ECellOp::Null);
-        return *this; 
-    } 
- 
+        return *this;
+    }
+
     const TMap<ui32, TFakeTableCell>& GetTagOps() const {
         return TagOps;
     }
@@ -185,12 +185,12 @@ void AppendKeyColumn(ui32 root, const TScheme& scheme, TVector<TFakeTableCell>& 
     AppendKeyColumn(root, scheme, tuple, tt...);
 }
 
-template <typename... Tt> 
+template <typename... Tt>
 void AppendKeyColumn(ui32 root, const TScheme& scheme, TVector<TFakeTableCell>& tuple, nullptr_t, Tt... tt) {
     tuple.push_back(MakeNull(ECellOp::Set));
-    AppendKeyColumn(root, scheme, tuple, tt...); 
-} 
- 
+    AppendKeyColumn(root, scheme, tuple, tt...);
+}
+
 // Helps to simplify test code that deals with ITestDb
 class TDbWrapper {
     ITestDb& Db;

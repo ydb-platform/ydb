@@ -1,11 +1,11 @@
 #pragma once
 
-#include "colons.h" 
+#include "colons.h"
 #include "do_zero.h"
 #include "do_mem.h"
 #include "do_part.h"
 #include "do_iter.h"
-#include "logger.h" 
+#include "logger.h"
 #include "sponge.h"
 #include "runner.h"
 

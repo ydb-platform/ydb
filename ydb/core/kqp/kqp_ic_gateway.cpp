@@ -1219,12 +1219,12 @@ public:
             if (!CheckCluster(cluster)) {
                 return InvalidCluster<TGenericResult>(cluster);
             }
- 
-            // FIXME: should be defined in grpc_services/rpc_calls.h, but cause cyclic dependency 
-            using namespace NGRpcService; 
-            using TEvAlterTableRequest = TGRpcRequestValidationWrapper<TRpcServices::EvAlterTable, Ydb::Table::AlterTableRequest, Ydb::Table::AlterTableResponse, true, TRateLimiterMode::Rps>; 
- 
-            return SendLocalRpcRequestNoResult<TEvAlterTableRequest>(std::move(req), Database, GetTokenCompat()); 
+
+            // FIXME: should be defined in grpc_services/rpc_calls.h, but cause cyclic dependency
+            using namespace NGRpcService;
+            using TEvAlterTableRequest = TGRpcRequestValidationWrapper<TRpcServices::EvAlterTable, Ydb::Table::AlterTableRequest, Ydb::Table::AlterTableResponse, true, TRateLimiterMode::Rps>;
+
+            return SendLocalRpcRequestNoResult<TEvAlterTableRequest>(std::move(req), Database, GetTokenCompat());
         }
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
@@ -1273,12 +1273,12 @@ public:
 
             Ydb::Table::DropTableRequest dropTable;
             dropTable.set_path(table);
- 
-            // FIXME: should be defined in grpc_services/rpc_calls.h, but cause cyclic dependency 
-            using namespace NGRpcService; 
-            using TEvDropTableRequest = TGRpcRequestWrapper<TRpcServices::EvDropTable, Ydb::Table::DropTableRequest, Ydb::Table::DropTableResponse, true, TRateLimiterMode::Rps>; 
- 
-            return SendLocalRpcRequestNoResult<TEvDropTableRequest>(std::move(dropTable), Database, GetTokenCompat()); 
+
+            // FIXME: should be defined in grpc_services/rpc_calls.h, but cause cyclic dependency
+            using namespace NGRpcService;
+            using TEvDropTableRequest = TGRpcRequestWrapper<TRpcServices::EvDropTable, Ydb::Table::DropTableRequest, Ydb::Table::DropTableResponse, true, TRateLimiterMode::Rps>;
+
+            return SendLocalRpcRequestNoResult<TEvDropTableRequest>(std::move(dropTable), Database, GetTokenCompat());
         }
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));

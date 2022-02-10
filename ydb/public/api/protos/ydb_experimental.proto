@@ -23,13 +23,13 @@ message ExecuteStreamQueryRequest {
 
     ProfileMode profile_mode = 3;
     bool explain = 4;
-} 
+}
 
 message ExecuteStreamQueryResponse {
     StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
     ExecuteStreamQueryResult result = 3;
-} 
+}
 
 message StreamQueryProgress {
 }
@@ -41,4 +41,4 @@ message ExecuteStreamQueryResult {
         StreamQueryProgress progress = 3;
         string query_plan = 4;
     }
-} 
+}

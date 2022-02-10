@@ -1,27 +1,27 @@
 import "google/protobuf/descriptor.proto";
- 
-package NKikimr; 
- 
-option java_package = "ru.yandex.kikimr.proto"; 
- 
-// 
-// Custom options to describe counters 
-// 
-message TRange { 
-    optional uint64 Value = 1; 
-    optional string Name = 2; 
-} 
- 
-message TCounterOptions { 
-    optional string Name = 1; 
-    repeated TRange Ranges = 2; 
+
+package NKikimr;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+//
+// Custom options to describe counters
+//
+message TRange {
+    optional uint64 Value = 1;
+    optional string Name = 2;
+}
+
+message TCounterOptions {
+    optional string Name = 1;
+    repeated TRange Ranges = 2;
     optional bool Integral = 3;
-} 
- 
-message TTxTypeOptions { 
-    optional string Name = 1; 
-} 
- 
+}
+
+message TTxTypeOptions {
+    optional string Name = 1;
+}
+
 message TLabeledCounterOptions {
     enum ECounterType {
         CT_SIMPLE = 1;
@@ -44,49 +44,49 @@ message TLabeledCounterGroupNamesOptions {
     repeated string Names = 1;
 }
 
-extend google.protobuf.EnumValueOptions { 
-    optional TCounterOptions CounterOpts = 56672; 
-    optional TTxTypeOptions TxTypeOpts = 56673; 
+extend google.protobuf.EnumValueOptions {
+    optional TCounterOptions CounterOpts = 56672;
+    optional TTxTypeOptions TxTypeOpts = 56673;
     optional TLabeledCounterOptions LabeledCounterOpts = 56676;
-} 
- 
-extend google.protobuf.EnumOptions { 
-    optional TCounterOptions GlobalCounterOpts = 56674; 
+}
+
+extend google.protobuf.EnumOptions {
+    optional TCounterOptions GlobalCounterOpts = 56674;
     optional TLabeledCounterGroupNamesOptions GlobalGroupNamesOpts = 56677;
-} 
- 
-extend google.protobuf.FileOptions { 
-    optional string TabletTypeName = 56675; 
-} 
- 
-// 
-// Counters common for every transaction type 
-// 
-enum ETxTypeSimpleCounters { 
+}
+
+extend google.protobuf.FileOptions {
+    optional string TabletTypeName = 56675;
+}
+
+//
+// Counters common for every transaction type
+//
+enum ETxTypeSimpleCounters {
     COUNTER_TT_SIMPLE_IGNORE = 0;
-} 
- 
-enum ETxTypeCumulativeCounters { 
+}
+
+enum ETxTypeCumulativeCounters {
     COUNTER_TT_CULUMATIVE_IGNORE = 0;
 
     COUNTER_TT_POSTPONED = 1                             [(CounterOpts) = {Name: "Postponed"}]; // Total restarts
-    COUNTER_TT_RO_COMPLETED = 2                          [(CounterOpts) = {Name: "RoCompleted"}]; 
-    COUNTER_TT_RW_COMPLETED = 3                          [(CounterOpts) = {Name: "RwCompleted"}]; 
-    COUNTER_TT_WRITES = 4                                [(CounterOpts) = {Name: "Writes"}]; 
-    COUNTER_TT_BYTES_WRITTEN = 5                         [(CounterOpts) = {Name: "WrittenBytes"}]; 
-    COUNTER_TT_BYTES_READ = 6                            [(CounterOpts) = {Name: "ReadBytes"}]; 
-    COUNTER_TT_EXECUTE_CPUTIME = 7                       [(CounterOpts) = {Name: "ExecuteCPUTime"}]; 
-    COUNTER_TT_BOOKKEEPING_CPUTIME = 8                   [(CounterOpts) = {Name: "BookkeepingCPUTime"}]; 
-    COUNTER_TT_COMMITED_CPUTIME = 9                      [(CounterOpts) = {Name: "CommitedCPUTime"}]; 
-    COUNTER_TT_TOUCHED_BLOCKS = 10                       [(CounterOpts) = {Name: "TouchedBlocks"}]; 
+    COUNTER_TT_RO_COMPLETED = 2                          [(CounterOpts) = {Name: "RoCompleted"}];
+    COUNTER_TT_RW_COMPLETED = 3                          [(CounterOpts) = {Name: "RwCompleted"}];
+    COUNTER_TT_WRITES = 4                                [(CounterOpts) = {Name: "Writes"}];
+    COUNTER_TT_BYTES_WRITTEN = 5                         [(CounterOpts) = {Name: "WrittenBytes"}];
+    COUNTER_TT_BYTES_READ = 6                            [(CounterOpts) = {Name: "ReadBytes"}];
+    COUNTER_TT_EXECUTE_CPUTIME = 7                       [(CounterOpts) = {Name: "ExecuteCPUTime"}];
+    COUNTER_TT_BOOKKEEPING_CPUTIME = 8                   [(CounterOpts) = {Name: "BookkeepingCPUTime"}];
+    COUNTER_TT_COMMITED_CPUTIME = 9                      [(CounterOpts) = {Name: "CommitedCPUTime"}];
+    COUNTER_TT_TOUCHED_BLOCKS = 10                       [(CounterOpts) = {Name: "TouchedBlocks"}];
     COUNTER_TT_LOADED_BLOCKS = 11                        [(CounterOpts) = {Name: "LoadedBlocks"}];
     COUNTER_TT_TERMINATED = 12                           [(CounterOpts) = {Name: "Terminated"}];
     COUNTER_TT_REDO_WRITTEN_BYTES = 13                   [(CounterOpts) = {Name: "RedoWrittenBytes"}];
     COUNTER_TT_ANNEX_WRITTEN_BYTES = 14                  [(CounterOpts) = {Name: "AnnexWrittenBytes"}];
-} 
- 
-enum ETxTypePercentileCounters { 
-    option (GlobalCounterOpts) = { 
+}
+
+enum ETxTypePercentileCounters {
+    option (GlobalCounterOpts) = {
         Ranges { Value: 0           Name: "(1) < 500 us"        }
         Ranges { Value: 500         Name: "(2) 0.5-1 ms"        }
         Ranges { Value: 1000        Name: "(3) 1-2 ms"          }
@@ -105,7 +105,7 @@ enum ETxTypePercentileCounters {
         Ranges { Value: 8000000     Name: "(16) 8-16 s"         }
         Ranges { Value: 16000000    Name: "(17) 16-32 s"        }
         Ranges { Value: 32000000    Name: "(18) 32 < s"         }
-    }; 
+    };
 
     COUNTER_TT_PERCENTILE_IGNORE = 0;
-} 
+}

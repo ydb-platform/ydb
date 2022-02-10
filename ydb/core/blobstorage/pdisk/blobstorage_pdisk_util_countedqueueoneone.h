@@ -35,10 +35,10 @@ public:
         return Queue.Pop();
     }
 
-    T Head() { 
-        return Queue.Head(); 
-    } 
- 
+    T Head() {
+        return Queue.Head();
+    }
+
     TAtomicBase GetWaitingSize() {
         return AtomicLoad(&SizeLowerEstimate);
     }

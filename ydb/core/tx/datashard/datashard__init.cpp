@@ -3,21 +3,21 @@
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/util/pb.h>
- 
 
-namespace NKikimr { 
+
+namespace NKikimr {
 namespace NDataShard {
- 
-using namespace NTabletFlatExecutor; 
- 
+
+using namespace NTabletFlatExecutor;
+
 TDataShard::TTxInit::TTxInit(TDataShard* ds)
-    : TBase(ds) 
-{} 
- 
+    : TBase(ds)
+{}
+
 bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInit::Execute");
- 
-    try { 
+
+    try {
         Self->State = TShardState::Unknown;
         Self->LastLocalTid = Schema::MinLocalTid;
         Self->LastSeqno = 1;
@@ -41,19 +41,19 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         }
 
         return done;
-    } catch (const TNotReadyTabletException &) { 
-        return false; 
-    } catch (const TSchemeErrorTabletException &ex) { 
+    } catch (const TNotReadyTabletException &) {
+        return false;
+    } catch (const TSchemeErrorTabletException &ex) {
         Y_UNUSED(ex);
         Y_FAIL();
-    } catch (...) { 
+    } catch (...) {
         Y_FAIL("there must be no leaked exceptions");
-    } 
-} 
- 
+    }
+}
+
 void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInit::Complete");
- 
+
     // Start MakeSnapshot() if we started in SplitSrcMakeSnapshot state
     if (Self->State == TShardState::SplitSrcMakeSnapshot) {
         Self->Execute(Self->CreateTxStartSplit(), ctx);
@@ -69,7 +69,7 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
         Self->Execute(Self->CreateTxInitSchemaDefaults(), ctx);
     }
 
-    Self->SwitchToWork(ctx); 
+    Self->SwitchToWork(ctx);
     Self->SendRegistrationRequestTimeCast(ctx);
 
     // InReadSets table might have a lot of garbage due to old bug.
@@ -120,18 +120,18 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
 
     // Switch mvcc state if needed
     Self->CheckMvccStateChangeCanStart(ctx);
-} 
- 
+}
+
 #define LOAD_SYS_UI64(db, row, value) if (!TDataShard::SysGetUi64(db, row, value)) return false;
 #define LOAD_SYS_BYTES(db, row, value) if (!TDataShard::SysGetBytes(db, row, value)) return false;
 #define LOAD_SYS_BOOL(db, row, value) if (!TDataShard::SysGetBool(db, row, value)) return false;
- 
+
 bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
-    // Note that we should not store any data directly into Self until NoMoreReads() is called 
-    // But it is ok for initialization, as long as ALL FOLLOWING ACTIONS ARE IDEMPOTENT 
- 
-    NIceDb::TNiceDb db(txc.DB); 
- 
+    // Note that we should not store any data directly into Self until NoMoreReads() is called
+    // But it is ok for initialization, as long as ALL FOLLOWING ACTIONS ARE IDEMPOTENT
+
+    NIceDb::TNiceDb db(txc.DB);
+
     {
         bool ready = true;
 
@@ -171,7 +171,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 #undef PRECHARGE_SYS_TABLE
     }
 
-    // Reads from Sys table 
+    // Reads from Sys table
     LOAD_SYS_UI64(db, Schema::Sys_State, Self->State);
     LOAD_SYS_UI64(db, Schema::Sys_LastLocalTid, Self->LastLocalTid);
     LOAD_SYS_UI64(db, Schema::Sys_LastSeqno, Self->LastSeqno);
@@ -207,26 +207,26 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
     if (!Self->Pipeline.Load(db))
         return false;
- 
-    { // Reads user tables metadata 
+
+    { // Reads user tables metadata
         Self->TableInfos.clear(); // For idempotency
         auto rowset = db.Table<Schema::UserTables>().GreaterOrEqual(0).Select();  // TODO[serxa]: this should be Range() but it is not working right now
-        if (!rowset.IsReady()) 
-            return false; 
-        while (!rowset.EndOfSet()) { 
-            ui64 tableId = rowset.GetValue<Schema::UserTables::Tid>(); 
-            ui32 localTid = rowset.GetValue<Schema::UserTables::LocalTid>(); 
+        if (!rowset.IsReady())
+            return false;
+        while (!rowset.EndOfSet()) {
+            ui64 tableId = rowset.GetValue<Schema::UserTables::Tid>();
+            ui32 localTid = rowset.GetValue<Schema::UserTables::LocalTid>();
             ui32 shadowTid = rowset.GetValueOrDefault<Schema::UserTables::ShadowTid>();
             TString schema = rowset.GetValue<Schema::UserTables::Schema>();
             NKikimrSchemeOp::TTableDescription descr;
             bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
             Y_VERIFY(parseOk);
             Self->AddUserTable(TPathId(Self->GetPathOwnerId(), tableId), new TUserTable(localTid, descr, shadowTid));
-            if (!rowset.Next()) 
-                return false; 
-        } 
-    } 
- 
+            if (!rowset.Next())
+                return false;
+        }
+    }
+
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::UserTablesStats::TableId)) {
         // Reads user tables persistent stats
         auto rowset = db.Table<Schema::UserTablesStats>().GreaterOrEqual(0).Select();
@@ -250,7 +250,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         auto rowset = db.Table<Schema::SplitSrcSnapshots>().GreaterOrEqual(0).Select();
         if (!rowset.IsReady())
             return false;
- 
+
         while (!rowset.EndOfSet()) {
             ui64 dstTablet = rowset.GetValue<Schema::SplitSrcSnapshots::DstTabletId>();
             TString snapBody = rowset.GetValue<Schema::SplitSrcSnapshots::SnapshotMeta>();
@@ -365,8 +365,8 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
     // Load unsent ReadSets
     if (!Self->OutReadSets.LoadReadSets(db))
-        return false; 
- 
+        return false;
+
     // TODO: properly check shard state
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::TxMain::TableId)) {
         if (!Self->TransQueue.Load(db))
@@ -382,7 +382,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             Self->Pipeline.AddCandidateUnit(EExecutionUnitKind::PlanQueue);
         // TODO: add propose blockers to blockers list
     }
- 
+
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::Snapshots::TableId)) {
         if (!Self->SnapshotManager.Reload(db))
             return false;
@@ -479,9 +479,9 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         }
     }
 
-    return true; 
-} 
- 
+    return true;
+}
+
 /// Creates and updates schema at tablet boot time
 class TDataShard::TTxInitSchema : public TTransactionBase<TDataShard> {
 public:
@@ -721,4 +721,4 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     return true;
 }
 
-}} 
+}}

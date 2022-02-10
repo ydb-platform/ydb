@@ -107,5 +107,5 @@ struct TSchLog {
     void Output(IOutputStream &out, const TNameTable &nameTable);
 };
 
-} // NSchLab 
-} // NKikimr 
+} // NSchLab
+} // NKikimr

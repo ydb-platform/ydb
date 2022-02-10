@@ -339,5 +339,5 @@ void TSchLog::Output(IOutputStream &out, const TNameTable &nameTable) {
     out << "]";
 }
 
-} // NSchLab 
-} // NKikimr 
+} // NSchLab
+} // NKikimr

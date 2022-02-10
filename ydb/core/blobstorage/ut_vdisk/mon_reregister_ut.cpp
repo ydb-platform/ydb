@@ -59,9 +59,9 @@ Y_UNIT_TEST_SUITE(TMonitoring) {
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
             TStringStream str;
-            HTML(str) { 
-                DIV_CLASS("alert alert-error") {str << "Incarnation: " << Incarnation;} 
-            } 
+            HTML(str) {
+                DIV_CLASS("alert alert-error") {str << "Incarnation: " << Incarnation;}
+            }
 
             ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
 

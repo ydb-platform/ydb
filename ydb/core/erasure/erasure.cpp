@@ -161,7 +161,7 @@ public:
     ui32 FirstSmallPartIdx;
 
     ui32 TotalParts;
-    ui64 WholeBlocks; // Data consists of (WholeBlocks * BlockSize + TailSize) bytes 
+    ui64 WholeBlocks; // Data consists of (WholeBlocks * BlockSize + TailSize) bytes
     ui32 TailSize;
 
     ui32 Prime;
@@ -171,9 +171,9 @@ public:
     TBufferDataPart BufferDataPart;
     char *Data;
 
-    // Maximum blocks to be split during one run in incremental mode 
-    static constexpr ui64 IncrementalSplitMaxBlocks = 1024; 
- 
+    // Maximum blocks to be split during one run in incremental mode
+    static constexpr ui64 IncrementalSplitMaxBlocks = 1024;
+
     TBlockParams(TErasureType::ECrcMode crcMode, const TErasureType &type, ui64 dataSize) {
         DataSize = dataSize;
         PartUserSize = type.PartUserSize(dataSize);
@@ -210,22 +210,22 @@ public:
         if (isStripe) {
             Data = data;
         } else {
-            // 
-            // All data is a matrix. Matrix cell is ColumnSize bytes. 
-            // Each part is a matrix column (continuous in memory). 
-            // Each block is a matrix row (not continuous in memory). 
-            // Cells are numerated as they appear in memory. 
-            // 
-            //   1 5 9 C   <--   4 required pointers (beginning of each data part) 
-            //   2 6 A D 
-            //   3 7 B E 
-            //   4 8   * 
-            // 
-            // There are two large parts (1st and 2nd), followed by two small parts (3rd and 4th). 
-            // Large part is exactly ColumnSize bytes larger than small part. 
-            // The last part is special, it can contain tail less than ColumnSize bytes (shown as *) 
-            // 
- 
+            //
+            // All data is a matrix. Matrix cell is ColumnSize bytes.
+            // Each part is a matrix column (continuous in memory).
+            // Each block is a matrix row (not continuous in memory).
+            // Cells are numerated as they appear in memory.
+            //
+            //   1 5 9 C   <--   4 required pointers (beginning of each data part)
+            //   2 6 A D
+            //   3 7 B E
+            //   4 8   *
+            //
+            // There are two large parts (1st and 2nd), followed by two small parts (3rd and 4th).
+            // Large part is exactly ColumnSize bytes larger than small part.
+            // The last part is special, it can contain tail less than ColumnSize bytes (shown as *)
+            //
+
             BufferDataPart.resize(DataParts);
             for (ui32 i = 0; i < FirstSmallPartIdx; ++i) {
                 BufferDataPart[i] = (ui64*)(data + i * LargePartSize);
@@ -330,10 +330,10 @@ public:
 
 
     template <bool isStripe, bool isFromDataParts>
-    void EoSplitWhole(char *data, TBufferDataPart &bufferDataPart, TDataPartSet &outPartSet, ui64 writePosition, ui64 firstBlock, ui64 lastBlock) { 
+    void EoSplitWhole(char *data, TBufferDataPart &bufferDataPart, TDataPartSet &outPartSet, ui64 writePosition, ui64 firstBlock, ui64 lastBlock) {
         const ui32 lastPartIdx = DataParts + 1;
         const ui32 m = Prime;
-        for (ui64 blockIdx = firstBlock; blockIdx != lastBlock; ++blockIdx) { 
+        for (ui64 blockIdx = firstBlock; blockIdx != lastBlock; ++blockIdx) {
 
 #define IN_EL_STRIPE(row, column) *((ui64*)data + (blockIdx * LineCount + (row)) * DataParts + (column))
 #define IN_EL_BLOCK(row, column) bufferDataPart[column][blockIdx * LineCount + (row)]
@@ -544,18 +544,18 @@ public:
         }
     }
 
-    template <bool isStripe, bool isFromDataParts, bool isIncremental = false> 
+    template <bool isStripe, bool isFromDataParts, bool isIncremental = false>
     void EoSplit(TDataPartSet &outPartSet) {
-        ui64 readPosition = isIncremental? ColumnSize * outPartSet.CurBlockIdx: 0; 
-        ui64 firstBlock = isIncremental? outPartSet.CurBlockIdx: 0; 
-        ui64 lastBlock = isIncremental? Min(WholeBlocks, firstBlock + IncrementalSplitMaxBlocks): WholeBlocks; 
-        outPartSet.CurBlockIdx = lastBlock; 
+        ui64 readPosition = isIncremental? ColumnSize * outPartSet.CurBlockIdx: 0;
+        ui64 firstBlock = isIncremental? outPartSet.CurBlockIdx: 0;
+        ui64 lastBlock = isIncremental? Min(WholeBlocks, firstBlock + IncrementalSplitMaxBlocks): WholeBlocks;
+        outPartSet.CurBlockIdx = lastBlock;
         bool hasTail = TailSize;
- 
+
         if (isFromDataParts) {
             Y_VERIFY(outPartSet.Parts[0].Offset % ColumnSize == 0);
             readPosition = outPartSet.Parts[0].Offset;
-            lastBlock = Min(WholeBlocks - readPosition / ColumnSize, outPartSet.Parts[0].Size / ColumnSize); 
+            lastBlock = Min(WholeBlocks - readPosition / ColumnSize, outPartSet.Parts[0].Size / ColumnSize);
             hasTail = TailSize && (outPartSet.Parts[0].Size + readPosition > WholeBlocks * ColumnSize);
         }
         TRACE(__LINE__ << " EoSplit readPosition# " << readPosition
@@ -564,11 +564,11 @@ public:
                 << " fullDataSize# " << outPartSet.FullDataSize
                 << Endl);
         // Use all whole columns of all the parts
-        EoSplitWhole<isStripe, isFromDataParts>(Data, BufferDataPart, outPartSet, readPosition, firstBlock, lastBlock); 
+        EoSplitWhole<isStripe, isFromDataParts>(Data, BufferDataPart, outPartSet, readPosition, firstBlock, lastBlock);
 
         // Use the remaining parts to fill in the last block
         // Write the tail of the data
-        if (hasTail && outPartSet.IsSplitDone()) { 
+        if (hasTail && outPartSet.IsSplitDone()) {
             char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
             TBufferDataPart bufferDataPart;
             if (!isFromDataParts) {
@@ -576,7 +576,7 @@ public:
             }
 
             EoSplitWhole<isStripe, isFromDataParts>(lastBlockSource, bufferDataPart, outPartSet,
-                    WholeBlocks * ColumnSize, 0, 1); 
+                    WholeBlocks * ColumnSize, 0, 1);
         }
     }
 
@@ -1406,26 +1406,26 @@ void EoBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, cons
     // Prepare input data pointers
     p.PrepareInputDataPointers<isStripe>(const_cast<char*>(buffer.data()));
 
-    // Prepare if not yet 
-    if (!outPartSet.IsSplitStarted()) { 
-        outPartSet.StartSplit(p.WholeBlocks); 
- 
-        outPartSet.FullDataSize = buffer.size(); 
-        outPartSet.PartsMask = ~((~(ui32)0) << p.TotalParts); 
-        outPartSet.Parts.resize(p.TotalParts); 
-        for (ui32 i = 0; i < p.TotalParts; ++i) { 
-            TRACE("Line# " << __LINE__ << Endl); 
-            Refurbish(outPartSet.Parts[i], p.PartContainerSize); 
-        } 
-        outPartSet.MemoryConsumed = p.TotalParts * outPartSet.Parts[0].MemoryConsumed(); 
+    // Prepare if not yet
+    if (!outPartSet.IsSplitStarted()) {
+        outPartSet.StartSplit(p.WholeBlocks);
+
+        outPartSet.FullDataSize = buffer.size();
+        outPartSet.PartsMask = ~((~(ui32)0) << p.TotalParts);
+        outPartSet.Parts.resize(p.TotalParts);
+        for (ui32 i = 0; i < p.TotalParts; ++i) {
+            TRACE("Line# " << __LINE__ << Endl);
+            Refurbish(outPartSet.Parts[i], p.PartContainerSize);
+        }
+        outPartSet.MemoryConsumed = p.TotalParts * outPartSet.Parts[0].MemoryConsumed();
     }
 
-    p.EoSplit<isStripe, false, true>(outPartSet); 
- 
-    // Finalize if split has been done to completion 
-    if (outPartSet.IsSplitDone()) { 
-        PadAndCrcParts(crcMode, p, outPartSet); 
-    } 
+    p.EoSplit<isStripe, false, true>(outPartSet);
+
+    // Finalize if split has been done to completion
+    if (outPartSet.IsSplitDone()) {
+        PadAndCrcParts(crcMode, p, outPartSet);
+    }
 }
 
 template <bool isStripe>
@@ -2587,13 +2587,13 @@ static void VerifyPartSizes(TDataPartSet& partSet, size_t definedPartEndIdx) {
 }
 
 void TErasureType::SplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const {
-    outPartSet.ResetSplit(); 
-    do { 
-        IncrementalSplitData(crcMode, buffer, outPartSet); 
-    } while (!outPartSet.IsSplitDone()); 
-} 
- 
-void TErasureType::IncrementalSplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const { 
+    outPartSet.ResetSplit();
+    do {
+        IncrementalSplitData(crcMode, buffer, outPartSet);
+    } while (!outPartSet.IsSplitDone());
+}
+
+void TErasureType::IncrementalSplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const {
     const TErasureParameters& erasure = ErasureSpeciesParameters[ErasureSpecies];
     switch (erasure.ErasureFamily) {
         case TErasureType::ErasureMirror:
@@ -2601,7 +2601,7 @@ void TErasureType::IncrementalSplitData(ECrcMode crcMode, const TString& buffer,
             break;
         case TErasureType::ErasureParityStripe:
             switch (erasure.ParityParts) {
-                case 1: 
+                case 1:
                     XorBlockSplit<true>(crcMode ,*this, buffer, outPartSet);
                     break;
                 case 2:
@@ -2637,9 +2637,9 @@ void TErasureType::IncrementalSplitData(ECrcMode crcMode, const TString& buffer,
             ythrow TWithBackTrace<yexception>() << "Unknown ErasureFamily = " << (i32)erasure.ErasureFamily;
             break;
     }
-    if (outPartSet.IsSplitDone()) { 
-        VerifyPartSizes(outPartSet, Max<size_t>()); 
-    } 
+    if (outPartSet.IsSplitDone()) {
+        VerifyPartSizes(outPartSet, Max<size_t>());
+    }
 }
 
 void MirrorSplitDiff(const TErasureType &type, const TVector<TDiff> &diffs, TPartDiffSet& outDiffSet) {

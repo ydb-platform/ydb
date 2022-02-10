@@ -67,8 +67,8 @@ namespace NActors {
         TMutex ChangeThreadsLock;
 
     public:
-        static constexpr TDuration DEFAULT_TIME_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX; 
-        static constexpr ui32 DEFAULT_EVENTS_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX; 
+        static constexpr TDuration DEFAULT_TIME_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX;
+        static constexpr ui32 DEFAULT_EVENTS_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
 
         TBasicExecutorPool(ui32 poolId,
                            ui32 threads,
@@ -79,18 +79,18 @@ namespace NActors {
                            ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX,
                            int realtimePriority = 0,
                            ui32 maxActivityType = 1);
-        explicit TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg); 
+        explicit TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg);
         ~TBasicExecutorPool();
 
-        ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingReadCounter) override; 
+        ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingReadCounter) override;
 
-        void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override; 
-        void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override; 
-        void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override; 
+        void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
+        void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
+        void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
 
         void ScheduleActivationEx(ui32 activation, ui64 revolvingWriteCounter) override;
 
-        void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) override; 
+        void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) override;
         void Start() override;
         void PrepareStop() override;
         void Shutdown() override;
@@ -106,6 +106,6 @@ namespace NActors {
         void SetThreadCount(ui32 threads);
 
     private:
-        void WakeUpLoop(); 
+        void WakeUpLoop();
     };
 }

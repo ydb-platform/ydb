@@ -538,7 +538,7 @@ struct TEvBlobStorage {
         EvChunkWrite,
         EvHarakiri,
         EvCheckSpace,
-        EvConfigureScheduler, 
+        EvConfigureScheduler,
         EvYardControl,
         EvCutLog,
         EvIPDiskGet,                                            /// 268 636 170
@@ -588,7 +588,7 @@ struct TEvBlobStorage {
         EvVDiskRequestCompleted,
         EvFrontRecoveryStatus,
         EvPruneQueue,
-        EvPDiskFairSchedulerWake, 
+        EvPDiskFairSchedulerWake,
         EvVDiskGuidObtained,
         EvCompactionFinished,
         EvKickEmergencyPutQueue,                                /// 268 636 220
@@ -680,7 +680,7 @@ struct TEvBlobStorage {
         EvChunkWriteResult,
         EvHarakiriResult,
         EvCheckSpaceResult,
-        EvConfigureSchedulerResult, 
+        EvConfigureSchedulerResult,
         EvYardControlResult,
         EvIPDiskGetResult,
         EvSyncLogSnapshotResult,                                /// 268 636 682

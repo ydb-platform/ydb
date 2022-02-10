@@ -836,7 +836,7 @@ void THive::OnActivateExecutor(const TActorContext&) {
     HiveGeneration = Executor()->Generation();
     RootDomainKey = TSubDomainKey(domain.SchemeRoot, 1);
     RootDomainName = "/" + domain.Name;
-    Executor()->RegisterExternalTabletCounters(TabletCountersPtr); 
+    Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     ResourceProfiles = AppData()->ResourceProfiles ? AppData()->ResourceProfiles : new TResourceProfiles;
     BuildLocalConfig();
     ClusterConfig = AppData()->HiveConfig;
@@ -1448,7 +1448,7 @@ void THive::SetCounterTabletsTotal(ui64 tabletsTotal) {
 
 void THive::UpdateCounterTabletsTotal(i64 tabletsTotalDiff) {
     if (TabletCounters != nullptr) {
-        auto& counter = TabletCounters->Simple()[NHive::COUNTER_TABLETS_TOTAL]; 
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_TABLETS_TOTAL];
         TabletsTotal = counter.Get() + tabletsTotalDiff;
         counter.Set(TabletsTotal);
         TabletCounters->Simple()[NHive::COUNTER_STATE_DONE].Set(TabletsTotal == TabletsAlive ? 1 : 0);
@@ -1457,7 +1457,7 @@ void THive::UpdateCounterTabletsTotal(i64 tabletsTotalDiff) {
 
 void THive::UpdateCounterTabletsAlive(i64 tabletsAliveDiff) {
     if (TabletCounters != nullptr) {
-        auto& counter = TabletCounters->Simple()[NHive::COUNTER_TABLETS_ALIVE]; 
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_TABLETS_ALIVE];
         TabletsAlive = counter.Get() + tabletsAliveDiff;
         counter.Set(TabletsAlive);
         TabletCounters->Simple()[NHive::COUNTER_STATE_DONE].Set(TabletsTotal == TabletsAlive ? 1 : 0);
@@ -1466,7 +1466,7 @@ void THive::UpdateCounterTabletsAlive(i64 tabletsAliveDiff) {
 
 void THive::UpdateCounterBootQueueSize(ui64 bootQueueSize) {
     if (TabletCounters != nullptr) {
-        auto& counter = TabletCounters->Simple()[NHive::COUNTER_BOOTQUEUE_SIZE]; 
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_BOOTQUEUE_SIZE];
         counter.Set(bootQueueSize);
     }
 }

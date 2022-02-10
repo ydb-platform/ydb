@@ -456,7 +456,7 @@ public:
     TOptions Options_;
     ICallBack* Cb_ = nullptr;
     THttpServer* Parent_ = nullptr;
-    TWakeupPollAble WakeupPollAble; 
+    TWakeupPollAble WakeupPollAble;
     TMutex StopMutex;
 
 private:

@@ -214,30 +214,30 @@ void TPersQueueCacheL2::Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext&
 TString TPersQueueCacheL2::HttpForm() const
 {
     TStringStream str;
-    HTML(str) { 
-        FORM_CLASS("form-horizontal") { 
-            DIV_CLASS("row") { 
-                PRE() { 
+    HTML(str) {
+        FORM_CLASS("form-horizontal") {
+            DIV_CLASS("row") {
+                PRE() {
                         str << "CacheLimit (MB): " << (MaxSize>>20) << Endl;
                         str << "CacheSize (MB): " << (CurrentSize>>20) << Endl;
                         str << "Count of blobs: " << Cache.Size() << Endl;
                         str << "Min RetentionTime: " << KeepTime << Endl;
                         str << "RetentionTime: " << RetentionTime << Endl;
-                } 
-            } 
-            DIV_CLASS("control-group") { 
-                LABEL_CLASS_FOR("control-label", "inputTo") {str << "New Chache Limit";} 
-                DIV_CLASS("controls") { 
+                }
+            }
+            DIV_CLASS("control-group") {
+                LABEL_CLASS_FOR("control-label", "inputTo") {str << "New Chache Limit";}
+                DIV_CLASS("controls") {
                     str << "<input type=\"number\" id=\"inputTo\" placeholder=\"CacheLimit (MB)\" name=\"newCacheLimit\">";
-                } 
-            } 
-            DIV_CLASS("control-group") { 
-                DIV_CLASS("controls") { 
+                }
+            }
+            DIV_CLASS("control-group") {
+                DIV_CLASS("controls") {
                     str << "<button type=\"submit\" name=\"submit\" class=\"btn btn-primary\">Change</button>";
-                } 
-            } 
-        } 
-    } 
+                }
+            }
+        }
+    }
     return str.Str();
 }
 

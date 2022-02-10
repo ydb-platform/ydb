@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include "csv_output.h"
 #include "data.h"
 #include "html_output.h"

@@ -30,14 +30,14 @@ TDescribeResourceResult::THierarchicalDrrProps::THierarchicalDrrProps(const Ydb:
     if (settings.max_burst_size_coefficient()) {
         MaxBurstSizeCoefficient_ = settings.max_burst_size_coefficient();
     }
- 
-    if (settings.prefetch_coefficient()) { 
-        PrefetchCoefficient_ = settings.prefetch_coefficient(); 
-    } 
- 
-    if (settings.prefetch_watermark()) { 
-        PrefetchWatermark_ = settings.prefetch_watermark(); 
-    } 
+
+    if (settings.prefetch_coefficient()) {
+        PrefetchCoefficient_ = settings.prefetch_coefficient();
+    }
+
+    if (settings.prefetch_watermark()) {
+        PrefetchWatermark_ = settings.prefetch_watermark();
+    }
 }
 
 class TRateLimiterClient::TImpl : public TClientImplCommon<TRateLimiterClient::TImpl> {
@@ -62,12 +62,12 @@ public:
         if (settings.MaxBurstSizeCoefficient_) {
             hdrr.set_max_burst_size_coefficient(*settings.MaxBurstSizeCoefficient_);
         }
-        if (settings.PrefetchCoefficient_) { 
-            hdrr.set_prefetch_coefficient(*settings.PrefetchCoefficient_); 
-        } 
-        if (settings.PrefetchWatermark_) { 
-            hdrr.set_prefetch_watermark(*settings.PrefetchWatermark_); 
-        } 
+        if (settings.PrefetchCoefficient_) {
+            hdrr.set_prefetch_coefficient(*settings.PrefetchCoefficient_);
+        }
+        if (settings.PrefetchWatermark_) {
+            hdrr.set_prefetch_watermark(*settings.PrefetchWatermark_);
+        }
 
         return request;
     }

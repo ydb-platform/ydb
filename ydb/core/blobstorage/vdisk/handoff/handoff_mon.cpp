@@ -98,10 +98,10 @@ namespace NKikimr {
         struct TPrinter {
             void operator() (IOutputStream &str, TCells::TConstIterator it) {
                 if (it->Myself) {
-                    HTML(str) { 
-                        PARA_CLASS("text-info") {str << "Self";} 
-                        SMALL() {str << it->VDiskIdShort.ToString();} 
-                    } 
+                    HTML(str) {
+                        PARA_CLASS("text-info") {str << "Self";}
+                        SMALL() {str << it->VDiskIdShort.ToString();}
+                    }
                 } else {
                     it->Get().PrState->OutputHtml(str);
                     it->Get().Cntr->OutputHtml(str);

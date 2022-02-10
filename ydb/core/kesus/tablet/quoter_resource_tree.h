@@ -1,10 +1,10 @@
 #pragma once
- 
-#include "rate_accounting.h" 
- 
+
+#include "rate_accounting.h"
+
 #include <ydb/core/protos/kesus.pb.h>
 
-#include <library/cpp/actors/core/actor.h> 
+#include <library/cpp/actors/core/actor.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/datetime/base.h>
@@ -17,7 +17,7 @@
 #include <queue>
 
 namespace NKikimr {
- 
+
 namespace NKesus {
 
 using TQuoterSessionId = std::pair<NActors::TActorId, ui64>; // client id, resource id
@@ -143,9 +143,9 @@ public:
     // Reaction for quoter runtime events: TEvSubscribeOnResources and TEvUpdateConsumptionState.
     virtual void UpdateConsumptionState(bool consume, double amount, TTickProcessorQueue& queue, TInstant now) = 0;
 
-    // Reaction for quoter runtime event TEvAccountResources. 
-    virtual TInstant Account(TInstant start, TDuration interval, const double* values, size_t size, TTickProcessorQueue& queue, TInstant now) = 0; 
- 
+    // Reaction for quoter runtime event TEvAccountResources.
+    virtual TInstant Account(TInstant start, TDuration interval, const double* values, size_t size, TTickProcessorQueue& queue, TInstant now) = 0;
+
     // Close session when resource is deleted.
     virtual void CloseSession(Ydb::StatusIds::StatusCode status, const TString& reason);
 
@@ -194,7 +194,7 @@ protected:
 // Common interface for hierarchical quoter resource.
 class TQuoterResourceTree : public TTickProcessor {
 public:
-    TQuoterResourceTree(ui64 resourceId, ui64 parentId, NActors::TActorId kesus, const IBillSink::TPtr& billSink, const NKikimrKesus::TStreamingQuoterResource& props); 
+    TQuoterResourceTree(ui64 resourceId, ui64 parentId, NActors::TActorId kesus, const IBillSink::TPtr& billSink, const NKikimrKesus::TStreamingQuoterResource& props);
     TQuoterResourceTree(TQuoterResourceTree&&) = delete;
     TQuoterResourceTree(const TQuoterResourceTree&) = delete;
 
@@ -313,8 +313,8 @@ public:
 protected:
     const ui64 ResourceId;
     const ui64 ParentId;
-    NActors::TActorId Kesus; 
-    IBillSink::TPtr BillSink; 
+    NActors::TActorId Kesus;
+    IBillSink::TPtr BillSink;
     TString QuoterPath;
     size_t ResourceLevel = 0;
     TQuoterResourceTree* Parent = nullptr;
@@ -358,7 +358,7 @@ public:
     void EnableDetailedCountersMode(bool enable = true);
     void FillCounters(NKikimrKesus::TEvGetQuoterResourceCountersResult& counters);
 
-    void SetupBilling(NActors::TActorId kesus, const IBillSink::TPtr& billSink); 
+    void SetupBilling(NActors::TActorId kesus, const IBillSink::TPtr& billSink);
     void ConstructTrees(); // Constructs all trees during initialization.
 
     size_t GetResourcesCount() const {
@@ -384,7 +384,7 @@ public:
 
     void SetQuoterPath(const TString& quoterPath);
 
- 
+
 private:
     TQuoterResourceTree* FindPathImpl(const TString& resourcePath); // doesn't canonize path
 
@@ -393,8 +393,8 @@ private:
 
 private:
     TString QuoterPath;
-    NActors::TActorId Kesus; 
-    IBillSink::TPtr BillSink; 
+    NActors::TActorId Kesus;
+    IBillSink::TPtr BillSink;
 
     THashMap<ui64, THolder<TQuoterResourceTree>> ResourcesById;
     THashMap<TString, TQuoterResourceTree*> ResourcesByPath;

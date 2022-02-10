@@ -25,8 +25,8 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
             TEvBlobStorage::T *event = static_cast<TEvBlobStorage::T *>(ev); \
             traceId = std::move(event->TraceId); \
             WILSON_TRACE_FROM_ACTOR(ctx, actor, &traceId, EV); \
-            const double usPerCycle = 1000000.0 / NHPTimer::GetCyclesPerSecond(); \ 
-            event->Record.MutableTimestamps()->SetSentByVDiskUs(GetCycleCountFast() * usPerCycle); \ 
+            const double usPerCycle = 1000000.0 / NHPTimer::GetCyclesPerSecond(); \
+            event->Record.MutableTimestamps()->SetSentByVDiskUs(GetCycleCountFast() * usPerCycle); \
             break; \
         }
 

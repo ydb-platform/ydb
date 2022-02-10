@@ -1180,7 +1180,7 @@ template <class OtherKey>
 typename THashTable<V, K, HF, Ex, Eq, A>::size_type THashTable<V, K, HF, Ex, Eq, A>::erase_one(const OtherKey& key) {
     const size_type n = bkt_num_key(key);
     node* first = buckets[n];
-
+ 
     if (first) {
         node* cur = first;
         node* next = cur->next;
@@ -1201,11 +1201,11 @@ typename THashTable<V, K, HF, Ex, Eq, A>::size_type THashTable<V, K, HF, Ex, Eq,
             delete_node(first);
             return 1;
         }
-    }
+    } 
     return 0;
-}
-
-template <class V, class K, class HF, class Ex, class Eq, class A>
+} 
+ 
+template <class V, class K, class HF, class Ex, class Eq, class A> 
 void THashTable<V, K, HF, Ex, Eq, A>::erase(const iterator& it) {
     if (node* const p = it.cur) {
         const size_type n = bkt_num(p->val);

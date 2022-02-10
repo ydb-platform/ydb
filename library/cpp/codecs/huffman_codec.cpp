@@ -58,15 +58,15 @@ namespace NCodecs {
             tree.back().Char = i;
             tree.back().Freq = freqs[i];
         }
-
+ 
         StableSort(tree.begin(), tree.end(), TTreeEntry::ByFreq);
-    }
-
+    } 
+ 
     void InitTree(TCodeTree& tree, ISequenceReader* in) {
         using namespace NPrivate;
         ui64 freqs[256];
         Zero(freqs);
-
+ 
         TStringBuf r;
         while (in->NextRegion(r)) {
             for (ui64 i = 0; i < r.size(); ++i)
@@ -466,24 +466,24 @@ namespace NCodecs {
 
             ui64 freqsArray[256];
             Zero(freqsArray);
-
+ 
             for (const auto& freq : freqs)
                 freqsArray[static_cast<ui8>(freq.first)] += freq.second;
-
+ 
             InitTreeByFreqs(tree, freqsArray);
             CalculateCodeLengths(tree);
-
+ 
             Y_ENSURE(!tree.empty(), " ");
-
+ 
             GenerateEncoder(tree);
             BuildDecoder();
         }
-
+ 
         void Save(IOutputStream* out) {
             ::Save(out, Invalid.CodeLength);
             Encoder.Save(out);
         }
-
+ 
         void Load(IInputStream* in) {
             ::Load(in, Invalid.CodeLength);
             Encoder.Load(in);
@@ -589,4 +589,4 @@ namespace NCodecs {
         Trained = true;
     }
 
-}
+} 

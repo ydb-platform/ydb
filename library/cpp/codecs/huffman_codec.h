@@ -29,7 +29,7 @@ namespace NCodecs {
         void Decode(TStringBuf in, TBuffer& bbb) const override;
 
         void LearnByFreqs(const TArrayRef<std::pair<char, ui64>>& freqs);
-
+ 
     protected:
         void DoLearn(ISequenceReader& in) override;
         void Save(IOutputStream* out) const override;

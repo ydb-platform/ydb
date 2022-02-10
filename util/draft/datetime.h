@@ -173,7 +173,7 @@ struct TMonth {
 
     TMonth operator-(ui16 n) {
         if (n <= Month) {
-            return TMonth(Year, Month - (ui8)n);
+            return TMonth(Year, Month - (ui8)n); 
         } else {
             n -= Month;
             return (n % 12) ? TMonth(Year - 1 - (n / 12), 12 - (n % 12)) : TMonth(Year - (n / 12), 0);

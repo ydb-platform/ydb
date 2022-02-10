@@ -4,8 +4,8 @@
 #include <util/generic/vector.h>
 
 namespace NKiwiAggr {
-    class THistogram;
-    class THistoRec;
+    class THistogram; 
+    class THistoRec; 
 
     class IHistogram;
     typedef TAtomicSharedPtr<IHistogram> IHistogramPtr;

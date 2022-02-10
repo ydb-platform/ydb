@@ -2,73 +2,73 @@
 
 #include <util/stream/output.h>
 #include <util/stream/format.h>
-#include <util/string/ascii.h>
+#include <util/string/ascii.h> 
 
-namespace {
-    bool TryParseInt(TStringBuf& s, int& dst, size_t maxDigits) {
-        int res = 0;
-        size_t i = 0;
-        while (i < maxDigits && !s.empty() && IsAsciiDigit(s[0])) {
-            res = res * 10 + (s[0] - '0');
-            ++i;
-            s.Skip(1);
-        }
-        if (i == 0) {
-            return false;
-        }
-        dst = res;
-        return true;
-    }
-
+namespace { 
+    bool TryParseInt(TStringBuf& s, int& dst, size_t maxDigits) { 
+        int res = 0; 
+        size_t i = 0; 
+        while (i < maxDigits && !s.empty() && IsAsciiDigit(s[0])) { 
+            res = res * 10 + (s[0] - '0'); 
+            ++i; 
+            s.Skip(1); 
+        } 
+        if (i == 0) { 
+            return false; 
+        } 
+        dst = res; 
+        return true; 
+    } 
+ 
     bool TryParseUTCOffsetTimezone(TStringBuf name, int& offset) {
-        static constexpr TStringBuf OFFSET_PREFIX = "UTC";
-        if (!name.SkipPrefix(OFFSET_PREFIX)) {
-            return false;
-        }
-        if (name.empty()) {
-            return false;
-        }
-        bool negative;
-        if (name[0] == '+') {
-            negative = false;
-        } else if (name[0] == '-') {
-            negative = true;
-        } else {
-            return false;
-        }
-        name.Skip(1);
-        int hour;
-        int minute = 0;
-        if (!TryParseInt(name, hour, 2) || hour > 24) {
-            return false;
-        }
-        if (!name.empty()) {
-            if (name[0] == ':') {
-                name.Skip(1);
-            }
-            if (!TryParseInt(name, minute, 2) || minute >= 60) {
-                return false;
-            }
-            if (!name.empty()) {
-                return false;
-            }
-        }
-        if (hour == 24 && minute != 0) {
-            return false;
-        }
-        offset = (hour * 60 + minute) * 60;
-        if (negative)
-            offset = -offset;
-        return true;
-    }
-} // anonymous namespace
-
+        static constexpr TStringBuf OFFSET_PREFIX = "UTC"; 
+        if (!name.SkipPrefix(OFFSET_PREFIX)) { 
+            return false; 
+        } 
+        if (name.empty()) { 
+            return false; 
+        } 
+        bool negative; 
+        if (name[0] == '+') { 
+            negative = false; 
+        } else if (name[0] == '-') { 
+            negative = true; 
+        } else { 
+            return false; 
+        } 
+        name.Skip(1); 
+        int hour; 
+        int minute = 0; 
+        if (!TryParseInt(name, hour, 2) || hour > 24) { 
+            return false; 
+        } 
+        if (!name.empty()) { 
+            if (name[0] == ':') { 
+                name.Skip(1); 
+            } 
+            if (!TryParseInt(name, minute, 2) || minute >= 60) { 
+                return false; 
+            } 
+            if (!name.empty()) { 
+                return false; 
+            } 
+        } 
+        if (hour == 24 && minute != 0) { 
+            return false; 
+        } 
+        offset = (hour * 60 + minute) * 60; 
+        if (negative) 
+            offset = -offset; 
+        return true; 
+    } 
+} // anonymous namespace 
+ 
 namespace NDatetime {
     TTimeZone GetTimeZone(TStringBuf name) {
-        int offset;
-        if (TryParseUTCOffsetTimezone(name, offset)) {
-            return GetFixedTimeZone(offset);
-        }
+        int offset; 
+        if (TryParseUTCOffsetTimezone(name, offset)) { 
+            return GetFixedTimeZone(offset); 
+        } 
         TTimeZone result;
         if (!cctz::load_time_zone(static_cast<std::string>(name), &result)) {
             ythrow TInvalidTimezone() << "Failed to load time zone " << name << ", " << result.name();

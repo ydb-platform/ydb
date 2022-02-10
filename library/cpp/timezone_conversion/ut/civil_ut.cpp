@@ -37,35 +37,35 @@ Y_UNIT_TEST_SUITE(DateTime) {
         UNIT_ASSERT_VALUES_EQUAL(absTime, NDatetime::Convert(dt2, lax));
         UNIT_ASSERT_EXCEPTION(NDatetime::Convert(absTime, "Unknown time zone"), NDatetime::TInvalidTimezone);
     }
-    Y_UNIT_TEST(UTCOffsetTimezone) {
-        NDatetime::TTimeZone lax = NDatetime::GetTimeZone("UTC+12");
-        auto lookup = lax.lookup(std::chrono::system_clock::from_time_t(0));
-        UNIT_ASSERT_VALUES_EQUAL(12 * 60 * 60, lookup.offset);
-        lax = NDatetime::GetTimeZone("UTC-10");
-        lookup = lax.lookup(std::chrono::system_clock::from_time_t(0));
-        UNIT_ASSERT_VALUES_EQUAL(-10 * 60 * 60, lookup.offset);
-        lax = NDatetime::GetTimeZone("UTC");
-        lookup = lax.lookup(std::chrono::system_clock::from_time_t(0));
-        UNIT_ASSERT_VALUES_EQUAL(0, lookup.offset);
-        lax = NDatetime::GetTimeZone("UTC+0");
-        lookup = lax.lookup(std::chrono::system_clock::from_time_t(0));
-        UNIT_ASSERT_VALUES_EQUAL(0, lookup.offset);
-        lax = NDatetime::GetTimeZone("UTC-2");
-        lookup = lax.lookup(std::chrono::system_clock::from_time_t(0));
-        UNIT_ASSERT_VALUES_EQUAL(-2 * 60 * 60, lookup.offset);
-        lax = NDatetime::GetTimeZone("UTC-00:30");
-        lookup = lax.lookup(std::chrono::system_clock::from_time_t(0));
-        UNIT_ASSERT_VALUES_EQUAL(-30 * 60, lookup.offset);
-        lax = NDatetime::GetTimeZone("UTC-0241");
-        lookup = lax.lookup(std::chrono::system_clock::from_time_t(0));
-        UNIT_ASSERT_VALUES_EQUAL(-(2 * 60 + 41) * 60, lookup.offset);
-        UNIT_ASSERT_EXCEPTION(NDatetime::GetTimeZone("UTCUnknown"), NDatetime::TInvalidTimezone);
-        UNIT_ASSERT_EXCEPTION(NDatetime::GetTimeZone("UTC+:"), NDatetime::TInvalidTimezone);
-        UNIT_ASSERT_EXCEPTION(NDatetime::GetTimeZone("UTC+24:01"), NDatetime::TInvalidTimezone);
-        UNIT_ASSERT_EXCEPTION(NDatetime::GetTimeZone("UTC+20:"), NDatetime::TInvalidTimezone);
-        UNIT_ASSERT_EXCEPTION(NDatetime::GetTimeZone("UTC+20:60"), NDatetime::TInvalidTimezone);
-        UNIT_ASSERT_EXCEPTION(NDatetime::GetTimeZone("UTC+20:30:"), NDatetime::TInvalidTimezone);
-    }
+    Y_UNIT_TEST(UTCOffsetTimezone) { 
+        NDatetime::TTimeZone lax = NDatetime::GetTimeZone("UTC+12"); 
+        auto lookup = lax.lookup(std::chrono::system_clock::from_time_t(0)); 
+        UNIT_ASSERT_VALUES_EQUAL(12 * 60 * 60, lookup.offset); 
+        lax = NDatetime::GetTimeZone("UTC-10"); 
+        lookup = lax.lookup(std::chrono::system_clock::from_time_t(0)); 
+        UNIT_ASSERT_VALUES_EQUAL(-10 * 60 * 60, lookup.offset); 
+        lax = NDatetime::GetTimeZone("UTC"); 
+        lookup = lax.lookup(std::chrono::system_clock::from_time_t(0)); 
+        UNIT_ASSERT_VALUES_EQUAL(0, lookup.offset); 
+        lax = NDatetime::GetTimeZone("UTC+0"); 
+        lookup = lax.lookup(std::chrono::system_clock::from_time_t(0)); 
+        UNIT_ASSERT_VALUES_EQUAL(0, lookup.offset); 
+        lax = NDatetime::GetTimeZone("UTC-2"); 
+        lookup = lax.lookup(std::chrono::system_clock::from_time_t(0)); 
+        UNIT_ASSERT_VALUES_EQUAL(-2 * 60 * 60, lookup.offset); 
+        lax = NDatetime::GetTimeZone("UTC-00:30"); 
+        lookup = lax.lookup(std::chrono::system_clock::from_time_t(0)); 
+        UNIT_ASSERT_VALUES_EQUAL(-30 * 60, lookup.offset); 
+        lax = NDatetime::GetTimeZone("UTC-0241"); 
+        lookup = lax.lookup(std::chrono::system_clock::from_time_t(0)); 
+        UNIT_ASSERT_VALUES_EQUAL(-(2 * 60 + 41) * 60, lookup.offset); 
+        UNIT_ASSERT_EXCEPTION(NDatetime::GetTimeZone("UTCUnknown"), NDatetime::TInvalidTimezone); 
+        UNIT_ASSERT_EXCEPTION(NDatetime::GetTimeZone("UTC+:"), NDatetime::TInvalidTimezone); 
+        UNIT_ASSERT_EXCEPTION(NDatetime::GetTimeZone("UTC+24:01"), NDatetime::TInvalidTimezone); 
+        UNIT_ASSERT_EXCEPTION(NDatetime::GetTimeZone("UTC+20:"), NDatetime::TInvalidTimezone); 
+        UNIT_ASSERT_EXCEPTION(NDatetime::GetTimeZone("UTC+20:60"), NDatetime::TInvalidTimezone); 
+        UNIT_ASSERT_EXCEPTION(NDatetime::GetTimeZone("UTC+20:30:"), NDatetime::TInvalidTimezone); 
+    } 
     Y_UNIT_TEST(Format) {
         NDatetime::TTimeZone lax = NDatetime::GetTimeZone("America/Los_Angeles");
         NDatetime::TCivilSecond tp(2013, 1, 2, 3, 4, 5);

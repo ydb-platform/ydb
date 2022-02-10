@@ -56,7 +56,7 @@ namespace ipcdetail{
 template<class T, class VoidAllocator, class Deleter>
 inline void sp_enable_shared_from_this
   (shared_count<T, VoidAllocator, Deleter> const & pn
-  ,enable_shared_from_this<T, VoidAllocator, Deleter> const *pe 
+  ,enable_shared_from_this<T, VoidAllocator, Deleter> const *pe
   ,T *ptr)
 
 {

@@ -31,11 +31,11 @@ ADDINCL(
 )
 
 END()
- 
+
 RECURSE(
     libs
 )
 
-RECURSE_FOR_TESTS( 
-    arcadia_test 
-) 
+RECURSE_FOR_TESTS(
+    arcadia_test
+)

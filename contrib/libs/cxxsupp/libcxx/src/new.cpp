@@ -56,7 +56,7 @@ __throw_bad_alloc()
 // in this shared library, so that they can be overridden by programs
 // that define non-weak copies of the functions.
 
-_LIBCPP_WEAK 
+_LIBCPP_WEAK
 void *
 operator new(std::size_t size) _THROW_BAD_ALLOC
 {
@@ -80,7 +80,7 @@ operator new(std::size_t size) _THROW_BAD_ALLOC
     return p;
 }
 
-_LIBCPP_WEAK 
+_LIBCPP_WEAK
 void*
 operator new(size_t size, const std::nothrow_t&) noexcept
 {
@@ -99,7 +99,7 @@ operator new(size_t size, const std::nothrow_t&) noexcept
     return p;
 }
 
-_LIBCPP_WEAK 
+_LIBCPP_WEAK
 void*
 operator new[](size_t size) _THROW_BAD_ALLOC
 {
@@ -125,21 +125,21 @@ operator new[](size_t size, const std::nothrow_t&) noexcept
     return p;
 }
 
-_LIBCPP_WEAK 
+_LIBCPP_WEAK
 void
 operator delete(void* ptr) noexcept
 {
         ::free(ptr);
 }
 
-_LIBCPP_WEAK 
+_LIBCPP_WEAK
 void
 operator delete(void* ptr, const std::nothrow_t&) noexcept
 {
     ::operator delete(ptr);
 }
 
-_LIBCPP_WEAK 
+_LIBCPP_WEAK
 void
 operator delete(void* ptr, size_t) noexcept
 {
@@ -220,7 +220,7 @@ operator new(size_t size, std::align_val_t alignment, const std::nothrow_t&) noe
     return p;
 }
 
-_LIBCPP_WEAK 
+_LIBCPP_WEAK
 void*
 operator new[](size_t size, std::align_val_t alignment) _THROW_BAD_ALLOC
 {
@@ -246,42 +246,42 @@ operator new[](size_t size, std::align_val_t alignment, const std::nothrow_t&) n
     return p;
 }
 
-_LIBCPP_WEAK 
+_LIBCPP_WEAK
 void
 operator delete(void* ptr, std::align_val_t) noexcept
 {
         std::__libcpp_aligned_free(ptr);
     }
 
-_LIBCPP_WEAK 
+_LIBCPP_WEAK
 void
 operator delete(void* ptr, std::align_val_t alignment, const std::nothrow_t&) noexcept
 {
     ::operator delete(ptr, alignment);
 }
 
-_LIBCPP_WEAK 
+_LIBCPP_WEAK
 void
 operator delete(void* ptr, size_t, std::align_val_t alignment) noexcept
 {
     ::operator delete(ptr, alignment);
 }
 
-_LIBCPP_WEAK 
+_LIBCPP_WEAK
 void
 operator delete[] (void* ptr, std::align_val_t alignment) noexcept
 {
     ::operator delete(ptr, alignment);
 }
 
-_LIBCPP_WEAK 
+_LIBCPP_WEAK
 void
 operator delete[] (void* ptr, std::align_val_t alignment, const std::nothrow_t&) noexcept
 {
     ::operator delete[](ptr, alignment);
 }
 
-_LIBCPP_WEAK 
+_LIBCPP_WEAK
 void
 operator delete[] (void* ptr, size_t, std::align_val_t alignment) noexcept
 {

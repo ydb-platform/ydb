@@ -49,7 +49,7 @@ class future_error
 {
 public:
     future_error(error_code ec);  // exposition only
-    explicit future_error(future_errc); // C++17 
+    explicit future_error(future_errc); // C++17
     const error_code& code() const noexcept;
     const char*       what() const noexcept;
 };
@@ -2242,7 +2242,7 @@ public:
     _LIBCPP_INLINE_VISIBILITY
     shared_future() _NOEXCEPT : __state_(nullptr) {}
     _LIBCPP_INLINE_VISIBILITY
-    shared_future(const shared_future& __rhs)  _NOEXCEPT : __state_(__rhs.__state_) 
+    shared_future(const shared_future& __rhs)  _NOEXCEPT : __state_(__rhs.__state_)
         {if (__state_) __state_->__add_shared();}
     _LIBCPP_INLINE_VISIBILITY
     shared_future(future<_Rp>&& __f) _NOEXCEPT : __state_(__f.__state_)
@@ -2251,7 +2251,7 @@ public:
     shared_future(shared_future&& __rhs) _NOEXCEPT : __state_(__rhs.__state_)
         {__rhs.__state_ = nullptr;}
     ~shared_future();
-    shared_future& operator=(const shared_future& __rhs) _NOEXCEPT; 
+    shared_future& operator=(const shared_future& __rhs) _NOEXCEPT;
     _LIBCPP_INLINE_VISIBILITY
     shared_future& operator=(shared_future&& __rhs) _NOEXCEPT
         {
@@ -2293,7 +2293,7 @@ shared_future<_Rp>::~shared_future()
 
 template <class _Rp>
 shared_future<_Rp>&
-shared_future<_Rp>::operator=(const shared_future& __rhs) _NOEXCEPT 
+shared_future<_Rp>::operator=(const shared_future& __rhs) _NOEXCEPT
 {
     if (__rhs.__state_)
         __rhs.__state_->__add_shared();

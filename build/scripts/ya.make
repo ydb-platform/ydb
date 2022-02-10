@@ -84,8 +84,8 @@ TEST_SRCS(
     touch.py
     unpacking_jtest_runner.py
     vcs_info.py
-    with_coverage.py 
-    with_crash_on_timeout.py 
+    with_coverage.py
+    with_crash_on_timeout.py
     with_pathsep_resolve.py
     wrap_groovyc.py
     wrapper.py

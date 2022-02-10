@@ -641,11 +641,11 @@ template <typename _Tp>
 struct __cxx_atomic_base_impl {
 
   _LIBCPP_INLINE_VISIBILITY
-#ifndef _LIBCPP_CXX03_LANG 
+#ifndef _LIBCPP_CXX03_LANG
     __cxx_atomic_base_impl() _NOEXCEPT = default;
 #else
     __cxx_atomic_base_impl() _NOEXCEPT : __a_value() {}
-#endif // _LIBCPP_CXX03_LANG 
+#endif // _LIBCPP_CXX03_LANG
   _LIBCPP_CONSTEXPR explicit __cxx_atomic_base_impl(_Tp value) _NOEXCEPT
     : __a_value(value) {}
   _Tp __a_value;

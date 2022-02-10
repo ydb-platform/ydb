@@ -44,8 +44,8 @@
 #   define _LIBCPP_ASSERT(x, m) _LIBCPP_ASSERT_IMPL(x, m)
 #endif
 
-_LIBCPP_BEGIN_NAMESPACE_STD 
- 
+_LIBCPP_BEGIN_NAMESPACE_STD
+
 struct _LIBCPP_TEMPLATE_VIS __libcpp_debug_info {
   _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR
   __libcpp_debug_info()

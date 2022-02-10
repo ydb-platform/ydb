@@ -340,64 +340,64 @@ public:
     typedef typename iterator_traits<Iterator>::iterator_category iterator_category;
     typedef value_type&&                                          reference;
 
-    constexpr move_iterator();  // all the constexprs are in C++17 
-    constexpr explicit move_iterator(Iterator i); 
-    template <class U> 
-      constexpr move_iterator(const move_iterator<U>& u); 
-    template <class U> 
-      constexpr move_iterator& operator=(const move_iterator<U>& u); 
-    constexpr iterator_type base() const; 
-    constexpr reference operator*() const; 
-    constexpr pointer operator->() const; 
-    constexpr move_iterator& operator++(); 
-    constexpr move_iterator operator++(int); 
-    constexpr move_iterator& operator--(); 
-    constexpr move_iterator operator--(int); 
+    constexpr move_iterator();  // all the constexprs are in C++17
+    constexpr explicit move_iterator(Iterator i);
+    template <class U>
+      constexpr move_iterator(const move_iterator<U>& u);
+    template <class U>
+      constexpr move_iterator& operator=(const move_iterator<U>& u);
+    constexpr iterator_type base() const;
+    constexpr reference operator*() const;
+    constexpr pointer operator->() const;
+    constexpr move_iterator& operator++();
+    constexpr move_iterator operator++(int);
+    constexpr move_iterator& operator--();
+    constexpr move_iterator operator--(int);
     constexpr move_iterator operator+(difference_type n) const;
     constexpr move_iterator& operator+=(difference_type n);
     constexpr move_iterator operator-(difference_type n) const;
     constexpr move_iterator& operator-=(difference_type n);
-    constexpr unspecified operator[](difference_type n) const; 
+    constexpr unspecified operator[](difference_type n) const;
 private:
     Iterator current; // exposition only
 };
 
 template <class Iterator1, class Iterator2>
-constexpr bool   // constexpr in C++17 
+constexpr bool   // constexpr in C++17
 operator==(const move_iterator<Iterator1>& x, const move_iterator<Iterator2>& y);
 
 template <class Iterator1, class Iterator2>
-constexpr bool   // constexpr in C++17 
+constexpr bool   // constexpr in C++17
 operator!=(const move_iterator<Iterator1>& x, const move_iterator<Iterator2>& y);
 
 template <class Iterator1, class Iterator2>
-constexpr bool   // constexpr in C++17 
+constexpr bool   // constexpr in C++17
 operator<(const move_iterator<Iterator1>& x, const move_iterator<Iterator2>& y);
 
 template <class Iterator1, class Iterator2>
-constexpr bool   // constexpr in C++17 
+constexpr bool   // constexpr in C++17
 operator<=(const move_iterator<Iterator1>& x, const move_iterator<Iterator2>& y);
 
 template <class Iterator1, class Iterator2>
-constexpr bool   // constexpr in C++17 
+constexpr bool   // constexpr in C++17
 operator>(const move_iterator<Iterator1>& x, const move_iterator<Iterator2>& y);
 
 template <class Iterator1, class Iterator2>
-constexpr bool   // constexpr in C++17 
+constexpr bool   // constexpr in C++17
 operator>=(const move_iterator<Iterator1>& x, const move_iterator<Iterator2>& y);
 
 template <class Iterator1, class Iterator2>
-constexpr auto   // constexpr in C++17 
+constexpr auto   // constexpr in C++17
 operator-(const move_iterator<Iterator1>& x,
           const move_iterator<Iterator2>& y) -> decltype(x.base() - y.base());
 
 template <class Iterator>
-constexpr move_iterator<Iterator> operator+(   // constexpr in C++17 
+constexpr move_iterator<Iterator> operator+(   // constexpr in C++17
             typename move_iterator<Iterator>::difference_type n,
             const move_iterator<Iterator>& x);
 
-template <class Iterator>   // constexpr in C++17 
-constexpr  move_iterator<Iterator> make_move_iterator(const Iterator& i); 
+template <class Iterator>   // constexpr in C++17
+constexpr  move_iterator<Iterator> make_move_iterator(const Iterator& i);
 
 // [default.sentinel], default sentinel
 struct default_sentinel_t;

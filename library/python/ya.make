@@ -40,7 +40,7 @@ RECURSE(
     compress
     compress/tests
     cookiemy
-    coredump_filter 
+    coredump_filter
     cores
     coverage
     cpp_test
@@ -166,7 +166,7 @@ RECURSE(
     sanitizers
     sdms_api
     sfx
-    selenium_ui_test 
+    selenium_ui_test
     sendmsg
     stubmaker
     solomon

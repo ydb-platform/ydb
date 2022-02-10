@@ -416,7 +416,7 @@ RECURSE(
     yson/node/pybind
     yson_pull
     yson_pull/ut
-    yt
+    yt 
     zipatch
 )
 
@@ -426,7 +426,7 @@ IF (OS_LINUX)
         balloc/aba_agri_test
         balloc_market/test
         balloc_market/aba_agri_test
-        ytalloc
+        ytalloc 
         rseq
     )
 ENDIF()

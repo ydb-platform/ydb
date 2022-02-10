@@ -1,65 +1,65 @@
 #include "blob.h"
 #include "ref.h"
 
-#include <library/cpp/ytalloc/api/ytalloc.h>
-
+#include <library/cpp/ytalloc/api/ytalloc.h> 
+ 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr size_t InitialBlobCapacity = 16;
-static constexpr double BlobCapacityMultiplier = 1.5;
+static constexpr size_t InitialBlobCapacity = 16; 
+static constexpr double BlobCapacityMultiplier = 1.5; 
 
 TBlob::TBlob(
     TRefCountedTypeCookie tagCookie,
     size_t size,
     bool initiailizeStorage,
-    bool pageAligned)
-    : PageAligned_(pageAligned)
+    bool pageAligned) 
+    : PageAligned_(pageAligned) 
 {
-    SetTagCookie(tagCookie);
+    SetTagCookie(tagCookie); 
     if (size == 0) {
         Reset();
     } else {
         Allocate(std::max(size, InitialBlobCapacity));
-        Size_ = size;
+        Size_ = size; 
         if (initiailizeStorage) {
-            ::memset(Begin_, 0, Size_);
+            ::memset(Begin_, 0, Size_); 
         }
     }
 }
 
 TBlob::TBlob(
     TRefCountedTypeCookie tagCookie,
-    TRef data,
-    bool pageAligned)
-    : PageAligned_(pageAligned)
+    TRef data, 
+    bool pageAligned) 
+    : PageAligned_(pageAligned) 
 {
-    SetTagCookie(tagCookie);
+    SetTagCookie(tagCookie); 
     Reset();
-    Append(data);
+    Append(data); 
 }
 
 TBlob::TBlob(const TBlob& other)
-    : PageAligned_(other.PageAligned_)
+    : PageAligned_(other.PageAligned_) 
 {
-    SetTagCookie(other);
+    SetTagCookie(other); 
     if (other.Size_ == 0) {
         Reset();
     } else {
         Allocate(std::max(InitialBlobCapacity, other.Size_));
-        ::memcpy(Begin_, other.Begin_, other.Size_);
-        Size_ = other.Size_;
+        ::memcpy(Begin_, other.Begin_, other.Size_); 
+        Size_ = other.Size_; 
     }
 }
 
 TBlob::TBlob(TBlob&& other) noexcept
-    : Begin_(other.Begin_)
+    : Begin_(other.Begin_) 
     , Size_(other.Size_)
     , Capacity_(other.Capacity_)
-    , PageAligned_(other.PageAligned_)
+    , PageAligned_(other.PageAligned_) 
 {
-    SetTagCookie(other);
+    SetTagCookie(other); 
     other.Reset();
 }
 
@@ -88,7 +88,7 @@ void TBlob::Resize(size_t newSize, bool initializeStorage /*= true*/)
             Reallocate(newCapacity);
         }
         if (initializeStorage) {
-            ::memset(Begin_ + Size_, 0, newSize - Size_);
+            ::memset(Begin_ + Size_, 0, newSize - Size_); 
         }
     }
     Size_ = newSize;
@@ -114,66 +114,66 @@ TBlob& TBlob::operator = (TBlob&& rhs) noexcept
 
 void TBlob::Append(const void* data, size_t size)
 {
-    if (Size_ + size > Capacity_) {
-        Resize(Size_ + size, false);
-        ::memcpy(Begin_ + Size_ - size, data, size);
-    } else {
-        ::memcpy(Begin_ + Size_, data, size);
-        Size_ += size;
-    }
+    if (Size_ + size > Capacity_) { 
+        Resize(Size_ + size, false); 
+        ::memcpy(Begin_ + Size_ - size, data, size); 
+    } else { 
+        ::memcpy(Begin_ + Size_, data, size); 
+        Size_ += size; 
+    } 
 }
 
-void TBlob::Append(TRef ref)
+void TBlob::Append(TRef ref) 
 {
     Append(ref.Begin(), ref.Size());
 }
 
-void TBlob::Append(char ch)
-{
-    if (Size_ + 1 > Capacity_) {
-        Resize(Size_ + 1, false);
-        Begin_[Size_ - 1] = ch;
-    } else {
-        Begin_[Size_++] = ch;
-    }
-}
-
+void TBlob::Append(char ch) 
+{ 
+    if (Size_ + 1 > Capacity_) { 
+        Resize(Size_ + 1, false); 
+        Begin_[Size_ - 1] = ch; 
+    } else { 
+        Begin_[Size_++] = ch; 
+    } 
+} 
+ 
 void TBlob::Reset()
 {
-    Begin_ = nullptr;
+    Begin_ = nullptr; 
     Size_ = Capacity_ = 0;
 }
 
-char* TBlob::DoAllocate(size_t size)
-{
-    return static_cast<char*>(PageAligned_
-        ? NYTAlloc::AllocatePageAligned(size)
-        : NYTAlloc::Allocate(size));
-}
-
+char* TBlob::DoAllocate(size_t size) 
+{ 
+    return static_cast<char*>(PageAligned_ 
+        ? NYTAlloc::AllocatePageAligned(size) 
+        : NYTAlloc::Allocate(size)); 
+} 
+ 
 void TBlob::Allocate(size_t newCapacity)
 {
-    YT_VERIFY(!Begin_);
-    Begin_ = DoAllocate(newCapacity);
+    YT_VERIFY(!Begin_); 
+    Begin_ = DoAllocate(newCapacity); 
     Capacity_ = newCapacity;
 #ifdef YT_ENABLE_REF_COUNTED_TRACKING
-    TRefCountedTrackerFacade::AllocateTagInstance(TagCookie_);
-    TRefCountedTrackerFacade::AllocateSpace(TagCookie_, newCapacity);
+    TRefCountedTrackerFacade::AllocateTagInstance(TagCookie_); 
+    TRefCountedTrackerFacade::AllocateSpace(TagCookie_, newCapacity); 
 #endif
 }
 
 void TBlob::Reallocate(size_t newCapacity)
 {
-    if (!Begin_) {
+    if (!Begin_) { 
         Allocate(newCapacity);
         return;
     }
-    char* newBegin = DoAllocate(newCapacity);
-    ::memcpy(newBegin, Begin_, Size_);
-    NYTAlloc::FreeNonNull(Begin_);
+    char* newBegin = DoAllocate(newCapacity); 
+    ::memcpy(newBegin, Begin_, Size_); 
+    NYTAlloc::FreeNonNull(Begin_); 
 #ifdef YT_ENABLE_REF_COUNTED_TRACKING
-    TRefCountedTrackerFacade::AllocateSpace(TagCookie_, newCapacity);
-    TRefCountedTrackerFacade::FreeSpace(TagCookie_, Capacity_);
+    TRefCountedTrackerFacade::AllocateSpace(TagCookie_, newCapacity); 
+    TRefCountedTrackerFacade::FreeSpace(TagCookie_, Capacity_); 
 #endif
     Begin_ = newBegin;
     Capacity_ = newCapacity;
@@ -181,28 +181,28 @@ void TBlob::Reallocate(size_t newCapacity)
 
 void TBlob::Free()
 {
-    if (!Begin_) {
+    if (!Begin_) { 
         return;
     }
-    NYTAlloc::FreeNonNull(Begin_);
+    NYTAlloc::FreeNonNull(Begin_); 
 #ifdef YT_ENABLE_REF_COUNTED_TRACKING
-    TRefCountedTrackerFacade::FreeTagInstance(TagCookie_);
-    TRefCountedTrackerFacade::FreeSpace(TagCookie_, Capacity_);
+    TRefCountedTrackerFacade::FreeTagInstance(TagCookie_); 
+    TRefCountedTrackerFacade::FreeSpace(TagCookie_, Capacity_); 
 #endif
-    Reset();
+    Reset(); 
 }
 
-void TBlob::SetTagCookie(TRefCountedTypeCookie tagCookie)
+void TBlob::SetTagCookie(TRefCountedTypeCookie tagCookie) 
 {
 #ifdef YT_ENABLE_REF_COUNTED_TRACKING
-    TagCookie_ = tagCookie;
+    TagCookie_ = tagCookie; 
 #endif
 }
-
-void TBlob::SetTagCookie(const TBlob& other)
+ 
+void TBlob::SetTagCookie(const TBlob& other) 
 {
 #ifdef YT_ENABLE_REF_COUNTED_TRACKING
-    TagCookie_ = other.TagCookie_;
+    TagCookie_ = other.TagCookie_; 
 #endif
 }
 
@@ -212,9 +212,9 @@ void swap(TBlob& left, TBlob& right)
         std::swap(left.Begin_, right.Begin_);
         std::swap(left.Size_, right.Size_);
         std::swap(left.Capacity_, right.Capacity_);
-        std::swap(left.PageAligned_, right.PageAligned_);
+        std::swap(left.PageAligned_, right.PageAligned_); 
 #ifdef YT_ENABLE_REF_COUNTED_TRACKING
-        std::swap(left.TagCookie_, right.TagCookie_);
+        std::swap(left.TagCookie_, right.TagCookie_); 
 #endif
     }
 }

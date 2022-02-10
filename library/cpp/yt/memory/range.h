@@ -1,42 +1,42 @@
 #pragma once
 
-#include <library/cpp/yt/assert/assert.h>
-
-#include <library/cpp/yt/misc/hash.h>
-
+#include <library/cpp/yt/assert/assert.h> 
+ 
+#include <library/cpp/yt/misc/hash.h> 
+ 
 #include <vector>
-#include <array>
-#include <optional>
-#include <initializer_list>
+#include <array> 
+#include <optional> 
+#include <initializer_list> 
 
-// For size_t.
-#include <stddef.h>
-
-namespace google::protobuf {
-
-////////////////////////////////////////////////////////////////////////////////
-// Forward declarations
-
-template <class T>
-class RepeatedField;
-
-template <class T>
-class RepeatedPtrField;
-
-////////////////////////////////////////////////////////////////////////////////
-
-} // namespace google::protobuf
-
+// For size_t. 
+#include <stddef.h> 
+ 
+namespace google::protobuf { 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+// Forward declarations 
+ 
+template <class T> 
+class RepeatedField; 
+ 
+template <class T> 
+class RepeatedPtrField; 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
+} // namespace google::protobuf 
+ 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
-// Forward declarations
+// Forward declarations 
 
-template <class T, size_t N>
-class TCompactVector;
-
-////////////////////////////////////////////////////////////////////////////////
-
+template <class T, size_t N> 
+class TCompactVector; 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 //! TRange (inspired by TArrayRef from LLVM)
 /*!
  * Represents a constant reference to an array (zero or more elements
@@ -93,28 +93,28 @@ public:
 
     //! Constructs a TRange from a C array.
     template <size_t N>
-    TRange(const T (&elements)[N])
-        : Data_(elements)
+    TRange(const T (&elements)[N]) 
+        : Data_(elements) 
         , Length_(N)
     { }
 
-    //! Constructs a TRange from std::initializer_list.
-    TRange(std::initializer_list<T> elements)
-        : Data_(elements.begin())
-        , Length_(elements.size())
-    { }
-
-    //! Constructs a TRange from std::array.
-    template <size_t N>
-    TRange(const std::array<T, N>& elements)
-        : Data_(elements.data())
-        , Length_(N)
-    { }
-
-    //! Constructs a TRange from std::optional.
+    //! Constructs a TRange from std::initializer_list. 
+    TRange(std::initializer_list<T> elements) 
+        : Data_(elements.begin()) 
+        , Length_(elements.size()) 
+    { } 
+ 
+    //! Constructs a TRange from std::array. 
+    template <size_t N> 
+    TRange(const std::array<T, N>& elements) 
+        : Data_(elements.data()) 
+        , Length_(N) 
+    { } 
+ 
+    //! Constructs a TRange from std::optional. 
     //! Range will contain 0-1 elements.
-    explicit TRange(const std::optional<T>& element)
-        : Data_(element ? &*element : nullptr)
+    explicit TRange(const std::optional<T>& element) 
+        : Data_(element ? &*element : nullptr) 
         , Length_(element ? 1 : 0)
     { }
 
@@ -123,33 +123,33 @@ public:
         return Data_;
     }
 
-    // STL interop, for gcc.
-    const_iterator begin() const
-    {
-        return Begin();
-    }
-
+    // STL interop, for gcc. 
+    const_iterator begin() const 
+    { 
+        return Begin(); 
+    } 
+ 
     const_iterator End() const
     {
         return Data_ + Length_;
     }
 
-    // STL interop, for gcc.
-    const_iterator end() const
-    {
-        return End();
-    }
-
+    // STL interop, for gcc. 
+    const_iterator end() const 
+    { 
+        return End(); 
+    } 
+ 
     bool Empty() const
     {
         return Length_ == 0;
     }
 
-    bool empty() const
-    {
-        return Empty();
-    }
-
+    bool empty() const 
+    { 
+        return Empty(); 
+    } 
+ 
     explicit operator bool() const
     {
         return Data_ != nullptr;
@@ -167,24 +167,24 @@ public:
 
     const T& operator[](size_t index) const
     {
-        YT_ASSERT(index < Size());
+        YT_ASSERT(index < Size()); 
         return Data_[index];
     }
 
 
-    const T& Front() const
-    {
-        YT_ASSERT(Length_ > 0);
-        return Data_[0];
-    }
-
-    const T& Back() const
-    {
-        YT_ASSERT(Length_ > 0);
-        return Data_[Length_ - 1];
-    }
-
-
+    const T& Front() const 
+    { 
+        YT_ASSERT(Length_ > 0); 
+        return Data_[0]; 
+    } 
+ 
+    const T& Back() const 
+    { 
+        YT_ASSERT(Length_ > 0); 
+        return Data_[Length_ - 1]; 
+    } 
+ 
+ 
     TRange<T> Slice(size_t startOffset, size_t endOffset) const
     {
         YT_ASSERT(startOffset <= endOffset && endOffset <= Size());
@@ -207,13 +207,13 @@ protected:
 
 // STL interop.
 template <class T>
-typename TRange<T>::const_iterator begin(TRange<T> ref)
+typename TRange<T>::const_iterator begin(TRange<T> ref) 
 {
     return ref.Begin();
 }
 
 template <class T>
-typename TRange<T>::const_iterator end(TRange<T> ref)
+typename TRange<T>::const_iterator end(TRange<T> ref) 
 {
     return ref.End();
 }
@@ -241,13 +241,13 @@ TRange<T> MakeRange(const TCompactVector<T, N>& elements)
     return elements;
 }
 
-//! "Copy-constructor".
-template <class T>
-TRange<T> MakeRange(TRange<T> range)
-{
-    return range;
-}
-
+//! "Copy-constructor". 
+template <class T> 
+TRange<T> MakeRange(TRange<T> range) 
+{ 
+    return range; 
+} 
+ 
 //! Constructs a TRange from an std::vector.
 template <class T>
 TRange<T> MakeRange(const std::vector<T>& elements)
@@ -255,13 +255,13 @@ TRange<T> MakeRange(const std::vector<T>& elements)
     return elements;
 }
 
-//! Constructs a TRange from an std::array.
-template <class T, size_t N>
-TRange<T> MakeRange(const std::array<T, N>& elements)
-{
-    return elements;
-}
-
+//! Constructs a TRange from an std::array. 
+template <class T, size_t N> 
+TRange<T> MakeRange(const std::array<T, N>& elements) 
+{ 
+    return elements; 
+} 
+ 
 //! Constructs a TRange from a C array.
 template <class T, size_t N>
 TRange<T> MakeRange(const T (& elements)[N])
@@ -269,27 +269,27 @@ TRange<T> MakeRange(const T (& elements)[N])
     return TRange<T>(elements);
 }
 
-//! Constructs a TRange from RepeatedField.
-template <class T>
-TRange<T> MakeRange(const google::protobuf::RepeatedField<T>& elements)
-{
-    return TRange<T>(elements.data(), elements.size());
-}
-
-//! Constructs a TRange from RepeatedPtrField.
-template <class T>
-TRange<const T*> MakeRange(const google::protobuf::RepeatedPtrField<T>& elements)
-{
-    return TRange<const T*>(elements.data(), elements.size());
-}
-
-template <class U, class T>
-TRange<U> ReinterpretCastRange(TRange<T> range)
-{
-    static_assert(sizeof(T) == sizeof(U), "T and U must have equal sizes.");
-    return TRange<U>(reinterpret_cast<const U*>(range.Begin()), range.Size());
-};
-
+//! Constructs a TRange from RepeatedField. 
+template <class T> 
+TRange<T> MakeRange(const google::protobuf::RepeatedField<T>& elements) 
+{ 
+    return TRange<T>(elements.data(), elements.size()); 
+} 
+ 
+//! Constructs a TRange from RepeatedPtrField. 
+template <class T> 
+TRange<const T*> MakeRange(const google::protobuf::RepeatedPtrField<T>& elements) 
+{ 
+    return TRange<const T*>(elements.data(), elements.size()); 
+} 
+ 
+template <class U, class T> 
+TRange<U> ReinterpretCastRange(TRange<T> range) 
+{ 
+    static_assert(sizeof(T) == sizeof(U), "T and U must have equal sizes."); 
+    return TRange<U>(reinterpret_cast<const U*>(range.Begin()), range.Size()); 
+}; 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 // TMutableRange (inspired by TMutableArrayRef from LLVM)
@@ -338,16 +338,16 @@ public:
         : TRange<T>(elements)
     { }
 
-    //! Constructs a TMutableRange from std::array.
-    template <size_t N>
-    TMutableRange(std::array<T, N>& elements)
-        : TRange<T>(elements.data(), N)
-    { }
-
-    //! Construct a TMutableRange from an std::optional
+    //! Constructs a TMutableRange from std::array. 
+    template <size_t N> 
+    TMutableRange(std::array<T, N>& elements) 
+        : TRange<T>(elements.data(), N) 
+    { } 
+ 
+    //! Construct a TMutableRange from an std::optional 
     //! Range will contain 0-1 elements.
-    explicit TMutableRange(std::optional<T>& optional)
-        : TRange<T>(optional)
+    explicit TMutableRange(std::optional<T>& optional) 
+        : TRange<T>(optional) 
     { }
 
     //! Constructs a TMutableRange from a C array.
@@ -356,11 +356,11 @@ public:
         : TRange<T>(elements)
     { }
 
-    using TRange<T>::Begin;
-    using TRange<T>::End;
-    using TRange<T>::Front;
-    using TRange<T>::Back;
-    using TRange<T>::operator[];
+    using TRange<T>::Begin; 
+    using TRange<T>::End; 
+    using TRange<T>::Front; 
+    using TRange<T>::Back; 
+    using TRange<T>::operator[]; 
 
     iterator Begin() const
     {
@@ -384,24 +384,24 @@ public:
         return End();
     }
 
-    T& operator[](size_t index)
+    T& operator[](size_t index) 
     {
-        YT_ASSERT(index <= this->Size());
-        return Begin()[index];
+        YT_ASSERT(index <= this->Size()); 
+        return Begin()[index]; 
     }
 
-    T& Front()
-    {
-        YT_ASSERT(this->Length_ > 0);
-        return Begin()[0];
-    }
+    T& Front() 
+    { 
+        YT_ASSERT(this->Length_ > 0); 
+        return Begin()[0]; 
+    } 
 
-    T& Back()
-    {
-        YT_ASSERT(this->Length_ > 0);
-        return Begin()[this->Length_ - 1];
-    }
-
+    T& Back() 
+    { 
+        YT_ASSERT(this->Length_ > 0); 
+        return Begin()[this->Length_ - 1]; 
+    } 
+ 
     TMutableRange<T> Slice(size_t startOffset, size_t endOffset) const
     {
         YT_ASSERT(startOffset <= endOffset && endOffset <= this->Size());
@@ -410,41 +410,41 @@ public:
 
     TMutableRange<T> Slice(T* begin, T* end) const
     {
-        YT_ASSERT(begin >= Begin());
-        YT_ASSERT(end <= End());
+        YT_ASSERT(begin >= Begin()); 
+        YT_ASSERT(end <= End()); 
         return TMutableRange<T>(begin, end);
     }
 };
 
 // STL interop.
 template <class T>
-typename TMutableRange<T>::iterator begin(TMutableRange<T> ref)
+typename TMutableRange<T>::iterator begin(TMutableRange<T> ref) 
 {
     return ref.Begin();
 }
 
 template <class T>
-typename TMutableRange<T>::iterator end(TMutableRange<T> ref)
+typename TMutableRange<T>::iterator end(TMutableRange<T> ref) 
 {
     return ref.End();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Constructs a TMutableRange from a pointer and length.
-template <class T>
-TMutableRange<T> MakeMutableRange(T* data, size_t length)
-{
-    return TMutableRange<T>(data, length);
-}
-
-//! Constructs a TMutableRange from a native range.
-template <class T>
-TMutableRange<T> MakeMutableRange(T* begin, T* end)
-{
-    return TMutableRange<T>(begin, end);
-}
-
+//! Constructs a TMutableRange from a pointer and length. 
+template <class T> 
+TMutableRange<T> MakeMutableRange(T* data, size_t length) 
+{ 
+    return TMutableRange<T>(data, length); 
+} 
+ 
+//! Constructs a TMutableRange from a native range. 
+template <class T> 
+TMutableRange<T> MakeMutableRange(T* begin, T* end) 
+{ 
+    return TMutableRange<T>(begin, end); 
+} 
+ 
 //! Constructs a TMutableRange from a TCompactVector.
 template <class T, size_t N>
 TMutableRange<T> MakeMutableRange(TCompactVector<T, N>& elements)
@@ -452,58 +452,58 @@ TMutableRange<T> MakeMutableRange(TCompactVector<T, N>& elements)
     return elements;
 }
 
-//! "Copy-constructor".
-template <class T>
-TMutableRange<T> MakeMutableRange(TMutableRange<T> range)
-{
-    return range;
-}
-
-//! Constructs a TMutableRange from an std::vector.
-template <class T>
-TMutableRange<T> MakeMutableRange(std::vector<T>& elements)
-{
-    return elements;
-}
-
-//! Constructs a TMutableRange from an std::array.
-template <class T, size_t N>
-TMutableRange<T> MakeMutableRange(std::array<T, N>& elements)
-{
-    return elements;
-}
-
-//! Constructs a TMutableRange from a C array.
-template <class T, size_t N>
-TMutableRange<T> MakeMutableRange(T (& elements)[N])
-{
-    return TMutableRange<T>(elements);
-}
-
-//! Constructs a TMutableRange from RepeatedField.
-template <class T>
-TMutableRange<T> MakeMutableRange(google::protobuf::RepeatedField<T>& elements)
-{
-    return TMutableRange<T>(elements.data(), elements.size());
-}
-
-//! Constructs a TMutableRange from RepeatedPtrField.
-template <class T>
-TMutableRange<T*> MakeMutableRange(google::protobuf::RepeatedPtrField<T>& elements)
-{
-    return TMutableRange<const T*>(elements.data(), elements.size());
-}
-
-template <class U, class T>
-TMutableRange<U> ReinterpretCastMutableRange(TMutableRange<T> range)
-{
-    static_assert(sizeof(T) == sizeof(U), "T and U must have equal sizes.");
-    return TMutableRange<U>(reinterpret_cast<U*>(range.Begin()), range.Size());
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-// Mark TMutableRange and TMutableRange as PODs.
+//! "Copy-constructor". 
+template <class T> 
+TMutableRange<T> MakeMutableRange(TMutableRange<T> range) 
+{ 
+    return range; 
+} 
+ 
+//! Constructs a TMutableRange from an std::vector. 
+template <class T> 
+TMutableRange<T> MakeMutableRange(std::vector<T>& elements) 
+{ 
+    return elements; 
+} 
+ 
+//! Constructs a TMutableRange from an std::array. 
+template <class T, size_t N> 
+TMutableRange<T> MakeMutableRange(std::array<T, N>& elements) 
+{ 
+    return elements; 
+} 
+ 
+//! Constructs a TMutableRange from a C array. 
+template <class T, size_t N> 
+TMutableRange<T> MakeMutableRange(T (& elements)[N]) 
+{ 
+    return TMutableRange<T>(elements); 
+} 
+ 
+//! Constructs a TMutableRange from RepeatedField. 
+template <class T> 
+TMutableRange<T> MakeMutableRange(google::protobuf::RepeatedField<T>& elements) 
+{ 
+    return TMutableRange<T>(elements.data(), elements.size()); 
+} 
+ 
+//! Constructs a TMutableRange from RepeatedPtrField. 
+template <class T> 
+TMutableRange<T*> MakeMutableRange(google::protobuf::RepeatedPtrField<T>& elements) 
+{ 
+    return TMutableRange<const T*>(elements.data(), elements.size()); 
+} 
+ 
+template <class U, class T> 
+TMutableRange<U> ReinterpretCastMutableRange(TMutableRange<T> range) 
+{ 
+    static_assert(sizeof(T) == sizeof(U), "T and U must have equal sizes."); 
+    return TMutableRange<U>(reinterpret_cast<U*>(range.Begin()), range.Size()); 
+} 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
+// Mark TMutableRange and TMutableRange as PODs. 
 namespace NMpl {
 
 template <class T>
@@ -540,17 +540,17 @@ struct hash<NYT::TRange<T>>
     }
 };
 
-template <class T>
-struct hash<NYT::TMutableRange<T>>
-{
-    size_t operator()(const NYT::TMutableRange<T>& range) const
-    {
-        size_t result = 0;
-        for (const auto& element : range) {
-            NYT::HashCombine(result, element);
-        }
-        return result;
-    }
-};
+template <class T> 
+struct hash<NYT::TMutableRange<T>> 
+{ 
+    size_t operator()(const NYT::TMutableRange<T>& range) const 
+    { 
+        size_t result = 0; 
+        for (const auto& element : range) { 
+            NYT::HashCombine(result, element); 
+        } 
+        return result; 
+    } 
+}; 
 
-
+ 

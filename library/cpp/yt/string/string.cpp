@@ -1,78 +1,78 @@
-#include "string.h"
+#include "string.h" 
 #include "format.h"
-
-#include <library/cpp/yt/assert/assert.h>
+ 
+#include <library/cpp/yt/assert/assert.h> 
 
 #include <util/generic/hash.h>
 
-#include <util/string/ascii.h>
-
-namespace NYT {
-
-////////////////////////////////////////////////////////////////////////////////
-
-void UnderscoreCaseToCamelCase(TStringBuilderBase* builder, TStringBuf str)
-{
+#include <util/string/ascii.h> 
+ 
+namespace NYT { 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
+void UnderscoreCaseToCamelCase(TStringBuilderBase* builder, TStringBuf str) 
+{ 
     bool first = true;
-    bool upper = true;
-    for (char c : str) {
-        if (c == '_') {
-            upper = true;
-        } else {
-            if (upper) {
+    bool upper = true; 
+    for (char c : str) { 
+        if (c == '_') { 
+            upper = true; 
+        } else { 
+            if (upper) { 
                 if (!std::isalpha(c) && !first) {
-                    builder->AppendChar('_');
+                    builder->AppendChar('_'); 
                 }
-                c = std::toupper(c);
-            }
-            builder->AppendChar(c);
-            upper = false;
-        }
+                c = std::toupper(c); 
+            } 
+            builder->AppendChar(c); 
+            upper = false; 
+        } 
         first = false;
-    }
-}
-
-TString UnderscoreCaseToCamelCase(TStringBuf str)
-{
-    TStringBuilder builder;
-    UnderscoreCaseToCamelCase(&builder, str);
-    return builder.Flush();
-}
-
-void CamelCaseToUnderscoreCase(TStringBuilderBase* builder, TStringBuf str)
-{
-    bool first = true;
-    for (char c : str) {
+    } 
+} 
+ 
+TString UnderscoreCaseToCamelCase(TStringBuf str) 
+{ 
+    TStringBuilder builder; 
+    UnderscoreCaseToCamelCase(&builder, str); 
+    return builder.Flush(); 
+} 
+ 
+void CamelCaseToUnderscoreCase(TStringBuilderBase* builder, TStringBuf str) 
+{ 
+    bool first = true; 
+    for (char c : str) { 
         if (std::isupper(c) && std::isalpha(c)) {
-            if (!first) {
-                builder->AppendChar('_');
-            }
+            if (!first) { 
+                builder->AppendChar('_'); 
+            } 
             c = std::tolower(c);
-        }
-        builder->AppendChar(c);
-        first = false;
-    }
-}
-
-TString CamelCaseToUnderscoreCase(TStringBuf str)
-{
-    TStringBuilder builder;
-    CamelCaseToUnderscoreCase(&builder, str);
-    return builder.Flush();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
+        } 
+        builder->AppendChar(c); 
+        first = false; 
+    } 
+} 
+ 
+TString CamelCaseToUnderscoreCase(TStringBuf str) 
+{ 
+    TStringBuilder builder; 
+    CamelCaseToUnderscoreCase(&builder, str); 
+    return builder.Flush(); 
+} 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 TString TrimLeadingWhitespaces(const TString& str)
-{
+{ 
     for (int i = 0; i < static_cast<int>(str.size()); ++i) {
-        if (str[i] != ' ') {
-            return str.substr(i);
-        }
-    }
-    return "";
-}
-
+        if (str[i] != ' ') { 
+            return str.substr(i); 
+        } 
+    } 
+    return ""; 
+} 
+ 
 TString Trim(const TString& str, const TString& whitespaces)
 {
     size_t end = str.size();
@@ -96,13 +96,13 @@ TString Trim(const TString& str, const TString& whitespaces)
     }
 
     size_t begin = str.find_first_not_of(whitespaces);
-    YT_VERIFY(begin != TString::npos);
-    YT_VERIFY(begin < end);
+    YT_VERIFY(begin != TString::npos); 
+    YT_VERIFY(begin < end); 
     return str.substr(begin, end - begin);
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 namespace {
 
 ui16 DecimalDigits2[100] = {
@@ -119,7 +119,7 @@ ui16 DecimalDigits2[100] = {
 };
 
 template <class T>
-char* WriteSignedIntToBufferBackwardsImpl(char* ptr, T value, TStringBuf min)
+char* WriteSignedIntToBufferBackwardsImpl(char* ptr, T value, TStringBuf min) 
 {
     if (value == 0) {
         --ptr;
@@ -214,50 +214,50 @@ char* WriteIntToBufferBackwards(char* ptr, ui64 value)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-size_t TCaseInsensitiveStringHasher::operator()(TStringBuf arg) const
-{
-    auto compute = [&] (char* buffer) {
-        for (size_t index = 0; index < arg.length(); ++index) {
-            buffer[index] = AsciiToLower(arg[index]);
-        }
+size_t TCaseInsensitiveStringHasher::operator()(TStringBuf arg) const 
+{ 
+    auto compute = [&] (char* buffer) { 
+        for (size_t index = 0; index < arg.length(); ++index) { 
+            buffer[index] = AsciiToLower(arg[index]); 
+        } 
         return ComputeHash(TStringBuf(buffer, arg.length()));
-    };
-    const size_t SmallSize = 256;
-    if (arg.length() <= SmallSize) {
-        std::array<char, SmallSize> stackBuffer;
-        return compute(stackBuffer.data());
-    } else {
-        std::unique_ptr<char[]> heapBuffer(new char[arg.length()]);
-        return compute(heapBuffer.get());
-    }
-}
-
-bool TCaseInsensitiveStringEqualityComparer::operator()(TStringBuf lhs, TStringBuf rhs) const
-{
-    return AsciiEqualsIgnoreCase(lhs, rhs);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-bool TryParseBool(TStringBuf value, bool* result)
+    }; 
+    const size_t SmallSize = 256; 
+    if (arg.length() <= SmallSize) { 
+        std::array<char, SmallSize> stackBuffer; 
+        return compute(stackBuffer.data()); 
+    } else { 
+        std::unique_ptr<char[]> heapBuffer(new char[arg.length()]); 
+        return compute(heapBuffer.get()); 
+    } 
+} 
+ 
+bool TCaseInsensitiveStringEqualityComparer::operator()(TStringBuf lhs, TStringBuf rhs) const 
+{ 
+    return AsciiEqualsIgnoreCase(lhs, rhs); 
+} 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
+bool TryParseBool(TStringBuf value, bool* result) 
 {
     if (value == "true" || value == "1") {
-        *result = true;
+        *result = true; 
         return true;
     } else if (value == "false" || value == "0") {
-        *result = false;
+        *result = false; 
         return true;
     } else {
         return false;
     }
 }
 
-bool ParseBool(TStringBuf value)
+bool ParseBool(TStringBuf value) 
 {
     bool result;
-    if (!TryParseBool(value, &result)) {
-        throw TSimpleException(Format("Error parsing boolean value %Qv",
-            value));
+    if (!TryParseBool(value, &result)) { 
+        throw TSimpleException(Format("Error parsing boolean value %Qv", 
+            value)); 
     }
     return result;
 }
@@ -269,4 +269,4 @@ TStringBuf FormatBool(bool value)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT
+} // namespace NYT 

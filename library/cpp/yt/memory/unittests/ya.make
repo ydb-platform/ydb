@@ -13,7 +13,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/testing/gtest
-    library/cpp/yt/memory
+    library/cpp/yt/memory 
 )
 
 END()

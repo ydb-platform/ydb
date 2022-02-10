@@ -1,41 +1,41 @@
-#pragma once
+#pragma once 
+ 
+#include <variant> 
+ 
+namespace NYT { 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
+namespace NDetail { 
+ 
+template <class T, class... Ts> 
+struct TIndexOf; 
+ 
+} // namespace NDetail 
+ 
+template <class T, class V> 
+struct TVariantIndex; 
+ 
+template <class T, class... Ts> 
+struct TVariantIndex<T, std::variant<Ts...>> 
+    : std::integral_constant<size_t, NDetail::TIndexOf<T, Ts...>::Value> 
+{ }; 
 
-#include <variant>
-
-namespace NYT {
-
-////////////////////////////////////////////////////////////////////////////////
-
-namespace NDetail {
-
-template <class T, class... Ts>
-struct TIndexOf;
-
-} // namespace NDetail
-
-template <class T, class V>
-struct TVariantIndex;
-
-template <class T, class... Ts>
-struct TVariantIndex<T, std::variant<Ts...>>
-    : std::integral_constant<size_t, NDetail::TIndexOf<T, Ts...>::Value>
-{ };
-
-template <class T, class V>
-constexpr size_t VariantIndexV = TVariantIndex<T, V>::value;
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TStringBuilderBase;
-
+template <class T, class V> 
+constexpr size_t VariantIndexV = TVariantIndex<T, V>::value; 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
+class TStringBuilderBase; 
+ 
+template <class... Ts> 
+void FormatValue(TStringBuilderBase* builder, const std::variant<Ts...>& variant, TStringBuf spec); 
+ 
 template <class... Ts>
-void FormatValue(TStringBuilderBase* builder, const std::variant<Ts...>& variant, TStringBuf spec);
+TString ToString(const std::variant<Ts...>& variant); 
 
-template <class... Ts>
-TString ToString(const std::variant<Ts...>& variant);
-
-////////////////////////////////////////////////////////////////////////////////
-
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 //! A concise way of creating a functor with an overloaded operator().
 /*!
  *  Very useful for std::visit-ing variants. For example:
@@ -69,8 +69,8 @@ auto Visit(T&& variant, U&&... visitorOverloads)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT
-
-#define VARIANT_INL_H_
-#include "variant-inl.h"
-#undef VARIANT_INL_H_
+} // namespace NYT 
+ 
+#define VARIANT_INL_H_ 
+#include "variant-inl.h" 
+#undef VARIANT_INL_H_ 

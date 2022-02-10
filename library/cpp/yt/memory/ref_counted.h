@@ -1,17 +1,17 @@
-#pragma once
+#pragma once 
+ 
+#include <library/cpp/yt/misc/port.h> 
 
-#include <library/cpp/yt/misc/port.h>
-
-#include <library/cpp/yt/assert/assert.h>
-
-#include <library/cpp/ytalloc/api/ytalloc.h>
+#include <library/cpp/yt/assert/assert.h> 
+ 
+#include <library/cpp/ytalloc/api/ytalloc.h> 
 
 #include <atomic>
 
-namespace NYT {
-
-////////////////////////////////////////////////////////////////////////////////
-
+namespace NYT { 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 //! A technical base class for ref-counted objects and promise states.
 class TRefCountedBase
 {
@@ -20,30 +20,30 @@ public:
 
     // Make destructor protected
     virtual ~TRefCountedBase() noexcept = default;
-
+ 
     virtual void DestroyRefCounted() = 0;
-
+ 
 private:
-    TRefCountedBase(const TRefCountedBase&) = delete;
-    TRefCountedBase(TRefCountedBase&&) = delete;
-
+    TRefCountedBase(const TRefCountedBase&) = delete; 
+    TRefCountedBase(TRefCountedBase&&) = delete; 
+ 
     TRefCountedBase& operator=(const TRefCountedBase&) = delete;
     TRefCountedBase& operator=(TRefCountedBase&&) = delete;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
+}; 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 template <class T, class = void>
 struct TFreeMemory
-{
+{ 
     static void Do(void* ptr)
     {
         NYTAlloc::FreeNonNull(ptr);
     }
 };
-
+ 
 template <class T>
-struct TFreeMemory<T, std::void_t<typename T::TAllocator>>
+struct TFreeMemory<T, std::void_t<typename T::TAllocator>> 
 {
     static void Do(void* ptr)
     {
@@ -51,17 +51,17 @@ struct TFreeMemory<T, std::void_t<typename T::TAllocator>>
         TAllocator::Free(ptr);
     }
 };
-
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRefCounter
+class TRefCounter 
 {
-public:
+public: 
     //! Returns current number of strong references to the object.
-    /*!
+    /*! 
      * Note that you should never ever use this method in production code.
      * This method is mainly for debugging purposes.
-     */
+     */ 
     int GetRefCount() const noexcept;
 
     //! Increments the strong reference counter.

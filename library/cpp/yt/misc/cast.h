@@ -1,7 +1,7 @@
 #pragma once
 
-#include <library/cpp/yt/exception/exception.h>
-
+#include <library/cpp/yt/exception/exception.h> 
+ 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -12,8 +12,8 @@ bool TryIntegralCast(S value, T* result);
 template <class T, class S>
 T CheckedIntegralCast(S value);
 
-////////////////////////////////////////////////////////////////////////////////
-
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 template <class T, class S>
 bool TryEnumCast(S value, T* result);
 

@@ -2,7 +2,7 @@
 #include "vector.h"
 #include "hash_set.h"
 
-#include <library/cpp/testing/common/probe.h>
+#include <library/cpp/testing/common/probe.h> 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <utility>
@@ -28,7 +28,7 @@ class THashTest: public TTestBase {
     UNIT_TEST(TestHMSetSize);
     UNIT_TEST(TestHMSet1);
     UNIT_TEST(TestHMSetEqualityOperator);
-    UNIT_TEST(TestHMSetEmplace);
+    UNIT_TEST(TestHMSetEmplace); 
     UNIT_TEST(TestInsertErase);
     UNIT_TEST(TestResizeOnInsertSmartPtrBug)
     UNIT_TEST(TestEmpty);
@@ -79,7 +79,7 @@ protected:
     void TestHMSetSize();
     void TestHMSet1();
     void TestHMSetEqualityOperator();
-    void TestHMSetEmplace();
+    void TestHMSetEmplace(); 
     void TestInsertErase();
     void TestResizeOnInsertSmartPtrBug();
     void TestEmpty();
@@ -554,56 +554,56 @@ void THashTest::TestHMSetEqualityOperator() {
     UNIT_ASSERT(!(c3 == base));
 }
 
-void THashTest::TestHMSetEmplace() {
-    class TKey: public NTesting::TProbe {
-    public:
-        TKey(NTesting::TProbeState* state, int key)
-            : TProbe(state)
+void THashTest::TestHMSetEmplace() { 
+    class TKey: public NTesting::TProbe { 
+    public: 
+        TKey(NTesting::TProbeState* state, int key) 
+            : TProbe(state) 
             , Key_(key)
         {
         }
-
-        operator size_t() const {
+ 
+        operator size_t() const { 
             return THash<int>()(Key_);
-        }
-
-        bool operator==(const TKey& other) const {
+        } 
+ 
+        bool operator==(const TKey& other) const { 
             return Key_ == other.Key_;
-        }
-
-    private:
+        } 
+ 
+    private: 
         int Key_;
-    };
-
-    NTesting::TProbeState state;
-
-    {
-        THashMultiSet<TKey> c;
-        c.emplace(&state, 1);
-        c.emplace(&state, 1);
-        c.emplace(&state, 2);
-
-        UNIT_ASSERT_EQUAL(state.CopyAssignments, 0);
-        UNIT_ASSERT_EQUAL(state.MoveAssignments, 0);
-        UNIT_ASSERT_EQUAL(state.Constructors, 3);
-        UNIT_ASSERT_EQUAL(state.MoveConstructors, 0);
-
-        UNIT_ASSERT_EQUAL(c.count(TKey(&state, 1)), 2);
-        UNIT_ASSERT_EQUAL(c.count(TKey(&state, 2)), 1);
-        UNIT_ASSERT_EQUAL(c.count(TKey(&state, 3)), 0);
-
-        UNIT_ASSERT_EQUAL(state.Constructors, 6);
-        UNIT_ASSERT_EQUAL(state.Destructors, 3);
-    }
-
-    UNIT_ASSERT_EQUAL(state.CopyAssignments, 0);
-    UNIT_ASSERT_EQUAL(state.MoveAssignments, 0);
-    UNIT_ASSERT_EQUAL(state.CopyConstructors, 0);
-    UNIT_ASSERT_EQUAL(state.MoveConstructors, 0);
-    UNIT_ASSERT_EQUAL(state.Constructors, 6);
-    UNIT_ASSERT_EQUAL(state.Destructors, 6);
-}
-
+    }; 
+ 
+    NTesting::TProbeState state; 
+ 
+    { 
+        THashMultiSet<TKey> c; 
+        c.emplace(&state, 1); 
+        c.emplace(&state, 1); 
+        c.emplace(&state, 2); 
+ 
+        UNIT_ASSERT_EQUAL(state.CopyAssignments, 0); 
+        UNIT_ASSERT_EQUAL(state.MoveAssignments, 0); 
+        UNIT_ASSERT_EQUAL(state.Constructors, 3); 
+        UNIT_ASSERT_EQUAL(state.MoveConstructors, 0); 
+ 
+        UNIT_ASSERT_EQUAL(c.count(TKey(&state, 1)), 2); 
+        UNIT_ASSERT_EQUAL(c.count(TKey(&state, 2)), 1); 
+        UNIT_ASSERT_EQUAL(c.count(TKey(&state, 3)), 0); 
+ 
+        UNIT_ASSERT_EQUAL(state.Constructors, 6); 
+        UNIT_ASSERT_EQUAL(state.Destructors, 3); 
+    } 
+ 
+    UNIT_ASSERT_EQUAL(state.CopyAssignments, 0); 
+    UNIT_ASSERT_EQUAL(state.MoveAssignments, 0); 
+    UNIT_ASSERT_EQUAL(state.CopyConstructors, 0); 
+    UNIT_ASSERT_EQUAL(state.MoveConstructors, 0); 
+    UNIT_ASSERT_EQUAL(state.Constructors, 6); 
+    UNIT_ASSERT_EQUAL(state.Destructors, 6); 
+} 
+ 
 void THashTest::TestInsertErase() {
     using hmap = THashMap<TString, size_t, THash<TString>, TEqualTo<TString>>;
     using val_type = hmap::value_type;

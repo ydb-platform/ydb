@@ -7,8 +7,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/yt/assert
-    library/cpp/yt/exception
+    library/cpp/yt/assert 
+    library/cpp/yt/exception 
     library/cpp/yt/misc
 )
 
@@ -18,9 +18,9 @@ CHECK_DEPENDENT_DIRS(
     contrib
     library
     util
-    library/cpp/yt/assert
+    library/cpp/yt/assert 
     library/cpp/yt/misc
-    library/cpp/yt/small_containers
+    library/cpp/yt/small_containers 
 )
 
 END()

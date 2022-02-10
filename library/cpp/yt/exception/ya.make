@@ -1,7 +1,7 @@
-LIBRARY()
-
-SRCS(
-    exception.cpp
-)
-
-END()
+LIBRARY() 
+ 
+SRCS( 
+    exception.cpp 
+) 
+ 
+END() 

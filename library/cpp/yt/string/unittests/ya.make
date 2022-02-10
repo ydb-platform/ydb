@@ -10,7 +10,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/yt/string
+    library/cpp/yt/string 
     library/cpp/testing/gtest
 )
 

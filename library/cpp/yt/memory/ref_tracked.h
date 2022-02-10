@@ -1,7 +1,7 @@
 #pragma once
 
-#include <library/cpp/yt/misc/port.h>
-#include <library/cpp/yt/misc/source_location.h>
+#include <library/cpp/yt/misc/port.h> 
+#include <library/cpp/yt/misc/source_location.h> 
 
 #include <util/system/defaults.h>
 
@@ -78,26 +78,26 @@ public:
 #ifdef YT_ENABLE_REF_COUNTED_TRACKING
     TRefTracked()
     {
-        auto cookie = GetRefCountedTypeCookie<T>();
-        TRefCountedTrackerFacade::AllocateInstance(cookie);
+        auto cookie = GetRefCountedTypeCookie<T>(); 
+        TRefCountedTrackerFacade::AllocateInstance(cookie); 
     }
 
-    TRefTracked(const TRefTracked&)
+    TRefTracked(const TRefTracked&) 
     {
         auto cookie = GetRefCountedTypeCookie<T>();
-        TRefCountedTrackerFacade::AllocateInstance(cookie);
+        TRefCountedTrackerFacade::AllocateInstance(cookie); 
     }
 
-    TRefTracked(TRefTracked&&)
+    TRefTracked(TRefTracked&&) 
     {
         auto cookie = GetRefCountedTypeCookie<T>();
-        TRefCountedTrackerFacade::AllocateInstance(cookie);
+        TRefCountedTrackerFacade::AllocateInstance(cookie); 
     }
 
     ~TRefTracked()
     {
-        auto cookie = GetRefCountedTypeCookie<T>();
-        TRefCountedTrackerFacade::FreeInstance(cookie);
+        auto cookie = GetRefCountedTypeCookie<T>(); 
+        TRefCountedTrackerFacade::FreeInstance(cookie); 
     }
 #endif
 };

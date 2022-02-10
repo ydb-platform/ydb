@@ -1,13 +1,13 @@
-#include "guid.h"
-
-#include <util/random/random.h>
-
-#include <util/string/printf.h>
-
-namespace NYT {
-
-////////////////////////////////////////////////////////////////////////////////
-
+#include "guid.h" 
+ 
+#include <util/random/random.h> 
+ 
+#include <util/string/printf.h> 
+ 
+namespace NYT { 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 namespace {
 
 const ui8 HexDigits1[16] = {
@@ -37,23 +37,23 @@ const ui16 HexDigits2[256] = {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGuid TGuid::Create()
-{
-    return TGuid(RandomNumber<ui64>(), RandomNumber<ui64>());
-}
-
-TGuid TGuid::FromString(TStringBuf str)
-{
-    TGuid guid;
-    if (!FromString(str, &guid)) {
-        throw TSimpleException(Sprintf("Error parsing GUID \"%s\"",
-            TString(str).c_str()));
-    }
-    return guid;
-}
-
-bool TGuid::FromString(TStringBuf str, TGuid* result)
-{
+TGuid TGuid::Create() 
+{ 
+    return TGuid(RandomNumber<ui64>(), RandomNumber<ui64>()); 
+} 
+ 
+TGuid TGuid::FromString(TStringBuf str) 
+{ 
+    TGuid guid; 
+    if (!FromString(str, &guid)) { 
+        throw TSimpleException(Sprintf("Error parsing GUID \"%s\"", 
+            TString(str).c_str())); 
+    } 
+    return guid; 
+} 
+ 
+bool TGuid::FromString(TStringBuf str, TGuid* result) 
+{ 
     size_t partId = 3;
     ui64 partValue = 0;
     bool isEmptyPart = true;
@@ -93,18 +93,18 @@ bool TGuid::FromString(TStringBuf str, TGuid* result)
     }
 
     if (partId != 0 || isEmptyPart) { // x-y or x-y-z-
-        return false;
-    }
+        return false; 
+    } 
     result->Parts32[partId] = static_cast<ui32>(partValue);
-    return true;
-}
-
+    return true; 
+} 
+ 
 TGuid TGuid::FromStringHex32(TStringBuf str)
 {
     TGuid guid;
     if (!FromStringHex32(str, &guid)) {
-        throw TSimpleException(Sprintf("Error parsing Hex32 GUID \"%s\"",
-            TString(str).c_str()));
+        throw TSimpleException(Sprintf("Error parsing Hex32 GUID \"%s\"", 
+            TString(str).c_str())); 
     }
     return guid;
 }
@@ -131,7 +131,7 @@ bool TGuid::FromStringHex32(TStringBuf str, TGuid* result)
         }
         return digit;
     };
-
+ 
     for (size_t j = 0; j < 16; ++j) {
         result->ReversedParts8[15 - j] = parseChar() * 16 + parseChar();
     }
@@ -198,6 +198,6 @@ char* WriteGuidToBuffer(char* ptr, TGuid value)
     return ptr;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-} // namespace NYT
+//////////////////////////////////////////////////////////////////////////////// 
+ 
+} // namespace NYT 

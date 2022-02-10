@@ -2,8 +2,8 @@
 
 #include "ref_counted.h"
 
-#include <util/generic/hash.h>
-
+#include <util/generic/hash.h> 
+ 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -12,12 +12,12 @@ template <class T>
 class TWeakPtr
 {
 public:
-    typedef T TUnderlying;
+    typedef T TUnderlying; 
 
     //! Empty constructor.
-    TWeakPtr() = default;
-
-    TWeakPtr(std::nullptr_t)
+    TWeakPtr() = default; 
+ 
+    TWeakPtr(std::nullptr_t) 
     { }
 
     //! Constructor from an unqualified reference.
@@ -25,7 +25,7 @@ public:
      * Note that this constructor could be racy due to unsynchronized operations
      * on the object and on the counter.
      */
-    explicit TWeakPtr(T* p) noexcept
+    explicit TWeakPtr(T* p) noexcept 
         : T_(p)
     {
 
@@ -110,7 +110,7 @@ public:
     }
 
     //! Copy assignment operator.
-    TWeakPtr& operator=(const TWeakPtr& other) noexcept
+    TWeakPtr& operator=(const TWeakPtr& other) noexcept 
     {
         TWeakPtr(other).Swap(*this);
         return *this;
@@ -118,7 +118,7 @@ public:
 
     //! Copy assignment operator with an upcast.
     template <class U>
-    TWeakPtr& operator=(const TWeakPtr<U>& other) noexcept
+    TWeakPtr& operator=(const TWeakPtr<U>& other) noexcept 
     {
         static_assert(
             std::is_convertible_v<U*, T*>,
@@ -136,7 +136,7 @@ public:
 
     //! Move assignment operator with an upcast.
     template <class U>
-    TWeakPtr& operator=(TWeakPtr<U>&& other) noexcept
+    TWeakPtr& operator=(TWeakPtr<U>&& other) noexcept 
     {
         static_assert(
             std::is_convertible_v<U*, T*>,
@@ -177,7 +177,7 @@ public:
     }
 
     //! Acquire a strong reference to the pointee and return a strong pointer.
-    TIntrusivePtr<T> Lock() const noexcept
+    TIntrusivePtr<T> Lock() const noexcept 
     {
         return T_ && RefCounter()->TryRef()
             ? TIntrusivePtr<T>(T_, false)
@@ -209,10 +209,10 @@ private:
 
     template <class U>
     friend class TWeakPtr;
-    template <class U>
+    template <class U> 
     friend struct ::THash;
 
-    T* T_ = nullptr;
+    T* T_ = nullptr; 
 #if defined(_tsan_enabled_)
     const TRefCounter* RefCounter_ = nullptr;
 
@@ -230,22 +230,22 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Creates a weak pointer wrapper for a given raw pointer.
-//! Compared to |TWeakPtr<T>::ctor|, type inference enables omitting |T|.
+//! Creates a weak pointer wrapper for a given raw pointer. 
+//! Compared to |TWeakPtr<T>::ctor|, type inference enables omitting |T|. 
 template <class T>
-TWeakPtr<T> MakeWeak(T* p)
-{
-    return TWeakPtr<T>(p);
-}
-
-//! Creates a weak pointer wrapper for a given intrusive pointer.
-//! Compared to |TWeakPtr<T>::ctor|, type inference enables omitting |T|.
-template <class T>
-TWeakPtr<T> MakeWeak(const TIntrusivePtr<T>& p)
-{
-    return TWeakPtr<T>(p);
-}
-
+TWeakPtr<T> MakeWeak(T* p) 
+{ 
+    return TWeakPtr<T>(p); 
+} 
+ 
+//! Creates a weak pointer wrapper for a given intrusive pointer. 
+//! Compared to |TWeakPtr<T>::ctor|, type inference enables omitting |T|. 
+template <class T> 
+TWeakPtr<T> MakeWeak(const TIntrusivePtr<T>& p) 
+{ 
+    return TWeakPtr<T>(p); 
+} 
+ 
 //! A helper for acquiring weak pointer for pointee, resetting intrusive pointer and then
 //! returning the pointee reference count using the acquired weak pointer.
 //! This helper is designed for best effort in checking that the object is not leaked after
@@ -265,10 +265,10 @@ int ResetAndGetResidualRefCount(TIntrusivePtr<T>& pointer)
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 // TODO(sandello): Kill comparsions.
-template <class T>
+template <class T> 
 bool operator<(const TWeakPtr<T>& lhs, const TWeakPtr<T>& rhs)
 {
     return lhs.Lock().Get() < rhs.Lock().Get();
@@ -301,14 +301,14 @@ bool operator!=(const TWeakPtr<T>& lhs, const TWeakPtr<U>& rhs)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-
-
-//! A hasher for TWeakPtr.
-template <class T>
+ 
+ 
+//! A hasher for TWeakPtr. 
+template <class T> 
 struct THash<NYT::TWeakPtr<T>>
-{
-    size_t operator () (const NYT::TWeakPtr<T>& ptr) const
-    {
+{ 
+    size_t operator () (const NYT::TWeakPtr<T>& ptr) const 
+    { 
         return THash<const NYT::TRefCountedBase*>()(ptr.T_);
-    }
-};
+    } 
+}; 

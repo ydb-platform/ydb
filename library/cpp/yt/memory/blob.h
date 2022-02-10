@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ref.h"
+#include "ref.h" 
 #include "ref_counted.h"
 
 namespace NYT {
@@ -8,8 +8,8 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Default memory tag for TBlob.
-struct TDefaultBlobTag
-{ };
+struct TDefaultBlobTag 
+{ }; 
 
 //! A home-grown optimized replacement for |std::vector<char>| suitable for carrying
 //! large chunks of data.
@@ -21,48 +21,48 @@ class TBlob
 {
 public:
     //! Constructs a blob with a given size.
-    TBlob(
-        TRefCountedTypeCookie tagCookie,
-        size_t size,
-        bool initiailizeStorage = true,
-        bool pageAligned = false);
+    TBlob( 
+        TRefCountedTypeCookie tagCookie, 
+        size_t size, 
+        bool initiailizeStorage = true, 
+        bool pageAligned = false); 
 
     //! Copies a chunk of memory into a new instance.
-    TBlob(
-        TRefCountedTypeCookie tagCookie,
-        TRef data,
-        bool pageAligned = false);
+    TBlob( 
+        TRefCountedTypeCookie tagCookie, 
+        TRef data, 
+        bool pageAligned = false); 
 
     //! Constructs an empty blob.
     template <class TTag = TDefaultBlobTag>
-    explicit TBlob(TTag tag = {})
-        : TBlob(tag, 0, true, false)
+    explicit TBlob(TTag tag = {}) 
+        : TBlob(tag, 0, true, false) 
     { }
 
     //! Constructs a blob with a given size.
     template <class TTag>
-    explicit TBlob(
-        TTag,
-        size_t size,
-        bool initiailizeStorage = true,
-        bool pageAligned = false)
-        : TBlob(
-            GetRefCountedTypeCookie<TTag>(),
-            size,
-            initiailizeStorage,
-            pageAligned)
+    explicit TBlob( 
+        TTag, 
+        size_t size, 
+        bool initiailizeStorage = true, 
+        bool pageAligned = false) 
+        : TBlob( 
+            GetRefCountedTypeCookie<TTag>(), 
+            size, 
+            initiailizeStorage, 
+            pageAligned) 
     { }
 
     //! Copies a chunk of memory into a new instance.
     template <class TTag>
-    TBlob(
-        TTag,
-        TRef data,
-        bool pageAligned = false)
-        : TBlob(
-            GetRefCountedTypeCookie<TTag>(),
-            data,
-            pageAligned)
+    TBlob( 
+        TTag, 
+        TRef data, 
+        bool pageAligned = false) 
+        : TBlob( 
+            GetRefCountedTypeCookie<TTag>(), 
+            data, 
+            pageAligned) 
     { }
 
     //! Remind user about the tag argument.
@@ -70,8 +70,8 @@ public:
     TBlob(i64 size, bool initiailizeStorage = true) = delete;
     TBlob(ui32 size, bool initiailizeStorage = true) = delete;
     TBlob(ui64 size, bool initiailizeStorage = true) = delete;
-    template <typename T, typename U>
-    TBlob(const T*, U) = delete;
+    template <typename T, typename U> 
+    TBlob(const T*, U) = delete; 
 
     //! Copies the data.
     TBlob(const TBlob& other);
@@ -95,25 +95,25 @@ public:
     void Resize(size_t newSize, bool initializeStorage = true);
 
     //! Returns the start pointer.
-    Y_FORCE_INLINE const char* Begin() const
+    Y_FORCE_INLINE const char* Begin() const 
     {
         return Begin_;
     }
 
     //! Returns the start pointer.
-    Y_FORCE_INLINE char* Begin()
+    Y_FORCE_INLINE char* Begin() 
     {
         return Begin_;
     }
 
     //! Returns the end pointer.
-    Y_FORCE_INLINE const char* End() const
+    Y_FORCE_INLINE const char* End() const 
     {
         return Begin_ + Size_;
     }
 
     //! Returns the end pointer.
-    Y_FORCE_INLINE char* End()
+    Y_FORCE_INLINE char* End() 
     {
         return Begin_ + Size_;
     }
@@ -125,49 +125,49 @@ public:
     }
 
     //! Returns the size.
-    Y_FORCE_INLINE size_t Size() const
+    Y_FORCE_INLINE size_t Size() const 
     {
         return Size_;
     }
 
     //! Returns the capacity.
-    Y_FORCE_INLINE size_t Capacity() const
+    Y_FORCE_INLINE size_t Capacity() const 
     {
         return Capacity_;
     }
 
-    //! Returns the TStringBuf instance for the occupied part of the blob.
-    Y_FORCE_INLINE TStringBuf ToStringBuf() const
-    {
-        return TStringBuf(Begin_, Size_);
-    }
-
-    //! Returns the TRef instance for the occupied part of the blob.
-    Y_FORCE_INLINE TRef ToRef() const
-    {
-        return TRef(Begin_, Size_);
-    }
-
+    //! Returns the TStringBuf instance for the occupied part of the blob. 
+    Y_FORCE_INLINE TStringBuf ToStringBuf() const 
+    { 
+        return TStringBuf(Begin_, Size_); 
+    } 
+ 
+    //! Returns the TRef instance for the occupied part of the blob. 
+    Y_FORCE_INLINE TRef ToRef() const 
+    { 
+        return TRef(Begin_, Size_); 
+    } 
+ 
     //! Provides by-value access to the underlying storage.
-    Y_FORCE_INLINE char operator [] (size_t index) const
+    Y_FORCE_INLINE char operator [] (size_t index) const 
     {
         return Begin_[index];
     }
 
     //! Provides by-ref access to the underlying storage.
-    Y_FORCE_INLINE char& operator [] (size_t index)
+    Y_FORCE_INLINE char& operator [] (size_t index) 
     {
         return Begin_[index];
     }
 
     //! Clears the instance but does not reclaim the memory.
-    Y_FORCE_INLINE void Clear()
+    Y_FORCE_INLINE void Clear() 
     {
         Size_ = 0;
     }
 
     //! Returns |true| if size is zero.
-    Y_FORCE_INLINE bool IsEmpty() const
+    Y_FORCE_INLINE bool IsEmpty() const 
     {
         return Size_ == 0;
     }
@@ -182,35 +182,35 @@ public:
     void Append(const void* data, size_t size);
 
     //! Appends a chunk of memory to the end.
-    void Append(TRef ref);
+    void Append(TRef ref); 
 
-    //! Appends a single char to the end.
-    void Append(char ch);
-
+    //! Appends a single char to the end. 
+    void Append(char ch); 
+ 
     //! Swaps the current and other instances
     void Swap(TBlob& other);
-
+ 
     friend void swap(TBlob& left, TBlob& right);
 
 private:
-    char* Begin_ = nullptr;
-    size_t Size_ = 0;
-    size_t Capacity_ = 0;
-    bool PageAligned_ = false;
+    char* Begin_ = nullptr; 
+    size_t Size_ = 0; 
+    size_t Capacity_ = 0; 
+    bool PageAligned_ = false; 
 
 #ifdef YT_ENABLE_REF_COUNTED_TRACKING
-    TRefCountedTypeCookie TagCookie_ = NullRefCountedTypeCookie;
+    TRefCountedTypeCookie TagCookie_ = NullRefCountedTypeCookie; 
 #endif
 
-    char* DoAllocate(size_t newCapacity);
+    char* DoAllocate(size_t newCapacity); 
     void Allocate(size_t newCapacity);
     void Reallocate(size_t newCapacity);
     void Free();
 
     void Reset();
 
-    void SetTagCookie(TRefCountedTypeCookie tagCookie);
-    void SetTagCookie(const TBlob& other);
+    void SetTagCookie(TRefCountedTypeCookie tagCookie); 
+    void SetTagCookie(const TBlob& other); 
 };
 
 void swap(TBlob& left, TBlob& right);

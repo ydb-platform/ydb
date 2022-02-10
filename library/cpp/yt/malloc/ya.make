@@ -1,7 +1,7 @@
-LIBRARY()
-
-SRCS(
-    malloc.cpp
-)
-
-END()
+LIBRARY() 
+ 
+SRCS( 
+    malloc.cpp 
+) 
+ 
+END() 

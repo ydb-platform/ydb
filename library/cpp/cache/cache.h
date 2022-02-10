@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/algorithm.h>
+#include <util/generic/algorithm.h> 
 #include <util/generic/ptr.h>
 #include <util/generic/intrlist.h>
 #include <util/generic/hash_set.h>
@@ -229,60 +229,60 @@ private:
     size_t MaxSize;
 };
 
-// Least Weighted list
-// discards the least weighted items first
-// doesn't support promotion
-template <typename TKey, typename TValue, typename TWeight, typename TWeighter>
-class TLWList {
-public:
-    TLWList(size_t maxSize)
-        : Size(0)
-        , MaxSize(maxSize)
-    {
-    }
-
-    struct TItem {
-        TItem(const TKey& key, const TValue& value = TValue())
-            : Key(key)
-            , Value(value)
-            , Weight(TWeighter::Weight(value))
-        {
-        }
-
-        TItem(const TItem& rhs)
-            : Key(rhs.Key)
-            , Value(rhs.Value)
-            , Weight(rhs.Weight)
-        {
-        }
-
+// Least Weighted list 
+// discards the least weighted items first 
+// doesn't support promotion 
+template <typename TKey, typename TValue, typename TWeight, typename TWeighter> 
+class TLWList { 
+public: 
+    TLWList(size_t maxSize) 
+        : Size(0) 
+        , MaxSize(maxSize) 
+    { 
+    } 
+ 
+    struct TItem { 
+        TItem(const TKey& key, const TValue& value = TValue()) 
+            : Key(key) 
+            , Value(value) 
+            , Weight(TWeighter::Weight(value)) 
+        { 
+        } 
+ 
+        TItem(const TItem& rhs) 
+            : Key(rhs.Key) 
+            , Value(rhs.Value) 
+            , Weight(rhs.Weight) 
+        { 
+        } 
+ 
         bool operator<(const TItem& rhs) const {
-            return Key < rhs.Key;
-        }
-
+            return Key < rhs.Key; 
+        } 
+ 
         bool operator==(const TItem& rhs) const {
-            return Key == rhs.Key;
-        }
-
-        TKey Key;
-        TValue Value;
-        TWeight Weight;
-
-        struct THash {
+            return Key == rhs.Key; 
+        } 
+ 
+        TKey Key; 
+        TValue Value; 
+        TWeight Weight; 
+ 
+        struct THash { 
             size_t operator()(const TItem& item) const {
-                return ::THash<TKey>()(item.Key);
-            }
-        };
-    };
-
-    struct THeapComparator {
-        bool operator()(TItem* const item1, TItem* const item2) const {
-            return item1->Weight > item2->Weight;
-        }
-    };
-
-public:
-    TItem* Insert(TItem* item) {
+                return ::THash<TKey>()(item.Key); 
+            } 
+        }; 
+    }; 
+ 
+    struct THeapComparator { 
+        bool operator()(TItem* const item1, TItem* const item2) const { 
+            return item1->Weight > item2->Weight; 
+        } 
+    }; 
+ 
+public: 
+    TItem* Insert(TItem* item) { 
         FixHeap();
 
         if (Size >= MaxSize && item->Weight < GetLightest()->Weight) {
@@ -298,41 +298,41 @@ public:
 
     TItem* RemoveIfOverflown() {
         if (Size <= MaxSize) {
-            return nullptr;
-        }
+            return nullptr; 
+        } 
 
         auto lightest = GetLightest();
         Erase(lightest);
         PopHeap(Heap.begin(), Heap.end(), THeapComparator());
         return lightest;
-    }
-
-    TItem* GetLightest() {
+    } 
+ 
+    TItem* GetLightest() { 
         FixHeap();
 
         Y_ASSERT(!Heap.empty());
 
-        return Heap.front();
-    }
-
-    // This method doesn't remove items from the heap.
-    // Erased items are stored in Removed set
-    // and will be deleted on-access (using FixHeap method)
-    void Erase(TItem* item) {
+        return Heap.front(); 
+    } 
+ 
+    // This method doesn't remove items from the heap. 
+    // Erased items are stored in Removed set 
+    // and will be deleted on-access (using FixHeap method) 
+    void Erase(TItem* item) { 
         Y_ASSERT(Size > 0);
 
-        --Size;
+        --Size; 
         Removed.insert(item);
-    }
-
-    void Promote(TItem*) {
-        // do nothing
-    }
-
+    } 
+ 
+    void Promote(TItem*) { 
+        // do nothing 
+    } 
+ 
     [[nodiscard]] size_t GetSize() const {
-        return Size;
-    }
-
+        return Size; 
+    } 
+ 
     size_t GetMaxSize() const {
         return MaxSize;
     }
@@ -343,18 +343,18 @@ public:
         MaxSize = newSize;
     }
 
-    void Clear() {
-        Heap.clear();
-        Removed.clear();
-        Size = 0;
-    }
-
+    void Clear() { 
+        Heap.clear(); 
+        Removed.clear(); 
+        Size = 0; 
+    } 
+ 
 private:
-    // Physically remove erased elements from the heap
-    void FixHeap() {
+    // Physically remove erased elements from the heap 
+    void FixHeap() { 
         if (Removed.empty()) {
             return;
-        }
+        } 
 
         Heap.erase(std::remove_if(Heap.begin(), Heap.end(), [this](TItem* item) {
                        return this->Removed.contains(item);
@@ -363,16 +363,16 @@ private:
         MakeHeap(Heap.begin(), Heap.end(), THeapComparator());
         Removed.clear();
         Size = Heap.size();
-    }
-
-private:
+    } 
+ 
+private: 
     TVector<TItem*> Heap;
     THashSet<TItem*> Removed;
-
-    size_t Size;
-    size_t MaxSize;
-};
-
+ 
+    size_t Size; 
+    size_t MaxSize; 
+}; 
+ 
 template <typename TKey, typename TValue, typename TListType, typename TDeleter>
 class TCache {
     typedef typename TListType::TItem TItem;
@@ -481,11 +481,11 @@ public:
             return false;
         TIndexIterator it = Index.insert(tmpItem);
 
-        TItem* insertedItem = const_cast<TItem*>(&*it);
+        TItem* insertedItem = const_cast<TItem*>(&*it); 
         auto removedItem = List.Insert(insertedItem);
         auto insertedWasRemoved = removedItem == insertedItem;
-        if (removedItem) {
-            EraseFromIndex(removedItem);
+        if (removedItem) { 
+            EraseFromIndex(removedItem); 
             while ((removedItem = List.RemoveIfOverflown())) {
                 insertedWasRemoved = insertedWasRemoved || insertedItem == removedItem;
                 EraseFromIndex(removedItem);
@@ -622,28 +622,28 @@ public:
         return TBase::Empty() ? TBase::End() : this->FindByItem(TBase::List.GetLeastFrequentlyUsed());
     }
 };
-
-// Least Weighted cache
-// discards the least weighted items first
-// doesn't support promotion
-template <typename TKey, typename TValue, typename TWeight, typename TWeighter, typename TDeleter = TNoopDelete>
+ 
+// Least Weighted cache 
+// discards the least weighted items first 
+// doesn't support promotion 
+template <typename TKey, typename TValue, typename TWeight, typename TWeighter, typename TDeleter = TNoopDelete> 
 class TLWCache: public TCache<TKey, TValue, TLWList<TKey, TValue, TWeight, TWeighter>, TDeleter> {
-    typedef TCache<TKey, TValue, TLWList<TKey, TValue, TWeight, TWeighter>, TDeleter> TBase;
+    typedef TCache<TKey, TValue, TLWList<TKey, TValue, TWeight, TWeighter>, TDeleter> TBase; 
     using TListType = TLWList<TKey, TValue, TWeight, TWeighter>;
-
-public:
-    typedef typename TBase::TIterator TIterator;
-
-    TLWCache(size_t maxSize, bool multiValue = false)
+ 
+public: 
+    typedef typename TBase::TIterator TIterator; 
+ 
+    TLWCache(size_t maxSize, bool multiValue = false) 
         : TBase(TListType(maxSize), multiValue)
-    {
-    }
-
-    TValue& GetLightest() {
-        return TBase::List.GetLightest()->Value;
-    }
-
-    TIterator FindLightest() {
-        return TBase::Empty() ? TBase::End() : this->FindByItem(TBase::List.GetLightest());
-    }
-};
+    { 
+    } 
+ 
+    TValue& GetLightest() { 
+        return TBase::List.GetLightest()->Value; 
+    } 
+ 
+    TIterator FindLightest() { 
+        return TBase::Empty() ? TBase::End() : this->FindByItem(TBase::List.GetLightest()); 
+    } 
+}; 

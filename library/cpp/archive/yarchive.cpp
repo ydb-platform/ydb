@@ -32,7 +32,7 @@ static inline T ESLoad(IInputStream* in) {
     T t = T();
 
     if (in->Load(&t, sizeof(t)) != sizeof(t)) {
-        ythrow TSerializeException() << "malformed archive";
+        ythrow TSerializeException() << "malformed archive"; 
     }
 
     return LittleToHost(t);
@@ -49,7 +49,7 @@ inline TString ESLoad<TString>(IInputStream* in) {
         const size_t readed = in->Read(tmp.Data(), toread);
 
         if (!readed) {
-            ythrow TSerializeException() << "malformed archive";
+            ythrow TSerializeException() << "malformed archive"; 
         }
 
         ret.append(tmp.Data(), readed);
@@ -190,7 +190,7 @@ private:
 };
 
 TArchiveWriter::TArchiveWriter(IOutputStream* out, bool compress)
-    : Impl_(new TImpl(*out, compress))
+    : Impl_(new TImpl(*out, compress)) 
 {
 }
 
@@ -283,7 +283,7 @@ public:
 
         for (size_t i = 0; i < count; ++i) {
             TArchiveRecordDescriptorRef descr(new TArchiveRecordDescriptor(&d));
-
+ 
             Recs_.push_back(descr);
             Dict_[descr->Name()] = descr;
         }
@@ -314,7 +314,7 @@ public:
     inline bool Has(const TStringBuf key) const {
         return Dict_.contains(key);
     }
-
+ 
     inline TAutoPtr<IInputStream> ObjectByKey(const TStringBuf key) const {
         TBlob subBlob = BlobByKey(key);
 
@@ -322,9 +322,9 @@ public:
             return new TArchiveInputStream(subBlob);
         } else {
             return new TMemoryInput(subBlob.Data(), subBlob.Length());
-        }
+        } 
     }
-
+ 
     inline TBlob ObjectBlobByKey(const TStringBuf key) const {
         TBlob subBlob = BlobByKey(key);
 
@@ -354,7 +354,7 @@ public:
     inline bool Compressed() const {
         return UseDecompression;
     }
-
+ 
 private:
     TBlob Blob_;
     TVector<TArchiveRecordDescriptorRef> Recs_;
@@ -384,15 +384,15 @@ bool TArchiveReader::Has(const TStringBuf key) const {
 TAutoPtr<IInputStream> TArchiveReader::ObjectByKey(const TStringBuf key) const {
     return Impl_->ObjectByKey(key);
 }
-
+ 
 TBlob TArchiveReader::ObjectBlobByKey(const TStringBuf key) const {
     return Impl_->ObjectBlobByKey(key);
 }
 
 TBlob TArchiveReader::BlobByKey(const TStringBuf key) const {
-    return Impl_->BlobByKey(key);
-}
-
-bool TArchiveReader::Compressed() const {
-    return Impl_->Compressed();
-}
+    return Impl_->BlobByKey(key); 
+} 
+ 
+bool TArchiveReader::Compressed() const { 
+    return Impl_->Compressed(); 
+} 

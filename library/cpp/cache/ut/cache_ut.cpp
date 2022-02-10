@@ -2,12 +2,12 @@
 #include <library/cpp/cache/thread_safe_cache.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-struct TStrokaWeighter {
+struct TStrokaWeighter { 
     static size_t Weight(const TString& s) {
-        return s.size();
-    }
-};
-
+        return s.size(); 
+    } 
+}; 
+ 
 Y_UNIT_TEST_SUITE(TCacheTest) {
     Y_UNIT_TEST(LRUListTest) {
         typedef TLRUList<int, TString> TListType;
@@ -88,32 +88,32 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
     Y_UNIT_TEST(LWListTest) {
         typedef TLWList<int, TString, size_t, TStrokaWeighter> TListType;
         TListType list(2);
-
+ 
         TListType::TItem x1(1, "tt");
         list.Insert(&x1);
         UNIT_ASSERT_EQUAL(list.GetLightest()->Key, 1);
         UNIT_ASSERT_EQUAL(list.GetSize(), 1);
-
+ 
         TListType::TItem x2(2, "yyyy");
         list.Insert(&x2);
         UNIT_ASSERT_EQUAL(list.GetLightest()->Key, 1);
         UNIT_ASSERT_EQUAL(list.GetSize(), 2);
-
+ 
         TListType::TItem x3(3, "z");
         list.Insert(&x3);
         UNIT_ASSERT_EQUAL(list.GetLightest()->Key, 1);
         UNIT_ASSERT_EQUAL(list.GetSize(), 2);
-
+ 
         TListType::TItem x4(4, "xxxxxx");
         list.Insert(&x4);
         UNIT_ASSERT_EQUAL(list.GetLightest()->Key, 2);
         UNIT_ASSERT_EQUAL(list.GetSize(), 2);
-
+ 
         list.Erase(&x2);
         UNIT_ASSERT_EQUAL(list.GetLightest()->Key, 4);
         UNIT_ASSERT_EQUAL(list.GetSize(), 1);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(SimpleTest) {
         typedef TLRUCache<int, TString> TCache;
         TCache s(2); // size 2

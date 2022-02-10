@@ -50,7 +50,7 @@ def create_cmakelists(zoneinfo_dir):
         cmd = 'add' if os.path.basename(fn) in all_hashes else 'remove'
         subprocess.check_call(['svn', cmd, '--force', fn])
 
-    with open('ya.make.resources', 'w') as f: 
+    with open('ya.make.resources', 'w') as f:
         print >>f, yamake_template.format(resources)
 
 def get_latest_iana_version():
@@ -61,11 +61,11 @@ def get_latest_iana_version():
     return version_match.group(1)
 
 def get_current_version():
-    try: 
-        with open('VERSION') as f: 
-            return f.read() 
-    except: 
-        return 0 
+    try:
+        with open('VERSION') as f:
+            return f.read()
+    except:
+        return 0
 
 def prepare_tzdata(version):
     temp_dir = tempfile.mkdtemp()
@@ -86,7 +86,7 @@ def prepare_tzdata(version):
         print 'Converting tzdata to binary format'
         subprocess.check_call(['make', '-s', '-C', temp_dir, 'TOPDIR={}'.format(temp_dir), 'install'])
 
-        print 'Preparing ya.make.resources' 
+        print 'Preparing ya.make.resources'
         zoneinfo_dir = os.path.join(temp_dir, 'usr', 'share', 'zoneinfo')
         create_cmakelists(zoneinfo_dir)
     finally:

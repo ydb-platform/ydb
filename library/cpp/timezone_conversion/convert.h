@@ -1,7 +1,7 @@
 #pragma once
 
-#include "civil.h" 
- 
+#include "civil.h"
+
 #include <contrib/libs/cctz/include/cctz/time_zone.h>
 #include <util/datetime/base.h>
 #include <util/draft/datetime.h>
@@ -31,19 +31,19 @@ namespace NDatetime {
     TSimpleTM ToCivilTime(const TInstant& absoluteTime, const TTimeZone& tz);
 
     /**
-     * Creates civil time in place with respect of given timezone. 
-     * @param[in] tz        The time zone to use for creation. 
-     * @param[in] year      The year of the creation time. 
-     * @param[in] mon       The month of the creation time. 
-     * @param[in] day       The day of the creation time. 
-     * @param[in] h         The hour of the creation time. 
-     * @param[in] m         The minute of the creation time. 
-     * @param[in] s         The second of the creation time. 
-     * @return a civil time 
-     */ 
-    TSimpleTM CreateCivilTime(const TTimeZone& tz, ui32 year, ui32 mon, ui32 day, ui32 h = 0, ui32 m = 0, ui32 s = 0); 
- 
-    /** 
+     * Creates civil time in place with respect of given timezone.
+     * @param[in] tz        The time zone to use for creation.
+     * @param[in] year      The year of the creation time.
+     * @param[in] mon       The month of the creation time.
+     * @param[in] day       The day of the creation time.
+     * @param[in] h         The hour of the creation time.
+     * @param[in] m         The minute of the creation time.
+     * @param[in] s         The second of the creation time.
+     * @return a civil time
+     */
+    TSimpleTM CreateCivilTime(const TTimeZone& tz, ui32 year, ui32 mon, ui32 day, ui32 h = 0, ui32 m = 0, ui32 s = 0);
+
+    /**
      * @param civilTime     A human-readable date and time (the following fields
      *                      are used by this function: {Year,Mon,MDay,Hour,Min,Sec}).
      * @param tz            The time zone to use for conversion.

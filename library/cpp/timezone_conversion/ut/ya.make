@@ -9,7 +9,7 @@ PEERDIR(
 
 SRCS(
     convert_ut.cpp
-    civil_ut.cpp 
+    civil_ut.cpp
 )
 
 END()

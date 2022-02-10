@@ -1,7 +1,7 @@
-#pragma once 
- 
-namespace NSc { 
-    class TValue; 
-    class TDict; 
-    class TArray; 
-} 
+#pragma once
+
+namespace NSc {
+    class TValue;
+    class TDict;
+    class TArray;
+}

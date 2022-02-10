@@ -13,10 +13,10 @@ PEERDIR(
     contrib/libs/cctz
 )
 
-INCLUDE(ya.make.resources) 
+INCLUDE(ya.make.resources)
 
-SRCS( 
-    GLOBAL factory.cpp 
+SRCS(
+    GLOBAL factory.cpp
 )
 
 END()

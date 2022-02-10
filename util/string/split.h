@@ -222,11 +222,11 @@ struct TFindFirstOf {
 
 template <>
 struct TFindFirstOf<const char>: public TCompactStrSpn {
-    inline TFindFirstOf(const char* set, const char* e) 
-        : TCompactStrSpn(set, e) 
-    { 
-    } 
- 
+    inline TFindFirstOf(const char* set, const char* e)
+        : TCompactStrSpn(set, e)
+    {
+    }
+
     inline TFindFirstOf(const char* set)
         : TCompactStrSpn(set)
     {

@@ -1,9 +1,9 @@
-#include "civil.h" 
- 
-#include <util/stream/output.h> 
-#include <util/stream/format.h> 
+#include "civil.h"
+
+#include <util/stream/output.h>
+#include <util/stream/format.h>
 #include <util/string/ascii.h>
- 
+
 namespace {
     bool TryParseInt(TStringBuf& s, int& dst, size_t maxDigits) {
         int res = 0;
@@ -63,35 +63,35 @@ namespace {
     }
 } // anonymous namespace
 
-namespace NDatetime { 
-    TTimeZone GetTimeZone(TStringBuf name) { 
+namespace NDatetime {
+    TTimeZone GetTimeZone(TStringBuf name) {
         int offset;
         if (TryParseUTCOffsetTimezone(name, offset)) {
             return GetFixedTimeZone(offset);
         }
-        TTimeZone result; 
+        TTimeZone result;
         if (!cctz::load_time_zone(static_cast<std::string>(name), &result)) {
-            ythrow TInvalidTimezone() << "Failed to load time zone " << name << ", " << result.name(); 
-        } 
-        return result; 
-    } 
- 
+            ythrow TInvalidTimezone() << "Failed to load time zone " << name << ", " << result.name();
+        }
+        return result;
+    }
+
     TTimeZone GetFixedTimeZone(const long offset) {
         return cctz::fixed_time_zone(std::chrono::seconds(offset));
     }
 
-    TCivilSecond Convert(const TInstant& absTime, const TTimeZone& tz) { 
-        return cctz::convert(TSystemClock::from_time_t(absTime.TimeT()), tz); 
-    } 
- 
-    TCivilSecond Convert(const TInstant& absTime, TStringBuf tzName) { 
-        TTimeZone tz = GetTimeZone(tzName); 
-        return cctz::convert(TSystemClock::from_time_t(absTime.TimeT()), tz); 
-    } 
- 
-    TInstant Convert(const TCivilSecond& tp, const TTimeZone& tz) { 
-        return TInstant::Seconds(cctz::convert(tp, tz).time_since_epoch().count()); 
-    } 
+    TCivilSecond Convert(const TInstant& absTime, const TTimeZone& tz) {
+        return cctz::convert(TSystemClock::from_time_t(absTime.TimeT()), tz);
+    }
+
+    TCivilSecond Convert(const TInstant& absTime, TStringBuf tzName) {
+        TTimeZone tz = GetTimeZone(tzName);
+        return cctz::convert(TSystemClock::from_time_t(absTime.TimeT()), tz);
+    }
+
+    TInstant Convert(const TCivilSecond& tp, const TTimeZone& tz) {
+        return TInstant::Seconds(cctz::convert(tp, tz).time_since_epoch().count());
+    }
 
     TCivilSecond AddYears(const TCivilSecond& tp, TDiff diff) {
         TCivilYear newYear = Calc<TCivilYear>(tp, diff);
@@ -173,42 +173,42 @@ namespace NDatetime {
             }
         }
     }
-} 
- 
-template <> 
+}
+
+template <>
 void Out<NDatetime::TCivilYear>(IOutputStream& out, const NDatetime::TCivilYear& y) {
     out << y.year();
-} 
- 
-template <> 
+}
+
+template <>
 void Out<NDatetime::TCivilMonth>(IOutputStream& out, const NDatetime::TCivilMonth& m) {
-    out << NDatetime::TCivilYear(m) << '-' << LeftPad(m.month(), 2, '0'); 
-} 
- 
-template <> 
+    out << NDatetime::TCivilYear(m) << '-' << LeftPad(m.month(), 2, '0');
+}
+
+template <>
 void Out<NDatetime::TCivilDay>(IOutputStream& out, const NDatetime::TCivilDay& d) {
-    out << NDatetime::TCivilMonth(d) << '-' << LeftPad(d.day(), 2, '0'); 
-} 
- 
-template <> 
+    out << NDatetime::TCivilMonth(d) << '-' << LeftPad(d.day(), 2, '0');
+}
+
+template <>
 void Out<NDatetime::TCivilHour>(IOutputStream& out, const NDatetime::TCivilHour& h) {
-    out << NDatetime::TCivilDay(h) << 'T' << LeftPad(h.hour(), 2, '0'); 
-} 
- 
-template <> 
+    out << NDatetime::TCivilDay(h) << 'T' << LeftPad(h.hour(), 2, '0');
+}
+
+template <>
 void Out<NDatetime::TCivilMinute>(IOutputStream& out, const NDatetime::TCivilMinute& m) {
-    out << NDatetime::TCivilHour(m) << ':' << LeftPad(m.minute(), 2, '0'); 
-} 
- 
-template <> 
+    out << NDatetime::TCivilHour(m) << ':' << LeftPad(m.minute(), 2, '0');
+}
+
+template <>
 void Out<NDatetime::TCivilSecond>(IOutputStream& out, const NDatetime::TCivilSecond& s) {
-    out << NDatetime::TCivilMinute(s) << ':' << LeftPad(s.second(), 2, '0'); 
-} 
- 
-template <> 
+    out << NDatetime::TCivilMinute(s) << ':' << LeftPad(s.second(), 2, '0');
+}
+
+template <>
 void Out<NDatetime::TWeekday>(IOutputStream& out, NDatetime::TWeekday wd) {
-    using namespace cctz; 
-    switch (wd) { 
+    using namespace cctz;
+    switch (wd) {
         case weekday::monday:
             out << TStringBuf("Monday");
             break;
@@ -230,5 +230,5 @@ void Out<NDatetime::TWeekday>(IOutputStream& out, NDatetime::TWeekday wd) {
         case weekday::sunday:
             out << TStringBuf("Sunday");
             break;
-    } 
-} 
+    }
+}

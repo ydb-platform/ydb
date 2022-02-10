@@ -197,8 +197,8 @@ public:
 
         ListenStartEvent.Reset();
         try {
-            ListenThread.Reset(new TThread(ListenSocketFunction, this)); 
-            ListenThread->Start(); 
+            ListenThread.Reset(new TThread(ListenSocketFunction, this));
+            ListenThread->Start();
         } catch (const yexception&) {
             SaveErrorCode();
             return false;
@@ -214,9 +214,9 @@ public:
         Cb_->OnWait();
         TGuard<TMutex> g(StopMutex);
         if (ListenThread) {
-            ListenThread->Join(); 
+            ListenThread->Join();
             ListenThread.Reset(nullptr);
-        } 
+        }
     }
 
     void Stop() {
@@ -224,9 +224,9 @@ public:
 
         TGuard<TMutex> g(StopMutex);
         if (ListenThread) {
-            ListenThread->Join(); 
+            ListenThread->Join();
             ListenThread.Reset(nullptr);
-        } 
+        }
 
         while (ConnectionCount) {
             usleep(10000);
@@ -398,7 +398,7 @@ public:
     }
 
     TImpl(THttpServer* parent, ICallBack* cb, TMtpQueueRef mainWorkers, TMtpQueueRef failWorkers, const TOptions& options_)
-        : Requests(mainWorkers) 
+        : Requests(mainWorkers)
         , FailRequests(failWorkers)
         , Options_(options_)
         , Cb_(cb)
@@ -442,7 +442,7 @@ public:
         return Options_.MaxConnections && ((size_t)GetClientCount() >= Options_.MaxConnections);
     }
 
-    THolder<TThread> ListenThread; 
+    THolder<TThread> ListenThread;
     TPipeHandle ListenWakeupReadFd;
     TPipeHandle ListenWakeupWriteFd;
     TSystemEvent ListenStartEvent;

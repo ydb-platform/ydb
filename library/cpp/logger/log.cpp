@@ -72,7 +72,7 @@ public:
         }
 
         TPriorityLogStream ls(priority, this);
- 
+
         Printf(ls, format, args);
     }
 
@@ -219,9 +219,9 @@ void TLog::ResetBackend(THolder<TLogBackend> backend) noexcept {
 }
 
 bool TLog::IsNullLog() const noexcept {
-    return Impl_->IsNullLog(); 
-} 
- 
+    return Impl_->IsNullLog();
+}
+
 THolder<TLogBackend> TLog::ReleaseBackend() noexcept {
     return Impl_->ReleaseBackend();
 }

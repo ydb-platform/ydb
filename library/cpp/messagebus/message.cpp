@@ -171,8 +171,8 @@ namespace NBus {
         } else {
             GetHeader()->FlagsInternal &= ~(MESSAGE_COMPRESS_RESPONSE);
         }
-    } 
- 
+    }
+
     TString TBusIdentity::ToString() const {
         TStringStream ss;
         ss << "msg-id=" << MessageId

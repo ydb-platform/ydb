@@ -94,7 +94,7 @@ namespace NBus {
                     } else if (!addr) {
                         addr.Reset(new TNetworkAddressRef(na, &*it));
                     }
-                } 
+                }
             }
             return addr;
         }
@@ -112,7 +112,7 @@ namespace NBus {
             TNetworkAddress na(TString(hostPort, portStr), port);
             return MakeAddress(na, requireVersion, preferVersion);
         }
-    } 
+    }
 
     TNetAddr::TNetAddr(const char* hostPort, EIpVersion requireVersion /*= EIP_VERSION_ANY*/, EIpVersion preferVersion /*= EIP_VERSION_ANY*/)
         : Ptr(MakeAddress(hostPort, requireVersion, preferVersion))
@@ -120,15 +120,15 @@ namespace NBus {
         if (!Ptr) {
             ythrow TNetAddr::TError() << "cannot resolve " << hostPort << " into " << Describe(requireVersion);
         }
-    } 
+    }
 
     TNetAddr::TNetAddr(TStringBuf host, int port, EIpVersion requireVersion /*= EIP_VERSION_ANY*/, EIpVersion preferVersion /*= EIP_VERSION_ANY*/)
         : Ptr(MakeAddress(host, port, requireVersion, preferVersion))
     {
         if (!Ptr) {
             ythrow TNetAddr::TError() << "cannot resolve " << host << ":" << port << " into " << Describe(requireVersion);
-        } 
-    } 
+        }
+    }
 
     TNetAddr::TNetAddr(const TNetworkAddress& na, EIpVersion requireVersion /*= EIP_VERSION_ANY*/, EIpVersion preferVersion /*= EIP_VERSION_ANY*/)
         : Ptr(MakeAddress(na, requireVersion, preferVersion))
@@ -141,11 +141,11 @@ namespace NBus {
     TNetAddr::TNetAddr(const TNetworkAddress& na, const TAddrInfo& ai)
         : Ptr(new TNetworkAddressRef(na, ai))
     {
-    } 
+    }
 
     const sockaddr* TNetAddr::Addr() const {
         return Ptr->Addr();
-    } 
+    }
 
     socklen_t TNetAddr::Len() const {
         return Ptr->Len();

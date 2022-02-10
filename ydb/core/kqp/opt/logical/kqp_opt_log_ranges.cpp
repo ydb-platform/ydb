@@ -125,43 +125,43 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
         return node;
     }
 
-    TMaybeNode<TKqlReadTableBase> readTable;
+    TMaybeNode<TKqlReadTableBase> readTable; 
     TMaybeNode<TCoFilterNullMembers> filterNull;
     TMaybeNode<TCoSkipNullMembers> skipNull;
 
-    TMaybeNode<TCoAtom> indexName;
-
+    TMaybeNode<TCoAtom> indexName; 
+ 
     if (auto maybeRead = flatmap.Input().Maybe<TKqlReadTable>()) {
         readTable = maybeRead.Cast();
     }
 
-    if (auto maybeRead = flatmap.Input().Maybe<TKqlReadTableIndex>()) {
-        readTable = maybeRead.Cast();
-        indexName = maybeRead.Cast().Index();
-    }
-
+    if (auto maybeRead = flatmap.Input().Maybe<TKqlReadTableIndex>()) { 
+        readTable = maybeRead.Cast(); 
+        indexName = maybeRead.Cast().Index(); 
+    } 
+ 
     if (auto maybeRead = flatmap.Input().Maybe<TCoFilterNullMembers>().Input().Maybe<TKqlReadTable>()) {
         readTable = maybeRead.Cast();
         filterNull = flatmap.Input().Cast<TCoFilterNullMembers>();
     }
 
-    if (auto maybeRead = flatmap.Input().Maybe<TCoFilterNullMembers>().Input().Maybe<TKqlReadTableIndex>()) {
-        readTable = maybeRead.Cast();
-        filterNull = flatmap.Input().Cast<TCoFilterNullMembers>();
-        indexName = maybeRead.Cast().Index();
-    }
-
+    if (auto maybeRead = flatmap.Input().Maybe<TCoFilterNullMembers>().Input().Maybe<TKqlReadTableIndex>()) { 
+        readTable = maybeRead.Cast(); 
+        filterNull = flatmap.Input().Cast<TCoFilterNullMembers>(); 
+        indexName = maybeRead.Cast().Index(); 
+    } 
+ 
     if (auto maybeRead = flatmap.Input().Maybe<TCoSkipNullMembers>().Input().Maybe<TKqlReadTable>()) {
         readTable = maybeRead.Cast();
         skipNull = flatmap.Input().Cast<TCoSkipNullMembers>();
     }
 
-    if (auto maybeRead = flatmap.Input().Maybe<TCoSkipNullMembers>().Input().Maybe<TKqlReadTableIndex>()) {
-        readTable = maybeRead.Cast();
-        skipNull = flatmap.Input().Cast<TCoSkipNullMembers>();
-        indexName = maybeRead.Cast().Index();
-    }
-
+    if (auto maybeRead = flatmap.Input().Maybe<TCoSkipNullMembers>().Input().Maybe<TKqlReadTableIndex>()) { 
+        readTable = maybeRead.Cast(); 
+        skipNull = flatmap.Input().Cast<TCoSkipNullMembers>(); 
+        indexName = maybeRead.Cast().Index(); 
+    } 
+ 
     if (!readTable) {
         return node;
     }
@@ -172,10 +172,10 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
         return node;
     }
 
-    auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
+    auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path()); 
 
-    auto& tableDesc = indexName ? kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(TString(indexName.Cast())).first->Name) : mainTableDesc;
-
+    auto& tableDesc = indexName ? kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(TString(indexName.Cast())).first->Name) : mainTableDesc; 
+ 
     YQL_ENSURE(tableDesc.Metadata->Kind != EKikimrTableKind::Olap);
 
     auto row = flatmap.Lambda().Args().Arg(0);
@@ -208,20 +208,20 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
         if (useLookup) {
             auto lookupKeys = BuildEquiRangeLookup(keyRange, tableDesc, read.Pos(), ctx);
 
-            if (indexName) {
-                readInput = Build<TKqlLookupIndex>(ctx, read.Pos())
-                    .Table(read.Table())
-                    .LookupKeys(lookupKeys)
-                    .Columns(read.Columns())
-                    .Index(indexName.Cast())
-                    .Done();
-            } else {
-                readInput = Build<TKqlLookupTable>(ctx, read.Pos())
-                    .Table(read.Table())
-                    .LookupKeys(lookupKeys)
-                    .Columns(read.Columns())
-                    .Done();
-            }
+            if (indexName) { 
+                readInput = Build<TKqlLookupIndex>(ctx, read.Pos()) 
+                    .Table(read.Table()) 
+                    .LookupKeys(lookupKeys) 
+                    .Columns(read.Columns()) 
+                    .Index(indexName.Cast()) 
+                    .Done(); 
+            } else { 
+                readInput = Build<TKqlLookupTable>(ctx, read.Pos()) 
+                    .Table(read.Table()) 
+                    .LookupKeys(lookupKeys) 
+                    .Columns(read.Columns()) 
+                    .Done(); 
+            } 
         } else {
             auto keyRangeExpr = BuildKeyRangeExpr(keyRange, tableDesc, node.Pos(), ctx);
 
@@ -234,22 +234,22 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
                 }
             }
 
-            if (indexName) {
-                readInput = Build<TKqlReadTableIndex>(ctx, read.Pos())
-                    .Table(read.Table())
-                    .Range(keyRangeExpr)
-                    .Columns(read.Columns())
-                    .Index(indexName.Cast())
-                    .Settings(settings.BuildNode(ctx, read.Pos()))
-                    .Done();
-            } else {
-                readInput = Build<TKqlReadTable>(ctx, read.Pos())
-                    .Table(read.Table())
-                    .Range(keyRangeExpr)
-                    .Columns(read.Columns())
-                    .Settings(settings.BuildNode(ctx, read.Pos()))
-                    .Done();
-            }
+            if (indexName) { 
+                readInput = Build<TKqlReadTableIndex>(ctx, read.Pos()) 
+                    .Table(read.Table()) 
+                    .Range(keyRangeExpr) 
+                    .Columns(read.Columns()) 
+                    .Index(indexName.Cast()) 
+                    .Settings(settings.BuildNode(ctx, read.Pos())) 
+                    .Done(); 
+            } else { 
+                readInput = Build<TKqlReadTable>(ctx, read.Pos()) 
+                    .Table(read.Table()) 
+                    .Range(keyRangeExpr) 
+                    .Columns(read.Columns()) 
+                    .Settings(settings.BuildNode(ctx, read.Pos())) 
+                    .Done(); 
+            } 
         }
 
         auto input = readInput.Cast();

@@ -49,7 +49,7 @@ public:
             ContentRequestContext.UserToken = Event->Get()->UserToken;
         }
         BrowseStarted = ctx.Now();
-        ctx.RegisterWithSameMailbox(new TBrowse(Viewer, ctx.SelfID, ContentRequestContext.Path, Event->Get()->UserToken));
+        ctx.RegisterWithSameMailbox(new TBrowse(Viewer, ctx.SelfID, ContentRequestContext.Path, Event->Get()->UserToken)); 
 
         TBase::Become(
             &TThis::StateWaitingBrowse,
@@ -117,7 +117,7 @@ private:
         ContentRequestContext.Timeout -= (ctx.Now() - BrowseStarted);
 
         // spawn content retrieval actor
-        ctx.RegisterWithSameMailbox(contentHandler(Initiator, ContentRequestContext));
+        ctx.RegisterWithSameMailbox(contentHandler(Initiator, ContentRequestContext)); 
         Die(ctx);
     }
 

@@ -103,7 +103,7 @@ private:
                 // Recheck schemecache for changes
                 LOG_TRACE_S(ctx, NKikimrServices::KESUS_PROXY,
                     "Starting resolve for kesus " << msg->KesusPath.Quote());
-                RegisterWithSameMailbox(CreateResolveActor(msg->KesusPath));
+                RegisterWithSameMailbox(CreateResolveActor(msg->KesusPath)); 
                 entry.State = CACHE_STATE_RESOLVING;
                 [[fallthrough]];
 
@@ -135,7 +135,7 @@ private:
                         "Received an OK result for " << msg->KesusPath.Quote()
                         << " without KesusInfo: not found");
                     entry.LastError.SetStatus(Ydb::StatusIds::NOT_FOUND);
-                    entry.LastError.AddIssues()->set_message("Kesus not found");
+                    entry.LastError.AddIssues()->set_message("Kesus not found"); 
                     break;
                 }
                 const auto& desc = result.KesusInfo->Description;
@@ -176,7 +176,7 @@ private:
                     "Resolve did not find path " << msg->KesusPath.Quote()
                     << ": " << result.Status);
                 entry.LastError.SetStatus(Ydb::StatusIds::NOT_FOUND);
-                entry.LastError.AddIssues()->set_message("Kesus not found");
+                entry.LastError.AddIssues()->set_message("Kesus not found"); 
                 break;
             default:
                 LOG_ERROR_S(ctx, NKikimrServices::KESUS_PROXY,

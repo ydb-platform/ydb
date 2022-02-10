@@ -13,13 +13,13 @@ struct TTableColumns {
     TVector<TString> Keys;
 };
 
-struct TIndexColumns {
-    TVector<TString> KeyColumns;
-    TVector<TString> DataColumns;
-};
+struct TIndexColumns { 
+    TVector<TString> KeyColumns; 
+    TVector<TString> DataColumns; 
+}; 
 
-bool IsCompatibleIndex(const TTableColumns& table, const TIndexColumns& index, TString& explain);
-TTableColumns CalcTableImplDescription(const TTableColumns& table, const TIndexColumns &index);
+bool IsCompatibleIndex(const TTableColumns& table, const TIndexColumns& index, TString& explain); 
+TTableColumns CalcTableImplDescription(const TTableColumns& table, const TIndexColumns &index); 
 
 }
 }

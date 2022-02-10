@@ -296,7 +296,7 @@ private:
     TActorId OwnerId;
 
     ui64 NextOrder;
-
+ 
 public:
     TSubscriptionClientSender(TInMemorySubscription::TPtr subscription, const TActorId &ownerId)
         : Subscription(subscription)
@@ -570,7 +570,7 @@ void TConfigsProvider::CheckSubscription(TSubscription::TPtr subscription,
         worker = new TServiceConfigSender(subscription, ctx.SelfID);
     else
         worker = new TTabletConfigSender(subscription, ctx.SelfID);
-    subscription->Worker = ctx.RegisterWithSameMailbox(worker);
+    subscription->Worker = ctx.RegisterWithSameMailbox(worker); 
 }
 
 void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscription,
@@ -694,7 +694,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev
                     "TConfigsProvider registered new subscription "
                     << subscriber.ToString() << ":" << rec.GetGeneration());
 
-        subscription->Worker = RegisterWithSameMailbox(new TSubscriptionClientSender(subscription, SelfId()));
+        subscription->Worker = RegisterWithSameMailbox(new TSubscriptionClientSender(subscription, SelfId())); 
 
         CheckSubscription(subscription, ctx);
     }

@@ -152,13 +152,13 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
 
             KqpSetTxLocksKeys(GetKqpTransaction().GetLocks(), self->SysLocksTable(), EngineBay);
             EngineBay.MarkTxLoaded();
-
-            auto& tasksRunner = GetKqpTasksRunner(); // prepare tasks runner, can throw TMemoryLimitExceededException
-
-            auto allocGuard = tasksRunner.BindAllocator(txc.GetMemoryLimit() - TxSize);
-
-            auto execCtx = DefaultKqpExecutionContext();
-            tasksRunner.Prepare(DefaultKqpDataReqMemoryLimits(), *execCtx);
+ 
+            auto& tasksRunner = GetKqpTasksRunner(); // prepare tasks runner, can throw TMemoryLimitExceededException 
+ 
+            auto allocGuard = tasksRunner.BindAllocator(txc.GetMemoryLimit() - TxSize); 
+ 
+            auto execCtx = DefaultKqpExecutionContext(); 
+            tasksRunner.Prepare(DefaultKqpDataReqMemoryLimits(), *execCtx); 
         } catch (const TMemoryLimitExceededException&) {
             LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Not enough memory to create tasks runner, datashard: "
                 << TabletId() << ", txid: " << StepTxId_.TxId);

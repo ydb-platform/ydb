@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    ddoarn
-    g:kikimr
-)
+OWNER( 
+    ddoarn 
+    g:kikimr 
+) 
 
 PEERDIR(
     library/cpp/grpc/server
@@ -13,7 +13,7 @@ PEERDIR(
     ydb/core/engine
     ydb/public/lib/deprecated/kicli
 )
-
+ 
 END()
 
 RECURSE(

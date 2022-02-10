@@ -4,29 +4,29 @@
 #include <ydb/public/sdk/cpp/client/ydb_rate_limiter/rate_limiter.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
-
+ 
 #include <ydb/core/grpc_services/local_rate_limiter.h>
-
+ 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
-
+ 
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/builder.h>
 
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
-
+ 
 namespace NKikimr {
 
 using NYdb::NRateLimiter::TCreateResourceSettings;
 
 namespace {
 
-void SetDuration(const TDuration& duration, google::protobuf::Duration& protoValue) {
-    protoValue.set_seconds(duration.Seconds());
-    protoValue.set_nanos(duration.NanoSecondsOfSecond());
-}
-
+void SetDuration(const TDuration& duration, google::protobuf::Duration& protoValue) { 
+    protoValue.set_seconds(duration.Seconds()); 
+    protoValue.set_nanos(duration.NanoSecondsOfSecond()); 
+} 
+ 
 TString PrintStatus(const NYdb::TStatus& status) {
     TStringBuilder builder;
     builder << status.GetStatus();
@@ -52,8 +52,8 @@ TString PrintStatus(const NYdb::TStatus& status) {
 
 #define ASSERT_STATUS_SUCCESS(expr) ASSERT_STATUS_SUCCESS_C(expr, "")
 
-class TTestSetup {
-public:
+class TTestSetup { 
+public: 
     TTestSetup()
         : Driver(MakeDriverConfig())
         , CoordinationClient(Driver)
@@ -62,8 +62,8 @@ public:
         CreateCoordinationNode();
     }
 
-    virtual ~TTestSetup() = default;
-
+    virtual ~TTestSetup() = default; 
+ 
     NYdb::TDriverConfig MakeDriverConfig() {
         return NYdb::TDriverConfig()
             .SetEndpoint(TStringBuilder() << "localhost:" << Server.GetPort());
@@ -73,7 +73,7 @@ public:
         ASSERT_STATUS_SUCCESS_C(CoordinationClient.CreateNode(path), "\nPath: " << path);
     }
 
-    void virtual CheckAcquireResource(const TString& coordinationNodePath, const TString& resourcePath, const NYdb::NRateLimiter::TAcquireResourceSettings& settings, NYdb::EStatus expected) {
+    void virtual CheckAcquireResource(const TString& coordinationNodePath, const TString& resourcePath, const NYdb::NRateLimiter::TAcquireResourceSettings& settings, NYdb::EStatus expected) { 
         const auto acquireResultFuture = RateLimiterClient.AcquireResource(coordinationNodePath, resourcePath, settings);
         ASSERT_STATUS(acquireResultFuture, expected);
     }
@@ -86,67 +86,67 @@ public:
     NYdb::NRateLimiter::TRateLimiterClient RateLimiterClient;
 };
 
-class TTestSetupAcquireActor : public TTestSetup {
-private:
-    class TAcquireActor : public TActorBootstrapped<TAcquireActor> {
-    public:
-        TAcquireActor(
-            const TString& coordinationNodePath,
-            const TString& resourcePath,
-            const NYdb::NRateLimiter::TAcquireResourceSettings& settings,
-            NThreading::TPromise<NYdb::TStatus> promise)
-        : CoordinationNodePath(coordinationNodePath)
-        , ResourcePath(resourcePath)
-        , Settings(settings)
-        , Promise(promise)
-        {}
-
-        void Bootstrap(const TActorContext& ctx) {
-            Become(&TThis::StateWork);
-            Ydb::RateLimiter::AcquireResourceRequest request;
-            request.set_coordination_node_path(CoordinationNodePath);
-            request.set_resource_path(ResourcePath);
-
-            SetDuration(Settings.OperationTimeout_, *request.mutable_operation_params()->mutable_operation_timeout());
-
-            if (Settings.IsUsedAmount_) {
-                request.set_used(Settings.Amount_.GetRef());
-            } else {
-                request.set_required(Settings.Amount_.GetRef());
-            }
-
-            auto id = SelfId();
-
-            auto cb = [this, id](Ydb::RateLimiter::AcquireResourceResponse resp) {
-                NYql::TIssues opIssues;
-                NYql::IssuesFromMessage(resp.operation().issues(), opIssues);
-                NYdb::TStatus status(static_cast<NYdb::EStatus>(resp.operation().status()), std::move(opIssues));
-                Promise.SetValue(status);
-                Send(id, new TEvents::TEvPoisonPill);
-            };
-
-            NKikimr::NRpcService::RateLimiterAcquireUseSameMailbox(std::move(request), "", "", std::move(cb), ctx);
-        }
-
-        STATEFN(StateWork) {
-            Y_UNUSED(ev);
-        }
-
-    private:
-        const TString CoordinationNodePath;
-        const TString ResourcePath;
-        const NYdb::NRateLimiter::TAcquireResourceSettings Settings;
-        NThreading::TPromise<NYdb::TStatus> Promise;
-    };
-public:
-    void virtual CheckAcquireResource(const TString& coordinationNodePath, const TString& resourcePath, const NYdb::NRateLimiter::TAcquireResourceSettings& settings, NYdb::EStatus expected) {
-        auto promise = NThreading::NewPromise<NYdb::TStatus>();
-        auto actor = new TAcquireActor(coordinationNodePath, resourcePath, settings, promise);
-        Server.GetRuntime()->GetAnyNodeActorSystem()->Register(actor);
-        ASSERT_STATUS(promise.GetFuture(), expected);
-    }
-};
-
+class TTestSetupAcquireActor : public TTestSetup { 
+private: 
+    class TAcquireActor : public TActorBootstrapped<TAcquireActor> { 
+    public: 
+        TAcquireActor( 
+            const TString& coordinationNodePath, 
+            const TString& resourcePath, 
+            const NYdb::NRateLimiter::TAcquireResourceSettings& settings, 
+            NThreading::TPromise<NYdb::TStatus> promise) 
+        : CoordinationNodePath(coordinationNodePath) 
+        , ResourcePath(resourcePath) 
+        , Settings(settings) 
+        , Promise(promise) 
+        {} 
+ 
+        void Bootstrap(const TActorContext& ctx) { 
+            Become(&TThis::StateWork); 
+            Ydb::RateLimiter::AcquireResourceRequest request; 
+            request.set_coordination_node_path(CoordinationNodePath); 
+            request.set_resource_path(ResourcePath); 
+ 
+            SetDuration(Settings.OperationTimeout_, *request.mutable_operation_params()->mutable_operation_timeout()); 
+ 
+            if (Settings.IsUsedAmount_) { 
+                request.set_used(Settings.Amount_.GetRef()); 
+            } else { 
+                request.set_required(Settings.Amount_.GetRef()); 
+            } 
+ 
+            auto id = SelfId(); 
+ 
+            auto cb = [this, id](Ydb::RateLimiter::AcquireResourceResponse resp) { 
+                NYql::TIssues opIssues; 
+                NYql::IssuesFromMessage(resp.operation().issues(), opIssues); 
+                NYdb::TStatus status(static_cast<NYdb::EStatus>(resp.operation().status()), std::move(opIssues)); 
+                Promise.SetValue(status); 
+                Send(id, new TEvents::TEvPoisonPill); 
+            }; 
+ 
+            NKikimr::NRpcService::RateLimiterAcquireUseSameMailbox(std::move(request), "", "", std::move(cb), ctx); 
+        } 
+ 
+        STATEFN(StateWork) { 
+            Y_UNUSED(ev); 
+        } 
+ 
+    private: 
+        const TString CoordinationNodePath; 
+        const TString ResourcePath; 
+        const NYdb::NRateLimiter::TAcquireResourceSettings Settings; 
+        NThreading::TPromise<NYdb::TStatus> Promise; 
+    }; 
+public: 
+    void virtual CheckAcquireResource(const TString& coordinationNodePath, const TString& resourcePath, const NYdb::NRateLimiter::TAcquireResourceSettings& settings, NYdb::EStatus expected) { 
+        auto promise = NThreading::NewPromise<NYdb::TStatus>(); 
+        auto actor = new TAcquireActor(coordinationNodePath, resourcePath, settings, promise); 
+        Server.GetRuntime()->GetAnyNodeActorSystem()->Register(actor); 
+        ASSERT_STATUS(promise.GetFuture(), expected); 
+    } 
+}; 
+ 
 TString TTestSetup::CoordinationNodePath = "/Root/CoordinationNode";
 
 } // namespace
@@ -310,58 +310,58 @@ Y_UNIT_TEST_SUITE(TGRpcRateLimiterTest) {
         }
     }
 
-    std::unique_ptr<TTestSetup> MakeTestSetup(bool useActorApi) {
-        if (useActorApi) {
-            return std::make_unique<TTestSetupAcquireActor>();
-        }
-        return std::make_unique<TTestSetup>();
-    }
-
-    void AcquireResourceManyRequired(bool useActorApi) {
+    std::unique_ptr<TTestSetup> MakeTestSetup(bool useActorApi) { 
+        if (useActorApi) { 
+            return std::make_unique<TTestSetupAcquireActor>(); 
+        } 
+        return std::make_unique<TTestSetup>(); 
+    } 
+ 
+    void AcquireResourceManyRequired(bool useActorApi) { 
         using NYdb::NRateLimiter::TAcquireResourceSettings;
 
-        auto setup = MakeTestSetup(useActorApi);
-
-        ASSERT_STATUS_SUCCESS(setup->RateLimiterClient.CreateResource(TTestSetup::CoordinationNodePath, "res",
+        auto setup = MakeTestSetup(useActorApi); 
+ 
+        ASSERT_STATUS_SUCCESS(setup->RateLimiterClient.CreateResource(TTestSetup::CoordinationNodePath, "res", 
                                                                      TCreateResourceSettings().MaxUnitsPerSecond(1).MaxBurstSizeCoefficient(42)));
 
-        setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(10000).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::SUCCESS);
+        setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(10000).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::SUCCESS); 
 
         for (int i = 0; i < 3; ++i) {
-            setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::TIMEOUT);
-            setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).IsUsedAmount(true).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::SUCCESS);
+            setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::TIMEOUT); 
+            setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).IsUsedAmount(true).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::SUCCESS); 
         }
     }
 
-    void AcquireResourceManyUsed(bool useActorApi) {
+    void AcquireResourceManyUsed(bool useActorApi) { 
         using NYdb::NRateLimiter::TAcquireResourceSettings;
 
-        auto setup = MakeTestSetup(useActorApi);
-        ASSERT_STATUS_SUCCESS(setup->RateLimiterClient.CreateResource(TTestSetup::CoordinationNodePath, "res",
+        auto setup = MakeTestSetup(useActorApi); 
+        ASSERT_STATUS_SUCCESS(setup->RateLimiterClient.CreateResource(TTestSetup::CoordinationNodePath, "res", 
                                                                      TCreateResourceSettings().MaxUnitsPerSecond(1).MaxBurstSizeCoefficient(42)));
 
-        setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(10000).IsUsedAmount(true).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::SUCCESS);
+        setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(10000).IsUsedAmount(true).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::SUCCESS); 
         for (int i = 0; i < 3; ++i) {
-            setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::TIMEOUT);
-            setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).IsUsedAmount(true).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::SUCCESS);
+            setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::TIMEOUT); 
+            setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).IsUsedAmount(true).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::SUCCESS); 
         }
     }
-
-    Y_UNIT_TEST(AcquireResourceManyRequiredGrpcApi) {
-        AcquireResourceManyRequired(false);
-    }
-
-    Y_UNIT_TEST(AcquireResourceManyRequiredActorApi) {
-        AcquireResourceManyRequired(true);
-    }
-
-    Y_UNIT_TEST(AcquireResourceManyUsedGrpcApi) {
-        AcquireResourceManyUsed(false);
-    }
-
-    Y_UNIT_TEST(AcquireResourceManyUsedActorApi) {
-        AcquireResourceManyUsed(true);
-    }
+ 
+    Y_UNIT_TEST(AcquireResourceManyRequiredGrpcApi) { 
+        AcquireResourceManyRequired(false); 
+    } 
+ 
+    Y_UNIT_TEST(AcquireResourceManyRequiredActorApi) { 
+        AcquireResourceManyRequired(true); 
+    } 
+ 
+    Y_UNIT_TEST(AcquireResourceManyUsedGrpcApi) { 
+        AcquireResourceManyUsed(false); 
+    } 
+ 
+    Y_UNIT_TEST(AcquireResourceManyUsedActorApi) { 
+        AcquireResourceManyUsed(true); 
+    } 
 }
 
 } // namespace NKikimr

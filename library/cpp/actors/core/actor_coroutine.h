@@ -134,7 +134,7 @@ namespace NActors {
             return GetActorContext().Register(actor, mailboxType, poolId);
         }
 
-        TActorId RegisterWithSameMailbox(IActor* actor) {
+        TActorId RegisterWithSameMailbox(IActor* actor) { 
             return GetActorContext().RegisterWithSameMailbox(actor);
         }
 

@@ -125,11 +125,11 @@ public:
     void DictPayload();
     void CloseDict();
 
-    // Variant
-    void OpenVariant(size_t index);
+    // Variant 
+    void OpenVariant(size_t index); 
     void OpenVariant();
-    void CloseVariant();
-
+    void CloseVariant(); 
+ 
     // Tagged
     void OpenTagged();
     const TString& GetTag();
@@ -195,16 +195,16 @@ private:
     std::unique_ptr<TImpl> Impl_;
 };
 
-struct TDecimalValue {
-    TString ToString() const;
-    TDecimalValue(const Ydb::Value& decimalValueProto, const TDecimalType& decimalType);
+struct TDecimalValue { 
+    TString ToString() const; 
+    TDecimalValue(const Ydb::Value& decimalValueProto, const TDecimalType& decimalType); 
     TDecimalValue(const TString& decimalString, ui8 precision = 22, ui8 scale = 9);
-
-    TDecimalType DecimalType_;
-    ui64 Low_;
-    i64 Hi_;
-};
-
+ 
+    TDecimalType DecimalType_; 
+    ui64 Low_; 
+    i64 Hi_; 
+}; 
+ 
 //! Representation of YDB value.
 class TValue {
     friend class TValueParser;
@@ -256,7 +256,7 @@ public:
     const TString& GetUtf8() const;
     const TString& GetYson() const;
     const TString& GetJson() const;
-    TDecimalValue GetDecimal() const;
+    TDecimalValue GetDecimal() const; 
     const TString& GetJsonDocument() const;
     const TString& GetDyNumber() const;
 
@@ -282,7 +282,7 @@ public:
     TMaybe<TString> GetOptionalUtf8() const;
     TMaybe<TString> GetOptionalYson() const;
     TMaybe<TString> GetOptionalJson() const;
-    TMaybe<TDecimalValue> GetOptionalDecimal() const;
+    TMaybe<TDecimalValue> GetOptionalDecimal() const; 
     TMaybe<TString> GetOptionalJsonDocument() const;
     TMaybe<TString> GetOptionalDyNumber() const;
 
@@ -314,10 +314,10 @@ public:
     void DictPayload();
     void CloseDict();
 
-    // Variant
-    void OpenVariant();
-    void CloseVariant();
-
+    // Variant 
+    void OpenVariant(); 
+    void CloseVariant(); 
+ 
     // Tagged
     void OpenTagged();
     const TString& GetTag() const;
@@ -359,7 +359,7 @@ public:
     TDerived& Utf8(const TString& value);
     TDerived& Yson(const TString& value);
     TDerived& Json(const TString& value);
-    TDerived& Decimal(const TDecimalValue& value);
+    TDerived& Decimal(const TDecimalValue& value); 
     TDerived& JsonDocument(const TString& value);
     TDerived& DyNumber(const TString& value);
 
@@ -433,7 +433,7 @@ protected:
 
     TValueBuilderBase(const TType& type);
 
-    TValueBuilderBase(Ydb::Type& type, Ydb::Value& value);
+    TValueBuilderBase(Ydb::Type& type, Ydb::Value& value); 
 
     ~TValueBuilderBase();
 

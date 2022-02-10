@@ -544,7 +544,7 @@ void TSysLocks::SetLock(const TTableId& tableId, const TTableRange& range, ui64 
 }
 
 void TSysLocks::BreakLock(const TTableId& tableId, const TArrayRef<const TCell>& key) {
-    Y_VERIFY(!tableId.HasSamePath(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks)));
+    Y_VERIFY(!tableId.HasSamePath(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks))); 
     if (!Self->IsUserTable(tableId))
         return;
 

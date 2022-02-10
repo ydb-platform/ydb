@@ -208,7 +208,7 @@ public:
                                             str << *(TActorId*)data;
                                             break;
                                         case NScheme::NTypeIds::Utf8:
-                                        case NScheme::NTypeIds::Json:
+                                        case NScheme::NTypeIds::Json: 
                                             str << EncodeHtmlPcdata(TStringBuf((const char*)data, size));
                                             break;
                                         case NScheme::NTypeIds::JsonDocument: {

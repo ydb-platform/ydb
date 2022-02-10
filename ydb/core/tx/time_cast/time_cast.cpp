@@ -99,7 +99,7 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
         }
 
         if (ev->Record.BucketSize()) {
-            mediator.PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, mediatorTabletId));
+            mediator.PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, mediatorTabletId)); 
             LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID.ToString()
                 << " SEND to# " << mediatorTabletId << " Mediator " << ev->ToString());
             NTabletPipe::SendData(ctx, mediator.PipeClient, ev.Release());

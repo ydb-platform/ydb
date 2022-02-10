@@ -385,21 +385,21 @@ bool TPartitionConfigMerger::ApplyChanges(
         return false;
     }
 
-    if (changes.HasFreezeState()) {
+    if (changes.HasFreezeState()) { 
         if (changes.GetFreezeState() == NKikimrSchemeOp::EFreezeState::Unspecified) {
-            errDesr = TStringBuilder() << "Unexpected freeze state";
-            return false;
-        }
-        TVector<const NProtoBuf::FieldDescriptor*> fields;
-        auto reflection = changes.GetReflection();
-        reflection->ListFields(changes, &fields);
-        if (fields.size() > 1) {
-            errDesr = TStringBuilder()
-                << "Mix freeze cmd with other options is forbiden";
-            return false;
-        }
-    }
-
+            errDesr = TStringBuilder() << "Unexpected freeze state"; 
+            return false; 
+        } 
+        TVector<const NProtoBuf::FieldDescriptor*> fields; 
+        auto reflection = changes.GetReflection(); 
+        reflection->ListFields(changes, &fields); 
+        if (fields.size() > 1) { 
+            errDesr = TStringBuilder() 
+                << "Mix freeze cmd with other options is forbiden"; 
+            return false; 
+        } 
+    } 
+ 
     if (changes.HasCompactionPolicy()) {
         result.MutableCompactionPolicy()->Clear();
         result.MutableCompactionPolicy()->CopyFrom(changes.GetCompactionPolicy());
@@ -1060,11 +1060,11 @@ bool TPartitionConfigMerger::VerifyAlterParams(
     }
 
     if (!VerifyCommandOnFrozenTable(srcConfig, dstConfig)) {
-        errDescr = TStringBuilder() <<
+        errDescr = TStringBuilder() << 
                                        "Table is frozen. Only unfreeze alter is allowed";
-        return false;
-    }
-
+        return false; 
+    } 
+ 
     return true;
 }
 
@@ -1098,14 +1098,14 @@ bool TPartitionConfigMerger::VerifyCommandOnFrozenTable(const NKikimrSchemeOp::T
             srcConfig.GetFreezeState() == NKikimrSchemeOp::EFreezeState::Freeze) {
         if (dstConfig.HasFreezeState() &&
                 dstConfig.GetFreezeState() == NKikimrSchemeOp::EFreezeState::Unfreeze) {
-            // Only unfreeze cmd is allowd
-            return true;
-        }
-        return false;
-    }
-    return true;
-}
-
+            // Only unfreeze cmd is allowd 
+            return true; 
+        } 
+        return false; 
+    } 
+    return true; 
+} 
+ 
 void TTableInfo::FinishAlter() {
     Y_VERIFY(AlterData, "No alter data at Alter complete");
     AlterVersion = AlterData->AlterVersion;
@@ -1229,7 +1229,7 @@ void TTableInfo::DeserializeAlterExtraData(const TString& str) {
 void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     THashMap<TShardIdx, TPartitionStats> newPartitionStats;
     TPartitionStats newAggregatedStats;
-    newAggregatedStats.PartCount = newPartitioning.size();
+    newAggregatedStats.PartCount = newPartitioning.size(); 
     ui64 cpuTotal = 0;
     for (const auto& np : newPartitioning) {
         auto idx = np.ShardIdx;

@@ -1100,16 +1100,16 @@ class TErrorExprType : public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Error;
 
-    TErrorExprType(ui64 hash, const TIssue& error)
+    TErrorExprType(ui64 hash, const TIssue& error) 
         : TTypeAnnotationNode(KindValue, 0, hash)
         , Error(error)
     {}
 
-    static ui64 MakeHash(const TIssue& error) {
+    static ui64 MakeHash(const TIssue& error) { 
         return error.Hash();
     }
 
-    const TIssue& GetError() const {
+    const TIssue& GetError() const { 
         return Error;
     }
 
@@ -1118,7 +1118,7 @@ public:
     }
 
 private:
-    const TIssue Error;
+    const TIssue Error; 
 };
 
 class TEmptyListExprType : public TTypeAnnotationNode {
@@ -2134,7 +2134,7 @@ struct TMakeTypeImpl<TVariantExprType> {
 
 template <>
 struct TMakeTypeImpl<TErrorExprType> {
-    static const TErrorExprType* Make(TExprContext& ctx, const TIssue& error);
+    static const TErrorExprType* Make(TExprContext& ctx, const TIssue& error); 
 };
 
 template <>
@@ -2233,7 +2233,7 @@ struct TExprContext : private TNonCopyable {
         TExprContext& Ctx;
     };
 
-    TIssueManager IssueManager;
+    TIssueManager IssueManager; 
     TNodeMap<TIssues> AssociativeIssues;
 
     TMemoryPool StringPool;
@@ -2435,16 +2435,16 @@ struct TExprContext : private TNonCopyable {
     template <typename T, typename... Args>
     const T* MakeConstraint(Args&&... args);
 
-    void AddError(const TIssue& error) {
+    void AddError(const TIssue& error) { 
         ENSURE_NOT_FROZEN_CTX
-        IssueManager.RaiseIssue(error);
+        IssueManager.RaiseIssue(error); 
     }
 
-    bool AddWarning(const TIssue& warning) {
-        ENSURE_NOT_FROZEN_CTX
-        return IssueManager.RaiseWarning(warning);
-    }
-
+    bool AddWarning(const TIssue& warning) { 
+        ENSURE_NOT_FROZEN_CTX 
+        return IssueManager.RaiseWarning(warning); 
+    } 
+ 
     void Freeze();
     void UnFreeze();
 

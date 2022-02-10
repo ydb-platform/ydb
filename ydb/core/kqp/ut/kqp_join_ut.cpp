@@ -39,21 +39,21 @@ static TParams BuildPureTableParams(TTableClient& client) {
 
 static void CreateSampleTables(TSession session) {
     UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
-        CREATE TABLE `/Root/Join1_1` (
+        CREATE TABLE `/Root/Join1_1` ( 
             Key Int32,
             Fk21 Int32,
             Fk22 String,
             Value String,
             PRIMARY KEY (Key)
         );
-        CREATE TABLE `/Root/Join1_2` (
+        CREATE TABLE `/Root/Join1_2` ( 
             Key1 Int32,
             Key2 String,
             Fk3 String,
             Value String,
             PRIMARY KEY (Key1, Key2)
         );
-        CREATE TABLE `/Root/Join1_3` (
+        CREATE TABLE `/Root/Join1_3` ( 
             Key String,
             Value Int32,
             PRIMARY KEY (Key)
@@ -63,7 +63,7 @@ static void CreateSampleTables(TSession session) {
      UNIT_ASSERT(session.ExecuteDataQuery(R"(
         PRAGMA kikimr.UseNewEngine = "true";
 
-        REPLACE INTO `/Root/Join1_1` (Key, Fk21, Fk22, Value) VALUES
+        REPLACE INTO `/Root/Join1_1` (Key, Fk21, Fk22, Value) VALUES 
             (1, 101, "One", "Value1"),
             (2, 102, "Two", "Value1"),
             (3, 103, "One", "Value2"),
@@ -73,7 +73,7 @@ static void CreateSampleTables(TSession session) {
             (7, 107, "One", "Value4"),
             (8, 108, "One", "Value5");
 
-        REPLACE INTO `/Root/Join1_2` (Key1, Key2, Fk3, Value) VALUES
+        REPLACE INTO `/Root/Join1_2` (Key1, Key2, Fk3, Value) VALUES 
             (101, "One",   "Name1", "Value21"),
             (101, "Two",   "Name1", "Value22"),
             (101, "Three", "Name3", "Value23"),
@@ -86,7 +86,7 @@ static void CreateSampleTables(TSession session) {
             (108, "One",    NULL,   "Value31"),
             (109, "Four",   NULL,   "Value41");
 
-        REPLACE INTO `/Root/Join1_3` (Key, Value) VALUES
+        REPLACE INTO `/Root/Join1_3` (Key, Value) VALUES 
             ("Name1", 1001),
             ("Name2", 1002),
             ("Name4", 1004);
@@ -264,46 +264,46 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 3);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(IdxLookupPartialWithTempTable) {
-        TKikimrRunner kikimr(SyntaxV1Settings());
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
+    Y_UNIT_TEST_NEW_ENGINE(IdxLookupPartialWithTempTable) { 
+        TKikimrRunner kikimr(SyntaxV1Settings()); 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        CreateSampleTables(session); 
+ 
+        auto params = TParamsBuilder() 
+            .AddParam("$in") 
+                .BeginList() 
+                    .AddListItem() 
+                        .BeginStruct() 
+                            .AddMember("k").Int32(101) 
+                        .EndStruct() 
+                .EndList().Build() 
+             .Build(); 
+ 
 
-        CreateSampleTables(session);
-
-        auto params = TParamsBuilder()
-            .AddParam("$in")
-                .BeginList()
-                    .AddListItem()
-                        .BeginStruct()
-                            .AddMember("k").Int32(101)
-                        .EndStruct()
-                .EndList().Build()
-             .Build();
-
-
-        const TString query = Q_(R"(
-            DECLARE $in AS List<Struct<k: Int32>>;
-            SELECT * FROM AS_TABLE($in) AS t1
-            INNER JOIN `/Root/Join1_2` AS t2
-            ON t1.k == t2.Key1;
-        )");
-
-        const TString expected = R"(
-            [
-                [["Name1"];[101];["One"];["Value21"];101];
-                [["Name3"];[101];["Three"];["Value23"];101];
-                [["Name1"];[101];["Two"];["Value22"];101]
-            ]
-        )";
-
-        auto result = ExecQuery(session, query, params, expected, false);
-        AssertTableReads(result, "/Root/Join1_2", 3);
-    }
-
+        const TString query = Q_(R"( 
+            DECLARE $in AS List<Struct<k: Int32>>; 
+            SELECT * FROM AS_TABLE($in) AS t1 
+            INNER JOIN `/Root/Join1_2` AS t2 
+            ON t1.k == t2.Key1; 
+        )"); 
+ 
+        const TString expected = R"( 
+            [ 
+                [["Name1"];[101];["One"];["Value21"];101]; 
+                [["Name3"];[101];["Three"];["Value23"];101]; 
+                [["Name1"];[101];["Two"];["Value22"];101] 
+            ] 
+        )"; 
+ 
+        auto result = ExecQuery(session, query, params, expected, false); 
+        AssertTableReads(result, "/Root/Join1_2", 3); 
+    } 
+ 
     Y_UNIT_TEST_NEW_ENGINE(LeftJoinWithNull) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         CreateSampleTables(session);
@@ -501,7 +501,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     // join on secondary index => index-lookup
-    Y_UNIT_TEST_NEW_ENGINE(RightSemiJoin_SecondaryIndex) {
+    Y_UNIT_TEST_NEW_ENGINE(RightSemiJoin_SecondaryIndex) { 
         TKikimrRunner kikimr(SyntaxV1Settings());
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -527,13 +527,13 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
         /* join with parameters */
         {
-            const TString query = Q_(R"(
+            const TString query = Q_(R"( 
                     DECLARE $in AS List<Struct<v: String?>>;
                     SELECT *
                     FROM AS_TABLE($in) AS l RIGHT SEMI JOIN `/Root/RSJ_SimpleKey_3` VIEW SubKeyIndex AS r
                          ON l.v = r.SubKey
                     ORDER BY Key
-                )");
+                )"); 
 
             auto params = TParamsBuilder().AddParam("$in").BeginList()
                     .AddListItem().BeginStruct().AddMember("v").OptionalString("2.One").EndStruct()
@@ -551,12 +551,12 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
         /* join with real table */
         {
-            const TString query = Q_(R"(
+            const TString query = Q_(R"( 
                     SELECT *
                     FROM `/Root/RSJ_SimpleKey_2` AS l RIGHT SEMI JOIN `/Root/RSJ_SimpleKey_3` VIEW SubKeyIndex AS r
                          ON l.Value = r.SubKey
                     ORDER BY Key
-                )");
+                )"); 
 
             auto result = ExecQuery(session, query, NoParams, R"([[[1];["2.One"];["Payload1"]];[[5];["2.Five"];["Payload2"]]])");
             AssertTableReads(result, "/Root/RSJ_SimpleKey_2", 5 /* all keys */);
@@ -567,7 +567,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     // join on complex secondary index => index-lookup
-    Y_UNIT_TEST_NEW_ENGINE(RightSemiJoin_ComplexSecondaryIndex) {
+    Y_UNIT_TEST_NEW_ENGINE(RightSemiJoin_ComplexSecondaryIndex) { 
         TKikimrRunner kikimr(SyntaxV1Settings());
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -576,13 +576,13 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
         /* join with parameters */
         {
-            const TString query = Q_(R"(
+            const TString query = Q_(R"( 
                         DECLARE $in AS List<Struct<k: Int32?, v: String?>>;
                         SELECT *
                         FROM AS_TABLE($in) AS l RIGHT SEMI JOIN `/Root/RSJ_SecondaryKeys_1` VIEW Index AS r
                              ON l.k = r.SubKey1 AND l.v = r.SubKey2
                         ORDER BY Key
-                    )");
+                    )"); 
 
             auto params = TParamsBuilder().AddParam("$in").BeginList()
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(1)
@@ -605,12 +605,12 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
         /* join with real table */
         {
-            const TString query = Q_(R"(
+            const TString query = Q_(R"( 
                         SELECT *
                         FROM `/Root/RSJ_SimpleKey_2` AS l RIGHT SEMI JOIN `/Root/RSJ_SecondaryKeys_1` VIEW Index AS r
                              ON l.Key = r.SubKey1 AND l.Value = r.SubKey2
                         ORDER BY Key
-                    )");
+                    )"); 
 
             auto result = ExecQuery(session, query, NoParams, R"([[[1];[1];["2.One"];["Payload1"]];[[5];[5];["2.Five"];["Payload2"]]])");
             AssertTableReads(result, "/Root/RSJ_SimpleKey_2", 5 /* all keys */);
@@ -622,7 +622,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     // join on secondary index prefix => index-lookup
-    Y_UNIT_TEST_NEW_ENGINE(RightSemiJoin_ComplexSecondaryIndexPrefix) {
+    Y_UNIT_TEST_NEW_ENGINE(RightSemiJoin_ComplexSecondaryIndexPrefix) { 
         TKikimrRunner kikimr(SyntaxV1Settings());
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -631,13 +631,13 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
         /* join with parameters */
         {
-            const TString query = Q_(R"(
+            const TString query = Q_(R"( 
                 DECLARE $in AS List<Struct<k: Int32?>>;
                 SELECT *
                 FROM AS_TABLE($in) AS l RIGHT SEMI JOIN `/Root/RSJ_SecondaryKeys_1` VIEW Index AS r
                      ON l.k = r.SubKey1
                 ORDER BY Key
-            )");
+            )"); 
 
             auto params = TParamsBuilder().AddParam("$in").BeginList()
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(1).EndStruct()
@@ -655,13 +655,13 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
         /* join with real table */
         {
-            const TString query = Q_(R"(
+            const TString query = Q_(R"( 
                 SELECT *
                 FROM `/Root/RSJ_SimpleKey_2` AS l RIGHT SEMI JOIN `/Root/RSJ_SecondaryKeys_1` VIEW Index AS r
                      ON l.Key = r.SubKey1
                 -- WHERE r.Key > 1
                 ORDER BY Key
-            )");
+            )"); 
 
             auto result = ExecQuery(session, query, NoParams, R"([[[1];[1];["2.One"];["Payload1"]];[[5];[5];["2.Five"];["Payload2"]]])");
             AssertTableReads(result, "/Root/RSJ_SimpleKey_2", 5 /* all keys */);
@@ -672,7 +672,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     template<bool UseNewEngine = false>
-    void TestInnerJoinWithPredicate(const TString& predicate, const TString& expected) {
+    void TestInnerJoinWithPredicate(const TString& predicate, const TString& expected) { 
         TKikimrRunner kikimr(SyntaxV1Settings());
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -695,36 +695,36 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        const TString query = Sprintf(R"(
+        const TString query = Sprintf(R"( 
             DECLARE $in AS List<Struct<k: Int32?>>;
             SELECT *
             FROM AS_TABLE($in) AS l INNER JOIN `/Root/SecondaryKeys` VIEW Index AS r
                  ON l.k = r.Fk
-            WHERE %s
+            WHERE %s 
             ORDER BY Key
-        )", predicate.c_str());
+        )", predicate.c_str()); 
 
         auto params = TParamsBuilder().AddParam("$in").BeginList()
-                .AddListItem().BeginStruct().AddMember("k").OptionalInt32(105).EndStruct()
+                .AddListItem().BeginStruct().AddMember("k").OptionalInt32(105).EndStruct() 
                 .EndList().Build().Build();
 
         result = session.ExecuteDataQuery(Q_(query), TTxControl::BeginTx().CommitTx(), params)
                 .ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(expected, FormatResultSetYson(result.GetResultSet(0))); 
     }
-
+ 
     Y_UNIT_TEST_NEW_ENGINE(RightTableKeyPredicate) {
         TestInnerJoinWithPredicate<UseNewEngine>("r.Key > 1", "[[[105];[5];[\"Payload2\"];[105]]]");
-    }
-
+    } 
+ 
     Y_UNIT_TEST_NEW_ENGINE(RightTableIndexPredicate) {
         TestInnerJoinWithPredicate<UseNewEngine>("r.Fk > 1", "[[[105];[5];[\"Payload2\"];[105]]]");
-    }
-
+    } 
+ 
     Y_UNIT_TEST_NEW_ENGINE(RightTableValuePredicate) {
         TestInnerJoinWithPredicate<UseNewEngine>("r.Value = \"Payload2\"", "[[[105];[5];[\"Payload2\"];[105]]]");
-    }
+    } 
 
     Y_UNIT_TEST_NEW_ENGINE(JoinAggregateSingleRow) {
         TKikimrRunner kikimr;
@@ -768,37 +768,37 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTables(session);
 
-        {
+        { 
             auto result = session.ExecuteDataQuery(Q_(R"(
-                SELECT t1.Value, SUM(t3.Value)
+                SELECT t1.Value, SUM(t3.Value) 
                 FROM `/Root/Join1_1` AS t1
                 INNER JOIN `/Root/Join1_2` AS t2
-                ON t1.Fk21 == t2.Key1
+                ON t1.Fk21 == t2.Key1 
                 LEFT JOIN `/Root/Join1_3` AS t3
-                ON t2.Fk3 = t3.Key
-                GROUP BY t1.Value;
+                ON t2.Fk3 = t3.Key 
+                GROUP BY t1.Value; 
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
 
-            CompareYson(R"([[["Value1"];[3004]];[["Value2"];[1001]];[["Value3"];[2006]];[["Value5"];#]])",
-                FormatResultSetYson(result.GetResultSet(0)));
-        }
-
-        {
+            CompareYson(R"([[["Value1"];[3004]];[["Value2"];[1001]];[["Value3"];[2006]];[["Value5"];#]])", 
+                FormatResultSetYson(result.GetResultSet(0))); 
+        } 
+ 
+        { 
             auto result = session.ExecuteDataQuery(Q_(R"(
-                SELECT t1.Value, SUM(t3.Value)
+                SELECT t1.Value, SUM(t3.Value) 
                 FROM `/Root/Join1_1` AS t1
                 INNER JOIN `/Root/Join1_2` AS t2
-                ON t1.Fk21 == t2.Key1
+                ON t1.Fk21 == t2.Key1 
                 LEFT JOIN `/Root/Join1_3` AS t3
-                ON t2.Fk3 = t3.Key
-                GROUP BY t1.Value LIMIT 3;
+                ON t2.Fk3 = t3.Key 
+                GROUP BY t1.Value LIMIT 3; 
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-            CompareYson(R"([[["Value1"];[3004]];[["Value2"];[1001]];[["Value3"];[2006]]])",
-                FormatResultSetYson(result.GetResultSet(0)));
-        }
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+ 
+            CompareYson(R"([[["Value1"];[3004]];[["Value2"];[1001]];[["Value3"];[2006]]])", 
+                FormatResultSetYson(result.GetResultSet(0))); 
+        } 
     }
 
     Y_UNIT_TEST_NEW_ENGINE(JoinConvert) {

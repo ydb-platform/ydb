@@ -223,12 +223,12 @@ private:
             }
 
             if (auto* param = stageInfo.Meta.Tx.Params.Values.FindPtr(name)) {
-                NMiniKQL::TType* typeFromProto;
-                std::tie(typeFromProto, value) = ImportValueFromProto(param->GetType(), param->GetValue(), typeEnv, holderFactory);
+                NMiniKQL::TType* typeFromProto; 
+                std::tie(typeFromProto, value) = ImportValueFromProto(param->GetType(), param->GetValue(), typeEnv, holderFactory); 
 #ifndef NDEBUG
                 YQL_ENSURE(ToString(*type) == ToString(*typeFromProto), "" << *type << " != " << *typeFromProto);
 #else
-                Y_UNUSED(typeFromProto);
+                Y_UNUSED(typeFromProto); 
 #endif
                 return true;
             }

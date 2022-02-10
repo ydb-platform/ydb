@@ -85,22 +85,22 @@ void TestListPathCommon(TIntrusivePtr<IKikimrGateway> gateway) {
     UNIT_ASSERT(response.Success());
 
     UNIT_ASSERT_VALUES_EQUAL(response.Path, "/Root/Test");
-    UNIT_ASSERT_VALUES_EQUAL(response.Items.size(), 5);
+    UNIT_ASSERT_VALUES_EQUAL(response.Items.size(), 5); 
     UNIT_ASSERT_VALUES_EQUAL(response.Items[0].Name, "TestTable2");
     UNIT_ASSERT_VALUES_EQUAL(response.Items[0].IsDirectory, false);
-    UNIT_ASSERT_VALUES_EQUAL(response.Items[1].Name, "TestTable3");
+    UNIT_ASSERT_VALUES_EQUAL(response.Items[1].Name, "TestTable3"); 
     UNIT_ASSERT_VALUES_EQUAL(response.Items[1].IsDirectory, false);
-    UNIT_ASSERT_VALUES_EQUAL(response.Items[2].Name, "TestTableKsv");
-    UNIT_ASSERT_VALUES_EQUAL(response.Items[2].IsDirectory, false);
-    UNIT_ASSERT_VALUES_EQUAL(response.Items[3].Name, "UserDir");
-    UNIT_ASSERT_VALUES_EQUAL(response.Items[3].IsDirectory, true);
-    UNIT_ASSERT_VALUES_EQUAL(response.Items[4].Name, "UserTable");
-    UNIT_ASSERT_VALUES_EQUAL(response.Items[4].IsDirectory, false);
+    UNIT_ASSERT_VALUES_EQUAL(response.Items[2].Name, "TestTableKsv"); 
+    UNIT_ASSERT_VALUES_EQUAL(response.Items[2].IsDirectory, false); 
+    UNIT_ASSERT_VALUES_EQUAL(response.Items[3].Name, "UserDir"); 
+    UNIT_ASSERT_VALUES_EQUAL(response.Items[3].IsDirectory, true); 
+    UNIT_ASSERT_VALUES_EQUAL(response.Items[4].Name, "UserTable"); 
+    UNIT_ASSERT_VALUES_EQUAL(response.Items[4].IsDirectory, false); 
 }
 
 void TestLoadTableMetadataCommon(TIntrusivePtr<IKikimrGateway> gateway) {
     auto responseFuture = gateway->LoadTableMetadata(TestCluster, "/Root/Test/UserTable",
-        IKikimrGateway::TLoadTableMetadataSettings());
+        IKikimrGateway::TLoadTableMetadataSettings()); 
     responseFuture.Wait();
     auto response = responseFuture.GetValue();
     response.Issues().PrintTo(Cerr);
@@ -130,12 +130,12 @@ void TestRunSimpleCommon(TIntrusivePtr<IKqpGateway> gateway) {
                 'Name
                 'Amount
             ))
-            (let table '(
+            (let table '( 
                 '"/Root/Test/TestTable2"
-                '"0"
-                '""
-            ))
-            (let data (SelectRow table key row))
+                '"0" 
+                '"" 
+            )) 
+            (let data (SelectRow table key row)) 
             (let r (SetResult 'Result data))
             (let pgmReturn (AsList r))
             (return pgmReturn)
@@ -181,12 +181,12 @@ void CheckPolicies(Tests::TClient& client, const TString& tableName) {
     }
 }
 
-struct TTestIndexSettings {
-    const bool WithDataColumns;
-};
-
+struct TTestIndexSettings { 
+    const bool WithDataColumns; 
+}; 
+ 
 void TestCreateTableCommon(TIntrusivePtr<IKikimrGateway> gateway, Tests::TClient& client,
-        bool createFolders = true, const TMaybe<TTestIndexSettings> withIndex = Nothing(), bool withExtendedDdl = false,
+        bool createFolders = true, const TMaybe<TTestIndexSettings> withIndex = Nothing(), bool withExtendedDdl = false, 
         const TMaybe<bool>& shouldCreate = Nothing()) {
     auto metadata = MakeIntrusive<TKikimrTableMetadata>();
 
@@ -207,26 +207,26 @@ void TestCreateTableCommon(TIntrusivePtr<IKikimrGateway> gateway, Tests::TClient
 
     metadata->KeyColumnNames.push_back("Column1");
 
-    if (withIndex) {
-        TVector<TString> dataColumns;
-        if (withIndex->WithDataColumns) {
+    if (withIndex) { 
+        TVector<TString> dataColumns; 
+        if (withIndex->WithDataColumns) { 
             metadata->Columns.insert(std::make_pair("Column3", TKikimrColumnMetadata{"Column3", 0, "String", false}));
             metadata->ColumnOrder.push_back("Column3");
-            dataColumns.push_back("Column3");
-        }
-        TIndexDescription indexDesc{
-            TString("Column2Index"),
-            TVector<TString>{"Column2"},
-            dataColumns,
+            dataColumns.push_back("Column3"); 
+        } 
+        TIndexDescription indexDesc{ 
+            TString("Column2Index"), 
+            TVector<TString>{"Column2"}, 
+            dataColumns, 
             TIndexDescription::EType::GlobalSync,
-            TIndexDescription::EIndexState::Ready,
-            0,
-            0,
-            0
-        };
-        metadata->Indexes.push_back(indexDesc);
-    }
-
+            TIndexDescription::EIndexState::Ready, 
+            0, 
+            0, 
+            0 
+        }; 
+        metadata->Indexes.push_back(indexDesc); 
+    } 
+ 
     if (withExtendedDdl) {
         metadata->TableSettings.AutoPartitioningBySize = "disabled";
         metadata->TableSettings.PartitionAtKeys = {
@@ -251,37 +251,37 @@ void TestCreateTableCommon(TIntrusivePtr<IKikimrGateway> gateway, Tests::TClient
         UNIT_ASSERT_C(response.Success(), response.Issues().ToString());
 
         auto loadFuture = gateway->LoadTableMetadata(TestCluster, "/Root/f1/f2/table",
-            IKikimrGateway::TLoadTableMetadataSettings());
+            IKikimrGateway::TLoadTableMetadataSettings()); 
         loadFuture.Wait();
         auto loadResponse = loadFuture.GetValue();
         UNIT_ASSERT(loadResponse.Success());
-        UNIT_ASSERT_VALUES_EQUAL(metadata->Name, loadResponse.Metadata->Name);
-        UNIT_ASSERT_VALUES_EQUAL(metadata->Indexes.size(), loadResponse.Metadata->Indexes.size());
-
-        THashMap<TString, TIndexDescription> expected;
-        for (const auto& indexDesc : metadata->Indexes) {
-            expected.insert(std::make_pair(indexDesc.Name, indexDesc));
-        }
-
-        THashMap<TString, TIndexDescription> indexResult;
-        for (const auto& indexDesc : loadResponse.Metadata->Indexes) {
-            indexResult.insert(std::make_pair(indexDesc.Name, indexDesc));
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(indexResult.size(), expected.size());
-        for (const auto& indexDescResult : indexResult) {
-            const auto expectedDesc = expected.find(indexDescResult.first);
-            UNIT_ASSERT(expectedDesc != expected.end());
-            UNIT_ASSERT_VALUES_EQUAL(expectedDesc->second.KeyColumns.size(), indexDescResult.second.KeyColumns.size());
-            UNIT_ASSERT_EQUAL(expectedDesc->second.Type, indexDescResult.second.Type);
-            for (size_t i = 0; i < indexDescResult.second.KeyColumns.size(); i++) {
-                UNIT_ASSERT_VALUES_EQUAL(indexDescResult.second.KeyColumns[i], expectedDesc->second.KeyColumns[i]);
-            }
-            UNIT_ASSERT_VALUES_EQUAL(expectedDesc->second.DataColumns.size(), indexDescResult.second.DataColumns.size());
-            for (size_t i = 0; i < indexDescResult.second.DataColumns.size(); i++) {
-                UNIT_ASSERT_VALUES_EQUAL(indexDescResult.second.DataColumns[i], expectedDesc->second.DataColumns[i]);
-            }
-        }
+        UNIT_ASSERT_VALUES_EQUAL(metadata->Name, loadResponse.Metadata->Name); 
+        UNIT_ASSERT_VALUES_EQUAL(metadata->Indexes.size(), loadResponse.Metadata->Indexes.size()); 
+ 
+        THashMap<TString, TIndexDescription> expected; 
+        for (const auto& indexDesc : metadata->Indexes) { 
+            expected.insert(std::make_pair(indexDesc.Name, indexDesc)); 
+        } 
+ 
+        THashMap<TString, TIndexDescription> indexResult; 
+        for (const auto& indexDesc : loadResponse.Metadata->Indexes) { 
+            indexResult.insert(std::make_pair(indexDesc.Name, indexDesc)); 
+        } 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(indexResult.size(), expected.size()); 
+        for (const auto& indexDescResult : indexResult) { 
+            const auto expectedDesc = expected.find(indexDescResult.first); 
+            UNIT_ASSERT(expectedDesc != expected.end()); 
+            UNIT_ASSERT_VALUES_EQUAL(expectedDesc->second.KeyColumns.size(), indexDescResult.second.KeyColumns.size()); 
+            UNIT_ASSERT_EQUAL(expectedDesc->second.Type, indexDescResult.second.Type); 
+            for (size_t i = 0; i < indexDescResult.second.KeyColumns.size(); i++) { 
+                UNIT_ASSERT_VALUES_EQUAL(indexDescResult.second.KeyColumns[i], expectedDesc->second.KeyColumns[i]); 
+            } 
+            UNIT_ASSERT_VALUES_EQUAL(expectedDesc->second.DataColumns.size(), indexDescResult.second.DataColumns.size()); 
+            for (size_t i = 0; i < indexDescResult.second.DataColumns.size(); i++) { 
+                UNIT_ASSERT_VALUES_EQUAL(indexDescResult.second.DataColumns[i], expectedDesc->second.DataColumns[i]); 
+            } 
+        } 
 
         if (withExtendedDdl) {
             CheckPolicies(client, metadata->Name);
@@ -297,7 +297,7 @@ void TestDropTableCommon(TIntrusivePtr<IKikimrGateway> gateway) {
     UNIT_ASSERT(response.Success());
 
     auto loadFuture = gateway->LoadTableMetadata(TestCluster, "/Root/Test/UserTable",
-        IKikimrGateway::TLoadTableMetadataSettings());
+        IKikimrGateway::TLoadTableMetadataSettings()); 
     loadFuture.Wait();
     auto loadResponse = loadFuture.GetValue();
     UNIT_ASSERT(loadResponse.Success());
@@ -332,20 +332,20 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         TestCreateTableCommon(GetIcGateway(kikimr.GetTestServer()), kikimr.GetTestClient());
     }
 
-    Y_UNIT_TEST(TestCreateTableWithIndex) {
+    Y_UNIT_TEST(TestCreateTableWithIndex) { 
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         CreateSampleTables(kikimr);
         TestCreateTableCommon(GetIcGateway(kikimr.GetTestServer()), kikimr.GetTestClient(), true,
             TTestIndexSettings{false});
-    }
-
-    Y_UNIT_TEST(TestCreateTableWithCoverIndex) {
+    } 
+ 
+    Y_UNIT_TEST(TestCreateTableWithCoverIndex) { 
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         CreateSampleTables(kikimr);
         TestCreateTableCommon(GetIcGateway(kikimr.GetTestServer()), kikimr.GetTestClient(), true,
             TTestIndexSettings{true});
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestCreateTableNoFolder) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         CreateSampleTables(kikimr);
@@ -359,13 +359,13 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         TestCreateTableCommon(GetIcGateway(kikimr.GetTestServer()), kikimr.GetTestClient());
     }
 
-    Y_UNIT_TEST(TestCreateSameTableWithIndex) {
+    Y_UNIT_TEST(TestCreateSameTableWithIndex) { 
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         CreateSampleTables(kikimr);
         TestCreateTableCommon(GetIcGateway(kikimr.GetTestServer()), kikimr.GetTestClient(), true,
             TTestIndexSettings{false});
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestDropTable) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         CreateSampleTables(kikimr);

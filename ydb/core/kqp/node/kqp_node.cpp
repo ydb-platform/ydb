@@ -32,11 +32,11 @@ namespace {
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_NODE, stream)
 #define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_NODE, stream)
 
-// Min interval between stats send from scan/compute actor to executor
-constexpr TDuration MinStatInterval = TDuration::MilliSeconds(20);
-// Max interval in case of no activety
-constexpr TDuration MaxStatInterval = TDuration::MilliSeconds(100);
-
+// Min interval between stats send from scan/compute actor to executor 
+constexpr TDuration MinStatInterval = TDuration::MilliSeconds(20); 
+// Max interval in case of no activety 
+constexpr TDuration MaxStatInterval = TDuration::MilliSeconds(100); 
+ 
 template <class TTasksCollection>
 TString TasksIdsStr(const TTasksCollection& tasks) {
     TVector<ui64> ids;
@@ -272,12 +272,12 @@ private:
         runtimeSettingsBase.UseLLVM = msgRtSettings.GetUseLLVM();
         runtimeSettingsBase.UseSpilling = msgRtSettings.GetUseSpilling();
 
-        if (msgRtSettings.HasRlPath()) {
-            runtimeSettingsBase.RlPath = msgRtSettings.GetRlPath();
-        }
-
-        runtimeSettingsBase.ReportStatsSettings = NYql::NDq::TReportStatsSettings{MinStatInterval, MaxStatInterval};
-
+        if (msgRtSettings.HasRlPath()) { 
+            runtimeSettingsBase.RlPath = msgRtSettings.GetRlPath(); 
+        } 
+ 
+        runtimeSettingsBase.ReportStatsSettings = NYql::NDq::TReportStatsSettings{MinStatInterval, MaxStatInterval}; 
+ 
         auto actorSystem = TlsActivationContext->ActorSystem();
 
         // start compute actors

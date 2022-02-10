@@ -99,22 +99,22 @@ static INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& n
 }
 
 static INode::TPtr CreateIndexDesc(const TIndexDescription& index, const INode& node) {
-    auto indexColumns = node.Y();
+    auto indexColumns = node.Y(); 
     for (const auto& col : index.IndexColumns) {
-        indexColumns = node.L(indexColumns, BuildQuotedAtom(col.Pos, col.Name));
-    }
-    auto dataColumns = node.Y();
+        indexColumns = node.L(indexColumns, BuildQuotedAtom(col.Pos, col.Name)); 
+    } 
+    auto dataColumns = node.Y(); 
     for (const auto& col : index.DataColumns) {
-        dataColumns = node.L(dataColumns, BuildQuotedAtom(col.Pos, col.Name));
-    }
+        dataColumns = node.L(dataColumns, BuildQuotedAtom(col.Pos, col.Name)); 
+    } 
     const auto& indexType = node.Y(node.Q("indexType"), CreateIndexType(index.Type, node));
     const auto& indexName = node.Y(node.Q("indexName"), BuildQuotedAtom(index.Name.Pos, index.Name.Name));
-    return node.Y(node.Q(indexName),
-                  node.Q(indexType),
-                  node.Q(node.Y(node.Q("indexColumns"), node.Q(indexColumns))),
-                  node.Q(node.Y(node.Q("dataColumns"), node.Q(dataColumns))));
-}
-
+    return node.Y(node.Q(indexName), 
+                  node.Q(indexType), 
+                  node.Q(node.Y(node.Q("indexColumns"), node.Q(indexColumns))), 
+                  node.Q(node.Y(node.Q("dataColumns"), node.Q(dataColumns)))); 
+} 
+ 
 static INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, const INode& node) {
     auto settings = node.Y();
     if (desc.Settings.Mode) {
@@ -606,28 +606,28 @@ public:
                     return false;
                 }
             }
-
-            THashSet<TString> indexNames;
+ 
+            THashSet<TString> indexNames; 
             for (const auto& index : Params.Indexes) {
                 if (!indexNames.insert(index.Name.Name).second) {
                     ctx.Error(index.Name.Pos) << "Index " << index.Name.Name << " must be defined once";
-                    return false;
-                }
-
+                    return false; 
+                } 
+ 
                 for (const auto& indexColumn : index.IndexColumns) {
-                    if (!columnsSet.contains(indexColumn.Name)) {
-                        ctx.Error(indexColumn.Pos) << "Undefined column: " << indexColumn.Name;
-                        return false;
-                    }
-                }
-
+                    if (!columnsSet.contains(indexColumn.Name)) { 
+                        ctx.Error(indexColumn.Pos) << "Undefined column: " << indexColumn.Name; 
+                        return false; 
+                    } 
+                } 
+ 
                 for (const auto& dataColumn : index.DataColumns) {
-                    if (!columnsSet.contains(dataColumn.Name)) {
-                        ctx.Error(dataColumn.Pos) << "Undefined column: " << dataColumn.Name;
-                        return false;
-                    }
-                }
-            }
+                    if (!columnsSet.contains(dataColumn.Name)) { 
+                        ctx.Error(dataColumn.Pos) << "Undefined column: " << dataColumn.Name; 
+                        return false; 
+                    } 
+                } 
+            } 
 
             THashSet<TString> cfNames;
             for (const auto& cf : Params.Changefeeds) {
@@ -708,9 +708,9 @@ public:
 
         for (const auto& index : Params.Indexes) {
             const auto& desc = CreateIndexDesc(index, *this);
-            opts = L(opts, Q(Y(Q("index"), Q(desc))));
-        }
-
+            opts = L(opts, Q(Y(Q("index"), Q(desc)))); 
+        } 
+ 
         for (const auto& cf : Params.Changefeeds) {
             const auto& desc = CreateChangefeedDesc(cf, *this);
             opts = L(opts, Q(Y(Q("changefeed"), Q(desc))));
@@ -731,7 +731,7 @@ public:
             }
             opts = L(opts, Q(Y(Q("columnFamilies"), Q(columnFamilies))));
         }
-
+ 
         if (Params.TableSettings.IsSet()) {
             auto settings = Y();
 
@@ -806,7 +806,7 @@ public:
         return {};
     }
 private:
-    const TTableRef Table;
+    const TTableRef Table; 
     const TCreateTableParameters Params;
     TScopedStatePtr Scoped;
 };
@@ -816,23 +816,23 @@ TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, const TCreateTable
     return new TCreateTableNode(pos, tr, params, scoped);
 }
 
-class TAlterTableNode final: public TAstListNode {
-public:
+class TAlterTableNode final: public TAstListNode { 
+public: 
     TAlterTableNode(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped)
-        : TAstListNode(pos)
-        , Table(tr)
+        : TAstListNode(pos) 
+        , Table(tr) 
         , Params(params)
         , Scoped(scoped)
     {
         scoped->UseCluster(Table.Service, Table.Cluster);
     }
 
-    bool DoInit(TContext& ctx, ISource* src) override {
-        auto keys = Table.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::CREATE);
-        if (!keys || !keys->Init(ctx, src)) {
-            return false;
-        }
-
+    bool DoInit(TContext& ctx, ISource* src) override { 
+        auto keys = Table.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::CREATE); 
+        if (!keys || !keys->Init(ctx, src)) { 
+            return false; 
+        } 
+ 
         auto actions = Y();
 
         if (Params.AddColumns) {
@@ -841,9 +841,9 @@ public:
                 auto columnDesc = Y();
                 columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
                 auto type = col.Type;
-                if (col.Nullable) {
+                if (col.Nullable) { 
                     type = Y("OptionalType", type);
-                }
+                } 
                 columnDesc = L(columnDesc, type);
                 if (col.Families) {
                     auto familiesDesc = Y();
@@ -853,18 +853,18 @@ public:
                     columnDesc = L(columnDesc, Q(familiesDesc));
                 }
                 columns = L(columns, Q(columnDesc));
-            }
+            } 
             actions = L(actions, Q(Y(Q("addColumns"), Q(columns))));
-        }
-
+        } 
+ 
         if (Params.DropColumns) {
             auto columns = Y();
             for (auto& colName : Params.DropColumns) {
                 columns = L(columns, BuildQuotedAtom(Pos, colName));
             }
             actions = L(actions, Q(Y(Q("dropColumns"), Q(columns))));
-        }
-
+        } 
+ 
         if (Params.AlterColumns) {
             auto columns = Y();
             for (auto& col : Params.AlterColumns) {
@@ -959,14 +959,14 @@ public:
 
         for (const auto& index : Params.AddIndexes) {
             const auto& desc = CreateIndexDesc(index, *this);
-            actions = L(actions, Q(Y(Q("addIndex"), Q(desc))));
-        }
-
-        for (const auto& id : Params.DropIndexes) {
-            auto indexName = BuildQuotedAtom(id.Pos, id.Name);
-            actions = L(actions, Q(Y(Q("dropIndex"), indexName)));
-        }
-
+            actions = L(actions, Q(Y(Q("addIndex"), Q(desc)))); 
+        } 
+ 
+        for (const auto& id : Params.DropIndexes) { 
+            auto indexName = BuildQuotedAtom(id.Pos, id.Name); 
+            actions = L(actions, Q(Y(Q("dropIndex"), indexName))); 
+        } 
+ 
         if (Params.RenameTo) {
             auto destination = ctx.GetPrefixedPath(Scoped->CurrService, Scoped->CurrCluster,
                                                    TDeferredAtom(Params.RenameTo->Pos, Params.RenameTo->Name));
@@ -993,28 +993,28 @@ public:
         opts = L(opts, Q(Y(Q("mode"), Q("alter"))));
         opts = L(opts, Q(Y(Q("actions"), Q(actions))));
 
-        Add("block", Q(Y(
+        Add("block", Q(Y( 
             Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.Service), Scoped->WrapCluster(Table.Cluster, ctx))),
             Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),
             Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
-        )));
-
-        return TAstListNode::DoInit(ctx, src);
-    }
-    TPtr DoClone() const final {
-        return {};
-    }
-private:
-    TTableRef Table;
+        ))); 
+ 
+        return TAstListNode::DoInit(ctx, src); 
+    } 
+    TPtr DoClone() const final { 
+        return {}; 
+    } 
+private: 
+    TTableRef Table; 
     const TAlterTableParameters Params;
     TScopedStatePtr Scoped;
-};
-
+}; 
+ 
 TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped)
-{
+{ 
     return new TAlterTableNode(pos, tr, params, scoped);
-}
-
+} 
+ 
 class TDropTableNode final: public TAstListNode {
 public:
     TDropTableNode(TPosition pos, const TTableRef& tr, TScopedStatePtr scoped)
@@ -1645,7 +1645,7 @@ public:
                         BuildQuotedAtom(Pos, "Warning"), BuildQuotedAtom(Pos, warningPragma.GetPattern()),
                             BuildQuotedAtom(Pos, to_lower(ToString(warningPragma.GetAction()))))));
                 }
-
+ 
                 if (ctx.ResultSizeLimit > 0) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", resultSink,
                         BuildQuotedAtom(Pos, "SizeLimit"), BuildQuotedAtom(Pos, ToString(ctx.ResultSizeLimit)))));

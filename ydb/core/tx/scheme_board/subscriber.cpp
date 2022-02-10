@@ -532,7 +532,7 @@ public:
     void Bootstrap(const TActorContext&) {
         TMonitorableActor<TDerived>::Bootstrap();
 
-        ReplicaSubscriber = this->RegisterWithSameMailbox(new TReplicaDerived(this->SelfId(), Replica, Path, DomainOwnerId));
+        ReplicaSubscriber = this->RegisterWithSameMailbox(new TReplicaDerived(this->SelfId(), Replica, Path, DomainOwnerId)); 
         this->Become(&TDerived::StateWork);
     }
 
@@ -840,7 +840,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         }
 
         for (const auto& replica : replicas) {
-            Proxies.emplace(this->RegisterWithSameMailbox(new TProxyDerived(this->SelfId(), replica, Path, DomainOwnerId)));
+            Proxies.emplace(this->RegisterWithSameMailbox(new TProxyDerived(this->SelfId(), replica, Path, DomainOwnerId))); 
         }
 
         this->Become(&TDerived::StateWork);

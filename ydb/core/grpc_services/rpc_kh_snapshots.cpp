@@ -71,7 +71,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
 
-        const auto* proto = GetProtoRequest();
+        const auto* proto = GetProtoRequest(); 
 
         if (proto->path_size() <= 0) {
             NYql::TIssues issues;
@@ -96,7 +96,7 @@ public:
         auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         req->Record.SetExecTimeoutPeriod(reqTimeout.MilliSeconds());
 
-        auto token = Request_->GetInternalToken();
+        auto token = Request_->GetInternalToken(); 
         if (!token.empty()) {
             req->Record.SetUserToken(token);
         }
@@ -200,7 +200,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
 
-        const auto* proto = GetProtoRequest();
+        const auto* proto = GetProtoRequest(); 
 
         if (!SnapshotId.Parse(proto->snapshot_id())) {
             NYql::TIssues issues;
@@ -232,7 +232,7 @@ public:
         auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         req->Record.SetExecTimeoutPeriod(reqTimeout.MilliSeconds());
 
-        auto token = Request_->GetInternalToken();
+        auto token = Request_->GetInternalToken(); 
         if (!token.empty()) {
             req->Record.SetUserToken(token);
         }
@@ -341,7 +341,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
 
-        const auto* proto = GetProtoRequest();
+        const auto* proto = GetProtoRequest(); 
 
         if (!SnapshotId.Parse(proto->snapshot_id())) {
             NYql::TIssues issues;
@@ -373,7 +373,7 @@ public:
         auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         req->Record.SetExecTimeoutPeriod(reqTimeout.MilliSeconds());
 
-        auto token = Request_->GetInternalToken();
+        auto token = Request_->GetInternalToken(); 
         if (!token.empty()) {
             req->Record.SetUserToken(token);
         }

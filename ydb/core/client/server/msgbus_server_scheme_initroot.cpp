@@ -82,7 +82,7 @@ public:
             if (WithRetry) {
                 clientConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
             }
-            PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, domain->SchemeRoot, clientConfig));
+            PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, domain->SchemeRoot, clientConfig)); 
             NTabletPipe::SendData(ctx, PipeClient, x.Release());
         } else {
             ReplyWithResult(MSTATUS_ERROR, TEvSchemeShard::TEvInitRootShardResult::StatusBadArgument, ctx);

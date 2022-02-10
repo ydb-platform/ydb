@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SLOW_LOG, NActors::NLog::PRI_ERROR);
 
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto paramsBuilder = db.GetParamsBuilder();

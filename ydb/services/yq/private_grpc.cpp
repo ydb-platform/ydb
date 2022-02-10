@@ -38,18 +38,18 @@ void TGRpcYqPrivateTaskService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) 
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
-#define ADD_REQUEST(NAME, CB)                                                                                  \
+#define ADD_REQUEST(NAME, CB)                                                                                  \ 
 MakeIntrusive<TGRpcRequest<Yq::Private::NAME##Request, Yq::Private::NAME##Response, TGRpcYqPrivateTaskService, TSecurityTextFormatPrinter<Yq::Private::NAME##Request>, TSecurityTextFormatPrinter<Yq::Private::NAME##Response>>>( \
-    this, &Service_, CQ_,                                                                                      \
-    [this](NGrpc::IRequestContextBase *ctx) {                                                                  \
-        NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                       \
-        ActorSystem_->Send(GRpcRequestProxyId_,                                                                \
+    this, &Service_, CQ_,                                                                                      \ 
+    [this](NGrpc::IRequestContextBase *ctx) {                                                                  \ 
+        NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                       \ 
+        ActorSystem_->Send(GRpcRequestProxyId_,                                                                \ 
             new TGrpcRequestOperationCall<Yq::Private::NAME##Request, Yq::Private::NAME##Response>                 \
-                (ctx, &CB));                                                                                   \
-    },                                                                                                         \
+                (ctx, &CB));                                                                                   \ 
+    },                                                                                                         \ 
     &Yq::Private::V1::YqPrivateTaskService::AsyncService::Request##NAME,                                  \
-    #NAME, logger, getCounterBlock("yql_internal", #NAME))                                                     \
-    ->Run();                                                                                                   \
+    #NAME, logger, getCounterBlock("yql_internal", #NAME))                                                     \ 
+    ->Run();                                                                                                   \ 
 
     ADD_REQUEST(PingTask, DoYqPrivatePingTaskRequest)
 

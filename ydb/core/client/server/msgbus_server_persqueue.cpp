@@ -987,7 +987,7 @@ public:
             }
 
             NTabletPipe::TClientConfig clientConfig;
-            PQClient.push_back(ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig)));
+            PQClient.push_back(ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig))); 
             ActorIdToProto(PQClient.back(), RequestProto.MutablePartitionRequest()->MutablePipeClient());
 
             TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
@@ -1032,7 +1032,7 @@ public:
                 tabletInfo.Topic = topic;
 
                 NTabletPipe::TClientConfig clientConfig;
-                TActorId pipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, it->second.BalancerTabletId, clientConfig));
+                TActorId pipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, it->second.BalancerTabletId, clientConfig)); 
                 tabletInfo.PipeClient = pipeClient;
                 PQClient.push_back(pipeClient);
 
@@ -1056,7 +1056,7 @@ public:
                         // Tablet node resolution relies on opening a pipe
 
                     NTabletPipe::TClientConfig clientConfig;
-                    TActorId pipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
+                    TActorId pipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig)); 
                     tabletInfo.PipeClient = pipeClient;
                     PQClient.push_back(pipeClient);
                     if (needAskOffset) {

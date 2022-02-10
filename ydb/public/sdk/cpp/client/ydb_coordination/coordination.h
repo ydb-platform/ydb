@@ -285,7 +285,7 @@ struct TDescribeSemaphoreSettings {
 
 class TClient {
 public:
-    TClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
+    TClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings()); 
 
     ~TClient();
 

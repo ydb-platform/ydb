@@ -11,7 +11,7 @@
 
 namespace NYdb {
 
-using TExpectedErrorException = yexception;
+using TExpectedErrorException = yexception; 
 
 Y_UNIT_TEST_SUITE(YdbValue) {
     Y_UNIT_TEST(ParseType1) {
@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
                 members {
                     name: "Member1"
                     type {
-                        type_id: UINT32
+                        type_id: UINT32 
                     }
                 }
                 members {
@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
                     type {
                         list_type {
                             item {
-                                type_id: STRING
+                                type_id: STRING 
                             }
                         }
                     }
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
                             elements {
                                 optional_type {
                                     item {
-                                        type_id: UTF8
+                                        type_id: UTF8 
                                     }
                                 }
                             }
@@ -63,21 +63,21 @@ Y_UNIT_TEST_SUITE(YdbValue) {
         NProtoBuf::TextFormat::ParseFromString(protoTypeStr, &protoType);
 
         UNIT_ASSERT_NO_DIFF(FormatType(protoType),
-            R"(Struct<'Member1':Uint32,'Member2':List<String>,'Member3':Tuple<Utf8?,Decimal(8,13),Void>>)");
+            R"(Struct<'Member1':Uint32,'Member2':List<String>,'Member3':Tuple<Utf8?,Decimal(8,13),Void>>)"); 
     }
 
     Y_UNIT_TEST(ParseType2) {
         auto protoTypeStr = R"(
             dict_type {
                 key {
-                    type_id: UINT32
+                    type_id: UINT32 
                 }
                 payload {
                     struct_type {
                         members {
                             name: "Member1"
                             type {
-                                type_id: DATE
+                                type_id: DATE 
                             }
                         }
                     }
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             .Build();
 
         UNIT_ASSERT_NO_DIFF(FormatType(type),
-            R"(Struct<'Member1':List<Uint32?>,'Member2':Dict<Int64,Tuple<Decimal(8,13),Utf8?>>>)");
+            R"(Struct<'Member1':List<Uint32?>,'Member2':Dict<Int64,Tuple<Decimal(8,13),Utf8?>>>)"); 
     }
 
     Y_UNIT_TEST(BuildTypeReuse) {
@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
     Y_UNIT_TEST(BuildTypeIncomplete) {
         try {
-            auto value = TTypeBuilder()
+            auto value = TTypeBuilder() 
                 .BeginTuple()
                 .AddElement()
                     .Primitive(EPrimitiveType::Uint32)
@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
                 members {
                     name: "Member1"
                     type {
-                        type_id: UINT32
+                        type_id: UINT32 
                     }
                 }
                 members {
@@ -199,7 +199,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
                     type {
                         list_type {
                             item {
-                                type_id: STRING
+                                type_id: STRING 
                             }
                         }
                     }
@@ -211,12 +211,12 @@ Y_UNIT_TEST_SUITE(YdbValue) {
                             elements {
                                 optional_type {
                                     item {
-                                        type_id: UTF8
+                                        type_id: UTF8 
                                     }
                                 }
                             }
                             elements {
-                                type_id: UTF8
+                                type_id: UTF8 
                             }
                             elements {
                                 void_type: NULL_VALUE
@@ -267,14 +267,14 @@ Y_UNIT_TEST_SUITE(YdbValue) {
         auto protoTypeStr = R"(
             dict_type {
                 key {
-                    type_id: UINT32
+                    type_id: UINT32 
                 }
                 payload {
                     struct_type {
                         members {
                             name: "Member1"
                             type {
-                                type_id: DATE
+                                type_id: DATE 
                             }
                         }
                     }
@@ -325,21 +325,21 @@ Y_UNIT_TEST_SUITE(YdbValue) {
                 elements {
                     optional_type {
                         item {
-                            type_id: UTF8
+                            type_id: UTF8 
                         }
                     }
                 }
                 elements {
                     optional_type {
                         item {
-                            type_id: INT8
+                            type_id: INT8 
                         }
                     }
                 }
                 elements {
                     optional_type {
                         item {
-                            type_id: DOUBLE
+                            type_id: DOUBLE 
                         }
                     }
                 }
@@ -350,13 +350,13 @@ Y_UNIT_TEST_SUITE(YdbValue) {
                         }
                     }
                 }
-                elements {
-                    optional_type {
-                        item {
-                            type_id: DYNUMBER
-                        }
-                    }
-                }
+                elements { 
+                    optional_type { 
+                        item { 
+                            type_id: DYNUMBER 
+                        } 
+                    } 
+                } 
             }
         )";
 
@@ -375,11 +375,11 @@ Y_UNIT_TEST_SUITE(YdbValue) {
                     uint64_value: 7
                 }
             }
-            items {
-                nested_value {
-                    text_value: "12.345"
-                }
-            }
+            items { 
+                nested_value { 
+                    text_value: "12.345" 
+                } 
+            } 
         )";
 
         Ydb::Type protoType;
@@ -400,14 +400,14 @@ Y_UNIT_TEST_SUITE(YdbValue) {
         UNIT_ASSERT_VALUES_EQUAL(parser.GetOptionalDouble(), TMaybe<double>());
         UNIT_ASSERT(parser.TryNextElement());
         UNIT_ASSERT_VALUES_EQUAL(parser.GetOptionalUint64(), (ui64)7);
-        UNIT_ASSERT(parser.TryNextElement());
-        UNIT_ASSERT_VALUES_EQUAL(parser.GetOptionalDyNumber(), "12.345");
+        UNIT_ASSERT(parser.TryNextElement()); 
+        UNIT_ASSERT_VALUES_EQUAL(parser.GetOptionalDyNumber(), "12.345"); 
         parser.CloseTuple();
     }
 
     Y_UNIT_TEST(BuildValueIncomplete) {
         try {
-            auto value = TValueBuilder()
+            auto value = TValueBuilder() 
                 .BeginTuple()
                 .AddElement()
                     .Uint32(10)
@@ -423,7 +423,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
     Y_UNIT_TEST(BuildValueListItemMismatch1) {
         try {
-            auto value = TValueBuilder()
+            auto value = TValueBuilder() 
                 .BeginList()
                 .AddListItem()
                     .Int32(17)
@@ -444,7 +444,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             .Build();
 
         try {
-            auto value = TValueBuilder()
+            auto value = TValueBuilder() 
                 .BeginList()
                 .AddListItem(itemValue)
                 .AddListItem()
@@ -464,7 +464,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             .Build();
 
         try {
-            auto value = TValueBuilder()
+            auto value = TValueBuilder() 
                 .BeginList()
                 .AddListItem()
                     .Int32(17)
@@ -480,7 +480,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
     Y_UNIT_TEST(BuildValueListItemMismatch4) {
         try {
-            auto value = TValueBuilder()
+            auto value = TValueBuilder() 
                 .BeginList()
                 .AddListItem()
                     .BeginList()
@@ -501,7 +501,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
     Y_UNIT_TEST(BuildValueEmptyListUnknown) {
         try {
-            auto value = TValueBuilder()
+            auto value = TValueBuilder() 
                 .EmptyList()
                 .Build();
         } catch (const TExpectedErrorException& e) {
@@ -511,17 +511,17 @@ Y_UNIT_TEST_SUITE(YdbValue) {
         UNIT_ASSERT(false);
     }
 
-    Y_UNIT_TEST(BuildDyNumberValue) {
-        auto value = TValueBuilder()
-            .DyNumber("12.345")
-            .Build();
-
-        UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
-            R"("12.345")");
-        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
-            R"("12.345")");
-    }
-
+    Y_UNIT_TEST(BuildDyNumberValue) { 
+        auto value = TValueBuilder() 
+            .DyNumber("12.345") 
+            .Build(); 
+ 
+        UNIT_ASSERT_NO_DIFF(FormatValueYson(value), 
+            R"("12.345")"); 
+        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode), 
+            R"("12.345")"); 
+    } 
+ 
     Y_UNIT_TEST(BuildValueList) {
         auto intValue = TValueBuilder()
             .Int32(21)
@@ -596,7 +596,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
     Y_UNIT_TEST(BuildValueBadCall) {
         try {
-            auto value = TValueBuilder()
+            auto value = TValueBuilder() 
                 .AddListItem()
                 .EndList()
                 .Build();
@@ -713,7 +713,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
     Y_UNIT_TEST(BuildValueOptionalMismatch1) {
         try {
-            auto value = TValueBuilder()
+            auto value = TValueBuilder() 
                 .BeginList()
                 .AddListItem()
                     .BeginOptional()
@@ -734,7 +734,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
     Y_UNIT_TEST(BuildValueOptionalMismatch2) {
         try {
-            auto value = TValueBuilder()
+            auto value = TValueBuilder() 
                 .BeginList()
                 .AddListItem()
                     .BeginOptional()
@@ -791,7 +791,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
     Y_UNIT_TEST(BuildValueStructMissingMember) {
         try {
-            auto value = TValueBuilder()
+            auto value = TValueBuilder() 
                 .BeginList()
                 .AddListItem()
                     .BeginStruct()
@@ -908,7 +908,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
     Y_UNIT_TEST(BuildValueTupleElementsMismatch1) {
         try {
-            auto value = TValueBuilder()
+            auto value = TValueBuilder() 
                 .BeginList()
                 .AddListItem()
                     .BeginTuple()
@@ -933,7 +933,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
     Y_UNIT_TEST(BuildValueTupleElementsMismatch2) {
         try {
-            auto value = TValueBuilder()
+            auto value = TValueBuilder() 
                 .BeginList()
                 .AddListItem()
                     .BeginTuple()
@@ -962,7 +962,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
     Y_UNIT_TEST(BuildValueTupleTypeMismatch) {
         try {
-            auto value = TValueBuilder()
+            auto value = TValueBuilder() 
                 .BeginList()
                 .AddListItem()
                     .BeginTuple()
@@ -1029,7 +1029,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
     Y_UNIT_TEST(BuildValueDictTypeMismatch1) {
         try {
-            auto value = TValueBuilder()
+            auto value = TValueBuilder() 
                 .BeginDict()
                 .AddDictItem()
                     .DictKey(TValueBuilder().Int32(1).Build())
@@ -1050,7 +1050,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
     Y_UNIT_TEST(BuildValueDictTypeMismatch2) {
         try {
-            auto value = TValueBuilder()
+            auto value = TValueBuilder() 
                 .BeginDict()
                 .AddDictItem()
                     .DictKey()
@@ -1114,7 +1114,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
     Y_UNIT_TEST(BuildValueDictEmptyNoType) {
         try {
-            auto value = TValueBuilder()
+            auto value = TValueBuilder() 
                 .BeginList()
                 .AddListItem()
                     .EmptyDict()
@@ -1129,7 +1129,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
     Y_UNIT_TEST(BuildValueDictEmptyTypeMismatch) {
         try {
-            auto value = TValueBuilder()
+            auto value = TValueBuilder() 
                 .BeginList()
                 .AddListItem()
                     .EmptyDict(
@@ -1175,10 +1175,10 @@ Y_UNIT_TEST_SUITE(YdbValue) {
                         .Primitive(EPrimitiveType::Uint8)
                     .EndOptional()
                 .EndDict()
-            .AddElement()
-                .BeginOptional()
-                    .Primitive(EPrimitiveType::DyNumber)
-                .EndOptional()
+            .AddElement() 
+                .BeginOptional() 
+                    .Primitive(EPrimitiveType::DyNumber) 
+                .EndOptional() 
             .EndTuple()
             .Build();
 
@@ -1206,19 +1206,19 @@ Y_UNIT_TEST_SUITE(YdbValue) {
                     .DictPayload()
                         .EmptyOptional()
                 .EndDict()
-            .AddElement()
-                .BeginOptional()
-                    .DyNumber("12.345")
-                .EndOptional()
+            .AddElement() 
+                .BeginOptional() 
+                    .DyNumber("12.345") 
+                .EndOptional() 
             .EndTuple()
             .Build();
 
         UNIT_ASSERT_NO_DIFF(FormatType(value.GetType()),
-            R"(Tuple<Struct<'Name':String,'Value':Uint64>,Utf8?,List<Bool>,Dict<Int32,Uint8?>,DyNumber?>)");
+            R"(Tuple<Struct<'Name':String,'Value':Uint64>,Utf8?,List<Bool>,Dict<Int32,Uint8?>,DyNumber?>)"); 
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
-            R"([["Sergey";1u];#;[%true];[[10;#]];["12.345"]])");
+            R"([["Sergey";1u];#;[%true];[[10;#]];["12.345"]])"); 
         UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
-            R"([{"Name":"Sergey","Value":1},null,[true],[[10,null]],"12.345"])");
+            R"([{"Name":"Sergey","Value":1},null,[true],[[10,null]],"12.345"])"); 
     }
 }
 

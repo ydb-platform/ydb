@@ -364,7 +364,7 @@ namespace NActors {
             }
 
             // Create new session actor.
-            SessionID = RegisterWithSameMailbox(Session = new TInterconnectSessionTCP(this, msg->Params));
+            SessionID = RegisterWithSameMailbox(Session = new TInterconnectSessionTCP(this, msg->Params)); 
             IActor::InvokeOtherActor(*Session, &TInterconnectSessionTCP::Init);
             SessionVirtualId = msg->Self;
             RemoteSessionVirtualId = msg->Peer;

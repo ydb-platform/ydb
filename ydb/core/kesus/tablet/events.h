@@ -99,7 +99,7 @@ struct TEvKesus {
     inline static void FillError(NKikimrKesus::TKesusError* error, Ydb::StatusIds::StatusCode status, const TString& reason) {
         Y_VERIFY(status != Ydb::StatusIds::SUCCESS, "Attempting to set error to SUCCESS");
         error->SetStatus(status);
-        error->AddIssues()->set_message(reason);
+        error->AddIssues()->set_message(reason); 
     }
 
     template<class TDerived, class TRecord, ui32 Event>

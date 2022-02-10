@@ -45,7 +45,7 @@ public:
 private:
     void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
         const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
-        auto *response = TEvWhoAmIRequest::AllocateResult<Ydb::Discovery::WhoAmIResult>(Request);
+        auto *response = TEvWhoAmIRequest::AllocateResult<Ydb::Discovery::WhoAmIResult>(Request); 
         if (!result.Error) {
             if (result.Token != nullptr) {
                 response->set_user(result.Token->GetUserSID());
@@ -72,7 +72,7 @@ private:
     void ReplyError(const TString& error) {
         auto issue = NYql::TIssue(error);
         Request->RaiseIssue(issue);
-        Request->ReplyWithYdbStatus(Ydb::StatusIds::GENERIC_ERROR);
+        Request->ReplyWithYdbStatus(Ydb::StatusIds::GENERIC_ERROR); 
     }
 
     THolder<TEvWhoAmIRequest> Request;

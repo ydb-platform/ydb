@@ -911,7 +911,7 @@ public:
         for (auto &pr : domainConfigs) {
             auto *domain = domains->GetDomainByName(pr.first);
             Y_VERIFY(domain, "unknown domain %s in Tenant Pool config", pr.first.data());
-            auto aid = ctx.RegisterWithSameMailbox(new TDomainTenantPool(pr.first, LocalID, pr.second));
+            auto aid = ctx.RegisterWithSameMailbox(new TDomainTenantPool(pr.first, LocalID, pr.second)); 
             DomainTenantPools[pr.first] = aid;
             auto serviceId = MakeTenantPoolID(SelfId().NodeId(), domain->DomainUid);
             ctx.ExecutorThread.ActorSystem->RegisterLocalService(serviceId, aid);

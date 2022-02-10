@@ -10,16 +10,16 @@ namespace {
 class TCompositeGraphTransformer : public TGraphTransformerBase {
 public:
     TCompositeGraphTransformer(const TVector<TTransformStage>& stages, bool useIssueScopes, bool doCheckArguments)
-        : Stages(stages)
-        , UseIssueScopes(useIssueScopes)
+        : Stages(stages) 
+        , UseIssueScopes(useIssueScopes) 
         , DoCheckArguments(doCheckArguments)
-    {
-        if (UseIssueScopes) {
-            for (const auto& stage : Stages) {
-                YQL_ENSURE(!stage.Name.empty());
-            }
-        }
-    }
+    { 
+        if (UseIssueScopes) { 
+            for (const auto& stage : Stages) { 
+                YQL_ENSURE(!stage.Name.empty()); 
+            } 
+        } 
+    } 
 
     void Rewind() override {
         for (auto& stage : Stages) {
@@ -42,16 +42,16 @@ public:
 #endif
 
         if (Index >= Stages.size()) {
-            if (LastIssueScope) {
-                ctx.IssueManager.LeaveScope();
-                LastIssueScope.Clear();
-            }
+            if (LastIssueScope) { 
+                ctx.IssueManager.LeaveScope(); 
+                LastIssueScope.Clear(); 
+            } 
             return TStatus::Ok;
         }
 
-        if (UseIssueScopes) {
-            UpdateIssueScope(ctx.IssueManager);
-        }
+        if (UseIssueScopes) { 
+            UpdateIssueScope(ctx.IssueManager); 
+        } 
         auto status = Stages[Index].GetTransformer().Transform(input, output, ctx);
 #ifndef NDEBUG
         if (DoCheckArguments && output && output != input) {
@@ -116,29 +116,29 @@ private:
         return status;
     }
 
-    void UpdateIssueScope(TIssueManager& issueManager) {
+    void UpdateIssueScope(TIssueManager& issueManager) { 
         YQL_ENSURE(Index < Stages.size());
         const auto scopeIssueCode = Stages[Index].IssueCode;
         const auto scopeIssueMessage = Stages[Index].IssueMessage;
-        if (LastIssueScope != scopeIssueCode) {
-            if (!LastIssueScope.Empty()) {
-                issueManager.LeaveScope();
-            }
+        if (LastIssueScope != scopeIssueCode) { 
+            if (!LastIssueScope.Empty()) { 
+                issueManager.LeaveScope(); 
+            } 
             issueManager.AddScope([scopeIssueCode, scopeIssueMessage]() {
                 auto issue = new TIssue(TPosition(), scopeIssueMessage ? scopeIssueMessage : IssueCodeToString(scopeIssueCode));
-                issue->SetCode(scopeIssueCode, GetSeverity(scopeIssueCode));
-                return issue;
-            });
-            LastIssueScope = scopeIssueCode;
-        }
-    }
-
+                issue->SetCode(scopeIssueCode, GetSeverity(scopeIssueCode)); 
+                return issue; 
+            }); 
+            LastIssueScope = scopeIssueCode; 
+        } 
+    } 
+ 
 protected:
     TVector<TTransformStage> Stages;
-    const bool UseIssueScopes;
+    const bool UseIssueScopes; 
     const bool DoCheckArguments;
     size_t Index = 0;
-    TMaybe<EYqlIssueCode> LastIssueScope;
+    TMaybe<EYqlIssueCode> LastIssueScope; 
     ui64 CheckArgumentsCount = 0;
 };
 
@@ -273,8 +273,8 @@ IGraphTransformer::TStatus SyncTransform(IGraphTransformer& transformer, TExprNo
         }
         AddTooManyTransformationsError(root->Pos(), "SyncTransform", ctx);
     }
-    catch (const std::exception& e) {
-        ctx.AddError(ExceptionToIssue(e));
+    catch (const std::exception& e) { 
+        ctx.AddError(ExceptionToIssue(e)); 
     }
     return IGraphTransformer::TStatus::Error;
 }
@@ -307,8 +307,8 @@ IGraphTransformer::TStatus InstantTransform(IGraphTransformer& transformer, TExp
         }
         AddTooManyTransformationsError(root->Pos(), "InstantTransform", ctx);
     }
-    catch (const std::exception& e) {
-        ctx.AddError(ExceptionToIssue(e));
+    catch (const std::exception& e) { 
+        ctx.AddError(ExceptionToIssue(e)); 
     }
     return IGraphTransformer::TStatus::Error;
 }
@@ -364,8 +364,8 @@ NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransform(IGraphTransformer
             return NThreading::MakeFuture(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error));
         }
     }
-    catch (const std::exception& e) {
-        ctx.AddError(ExceptionToIssue(e));
+    catch (const std::exception& e) { 
+        ctx.AddError(ExceptionToIssue(e)); 
         return NThreading::MakeFuture(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error));
     }
 

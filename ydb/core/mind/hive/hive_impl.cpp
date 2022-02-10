@@ -845,7 +845,7 @@ void THive::OnActivateExecutor(const TActorContext&) {
     Execute(CreateInitScheme());
     if (!ResponsivenessPinger) {
         ResponsivenessPinger = new TTabletResponsivenessPinger(TabletCounters->Simple()[NHive::COUNTER_RESPONSE_TIME_USEC], TDuration::Seconds(1));
-        ResponsivenessActorID = RegisterWithSameMailbox(ResponsivenessPinger);
+        ResponsivenessActorID = RegisterWithSameMailbox(ResponsivenessPinger); 
     }
 }
 

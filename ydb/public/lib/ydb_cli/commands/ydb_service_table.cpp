@@ -37,13 +37,13 @@ TCommandQuery::TCommandQuery()
     AddCommand(std::make_unique<TCommandExplain>());
 }
 
-TCommandIndex::TCommandIndex()
-    : TClientCommandTree("index", {}, "Index operations")
-{
+TCommandIndex::TCommandIndex() 
+    : TClientCommandTree("index", {}, "Index operations") 
+{ 
     AddCommand(std::make_unique<TCommandIndexAdd>());
     AddCommand(std::make_unique<TCommandIndexDrop>());
-}
-
+} 
+ 
 TCommandAttribute::TCommandAttribute()
     : TClientCommandTree("attribute", {"attr"}, "Attribute operations")
 {
@@ -58,13 +58,13 @@ TCommandTtl::TCommandTtl()
     AddCommand(std::make_unique<TCommandTtlDrop>());
 }
 
-TCommandIndexAdd::TCommandIndexAdd()
-    : TClientCommandTree("add", {}, "Add index in to the specified table")
-{
+TCommandIndexAdd::TCommandIndexAdd() 
+    : TClientCommandTree("add", {}, "Add index in to the specified table") 
+{ 
     AddCommand(std::make_unique<TCommandIndexAddGlobalSync>());
     AddCommand(std::make_unique<TCommandIndexAddGlobalAsync>());
-}
-
+} 
+ 
 TTableCommand::TTableCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
     : TYdbOperationCommand(name, aliases, description)
 {}
@@ -845,47 +845,47 @@ TCommandIndexAddGlobal::TCommandIndexAddGlobal(
         const TString& description)
     : TYdbCommand(name, aliases, description)
     , IndexType(type)
-{}
-
-void TCommandIndexAddGlobal::Config(TConfig& config) {
-    TYdbCommand::Config(config);
-
-    config.Opts->AddLongOption("index-name", "Name of index to add.")
-        .RequiredArgument("NAME").StoreResult(&IndexName);
-    config.Opts->AddLongOption("columns", "Ordered comma separated list of columns to build index for")
-        .RequiredArgument("CSV").StoreResult(&Columns);
-    config.Opts->AddLongOption("cover", "Ordered comma separated list of cover columns. (Data for those columns will be duplicated to index)")
-        .RequiredArgument("CSV").StoreResult(&DataColumns);
-
-    config.SetFreeArgsNum(1);
-    SetFreeArgTitle(0, "<table path>", "Path to a table");
+{} 
+ 
+void TCommandIndexAddGlobal::Config(TConfig& config) { 
+    TYdbCommand::Config(config); 
+ 
+    config.Opts->AddLongOption("index-name", "Name of index to add.") 
+        .RequiredArgument("NAME").StoreResult(&IndexName); 
+    config.Opts->AddLongOption("columns", "Ordered comma separated list of columns to build index for") 
+        .RequiredArgument("CSV").StoreResult(&Columns); 
+    config.Opts->AddLongOption("cover", "Ordered comma separated list of cover columns. (Data for those columns will be duplicated to index)") 
+        .RequiredArgument("CSV").StoreResult(&DataColumns); 
+ 
+    config.SetFreeArgsNum(1); 
+    SetFreeArgTitle(0, "<table path>", "Path to a table"); 
+}
+ 
+void TCommandIndexAddGlobal::Parse(TConfig& config) { 
+    TClientCommand::Parse(config); 
+    ParseFormats(); 
+    ParsePath(config, 0); 
 }
 
-void TCommandIndexAddGlobal::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
-    ParseFormats();
-    ParsePath(config, 0);
-}
-
-int TCommandIndexAddGlobal::Run(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
-    auto columns = StringSplitter(Columns).Split(',').ToList<TString>();
-    TVector<TString> dataColumns;
-    if (DataColumns) {
-        dataColumns = StringSplitter(DataColumns).Split(',').ToList<TString>();
-    }
-
-    auto settings = NTable::TAlterTableSettings()
-        .AppendAddIndexes({NTable::TIndexDescription(IndexName, IndexType, columns, dataColumns)});
-    auto session = client.GetSession().GetValueSync();
-    ThrowOnError(session);
-    auto opResult = session.GetSession().AlterTableLong(Path, settings).GetValueSync();
-    ThrowOnError(opResult);
-    PrintOperation(opResult, OutputFormat);
-
-    return EXIT_SUCCESS;
-}
-
+int TCommandIndexAddGlobal::Run(TConfig& config) { 
+    NTable::TTableClient client(CreateDriver(config)); 
+    auto columns = StringSplitter(Columns).Split(',').ToList<TString>(); 
+    TVector<TString> dataColumns; 
+    if (DataColumns) { 
+        dataColumns = StringSplitter(DataColumns).Split(',').ToList<TString>(); 
+    } 
+ 
+    auto settings = NTable::TAlterTableSettings() 
+        .AppendAddIndexes({NTable::TIndexDescription(IndexName, IndexType, columns, dataColumns)}); 
+    auto session = client.GetSession().GetValueSync(); 
+    ThrowOnError(session); 
+    auto opResult = session.GetSession().AlterTableLong(Path, settings).GetValueSync(); 
+    ThrowOnError(opResult); 
+    PrintOperation(opResult, OutputFormat); 
+ 
+    return EXIT_SUCCESS; 
+} 
+ 
 TCommandIndexAddGlobalSync::TCommandIndexAddGlobalSync()
     : TCommandIndexAddGlobal(NTable::EIndexType::GlobalSync, "global-sync", {"global"}, "Add global sync index. The command returns operation")
 {}
@@ -894,38 +894,38 @@ TCommandIndexAddGlobalAsync::TCommandIndexAddGlobalAsync()
     : TCommandIndexAddGlobal(NTable::EIndexType::GlobalAsync, "global-async", {}, "Add global async index. The command returns operation")
 {}
 
-TCommandIndexDrop::TCommandIndexDrop()
-    : TYdbCommand("drop", {}, "Drop index from the specified table")
-{}
-
-void TCommandIndexDrop::Config(TConfig& config) {
-    TYdbCommand::Config(config);
-
-    config.Opts->AddLongOption("index-name", "Name of index to drop.")
-        .RequiredArgument("NAME").StoreResult(&IndexName);
-
-    config.SetFreeArgsNum(1);
-    SetFreeArgTitle(0, "<table path>", "Path to a table");
-}
-
-void TCommandIndexDrop::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
-    ParsePath(config, 0);
-}
-
-int TCommandIndexDrop::Run(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
-
-    auto settings = NTable::TAlterTableSettings()
-        .AppendDropIndexes({IndexName});
-    auto session = client.GetSession().GetValueSync();
-    ThrowOnError(session);
-    auto result = session.GetSession().AlterTable(Path, settings).GetValueSync();
-    ThrowOnError(result);
-
-    return EXIT_SUCCESS;
-}
-
+TCommandIndexDrop::TCommandIndexDrop() 
+    : TYdbCommand("drop", {}, "Drop index from the specified table") 
+{} 
+ 
+void TCommandIndexDrop::Config(TConfig& config) { 
+    TYdbCommand::Config(config); 
+ 
+    config.Opts->AddLongOption("index-name", "Name of index to drop.") 
+        .RequiredArgument("NAME").StoreResult(&IndexName); 
+ 
+    config.SetFreeArgsNum(1); 
+    SetFreeArgTitle(0, "<table path>", "Path to a table"); 
+} 
+ 
+void TCommandIndexDrop::Parse(TConfig& config) { 
+    TClientCommand::Parse(config); 
+    ParsePath(config, 0); 
+} 
+ 
+int TCommandIndexDrop::Run(TConfig& config) { 
+    NTable::TTableClient client(CreateDriver(config)); 
+ 
+    auto settings = NTable::TAlterTableSettings() 
+        .AppendDropIndexes({IndexName}); 
+    auto session = client.GetSession().GetValueSync(); 
+    ThrowOnError(session); 
+    auto result = session.GetSession().AlterTable(Path, settings).GetValueSync(); 
+    ThrowOnError(result); 
+ 
+    return EXIT_SUCCESS; 
+} 
+ 
 TCommandAttributeAdd::TCommandAttributeAdd()
     : TYdbCommand("add", {}, "Add attributes to the specified table")
 {}
@@ -940,13 +940,13 @@ void TCommandAttributeAdd::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<table path>", "Path to a table");
-}
+} 
 
 void TCommandAttributeAdd::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParsePath(config, 0);
-}
-
+} 
+ 
 int TCommandAttributeAdd::Run(TConfig& config) {
     NTable::TTableClient client(CreateDriver(config));
 

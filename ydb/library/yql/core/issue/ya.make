@@ -1,23 +1,23 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:yql g:yql_ydb_core)
-
-SRCS(
-    yql_issue.cpp
-)
-
-PEERDIR(
+ 
+SRCS( 
+    yql_issue.cpp 
+) 
+ 
+PEERDIR( 
     library/cpp/resource
-    contrib/libs/protobuf
+    contrib/libs/protobuf 
     ydb/library/yql/public/issue
     ydb/library/yql/core/issue/protos
-)
-
-RESOURCE(
+) 
+ 
+RESOURCE( 
     ydb/library/yql/core/issue/yql_issue.txt yql_issue.txt
-)
-
-END()
+) 
+ 
+END() 
 
 RECURSE_FOR_TESTS(
     ut

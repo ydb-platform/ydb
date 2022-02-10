@@ -566,11 +566,11 @@ message TGRpcConfig {
     optional uint64 MaxMessageSize = 6; // default = DEFAULT_GRPC_MESSAGE_SIZE_LIMIT
     optional uint32 MaxInFlight = 7; // 0 == unlimited [default]
     optional NKikimrStream.TStreamingConfig StreamingConfig = 8;
-    // Ssl part
-    optional uint32 SslPort = 9;
-    optional string CA = 10;
-    optional string Cert = 11;
-    optional string Key = 12;
+    // Ssl part 
+    optional uint32 SslPort = 9; 
+    optional string CA = 10; 
+    optional string Cert = 11; 
+    optional string Key = 12; 
 
     // public host/port for publishing
     optional string PublicHost = 13;
@@ -622,7 +622,7 @@ message TFeatureFlags {
     optional bool EnableChunkGraceForPDisk = 7 [default = true];
     optional bool AllowConsistentOperationsForSchemeShard = 8 [default = true];
     optional bool EnableSchemeBoard = 9 [default = true]; // deprecated: always true
-    optional bool AllowYdbRequestsWithoutDatabase = 10 [default = true];
+    optional bool AllowYdbRequestsWithoutDatabase = 10 [default = true]; 
     optional bool EnableExternalSubdomains = 11 [default = true];
     optional bool AllowRecursiveMkDir = 12 [default = true]; // deprecated: always true
     optional bool AllowHugeKeyValueDeletes = 13 [default = true]; // delete when all clients limit deletes per request
@@ -631,11 +631,11 @@ message TFeatureFlags {
     optional bool EnableSystemViews = 16 [default = true];
     optional bool EnableExternalHive = 17 [default = true];
     optional bool UseSchemeBoardCacheForSchemeRequests = 18 [default = true]; // deprecated: always true
-    optional bool CompileMinikqlWithVersion = 19 [default = true]; // deprecated: always true
+    optional bool CompileMinikqlWithVersion = 19 [default = true]; // deprecated: always true 
     optional bool ReadTableWithSnapshot = 20 [default = true];
     optional bool ImportantTabletsUseSystemPool = 21 [default = true];
     optional bool EnableOfflineSlaves = 22 [default = true]; // deprecated: always true
-    optional bool CheckDatabaseAccessPermission = 23 [default = false];
+    optional bool CheckDatabaseAccessPermission = 23 [default = false]; 
     optional bool AllowOnlineIndexBuild = 24 [default = true]; // deprecated: always true
     optional bool EnablePersistentQueryStats = 25 [default = false];
     optional bool DisableDataShardBarrier = 26 [default = false];
@@ -646,13 +646,13 @@ message TFeatureFlags {
     optional bool EnableTtlOnIndexedTables = 31 [default = true]; // deprecated: always true
     optional bool AllowUpdateChannelsBindingOfSolomonPartitions = 32 [default = false];
     optional bool DisableLegacyYql = 33 [default = true]; // deprecated: always true
-    optional bool EnableDataColumnForIndexTable = 34 [default = true];
+    optional bool EnableDataColumnForIndexTable = 34 [default = true]; 
     optional bool AllowServerlessStorageBillingForSchemeShard = 35 [default = false];
     optional bool EnableGracefulShutdown = 36 [default = true];
     optional bool EnableDrainOnShutdown = 37 [default = true];
     optional bool EnableConfigurationCache = 38 [default = false];
     optional bool EnableDbCounters = 39 [default = false];
-    optional bool EnableClockGettimeForUserCpuAccounting = 40 [default = false];
+    optional bool EnableClockGettimeForUserCpuAccounting = 40 [default = false]; 
     optional bool EnableAsyncIndexes = 41 [default = true];
     optional bool AllowStreamExecuteYqlScript = 42 [default = true];
     optional bool EnableKqpScanOverPersistentSnapshot = 43 [default = true]; // deprecated: always true

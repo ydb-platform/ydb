@@ -69,79 +69,79 @@ TMaybeNode<TKqlKeyInc> GetRightTableKeyPrefix(const TKqlKeyRange& range) {
     return rangeFrom;
 }
 
-TExprBase BuildLookupIndex(TExprContext& ctx, const TPositionHandle pos, const TKqlReadTableBase& read,
+TExprBase BuildLookupIndex(TExprContext& ctx, const TPositionHandle pos, const TKqlReadTableBase& read, 
     const TExprBase& keysToLookup, const TVector<TCoAtom>& lookupNames, const TString& indexName)
-{
-    return Build<TKqlLookupIndex>(ctx, pos)
-        .Table(read.Table())
-        .LookupKeys<TCoSkipNullMembers>()
-            .Input(keysToLookup)
-            .Members()
-                .Add(lookupNames)
-                .Build()
-            .Build()
-        .Columns(read.Columns())
-        .Index()
-            .Build(indexName)
-        .Done();
-}
-
-TExprBase BuildLookupTable(TExprContext& ctx, const TPositionHandle pos, const TKqlReadTableBase& read,
+{ 
+    return Build<TKqlLookupIndex>(ctx, pos) 
+        .Table(read.Table()) 
+        .LookupKeys<TCoSkipNullMembers>() 
+            .Input(keysToLookup) 
+            .Members() 
+                .Add(lookupNames) 
+                .Build() 
+            .Build() 
+        .Columns(read.Columns()) 
+        .Index() 
+            .Build(indexName) 
+        .Done(); 
+} 
+ 
+TExprBase BuildLookupTable(TExprContext& ctx, const TPositionHandle pos, const TKqlReadTableBase& read, 
     const TExprBase& keysToLookup, const TVector<TCoAtom>& lookupNames)
-{
-    return Build<TKqlLookupTable>(ctx, pos)
-        .Table(read.Table())
-        .LookupKeys<TCoSkipNullMembers>()
-            .Input(keysToLookup)
-            .Members()
-                .Add(lookupNames)
-                .Build()
-            .Build()
-        .Columns(read.Columns())
-        .Done();
-}
-
-TVector<TExprBase> CreateRenames(const TMaybeNode<TCoFlatMap>& rightFlatmap, const TCoAtomList& tableColumns,
-    const TCoArgument& arg, const TStringBuf& rightLabel, TPositionHandle pos, TExprContext& ctx)
-{
-    TVector<TExprBase> renames;
-    if (rightFlatmap) {
-        const auto flatMapType = GetSeqItemType(rightFlatmap.Ref().GetTypeAnn());
-        YQL_ENSURE(flatMapType->GetKind() == ETypeAnnotationKind::Struct);
-        renames.reserve(flatMapType->Cast<TStructExprType>()->GetSize());
-
-        for (const auto& column : flatMapType->Cast<TStructExprType>()->GetItems()) {
-            renames.emplace_back(
-                Build<TCoNameValueTuple>(ctx, pos)
-                    .Name<TCoAtom>()
-                        .Build(Join('.', rightLabel, column->GetName()))
-                    .Value<TCoMember>()
-                        .Struct(arg)
-                        .Name<TCoAtom>()
-                            .Build(column->GetName())
-                        .Build()
-                    .Done());
-        }
-    } else {
-        renames.reserve(tableColumns.Size());
-
-        for (const auto& column : tableColumns) {
-            renames.emplace_back(
-                Build<TCoNameValueTuple>(ctx, pos)
-                    .Name<TCoAtom>()
-                        .Build(Join('.', rightLabel, column.Value()))
-                    .Value<TCoMember>()
-                        .Struct(arg)
-                        .Name(column)
-                        .Build()
-                    .Done());
-        }
-    }
-    return renames;
-}
-
-
-//#define DBG(...) YQL_CLOG(DEBUG, ProviderKqp) << __VA_ARGS__
+{ 
+    return Build<TKqlLookupTable>(ctx, pos) 
+        .Table(read.Table()) 
+        .LookupKeys<TCoSkipNullMembers>() 
+            .Input(keysToLookup) 
+            .Members() 
+                .Add(lookupNames) 
+                .Build() 
+            .Build() 
+        .Columns(read.Columns()) 
+        .Done(); 
+} 
+ 
+TVector<TExprBase> CreateRenames(const TMaybeNode<TCoFlatMap>& rightFlatmap, const TCoAtomList& tableColumns, 
+    const TCoArgument& arg, const TStringBuf& rightLabel, TPositionHandle pos, TExprContext& ctx) 
+{ 
+    TVector<TExprBase> renames; 
+    if (rightFlatmap) { 
+        const auto flatMapType = GetSeqItemType(rightFlatmap.Ref().GetTypeAnn()); 
+        YQL_ENSURE(flatMapType->GetKind() == ETypeAnnotationKind::Struct); 
+        renames.reserve(flatMapType->Cast<TStructExprType>()->GetSize()); 
+ 
+        for (const auto& column : flatMapType->Cast<TStructExprType>()->GetItems()) { 
+            renames.emplace_back( 
+                Build<TCoNameValueTuple>(ctx, pos) 
+                    .Name<TCoAtom>() 
+                        .Build(Join('.', rightLabel, column->GetName())) 
+                    .Value<TCoMember>() 
+                        .Struct(arg) 
+                        .Name<TCoAtom>() 
+                            .Build(column->GetName()) 
+                        .Build() 
+                    .Done()); 
+        } 
+    } else { 
+        renames.reserve(tableColumns.Size()); 
+ 
+        for (const auto& column : tableColumns) { 
+            renames.emplace_back( 
+                Build<TCoNameValueTuple>(ctx, pos) 
+                    .Name<TCoAtom>() 
+                        .Build(Join('.', rightLabel, column.Value())) 
+                    .Value<TCoMember>() 
+                        .Struct(arg) 
+                        .Name(column) 
+                        .Build() 
+                    .Done()); 
+        } 
+    } 
+    return renames; 
+} 
+ 
+ 
+//#define DBG(...) YQL_CLOG(DEBUG, ProviderKqp) << __VA_ARGS__ 
 #define DBG(...)
 
 TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
@@ -155,27 +155,27 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         return {};
     }
 
-    TMaybeNode<TKqlReadTableBase> rightRead;
+    TMaybeNode<TKqlReadTableBase> rightRead; 
     TMaybeNode<TCoFlatMap> rightFlatmap;
     TMaybeNode<TCoFilterNullMembers> rightFilterNull;
     TMaybeNode<TCoSkipNullMembers> rightSkipNull;
 
-    if (auto readTable = join.RightInput().Maybe<TKqlReadTableBase>()) {
+    if (auto readTable = join.RightInput().Maybe<TKqlReadTableBase>()) { 
         rightRead = readTable;
     }
 
-    if (auto readTable = join.RightInput().Maybe<TCoFlatMap>().Input().Maybe<TKqlReadTableBase>()) {
+    if (auto readTable = join.RightInput().Maybe<TCoFlatMap>().Input().Maybe<TKqlReadTableBase>()) { 
         rightRead = readTable;
         rightFlatmap = join.RightInput().Maybe<TCoFlatMap>();
     }
 
-    if (auto readTable = join.RightInput().Maybe<TCoFlatMap>().Input().Maybe<TCoFilterNullMembers>().Input().Maybe<TKqlReadTableBase>()) {
+    if (auto readTable = join.RightInput().Maybe<TCoFlatMap>().Input().Maybe<TCoFilterNullMembers>().Input().Maybe<TKqlReadTableBase>()) { 
         rightRead = readTable;
         rightFlatmap = join.RightInput().Maybe<TCoFlatMap>();
         rightFilterNull = rightFlatmap.Input().Cast<TCoFilterNullMembers>();
     }
 
-    if (auto readTable = join.RightInput().Maybe<TCoFlatMap>().Input().Maybe<TCoSkipNullMembers>().Input().Maybe<TKqlReadTableBase>()) {
+    if (auto readTable = join.RightInput().Maybe<TCoFlatMap>().Input().Maybe<TCoSkipNullMembers>().Input().Maybe<TKqlReadTableBase>()) { 
         rightRead = readTable;
         rightFlatmap = join.RightInput().Maybe<TCoFlatMap>();
         rightSkipNull = rightFlatmap.Input().Cast<TCoSkipNullMembers>();
@@ -185,9 +185,9 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         return {};
     }
 
-    Y_ENSURE(rightRead.Maybe<TKqlReadTable>() || rightRead.Maybe<TKqlReadTableIndex>());
-
-    const TKqlReadTableBase read = rightRead.Cast();
+    Y_ENSURE(rightRead.Maybe<TKqlReadTable>() || rightRead.Maybe<TKqlReadTableIndex>()); 
+ 
+    const TKqlReadTableBase read = rightRead.Cast(); 
     if (!read.Table().SysView().Value().empty()) {
         // Can't lookup in system views
         return {};
@@ -204,18 +204,18 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     }
     auto rightTableKeyPrefix = maybeRightTableKeyPrefix.Cast();
 
-    TString lookupTable;
-    TString indexName;
+    TString lookupTable; 
+    TString indexName; 
 
-    if (auto indexRead = rightRead.Maybe<TKqlReadTableIndex>()) {
-        indexName = indexRead.Cast().Index().StringValue();
-        lookupTable = GetIndexMetadata(indexRead.Cast(), *kqpCtx.Tables, kqpCtx.Cluster)->Name;
-    } else {
-        lookupTable = read.Table().Path().StringValue();
-    }
-
-    const auto& rightTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, lookupTable);
-
+    if (auto indexRead = rightRead.Maybe<TKqlReadTableIndex>()) { 
+        indexName = indexRead.Cast().Index().StringValue(); 
+        lookupTable = GetIndexMetadata(indexRead.Cast(), *kqpCtx.Tables, kqpCtx.Cluster)->Name; 
+    } else { 
+        lookupTable = read.Table().Path().StringValue(); 
+    } 
+ 
+    const auto& rightTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, lookupTable); 
+ 
     TMap<std::string_view, TString> rightJoinKeyToLeft;
     TVector<TCoAtom> rightKeyColumns;
     rightKeyColumns.reserve(join.JoinKeys().Size());
@@ -360,9 +360,9 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
             .Build()
         .Done();
 
-    TExprBase lookup = indexName
-        ? BuildLookupIndex(ctx, join.Pos(), read, keysToLookup, lookupNames, indexName)
-        : BuildLookupTable(ctx, join.Pos(), read, keysToLookup, lookupNames);
+    TExprBase lookup = indexName 
+        ? BuildLookupIndex(ctx, join.Pos(), read, keysToLookup, lookupNames, indexName) 
+        : BuildLookupTable(ctx, join.Pos(), read, keysToLookup, lookupNames); 
 
     // Skip null keys in lookup part as for equijoin semantics null != null,
     // so we can't have nulls in lookup part
@@ -398,7 +398,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         auto arg = TCoArgument(ctx.NewArgument(join.Pos(), "row"));
         auto rightLabel = join.RightLabel().Cast<TCoAtom>().Value();
 
-        TVector<TExprBase> renames = CreateRenames(rightFlatmap, read.Columns(), arg, rightLabel, join.Pos(), ctx);
+        TVector<TExprBase> renames = CreateRenames(rightFlatmap, read.Columns(), arg, rightLabel, join.Pos(), ctx); 
 
         lookup = Build<TCoMap>(ctx, join.Pos())
             .Input(lookup)

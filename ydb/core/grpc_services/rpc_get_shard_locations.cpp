@@ -173,7 +173,7 @@ private:
 
     void ReplyWithError(StatusIds::StatusCode status, const TString& message, const TActorContext& ctx) {
         Request->RaiseIssue(NYql::TIssue(message));
-        Request->ReplyWithYdbStatus(status);
+        Request->ReplyWithYdbStatus(status); 
         Die(ctx);
     }
 

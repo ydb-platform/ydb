@@ -20,7 +20,7 @@ public:
 
     void AddIssue(const TIssue& issue);
     void AddIssues(const TIssues& issues);
-    void SetException(const std::exception& e, const TPosition& pos = {});
+    void SetException(const std::exception& e, const TPosition& pos = {}); 
 
     void ReportIssues(TIssueManager& issueManager) const;
 private:
@@ -71,7 +71,7 @@ TResult ResultFromError(const TString& error, TPosition pos = TPosition()) {
 }
 
 template<typename TResult>
-TResult ResultFromErrors(const TIssues& errors) {
+TResult ResultFromErrors(const TIssues& errors) { 
     TResult result;
     result.AddIssues(errors);
     return result;

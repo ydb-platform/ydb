@@ -41,7 +41,7 @@ using NALP::SQLLexerTokens;
 #endif
 
 using namespace NSQLGenerated;
-
+ 
 static TPosition GetPos(const TToken& token) {
     return TPosition(token.GetColumn(), token.GetLine());
 }
@@ -68,26 +68,26 @@ inline TIdentifier GetKeywordId(TTranslation& ctx, const TRule_keyword_restricte
 }
 
 inline TIdentifier GetKeywordId(TTranslation& ctx, const TRule_keyword& node) {
-    switch (node.Alt_case()) {
+    switch (node.Alt_case()) { 
         case TRule_keyword::kAltKeyword1:
             return GetKeywordId(ctx, node.GetAlt_keyword1().GetRule_keyword_restricted1());
         case TRule_keyword::kAltKeyword2:
             return GetIdentifier(ctx, node.GetAlt_keyword2().GetRule_keyword_alter_uncompat1());
         case TRule_keyword::kAltKeyword3:
             return GetIdentifier(ctx, node.GetAlt_keyword3().GetRule_keyword_table_uncompat1());
-        default:
-            Y_FAIL("You should change implementation according grammar changes");
-    }
-}
-
+        default: 
+            Y_FAIL("You should change implementation according grammar changes"); 
+    } 
+} 
+ 
 inline TString GetKeyword(TTranslation& ctx, const TRule_keyword& node) {
     return GetKeywordId(ctx, node).Name;
 }
 
-inline TString GetKeyword(TTranslation& ctx, const TRule_keyword_restricted& node) {
-    return GetKeywordId(ctx, node).Name;
-}
-
+inline TString GetKeyword(TTranslation& ctx, const TRule_keyword_restricted& node) { 
+    return GetKeywordId(ctx, node).Name; 
+} 
+ 
 static TString Id(const TRule_id& node, TTranslation& ctx) {
     // id: IDENTIFIER | keyword;
     switch (node.Alt_case()) {
@@ -101,16 +101,16 @@ static TString Id(const TRule_id& node, TTranslation& ctx) {
 }
 
 static TString Id(const TRule_id_schema& node, TTranslation& ctx) {
-    switch (node.Alt_case()) {
+    switch (node.Alt_case()) { 
         case TRule_id_schema::kAltIdSchema1:
             return ctx.Identifier(node.GetAlt_id_schema1().GetToken1());
         case TRule_id_schema::kAltIdSchema2:
             return GetKeyword(ctx, node.GetAlt_id_schema2().GetRule_keyword_restricted1());
-        default:
-            Y_FAIL("You should change implementation according grammar changes");
-    }
-}
-
+        default: 
+            Y_FAIL("You should change implementation according grammar changes"); 
+    } 
+} 
+ 
 static std::pair<bool, TString> Id(const TRule_id_or_at& node, TTranslation& ctx) {
     bool hasAt = node.HasBlock1();
     return std::make_pair(hasAt, Id(node.GetRule_id2(), ctx) );
@@ -4431,32 +4431,32 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
             break;
-        case TRule_sql_stmt_core::kAltSqlStmtCore15: {
-            Ctx.BodyPart();
-            const auto& rule = core.GetAlt_sql_stmt_core15().GetRule_alter_table_stmt1();
+        case TRule_sql_stmt_core::kAltSqlStmtCore15: { 
+            Ctx.BodyPart(); 
+            const auto& rule = core.GetAlt_sql_stmt_core15().GetRule_alter_table_stmt1(); 
             TTableRef tr(SimpleTableRefImpl(rule.GetRule_simple_table_ref3(), Mode, *this));
-            const auto& ruleAction = rule.GetRule_alter_table_action4();
-            switch (ruleAction.Alt_case()) {
-                case TRule_alter_table_action::kAltAlterTableAction1: {
-                    const auto& addRule = ruleAction.GetAlt_alter_table_action1().GetRule_alter_table_add_column1();
-                    if (!AlterTableAddColumns(blocks, addRule, tr)) {
-                        return false;
-                    }
-                    break;
-                }
-                case TRule_alter_table_action::kAltAlterTableAction2: {
-                    const auto& dropRule = ruleAction.GetAlt_alter_table_action2().GetRule_alter_table_drop_column1();
-                    if (!AlterTableDropColumn(blocks, dropRule, tr)) {
-                        return false;
-                    }
-                    break;
-                }
-                default:
-                    AltNotImplemented("alter_table_action", core);
-                    return false;
-            }
-            break;
-        }
+            const auto& ruleAction = rule.GetRule_alter_table_action4(); 
+            switch (ruleAction.Alt_case()) { 
+                case TRule_alter_table_action::kAltAlterTableAction1: { 
+                    const auto& addRule = ruleAction.GetAlt_alter_table_action1().GetRule_alter_table_add_column1(); 
+                    if (!AlterTableAddColumns(blocks, addRule, tr)) { 
+                        return false; 
+                    } 
+                    break; 
+                } 
+                case TRule_alter_table_action::kAltAlterTableAction2: { 
+                    const auto& dropRule = ruleAction.GetAlt_alter_table_action2().GetRule_alter_table_drop_column1(); 
+                    if (!AlterTableDropColumn(blocks, dropRule, tr)) { 
+                        return false; 
+                    } 
+                    break; 
+                } 
+                default: 
+                    AltNotImplemented("alter_table_action", core); 
+                    return false; 
+            } 
+            break; 
+        } 
         case TRule_sql_stmt_core::kAltSqlStmtCore16: {
             Ctx.BodyPart();
             auto node = DoStatement(core.GetAlt_sql_stmt_core16().GetRule_do_stmt1(), false);
@@ -4502,7 +4502,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
     }
 
     Ctx.IncrementMonCounter("sql_features", internalStatementName);
-    return !Ctx.HasPendingErrors;
+    return !Ctx.HasPendingErrors; 
 }
 
 bool TSqlQuery::DeclareStatement(const TRule_declare_stmt& stmt) {
@@ -4549,30 +4549,30 @@ bool TSqlQuery::ExportStatement(const TRule_export_stmt& stmt) {
 
 bool TSqlQuery::AlterTableAddColumns(TVector<TNodePtr>& blocks, const TRule_alter_table_add_column& rule, const TTableRef& tr) {
     TVector<TColumnSchema> columns;
-
-    columns.push_back(ColumnSchemaImpl(rule.GetRule_column_schema3(), *this));
-    for (const auto& block: rule.GetBlock4()) {
-        columns.push_back(ColumnSchemaImpl(block.GetRule_column_schema4(), *this));
-    }
-
-    AddStatementToBlocks(blocks, BuildAlterTable(Ctx.Pos(), tr, columns, EAlterTableIntentnt::AddColumn));
-    return true;
-}
-
+ 
+    columns.push_back(ColumnSchemaImpl(rule.GetRule_column_schema3(), *this)); 
+    for (const auto& block: rule.GetBlock4()) { 
+        columns.push_back(ColumnSchemaImpl(block.GetRule_column_schema4(), *this)); 
+    } 
+ 
+    AddStatementToBlocks(blocks, BuildAlterTable(Ctx.Pos(), tr, columns, EAlterTableIntentnt::AddColumn)); 
+    return true; 
+} 
+ 
 bool TSqlQuery::AlterTableDropColumn(TVector<TNodePtr>& blocks, const TRule_alter_table_drop_column& node, const TTableRef& tr) {
     TString name = Id(node.GetRule_id3(), *this);
     TColumnSchema column(Ctx.Pos(), name, "", false, false);
     AddStatementToBlocks(blocks, BuildAlterTable(Ctx.Pos(), tr, TVector<TColumnSchema>{column}, EAlterTableIntentnt::DropColumn));
-    return true;
-}
-
+    return true; 
+} 
+ 
 TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success) {
     success = false;
     const TString& prefix = OptIdPrefixAsStr(stmt.GetRule_opt_id_prefix2(), *this);
     const TString& lowerPrefix = to_lower(prefix);
     const TString pragma(IdOrString(stmt.GetRule_id_or_string3(), *this));
     TString normalizedPragma(pragma);
-    TMaybe<TIssue> normalizeError = NormalizeName(Ctx.Pos(), normalizedPragma);
+    TMaybe<TIssue> normalizeError = NormalizeName(Ctx.Pos(), normalizedPragma); 
     if (!normalizeError.Empty()) {
         Error() << normalizeError->Message;
         Ctx.IncrementMonCounter("sql_errors", "NormalizePragmaError");
@@ -4730,7 +4730,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             if (values.size() != 1 || !TryFromString(*values[0].GetLiteral(), Ctx.ResultRowsLimit)) {
                 Error() << "Expected single unsigned integer argument for: " << pragma;
                 Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
+                return {}; 
             }
 
             Ctx.IncrementMonCounter("sql_pragma", "ResultRowsLimit");
@@ -4738,16 +4738,16 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             if (values.size() != 1 || !TryFromString(*values[0].GetLiteral(), Ctx.ResultSizeLimit)) {
                 Error() << "Expected single unsigned integer argument for: " << pragma;
                 Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
+                return {}; 
             }
 
             Ctx.IncrementMonCounter("sql_pragma", "ResultSizeLimit");
-        } else if (normalizedPragma == "warning") {
+        } else if (normalizedPragma == "warning") { 
             if (values.size() != 2U || values.front().Empty() || values.back().Empty()) {
-                Error() << "Expected arguments <action>, <issueId> for: " << pragma;
-                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
+                Error() << "Expected arguments <action>, <issueId> for: " << pragma; 
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue"); 
+                return {}; 
+            } 
 
             TString codePattern = *values[1].GetLiteral();
             TString action = *values[0].GetLiteral();
@@ -4775,7 +4775,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                     Y_ENSURE(false, "Unknown parse result");
             }
 
-            Ctx.IncrementMonCounter("sql_pragma", "warning");
+            Ctx.IncrementMonCounter("sql_pragma", "warning"); 
         } else if (normalizedPragma == "greetings") {
             if (values.size() > 1) {
                 Error() << "Not expect few arguments for: " << pragma;
@@ -5269,11 +5269,11 @@ TAstNode* SqlASTToYql(const google::protobuf::Message& protoAst, TContext& ctx) 
 
 void SqlASTToYqlImpl(NYql::TAstParseResult& res, const google::protobuf::Message& protoAst,
         TContext& ctx) {
-    YQL_ENSURE(!ctx.Issues.Size());
+    YQL_ENSURE(!ctx.Issues.Size()); 
     res.Root = SqlASTToYql(protoAst, ctx);
     res.Pool = std::move(ctx.Pool);
     if (!res.Root) {
-        if (ctx.Issues.Size()) {
+        if (ctx.Issues.Size()) { 
             ctx.IncrementMonCounter("sql_errors", "AstToYqlError");
         } else {
             ctx.IncrementMonCounter("sql_errors", "AstToYqlSilentError");

@@ -167,16 +167,16 @@ private:
 };
 
 class TDataShard::TTxStoreScanState : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public:
+public: 
     TTxStoreScanState(TDataShard* ds, TEvPrivate::TEvPersistScanState::TPtr ev);
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext &ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_STORE_SCAN_STATE; }
-private:
-    TEvPrivate::TEvPersistScanState::TPtr Ev;
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override; 
+    void Complete(const TActorContext &ctx) override; 
+    TTxType GetTxType() const override { return TXTYPE_STORE_SCAN_STATE; } 
+private: 
+    TEvPrivate::TEvPersistScanState::TPtr Ev; 
     TActorId Sender;
-};
-
+}; 
+ 
 class TDataShard::TTxRefreshVolatileSnapshot : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxRefreshVolatileSnapshot(TDataShard* ds, TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr ev);

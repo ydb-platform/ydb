@@ -45,19 +45,19 @@ struct TComputationOpts {
 
 struct TComputationOptsFull: public TComputationOpts {
     TComputationOptsFull(IStatsRegistry* stats, TAllocState& allocState, IRandomProvider& randomProvider,
-            ITimeProvider& timeProvider, NUdf::EValidatePolicy validatePolicy, const NUdf::ISecureParamsProvider* secureParamsProvider)
+            ITimeProvider& timeProvider, NUdf::EValidatePolicy validatePolicy, const NUdf::ISecureParamsProvider* secureParamsProvider) 
         : TComputationOpts(stats)
         , AllocState(allocState)
         , RandomProvider(randomProvider)
         , TimeProvider(timeProvider)
         , ValidatePolicy(validatePolicy)
-        , SecureParamsProvider(secureParamsProvider)
+        , SecureParamsProvider(secureParamsProvider) 
     {}
     TAllocState& AllocState;
     IRandomProvider& RandomProvider;
     ITimeProvider& TimeProvider;
     NUdf::EValidatePolicy ValidatePolicy;
-    const NUdf::ISecureParamsProvider* SecureParamsProvider;
+    const NUdf::ISecureParamsProvider* SecureParamsProvider; 
 };
 
 struct TComputationMutables {
@@ -293,7 +293,7 @@ struct TComputationPatternOpts {
     void SetOptions(TComputationNodeFactory factory, const IFunctionRegistry* functionRegistry,
         NUdf::EValidateMode validateMode, NUdf::EValidatePolicy validatePolicy,
         const TString& optLLVM, EGraphPerProcess graphPerProcess, IStatsRegistry* stats = nullptr,
-        NUdf::ICountersProvider* counters = nullptr, const NUdf::ISecureParamsProvider* secureParamsProvider = nullptr) {
+        NUdf::ICountersProvider* counters = nullptr, const NUdf::ISecureParamsProvider* secureParamsProvider = nullptr) { 
         Factory = factory;
         FunctionRegistry = functionRegistry;
         ValidateMode = validateMode;
@@ -302,7 +302,7 @@ struct TComputationPatternOpts {
         GraphPerProcess = graphPerProcess;
         Stats = stats;
         CountersProvider = counters;
-        SecureParamsProvider = secureParamsProvider;
+        SecureParamsProvider = secureParamsProvider; 
     }
 
     mutable std::shared_ptr<TInjectedAlloc> CacheAlloc;
@@ -311,18 +311,18 @@ struct TComputationPatternOpts {
     const TTypeEnvironment& Env;
 
     TComputationNodeFactory Factory;
-    const IFunctionRegistry* FunctionRegistry = nullptr;
-    NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
-    NUdf::EValidatePolicy ValidatePolicy = NUdf::EValidatePolicy::Fail;
+    const IFunctionRegistry* FunctionRegistry = nullptr; 
+    NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None; 
+    NUdf::EValidatePolicy ValidatePolicy = NUdf::EValidatePolicy::Fail; 
     TString OptLLVM;
-    EGraphPerProcess GraphPerProcess = EGraphPerProcess::Multi;
-    IStatsRegistry* Stats = nullptr;
-    NUdf::ICountersProvider* CountersProvider = nullptr;
-    const NUdf::ISecureParamsProvider* SecureParamsProvider = nullptr;
+    EGraphPerProcess GraphPerProcess = EGraphPerProcess::Multi; 
+    IStatsRegistry* Stats = nullptr; 
+    NUdf::ICountersProvider* CountersProvider = nullptr; 
+    const NUdf::ISecureParamsProvider* SecureParamsProvider = nullptr; 
 
     /// \todo split and exclude
     TComputationOptsFull ToComputationOptions(IRandomProvider& randomProvider, ITimeProvider& timeProvider, TAllocState* allocStatePtr = nullptr) const {
-        return TComputationOptsFull(Stats, allocStatePtr ? *allocStatePtr : AllocState, randomProvider, timeProvider, ValidatePolicy, SecureParamsProvider);
+        return TComputationOptsFull(Stats, allocStatePtr ? *allocStatePtr : AllocState, randomProvider, timeProvider, ValidatePolicy, SecureParamsProvider); 
     }
 };
 

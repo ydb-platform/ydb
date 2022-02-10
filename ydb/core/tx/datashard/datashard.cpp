@@ -653,10 +653,10 @@ void TDataShard::NotifySchemeshard(const TActorContext& ctx, ui64 txId) {
             result->SetExplain(op->Error);
             result->SetBytesProcessed(op->BytesProcessed);
             result->SetRowsProcessed(op->RowsProcessed);
-            break;
-        }
-        default:
-            break;
+            break; 
+        } 
+        default: 
+            break; 
     }
 
     SendViaSchemeshardPipe(ctx, op->TabletId, THolder(event.Release()));
@@ -937,15 +937,15 @@ TUserTable::TPtr TDataShard::AlterUserTable(const TActorContext& ctx, TTransacti
         if (configDelta.HasFreezeState()) {
             auto cmd = configDelta.GetFreezeState();
             State = cmd == NKikimrSchemeOp::EFreezeState::Freeze ? TShardState::Frozen : TShardState::Ready;
-            PersistSys(db, Schema::Sys_State, State);
-        }
-
+            PersistSys(db, Schema::Sys_State, State); 
+        } 
+ 
         if (configDelta.HasTxReadSizeLimit()) {
             config.SetTxReadSizeLimit(configDelta.GetTxReadSizeLimit());
             TxReadSizeLimit = configDelta.GetTxReadSizeLimit();
             PersistSys(db, Schema::Sys_TxReadSizeLimit, TxReadSizeLimit);
         }
-
+ 
         if (configDelta.HasDisableStatisticsCalculation()) {
             StatisticsDisabled = configDelta.GetDisableStatisticsCalculation() ? 1 : 0;
             PersistSys(db, Schema::Sys_StatisticsDisabled, StatisticsDisabled);
@@ -1732,11 +1732,11 @@ void TDataShard::Handle(TEvPrivate::TEvScanStats::TPtr& ev, const TActorContext 
 }
 
 void TDataShard::Handle(TEvPrivate::TEvPersistScanState::TPtr& ev, const TActorContext &ctx) {
-    TabletCounters->Cumulative()[COUNTER_SCANNED_ROWS].Increment(ev->Get()->Rows);
-    TabletCounters->Cumulative()[COUNTER_SCANNED_BYTES].Increment(ev->Get()->Bytes);
-    Execute(new TTxStoreScanState(this, ev), ctx);
-}
-
+    TabletCounters->Cumulative()[COUNTER_SCANNED_ROWS].Increment(ev->Get()->Rows); 
+    TabletCounters->Cumulative()[COUNTER_SCANNED_BYTES].Increment(ev->Get()->Bytes); 
+    Execute(new TTxStoreScanState(this, ev), ctx); 
+} 
+ 
 void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
     Y_VERIFY(ev->Get()->Leader, "Unexpectedly connected to follower of tablet %" PRIu64, ev->Get()->TabletId);
 

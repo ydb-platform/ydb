@@ -18,7 +18,7 @@
 #include <util/string/escape.h>
 
 #include <ydb/core/base/cputime.h>
-
+ 
 namespace NKikimr {
 namespace NKqp {
 
@@ -102,13 +102,13 @@ public:
         IKqpHost::TPrepareSettings prepareSettings;
         // prepareSettings.UseNewEngine = use default settings
         prepareSettings.DocumentApiRestricted = Query.Settings.DocumentApiRestricted;
-
-        NCpuTime::TCpuTimer timer(CompileCpuTime);
-
+ 
+        NCpuTime::TCpuTimer timer(CompileCpuTime); 
+ 
         AsyncCompileResult = KqpHost->PrepareDataQuery(Query.Text, prepareSettings);
 
         Continue(ctx);
-
+ 
         Become(&TKqpCompileActor::CompileState);
     }
 
@@ -208,7 +208,7 @@ private:
         auto& stats = responseEv->Stats;
         stats.SetFromCache(false);
         stats.SetDurationUs((TInstant::Now() - StartTime).MicroSeconds());
-        stats.SetCpuTimeUs(CompileCpuTime.MicroSeconds());
+        stats.SetCpuTimeUs(CompileCpuTime.MicroSeconds()); 
         ctx.Send(Owner, responseEv.Release());
 
         Counters->ReportCompileFinish(DbCounters);
@@ -243,7 +243,7 @@ private:
         TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, "");
 
         if (!ev->Get()->Finished) {
-            NCpuTime::TCpuTimer timer(CompileCpuTime);
+            NCpuTime::TCpuTimer timer(CompileCpuTime); 
             Continue(ctx);
             return;
         }
@@ -380,7 +380,7 @@ private:
     TDuration CompilationTimeout;
     bool RecompileWithNewEngine;
     TInstant StartTime;
-    TDuration CompileCpuTime;
+    TDuration CompileCpuTime; 
     TInstant RecompileStartTime;
     TActorId TimeoutTimerActorId;
     TIntrusivePtr<IKqpGateway> Gateway;

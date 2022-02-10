@@ -9,9 +9,9 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-/// Common
-void PrintOperation(const TOperation& operation, EOutputFormat format);
-
+/// Common 
+void PrintOperation(const TOperation& operation, EOutputFormat format); 
+ 
 /// YT
 void PrintOperation(const NExport::TExportToYtResponse& operation, EOutputFormat format);
 void PrintOperationsList(const NOperation::TOperationsList<NExport::TExportToYtResponse>& operations, EOutputFormat format);
@@ -24,9 +24,9 @@ void PrintOperationsList(const NOperation::TOperationsList<NExport::TExportToS3R
 void PrintOperation(const NImport::TImportFromS3Response& operation, EOutputFormat format);
 void PrintOperationsList(const NOperation::TOperationsList<NImport::TImportFromS3Response>& operations, EOutputFormat format);
 
-/// Index build
-void PrintOperation(const NYdb::NTable::TBuildIndexOperation& operation, EOutputFormat format);
-void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TBuildIndexOperation>& operations, EOutputFormat format);
-
+/// Index build 
+void PrintOperation(const NYdb::NTable::TBuildIndexOperation& operation, EOutputFormat format); 
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TBuildIndexOperation>& operations, EOutputFormat format); 
+ 
 }
 }

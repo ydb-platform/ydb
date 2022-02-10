@@ -34,29 +34,29 @@ namespace {
     };
 }
 
-void TCommandWithResponseHeaders::PrintResponseHeader(const TStatus& status) {
-    if (!ShowHeaders)
-        return;
-
-    PrintResponseHeaderPretty(status);
-}
-
-void TCommandWithResponseHeaders::PrintResponseHeaderPretty(const TStatus& status) {
-    const auto columnNames = TVector<TString>{"meta key", "meta value"};
-    TPrettyTable table(columnNames);
-
-    const auto headers = status.GetResponseMetadata();
-    for (const auto& h : headers) {
-        auto& row = table.AddRow();
-        row.Column(0, h.first);
-        row.Column(1, h.second);
-    }
-
-    Cout << table;
-}
-
-const TString TCommandWithResponseHeaders::ResponseHeadersHelp = "Show response metadata for ydb call";
-
+void TCommandWithResponseHeaders::PrintResponseHeader(const TStatus& status) { 
+    if (!ShowHeaders) 
+        return; 
+ 
+    PrintResponseHeaderPretty(status); 
+} 
+ 
+void TCommandWithResponseHeaders::PrintResponseHeaderPretty(const TStatus& status) { 
+    const auto columnNames = TVector<TString>{"meta key", "meta value"}; 
+    TPrettyTable table(columnNames); 
+ 
+    const auto headers = status.GetResponseMetadata(); 
+    for (const auto& h : headers) { 
+        auto& row = table.AddRow(); 
+        row.Column(0, h.first); 
+        row.Column(1, h.second); 
+    } 
+ 
+    Cout << table; 
+} 
+ 
+const TString TCommandWithResponseHeaders::ResponseHeadersHelp = "Show response metadata for ydb call"; 
+ 
 // Deprecated
 void TCommandWithFormat::AddJsonOption(TClientCommand::TConfig& config, const TString& description) {
     config.Opts->AddLongOption("json", description).NoArgument()

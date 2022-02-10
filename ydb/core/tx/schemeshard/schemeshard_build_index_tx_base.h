@@ -201,12 +201,12 @@ protected:
             const TShardIdx& shardIdx = item.first;
             const TIndexBuildInfo::TShardStatus& status = item.second;
 
-            if (status.Status != NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS) {
-                if (status.UploadStatus != Ydb::StatusIds::SUCCESS) {
-                    if (status.DebugMessage) {
-                        AddIssue(index.MutableIssues(), status.ToString(shardIdx));
-                    }
-                }
+            if (status.Status != NKikimrTxDataShard::TEvBuildIndexProgressResponse::INPROGRESS) { 
+                if (status.UploadStatus != Ydb::StatusIds::SUCCESS) { 
+                    if (status.DebugMessage) { 
+                        AddIssue(index.MutableIssues(), status.ToString(shardIdx)); 
+                    } 
+                } 
             }
         }
 
@@ -214,30 +214,30 @@ protected:
         case TIndexBuildInfo::EState::Locking:
         case TIndexBuildInfo::EState::GatheringStatistics:
         case TIndexBuildInfo::EState::Initiating:
-            index.SetState(Ydb::Table::IndexBuildState::STATE_PREPARING);
-            index.SetProgress(0.0);
+            index.SetState(Ydb::Table::IndexBuildState::STATE_PREPARING); 
+            index.SetProgress(0.0); 
             break;
         case TIndexBuildInfo::EState::Filling:
-            index.SetState(Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA);
-            index.SetProgress(indexInfo->CalcProgressPercent());
+            index.SetState(Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA); 
+            index.SetProgress(indexInfo->CalcProgressPercent()); 
             break;
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Unlocking:
-            index.SetState(Ydb::Table::IndexBuildState::STATE_APPLYING);
-            index.SetProgress(100.0);
+            index.SetState(Ydb::Table::IndexBuildState::STATE_APPLYING); 
+            index.SetProgress(100.0); 
             break;
         case TIndexBuildInfo::EState::Done:
-            index.SetState(Ydb::Table::IndexBuildState::STATE_DONE);
-            index.SetProgress(100.0);
+            index.SetState(Ydb::Table::IndexBuildState::STATE_DONE); 
+            index.SetProgress(100.0); 
             break;
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Cancellation_Unlocking:
-            index.SetState(Ydb::Table::IndexBuildState::STATE_CANCELLATION);
-            index.SetProgress(0.0);
+            index.SetState(Ydb::Table::IndexBuildState::STATE_CANCELLATION); 
+            index.SetProgress(0.0); 
             break;
         case TIndexBuildInfo::EState::Cancelled:
-            index.SetState(Ydb::Table::IndexBuildState::STATE_CANCELLED);
-            index.SetProgress(0.0);
+            index.SetState(Ydb::Table::IndexBuildState::STATE_CANCELLED); 
+            index.SetProgress(0.0); 
             break;
          case TIndexBuildInfo::EState::Rejection_Applying:
             index.SetState(Ydb::Table::IndexBuildState::STATE_REJECTION);
@@ -245,14 +245,14 @@ protected:
             break;
         case TIndexBuildInfo::EState::Rejection_Unlocking:
             index.SetState(Ydb::Table::IndexBuildState::STATE_REJECTION);
-            index.SetProgress(0.0);
+            index.SetProgress(0.0); 
             break;
         case TIndexBuildInfo::EState::Rejected:
             index.SetState(Ydb::Table::IndexBuildState::STATE_REJECTED);
-            index.SetProgress(0.0);
+            index.SetProgress(0.0); 
             break;
         case TIndexBuildInfo::EState::Invalid:
-            index.SetState(Ydb::Table::IndexBuildState::STATE_UNSPECIFIED);
+            index.SetState(Ydb::Table::IndexBuildState::STATE_UNSPECIFIED); 
             break;
         }
 
@@ -266,22 +266,22 @@ protected:
         Ydb::Table::TableIndex& index = *settings.mutable_index();
         index.set_name(indexInfo->IndexName);
 
-        *index.mutable_index_columns() = {
-            indexInfo->IndexColumns.begin(),
-            indexInfo->IndexColumns.end()
-        };
-
-        *index.mutable_data_columns() = {
-            indexInfo->DataColumns.begin(),
-            indexInfo->DataColumns.end()
-        };
-
+        *index.mutable_index_columns() = { 
+            indexInfo->IndexColumns.begin(), 
+            indexInfo->IndexColumns.end() 
+        }; 
+ 
+        *index.mutable_data_columns() = { 
+            indexInfo->DataColumns.begin(), 
+            indexInfo->DataColumns.end() 
+        }; 
+ 
         switch (indexInfo->IndexType) {
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobal:
-            *index.mutable_global_index() = Ydb::Table::GlobalIndex();
+            *index.mutable_global_index() = Ydb::Table::GlobalIndex(); 
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
-            *index.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
+            *index.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex(); 
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeInvalid:
             Y_FAIL("Unreachable");

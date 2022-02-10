@@ -46,9 +46,9 @@ TMaybe<Ydb::StatusIds::StatusCode> GetYdbStatus(const TIssue& issue) {
         case TIssuesIds::KIKIMR_TOO_MANY_TRANSACTIONS:
             return Ydb::StatusIds::BAD_SESSION;
 
-        case TIssuesIds::KIKIMR_ACCESS_DENIED:
-            return Ydb::StatusIds::UNAUTHORIZED;
-
+        case TIssuesIds::KIKIMR_ACCESS_DENIED: 
+            return Ydb::StatusIds::UNAUTHORIZED; 
+ 
         case TIssuesIds::KIKIMR_TIMEOUT:
             return Ydb::StatusIds::TIMEOUT;
 
@@ -92,11 +92,11 @@ void CollectYdbStatuses(const TIssue& issue, TSet<Ydb::StatusIds::StatusCode>& s
     }
 }
 
-bool HasSchemeOrFatalIssues(const TIssue& issue) {
-    if (issue.GetSeverity() == TSeverityIds::S_FATAL) {
-        return true;
-    }
-
+bool HasSchemeOrFatalIssues(const TIssue& issue) { 
+    if (issue.GetSeverity() == TSeverityIds::S_FATAL) { 
+        return true; 
+    } 
+ 
     switch (issue.GetCode()) {
         case TIssuesIds::KIKIMR_SCHEME_MISMATCH:
         case TIssuesIds::KIKIMR_SCHEME_ERROR:
@@ -104,7 +104,7 @@ bool HasSchemeOrFatalIssues(const TIssue& issue) {
     }
 
     for (auto& subIssue : issue.GetSubIssues()) {
-        if (HasSchemeOrFatalIssues(*subIssue)) {
+        if (HasSchemeOrFatalIssues(*subIssue)) { 
             return true;
         }
     }
@@ -125,9 +125,9 @@ Ydb::StatusIds::StatusCode GetYdbStatus(const NYql::NCommon::TOperationResult& q
     }
 
     if (statuses.contains(Ydb::StatusIds::UNAUTHORIZED)) {
-        return Ydb::StatusIds::UNAUTHORIZED;
-    }
-
+        return Ydb::StatusIds::UNAUTHORIZED; 
+    } 
+ 
     if (statuses.contains(Ydb::StatusIds::INTERNAL_ERROR)) {
         return Ydb::StatusIds::INTERNAL_ERROR;
     }
@@ -149,9 +149,9 @@ void AddQueryIssues(NKikimrKqp::TQueryResponse& response, const TIssues& issues)
     }
 }
 
-bool HasSchemeOrFatalIssues(const TIssues& issues) {
+bool HasSchemeOrFatalIssues(const TIssues& issues) { 
     for (auto& issue : issues) {
-        if (HasSchemeOrFatalIssues(issue)) {
+        if (HasSchemeOrFatalIssues(issue)) { 
             return true;
         }
     }

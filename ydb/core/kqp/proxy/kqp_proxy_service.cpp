@@ -262,7 +262,7 @@ public:
 
         if (!GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver)) {
             TStringStream errorStream;
-            ModuleResolverState->ExprCtx.IssueManager.GetIssues().PrintTo(errorStream);
+            ModuleResolverState->ExprCtx.IssueManager.GetIssues().PrintTo(errorStream); 
 
             KQP_PROXY_LOG_E("Failed to load default YQL libraries: " << errorStream.Str());
             PassAway();
@@ -515,11 +515,11 @@ public:
 
         TProcessResult<TKqpSessionInfo*> result;
         TKqpDbCountersPtr dbCounters;
-
-        const auto deadline = TInstant::MicroSeconds(event.GetDeadlineUs());
-
-        if (CheckRequestDeadline(requestInfo, deadline, result) &&
-            CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), true, request.GetDatabase(), result))
+ 
+        const auto deadline = TInstant::MicroSeconds(event.GetDeadlineUs()); 
+ 
+        if (CheckRequestDeadline(requestInfo, deadline, result) && 
+            CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), true, request.GetDatabase(), result)) 
         {
             auto& response = *responseEv->Record.MutableResponse();
             response.SetSessionId(result.Value->SessionId);
@@ -1008,7 +1008,7 @@ private:
         TKqpDbCountersPtr dbCounters)
     {
         Y_UNUSED(requestInfo);
-        const auto& event = holder.GetRef();
+        const auto& event = holder.GetRef(); 
 
         Counters->ReportResponseStatus(dbCounters, event.ByteSize(),
             event.GetYdbStatus());
@@ -1080,26 +1080,26 @@ private:
         return Send(SelfId(), response.Release(), 0, requestId);
     }
 
-    bool CheckRequestDeadline(const TKqpRequestInfo& requestInfo, const TInstant deadline, TProcessResult<TKqpSessionInfo*>& result)
-    {
-        if (!deadline) {
-            return true;
-        }
-        auto now = TInstant::Now();
-        if (now >= deadline) {
-            TString error = TStringBuilder() << "Request deadline has expired for " << now - deadline << " seconds";
-            KQP_PROXY_LOG_E(requestInfo << error);
-
-            // In theory client should not see this status due to internal grpc deadline accounting.
-            result.YdbStatus = Ydb::StatusIds::TIMEOUT;
-            result.Error = error;
-            return false;
-        } else {
-            KQP_PROXY_LOG_D(requestInfo << "Request has " << deadline - now << " seconds to be completed");
-            return true;
-        }
-    }
-
+    bool CheckRequestDeadline(const TKqpRequestInfo& requestInfo, const TInstant deadline, TProcessResult<TKqpSessionInfo*>& result) 
+    { 
+        if (!deadline) { 
+            return true; 
+        } 
+        auto now = TInstant::Now(); 
+        if (now >= deadline) { 
+            TString error = TStringBuilder() << "Request deadline has expired for " << now - deadline << " seconds"; 
+            KQP_PROXY_LOG_E(requestInfo << error); 
+ 
+            // In theory client should not see this status due to internal grpc deadline accounting. 
+            result.YdbStatus = Ydb::StatusIds::TIMEOUT; 
+            result.Error = error; 
+            return false; 
+        } else { 
+            KQP_PROXY_LOG_D(requestInfo << "Request has " << deadline - now << " seconds to be completed"); 
+            return true; 
+        } 
+    } 
+ 
     bool CreateNewSessionWorker(const TKqpRequestInfo& requestInfo,
         const TString& cluster, bool longSession, const TString& database, TProcessResult<TKqpSessionInfo*>& result)
     {

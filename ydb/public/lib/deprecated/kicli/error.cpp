@@ -280,12 +280,12 @@ void TError::Throw() const {
 TError::TError(const TResult& result)
     : Facility(EFacility::FacilityMessageBus)
     , Code(NBus::MESSAGE_OK)
-    , YdbStatus(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)
+    , YdbStatus(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) 
 {
     if (result.TransportStatus != NBus::MESSAGE_OK) {
         Facility = EFacility::FacilityMessageBus;
         Code = result.TransportStatus;
-        Message = result.TransportErrorMessage;
+        Message = result.TransportErrorMessage; 
     } else {
         if (result.Reply->GetHeader()->Type == NMsgBusProxy::MTYPE_CLIENT_RESPONSE) {
             const NKikimrClient::TResponse& response = result.GetResult<NKikimrClient::TResponse>();
@@ -312,11 +312,11 @@ TError::TError(const TResult& result)
                 Message = response.GetDataShardErrors();
             }
             if (response.HasMiniKQLCompileResults() && response.GetMiniKQLCompileResults().ProgramCompileErrorsSize() > 0) {
-                NYql::TIssues issues;
-                NYql::IssuesFromMessage(response.GetMiniKQLCompileResults().GetProgramCompileErrors(), issues);
-                TStringStream message;
-                issues.PrintTo(message);
-                Message = message.Str();
+                NYql::TIssues issues; 
+                NYql::IssuesFromMessage(response.GetMiniKQLCompileResults().GetProgramCompileErrors(), issues); 
+                TStringStream message; 
+                issues.PrintTo(message); 
+                Message = message.Str(); 
             }
             if (response.HasMiniKQLErrors()) {
                 if (!Message.empty())
@@ -332,8 +332,8 @@ TError::EFacility TError::GetFacility() const {
 }
 
 Ydb::StatusIds::StatusCode TError::GetYdbStatus() const {
-    return YdbStatus;
+    return YdbStatus; 
 }
-
+ 
 }
-}
+} 

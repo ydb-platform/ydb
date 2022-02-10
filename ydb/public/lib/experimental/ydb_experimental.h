@@ -66,7 +66,7 @@ public:
 private:
     TStreamPartIterator(
         std::shared_ptr<TReaderImpl> impl,
-        TPlainStatus&& status
+        TPlainStatus&& status 
     );
     std::shared_ptr<TReaderImpl> ReaderImpl_;
 };

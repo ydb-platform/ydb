@@ -1791,7 +1791,7 @@ namespace NActors {
 
         void Bootstrap(const TActorContext& ctx) {
             Become(&TStrandingActorDecorator::StateFunc);
-            ReplyId = ctx.RegisterWithSameMailbox(new TReplyActor(this));
+            ReplyId = ctx.RegisterWithSameMailbox(new TReplyActor(this)); 
             DelegateeOptions.OnlyMailboxes.push_back(TEventMailboxId(Delegatee.NodeId(), Delegatee.Hint()));
             for (const auto& actor : AdditionalActors) {
                 DelegateeOptions.OnlyMailboxes.push_back(TEventMailboxId(actor.NodeId(), actor.Hint()));

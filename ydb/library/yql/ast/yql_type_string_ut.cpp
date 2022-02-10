@@ -10,7 +10,7 @@ Y_UNIT_TEST_SUITE(TTypeString)
 {
     void TestFail(const TStringBuf& prog, ui32 column, const TStringBuf& expectedError) {
         TMemoryPool pool(4096);
-        TIssues errors;
+        TIssues errors; 
         auto res = ParseType(prog, pool, errors);
         UNIT_ASSERT(res == nullptr);
         UNIT_ASSERT(!errors.Empty());
@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(TTypeString)
 
     void TestOk(const TStringBuf& prog, const TStringBuf& expectedType) {
         TMemoryPool pool(4096);
-        TIssues errors;
+        TIssues errors; 
         auto res = ParseType(prog, pool, errors);
         if (!res) {
             errors.PrintWithProgramTo(Cerr, "-memory-", TString(prog));
@@ -520,8 +520,8 @@ Y_UNIT_TEST_SUITE(TTypeString)
 
         TExprContext ctx;
         const TTypeAnnotationNode* type = CompileTypeAnnotation(*astRes.Root->GetChild(0), ctx);
-        if (!type) {
-            ctx.IssueManager.GetIssues().PrintWithProgramTo(Cerr, "-memory-", yql);
+        if (!type) { 
+            ctx.IssueManager.GetIssues().PrintWithProgramTo(Cerr, "-memory-", yql); 
             UNIT_FAIL("Can't compile types");
         }
 

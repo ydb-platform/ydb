@@ -31,21 +31,21 @@
             ]
         },
         {
-            "Name": "TCoIndex",
-            "Base": "TExprBase",
-            "Match": {"Type": "Tuple"},
-            "Children": [
-                {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Type", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 3, "Name": "DataColumns", "Type": "TCoAtomList"}
-            ]
-        },
-        {
-            "Name": "TCoIndexList",
-            "ListBase": "TCoIndex"
-        },
-        {
+            "Name": "TCoIndex", 
+            "Base": "TExprBase", 
+            "Match": {"Type": "Tuple"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"}, 
+                {"Index": 1, "Name": "Type", "Type": "TCoAtom"}, 
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"}, 
+                {"Index": 3, "Name": "DataColumns", "Type": "TCoAtomList"} 
+            ] 
+        }, 
+        { 
+            "Name": "TCoIndexList", 
+            "ListBase": "TCoIndex" 
+        }, 
+        { 
             "Name": "TCoNameValueTupleList",
             "ListBase": "TCoNameValueTuple"
         },
@@ -343,16 +343,16 @@
             "Match": {"Type": "Callable", "Name": "Collect"}
         },
         {
-            "Name": "TCoHead",
-            "Base": "TCoInputBase",
-            "Match": {"Type": "Callable", "Name": "Head"}
-        },
-        {
+            "Name": "TCoHead", 
+            "Base": "TCoInputBase", 
+            "Match": {"Type": "Callable", "Name": "Head"} 
+        }, 
+        { 
             "Name": "TCoLast",
-            "Base": "TCoInputBase",
+            "Base": "TCoInputBase", 
             "Match": {"Type": "Callable", "Name": "Last"}
-        },
-        {
+        }, 
+        { 
             "Name": "TCoUnorderedBase",
             "Base": "TCoInputBase",
             "Match": {"Type": "CallableBase"}
@@ -1888,14 +1888,14 @@
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"}
             ]
-        },
-        {
-            "Name": "TCoSecureParam",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "SecureParam"},
-            "Children": [
-                {"Index": 0, "Name": "Name", "Type": "TCoAtom"}
-            ]
+        }, 
+        { 
+            "Name": "TCoSecureParam", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "SecureParam"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"} 
+            ] 
         },
         {
             "Name": "TCoEnsure",

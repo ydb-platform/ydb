@@ -882,10 +882,10 @@ namespace NTypeAnnImpl {
         }
 
         TMemoryPool pool(4096);
-        TIssues issues;
+        TIssues issues; 
         auto parsedType = ParseType(input->Child(0)->Content(), pool, issues, ctx.Expr.GetPosition(input->Child(0)->Pos()));
         if (!parsedType) {
-            ctx.Expr.IssueManager.AddIssues(issues);
+            ctx.Expr.IssueManager.AddIssues(issues); 
             return IGraphTransformer::TStatus::Error;
         }
 

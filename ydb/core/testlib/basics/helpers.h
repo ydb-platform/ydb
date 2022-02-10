@@ -49,7 +49,7 @@ namespace NFake {
     void SetupMonitoringProxy(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupGRpcProxyStatus(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupNodeTabletMonitor(TTestActorRuntime& runtime, ui32 nodeIndex);
-    void SetupSchemeCache(TTestActorRuntime& runtime, ui32 nodeIndex, const TString& root);
+    void SetupSchemeCache(TTestActorRuntime& runtime, ui32 nodeIndex, const TString& root); 
     void SetupQuoterService(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupSysViewService(TTestActorRuntime& runtime, ui32 nodeIndex);
 

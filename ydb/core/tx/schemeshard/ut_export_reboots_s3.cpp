@@ -9,17 +9,17 @@ using namespace NSchemeShardUT_Private::NExportReboots;
 using namespace NKikimr::NWrappers::NTestHelpers;
 
 Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
-    using TUnderlying = std::function<void(const TVector<TString>&, const TString&, TTestWithReboots&)>;
+    using TUnderlying = std::function<void(const TVector<TString>&, const TString&, TTestWithReboots&)>; 
 
     void Decorate(const TVector<TString>& tables, const TString& request, TUnderlying func) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
-        TTestWithReboots t;
+        TTestWithReboots t; 
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        func(tables, Sprintf(request.c_str(), port), t);
+        func(tables, Sprintf(request.c_str(), port), t); 
     }
 
     void RunS3(const TVector<TString>& tables, const TString& request) {

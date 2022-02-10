@@ -387,14 +387,14 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
         ProcessRequest(ev, ctx, txIds.front());
     }
 
-    void Handle(TEvTxUserProxy::TEvGetProxyServicesRequest::TPtr &ev, const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
-                    "actor# " << SelfId() << " Handle TEvGetProxyServicesRequest");
-
-        auto reply = MakeHolder<TEvTxUserProxy::TEvGetProxyServicesResponse>(Services);
-        ctx.Send(ev->Sender, reply.Release(), 0, ev->Cookie);
-    }
-
+    void Handle(TEvTxUserProxy::TEvGetProxyServicesRequest::TPtr &ev, const TActorContext &ctx) { 
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, 
+                    "actor# " << SelfId() << " Handle TEvGetProxyServicesRequest"); 
+ 
+        auto reply = MakeHolder<TEvTxUserProxy::TEvGetProxyServicesResponse>(Services); 
+        ctx.Send(ev->Sender, reply.Release(), 0, ev->Cookie); 
+    } 
+ 
     void Handle(TEvTxUserProxy::TEvNavigate::TPtr &ev, const TActorContext &ctx) {
         TString path = ev->Get()->Record.GetDescribePath().GetPath();
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
@@ -472,8 +472,8 @@ public:
             HFunc(TEvTxUserProxy::TEvProposeKqpTransaction, Handle);
             HFunc(TEvTxUserProxy::TEvAllocateTxId, Handle);
 
-            HFunc(TEvTxUserProxy::TEvGetProxyServicesRequest, Handle);
-
+            HFunc(TEvTxUserProxy::TEvGetProxyServicesRequest, Handle); 
+ 
             HFunc(TEvents::TEvPoisonPill, Handle);
         default:
             LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY,

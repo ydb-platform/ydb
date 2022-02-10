@@ -1,18 +1,18 @@
-LIBRARY()
-
-OWNER(
-    dcherednik
-    g:kikimr
-)
-
-SRCS(
+LIBRARY() 
+ 
+OWNER( 
+    dcherednik 
+    g:kikimr 
+) 
+ 
+SRCS( 
     grpc_endpoint_publish_actor.cpp
-    grpc_helper.cpp
+    grpc_helper.cpp 
     grpc_mon.cpp
     grpc_publisher_service_actor.cpp
-    grpc_request_proxy.cpp
-    local_rate_limiter.cpp
-    operation_helpers.cpp
+    grpc_request_proxy.cpp 
+    local_rate_limiter.cpp 
+    operation_helpers.cpp 
     resolve_local_db_table.cpp
     rpc_alter_coordination_node.cpp
     rpc_alter_table.cpp
@@ -25,9 +25,9 @@ SRCS(
     rpc_copy_tables.cpp
     rpc_export.cpp
     rpc_create_coordination_node.cpp
-    rpc_create_session.cpp
+    rpc_create_session.cpp 
     rpc_create_table.cpp
-    rpc_delete_session.cpp
+    rpc_delete_session.cpp 
     rpc_describe_coordination_node.cpp
     rpc_describe_path.cpp
     rpc_describe_table.cpp
@@ -45,7 +45,7 @@ SRCS(
     rpc_get_shard_locations.cpp
     rpc_import.cpp
     rpc_import_data.cpp
-    rpc_keep_alive.cpp
+    rpc_keep_alive.cpp 
     rpc_kh_describe.cpp
     rpc_kh_snapshots.cpp
     rpc_kqp_base.cpp
@@ -61,7 +61,7 @@ SRCS(
     rpc_rate_limiter_api.cpp
     rpc_read_columns.cpp
     rpc_read_table.cpp
-    rpc_remove_directory.cpp
+    rpc_remove_directory.cpp 
     rpc_rename_tables.cpp
     rpc_rollback_transaction.cpp
     rpc_s3_listing.cpp
@@ -73,9 +73,9 @@ SRCS(
     table_profiles.cpp
     table_settings.cpp
     rpc_analytics_internal.cpp
-)
-
-PEERDIR(
+) 
+ 
+PEERDIR( 
     contrib/libs/xxhash
     library/cpp/cgiparam
     library/cpp/digest/old_crc
@@ -109,8 +109,8 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/lib/operation_id
     ydb/public/sdk/cpp/client/resources
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
 
 END()

@@ -386,7 +386,7 @@ enum ETxTypes {
     TXTYPE_STORE_TABLE_PATH = 37                          [(TxTypeOpts) = {Name: "TTxStoreTablePath"}];
     TXTYPE_READ_COLUMNS = 38                              [(TxTypeOpts) = {Name: "TTxReadColumns"}];
     TXTYPE_PROPOSE = 39                                   [(TxTypeOpts) = {Name: "TxPropose"}];
-    TXTYPE_STORE_SCAN_STATE = 40                          [(TxTypeOpts) = {Name: "TxStoreScanState"}];
+    TXTYPE_STORE_SCAN_STATE = 40                          [(TxTypeOpts) = {Name: "TxStoreScanState"}]; 
     TXTYPE_INIT_SCHEMA_DEFAULTS = 41                      [(TxTypeOpts) = {Name: "TxInitSchemaDefaults"}];
     TXTYPE_REFRESH_VOLATILE_SNAPSHOT = 42                 [(TxTypeOpts) = {Name: "TxRefreshVolatileSnapshot"}];
     TXTYPE_DISCARD_VOLATILE_SNAPSHOT = 43                 [(TxTypeOpts) = {Name: "TxDiscardVolatileSnapshot"}];

@@ -33,7 +33,7 @@ void TDynamicNodeResolverBase::Bootstrap(const TActorContext &ctx)
 
     ui32 group = dinfo->GetDefaultStateStorageGroup(domain);
     auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeNodeBrokerID(group), NTabletPipe::TClientConfig(retryPolicy));
-    NodeBrokerPipe = ctx.RegisterWithSameMailbox(pipe);
+    NodeBrokerPipe = ctx.RegisterWithSameMailbox(pipe); 
 
     TAutoPtr<TEvNodeBroker::TEvResolveNode> request = new TEvNodeBroker::TEvResolveNode;
     request->Record.SetNodeId(NodeId);
@@ -157,7 +157,7 @@ void TDynamicNameserver::OpenPipe(ui32 domain,
 
     if (!NodeBrokerPipes[domain]) {
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeNodeBrokerID(group));
-        NodeBrokerPipes[domain] = ctx.RegisterWithSameMailbox(pipe);
+        NodeBrokerPipes[domain] = ctx.RegisterWithSameMailbox(pipe); 
     }
 }
 
@@ -184,7 +184,7 @@ void TDynamicNameserver::ResolveStaticNode(ui32 nodeId, TActorId sender, TInstan
         return;
     }
 
-    RegisterWithSameMailbox(CreateResolveActor(it->second.ResolveHost, it->second.Port, nodeId, it->second.Address, sender, SelfId(), deadline));
+    RegisterWithSameMailbox(CreateResolveActor(it->second.ResolveHost, it->second.Port, nodeId, it->second.Address, sender, SelfId(), deadline)); 
 }
 
 void TDynamicNameserver::ResolveDynamicNode(ui32 nodeId,
@@ -198,14 +198,14 @@ void TDynamicNameserver::ResolveDynamicNode(ui32 nodeId,
     if (it != DynamicConfigs[domain]->DynamicNodes.end()
         && it->second.Expire > ctx.Now())
     {
-        RegisterWithSameMailbox(CreateResolveActor(it->second.ResolveHost, it->second.Port, nodeId, it->second.Address, ev->Sender, SelfId(), deadline));
+        RegisterWithSameMailbox(CreateResolveActor(it->second.ResolveHost, it->second.Port, nodeId, it->second.Address, ev->Sender, SelfId(), deadline)); 
     } else if (DynamicConfigs[domain]->ExpiredNodes.contains(nodeId)
                 && ctx.Now() < DynamicConfigs[domain]->Epoch.End) {
         auto reply = new TEvLocalNodeInfo;
         reply->NodeId = nodeId;
         ctx.Send(ev->Sender, reply);
     } else {
-        ctx.RegisterWithSameMailbox(new TDynamicNodeResolver(SelfId(), nodeId, DynamicConfigs[domain], ev, deadline));
+        ctx.RegisterWithSameMailbox(new TDynamicNodeResolver(SelfId(), nodeId, DynamicConfigs[domain], ev, deadline)); 
     }
 }
 
@@ -330,7 +330,7 @@ void TDynamicNameserver::Handle(TEvResolveAddress::TPtr &ev, const TActorContext
 
     const TEvResolveAddress* request = ev->Get();
 
-    RegisterWithSameMailbox(CreateResolveActor(request->Address, request->Port, ev->Sender, SelfId(), TInstant::Max()));
+    RegisterWithSameMailbox(CreateResolveActor(request->Address, request->Port, ev->Sender, SelfId(), TInstant::Max())); 
 }
 
 void TDynamicNameserver::Handle(TEvInterconnect::TEvListNodes::TPtr &ev,
@@ -379,7 +379,7 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TAc
             ctx.Send(ev->Sender, reply.Release());
         } else {
             const TInstant deadline = ev->Get()->Deadline;
-            ctx.RegisterWithSameMailbox(new TDynamicNodeSearcher(SelfId(), nodeId, DynamicConfigs[domain], ev.Release(),
+            ctx.RegisterWithSameMailbox(new TDynamicNodeSearcher(SelfId(), nodeId, DynamicConfigs[domain], ev.Release(), 
                 deadline));
         }
     }

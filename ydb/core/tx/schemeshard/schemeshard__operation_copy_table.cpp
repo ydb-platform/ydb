@@ -68,7 +68,7 @@ public:
 
         Y_VERIFY(srcTableInfo->GetPartitions().size() == dstTableInfo->GetPartitions().size(),
                  "CopyTable paritition counts don't match");
-        const ui64 dstSchemaVersion = NEW_TABLE_ALTER_VERSION;
+        const ui64 dstSchemaVersion = NEW_TABLE_ALTER_VERSION; 
 
         const ui64 subDomainPathId = context.SS->ResolveDomainId(txState->TargetPathId).LocalPathId;
 
@@ -93,7 +93,7 @@ public:
             // Send "CreateTable + ReceiveParts" transaction to destination datashard
             NKikimrTxDataShard::TFlatSchemeTransaction newShardTx;
             context.SS->FillSeqNo(newShardTx, seqNo);
-            context.SS->FillTableDescription(txState->TargetPathId, i, dstSchemaVersion, newShardTx.MutableCreateTable());
+            context.SS->FillTableDescription(txState->TargetPathId, i, dstSchemaVersion, newShardTx.MutableCreateTable()); 
             newShardTx.MutableReceiveSnapshot()->SetTableId_Deprecated(txState->TargetPathId.LocalPathId);
             newShardTx.MutableReceiveSnapshot()->MutableTableId()->SetOwnerId(txState->TargetPathId.OwnerId);
             newShardTx.MutableReceiveSnapshot()->MutableTableId()->SetTableId(txState->TargetPathId.LocalPathId);
@@ -188,7 +188,7 @@ public:
 
         TTableInfo::TPtr table = context.SS->Tables[pathId];
         Y_VERIFY(table);
-        table->AlterVersion = NEW_TABLE_ALTER_VERSION;
+        table->AlterVersion = NEW_TABLE_ALTER_VERSION; 
         context.SS->PersistTableCreated(db, pathId);
 
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_COUNT].Add(1);
@@ -726,12 +726,12 @@ TVector<ISubOperationBase::TPtr> CreateCopyTable(TOperationId nextId, const TTxT
             auto operation = schema.MutableCreateTableIndex();
             operation->SetName(name);
             operation->SetType(indexInfo->Type);
-            for (const auto& keyName: indexInfo->IndexKeys) {
+            for (const auto& keyName: indexInfo->IndexKeys) { 
                 *operation->MutableKeyColumnNames()->Add() = keyName;
             }
-            for (const auto& dataColumn: indexInfo->IndexDataColumns) {
-                *operation->MutableDataColumnNames()->Add() = dataColumn;
-            }
+            for (const auto& dataColumn: indexInfo->IndexDataColumns) { 
+                *operation->MutableDataColumnNames()->Add() = dataColumn; 
+            } 
 
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
         }

@@ -1,8 +1,8 @@
 #include "value.h"
 
-#define INCLUDE_YDB_INTERNAL_H
+#define INCLUDE_YDB_INTERNAL_H 
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/value_helpers/helpers.h>
-#undef INCLUDE_YDB_INTERNAL_H
+#undef INCLUDE_YDB_INTERNAL_H 
 
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -13,22 +13,22 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
-
+ 
 #include <util/generic/bitmap.h>
 #include <util/generic/map.h>
 #include <util/string/builder.h>
 
 namespace NYdb {
 
-static void CheckKind(TTypeParser::ETypeKind actual, TTypeParser::ETypeKind expected, const TString& method)
+static void CheckKind(TTypeParser::ETypeKind actual, TTypeParser::ETypeKind expected, const TString& method) 
 {
     if (expected != actual) {
-        ThrowFatalError(TStringBuilder() << method << "(): invalid state, expected type: "
+        ThrowFatalError(TStringBuilder() << method << "(): invalid state, expected type: " 
             << expected << ", actual: " << actual);
     }
 }
 
-static TTypeParser::ETypeKind GetKind(const Ydb::Type& type) {
+static TTypeParser::ETypeKind GetKind(const Ydb::Type& type) { 
     using ETypeKind = TTypeParser::ETypeKind;
 
     switch (type.type_case()) {
@@ -62,7 +62,7 @@ static TTypeParser::ETypeKind GetKind(const Ydb::Type& type) {
             break;
     }
 
-    ThrowFatalError(TStringBuilder() << "Unexpected proto type kind: " << (ui32) type.type_case());
+    ThrowFatalError(TStringBuilder() << "Unexpected proto type kind: " << (ui32) type.type_case()); 
     return ETypeKind::Void;
 }
 
@@ -107,7 +107,7 @@ const Ydb::Type& TType::GetProto() const {
 
 class TTypeParser::TImpl {
 public:
-    TImpl(const TType& type)
+    TImpl(const TType& type) 
         : Type_(type)
     {
         Reset();
@@ -119,7 +119,7 @@ public:
     }
 
     ETypeKind GetKind(ui32 offset = 0) const {
-        return NYdb::GetKind(GetProto(offset));
+        return NYdb::GetKind(GetProto(offset)); 
     }
 
     EPrimitiveType GetPrimitive() const {
@@ -140,34 +140,34 @@ public:
         ForwardStep();
     }
 
-    void OpenVariant(int index) {
-        CheckKind(ETypeKind::Variant, "Open");
-        const Ydb::VariantType& variantType = GetProto().variant_type();
-        const google::protobuf::Message* nextPtr = nullptr;
-        switch (variantType.type_case()) {
-            case Ydb::VariantType::kTupleItems: {
-                auto& tupleType = variantType.tuple_items();
-                if (index >= tupleType.elements_size()) {
-                    return FatalError("variant index is out of range");
-                }
-                nextPtr = &tupleType.elements(index);
-                break;
-            }
-            case Ydb::VariantType::kStructItems: {
-                auto& structType = variantType.struct_items();
-                if (index >= structType.members_size()) {
-                    return FatalError("variant index is out of range");
-                }
-                nextPtr = &structType.members(index).type();
-                break;
-            }
-            default: {
-                return FatalError("unknown variant type case");
-            }
-        }
-        Path_.emplace_back(TProtoPosition{nextPtr, -1});
-    }
-
+    void OpenVariant(int index) { 
+        CheckKind(ETypeKind::Variant, "Open"); 
+        const Ydb::VariantType& variantType = GetProto().variant_type(); 
+        const google::protobuf::Message* nextPtr = nullptr; 
+        switch (variantType.type_case()) { 
+            case Ydb::VariantType::kTupleItems: { 
+                auto& tupleType = variantType.tuple_items(); 
+                if (index >= tupleType.elements_size()) { 
+                    return FatalError("variant index is out of range"); 
+                } 
+                nextPtr = &tupleType.elements(index); 
+                break; 
+            } 
+            case Ydb::VariantType::kStructItems: { 
+                auto& structType = variantType.struct_items(); 
+                if (index >= structType.members_size()) { 
+                    return FatalError("variant index is out of range"); 
+                } 
+                nextPtr = &structType.members(index).type(); 
+                break; 
+            } 
+            default: { 
+                return FatalError("unknown variant type case"); 
+            } 
+        } 
+        Path_.emplace_back(TProtoPosition{nextPtr, -1}); 
+    } 
+ 
     template<ETypeKind kind>
     void Close() {
         CheckPreviousKind(kind, "Close");
@@ -229,9 +229,9 @@ public:
                         idx = structType.members_size() - 1;
                         hasIdx = false;
                     }
-                    if (idx >= 0) {
-                        nextPtr = &structType.members(idx).type();
-                    }
+                    if (idx >= 0) { 
+                        nextPtr = &structType.members(idx).type(); 
+                    } 
                 } else {
                     nextPtr = &GetProto();
                 }
@@ -245,9 +245,9 @@ public:
                         idx = tupleType.elements_size() - 1;
                         hasIdx = false;
                     }
-                    if (idx >= 0) {
-                        nextPtr = &tupleType.elements(idx);
-                    }
+                    if (idx >= 0) { 
+                        nextPtr = &tupleType.elements(idx); 
+                    } 
                 } else {
                     nextPtr = &GetProto();
                 }
@@ -303,7 +303,7 @@ public:
 
 private:
     void CheckKind(ETypeKind kind, const TString& method) const {
-        NYdb::CheckKind(GetKind(), kind, method);
+        NYdb::CheckKind(GetKind(), kind, method); 
     }
 
     void CheckPreviousKind(ETypeKind kind, const TString method) const {
@@ -312,7 +312,7 @@ private:
             return;
         }
 
-        NYdb::CheckKind(GetKind(1), kind, method);
+        NYdb::CheckKind(GetKind(1), kind, method); 
     }
 
     const Ydb::Type& GetProto(ui32 offset = 0) const {
@@ -324,7 +324,7 @@ private:
     }
 
     void FatalError(const TString& msg) const {
-        ThrowFatalError(TStringBuilder() << "TTypeParser: " << msg);
+        ThrowFatalError(TStringBuilder() << "TTypeParser: " << msg); 
     }
 
 private:
@@ -345,7 +345,7 @@ TTypeParser::TTypeParser(TTypeParser&&) = default;
 TTypeParser::~TTypeParser() = default;
 
 TTypeParser::TTypeParser(const TType& type)
-    : Impl_(new TImpl(type)) {}
+    : Impl_(new TImpl(type)) {} 
 
 TTypeParser::ETypeKind TTypeParser::GetKind() const {
     return Impl_->GetKind();
@@ -417,20 +417,20 @@ void TTypeParser::DictKey() {
 
 void TTypeParser::DictPayload() {
     Impl_->DictPayload();
-}
+} 
 
-void TTypeParser::OpenVariant(size_t index) {
-    Impl_->OpenVariant(index);
+void TTypeParser::OpenVariant(size_t index) { 
+    Impl_->OpenVariant(index); 
 }
 
 void TTypeParser::OpenVariant() {
     Impl_->Open<ETypeKind::Variant>();
 }
 
-void TTypeParser::CloseVariant() {
-    Impl_->Close<ETypeKind::Variant>();
-}
-
+void TTypeParser::CloseVariant() { 
+    Impl_->Close<ETypeKind::Variant>(); 
+} 
+ 
 void TTypeParser::OpenTagged() {
     Impl_->Open<ETypeKind::Tagged>();
 }
@@ -453,7 +453,7 @@ void FormatTypeInternal(TTypeParser& parser, IOutputStream& out) {
 
         case TTypeParser::ETypeKind::Decimal: {
             auto decimal = parser.GetDecimal();
-            out << "Decimal(" << (ui32)decimal.Precision << ',' << (ui32)decimal.Scale << ")";
+            out << "Decimal(" << (ui32)decimal.Precision << ',' << (ui32)decimal.Scale << ")"; 
             //out << "Decimal";
             break;
         }
@@ -527,7 +527,7 @@ void FormatTypeInternal(TTypeParser& parser, IOutputStream& out) {
             break;
 
         default:
-            ThrowFatalError(TStringBuilder()
+            ThrowFatalError(TStringBuilder() 
                 << "Unexpected type kind: " << parser.GetKind());
     }
 }
@@ -545,12 +545,12 @@ class TTypeBuilder::TImpl {
     using ETypeKind = TTypeParser::ETypeKind;
 
 public:
-    TImpl()
+    TImpl() 
     {
         Path_.emplace_back(TProtoPosition{&ProtoType_});
     }
 
-    TImpl(Ydb::Type& type)
+    TImpl(Ydb::Type& type) 
     {
         Path_.emplace_back(TProtoPosition{&type});
     }
@@ -703,19 +703,19 @@ private:
     }
 
     void FatalError(const TString& msg) const {
-        ThrowFatalError(TStringBuilder() << "TTypeBuilder: " << msg);
+        ThrowFatalError(TStringBuilder() << "TTypeBuilder: " << msg); 
     }
 
     void CheckKind(ETypeKind kind, const TString& method) {
-        NYdb::CheckKind(GetKind(), kind, method);
+        NYdb::CheckKind(GetKind(), kind, method); 
     }
 
     void CheckPreviousKind(ETypeKind kind, const TString& method) {
-        NYdb::CheckKind(GetKind(1), kind, method);
+        NYdb::CheckKind(GetKind(1), kind, method); 
     }
 
     ETypeKind GetKind(ui32 offset = 0) {
-        return NYdb::GetKind(GetProto(offset));
+        return NYdb::GetKind(GetProto(offset)); 
     }
 
     template<ETypeKind kind>
@@ -745,7 +745,7 @@ TTypeBuilder::TTypeBuilder(TTypeBuilder&&) = default;
 TTypeBuilder::~TTypeBuilder() = default;
 
 TTypeBuilder::TTypeBuilder()
-    : Impl_(new TImpl()) {}
+    : Impl_(new TImpl()) {} 
 
 TType TTypeBuilder::Build() {
     return Impl_->Build();
@@ -863,29 +863,29 @@ TTypeBuilder& TTypeBuilder::EndDict() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDecimalValue::TDecimalValue(const Ydb::Value& valueProto, const TDecimalType& decimalType)
-    : DecimalType_(decimalType)
-    , Low_(valueProto.low_128())
-    , Hi_(valueProto.high_128())
-{}
-
-TDecimalValue::TDecimalValue(const TString& decimalString, ui8 precision, ui8 scale)
-    : DecimalType_(precision, scale)
-{
+TDecimalValue::TDecimalValue(const Ydb::Value& valueProto, const TDecimalType& decimalType) 
+    : DecimalType_(decimalType) 
+    , Low_(valueProto.low_128()) 
+    , Hi_(valueProto.high_128()) 
+{} 
+ 
+TDecimalValue::TDecimalValue(const TString& decimalString, ui8 precision, ui8 scale) 
+    : DecimalType_(precision, scale) 
+{ 
     NYql::NDecimal::TInt128 val = NYql::NDecimal::FromString(decimalString, precision, scale);
-    static_assert(sizeof(val) == 16, "wrong TInt128 size");
-    char* buf = reinterpret_cast<char*>(&val);
-    Low_ = *(ui64*)buf;
-    Hi_ = *(i64*)(buf + 8);
-}
-
-TString TDecimalValue::ToString() const {
+    static_assert(sizeof(val) == 16, "wrong TInt128 size"); 
+    char* buf = reinterpret_cast<char*>(&val); 
+    Low_ = *(ui64*)buf; 
+    Hi_ = *(i64*)(buf + 8); 
+} 
+ 
+TString TDecimalValue::ToString() const { 
     NYql::NDecimal::TInt128 val = NYql::NDecimal::FromHalfs(Low_, Hi_);
     return NYql::NDecimal::ToString(val, DecimalType_.Precision, DecimalType_.Scale);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
+} 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 class TValue::TImpl {
 public:
     TImpl(const TType& type, const Ydb::Value& valueProto)
@@ -936,15 +936,15 @@ class TValueParser::TImpl {
     };
 
 public:
-    TImpl(const TValue& value)
+    TImpl(const TValue& value) 
         : Value_(value.Impl_)
         , TypeParser_(value.GetType())
     {
         Reset(Value_->ProtoValue_);
     }
 
-    TImpl(const TType& type)
-        : TypeParser_(type) {}
+    TImpl(const TType& type) 
+        : TypeParser_(type) {} 
 
     void Reset(const Ydb::Value& value) {
         TypeParser_.Impl_->Reset();
@@ -1081,11 +1081,11 @@ public:
         return GetProto().text_value();
     }
 
-    TDecimalValue GetDecimal() const {
-        CheckDecimal();
-        return TDecimalValue(GetProto(), TypeParser_.GetDecimal());
-    }
-
+    TDecimalValue GetDecimal() const { 
+        CheckDecimal(); 
+        return TDecimalValue(GetProto(), TypeParser_.GetDecimal()); 
+    } 
+ 
     void OpenOptional() {
         TypeParser_.OpenOptional();
 
@@ -1203,21 +1203,21 @@ public:
         TypeParser_.CloseDict();
     }
 
-    void OpenVariant() {
-        auto variantIndex = GetProto().variant_index();
-        TypeParser_.OpenVariant(variantIndex);
-        if (GetProto().value_case() == Ydb::Value::kNestedValue) {
-            AddPath(EParseKind::Value, &GetProto().nested_value());
-        } else {
-            FatalError(TStringBuilder() << "No nested value for variant type.");
-        }
-    }
-
-    void CloseVariant() {
-        PopPath();
-        TypeParser_.CloseVariant();
-    }
-
+    void OpenVariant() { 
+        auto variantIndex = GetProto().variant_index(); 
+        TypeParser_.OpenVariant(variantIndex); 
+        if (GetProto().value_case() == Ydb::Value::kNestedValue) { 
+            AddPath(EParseKind::Value, &GetProto().nested_value()); 
+        } else { 
+            FatalError(TStringBuilder() << "No nested value for variant type."); 
+        } 
+    } 
+ 
+    void CloseVariant() { 
+        PopPath(); 
+        TypeParser_.CloseVariant(); 
+    } 
+ 
     void OpenTagged() {
         TypeParser_.OpenTagged();
     }
@@ -1335,7 +1335,7 @@ private:
     }
 
     void CheckKind(ETypeKind kind, const TString& method) const {
-        NYdb::CheckKind(TypeParser_.GetKind(), kind, method);
+        NYdb::CheckKind(TypeParser_.GetKind(), kind, method); 
     }
 
     void CheckTransportKind(Ydb::Value::ValueCase expectedCase) const {
@@ -1356,11 +1356,11 @@ private:
         CheckTransportKind(GetPrimitiveValueCase(primitiveType));
     }
 
-    void CheckDecimal() const {
-        CheckKind(ETypeKind::Decimal, "Get");
-        CheckTransportKind(Ydb::Value::kLow128);
-    }
-
+    void CheckDecimal() const { 
+        CheckKind(ETypeKind::Decimal, "Get"); 
+        CheckTransportKind(Ydb::Value::kLow128); 
+    } 
+ 
     const Ydb::Value& GetProto() const {
         return *static_cast<const Ydb::Value*>(GetPathBack().Ptr);
     }
@@ -1425,7 +1425,7 @@ private:
     }
 
     void FatalError(const TString& msg) const {
-        ThrowFatalError(TStringBuilder() << "TValueParser: " << msg);
+        ThrowFatalError(TStringBuilder() << "TValueParser: " << msg); 
     }
 
 private:
@@ -1440,10 +1440,10 @@ TValueParser::TValueParser(TValueParser&&) = default;
 TValueParser::~TValueParser() = default;
 
 TValueParser::TValueParser(const TValue& value)
-    : Impl_(new TImpl(value)) {}
+    : Impl_(new TImpl(value)) {} 
 
 TValueParser::TValueParser(const TType& type)
-    : Impl_(new TImpl(type)) {}
+    : Impl_(new TImpl(type)) {} 
 
 void TValueParser::Reset(const Ydb::Value& value) {
     Impl_->Reset(value);
@@ -1555,10 +1555,10 @@ const TString& TValueParser::GetDyNumber() const {
     return Impl_->GetDyNumber();
 }
 
-TDecimalValue TValueParser::GetDecimal() const {
-    return Impl_->GetDecimal();
-}
-
+TDecimalValue TValueParser::GetDecimal() const { 
+    return Impl_->GetDecimal(); 
+} 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 #define RET_OPT_VALUE(Type, Name) \
@@ -1663,10 +1663,10 @@ TMaybe<TString> TValueParser::GetOptionalDyNumber() const {
     RET_OPT_VALUE(TString, DyNumber);
 }
 
-TMaybe<TDecimalValue> TValueParser::GetOptionalDecimal() const {
-    RET_OPT_VALUE(TDecimalValue, Decimal);
-}
-
+TMaybe<TDecimalValue> TValueParser::GetOptionalDecimal() const { 
+    RET_OPT_VALUE(TDecimalValue, Decimal); 
+} 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 void TValueParser::OpenOptional() {
@@ -1741,14 +1741,14 @@ void TValueParser::CloseDict() {
     Impl_->CloseDict();
 }
 
-void TValueParser::OpenVariant() {
-    Impl_->OpenVariant();
-}
-
-void TValueParser::CloseVariant() {
-    Impl_->CloseVariant();
-}
-
+void TValueParser::OpenVariant() { 
+    Impl_->OpenVariant(); 
+} 
+ 
+void TValueParser::CloseVariant() { 
+    Impl_->CloseVariant(); 
+} 
+ 
 void TValueParser::OpenTagged() {
     Impl_->OpenTagged();
 }
@@ -1786,21 +1786,21 @@ class TValueBuilderImpl {
     };
 
 public:
-    TValueBuilderImpl()
-        : TypeBuilder_()
+    TValueBuilderImpl() 
+        : TypeBuilder_() 
     {
         PushPath(ProtoValue_);
     }
 
-    TValueBuilderImpl(const TType& type)
-        : TypeBuilder_()
+    TValueBuilderImpl(const TType& type) 
+        : TypeBuilder_() 
     {
         PushPath(ProtoValue_);
         GetType().CopyFrom(TProtoAccessor::GetProto(type));
     }
 
-    TValueBuilderImpl(Ydb::Type& type, Ydb::Value& value)
-        : TypeBuilder_(type)
+    TValueBuilderImpl(Ydb::Type& type, Ydb::Value& value) 
+        : TypeBuilder_(type) 
     {
         PushPath(value);
     }
@@ -1941,12 +1941,12 @@ public:
         GetValue().set_text_value(value);
     }
 
-    void Decimal(const TDecimalValue& value) {
-        FillDecimalType(value.DecimalType_);
-        GetValue().set_low_128(value.Low_);
-        GetValue().set_high_128(value.Hi_);
-    }
-
+    void Decimal(const TDecimalValue& value) { 
+        FillDecimalType(value.DecimalType_); 
+        GetValue().set_low_128(value.Low_); 
+        GetValue().set_high_128(value.Hi_); 
+    } 
+ 
     void BeginOptional() {
         SetBuildType(!CheckType(ETypeKind::Optional));
 
@@ -2313,12 +2313,12 @@ private:
         }
     }
 
-    void FillDecimalType(const TDecimalType& type) {
-        if (!CheckDecimalType()) {
-            TypeBuilder_.Decimal(type);
-        }
-    }
-
+    void FillDecimalType(const TDecimalType& type) { 
+        if (!CheckDecimalType()) { 
+            TypeBuilder_.Decimal(type); 
+        } 
+    } 
+ 
     bool CheckType() {
         if (!GetType().type_case()) {
             return false;
@@ -2332,7 +2332,7 @@ private:
             return false;
         }
 
-        auto expectedKind = GetKind(GetType());
+        auto expectedKind = GetKind(GetType()); 
         if (expectedKind != kind) {
             FatalError(TStringBuilder() << "Type mismatch, expected: " << expectedKind
                 << ", actual: " << kind);
@@ -2371,20 +2371,20 @@ private:
         return true;
     }
 
-    bool CheckDecimalType() {
-        if (!CheckType(ETypeKind::Decimal)) {
-            return false;
-        }
-
-        return true;
-    }
-
+    bool CheckDecimalType() { 
+        if (!CheckType(ETypeKind::Decimal)) { 
+            return false; 
+        } 
+ 
+        return true; 
+    } 
+ 
     void CheckContainerKind(ETypeKind kind) {
         if (Path_.size() < 2) {
             FatalError(TStringBuilder() << "No opened container");
         }
 
-        auto actualKind = GetKind(GetType(1));
+        auto actualKind = GetKind(GetType(1)); 
         if (actualKind != kind) {
             FatalError(TStringBuilder() << "Container type mismatch, expected: " << kind
                 << ", actual: " << actualKind);
@@ -2443,7 +2443,7 @@ private:
     }
 
     void FatalError(const TString& msg) const {
-        ThrowFatalError(TStringBuilder() << "TValueBuilder: " << msg);
+        ThrowFatalError(TStringBuilder() << "TValueBuilder: " << msg); 
     }
 
 private:
@@ -2467,15 +2467,15 @@ TValueBuilderBase<TDerived>::~TValueBuilderBase() = default;
 
 template<typename TDerived>
 TValueBuilderBase<TDerived>::TValueBuilderBase()
-    : Impl_(new TValueBuilderImpl()) {}
+    : Impl_(new TValueBuilderImpl()) {} 
 
 template<typename TDerived>
 TValueBuilderBase<TDerived>::TValueBuilderBase(const TType& type)
-    : Impl_(new TValueBuilderImpl(type)) {}
+    : Impl_(new TValueBuilderImpl(type)) {} 
 
 template<typename TDerived>
-TValueBuilderBase<TDerived>::TValueBuilderBase(Ydb::Type& type, Ydb::Value& value)
-    : Impl_(new TValueBuilderImpl(type, value)) {}
+TValueBuilderBase<TDerived>::TValueBuilderBase(Ydb::Type& type, Ydb::Value& value) 
+    : Impl_(new TValueBuilderImpl(type, value)) {} 
 
 template<typename TDerived>
 void TValueBuilderBase<TDerived>::CheckValue() {
@@ -2614,7 +2614,7 @@ TDerived& TValueBuilderBase<TDerived>::Json(const TString& value) {
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
+template<typename TDerived> 
 TDerived& TValueBuilderBase<TDerived>::JsonDocument(const TString& value) {
     Impl_->JsonDocument(value);
     return static_cast<TDerived&>(*this);
@@ -2627,11 +2627,11 @@ TDerived& TValueBuilderBase<TDerived>::DyNumber(const TString& value) {
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Decimal(const TDecimalValue& value) {
-    Impl_->Decimal(value);
-    return static_cast<TDerived&>(*this);
-}
-
+TDerived& TValueBuilderBase<TDerived>::Decimal(const TDecimalValue& value) { 
+    Impl_->Decimal(value); 
+    return static_cast<TDerived&>(*this); 
+} 
+ 
 #define SET_OPT_VALUE_MAYBE(Name) \
     if (value) { \
         Impl_->BeginOptional(); \

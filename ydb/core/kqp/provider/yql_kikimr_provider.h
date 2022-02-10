@@ -48,7 +48,7 @@ public:
         TMaybe<bool> UseScanQuery;
         EKikimrStatsMode StatsMode = EKikimrStatsMode::None;
         TMaybe<bool> DocumentApiRestricted;
-        TMaybe<NKikimrKqp::TRlPath> RlPath;
+        TMaybe<NKikimrKqp::TRlPath> RlPath; 
 
         bool ForceNewEngine() const { return UseNewEngine && *UseNewEngine; }
     };
@@ -69,7 +69,7 @@ enum class EKikimrQueryType {
     Unspecified = 0,
     Dml,
     Ddl,
-    YqlScript,
+    YqlScript, 
     YqlInternal,
     Scan,
     YqlScriptStreaming,
@@ -109,7 +109,7 @@ struct TKikimrQueryContext : TThrRefBase {
     TVector<ui64> ExecutionOrder;
 
     NActors::TActorId ReplyTarget;
-    TMaybe<NKikimrKqp::TRlPath> RlPath;
+    TMaybe<NKikimrKqp::TRlPath> RlPath; 
 
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;
@@ -167,7 +167,7 @@ struct TKikimrQueryContext : TThrRefBase {
         InProgress.clear();
         ExecutionOrder.clear();
 
-        RlPath.Clear();
+        RlPath.Clear(); 
 
         CachedNow.reset();
         std::get<0>(CachedRandom).reset();
@@ -266,7 +266,7 @@ public:
 
     virtual bool ApplyTableOperations(const TVector<NKqpProto::TKqpTableOp>& operations,
         const TVector<NKqpProto::TKqpTableInfo>& tableInfo, NKikimrKqp::EIsolationLevel isolationLevel,
-        bool strictDml, EKikimrQueryType queryType, TExprContext& ctx) = 0;
+        bool strictDml, EKikimrQueryType queryType, TExprContext& ctx) = 0; 
 
     virtual ~IKikimrTransactionContext() = default;
 };
@@ -312,7 +312,7 @@ public:
     }
 
     bool ApplyTableOperations(const TVector<NKqpProto::TKqpTableOp>& operations, const TVector<NKqpProto::TKqpTableInfo>& tableInfo,
-        NKikimrKqp::EIsolationLevel isolationLevel, bool strictDml, EKikimrQueryType queryType, TExprContext& ctx) override;
+        NKikimrKqp::EIsolationLevel isolationLevel, bool strictDml, EKikimrQueryType queryType, TExprContext& ctx) override; 
 };
 
 class TKikimrSessionContext : public TThrRefBase {

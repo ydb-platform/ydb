@@ -49,7 +49,7 @@ using NALPDefault::SQLv1LexerTokens;
 #endif
 
 using namespace NSQLv1Generated;
-
+ 
 static TPosition GetPos(const TToken& token) {
     return TPosition(token.GetColumn(), token.GetLine());
 }
@@ -72,7 +72,7 @@ inline TIdentifier GetKeywordId(TTranslation& ctx, const TRule_keyword& node) {
     //  | keyword_hint_uncompat
     //  | keyword_schema_uncompat
     //;
-    switch (node.Alt_case()) {
+    switch (node.Alt_case()) { 
         case TRule_keyword::kAltKeyword1:
             return GetIdentifier(ctx, node.GetAlt_keyword1().GetRule_keyword_compat1());
         case TRule_keyword::kAltKeyword2:
@@ -91,11 +91,11 @@ inline TIdentifier GetKeywordId(TTranslation& ctx, const TRule_keyword& node) {
             return GetIdentifier(ctx, node.GetAlt_keyword8().GetRule_keyword_hint_uncompat1());
         case TRule_keyword::kAltKeyword9:
             return GetIdentifier(ctx, node.GetAlt_keyword9().GetRule_keyword_schema_uncompat1());
-        default:
+        default: 
             Y_FAIL("You should change implementation according to grammar changes");
-    }
-}
-
+    } 
+} 
+ 
 inline TString GetKeyword(TTranslation& ctx, const TRule_keyword& node) {
     return GetKeywordId(ctx, node).Name;
 }
@@ -103,8 +103,8 @@ inline TString GetKeyword(TTranslation& ctx, const TRule_keyword& node) {
 template <typename TRule>
 inline TString GetKeyword(TTranslation& ctx, const TRule& node) {
     return GetIdentifier(ctx, node).Name;
-}
-
+} 
+ 
 static TString Id(const TRule_identifier& node, TTranslation& ctx) {
     // identifier: ID_PLAIN | ID_QUOTED;
     return ctx.Identifier(node.GetToken1());
@@ -146,7 +146,7 @@ static TString Id(const TRule_id_schema& node, TTranslation& ctx) {
     //  | keyword_hint_uncompat
     // //  | keyword_schema_uncompat
     //;
-    switch (node.Alt_case()) {
+    switch (node.Alt_case()) { 
         case TRule_id_schema::kAltIdSchema1:
             return Id(node.GetAlt_id_schema1().GetRule_identifier1(), ctx);
         case TRule_id_schema::kAltIdSchema2:
@@ -161,11 +161,11 @@ static TString Id(const TRule_id_schema& node, TTranslation& ctx) {
             return GetKeyword(ctx, node.GetAlt_id_schema6().GetRule_keyword_window_uncompat1());
         case TRule_id_schema::kAltIdSchema7:
             return GetKeyword(ctx, node.GetAlt_id_schema7().GetRule_keyword_hint_uncompat1());
-        default:
+        default: 
             Y_FAIL("You should change implementation according to grammar changes");
-    }
-}
-
+    } 
+} 
+ 
 static TString Id(const TRule_an_id_or_type& node, TTranslation& ctx) {
     // an_id_or_type: id_or_type | STRING_VALUE;
     switch (node.Alt_case()) {
@@ -509,11 +509,11 @@ static TString Id(const TRule_an_id_pure& node, TTranslation& ctx) {
 
 template<typename TRule>
 static TIdentifier IdEx(const TRule& node, TTranslation& ctx) {
-    const TString name(Id(node, ctx));
-    const TPosition pos(ctx.Context().Pos());
-    return TIdentifier(pos, name);
-}
-
+    const TString name(Id(node, ctx)); 
+    const TPosition pos(ctx.Context().Pos()); 
+    return TIdentifier(pos, name); 
+} 
+ 
 static TString OptIdPrefixAsStr(const TRule_opt_id_prefix& node, TTranslation& ctx, const TString& defaultStr = {}) {
     if (!node.HasBlock1()) {
         return defaultStr;
@@ -598,15 +598,15 @@ static bool PureColumnOrNamedListStr(const TRule_pure_column_or_named_list& node
 
 static bool CreateTableIndex(const TRule_table_index& node, TTranslation& ctx, TVector<TIndexDescription>& indexes) {
     indexes.emplace_back(IdEx(node.GetRule_an_id2(), ctx));
-
+ 
     const auto& indexType = node.GetRule_table_index_type3();
-    switch (indexType.Alt_case()) {
+    switch (indexType.Alt_case()) { 
         case TRule_table_index_type::kAltTableIndexType1: {
             auto globalIndex = indexType.GetAlt_table_index_type1().GetRule_global_index1();
             if (globalIndex.HasBlock2()) {
-                ctx.AltNotImplemented("unique", indexType);
-                return false;
-            }
+                ctx.AltNotImplemented("unique", indexType); 
+                return false; 
+            } 
             if (globalIndex.HasBlock3()) {
                 const TString token = to_lower(ctx.Token(globalIndex.GetBlock3().GetToken1()));
                 if (token == "sync") {
@@ -617,36 +617,36 @@ static bool CreateTableIndex(const TRule_table_index& node, TTranslation& ctx, T
                     Y_FAIL("You should change implementation according to grammar changes");
                 }
             }
-        }
-        break;
+        } 
+        break; 
         case TRule_table_index_type::kAltTableIndexType2:
-            ctx.AltNotImplemented("local", indexType);
-            return false;
-        default:
+            ctx.AltNotImplemented("local", indexType); 
+            return false; 
+        default: 
             Y_FAIL("You should change implementation according to grammar changes");
-    }
-
-    if (node.HasBlock4()) {
-        ctx.AltNotImplemented("with", indexType);
-        return false;
-    }
-
+    } 
+ 
+    if (node.HasBlock4()) { 
+        ctx.AltNotImplemented("with", indexType); 
+        return false; 
+    } 
+ 
     indexes.back().IndexColumns.emplace_back(IdEx(node.GetRule_an_id_schema7(), ctx));
-    for (const auto& block : node.GetBlock8()) {
+    for (const auto& block : node.GetBlock8()) { 
         indexes.back().IndexColumns.emplace_back(IdEx(block.GetRule_an_id_schema2(), ctx));
-    }
-
-    if (node.HasBlock10()) {
-        const auto& block = node.GetBlock10();
+    } 
+ 
+    if (node.HasBlock10()) { 
+        const auto& block = node.GetBlock10(); 
         indexes.back().DataColumns.emplace_back(IdEx(block.GetRule_an_id_schema3(), ctx));
-        for (const auto& inner : block.GetBlock4()) {
+        for (const auto& inner : block.GetBlock4()) { 
             indexes.back().DataColumns.emplace_back(IdEx(inner.GetRule_an_id_schema2(), ctx));
-        }
-    }
-
-    return true;
-}
-
+        } 
+    } 
+ 
+    return true; 
+} 
+ 
 static bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node, TTranslation& ctx, TChangefeedSettings& settings, bool alter) {
     const auto id = IdEx(node.GetRule_an_id1(), ctx);
     const TString value(ctx.Token(node.GetRule_changefeed_setting_value3().GetToken1()));
@@ -8157,8 +8157,8 @@ private:
     bool AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_uncompat& node, TAlterTableParameters& params);
     bool AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_compat& node, TAlterTableParameters& params);
     bool AlterTableResetTableSetting(const TRule_alter_table_reset_table_setting& node, TAlterTableParameters& params);
-    bool AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlterTableParameters& params);
-    void AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params);
+    bool AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlterTableParameters& params); 
+    void AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params); 
     void AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlterTableParameters& params);
     bool AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params);
     bool AlterTableAlterChangefeed(const TRule_alter_table_alter_changefeed& node, TAlterTableParameters& params);
@@ -8483,9 +8483,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
             break;
-        case TRule_sql_stmt_core::kAltSqlStmtCore15: {
-            Ctx.BodyPart();
-            const auto& rule = core.GetAlt_sql_stmt_core15().GetRule_alter_table_stmt1();
+        case TRule_sql_stmt_core::kAltSqlStmtCore15: { 
+            Ctx.BodyPart(); 
+            const auto& rule = core.GetAlt_sql_stmt_core15().GetRule_alter_table_stmt1(); 
             TTableRef tr;
             if (!SimpleTableRefImpl(rule.GetRule_simple_table_ref3(), tr)) {
                 return false;
@@ -8499,12 +8499,12 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             for (auto& block : rule.GetBlock5()) {
                 if (!AlterTableAction(block.GetRule_alter_table_action2(), params)) {
                     return false;
-                }
-            }
+                } 
+            } 
 
             AddStatementToBlocks(blocks, BuildAlterTable(Ctx.Pos(), tr, params, Ctx.Scoped));
-            break;
-        }
+            break; 
+        } 
         case TRule_sql_stmt_core::kAltSqlStmtCore16: {
             Ctx.BodyPart();
             auto node = DoStatement(core.GetAlt_sql_stmt_core16().GetRule_do_stmt1(), false);
@@ -8764,7 +8764,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
     }
 
     Ctx.IncrementMonCounter("sql_features", internalStatementName);
-    return !Ctx.HasPendingErrors;
+    return !Ctx.HasPendingErrors; 
 }
 
 bool TSqlQuery::DeclareStatement(const TRule_declare_stmt& stmt) {
@@ -8900,20 +8900,20 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
         }
         break;
     }
-    case TRule_alter_table_action::kAltAlterTableAction9: {
-        // ADD INDEX
-        const auto& addIndex = node.GetAlt_alter_table_action9().GetRule_alter_table_add_index1();
-        if (!AlterTableAddIndex(addIndex, params)) {
-            return false;
-        }
-        break;
-    }
-    case TRule_alter_table_action::kAltAlterTableAction10: {
-        // DROP INDEX
-        const auto& dropIndex = node.GetAlt_alter_table_action10().GetRule_alter_table_drop_index1();
-        AlterTableDropIndex(dropIndex, params);
-        break;
-    }
+    case TRule_alter_table_action::kAltAlterTableAction9: { 
+        // ADD INDEX 
+        const auto& addIndex = node.GetAlt_alter_table_action9().GetRule_alter_table_add_index1(); 
+        if (!AlterTableAddIndex(addIndex, params)) { 
+            return false; 
+        } 
+        break; 
+    } 
+    case TRule_alter_table_action::kAltAlterTableAction10: { 
+        // DROP INDEX 
+        const auto& dropIndex = node.GetAlt_alter_table_action10().GetRule_alter_table_drop_index1(); 
+        AlterTableDropIndex(dropIndex, params); 
+        break; 
+    } 
     case TRule_alter_table_action::kAltAlterTableAction11: {
         // RENAME TO
         if (!params.IsEmpty()) {
@@ -8921,7 +8921,7 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
             Error() << "RENAME TO can not be used together with another table action";
             return false;
         }
-
+ 
         const auto& renameTo = node.GetAlt_alter_table_action11().GetRule_alter_table_rename_to1();
         AlterTableRenameTo(renameTo, params);
         break;
@@ -8955,7 +8955,7 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
     }
     return true;
 }
-
+ 
 bool TSqlQuery::AlterTableAddColumn(const TRule_alter_table_add_column& node, TAlterTableParameters& params) {
     auto columnSchema = ColumnSchemaImpl(node.GetRule_column_schema3());
     if (!columnSchema) {
@@ -8993,11 +8993,11 @@ bool TSqlQuery::AlterTableAddFamily(const TRule_family_entry& node, TAlterTableP
         if (!FillFamilySettings(node.GetBlock3().GetRule_family_settings1(), family)) {
             return false;
         }
-    }
+    } 
     params.AddColumnFamilies.push_back(family);
     return true;
 }
-
+ 
 bool TSqlQuery::AlterTableAlterFamily(const TRule_alter_table_alter_column_family& node,
         TAlterTableParameters& params)
 {
@@ -9034,9 +9034,9 @@ bool TSqlQuery::AlterTableAlterFamily(const TRule_alter_table_alter_column_famil
         Ctx.Error() << "Unknown table setting: " << settingName.Name;
         return false;
     }
-    return true;
-}
-
+    return true; 
+} 
+ 
 bool TSqlQuery::AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_uncompat& node,
         TAlterTableParameters& params)
 {
@@ -9044,9 +9044,9 @@ bool TSqlQuery::AlterTableSetTableSetting(const TRule_alter_table_set_table_sett
         params.TableSettings, true)) {
         return false;
     }
-    return true;
-}
-
+    return true; 
+} 
+ 
 bool TSqlQuery::AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_compat& node,
         TAlterTableParameters& params)
 {
@@ -9081,17 +9081,17 @@ bool TSqlQuery::AlterTableResetTableSetting(const TRule_alter_table_reset_table_
     return true;
 }
 
-bool TSqlQuery::AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlterTableParameters& params) {
-    if (!CreateTableIndex(node.GetRule_table_index2(), *this, params.AddIndexes)) {
-        return false;
-    }
-    return true;
-}
-
-void TSqlQuery::AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params) {
-    params.DropIndexes.emplace_back(IdEx(node.GetRule_an_id3(), *this));
-}
-
+bool TSqlQuery::AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlterTableParameters& params) { 
+    if (!CreateTableIndex(node.GetRule_table_index2(), *this, params.AddIndexes)) { 
+        return false; 
+    } 
+    return true; 
+} 
+ 
+void TSqlQuery::AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params) { 
+    params.DropIndexes.emplace_back(IdEx(node.GetRule_an_id3(), *this)); 
+} 
+ 
 void TSqlQuery::AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlterTableParameters& params) {
     params.RenameTo = IdEx(node.GetRule_an_id_table3(), *this);
 }
@@ -9137,7 +9137,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
     const TString& lowerPrefix = to_lower(prefix);
     const TString pragma(Id(stmt.GetRule_an_id3(), *this));
     TString normalizedPragma(pragma);
-    TMaybe<TIssue> normalizeError = NormalizeName(Ctx.Pos(), normalizedPragma);
+    TMaybe<TIssue> normalizeError = NormalizeName(Ctx.Pos(), normalizedPragma); 
     if (!normalizeError.Empty()) {
         Error() << normalizeError->Message;
         Ctx.IncrementMonCounter("sql_errors", "NormalizePragmaError");
@@ -9357,7 +9357,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), Ctx.ResultRowsLimit)) {
                 Error() << "Expected unsigned integer literal as a single argument for: " << pragma;
                 Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
+                return {}; 
             }
 
             Ctx.IncrementMonCounter("sql_pragma", "ResultRowsLimit");
@@ -9365,16 +9365,16 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), Ctx.ResultSizeLimit)) {
                 Error() << "Expected unsigned integer literal as a single argument for: " << pragma;
                 Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
+                return {}; 
             }
 
             Ctx.IncrementMonCounter("sql_pragma", "ResultSizeLimit");
-        } else if (normalizedPragma == "warning") {
+        } else if (normalizedPragma == "warning") { 
             if (values.size() != 2U || values.front().Empty() || values.back().Empty()) {
-                Error() << "Expected arguments <action>, <issueId> for: " << pragma;
-                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
+                Error() << "Expected arguments <action>, <issueId> for: " << pragma; 
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue"); 
+                return {}; 
+            } 
 
             TString action;
             TString codePattern;
@@ -9403,7 +9403,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                 Ctx.SetWarningPolicyFor(TIssuesIds::YQL_UNUSED_SYMBOL, EWarningAction::DEFAULT);
             }
 
-            Ctx.IncrementMonCounter("sql_pragma", "warning");
+            Ctx.IncrementMonCounter("sql_pragma", "warning"); 
         } else if (normalizedPragma == "greetings") {
             if (values.size() > 1) {
                 Error() << "Multiple arguments are not expected for " << pragma;
@@ -10092,11 +10092,11 @@ TAstNode* SqlASTToYql(const google::protobuf::Message& protoAst, TContext& ctx) 
 
 void SqlASTToYqlImpl(NYql::TAstParseResult& res, const google::protobuf::Message& protoAst,
         TContext& ctx) {
-    YQL_ENSURE(!ctx.Issues.Size());
+    YQL_ENSURE(!ctx.Issues.Size()); 
     res.Root = SqlASTToYql(protoAst, ctx);
     res.Pool = std::move(ctx.Pool);
     if (!res.Root) {
-        if (ctx.Issues.Size()) {
+        if (ctx.Issues.Size()) { 
             ctx.IncrementMonCounter("sql_errors", "AstToYqlError");
         } else {
             ctx.IncrementMonCounter("sql_errors", "AstToYqlSilentError");

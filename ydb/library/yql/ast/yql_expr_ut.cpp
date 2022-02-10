@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
 
     static void CompileExprWithCheck(TAstNode& root, TExprNode::TPtr& exprRoot, TExprContext& exprCtx, ui32 typeAnnotationIndex = Max<ui32>()) {
         const bool success = CompileExpr(root, exprRoot, exprCtx, nullptr, typeAnnotationIndex != Max<ui32>(), typeAnnotationIndex);
-        exprCtx.IssueManager.GetIssues().PrintTo(Cout);
+        exprCtx.IssueManager.GetIssues().PrintTo(Cout); 
 
         UNIT_ASSERT(success);
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->GetState(), typeAnnotationIndex != Max<ui32>() ? TExprNode::EState::TypeComplete : TExprNode::EState::Initial);
@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
 
     static void CompileExprWithCheck(TAstNode& root, TLibraryCohesion& cohesion, TExprContext& exprCtx) {
         const bool success = CompileExpr(root, cohesion, exprCtx);
-        exprCtx.IssueManager.GetIssues().PrintTo(Cout);
+        exprCtx.IssueManager.GetIssues().PrintTo(Cout); 
 
         UNIT_ASSERT(success);
     }
@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         TExprContext exprCtx;
         TExprNode::TPtr exprRoot;
         bool result = CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr);
-        exprCtx.IssueManager.GetIssues().PrintTo(Cout);
+        exprCtx.IssueManager.GetIssues().PrintTo(Cout); 
         return result;
     }
 
@@ -902,7 +902,7 @@ Y_UNIT_TEST_SUITE(TConvertToAst) {
         TExprContext exprCtx2;
         TExprNode::TPtr exprRoot2;
         auto compileOk = CompileExpr(*convRes.Root, exprRoot2, exprCtx2, nullptr);
-        exprCtx2.IssueManager.GetIssues().PrintTo(Cout);
+        exprCtx2.IssueManager.GetIssues().PrintTo(Cout); 
         UNIT_ASSERT(compileOk);
         UNIT_ASSERT(exprRoot2);
         const TExprNode* node = exprRoot.Get();

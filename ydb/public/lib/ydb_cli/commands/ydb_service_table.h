@@ -23,11 +23,11 @@ public:
     TCommandQuery();
 };
 
-class TCommandIndex : public TClientCommandTree {
-public:
-    TCommandIndex();
-};
-
+class TCommandIndex : public TClientCommandTree { 
+public: 
+    TCommandIndex(); 
+}; 
+ 
 class TCommandAttribute : public TClientCommandTree {
 public:
     TCommandAttribute();
@@ -151,30 +151,30 @@ private:
     TString To;
 };
 
-class TCommandIndexAdd : public TClientCommandTree {
-public:
-    TCommandIndexAdd();
-};
-
-class TCommandIndexAddGlobal : public TYdbCommand, public TCommandWithPath, public TCommandWithFormat {
-public:
+class TCommandIndexAdd : public TClientCommandTree { 
+public: 
+    TCommandIndexAdd(); 
+}; 
+ 
+class TCommandIndexAddGlobal : public TYdbCommand, public TCommandWithPath, public TCommandWithFormat { 
+public: 
     TCommandIndexAddGlobal(
         NTable::EIndexType type,
         const TString& name,
         const std::initializer_list<TString>& aliases = std::initializer_list<TString>(),
         const TString& description = TString()
     );
-    virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
-    virtual int Run(TConfig& config) override;
+    virtual void Config(TConfig& config) override; 
+    virtual void Parse(TConfig& config) override; 
+    virtual int Run(TConfig& config) override; 
 protected:
-    TString IndexName;
-    TString Columns;
-    TString DataColumns;
+    TString IndexName; 
+    TString Columns; 
+    TString DataColumns; 
 private:
     const NTable::EIndexType IndexType;
-};
-
+}; 
+ 
 class TCommandIndexAddGlobalSync : public TCommandIndexAddGlobal {
 public:
     TCommandIndexAddGlobalSync();
@@ -185,16 +185,16 @@ public:
     TCommandIndexAddGlobalAsync();
 };
 
-class TCommandIndexDrop : public TYdbCommand, public TCommandWithPath {
-public:
-    TCommandIndexDrop();
-    virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
-    virtual int Run(TConfig& config) override;
-private:
-    TString IndexName;
-};
-
+class TCommandIndexDrop : public TYdbCommand, public TCommandWithPath { 
+public: 
+    TCommandIndexDrop(); 
+    virtual void Config(TConfig& config) override; 
+    virtual void Parse(TConfig& config) override; 
+    virtual int Run(TConfig& config) override; 
+private: 
+    TString IndexName; 
+}; 
+ 
 class TCommandAttributeAdd : public TYdbCommand, public TCommandWithPath {
 public:
     TCommandAttributeAdd();

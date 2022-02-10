@@ -61,13 +61,13 @@ private:
     THashMap<ui64, TVector<NYql::NDqProto::TDqTask>> ScanTasks;
     const IKqpGateway::TKqpSnapshot Snapshot;
     TString Database;
-    const TMaybe<TString> UserToken;
+    const TMaybe<TString> UserToken; 
     const TInstant Deadline;
     const NYql::NDqProto::EDqStatsMode StatsMode;
     const bool DisableLlvmForUdfStages;
     const bool EnableLlvm;
     const bool WithSpilling;
-    const TMaybe<NKikimrKqp::TRlPath> RlPath;
+    const TMaybe<NKikimrKqp::TRlPath> RlPath; 
     THashSet<ui32> TrackingNodes;
 };
 

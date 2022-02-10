@@ -159,10 +159,10 @@ class TTypeParser
 {
 public:
     TTypeParser(
-            TStringBuf str, TIssues& issues,
+            TStringBuf str, TIssues& issues, 
             TPosition position, TMemoryPool& pool)
         : Str(str)
-        , Issues(issues)
+        , Issues(issues) 
         , Position(position)
         , Index(0)
         , Pool(pool)
@@ -1085,7 +1085,7 @@ private:
 
 private:
     TStringBuf Str;
-    TIssues& Issues;
+    TIssues& Issues; 
     TPosition TokenBegin, Position;
     size_t Index;
     int Token;
@@ -1352,10 +1352,10 @@ private:
 } // namespace
 
 
-TAstNode* ParseType(TStringBuf str, TMemoryPool& pool, TIssues& issues,
+TAstNode* ParseType(TStringBuf str, TMemoryPool& pool, TIssues& issues, 
         TPosition position /* = TPosition(1, 1) */)
 {
-    TTypeParser parser(str, issues, position, pool);
+    TTypeParser parser(str, issues, position, pool); 
     return parser.ParseTopLevelType();
 }
 

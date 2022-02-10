@@ -1493,14 +1493,14 @@ namespace NSchemeShardUT_Private {
         AsyncUpgradeSubDomainDecision(runtime, txId, parentPath, name, decision);
         TestModificationResults(runtime, txId, {TEvSchemeShard::EStatus::StatusAccepted});
     }
-
-    TRowVersion CreateVolatileSnapshot(
-        TTestActorRuntime& runtime,
-        const TVector<TString>& tables,
+ 
+    TRowVersion CreateVolatileSnapshot( 
+        TTestActorRuntime& runtime, 
+        const TVector<TString>& tables, 
         TDuration timeout)
     {
         TActorId sender = runtime.AllocateEdgeActor();
-
+ 
         {
             auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
             auto* tx = request->Record.MutableTransaction()->MutableCreateVolatileSnapshot();
@@ -1509,7 +1509,7 @@ namespace NSchemeShardUT_Private {
             }
             tx->SetTimeoutMs(timeout.MilliSeconds());
             runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
-        }
+        } 
 
         auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
         const auto& record = ev->Get()->Record;
@@ -1523,8 +1523,8 @@ namespace NSchemeShardUT_Private {
             "Unexpected step " << step << " and txId " << txId);
 
         return { step, txId };
-    }
-
+    } 
+ 
     TEvIndexBuilder::TEvCreateRequest* CreateBuildIndexRequest(ui64 id, const TString& dbName, const TString& src, const TBuildIndexConfig& cfg) {
         NKikimrIndexBuilder::TIndexBuildSettings settings;
         settings.set_source_path(src);
@@ -1535,7 +1535,7 @@ namespace NSchemeShardUT_Private {
         index.set_name(cfg.IndexName);
         *index.mutable_index_columns() = {cfg.IndexColumns.begin(), cfg.IndexColumns.end()};
         *index.mutable_data_columns() = {cfg.DataColumns.begin(), cfg.DataColumns.end()};
-
+ 
         switch (cfg.IndexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
             *index.mutable_global_index() = Ydb::Table::GlobalIndex();
@@ -1545,7 +1545,7 @@ namespace NSchemeShardUT_Private {
             break;
         default:
             UNIT_ASSERT_C(false, "Unknown index type: " << static_cast<ui32>(cfg.IndexType));
-        }
+        } 
 
         return new TEvIndexBuilder::TEvCreateRequest(id, dbName, std::move(settings));
     }
@@ -2055,4 +2055,4 @@ namespace NSchemeShardUT_Private {
 
         runtime.SetObserverFunc(prevObserver);
     }
-}
+} 

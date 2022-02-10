@@ -327,7 +327,7 @@ struct TMockReadSessionProcessor : public TMockProcessorFactory<Ydb::PersQueue::
     void Cancel() override {
     }
 
-    void ReadInitialMetadata(std::unordered_multimap<TString, TString>* metadata, TReadCallback callback) override {
+    void ReadInitialMetadata(std::unordered_multimap<TString, TString>* metadata, TReadCallback callback) override { 
         Y_UNUSED(metadata);
         Y_UNUSED(callback);
         UNIT_ASSERT_C(false, "This method is not expected to be called");
@@ -1618,7 +1618,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         // First time.
         dataEvent.GetMessages()[0].Commit();
 
-        UNIT_ASSERT_EXCEPTION(dataEvent.GetMessages()[0].Commit(), NYdb::TContractViolation);
+        UNIT_ASSERT_EXCEPTION(dataEvent.GetMessages()[0].Commit(), NYdb::TContractViolation); 
     }
 
     Y_UNIT_TEST(DataReceivedCallbackReal) {

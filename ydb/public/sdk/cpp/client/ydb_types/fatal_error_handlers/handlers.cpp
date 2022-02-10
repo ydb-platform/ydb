@@ -3,8 +3,8 @@
 
 namespace NYdb {
 
-void ThrowFatalError(const TString& str) {
-    throw TContractViolation(str);
+void ThrowFatalError(const TString& str) { 
+    throw TContractViolation(str); 
 }
 
 } // namespace NYdb

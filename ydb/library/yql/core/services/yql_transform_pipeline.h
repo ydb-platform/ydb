@@ -47,7 +47,7 @@ public:
     TTransformationPipeline& Add(IGraphTransformer& transformer, const TString& stageName,
         EYqlIssueCode issueCode = TIssuesIds::DEFAULT_ERROR, const TString& issueMessage = {});
 
-    TAutoPtr<IGraphTransformer> Build(bool useIssueScopes = true);
+    TAutoPtr<IGraphTransformer> Build(bool useIssueScopes = true); 
     TAutoPtr<IGraphTransformer> BuildWithNoArgChecks(bool useIssueScopes = true);
 
     TIntrusivePtr<TTypeAnnotationContext> GetTypeAnnotationContext() const;

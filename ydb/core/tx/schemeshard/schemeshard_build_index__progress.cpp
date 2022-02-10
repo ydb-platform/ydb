@@ -23,9 +23,9 @@ NKikimrSchemeOp::TIndexBuildConfig GetInitiateIndexBuildMessage(TSchemeShard* ss
     for (const auto& x: buildInfo->IndexColumns) {
         *index.AddKeyColumnNames() = x;
     }
-    for (const auto& x: buildInfo->DataColumns) {
-        *index.AddDataColumnNames() = x;
-    }
+    for (const auto& x: buildInfo->DataColumns) { 
+        *index.AddDataColumnNames() = x; 
+    } 
     index.SetType(buildInfo->IndexType);
 
     return message;
@@ -280,15 +280,15 @@ public:
                 ev->Record.SetPathId(buildInfo->TablePathId.LocalPathId);
 
                 ev->Record.SetTargetName(buildInfo->ImplTablePath);
-
-                THashSet<TString> columns = buildInfo->ImplTableColumns.Columns;
+ 
+                THashSet<TString> columns = buildInfo->ImplTableColumns.Columns; 
                 for (const auto& x: buildInfo->ImplTableColumns.Keys) {
                     *ev->Record.AddIndexColumns() = x;
-                    columns.erase(x);
+                    columns.erase(x); 
                 }
-                for (const auto& x: columns) {
-                    *ev->Record.AddDataColumns() = x;
-                }
+                for (const auto& x: columns) { 
+                    *ev->Record.AddDataColumns() = x; 
+                } 
 
                 TIndexBuildInfo::TShardStatus& shardStatus = buildInfo->Shards.at(shardIdx);
                 if (shardStatus.LastKeyAck) {

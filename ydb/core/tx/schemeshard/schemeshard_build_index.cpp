@@ -47,20 +47,20 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
         NIceDb::TUpdate<Schema::IndexBuild::MaxRetries>(indexInfo->Limits.MaxRetries)
     );
 
-    ui32 columnNo = 0;
-    for (ui32 i = 0; i < indexInfo->IndexColumns.size(); ++i, ++columnNo) {
+    ui32 columnNo = 0; 
+    for (ui32 i = 0; i < indexInfo->IndexColumns.size(); ++i, ++columnNo) { 
         db.Table<Schema::IndexBuildColumns>().Key(indexInfo->Id, columnNo).Update(
-            NIceDb::TUpdate<Schema::IndexBuildColumns::ColumnName>(indexInfo->IndexColumns[i]),
-            NIceDb::TUpdate<Schema::IndexBuildColumns::ColumnKind>(EIndexColumnKind::KeyColumn)
-        );
+            NIceDb::TUpdate<Schema::IndexBuildColumns::ColumnName>(indexInfo->IndexColumns[i]), 
+            NIceDb::TUpdate<Schema::IndexBuildColumns::ColumnKind>(EIndexColumnKind::KeyColumn) 
+        ); 
     }
 
-    for (ui32 i = 0; i < indexInfo->DataColumns.size(); ++i, ++columnNo) {
-        db.Table<Schema::IndexBuildColumns>().Key(indexInfo->Id, columnNo).Update(
-            NIceDb::TUpdate<Schema::IndexBuildColumns::ColumnName>(indexInfo->DataColumns[i]),
-            NIceDb::TUpdate<Schema::IndexBuildColumns::ColumnKind>(EIndexColumnKind::DataColumn)
-        );
-    }
+    for (ui32 i = 0; i < indexInfo->DataColumns.size(); ++i, ++columnNo) { 
+        db.Table<Schema::IndexBuildColumns>().Key(indexInfo->Id, columnNo).Update( 
+            NIceDb::TUpdate<Schema::IndexBuildColumns::ColumnName>(indexInfo->DataColumns[i]), 
+            NIceDb::TUpdate<Schema::IndexBuildColumns::ColumnKind>(EIndexColumnKind::DataColumn) 
+        ); 
+    } 
 }
 
 void TSchemeShard::PersistBuildIndexState(NIceDb::TNiceDb& db, const TIndexBuildInfo::TPtr indexInfo) {
@@ -171,15 +171,15 @@ void TSchemeShard::PersistBuildIndexUploadInitiate(NIceDb::TNiceDb& db, const TI
 void TSchemeShard::PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuildInfo::TPtr indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo->Id).Delete();
 
-    ui32 columnNo = 0;
-    for (ui32 i = 0; i < indexInfo->IndexColumns.size(); ++i, ++columnNo) {
+    ui32 columnNo = 0; 
+    for (ui32 i = 0; i < indexInfo->IndexColumns.size(); ++i, ++columnNo) { 
         db.Table<Schema::IndexBuildColumns>().Key(indexInfo->Id, columnNo).Delete();
     }
 
-    for (ui32 i = 0; i < indexInfo->DataColumns.size(); ++i, ++columnNo) {
-        db.Table<Schema::IndexBuildColumns>().Key(indexInfo->Id, columnNo).Delete();
-    }
-
+    for (ui32 i = 0; i < indexInfo->DataColumns.size(); ++i, ++columnNo) { 
+        db.Table<Schema::IndexBuildColumns>().Key(indexInfo->Id, columnNo).Delete(); 
+    } 
+ 
     for (const auto& item: indexInfo->Shards) {
         auto shardIdx = item.first;
         db.Table<Schema::IndexBuildShardStatus>().Key(indexInfo->Id, shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Delete();

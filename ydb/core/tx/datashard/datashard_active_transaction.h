@@ -27,13 +27,13 @@ class TSysLocks;
 struct TReadSetKey;
 class TActiveTransaction;
 
-struct TScanState {
-    TString LastKey;
-    ui64 Bytes = 0;
+struct TScanState { 
+    TString LastKey; 
+    ui64 Bytes = 0; 
     Ydb::StatusIds::StatusCode StatusCode = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-    NYql::TIssues Issues;
-};
-
+    NYql::TIssues Issues; 
+}; 
+ 
 struct TSchemaOperation {
     enum EType : ui32 {
         ETypeDrop = 0,
@@ -66,13 +66,13 @@ struct TSchemaOperation {
     bool ReadOnly;
     bool Done;
 
-    bool Success;
+    bool Success; 
     TString Error;
     ui64 BytesProcessed;
     ui64 RowsProcessed;
 
-    TScanState ScanState;
-
+    TScanState ScanState; 
+ 
     TSchemaOperation(ui64 txId, EType type, TActorId source, ui64 tabletId,
                     ui64 minStep, ui64 maxStep, ui64 planStep, bool readOnly,
                     bool success, const TString& error, ui64 bytes, ui64 rows)

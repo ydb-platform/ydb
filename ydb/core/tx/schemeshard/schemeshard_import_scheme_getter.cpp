@@ -164,7 +164,7 @@ public:
             Send(Client, new TEvents::TEvPoisonPill());
         }
 
-        Client = RegisterWithSameMailbox(CreateS3Wrapper(Credentials, Config));
+        Client = RegisterWithSameMailbox(CreateS3Wrapper(Credentials, Config)); 
 
         HeadObject(SchemeKey);
         Become(&TThis::StateWork);

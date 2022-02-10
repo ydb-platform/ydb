@@ -52,7 +52,7 @@ static constexpr TDuration MAX_RETRY_DELAY = TDuration::Seconds(2);
 static constexpr ui64 MAX_SHARD_RETRIES = 5; // retry after: 0, 250, 500, 1000, 2000
 static constexpr ui64 MAX_TOTAL_SHARD_RETRIES = 20;
 static constexpr ui64 MAX_SHARD_RESOLVES = 3;
-static constexpr TDuration RL_MAX_BATCH_DELAY = TDuration::Seconds(50);
+static constexpr TDuration RL_MAX_BATCH_DELAY = TDuration::Seconds(50); 
 
 
 class TKqpScanComputeActor : public TDqComputeActorBase<TKqpScanComputeActor> {
@@ -173,23 +173,23 @@ public:
         ReportEventElapsedTime();
     }
 
-    void HandleEvWakeup(EEvWakeupTag tag) {
-        switch (tag) {
-            case RlSendAllowedTag:
-                ProcessScanData();
-                break;
-            case RlNoResourceTag:
-                ProcessRlNoResourceAndDie();
-                break;
-            case TimeoutTag:
-                Y_FAIL("TimeoutTag must be handled in base class");
-                break;
-            case PeriodicStatsTag:
-                Y_FAIL("PeriodicStatsTag must be handled in base class");
-                break;
-        }
-    }
-
+    void HandleEvWakeup(EEvWakeupTag tag) { 
+        switch (tag) { 
+            case RlSendAllowedTag: 
+                ProcessScanData(); 
+                break; 
+            case RlNoResourceTag: 
+                ProcessRlNoResourceAndDie(); 
+                break; 
+            case TimeoutTag: 
+                Y_FAIL("TimeoutTag must be handled in base class"); 
+                break; 
+            case PeriodicStatsTag: 
+                Y_FAIL("PeriodicStatsTag must be handled in base class"); 
+                break; 
+        } 
+    } 
+ 
     void FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool last) {
         if (last && ScanData && dst->TasksSize() > 0) {
             YQL_ENSURE(dst->TasksSize() == 1);
@@ -232,17 +232,17 @@ protected:
     }
 
 private:
-    void ProcessRlNoResourceAndDie() {
-        const NYql::TIssue issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_RESOURCE_USAGE_LIMITED,
-            "Throughput limit exceeded for query");
-        CA_LOG_E("Throughput limit exceeded, we got "
-             << PendingScanData.size() << " pending messages,"
-             << " stream will be terminated");
-
+    void ProcessRlNoResourceAndDie() { 
+        const NYql::TIssue issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_RESOURCE_USAGE_LIMITED, 
+            "Throughput limit exceeded for query"); 
+        CA_LOG_E("Throughput limit exceeded, we got " 
+             << PendingScanData.size() << " pending messages," 
+             << " stream will be terminated"); 
+ 
         State = NDqProto::COMPUTE_STATE_FAILURE;
         ReportStateAndMaybeDie(Ydb::StatusIds::OVERLOADED, TIssues({issue}));
-    }
-
+    } 
+ 
     void HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
         Y_VERIFY_DEBUG(ScanData);
         Y_VERIFY_DEBUG(!Shards.empty());
@@ -280,7 +280,7 @@ private:
 
             case EShardState::Initial:
             case EShardState::Running:
-            case EShardState::PostRunning:
+            case EShardState::PostRunning: 
             case EShardState::Resolving: {
                 TerminateExpiredScan(scanActorId, "Got unexpected/expired EvScanInitActor, terminate it");
                 return;
@@ -296,84 +296,84 @@ private:
         auto& state = Shards.front();
 
         switch (state.State) {
-            case EShardState::Running: {
+            case EShardState::Running: { 
                 if (state.Generation == msg.Generation) {
                     YQL_ENSURE(state.ActorId == ev->Sender, "expected: " << state.ActorId << ", got: " << ev->Sender);
 
-                    TInstant startTime = TActivationContext::Now();
-                    if (ev->Get()->Finished) {
-                        state.State = EShardState::PostRunning;
-                    }
-                    PendingScanData.emplace_back(std::make_pair(ev, startTime));
-
-                    if (auto rlPath = GetRlPath()) {
-                        auto selfId = this->SelfId();
-                        auto as = TActivationContext::ActorSystem();
-
-                        auto onSendAllowed = [selfId, as]() mutable {
-                            as->Send(selfId, new TEvents::TEvWakeup(EEvWakeupTag::RlSendAllowedTag));
-                        };
-
-                        auto onSendTimeout = [selfId, as]() {
-                            as->Send(selfId, new TEvents::TEvWakeup(EEvWakeupTag::RlNoResourceTag));
-                        };
-
-                        const NRpcService::TRlFullPath rlFullPath {
-                            .CoordinationNode = rlPath->GetCoordinationNode(),
-                            .ResourcePath = rlPath->GetResourcePath(),
-                            .DatabaseName = rlPath->GetDatabase(),
-                            .Token = rlPath->GetToken()
-                        };
-
-                        auto rlActor = NRpcService::RateLimiterAcquireUseSameMailbox(
-                            rlFullPath, 0, RL_MAX_BATCH_DELAY,
-                            std::move(onSendAllowed), std::move(onSendTimeout), TActivationContext::AsActorContext());
-
-                        CA_LOG_D("Launch rate limiter actor: " << rlActor);
-                    } else {
-                        ProcessScanData();
-                    }
-
-                } else if (state.Generation > msg.Generation) {
-                    TerminateExpiredScan(ev->Sender, "Cancel expired scan");
-                } else {
-                    YQL_ENSURE(false, "EvScanData from the future, expected: " << state.Generation << ", got: " << msg.Generation);
-                }
-                break;
-            }
-            case EShardState::PostRunning:
-                TerminateExpiredScan(ev->Sender, "Unexpected data after finish");
-                break;
-            case EShardState::Initial:
-            case EShardState::Starting:
-            case EShardState::Resolving:
-                TerminateExpiredScan(ev->Sender, "Cancel unexpected scan");
-                break;
-        }
-    }
-
-    void ProcessScanData() {
-        Y_VERIFY_DEBUG(ScanData);
-        Y_VERIFY_DEBUG(!Shards.empty());
-        Y_VERIFY(PendingScanData);
-
-        auto& ev = PendingScanData.front().first;
-
-        TDuration latency;
-        if (PendingScanData.front().second != TInstant::Zero()) {
-            latency = TActivationContext::Now() - PendingScanData.front().second;
-            Counters->ScanQueryRateLimitLatency->Collect(latency.MilliSeconds());
-        }
-
-        auto& msg = *ev->Get();
-        auto& state = Shards.front();
-
-        switch (state.State) {
-            case EShardState::Running:
-            case EShardState::PostRunning: {
-                if (state.Generation == msg.Generation) {
-                    YQL_ENSURE(state.ActorId == ev->Sender, "expected: " << state.ActorId << ", got: " << ev->Sender);
-
+                    TInstant startTime = TActivationContext::Now(); 
+                    if (ev->Get()->Finished) { 
+                        state.State = EShardState::PostRunning; 
+                    } 
+                    PendingScanData.emplace_back(std::make_pair(ev, startTime)); 
+ 
+                    if (auto rlPath = GetRlPath()) { 
+                        auto selfId = this->SelfId(); 
+                        auto as = TActivationContext::ActorSystem(); 
+ 
+                        auto onSendAllowed = [selfId, as]() mutable { 
+                            as->Send(selfId, new TEvents::TEvWakeup(EEvWakeupTag::RlSendAllowedTag)); 
+                        }; 
+ 
+                        auto onSendTimeout = [selfId, as]() { 
+                            as->Send(selfId, new TEvents::TEvWakeup(EEvWakeupTag::RlNoResourceTag)); 
+                        }; 
+ 
+                        const NRpcService::TRlFullPath rlFullPath { 
+                            .CoordinationNode = rlPath->GetCoordinationNode(), 
+                            .ResourcePath = rlPath->GetResourcePath(), 
+                            .DatabaseName = rlPath->GetDatabase(), 
+                            .Token = rlPath->GetToken() 
+                        }; 
+ 
+                        auto rlActor = NRpcService::RateLimiterAcquireUseSameMailbox( 
+                            rlFullPath, 0, RL_MAX_BATCH_DELAY, 
+                            std::move(onSendAllowed), std::move(onSendTimeout), TActivationContext::AsActorContext()); 
+ 
+                        CA_LOG_D("Launch rate limiter actor: " << rlActor); 
+                    } else { 
+                        ProcessScanData(); 
+                    } 
+ 
+                } else if (state.Generation > msg.Generation) { 
+                    TerminateExpiredScan(ev->Sender, "Cancel expired scan"); 
+                } else { 
+                    YQL_ENSURE(false, "EvScanData from the future, expected: " << state.Generation << ", got: " << msg.Generation); 
+                } 
+                break; 
+            } 
+            case EShardState::PostRunning: 
+                TerminateExpiredScan(ev->Sender, "Unexpected data after finish"); 
+                break; 
+            case EShardState::Initial: 
+            case EShardState::Starting: 
+            case EShardState::Resolving: 
+                TerminateExpiredScan(ev->Sender, "Cancel unexpected scan"); 
+                break; 
+        } 
+    } 
+ 
+    void ProcessScanData() { 
+        Y_VERIFY_DEBUG(ScanData); 
+        Y_VERIFY_DEBUG(!Shards.empty()); 
+        Y_VERIFY(PendingScanData); 
+ 
+        auto& ev = PendingScanData.front().first; 
+ 
+        TDuration latency; 
+        if (PendingScanData.front().second != TInstant::Zero()) { 
+            latency = TActivationContext::Now() - PendingScanData.front().second; 
+            Counters->ScanQueryRateLimitLatency->Collect(latency.MilliSeconds()); 
+        } 
+ 
+        auto& msg = *ev->Get(); 
+        auto& state = Shards.front(); 
+ 
+        switch (state.State) { 
+            case EShardState::Running: 
+            case EShardState::PostRunning: { 
+                if (state.Generation == msg.Generation) { 
+                    YQL_ENSURE(state.ActorId == ev->Sender, "expected: " << state.ActorId << ", got: " << ev->Sender); 
+ 
                     LastKey = std::move(msg.LastKey);
 
                     ui64 bytes = 0;
@@ -400,10 +400,10 @@ private:
                     }
 
                     CA_LOG_D("Got EvScanData, rows: " << rowsCount << ", bytes: " << bytes << ", finished: " << msg.Finished
-                        << ", from: " << ev->Sender << ", shards remain: " << Shards.size()
-                        << ", delayed for: " << latency.SecondsFloat() << " seconds by ratelimitter");
+                        << ", from: " << ev->Sender << ", shards remain: " << Shards.size() 
+                        << ", delayed for: " << latency.SecondsFloat() << " seconds by ratelimitter"); 
 
-                    if (rowsCount == 0 && !msg.Finished && state.State != EShardState::PostRunning) {
+                    if (rowsCount == 0 && !msg.Finished && state.State != EShardState::PostRunning) { 
                         ui64 freeSpace = GetMemoryLimits().ScanBufferSize > ScanData->GetStoredBytes()
                             ? GetMemoryLimits().ScanBufferSize - ScanData->GetStoredBytes()
                             : 0ul;
@@ -441,22 +441,22 @@ private:
 
                     DoExecute();
 
-                } else if (state.Generation > msg.Generation) {
+                } else if (state.Generation > msg.Generation) { 
                     TerminateExpiredScan(ev->Sender, "Cancel expired scan");
-                } else {
-                    YQL_ENSURE(false, "EvScanData from the future, expected: " << state.Generation << ", got: " << msg.Generation);
+                } else { 
+                    YQL_ENSURE(false, "EvScanData from the future, expected: " << state.Generation << ", got: " << msg.Generation); 
                 }
-                break;
+                break; 
             }
 
-            case EShardState::Initial:
-            case EShardState::Starting:
-            case EShardState::Resolving: {
+            case EShardState::Initial: 
+            case EShardState::Starting: 
+            case EShardState::Resolving: { 
                 TerminateExpiredScan(ev->Sender, "Cancel unexpected scan");
-                break;
+                break; 
             }
         }
-        PendingScanData.pop_front();
+        PendingScanData.pop_front(); 
     }
 
     void HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) {
@@ -472,7 +472,7 @@ private:
         auto& state = Shards.front();
 
         switch (state.State) {
-            case EShardState::Starting: {
+            case EShardState::Starting: { 
                 if (state.Generation == msg.GetGeneration()) {
                     CA_LOG_W("Got EvScanError while starting scan, status: " << Ydb::StatusIds_StatusCode_Name(status)
                         << ", reason: " << issues.ToString());
@@ -511,11 +511,11 @@ private:
 
                 YQL_ENSURE(false, "Got EvScanError from the future, expected: " << state.Generation
                     << ", got: " << msg.GetGeneration());
-                break;
+                break; 
             }
 
-            case EShardState::PostRunning:
-            case EShardState::Running: {
+            case EShardState::PostRunning: 
+            case EShardState::Running: { 
                 if (state.Generation == msg.GetGeneration()) {
                     CA_LOG_W("Got EvScanError while running scan, status: " << Ydb::StatusIds_StatusCode_Name(status)
                         << ", reason: " << issues.ToString() << ", restart");
@@ -536,8 +536,8 @@ private:
                     << ", got: " << msg.GetGeneration());
             }
 
-            case EShardState::Initial:
-            case EShardState::Resolving: {
+            case EShardState::Initial: 
+            case EShardState::Resolving: { 
                 // do nothing
                 return;
             }
@@ -561,8 +561,8 @@ private:
         }
 
         switch (state.State) {
-            case EShardState::Starting:
-            case EShardState::Running: {
+            case EShardState::Starting: 
+            case EShardState::Running: { 
                 Counters->ScanQueryShardDisconnect->Inc();
 
                 if (state.TotalRetries >= MAX_TOTAL_SHARD_RETRIES) {
@@ -604,9 +604,9 @@ private:
                 return;
             }
 
-            case EShardState::Initial:
-            case EShardState::Resolving:
-            case EShardState::PostRunning: {
+            case EShardState::Initial: 
+            case EShardState::Resolving: 
+            case EShardState::PostRunning: { 
                 CA_LOG_W("TKqpScanComputeActor: broken pipe with tablet " << state.TabletId
                     << ", state: " << (int) state.State);
                 return;
@@ -753,8 +753,8 @@ private:
                 }
                 auto& shard = Shards.front();
                 if (shard.State == EShardState::Running && ev->Sender == shard.ActorId) {
-                    CA_LOG_E("TEvScanDataAck lost while running scan, terminate execution. DataShard actor: "
-                        << shard.ActorId);
+                    CA_LOG_E("TEvScanDataAck lost while running scan, terminate execution. DataShard actor: " 
+                        << shard.ActorId); 
                     InternalError(TIssuesIds::DEFAULT_ERROR, "Delivery problem: EvScanDataAck lost.");
                 } else {
                     CA_LOG_D("Skip lost TEvScanDataAck to " << ev->Sender << ", active scan actor: " << shard.ActorId);
@@ -986,9 +986,9 @@ private:
         CA_LOG_T("Scan over tablet " << state.TabletId << " finished: " << ScanData->IsFinished()
             << ", prevFreeSpace: " << prevFreeSpace << ", freeSpace: " << freeSpace << ", peer: " << state.ActorId);
 
-        if (!ScanData->IsFinished() && state.State != EShardState::PostRunning
-            && prevFreeSpace < freeSpace && state.ActorId)
-        {
+        if (!ScanData->IsFinished() && state.State != EShardState::PostRunning 
+            && prevFreeSpace < freeSpace && state.ActorId) 
+        { 
             CA_LOG_T("[poll] Send EvScanDataAck to " << state.ActorId << ", gen: " << state.Generation
                 << ", freeSpace: " << freeSpace);
             SendScanDataAck(state, freeSpace);
@@ -1041,13 +1041,13 @@ private:
     NMiniKQL::TKqpScanComputeContext::TScanData* ScanData = nullptr;
 
     TOwnedCellVec LastKey;
-    TDeque<std::pair<TEvKqpCompute::TEvScanData::TPtr, TInstant>> PendingScanData;
+    TDeque<std::pair<TEvKqpCompute::TEvScanData::TPtr, TInstant>> PendingScanData; 
 
-    enum class EShardState {
+    enum class EShardState { 
         Initial,
         Starting,
         Running,
-        PostRunning, //We already recieve all data, we has not processed it yet.
+        PostRunning, //We already recieve all data, we has not processed it yet. 
         Resolving,
     };
 

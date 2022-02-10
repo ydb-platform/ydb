@@ -10,24 +10,24 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 bool CheckFreezeStateAlredySet(const TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter) {
-    if (!alter.HasPartitionConfig())
-        return false;
-    if (alter.GetPartitionConfig().HasFreezeState()) {
-        if (table->PartitionConfig().HasFreezeState()) {
-            auto tableFreezeState = table->PartitionConfig().GetFreezeState();
-            if (tableFreezeState == alter.GetPartitionConfig().GetFreezeState()) {
-                return true;
-            }
-        } else {
+    if (!alter.HasPartitionConfig()) 
+        return false; 
+    if (alter.GetPartitionConfig().HasFreezeState()) { 
+        if (table->PartitionConfig().HasFreezeState()) { 
+            auto tableFreezeState = table->PartitionConfig().GetFreezeState(); 
+            if (tableFreezeState == alter.GetPartitionConfig().GetFreezeState()) { 
+                return true; 
+            } 
+        } else { 
             if (alter.GetPartitionConfig().GetFreezeState() == NKikimrSchemeOp::EFreezeState::Unfreeze) {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
+                return true; 
+            } 
+        } 
+    } 
+ 
+    return false; 
+} 
+ 
 bool IsSuperUser(const NACLib::TUserToken* userToken) {
     if (!userToken)
         return false;
@@ -79,14 +79,14 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         return nullptr;
     }
 
-    if (copyAlter.HasPartitionConfig() && copyAlter.GetPartitionConfig().HasFreezeState()) {
+    if (copyAlter.HasPartitionConfig() && copyAlter.GetPartitionConfig().HasFreezeState()) { 
         if (hasSchemaChanges) {
-            errStr = Sprintf("Mix freeze cmd with other options is forbiden");
+            errStr = Sprintf("Mix freeze cmd with other options is forbiden"); 
             status = NKikimrScheme::StatusInvalidParameter;
-            return nullptr;
-        }
-    }
-
+            return nullptr; 
+        } 
+    } 
+ 
     // Ignore column ids if they were passed by user!
     for (auto& col : *copyAlter.MutableColumns()) {
         col.ClearId();
@@ -102,17 +102,17 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     }
 
     if (CheckFreezeStateAlredySet(table, copyAlter)) {
-        errStr = Sprintf("Requested freeze state alredy set");
+        errStr = Sprintf("Requested freeze state alredy set"); 
         status = NKikimrScheme::StatusAlreadyExists;
-        return nullptr;
-    }
-
+        return nullptr; 
+    } 
+ 
     NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
     if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, table->PartitionConfig(), copyAlter.GetPartitionConfig(), appData, errStr)
         || !TPartitionConfigMerger::VerifyAlterParams(table->PartitionConfig(), compilationPartitionConfig, appData, shadowDataAllowed, errStr)) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
-    }
+    } 
     copyAlter.MutablePartitionConfig()->CopyFrom(compilationPartitionConfig);
 
     const TSubDomainInfo& subDomain = *path.DomainInfo();
@@ -206,17 +206,17 @@ bool CheckDropingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableDe
                 return false;
             }
         }
-
-        for (const auto& col: indexInfo->IndexDataColumns) {
-            if (deletedColumns.contains(col)) {
-                errStr = TStringBuilder ()
-                    << "Imposible drop column because table index covers that column"
+ 
+        for (const auto& col: indexInfo->IndexDataColumns) { 
+            if (deletedColumns.contains(col)) { 
+                errStr = TStringBuilder () 
+                    << "Imposible drop column because table index covers that column" 
                     << ", column name: " << col
-                    << ", table name: " << tablePath.PathString()
+                    << ", table name: " << tablePath.PathString() 
                     << ", index name: " << childName;
-                return false;
-            }
-        }
+                return false; 
+            } 
+        } 
     }
 
     return true;
@@ -538,7 +538,7 @@ public:
         }
 
         Y_VERIFY(context.SS->Tables.contains(path.Base()->PathId));
-        TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
+        TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId); 
 
         if (table->AlterVersion == 0) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Table is not created yet");
@@ -573,10 +573,10 @@ public:
         NKikimrScheme::EStatus status;
         TTableInfo::TAlterDataPtr alterData = ParseParams(path, table, alter, IsShadowDataAllowed(), errStr, status, context);
         if (!alterData) {
-            result->SetError(status, errStr);
+            result->SetError(status, errStr); 
             return result;
         }
-
+ 
         Y_VERIFY(alterData->AlterVersion == table->AlterVersion + 1);
 
         if (!CheckDropingColumns(context.SS, alter, path, errStr)) {

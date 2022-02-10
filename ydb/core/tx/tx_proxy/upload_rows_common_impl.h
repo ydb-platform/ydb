@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 
@@ -14,10 +14,10 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-
+ 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
-
+ 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
@@ -89,13 +89,13 @@ private:
 
 }
 
-namespace NTxProxy {
+namespace NTxProxy { 
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
     using TBase = TActorBootstrapped<TUploadRowsBase<DerivedActivityType>>;
     using TThis = typename TBase::TThis;
-
+ 
 private:
     using TTabletId = ui64;
 
@@ -108,11 +108,11 @@ private:
     TActorId TimeoutTimerActorId;
     bool WaitingResolveReply;
     bool Finished;
-
-    TAutoPtr<NSchemeCache::TSchemeCacheRequest> ResolvePartitionsResult;
+ 
+    TAutoPtr<NSchemeCache::TSchemeCacheRequest> ResolvePartitionsResult; 
     TAutoPtr<NSchemeCache::TSchemeCacheNavigate> ResolveNamesResult;
-    TSerializedCellVec MinKey;
-    TSerializedCellVec MaxKey;
+    TSerializedCellVec MinKey; 
+    TSerializedCellVec MaxKey; 
     TVector<NScheme::TTypeId> KeyColumnTypes;
     TVector<NScheme::TTypeId> ValueColumnTypes;
     NSchemeCache::TSchemeCacheNavigate::EKind TableKind = NSchemeCache::TSchemeCacheNavigate::KindUnknown;
@@ -123,7 +123,7 @@ private:
     NLongTxService::TLongTxId LongTxId;
     NThreading::TFuture<Ydb::LongTx::WriteResponse> WriteBatchResult;
 
-protected:
+protected: 
     enum class EUploadSource {
         ProtoValues = 0,
         ArrowBatch = 1,
@@ -147,7 +147,7 @@ protected:
     TVector<std::pair<TString, NScheme::TTypeId>> SrcColumns; // source columns in CSV could have any order
     TVector<std::pair<TString, NScheme::TTypeId>> YdbSchema;
     THashMap<ui32, size_t> Id2Position; // columnId -> its position in YdbSchema
-
+ 
     bool WriteToTableShadow = false;
     bool AllowWriteToPrivateTable = false;
 
@@ -171,7 +171,7 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx) {
         Deadline = AppData(ctx)->TimeProvider->Now() + Timeout;
-        ResolveTable(GetTable(), ctx);
+        ResolveTable(GetTable(), ctx); 
     }
 
     void Die(const NActors::TActorContext& ctx) override {
@@ -184,10 +184,10 @@ public:
         TBase::Die(ctx);
     }
 
-protected:
+protected: 
     const NSchemeCache::TSchemeCacheNavigate* GetResolveNameResult() const {
         return ResolveNamesResult.Get();
-    }
+    } 
 
     const TKeyDesc* GetKeyRange() const {
         Y_VERIFY(ResolvePartitionsResult->ResultSet.size() == 1);
@@ -233,14 +233,14 @@ protected:
 
 private:
     virtual TString GetDatabase() = 0;
-    virtual const TString& GetTable() = 0;
-    virtual const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const = 0;
-    virtual bool CheckAccess(TString& errorMessage) = 0;
+    virtual const TString& GetTable() = 0; 
+    virtual const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const = 0; 
+    virtual bool CheckAccess(TString& errorMessage) = 0; 
     virtual TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const = 0;
     virtual bool ExtractRows(TString& errorMessage) = 0;
     virtual bool ExtractBatch(TString& errorMessage) = 0;
-    virtual void RaiseIssue(const NYql::TIssue& issue) = 0;
-    virtual void SendResult(const NActors::TActorContext& ctx, const ::Ydb::StatusIds::StatusCode& status) = 0;
+    virtual void RaiseIssue(const NYql::TIssue& issue) = 0; 
+    virtual void SendResult(const NActors::TActorContext& ctx, const ::Ydb::StatusIds::StatusCode& status) = 0; 
 
     virtual EUploadSource GetSourceType() const {
         return EUploadSource::ProtoValues;
@@ -256,7 +256,7 @@ private:
         return none;
     }
 
-private:
+private: 
     STFUNC(StateWaitResolveTable) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
@@ -333,8 +333,8 @@ private:
             }
         }
 
-        for (size_t pos = 0; pos < reqColumns.size(); ++pos) {
-            auto& name = reqColumns[pos].first;
+        for (size_t pos = 0; pos < reqColumns.size(); ++pos) { 
+            auto& name = reqColumns[pos].first; 
             const auto* cp = columnByName.FindPtr(name);
             if (!cp) {
                 errorMessage = Sprintf("Unknown column: %s", name.c_str());
@@ -343,7 +343,7 @@ private:
             ui32 colId = *cp;
             auto& ci = *entry.Columns.FindPtr(colId);
 
-            const auto& typeInProto = reqColumns[pos].second;
+            const auto& typeInProto = reqColumns[pos].second; 
 
             if (typeInProto.type_id()) {
                 NScheme::TTypeId typeInRequest = typeInProto.type_id();
@@ -418,60 +418,60 @@ private:
         return true;
     }
 
-    void ResolveTable(const TString& table, const NActors::TActorContext& ctx) {
-        // TODO: check all params;
-        // Cerr << *Request->GetProtoRequest() << Endl;
+    void ResolveTable(const TString& table, const NActors::TActorContext& ctx) { 
+        // TODO: check all params; 
+        // Cerr << *Request->GetProtoRequest() << Endl; 
 
-        TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
-        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-        entry.Path = ::NKikimr::SplitPath(table);
-        if (entry.Path.empty()) {
-            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "Invalid table path specified", ctx);
+        TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate()); 
+        NSchemeCache::TSchemeCacheNavigate::TEntry entry; 
+        entry.Path = ::NKikimr::SplitPath(table); 
+        if (entry.Path.empty()) { 
+            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "Invalid table path specified", ctx); 
         }
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable; 
         entry.SyncVersion = true;
         entry.ShowPrivatePath = AllowWriteToPrivateTable;
-        request->ResultSet.emplace_back(entry);
-        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
+        request->ResultSet.emplace_back(entry); 
+        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request)); 
 
-        TimeoutTimerActorId = CreateLongTimer(ctx, Timeout,
-            new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
+        TimeoutTimerActorId = CreateLongTimer(ctx, Timeout, 
+            new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup())); 
 
-        TBase::Become(&TThis::StateWaitResolveTable);
-        WaitingResolveReply = true;
-    }
+        TBase::Become(&TThis::StateWaitResolveTable); 
+        WaitingResolveReply = true; 
+    } 
 
-    void HandleTimeout(const TActorContext& ctx) {
+    void HandleTimeout(const TActorContext& ctx) { 
         ShardRepliesLeft.clear();
-        return ReplyWithError(Ydb::StatusIds::TIMEOUT, "Request timed out", ctx);
+        return ReplyWithError(Ydb::StatusIds::TIMEOUT, "Request timed out", ctx); 
     }
 
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        WaitingResolveReply = false;
-        if (Finished) {
-            return Die(ctx);
-        }
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) { 
+        WaitingResolveReply = false; 
+        if (Finished) { 
+            return Die(ctx); 
+        } 
 
-        const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request;
-
-        Y_VERIFY(request.ResultSet.size() == 1);
-        switch (request.ResultSet.front().Status) {
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
-                break;
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
+        const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request; 
+ 
+        Y_VERIFY(request.ResultSet.size() == 1); 
+        switch (request.ResultSet.front().Status) { 
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok: 
+                break; 
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError: 
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError: 
                 return ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Sprintf("Table '%s' unavaliable", GetTable().c_str()), ctx);
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable: 
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath: 
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete: 
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown: 
                 return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, Sprintf("Unknown table '%s'", GetTable().c_str()), ctx);
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown: 
                 return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, Sprintf("Unknown database for table '%s'", GetTable().c_str()), ctx);
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown: 
                 return ReplyWithError(Ydb::StatusIds::GENERIC_ERROR, Sprintf("Unknown error on table '%s'", GetTable().c_str()), ctx);
         }
-
+ 
         TableKind = request.ResultSet.front().Kind;
         bool isOlapTable = (TableKind == NSchemeCache::TSchemeCacheNavigate::KindOlapTable);
 
@@ -480,10 +480,10 @@ private:
                 Sprintf("Table '%s' is a system view. Bulk upsert is not supported.", GetTable().c_str()), ctx);
         }
 
-        ResolveNamesResult = ev->Get()->Request;
+        ResolveNamesResult = ev->Get()->Request; 
 
         bool makeYdbSchema = isOlapTable || (GetSourceType() != EUploadSource::ProtoValues);
-        TString errorMessage;
+        TString errorMessage; 
         if (!BuildSchema(ctx, errorMessage, makeYdbSchema)) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, errorMessage, ctx);
         }
@@ -526,7 +526,7 @@ private:
 
                 break;
             }
-        }
+        } 
 
         if (TableKind == NSchemeCache::TSchemeCacheNavigate::KindTable) {
             ResolveShards(ctx);
@@ -536,7 +536,7 @@ private:
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
                 Sprintf("Table '%s': Bulk upsert is not supported for this table kind.", GetTable().c_str()), ctx);
         }
-    }
+    } 
 
     void WriteToOlapTable(const NActors::TActorContext& ctx) {
         TString accessCheckError;
@@ -739,10 +739,10 @@ private:
         return ReplyWithResult(msg->Record.GetStatus(), ctx);
     }
 
-    void FindMinMaxKeys() {
+    void FindMinMaxKeys() { 
 
-        for (const auto& pair : GetRows()) {
-             const auto& serializedKey = pair.first;
+        for (const auto& pair : GetRows()) { 
+             const auto& serializedKey = pair.first; 
 
             if (MinKey.GetCells().empty()) {
                 // Only for the first key
@@ -841,7 +841,7 @@ private:
 
         // Group rows by shard id
         TVector<std::unique_ptr<TEvDataShard::TEvUploadRowsRequest>> shardRequests(keyRange->Partitions.size());
-        for (const auto& keyValue : GetRows()) {
+        for (const auto& keyValue : GetRows()) { 
             // Find partition for the key
             auto it = std::lower_bound(keyRange->Partitions.begin(), keyRange->Partitions.end(), keyValue.first.GetCells(),
                 [this](const auto &partition, const auto& key) {
@@ -999,7 +999,7 @@ private:
     }
 
     void ReplyWithResult(::Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
-        SendResult(ctx, status);
+        SendResult(ctx, status); 
 
         LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Bulk upsert to table " << GetTable()
                     << " completed with status " << status);
@@ -1017,5 +1017,5 @@ private:
     }
 };
 
-} // namespace NTxProxy
+} // namespace NTxProxy 
 } // namespace NKikimr

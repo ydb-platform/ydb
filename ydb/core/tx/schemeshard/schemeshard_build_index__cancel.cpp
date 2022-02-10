@@ -69,7 +69,7 @@ public:
         if (indexBuildInfo->IsFinished()) {
             return Reply(
                 std::move(response),
-                Ydb::StatusIds::PRECONDITION_FAILED,
+                Ydb::StatusIds::PRECONDITION_FAILED, 
                 TStringBuilder() << "Index build prcess with id <" << indexBuildId << "> has been finished already"
                 );
         }
@@ -77,7 +77,7 @@ public:
         if (indexBuildInfo->IsCancellationRequested()) {
             return Reply(
                 std::move(response),
-                Ydb::StatusIds::PRECONDITION_FAILED,
+                Ydb::StatusIds::PRECONDITION_FAILED, 
                 TStringBuilder() << "Index build prcess with id <" << indexBuildId << "> canceling already"
                 );
         }
@@ -85,7 +85,7 @@ public:
         if (indexBuildInfo->State > TIndexBuildInfo::EState::Filling) {
             return Reply(
                 std::move(response),
-                Ydb::StatusIds::PRECONDITION_FAILED,
+                Ydb::StatusIds::PRECONDITION_FAILED, 
                 TStringBuilder() << "Index build prcess with id <" << indexBuildId << "> are almost done, cancellation has no sense"
                 );
         }

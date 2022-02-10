@@ -65,8 +65,8 @@ class CreateTenantRequest(AbstractProtobufBuilder):
         if soft is not None:
             quotas.data_size_soft_quota = soft
 
-    def set_attribute(self, name, value):
-        self.protobuf.CreateTenantRequest.Request.attributes[name] = value
+    def set_attribute(self, name, value): 
+        self.protobuf.CreateTenantRequest.Request.attributes[name] = value 
 
 
 class AlterTenantRequest(AbstractProtobufBuilder):

@@ -168,18 +168,18 @@ inline void CheckCreateTenant(TTenantTestRuntime &runtime,
         unit.set_availability_zone(req.Zone);
         unit.set_count(req.Count);
     }
-
+ 
     for (auto &pool : request.Pools) {
         auto &unit = *resources->add_storage_units();
         unit.set_unit_kind(pool.PoolType);
         unit.set_count(pool.PoolSize);
     }
-
+ 
     if (token)
         event->Record.SetUserToken(token);
-
-    for (const auto& [key, value] : request.Attrs) {
-        (*event->Record.MutableRequest()->mutable_attributes())[key] = value;
+ 
+    for (const auto& [key, value] : request.Attrs) { 
+        (*event->Record.MutableRequest()->mutable_attributes())[key] = value; 
     }
 
     if (request.Type == EType::Serverless) {

@@ -801,9 +801,9 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
             } else if (node->IsCallable("TablePath") || node->IsCallable("TableRecord")) {
                 auto issue = TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << node->Content() << " will be empty");
                 SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_FREE_TABLE_PATH_RECORD, issue);
-                if (!ctx.AddWarning(issue)) {
-                    hasErrors = true;
-                }
+                if (!ctx.AddWarning(issue)) { 
+                    hasErrors = true; 
+                } 
             } else if (node->IsCallable("UnsafeTimestampCast")) {
                 auto issue = TIssue(ctx.GetPosition(node->Pos()), "Unsafe conversion integral value to Timestamp, consider using date types");
                 SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_CAST_INTEGRAL_TO_TIMESTAMP_UNSAFE, issue);

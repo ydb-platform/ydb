@@ -2,7 +2,7 @@
 
 #include "rpc_calls.h"
 #include "rpc_kqp_base.h"
-#include "rpc_common.h"
+#include "rpc_common.h" 
 
 #include <ydb/core/protos/console_config.pb.h>
 
@@ -38,14 +38,14 @@ public:
     }
 
     void Proceed(const TActorContext &ctx) {
-        const auto req = GetProtoRequest();
+        const auto req = GetProtoRequest(); 
         const auto traceId = Request_->GetTraceId();
         const auto requestType = Request_->GetRequestType();
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        SetAuthToken(ev, *Request_);
-        SetDatabase(ev, *Request_);
-
+        SetAuthToken(ev, *Request_); 
+        SetDatabase(ev, *Request_); 
+ 
         NYql::TIssues issues;
         if (CheckSession(req->session_id(), issues)) {
             ev->Record.MutableRequest()->SetSessionId(req->session_id());

@@ -10,13 +10,13 @@ NKikimrMiniKQL::TResult GetKikimrUnpackedRunResult(const NKikimrMiniKQL::TResult
 void GetKikimrUnpackedRunResult(const NKikimrMiniKQL::TResult& runResult, ui32 index,
     const NKikimrMiniKQL::TType*& type, const NKikimrMiniKQL::TValue*& value);
 
-TVector<NKikimrMiniKQL::TResult*> UnpackKikimrRunResult(const NKikimrMiniKQL::TResult& runResult, google::protobuf::Arena* arena);
+TVector<NKikimrMiniKQL::TResult*> UnpackKikimrRunResult(const NKikimrMiniKQL::TResult& runResult, google::protobuf::Arena* arena); 
 
 void KikimrResultToYson(const TStringStream& stream, NYson::TYsonWriter& writer, const NKikimrMiniKQL::TResult& result,
     const TVector<TString>& columnHints, const IDataProvider::TFillSettings& fillSettings, bool& truncated);
 
-NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& result, const TVector<TString>& columnHints,
-    const IDataProvider::TFillSettings& fillSettings, google::protobuf::Arena* arena);
+NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& result, const TVector<TString>& columnHints, 
+    const IDataProvider::TFillSettings& fillSettings, google::protobuf::Arena* arena); 
 
 bool IsRawKikimrResult(const NKikimrMiniKQL::TResult& result);
 

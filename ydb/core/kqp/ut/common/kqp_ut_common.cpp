@@ -57,13 +57,13 @@ NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegi
     return funcRegistry.Release();
 }
 
-TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings() {
-    auto setting = NKikimrKqp::TKqpSetting();
-    setting.SetName("_KqpYqlSyntaxVersion");
-    setting.SetValue("1");
-    return {setting};
-}
-
+TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings() { 
+    auto setting = NKikimrKqp::TKqpSetting(); 
+    setting.SetName("_KqpYqlSyntaxVersion"); 
+    setting.SetValue("1"); 
+    return {setting}; 
+} 
+ 
 TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     // EnableKikimrBacktraceFormat(); // Very slow, enable only when required locally
 
@@ -104,13 +104,13 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetFeatureFlags(settings.FeatureFlags);
     ServerSettings->SetNodeCount(settings.NodeCount);
     ServerSettings->SetEnableKqpSpilling(enableSpilling);
-    ServerSettings->SetEnableDataColumnForIndexTable(true);
+    ServerSettings->SetEnableDataColumnForIndexTable(true); 
     ServerSettings->SetKeepSnapshotTimeout(settings.KeepSnapshotTimeout);
     ServerSettings->SetFrFactory(&UdfFrFactory);
     ServerSettings->SetEnableSchemeTransactionsAtSchemeShard(true);
     ServerSettings->SetEnableNotNullColumns(true);
-    if (settings.LogStream)
-        ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
+    if (settings.LogStream) 
+        ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream)); 
 
     Server.Reset(MakeHolder<Tests::TServer>(*ServerSettings));
     Server->EnableGRpc(grpcPort);
@@ -166,9 +166,9 @@ TKikimrRunner::TKikimrRunner(const NKikimrConfig::TFeatureFlags& featureFlags, c
 
 TKikimrRunner::TKikimrRunner(const TString& authToken, const TString& domainRoot, ui32 nodeCount)
     : TKikimrRunner(TKikimrSettings()
-        .SetAuthToken(authToken)
-        .SetDomainRoot(domainRoot)
-        .SetNodeCount(nodeCount)) {}
+        .SetAuthToken(authToken) 
+        .SetDomainRoot(domainRoot) 
+        .SetNodeCount(nodeCount)) {} 
 
 void TKikimrRunner::CreateSampleTables() {
     Client->CreateTable("/Root", R"(
@@ -251,12 +251,12 @@ void TKikimrRunner::CreateSampleTables() {
         );
 
         CREATE TABLE `KeyValue2` (
-            Key String,
-            Value String,
-            PRIMARY KEY (Key)
-        );
-
-
+            Key String, 
+            Value String, 
+            PRIMARY KEY (Key) 
+        ); 
+ 
+ 
         CREATE TABLE `Test` (
             Group Uint32,
             Name String,
@@ -330,9 +330,9 @@ void TKikimrRunner::CreateSampleTables() {
             (2u, "Two");
 
         REPLACE INTO `KeyValue2` (Key, Value) VALUES
-            ("1", "One"),
-            ("2", "Two");
-
+            ("1", "One"), 
+            ("2", "Two"); 
+ 
         REPLACE INTO `Test` (Group, Name, Amount, Comment) VALUES
             (1u, "Anna", 3500ul, "None"),
             (1u, "Paul", 300ul, "None"),
@@ -693,21 +693,21 @@ TCollectedStreamResult CollectStreamResult(NYdb::NTable::TScanQueryPartIterator&
     return CollectStreamResultImpl(it);
 }
 
-TString ReadTablePartToYson(NYdb::NTable::TSession session, const TString& table) {
-    auto it = session.ReadTable(table).GetValueSync();
-    UNIT_ASSERT(it.IsSuccess());
-
-    TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
-    if (!streamPart.IsSuccess()) {
-        streamPart.GetIssues().PrintTo(Cerr);
-        if (streamPart.EOS()) {
-            return {};
-        }
-        UNIT_ASSERT_C(false, "Status: " << streamPart.GetStatus());
-    }
-    return NYdb::FormatResultSetYson(streamPart.ExtractPart());
-}
-
+TString ReadTablePartToYson(NYdb::NTable::TSession session, const TString& table) { 
+    auto it = session.ReadTable(table).GetValueSync(); 
+    UNIT_ASSERT(it.IsSuccess()); 
+ 
+    TReadTableResultPart streamPart = it.ReadNext().GetValueSync(); 
+    if (!streamPart.IsSuccess()) { 
+        streamPart.GetIssues().PrintTo(Cerr); 
+        if (streamPart.EOS()) { 
+            return {}; 
+        } 
+        UNIT_ASSERT_C(false, "Status: " << streamPart.GetStatus()); 
+    } 
+    return NYdb::FormatResultSetYson(streamPart.ExtractPart()); 
+} 
+ 
 ui32 CountPlanNodesByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value) {
     ui32 result = 0;
 
@@ -786,77 +786,77 @@ NJson::TJsonValue FindPlanNodeByKv(const NJson::TJsonValue& plan, const TString&
     return NJson::TJsonValue();
 }
 
-void CreateSampleTablesWithIndex(TSession& session) {
-    auto res = session.ExecuteSchemeQuery(R"(
-        --!syntax_v1
-        CREATE TABLE `/Root/SecondaryKeys` (
-            Key Int32,
-            Fk Int32,
-            Value String,
-            PRIMARY KEY (Key),
-            INDEX Index GLOBAL ON (Fk)
-        );
-        CREATE TABLE `/Root/SecondaryComplexKeys` (
-            Key Int32,
-            Fk1 Int32,
-            Fk2 String,
-            Value String,
-            PRIMARY KEY (Key),
-            INDEX Index GLOBAL ON (Fk1, Fk2)
-        );
-        CREATE TABLE `/Root/SecondaryWithDataColumns` (
-            Key String,
-            Index2 String,
-            Value String,
-            ExtPayload String,
-            PRIMARY KEY (Key),
-            INDEX Index GLOBAL ON (Index2)
-            COVER (Value)
-        )
-
-    )").GetValueSync();
-    UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
-
-    auto result = session.ExecuteDataQuery(R"(
+void CreateSampleTablesWithIndex(TSession& session) { 
+    auto res = session.ExecuteSchemeQuery(R"( 
+        --!syntax_v1 
+        CREATE TABLE `/Root/SecondaryKeys` ( 
+            Key Int32, 
+            Fk Int32, 
+            Value String, 
+            PRIMARY KEY (Key), 
+            INDEX Index GLOBAL ON (Fk) 
+        ); 
+        CREATE TABLE `/Root/SecondaryComplexKeys` ( 
+            Key Int32, 
+            Fk1 Int32, 
+            Fk2 String, 
+            Value String, 
+            PRIMARY KEY (Key), 
+            INDEX Index GLOBAL ON (Fk1, Fk2) 
+        ); 
+        CREATE TABLE `/Root/SecondaryWithDataColumns` ( 
+            Key String, 
+            Index2 String, 
+            Value String, 
+            ExtPayload String, 
+            PRIMARY KEY (Key), 
+            INDEX Index GLOBAL ON (Index2) 
+            COVER (Value) 
+        ) 
+ 
+    )").GetValueSync(); 
+    UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString()); 
+ 
+    auto result = session.ExecuteDataQuery(R"( 
         PRAGMA kikimr.UseNewEngine = "true";
 
         REPLACE INTO `KeyValue` (Key, Value) VALUES
-            (3u,   "Three"),
-            (4u,   "Four"),
-            (10u,  "Ten"),
-            (NULL, "Null Value");
-
+            (3u,   "Three"), 
+            (4u,   "Four"), 
+            (10u,  "Ten"), 
+            (NULL, "Null Value"); 
+ 
         REPLACE INTO `Test` (Group, Name, Amount, Comment) VALUES
-            (1u, "Jack",     100500ul, "Just Jack"),
-            (3u, "Harry",    5600ul,   "Not Potter"),
-            (3u, "Joshua",   8202ul,   "Very popular name in GB"),
-            (3u, "Muhammad", 887773ul, "Also very popular name in GB"),
-            (4u, "Hugo",     77,       "Boss");
-
-        REPLACE INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES
-            (1,    1,    "Payload1"),
-            (2,    2,    "Payload2"),
-            (5,    5,    "Payload5"),
-            (NULL, 6,    "Payload6"),
-            (7,    NULL, "Payload7"),
-            (NULL, NULL, "Payload8");
-
-        REPLACE INTO `/Root/SecondaryComplexKeys` (Key, Fk1, Fk2, Value) VALUES
-            (1,    1,    "Fk1", "Payload1"),
-            (2,    2,    "Fk2", "Payload2"),
-            (5,    5,    "Fk5", "Payload5"),
-            (NULL, 6,    "Fk6", "Payload6"),
-            (7,    NULL, "Fk7", "Payload7"),
-            (NULL, NULL, NULL,  "Payload8");
-
-        REPLACE INTO `/Root/SecondaryWithDataColumns` (Key, Index2, Value) VALUES
-            ("Primary1", "Secondary1", "Value1");
-
-    )", TTxControl::BeginTx().CommitTx()).GetValueSync();
-
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-}
-
+            (1u, "Jack",     100500ul, "Just Jack"), 
+            (3u, "Harry",    5600ul,   "Not Potter"), 
+            (3u, "Joshua",   8202ul,   "Very popular name in GB"), 
+            (3u, "Muhammad", 887773ul, "Also very popular name in GB"), 
+            (4u, "Hugo",     77,       "Boss"); 
+ 
+        REPLACE INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES 
+            (1,    1,    "Payload1"), 
+            (2,    2,    "Payload2"), 
+            (5,    5,    "Payload5"), 
+            (NULL, 6,    "Payload6"), 
+            (7,    NULL, "Payload7"), 
+            (NULL, NULL, "Payload8"); 
+ 
+        REPLACE INTO `/Root/SecondaryComplexKeys` (Key, Fk1, Fk2, Value) VALUES 
+            (1,    1,    "Fk1", "Payload1"), 
+            (2,    2,    "Fk2", "Payload2"), 
+            (5,    5,    "Fk5", "Payload5"), 
+            (NULL, 6,    "Fk6", "Payload6"), 
+            (7,    NULL, "Fk7", "Payload7"), 
+            (NULL, NULL, NULL,  "Payload8"); 
+ 
+        REPLACE INTO `/Root/SecondaryWithDataColumns` (Key, Index2, Value) VALUES 
+            ("Primary1", "Secondary1", "Value1"); 
+ 
+    )", TTxControl::BeginTx().CommitTx()).GetValueSync(); 
+ 
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
+} 
+ 
 void WaitForKqpProxyInit(const NYdb::TDriver& driver) {
     NYdb::NTable::TTableClient client(driver);
 

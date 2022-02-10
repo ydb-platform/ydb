@@ -44,7 +44,7 @@ TExprNode::TPtr ExtractFilter(TExprBase node, TExprContext& ctx) {
         auto blacklistedNode = FindNode(conditional.Predicate().Ptr(), [](const TExprNode::TPtr& exprNode) {
             auto node = TExprBase(exprNode);
 
-            if (node.Maybe<TKiSelectRow>() || node.Maybe<TKiSelectRangeBase>()) {
+            if (node.Maybe<TKiSelectRow>() || node.Maybe<TKiSelectRangeBase>()) { 
                 return true;
             }
 
@@ -86,7 +86,7 @@ TExprNode::TPtr ExtractFilter(TExprBase node, TExprContext& ctx) {
         auto blacklistedNode = FindNode(conditional.Predicate().Ptr(), [](const TExprNode::TPtr& exprNode) {
             auto node = TExprBase(exprNode);
 
-            if (node.Maybe<TKiSelectRow>() || node.Maybe<TKiSelectRangeBase>()) {
+            if (node.Maybe<TKiSelectRow>() || node.Maybe<TKiSelectRangeBase>()) { 
                 return true;
             }
 
@@ -173,10 +173,10 @@ TExprNode::TPtr MergeMapsWithSameLambda(TExprBase node, TExprContext& ctx) {
     if (!node.Maybe<TCoExtend>()) {
         return node.Ptr();
     }
-
+ 
     bool hasInputsToMerge = false;
     TVector<std::pair<TMaybeNode<TCoLambda>, TVector<TExprBase>>> inputs;
-
+ 
     auto extend = node.Cast<TCoExtend>();
     for (const auto& list : extend) {
         TMaybeNode<TExprBase> input;
@@ -193,14 +193,14 @@ TExprNode::TPtr MergeMapsWithSameLambda(TExprBase node, TExprContext& ctx) {
             lambda = maybeMap.Cast().Lambda();
             input = maybeMap.Cast().Input();
             buildList = true;
-        }
-
+        } 
+ 
         if (buildList) {
             input = Build<TCoToList>(ctx, node.Pos())
                 .Optional(input.Cast())
-                .Done();
-        }
-
+                .Done(); 
+        } 
+ 
         if (lambda && !IsKqlPureLambda(lambda.Cast())) {
             if (!inputs.empty() && inputs.back().first && inputs.back().first.Cast().Raw() == lambda.Cast().Raw()) {
                 inputs.back().second.push_back(input.Cast());
@@ -208,10 +208,10 @@ TExprNode::TPtr MergeMapsWithSameLambda(TExprBase node, TExprContext& ctx) {
             } else {
                 inputs.emplace_back(lambda, TVector<TExprBase>{input.Cast()});
             }
-        } else {
+        } else { 
             inputs.emplace_back(TMaybeNode<TCoLambda>(), TVector<TExprBase>{list});
-        }
-    }
+        } 
+    } 
 
     if (!hasInputsToMerge) {
         return node.Ptr();
@@ -259,8 +259,8 @@ TExprNode::TPtr MergeMapsWithSameLambda(TExprBase node, TExprContext& ctx) {
     }
 
     return ret.Ptr();
-}
-
+} 
+ 
 TExprNode::TPtr RewritePresentIfToFlatMap(TExprBase node, TExprContext& ctx) {
     if (!node.Maybe<TCoIfPresent>()) {
         return node.Ptr();
@@ -306,10 +306,10 @@ public:
                 TExprBase node(input);
 
                 ret = MergeMapsWithSameLambda<TCoMap>(node, ctx);
-                if (ret != input) {
-                    return ret;
-                }
-
+                if (ret != input) { 
+                    return ret; 
+                } 
+ 
                 ret = MergeMapsWithSameLambda<TCoFlatMap>(node, ctx);
                 if (ret != input) {
                     return ret;

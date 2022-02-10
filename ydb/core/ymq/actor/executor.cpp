@@ -444,7 +444,7 @@ void TMiniKqlExecutionActor::WaitForCompletion(bool retry) {
     const ui64 schemeShardId = ResponseEvent_->Get()->Record.GetSchemeShardTabletId();
     NTabletPipe::TClientConfig clientConfig;
     clientConfig.RetryPolicy = {.RetryLimitCount = 5, .MinRetryTime = TDuration::MilliSeconds(100), .DoFirstRetryInstantly = !retry};
-    TabletPipeClient_ = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), schemeShardId, clientConfig));
+    TabletPipeClient_ = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), schemeShardId, clientConfig)); 
 
     TAutoPtr<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion> request(new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion());
     request->Record.SetTxId(ResponseEvent_->Get()->Record.GetTxId());

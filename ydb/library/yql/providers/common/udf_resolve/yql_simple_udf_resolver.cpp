@@ -48,7 +48,7 @@ public:
                 auto& udf = *udfPtr;
                 TStringBuf moduleName, funcName;
                 if (!SplitUdfName(udf.Name, moduleName, funcName) || moduleName.empty() || funcName.empty()) {
-                    ctx.AddError(TIssue(udf.Pos, TStringBuilder() <<
+                    ctx.AddError(TIssue(udf.Pos, TStringBuilder() << 
                         "Incorrect format of function name: " << udf.Name));
                     hasErrors = true;
                 } else {
@@ -84,7 +84,7 @@ public:
                         path2import[path] = import;
                     } else {
                         if (import->Block->Type != EUserDataType::PATH) {
-                            ctx.AddError(TIssue(import->Pos, TStringBuilder() <<
+                            ctx.AddError(TIssue(import->Pos, TStringBuilder() << 
                                 "Only path file type is supported, cannot load file with alias: " << import->FileAlias));
                             hasErrors = true;
                             continue;
@@ -94,7 +94,7 @@ public:
                     }
                 }
                 catch (yexception& e) {
-                    ctx.AddError(TIssue(import->Pos, TStringBuilder()
+                    ctx.AddError(TIssue(import->Pos, TStringBuilder() 
                         << "Internal error of loading udf module: " << import->FileAlias
                         << ", reason: " << e.what()));
                     hasErrors = true;

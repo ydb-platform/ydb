@@ -128,13 +128,13 @@ protected:
         DumpAppliedRule("RewriteTopSortOverIndexRead", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     TMaybeNode<TExprBase> RewriteTakeOverIndexRead(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRewriteTakeOverIndexRead(node, ctx, KqpCtx);
         DumpAppliedRule("RewriteTakeOverIndexRead", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     TMaybeNode<TExprBase> RewriteFlatMapOverExtend(TExprBase node, TExprContext& ctx) {
         auto output = DqFlatMapOverExtend(node, ctx);
         DumpAppliedRule("RewriteFlatMapOverExtend", node.Ptr(), output.Ptr(), ctx);
@@ -146,7 +146,7 @@ protected:
         DumpAppliedRule("RewriteIndexRead", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
-
+ 
     TMaybeNode<TExprBase> RewriteLookupIndex(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRewriteLookupIndex(node, ctx, KqpCtx);
         DumpAppliedRule("RewriteLookupIndex", node.Ptr(), output.Ptr(), ctx);

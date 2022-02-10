@@ -224,7 +224,7 @@ protected:
 
     TActorId CreatePipe(ui64 tabletId, const TActorContext& ctx) {
         NTabletPipe::TClientConfig clientConfig;
-        const TActorId pipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
+        const TActorId pipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig)); 
         Y_VERIFY(Pipes.emplace(tabletId, pipe).second);
         return pipe;
     }

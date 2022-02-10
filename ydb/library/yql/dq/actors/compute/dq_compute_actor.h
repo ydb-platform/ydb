@@ -207,17 +207,17 @@ struct TDqExecutionSettings {
 const TDqExecutionSettings& GetDqExecutionSettings();
 TDqExecutionSettings& GetDqExecutionSettingsForTests();
 
-struct TReportStatsSettings {
-    // Min interval between stats messages.
-    TDuration MinInterval;
-    // Max interval to sent stats in case of no activity.
-    TDuration MaxInterval;
-};
-
+struct TReportStatsSettings { 
+    // Min interval between stats messages. 
+    TDuration MinInterval; 
+    // Max interval to sent stats in case of no activity. 
+    TDuration MaxInterval; 
+}; 
+ 
 struct TComputeRuntimeSettings {
     TMaybe<TDuration> Timeout;
     NDqProto::EDqStatsMode StatsMode = NDqProto::DQ_STATS_MODE_NONE;
-    TMaybe<TReportStatsSettings> ReportStatsSettings;
+    TMaybe<TReportStatsSettings> ReportStatsSettings; 
 
     // see kqp_rm.h
     // 0 - disable extra memory allocation
@@ -230,7 +230,7 @@ struct TComputeRuntimeSettings {
     bool UseSpilling = false;
 
     std::function<void(bool success, const TString& reason)> TerminateHandler;
-    TMaybe<NDqProto::TRlPath> RlPath;
+    TMaybe<NDqProto::TRlPath> RlPath; 
 };
 
 using TAllocateMemoryCallback = std::function<bool(const TTxId& txId, ui64 taskId, ui64 memory)>;

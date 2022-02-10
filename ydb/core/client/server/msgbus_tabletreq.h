@@ -99,7 +99,7 @@ public:
         TabletId = reqPair.first;
 
         if (reqPair.first) {
-            PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, reqPair.first, clientConfig));
+            PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, reqPair.first, clientConfig)); 
             NTabletPipe::SendData(ctx, PipeClient, reqPair.second.Release());
 
             this->Become(&TDerived::StateFunc, ctx, Timeout, new TEvents::TEvWakeup());

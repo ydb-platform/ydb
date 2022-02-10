@@ -58,14 +58,14 @@
             "Match": {"Type": "Callable", "Name": "KqlReadTable"}
         },
         {
-            "Name": "TKqlReadTableIndex",
-            "Base": "TKqlReadTableBase",
-            "Match": {"Type": "Callable", "Name": "KqlReadTableIndex"},
-            "Children": [
-                {"Index": 4, "Name": "Index", "Type": "TCoAtom"}
-            ]
-        },
-        {
+            "Name": "TKqlReadTableIndex", 
+            "Base": "TKqlReadTableBase", 
+            "Match": {"Type": "Callable", "Name": "KqlReadTableIndex"}, 
+            "Children": [ 
+                {"Index": 4, "Name": "Index", "Type": "TCoAtom"} 
+            ] 
+        }, 
+        { 
             "Name": "TKqpReadTable",
             "Base": "TKqlReadTableBase",
             "Match": {"Type": "Callable", "Name": "KqpReadTable"}
@@ -136,14 +136,14 @@
             "Match": {"Type": "Callable", "Name": "KqlLookupTable"}
         },
         {
-            "Name": "TKqlLookupIndex",
-            "Base": "TKqlLookupTableBase",
-            "Match": {"Type": "Callable", "Name": "KqlLookupIndex"},
-            "Children": [
-                {"Index": 3, "Name": "Index", "Type": "TCoAtom"}
-            ]
-        },
-        {
+            "Name": "TKqlLookupIndex", 
+            "Base": "TKqlLookupTableBase", 
+            "Match": {"Type": "Callable", "Name": "KqlLookupIndex"}, 
+            "Children": [ 
+                {"Index": 3, "Name": "Index", "Type": "TCoAtom"} 
+            ] 
+        }, 
+        { 
             "Name": "TKqpLookupTable",
             "Base": "TKqlLookupTableBase",
             "Match": {"Type": "Callable", "Name": "KqpLookupTable"}
@@ -172,11 +172,11 @@
             "Match": {"Type": "Callable", "Name": "KqlUpsertRows"}
         },
         {
-            "Name": "TKqlUpsertRowsIndex",
-            "Base": "TKqlUpsertRowsBase",
-            "Match": {"Type": "Callable", "Name": "KqlUpsertRowsIndex"}
-        },
-        {
+            "Name": "TKqlUpsertRowsIndex", 
+            "Base": "TKqlUpsertRowsBase", 
+            "Match": {"Type": "Callable", "Name": "KqlUpsertRowsIndex"} 
+        }, 
+        { 
             "Name": "TKqpUpsertRows",
             "Base": "TKqlUpsertRowsBase",
             "Match": {"Type": "Callable", "Name": "KqpUpsertRows"},
@@ -185,9 +185,9 @@
             ]
         },
         {
-            "Name": "TKqlInsertRowsBase",
+            "Name": "TKqlInsertRowsBase", 
             "Base": "TKqlTableEffect",
-            "Match": {"Type": "CallableBase"},
+            "Match": {"Type": "CallableBase"}, 
             "Children": [
                 {"Index": 1, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
@@ -195,35 +195,35 @@
             ]
         },
         {
-            "Name": "TKqlUpdateRowsBase",
+            "Name": "TKqlUpdateRowsBase", 
             "Base": "TKqlTableEffect",
-            "Match": {"Type": "CallableBase"},
+            "Match": {"Type": "CallableBase"}, 
             "Children": [
                 {"Index": 1, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"}
             ]
         },
         {
-            "Name": "TKqlUpdateRows",
-            "Base": "TKqlUpdateRowsBase",
-            "Match": {"Type": "Callable", "Name": "TKqlUpdateRows"}
-        },
-        {
-            "Name": "TKqlUpdateRowsIndex",
-            "Base": "TKqlUpdateRowsBase",
-            "Match": {"Type": "Callable", "Name": "TKqlUpdateRowsIndex"}
-        },
-        {
-            "Name": "TKqlInsertRows",
-            "Base": "TKqlInsertRowsBase",
-            "Match": {"Type": "Callable", "Name": "TKqlInsertRows"}
-        },
-        {
-            "Name": "TKqlInsertRowsIndex",
-            "Base": "TKqlInsertRowsBase",
-            "Match": {"Type": "Callable", "Name": "TKqlInsertRowsIndex"}
-        },
-        {
+            "Name": "TKqlUpdateRows", 
+            "Base": "TKqlUpdateRowsBase", 
+            "Match": {"Type": "Callable", "Name": "TKqlUpdateRows"} 
+        }, 
+        { 
+            "Name": "TKqlUpdateRowsIndex", 
+            "Base": "TKqlUpdateRowsBase", 
+            "Match": {"Type": "Callable", "Name": "TKqlUpdateRowsIndex"} 
+        }, 
+        { 
+            "Name": "TKqlInsertRows", 
+            "Base": "TKqlInsertRowsBase", 
+            "Match": {"Type": "Callable", "Name": "TKqlInsertRows"} 
+        }, 
+        { 
+            "Name": "TKqlInsertRowsIndex", 
+            "Base": "TKqlInsertRowsBase", 
+            "Match": {"Type": "Callable", "Name": "TKqlInsertRowsIndex"} 
+        }, 
+        { 
             "Name": "TKqpParamBinding",
             "Base": "TExprBase",
             "Match": {"Type": "Tuple"},
@@ -349,11 +349,11 @@
             "Match": {"Type": "Callable", "Name": "KqlDeleteRows"}
         },
         {
-            "Name": "TKqlDeleteRowsIndex",
-            "Base": "TKqlDeleteRowsBase",
-            "Match": {"Type": "Callable", "Name": "KqlDeleteRowsIndex"}
-        },
-        {
+            "Name": "TKqlDeleteRowsIndex", 
+            "Base": "TKqlDeleteRowsBase", 
+            "Match": {"Type": "Callable", "Name": "KqlDeleteRowsIndex"} 
+        }, 
+        { 
             "Name": "TKqpDeleteRows",
             "Base": "TKqlDeleteRowsBase",
             "Match": {"Type": "Callable", "Name": "KqpDeleteRows"}

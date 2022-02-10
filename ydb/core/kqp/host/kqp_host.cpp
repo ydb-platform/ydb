@@ -205,10 +205,10 @@ public:
 
     void FillResult(TResult& queryResult) const override {
         for (auto& resultStr : ResultProviderConfig.CommittedResults) {
-            queryResult.Results.emplace_back(
+            queryResult.Results.emplace_back( 
                 google::protobuf::Arena::CreateMessage<NKikimrMiniKQL::TResult>(queryResult.ProtobufArenaPtr.get()));
-            NKikimrMiniKQL::TResult* result = queryResult.Results.back();
-
+            NKikimrMiniKQL::TResult* result = queryResult.Results.back(); 
+ 
             if (!result->ParseFromArray(resultStr.data(), resultStr.size())) {
                 queryResult = ResultFromError<TResult>("Failed to parse run result.");
                 return;
@@ -762,7 +762,7 @@ TIntrusivePtr<IKikimrAsyncResult<TResult>> CheckedProcess(TExprContext& ctx, TLa
             ? asyncResult
             : MakeKikimrResultHolder(ResultFromErrors<TResult>(ctx.IssueManager.GetIssues()));
     }
-    catch (const std::exception& e) {
+    catch (const std::exception& e) { 
         return MakeKikimrResultHolder(ResultFromException<TResult>(e));
     }
 }
@@ -773,7 +773,7 @@ TResult CheckedSyncProcess(TLambda&& getResultFunc) {
         auto asyncResult = getResultFunc();
         return SyncProcess(asyncResult);
     }
-    catch (const std::exception& e) {
+    catch (const std::exception& e) { 
         return ResultFromException<TResult>(e);
     }
 }
@@ -1083,7 +1083,7 @@ public:
             .AddTypeAnnotation()
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
             .AddPostTypeAnnotation()
-            .AddOptimization(true, false)
+            .AddOptimization(true, false) 
             .Add(TLogExprTransformer::Sync("Optimized expr"), "LogExpr")
             .AddRun(&NullProgressWriter)
             .Build();
@@ -1879,10 +1879,10 @@ private:
 
         SetupExecutePreparedTransformer(settings, tx);
 
-        if (issues) {
-            ctx.IssueManager.AddIssues(issues);
-        }
-
+        if (issues) { 
+            ctx.IssueManager.AddIssues(issues); 
+        } 
+ 
         if (!ParseParameters(std::move(parameters), SessionCtx->Query().Parameters, ctx)) {
             return nullptr;
         }
@@ -2120,7 +2120,7 @@ private:
         SessionCtx->Query().Deadlines = settings.Deadlines;
         SessionCtx->Query().Limits = settings.Limits;
         SessionCtx->Query().StatsMode = settings.StatsMode;
-        SessionCtx->Query().RlPath = settings.RlPath;
+        SessionCtx->Query().RlPath = settings.RlPath; 
 
         return MakeIntrusive<TAsyncExecutePreparedResult>(FakeWorld.Get(), ctx, *ExecutePreparedTransformer,
             SessionCtx, FillSettings, ExecuteCtx, nullptr, sqlVersion);
@@ -2128,7 +2128,7 @@ private:
 
     void SetupSession(TIntrusivePtr<IKikimrTransactionContext> txCtx) {
         ExprCtx->Reset();
-        ExprCtx->Step.Done(TExprStep::ExprEval); // KIKIMR-8067
+        ExprCtx->Step.Done(TExprStep::ExprEval); // KIKIMR-8067 
 
         TypesCtx->DeprecatedSQL = false;
         TypesCtx->CachedNow.reset();

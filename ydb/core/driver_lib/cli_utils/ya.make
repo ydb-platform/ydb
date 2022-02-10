@@ -1,6 +1,6 @@
 LIBRARY(cli_utils)
 
-OWNER(g:kikimr)
+OWNER(g:kikimr) 
 
 SRCS(
     cli.cpp

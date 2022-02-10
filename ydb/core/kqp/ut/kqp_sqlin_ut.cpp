@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session); 
 
         auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
             TString query = TStringBuilder()
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session); 
 
         auto query = TStringBuilder()
             << "--!syntax_v1" << Endl
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session); 
 
         auto test = [&](bool disableOpt, bool optionalParam, std::function<void(const TDataQueryResult&)> assertFn) {
             auto query = TStringBuilder()
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session); 
 
         auto query = TStringBuilder()
             << "--!syntax_v1" << Endl
@@ -187,7 +187,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session); 
 
         auto test = [&](bool disableOpt, bool optionalParam, std::function<void(const TDataQueryResult&)> assertFn) {
             auto query = TStringBuilder()
@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session); 
 
         auto query = TStringBuilder()
             << "--!syntax_v1" << Endl
@@ -270,7 +270,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session); 
 
         auto query = TStringBuilder()
             << "--!syntax_v1" << Endl
@@ -298,7 +298,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session); 
 
         auto query = TStringBuilder()
             << "--!syntax_v1" << Endl
@@ -378,7 +378,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto params = TParamsBuilder()
             .AddParam("$keys").BeginList()
                 .AddListItem().Utf8("1")
-                .AddListItem().Utf8("¿cómo estás?")
+                .AddListItem().Utf8("¿cómo estás?") 
                 .EndList().Build()
             .Build();
 
@@ -391,7 +391,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session); 
 
         auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
             auto query = TStringBuilder()
@@ -429,7 +429,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session); 
 
         auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
             auto query = TStringBuilder()
@@ -471,7 +471,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session); 
 
         auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
             auto query = TStringBuilder()
@@ -506,11 +506,11 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session); 
 
         auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
             auto query = TStringBuilder()
-                << Q1_(Sprintf(R"(
+                << Q1_(Sprintf(R"( 
                     PRAGMA Kikimr.OptDisableSqlInToJoin = "True";
                     PRAGMA Kikimr.OptDisableJoinReverseTableLookupLeftSemi = "%s"; -- not depends on `Kikimr.OptDisableSqlInToJoin` pragma
                     DECLARE $in AS List<Struct<k: Uint32, v: String>>;
@@ -548,7 +548,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session); 
 
         const TString query = Q1_(R"(
                 DECLARE $in AS List<Int32?>;
@@ -577,20 +577,20 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         AssertTableReads(result, "/Root/SecondaryKeys", 2);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_SimpleKey) {
+    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_SimpleKey) { 
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session); 
 
         auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
-            const TString query = Q1_(Sprintf(R"(
+            const TString query = Q1_(Sprintf(R"( 
                     %s
                     DECLARE $in AS List<Int32?>;
                     SELECT Value FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk IN $in
                     ORDER BY Value
-                )", FormatPragma(disableOpt)));
+                )", FormatPragma(disableOpt))); 
 
             auto params = TParamsBuilder().AddParam("$in").BeginList()
                     .AddListItem().OptionalInt32(1)
@@ -604,7 +604,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 5);
+            AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 5); 
             AssertTableReads(result, "/Root/SecondaryKeys", 5);
         });
 
@@ -614,195 +614,195 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_SimpleKey_In_And) {
+    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_SimpleKey_In_And) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        CreateSampleTablesWithIndex(session); 
+ 
+        auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) { 
+            const TString query = Q1_(Sprintf(R"( 
+                    PRAGMA AnsiInForEmptyOrNullableItemsCollections; 
+                    %s 
+                    DECLARE $in AS List<Int32?>; 
+                    SELECT * FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk IN $in 
+                    AND Value == "Payload1" 
+                )", FormatPragma(disableOpt))); 
+ 
+            auto params = TParamsBuilder().AddParam("$in").BeginList() 
+                    .AddListItem().OptionalInt32(1) 
+                    .AddListItem().OptionalInt32(2) 
+                    .AddListItem().OptionalInt32(42) 
+                    .AddListItem().OptionalInt32(Nothing()) 
+                    .EndList().Build().Build(); 
+ 
+            auto result = ExecQueryAndTestResult(session, query, params, R"([[[1];[1];["Payload1"]]])"); 
+            assertFn(result); 
+        }; 
+ 
+        test(DisableOpt, [](const TDataQueryResult& result) { 
+            AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 5); 
+            AssertTableReads(result, "/Root/SecondaryKeys", 5); 
+            UNIT_ASSERT_C(result.GetIssues().ToString().Contains("Given predicate is not suitable"), 
+                result.GetIssues().ToString()); 
+        }); 
+ 
+        test(EnableOpt, [](const TDataQueryResult& result) { 
+            AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 2); 
+            AssertTableReads(result, "/Root/SecondaryKeys", 2); 
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString()); 
+        }); 
+    } 
+ 
+    Y_UNIT_TEST_NEW_ENGINE(SimpleKey_In_And_In) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        CreateSampleTablesWithIndex(session); 
+ 
+        auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) { 
+            const TString query = Q1_(Sprintf(R"( 
+                    PRAGMA AnsiInForEmptyOrNullableItemsCollections; 
+                    %s 
+                    DECLARE $in1 AS List<Int32>; 
+                    SELECT Key, FROM `/Root/SecondaryComplexKeys` 
+                    WHERE Key IN $in1 AND Value IN ("active", "Payload2"); 
+                )", FormatPragma(disableOpt))); 
+ 
+            auto params = TParamsBuilder() 
+                    .AddParam("$in1") 
+                        .BeginList() 
+                            .AddListItem().Int32(1) 
+                            .AddListItem().Int32(2) 
+                            .AddListItem().Int32(42) 
+                        .EndList().Build() 
+                    .Build(); 
+ 
+            auto result = ExecQueryAndTestResult(session, query, params, R"([[[2]]])"); 
+            assertFn(result); 
+        }; 
+ 
+        test(DisableOpt, [](const TDataQueryResult& result) { 
+            AssertTableReads(result, "/Root/SecondaryComplexKeys", 5); 
+        }); 
+ 
+        test(EnableOpt, [](const TDataQueryResult& result) { 
+            AssertTableReads(result, "/Root/SecondaryComplexKeys", 2); 
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString()); 
+        }); 
+    } 
+ 
+    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_SimpleKey_In_And_In) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        CreateSampleTablesWithIndex(session); 
+ 
+        auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) { 
+            const TString query = Q1_(Sprintf(R"( 
+                    PRAGMA AnsiInForEmptyOrNullableItemsCollections; 
+                    %s 
+                    DECLARE $in1 AS List<Int32>; 
+                    SELECT Key, FROM `/Root/SecondaryComplexKeys` VIEW Index 
+                        WHERE Fk1 IN $in1 AND Value IN ("active", "Payload2"); 
+                )", FormatPragma(disableOpt))); 
+ 
+            auto params = TParamsBuilder() 
+                    .AddParam("$in1") 
+                        .BeginList() 
+                            .AddListItem().Int32(1) 
+                            .AddListItem().Int32(2) 
+                            .AddListItem().Int32(42) 
+                        .EndList().Build() 
+                    .Build(); 
+ 
+            auto result = ExecQueryAndTestResult(session, query, params, R"([[[2]]])"); 
+            assertFn(result); 
+        }; 
+ 
+        test(DisableOpt, [](const TDataQueryResult& result) { 
+            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 5); 
+            AssertTableReads(result, "/Root/SecondaryComplexKeys", 5); 
+            UNIT_ASSERT_C(result.GetIssues().ToString().Contains("Given predicate is not suitable"), 
+                result.GetIssues().ToString()); 
+        }); 
+ 
+        test(EnableOpt, [](const TDataQueryResult& result) { 
+            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 2); 
+            AssertTableReads(result, "/Root/SecondaryComplexKeys", 2); 
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString()); 
+        }); 
+    } 
+ 
+    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_ComplexKey_In_And_In) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        CreateSampleTablesWithIndex(session); 
+ 
+        auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) { 
+            const TString query = Q1_(Sprintf(R"( 
+                    PRAGMA AnsiInForEmptyOrNullableItemsCollections; 
+                    %s 
+                    DECLARE $in1 AS List<Int32>; 
+                    DECLARE $in2 AS List<String>; 
+                    SELECT Key, FROM `/Root/SecondaryComplexKeys` VIEW Index 
+                        WHERE Fk1 IN $in1 AND Fk2 IN $in2 AND Value IN ("active", "Payload2"); 
+                )", FormatPragma(disableOpt))); 
+ 
+            auto params = TParamsBuilder() 
+                    .AddParam("$in1") 
+                        .BeginList() 
+                            .AddListItem().Int32(1) 
+                            .AddListItem().Int32(2) 
+                            .AddListItem().Int32(42) 
+                        .EndList().Build() 
+                    .AddParam("$in2") 
+                        .BeginList() 
+                            .AddListItem().String("Fk2") 
+                            .AddListItem().String("qq") 
+                        .EndList().Build() 
+ 
+                    .Build(); 
+ 
+            auto result = ExecQueryAndTestResult(session, query, params, R"([[[2]]])"); 
+            assertFn(result); 
+        }; 
+ 
+        test(DisableOpt, [](const TDataQueryResult& result) { 
+            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 5); 
+            AssertTableReads(result, "/Root/SecondaryComplexKeys", 5); 
+            UNIT_ASSERT_C(result.GetIssues().ToString().Contains("Given predicate is not suitable"), 
+                result.GetIssues().ToString()); 
+        }); 
+ 
+        test(EnableOpt, [](const TDataQueryResult& result) { 
+            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 2); 
+            AssertTableReads(result, "/Root/SecondaryComplexKeys", 2); 
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString()); 
+        }); 
+    } 
+ 
+    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_TupleParameter) { 
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session); 
 
         auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
-            const TString query = Q1_(Sprintf(R"(
-                    PRAGMA AnsiInForEmptyOrNullableItemsCollections;
-                    %s
-                    DECLARE $in AS List<Int32?>;
-                    SELECT * FROM `/Root/SecondaryKeys` VIEW Index WHERE Fk IN $in
-                    AND Value == "Payload1"
-                )", FormatPragma(disableOpt)));
-
-            auto params = TParamsBuilder().AddParam("$in").BeginList()
-                    .AddListItem().OptionalInt32(1)
-                    .AddListItem().OptionalInt32(2)
-                    .AddListItem().OptionalInt32(42)
-                    .AddListItem().OptionalInt32(Nothing())
-                    .EndList().Build().Build();
-
-            auto result = ExecQueryAndTestResult(session, query, params, R"([[[1];[1];["Payload1"]]])");
-            assertFn(result);
-        };
-
-        test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 5);
-            AssertTableReads(result, "/Root/SecondaryKeys", 5);
-            UNIT_ASSERT_C(result.GetIssues().ToString().Contains("Given predicate is not suitable"),
-                result.GetIssues().ToString());
-        });
-
-        test(EnableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 2);
-            AssertTableReads(result, "/Root/SecondaryKeys", 2);
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
-        });
-    }
-
-    Y_UNIT_TEST_NEW_ENGINE(SimpleKey_In_And_In) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        CreateSampleTablesWithIndex(session);
-
-        auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
-            const TString query = Q1_(Sprintf(R"(
-                    PRAGMA AnsiInForEmptyOrNullableItemsCollections;
-                    %s
-                    DECLARE $in1 AS List<Int32>;
-                    SELECT Key, FROM `/Root/SecondaryComplexKeys`
-                    WHERE Key IN $in1 AND Value IN ("active", "Payload2");
-                )", FormatPragma(disableOpt)));
-
-            auto params = TParamsBuilder()
-                    .AddParam("$in1")
-                        .BeginList()
-                            .AddListItem().Int32(1)
-                            .AddListItem().Int32(2)
-                            .AddListItem().Int32(42)
-                        .EndList().Build()
-                    .Build();
-
-            auto result = ExecQueryAndTestResult(session, query, params, R"([[[2]]])");
-            assertFn(result);
-        };
-
-        test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryComplexKeys", 5);
-        });
-
-        test(EnableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryComplexKeys", 2);
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
-        });
-    }
-
-    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_SimpleKey_In_And_In) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        CreateSampleTablesWithIndex(session);
-
-        auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
-            const TString query = Q1_(Sprintf(R"(
-                    PRAGMA AnsiInForEmptyOrNullableItemsCollections;
-                    %s
-                    DECLARE $in1 AS List<Int32>;
-                    SELECT Key, FROM `/Root/SecondaryComplexKeys` VIEW Index
-                        WHERE Fk1 IN $in1 AND Value IN ("active", "Payload2");
-                )", FormatPragma(disableOpt)));
-
-            auto params = TParamsBuilder()
-                    .AddParam("$in1")
-                        .BeginList()
-                            .AddListItem().Int32(1)
-                            .AddListItem().Int32(2)
-                            .AddListItem().Int32(42)
-                        .EndList().Build()
-                    .Build();
-
-            auto result = ExecQueryAndTestResult(session, query, params, R"([[[2]]])");
-            assertFn(result);
-        };
-
-        test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 5);
-            AssertTableReads(result, "/Root/SecondaryComplexKeys", 5);
-            UNIT_ASSERT_C(result.GetIssues().ToString().Contains("Given predicate is not suitable"),
-                result.GetIssues().ToString());
-        });
-
-        test(EnableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 2);
-            AssertTableReads(result, "/Root/SecondaryComplexKeys", 2);
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
-        });
-    }
-
-    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_ComplexKey_In_And_In) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        CreateSampleTablesWithIndex(session);
-
-        auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
-            const TString query = Q1_(Sprintf(R"(
-                    PRAGMA AnsiInForEmptyOrNullableItemsCollections;
-                    %s
-                    DECLARE $in1 AS List<Int32>;
-                    DECLARE $in2 AS List<String>;
-                    SELECT Key, FROM `/Root/SecondaryComplexKeys` VIEW Index
-                        WHERE Fk1 IN $in1 AND Fk2 IN $in2 AND Value IN ("active", "Payload2");
-                )", FormatPragma(disableOpt)));
-
-            auto params = TParamsBuilder()
-                    .AddParam("$in1")
-                        .BeginList()
-                            .AddListItem().Int32(1)
-                            .AddListItem().Int32(2)
-                            .AddListItem().Int32(42)
-                        .EndList().Build()
-                    .AddParam("$in2")
-                        .BeginList()
-                            .AddListItem().String("Fk2")
-                            .AddListItem().String("qq")
-                        .EndList().Build()
-
-                    .Build();
-
-            auto result = ExecQueryAndTestResult(session, query, params, R"([[[2]]])");
-            assertFn(result);
-        };
-
-        test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 5);
-            AssertTableReads(result, "/Root/SecondaryComplexKeys", 5);
-            UNIT_ASSERT_C(result.GetIssues().ToString().Contains("Given predicate is not suitable"),
-                result.GetIssues().ToString());
-        });
-
-        test(EnableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 2);
-            AssertTableReads(result, "/Root/SecondaryComplexKeys", 2);
-            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
-        });
-    }
-
-    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_TupleParameter) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        CreateSampleTablesWithIndex(session);
-
-        auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
-            const TString query = Q1_(Sprintf(R"(
+            const TString query = Q1_(Sprintf(R"( 
                     %s
                     DECLARE $in AS List<Tuple<Int32?, String>>;
                     SELECT Value
                     FROM `/Root/SecondaryComplexKeys` VIEW Index
                     WHERE (Fk1, Fk2) IN $in
                     ORDER BY Value
-                )", FormatPragma(disableOpt)));
+                )", FormatPragma(disableOpt))); 
 
             auto params = TParamsBuilder().AddParam("$in").BeginList()
                     .AddListItem().BeginTuple().AddElement().OptionalInt32(1).AddElement().String("Fk1").EndTuple()
@@ -816,7 +816,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 5);
+            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 5); 
             AssertTableReads(result, "/Root/SecondaryComplexKeys", 5);
         });
 
@@ -826,28 +826,28 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_TupleLiteral) {
+    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_TupleLiteral) { 
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session); 
 
         auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
-            const TString query = Q1_(Sprintf(R"(
+            const TString query = Q1_(Sprintf(R"( 
                     %s
                     SELECT Value
                     FROM `/Root/SecondaryComplexKeys` VIEW Index
                     WHERE (Fk1, Fk2) IN AsList((1, "Fk1"), (2, "Fk2"), (42, "Fk5"), (Null, "FkNull"))
                     ORDER BY Value
-                )", FormatPragma(disableOpt)));
+                )", FormatPragma(disableOpt))); 
 
             auto result = ExecQueryAndTestResult(session, query, R"([[["Payload1"]];[["Payload2"]]])");
             assertFn(result);
         };
 
         test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 5);
+            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 5); 
             AssertTableReads(result, "/Root/SecondaryComplexKeys", 5);
         });
 
@@ -857,15 +857,15 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         });
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_TupleSelect) {
+    Y_UNIT_TEST_NEW_ENGINE(SecondaryIndex_TupleSelect) { 
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session); 
 
         auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
-            const TString query = Q1_(Sprintf(R"(
+            const TString query = Q1_(Sprintf(R"( 
                     PRAGMA Kikimr.OptDisableSqlInToJoin = "True";
                     PRAGMA Kikimr.OptDisableJoinReverseTableLookupLeftSemi = "%s";
                     DECLARE $in AS List<Struct<k: Int32?, v: String>>;
@@ -873,7 +873,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
                     FROM `/Root/SecondaryComplexKeys` VIEW Index
                     WHERE (Fk1, Fk2) IN (SELECT (k, v) FROM AS_TABLE($in))
                     ORDER BY Value
-                )", disableOpt ? "True" : "False"));
+                )", disableOpt ? "True" : "False")); 
 
             auto params = TParamsBuilder().AddParam("$in").BeginList()
                     .AddListItem().BeginStruct().AddMember("k").OptionalInt32(1).AddMember("v").String("Fk1").EndStruct()
@@ -902,11 +902,11 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session); 
 
         auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
             auto query = TStringBuilder()
-                << Q1_(Sprintf(R"(
+                << Q1_(Sprintf(R"( 
                     %s
                     DECLARE $in AS List<Tuple<String, Uint32>>;
                     SELECT Group AS g, Name as n, Amount AS a
@@ -952,10 +952,10 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTablesWithIndex(session);
+        CreateSampleTablesWithIndex(session); 
 
         auto query = TStringBuilder()
-            << Q1_(R"(
+            << Q1_(R"( 
                 DECLARE $in AS List<Uint64>;
                 DELETE FROM `/Root/KeyValue` WHERE Key IN $in
             )");

@@ -64,7 +64,7 @@ public:
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(StateStorageGroup), pipeConfig);
-        CmsPipe = ctx.RegisterWithSameMailbox(pipe);
+        CmsPipe = ctx.RegisterWithSameMailbox(pipe); 
 
         LOG_DEBUG(ctx, NKikimrServices::CMS, "Forwarding CMS request: %s",
                   Request.ShortDebugString().data());

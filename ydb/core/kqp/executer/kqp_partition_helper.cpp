@@ -33,7 +33,7 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(const NDq::TMkqlV
     THashMap<ui64, TShardParamValuesAndRanges> ret;
     THashMap<ui64, NMiniKQL::TUnboxedValueVector> shardParamValues;
 
-    auto [type, value] = ImportValueFromProto(param.GetType(), param.GetValue(), typeEnv, holderFactory);
+    auto [type, value] = ImportValueFromProto(param.GetType(), param.GetValue(), typeEnv, holderFactory); 
 
     YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::List);
     auto* itemType = static_cast<NMiniKQL::TListType*>(type)->GetItemType();
@@ -93,7 +93,7 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKeyPrefix(const NDq::
     THashMap<ui64, TShardParamValuesAndRanges> ret;
     THashMap<ui64, NMiniKQL::TUnboxedValueVector> shardParamValues;
 
-    auto [type, value] = ImportValueFromProto(param.GetType(), param.GetValue(), typeEnv, holderFactory);
+    auto [type, value] = ImportValueFromProto(param.GetType(), param.GetValue(), typeEnv, holderFactory); 
 
     YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::List);
     auto itemType = static_cast<NMiniKQL::TListType&>(*type).GetItemType();
@@ -205,7 +205,7 @@ TVector<TCell> FillKeyValues(const TVector<NUdf::TDataTypeId>& keyColumnTypes, c
             protoValue = &protoValue->GetTuple(*paramIndex);
         }
 
-        auto [type, value] = ImportValueFromProto(*protoType, *protoValue, typeEnv, holderFactory);
+        auto [type, value] = ImportValueFromProto(*protoType, *protoValue, typeEnv, holderFactory); 
 
         keyValues.emplace_back(NMiniKQL::MakeCell(keyColumnTypes[i], value, typeEnv, /* copy */ true));
     }
@@ -340,7 +340,7 @@ TVector<TSerializedPointOrRange> FillRangesFromParameter(const TVector<NUdf::TDa
     const auto* protoType = &param->GetType();
     const auto* protoValue = &param->GetValue();
 
-    auto [type, value] = ImportValueFromProto(*protoType, *protoValue, typeEnv, holderFactory);
+    auto [type, value] = ImportValueFromProto(*protoType, *protoValue, typeEnv, holderFactory); 
 
     // First element is Flow wrapping Ranges List
     YQL_ENSURE(value.IsBoxed());
@@ -631,7 +631,7 @@ THashMap<ui64, TShardInfo> PartitionLookupByRowsList(const NKqpProto::TKqpPhyRow
                         paramDesc = &iter.first->second;
 
                         paramDesc->MkqlValueRef = param;
-                        std::tie(paramDesc->MkqlType, paramDesc->MkqlValue) = ImportValueFromProto(param->GetType(), param->GetValue(), typeEnv, holderFactory);
+                        std::tie(paramDesc->MkqlType, paramDesc->MkqlValue) = ImportValueFromProto(param->GetType(), param->GetValue(), typeEnv, holderFactory); 
                     }
 
                     mkqlType = paramDesc->MkqlType;
@@ -643,7 +643,7 @@ THashMap<ui64, TShardInfo> PartitionLookupByRowsList(const NKqpProto::TKqpPhyRow
                 case NKqpProto::TKqpPhyRowsList_TValue::kLiteralValue: {
                     const auto& literal = columnValue.GetLiteralValue();
 
-                    std::tie(mkqlType, mkqlValue) = ImportValueFromProto(literal.GetType(), literal.GetValue(), typeEnv, holderFactory);
+                    std::tie(mkqlType, mkqlValue) = ImportValueFromProto(literal.GetType(), literal.GetValue(), typeEnv, holderFactory); 
 
                     break;
                 }

@@ -13,10 +13,10 @@ using namespace NCommon;
 TKiOperation BuildTableOpNode(const TCoAtom& cluster, const TStringBuf& table, TYdbOperation op, TPositionHandle pos,
     TExprContext& ctx)
 {
-    return Build<TKiOperation>(ctx, pos)
-        .Cluster().Build(cluster)
-        .Table().Build(table)
-        .Operation<TCoAtom>().Build(ToString(op))
+    return Build<TKiOperation>(ctx, pos) 
+        .Cluster().Build(cluster) 
+        .Table().Build(table) 
+        .Operation<TCoAtom>().Build(ToString(op)) 
         .Done();
 }
 
@@ -67,7 +67,7 @@ struct TKiExploreTxResults {
     TVector<TExprBase> Sync;
     TVector<TExprBase> Results;
     TVector<TExprBase> Effects;
-    TVector<TKiOperation> TableOperations;
+    TVector<TKiOperation> TableOperations; 
     bool HasExecute;
 
     THashSet<const TExprNode*> GetSyncSet() const {
@@ -116,8 +116,8 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         return dataSink.Raw() == ds.Raw();
     };
 
-    auto cluster = dataSink.Cluster();
-
+    auto cluster = dataSink.Cluster(); 
+ 
     if (auto maybeRead = node.Maybe<TKiReadTable>()) {
         auto read = maybeRead.Cast();
         if (!checkDataSource(read.DataSource())) {
@@ -144,7 +144,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(write.World(), ctx, dataSink, txRes);
         auto tableOp = GetTableOp(write);
-        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, tableOp, write.Pos(), ctx));
+        txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, tableOp, write.Pos(), ctx)); 
         txRes.Effects.push_back(node);
         return result;
     }

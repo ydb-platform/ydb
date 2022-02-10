@@ -86,7 +86,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     TAutoPtr<NKikimrMiniKQL::TResult> EngineEvaluatedResponse;
     ui64 PageFaultCount = 0;
 
-    bool ParseProgram(TStringBuf program, NYql::TIssues &errors, NYql::TExprContainer &expr) {
+    bool ParseProgram(TStringBuf program, NYql::TIssues &errors, NYql::TExprContainer &expr) { 
         NYql::TAstParseResult astResult = NYql::ParseAst(program);
         if (!astResult.Root) {
             errors = astResult.Issues;
@@ -95,7 +95,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
         expr.Context.IssueManager.AddIssues(astResult.Issues);
 
         if (!NYql::CompileExpr(*astResult.Root, expr.Root, expr.Context, nullptr)) {
-            errors = expr.Context.IssueManager.GetIssues();
+            errors = expr.Context.IssueManager.GetIssues(); 
             return false;
         }
 
@@ -187,7 +187,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                 record.SetStatus(NKikimrProto::OK);
                 compileResults->SetCompiledProgram(ProgramCompileResult->CompiledProgram);
             } else {
-                NYql::IssuesToMessage(ProgramCompileResult->Errors, compileResults->MutableProgramCompileErrors());
+                NYql::IssuesToMessage(ProgramCompileResult->Errors, compileResults->MutableProgramCompileErrors()); 
                 record.SetStatus(NKikimrProto::ERROR);
             }
         } else {

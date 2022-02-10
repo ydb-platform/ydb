@@ -1,13 +1,13 @@
-syntax = "proto3";
-
+syntax = "proto3"; 
+ 
 package Ydb;
 option java_package = "com.yandex.ydb";
 option java_outer_classname = "StatusCodesProtos";
-
-message StatusIds {
-    // reserved range [400000, 400999]
-    enum StatusCode {
-        STATUS_CODE_UNSPECIFIED =    0;
+ 
+message StatusIds { 
+    // reserved range [400000, 400999] 
+    enum StatusCode { 
+        STATUS_CODE_UNSPECIFIED =    0; 
         SUCCESS =             400000;
         BAD_REQUEST =         400010;
         UNAUTHORIZED =        400020;
@@ -27,6 +27,6 @@ message StatusIds {
         UNDETERMINED =        400170;
         UNSUPPORTED =         400180;
         SESSION_BUSY =        400190;
-    }
-    // reserved range [401000, 402999] for internal client status
-}
+    } 
+    // reserved range [401000, 402999] for internal client status 
+} 

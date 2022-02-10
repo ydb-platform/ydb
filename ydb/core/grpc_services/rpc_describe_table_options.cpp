@@ -172,7 +172,7 @@ private:
                 description.add_allowed_caching_policies(pr.first);
         }
 
-        this->Request_->SendResult(result, Ydb::StatusIds::SUCCESS);
+        this->Request_->SendResult(result, Ydb::StatusIds::SUCCESS); 
         Die(ctx);
     }
 

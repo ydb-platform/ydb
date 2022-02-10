@@ -675,12 +675,12 @@ TCheckFunc IndexKeys(const TVector<TString>& keyNames) {
 TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTableIndex().DataColumnNamesSize(), dataColumnNames.size());
-        for (ui32 colId = 0; colId < dataColumnNames.size(); ++colId) {
+        for (ui32 colId = 0; colId < dataColumnNames.size(); ++colId) { 
             UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTableIndex().GetDataColumnNames(colId), dataColumnNames.at(colId));
-        }
-    };
-}
-
+        } 
+    }; 
+} 
+ 
 void NoChildren(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     ChildrenCount(0)(record);
 }

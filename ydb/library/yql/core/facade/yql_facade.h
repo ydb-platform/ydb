@@ -162,7 +162,7 @@ public:
 
     inline TIssues Issues() {
         if (ExprCtx_) {
-            return ExprCtx_->IssueManager.GetIssues();
+            return ExprCtx_->IssueManager.GetIssues(); 
         } else {
             return {};
         }
@@ -180,7 +180,7 @@ public:
 
     inline void PrintErrorsTo(IOutputStream& out) const {
         if (ExprCtx_) {
-            ExprCtx_->IssueManager.GetIssues().PrintWithProgramTo(out, Filename_, SourceCode_);
+            ExprCtx_->IssueManager.GetIssues().PrintWithProgramTo(out, Filename_, SourceCode_); 
         }
     }
 

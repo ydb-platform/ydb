@@ -290,54 +290,54 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatTest) {
-
+ 
     template<NUdf::TDataTypeId TKey, NUdf::TDataTypeId TValue>
-    NKikimrMiniKQL::TResult WriteSomething(
-        TDriver& driver,
-        TRuntimeNode key = TRuntimeNode(),
-        TRuntimeNode value = TRuntimeNode())
-    {
-        auto& pgmBuilder = driver.PgmBuilder;
+    NKikimrMiniKQL::TResult WriteSomething( 
+        TDriver& driver, 
+        TRuntimeNode key = TRuntimeNode(), 
+        TRuntimeNode value = TRuntimeNode()) 
+    { 
+        auto& pgmBuilder = driver.PgmBuilder; 
         TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)TKey;
+        keyTypes[0] = (ui32)TKey; 
         TRuntimeNode::TList row(1);
-        row[0] = key ? key : pgmBuilder.NewNull();
-        auto update = pgmBuilder.GetUpdateRowBuilder();
-        ui32 columnId = (ui32)Schema1::Table1::Value::ColumnId;
-
-        update.SetColumn(columnId,
-            TValue,
-            value ? value : pgmBuilder.NewNull());
-
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.UpdateRow(TTableId(OwnerId, Table1Id),
-            keyTypes, row, update)));
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
-        return res;
-    }
-
+        row[0] = key ? key : pgmBuilder.NewNull(); 
+        auto update = pgmBuilder.GetUpdateRowBuilder(); 
+        ui32 columnId = (ui32)Schema1::Table1::Value::ColumnId; 
+ 
+        update.SetColumn(columnId, 
+            TValue, 
+            value ? value : pgmBuilder.NewNull()); 
+ 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.UpdateRow(TTableId(OwnerId, Table1Id), 
+            keyTypes, row, update))); 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete); 
+        return res; 
+    } 
+ 
     template<NUdf::TDataTypeId TKey>
-    NKikimrMiniKQL::TResult SelectNullKey(
-        TDriver& driver)
-    {
-        auto& pgmBuilder = driver.PgmBuilder;
+    NKikimrMiniKQL::TResult SelectNullKey( 
+        TDriver& driver) 
+    { 
+        auto& pgmBuilder = driver.PgmBuilder; 
         TVector<ui32> keyTypes(1);
-        keyTypes[0] = (ui32)TKey;
+        keyTypes[0] = (ui32)TKey; 
         TRuntimeNode::TList row(1);
-        row[0] = pgmBuilder.NewNull();
-
+        row[0] = pgmBuilder.NewNull(); 
+ 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-        auto value = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row);
-
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
-        return res;
-    }
-
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+        auto value = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row); 
+ 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value))); 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete); 
+        return res; 
+    } 
+ 
     Y_UNIT_TEST(TestEmptyProgram) {
         TDriver driver;
         auto& pgmBuilder = driver.PgmBuilder;
@@ -594,72 +594,72 @@ Value {
     }
 
     Y_UNIT_TEST(TestSelectRowPayloadNullKey) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-
-        auto& pgmBuilder = driver.PgmBuilder;
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
         WriteSomething<NUdf::TDataType<ui32>::Id, NUdf::TDataType<NUdf::TUtf8>::Id>(
-            driver,
-            pgmBuilder.NewNull(),
+            driver, 
+            pgmBuilder.NewNull(), 
             pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>("qwe"));
-
+ 
         auto res = SelectNullKey<NUdf::TDataType<ui32>::Id>(driver);
-        auto resStr = res.DebugString();
-        auto expectedStr = R"___(Type {
-  Kind: Struct
-  Struct {
-    Member {
-      Name: "myRes"
-      Type {
-        Kind: Optional
-        Optional {
-          Item {
-            Kind: Optional
-            Optional {
-              Item {
-                Kind: Struct
-                Struct {
-                  Member {
-                    Name: "2"
-                    Type {
-                      Kind: Optional
-                      Optional {
-                        Item {
-                          Kind: Data
-                          Data {
-                            Scheme: 4608
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-Value {
-  Struct {
-    Optional {
-      Optional {
-        Struct {
-          Optional {
-            Text: "qwe"
-          }
-        }
-      }
-    }
-  }
-}
-)___";
-        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
-    }
-
-
+        auto resStr = res.DebugString(); 
+        auto expectedStr = R"___(Type { 
+  Kind: Struct 
+  Struct { 
+    Member { 
+      Name: "myRes" 
+      Type { 
+        Kind: Optional 
+        Optional { 
+          Item { 
+            Kind: Optional 
+            Optional { 
+              Item { 
+                Kind: Struct 
+                Struct { 
+                  Member { 
+                    Name: "2" 
+                    Type { 
+                      Kind: Optional 
+                      Optional { 
+                        Item { 
+                          Kind: Data 
+                          Data { 
+                            Scheme: 4608 
+                          } 
+                        } 
+                      } 
+                    } 
+                  } 
+                } 
+              } 
+            } 
+          } 
+        } 
+      } 
+    } 
+  } 
+} 
+Value { 
+  Struct { 
+    Optional { 
+      Optional { 
+        Struct { 
+          Optional { 
+            Text: "qwe" 
+          } 
+        } 
+      } 
+    } 
+  } 
+} 
+)___"; 
+        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr); 
+    } 
+ 
+ 
     Y_UNIT_TEST(TestEraseRow) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
@@ -706,85 +706,85 @@ Value {
     }
 
     Y_UNIT_TEST(TestEraseRowNullKey) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-
-        auto& pgmBuilder = driver.PgmBuilder;
-        {
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
+        { 
             WriteSomething<NUdf::TDataType<ui32>::Id, NUdf::TDataType<NUdf::TUtf8>::Id>(
-                driver,
-                pgmBuilder.NewNull(),
+                driver, 
+                pgmBuilder.NewNull(), 
                 pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>("qwe"));
-        }
-
+        } 
+ 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList row(1);
-        row[0] = pgmBuilder.NewNull();
-
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.EraseRow(TTableId(OwnerId, Table1Id), keyTypes, row)));
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
-        auto resStr = res.DebugString();
-        auto expectedStr = R"___(Type {
-  Kind: Struct
-}
-)___";
-        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
-
-        {
+        row[0] = pgmBuilder.NewNull(); 
+ 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.EraseRow(TTableId(OwnerId, Table1Id), keyTypes, row))); 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete); 
+        auto resStr = res.DebugString(); 
+        auto expectedStr = R"___(Type { 
+  Kind: Struct 
+} 
+)___"; 
+        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr); 
+ 
+        { 
             auto res = SelectNullKey<NUdf::TDataType<ui32>::Id>(driver);
-            auto resStr = res.DebugString();
-            auto expectedStr = R"___(Type {
-  Kind: Struct
-  Struct {
-    Member {
-      Name: "myRes"
-      Type {
-        Kind: Optional
-        Optional {
-          Item {
-            Kind: Optional
-            Optional {
-              Item {
-                Kind: Struct
-                Struct {
-                  Member {
-                    Name: "2"
-                    Type {
-                      Kind: Optional
-                      Optional {
-                        Item {
-                          Kind: Data
-                          Data {
-                            Scheme: 4608
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-Value {
-  Struct {
-    Optional {
-    }
-  }
-}
-)___";
-        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
-
-        }
-    }
-
+            auto resStr = res.DebugString(); 
+            auto expectedStr = R"___(Type { 
+  Kind: Struct 
+  Struct { 
+    Member { 
+      Name: "myRes" 
+      Type { 
+        Kind: Optional 
+        Optional { 
+          Item { 
+            Kind: Optional 
+            Optional { 
+              Item { 
+                Kind: Struct 
+                Struct { 
+                  Member { 
+                    Name: "2" 
+                    Type { 
+                      Kind: Optional 
+                      Optional { 
+                        Item { 
+                          Kind: Data 
+                          Data { 
+                            Scheme: 4608 
+                          } 
+                        } 
+                      } 
+                    } 
+                  } 
+                } 
+              } 
+            } 
+          } 
+        } 
+      } 
+    } 
+  } 
+} 
+Value { 
+  Struct { 
+    Optional { 
+    } 
+  } 
+} 
+)___"; 
+        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr); 
+ 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestUpdateRowNotExistWithoutColumns) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
@@ -867,34 +867,34 @@ Value {
     }
 
     Y_UNIT_TEST(TestUpdateRowNotExistSetPayloadNullValue) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-
-        auto& pgmBuilder = driver.PgmBuilder;
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
         auto res = WriteSomething<NUdf::TDataType<ui32>::Id, NUdf::TDataType<NUdf::TUtf8>::Id>(
-            driver,
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42));
-
-        auto resStr = res.DebugString();
-        auto expectedStr = R"___(Type {
-  Kind: Struct
-}
-)___";
-        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-            auto selectRes = db.Table<Schema1::Table1>()
-                .Key(ui32(42))
-                .Select<Schema1::Table1::Value>();
-
-            UNIT_ASSERT(selectRes.IsReady() && selectRes.IsValid());
-            UNIT_ASSERT(!selectRes.HaveValue<Schema1::Table1::Value>());
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-    }
-
+            driver, 
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42)); 
+ 
+        auto resStr = res.DebugString(); 
+        auto expectedStr = R"___(Type { 
+  Kind: Struct 
+} 
+)___"; 
+        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+            auto selectRes = db.Table<Schema1::Table1>() 
+                .Key(ui32(42)) 
+                .Select<Schema1::Table1::Value>(); 
+ 
+            UNIT_ASSERT(selectRes.IsReady() && selectRes.IsValid()); 
+            UNIT_ASSERT(!selectRes.HaveValue<Schema1::Table1::Value>()); 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestUpdateRowNotExistErasePayload) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
@@ -1110,77 +1110,77 @@ Value {
     }
 
     Y_UNIT_TEST(TestSelectRangeFullWithoutColumnsNotExistsNullKey) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        auto& pgmBuilder = driver.PgmBuilder;
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        auto& pgmBuilder = driver.PgmBuilder; 
         TVector<TSelectColumn> columns;
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList rowFrom(1);
-        rowFrom[0] = pgmBuilder.NewNull();
-        options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
-        auto resStr = res.DebugString();
-        auto expectedStr = R"___(Type {
-  Kind: Struct
-  Struct {
-    Member {
-      Name: "myRes"
-      Type {
-        Kind: Optional
-        Optional {
-          Item {
-            Kind: Struct
-            Struct {
-              Member {
-                Name: "List"
-                Type {
-                  Kind: List
-                  List {
-                    Item {
-                      Kind: Struct
-                    }
-                  }
-                }
-              }
-              Member {
-                Name: "Truncated"
-                Type {
-                  Kind: Data
-                  Data {
-                    Scheme: 6
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-Value {
-  Struct {
-    Optional {
-      Struct {
-      }
-      Struct {
-        Bool: false
-      }
-    }
-  }
-}
-)___";
-        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
-    }
-
-
+        rowFrom[0] = pgmBuilder.NewNull(); 
+        options.FromColumns = rowFrom; 
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value))); 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete); 
+        auto resStr = res.DebugString(); 
+        auto expectedStr = R"___(Type { 
+  Kind: Struct 
+  Struct { 
+    Member { 
+      Name: "myRes" 
+      Type { 
+        Kind: Optional 
+        Optional { 
+          Item { 
+            Kind: Struct 
+            Struct { 
+              Member { 
+                Name: "List" 
+                Type { 
+                  Kind: List 
+                  List { 
+                    Item { 
+                      Kind: Struct 
+                    } 
+                  } 
+                } 
+              } 
+              Member { 
+                Name: "Truncated" 
+                Type { 
+                  Kind: Data 
+                  Data { 
+                    Scheme: 6 
+                  } 
+                } 
+              } 
+            } 
+          } 
+        } 
+      } 
+    } 
+  } 
+} 
+Value { 
+  Struct { 
+    Optional { 
+      Struct { 
+      } 
+      Struct { 
+        Bool: false 
+      } 
+    } 
+  } 
+} 
+)___"; 
+        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr); 
+    } 
+ 
+ 
     Y_UNIT_TEST(TestSelectRangeFullExists) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
@@ -1410,115 +1410,115 @@ Value {
     }
 
     Y_UNIT_TEST(TestSelectRangeFullExistsTruncatedByItemsFromNull) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-            db.Table<Schema1::Table1>()
-                .Key(ui32(42))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("asd"));
-            db.Table<Schema1::Table1>()
-                .Key(ui32(43))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("qwe"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(42)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("asd")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(43)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("qwe")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList rowFrom(1);
-        rowFrom[0] = pgmBuilder.NewNull();
-        options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        options.ItemsLimit = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1);
-        auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
-        auto resStr = res.DebugString();
-        auto expectedStr = R"___(Type {
-  Kind: Struct
-  Struct {
-    Member {
-      Name: "myRes"
-      Type {
-        Kind: Optional
-        Optional {
-          Item {
-            Kind: Struct
-            Struct {
-              Member {
-                Name: "List"
-                Type {
-                  Kind: List
-                  List {
-                    Item {
-                      Kind: Struct
-                      Struct {
-                        Member {
-                          Name: "2"
-                          Type {
-                            Kind: Optional
-                            Optional {
-                              Item {
-                                Kind: Data
-                                Data {
-                                  Scheme: 4608
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-              Member {
-                Name: "Truncated"
-                Type {
-                  Kind: Data
-                  Data {
-                    Scheme: 6
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-Value {
-  Struct {
-    Optional {
-      Struct {
-        List {
-          Struct {
-            Optional {
-              Text: "asd"
-            }
-          }
-        }
-      }
-      Struct {
-        Bool: true
-      }
-    }
-  }
-}
-)___";
-        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
-    }
-
+        rowFrom[0] = pgmBuilder.NewNull(); 
+        options.FromColumns = rowFrom; 
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        options.ItemsLimit = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1); 
+        auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value))); 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete); 
+        auto resStr = res.DebugString(); 
+        auto expectedStr = R"___(Type { 
+  Kind: Struct 
+  Struct { 
+    Member { 
+      Name: "myRes" 
+      Type { 
+        Kind: Optional 
+        Optional { 
+          Item { 
+            Kind: Struct 
+            Struct { 
+              Member { 
+                Name: "List" 
+                Type { 
+                  Kind: List 
+                  List { 
+                    Item { 
+                      Kind: Struct 
+                      Struct { 
+                        Member { 
+                          Name: "2" 
+                          Type { 
+                            Kind: Optional 
+                            Optional { 
+                              Item { 
+                                Kind: Data 
+                                Data { 
+                                  Scheme: 4608 
+                                } 
+                              } 
+                            } 
+                          } 
+                        } 
+                      } 
+                    } 
+                  } 
+                } 
+              } 
+              Member { 
+                Name: "Truncated" 
+                Type { 
+                  Kind: Data 
+                  Data { 
+                    Scheme: 6 
+                  } 
+                } 
+              } 
+            } 
+          } 
+        } 
+      } 
+    } 
+  } 
+} 
+Value { 
+  Struct { 
+    Optional { 
+      Struct { 
+        List { 
+          Struct { 
+            Optional { 
+              Text: "asd" 
+            } 
+          } 
+        } 
+      } 
+      Struct { 
+        Bool: true 
+      } 
+    } 
+  } 
+} 
+)___"; 
+        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr); 
+    } 
+ 
     Y_UNIT_TEST(TestSelectRangeFullExistsTruncatedByBytes) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
@@ -2002,115 +2002,115 @@ Value {
     }
 
     Y_UNIT_TEST(TestSelectRangeNullNull) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
-            db.Table<Schema1::Table1>()
-                .Key(ui32(42))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("asd"));
-            db.Table<Schema1::Table1>()
-                .Key(ui32(43))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("qwe"));
-            db.Table<Schema1::Table1>()
-                .Key(ui32(44))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("zsd"));
-
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        auto& pgmBuilder = driver.PgmBuilder;
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(42)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("asd")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(43)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("qwe")); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(44)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("zsd")); 
+ 
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        auto& pgmBuilder = driver.PgmBuilder; 
         TVector<TSelectColumn> columns;
-        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
-
+        columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType); 
+ 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
         TRuntimeNode::TList rowFrom(1);
         TRuntimeNode::TList rowTo(1);
-        rowFrom[0] = pgmBuilder.NewNull();
-        rowTo[0] = pgmBuilder.NewNull();
-
-        auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::IncludeTermValue);
-        options.FromColumns = rowFrom;
-        options.ToColumns = rowTo;
-        auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
-        auto resStr = res.DebugString();
-        auto expectedStr = R"___(Type {
-  Kind: Struct
-  Struct {
-    Member {
-      Name: "myRes"
-      Type {
-        Kind: Optional
-        Optional {
-          Item {
-            Kind: Struct
-            Struct {
-              Member {
-                Name: "List"
-                Type {
-                  Kind: List
-                  List {
-                    Item {
-                      Kind: Struct
-                      Struct {
-                        Member {
-                          Name: "2"
-                          Type {
-                            Kind: Optional
-                            Optional {
-                              Item {
-                                Kind: Data
-                                Data {
-                                  Scheme: 4608
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-              Member {
-                Name: "Truncated"
-                Type {
-                  Kind: Data
-                  Data {
-                    Scheme: 6
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-Value {
-  Struct {
-    Optional {
-      Struct {
-      }
-      Struct {
-        Bool: false
-      }
-    }
-  }
-}
-)___";
-        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
-    }
-
+        rowFrom[0] = pgmBuilder.NewNull(); 
+        rowTo[0] = pgmBuilder.NewNull(); 
+ 
+        auto options = pgmBuilder.GetDefaultTableRangeOptions(); 
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::IncludeTermValue); 
+        options.FromColumns = rowFrom; 
+        options.ToColumns = rowTo; 
+        auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options); 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value))); 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete); 
+        auto resStr = res.DebugString(); 
+        auto expectedStr = R"___(Type { 
+  Kind: Struct 
+  Struct { 
+    Member { 
+      Name: "myRes" 
+      Type { 
+        Kind: Optional 
+        Optional { 
+          Item { 
+            Kind: Struct 
+            Struct { 
+              Member { 
+                Name: "List" 
+                Type { 
+                  Kind: List 
+                  List { 
+                    Item { 
+                      Kind: Struct 
+                      Struct { 
+                        Member { 
+                          Name: "2" 
+                          Type { 
+                            Kind: Optional 
+                            Optional { 
+                              Item { 
+                                Kind: Data 
+                                Data { 
+                                  Scheme: 4608 
+                                } 
+                              } 
+                            } 
+                          } 
+                        } 
+                      } 
+                    } 
+                  } 
+                } 
+              } 
+              Member { 
+                Name: "Truncated" 
+                Type { 
+                  Kind: Data 
+                  Data { 
+                    Scheme: 6 
+                  } 
+                } 
+              } 
+            } 
+          } 
+        } 
+      } 
+    } 
+  } 
+} 
+Value { 
+  Struct { 
+    Optional { 
+      Struct { 
+      } 
+      Struct { 
+        Bool: false 
+      } 
+    } 
+  } 
+} 
+)___"; 
+        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr); 
+    } 
+ 
     Y_UNIT_TEST(TestSelectRangeToExclusive) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);

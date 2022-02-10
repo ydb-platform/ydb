@@ -17,8 +17,8 @@ public:
 
     void Load(const NKikimrConfig::TTableProfilesConfig &config);
 
-    bool HasPresetName(const TString& presetName) const;
-
+    bool HasPresetName(const TString& presetName) const; 
+ 
     bool ApplyTableProfile(const Ydb::Table::TableProfile &profile,
                            NKikimrSchemeOp::TTableDescription &tableDesc,
                            Ydb::StatusIds::StatusCode &code,

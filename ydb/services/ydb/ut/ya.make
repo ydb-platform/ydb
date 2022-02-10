@@ -1,11 +1,11 @@
 UNITTEST_FOR(ydb/services/ydb)
-
+ 
 OWNER(
     dcherednik
     g:kikimr
 )
 
-FORK_SUBTESTS()
+FORK_SUBTESTS() 
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SPLIT_FACTOR(60)
@@ -16,14 +16,14 @@ ELSE()
     TIMEOUT(300)
     SIZE(MEDIUM)
 ENDIF()
-
-SRCS(
+ 
+SRCS( 
     ydb_bulk_upsert_ut.cpp
     ydb_bulk_upsert_olap_ut.cpp
     ydb_coordination_ut.cpp
     ydb_index_table_ut.cpp
     ydb_import_ut.cpp
-    ydb_ut.cpp
+    ydb_ut.cpp 
     ydb_s3_internal_ut.cpp
     ydb_scripting_ut.cpp
     ydb_table_ut.cpp
@@ -34,9 +34,9 @@ SRCS(
     ydb_olapstore_ut.cpp
     json_udf.cpp
     re2_udf.cpp
-)
-
-PEERDIR(
+) 
+ 
+PEERDIR( 
     contrib/libs/apache/arrow
     library/cpp/getopt
     library/cpp/grpc/client
@@ -55,10 +55,10 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_operation
     ydb/public/sdk/cpp/client/ydb_scheme
     ydb/services/ydb
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
 
 REQUIREMENTS(ram:14)
 
-END()
+END() 

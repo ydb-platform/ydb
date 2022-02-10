@@ -238,12 +238,12 @@ struct TEvSchemeShard {
             Record.SetSchemeshardId(tableId.PathId.OwnerId);
             Record.SetPathId(tableId.PathId.LocalPathId);
         }
-
-        TEvDescribeScheme(NKikimr::TPathId pathId)
-        {
-            Record.SetSchemeshardId(pathId.OwnerId);
-            Record.SetPathId(pathId.LocalPathId);
-        }
+ 
+        TEvDescribeScheme(NKikimr::TPathId pathId) 
+        { 
+            Record.SetSchemeshardId(pathId.OwnerId); 
+            Record.SetPathId(pathId.LocalPathId); 
+        } 
     };
 
     struct TEvDescribeSchemeResult : public TEventPreSerializedPB<TEvDescribeSchemeResult,

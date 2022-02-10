@@ -155,7 +155,7 @@ private:
             return;
         }
 
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Undelivered event: " << ev->GetTypeRewrite()
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Undelivered event: " << ev->GetTypeRewrite() 
             << ", at: " << ScanActorId << ", tablet: " << DatashardActorId
             << ", scanId: " << ScanId << ", table: " << TablePath);
 
@@ -217,10 +217,10 @@ private:
         YQL_ENSURE(seq == CurrentRange);
 
         if (CurrentRange == TableRanges.size()) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                "TableRanges is over"
-                << ", at: " << ScanActorId << ", scanId: " << ScanId
-                << ", table: " << TablePath);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, 
+                "TableRanges is over" 
+                << ", at: " << ScanActorId << ", scanId: " << ScanId 
+                << ", table: " << TablePath); 
             return EScan::Final;
         }
 

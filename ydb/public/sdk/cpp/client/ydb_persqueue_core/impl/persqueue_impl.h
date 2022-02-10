@@ -170,14 +170,14 @@ public:
 
         auto promise = NThreading::NewPromise<TDescribeTopicResult>();
 
-        auto extractor = [promise]
+        auto extractor = [promise] 
             (google::protobuf::Any* any, TPlainStatus status) mutable {
                 Ydb::PersQueue::V1::DescribeTopicResult result;
                 if (any) {
                     any->UnpackTo(&result);
                 }
 
-                TDescribeTopicResult val(TStatus(std::move(status)), result);
+                TDescribeTopicResult val(TStatus(std::move(status)), result); 
                 promise.SetValue(std::move(val));
             };
 

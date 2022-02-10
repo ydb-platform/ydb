@@ -961,7 +961,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             , CreateStep(0)
             , IsPrivatePath(false)
             , IsVirtual(isVirtual)
-            , SchemaVersion(0)
+            , SchemaVersion(0) 
         {
         }
 
@@ -979,7 +979,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             , PathId(other.PathId)
             , IsPrivatePath(other.IsPrivatePath)
             , IsVirtual(other.IsVirtual)
-            , SchemaVersion(other.SchemaVersion)
+            , SchemaVersion(other.SchemaVersion) 
         {
             if (other.Subscriber) {
                 other.Subscriber = TSubscriber();
@@ -1430,9 +1430,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 ListNodeEntry->Children.reserve(pathDesc.ChildrenSize());
 
                 for (const auto& child : pathDesc.GetChildren()) {
-                    const auto& name = child.GetName();
-                    const auto pathId = TPathId(child.GetSchemeshardId(), child.GetPathId());
-
+                    const auto& name = child.GetName(); 
+                    const auto pathId = TPathId(child.GetSchemeshardId(), child.GetPathId()); 
+ 
                     switch (child.GetPathType()) {
                     case NKikimrSchemeOp::EPathTypeSubDomain:
                     case NKikimrSchemeOp::EPathTypeDir:
@@ -1541,7 +1541,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 listNodeEntry->Kind = TNavigate::KindPath;
                 listNodeEntry->Children.reserve(names.size());
                 for (const auto& name : names) {
-                    listNodeEntry->Children.emplace_back(name, TPathId(), TNavigate::KindTable);
+                    listNodeEntry->Children.emplace_back(name, TPathId(), TNavigate::KindTable); 
                 }
 
                 entry.Kind = TNavigate::KindPath;
@@ -1653,13 +1653,13 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 } else {
                     entry.TableId = TTableId(PathId.OwnerId, PathId.LocalPathId);
                 }
-            } else {
+            } else { 
                 entry.Path = SplitPath(Path);
-                // update schema version
-                entry.TableId.SchemaVersion = SchemaVersion;
-
-            }
-
+                // update schema version 
+                entry.TableId.SchemaVersion = SchemaVersion; 
+ 
+            } 
+ 
             if (entry.Operation == TNavigate::OpList) {
                 entry.ListNodeEntry = ListNodeEntry;
             }
@@ -1901,9 +1901,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         bool IsPrivatePath;
         bool IsVirtual;
 
-        // Used for Table and Index
-        ui64 SchemaVersion;
-
+        // Used for Table and Index 
+        ui64 SchemaVersion; 
+ 
         // domain & path specific
         TIntrusivePtr<TNavigate::TListNodeEntry> ListNodeEntry;
         TIntrusivePtr<TNavigate::TDomainDescription> DomainDescription;

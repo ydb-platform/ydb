@@ -30,18 +30,18 @@ TExprBase KqpApplyExtractMembersToReadTable(TExprBase node, TExprContext& ctx) {
 
     auto read = extract.Input().Cast<TKqlReadTableBase>();
 
-    if (auto maybeIndexRead = read.Maybe<TKqlReadTableIndex>()) {
-        auto indexRead = maybeIndexRead.Cast();
-
+    if (auto maybeIndexRead = read.Maybe<TKqlReadTableIndex>()) { 
+        auto indexRead = maybeIndexRead.Cast(); 
+ 
         return Build<TKqlReadTableIndex>(ctx, extract.Pos())
-            .Table(indexRead.Table())
-            .Range(indexRead.Range())
-            .Columns(extract.Members())
-            .Index(indexRead.Index())
-            .Settings(indexRead.Settings())
-            .Done();
-    }
-
+            .Table(indexRead.Table()) 
+            .Range(indexRead.Range()) 
+            .Columns(extract.Members()) 
+            .Index(indexRead.Index()) 
+            .Settings(indexRead.Settings()) 
+            .Done(); 
+    } 
+ 
     return Build<TKqlReadTableBase>(ctx, extract.Pos())
         .CallableName(read.CallableName())
         .Table(read.Table())

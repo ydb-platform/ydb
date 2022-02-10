@@ -9,11 +9,11 @@ struct TRpcRequestSettings {
     TStringType TraceId;
     TStringType RequestType;
     std::vector<std::pair<TStringType, TStringType>> Header;
-    enum class TEndpointPolicy {
-        UsePreferedEndpoint,
-        UseDiscoveryEndpoint // Use single discovery endpoint for request
-    } EndpointPolicy = TEndpointPolicy::UsePreferedEndpoint;
-    bool UseAuth = true;
+    enum class TEndpointPolicy { 
+        UsePreferedEndpoint, 
+        UseDiscoveryEndpoint // Use single discovery endpoint for request 
+    } EndpointPolicy = TEndpointPolicy::UsePreferedEndpoint; 
+    bool UseAuth = true; 
 
     template<typename TRequestSettings>
     static TRpcRequestSettings Make(const TRequestSettings& settings) {
@@ -21,8 +21,8 @@ struct TRpcRequestSettings {
         rpcSettings.TraceId = settings.TraceId_;
         rpcSettings.RequestType = settings.RequestType_;
         rpcSettings.Header = settings.Header_;
-        rpcSettings.EndpointPolicy = TEndpointPolicy::UsePreferedEndpoint;
-        rpcSettings.UseAuth = true;
+        rpcSettings.EndpointPolicy = TEndpointPolicy::UsePreferedEndpoint; 
+        rpcSettings.UseAuth = true; 
         return rpcSettings;
     }
 };

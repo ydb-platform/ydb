@@ -11,17 +11,17 @@ enum class EColumnFamilyCompression {
     LZ4,
 };
 
-//! State of build index operation
-enum class EBuildIndexState {
-    Unspecified = 0,
-    Preparing = 1,
-    TransferData = 2,
-    Applying = 3,
-    Done = 4,
-    Cancellation = 5,
-    Cancelled = 6,
-};
-
+//! State of build index operation 
+enum class EBuildIndexState { 
+    Unspecified = 0, 
+    Preparing = 1, 
+    TransferData = 2, 
+    Applying = 3, 
+    Done = 4, 
+    Cancellation = 5, 
+    Cancelled = 6, 
+}; 
+ 
 enum class EIndexType {
     GlobalSync,
     GlobalAsync,

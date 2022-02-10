@@ -1,78 +1,78 @@
-syntax = "proto3";
-
-package Ydb.Table.V1;
+syntax = "proto3"; 
+ 
+package Ydb.Table.V1; 
 option java_package = "com.yandex.ydb.table.v1";
-
+ 
 import "ydb/public/api/protos/ydb_table.proto";
-
-service TableService {
-
-    // Create new session. Implicit session creation is forbidden,
+ 
+service TableService { 
+ 
+    // Create new session. Implicit session creation is forbidden, 
     // so user must create new session before execute any query,
     // otherwise BAD_SESSION status will be returned.
-    // Simultaneous execution of requests are forbiden.
+    // Simultaneous execution of requests are forbiden. 
     // Sessions are volatile, can be invalidated by server, for example in case
-    // of fatal errors. All requests with this session will fail with BAD_SESSION status.
-    // So, client must be able to handle BAD_SESSION status.
-    rpc CreateSession(Table.CreateSessionRequest) returns (Table.CreateSessionResponse);
+    // of fatal errors. All requests with this session will fail with BAD_SESSION status. 
+    // So, client must be able to handle BAD_SESSION status. 
+    rpc CreateSession(Table.CreateSessionRequest) returns (Table.CreateSessionResponse); 
+ 
+    // Ends a session, releasing server resources associated with it. 
+    rpc DeleteSession(Table.DeleteSessionRequest) returns (Table.DeleteSessionResponse); 
+ 
+    // Idle sessions can be kept alive by calling KeepAlive periodically. 
+    rpc KeepAlive(Table.KeepAliveRequest) returns (Table.KeepAliveResponse); 
+ 
+    // Creates new table. 
+    rpc CreateTable(Table.CreateTableRequest) returns (Table.CreateTableResponse); 
+ 
+    // Drop table. 
+    rpc DropTable(Table.DropTableRequest) returns (Table.DropTableResponse); 
 
-    // Ends a session, releasing server resources associated with it.
-    rpc DeleteSession(Table.DeleteSessionRequest) returns (Table.DeleteSessionResponse);
-
-    // Idle sessions can be kept alive by calling KeepAlive periodically.
-    rpc KeepAlive(Table.KeepAliveRequest) returns (Table.KeepAliveResponse);
-
-    // Creates new table.
-    rpc CreateTable(Table.CreateTableRequest) returns (Table.CreateTableResponse);
-
-    // Drop table.
-    rpc DropTable(Table.DropTableRequest) returns (Table.DropTableResponse);
-
-    // Modifies schema of given table.
-    rpc AlterTable(Table.AlterTableRequest) returns (Table.AlterTableResponse);
-
-    // Creates copy of given table.
-    rpc CopyTable(Table.CopyTableRequest) returns (Table.CopyTableResponse);
-
+    // Modifies schema of given table. 
+    rpc AlterTable(Table.AlterTableRequest) returns (Table.AlterTableResponse); 
+ 
+    // Creates copy of given table. 
+    rpc CopyTable(Table.CopyTableRequest) returns (Table.CopyTableResponse); 
+ 
     // Creates consistent copy of given tables.
     rpc CopyTables(Table.CopyTablesRequest) returns (Table.CopyTablesResponse);
 
     // Creates consistent move of given tables.
     rpc RenameTables(Table.RenameTablesRequest) returns (Table.RenameTablesResponse);
 
-    // Returns information about given table (metadata).
-    rpc DescribeTable(Table.DescribeTableRequest) returns (Table.DescribeTableResponse);
-
+    // Returns information about given table (metadata). 
+    rpc DescribeTable(Table.DescribeTableRequest) returns (Table.DescribeTableResponse); 
+ 
     // Explains data query.
     // SessionId of previously created session must be provided.
-    rpc ExplainDataQuery(Table.ExplainDataQueryRequest) returns (Table.ExplainDataQueryResponse);
+    rpc ExplainDataQuery(Table.ExplainDataQueryRequest) returns (Table.ExplainDataQueryResponse); 
 
     // Prepares data query, returns query id.
     // SessionId of previously created session must be provided.
-    rpc PrepareDataQuery(Table.PrepareDataQueryRequest) returns (Table.PrepareDataQueryResponse);
+    rpc PrepareDataQuery(Table.PrepareDataQueryRequest) returns (Table.PrepareDataQueryResponse); 
 
     // Executes data query.
     // SessionId of previously created session must be provided.
-    rpc ExecuteDataQuery(Table.ExecuteDataQueryRequest) returns (Table.ExecuteDataQueryResponse);
+    rpc ExecuteDataQuery(Table.ExecuteDataQueryRequest) returns (Table.ExecuteDataQueryResponse); 
 
     // Executes scheme query.
     // SessionId of previously created session must be provided.
-    rpc ExecuteSchemeQuery(Table.ExecuteSchemeQueryRequest) returns (Table.ExecuteSchemeQueryResponse);
+    rpc ExecuteSchemeQuery(Table.ExecuteSchemeQueryRequest) returns (Table.ExecuteSchemeQueryResponse); 
 
     // Begins new transaction.
-    rpc BeginTransaction(Table.BeginTransactionRequest) returns (Table.BeginTransactionResponse);
+    rpc BeginTransaction(Table.BeginTransactionRequest) returns (Table.BeginTransactionResponse); 
 
     // Commits specified active transaction.
-    rpc CommitTransaction(Table.CommitTransactionRequest) returns (Table.CommitTransactionResponse);
+    rpc CommitTransaction(Table.CommitTransactionRequest) returns (Table.CommitTransactionResponse); 
 
     // Performs a rollback of the specified active transaction.
-    rpc RollbackTransaction(Table.RollbackTransactionRequest) returns (Table.RollbackTransactionResponse);
+    rpc RollbackTransaction(Table.RollbackTransactionRequest) returns (Table.RollbackTransactionResponse); 
 
     // Describe supported table options.
     rpc DescribeTableOptions(Table.DescribeTableOptionsRequest) returns (Table.DescribeTableOptionsResponse);
-
-    // Streaming read table
-    rpc StreamReadTable(Table.ReadTableRequest) returns (stream Table.ReadTableResponse);
+ 
+    // Streaming read table 
+    rpc StreamReadTable(Table.ReadTableRequest) returns (stream Table.ReadTableResponse); 
 
     // Upserts a batch of rows non-transactionally.
     // Returns success only when all rows were successfully upserted. In case of an error some rows might
@@ -81,4 +81,4 @@ service TableService {
 
     // Executes scan query with streaming result.
     rpc StreamExecuteScanQuery(Table.ExecuteScanQueryRequest) returns (stream Table.ExecuteScanQueryPartialResponse);
-}
+} 

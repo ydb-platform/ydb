@@ -19,8 +19,8 @@ enum class ETableKind {
     Olap
 };
 
-class TKqpTableKeys {
-public:
+class TKqpTableKeys { 
+public: 
     struct TColumn {
         ui32 Id;
         ui32 Type;
@@ -36,8 +36,8 @@ public:
 
     TTable* FindTablePtr(const TTableId& id) {
         return TablesById.FindPtr(id);
-    }
-
+    } 
+ 
     const TTable* FindTablePtr(const TTableId& id) const {
         return TablesById.FindPtr(id);
     }
@@ -52,23 +52,23 @@ public:
         }
 
         return table;
-    }
-
+    } 
+ 
     const TTable& GetTable(const TTableId& id) const {
         auto table = TablesById.FindPtr(id);
         MKQL_ENSURE_S(table);
         return *table;
     }
 
-    size_t Size() const {
+    size_t Size() const { 
         return TablesById.size();
-    }
-
+    } 
+ 
     const THashMap<TTableId, TTable>& Get() const {
         return TablesById;
-    }
+    } 
 
-private:
+private: 
     THashMap<TTableId, TTable> TablesById;
 };
 

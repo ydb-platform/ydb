@@ -10,15 +10,15 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-class TCommandWithResponseHeaders {
-protected:
-    void PrintResponseHeader(const NYdb::TStatus& status);
-    void PrintResponseHeaderPretty(const NYdb::TStatus& status);
-
-    bool ShowHeaders = false;
-    static const TString ResponseHeadersHelp;
-};
-
+class TCommandWithResponseHeaders { 
+protected: 
+    void PrintResponseHeader(const NYdb::TStatus& status); 
+    void PrintResponseHeaderPretty(const NYdb::TStatus& status); 
+ 
+    bool ShowHeaders = false; 
+    static const TString ResponseHeadersHelp; 
+}; 
+ 
 class TCommandWithFormat {
 protected:
     void AddInputFormats(TClientCommand::TConfig& config, const TVector<EOutputFormat>& allowedFormats);

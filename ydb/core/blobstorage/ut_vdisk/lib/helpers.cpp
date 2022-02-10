@@ -936,7 +936,7 @@ class TWaitForCompaction : public TActorBootstrapped<TWaitForCompaction> {
         ui32 total = Conf->GroupInfo->GetTotalVDisksNum();
         for (ui32 i = 0; i < total; i++) {
             TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(i);
-            ctx.RegisterWithSameMailbox(CreateWaitForCompaction(ctx.SelfID, instance));
+            ctx.RegisterWithSameMailbox(CreateWaitForCompaction(ctx.SelfID, instance)); 
             Counter++;
         }
     }

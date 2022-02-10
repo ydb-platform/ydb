@@ -1,28 +1,28 @@
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
-
+ 
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/client/flat_ut_client.h>
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
-
+ 
 #include "ydb_common_ut.h"
-
+ 
 #include <util/thread/factory.h>
-
+ 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
-
+ 
 using namespace NYdb;
 using namespace NYdb::NTable;
-
+ 
 void CreateTestTableWithIndex(NYdb::NTable::TTableClient& client) {
     auto sessionResult = client.CreateSession().ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS);
     auto session = sessionResult.GetSession();
-
+ 
     const ui32 SHARD_COUNT = 4;
-
+ 
     {
         auto tableBuilder = client.GetTableBuilder()
                 .AddNullableColumn("NameHash", EPrimitiveType::Uint32)
@@ -32,16 +32,16 @@ void CreateTestTableWithIndex(NYdb::NTable::TTableClient& client) {
                 .AddNullableColumn("Data", EPrimitiveType::String)
                 .SetPrimaryKeyColumns({"NameHash", "Name"})
                 .AddSecondaryIndex("TimestampIndex",TVector<TString>({"Timestamp", "Name", "Version"}));
-
+ 
         auto tableSettings = NYdb::NTable::TCreateTableSettings().PartitioningPolicy(
             NYdb::NTable::TPartitioningPolicy().UniformPartitions(SHARD_COUNT));
-
+ 
         auto result = session.CreateTable("/Root/Foo", tableBuilder.Build(), tableSettings).ExtractValueSync();
-        UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-    }
+        UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
+    } 
 }
-
+ 
 Y_UNIT_TEST_SUITE(YdbIndexTable) {
     Y_UNIT_TEST(FastSplitIndex) {
         TKikimrWithGrpcAndRootSchema server;
@@ -257,4 +257,4 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
             UNIT_ASSERT_VALUES_EQUAL(result->Record.GetErrorReason(), "Adding or dropping columns in index table is not supported");
         }
     }
-}
+} 

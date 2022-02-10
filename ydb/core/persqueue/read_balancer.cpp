@@ -620,7 +620,7 @@ void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TA
     TActorId pipeClient;
     if (it == TabletPipes.end()) {
         NTabletPipe::TClientConfig clientConfig;
-        pipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
+        pipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig)); 
         TabletPipes[tabletId] = pipeClient;
     } else {
         pipeClient = it->second;

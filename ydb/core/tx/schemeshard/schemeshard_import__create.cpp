@@ -300,7 +300,7 @@ private:
             << ": info# " << importInfo->ToString()
             << ", item# " << item.ToString(itemIdx));
 
-        ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx));
+        ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx)); 
     }
 
     void CreateTable(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {

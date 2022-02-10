@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST_NEW_ENGINE(ExplicitTcl) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto tx = session.BeginTransaction(TTxSettings::SerializableRW())
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(BeginTransactionBadMode) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.BeginTransaction(TTxSettings::OnlineRO()).ExtractValueSync();
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST_NEW_ENGINE(CommitRequired) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(Q_(R"(
@@ -147,7 +147,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST_NEW_ENGINE(RollbackTx) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         // with effects, without locks
@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST_NEW_ENGINE(EmptyTxOnCommit) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(Q_(R"(
@@ -294,7 +294,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         setting.SetValue("2");
 
         TKikimrRunner kikimr({setting});
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.BeginTransaction(TTxSettings::SerializableRW()).ExtractValueSync();
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         settings.push_back(setting);
 
         TKikimrRunner kikimr(settings);
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.BeginTransaction(TTxSettings::SerializableRW()).ExtractValueSync();
@@ -347,7 +347,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST_NEW_ENGINE(RollbackInvalidated) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(Q_(R"(
@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST_NEW_ENGINE(CommitPrepared) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto query = session.PrepareDataQuery(Q_(R"(

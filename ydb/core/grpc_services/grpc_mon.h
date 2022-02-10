@@ -10,7 +10,7 @@ namespace NGRpcService {
 TActorId GrpcMonServiceId();
 IActor* CreateGrpcMonService();
 
-void ReportGrpcReqToMon(NActors::TActorSystem&, const TString& fromAddress);
-void ReportGrpcReqToMon(NActors::TActorSystem&, const TString& fromAddress, const TString& buildInfo);
+void ReportGrpcReqToMon(NActors::TActorSystem&, const TString& fromAddress); 
+void ReportGrpcReqToMon(NActors::TActorSystem&, const TString& fromAddress, const TString& buildInfo); 
 
 }}

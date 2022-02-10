@@ -2,7 +2,7 @@
 
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/tx/datashard/sys_tables.h>
-
+ 
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
 
@@ -18,9 +18,9 @@ namespace {
 
 const TStringBuf LocksInvalidatedResultName = "tx_locks_invalidated";
 const TStringBuf LocksInvalidatedListName = "tx_locks_invalidated_list";
-const TStringBuf LocksTableName = "/sys/locks2";
-const TStringBuf LocksTableVersion = "0";
-const TString LocksTablePathId = TKikimrPathId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks2).ToString();
+const TStringBuf LocksTableName = "/sys/locks2"; 
+const TStringBuf LocksTableVersion = "0"; 
+const TString LocksTablePathId = TKikimrPathId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks2).ToString(); 
 const ui64 LocksInvalidatedCount = 1;
 
 TExprBase GetDeferredEffectsList(const TDeferredEffects& effects, TPositionHandle pos, TExprContext& ctx) {
@@ -48,11 +48,11 @@ TExprBase GetEraseLocksEffects(const TString& cluster, TPositionHandle pos, TCoP
             .Args({"lockItem"})
             .Body<TKiEraseRow>()
                 .Cluster().Build(cluster)
-                .Table<TKiVersionedTable>()
-                    .Path<TCoAtom>().Build(LocksTableName)
-                    .SchemaVersion<TCoAtom>().Build(LocksTableVersion)
-                    .PathId<TCoAtom>().Build(LocksTablePathId)
-                .Build()
+                .Table<TKiVersionedTable>() 
+                    .Path<TCoAtom>().Build(LocksTableName) 
+                    .SchemaVersion<TCoAtom>().Build(LocksTableVersion) 
+                    .PathId<TCoAtom>().Build(LocksTablePathId) 
+                .Build() 
                 .Key()
                     .Add()
                         .Name().Build("LockId")
@@ -455,11 +455,11 @@ private:
 
         auto selectLock = Build<TKiSelectRow>(ctx, pos)
             .Cluster().Build(Cluster)
-            .Table<TKiVersionedTable>()
-                .Path<TCoAtom>().Build(LocksTableName)
-                .SchemaVersion<TCoAtom>().Build(LocksTableVersion)
-                .PathId<TCoAtom>().Build(LocksTablePathId)
-            .Build()
+            .Table<TKiVersionedTable>() 
+                .Path<TCoAtom>().Build(LocksTableName) 
+                .SchemaVersion<TCoAtom>().Build(LocksTableVersion) 
+                .PathId<TCoAtom>().Build(LocksTablePathId) 
+            .Build() 
             .Key()
                 .Add()
                     .Name().Build("LockId")

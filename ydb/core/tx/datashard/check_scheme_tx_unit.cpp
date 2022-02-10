@@ -37,8 +37,8 @@ private:
     bool CheckCreateCdcStream(TActiveTransaction *activeTx);
     bool CheckAlterCdcStream(TActiveTransaction *activeTx);
     bool CheckDropCdcStream(TActiveTransaction *activeTx);
-
-    bool CheckSchemaVersion(TActiveTransaction *activeTx, ui64 proposedSchemaVersion, ui64 currentSchemaVersion, ui64 expectedSchemaVersion);
+ 
+    bool CheckSchemaVersion(TActiveTransaction *activeTx, ui64 proposedSchemaVersion, ui64 currentSchemaVersion, ui64 expectedSchemaVersion); 
 
     using TPipelineHasSmthFunc = std::function<bool(TPipeline* const)>;
     bool HasDuplicate(TActiveTransaction *activeTx, const TStringBuf kind, TPipelineHasSmthFunc checker);
@@ -76,17 +76,17 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
 
     TActiveTransaction *activeTx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(activeTx, "cannot cast operation of kind " << op->GetKind());
-    const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
-    bool unfreezeTx = false;
-    if (tx.HasAlterTable() && tx.GetAlterTable().HasPartitionConfig() &&
-            tx.GetAlterTable().GetPartitionConfig().HasFreezeState())
-    {
-        auto cmd = tx.GetAlterTable().GetPartitionConfig().GetFreezeState();
+    const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx(); 
+    bool unfreezeTx = false; 
+    if (tx.HasAlterTable() && tx.GetAlterTable().HasPartitionConfig() && 
+            tx.GetAlterTable().GetPartitionConfig().HasFreezeState()) 
+    { 
+        auto cmd = tx.GetAlterTable().GetPartitionConfig().GetFreezeState(); 
         unfreezeTx = cmd == NKikimrSchemeOp::EFreezeState::Unfreeze;
-    }
+    } 
 
     // Check state is proper for scheme transactions.
-    if (!DataShard.IsStateActive() || (DataShard.IsStateFrozen() && !unfreezeTx)) {
+    if (!DataShard.IsStateActive() || (DataShard.IsStateFrozen() && !unfreezeTx)) { 
         TString error = TStringBuilder()
             << "Wrong shard state for scheme transaction at tablet "
             << DataShard.TabletID() << " state: " << DataShard.GetState() << " txId: "
@@ -207,30 +207,30 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
     return EExecutionStatus::ExecutedNoMoreRestarts;
 }
 
-bool TCheckSchemeTxUnit::CheckSchemaVersion(TActiveTransaction *activeTx,
-    ui64 proposedSchemaVersion, ui64 currentSchemaVersion, ui64 expectedSchemaVersion)
-{
-    LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                "Check scheme tx, proposed scheme version# " << proposedSchemaVersion <<
-                " current version# " << currentSchemaVersion <<
-                " expected version# " << expectedSchemaVersion <<
-                " at tablet# " << DataShard.TabletID() << " txId# " << activeTx->GetTxId());
-
-    // Allow scheme tx if proposed or current schema version is zero. This simplify migration a lot.
-    if (proposedSchemaVersion && currentSchemaVersion && expectedSchemaVersion != proposedSchemaVersion) {
-        TString err = TStringBuilder()
-            << "Wrong schema version: proposed# " << proposedSchemaVersion <<
-               " current version# " << currentSchemaVersion <<
-               " expected version# " << expectedSchemaVersion <<
-               " at tablet# " << DataShard.TabletID() << " txId# " << activeTx->GetTxId();
-
-        LOG_CRIT_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, err);
-        return false;
-    }
-
-    return true;
-}
-
+bool TCheckSchemeTxUnit::CheckSchemaVersion(TActiveTransaction *activeTx, 
+    ui64 proposedSchemaVersion, ui64 currentSchemaVersion, ui64 expectedSchemaVersion) 
+{ 
+    LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, 
+                "Check scheme tx, proposed scheme version# " << proposedSchemaVersion << 
+                " current version# " << currentSchemaVersion << 
+                " expected version# " << expectedSchemaVersion << 
+                " at tablet# " << DataShard.TabletID() << " txId# " << activeTx->GetTxId()); 
+ 
+    // Allow scheme tx if proposed or current schema version is zero. This simplify migration a lot. 
+    if (proposedSchemaVersion && currentSchemaVersion && expectedSchemaVersion != proposedSchemaVersion) { 
+        TString err = TStringBuilder() 
+            << "Wrong schema version: proposed# " << proposedSchemaVersion << 
+               " current version# " << currentSchemaVersion << 
+               " expected version# " << expectedSchemaVersion << 
+               " at tablet# " << DataShard.TabletID() << " txId# " << activeTx->GetTxId(); 
+ 
+        LOG_CRIT_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, err); 
+        return false; 
+    } 
+ 
+    return true; 
+} 
+ 
 bool TCheckSchemeTxUnit::HasDuplicate(TActiveTransaction *activeTx, const TStringBuf kind, TPipelineHasSmthFunc checker) {
     if (!checker(&Pipeline)) {
         return false;
@@ -316,26 +316,26 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
 {
     const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
 
-    bool res = false;
+    bool res = false; 
     switch (activeTx->GetSchemeTxType()) {
     case TSchemaOperation::ETypeCreate:
-        res = CheckCreate(activeTx);
-        break;
+        res = CheckCreate(activeTx); 
+        break; 
     case TSchemaOperation::ETypeDrop:
-        res = CheckDrop(activeTx);
-        break;
+        res = CheckDrop(activeTx); 
+        break; 
     case TSchemaOperation::ETypeAlter:
-        res = CheckAlter(activeTx);
-        break;
+        res = CheckAlter(activeTx); 
+        break; 
     case TSchemaOperation::ETypeBackup:
-        res = CheckBackup(activeTx);
-        break;
+        res = CheckBackup(activeTx); 
+        break; 
     case TSchemaOperation::ETypeRestore:
         res = CheckRestore(activeTx);
         break;
     case TSchemaOperation::ETypeCopy:
-        res = CheckCopy(activeTx);
-        break;
+        res = CheckCopy(activeTx); 
+        break; 
     case TSchemaOperation::ETypeCreatePersistentSnapshot:
         res = CheckCreatePersistentSnapshot(activeTx);
         break;
@@ -371,7 +371,7 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
         BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
     }
 
-    return res;
+    return res; 
 }
 
 bool TCheckSchemeTxUnit::CheckCreate(TActiveTransaction *activeTx) {
@@ -430,65 +430,65 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
     }
 
     const auto &alter = tx.GetAlterTable();
-    const ui64 proposedSchemaVersion = alter.HasTableSchemaVersion() ? alter.GetTableSchemaVersion() : 0;
-
-    if (alter.HasPartitionConfig() && alter.GetPartitionConfig().HasFreezeState()) {
-        if (alter.ColumnsSize() || alter.DropColumnsSize()) {
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                        "Ignoring alter, combine freeze with other actions is forbiden, tablet " << DataShard.TabletID()
-                        << " txId " << activeTx->GetTxId() <<  " currentTxId "
-                        << Pipeline.CurrentSchemaTxId());
-            BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST);
-            return false;
-        }
-
+    const ui64 proposedSchemaVersion = alter.HasTableSchemaVersion() ? alter.GetTableSchemaVersion() : 0; 
+ 
+    if (alter.HasPartitionConfig() && alter.GetPartitionConfig().HasFreezeState()) { 
+        if (alter.ColumnsSize() || alter.DropColumnsSize()) { 
+            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, 
+                        "Ignoring alter, combine freeze with other actions is forbiden, tablet " << DataShard.TabletID() 
+                        << " txId " << activeTx->GetTxId() <<  " currentTxId " 
+                        << Pipeline.CurrentSchemaTxId()); 
+            BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST); 
+            return false; 
+        } 
+ 
         if (DataShard.IsFollower()) {
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
+            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, 
                         "Ignoring alter, attempt to freeze follower, tablet " << DataShard.TabletID()
-                        << " txId " << activeTx->GetTxId() <<  " currentTxId "
-                        << Pipeline.CurrentSchemaTxId());
-            BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST);
-            return false;
-        }
-
+                        << " txId " << activeTx->GetTxId() <<  " currentTxId " 
+                        << Pipeline.CurrentSchemaTxId()); 
+            BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST); 
+            return false; 
+        } 
+ 
         bool freeze = alter.GetPartitionConfig().GetFreezeState() == NKikimrSchemeOp::EFreezeState::Freeze;
-        const auto curState = DataShard.GetState();
-        bool err = false;
-
-        if (freeze) {
+        const auto curState = DataShard.GetState(); 
+        bool err = false; 
+ 
+        if (freeze) { 
             if (curState != NDataShard::TShardState::Ready) {
-                err = true;
-            }
-        } else {
+                err = true; 
+            } 
+        } else { 
             if (curState != NDataShard::TShardState::Frozen) {
-                err = true;
-            }
-        }
-        if (err) {
-            const auto& cmdStr = freeze ? TString("freeze") : TString("unfreeze");
-            TString errText = TStringBuilder() << "Ignoring alter, transaction wants to "
-                    << cmdStr << " datashard but current state is "
-                    << DatashardStateName(curState) << " tablet "<< DataShard.TabletID()
-                    << " txId " << activeTx->GetTxId() <<  " currentTxId "
-                    << Pipeline.CurrentSchemaTxId();
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, errText);
-            BuildResult(activeTx)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, errText);
-            return false;
-        }
-    }
-
+                err = true; 
+            } 
+        } 
+        if (err) { 
+            const auto& cmdStr = freeze ? TString("freeze") : TString("unfreeze"); 
+            TString errText = TStringBuilder() << "Ignoring alter, transaction wants to " 
+                    << cmdStr << " datashard but current state is " 
+                    << DatashardStateName(curState) << " tablet "<< DataShard.TabletID() 
+                    << " txId " << activeTx->GetTxId() <<  " currentTxId " 
+                    << Pipeline.CurrentSchemaTxId(); 
+            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, errText); 
+            BuildResult(activeTx)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, errText); 
+            return false; 
+        } 
+    } 
+ 
     ui64 tableId = alter.GetId_Deprecated();
     if (alter.HasPathId()) {
         Y_VERIFY(DataShard.GetPathOwnerId() == alter.GetPathId().GetOwnerId());
         tableId = alter.GetPathId().GetLocalId();
     }
 
-    const auto tablePtr = DataShard.GetUserTables().FindPtr(tableId);
+    const auto tablePtr = DataShard.GetUserTables().FindPtr(tableId); 
     Y_VERIFY_S(tablePtr, "tableId: " << tableId);
-    const TUserTable &table = **tablePtr;
-
-    auto curSchemaVersion = table.GetTableSchemaVersion();
-
+    const TUserTable &table = **tablePtr; 
+ 
+    auto curSchemaVersion = table.GetTableSchemaVersion(); 
+ 
     for (const auto &col : alter.GetColumns()) {
         Y_VERIFY(col.HasId());
         Y_VERIFY(col.HasTypeId());
@@ -510,8 +510,8 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
         Y_VERIFY(userColumn->Name == col.GetName());
     }
 
-    auto res = CheckSchemaVersion(activeTx, proposedSchemaVersion, curSchemaVersion, curSchemaVersion + 1);
-    Y_VERIFY_DEBUG(res, "Unexpected schema version mutation");
+    auto res = CheckSchemaVersion(activeTx, proposedSchemaVersion, curSchemaVersion, curSchemaVersion + 1); 
+    Y_VERIFY_DEBUG(res, "Unexpected schema version mutation"); 
     return true;
 }
 

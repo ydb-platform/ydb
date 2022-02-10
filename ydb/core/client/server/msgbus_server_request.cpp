@@ -28,7 +28,7 @@ class TMessageBusServerRequest : public TMessageBusSecureRequest<TMessageBusServ
     bool CompilationRetried;
 
     void ReplyWithResult(EResponseStatus status, NKikimrTxUserProxy::TEvProposeTransactionStatus &result,
-                         const TActorContext &ctx);
+                         const TActorContext &ctx); 
     bool RetryResolve(const TActorContext &ctx);
     void FinishReply(const TActorContext &ctx);
     void TryToAllocateQuota(const TActorContext &ctx);
@@ -88,7 +88,7 @@ public:
             record.SetExecTimeoutPeriod(msgBusTimeout);
         }
 
-        record.SetStreamResponse(false);
+        record.SetStreamResponse(false); 
 
         auto* transaction = record.MutableTransaction();
         if (transaction->HasMiniKQLTransaction()) {
@@ -134,8 +134,8 @@ public:
             }
             return;
         } else if (transaction->HasReadTableTransaction()) {
-            NKikimrTxUserProxy::TEvProposeTransactionStatus status;
-            return ReplyWithResult(EResponseStatus::MSTATUS_ERROR, status, ctx);
+            NKikimrTxUserProxy::TEvProposeTransactionStatus status; 
+            return ReplyWithResult(EResponseStatus::MSTATUS_ERROR, status, ctx); 
         }
         ctx.Send(MakeTxProxyID(), Proposal.Release());
     }
@@ -157,7 +157,7 @@ bool TMessageBusServerRequest::RetryResolve(const TActorContext &ctx) {
 
 void TMessageBusServerRequest::ReplyWithResult(EResponseStatus status,
                                                NKikimrTxUserProxy::TEvProposeTransactionStatus &result,
-                                               const TActorContext &ctx)
+                                               const TActorContext &ctx) 
 {
     TAutoPtr<TBusResponse> response(ProposeTransactionStatusToResponse(status, result));
 
@@ -175,9 +175,9 @@ void TMessageBusServerRequest::ReplyWithResult(EResponseStatus status,
         response->Record.MutableTxStats()->Swap(result.MutableTxStats());
     }
 
-    SendReplyAutoPtr(response);
+    SendReplyAutoPtr(response); 
 
-    FinishReply(ctx);
+    FinishReply(ctx); 
 }
 
 void TMessageBusServerRequest::FinishReply(const TActorContext &ctx)
@@ -207,7 +207,7 @@ void TMessageBusServerRequest::Handle(TMiniKQLCompileServiceEvents::TEvCompileSt
             pgm->SetBin(result.CompiledProgram);
             compileResults->SetCompiledProgram(result.CompiledProgram);
         } else {
-            NYql::IssuesToMessage(result.Errors, compileResults->MutableProgramCompileErrors());
+            NYql::IssuesToMessage(result.Errors, compileResults->MutableProgramCompileErrors()); 
         }
         --InFlyRequests;
         CompileResolveCookies = std::move(ev->Get()->CompileResolveCookies);
@@ -221,7 +221,7 @@ void TMessageBusServerRequest::Handle(TMiniKQLCompileServiceEvents::TEvCompileSt
             params->SetBin(result.CompiledProgram);
             compileResults->SetCompiledParams(result.CompiledProgram);
         } else {
-            NYql::IssuesToMessage(result.Errors, compileResults->MutableParamsCompileErrors());
+            NYql::IssuesToMessage(result.Errors, compileResults->MutableParamsCompileErrors()); 
         }
         --InFlyRequests;
     }
@@ -289,7 +289,7 @@ void TMessageBusServerRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatu
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAlready:
     // completion
-        return ReplyWithResult(MSTATUS_OK, msg->Record, ctx);
+        return ReplyWithResult(MSTATUS_OK, msg->Record, ctx); 
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecTimeout:
         return ReplyWithResult(MSTATUS_INPROGRESS, msg->Record, ctx);
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyNotReady:
@@ -328,10 +328,10 @@ void TMessageBusServerRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatu
 void TMessageBusServerRequest::Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx) {
     auto *response = new TEvDataShard::TEvGetReadTableStreamStateResponse;
 
-    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::GENERIC_ERROR);
-    auto *issue = response->Record.MutableStatus()->AddIssues();
-    issue->set_severity(NYql::TSeverityIds::S_ERROR);
-    issue->set_message("request proxy is not streaming");
+    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::GENERIC_ERROR); 
+    auto *issue = response->Record.MutableStatus()->AddIssues(); 
+    issue->set_severity(NYql::TSeverityIds::S_ERROR); 
+    issue->set_message("request proxy is not streaming"); 
     ctx.Send(ev->Sender, response);
 }
 

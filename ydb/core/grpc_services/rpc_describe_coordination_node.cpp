@@ -81,7 +81,7 @@ private:
     }
 
     void SendProposeRequest(const TActorContext &ctx) {
-        const auto req = GetProtoRequest();
+        const auto req = GetProtoRequest(); 
 
         std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
         SetAuthToken(navigateRequest, *Request_);
@@ -92,7 +92,7 @@ private:
         ctx.Send(MakeTxProxyID(), navigateRequest.release());
     }
 
-
+ 
 };
 
 void TGRpcRequestProxy::Handle(TEvDescribeCoordinationNode::TPtr& ev, const TActorContext& ctx) {

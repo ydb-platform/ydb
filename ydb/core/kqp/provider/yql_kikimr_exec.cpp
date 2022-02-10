@@ -387,10 +387,10 @@ private:
         auto resultType = executeRightType->Cast<TTupleExprType>()->GetItems()[resultIndex];
 
         YQL_ENSURE(resultIndex < runResult->Results.size());
-        auto resultValue = runResult->Results[resultIndex];
-        YQL_ENSURE(resultValue);
+        auto resultValue = runResult->Results[resultIndex]; 
+        YQL_ENSURE(resultValue); 
 
-        auto resResultNode = GetResOrPullResult(res.Ref(), fillSettings, resultType, *resultValue, ctx);
+        auto resResultNode = GetResOrPullResult(res.Ref(), fillSettings, resultType, *resultValue, ctx); 
 
         res.Ptr()->SetResult(std::move(resResultNode));
         return SyncOk();
@@ -508,26 +508,26 @@ public:
             return SyncOk();
         }
 
-        if (auto maybeAlter = TMaybeNode<TKiAlterTable>(input)) {
+        if (auto maybeAlter = TMaybeNode<TKiAlterTable>(input)) { 
             if (!EnsureNotPrepare("ALTER TABLE", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
-            }
-
-            auto requireStatus = RequireChild(*input, 0);
-            if (requireStatus.Level != TStatus::Ok) {
-                return SyncStatus(requireStatus);
-            }
-
+                return SyncError(); 
+            } 
+ 
+            auto requireStatus = RequireChild(*input, 0); 
+            if (requireStatus.Level != TStatus::Ok) { 
+                return SyncStatus(requireStatus); 
+            } 
+ 
             auto cluster = TString(maybeAlter.Cast().DataSink().Cluster());
             auto& table = SessionCtx->Tables().GetTable(cluster, TString(maybeAlter.Cast().Table()));
-
+ 
             if (!ApplyDdlOperation(cluster, input->Pos(), table.Metadata->Name, TYdbOperation::AlterTable, ctx)) {
                 return SyncError();
             }
 
-            Ydb::Table::AlterTableRequest alterTableRequest;
-            alterTableRequest.set_path(table.Metadata->Name);
-
+            Ydb::Table::AlterTableRequest alterTableRequest; 
+            alterTableRequest.set_path(table.Metadata->Name); 
+ 
             for (auto action : maybeAlter.Cast().Actions()) {
                 auto name = action.Name().Value();
                 if (name == "renameTo") {
@@ -542,12 +542,12 @@ public:
                 } else if (name == "addColumns") {
                     auto listNode = action.Value().Cast<TExprList>();
                     for (size_t i = 0; i < listNode.Size(); ++i) {
-                        auto add_column = alterTableRequest.add_add_columns();
+                        auto add_column = alterTableRequest.add_add_columns(); 
                         auto item = listNode.Item(i);
                         auto columnTuple = item.Cast<TExprList>();
                         auto columnName = columnTuple.Item(0).Cast<TCoAtom>();
-                        add_column->set_name(TString(columnName));
-
+                        add_column->set_name(TString(columnName)); 
+ 
                         auto typeNode = columnTuple.Item(1);
                         auto columnType = typeNode.Ref().GetTypeAnn();
                         auto type = columnType->Cast<TTypeExprType>()->GetType();
@@ -557,38 +557,38 @@ public:
                         SetColumnType(*add_column->mutable_type(), TString(dataType->GetName()), notNull);
                         if (columnTuple.Size() > 2) {
                             auto families = columnTuple.Item(2).Cast<TCoAtomList>();
-                            if (families.Size() > 1) {
-                                ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
-                                    "Unsupported number of families"));
-                                return SyncError();
-                            }
+                            if (families.Size() > 1) { 
+                                ctx.AddError(TIssue(ctx.GetPosition(families.Pos()), 
+                                    "Unsupported number of families")); 
+                                return SyncError(); 
+                            } 
                             for (auto family : families) {
-                                add_column->set_family(TString(family.Value()));
+                                add_column->set_family(TString(family.Value())); 
                             }
                         }
                     }
                 } else if (name == "dropColumns") {
                     auto listNode = action.Value().Cast<TCoAtomList>();
                     for (auto dropColumn : listNode) {
-                        alterTableRequest.add_drop_columns(TString(dropColumn.Value()));
+                        alterTableRequest.add_drop_columns(TString(dropColumn.Value())); 
                     }
                 } else if (name == "alterColumns") {
                     auto listNode = action.Value().Cast<TExprList>();
                     for (size_t i = 0; i < listNode.Size(); ++i) {
-                        auto alter_columns = alterTableRequest.add_alter_columns();
+                        auto alter_columns = alterTableRequest.add_alter_columns(); 
                         auto item = listNode.Item(i);
                         auto columnTuple = item.Cast<TExprList>();
                         auto columnName = columnTuple.Item(0).Cast<TCoAtom>();
-                        alter_columns->set_name(TString(columnName));
-
+                        alter_columns->set_name(TString(columnName)); 
+ 
                         auto families = columnTuple.Item(1).Cast<TCoAtomList>();
-                        if (families.Size() > 1) {
-                            ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
-                                "Unsupported number of families"));
-                            return SyncError();
-                        }
+                        if (families.Size() > 1) { 
+                            ctx.AddError(TIssue(ctx.GetPosition(families.Pos()), 
+                                "Unsupported number of families")); 
+                            return SyncError(); 
+                        } 
                         for (auto family : families) {
-                            alter_columns->set_family(TString(family.Value()));
+                            alter_columns->set_family(TString(family.Value())); 
                         }
                     }
                 } else if (name == "addColumnFamilies" || name == "alterColumnFamilies") {
@@ -596,36 +596,36 @@ public:
                     for (size_t i = 0; i < listNode.Size(); ++i) {
                         auto item = listNode.Item(i);
                         if (auto maybeTupleList = item.Maybe<TCoNameValueTupleList>()) {
-                            auto f = (name == "addColumnFamilies") ?
-                                alterTableRequest.add_add_column_families() :
-                                alterTableRequest.add_alter_column_families();
-
+                            auto f = (name == "addColumnFamilies") ? 
+                                alterTableRequest.add_add_column_families() : 
+                                alterTableRequest.add_alter_column_families(); 
+ 
                             for (auto familySetting : maybeTupleList.Cast()) {
                                 auto name = familySetting.Name().Value();
                                 if (name == "name") {
-                                    f->set_name(TString(familySetting.Value().Cast<TCoAtom>().Value()));
+                                    f->set_name(TString(familySetting.Value().Cast<TCoAtom>().Value())); 
                                 } else if (name == "data") {
-                                    auto data = TString(
-                                                familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>()
-                                                    .Value());
-                                    f->mutable_data()->set_media(data);
+                                    auto data = TString( 
+                                                familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>() 
+                                                    .Value()); 
+                                    f->mutable_data()->set_media(data); 
                                 } else if (name == "compression") {
-                                    auto comp = TString(
+                                    auto comp = TString( 
                                         familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>()
                                             .Value()
                                     );
-                                    if (to_lower(comp) == "off") {
-                                        f->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
-                                    } else if (to_lower(comp) == "lz4") {
-                                        f->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
-                                    } else {
-                                        auto errText = TStringBuilder() << "Unknown compression '" << comp
-                                            << "' for a column family";
-                                        ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
-                                            errText));
-                                        return SyncError();
-                                    }
-
+                                    if (to_lower(comp) == "off") { 
+                                        f->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE); 
+                                    } else if (to_lower(comp) == "lz4") { 
+                                        f->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4); 
+                                    } else { 
+                                        auto errText = TStringBuilder() << "Unknown compression '" << comp 
+                                            << "' for a column family"; 
+                                        ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()), 
+                                            errText)); 
+                                        return SyncError(); 
+                                    } 
+ 
                                 } else {
                                     ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
                                         TStringBuilder() << "Unknown column family setting name: " << name));
@@ -640,31 +640,31 @@ public:
                     for (const auto& setting : listNode) {
                         auto name = setting.Name().Value();
                         if (name == "compactionPolicy") {
-                            alterTableRequest.set_set_compaction_policy(TString(
+                            alterTableRequest.set_set_compaction_policy(TString( 
                                 setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                            ));
+                            )); 
                         } else if (name == "autoPartitioningBySize") {
-                            auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                            auto val = to_lower(TString(setting.Value().Cast<TCoAtom>().Value()));
-                            if (val == "enabled") {
-                                partitioningSettings->set_partitioning_by_size(Ydb::FeatureFlag::ENABLED);
-                            } else if (val == "disabled") {
-                                partitioningSettings->set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
-                            } else {
-                                auto errText = TStringBuilder() << "Unknown feature flag '"
-                                    << val
-                                    << "' for auto partitioning by size";
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()),
-                                    errText));
-                                return SyncError();
-                            }
+                            auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings(); 
+                            auto val = to_lower(TString(setting.Value().Cast<TCoAtom>().Value())); 
+                            if (val == "enabled") { 
+                                partitioningSettings->set_partitioning_by_size(Ydb::FeatureFlag::ENABLED); 
+                            } else if (val == "disabled") { 
+                                partitioningSettings->set_partitioning_by_size(Ydb::FeatureFlag::DISABLED); 
+                            } else { 
+                                auto errText = TStringBuilder() << "Unknown feature flag '" 
+                                    << val 
+                                    << "' for auto partitioning by size"; 
+                                ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()), 
+                                    errText)); 
+                                return SyncError(); 
+                            } 
                         } else if (name == "partitionSizeMb") {
                             ui64 value = FromString<ui64>(
                                 setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                                 );
                             if (value) {
-                                auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                                partitioningSettings->set_partition_size_mb(value);
+                                auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings(); 
+                                partitioningSettings->set_partition_size_mb(value); 
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                                     "Can't set preferred partition size to 0. "
@@ -672,27 +672,27 @@ public:
                                 return SyncError();
                             }
                         } else if (name == "autoPartitioningByLoad") {
-                            auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                            TString val = to_lower(TString(setting.Value().Cast<TCoAtom>().Value()));
-                            if (val == "enabled") {
-                                partitioningSettings->set_partitioning_by_load(Ydb::FeatureFlag::ENABLED);
-                            } else if (val == "disabled") {
-                                partitioningSettings->set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
-                            } else {
-                                auto errText = TStringBuilder() << "Unknown feature flag '"
-                                    << val
-                                    << "' for auto partitioning by load";
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()),
-                                    errText));
-                                return SyncError();
-                            }
+                            auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings(); 
+                            TString val = to_lower(TString(setting.Value().Cast<TCoAtom>().Value())); 
+                            if (val == "enabled") { 
+                                partitioningSettings->set_partitioning_by_load(Ydb::FeatureFlag::ENABLED); 
+                            } else if (val == "disabled") { 
+                                partitioningSettings->set_partitioning_by_load(Ydb::FeatureFlag::DISABLED); 
+                            } else { 
+                                auto errText = TStringBuilder() << "Unknown feature flag '" 
+                                    << val 
+                                    << "' for auto partitioning by load"; 
+                                ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()), 
+                                    errText)); 
+                                return SyncError(); 
+                            } 
                         } else if (name == "minPartitions") {
                             ui64 value = FromString<ui64>(
                                 setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                                 );
                             if (value) {
-                                auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                                partitioningSettings->set_min_partitions_count(value);
+                                auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings(); 
+                                partitioningSettings->set_min_partitions_count(value); 
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                                     "Can't set min partition count to 0"));
@@ -703,42 +703,42 @@ public:
                                 setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                                 );
                             if (value) {
-                                auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings();
-                                partitioningSettings->set_max_partitions_count(value);
+                                auto partitioningSettings = alterTableRequest.mutable_alter_partitioning_settings(); 
+                                partitioningSettings->set_max_partitions_count(value); 
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                                     "Can't set max partition count to 0"));
                                 return SyncError();
                             }
                         } else if (name == "keyBloomFilter") {
-                            auto val = to_lower(TString(setting.Value().Cast<TCoAtom>().Value()));
-                            if (val == "enabled") {
-                                alterTableRequest.set_set_key_bloom_filter(Ydb::FeatureFlag::ENABLED);
-                            } else if (val == "disabled") {
-                                alterTableRequest.set_set_key_bloom_filter(Ydb::FeatureFlag::DISABLED);
-                            } else {
-                                auto errText = TStringBuilder() << "Unknown feature flag '"
-                                    << val
-                                    << "' for key bloom filter";
-                                ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()),
-                                    errText));
-                                return SyncError();
-                            }
-
+                            auto val = to_lower(TString(setting.Value().Cast<TCoAtom>().Value())); 
+                            if (val == "enabled") { 
+                                alterTableRequest.set_set_key_bloom_filter(Ydb::FeatureFlag::ENABLED); 
+                            } else if (val == "disabled") { 
+                                alterTableRequest.set_set_key_bloom_filter(Ydb::FeatureFlag::DISABLED); 
+                            } else { 
+                                auto errText = TStringBuilder() << "Unknown feature flag '" 
+                                    << val 
+                                    << "' for key bloom filter"; 
+                                ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Cast<TCoAtom>().Pos()), 
+                                    errText)); 
+                                return SyncError(); 
+                            } 
+ 
                         } else if (name == "readReplicasSettings") {
-                            const auto replicasSettings = TString(
+                            const auto replicasSettings = TString( 
                                 setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                             );
-                            Ydb::StatusIds::StatusCode code;
-                            TString errText;
-                            if (!ConvertReadReplicasSettingsToProto(replicasSettings,
-                                 *alterTableRequest.mutable_set_read_replicas_settings(), code, errText)) {
-
-                                ctx.AddError(YqlIssue(ctx.GetPosition(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Pos()),
-                                                      NYql::YqlStatusFromYdbStatus(code),
-                                                      errText));
-                                return SyncError();
-                            }
+                            Ydb::StatusIds::StatusCode code; 
+                            TString errText; 
+                            if (!ConvertReadReplicasSettingsToProto(replicasSettings, 
+                                 *alterTableRequest.mutable_set_read_replicas_settings(), code, errText)) { 
+ 
+                                ctx.AddError(YqlIssue(ctx.GetPosition(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Pos()), 
+                                                      NYql::YqlStatusFromYdbStatus(code), 
+                                                      errText)); 
+                                return SyncError(); 
+                            } 
                         } else if (name == "setTtlSettings") {
                             TTtlSettings ttlSettings;
                             TString error;
@@ -750,85 +750,85 @@ public:
                                 return SyncError();
                             }
 
-                            ConvertTtlSettingsToProto(ttlSettings, *alterTableRequest.mutable_set_ttl_settings());
+                            ConvertTtlSettingsToProto(ttlSettings, *alterTableRequest.mutable_set_ttl_settings()); 
                         } else if (name == "resetTtlSettings") {
-                            alterTableRequest.mutable_drop_ttl_settings();
+                            alterTableRequest.mutable_drop_ttl_settings(); 
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                                 TStringBuilder() << "Unknown table profile setting: " << name));
                             return SyncError();
                         }
                     }
-                } else if (name == "addIndex") {
-                    auto listNode = action.Value().Cast<TExprList>();
-                    auto add_index = alterTableRequest.add_add_indexes();
-                    for (size_t i = 0; i < listNode.Size(); ++i) {
-                        auto item = listNode.Item(i);
-                        auto columnTuple = item.Cast<TExprList>();
-                        auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
-                        auto name = TString(nameNode.Value());
-                        if (name == "indexName") {
-                            add_index->set_name(TString(columnTuple.Item(1).Cast<TCoAtom>().Value()));
-                        } else if (name == "indexType") {
-                            const auto type = TString(columnTuple.Item(1).Cast<TCoAtom>().Value());
+                } else if (name == "addIndex") { 
+                    auto listNode = action.Value().Cast<TExprList>(); 
+                    auto add_index = alterTableRequest.add_add_indexes(); 
+                    for (size_t i = 0; i < listNode.Size(); ++i) { 
+                        auto item = listNode.Item(i); 
+                        auto columnTuple = item.Cast<TExprList>(); 
+                        auto nameNode = columnTuple.Item(0).Cast<TCoAtom>(); 
+                        auto name = TString(nameNode.Value()); 
+                        if (name == "indexName") { 
+                            add_index->set_name(TString(columnTuple.Item(1).Cast<TCoAtom>().Value())); 
+                        } else if (name == "indexType") { 
+                            const auto type = TString(columnTuple.Item(1).Cast<TCoAtom>().Value()); 
                             if (type == "syncGlobal") {
-                                add_index->mutable_global_index();
+                                add_index->mutable_global_index(); 
                             } else if (type == "asyncGlobal") {
                                 add_index->mutable_global_async_index();
-                            } else {
-                                ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
-                                    TStringBuilder() << "Unknown index type: " << type));
-                                return SyncError();
-                            }
-                        } else if (name == "indexColumns") {
-                            auto columnList = columnTuple.Item(1).Cast<TCoAtomList>();
-                            for (auto column : columnList) {
-                                TString columnName(column.Value());
-                                add_index->add_index_columns(columnName);
-                            }
-                        } else if (name == "dataColumns") {
-                            auto columnList = columnTuple.Item(1).Cast<TCoAtomList>();
-                            for (auto column : columnList) {
-                                TString columnName(column.Value());
-                                add_index->add_data_columns(columnName);
-                            }
-                        } else {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
-                                TStringBuilder() << "Unknown add index setting: " << name));
-                            return SyncError();
-                        }
-                    }
+                            } else { 
+                                ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()), 
+                                    TStringBuilder() << "Unknown index type: " << type)); 
+                                return SyncError(); 
+                            } 
+                        } else if (name == "indexColumns") { 
+                            auto columnList = columnTuple.Item(1).Cast<TCoAtomList>(); 
+                            for (auto column : columnList) { 
+                                TString columnName(column.Value()); 
+                                add_index->add_index_columns(columnName); 
+                            } 
+                        } else if (name == "dataColumns") { 
+                            auto columnList = columnTuple.Item(1).Cast<TCoAtomList>(); 
+                            for (auto column : columnList) { 
+                                TString columnName(column.Value()); 
+                                add_index->add_data_columns(columnName); 
+                            } 
+                        } else { 
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), 
+                                TStringBuilder() << "Unknown add index setting: " << name)); 
+                            return SyncError(); 
+                        } 
+                    } 
                     switch (add_index->type_case()) {
                         case Ydb::Table::TableIndex::kGlobalIndex:
-                            *add_index->mutable_global_index() = Ydb::Table::GlobalIndex();
+                            *add_index->mutable_global_index() = Ydb::Table::GlobalIndex(); 
                             break;
                         case Ydb::Table::TableIndex::kGlobalAsyncIndex:
-                            *add_index->mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
+                            *add_index->mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex(); 
                             break;
                         default:
                             YQL_ENSURE(false, "Unknown index type: " << (ui32)add_index->type_case());
                     }
-                } else if (name == "dropIndex") {
-                    auto nameNode = action.Value().Cast<TCoAtom>();
-                    alterTableRequest.add_drop_indexes(TString(nameNode.Value()));
+                } else if (name == "dropIndex") { 
+                    auto nameNode = action.Value().Cast<TCoAtom>(); 
+                    alterTableRequest.add_drop_indexes(TString(nameNode.Value())); 
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                         TStringBuilder() << "Unknown alter table action: " << name));
                     return SyncError();
-                }
-            }
-
-            auto future = Gateway->AlterTable(std::move(alterTableRequest), cluster);
-
-            return WrapFuture(future,
-                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
-                    Y_UNUSED(res);
-                    auto resultNode = ctx.NewWorld(input->Pos());
-                    return resultNode;
-                });
-
-        }
-
+                } 
+            } 
+ 
+            auto future = Gateway->AlterTable(std::move(alterTableRequest), cluster); 
+ 
+            return WrapFuture(future, 
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) { 
+                    Y_UNUSED(res); 
+                    auto resultNode = ctx.NewWorld(input->Pos()); 
+                    return resultNode; 
+                }); 
+ 
+        } 
+ 
         if (auto maybeCreateUser = TMaybeNode<TKiCreateUser>(input)) {
             if (!EnsureNotPrepare("CREATE USER", input->Pos(), SessionCtx->Query(), ctx)) {
                 return SyncError();
@@ -1099,20 +1099,20 @@ private:
         auto queryType = SessionCtx->Query().Type;
         TVector<NKqpProto::TKqpTableInfo> tableInfo;
 
-        for (const auto& op : tableOps) {
-            auto table = op.GetTable();
-            const auto& desc = SessionCtx->Tables().GetTable(cluster, table);
-            YQL_ENSURE(desc.Metadata);
+        for (const auto& op : tableOps) { 
+            auto table = op.GetTable(); 
+            const auto& desc = SessionCtx->Tables().GetTable(cluster, table); 
+            YQL_ENSURE(desc.Metadata); 
             tableInfo.push_back(NKqpProto::TKqpTableInfo());
-            TableDescriptionToTableInfo(desc, &tableInfo.back());
-        }
-
+            TableDescriptionToTableInfo(desc, &tableInfo.back()); 
+        } 
+ 
         if (!SessionCtx->HasTx()) {
             TKikimrTransactionContextBase emptyCtx;
-            return emptyCtx.ApplyTableOperations(tableOps, tableInfo, isolationLevel, strictDml, queryType, ctx);
+            return emptyCtx.ApplyTableOperations(tableOps, tableInfo, isolationLevel, strictDml, queryType, ctx); 
         }
 
-        return SessionCtx->Tx().ApplyTableOperations(tableOps, tableInfo, isolationLevel, strictDml, queryType, ctx);
+        return SessionCtx->Tx().ApplyTableOperations(tableOps, tableInfo, isolationLevel, strictDml, queryType, ctx); 
     }
 
     bool ApplyDdlOperation(const TString& cluster, TPositionHandle pos, const TString& table,

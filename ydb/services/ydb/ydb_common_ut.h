@@ -1,25 +1,25 @@
-#pragma once
-
+#pragma once 
+ 
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/formats/arrow_helpers.h>
 #include <ydb/services/ydb/ydb_dummy.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
-
-#include "ydb_keys_ut.h"
-
+ 
+#include "ydb_keys_ut.h" 
+ 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/csv/api.h> // for WriteCSV()
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
 
 #include <functional>
 
-using namespace NKikimr;
+using namespace NKikimr; 
 namespace NYdb {
-
-using namespace Tests;
+ 
+using namespace Tests; 
 using namespace NYdb;
-
+ 
 struct TKikimrTestSettings {
     static constexpr bool SSL = false;
     static constexpr bool AUTH = false;
@@ -41,7 +41,7 @@ struct TKikimrTestNoSystemViews : TKikimrTestSettings {
 
 template <typename TestSettings = TKikimrTestSettings>
 class TBasicKikimrWithGrpcAndRootSchema {
-public:
+public: 
     TBasicKikimrWithGrpcAndRootSchema(
             NKikimrConfig::TAppConfig appConfig = {},
             const TVector<NKikimrKqp::TKqpSetting>& kqpSettings = {},
@@ -49,7 +49,7 @@ public:
             bool enableYq = false,
             TAppPrepare::TFnReg udfFrFactory = nullptr,
             std::function<void(TServerSettings& settings)> builder = nullptr)
-    {
+    { 
         ui16 port = PortManager.GetPort(2134);
         ui16 grpc = PortManager.GetPort(2135);
         ServerSettings = new TServerSettings(port);
@@ -73,7 +73,7 @@ public:
         ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
         ServerSettings->SetKqpSettings(kqpSettings);
         ServerSettings->SetEnableAsyncIndexes(true);
-        ServerSettings->SetEnableDataColumnForIndexTable(true);
+        ServerSettings->SetEnableDataColumnForIndexTable(true); 
         ServerSettings->SetEnableNotNullColumns(true);
         ServerSettings->SetEnableSystemViews(TestSettings::EnableSystemViews);
         ServerSettings->SetEnableSchemeTransactionsAtSchemeShard(true);
@@ -83,7 +83,7 @@ public:
         if (appConfig.HasMeteringConfig() && appConfig.GetMeteringConfig().HasMeteringFilePath()) {
             ServerSettings->SetMeteringFilePath(appConfig.GetMeteringConfig().GetMeteringFilePath());
         }
-        ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TGRpcYdbDummyService>("dummy");
+        ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TGRpcYdbDummyService>("dummy"); 
         if (udfFrFactory) {
             ServerSettings->SetFrFactory(udfFrFactory);
         }
@@ -94,10 +94,10 @@ public:
         Server_.Reset(new TServer(*ServerSettings));
         Tenants_.Reset(new Tests::TTenants(Server_));
 
-        //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_DEBUG);
-        //Server_->GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG);
+        //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_DEBUG); 
+        //Server_->GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG); 
         Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
-        //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
+        //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG); 
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_OLAPSHARD, NActors::NLog::PRI_DEBUG);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
         if (enableYq) {
@@ -107,29 +107,29 @@ public:
 
         NGrpc::TServerOptions grpcOption;
         if (TestSettings::AUTH) {
-            grpcOption.SetUseAuth(true);
-        }
-        grpcOption.SetPort(grpc);
+            grpcOption.SetUseAuth(true); 
+        } 
+        grpcOption.SetPort(grpc); 
         if (TestSettings::SSL) {
             NGrpc::TSslData sslData{NYdbSslTestData::ServerCrt,
-                                          NYdbSslTestData::ServerKey,
-                                          NYdbSslTestData::CaCrt};
-            grpcOption.SetSslData(sslData);
-        }
-        Server_->EnableGRpc(grpcOption);
+                                          NYdbSslTestData::ServerKey, 
+                                          NYdbSslTestData::CaCrt}; 
+            grpcOption.SetSslData(sslData); 
+        } 
+        Server_->EnableGRpc(grpcOption); 
 
         TClient annoyingClient(*ServerSettings);
-        if (ServerSettings->AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
-            annoyingClient.SetSecurityToken("root@builtin");
-        }
-        annoyingClient.InitRootScheme("Root");
-        GRpcPort_ = grpc;
-    }
+        if (ServerSettings->AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) { 
+            annoyingClient.SetSecurityToken("root@builtin"); 
+        } 
+        annoyingClient.InitRootScheme("Root"); 
+        GRpcPort_ = grpc; 
+    } 
 
-    ui16 GetPort() {
-        return GRpcPort_;
-    }
-
+    ui16 GetPort() { 
+        return GRpcPort_; 
+    } 
+ 
     TPortManager& GetPortManager() {
         return PortManager;
     }
@@ -151,11 +151,11 @@ public:
     TServerSettings::TPtr ServerSettings;
     Tests::TServer::TPtr Server_;
     THolder<Tests::TTenants> Tenants_;
-private:
+private: 
     TPortManager PortManager;
-    ui16 GRpcPort_;
-};
-
+    ui16 GRpcPort_; 
+}; 
+ 
 struct TTestOlap {
     static constexpr const char * StoreName = "OlapStore";
     static constexpr const char * TableName = "OlapTable";
@@ -310,4 +310,4 @@ using TKikimrWithGrpcAndRootSchemaWithAuth = TBasicKikimrWithGrpcAndRootSchema<T
 using TKikimrWithGrpcAndRootSchemaWithAuthAndSsl = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuthAndSsl>;
 using TKikimrWithGrpcAndRootSchemaNoSystemViews = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestNoSystemViews>;
 
-}
+} 

@@ -14,7 +14,7 @@ using namespace NYdb::NTable;
 Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(UseUnauthorizedTable) {
         TKikimrRunner kikimr("test_user@builtin");
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto& tableSettings = kikimr.GetTestServer().GetSettings().AppConfig.GetTableServiceConfig();
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(UseNonexistentTable) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(UseDroppedTable) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateDroppedTable) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto schemeResult = session.ExecuteSchemeQuery(R"(
@@ -99,98 +99,98 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(CreateDropTableMultipleTime) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-
-        const size_t inflight = 4;
-        const size_t limit = 1000;
-
-        const static TString createTableQuery = R"(
+    Y_UNIT_TEST(CreateDropTableMultipleTime) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+ 
+        const size_t inflight = 4; 
+        const size_t limit = 1000; 
+ 
+        const static TString createTableQuery = R"( 
             CREATE TABLE [/Root/Test1234/KeyValue] (
-                Key Uint32,
-                Value String,
-                PRIMARY KEY(Key)
-            );
-        )";
-
-        const static TString dropTableQuery = R"(
+                Key Uint32, 
+                Value String, 
+                PRIMARY KEY(Key) 
+            ); 
+        )"; 
+ 
+        const static TString dropTableQuery = R"( 
             DROP TABLE [/Root/Test1234/KeyValue];
-        )";
-
-        NPar::LocalExecutor().RunAdditionalThreads(inflight);
+        )"; 
+ 
+        NPar::LocalExecutor().RunAdditionalThreads(inflight); 
         NPar::LocalExecutor().ExecRange([=, &db](int /*id*/) mutable {
-            size_t i = limit;
-            while (--i) {
-                auto session = db.GetSession().GetValueSync().GetSession();
-                {
-                    auto result = session.ExecuteSchemeQuery(dropTableQuery)
-                        .ExtractValueSync();
-                    if (!(result.GetStatus() == EStatus::SUCCESS ||
-                          result.GetStatus() == EStatus::SCHEME_ERROR ||
-                          result.GetStatus() == EStatus::OVERLOADED)) {
-                        UNIT_ASSERT_C(false, "status: " << result.GetStatus()
-                            << " issues: " << result.GetIssues().ToString());
-                    }
-                }
-                {
-                    auto result = session.ExecuteSchemeQuery(createTableQuery)
-                        .ExtractValueSync();
-                    if (!(result.GetStatus() == EStatus::SUCCESS ||
-                          result.GetStatus() == EStatus::SCHEME_ERROR ||
-                          result.GetStatus() == EStatus::OVERLOADED)) {
-                        UNIT_ASSERT_C(false, "status: " << result.GetStatus()
-                            << " issues: " << result.GetIssues().ToString());
-                    }
-                }
-
-            }
-        }, 0, inflight, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
-    }
-
-    Y_UNIT_TEST(CreateDropTableViaApiMultipleTime) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-
-        const size_t inflight = 4;
-        const size_t limit = 1000;
+            size_t i = limit; 
+            while (--i) { 
+                auto session = db.GetSession().GetValueSync().GetSession(); 
+                { 
+                    auto result = session.ExecuteSchemeQuery(dropTableQuery) 
+                        .ExtractValueSync(); 
+                    if (!(result.GetStatus() == EStatus::SUCCESS || 
+                          result.GetStatus() == EStatus::SCHEME_ERROR || 
+                          result.GetStatus() == EStatus::OVERLOADED)) { 
+                        UNIT_ASSERT_C(false, "status: " << result.GetStatus() 
+                            << " issues: " << result.GetIssues().ToString()); 
+                    } 
+                } 
+                { 
+                    auto result = session.ExecuteSchemeQuery(createTableQuery) 
+                        .ExtractValueSync(); 
+                    if (!(result.GetStatus() == EStatus::SUCCESS || 
+                          result.GetStatus() == EStatus::SCHEME_ERROR || 
+                          result.GetStatus() == EStatus::OVERLOADED)) { 
+                        UNIT_ASSERT_C(false, "status: " << result.GetStatus() 
+                            << " issues: " << result.GetIssues().ToString()); 
+                    } 
+                } 
+ 
+            } 
+        }, 0, inflight, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY); 
+    } 
+ 
+    Y_UNIT_TEST(CreateDropTableViaApiMultipleTime) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+ 
+        const size_t inflight = 4; 
+        const size_t limit = 1000; 
         const static TString tableName = "/Root/Test1234/KeyValue";
-
-        NPar::LocalExecutor().RunAdditionalThreads(inflight);
+ 
+        NPar::LocalExecutor().RunAdditionalThreads(inflight); 
         NPar::LocalExecutor().ExecRange([=, &db](int /*id*/) mutable {
-            size_t i = limit;
-            while (--i) {
-                auto session = db.GetSession().GetValueSync().GetSession();
-                {
-                    auto result = session.DropTable(tableName)
-                        .ExtractValueSync();
-                    if (!(result.GetStatus() == EStatus::SUCCESS ||
-                          result.GetStatus() == EStatus::SCHEME_ERROR ||
-                          result.GetStatus() == EStatus::OVERLOADED)) {
-                        UNIT_ASSERT_C(false, "status: " << result.GetStatus()
-                            << " issues: " << result.GetIssues().ToString());
-                    }
-                }
-                {
-                    auto desc = TTableBuilder()
-                        .AddNullableColumn("Key", EPrimitiveType::Uint32)
-                        .AddNullableColumn("Value", EPrimitiveType::String)
-                        .SetPrimaryKeyColumn("Key")
-                        .Build();
-                    auto result = session.CreateTable(tableName, std::move(desc))
-                        .ExtractValueSync();
-                    if (!(result.GetStatus() == EStatus::SUCCESS ||
-                          result.GetStatus() == EStatus::SCHEME_ERROR ||
-                          result.GetStatus() == EStatus::OVERLOADED)) {
-                        UNIT_ASSERT_C(false, "status: " << result.GetStatus()
-                            << " issues: " << result.GetIssues().ToString());
-                    }
-                }
-
-            }
-        }, 0, inflight, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
-    }
-
+            size_t i = limit; 
+            while (--i) { 
+                auto session = db.GetSession().GetValueSync().GetSession(); 
+                { 
+                    auto result = session.DropTable(tableName) 
+                        .ExtractValueSync(); 
+                    if (!(result.GetStatus() == EStatus::SUCCESS || 
+                          result.GetStatus() == EStatus::SCHEME_ERROR || 
+                          result.GetStatus() == EStatus::OVERLOADED)) { 
+                        UNIT_ASSERT_C(false, "status: " << result.GetStatus() 
+                            << " issues: " << result.GetIssues().ToString()); 
+                    } 
+                } 
+                { 
+                    auto desc = TTableBuilder() 
+                        .AddNullableColumn("Key", EPrimitiveType::Uint32) 
+                        .AddNullableColumn("Value", EPrimitiveType::String) 
+                        .SetPrimaryKeyColumn("Key") 
+                        .Build(); 
+                    auto result = session.CreateTable(tableName, std::move(desc)) 
+                        .ExtractValueSync(); 
+                    if (!(result.GetStatus() == EStatus::SUCCESS || 
+                          result.GetStatus() == EStatus::SCHEME_ERROR || 
+                          result.GetStatus() == EStatus::OVERLOADED)) { 
+                        UNIT_ASSERT_C(false, "status: " << result.GetStatus() 
+                            << " issues: " << result.GetIssues().ToString()); 
+                    } 
+                } 
+ 
+            } 
+        }, 0, inflight, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY); 
+    } 
+ 
     Y_UNIT_TEST(QueryWithAlter) {
         auto kikimr = std::make_shared<TKikimrRunner>();
         auto db = kikimr->GetTableClient();
@@ -240,13 +240,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             }
         }, 0, Inflight + 1, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
     }
-
+ 
     Y_UNIT_TEST_NEW_ENGINE(SchemaVersionMissmatch) {
         TKikimrRunner kikimr;
-
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
+ 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
         const TString query = Q_(R"(
             SELECT * FROM [/Root/KeyValue] WHERE Value = "New";
         )");
@@ -255,14 +255,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         execSettings.KeepInQueryCache(true);
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
-        {
+        { 
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(),
                 TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync();
-
+ 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+        } 
 
-        {
+        { 
             auto result = session.ExecuteDataQuery(query,
                 TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -272,46 +272,46 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
 
         {
-            auto type = TTypeBuilder()
-                .BeginOptional()
-                    .Primitive(EPrimitiveType::Utf8)
-                .EndOptional()
-                .Build();
-
+            auto type = TTypeBuilder() 
+                .BeginOptional() 
+                    .Primitive(EPrimitiveType::Utf8) 
+                .EndOptional() 
+                .Build(); 
+ 
             auto result = session.AlterTable("/Root/KeyValue", TAlterTableSettings()
-                .AppendAddColumns(TColumn{"NewColumn", type})).ExtractValueSync();
+                .AppendAddColumns(TColumn{"NewColumn", type})).ExtractValueSync(); 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        {
-            auto result = session.ExecuteDataQuery(query,
+        } 
+ 
+        { 
+            auto result = session.ExecuteDataQuery(query, 
                 TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
+ 
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
             UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
-        }
-    }
-
+        } 
+    } 
+ 
     void CheckInvalidationAfterDropCreateTable(bool withCompatSchema) {
         TKikimrRunner kikimr;
-
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
+ 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
         const TString sql = "UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES(1, \"One\")";
-
+ 
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.KeepInQueryCache(true);
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
-        {
+        { 
             auto result = session.ExecuteDataQuery(sql,
                 TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync();
-
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
-
-        {
+ 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
+        } 
+ 
+        { 
             auto result = session.ExecuteDataQuery(sql,
                 TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -322,141 +322,141 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         {
             auto result = session.DropTable("/Root/KeyValue").ExtractValueSync();
-
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
-
-        {
-            auto desc = withCompatSchema
-                ? TTableBuilder()
-                    .AddNullableColumn("Key", EPrimitiveType::Uint64)
-                    .AddNullableColumn("Value", EPrimitiveType::String)
-                    .AddNullableColumn("Value2", EPrimitiveType::String)
-                    .SetPrimaryKeyColumns({"Key"})
-                    .Build()
-                : TTableBuilder()
-                    .AddNullableColumn("Key", EPrimitiveType::Uint64)
-                    .AddNullableColumn("Value", EPrimitiveType::String)
-                    .SetPrimaryKeyColumns({"Key", "Value"})
-                    .Build();
-
+ 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
+        } 
+ 
+        { 
+            auto desc = withCompatSchema 
+                ? TTableBuilder() 
+                    .AddNullableColumn("Key", EPrimitiveType::Uint64) 
+                    .AddNullableColumn("Value", EPrimitiveType::String) 
+                    .AddNullableColumn("Value2", EPrimitiveType::String) 
+                    .SetPrimaryKeyColumns({"Key"}) 
+                    .Build() 
+                : TTableBuilder() 
+                    .AddNullableColumn("Key", EPrimitiveType::Uint64) 
+                    .AddNullableColumn("Value", EPrimitiveType::String) 
+                    .SetPrimaryKeyColumns({"Key", "Value"}) 
+                    .Build(); 
+ 
             auto result =  session.CreateTable("/Root/KeyValue",
-                std::move(desc)).GetValueSync();
-
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
-
-        {
+                std::move(desc)).GetValueSync(); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
+        } 
+ 
+        { 
             auto result = session.ExecuteDataQuery(sql,
                 TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
-
+ 
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-
+ 
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
             UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
-        }
-
-        {
-            // New session
-            auto session2 = db.CreateSession().GetValueSync().GetSession();
+        } 
+ 
+        { 
+            // New session 
+            auto session2 = db.CreateSession().GetValueSync().GetSession(); 
             auto result = session2.ExecuteDataQuery(sql,
                 TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync();
-
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
-    }
-
-    Y_UNIT_TEST(InvalidationAfterDropCreate) {
+ 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(InvalidationAfterDropCreate) { 
         CheckInvalidationAfterDropCreateTable(false);
-    }
-
-    Y_UNIT_TEST(InvalidationAfterDropCreateCompatSchema) {
+    } 
+ 
+    Y_UNIT_TEST(InvalidationAfterDropCreateCompatSchema) { 
         CheckInvalidationAfterDropCreateTable(true);
-    }
-
-    void CheckInvalidationAfterDropCreateTable2(bool multistageTx, bool select) {
-        TKikimrRunner kikimr(TString(), KikimrDefaultUtDomainRoot, 1);
-
-        auto db = kikimr.GetTableClient();
-        const TString sql = select
+    } 
+ 
+    void CheckInvalidationAfterDropCreateTable2(bool multistageTx, bool select) { 
+        TKikimrRunner kikimr(TString(), KikimrDefaultUtDomainRoot, 1); 
+ 
+        auto db = kikimr.GetTableClient(); 
+        const TString sql = select 
             ? "SELECT * FROM [/Root/KeyValue];"
             : "UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES(1, \"One\")";
-
-        auto action = [db, sql, multistageTx]() mutable {
-            return db.RetryOperationSync(
-                [&](NYdb::NTable::TSession session) -> NYdb::TStatus {
-                    auto prepareResult = session.PrepareDataQuery(sql).GetValueSync();
-
-                    if (!prepareResult.IsSuccess()) {
-                        return prepareResult;
-                    }
-                    auto dataQuery = prepareResult.GetQuery();
-
-                    auto transaction = multistageTx
-                        ? NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW())
-                        : NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx();
-                    auto result = dataQuery.Execute(transaction).GetValueSync();
-
-                    if (multistageTx) {
-                        if (!result.IsSuccess()) {
-                            return result;
-                        }
-                        return result.GetTransaction()->Commit().GetValueSync();
-                    } else {
-                        return result;
-                    }
-                }
-            );
-        };
-
-        {
-            auto result = action();
-
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
-
-        {
+ 
+        auto action = [db, sql, multistageTx]() mutable { 
+            return db.RetryOperationSync( 
+                [&](NYdb::NTable::TSession session) -> NYdb::TStatus { 
+                    auto prepareResult = session.PrepareDataQuery(sql).GetValueSync(); 
+ 
+                    if (!prepareResult.IsSuccess()) { 
+                        return prepareResult; 
+                    } 
+                    auto dataQuery = prepareResult.GetQuery(); 
+ 
+                    auto transaction = multistageTx 
+                        ? NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()) 
+                        : NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(); 
+                    auto result = dataQuery.Execute(transaction).GetValueSync(); 
+ 
+                    if (multistageTx) { 
+                        if (!result.IsSuccess()) { 
+                            return result; 
+                        } 
+                        return result.GetTransaction()->Commit().GetValueSync(); 
+                    } else { 
+                        return result; 
+                    } 
+                } 
+            ); 
+        }; 
+ 
+        { 
+            auto result = action(); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
+        } 
+ 
+        { 
             auto result = db.GetSession().GetValueSync().GetSession().DropTable("/Root/KeyValue").ExtractValueSync();
-
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
-
-        {
-            auto desc = TTableBuilder()
-                .AddNullableColumn("Key", EPrimitiveType::Uint64)
-                .AddNullableColumn("Value", EPrimitiveType::String)
-                .AddNullableColumn("Value2", EPrimitiveType::String)
-                .SetPrimaryKeyColumns({"Key"})
-                .Build();
-
+ 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
+        } 
+ 
+        { 
+            auto desc = TTableBuilder() 
+                .AddNullableColumn("Key", EPrimitiveType::Uint64) 
+                .AddNullableColumn("Value", EPrimitiveType::String) 
+                .AddNullableColumn("Value2", EPrimitiveType::String) 
+                .SetPrimaryKeyColumns({"Key"}) 
+                .Build(); 
+ 
             auto result = db.GetSession().GetValueSync().GetSession().CreateTable("/Root/KeyValue",
-                std::move(desc)).GetValueSync();
-
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
-
-        {
-            auto result = action();
-
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
-    }
-
-    Y_UNIT_TEST(InvalidationAfterDropCreateTable2) {
-        CheckInvalidationAfterDropCreateTable2(false, false);
-    }
-
-    Y_UNIT_TEST(InvalidationAfterDropCreateTable2MultiStageTx) {
-        CheckInvalidationAfterDropCreateTable2(true, false);
-    }
-
-    Y_UNIT_TEST(InvalidationAfterDropCreateTable2NoEffects) {
-        CheckInvalidationAfterDropCreateTable2(false, true);
-    }
-
-    Y_UNIT_TEST(InvalidationAfterDropCreateTable2MultiStageTxNoEffects) {
-        CheckInvalidationAfterDropCreateTable2(true, true);
-    }
+                std::move(desc)).GetValueSync(); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
+        } 
+ 
+        { 
+            auto result = action(); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(InvalidationAfterDropCreateTable2) { 
+        CheckInvalidationAfterDropCreateTable2(false, false); 
+    } 
+ 
+    Y_UNIT_TEST(InvalidationAfterDropCreateTable2MultiStageTx) { 
+        CheckInvalidationAfterDropCreateTable2(true, false); 
+    } 
+ 
+    Y_UNIT_TEST(InvalidationAfterDropCreateTable2NoEffects) { 
+        CheckInvalidationAfterDropCreateTable2(false, true); 
+    } 
+ 
+    Y_UNIT_TEST(InvalidationAfterDropCreateTable2MultiStageTxNoEffects) { 
+        CheckInvalidationAfterDropCreateTable2(true, true); 
+    } 
 
     Y_UNIT_TEST(CreateTableWithDefaultSettings) {
         TKikimrRunner kikimr;
@@ -1645,24 +1645,24 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR));
     }
 
-    Y_UNIT_TEST(DropIndexDataColumn) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        TKikimrRunner kikimr({setting});
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateSampleTablesWithIndex(session);
-
-        const TString query1(R"(
-            ALTER TABLE `/Root/SecondaryWithDataColumns` DROP COLUMN Value;
-        )");
-
-        auto result = session.ExecuteSchemeQuery(
-            query1)
-        .ExtractValueSync();
-
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-    }
-
+    Y_UNIT_TEST(DropIndexDataColumn) { 
+        auto setting = NKikimrKqp::TKqpSetting(); 
+        TKikimrRunner kikimr({setting}); 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        CreateSampleTablesWithIndex(session); 
+ 
+        const TString query1(R"( 
+            ALTER TABLE `/Root/SecondaryWithDataColumns` DROP COLUMN Value; 
+        )"); 
+ 
+        auto result = session.ExecuteSchemeQuery( 
+            query1) 
+        .ExtractValueSync(); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED); 
+    } 
+ 
     Y_UNIT_TEST(PathWithNoRoot) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -1742,75 +1742,75 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     void AlterTableAddIndex(EIndexTypeSql type, bool enableAsyncIndexes = false) {
         TKikimrRunner kikimr(TKikimrSettings().SetEnableAsyncIndexes(enableAsyncIndexes));
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateSampleTablesWithIndex(session);
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        CreateSampleTablesWithIndex(session); 
 
         const auto typeStr = IndexTypeSqlString(type);
         const auto expectedStatus = (type == EIndexTypeSql::GlobalAsync)
             ? (enableAsyncIndexes ? EStatus::SUCCESS : EStatus::UNSUPPORTED)
             : EStatus::SUCCESS;
-
-        {
+ 
+        { 
             auto status = session.ExecuteSchemeQuery(Sprintf(R"(
-                --!syntax_v1
+                --!syntax_v1 
                 ALTER TABLE `/Root/Test` ADD INDEX NameIndex %s ON (Name);
             )", typeStr.data())).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), expectedStatus, status.GetIssues().ToString());
-        }
-
-        {
+        } 
+ 
+        { 
             TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS); 
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions(); 
 
             if (expectedStatus != EStatus::SUCCESS) {
                 UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 0);
                 return;
             }
 
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexName(), "NameIndex");
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1); 
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexName(), "NameIndex"); 
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexType(), IndexTypeSqlToIndexType(type));
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 0);
-        }
-
-        {
-            auto status = session.ExecuteSchemeQuery(R"(
-                --!syntax_v1
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 1); 
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 0); 
+        } 
+ 
+        { 
+            auto status = session.ExecuteSchemeQuery(R"( 
+                --!syntax_v1 
                 ALTER TABLE `/Root/Test` DROP INDEX NameIndex;
-            )").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
-        }
-
-        {
+            )").ExtractValueSync(); 
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString()); 
+        } 
+ 
+        { 
             TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 0);
-        }
-
-        {
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS); 
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions(); 
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 0); 
+        } 
+ 
+        { 
             auto status = session.ExecuteSchemeQuery(Sprintf(R"(
-                --!syntax_v1
+                --!syntax_v1 
                 ALTER TABLE `/Root/Test` ADD INDEX NameIndex %s ON (Name) COVER (Amount);
             )", typeStr.data())).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
-        }
-
-        {
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString()); 
+        } 
+ 
+        { 
             TDescribeTableResult describe = session.DescribeTable("/Root/Test").GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexName(), "NameIndex");
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS); 
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions(); 
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1); 
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexName(), "NameIndex"); 
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexType(), IndexTypeSqlToIndexType(type));
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 1);
-        }
-    }
-
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 1); 
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 1); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(AlterTableAddImplicitSyncIndex) {
         AlterTableAddIndex(EIndexTypeSql::Global);
     }

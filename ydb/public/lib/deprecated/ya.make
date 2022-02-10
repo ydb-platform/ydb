@@ -1,4 +1,4 @@
 RECURSE(
     client
-    kicli
+    kicli 
 )

@@ -332,7 +332,7 @@ message TTenant {
     string Name = 1;
     string Id = 2;
     ETenantType Type = 3;
-    Ydb.Cms.GetDatabaseStatusResult.State State = 4;
+    Ydb.Cms.GetDatabaseStatusResult.State State = 4; 
     repeated NKikimrHive.THiveDomainStatsStateCount StateStats = 5;
     NKikimrTabletBase.TMetrics Metrics = 6;
     repeated uint32 NodeIds = 7;

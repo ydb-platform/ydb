@@ -254,7 +254,7 @@ private:
     void HandleLinkFailure() {
         NKikimrKesus::TKesusError error;
         error.SetStatus(Ydb::StatusIds::UNAVAILABLE);
-        error.AddIssues()->set_message("Link failure");
+        error.AddIssues()->set_message("Link failure"); 
         HandleLinkError(error);
     }
 
@@ -650,7 +650,7 @@ private:
 
         NKikimrKesus::TKesusError error;
         error.SetStatus(Ydb::StatusIds::BAD_SESSION);
-        error.AddIssues()->set_message("Proxy session expired");
+        error.AddIssues()->set_message("Proxy session expired"); 
         HandleSessionError(error);
 
         if (SessionNeeded()) {

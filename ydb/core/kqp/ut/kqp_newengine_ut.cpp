@@ -21,7 +21,7 @@ TKikimrRunner KikimrRunnerWithSessionActor() {
 Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     void TestSimpleSelect(const TKikimrRunner& kikimr) {
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(MultiSelect) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
@@ -333,7 +333,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(InShardsWrite) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
@@ -363,7 +363,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(ShuffleWrite) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
@@ -391,88 +391,88 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         )", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(KeyColumnOrder) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        // Please do not change the name of columns here
-        {
-            auto builder = TTableBuilder()
-               .AddNullableColumn("key", EPrimitiveType::Uint64)
-               .AddNullableColumn("index_0", EPrimitiveType::Utf8)
-               .AddNullableColumn("value", EPrimitiveType::Uint32)
-               .SetPrimaryKeyColumns({"key","index_0"});
-
-            auto result = session.CreateTable("/Root/Test1", builder.Build()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        {
-            const TString query1(R"(
-                --!syntax_v1
-                PRAGMA Kikimr.UseNewEngine = "true";
-                DECLARE $items AS List<Struct<'key':Uint64,'index_0':Utf8,'value':Uint32>>;
-                UPSERT INTO `/Root/Test1`
-                   SELECT * FROM AS_TABLE($items);
-            )");
-
-            TParamsBuilder builder;
-            builder.AddParam("$items").BeginList()
-                .AddListItem()
-                    .BeginStruct()
-                        .AddMember("key").Uint64(646464646464)
-                        .AddMember("index_0").Utf8("SomeUtf8Data")
-                        .AddMember("value").Uint32(323232)
-                    .EndStruct()
-                .EndList()
-            .Build();
-
-            static const TTxControl txControl = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
-            auto result = session.ExecuteDataQuery(query1, txControl, builder.Build()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const auto& yson = ReadTablePartToYson(session, "/Root/Test1");
-            const TString expected = R"([[[646464646464u];["SomeUtf8Data"];[323232u]]])";
-            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
-        }
-    }
-
-    Y_UNIT_TEST(KeyColumnOrder2) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        {
-            const TString query1(R"(
-                --!syntax_v1
-                PRAGMA Kikimr.UseNewEngine = "true";
-                DECLARE $items AS List<Struct<'key':Uint64,'index_0':Utf8,'value':Uint32>>;
-                SELECT * FROM AS_TABLE($items);
-            )");
-
-            TParamsBuilder builder;
-            builder.AddParam("$items").BeginList()
-                .AddListItem()
-                    .BeginStruct()
-                        .AddMember("key").Uint64(646464646464)
-                        .AddMember("index_0").Utf8("SomeUtf8Data")
-                        .AddMember("value").Uint32(323232)
-                    .EndStruct()
-                .EndList()
-            .Build();
-
-            static const TTxControl txControl = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
-            auto result = session.ExecuteDataQuery(query1, txControl, builder.Build()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            const auto yson = FormatResultSetYson(result.GetResultSet(0));
-            const auto expected = R"([["SomeUtf8Data";646464646464u;323232u]])";
-            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
-        }
-    }
-
+    Y_UNIT_TEST(KeyColumnOrder) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        // Please do not change the name of columns here 
+        { 
+            auto builder = TTableBuilder() 
+               .AddNullableColumn("key", EPrimitiveType::Uint64) 
+               .AddNullableColumn("index_0", EPrimitiveType::Utf8) 
+               .AddNullableColumn("value", EPrimitiveType::Uint32) 
+               .SetPrimaryKeyColumns({"key","index_0"}); 
+ 
+            auto result = session.CreateTable("/Root/Test1", builder.Build()).GetValueSync(); 
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
+        } 
+        { 
+            const TString query1(R"( 
+                --!syntax_v1 
+                PRAGMA Kikimr.UseNewEngine = "true"; 
+                DECLARE $items AS List<Struct<'key':Uint64,'index_0':Utf8,'value':Uint32>>; 
+                UPSERT INTO `/Root/Test1` 
+                   SELECT * FROM AS_TABLE($items); 
+            )"); 
+ 
+            TParamsBuilder builder; 
+            builder.AddParam("$items").BeginList() 
+                .AddListItem() 
+                    .BeginStruct() 
+                        .AddMember("key").Uint64(646464646464) 
+                        .AddMember("index_0").Utf8("SomeUtf8Data") 
+                        .AddMember("value").Uint32(323232) 
+                    .EndStruct() 
+                .EndList() 
+            .Build(); 
+ 
+            static const TTxControl txControl = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(); 
+            auto result = session.ExecuteDataQuery(query1, txControl, builder.Build()).GetValueSync(); 
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
+        } 
+ 
+        { 
+            const auto& yson = ReadTablePartToYson(session, "/Root/Test1"); 
+            const TString expected = R"([[[646464646464u];["SomeUtf8Data"];[323232u]]])"; 
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(KeyColumnOrder2) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+        { 
+            const TString query1(R"( 
+                --!syntax_v1 
+                PRAGMA Kikimr.UseNewEngine = "true"; 
+                DECLARE $items AS List<Struct<'key':Uint64,'index_0':Utf8,'value':Uint32>>; 
+                SELECT * FROM AS_TABLE($items); 
+            )"); 
+ 
+            TParamsBuilder builder; 
+            builder.AddParam("$items").BeginList() 
+                .AddListItem() 
+                    .BeginStruct() 
+                        .AddMember("key").Uint64(646464646464) 
+                        .AddMember("index_0").Utf8("SomeUtf8Data") 
+                        .AddMember("value").Uint32(323232) 
+                    .EndStruct() 
+                .EndList() 
+            .Build(); 
+ 
+            static const TTxControl txControl = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(); 
+            auto result = session.ExecuteDataQuery(query1, txControl, builder.Build()).GetValueSync(); 
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
+            const auto yson = FormatResultSetYson(result.GetResultSet(0)); 
+            const auto expected = R"([["SomeUtf8Data";646464646464u;323232u]])"; 
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(BlindWrite) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
@@ -500,7 +500,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(BlindWriteParameters) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto params = db.GetParamsBuilder()
@@ -550,7 +550,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(BlindWriteListParameter) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto params = db.GetParamsBuilder()
@@ -600,7 +600,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(BatchUpload) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto queryText = R"(
@@ -677,7 +677,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 #if !defined(_ubsan_enabled_)
     Y_UNIT_TEST(Aggregate) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto result = session.ExecuteDataQuery(R"(
             PRAGMA kikimr.UseNewEngine = "true";
@@ -693,7 +693,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(AggregateTuple) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto result = session.ExecuteDataQuery(R"(
             PRAGMA kikimr.UseNewEngine = "true";
@@ -774,7 +774,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(LocksSingleShard) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session1 = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session1.ExecuteDataQuery(R"(
@@ -809,7 +809,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(LocksMultiShard) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session1 = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session1.ExecuteDataQuery(R"(
@@ -844,7 +844,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(LocksMultiShardOk) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
@@ -864,7 +864,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
     Y_UNIT_TEST(LocksEffects) {
         TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
+        auto db = kikimr.GetTableClient(); 
         auto session1 = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session1.ExecuteDataQuery(R"(

@@ -1,5 +1,5 @@
-#include "ydb_scripting.h"
-
+#include "ydb_scripting.h" 
+ 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/table_helpers/helpers.h>
@@ -8,12 +8,12 @@
 #include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_scripting.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
-
-namespace NYdb {
-namespace NScripting {
-
-using namespace NThreading;
-
+ 
+namespace NYdb { 
+namespace NScripting { 
+ 
+using namespace NThreading; 
+ 
 TExecuteYqlResult::TExecuteYqlResult(TStatus&& status, TVector<TResultSet>&& resultSets,
     const TMaybe<NTable::TQueryStats>& queryStats)
     : TStatus(std::move(status))
@@ -50,7 +50,7 @@ public:
     using TReadCallback = NGrpc::IStreamRequestReadProcessor<TResponse>::TReadCallback;
     using TGRpcStatus = NGrpc::TGrpcStatus;
 
-    TReaderImpl(TStreamProcessorPtr streamProcessor, const TString& endpoint)
+    TReaderImpl(TStreamProcessorPtr streamProcessor, const TString& endpoint) 
         : StreamProcessor_(streamProcessor)
         , Finished_(false)
         , Endpoint_(endpoint)
@@ -70,13 +70,13 @@ public:
         auto readCb = [self, promise](TGRpcStatus&& grpcStatus) mutable {
             if (!grpcStatus.Ok()) {
                 self->Finished_ = true;
-                promise.SetValue({ TStatus(TPlainStatus(grpcStatus, self->Endpoint_)) });
+                promise.SetValue({ TStatus(TPlainStatus(grpcStatus, self->Endpoint_)) }); 
             } else {
                 NYql::TIssues issues;
                 NYql::IssuesFromMessage(self->Response_.issues(), issues);
                 EStatus clientStatus = static_cast<EStatus>(self->Response_.status());
                 TPlainStatus plainStatus{ clientStatus, std::move(issues), self->Endpoint_, {} };
-                TStatus status{ std::move(plainStatus) };
+                TStatus status{ std::move(plainStatus) }; 
                 TMaybe<NTable::TQueryStats> queryStats;
 
                 if (self->Response_.result().has_query_stats()) {
@@ -110,8 +110,8 @@ private:
 
 TYqlResultPartIterator::TYqlResultPartIterator(
     std::shared_ptr<TReaderImpl> impl,
-    TPlainStatus&& status)
-    : TStatus(std::move(status))
+    TPlainStatus&& status) 
+    : TStatus(std::move(status)) 
     , ReaderImpl_(impl)
 {}
 
@@ -142,59 +142,59 @@ const TString& TExplainYqlResult::GetPlan() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TScriptingClient::TImpl : public TClientImplCommon<TScriptingClient::TImpl> {
-public:
+class TScriptingClient::TImpl : public TClientImplCommon<TScriptingClient::TImpl> { 
+public: 
     using TYqlScriptProcessorPtr = TYqlResultPartIterator::TReaderImpl::TStreamProcessorPtr;
 
-    TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
-        : TClientImplCommon(std::move(connections), settings) {}
-
-    template<typename TParamsType>
+    TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings) 
+        : TClientImplCommon(std::move(connections), settings) {} 
+ 
+    template<typename TParamsType> 
     TAsyncExecuteYqlResult ExecuteYqlScript(const TString& script, TParamsType params,
         const TExecuteYqlRequestSettings& settings)
     {
-        auto request = MakeOperationRequest<Ydb::Scripting::ExecuteYqlRequest>(settings);
-        request.set_script(script);
-        SetParams(params, &request);
+        auto request = MakeOperationRequest<Ydb::Scripting::ExecuteYqlRequest>(settings); 
+        request.set_script(script); 
+        SetParams(params, &request); 
         request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
-
+ 
         auto promise = NewPromise<TExecuteYqlResult>();
-
-        auto extractor = [promise]
-            (google::protobuf::Any* any, TPlainStatus status) mutable {
-                TVector<TResultSet> res;
+ 
+        auto extractor = [promise] 
+            (google::protobuf::Any* any, TPlainStatus status) mutable { 
+                TVector<TResultSet> res; 
                 TMaybe<NTable::TQueryStats> queryStats;
-                if (any) {
-                    Ydb::Scripting::ExecuteYqlResult result;
-                    any->UnpackTo(&result);
-
-                    for (size_t i = 0; i < result.result_setsSize(); i++) {
-                        res.push_back(TResultSet(*result.mutable_result_sets(i)));
-                    }
+                if (any) { 
+                    Ydb::Scripting::ExecuteYqlResult result; 
+                    any->UnpackTo(&result); 
+ 
+                    for (size_t i = 0; i < result.result_setsSize(); i++) { 
+                        res.push_back(TResultSet(*result.mutable_result_sets(i))); 
+                    } 
 
                     if (result.has_query_stats()) {
                         queryStats = NTable::TQueryStats(result.query_stats());
                     }
-                }
-
-                TExecuteYqlResult executeResult(TStatus(std::move(status)), std::move(res),
+                } 
+ 
+                TExecuteYqlResult executeResult(TStatus(std::move(status)), std::move(res), 
                     queryStats);
                 promise.SetValue(std::move(executeResult));
-            };
-
+            }; 
+ 
         Connections_->RunDeferred<Ydb::Scripting::V1::ScriptingService, Ydb::Scripting::ExecuteYqlRequest,
             Ydb::Scripting::ExecuteYqlResponse>(
                 std::move(request),
                 extractor,
                 &Ydb::Scripting::V1::ScriptingService::Stub::AsyncExecuteYql,
                 DbDriverState_,
-                INITIAL_DEFERRED_CALL_DELAY,
+                INITIAL_DEFERRED_CALL_DELAY, 
                 TRpcRequestSettings::Make(settings),
                 settings.ClientTimeout_);
-
-        return promise.GetFuture();
-    }
-
+ 
+        return promise.GetFuture(); 
+    } 
+ 
     template<typename TParamsType>
     TFuture<std::pair<TPlainStatus, TYqlScriptProcessorPtr>> StreamExecuteYqlScriptInternal(const TString& script,
         TParamsType params, const TExecuteYqlRequestSettings& settings)
@@ -229,16 +229,16 @@ public:
     {
         auto promise = NewPromise<TYqlResultPartIterator>();
 
-        auto iteratorCallback = [promise](TFuture<std::pair<TPlainStatus,
+        auto iteratorCallback = [promise](TFuture<std::pair<TPlainStatus, 
             TScriptingClient::TImpl::TYqlScriptProcessorPtr>> future) mutable
         {
             Y_ASSERT(future.HasValue());
             auto pair = future.ExtractValue();
             promise.SetValue(TYqlResultPartIterator(
                 pair.second
-                ? std::make_shared<TYqlResultPartIterator::TReaderImpl>(pair.second, pair.first.Endpoint)
+                ? std::make_shared<TYqlResultPartIterator::TReaderImpl>(pair.second, pair.first.Endpoint) 
                 : nullptr,
-                std::move(pair.first)));
+                std::move(pair.first))); 
         };
 
         StreamExecuteYqlScriptInternal(query, params, settings).Subscribe(iteratorCallback);
@@ -266,7 +266,7 @@ public:
 
             auto promise = NewPromise<TExplainYqlResult>();
 
-            auto extractor = [promise]
+            auto extractor = [promise] 
                 (google::protobuf::Any* any, TPlainStatus status) mutable {
                     TString plan;
                     ::google::protobuf::Map<TString, Ydb::Type> types;
@@ -278,7 +278,7 @@ public:
                         types = result.parameters_types();
                     }
 
-                    TExplainYqlResult explainResult(TStatus(std::move(status)),
+                    TExplainYqlResult explainResult(TStatus(std::move(status)), 
                         std::move(types), std::move(plan));
                     promise.SetValue(std::move(explainResult));
                 };
@@ -296,27 +296,27 @@ public:
             return promise.GetFuture();
     }
 
-private:
+private: 
     template<typename TRequest>
     static void SetParams(::google::protobuf::Map<TString, Ydb::TypedValue>* params, TRequest* request) {
-        if (params) {
-            request->mutable_parameters()->swap(*params);
-        }
-    }
-
+        if (params) { 
+            request->mutable_parameters()->swap(*params); 
+        } 
+    } 
+ 
     template<typename TRequest>
     static void SetParams(const ::google::protobuf::Map<TString, Ydb::TypedValue>& params, TRequest* request) {
-        *request->mutable_parameters() = params;
-    }
-
-};
-
-TScriptingClient::TScriptingClient(const TDriver& driver, const TCommonClientSettings &settings)
-    : Impl_(new TImpl(CreateInternalInterface(driver), settings))
-{}
-
+        *request->mutable_parameters() = params; 
+    } 
+ 
+}; 
+ 
+TScriptingClient::TScriptingClient(const TDriver& driver, const TCommonClientSettings &settings) 
+    : Impl_(new TImpl(CreateInternalInterface(driver), settings)) 
+{} 
+ 
 TParamsBuilder TScriptingClient::GetParamsBuilder() {
-    return TParamsBuilder();
+    return TParamsBuilder(); 
 }
 
 TAsyncExecuteYqlResult TScriptingClient::ExecuteYqlScript(const TString &query, NYdb::TParams&& params,
@@ -324,31 +324,31 @@ TAsyncExecuteYqlResult TScriptingClient::ExecuteYqlScript(const TString &query, 
 {
     auto paramsPtr = params.Empty() ? nullptr : params.GetProtoMapPtr();
     return Impl_->ExecuteYqlScript(query, paramsPtr, settings);
-}
-
+} 
+ 
 TAsyncExecuteYqlResult TScriptingClient::ExecuteYqlScript(const TString &query, const NYdb::TParams& params,
     const TExecuteYqlRequestSettings &settings)
 {
-    if (params.Empty()) {
+    if (params.Empty()) { 
         return Impl_->ExecuteYqlScript(
-            query,
-            nullptr,
-            settings);
-    } else {
-        using TProtoParamsType = const ::google::protobuf::Map<TString, Ydb::TypedValue>;
+            query, 
+            nullptr, 
+            settings); 
+    } else { 
+        using TProtoParamsType = const ::google::protobuf::Map<TString, Ydb::TypedValue>; 
         return Impl_->ExecuteYqlScript<TProtoParamsType&>(
-            query,
+            query, 
             params.GetProtoMap(),
-            settings);
-    }
-}
-
+            settings); 
+    } 
+} 
+ 
 TAsyncExecuteYqlResult TScriptingClient::ExecuteYqlScript(const TString &script,
     const TExecuteYqlRequestSettings &settings)
 {
     return Impl_->ExecuteYqlScript(script, nullptr, settings);
-}
-
+} 
+ 
 TAsyncYqlResultPartIterator TScriptingClient::StreamExecuteYqlScript(const TString& script,
     const TExecuteYqlRequestSettings& settings)
 {
@@ -379,5 +379,5 @@ TAsyncExplainYqlResult TScriptingClient::ExplainYqlScript(const TString& script,
     return Impl_->ExplainYqlScript(script, settings);
 }
 
-} // namespace NScheme
-} // namespace NYdb
+} // namespace NScheme 
+} // namespace NYdb 

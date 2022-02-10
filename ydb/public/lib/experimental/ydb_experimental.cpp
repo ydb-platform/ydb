@@ -32,10 +32,10 @@ public:
     using TGRpcStatus = NGrpc::TGrpcStatus;
     using TBatchReadResult = std::pair<TResponse, TGRpcStatus>;
 
-    TReaderImpl(TStreamProcessorPtr streamProcessor, const TString& endpoint)
+    TReaderImpl(TStreamProcessorPtr streamProcessor, const TString& endpoint) 
         : StreamProcessor_(streamProcessor)
         , Finished_(false)
-        , Endpoint_(endpoint)
+        , Endpoint_(endpoint) 
     {}
 
     ~TReaderImpl() {
@@ -52,13 +52,13 @@ public:
         auto readCb = [self, promise](TGRpcStatus&& grpcStatus) mutable {
             if (!grpcStatus.Ok()) {
                 self->Finished_ = true;
-                promise.SetValue({TStatus(TPlainStatus(grpcStatus, self->Endpoint_))});
+                promise.SetValue({TStatus(TPlainStatus(grpcStatus, self->Endpoint_))}); 
             } else {
                 NYql::TIssues issues;
                 NYql::IssuesFromMessage(self->Response_.issues(), issues);
                 EStatus clientStatus = static_cast<EStatus>(self->Response_.status());
-                TPlainStatus plainStatus{clientStatus, std::move(issues), self->Endpoint_, {}};
-                TStatus status{std::move(plainStatus)};
+                TPlainStatus plainStatus{clientStatus, std::move(issues), self->Endpoint_, {}}; 
+                TStatus status{std::move(plainStatus)}; 
 
                 if (self->Response_.result().has_result_set()) {
                     promise.SetValue({TResultSet(std::move(*self->Response_.mutable_result()->mutable_result_set())),
@@ -83,13 +83,13 @@ private:
     TStreamProcessorPtr StreamProcessor_;
     TResponse Response_;
     bool Finished_;
-    TString Endpoint_;
+    TString Endpoint_; 
 };
 
 TStreamPartIterator::TStreamPartIterator(
     std::shared_ptr<TReaderImpl> impl,
-    TPlainStatus&& status)
-    : TStatus(std::move(status))
+    TPlainStatus&& status) 
+    : TStatus(std::move(status)) 
     , ReaderImpl_(impl)
 {}
 
@@ -104,7 +104,7 @@ public:
     using TStreamProcessorPtr = TStreamPartIterator::TReaderImpl::TStreamProcessorPtr;
 
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
-        : TClientImplCommon(std::move(connections), settings) {}
+        : TClientImplCommon(std::move(connections), settings) {} 
 
     TFuture<std::pair<TPlainStatus, TStreamProcessorPtr>> ExecuteStreamQueryInternal(const TString& query,
         const TParams* params, const TExecuteStreamQuerySettings& settings)
@@ -153,16 +153,16 @@ public:
     {
         auto promise = NewPromise<TStreamPartIterator>();
 
-        auto iteratorCallback = [promise](TFuture<std::pair<TPlainStatus,
+        auto iteratorCallback = [promise](TFuture<std::pair<TPlainStatus, 
             TStreamQueryClient::TImpl::TStreamProcessorPtr>> future) mutable
         {
             Y_ASSERT(future.HasValue());
             auto pair = future.ExtractValue();
             promise.SetValue(TStreamPartIterator(
                 pair.second
-                    ? std::make_shared<TStreamPartIterator::TReaderImpl>(pair.second, pair.first.Endpoint)
+                    ? std::make_shared<TStreamPartIterator::TReaderImpl>(pair.second, pair.first.Endpoint) 
                     : nullptr,
-                std::move(pair.first))
+                std::move(pair.first)) 
             );
         };
 
@@ -175,7 +175,7 @@ TStreamQueryClient::TStreamQueryClient(const TDriver& driver, const TCommonClien
     : Impl_(new TImpl(CreateInternalInterface(driver), settings)) {}
 
 TParamsBuilder TStreamQueryClient::GetParamsBuilder() {
-    return TParamsBuilder();
+    return TParamsBuilder(); 
 }
 
 TAsyncStreamPartIterator TStreamQueryClient::ExecuteStreamQuery(const TString& query,

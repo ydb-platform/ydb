@@ -738,10 +738,10 @@ TKqpCounters::TKqpCounters(const NMonitoring::TDynamicCounterPtr& counters, cons
     /* Scan queries */
     ScanQueryShardDisconnect = KqpGroup->GetCounter("ScanQuery/ShardDisconnect", true);
     ScanQueryShardResolve = KqpGroup->GetCounter("ScanQuery/ShardResolve", true);
-    ScanQueryRateLimitLatency = KqpGroup->GetHistogram(
-        "ScanQuery/RateLimitLatency", NMonitoring::ExponentialHistogram(20, 2, 1));
+    ScanQueryRateLimitLatency = KqpGroup->GetHistogram( 
+        "ScanQuery/RateLimitLatency", NMonitoring::ExponentialHistogram(20, 2, 1)); 
 
-
+ 
     // NewEngine
     NewEngineForcedQueryLatencies[NKikimrKqp::QUERY_ACTION_EXECUTE] = KqpGroup->GetHistogram(
         "Query/ExecuteLatency_NEForced", NMonitoring::ExponentialHistogram(20, 2, 1));

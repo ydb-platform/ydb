@@ -395,10 +395,10 @@ struct TUserTable : public TThrRefBase {
 
     void SetPath(const TString &path);
 
-    ui64 GetTableSchemaVersion() const { return TableSchemaVersion; }
+    ui64 GetTableSchemaVersion() const { return TableSchemaVersion; } 
     void SetTableSchemaVersion(ui64 schemaVersion);
     bool ResetTableSchemaVersion();
-
+ 
     void AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc);
     void DropIndex(const TPathId& indexPathId);
     bool HasAsyncIndexes() const;
@@ -414,7 +414,7 @@ private:
 
 private:
     TString Schema;
-    ui64 TableSchemaVersion = 0;
+    ui64 TableSchemaVersion = 0; 
 
     void CheckSpecialColumns();
     void AlterSchema();

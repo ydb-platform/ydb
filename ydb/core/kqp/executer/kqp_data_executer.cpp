@@ -127,9 +127,9 @@ public:
         return NKikimrServices::TActivity::KQP_DATA_EXECUTER_ACTOR;
     }
 
-    TKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken,
+    TKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken, 
         TKqpRequestCounters::TPtr counters)
-        : TBase(std::move(request), database, userToken, counters)
+        : TBase(std::move(request), database, userToken, counters) 
     {
         YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
 
@@ -918,7 +918,7 @@ private:
             auto sb = TStringBuilder() << "Waiting for " << PendingComputeActors.size() << " compute actor(s) and "
                 << notFinished << " datashard(s): ";
             for (auto shardId : PendingComputeActors) {
-                sb << "CA " << shardId.first << ", ";
+                sb << "CA " << shardId.first << ", "; 
             }
             for (auto& [shardId, shardState] : ShardStates) {
                 if (shardState.State != TShardState::EState::Finished) {
@@ -1241,7 +1241,7 @@ private:
 
         LOG_D("Executing task: " << taskId << " on compute actor: " << task.ComputeActorId);
 
-        auto result = PendingComputeActors.emplace(task.ComputeActorId, TProgressStat());
+        auto result = PendingComputeActors.emplace(task.ComputeActorId, TProgressStat()); 
         YQL_ENSURE(result.second);
     }
 
@@ -1758,10 +1758,10 @@ private:
 
 } // namespace
 
-IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken,
+IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken, 
     TKqpRequestCounters::TPtr counters)
 {
-    return new TKqpDataExecuter(std::move(request), database, userToken, counters);
+    return new TKqpDataExecuter(std::move(request), database, userToken, counters); 
 }
 
 } // namespace NKqp

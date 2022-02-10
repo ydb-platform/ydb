@@ -2,7 +2,7 @@
 
 #include "rpc_calls.h"
 #include "rpc_kqp_base.h"
-#include "rpc_common.h"
+#include "rpc_common.h" 
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
@@ -37,14 +37,14 @@ public:
 
 private:
     void RollbackTransactionImpl(const TActorContext &ctx) {
-        const auto req = GetProtoRequest();
+        const auto req = GetProtoRequest(); 
         const auto traceId = Request_->GetTraceId();
 
         TString sessionId;
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        SetAuthToken(ev, *Request_);
-        SetDatabase(ev, *Request_);
-
+        SetAuthToken(ev, *Request_); 
+        SetDatabase(ev, *Request_); 
+ 
         NYql::TIssues issues;
         if (CheckSession(req->session_id(), issues)) {
             ev->Record.MutableRequest()->SetSessionId(req->session_id());
@@ -83,7 +83,7 @@ private:
     }
 
     void ReplyWithResult(StatusIds::StatusCode status,
-                         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message,
+                         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, 
                          const TActorContext& ctx) {
         Request_->SendResult(status, message);
         Die(ctx);

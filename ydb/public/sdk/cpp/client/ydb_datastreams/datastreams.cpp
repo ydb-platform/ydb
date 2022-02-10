@@ -18,7 +18,7 @@ namespace NYdb::NDataStreams::V1 {
 
         template<class TProtoResult, class TResultWrapper>
         auto MakeResultExtractor(NThreading::TPromise <TResultWrapper> promise) {
-            return [promise = std::move(promise)]
+            return [promise = std::move(promise)] 
                     (google::protobuf::Any *any, TPlainStatus status) mutable {
                 std::unique_ptr <TProtoResult> result;
                 if (any) {
@@ -28,7 +28,7 @@ namespace NYdb::NDataStreams::V1 {
 
                 promise.SetValue(
                         TResultWrapper(
-                                TStatus(std::move(status)),
+                                TStatus(std::move(status)), 
                                 std::move(result)));
             };
         }

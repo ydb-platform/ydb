@@ -40,8 +40,8 @@ struct TContext : public TAtomicRefCount<TContext> {
     TRuntimeNode NewParam(TStringBuf name, TType* type);
 
     void AddTableLookup(const IDbSchemeResolver::TTable& request);
-    template<typename TStringType>
-    IDbSchemeResolver::TTableResult* GetTableLookup(const TExprNode& node, const TStringType& tableName);
+    template<typename TStringType> 
+    IDbSchemeResolver::TTableResult* GetTableLookup(const TExprNode& node, const TStringType& tableName); 
     TTableMap& GetTablesToResolve();
 
     TConvertResult Finish(TRuntimeNode convertedNode);
@@ -52,8 +52,8 @@ public:
     NKikimr::NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
     TAutoPtr<TKikimrProgramBuilder> PgmBuilder;
     TMaybe<TParametersBuilder> ParamsBuilder;
-
-private:
+ 
+private: 
     bool WasParams;
     TTableMap Tables;
 };

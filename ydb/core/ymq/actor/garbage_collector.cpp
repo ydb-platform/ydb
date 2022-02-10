@@ -142,7 +142,7 @@ private:
             if (entry.ListNodeEntry && CurrentDepth <= MaxDepth) {
                 for (const auto& child : entry.ListNodeEntry->Children) {
                     auto yetAnotherPathToTraverse = entry.Path;
-                    yetAnotherPathToTraverse.push_back(child.Name);
+                    yetAnotherPathToTraverse.push_back(child.Name); 
 
                     newPathsToTraverse.push_back(std::move(yetAnotherPathToTraverse));
                 }

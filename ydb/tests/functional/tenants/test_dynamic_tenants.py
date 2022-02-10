@@ -44,58 +44,58 @@ class TestCreateTenantWithCPU(DBWithDynamicSlot):
         self.cluster.remove_database(database)
 
 
-class TestCreateTenantThenExecYQLEmptyDatabaseHeader(DBWithDynamicSlot):
-    def test_case(self):
-        database = '/Root/users/database'
-
-        driver_config = ydb.DriverConfig(
-            "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port),
-            database
-        )
-
-        self.cluster.create_database(
-            database,
-            storage_pool_units_count={
-                'hdd': 1
-            }
-        )
+class TestCreateTenantThenExecYQLEmptyDatabaseHeader(DBWithDynamicSlot): 
+    def test_case(self): 
+        database = '/Root/users/database' 
+ 
+        driver_config = ydb.DriverConfig( 
+            "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port), 
+            database 
+        ) 
+ 
+        self.cluster.create_database( 
+            database, 
+            storage_pool_units_count={ 
+                'hdd': 1 
+            } 
+        ) 
         self.cluster.register_and_start_slots(database, count=1)
         self.cluster.wait_tenant_up(database)
-
-        def list_endpoints(database):
-            logger.debug("List endpoints of %s", database)
-            resolver = ydb.DiscoveryEndpointsResolver(driver_config)
-            result = resolver.resolve()
-            if result is not None:
-                return result.endpoints
-            return result
-
-        endpoints = list_endpoints(database)
-
-        driver_config2 = ydb.DriverConfig(
-            "%s" % endpoints[0].endpoint,
-            None,
-            credentials=ydb.AuthTokenCredentials("root@builtin")
-        )
-
-        table_path = '%s/table-1' % database
-        with ydb.Driver(driver_config2) as driver:
-            with ydb.SessionPool(driver, size=1) as pool:
-                with pool.checkout() as session:
-                    session.execute_scheme(
+ 
+        def list_endpoints(database): 
+            logger.debug("List endpoints of %s", database) 
+            resolver = ydb.DiscoveryEndpointsResolver(driver_config) 
+            result = resolver.resolve() 
+            if result is not None: 
+                return result.endpoints 
+            return result 
+ 
+        endpoints = list_endpoints(database) 
+ 
+        driver_config2 = ydb.DriverConfig( 
+            "%s" % endpoints[0].endpoint, 
+            None, 
+            credentials=ydb.AuthTokenCredentials("root@builtin") 
+        ) 
+ 
+        table_path = '%s/table-1' % database 
+        with ydb.Driver(driver_config2) as driver: 
+            with ydb.SessionPool(driver, size=1) as pool: 
+                with pool.checkout() as session: 
+                    session.execute_scheme( 
                         "create table `{}` (key Int32, value String, primary key(key));".format(
-                            table_path
-                        )
-                    )
-
-                    session.transaction().execute(
+                            table_path 
+                        ) 
+                    ) 
+ 
+                    session.transaction().execute( 
                         "upsert into `{}` (key) values (101);".format(table_path),
-                        commit_tx=True
-                    )
-
+                        commit_tx=True 
+                    ) 
+ 
                     session.transaction().execute("select key from `{}`;".format(table_path), commit_tx=True)
-
-
+ 
+ 
 class TestCreateTenantThenExecYQL(DBWithDynamicSlot):
     def test_case(self):
         database = '/Root/users/database'
@@ -105,11 +105,11 @@ class TestCreateTenantThenExecYQL(DBWithDynamicSlot):
             database
         )
 
-        driver_config2 = ydb.DriverConfig(
-            "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port),
-            database + "/"
-        )
-
+        driver_config2 = ydb.DriverConfig( 
+            "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port), 
+            database + "/" 
+        ) 
+ 
         self.cluster.create_database(
             database,
             storage_pool_units_count={
@@ -119,22 +119,22 @@ class TestCreateTenantThenExecYQL(DBWithDynamicSlot):
         self.cluster.register_and_start_slots(database, count=1)
         self.cluster.wait_tenant_up(database)
 
-        d_configs = [driver_config, driver_config2]
-        for d_config in d_configs:
-            table_path = '%s/table-1' % database
-            with ydb.Driver(d_config) as driver:
-                with ydb.SessionPool(driver, size=1) as pool:
-                    with pool.checkout() as session:
-                        session.execute_scheme(
+        d_configs = [driver_config, driver_config2] 
+        for d_config in d_configs: 
+            table_path = '%s/table-1' % database 
+            with ydb.Driver(d_config) as driver: 
+                with ydb.SessionPool(driver, size=1) as pool: 
+                    with pool.checkout() as session: 
+                        session.execute_scheme( 
                             "create table `{}` (key Int32, value String, primary key(key));".format(
-                                table_path
-                            )
+                                table_path 
+                            ) 
                         )
 
-                        session.transaction().execute(
+                        session.transaction().execute( 
                             "upsert into `{}` (key) values (101);".format(table_path),
-                            commit_tx=True
-                        )
+                            commit_tx=True 
+                        ) 
 
                         session.transaction().execute("select key from `{}`;".format(table_path), commit_tx=True)
 

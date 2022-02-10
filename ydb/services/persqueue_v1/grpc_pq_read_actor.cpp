@@ -948,7 +948,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAct
             clientConfig.CheckAliveness = false;
 
             clientConfig.RetryPolicy = RetryPolicyForPipes;
-            t.second.PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, t.second.TabletID, clientConfig));
+            t.second.PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, t.second.TabletID, clientConfig)); 
 
             auto it = TopicGroups.find(t.second.TopicNameConverter->GetModernName());
             if (it != TopicGroups.end()) {
@@ -1257,7 +1257,7 @@ void TReadSessionActor::CloseSession(const TString& errorReason, const PersQueue
             LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc write failed");
             Die(ctx);
             return;
-        }
+        } 
     } else {
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " closed");
         if (!Request->GetStreamCtx()->Finish(std::move(grpc::Status::OK))) {
@@ -1355,7 +1355,7 @@ bool TReadSessionActor::ProcessBalancerDead(const ui64 tablet, const TActorConte
             NTabletPipe::TClientConfig clientConfig;
             clientConfig.CheckAliveness = false;
             clientConfig.RetryPolicy = RetryPolicyForPipes;
-            t.second.PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, t.second.TabletID, clientConfig));
+            t.second.PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, t.second.TabletID, clientConfig)); 
             if (InitDone) {
                 ++(*PipeReconnects);
                 ++(*Errors);
@@ -1870,7 +1870,7 @@ void TPartitionActor::Handle(const TEvPQProxy::TEvRestartPipe::TPtr&, const TAct
         .BackoffMultiplier = 2,
         .DoFirstRetryInstantly = true
     };
-    PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletID, clientConfig));
+    PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletID, clientConfig)); 
     Y_VERIFY(TabletID);
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
@@ -2314,7 +2314,7 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
             .BackoffMultiplier = 2,
             .DoFirstRetryInstantly = true
         };
-        PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletID, clientConfig));
+        PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletID, clientConfig)); 
 
         NKikimrClient::TPersQueueRequest request;
 
@@ -2801,20 +2801,20 @@ void TReadInfoActor::Bootstrap(const TActorContext& ctx) {
     TBase::Bootstrap(ctx);
     Become(&TThis::StateFunc);
 
-    auto request = dynamic_cast<const ReadInfoRequest*>(GetProtoRequest());
+    auto request = dynamic_cast<const ReadInfoRequest*>(GetProtoRequest()); 
     Y_VERIFY(request);
     ClientId = NPersQueue::ConvertNewConsumerName(request->consumer().path(), ctx);
 
     bool readOnlyLocal = request->get_only_original();
 
     TIntrusivePtr<NACLib::TUserToken> token;
-    if (Request_->GetInternalToken().empty()) {
+    if (Request_->GetInternalToken().empty()) { 
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             AnswerError("Unauthenticated access is forbidden, please provide credentials", PersQueue::ErrorCode::ACCESS_DENIED, ctx);
             return;
         }
     } else {
-        token = new NACLib::TUserToken(Request_->GetInternalToken());
+        token = new NACLib::TUserToken(Request_->GetInternalToken()); 
     }
 
     THashSet<TString> topicsToResolve;

@@ -83,7 +83,7 @@ inline TExprContainer::TPtr ParseText(const TString& programText) {
 
     TExprContainer::TPtr expr(new TExprContainer());
     bool isOk = CompileExpr(*astRes.Root, expr->Root, expr->Context, nullptr);
-    expr->Context.IssueManager.GetIssues().PrintTo(Cerr);
+    expr->Context.IssueManager.GetIssues().PrintTo(Cerr); 
     UNIT_ASSERT(isOk);
     return expr;
 }

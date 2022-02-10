@@ -224,7 +224,7 @@ private:
         if (!message.empty()) {
             Request->RaiseIssue(NYql::TIssue(message));
         }
-        Request->ReplyWithYdbStatus(status);
+        Request->ReplyWithYdbStatus(status); 
         PassAway();
     }
 
@@ -296,7 +296,7 @@ private:
         if (!message.empty()) {
             Request->RaiseIssue(NYql::TIssue(message));
         }
-        Request->ReplyWithYdbStatus(status);
+        Request->ReplyWithYdbStatus(status); 
         PassAway();
     }
 
@@ -630,7 +630,7 @@ protected:
         if (!message.empty()) {
             Request->RaiseIssue(NYql::TIssue(message));
         }
-        Request->ReplyWithYdbStatus(status);
+        Request->ReplyWithYdbStatus(status); 
         PassAway();
     }
 
@@ -927,7 +927,7 @@ private:
     }
 
     Ydb::LongTx::ReadResult* MakeResult(ui64 outChunk, bool finished) const {
-        auto result = TEvLongTxReadRequest::AllocateResult<Ydb::LongTx::ReadResult>(Request);
+        auto result = TEvLongTxReadRequest::AllocateResult<Ydb::LongTx::ReadResult>(Request); 
 
         const auto* req = Request->GetProtoRequest();
         result->set_tx_id(req->tx_id());

@@ -1001,7 +1001,7 @@ protected:
         return NextFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), value);
     }
 
-    TComputationContext* const Ctx;
+    TComputationContext* const Ctx; 
     const TNextPtr NextFunc;
     const NUdf::TUnboxedValue Iterator;
 };
@@ -1025,7 +1025,7 @@ protected:
         return NextFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), State, value);
     }
 
-    TComputationContext* const Ctx;
+    TComputationContext* const Ctx; 
     const TNextPtr NextFunc;
     const NUdf::TUnboxedValue Iterator;
     TStateType State;
@@ -1048,7 +1048,7 @@ private:
         return NUdf::TUnboxedValuePod(new TIterator(GetMemInfo(), NextFunc, Ctx, List.GetListIterator()));
     }
 
-    TComputationContext* const Ctx;
+    TComputationContext* const Ctx; 
     const TNextPtr NextFunc;
     const NUdf::TUnboxedValue List;
 };
@@ -1108,7 +1108,7 @@ private:
         return List.HasFastListLength();
     }
 
-    TComputationContext* const Ctx;
+    TComputationContext* const Ctx; 
     const TNextPtr NextFunc;
     const NUdf::TUnboxedValue List;
 };

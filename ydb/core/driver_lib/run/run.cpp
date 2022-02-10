@@ -100,7 +100,7 @@
 #include <ydb/services/rate_limiter/grpc_service.h>
 #include <ydb/services/discovery/grpc_service.h>
 #include <ydb/services/yq/grpc_service.h>
-
+ 
 #include <ydb/core/yq/libs/init/init.h>
 
 #include <library/cpp/logger/global/global.h>
@@ -330,9 +330,9 @@ TKikimrRunner::~TKikimrRunner() {
         ActorSystem->Stop();
         // After that stop sending any requests to actors
         // by destroing grpc subsystem.
-        for (auto& serv : GRpcServers) {
-            serv.second.Destroy();
-        }
+        for (auto& serv : GRpcServers) { 
+            serv.second.Destroy(); 
+        } 
 
         ActorSystem.Destroy();
     }
@@ -464,11 +464,11 @@ void TKikimrRunner::InitializeMessageBus(
     }
 }
 
-static TString ReadFile(const TString& fileName) {
-    TFileInput f(fileName);
-    return f.ReadAll();
-}
-
+static TString ReadFile(const TString& fileName) { 
+    TFileInput f(fileName); 
+    return f.ReadAll(); 
+} 
+ 
 void TKikimrRunner::InitializeGracefulShutdown(const TKikimrRunConfig& runConfig) {
     Y_UNUSED(runConfig);
     GracefulShutdownSupported = true;
@@ -739,14 +739,14 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         opts.SetWorkerThreads(grpcConfig.GetWorkerThreads());
         opts.SetGRpcMemoryQuotaBytes(grpcConfig.GetGRpcMemoryQuotaBytes());
         opts.SetMaxMessageSize(grpcConfig.HasMaxMessageSize() ? grpcConfig.GetMaxMessageSize() : DEFAULT_GRPC_MESSAGE_SIZE_LIMIT);
-        opts.SetMaxGlobalRequestInFlight(grpcConfig.GetMaxInFlight());
+        opts.SetMaxGlobalRequestInFlight(grpcConfig.GetMaxInFlight()); 
         opts.SetLogger(NGrpc::CreateActorSystemLogger(*ActorSystem.Get(), NKikimrServices::GRPC_SERVER));
 
-        if (appConfig.HasDomainsConfig() &&
-            appConfig.GetDomainsConfig().HasSecurityConfig() &&
-            appConfig.GetDomainsConfig().GetSecurityConfig().HasEnforceUserTokenRequirement()) {
+        if (appConfig.HasDomainsConfig() && 
+            appConfig.GetDomainsConfig().HasSecurityConfig() && 
+            appConfig.GetDomainsConfig().GetSecurityConfig().HasEnforceUserTokenRequirement()) { 
             opts.SetUseAuth(appConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement());
-        }
+        } 
 
         if (grpcConfig.HasKeepAliveEnable()) {
             if (grpcConfig.GetKeepAliveEnable()) {
@@ -764,22 +764,22 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         }
 
         NGrpc::TServerOptions sslOpts = opts;
-        if (grpcConfig.HasSslPort() && grpcConfig.GetSslPort()) {
-            Y_VERIFY(grpcConfig.HasCA(), "CA not set");
-            Y_VERIFY(grpcConfig.HasCert(), "Cert not set");
-            Y_VERIFY(grpcConfig.HasKey(), "Key not set");
-            sslOpts.SetPort(grpcConfig.GetSslPort());
+        if (grpcConfig.HasSslPort() && grpcConfig.GetSslPort()) { 
+            Y_VERIFY(grpcConfig.HasCA(), "CA not set"); 
+            Y_VERIFY(grpcConfig.HasCert(), "Cert not set"); 
+            Y_VERIFY(grpcConfig.HasKey(), "Key not set"); 
+            sslOpts.SetPort(grpcConfig.GetSslPort()); 
             NGrpc::TSslData sslData;
-            sslData.Root = ReadFile(grpcConfig.GetCA());
-            sslData.Cert = ReadFile(grpcConfig.GetCert());
-            sslData.Key = ReadFile(grpcConfig.GetKey());
-            sslOpts.SetSslData(sslData);
-
+            sslData.Root = ReadFile(grpcConfig.GetCA()); 
+            sslData.Cert = ReadFile(grpcConfig.GetCert()); 
+            sslData.Key = ReadFile(grpcConfig.GetKey()); 
+            sslOpts.SetSslData(sslData); 
+ 
             GRpcServers.push_back({ "grpcs", new NGrpc::TGRpcServer(sslOpts) });
 
             fillFn(grpcConfig, *GRpcServers.back().second, sslOpts);
-        }
-
+        } 
+ 
         if (grpcConfig.GetPort()) {
             GRpcServers.push_back({ "grpc", new NGrpc::TGRpcServer(opts) });
 
@@ -797,8 +797,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
                 GRpcServers.push_back({ "grpc", new NGrpc::TGRpcServer(xopts) });
                 fillFn(ex, *GRpcServers.back().second, xopts);
-            }
-
+            } 
+ 
             if (ex.HasSslPort() && ex.GetSslPort()) {
                 NGrpc::TServerOptions xopts = opts;
                 xopts.SetPort(ex.GetSslPort());
@@ -1363,18 +1363,18 @@ void TKikimrRunner::KikimrStart() {
         ActorSystem->Start();
     }
 
-    for (auto& server : GRpcServers) {
-        if (server.second) {
-            server.second->Start();
-
-            TString endpoint;
-            if (server.second->GetHost() != "[::]") {
-                endpoint = server.second->GetHost();
-            }
-            endpoint += Sprintf(":%d", server.second->GetPort());
-            ActorSystem->Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ActorSystem->NodeId),
-                              new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(server.first, endpoint));
-        }
+    for (auto& server : GRpcServers) { 
+        if (server.second) { 
+            server.second->Start(); 
+ 
+            TString endpoint; 
+            if (server.second->GetHost() != "[::]") { 
+                endpoint = server.second->GetHost(); 
+            } 
+            endpoint += Sprintf(":%d", server.second->GetPort()); 
+            ActorSystem->Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ActorSystem->NodeId), 
+                              new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(server.first, endpoint)); 
+        } 
     }
 
     if (SqsHttp) {
@@ -1457,20 +1457,20 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         SqsHttp.Destroy();
     }
 
-    // stop processing grpc requests/response - we must stop feeding ActorSystem
-    for (auto& server : GRpcServers) {
-        if (server.second) {
-            server.second->Stop();
-        }
-    }
-
+    // stop processing grpc requests/response - we must stop feeding ActorSystem 
+    for (auto& server : GRpcServers) { 
+        if (server.second) { 
+            server.second->Stop(); 
+        } 
+    } 
+ 
     if (ActorSystem) {
         ActorSystem->Stop();
     }
 
-    for (auto& server : GRpcServers) {
-        server.second.Destroy();
-    }
+    for (auto& server : GRpcServers) { 
+        server.second.Destroy(); 
+    } 
 
     if (Bus) {
         Bus->Stop();

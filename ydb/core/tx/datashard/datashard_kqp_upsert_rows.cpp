@@ -43,7 +43,7 @@ public:
         void Apply(NUdf::IApplyContext& applyContext) const override {
             auto& dsApplyCtx = *CheckedCast<TKqpDatashardApplyContext*>(&applyContext);
 
-            TVector<TCell> keyTuple(Owner.KeyIndices.size());
+            TVector<TCell> keyTuple(Owner.KeyIndices.size()); 
             FillKeyTupleValue(Row, Owner.KeyIndices, Owner.RowTypes, keyTuple, Owner.Env);
 
             if (dsApplyCtx.Host->IsPathErased(Owner.TableId)) {
@@ -160,11 +160,11 @@ private:
 IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     TKqpDatashardComputeContext& computeCtx)
 {
-    MKQL_ENSURE_S(callable.GetInputsCount() >= 3);
+    MKQL_ENSURE_S(callable.GetInputsCount() >= 3); 
 
     auto tableNode = callable.GetInput(0);
     auto rowsNode = callable.GetInput(1);
-    auto upsertColumnsNode = callable.GetInput(2);
+    auto upsertColumnsNode = callable.GetInput(2); 
 
     auto tableId = NKqp::ParseTableId(tableNode);
     auto localTableId = computeCtx.GetLocalTableId(tableId);
@@ -176,23 +176,23 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
 
     auto rowType = AS_TYPE(TStructType, AS_TYPE(TStreamType, rowsNode.GetStaticType())->GetItemType());
 
-    MKQL_ENSURE_S(tableKeyTypes.size() <= rowType->GetMembersCount(), "not enough columns in the runtime node");
-
-    THashMap<TString, ui32> inputIndex;
+    MKQL_ENSURE_S(tableKeyTypes.size() <= rowType->GetMembersCount(), "not enough columns in the runtime node"); 
+ 
+    THashMap<TString, ui32> inputIndex; 
     TVector<NUdf::TDataTypeId> rowTypes(rowType->GetMembersCount());
     for (ui32 i = 0; i < rowTypes.size(); ++i) {
-        const auto& name = rowType->GetMemberName(i);
-        MKQL_ENSURE_S(inputIndex.emplace(TString(name), i).second);
+        const auto& name = rowType->GetMemberName(i); 
+        MKQL_ENSURE_S(inputIndex.emplace(TString(name), i).second); 
         rowTypes[i] = NKqp::UnwrapDataTypeFromStruct(*rowType, i);
     }
 
-    TVector<ui32> keyIndices(tableKeyTypes.size());
-    for (ui32 i = 0; i < tableKeyTypes.size(); i++) {
-        auto it = inputIndex.find(tableKeyTypes[i].second);
-        MKQL_ENSURE_S(it != inputIndex.end());
+    TVector<ui32> keyIndices(tableKeyTypes.size()); 
+    for (ui32 i = 0; i < tableKeyTypes.size(); i++) { 
+        auto it = inputIndex.find(tableKeyTypes[i].second); 
+        MKQL_ENSURE_S(it != inputIndex.end()); 
         auto typeId = NKqp::UnwrapDataTypeFromStruct(*rowType, it->second);
-        MKQL_ENSURE_S(typeId == tableKeyTypes[i].first, "row key type missmatch with table key type");
-        keyIndices[i] = it->second;
+        MKQL_ENSURE_S(typeId == tableKeyTypes[i].first, "row key type missmatch with table key type"); 
+        keyIndices[i] = it->second; 
     }
 
     for (const auto& [_, column] : tableInfo->Columns) {
@@ -200,13 +200,13 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
             auto it = inputIndex.find(column.Name);
             MKQL_ENSURE(it != inputIndex.end(),
                 "Not null column " << column.Name << " has to be specified in upsert");
-
+ 
             auto columnType = rowType->GetMemberType(it->second);
             MKQL_ENSURE(columnType->GetKind() != NMiniKQL::TType::EKind::Optional,
                 "Not null column " << column.Name << " can't be optional");
-        }
-    }
-
+        } 
+    } 
+ 
     auto upsertColumnsDict = AS_VALUE(TDictLiteral, upsertColumnsNode);
     TVector<TUpsertColumn> upsertColumns(upsertColumnsDict->GetItemsCount());
     for (ui32 i = 0; i < upsertColumns.size(); ++i) {

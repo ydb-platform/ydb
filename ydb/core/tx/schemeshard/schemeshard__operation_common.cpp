@@ -145,12 +145,12 @@ bool NTableState::CollectSchemaChanged(
 
     txState.SchemeChangeNotificationReceived[shardIdx] = std::make_pair(ackTo, generation);
 
-
-    if (evRecord.HasOpResult()) {
-        // TODO: remove TxBackup handling
+ 
+    if (evRecord.HasOpResult()) { 
+        // TODO: remove TxBackup handling 
         Y_VERIFY_DEBUG(txState.TxType == TTxState::TxBackup || txState.TxType == TTxState::TxRestore);
-    }
-
+    } 
+ 
     if (!txState.ReadyForNotifications) {
         return false;
     }

@@ -72,7 +72,7 @@ public:
 
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
-        Pipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tid, pipeConfig));
+        Pipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tid, pipeConfig)); 
         NTabletPipe::SendData(ctx, Pipe, request.Release());
 
         TBase::Become(&TBase::TThis::StateWork, ctx, TDuration::Seconds(120), new TEvents::TEvWakeup());

@@ -2275,7 +2275,7 @@ namespace {
                         continue;
                     }
 
-                    auto err = TIssue(
+                    auto err = TIssue( 
                         ctx.Expr.GetPosition(pos),
                         TStringBuilder()
                             << "Uncompatible member " << item->GetName() << " types: "

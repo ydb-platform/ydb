@@ -36,14 +36,14 @@ private:
         const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
         if (!result.Error.empty()) {
             if (IsTokenRequired()) {
-                return static_cast<TDerived*>(this)->OnAccessDenied(result.Error, ctx);
+                return static_cast<TDerived*>(this)->OnAccessDenied(result.Error, ctx); 
             }
         } else {
             if (RequireAdminAccess) {
                 if (!GetAdministrationAllowedSIDs().empty()) {
                     const auto& allowedSIDs(GetAdministrationAllowedSIDs());
                     if (std::find_if(allowedSIDs.begin(), allowedSIDs.end(), [&result](const TString& sid) -> bool { return result.Token->IsExist(sid); }) == allowedSIDs.end()) {
-                        return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{"Administrative access denied", false}, ctx);
+                        return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{"Administrative access denied", false}, ctx); 
                     }
                 }
                 UserAdmin = true;
@@ -55,7 +55,7 @@ private:
 
     void Handle(TEvents::TEvUndelivered::TPtr&, const TActorContext& ctx) {
         if (IsTokenRequired()) {
-            return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{"Access denied - error parsing token", false}, ctx);
+            return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{"Access denied - error parsing token", false}, ctx); 
         }
         static_cast<TBootstrap*>(this)->Bootstrap(ctx);
     }
@@ -88,8 +88,8 @@ public:
 
     void SetEntries(const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& entries) {
         Entries = entries;
-    }
-
+    } 
+ 
     const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& GetEntries() const {
         return Entries;
     }
@@ -135,7 +135,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         if (IsTokenRequired() && !IsTokenExists()) {
-            return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{"Access denied without user token", false}, ctx);
+            return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{"Access denied without user token", false}, ctx); 
         }
         if (SecurityToken.empty()) {
             if (!GetDefaultUserSIDs().empty()) {

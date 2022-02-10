@@ -112,7 +112,7 @@ private: // for pipeline only
     void RemoveTx(NIceDb::TNiceDb &db,
                   const TOperation &op);
     void RemoveSchemaOperation(NIceDb::TNiceDb& db, ui64 txId);
-    void RemoveScanProgress(NIceDb::TNiceDb& db, ui64 txId);
+    void RemoveScanProgress(NIceDb::TNiceDb& db, ui64 txId); 
 
     ui64 NextDeadlineStep() const {
         if (DeadlineQueue.empty())

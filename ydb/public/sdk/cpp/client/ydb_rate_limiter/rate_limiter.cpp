@@ -43,7 +43,7 @@ TDescribeResourceResult::THierarchicalDrrProps::THierarchicalDrrProps(const Ydb:
 class TRateLimiterClient::TImpl : public TClientImplCommon<TRateLimiterClient::TImpl> {
 public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl> connections, const TCommonClientSettings& settings)
-        : TClientImplCommon(std::move(connections), settings)
+        : TClientImplCommon(std::move(connections), settings) 
     {
     }
 
@@ -112,7 +112,7 @@ public:
 
         auto promise = NThreading::NewPromise<TListResourcesResult>();
 
-        auto extractor = [promise]
+        auto extractor = [promise] 
             (google::protobuf::Any* any, TPlainStatus status) mutable {
                 TVector<TString> list;
                 if (any) {
@@ -124,7 +124,7 @@ public:
                     }
                 }
 
-                TListResourcesResult val(TStatus(std::move(status)), std::move(list));
+                TListResourcesResult val(TStatus(std::move(status)), std::move(list)); 
                 promise.SetValue(std::move(val));
             };
 
@@ -147,14 +147,14 @@ public:
 
         auto promise = NThreading::NewPromise<TDescribeResourceResult>();
 
-        auto extractor = [promise]
+        auto extractor = [promise] 
             (google::protobuf::Any* any, TPlainStatus status) mutable {
                 Ydb::RateLimiter::DescribeResourceResult result;
                 if (any) {
                     any->UnpackTo(&result);
                 }
 
-                TDescribeResourceResult val(TStatus(std::move(status)), result);
+                TDescribeResourceResult val(TStatus(std::move(status)), result); 
                 promise.SetValue(std::move(val));
             };
 

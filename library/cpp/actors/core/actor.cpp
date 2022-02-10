@@ -61,17 +61,17 @@ namespace NActors {
         return TActivationContext::Schedule(delta, new IEventHandle(*this, {}, ev), cookie);
     }
 
-    TActorId TActivationContext::RegisterWithSameMailbox(IActor* actor, TActorId parentId) {
+    TActorId TActivationContext::RegisterWithSameMailbox(IActor* actor, TActorId parentId) { 
         Y_VERIFY_DEBUG(parentId);
         auto& ctx = *TlsActivationContext;
         return ctx.ExecutorThread.RegisterActor(actor, &ctx.Mailbox, parentId.Hint(), parentId);
     }
 
-    TActorId TActorContext::RegisterWithSameMailbox(IActor* actor) const {
+    TActorId TActorContext::RegisterWithSameMailbox(IActor* actor) const { 
         return ExecutorThread.RegisterActor(actor, &Mailbox, SelfID.Hint(), SelfID);
     }
 
-    TActorId IActor::RegisterWithSameMailbox(IActor* actor) const noexcept {
+    TActorId IActor::RegisterWithSameMailbox(IActor* actor) const noexcept { 
         return TlsActivationContext->ExecutorThread.RegisterActor(actor, &TlsActivationContext->Mailbox, SelfActorId.Hint(), SelfActorId);
     }
 

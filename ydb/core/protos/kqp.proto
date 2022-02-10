@@ -1,6 +1,6 @@
 package NKikimrKqp;
 option java_package = "ru.yandex.kikimr.proto";
-option cc_enable_arenas = true;
+option cc_enable_arenas = true; 
 
 import "library/cpp/actors/protos/actors.proto";
 import "ydb/core/protos/kqp_physical.proto";
@@ -25,7 +25,7 @@ enum ERequestType {
 enum EQueryType {
     QUERY_TYPE_UNDEFINED = 0;
 
-    reserved 1, 2, 3;
+    reserved 1, 2, 3; 
 
     QUERY_TYPE_SQL_DML = 4;
     QUERY_TYPE_SQL_DDL = 5;
@@ -84,7 +84,7 @@ message TQueryRequest {
     optional bool Profile = 10; // DEPRECATED, use StatsMode instead
     optional bytes PreparedQuery = 11;
     optional uint32 ReplyFlags = 12 [default = 1];
-    optional Ydb.Table.TransactionControl TxControl = 13;
+    optional Ydb.Table.TransactionControl TxControl = 13; 
     optional string Database = 14;
     optional Ydb.Table.QueryCachePolicy QueryCachePolicy = 15;
     optional uint64 CancelAfterMs = 16;
@@ -139,18 +139,18 @@ message TKqpTableMetadataProto {
     repeated TKqpTableMetadataProto SecondaryGlobalIndexMetadata = 12;
 }
 
-message TRlPath {
-    optional string CoordinationNode = 1;
-    optional string ResourcePath = 2;
-}
-
+message TRlPath { 
+    optional string CoordinationNode = 1; 
+    optional string ResourcePath = 2; 
+} 
+ 
 message TEvQueryRequest {
     optional TQueryRequest Request = 1;
     optional string TraceId = 2;
     optional string UserToken = 3;
     optional NActorsProto.TActorId RequestActorId = 4;
     optional string RequestType = 5;
-    optional TRlPath RlPath = 6;
+    optional TRlPath RlPath = 6; 
 }
 
 message TMkqlProfile {
@@ -246,10 +246,10 @@ message TQueryResponse {
     optional bytes PreparedQuery = 5;
     optional string QueryAst = 6;
     reserved 7;
-    repeated Ydb.Issue.IssueMessage QueryIssues = 8;
+    repeated Ydb.Issue.IssueMessage QueryIssues = 8; 
     optional bytes QueryPlan = 9;
     repeated TParameterDescription QueryParameters = 10;
-    optional Ydb.Table.TransactionMeta TxMeta = 11;
+    optional Ydb.Table.TransactionMeta TxMeta = 11; 
     optional NKqpProto.TKqpStatsQuery QueryStats = 12;
 }
 
@@ -259,7 +259,7 @@ message TEvQueryResponse {
     optional TQueryResponse Response = 3;
     optional Ydb.StatusIds.StatusCode YdbStatus = 4;
     reserved 5; // (deprecated) ForcedNewEngine
-    optional uint64 ConsumedRu = 6;
+    optional uint64 ConsumedRu = 6; 
     optional bool WorkerIsClosing = 7 [default = false];
 }
 
@@ -297,7 +297,7 @@ message TKqpSetting {
 
 message TKqpDefaultSettings {
     repeated TKqpSetting DefaultSettings = 1;
-}
+} 
 
 message TCreateSessionRequest {
     optional string Database = 1;
@@ -306,7 +306,7 @@ message TCreateSessionRequest {
 message TEvCreateSessionRequest {
     optional TCreateSessionRequest Request = 1;
     optional string TraceId = 2;
-    optional uint64 DeadlineUs = 3;
+    optional uint64 DeadlineUs = 3; 
 }
 
 message TCreateSessionResponse {
@@ -370,7 +370,7 @@ message TExecuterTxResult {
 
 message TExecuterTxResponse {
     optional Ydb.StatusIds.StatusCode Status = 1;
-    repeated Ydb.Issue.IssueMessage Issues = 2;
+    repeated Ydb.Issue.IssueMessage Issues = 2; 
     optional TExecuterTxResult Result = 3;
 };
 

@@ -127,7 +127,7 @@ public:
 
     //-- literal functions
     TRuntimeNode NewVoid();
-    TRuntimeNode NewNull();
+    TRuntimeNode NewNull(); 
 
     TType* NewDataType(NUdf::TDataTypeId schemeType, bool optional = false);
     TType* NewDataType(NUdf::EDataSlot slot, bool optional = false) {

@@ -888,8 +888,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable("Json", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::Json>(node.Head().Content());
-    });
-
+    }); 
+ 
     AddCallable("JsonDocument", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         // NOTE: ValueFromString returns TUnboxedValuePod. This type does not free string inside it during destruction.
         // To get smart pointer-like behaviour we convert TUnboxedValuePod to TUnboxedValue. Without this conversion there
@@ -2052,8 +2052,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable("Null", [](const TExprNode&, TMkqlBuildContext& ctx) {
         return ctx.ProgramBuilder.NewNull();
-    });
-
+    }); 
+ 
     AddCallable({"AsTagged","Untag"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return MkqlBuildExpr(node.Head(), ctx);
     });
@@ -2282,10 +2282,10 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const NNodes::TCoParameter parameter(&node);
         return ctx.ProgramBuilder.Member(ctx.Parameters, parameter.Name());
     });
-
+ 
     AddCallable("SecureParam", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(node.Head().Content());
-    });
+    }); 
 
     AddCallable(SkippableCallables, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return MkqlBuildExpr(node.Head(), ctx);

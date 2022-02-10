@@ -34,8 +34,8 @@ public:
         operation.set_ready(true);
         operation.set_status(code);
         auto issue = operation.add_issues();
-        issue->set_severity(NYql::TSeverityIds::S_ERROR);
-        issue->set_message(error);
+        issue->set_severity(NYql::TSeverityIds::S_ERROR); 
+        issue->set_message(error); 
 
         Tenant = nullptr;
 
@@ -109,17 +109,17 @@ public:
 
         // Check attributes.
         THashSet<TString> attrNames;
-        for (const auto& [key, value] : rec.attributes()) {
-            if (!key)
+        for (const auto& [key, value] : rec.attributes()) { 
+            if (!key) 
                 return Error(Ydb::StatusIds::BAD_REQUEST,
                              "Attribute name shouldn't be empty", ctx);
-            if (!value)
+            if (!value) 
                 return Error(Ydb::StatusIds::BAD_REQUEST,
                              "Attribute value shouldn't be empty", ctx);
-            if (attrNames.contains(key))
+            if (attrNames.contains(key)) 
                 return Error(Ydb::StatusIds::BAD_REQUEST,
-                             Sprintf("Multiple attributes with name '%s'", key.data()), ctx);
-            attrNames.insert(key);
+                             Sprintf("Multiple attributes with name '%s'", key.data()), ctx); 
+            attrNames.insert(key); 
         }
 
         Tenant = new TTenant(path, TTenant::CREATING_POOLS, token);
@@ -152,10 +152,10 @@ public:
         Tenant->StorageUnitsQuota = Self->Config.DefaultStorageUnitsQuota;
         Tenant->ComputationalUnitsQuota = Self->Config.DefaultComputationalUnitsQuota;
 
-        for (const auto& [key, value] : rec.attributes()) {
+        for (const auto& [key, value] : rec.attributes()) { 
             auto &r = *Tenant->Attributes.AddUserAttributes();
-            r.SetKey(key);
-            r.SetValue(value);
+            r.SetKey(key); 
+            r.SetValue(value); 
         }
 
         switch (rec.resources_kind_case()) {

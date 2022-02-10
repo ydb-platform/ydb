@@ -32,9 +32,9 @@ namespace NDnsResolver {
         TActorId GetUpstream() {
             if (Y_UNLIKELY(!CachingResolverId)) {
                 if (Y_LIKELY(!SimpleResolverId)) {
-                    SimpleResolverId = RegisterWithSameMailbox(CreateSimpleDnsResolver(Options));
+                    SimpleResolverId = RegisterWithSameMailbox(CreateSimpleDnsResolver(Options)); 
                 }
-                CachingResolverId = RegisterWithSameMailbox(CreateCachingDnsResolver(SimpleResolverId, Options));
+                CachingResolverId = RegisterWithSameMailbox(CreateCachingDnsResolver(SimpleResolverId, Options)); 
             }
             return CachingResolverId;
         }

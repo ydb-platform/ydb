@@ -42,7 +42,7 @@
 #include <ydb/core/protos/counters_datashard.pb.h>
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-
+ 
 #include <library/cpp/actors/interconnect/interconnect.h>
 
 #include <util/string/join.h>
@@ -183,7 +183,7 @@ class TDataShard
     class TTxGetInfo;
     class TTxListOperations;
     class TTxGetOperation;
-    class TTxStoreScanState;
+    class TTxStoreScanState; 
     class TTxRefreshVolatileSnapshot;
     class TTxDiscardVolatileSnapshot;
     class TTxCleanupRemovedSnapshots;
@@ -289,8 +289,8 @@ class TDataShard
             EvRegisterScanActor,
             EvNodeDisconnected,
             EvScanStats,
-            EvPersistScanState,
-            EvPersistScanStateAck,
+            EvPersistScanState, 
+            EvPersistScanStateAck, 
             EvConditionalEraseRowsRegistered,
             EvAsyncJobComplete,
             EvSubDomainPathIdFound,
@@ -358,32 +358,32 @@ class TDataShard
             ui64 Rows;
             ui64 Bytes;
         };
-
-        // Also updates scan statistic, i.e. like TEvScanStats but persist state for given tx
-        struct TEvPersistScanState : public TEventLocal<TEvPersistScanState, EvPersistScanState> {
-            TEvPersistScanState(
-                ui64 txId,
-                TString lastKey,
-                ui64 rows,
-                ui64 bytes,
-                Ydb::StatusIds::StatusCode statusCode,
-                const NYql::TIssues& issues)
-                : TxId(txId)
-                , LastKey(lastKey)
-                , Rows(rows)
-                , Bytes(bytes)
-                , StatusCode(statusCode)
-                , Issues(issues)
-            {}
-            ui64 TxId;
-            TString LastKey;
-            ui64 Rows;
-            ui64 Bytes;
-            Ydb::StatusIds::StatusCode StatusCode;
-            NYql::TIssues Issues;
-        };
-
-        struct TEvPersistScanStateAck : public TEventLocal<TEvPersistScanStateAck, EvPersistScanStateAck> {};
+ 
+        // Also updates scan statistic, i.e. like TEvScanStats but persist state for given tx 
+        struct TEvPersistScanState : public TEventLocal<TEvPersistScanState, EvPersistScanState> { 
+            TEvPersistScanState( 
+                ui64 txId, 
+                TString lastKey, 
+                ui64 rows, 
+                ui64 bytes, 
+                Ydb::StatusIds::StatusCode statusCode, 
+                const NYql::TIssues& issues) 
+                : TxId(txId) 
+                , LastKey(lastKey) 
+                , Rows(rows) 
+                , Bytes(bytes) 
+                , StatusCode(statusCode) 
+                , Issues(issues) 
+            {} 
+            ui64 TxId; 
+            TString LastKey; 
+            ui64 Rows; 
+            ui64 Bytes; 
+            Ydb::StatusIds::StatusCode StatusCode; 
+            NYql::TIssues Issues; 
+        }; 
+ 
+        struct TEvPersistScanStateAck : public TEventLocal<TEvPersistScanStateAck, EvPersistScanStateAck> {}; 
 
         struct TEvConditionalEraseRowsRegistered : public TEventLocal<TEvConditionalEraseRowsRegistered, EvConditionalEraseRowsRegistered> {
             explicit TEvConditionalEraseRowsRegistered(ui64 txId, const TActorId& actorId)
@@ -579,17 +579,17 @@ class TDataShard
             using TColumns = TableColumns<TxId, Flags, Locks>;
         };
 
-        struct ScanProgress : Table<13> {
-            struct TxId :            Column<1, NScheme::NTypeIds::Uint64> {};
-            struct LastKey :         Column<2, NScheme::NTypeIds::String> {};
-            struct LastBytes :       Column<3, NScheme::NTypeIds::Uint64> {};
-            struct LastStatus :      Column<4, NScheme::NTypeIds::Uint64> {};
-            struct LastIssues :      Column<5, NScheme::NTypeIds::String> { using Type = TString; };
-
-            using TKey = TableKey<TxId>;
-            using TColumns = TableColumns<TxId, LastKey, LastBytes, LastStatus, LastIssues>;
-        };
-
+        struct ScanProgress : Table<13> { 
+            struct TxId :            Column<1, NScheme::NTypeIds::Uint64> {}; 
+            struct LastKey :         Column<2, NScheme::NTypeIds::String> {}; 
+            struct LastBytes :       Column<3, NScheme::NTypeIds::Uint64> {}; 
+            struct LastStatus :      Column<4, NScheme::NTypeIds::Uint64> {}; 
+            struct LastIssues :      Column<5, NScheme::NTypeIds::String> { using Type = TString; }; 
+ 
+            using TKey = TableKey<TxId>; 
+            using TColumns = TableColumns<TxId, LastKey, LastBytes, LastStatus, LastIssues>; 
+        }; 
+ 
         struct Snapshots : Table<14> {
             struct Oid :             Column<1, NScheme::NTypeIds::Uint64> {}; // PathOwnerId
             struct Tid :             Column<2, NScheme::NTypeIds::Uint64> {}; // LocalPathId
@@ -898,7 +898,7 @@ class TDataShard
     void Handle(TEvPrivate::TEvRemoveOldInReadSets::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvRegisterScanActor::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvScanStats::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvPrivate::TEvPersistScanState::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvPersistScanState::TPtr &ev, const TActorContext &ctx); 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx);
@@ -1115,14 +1115,14 @@ public:
         return State == TShardState::Ready ||
                 State == TShardState::Readonly ||
                 State == TShardState::WaitScheme ||
-                State == TShardState::SplitSrcWaitForNoTxInFlight ||
-                State == TShardState::Frozen;
+                State == TShardState::SplitSrcWaitForNoTxInFlight || 
+                State == TShardState::Frozen; 
     }
 
-    bool IsStateFrozen() const {
-        return State == TShardState::Frozen;
-    }
-
+    bool IsStateFrozen() const { 
+        return State == TShardState::Frozen; 
+    } 
+ 
 
     ui32 Generation() const { return Executor()->Generation(); }
     bool IsFollower() const { return Executor()->GetStats().IsFollower; }
@@ -2159,7 +2159,7 @@ protected:
             HFuncTraced(TEvPrivate::TEvRemoveOldInReadSets, Handle);
             HFuncTraced(TEvPrivate::TEvRegisterScanActor, Handle);
             HFuncTraced(TEvPrivate::TEvScanStats, Handle);
-            HFuncTraced(TEvPrivate::TEvPersistScanState, Handle);
+            HFuncTraced(TEvPrivate::TEvPersistScanState, Handle); 
             HFuncTraced(TEvTabletPipe::TEvClientConnected, Handle);
             HFuncTraced(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFuncTraced(TEvTabletPipe::TEvServerConnected, Handle);

@@ -8,13 +8,13 @@ namespace NKikimr {
 namespace NGRpcService {
 
 static TString GetSdkBuildInfo(NGrpc::IRequestContextBase* reqCtx) {
-    const auto& res = reqCtx->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
-    if (res.empty()) {
-        return {};
-    }
+    const auto& res = reqCtx->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER); 
+    if (res.empty()) { 
+        return {}; 
+    } 
     return TString{res[0]};
-}
-
+} 
+ 
 TGRpcDiscoveryService::TGRpcDiscoveryService(NActors::TActorSystem *system,
                                  TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
                                  NActors::TActorId id)
@@ -48,9 +48,9 @@ TGRpcDiscoveryService::TGRpcDiscoveryService(NActors::TActorSystem *system,
  #error ADD_REQUEST macro already defined
  #endif
  #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
-     MakeIntrusive<TGRpcRequest<Ydb::Discovery::IN, Ydb::Discovery::OUT, TGRpcDiscoveryService>>(this, &Service_, CQ_, \
+     MakeIntrusive<TGRpcRequest<Ydb::Discovery::IN, Ydb::Discovery::OUT, TGRpcDiscoveryService>>(this, &Service_, CQ_, \ 
          [this](NGrpc::IRequestContextBase *reqCtx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer(), GetSdkBuildInfo(reqCtx)); \
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer(), GetSdkBuildInfo(reqCtx)); \ 
             ACTION; \
          }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME, \
          #NAME, logger, getCounterBlock("discovery", #NAME))->Run();

@@ -1,9 +1,9 @@
-#pragma once
+#pragma once 
 
 #include "defs.h"
 #include "grpc_request_proxy.h"
 #include "rpc_common.h"
-
+ 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -15,10 +15,10 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
-
-namespace NKikimr {
-namespace NGRpcService {
-
+ 
+namespace NKikimr { 
+namespace NGRpcService { 
+ 
 template <typename TDerived, typename TRequest, bool IsOperation>
 class TRpcRequestWithOperationParamsActor : public TActorBootstrapped<TDerived> {
 private:
@@ -30,17 +30,17 @@ public:
         WakeupTagTimeout = 10,
         WakeupTagCancel = 11,
         WakeupTagGetConfig = 21,
-        WakeupTagClientLost = 22,
+        WakeupTagClientLost = 22, 
     };
 
 public:
     TRpcRequestWithOperationParamsActor(TRequestBase* request)
         : Request_(request)
     {
-        auto& operationParams = GetProtoRequest()->operation_params();
+        auto& operationParams = GetProtoRequest()->operation_params(); 
         OperationTimeout_ = GetDuration(operationParams.operation_timeout());
         CancelAfter_ = GetDuration(operationParams.cancel_after());
-        ReportCostInfo_ = operationParams.report_cost_info() == Ydb::FeatureFlag::ENABLED;
+        ReportCostInfo_ = operationParams.report_cost_info() == Ydb::FeatureFlag::ENABLED; 
     }
 
     const typename TRequest::TRequest* GetProtoRequest() const {
@@ -64,8 +64,8 @@ public:
             CancelAfterTimer = CreateLongTimer(ctx, CancelAfter_,
                 new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(WakeupTagCancel)),
                 AppData(ctx)->UserPoolId);
-        }
-
+        } 
+ 
         auto selfId = ctx.SelfID;
         auto* actorSystem = ctx.ExecutorThread.ActorSystem;
         auto clientLostCb = [selfId, actorSystem]() {
@@ -86,8 +86,8 @@ public:
 protected:
     TDuration GetOperationTimeout() {
         return OperationTimeout_;
-    }
-
+    } 
+ 
     TDuration GetCancelAfter() {
         return CancelAfter_;
     }
@@ -113,13 +113,13 @@ protected:
 
 protected:
     std::unique_ptr<TRequestBase> Request_;
-
-    TActorId OperationTimeoutTimer;
-    TActorId CancelAfterTimer;
+ 
+    TActorId OperationTimeoutTimer; 
+    TActorId CancelAfterTimer; 
     TDuration OperationTimeout_;
     TDuration CancelAfter_;
     bool HasCancel_ = false;
-    bool ReportCostInfo_ = false;
+    bool ReportCostInfo_ = false; 
 };
 
 template <typename TDerived, typename TRequest>
@@ -139,8 +139,8 @@ public:
 
     void OnCancelOperation(const TActorContext& ctx) {
         Y_UNUSED(ctx);
-    }
-
+    } 
+ 
     void OnForgetOperation(const TActorContext& ctx) {
         // No client is waiting for the reply, but we have to issue fake reply
         // anyway before dying to make Grpc happy.
@@ -155,8 +155,8 @@ public:
         issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
             "Operation timeout."));
         Reply(Ydb::StatusIds::TIMEOUT, issues, ctx);
-    }
-
+    } 
+ 
 protected:
     void StateFuncBase(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
         switch (ev->GetTypeRewrite()) {
@@ -169,25 +169,25 @@ protected:
                         << ev->GetTypeRewrite()));
                 return this->Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx);
             }
-        }
-    }
-
+        } 
+    } 
+ 
 protected:
     using TBase::Request_;
 
     void Reply(Ydb::StatusIds::StatusCode status,
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext& ctx)
     {
-        Request_->SendResult(status, message);
-        this->Die(ctx);
-    }
-
+        Request_->SendResult(status, message); 
+        this->Die(ctx); 
+    } 
+ 
     void Reply(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TActorContext& ctx) {
-        Request_->RaiseIssues(issues);
-        Request_->ReplyWithYdbStatus(status);
-        this->Die(ctx);
-    }
-
+        Request_->RaiseIssues(issues); 
+        Request_->ReplyWithYdbStatus(status); 
+        this->Die(ctx); 
+    } 
+ 
     void Reply(Ydb::StatusIds::StatusCode status, const TString& message, NKikimrIssues::TIssuesIds::EIssueCode issueCode, const TActorContext& ctx) {
         NYql::TIssues issues;
         issues.AddIssue(MakeIssue(issueCode, message));
@@ -202,41 +202,41 @@ protected:
     void ReplyWithResult(Ydb::StatusIds::StatusCode status,
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext &ctx)
     {
-        Request_->SendResult(status, message);
-        this->Die(ctx);
-    }
-
-    template<typename TResult>
-    void ReplyWithResult(Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message,
-        const TResult& result,
-        const TActorContext& ctx)
-    {
-        Request_->SendResult(result, status, message);
-        this->Die(ctx);
-    }
-
-    template<typename TResult>
-    void ReplyWithResult(Ydb::StatusIds::StatusCode status,
-                         const TResult& result,
-                         const TActorContext& ctx) {
-        Request_->SendResult(result, status);
-        this->Die(ctx);
-    }
-
-    void ReplyOperation(Ydb::Operations::Operation& operation)
-    {
-        Request_->SendOperation(operation);
-        this->PassAway();
-    }
-
-    void SetCost(ui64 ru) {
-        Request_->SetRuHeader(ru);
-        if (TBase::ReportCostInfo_) {
-            Request_->SetCostInfo(ru);
-        }
-    }
-
+        Request_->SendResult(status, message); 
+        this->Die(ctx); 
+    } 
+ 
+    template<typename TResult> 
+    void ReplyWithResult(Ydb::StatusIds::StatusCode status, 
+        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, 
+        const TResult& result, 
+        const TActorContext& ctx) 
+    { 
+        Request_->SendResult(result, status, message); 
+        this->Die(ctx); 
+    } 
+ 
+    template<typename TResult> 
+    void ReplyWithResult(Ydb::StatusIds::StatusCode status, 
+                         const TResult& result, 
+                         const TActorContext& ctx) { 
+        Request_->SendResult(result, status); 
+        this->Die(ctx); 
+    } 
+ 
+    void ReplyOperation(Ydb::Operations::Operation& operation) 
+    { 
+        Request_->SendOperation(operation); 
+        this->PassAway(); 
+    } 
+ 
+    void SetCost(ui64 ru) { 
+        Request_->SetRuHeader(ru); 
+        if (TBase::ReportCostInfo_) { 
+            Request_->SetCostInfo(ru); 
+        } 
+    } 
+ 
 protected:
     void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
         switch (ev->Get()->Tag) {
@@ -255,7 +255,7 @@ protected:
         Y_UNUSED(ev);
         static_cast<TDerived*>(this)->OnForgetOperation(ctx);
     }
-};
-
-} // namespace NGRpcService
-} // namespace NKikimr
+}; 
+ 
+} // namespace NGRpcService 
+} // namespace NKikimr 

@@ -179,7 +179,7 @@ public:
             .Add(CreateKqpExecTransformer(Gateway, Cluster, TxState, TransformCtx), "Prepare")
             .Add(CreateKqpSubstituteTransformer(TxState, TransformCtx), "Substitute")
             .Add(CreateKqpFinalizeTransformer(Gateway, Cluster, TxState, TransformCtx), "Finalize")
-            .Build(false);
+            .Build(false); 
 
         PreparedRunTransformer = TTransformationPipeline(typesCtx)
             .Add(TLogExprTransformer::Sync("PreparedRun iteration", logComp, logLevel), "KqlPreparedRun")
@@ -470,20 +470,20 @@ private:
         TransformCtx->QueryCtx->PreparingQuery->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_V1);
         auto kql = TransformCtx->QueryCtx->PreparingQuery->AddKqls();
         kql->MutableSettings()->CopyFrom(TransformCtx->Settings);
-
+ 
         FillAstAndPlan(*kql, finalProgram, ctx);
 
         auto operations = TableOperationsToProto(dataQuery.Operations(), ctx);
         for (auto& op : operations) {
             const auto& tableName = op.GetTable();
-
+ 
             kql->AddOperations()->CopyFrom(op);
             const auto& desc = TransformCtx->Tables->GetTable(cluster, tableName);
             TableDescriptionToTableInfo(desc, kql->AddTableInfo());
         }
 
         TransformCtx->PreparingKql = kql;
-
+ 
         return MakeIntrusive<TAsyncRunResult>(finalProgram, ctx, *KqlPrepareTransformer, *TransformCtx);
     }
 

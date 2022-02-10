@@ -1,23 +1,23 @@
-LIBRARY()
-
-OWNER(
-    dcherednik
-    g:kikimr
-)
-
-SRCS(
-    ydb_scripting.cpp
+LIBRARY() 
+ 
+OWNER( 
+    dcherednik 
+    g:kikimr 
+) 
+ 
+SRCS( 
+    ydb_scripting.cpp 
     ydb_long_tx.cpp
-)
-
-PEERDIR(
+) 
+ 
+PEERDIR( 
     ydb/public/api/grpc/draft
     ydb/public/sdk/cpp/client/ydb_table
     ydb/public/sdk/cpp/client/ydb_types/operation
     ydb/public/sdk/cpp/client/ydb_value
-)
-
-END()
+) 
+ 
+END() 
 
 RECURSE_FOR_TESTS(
     ut

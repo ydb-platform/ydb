@@ -122,7 +122,7 @@ public:
         bool LlvmEnabled = true;
         TKqpSnapshot Snapshot = TKqpSnapshot();
         NKikimrKqp::EIsolationLevel IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
-        TMaybe<NKikimrKqp::TRlPath> RlPath;
+        TMaybe<NKikimrKqp::TRlPath> RlPath; 
     };
 
     struct TExecPhysicalResult : public TGenericResult {

@@ -53,7 +53,7 @@ public:
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         Counters = FromStringWithDefault(params.Get("counters"), false);
         TString path = params.Get("path");
-        BrowseActorID = ctx.RegisterWithSameMailbox(new TBrowse(Viewer, ctx.SelfID, path, Event->Get()->UserToken));
+        BrowseActorID = ctx.RegisterWithSameMailbox(new TBrowse(Viewer, ctx.SelfID, path, Event->Get()->UserToken)); 
         Become(&TThis::StateWait, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 

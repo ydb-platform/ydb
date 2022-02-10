@@ -51,11 +51,11 @@ public:
 };
 
 //! Implements interaction Kikimr via gRPC protocol.
-class TGRpcService
+class TGRpcService 
     : public NGrpc::TGrpcServiceBase<NKikimrClient::TGRpcServer>
 {
 public:
-    TGRpcService();
+    TGRpcService(); 
 
     void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
     void SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) override;
@@ -63,15 +63,15 @@ public:
     NThreading::TFuture<void> Prepare(NActors::TActorSystem* system, const NActors::TActorId& pqMeta, const NActors::TActorId& msgBusProxy, TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
     void Start();
 
-    bool IncRequest();
-    void DecRequest();
-    i64 GetCurrentInFlight() const;
+    bool IncRequest(); 
+    void DecRequest(); 
+    i64 GetCurrentInFlight() const; 
 
 private:
     void RegisterRequestActor(NActors::IActor* req);
 
-    //! Setup handlers for incoming requests.
-    void SetupIncomingRequests();
+    //! Setup handlers for incoming requests. 
+    void SetupIncomingRequests(); 
 
 private:
     using IThreadRef = TAutoPtr<IThreadFactory::IThread>;
@@ -81,14 +81,14 @@ private:
     NActors::TActorId PQMeta;
     NActors::TActorId MsgBusProxy;
 
-    grpc::ServerCompletionQueue* CQ = nullptr;
+    grpc::ServerCompletionQueue* CQ = nullptr; 
 
-    size_t PersQueueWriteSessionsMaxCount = 1000000;
-    size_t PersQueueReadSessionsMaxCount  = 100000;
+    size_t PersQueueWriteSessionsMaxCount = 1000000; 
+    size_t PersQueueReadSessionsMaxCount  = 100000; 
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
 
-    std::function<void()> InitCb_;
+    std::function<void()> InitCb_; 
     // In flight request management.
     NGrpc::TGlobalLimiter* Limiter_ = nullptr;
 

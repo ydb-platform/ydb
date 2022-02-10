@@ -116,11 +116,11 @@ public:
         db.Table<Schema::TxInFlightV2>().Key(OperationId.GetTxId(), OperationId.GetSubTxId()).Update(
                     NIceDb::TUpdate<Schema::TxInFlightV2::ExtraBytes>(extraData));
 
-        const auto tableInfo = context.SS->Tables.FindPtr(txState->TargetPathId);
-        Y_VERIFY(tableInfo);
-
-        const ui64 alterVersion = (*tableInfo)->AlterVersion;
-
+        const auto tableInfo = context.SS->Tables.FindPtr(txState->TargetPathId); 
+        Y_VERIFY(tableInfo); 
+ 
+        const ui64 alterVersion = (*tableInfo)->AlterVersion; 
+ 
         const ui64 subDomainPathId = context.SS->ResolveDomainId(txState->TargetPathId).LocalPathId;
 
         for (const auto& shard: txState->Shards) {
@@ -160,15 +160,15 @@ public:
             // diverge during a migration period. That's ok though, since
             // schemas may only become incompatible after column family storage
             // configuration is altered, and it's protected with a feature flag.
-            auto tableDesc = event->Record.MutableCreateTable();
+            auto tableDesc = event->Record.MutableCreateTable(); 
             context.SS->FillTableDescriptionForShardIdx(
                 txState->TargetPathId,
                 shard.Idx,
-                tableDesc,
+                tableDesc, 
                 rangeDescr.GetKeyRangeBegin(),
                 rangeDescr.GetKeyRangeEnd(),
                 true, false);
-            context.SS->FillTableSchemaVersion(alterVersion, tableDesc);
+            context.SS->FillTableSchemaVersion(alterVersion, tableDesc); 
 
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shard.Idx, event.Release());
         }

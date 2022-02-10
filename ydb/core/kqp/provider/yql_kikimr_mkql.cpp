@@ -5,26 +5,26 @@
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_join.h>
 
-
+ 
 namespace NYql {
 namespace {
 
 using namespace NNodes;
 
-TExprNode::TPtr BuildMkqlVersionedTable(const TCoAtom& tableName, const TCoAtom& schemaVersion,
-    const TCoAtom& pathId, TExprContext& ctx, TPositionHandle pos)
-{
-    return Build<TMkqlVersionedTable>(ctx, pos)
-        .Table(tableName)
-        .SchemaVersion(schemaVersion)
-        .PathId(pathId)
-        .Done()
-        .Ptr();
-}
-
+TExprNode::TPtr BuildMkqlVersionedTable(const TCoAtom& tableName, const TCoAtom& schemaVersion, 
+    const TCoAtom& pathId, TExprContext& ctx, TPositionHandle pos) 
+{ 
+    return Build<TMkqlVersionedTable>(ctx, pos) 
+        .Table(tableName) 
+        .SchemaVersion(schemaVersion) 
+        .PathId(pathId) 
+        .Done() 
+        .Ptr(); 
+} 
+ 
 TExprNode::TPtr MkqlRewriteCallables(TCallable callable, TExprContext& ctx, const TMaybe<TString>& rtParamName) {
     TMaybeNode<TCoParameter> readTarget;
-
+ 
     if (rtParamName) {
         readTarget = Build<TCoParameter>(ctx, callable.Pos())
             .Name().Build(*rtParamName)
@@ -34,28 +34,28 @@ TExprNode::TPtr MkqlRewriteCallables(TCallable callable, TExprContext& ctx, cons
             .Done();
     }
 
-    if (auto maybeSelectRow = callable.Maybe<TKiSelectRow>()) {
-        auto selectRow  = maybeSelectRow.Cast();
-        auto vt = selectRow.Table();
+    if (auto maybeSelectRow = callable.Maybe<TKiSelectRow>()) { 
+        auto selectRow  = maybeSelectRow.Cast(); 
+        auto vt = selectRow.Table(); 
         TExprNode::TListType children = {
-            BuildMkqlVersionedTable(vt.Path(), vt.SchemaVersion(), vt.PathId(), ctx, selectRow.Pos()),
-            selectRow.Key().Ptr(),
-            selectRow.Select().Ptr()
+            BuildMkqlVersionedTable(vt.Path(), vt.SchemaVersion(), vt.PathId(), ctx, selectRow.Pos()), 
+            selectRow.Key().Ptr(), 
+            selectRow.Select().Ptr() 
         };
 
         if (readTarget) {
             children.push_back(readTarget.Cast().Ptr());
         }
 
-        return ctx.NewCallable(selectRow.Pos(), "SelectRow", std::move(children));
+        return ctx.NewCallable(selectRow.Pos(), "SelectRow", std::move(children)); 
     }
 
-    if (auto maybeSelectRange = callable.Maybe<TKiSelectRangeBase>()) {
-        auto selectRange = maybeSelectRange.Cast();
-        auto vt = selectRange.Table();
+    if (auto maybeSelectRange = callable.Maybe<TKiSelectRangeBase>()) { 
+        auto selectRange = maybeSelectRange.Cast(); 
+        auto vt = selectRange.Table(); 
 
         TExprNode::TListType children = {
-            BuildMkqlVersionedTable(vt.Path(), vt.SchemaVersion(), vt.PathId(), ctx, selectRange.Pos()),
+            BuildMkqlVersionedTable(vt.Path(), vt.SchemaVersion(), vt.PathId(), ctx, selectRange.Pos()), 
             selectRange.Range().Ptr(),
             selectRange.Select().Ptr(),
             selectRange.Settings().Ptr()
@@ -76,30 +76,30 @@ TExprNode::TPtr MkqlRewriteCallables(TCallable callable, TExprContext& ctx, cons
                 .Build();
         } else {
             ctx.AddError(TIssue(ctx.GetPosition(selectRange.Pos()), TStringBuilder() << "Got unsupported callable: "
-                << selectRange.CallableName()));
-            return nullptr;
+                << selectRange.CallableName())); 
+            return nullptr; 
         }
     }
 
-    if (auto maybeUpdateRow = callable.Maybe<TKiUpdateRow>()) {
-        auto updateRow = maybeUpdateRow.Cast();
-        auto vt = updateRow.Table();
-        return Build<TMkqlUpdateRow>(ctx, updateRow.Pos())
-            .Table(BuildMkqlVersionedTable(vt.Path(), vt.SchemaVersion(), vt.PathId(), ctx, updateRow.Pos()))
-            .Key(updateRow.Key())
-            .Update(updateRow.Update())
-            .Done()
-            .Ptr();
+    if (auto maybeUpdateRow = callable.Maybe<TKiUpdateRow>()) { 
+        auto updateRow = maybeUpdateRow.Cast(); 
+        auto vt = updateRow.Table(); 
+        return Build<TMkqlUpdateRow>(ctx, updateRow.Pos()) 
+            .Table(BuildMkqlVersionedTable(vt.Path(), vt.SchemaVersion(), vt.PathId(), ctx, updateRow.Pos())) 
+            .Key(updateRow.Key()) 
+            .Update(updateRow.Update()) 
+            .Done() 
+            .Ptr(); 
     }
 
-    if (auto maybeEraseRow = callable.Maybe<TKiEraseRow>()) {
-        auto eraseRow = maybeEraseRow.Cast();
-        auto vt = eraseRow.Table();
-        return Build<TMkqlEraseRow>(ctx, eraseRow.Pos())
-                .Table(BuildMkqlVersionedTable(vt.Path(), vt.SchemaVersion(), vt.PathId(), ctx, eraseRow.Pos()))
-                .Key(eraseRow.Key())
-                .Done()
-                .Ptr();
+    if (auto maybeEraseRow = callable.Maybe<TKiEraseRow>()) { 
+        auto eraseRow = maybeEraseRow.Cast(); 
+        auto vt = eraseRow.Table(); 
+        return Build<TMkqlEraseRow>(ctx, eraseRow.Pos()) 
+                .Table(BuildMkqlVersionedTable(vt.Path(), vt.SchemaVersion(), vt.PathId(), ctx, eraseRow.Pos())) 
+                .Key(eraseRow.Key()) 
+                .Done() 
+                .Ptr(); 
     }
 
     if (auto setResult = callable.Maybe<TKiSetResult>()) {
@@ -120,11 +120,11 @@ TExprNode::TPtr MkqlRewriteCallables(TCallable callable, TExprContext& ctx, cons
     }
 
     if (auto map = callable.Maybe<TKiMapParameter>()) {
-        return Build<TMkqlMapParameter>(ctx, map.Cast().Pos())
-                .Input(map.Cast().Input())
-                .Lambda(map.Cast().Lambda())
-            .Done()
-            .Ptr();
+        return Build<TMkqlMapParameter>(ctx, map.Cast().Pos()) 
+                .Input(map.Cast().Input()) 
+                .Lambda(map.Cast().Lambda()) 
+            .Done() 
+            .Ptr(); 
     }
 
     if (auto map = callable.Maybe<TKiFlatMapParameter>()) {

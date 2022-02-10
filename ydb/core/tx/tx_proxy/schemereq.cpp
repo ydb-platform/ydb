@@ -114,7 +114,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         TVector<TString> result = l;
         std::move(r.begin(), r.end(), std::back_inserter(result));
         return result;
-    }
+    } 
 
     static TString& GetPathNameForScheme(NKikimrSchemeOp::TModifyScheme& modifyScheme) {
         switch (modifyScheme.GetOperationType()) {
@@ -150,7 +150,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup:
             return *modifyScheme.MutableAlterPersQueueGroup()->MutableName();
-
+ 
         case NKikimrSchemeOp::ESchemeOpModifyACL:
             return *modifyScheme.MutableModifyACL()->MutableName();
 
@@ -1169,15 +1169,15 @@ void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetRe
     auto parts = Merge(SplitPath(GetModifyScheme().GetWorkingDir()), SplitPath(GetPathNameForScheme(GetModifyScheme())));
 
     if (!workingDir || workingDir->size() >= parts.size()) {
-        const TString errText = TStringBuilder()
-            << "Cannot resolve working dir"
-            << " workingDir# " << (workingDir ? JoinPath(*workingDir) : "null")
-            << " path# " << JoinPath(parts);
-        LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, errText);
+        const TString errText = TStringBuilder() 
+            << "Cannot resolve working dir" 
+            << " workingDir# " << (workingDir ? JoinPath(*workingDir) : "null") 
+            << " path# " << JoinPath(parts); 
+        LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, errText); 
 
         TxProxyMon->ResolveKeySetWrongRequest->Inc();
-        const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, errText);
-        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, nullptr, &issue, ctx);
+        const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, errText); 
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, nullptr, &issue, ctx); 
         return Die(ctx);
     }
 

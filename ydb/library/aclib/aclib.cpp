@@ -11,8 +11,8 @@ std::pair<ui32, ui32>& operator |=(std::pair<ui32, ui32>& a, const std::pair<ui3
     a.first |= b.first;
     a.second |= b.second;
     return a;
-}
-
+} 
+ 
 void TUserToken::SetGroupSIDs(const TVector<TString>& groupSIDs) {
     auto& hashTable = *MutableGroupSIDs();
     auto& hashBuckets = *hashTable.MutableBuckets();
@@ -249,12 +249,12 @@ void TSecurityObject::RemoveAccess(NACLib::EAccessType type, ui32 access, const 
 
 void TSecurityObject::ClearAccess() Y_NO_SANITIZE("undefined") {
     static_cast<TACL*>(MutableACL())->ClearAccess();
-}
-
+} 
+ 
 NACLibProto::TACL TSecurityObject::GetImmediateACL() const Y_NO_SANITIZE("undefined") {
     return static_cast<const TACL&>(GetACL()).GetImmediateACL();
-}
-
+} 
+ 
 TSecurityObject::TSecurityObject()
     : IsContainer(false)
 {}
@@ -688,17 +688,17 @@ void TDiffACL::RemoveAccess(const NACLibProto::TACE& access) {
     ace->CopyFrom(access);
 }
 
-void TDiffACL::ClearAccess() {
-    NACLibProto::TDiffACE* diffACE(AddDiffACE());
+void TDiffACL::ClearAccess() { 
+    NACLibProto::TDiffACE* diffACE(AddDiffACE()); 
     diffACE->SetDiffType(static_cast<ui32>(EDiffType::Remove));
-}
-
-void TDiffACL::ClearAccessForSid(const NACLib::TSID& sid) {
-    NACLibProto::TDiffACE* diffACE(AddDiffACE());
+} 
+ 
+void TDiffACL::ClearAccessForSid(const NACLib::TSID& sid) { 
+    NACLibProto::TDiffACE* diffACE(AddDiffACE()); 
     diffACE->SetDiffType(static_cast<ui32>(EDiffType::Remove));
-    diffACE->MutableACE()->SetSID(sid);
-}
-
+    diffACE->MutableACE()->SetSID(sid); 
+} 
+ 
 TString AccessRightsToString(ui32 accessRights) {
     switch (accessRights) {
     case EAccessRights::GenericFull: return "Full";

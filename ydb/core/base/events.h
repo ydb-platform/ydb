@@ -81,7 +81,7 @@ struct TKikimrEvents : TEvents {
         ES_RESOURCE_BROKER,
         ES_VIEWER,
         ES_SUB_DOMAIN,
-        ES_GRPC_PROXY_STATUS, //OLD
+        ES_GRPC_PROXY_STATUS, //OLD 
         ES_SQS,
         ES_BLOCKSTORE, //4162
         ES_RTMR_ICBUS,
@@ -90,7 +90,7 @@ struct TKikimrEvents : TEvents {
         ES_TVM_SETTINGS_UPDATER,
         ES_PQ_CLUSTERS_UPDATER,
         ES_TENANT_SLOT_BROKER,
-        ES_GRPC_CALLS,
+        ES_GRPC_CALLS, 
         ES_CONSOLE,
         ES_KESUS_PROXY,
         ES_KESUS,

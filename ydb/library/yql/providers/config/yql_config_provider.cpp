@@ -235,7 +235,7 @@ namespace {
                         if (command == "PureDataSource") {
                             if (Types.PureResultDataSource != node->Child(3)->Content()) {
                                 res = ctx.ChangeChild(*node, 3, ctx.RenameNode(*node->Child(3), Types.PureResultDataSource));
-                            }
+                            } 
                         }
                     }
 

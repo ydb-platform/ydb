@@ -330,18 +330,18 @@ NKikimrMiniKQL::TResult GetKikimrUnpackedRunResult(const NKikimrMiniKQL::TResult
     return result;
 }
 
-TVector<NKikimrMiniKQL::TResult*> UnpackKikimrRunResult(const NKikimrMiniKQL::TResult& runResult, google::protobuf::Arena* arena) {
+TVector<NKikimrMiniKQL::TResult*> UnpackKikimrRunResult(const NKikimrMiniKQL::TResult& runResult, google::protobuf::Arena* arena) { 
     const NKikimrMiniKQL::TTupleType* tupleType;
     const NKikimrMiniKQL::TValue* tupleValue;
     UnpackKikimrRunResult(runResult, tupleType, tupleValue);
 
-    TVector<NKikimrMiniKQL::TResult*> results;
+    TVector<NKikimrMiniKQL::TResult*> results; 
     ui32 resultsSize = tupleType->ElementSize();
     for (ui32 i = 0; i < resultsSize; ++i) {
-        results.push_back(google::protobuf::Arena::CreateMessage<NKikimrMiniKQL::TResult>(arena));
-        NKikimrMiniKQL::TResult* result = results.back();
-        *result->MutableType() = tupleType->GetElement(i);
-        *result->MutableValue() = tupleValue->GetTuple(i);
+        results.push_back(google::protobuf::Arena::CreateMessage<NKikimrMiniKQL::TResult>(arena)); 
+        NKikimrMiniKQL::TResult* result = results.back(); 
+        *result->MutableType() = tupleType->GetElement(i); 
+        *result->MutableValue() = tupleValue->GetTuple(i); 
     }
 
     return results;
@@ -370,11 +370,11 @@ bool IsRawKikimrResult(const NKikimrMiniKQL::TResult& result) {
     return structType.GetMember(0).GetName() != "Data" || structType.GetMember(1).GetName() != "Truncated";
 }
 
-NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& result, const TVector<TString>& columnHints,
-    const IDataProvider::TFillSettings& fillSettings, google::protobuf::Arena* arena)
+NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& result, const TVector<TString>& columnHints, 
+    const IDataProvider::TFillSettings& fillSettings, google::protobuf::Arena* arena) 
 {
-    NKikimrMiniKQL::TResult* packedResult = google::protobuf::Arena::CreateMessage<NKikimrMiniKQL::TResult>(arena);
-    auto* packedType = packedResult->MutableType();
+    NKikimrMiniKQL::TResult* packedResult = google::protobuf::Arena::CreateMessage<NKikimrMiniKQL::TResult>(arena); 
+    auto* packedType = packedResult->MutableType(); 
     packedType->SetKind(NKikimrMiniKQL::ETypeKind::Struct);
     auto* dataMember = packedType->MutableStruct()->AddMember();
     dataMember->SetName("Data");
@@ -383,7 +383,7 @@ NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& resu
     truncatedMember->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
     truncatedMember->MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<bool>::Id);
 
-    auto* packedValue = packedResult->MutableValue();
+    auto* packedValue = packedResult->MutableValue(); 
     auto* dataValue = packedValue->AddStruct();
     auto* dataType = dataMember->MutableType();
     auto* truncatedValue = packedValue->AddStruct();
@@ -549,18 +549,18 @@ bool ExportTypeToKikimrProto(const TTypeAnnotationNode& type, NKikimrMiniKQL::TT
         case ETypeAnnotationKind::Data: {
             protoType.SetKind(NKikimrMiniKQL::ETypeKind::Data);
             auto slot = type.Cast<TDataExprType>()->GetSlot();
-            auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
-            if (typeId == NYql::NProto::TypeIds::Decimal) {
-                auto dataProto = protoType.MutableData();
-                dataProto->SetScheme(typeId);
-                const auto paramsDataType = type.Cast<TDataExprParamsType>();
-                ui8 precision = ::FromString<ui8>(paramsDataType->GetParamOne());
-                ui8 scale = ::FromString<ui8>(paramsDataType->GetParamTwo());
-                dataProto->MutableDecimalParams()->SetPrecision(precision);
-                dataProto->MutableDecimalParams()->SetScale(scale);
-            } else {
-                protoType.MutableData()->SetScheme(typeId);
-            }
+            auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId; 
+            if (typeId == NYql::NProto::TypeIds::Decimal) { 
+                auto dataProto = protoType.MutableData(); 
+                dataProto->SetScheme(typeId); 
+                const auto paramsDataType = type.Cast<TDataExprParamsType>(); 
+                ui8 precision = ::FromString<ui8>(paramsDataType->GetParamOne()); 
+                ui8 scale = ::FromString<ui8>(paramsDataType->GetParamTwo()); 
+                dataProto->MutableDecimalParams()->SetPrecision(precision); 
+                dataProto->MutableDecimalParams()->SetScale(scale); 
+            } else { 
+                protoType.MutableData()->SetScheme(typeId); 
+            } 
             return true;
         }
 
@@ -887,11 +887,11 @@ TMaybe<TString> GetTableListResult(const IKikimrGateway::TListPathResult& res,
         }
     }
 
-    std::unique_ptr<NKikimrMiniKQL::TResult> packedResult(KikimrResultToProto(result, {}, fillSettings, nullptr));
+    std::unique_ptr<NKikimrMiniKQL::TResult> packedResult(KikimrResultToProto(result, {}, fillSettings, nullptr)); 
 
     if (fillSettings.Format == IDataProvider::EResultFormat::Yson) {
         NYson::EYsonFormat ysonFormat = NCommon::GetYsonFormat(fillSettings);
-        auto yson = KqpResultToYson(*packedResult, ysonFormat, ctx);
+        auto yson = KqpResultToYson(*packedResult, ysonFormat, ctx); 
         if (!yson) {
             return Nothing();
         }
@@ -901,7 +901,7 @@ TMaybe<TString> GetTableListResult(const IKikimrGateway::TListPathResult& res,
         YQL_ENSURE(fillSettings.Format == IDataProvider::EResultFormat::Custom);
         YQL_ENSURE(fillSettings.FormatDetails == KikimrMkqlProtoFormat);
 
-        TVector<char> buffer(packedResult->ByteSize());
+        TVector<char> buffer(packedResult->ByteSize()); 
         Y_PROTOBUF_SUPPRESS_NODISCARD packedResult->SerializeToArray(buffer.data(), buffer.size());
         return TString(buffer.data(), buffer.size());
     }
@@ -924,11 +924,11 @@ TMaybe<TString> GetTableMetadataResult(const TKikimrTableDescription& table,
 
     result.MutableValue()->SetBytes(metaYson);
 
-    std::unique_ptr<NKikimrMiniKQL::TResult> packedResult(KikimrResultToProto(result, {}, fillSettings, nullptr));
+    std::unique_ptr<NKikimrMiniKQL::TResult> packedResult(KikimrResultToProto(result, {}, fillSettings, nullptr)); 
 
     if (fillSettings.Format == IDataProvider::EResultFormat::Yson) {
         NYson::EYsonFormat ysonFormat = NCommon::GetYsonFormat(fillSettings);
-        auto yson = KqpResultToYson(*packedResult, ysonFormat, ctx);
+        auto yson = KqpResultToYson(*packedResult, ysonFormat, ctx); 
         if (!yson) {
             return Nothing();
         }
@@ -938,7 +938,7 @@ TMaybe<TString> GetTableMetadataResult(const TKikimrTableDescription& table,
         YQL_ENSURE(fillSettings.Format == IDataProvider::EResultFormat::Custom);
         YQL_ENSURE(fillSettings.FormatDetails == KikimrMkqlProtoFormat);
 
-        TVector<char> buffer(packedResult->ByteSize());
+        TVector<char> buffer(packedResult->ByteSize()); 
         Y_PROTOBUF_SUPPRESS_NODISCARD packedResult->SerializeToArray(buffer.data(), buffer.size());
         return TString(buffer.data(), buffer.size());
     }

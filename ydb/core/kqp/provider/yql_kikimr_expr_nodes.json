@@ -26,16 +26,16 @@
             ]
         },
         {
-            "Name": "TKiVersionedTable",
-            "Base": "TExprBase",
-            "Match": {"Type": "Tuple"},
-            "Children": [
-                {"Index": 0, "Name": "Path", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "SchemaVersion", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "PathId", "Type": "TCoAtom"}
-            ]
-        },
-        {
+            "Name": "TKiVersionedTable", 
+            "Base": "TExprBase", 
+            "Match": {"Type": "Tuple"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Path", "Type": "TCoAtom"}, 
+                {"Index": 1, "Name": "SchemaVersion", "Type": "TCoAtom"}, 
+                {"Index": 2, "Name": "PathId", "Type": "TCoAtom"} 
+            ] 
+        }, 
+        { 
             "Name": "TKiReadBase",
             "Base": "TCallable",
             "Match": {"Type": "CallableBase"},
@@ -112,7 +112,7 @@
                 {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Columns", "Type": "TExprList"},
                 {"Index": 4, "Name": "PrimaryKey", "Type": "TCoAtomList"},
-                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"},
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"}, 
                 {"Index": 6, "Name": "Indexes", "Type": "TCoIndexList"},
                 {"Index": 7, "Name": "PartitionBy", "Type": "TCoAtomList"},
                 {"Index": 8, "Name": "ColumnFamilies", "Type": "TExprList"},
@@ -121,17 +121,17 @@
             ]
         },
         {
-            "Name": "TKiAlterTable",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "KiAlterTable!"},
-            "Children": [
-                {"Index": 0, "Name": "World", "Type": "TExprBase"},
-                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+            "Name": "TKiAlterTable", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "KiAlterTable!"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "World", "Type": "TExprBase"}, 
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"}, 
                 {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Actions", "Type": "TCoNameValueTupleList"}
-            ]
-        },
-        {
+            ] 
+        }, 
+        { 
             "Name": "TKiDropTable",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KiDropTable!"},
@@ -209,20 +209,20 @@
             ]
         },
         {
-            "Name": "TKiOperation",
-            "Base": "TExprBase",
-            "Match": {"Type": "Tuple"},
-            "Children": [
-                {"Index": 0, "Name": "Cluster", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Table", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "Operation", "Type": "TCoAtom"}
-            ]
-        },
-        {
+            "Name": "TKiOperation", 
+            "Base": "TExprBase", 
+            "Match": {"Type": "Tuple"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Cluster", "Type": "TCoAtom"}, 
+                {"Index": 1, "Name": "Table", "Type": "TCoAtom"}, 
+                {"Index": 2, "Name": "Operation", "Type": "TCoAtom"} 
+            ] 
+        }, 
+        { 
             "Name": "TKiOperationList",
-            "ListBase": "TKiOperation"
-        },
-        {
+            "ListBase": "TKiOperation" 
+        }, 
+        { 
             "Name": "TKiResult",
             "Base": "TExprBase",
             "Match": {"Type": "Tuple"},
@@ -280,7 +280,7 @@
             "Match": {"Type": "Callable", "Name": "KiSelectRow"},
             "Children": [
                 {"Index": 0, "Name": "Cluster", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Table", "Type": "TKiVersionedTable"},
+                {"Index": 1, "Name": "Table", "Type": "TKiVersionedTable"}, 
                 {"Index": 2, "Name": "Key", "Type": "TCoNameValueTupleList"},
                 {"Index": 3, "Name": "Select", "Type": "TCoAtomList"}
             ]
@@ -291,7 +291,7 @@
             "Match": {"Type": "Callable", "Name": "KiUpdateRow"},
             "Children": [
                 {"Index": 0, "Name": "Cluster", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Table", "Type": "TKiVersionedTable"},
+                {"Index": 1, "Name": "Table", "Type": "TKiVersionedTable"}, 
                 {"Index": 2, "Name": "Key", "Type": "TCoNameValueTupleList"},
                 {"Index": 3, "Name": "Update", "Type": "TCoNameValueTupleList"}
             ]
@@ -302,7 +302,7 @@
             "Match": {"Type": "Callable", "Name": "KiEraseRow"},
             "Children": [
                 {"Index": 0, "Name": "Cluster", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Table", "Type": "TKiVersionedTable"},
+                {"Index": 1, "Name": "Table", "Type": "TKiVersionedTable"}, 
                 {"Index": 2, "Name": "Key", "Type": "TCoNameValueTupleList"}
             ]
         },
@@ -313,7 +313,7 @@
             "Builder": {"Generate": "None"},
             "Children": [
                 {"Index": 0, "Name": "Cluster", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Table", "Type": "TKiVersionedTable"},
+                {"Index": 1, "Name": "Table", "Type": "TKiVersionedTable"}, 
                 {"Index": 2, "Name": "Range", "Type": "TExprList"},
                 {"Index": 3, "Name": "Select", "Type": "TCoAtomList"},
                 {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList"}
@@ -325,12 +325,12 @@
             "Match": {"Type": "Callable", "Name": "KiSelectRange"}
         },
         {
-            "Name": "TKiSelectIndexRange",
+            "Name": "TKiSelectIndexRange", 
             "Base": "TKiSelectRangeBase",
-            "Match": {"Type": "Callable", "Name": "KiSelectIndexRange"},
-            "Children": [
-                {"Index": 5, "Name": "IndexName", "Type": "TCoAtom"}
-            ]
+            "Match": {"Type": "Callable", "Name": "KiSelectIndexRange"}, 
+            "Children": [ 
+                {"Index": 5, "Name": "IndexName", "Type": "TCoAtom"} 
+            ] 
         },
         {
             "Name": "TKiSetResult",
@@ -359,15 +359,15 @@
             ]
         },
         {
-            "Name": "TMkqlMapParameter",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "MapParameter"},
-            "Children": [
-                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
-                {"Index": 1, "Name": "Lambda", "Type": "TCoLambda"}
-            ]
-        },
-        {
+            "Name": "TMkqlMapParameter", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "MapParameter"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"}, 
+                {"Index": 1, "Name": "Lambda", "Type": "TCoLambda"} 
+            ] 
+        }, 
+        { 
             "Name": "TKiFlatMapParameter",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KiFlatMapParameter"},

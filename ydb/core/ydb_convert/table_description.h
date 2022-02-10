@@ -13,7 +13,7 @@ void FillColumnDescription(Ydb::Table::CreateTableRequest& out,
     NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in);
 // in
 bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
-    const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error);
+    const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error); 
 bool ExtractColumnTypeId(ui32& outTypeId, const Ydb::Type& inType, Ydb::StatusIds::StatusCode& status, TString& error);
 
 // out

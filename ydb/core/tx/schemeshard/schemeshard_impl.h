@@ -55,8 +55,8 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-extern const ui64 NEW_TABLE_ALTER_VERSION;
-
+extern const ui64 NEW_TABLE_ALTER_VERSION; 
+ 
 class TSchemeShard
     : public TActor<TSchemeShard>
     , public NTabletFlatExecutor::TTabletExecutedFlat
@@ -113,7 +113,7 @@ public:
 
     TControlWrapper AllowConditionalEraseOperations;
     TControlWrapper AllowServerlessStorageBilling;
-
+ 
     TSplitSettings SplitSettings;
 
     struct TTenantInitState {
@@ -727,7 +727,7 @@ public:
 
     TString FillAlterTableTxBody(TPathId tableId, TShardIdx shardIdx, TMessageSeqNo seqNo) const;
     TString FillBackupTxBody(TPathId pathId, const NKikimrSchemeOp::TBackupTask& task, ui32 shardNum, TMessageSeqNo seqNo) const;
-
+ 
     static void FillSeqNo(NKikimrTxDataShard::TFlatSchemeTransaction &tx, TMessageSeqNo seqNo);
     static void FillSeqNo(NKikimrTxColumnShard::TSchemaTxBody &tx, TMessageSeqNo seqNo);
 
@@ -946,7 +946,7 @@ public:
     void FillTableSchemaVersion(ui64 schemaVersion, NKikimrSchemeOp::TTableDescription *tableDescr) const;
 
     // namespace NIndexBuilder {
-    TControlWrapper AllowDataColumnForIndexTable;
+    TControlWrapper AllowDataColumnForIndexTable; 
     TControlWrapper EnableAsyncIndexes;
     TControlWrapper EnableSchemeTransactionsAtSchemeShard;
 

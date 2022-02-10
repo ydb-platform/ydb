@@ -15,11 +15,11 @@ template <typename TDerived>
 class TMessageBusSecureRequest<TMessageBusServerRequestBase<TDerived>> : public
         TSecureRequestActor<TMessageBusServerRequestBase<TMessageBusSecureRequest<TMessageBusServerRequestBase<TDerived>>>, TDerived> {
 public:
-    void OnAccessDenied(const TEvTicketParser::TError& error, const TActorContext& ctx) {
+    void OnAccessDenied(const TEvTicketParser::TError& error, const TActorContext& ctx) { 
         TMessageBusServerRequestBase<TMessageBusSecureRequest<TMessageBusServerRequestBase<TDerived>>>::HandleError(
                     MSTATUS_ERROR,
                     TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied,
-                    error.Message,
+                    error.Message, 
                     ctx);
     }
 
@@ -51,11 +51,11 @@ public:
         TMessageBusSimpleTabletRequest<TDerived, TTabletReplyEvent, Activity>::Die(ctx);
     }
 
-    void OnAccessDenied(const TEvTicketParser::TError& error, const TActorContext& ctx) {
+    void OnAccessDenied(const TEvTicketParser::TError& error, const TActorContext& ctx) { 
         HandleError(
                     MSTATUS_ERROR,
                     TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied,
-                    error.Message,
+                    error.Message, 
                     ctx);
     }
 
@@ -90,11 +90,11 @@ public:
         TMessageBusTabletRequest<TDerived, TTabletReplyEvent>::Die(ctx);
     }
 
-    void OnAccessDenied(const TEvTicketParser::TError& error, const TActorContext& ctx) {
+    void OnAccessDenied(const TEvTicketParser::TError& error, const TActorContext& ctx) { 
         HandleError(
                     MSTATUS_ERROR,
                     TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied,
-                    error.Message,
+                    error.Message, 
                     ctx);
     }
 

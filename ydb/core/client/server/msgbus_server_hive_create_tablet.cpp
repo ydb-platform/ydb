@@ -274,7 +274,7 @@ public:
         ui64 hiveTabletId = domainsInfo.GetHive(hiveUid);
 
         if (Status == NKikimrProto::OK) {
-            PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, hiveTabletId, clientConfig));
+            PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, hiveTabletId, clientConfig)); 
 
             for (ui64 i = 0; i < Requests.size(); ++i) {
                 const TRequest &cmd = Requests[i];

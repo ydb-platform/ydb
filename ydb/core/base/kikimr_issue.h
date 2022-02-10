@@ -44,21 +44,21 @@ inline NYql::TIssue MakeIssue(NKikimrIssues::TIssuesIds::EIssueCode id) {
     return MakeIssue(id, IssueCodeToString(id));
 }
 
-inline TString SerializeIssues(const NYql::TIssues& in) {
-    NYql::TIssue rootIssue;
-    for(const auto& i : in) {
-        rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
-    }
-    return NYql::IssueToBinaryMessage(rootIssue);
+inline TString SerializeIssues(const NYql::TIssues& in) { 
+    NYql::TIssue rootIssue; 
+    for(const auto& i : in) { 
+        rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i)); 
+    } 
+    return NYql::IssueToBinaryMessage(rootIssue); 
 }
-
-inline NYql::TIssues DeserializeIssues(const TString& in) {
-    NYql::TIssues result;
-    NYql::TIssue issue = NYql::IssueFromBinaryMessage(in);
-    for (const auto& i : issue.GetSubIssues()) {
-        result.AddIssue(*i);
-    }
-    return result;
-}
-
-}
+ 
+inline NYql::TIssues DeserializeIssues(const TString& in) { 
+    NYql::TIssues result; 
+    NYql::TIssue issue = NYql::IssueFromBinaryMessage(in); 
+    for (const auto& i : issue.GetSubIssues()) { 
+        result.AddIssue(*i); 
+    } 
+    return result; 
+} 
+ 
+} 

@@ -145,7 +145,7 @@ public:
         for (auto udf : functions) {
             TStringBuf moduleName, funcName;
             if (!SplitUdfName(udf->Name, moduleName, funcName) || moduleName.empty() || funcName.empty()) {
-                ctx.AddError(TIssue(udf->Pos, TStringBuilder() <<
+                ctx.AddError(TIssue(udf->Pos, TStringBuilder() << 
                     "Incorrect format of function name: " << udf->Name));
                 hasErrors = true;
             } else {
@@ -191,8 +191,8 @@ public:
 
             try {
                 LoadImport(holdingFileStorage, *filesBox, *import, request);
-            } catch (const std::exception& e) {
-                ctx.AddError(ExceptionToIssue(e));
+            } catch (const std::exception& e) { 
+                ctx.AddError(ExceptionToIssue(e)); 
                 hasErrors = true;
             }
         }
@@ -327,7 +327,7 @@ private:
                 import = *p;
             }
             if (importRes.HasError()) {
-                ctx.AddError(TIssue(import ? import->Pos : TPosition(), importRes.GetError()));
+                ctx.AddError(TIssue(import ? import->Pos : TPosition(), importRes.GetError())); 
                 hasErrors = true;
             } else if (import) {
                 import->Modules.ConstructInPlace();
@@ -341,7 +341,7 @@ private:
             TFunction* udf = functions[i];
             const TFunctionResult& udfRes = response.GetUdfs(i);
             if (udfRes.HasError()) {
-                ctx.AddError(TIssue(udf->Pos, udfRes.GetError()));
+                ctx.AddError(TIssue(udf->Pos, udfRes.GetError())); 
                 hasErrors = true;
             } else {
                 udf->CallableType = ParseTypeFromYson(TStringBuf{udfRes.GetCallableType()}, ctx, udf->Pos);

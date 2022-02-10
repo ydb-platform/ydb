@@ -593,10 +593,10 @@ namespace NTypeAnnImpl {
             if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
-
+ 
             if (!EnsureAtom(input->Head(), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
+                return IGraphTransformer::TStatus::Error; 
+            } 
 
             TMaybe<TString> textValue;
             if (input->Content() == "Bool") {
@@ -11496,41 +11496,41 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    IGraphTransformer::TStatus SecureParamWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TExtContext& ctx) {
-        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
+    IGraphTransformer::TStatus SecureParamWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TExtContext& ctx) { 
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
         if (!EnsureAtom(input->Head(), ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
         auto tokenName = input->Head().Content();
-        auto separator = tokenName.find(":");
-
-        if (separator == TString::npos || separator == tokenName.size()) {
+        auto separator = tokenName.find(":"); 
+ 
+        if (separator == TString::npos || separator == tokenName.size()) { 
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "malformed secure param: " << tokenName));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        const auto p0 = tokenName.substr(0, separator);
-        if (p0 == "api") {
-            const auto p1 = tokenName.substr(separator + 1);
-            if (p1 != "oauth" && p1 != "cookie") {
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        const auto p0 = tokenName.substr(0, separator); 
+        if (p0 == "api") { 
+            const auto p1 = tokenName.substr(separator + 1); 
+            if (p1 != "oauth" && p1 != "cookie") { 
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "unknown token: " << p1 << ", prefix: " << p0));
-                return IGraphTransformer::TStatus::Error;
-            }
-            if (p1 == "oauth" && ctx.Types.UserCredentials.OauthToken.empty()) {
+                return IGraphTransformer::TStatus::Error; 
+            } 
+            if (p1 == "oauth" && ctx.Types.UserCredentials.OauthToken.empty()) { 
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "got empty Oauth token string"));
-                return IGraphTransformer::TStatus::Error;
-            }
-            if (p1 == "cookie" && ctx.Types.UserCredentials.BlackboxSessionIdCookie.empty()) {
+                return IGraphTransformer::TStatus::Error; 
+            } 
+            if (p1 == "cookie" && ctx.Types.UserCredentials.BlackboxSessionIdCookie.empty()) { 
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "got empty session cookie"));
-                return IGraphTransformer::TStatus::Error;
-            }
+                return IGraphTransformer::TStatus::Error; 
+            } 
         } else if (p0 == "token" || p0 == "cluster") {
-            const auto p1 = tokenName.substr(separator + 1);
-            auto cred = ctx.Types.FindCredential(p1);
+            const auto p1 = tokenName.substr(separator + 1); 
+            auto cred = ctx.Types.FindCredential(p1); 
             TMaybe<TCredential> clusterCred;
             if (cred == nullptr && p0 == "cluster") {
                 if (p1.StartsWith("default_")) {
@@ -11558,24 +11558,24 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 }
             }
 
-            if (cred == nullptr) {
+            if (cred == nullptr) { 
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "unknown token id: " << p1 << ", prefix: " << p0));
-                return IGraphTransformer::TStatus::Error;
-            }
-            if (cred->Content.empty()) {
+                return IGraphTransformer::TStatus::Error; 
+            } 
+            if (cred->Content.empty()) { 
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "got empty credential content for id: " << p1));
-                return IGraphTransformer::TStatus::Error;
-            }
-        } else {
+                return IGraphTransformer::TStatus::Error; 
+            } 
+        } else { 
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "unknown token prefix: " << p0));
-            return IGraphTransformer::TStatus::Error;
-        }
-
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
         input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String));
-
-        return IGraphTransformer::TStatus::Ok;
-    }
-
+ 
+        return IGraphTransformer::TStatus::Ok; 
+    } 
+ 
     IGraphTransformer::TStatus MuxWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -13232,7 +13232,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["CurrentOperationId"] = &CurrentOperationIdWrapper;
         ExtFunctions["CurrentOperationSharedId"] = &CurrentOperationSharedIdWrapper;
         ExtFunctions["CurrentAuthenticatedUser"] = &CurrentAuthenticatedUserWrapper;
-        ExtFunctions["SecureParam"] = &SecureParamWrapper;
+        ExtFunctions["SecureParam"] = &SecureParamWrapper; 
         ExtFunctions["UnsafeTimestampCast"] = &UnsafeTimestampCastWrapper;
         ExtFunctions["JsonValue"] = &JsonValueWrapper;
         ExtFunctions["JsonExists"] = &JsonExistsWrapper;

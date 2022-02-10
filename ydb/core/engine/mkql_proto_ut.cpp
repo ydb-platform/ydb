@@ -19,376 +19,376 @@ namespace NMiniKQL {
 Y_UNIT_TEST_SUITE(TMiniKQLProtoTestYdb) {
     Y_UNIT_TEST(TestExportVoidTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
-            auto pgmReturn = pgmBuilder.NewVoid();
-            return pgmReturn;
-        }, "void_type: NULL_VALUE\n");
-    }
-
+            auto pgmReturn = pgmBuilder.NewVoid(); 
+            return pgmReturn; 
+        }, "void_type: NULL_VALUE\n"); 
+    } 
+ 
     Y_UNIT_TEST(TestExportDataTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
-            auto pgmReturn = pgmBuilder.NewDataLiteral<i32>(42);
-            return pgmReturn;
-        },
-        "type_id: INT32\n");
-    }
-
-    Y_UNIT_TEST(TestExportDecimalTypeYdb) {
-        TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
+            auto pgmReturn = pgmBuilder.NewDataLiteral<i32>(42); 
+            return pgmReturn; 
+        }, 
+        "type_id: INT32\n"); 
+    } 
+ 
+    Y_UNIT_TEST(TestExportDecimalTypeYdb) { 
+        TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) { 
             NYql::NDecimal::TInt128 x;
             ui64* p = (ui64*)&x;
             p[0] = 1;
             p[1] = 0;
             auto pgmReturn = pgmBuilder.NewDecimalLiteral(x, 21, 8);
-            return pgmReturn;
-        },
-        "decimal_type {\n"
-        "  precision: 21\n"
-        "  scale: 8\n"
-        "}\n");
-    }
-
-    Y_UNIT_TEST(TestExportUuidTypeYdb) {
-        TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
+            return pgmReturn; 
+        }, 
+        "decimal_type {\n" 
+        "  precision: 21\n" 
+        "  scale: 8\n" 
+        "}\n"); 
+    } 
+ 
+    Y_UNIT_TEST(TestExportUuidTypeYdb) { 
+        TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) { 
             auto pgmReturn = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Uuid>("\1\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"sv);
-            return pgmReturn;
-        },
-        "type_id: UUID\n");
-    }
-
+            return pgmReturn; 
+        }, 
+        "type_id: UUID\n"); 
+    } 
+ 
     Y_UNIT_TEST(TestExportOptionalTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
-            auto pgmReturn = pgmBuilder.NewOptional(pgmBuilder.NewDataLiteral<i32>(42));
-            return pgmReturn;
-        },
-        "optional_type {\n"
-        "  item {\n"
-        "    type_id: INT32\n"
-        "  }\n"
-        "}\n");
-    }
-
+            auto pgmReturn = pgmBuilder.NewOptional(pgmBuilder.NewDataLiteral<i32>(42)); 
+            return pgmReturn; 
+        }, 
+        "optional_type {\n" 
+        "  item {\n" 
+        "    type_id: INT32\n" 
+        "  }\n" 
+        "}\n"); 
+    } 
+ 
     Y_UNIT_TEST(TestExportListTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
-            auto pgmReturn = pgmBuilder.AsList(pgmBuilder.NewDataLiteral<i32>(42));
-            return pgmReturn;
-        },
-        "list_type {\n"
-        "  item {\n"
-        "    type_id: INT32\n"
-        "  }\n"
-        "}\n");
-    }
-
+            auto pgmReturn = pgmBuilder.AsList(pgmBuilder.NewDataLiteral<i32>(42)); 
+            return pgmReturn; 
+        }, 
+        "list_type {\n" 
+        "  item {\n" 
+        "    type_id: INT32\n" 
+        "  }\n" 
+        "}\n"); 
+    } 
+ 
     Y_UNIT_TEST(TestExportTupleTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
             TRuntimeNode::TList items;
-            items.push_back(pgmBuilder.NewDataLiteral<i32>(42));
-            items.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc"));
-            auto pgmReturn = pgmBuilder.NewTuple(items);
-            return pgmReturn;
-        },
-        "tuple_type {\n"
-        "  elements {\n"
-        "    type_id: INT32\n"
-        "  }\n"
-        "  elements {\n"
-        "    type_id: STRING\n"
-        "  }\n"
-        "}\n");
-    }
-
+            items.push_back(pgmBuilder.NewDataLiteral<i32>(42)); 
+            items.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc")); 
+            auto pgmReturn = pgmBuilder.NewTuple(items); 
+            return pgmReturn; 
+        }, 
+        "tuple_type {\n" 
+        "  elements {\n" 
+        "    type_id: INT32\n" 
+        "  }\n" 
+        "  elements {\n" 
+        "    type_id: STRING\n" 
+        "  }\n" 
+        "}\n"); 
+    } 
+ 
     Y_UNIT_TEST(TestExportStructTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
             std::vector<std::pair<std::string_view, TRuntimeNode>> items;
-            items.push_back({ "x", pgmBuilder.NewDataLiteral<i32>(42) });
-            items.push_back({ "y", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc") });
-            auto pgmReturn = pgmBuilder.NewStruct(items);
-            return pgmReturn;
-        },
-        "struct_type {\n"
-        "  members {\n"
-        "    name: \"x\"\n"
-        "    type {\n"
-        "      type_id: INT32\n"
-        "    }\n"
-        "  }\n"
-        "  members {\n"
-        "    name: \"y\"\n"
-        "    type {\n"
-        "      type_id: STRING\n"
-        "    }\n"
-        "  }\n"
-        "}\n");
-    }
-
+            items.push_back({ "x", pgmBuilder.NewDataLiteral<i32>(42) }); 
+            items.push_back({ "y", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc") }); 
+            auto pgmReturn = pgmBuilder.NewStruct(items); 
+            return pgmReturn; 
+        }, 
+        "struct_type {\n" 
+        "  members {\n" 
+        "    name: \"x\"\n" 
+        "    type {\n" 
+        "      type_id: INT32\n" 
+        "    }\n" 
+        "  }\n" 
+        "  members {\n" 
+        "    name: \"y\"\n" 
+        "    type {\n" 
+        "      type_id: STRING\n" 
+        "    }\n" 
+        "  }\n" 
+        "}\n"); 
+    } 
+ 
     Y_UNIT_TEST(TestExportDictTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
-            auto dictType = pgmBuilder.NewDictType(pgmBuilder.NewDataType(NUdf::TDataType<i32>::Id),
-                pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id), false);
-            TVector<std::pair<TRuntimeNode, TRuntimeNode>> items;
-            items.push_back({ pgmBuilder.NewDataLiteral<i32>(42),
-                pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc") });
-            auto pgmReturn = pgmBuilder.NewDict(dictType, items);
-            return pgmReturn;
-        },
-        "dict_type {\n"
-        "  key {\n"
-        "    type_id: INT32\n"
-        "  }\n"
-        "  payload {\n"
-        "    type_id: STRING\n"
-        "  }\n"
-        "}\n");
-    }
-
-    Y_UNIT_TEST(TestExportVariantTupleTypeYdb) {
-        const TString expected = R"___(variant_type {
-  tuple_items {
-    elements {
-      type_id: UINT64
-    }
-    elements {
-      type_id: UINT32
-    }
-  }
-}
-)___";
-        TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
-            std::vector<TType*> tupleElemenTypes;
-            tupleElemenTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id));
-            tupleElemenTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
-            auto pgmReturn = pgmBuilder.NewVariant(
-                pgmBuilder.NewDataLiteral<ui32>(66),
-                1,
-                pgmBuilder.NewVariantType(pgmBuilder.NewTupleType(tupleElemenTypes)));
-            return pgmReturn;
-        },
-        expected);
-    }
-
-Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
-        const TString expected = R"___(variant_type {
-  struct_items {
-    members {
-      name: "a"
-      type {
-        type_id: UINT64
-      }
-    }
-    members {
-      name: "b"
-      type {
-        type_id: UINT32
-      }
-    }
-  }
-}
-)___";
-
-        TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
+            auto dictType = pgmBuilder.NewDictType(pgmBuilder.NewDataType(NUdf::TDataType<i32>::Id), 
+                pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id), false); 
+            TVector<std::pair<TRuntimeNode, TRuntimeNode>> items; 
+            items.push_back({ pgmBuilder.NewDataLiteral<i32>(42), 
+                pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc") }); 
+            auto pgmReturn = pgmBuilder.NewDict(dictType, items); 
+            return pgmReturn; 
+        }, 
+        "dict_type {\n" 
+        "  key {\n" 
+        "    type_id: INT32\n" 
+        "  }\n" 
+        "  payload {\n" 
+        "    type_id: STRING\n" 
+        "  }\n" 
+        "}\n"); 
+    } 
+ 
+    Y_UNIT_TEST(TestExportVariantTupleTypeYdb) { 
+        const TString expected = R"___(variant_type { 
+  tuple_items { 
+    elements { 
+      type_id: UINT64 
+    } 
+    elements { 
+      type_id: UINT32 
+    } 
+  } 
+} 
+)___"; 
+        TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) { 
+            std::vector<TType*> tupleElemenTypes; 
+            tupleElemenTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)); 
+            tupleElemenTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id)); 
+            auto pgmReturn = pgmBuilder.NewVariant( 
+                pgmBuilder.NewDataLiteral<ui32>(66), 
+                1, 
+                pgmBuilder.NewVariantType(pgmBuilder.NewTupleType(tupleElemenTypes))); 
+            return pgmReturn; 
+        }, 
+        expected); 
+    } 
+ 
+Y_UNIT_TEST(TestExportVariantStructTypeYdb) { 
+        const TString expected = R"___(variant_type { 
+  struct_items { 
+    members { 
+      name: "a" 
+      type { 
+        type_id: UINT64 
+      } 
+    } 
+    members { 
+      name: "b" 
+      type { 
+        type_id: UINT32 
+      } 
+    } 
+  } 
+} 
+)___"; 
+ 
+        TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) { 
             std::vector<std::pair<std::string_view, TType*>> structElemenTypes;
             structElemenTypes.push_back({"a", pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)});
             structElemenTypes.push_back({"b", pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id)});
-            TType* structType = pgmBuilder.NewStructType(structElemenTypes);
-            auto pgmReturn = pgmBuilder.NewVariant(
-                pgmBuilder.NewDataLiteral<ui32>(66),
-                "b",
-                pgmBuilder.NewVariantType(structType));
-            return pgmReturn;
-        },
-        expected);
-    }
-
+            TType* structType = pgmBuilder.NewStructType(structElemenTypes); 
+            auto pgmReturn = pgmBuilder.NewVariant( 
+                pgmBuilder.NewDataLiteral<ui32>(66), 
+                "b", 
+                pgmBuilder.NewVariantType(structType)); 
+            return pgmReturn; 
+        }, 
+        expected); 
+    } 
+ 
     Y_UNIT_TEST(TestExportVoidYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
-            auto pgmReturn = pgmBuilder.NewVoid();
-            return pgmReturn;
-        }, "");
-    }
-
+            auto pgmReturn = pgmBuilder.NewVoid(); 
+            return pgmReturn; 
+        }, ""); 
+    } 
+ 
     Y_UNIT_TEST(TestExportBoolYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
-            auto pgmReturn = pgmBuilder.NewDataLiteral(true);
-            return pgmReturn;
-        }, "bool_value: true\n");
-    }
-
+            auto pgmReturn = pgmBuilder.NewDataLiteral(true); 
+            return pgmReturn; 
+        }, "bool_value: true\n"); 
+    } 
+ 
     Y_UNIT_TEST(TestExportIntegralYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
-            auto pgmReturn = pgmBuilder.NewDataLiteral<i32>(42);
-            return pgmReturn;
-        }, "int32_value: 42\n");
-    }
-
+            auto pgmReturn = pgmBuilder.NewDataLiteral<i32>(42); 
+            return pgmReturn; 
+        }, "int32_value: 42\n"); 
+    } 
+ 
     Y_UNIT_TEST(TestExportDoubleYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
-            auto pgmReturn = pgmBuilder.NewDataLiteral(3.5);
-            return pgmReturn;
-        }, "double_value: 3.5\n");
-    }
-
-    Y_UNIT_TEST(TestExportStringYdb) {
+            auto pgmReturn = pgmBuilder.NewDataLiteral(3.5); 
+            return pgmReturn; 
+        }, "double_value: 3.5\n"); 
+    } 
+ 
+    Y_UNIT_TEST(TestExportStringYdb) { 
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
-            auto pgmReturn = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc");
-            return pgmReturn;
-        }, "bytes_value: \"abc\"\n");
-    }
-
-    Y_UNIT_TEST(TestExportUuidYdb) {
-        TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
+            auto pgmReturn = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc"); 
+            return pgmReturn; 
+        }, "bytes_value: \"abc\"\n"); 
+    } 
+ 
+    Y_UNIT_TEST(TestExportUuidYdb) { 
+        TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) { 
             auto pgmReturn = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Uuid>("\1\0\0\0\0\0\0\0\2\0\0\0\0\0\0\0"sv);
-            return pgmReturn;
-        }, "low_128: 1\n"
-           "high_128: 2\n");
-    }
-
-    Y_UNIT_TEST(TestExportDecimalYdb) {
-        TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
+            return pgmReturn; 
+        }, "low_128: 1\n" 
+           "high_128: 2\n"); 
+    } 
+ 
+    Y_UNIT_TEST(TestExportDecimalYdb) { 
+        TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) { 
             NYql::NDecimal::TInt128 x;
             ui64* p = (ui64*)&x;
             p[0] = 1;
             p[1] = 0;
             auto pgmReturn = pgmBuilder.NewDecimalLiteral(x, 21, 8);
-            return pgmReturn;
-        }, "low_128: 1\n");
-    }
-
-    Y_UNIT_TEST(TestExportDecimalNegativeYdb) {
-        TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
+            return pgmReturn; 
+        }, "low_128: 1\n"); 
+    } 
+ 
+    Y_UNIT_TEST(TestExportDecimalNegativeYdb) { 
+        TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) { 
             NYql::NDecimal::TInt128 x;
             ui64* p = (ui64*)&x;
             p[0] = Max<ui64>();
             p[1] = Max<ui64>();
             auto pgmReturn = pgmBuilder.NewDecimalLiteral(x, 21, 8);
-            return pgmReturn;
-        }, "low_128: 18446744073709551615\n"
-           "high_128: 18446744073709551615\n");
-    }
-
-    Y_UNIT_TEST(TestExportDecimalHugeYdb) {
-        TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
+            return pgmReturn; 
+        }, "low_128: 18446744073709551615\n" 
+           "high_128: 18446744073709551615\n"); 
+    } 
+ 
+    Y_UNIT_TEST(TestExportDecimalHugeYdb) { 
+        TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) { 
             NYql::NDecimal::TInt128 x;
             ui64* p = (ui64*)&x;
             p[0] = 0;
             p[1] = 1;
             auto pgmReturn = pgmBuilder.NewDecimalLiteral(x, 21, 8);
-            return pgmReturn;
-        }, "low_128: 0\n"
-           "high_128: 1\n");
-    }
-
+            return pgmReturn; 
+        }, "low_128: 0\n" 
+           "high_128: 1\n"); 
+    } 
+ 
     Y_UNIT_TEST(TestExportEmptyOptionalYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
-            auto pgmReturn = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<char*>::Id);
-            return pgmReturn;
-        }, "null_flag_value: NULL_VALUE\n");
-    }
-
+            auto pgmReturn = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<char*>::Id); 
+            return pgmReturn; 
+        }, "null_flag_value: NULL_VALUE\n"); 
+    } 
+ 
     Y_UNIT_TEST(TestExportEmptyOptionalOptionalYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
-            auto pgmReturn = pgmBuilder.NewOptional(
-                pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<char*>::Id));
-            return pgmReturn;
-        },
-        "nested_value {\n"
-        "  null_flag_value: NULL_VALUE\n"
-        "}\n");
-    }
-
+            auto pgmReturn = pgmBuilder.NewOptional( 
+                pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<char*>::Id)); 
+            return pgmReturn; 
+        }, 
+        "nested_value {\n" 
+        "  null_flag_value: NULL_VALUE\n" 
+        "}\n"); 
+    } 
+ 
     Y_UNIT_TEST(TestExportMultipleOptionalNotEmptyYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
-            auto pgmReturn = pgmBuilder.NewOptional(
-                pgmBuilder.NewOptional(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc")));
-            return pgmReturn;
-        }, "bytes_value: \"abc\"\n");
-    }
-
+            auto pgmReturn = pgmBuilder.NewOptional( 
+                pgmBuilder.NewOptional(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc"))); 
+            return pgmReturn; 
+        }, "bytes_value: \"abc\"\n"); 
+    } 
+ 
     Y_UNIT_TEST(TestExportOptionalYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
-            auto pgmReturn = pgmBuilder.NewOptional(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc"));
-            return pgmReturn;
-        }, "bytes_value: \"abc\"\n");
-    }
-
+            auto pgmReturn = pgmBuilder.NewOptional(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc")); 
+            return pgmReturn; 
+        }, "bytes_value: \"abc\"\n"); 
+    } 
+ 
     Y_UNIT_TEST(TestExportListYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
-            auto pgmReturn = pgmBuilder.AsList(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc"));
-            return pgmReturn;
-        },
-        "items {\n"
-        "  bytes_value: \"abc\"\n"
-        "}\n");
-    }
-
+            auto pgmReturn = pgmBuilder.AsList(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc")); 
+            return pgmReturn; 
+        }, 
+        "items {\n" 
+        "  bytes_value: \"abc\"\n" 
+        "}\n"); 
+    } 
+ 
     Y_UNIT_TEST(TestExportTupleYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
             TRuntimeNode::TList items;
-            items.push_back(pgmBuilder.NewDataLiteral<i32>(42));
-            items.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc"));
-            auto pgmReturn = pgmBuilder.NewTuple(items);
-            return pgmReturn;
-        },
-        "items {\n"
-        "  int32_value: 42\n"
-        "}\n"
-        "items {\n"
-        "  bytes_value: \"abc\"\n"
-        "}\n");
-    }
-
+            items.push_back(pgmBuilder.NewDataLiteral<i32>(42)); 
+            items.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc")); 
+            auto pgmReturn = pgmBuilder.NewTuple(items); 
+            return pgmReturn; 
+        }, 
+        "items {\n" 
+        "  int32_value: 42\n" 
+        "}\n" 
+        "items {\n" 
+        "  bytes_value: \"abc\"\n" 
+        "}\n"); 
+    } 
+ 
     Y_UNIT_TEST(TestExportStructYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
             std::vector<std::pair<std::string_view, TRuntimeNode>> items;
-            items.push_back({ "x", pgmBuilder.NewDataLiteral<i32>(42) });
-            items.push_back({ "y", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc") });
-            auto pgmReturn = pgmBuilder.NewStruct(items);
-            return pgmReturn;
-        },
-        "items {\n"
-        "  int32_value: 42\n"
-        "}\n"
-        "items {\n"
-        "  bytes_value: \"abc\"\n"
-        "}\n");
-    }
-
+            items.push_back({ "x", pgmBuilder.NewDataLiteral<i32>(42) }); 
+            items.push_back({ "y", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc") }); 
+            auto pgmReturn = pgmBuilder.NewStruct(items); 
+            return pgmReturn; 
+        }, 
+        "items {\n" 
+        "  int32_value: 42\n" 
+        "}\n" 
+        "items {\n" 
+        "  bytes_value: \"abc\"\n" 
+        "}\n"); 
+    } 
+ 
     Y_UNIT_TEST(TestExportDictYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
-            auto dictType = pgmBuilder.NewDictType(pgmBuilder.NewDataType(NUdf::TDataType<i32>::Id),
-                pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id), false);
-            TVector<std::pair<TRuntimeNode, TRuntimeNode>> items;
-            items.push_back({ pgmBuilder.NewDataLiteral<i32>(42),
-                pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc") });
-            auto pgmReturn = pgmBuilder.NewDict(dictType, items);
-            return pgmReturn;
-        },
-        "pairs {\n"
-        "  key {\n"
-        "    int32_value: 42\n"
-        "  }\n"
-        "  payload {\n"
-        "    bytes_value: \"abc\"\n"
-        "  }\n"
-        "}\n");
-    }
-
+            auto dictType = pgmBuilder.NewDictType(pgmBuilder.NewDataType(NUdf::TDataType<i32>::Id), 
+                pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id), false); 
+            TVector<std::pair<TRuntimeNode, TRuntimeNode>> items; 
+            items.push_back({ pgmBuilder.NewDataLiteral<i32>(42), 
+                pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc") }); 
+            auto pgmReturn = pgmBuilder.NewDict(dictType, items); 
+            return pgmReturn; 
+        }, 
+        "pairs {\n" 
+        "  key {\n" 
+        "    int32_value: 42\n" 
+        "  }\n" 
+        "  payload {\n" 
+        "    bytes_value: \"abc\"\n" 
+        "  }\n" 
+        "}\n"); 
+    } 
+ 
     Y_UNIT_TEST(TestExportVariantYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
-            std::vector<TType*> tupleElemenTypes;
-            tupleElemenTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id));
-            tupleElemenTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
-            auto pgmReturn = pgmBuilder.NewVariant(
-                pgmBuilder.NewDataLiteral<ui32>(66),
-                1,
-                pgmBuilder.NewVariantType(pgmBuilder.NewTupleType(tupleElemenTypes)));
-            return pgmReturn;
-        },
-        "nested_value {\n"
-        "  uint32_value: 66\n"
-        "}\n"
-        "variant_index: 1\n");
-    }
-
+            std::vector<TType*> tupleElemenTypes; 
+            tupleElemenTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)); 
+            tupleElemenTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id)); 
+            auto pgmReturn = pgmBuilder.NewVariant( 
+                pgmBuilder.NewDataLiteral<ui32>(66), 
+                1, 
+                pgmBuilder.NewVariantType(pgmBuilder.NewTupleType(tupleElemenTypes))); 
+            return pgmReturn; 
+        }, 
+        "nested_value {\n" 
+        "  uint32_value: 66\n" 
+        "}\n" 
+        "variant_index: 1\n"); 
+    } 
+ 
     TString DoTestCellsFromTuple(const TConstArrayRef<NScheme::TTypeId>& types, TString paramsProto) {
         NKikimrMiniKQL::TParams params;
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(paramsProto, &params);

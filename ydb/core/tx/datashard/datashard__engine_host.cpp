@@ -283,7 +283,7 @@ public:
     TDataShardEngineHost(TDataShard* self, NTable::TDatabase& db, TEngineHostCounters& counters, ui64& lockTxId, TInstant now)
         : TEngineHost(db, counters,
             TEngineHostSettings(self->TabletID(),
-                (self->State == TShardState::Readonly || self->State == TShardState::Frozen),
+                (self->State == TShardState::Readonly || self->State == TShardState::Frozen), 
                 self->ByKeyFilterDisabled(),
                 self->GetKeyAccessSampler()))
         , Self(self)
@@ -375,7 +375,7 @@ public:
     NUdf::TUnboxedValue SelectRange(const TTableId& tableId, const TTableRange& range,
         TStructLiteral* columnIds,  TListLiteral* skipNullKeys, TStructType* returnType,
         const TReadTarget& readTarget, ui64 itemsLimit, ui64 bytesLimit, bool reverse,
-        std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs, const THolderFactory& holderFactory) override
+        std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs, const THolderFactory& holderFactory) override 
     {
         Y_VERIFY(!TSysTables::IsSystemTable(tableId), "SelectRange no system table is not supported");
 
@@ -383,7 +383,7 @@ public:
 
         Self->SetTableAccessTime(tableId, Now);
         return TEngineHost::SelectRange(tableId, range, columnIds, skipNullKeys, returnType, readTarget,
-            itemsLimit, bytesLimit, reverse, forbidNullArgs, holderFactory);
+            itemsLimit, bytesLimit, reverse, forbidNullArgs, holderFactory); 
     }
 
     void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands) override {
@@ -476,21 +476,21 @@ public:
         return Self->GetLocalTableId(tableId);
     }
 
-    ui64 GetTableSchemaVersion(const TTableId& tableId) const override {
-        if (TSysTables::IsSystemTable(tableId))
-            return 0;
-        const auto& userTables = Self->GetUserTables();
-        auto it = userTables.find(tableId.PathId.LocalPathId);
-        if (it == userTables.end()) {
-            Y_FAIL_S("DatshardEngineHost (tablet id: " << Self->TabletID()
-                     << " state: " << Self->GetState()
-                     << ") unables to find given table with id: " << tableId);
-            return 0;
-        } else {
-            return it->second->GetTableSchemaVersion();
-        }
-    }
-
+    ui64 GetTableSchemaVersion(const TTableId& tableId) const override { 
+        if (TSysTables::IsSystemTable(tableId)) 
+            return 0; 
+        const auto& userTables = Self->GetUserTables(); 
+        auto it = userTables.find(tableId.PathId.LocalPathId); 
+        if (it == userTables.end()) { 
+            Y_FAIL_S("DatshardEngineHost (tablet id: " << Self->TabletID() 
+                     << " state: " << Self->GetState() 
+                     << ") unables to find given table with id: " << tableId); 
+            return 0; 
+        } else { 
+            return it->second->GetTableSchemaVersion(); 
+        } 
+    } 
+ 
 private:
     const TDataShardSysTable& DataShardSysTable(const TTableId& tableId) const {
         return static_cast<const TDataShardSysTables *>(Self->GetDataShardSysTables())->Get(tableId);

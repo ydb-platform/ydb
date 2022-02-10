@@ -1,12 +1,12 @@
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
-
+ 
 using namespace NYdb;
-
-using TExpectedErrorException = yexception;
+ 
+using TExpectedErrorException = yexception; 
 
 Y_UNIT_TEST_SUITE(ParamsBuilder) {
     Y_UNIT_TEST(Build) {
@@ -35,8 +35,8 @@ Y_UNIT_TEST_SUITE(ParamsBuilder) {
             R"(String)");
         UNIT_ASSERT_NO_DIFF(FormatValueYson(*params.GetValue("$param2")),
             R"("test")");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(BuildFromValue) {
         auto value2 = TValueBuilder()
             .BeginList()
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(ParamsBuilder) {
             R"(List<Tuple<Int32,String>?>)");
         UNIT_ASSERT_NO_DIFF(FormatValueYson(*params.GetValue("$param2")),
             R"([[[-11;"test2"]];#])");
-    }
+    } 
 
     Y_UNIT_TEST(BuildWithTypeInfo) {
         auto param1Type = TTypeBuilder()
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(ParamsBuilder) {
             R"(Uint32?)");
         UNIT_ASSERT_NO_DIFF(FormatValueYson(*params.GetValue("$param2")),
             R"(#)");
-    }
+    } 
 
     Y_UNIT_TEST(MissingParam) {
         auto param1Type = TTypeBuilder()
@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(ParamsBuilder) {
         paramsMap.emplace("$param2", param2Type);
 
         try {
-            auto params = TParamsBuilder(paramsMap)
+            auto params = TParamsBuilder(paramsMap) 
                 .AddParam("$param3")
                     .EmptyOptional()
                     .Build()
@@ -144,10 +144,10 @@ Y_UNIT_TEST_SUITE(ParamsBuilder) {
         }
 
         UNIT_ASSERT(false);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(IncompleteParam) {
-        auto paramsBuilder = TParamsBuilder();
+        auto paramsBuilder = TParamsBuilder(); 
 
         auto& param1Builder = paramsBuilder.AddParam("$param1");
         auto& param2Builder = paramsBuilder.AddParam("$param2");
@@ -172,7 +172,7 @@ Y_UNIT_TEST_SUITE(ParamsBuilder) {
         }
 
         UNIT_ASSERT(false);
-    }
+    } 
 
     Y_UNIT_TEST(TypeMismatch) {
         auto param1Type = TTypeBuilder()
@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(ParamsBuilder) {
         paramsMap.emplace("$param2", param2Type);
 
         try {
-            auto params = TParamsBuilder(paramsMap)
+            auto params = TParamsBuilder(paramsMap) 
                 .AddParam("$param1")
                     .EmptyOptional()
                     .Build()
@@ -202,7 +202,7 @@ Y_UNIT_TEST_SUITE(ParamsBuilder) {
         }
 
         UNIT_ASSERT(false);
-    }
+    } 
 
     Y_UNIT_TEST(TypeMismatchFromValue) {
         auto param1Type = TTypeBuilder()
@@ -231,7 +231,7 @@ Y_UNIT_TEST_SUITE(ParamsBuilder) {
             .Build();
 
         try {
-            auto params = TParamsBuilder(paramsMap)
+            auto params = TParamsBuilder(paramsMap) 
                 .AddParam("$param2", value1)
                 .Build();
         } catch (const TExpectedErrorException& e) {
@@ -239,5 +239,5 @@ Y_UNIT_TEST_SUITE(ParamsBuilder) {
         }
 
         UNIT_ASSERT(false);
-    }
-}
+    } 
+} 

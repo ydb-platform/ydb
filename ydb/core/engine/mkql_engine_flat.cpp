@@ -481,8 +481,8 @@ public:
                 }
             }
 
-            TTablePathHashSet srcTables;
-            TTablePathHashSet dstTables;
+            TTablePathHashSet srcTables; 
+            TTablePathHashSet dstTables; 
             for (auto& readset : readsets) {
                 srcTables.emplace(tableMap[readset.first]);
                 dstTables.emplace(tableMap[readset.second]);
@@ -980,7 +980,7 @@ public:
                     if (!CheckValidUint8InKey(*desc)) {
                         return EResult::ProgramError;
                     }
-
+ 
                     validationInfo.Keys.emplace_back(TValidatedKey(std::move(desc), true));
                 }
             }

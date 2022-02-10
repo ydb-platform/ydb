@@ -281,10 +281,10 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         if (node->IsCallable({"String", "Utf8"}) && to == EDataSlot::Json) {
             if (const auto atom = node->Head().Content(); NDom::IsValidJson(atom)) {
                 node = ctx.RenameNode(*node, "Json");
-                return IGraphTransformer::TStatus::Repeat;
-            }
-        }
-
+                return IGraphTransformer::TStatus::Repeat; 
+            } 
+        } 
+ 
         bool allow = false;
         bool isSafe = true;
         bool useCast = false;
@@ -4465,10 +4465,10 @@ bool EnsureHashableDataType(TPositionHandle position, EDataSlot dataSlot, TExprC
     return true;
 }
 
-TMaybe<TIssue> NormalizeName(TPosition position, TString& name) {
+TMaybe<TIssue> NormalizeName(TPosition position, TString& name) { 
     const ui32 inputLength = name.length();
-    ui32 startCharPos = 0;
-    ui32 totalSkipped = 0;
+    ui32 startCharPos = 0; 
+    ui32 totalSkipped = 0; 
     bool atStart = true;
     bool justSkippedUnderscore = false;
     for (ui32 i = 0; i < inputLength; ++i) {
@@ -4476,45 +4476,45 @@ TMaybe<TIssue> NormalizeName(TPosition position, TString& name) {
         if (c == '_') {
             if (!atStart) {
                 if (justSkippedUnderscore) {
-                    return TIssue(position, TStringBuilder() << "\"" << name << "\" looks weird, has multiple consecutive underscores");
+                    return TIssue(position, TStringBuilder() << "\"" << name << "\" looks weird, has multiple consecutive underscores"); 
                 }
                 justSkippedUnderscore = true;
                 ++totalSkipped;
                 continue;
-            } else {
-                ++startCharPos;
+            } else { 
+                ++startCharPos; 
             }
         }
         else {
             atStart = false;
             justSkippedUnderscore = false;
         }
-    }
+    } 
 
     if (totalSkipped >= 5) {
-        return TIssue(position, TStringBuilder() << "\"" << name << "\" looks weird, has multiple consecutive underscores");
+        return TIssue(position, TStringBuilder() << "\"" << name << "\" looks weird, has multiple consecutive underscores"); 
     }
-
-    ui32 outPos = startCharPos;
-    for (ui32 i = startCharPos; i < inputLength; i++) {
-        const char c = name.at(i);
-        if (c == '_') {
-            continue;
-        } else {
-            name[outPos] = AsciiToLower(c);
-            ++outPos;
-        }
-    }
-
-    name.resize(outPos);
-    Y_VERIFY(inputLength - outPos == totalSkipped);
-
+ 
+    ui32 outPos = startCharPos; 
+    for (ui32 i = startCharPos; i < inputLength; i++) { 
+        const char c = name.at(i); 
+        if (c == '_') { 
+            continue; 
+        } else { 
+            name[outPos] = AsciiToLower(c); 
+            ++outPos; 
+        } 
+    } 
+ 
+    name.resize(outPos); 
+    Y_VERIFY(inputLength - outPos == totalSkipped); 
+ 
     return Nothing();
 }
 
 TString NormalizeName(const TStringBuf& name) {
     TString result(name);
-    TMaybe<TIssue> error = NormalizeName(TPosition(), result);
+    TMaybe<TIssue> error = NormalizeName(TPosition(), result); 
     YQL_ENSURE(error.Empty(), "" << error->Message);
     return result;
 }

@@ -24,8 +24,8 @@ protected:
 
         IKqpGateway::TExecPhysicalRequest request;
         request.Transactions.emplace_back(*tx, PrepareParameters(*tx));
-
-        request.RlPath = TransformCtx->QueryCtx->RlPath;
+ 
+        request.RlPath = TransformCtx->QueryCtx->RlPath; 
         request.Timeout = TransformCtx->QueryCtx->Deadlines.TimeoutAt - Gateway->GetCurrentTime();
         if (!request.Timeout) {
             // TODO: Just cancel request.

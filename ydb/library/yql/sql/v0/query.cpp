@@ -327,7 +327,7 @@ public:
         Y_UNUSED(src);
         TSet<TString> used;
         for (auto& hint: Hints) {
-            TMaybe<TIssue> normalizeError = NormalizeName(Pos, hint);
+            TMaybe<TIssue> normalizeError = NormalizeName(Pos, hint); 
             if (!normalizeError.Empty()) {
                 ctx.Error() << normalizeError->Message;
                 ctx.IncrementMonCounter("sql_errors", "NormalizeHintError");
@@ -575,94 +575,94 @@ TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, const TVector<TCol
     return new TCreateTableNode(pos, tr, columns, pkColumns, partitionByColumns, orderByColumns);
 }
 
-class TAlterTableNode final: public TAstListNode {
-public:
+class TAlterTableNode final: public TAstListNode { 
+public: 
     TAlterTableNode(TPosition pos, const TTableRef& tr, const TVector<TColumnSchema>& columns, EAlterTableIntentnt intent)
-        : TAstListNode(pos)
-        , Table(tr)
-        , Columns(columns)
-        , Intent(intent)
-    {}
-    bool DoInit(TContext& ctx, ISource* src) override {
-        if (!Table.Check(ctx)) {
-            return false;
-        }
-
-        auto keys = Table.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::CREATE);
-        ctx.PushBlockShortcuts();
-        if (!keys || !keys->Init(ctx, src)) {
-            return false;
-        }
-        keys = ctx.GroundBlockShortcutsForExpr(keys);
-
+        : TAstListNode(pos) 
+        , Table(tr) 
+        , Columns(columns) 
+        , Intent(intent) 
+    {} 
+    bool DoInit(TContext& ctx, ISource* src) override { 
+        if (!Table.Check(ctx)) { 
+            return false; 
+        } 
+ 
+        auto keys = Table.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::CREATE); 
+        ctx.PushBlockShortcuts(); 
+        if (!keys || !keys->Init(ctx, src)) { 
+            return false; 
+        } 
+        keys = ctx.GroundBlockShortcutsForExpr(keys); 
+ 
         auto actions = Y();
 
-        if (Intent == EAlterTableIntentnt::DropColumn) {
+        if (Intent == EAlterTableIntentnt::DropColumn) { 
             auto columns = Y();
             for (auto& col : Columns) {
                 columns = L(columns, BuildQuotedAtom(Pos, col.Name));
-            }
+            } 
             actions = L(actions, Q(Y(Q("dropColumns"), Q(columns))));
-        } else {
+        } else { 
             auto columns = Y();
-            for (auto& col: Columns) {
+            for (auto& col: Columns) { 
                 auto type = ParseType(TypeByAlias(col.Type, !col.IsTypeString), *ctx.Pool, ctx.Issues, col.Pos);
-                if (!type) {
-                    return false;
-                }
-                Y_ASSERT(type->IsList());
-                Y_ASSERT(type->GetChildrenCount() > 1);
-                auto typeName = type->GetChild(0);
-                Y_ASSERT(typeName->IsAtom());
-                if (typeName->GetContent() == "OptionalType") {
-                    ctx.Error(col.Pos) << "ALTER TABLE clause requires non-optional column types in scheme";
-                    return false;
-                }
-                if (col.Nullable) {
-                    type = TAstNode::NewList(
-                        col.Pos,
-                        *ctx.Pool,
-                        TAstNode::NewLiteralAtom(
-                            col.Pos,
-                            "OptionalType",
-                            *ctx.Pool
-                        ),
-                        type
-                    );
-                }
-                columns = L(columns, Q(Y(BuildQuotedAtom(Pos, col.Name), AstNode(type))));
-            }
+                if (!type) { 
+                    return false; 
+                } 
+                Y_ASSERT(type->IsList()); 
+                Y_ASSERT(type->GetChildrenCount() > 1); 
+                auto typeName = type->GetChild(0); 
+                Y_ASSERT(typeName->IsAtom()); 
+                if (typeName->GetContent() == "OptionalType") { 
+                    ctx.Error(col.Pos) << "ALTER TABLE clause requires non-optional column types in scheme"; 
+                    return false; 
+                } 
+                if (col.Nullable) { 
+                    type = TAstNode::NewList( 
+                        col.Pos, 
+                        *ctx.Pool, 
+                        TAstNode::NewLiteralAtom( 
+                            col.Pos, 
+                            "OptionalType", 
+                            *ctx.Pool 
+                        ), 
+                        type 
+                    ); 
+                } 
+                columns = L(columns, Q(Y(BuildQuotedAtom(Pos, col.Name), AstNode(type)))); 
+            } 
             actions = L(actions, Q(Y(Q("addColumns"), Q(columns))));
-        }
-
+        } 
+ 
         auto opts = Y();
 
-        opts = L(opts, Q(Y(Q("mode"), Q("alter"))));
+        opts = L(opts, Q(Y(Q("mode"), Q("alter")))); 
         opts = L(opts, Q(Y(Q("actions"), Q(actions))));
-
-        Add("block", Q(Y(
-            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.ServiceName(ctx)), BuildQuotedAtom(Pos, Table.Cluster))),
+ 
+        Add("block", Q(Y( 
+            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.ServiceName(ctx)), BuildQuotedAtom(Pos, Table.Cluster))), 
             Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),
             Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
-        )));
-
-        ctx.UsedClusters.insert(Table.Cluster);
-        return TAstListNode::DoInit(ctx, src);
-    }
-    TPtr DoClone() const final {
-        return {};
-    }
-private:
-    TTableRef Table;
+        ))); 
+ 
+        ctx.UsedClusters.insert(Table.Cluster); 
+        return TAstListNode::DoInit(ctx, src); 
+    } 
+    TPtr DoClone() const final { 
+        return {}; 
+    } 
+private: 
+    TTableRef Table; 
     TVector<TColumnSchema> Columns;
-    EAlterTableIntentnt Intent;
-};
-
+    EAlterTableIntentnt Intent; 
+}; 
+ 
 TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TVector<TColumnSchema>& columns, EAlterTableIntentnt intent)
-{
-    return new TAlterTableNode(pos, tr, columns, intent);
-}
-
+{ 
+    return new TAlterTableNode(pos, tr, columns, intent); 
+} 
+ 
 class TDropTableNode final: public TAstListNode {
 public:
     TDropTableNode(TPosition pos, const TTableRef& tr)
@@ -990,7 +990,7 @@ public:
                         BuildQuotedAtom(Pos, "Warning"), BuildQuotedAtom(Pos, warningPragma.GetPattern()),
                             BuildQuotedAtom(Pos, to_lower(ToString(warningPragma.GetAction()))))));
                 }
-
+ 
                 if (ctx.ResultSizeLimit > 0) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", resultSink,
                         BuildQuotedAtom(Pos, "SizeLimit"), BuildQuotedAtom(Pos, ToString(ctx.ResultSizeLimit)))));

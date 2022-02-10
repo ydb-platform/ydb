@@ -9,12 +9,12 @@
 #include <ydb/library/yql/minikql/dom/json.h>
 #include <ydb/library/yql/utils/utf8.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
-
+ 
 #include <ydb/library/binary_json/write.h>
 #include <ydb/library/dynumber/dynumber.h>
 
 #include <util/string/vector.h>
-#include <util/generic/size_literals.h>
+#include <util/generic/size_literals.h> 
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -22,8 +22,8 @@ namespace NGRpcService {
 using namespace NActors;
 using namespace Ydb;
 
-namespace {
-
+namespace { 
+ 
 bool CheckValueData(NScheme::TTypeId type, const TCell& cell, TString& err) {
     bool ok = true;
     switch (type) {
@@ -169,8 +169,8 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
             break;
     }
     return false;
-}
-
+} 
+ 
 }
 
 class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
@@ -180,7 +180,7 @@ public:
         : TBase(GetDuration(request->GetProtoRequest()->operation_params().operation_timeout()))
         , Request(request)
     {}
-
+ 
 private:
     static bool CellFromProtoVal(NScheme::TTypeId type, const Ydb::Value* vp,
                                   TCell& c, TString& err, TMemoryPool& valueDataPool)
@@ -292,91 +292,91 @@ private:
         return true;
     }
 
-private:
-    bool ReportCostInfoEnabled() const {
-        return Request->GetProtoRequest()->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED;
-    }
-
+private: 
+    bool ReportCostInfoEnabled() const { 
+        return Request->GetProtoRequest()->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED; 
+    } 
+ 
     TString GetDatabase()override {
         return Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData()));
     }
 
-    const TString& GetTable() override {
-        return Request->GetProtoRequest()->table();
-    }
-
-    const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
-        return AllRows;
-    }
-
-    void RaiseIssue(const NYql::TIssue& issue) override {
-        return Request->RaiseIssue(issue);
-    }
-
-    void SendResult(const NActors::TActorContext&, const StatusIds::StatusCode& status) override {
+    const TString& GetTable() override { 
+        return Request->GetProtoRequest()->table(); 
+    } 
+ 
+    const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override { 
+        return AllRows; 
+    } 
+ 
+    void RaiseIssue(const NYql::TIssue& issue) override { 
+        return Request->RaiseIssue(issue); 
+    } 
+ 
+    void SendResult(const NActors::TActorContext&, const StatusIds::StatusCode& status) override { 
         const Ydb::Table::BulkUpsertResult result;
-        if (status == StatusIds::SUCCESS) {
-            ui64 cost = std::ceil(RuCost);
-            Request->SetRuHeader(cost);
-            if (ReportCostInfoEnabled()) {
-                Request->SetCostInfo(cost);
-            }
-        }
-        return Request->SendResult(result, status);
-    }
-
-    bool CheckAccess(TString& errorMessage) override {
-        if (Request->GetInternalToken().empty())
-            return true;
-
-        NACLib::TUserToken userToken(Request->GetInternalToken());
-        const ui32 access = NACLib::EAccessRights::UpdateRow;
+        if (status == StatusIds::SUCCESS) { 
+            ui64 cost = std::ceil(RuCost); 
+            Request->SetRuHeader(cost); 
+            if (ReportCostInfoEnabled()) { 
+                Request->SetCostInfo(cost); 
+            } 
+        } 
+        return Request->SendResult(result, status); 
+    } 
+ 
+    bool CheckAccess(TString& errorMessage) override { 
+        if (Request->GetInternalToken().empty()) 
+            return true; 
+ 
+        NACLib::TUserToken userToken(Request->GetInternalToken()); 
+        const ui32 access = NACLib::EAccessRights::UpdateRow; 
         auto resolveResult = GetResolveNameResult();
         if (!resolveResult) {
-            TStringStream explanation;
-            explanation << "Access denied for " << userToken.GetUserSID()
+            TStringStream explanation; 
+            explanation << "Access denied for " << userToken.GetUserSID() 
                         << " table '" << Request->GetProtoRequest()->table()
                         << "' has not been resolved yet";
-
-            errorMessage = explanation.Str();
-            return false;
-        }
+ 
+            errorMessage = explanation.Str(); 
+            return false; 
+        } 
         for (const NSchemeCache::TSchemeCacheNavigate::TEntry& entry : resolveResult->ResultSet) {
             if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok
                 && entry.SecurityObject != nullptr
                 && !entry.SecurityObject->CheckAccess(access, userToken))
-            {
-                TStringStream explanation;
-                explanation << "Access denied for " << userToken.GetUserSID()
-                            << " with access " << NACLib::AccessRightsToString(access)
+            { 
+                TStringStream explanation; 
+                explanation << "Access denied for " << userToken.GetUserSID() 
+                            << " with access " << NACLib::AccessRightsToString(access) 
                             << " to table '" << Request->GetProtoRequest()->table() << "'";
-
-                errorMessage = explanation.Str();
-                return false;
-            }
-        }
-        return true;
-    }
-
+ 
+                errorMessage = explanation.Str(); 
+                return false; 
+            } 
+        } 
+        return true; 
+    } 
+ 
     TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const override {
         Y_UNUSED(errorMessage);
 
-        const auto& type = Request->GetProtoRequest()->Getrows().Gettype();
-        const auto& rowType = type.Getlist_type();
-        const auto& rowFields = rowType.Getitem().Getstruct_type().Getmembers();
-
-        TVector<std::pair<TString, Ydb::Type>> result;
-
-        for (i32 pos = 0; pos < rowFields.size(); ++pos) {
-            const auto& name = rowFields[pos].Getname();
-            const auto& typeInProto = rowFields[pos].type().has_optional_type() ?
-                        rowFields[pos].type().optional_type().item() : rowFields[pos].type();
-
-            result.emplace_back(name, typeInProto);
-        }
-        return result;
-    }
-
+        const auto& type = Request->GetProtoRequest()->Getrows().Gettype(); 
+        const auto& rowType = type.Getlist_type(); 
+        const auto& rowFields = rowType.Getitem().Getstruct_type().Getmembers(); 
+ 
+        TVector<std::pair<TString, Ydb::Type>> result; 
+ 
+        for (i32 pos = 0; pos < rowFields.size(); ++pos) { 
+            const auto& name = rowFields[pos].Getname(); 
+            const auto& typeInProto = rowFields[pos].type().has_optional_type() ? 
+                        rowFields[pos].type().optional_type().item() : rowFields[pos].type(); 
+ 
+            result.emplace_back(name, typeInProto); 
+        } 
+        return result; 
+    } 
+ 
     bool ExtractRows(TString& errorMessage) override {
         // Parse type field
         // Check that it is a list of stuct
@@ -395,7 +395,7 @@ private:
         for (const auto& r : rows) {
             valueDataPool.Clear();
 
-            ui64 sz = 0;
+            ui64 sz = 0; 
             // Take members corresponding to key columns
             if (!FillCellsFromProto(keyCells, KeyColumnPositions, r, errorMessage, valueDataPool)) {
                 return false;
@@ -406,16 +406,16 @@ private:
                 return false;
             }
 
-            for (const auto& cell : keyCells) {
-                sz += cell.Size();
-            }
-
-            for (const auto& cell : valueCells) {
-                sz += cell.Size();
-            }
-
+            for (const auto& cell : keyCells) { 
+                sz += cell.Size(); 
+            } 
+ 
+            for (const auto& cell : valueCells) { 
+                sz += cell.Size(); 
+            } 
+ 
             cost += TUpsertCost::OneRowCost(sz);
-
+ 
             // Save serialized key and value
             TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(keyCells));
             TString serializedValue = TSerializedCellVec::Serialize(valueCells);
@@ -431,9 +431,9 @@ private:
         return Batch.get();
     }
 
-private:
+private: 
     TAutoPtr<TEvBulkUpsertRequest> Request;
-    TVector<std::pair<TSerializedCellVec, TString>> AllRows;
+    TVector<std::pair<TSerializedCellVec, TString>> AllRows; 
 };
 
 class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {

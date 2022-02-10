@@ -11,10 +11,10 @@ namespace {
 using namespace NNodes;
 using namespace NCommon;
 
-bool CanPushPartialSort(const TKiPartialSort& node, const TKikimrTableDescription& tableDesc, TVector<TString>* columns) {
-    return IsKeySelectorPkPrefix(node.KeySelectorLambda(), tableDesc, columns);
-}
-
+bool CanPushPartialSort(const TKiPartialSort& node, const TKikimrTableDescription& tableDesc, TVector<TString>* columns) { 
+    return IsKeySelectorPkPrefix(node.KeySelectorLambda(), tableDesc, columns); 
+} 
+ 
 TExprNode::TPtr KiTrimReadTableWorld(TExprBase node) {
     if (auto maybeRead = node.Maybe<TCoLeft>().Input().Maybe<TKiReadTable>()) {
         YQL_CLOG(INFO, ProviderKikimr) << "KiTrimReadTableWorld";
@@ -48,7 +48,7 @@ TExprNode::TPtr KiEraseOverSelectRow(TExprBase node, TExprContext& ctx) {
     }
 
     auto map = node.Cast<TCoFlatMap>();
-
+ 
     if (auto maybeErase = map.Lambda().Body().Maybe<TCoJust>().Input().Maybe<TKiEraseRow>()) {
         auto selectRow = map.Input().Cast<TKiSelectRow>();
         auto eraseRow = maybeErase.Cast();
@@ -69,34 +69,34 @@ TExprNode::TPtr KiEraseOverSelectRow(TExprBase node, TExprContext& ctx) {
         }
     }
 
-    if (auto maybeAsList = map.Lambda().Body().Maybe<TCoAsList>()) {
-        auto asList = maybeAsList.Cast();
-        if (asList.ArgCount() != 1) {
-            return node.Ptr();
-        }
-
-        if (auto maybeErase = asList.Arg(0).Maybe<TKiEraseRow>()) {
-            auto selectRow = map.Input().Cast<TKiSelectRow>();
-            auto eraseRow = maybeErase.Cast();
-
-            YQL_ENSURE(selectRow.Cluster().Raw() == eraseRow.Cluster().Raw());
-
-            if (selectRow.Table().Raw() == eraseRow.Table().Raw()) {
-
-                auto ret = Build<TCoAsList>(ctx, node.Pos())
-                    .Add<TKiEraseRow>()
-                        .Cluster(selectRow.Cluster())
-                        .Table(selectRow.Table())
-                        .Key(selectRow.Key())
-                        .Build()
-                    .Done();
-
-                YQL_CLOG(INFO, ProviderKikimr) << "KiEraseOverSelectRow";
-                return ret.Ptr();
-            }
-        }
-    }
-
+    if (auto maybeAsList = map.Lambda().Body().Maybe<TCoAsList>()) { 
+        auto asList = maybeAsList.Cast(); 
+        if (asList.ArgCount() != 1) { 
+            return node.Ptr(); 
+        } 
+ 
+        if (auto maybeErase = asList.Arg(0).Maybe<TKiEraseRow>()) { 
+            auto selectRow = map.Input().Cast<TKiSelectRow>(); 
+            auto eraseRow = maybeErase.Cast(); 
+ 
+            YQL_ENSURE(selectRow.Cluster().Raw() == eraseRow.Cluster().Raw()); 
+ 
+            if (selectRow.Table().Raw() == eraseRow.Table().Raw()) { 
+ 
+                auto ret = Build<TCoAsList>(ctx, node.Pos()) 
+                    .Add<TKiEraseRow>() 
+                        .Cluster(selectRow.Cluster()) 
+                        .Table(selectRow.Table()) 
+                        .Key(selectRow.Key()) 
+                        .Build() 
+                    .Done(); 
+ 
+                YQL_CLOG(INFO, ProviderKikimr) << "KiEraseOverSelectRow"; 
+                return ret.Ptr(); 
+            } 
+        } 
+    } 
+ 
     return node.Ptr();
 }
 
@@ -149,11 +149,11 @@ TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx,
         read = flatmap.Input();
     }
 
-    if (!read.Maybe<TKiSelectRange>()) {
+    if (!read.Maybe<TKiSelectRange>()) { 
         return node.Ptr();
     }
 
-    auto selectRange = read.Cast<TKiSelectRange>();
+    auto selectRange = read.Cast<TKiSelectRange>(); 
 
     if (HasSetting(selectRange.Settings().Ref(), "Reverse")) {
         // N.B. when SelectRange has a Reverse option we cannot optimize
@@ -196,8 +196,8 @@ TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx,
         }
     }
 
-    auto& tableData = tablesData.ExistingTable(selectRange.Cluster().StringValue(), selectRange.Table().Path().StringValue());
-
+    auto& tableData = tablesData.ExistingTable(selectRange.Cluster().StringValue(), selectRange.Table().Path().StringValue()); 
+ 
     auto checkKey = [keySelector, &tableData, &passthroughFields] (TExprBase key, ui32 index) {
         if (!key.Maybe<TCoMember>()) {
             return false;
@@ -252,14 +252,14 @@ TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx,
                 .Build()
             .Done();
 
-        TExprNode::TPtr newSelect = Build<TKiSelectRange>(ctx, selectRange.Pos())
-            .Cluster(selectRange.Cluster())
-            .Table(selectRange.Table())
-            .Range(selectRange.Range())
-            .Select(selectRange.Select())
-            .Settings(newSettings)
-            .Done()
-            .Ptr();
+        TExprNode::TPtr newSelect = Build<TKiSelectRange>(ctx, selectRange.Pos()) 
+            .Cluster(selectRange.Cluster()) 
+            .Table(selectRange.Table()) 
+            .Range(selectRange.Range()) 
+            .Select(selectRange.Select()) 
+            .Settings(newSettings) 
+            .Done() 
+            .Ptr(); 
 
         YQL_CLOG(INFO, ProviderKikimr) << "KiRedundantSortByPkReverse";
 
@@ -271,7 +271,7 @@ TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx,
                 .Lambda(flatmap.Lambda())
                 .Done().Ptr();
         } else {
-            return newSelect;
+            return newSelect; 
         }
     }
 
@@ -359,7 +359,7 @@ TExprNode::TPtr KiTopSort(TExprBase node, TExprContext& ctx, const TOptimizeCont
             read = flatmap.Input();
         }
 
-        if (!read.Maybe<TKiSelectRangeBase>()) {
+        if (!read.Maybe<TKiSelectRangeBase>()) { 
             return node.Ptr();
         }
 
@@ -487,172 +487,172 @@ TExprNode::TPtr KiSimplifyRowKey(TExprBase node, TExprContext& ctx) {
     return node.Ptr();
 }
 
-TExprNode::TPtr DoRewriteSelectIndexRange(const TKiSelectIndexRange& selectIndexRange,
-    const TKikimrTablesData& tablesData, TExprContext& ctx,
-    const TVector<TString>& extraColumns, const std::function<TExprBase(const TExprBase&)>& middleFilter = {})
-{
-    const auto pos = selectIndexRange.Pos();
+TExprNode::TPtr DoRewriteSelectIndexRange(const TKiSelectIndexRange& selectIndexRange, 
+    const TKikimrTablesData& tablesData, TExprContext& ctx, 
+    const TVector<TString>& extraColumns, const std::function<TExprBase(const TExprBase&)>& middleFilter = {}) 
+{ 
+    const auto pos = selectIndexRange.Pos(); 
+ 
+    const auto& cluster = selectIndexRange.Cluster().Value(); 
+    const auto& versionedTable = selectIndexRange.Table(); 
+    const auto& indexTableName = selectIndexRange.IndexName().Value(); 
+ 
+    const auto& tableDesc = tablesData.ExistingTable(TString(cluster), TString(versionedTable.Path())); 
+    const auto& indexTableDesc = tablesData.ExistingTable(TString(cluster), TString(indexTableName)); 
+ 
+    const auto& fetchItemArg = Build<TCoArgument>(ctx, pos) 
+        .Name("fetchItem") 
+        .Done(); 
+ 
+    bool needDataRead = false; 
+    for (const auto& col : selectIndexRange.Select()) { 
+        if (!indexTableDesc.Metadata->Columns.contains(TString(col.Value()))) { 
+            needDataRead = true; 
+            break; 
+        } 
+    } 
+ 
+    const bool indexFullScan = TKikimrKeyRange::IsFull(selectIndexRange.Range()); 
+    // Fullscan from index table but without reading data from main is OK 
+    if (indexFullScan && needDataRead) { 
+        auto issue = TIssue(ctx.GetPosition(pos), "Given predicate is not suitable for used index"); 
+        SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_WRONG_INDEX_USAGE, issue); 
+        if (!ctx.AddWarning(issue)) { 
+            return nullptr; 
+        } 
+    } 
+ 
+    auto keyColumnsList = needDataRead ? BuildKeyColumnsList(tableDesc, pos, ctx) : selectIndexRange.Select(); 
+    auto columns = MergeColumns(keyColumnsList, extraColumns, ctx); 
+ 
+    TExprBase selectKeyRange = Build<TKiSelectRange>(ctx, pos) 
+        .Cluster(selectIndexRange.Cluster()) 
+        .Table(BuildVersionedTable(*indexTableDesc.Metadata, pos, ctx)) 
+        .Range(selectIndexRange.Range()) 
+        .Select(columns) 
+        .Settings(selectIndexRange.Settings()) 
+        .Done(); 
+ 
+    if (middleFilter) { 
+        selectKeyRange = middleFilter(selectKeyRange); 
+    } 
+ 
+    if (!needDataRead) { 
+        return TExprBase(selectKeyRange).Ptr(); 
+    } 
+ 
+    const auto& fetchLambda = Build<TCoLambda>(ctx, pos) 
+        .Args(fetchItemArg) 
+        .Body<TKiSelectRow>() 
+            .Cluster() 
+                .Value(cluster) 
+                .Build() 
+            .Table(versionedTable) 
+            .Key(ExtractNamedKeyTuples(fetchItemArg, tableDesc, ctx)) 
+            .Select(selectIndexRange.Select()) 
+            .Build() 
+        .Done(); 
+ 
+    const auto& flatMap = Build<TCoFlatMap>(ctx, pos) 
+            .Input(selectKeyRange) 
+            .Lambda(fetchLambda) 
+            .Done(); 
+ 
+    YQL_CLOG(INFO, ProviderKikimr) << "KiRewriteSelectIndexRange"; 
+    return TExprBase(flatMap).Ptr(); 
+} 
+ 
+TExprNode::TPtr KiRewritePartialTakeSortOverSelectIndexRange(TExprBase node, const TKikimrTablesData& tablesData, TExprContext& ctx) { 
+    auto maybePartialTake = node.Maybe<TKiPartialTake>(); 
+    if (!maybePartialTake) { 
+        return node.Ptr(); 
+    } 
+ 
+    auto partialTake = maybePartialTake.Cast(); 
+ 
+    auto maybePartialSort = partialTake.Input().Maybe<TKiPartialSort>(); 
+    if (!maybePartialSort) { 
+        return node.Ptr(); 
+    } 
+ 
+    auto partialSort = maybePartialSort.Cast(); 
+ 
+    auto maybeSelectIndexRange = partialSort.Input().Maybe<TKiSelectIndexRange>(); 
+    if (!maybeSelectIndexRange) { 
+        return node.Ptr(); 
+    } 
+ 
+    auto selectIndexRange = maybeSelectIndexRange.Cast(); 
+ 
+    const auto cluster = selectIndexRange.Cluster().StringValue(); 
+    const auto indexTableName = selectIndexRange.IndexName().StringValue(); 
+ 
+    const auto& indexDesc = tablesData.ExistingTable(cluster, indexTableName); 
+ 
+    TVector<TString> sortByColumns; 
+    if (!CanPushPartialSort(maybePartialSort.Cast(), indexDesc, &sortByColumns)) { 
+        return node.Ptr(); 
+    } 
 
-    const auto& cluster = selectIndexRange.Cluster().Value();
-    const auto& versionedTable = selectIndexRange.Table();
-    const auto& indexTableName = selectIndexRange.IndexName().Value();
-
-    const auto& tableDesc = tablesData.ExistingTable(TString(cluster), TString(versionedTable.Path()));
-    const auto& indexTableDesc = tablesData.ExistingTable(TString(cluster), TString(indexTableName));
-
-    const auto& fetchItemArg = Build<TCoArgument>(ctx, pos)
-        .Name("fetchItem")
-        .Done();
-
-    bool needDataRead = false;
-    for (const auto& col : selectIndexRange.Select()) {
-        if (!indexTableDesc.Metadata->Columns.contains(TString(col.Value()))) {
-            needDataRead = true;
-            break;
-        }
-    }
-
-    const bool indexFullScan = TKikimrKeyRange::IsFull(selectIndexRange.Range());
-    // Fullscan from index table but without reading data from main is OK
-    if (indexFullScan && needDataRead) {
-        auto issue = TIssue(ctx.GetPosition(pos), "Given predicate is not suitable for used index");
-        SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_WRONG_INDEX_USAGE, issue);
-        if (!ctx.AddWarning(issue)) {
-            return nullptr;
-        }
-    }
-
-    auto keyColumnsList = needDataRead ? BuildKeyColumnsList(tableDesc, pos, ctx) : selectIndexRange.Select();
-    auto columns = MergeColumns(keyColumnsList, extraColumns, ctx);
-
-    TExprBase selectKeyRange = Build<TKiSelectRange>(ctx, pos)
-        .Cluster(selectIndexRange.Cluster())
-        .Table(BuildVersionedTable(*indexTableDesc.Metadata, pos, ctx))
-        .Range(selectIndexRange.Range())
-        .Select(columns)
-        .Settings(selectIndexRange.Settings())
-        .Done();
-
-    if (middleFilter) {
-        selectKeyRange = middleFilter(selectKeyRange);
-    }
-
-    if (!needDataRead) {
-        return TExprBase(selectKeyRange).Ptr();
-    }
-
-    const auto& fetchLambda = Build<TCoLambda>(ctx, pos)
-        .Args(fetchItemArg)
-        .Body<TKiSelectRow>()
-            .Cluster()
-                .Value(cluster)
-                .Build()
-            .Table(versionedTable)
-            .Key(ExtractNamedKeyTuples(fetchItemArg, tableDesc, ctx))
-            .Select(selectIndexRange.Select())
-            .Build()
-        .Done();
-
-    const auto& flatMap = Build<TCoFlatMap>(ctx, pos)
-            .Input(selectKeyRange)
-            .Lambda(fetchLambda)
-            .Done();
-
-    YQL_CLOG(INFO, ProviderKikimr) << "KiRewriteSelectIndexRange";
-    return TExprBase(flatMap).Ptr();
-}
-
-TExprNode::TPtr KiRewritePartialTakeSortOverSelectIndexRange(TExprBase node, const TKikimrTablesData& tablesData, TExprContext& ctx) {
-    auto maybePartialTake = node.Maybe<TKiPartialTake>();
-    if (!maybePartialTake) {
-        return node.Ptr();
-    }
-
-    auto partialTake = maybePartialTake.Cast();
-
-    auto maybePartialSort = partialTake.Input().Maybe<TKiPartialSort>();
-    if (!maybePartialSort) {
-        return node.Ptr();
-    }
-
-    auto partialSort = maybePartialSort.Cast();
-
-    auto maybeSelectIndexRange = partialSort.Input().Maybe<TKiSelectIndexRange>();
-    if (!maybeSelectIndexRange) {
-        return node.Ptr();
-    }
-
-    auto selectIndexRange = maybeSelectIndexRange.Cast();
-
-    const auto cluster = selectIndexRange.Cluster().StringValue();
-    const auto indexTableName = selectIndexRange.IndexName().StringValue();
-
-    const auto& indexDesc = tablesData.ExistingTable(cluster, indexTableName);
-
-    TVector<TString> sortByColumns;
-    if (!CanPushPartialSort(maybePartialSort.Cast(), indexDesc, &sortByColumns)) {
-        return node.Ptr();
-    }
-
-    auto filter = [&ctx, &node, &partialSort, &partialTake](const TExprBase& in) mutable {
-        auto out = Build<TKiPartialTake>(ctx, node.Pos())
-            .Input<TKiPartialSort>()
-                .Input(in)
-                .SortDirections(partialSort.SortDirections())
-                .KeySelectorLambda(ctx.DeepCopyLambda(partialSort.KeySelectorLambda().Ref()))
-                .Build()
-            .Count(partialTake.Count())
-            .Done();
-        return TExprBase(out);
-    };
-
-    return DoRewriteSelectIndexRange(selectIndexRange, tablesData, ctx, sortByColumns, filter);
-}
-
-TExprNode::TPtr KiRewriteSelectIndexRange(TExprBase node, const TKikimrTablesData& tablesData, TExprContext& ctx) {
-    if (auto maybeSelectIndexRange = node.Maybe<TKiSelectIndexRange>()) {
-        return DoRewriteSelectIndexRange(maybeSelectIndexRange.Cast(), tablesData, ctx, {});
-    }
-
-    return node.Ptr();
-}
-
-TExprNode::TPtr KiApplyExtractMembersToSelectRange(TExprBase node, TExprContext& ctx) {
-    if (!node.Maybe<TCoExtractMembers>().Input().Maybe<TKiSelectRangeBase>()) {
-        return node.Ptr();
-    }
-
-    auto extract = node.Cast<TCoExtractMembers>();
-
-    if (node.Maybe<TCoExtractMembers>().Input().Maybe<TKiSelectRange>()) {
-        auto range = extract.Input().Cast<TKiSelectRange>();
-
-        YQL_CLOG(INFO, ProviderKikimr) << "KiApplyExtractMembersToSelectRange";
-        return Build<TKiSelectRange>(ctx, node.Pos())
-            .Cluster(range.Cluster())
-            .Table(range.Table())
-            .Range(range.Range())
-            .Select(extract.Members())
-            .Settings(range.Settings())
-            .Done().Ptr();
-    } else if (node.Maybe<TCoExtractMembers>().Input().Maybe<TKiSelectIndexRange>()) {
-        auto range = extract.Input().Cast<TKiSelectIndexRange>();
-
-        YQL_CLOG(INFO, ProviderKikimr) << "KiApplyExtractMembersToSelectRange";
-        return Build<TKiSelectIndexRange>(ctx, node.Pos())
-            .Cluster(range.Cluster())
-            .Table(range.Table())
-            .Range(range.Range())
-            .Select(extract.Members())
-            .Settings(range.Settings())
-            .IndexName(range.IndexName())
-            .Done().Ptr();
-    } else {
+    auto filter = [&ctx, &node, &partialSort, &partialTake](const TExprBase& in) mutable { 
+        auto out = Build<TKiPartialTake>(ctx, node.Pos()) 
+            .Input<TKiPartialSort>() 
+                .Input(in) 
+                .SortDirections(partialSort.SortDirections()) 
+                .KeySelectorLambda(ctx.DeepCopyLambda(partialSort.KeySelectorLambda().Ref())) 
+                .Build() 
+            .Count(partialTake.Count()) 
+            .Done(); 
+        return TExprBase(out); 
+    }; 
+ 
+    return DoRewriteSelectIndexRange(selectIndexRange, tablesData, ctx, sortByColumns, filter); 
+} 
+ 
+TExprNode::TPtr KiRewriteSelectIndexRange(TExprBase node, const TKikimrTablesData& tablesData, TExprContext& ctx) { 
+    if (auto maybeSelectIndexRange = node.Maybe<TKiSelectIndexRange>()) { 
+        return DoRewriteSelectIndexRange(maybeSelectIndexRange.Cast(), tablesData, ctx, {}); 
+    } 
+ 
+    return node.Ptr(); 
+} 
+ 
+TExprNode::TPtr KiApplyExtractMembersToSelectRange(TExprBase node, TExprContext& ctx) { 
+    if (!node.Maybe<TCoExtractMembers>().Input().Maybe<TKiSelectRangeBase>()) { 
+        return node.Ptr(); 
+    } 
+ 
+    auto extract = node.Cast<TCoExtractMembers>(); 
+ 
+    if (node.Maybe<TCoExtractMembers>().Input().Maybe<TKiSelectRange>()) { 
+        auto range = extract.Input().Cast<TKiSelectRange>(); 
+ 
+        YQL_CLOG(INFO, ProviderKikimr) << "KiApplyExtractMembersToSelectRange"; 
+        return Build<TKiSelectRange>(ctx, node.Pos()) 
+            .Cluster(range.Cluster()) 
+            .Table(range.Table()) 
+            .Range(range.Range()) 
+            .Select(extract.Members()) 
+            .Settings(range.Settings()) 
+            .Done().Ptr(); 
+    } else if (node.Maybe<TCoExtractMembers>().Input().Maybe<TKiSelectIndexRange>()) { 
+        auto range = extract.Input().Cast<TKiSelectIndexRange>(); 
+ 
+        YQL_CLOG(INFO, ProviderKikimr) << "KiApplyExtractMembersToSelectRange"; 
+        return Build<TKiSelectIndexRange>(ctx, node.Pos()) 
+            .Cluster(range.Cluster()) 
+            .Table(range.Table()) 
+            .Range(range.Range()) 
+            .Select(extract.Members()) 
+            .Settings(range.Settings()) 
+            .IndexName(range.IndexName()) 
+            .Done().Ptr(); 
+    } else { 
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Unexpected callable"));
-        return nullptr;
-    }
-}
-
+        return nullptr; 
+    } 
+} 
+ 
 } // namespace
 
 TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx) {
@@ -725,11 +725,11 @@ TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<
                 return ret;
             }
 
-            ret = KiRewritePartialTakeSortOverSelectIndexRange(node, sessionCtx->Tables(), ctx);
-            if (ret != inputNode) {
-                return ret;
-            }
-
+            ret = KiRewritePartialTakeSortOverSelectIndexRange(node, sessionCtx->Tables(), ctx); 
+            if (ret != inputNode) { 
+                return ret; 
+            } 
+ 
             return ret;
         }, ctx, TOptimizeExprSettings(nullptr));
 
@@ -781,7 +781,7 @@ TAutoPtr<IGraphTransformer> CreateKiPhysicalOptProposalTransformer(TIntrusivePtr
             return status;
         }
 
-        status = OptimizeExpr(input, output, [sessionCtx](const TExprNode::TPtr& inputNode, TExprContext& ctx) {
+        status = OptimizeExpr(input, output, [sessionCtx](const TExprNode::TPtr& inputNode, TExprContext& ctx) { 
             Y_UNUSED(ctx);
 
             auto ret = inputNode;
@@ -792,11 +792,11 @@ TAutoPtr<IGraphTransformer> CreateKiPhysicalOptProposalTransformer(TIntrusivePtr
                 return ret;
             }
 
-            ret = KiRewriteSelectIndexRange(node, sessionCtx->Tables(), ctx);
-            if (ret != inputNode) {
-                return ret;
-            }
-
+            ret = KiRewriteSelectIndexRange(node, sessionCtx->Tables(), ctx); 
+            if (ret != inputNode) { 
+                return ret; 
+            } 
+ 
             return ret;
         }, ctx, TOptimizeExprSettings(nullptr));
 

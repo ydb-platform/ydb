@@ -11,15 +11,15 @@ namespace {
 
 TTableStat operator - (const TTableStat& l, const TTableStat& r) {
     return {.Rows = l.Rows - r.Rows, .Bytes = l.Bytes - r.Bytes};
-}
-
-TProgressStatEntry operator - (const TProgressStatEntry& l, const TProgressStatEntry& r) {
-    return TProgressStatEntry {
+} 
+ 
+TProgressStatEntry operator - (const TProgressStatEntry& l, const TProgressStatEntry& r) { 
+    return TProgressStatEntry { 
         .ComputeTime = l.ComputeTime - r.ComputeTime,
         .ReadIOStat = l.ReadIOStat - r.ReadIOStat
-    };
-}
-
+    }; 
+} 
+ 
 void UpdateAggr(NDqProto::TDqStatsAggr* aggr, ui64 value) noexcept {
     if (aggr->GetMin() == 0) {
         aggr->SetMin(value);
@@ -252,37 +252,37 @@ void TQueryExecutionStats::Finish() {
  //   Cerr << (TStringBuilder() << "TQueryExecutionStats::Finish" << Endl << Result->DebugString() << Endl);
 }
 
-TTableStat& TTableStat::operator +=(const TTableStat& rhs) {
-    Rows += rhs.Rows;
-    Bytes += rhs.Bytes;
-    return *this;
-}
-
-TTableStat& TTableStat::operator -=(const TTableStat& rhs) {
-    Rows -= rhs.Rows;
-    Bytes -= rhs.Bytes;
-    return *this;
-}
-
-TProgressStatEntry& TProgressStatEntry::operator +=(const TProgressStatEntry& rhs) {
+TTableStat& TTableStat::operator +=(const TTableStat& rhs) { 
+    Rows += rhs.Rows; 
+    Bytes += rhs.Bytes; 
+    return *this; 
+} 
+ 
+TTableStat& TTableStat::operator -=(const TTableStat& rhs) { 
+    Rows -= rhs.Rows; 
+    Bytes -= rhs.Bytes; 
+    return *this; 
+} 
+ 
+TProgressStatEntry& TProgressStatEntry::operator +=(const TProgressStatEntry& rhs) { 
     ComputeTime += rhs.ComputeTime;
     ReadIOStat += rhs.ReadIOStat;
-
-    return *this;
-}
-
+ 
+    return *this; 
+} 
+ 
 TTableStat CalcSumTableReadStat(const TProgressStatEntry& entry) {
     return entry.ReadIOStat;
-}
-
-TDuration CalcCumComputeTime(const TProgressStatEntry& entry) {
+} 
+ 
+TDuration CalcCumComputeTime(const TProgressStatEntry& entry) { 
     return entry.ComputeTime;
-}
-
-void TProgressStatEntry::Out(IOutputStream& o) const {
+} 
+ 
+void TProgressStatEntry::Out(IOutputStream& o) const { 
     o << "ComputeTime: " << ComputeTime << " ReadRows: " << ReadIOStat.Rows << " ReadBytes: " << ReadIOStat.Bytes;
-}
-
+} 
+ 
 void TProgressStat::Set(const NDqProto::TDqComputeActorStats& stats) {
     Cur.ComputeTime += TDuration::MicroSeconds(stats.GetCpuTimeUs());
     for (auto& task : stats.GetTasks()) {
@@ -290,16 +290,16 @@ void TProgressStat::Set(const NDqProto::TDqComputeActorStats& stats) {
             Cur.ReadIOStat.Rows += table.GetReadRows();
             Cur.ReadIOStat.Bytes += table.GetReadBytes();
         }
-    }
-}
-
-TProgressStat::TEntry TProgressStat::GetLastUsage() const {
-    return Cur - Total;
-}
-
-void TProgressStat::Update() {
-    Total = Cur;
-    Cur = TEntry();
-}
-
+    } 
+} 
+ 
+TProgressStat::TEntry TProgressStat::GetLastUsage() const { 
+    return Cur - Total; 
+} 
+ 
+void TProgressStat::Update() { 
+    Total = Cur; 
+    Cur = TEntry(); 
+} 
+ 
 } // namespace NKikimr::NKqp

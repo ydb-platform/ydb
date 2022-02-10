@@ -203,7 +203,7 @@ private:
     void RespondServiceUnavailable(NGRpcService::TEvDiscoverPQClustersRequest::TPtr& ev) {
         Counters->DroppedRequestsCount->Inc();
 
-        ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+        ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE); 
     }
 
     void HandleDiscoverPQClustersRequestWhileIniting(NGRpcService::TEvDiscoverPQClustersRequest::TPtr& ev) {

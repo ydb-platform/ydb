@@ -1679,7 +1679,7 @@ namespace NKikimr {
                 // run LogCutter in the same mailbox
                 TLogCutterCtx logCutterCtx = {VCtx, PDiskCtx, Db->LsnMngr, Config,
                         (TActorId)(Db->LoggerID)};
-                Db->LogCutterID.Set(ctx.RegisterWithSameMailbox(CreateRecoveryLogCutter(std::move(logCutterCtx))));
+                Db->LogCutterID.Set(ctx.RegisterWithSameMailbox(CreateRecoveryLogCutter(std::move(logCutterCtx)))); 
                 ActiveActors.Insert(Db->LogCutterID); // keep forever
 
                 // run HugeBlobKeeper

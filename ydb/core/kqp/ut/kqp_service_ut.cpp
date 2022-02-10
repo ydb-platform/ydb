@@ -19,8 +19,8 @@ Y_UNIT_TEST_SUITE(KqpService) {
         NPar::LocalExecutor().RunAdditionalThreads(Inflight);
         auto driverConfig = kikimr->GetDriverConfig();
 
-        NYdb::TDriver driver(driverConfig);
-        NPar::LocalExecutor().ExecRange([driver](int id) {
+        NYdb::TDriver driver(driverConfig); 
+        NPar::LocalExecutor().ExecRange([driver](int id) { 
             NYdb::NTable::TTableClient db(driver);
 
             auto sessionResult = db.CreateSession().GetValueSync();
@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         Sleep(WaitDuration);
         kikimr.Reset();
         Sleep(WaitDuration);
-        driver.Stop(true);
+        driver.Stop(true); 
     }
 
     Y_UNIT_TEST(CloseSessionsWithLoad) {
@@ -128,19 +128,19 @@ Y_UNIT_TEST_SUITE(KqpService) {
         }, 0, SessionsCount + 1, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
     }
 
-    TVector<TAsyncDataQueryResult> simulateSessionBusy(ui32 count, TSession& session) {
-        TVector<TAsyncDataQueryResult> futures;
-        for (ui32 i = 0; i < count; ++i) {
-            auto query = Sprintf(R"(
+    TVector<TAsyncDataQueryResult> simulateSessionBusy(ui32 count, TSession& session) { 
+        TVector<TAsyncDataQueryResult> futures; 
+        for (ui32 i = 0; i < count; ++i) { 
+            auto query = Sprintf(R"( 
                 SELECT * FROM [/Root/EightShard] WHERE Key=%1$d;
-            )", i);
-
-            auto future = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx());
-            futures.push_back(future);
-        }
-        return futures;
-    }
-
+            )", i); 
+ 
+            auto future = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()); 
+            futures.push_back(future); 
+        } 
+        return futures; 
+    } 
+ 
     Y_UNIT_TEST(SessionBusy) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetUseSessionBusyStatus(true);
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto futures = simulateSessionBusy(10, session);
+        auto futures = simulateSessionBusy(10, session); 
 
         NThreading::WaitExceptionOrAll(futures).GetValueSync();
 
@@ -160,71 +160,71 @@ Y_UNIT_TEST_SUITE(KqpService) {
             }
         }
     }
-
-    Y_UNIT_TEST(SessionBusyRetryOperation) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetUseSessionBusyStatus(true);
-
-        TKikimrRunner kikimr(appConfig);
-        auto db = kikimr.GetTableClient();
-
-        ui32 queriesCount = 10;
-        ui32 busyResultCount = 0;
-        auto status = db.RetryOperation([&queriesCount, &busyResultCount](TSession session) {
-            UNIT_ASSERT(queriesCount);
-            UNIT_ASSERT(session.GetId());
-
-            auto futures = simulateSessionBusy(queriesCount, session);
-
+ 
+    Y_UNIT_TEST(SessionBusyRetryOperation) { 
+        NKikimrConfig::TAppConfig appConfig; 
+        appConfig.MutableTableServiceConfig()->SetUseSessionBusyStatus(true); 
+ 
+        TKikimrRunner kikimr(appConfig); 
+        auto db = kikimr.GetTableClient(); 
+ 
+        ui32 queriesCount = 10; 
+        ui32 busyResultCount = 0; 
+        auto status = db.RetryOperation([&queriesCount, &busyResultCount](TSession session) { 
+            UNIT_ASSERT(queriesCount); 
+            UNIT_ASSERT(session.GetId()); 
+ 
+            auto futures = simulateSessionBusy(queriesCount, session); 
+ 
             NThreading::WaitExceptionOrAll(futures).GetValueSync();
-
-            for (auto& future : futures) {
-                auto result = future.GetValue();
-                if (!result.IsSuccess()) {
-                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SESSION_BUSY, result.GetIssues().ToString());
-                    queriesCount--;
-                    busyResultCount++;
-                    return NThreading::MakeFuture<TStatus>(result);
-                }
-            }
-            return NThreading::MakeFuture<TStatus>(TStatus(EStatus::SUCCESS, NYql::TIssues()));
-         }).GetValueSync();
-         // Result should be SUCCESS in case of SESSION_BUSY
-         UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
-    }
-
-    Y_UNIT_TEST(SessionBusyRetryOperationSync) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetUseSessionBusyStatus(true);
-
-        TKikimrRunner kikimr(appConfig);
-        auto db = kikimr.GetTableClient();
-
-        ui32 queriesCount = 10;
-        ui32 busyResultCount = 0;
-        auto status = db.RetryOperationSync([&queriesCount, &busyResultCount](TSession session) {
-            UNIT_ASSERT(queriesCount);
-            UNIT_ASSERT(session.GetId());
-
-            auto futures = simulateSessionBusy(queriesCount, session);
-
+ 
+            for (auto& future : futures) { 
+                auto result = future.GetValue(); 
+                if (!result.IsSuccess()) { 
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SESSION_BUSY, result.GetIssues().ToString()); 
+                    queriesCount--; 
+                    busyResultCount++; 
+                    return NThreading::MakeFuture<TStatus>(result); 
+                } 
+            } 
+            return NThreading::MakeFuture<TStatus>(TStatus(EStatus::SUCCESS, NYql::TIssues())); 
+         }).GetValueSync(); 
+         // Result should be SUCCESS in case of SESSION_BUSY 
+         UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString()); 
+    } 
+ 
+    Y_UNIT_TEST(SessionBusyRetryOperationSync) { 
+        NKikimrConfig::TAppConfig appConfig; 
+        appConfig.MutableTableServiceConfig()->SetUseSessionBusyStatus(true); 
+ 
+        TKikimrRunner kikimr(appConfig); 
+        auto db = kikimr.GetTableClient(); 
+ 
+        ui32 queriesCount = 10; 
+        ui32 busyResultCount = 0; 
+        auto status = db.RetryOperationSync([&queriesCount, &busyResultCount](TSession session) { 
+            UNIT_ASSERT(queriesCount); 
+            UNIT_ASSERT(session.GetId()); 
+ 
+            auto futures = simulateSessionBusy(queriesCount, session); 
+ 
             NThreading::WaitExceptionOrAll(futures).GetValueSync();
-
-            for (auto& future : futures) {
-                auto result = future.GetValue();
-                if (!result.IsSuccess()) {
-                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SESSION_BUSY, result.GetIssues().ToString());
-                    queriesCount--;
-                    busyResultCount++;
-                    return (TStatus)result;
-                }
-            }
-            return TStatus(EStatus::SUCCESS, NYql::TIssues());
-         });
-         // Result should be SUCCESS in case of SESSION_BUSY
-         UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
-    }
-
+ 
+            for (auto& future : futures) { 
+                auto result = future.GetValue(); 
+                if (!result.IsSuccess()) { 
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SESSION_BUSY, result.GetIssues().ToString()); 
+                    queriesCount--; 
+                    busyResultCount++; 
+                    return (TStatus)result; 
+                } 
+            } 
+            return TStatus(EStatus::SUCCESS, NYql::TIssues()); 
+         }); 
+         // Result should be SUCCESS in case of SESSION_BUSY 
+         UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString()); 
+    } 
+ 
 }
 
 } // namspace NKqp

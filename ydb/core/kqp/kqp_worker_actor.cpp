@@ -32,7 +32,7 @@ using namespace NKikimrConfig;
 using namespace NThreading;
 using namespace NYql;
 using namespace NYql::NDq;
-using namespace NRuCalc;
+using namespace NRuCalc; 
 
 static std::atomic<bool> FailForcedNewEngineExecution = false;
 void FailForcedNewEngineExecutionForTests(bool fail) {
@@ -58,7 +58,7 @@ struct TKqpQueryState {
     TString UserToken;
     TActorId RequestActorId;
     TInstant StartTime;
-    TDuration CpuTime;
+    TDuration CpuTime; 
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     TString TxId;
     TKqpCompileResult::TConstPtr QueryCompileResult;
@@ -73,7 +73,7 @@ struct TKqpQueryState {
     TKqpForceNewEngineState ForceNewEngineState;
     std::optional<TQueryTraits> QueryTraits;
 
-    TMaybe<NKikimrKqp::TRlPath> RlPath;
+    TMaybe<NKikimrKqp::TRlPath> RlPath; 
 };
 
 
@@ -287,11 +287,11 @@ public:
             QueryState->ReplyFlags |= NKikimrKqp::QUERY_REPLY_FLAG_AST;
         }
 
-        if (event.HasRlPath()) {
-            QueryState->RlPath = event.GetRlPath();
-        }
-
-        NCpuTime::TCpuTimer timer;
+        if (event.HasRlPath()) { 
+            QueryState->RlPath = event.GetRlPath(); 
+        } 
+ 
+        NCpuTime::TCpuTimer timer; 
 
         if (queryRequest.GetCancelAfterMs()) {
             QueryState->QueryDeadlines.CancelAt = now + TDuration::MilliSeconds(queryRequest.GetCancelAfterMs());
@@ -414,14 +414,14 @@ public:
 
         if (CompileQuery(ctx)) {
             if (QueryState) {
-                QueryState->CpuTime += timer.GetTime();
+                QueryState->CpuTime += timer.GetTime(); 
             }
             return;
         }
 
         PerformQuery(ctx);
         if (QueryState) {
-            QueryState->CpuTime += timer.GetTime();
+            QueryState->CpuTime += timer.GetTime(); 
         }
     }
 
@@ -506,12 +506,12 @@ public:
                 break;
         }
 
-        NCpuTime::TCpuTimer timer;
+        NCpuTime::TCpuTimer timer; 
         PerformQuery(ctx);
 
-        // PerformQuery can reset QueryState
+        // PerformQuery can reset QueryState 
         if (QueryState) {
-            QueryState->CpuTime += timer.GetTime();
+            QueryState->CpuTime += timer.GetTime(); 
         }
     }
 
@@ -610,7 +610,7 @@ public:
 
             QueryCleanup(ctx);
         } else {
-            NCpuTime::TCpuTimer timer(QueryState->CpuTime);
+            NCpuTime::TCpuTimer timer(QueryState->CpuTime); 
             ContinueQueryProcess(ctx);
         }
     }
@@ -739,7 +739,7 @@ public:
             HFunc(TEvKqp::TEvQueryRequest, HandlePerformQuery);
             HFunc(TEvKqp::TEvCompileResponse, HandlePerformQuery);
             HFunc(TEvKqp::TEvCloseSessionRequest, HandlePerformQuery);
-            HFunc(TEvKqp::TEvPingSessionRequest, HandlePerformQuery);
+            HFunc(TEvKqp::TEvPingSessionRequest, HandlePerformQuery); 
             HFunc(TEvKqp::TEvContinueProcess, HandlePerformQuery);
             HFunc(TEvKqp::TEvIdleTimeout, HandlePerformQuery);
             HFunc(TEvKqp::TEvInitiateSessionShutdown, HandleInitiateShutdown);
@@ -754,7 +754,7 @@ public:
             HFunc(TEvKqp::TEvQueryRequest, HandlePerformCleanup);
             HFunc(TEvKqp::TEvCompileResponse, HandlePerformCleanup);
             HFunc(TEvKqp::TEvCloseSessionRequest, HandlePerformCleanup);
-            HFunc(TEvKqp::TEvPingSessionRequest, HandlePerformCleanup);
+            HFunc(TEvKqp::TEvPingSessionRequest, HandlePerformCleanup); 
             HFunc(TEvKqp::TEvContinueProcess, HandlePerformCleanup);
             HFunc(TEvKqp::TEvIdleTimeout, HandlePerformCleanup);
             HFunc(TEvKqp::TEvInitiateSessionShutdown, HandleInitiateShutdown);
@@ -982,7 +982,7 @@ private:
             case NKikimrKqp::QUERY_ACTION_EXPLAIN: {
                 // Force reply flags
                 QueryState->ReplyFlags |= NKikimrKqp::QUERY_REPLY_FLAG_PLAN | NKikimrKqp::QUERY_REPLY_FLAG_AST;
-                if (!ExplainQuery(ctx, queryRequest.GetQuery(), queryType)) {
+                if (!ExplainQuery(ctx, queryRequest.GetQuery(), queryType)) { 
                     onBadRequest(QueryState->Error);
                     return;
                 }
@@ -995,7 +995,7 @@ private:
             }
 
             case NKikimrKqp::QUERY_ACTION_VALIDATE: {
-                if (!ValidateQuery(ctx, queryRequest.GetQuery(), queryType)) {
+                if (!ValidateQuery(ctx, queryRequest.GetQuery(), queryType)) { 
                     onBadRequest(QueryState->Error);
                     return;
                 }
@@ -1326,8 +1326,8 @@ private:
                 execSettings.StatsMode = statsMode;
                 execSettings.Deadlines = QueryState->QueryDeadlines;
                 execSettings.Limits = GetQueryLimits(Settings);
-                execSettings.RlPath = QueryState->RlPath;
-
+                execSettings.RlPath = QueryState->RlPath; 
+ 
                 QueryState->AsyncQueryResult = KqpHost->ExecuteScanQuery(query, isSql, std::move(*parameters),
                     requestActorId, execSettings);
                 break;
@@ -1554,10 +1554,10 @@ private:
     bool ReplyPrepareResult(const TKqpCompileResult::TConstPtr& compileResult, const TActorContext &ctx) {
         auto responseEv = MakeHolder<TEvKqp::TEvQueryResponse>();
         FillCompileStatus(compileResult, responseEv->Record);
-
-        auto ru = CpuTimeToUnit(TDuration::MicroSeconds(QueryState->CompileStats.GetCpuTimeUs()));
-        responseEv->Record.GetRef().SetConsumedRu(ru);
-
+ 
+        auto ru = CpuTimeToUnit(TDuration::MicroSeconds(QueryState->CompileStats.GetCpuTimeUs())); 
+        responseEv->Record.GetRef().SetConsumedRu(ru); 
+ 
         return Reply(std::move(responseEv), ctx);
     }
 
@@ -1568,8 +1568,8 @@ private:
         KqpHost->AbortTransaction(QueryState->TxId);
         FillTxInfo(responseEv->Record);
 
-        responseEv->Record.GetRef().SetConsumedRu(1);
-
+        responseEv->Record.GetRef().SetConsumedRu(1); 
+ 
         return Reply(std::move(responseEv), ctx);
     }
 
@@ -1670,7 +1670,7 @@ private:
 
         if (Settings.LongSession && status != Ydb::StatusIds::SUCCESS) {
             bool isQueryById = queryRequest.GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
-
+ 
             TMaybe<TString> invalidatedId;
             if (HasSchemeOrFatalIssues(queryResult.Issues())) {
                 auto compileResult = QueryState->QueryCompileResult;
@@ -1703,15 +1703,15 @@ private:
 
         auto& stats = queryResult.QueryStats;
         stats.SetDurationUs(queryDuration.MicroSeconds());
-        stats.SetWorkerCpuTimeUs(QueryState->CpuTime.MicroSeconds());
+        stats.SetWorkerCpuTimeUs(QueryState->CpuTime.MicroSeconds()); 
         if (QueryState->QueryCompileResult) {
             stats.MutableCompilation()->Swap(&QueryState->CompileStats);
         }
 
         auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
         if (IsExecuteAction(queryRequest.GetAction())) {
-            auto ru = CalcRequestUnit(stats);
-            record.SetConsumedRu(ru);
+            auto ru = CalcRequestUnit(stats); 
+            record.SetConsumedRu(ru); 
             CollectSystemViewQueryStats(ctx, &stats, queryDuration, queryRequest.GetDatabase(), ru);
             SlowLogQuery(ctx, requestInfo, queryDuration, status, [&record](){
                 ui64 resultsSize = 0;
@@ -1932,11 +1932,11 @@ private:
         auto& queryRequest = QueryState->Request;
 
         auto& queryResult = QueryState->QueryResult;
-        auto arena = queryResult.ProtobufArenaPtr;
-        if (arena) {
-            record.Realloc(arena);
-        }
-        auto& ev = record.GetRef();
+        auto arena = queryResult.ProtobufArenaPtr; 
+        if (arena) { 
+            record.Realloc(arena); 
+        } 
+        auto& ev = record.GetRef(); 
 
         bool replyResults = IsExecuteAction(queryRequest.GetAction());
         bool replyPlan = true;
@@ -1958,10 +1958,10 @@ private:
 
         if (replyResults) {
             for (auto& result : queryResult.Results) {
-                // If we have result it must be allocated on protobuf arena
-                Y_ASSERT(result->GetArena());
-                Y_ASSERT(ev.MutableResponse()->GetArena() == result->GetArena());
-                ev.MutableResponse()->AddResults()->Swap(result);
+                // If we have result it must be allocated on protobuf arena 
+                Y_ASSERT(result->GetArena()); 
+                Y_ASSERT(ev.MutableResponse()->GetArena() == result->GetArena()); 
+                ev.MutableResponse()->AddResults()->Swap(result); 
             }
         }
 
@@ -1994,7 +1994,7 @@ private:
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
             replyQueryParameters = replyQueryId = queryRequest.GetQueryCachePolicy().keep_in_cache();
             break;
-
+ 
         case NKikimrKqp::QUERY_ACTION_PARSE:
         case NKikimrKqp::QUERY_ACTION_VALIDATE:
             replyQueryParameters = true;

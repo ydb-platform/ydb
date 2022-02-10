@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             STFUNC(StateFunc)
             {
                 Y_UNUSED(ev);
-                ChildId = ctx.RegisterWithSameMailbox(new TChildActor());
+                ChildId = ctx.RegisterWithSameMailbox(new TChildActor()); 
                 ctx.Send(ChildId, new TEvents::TEvPing());
             }
 

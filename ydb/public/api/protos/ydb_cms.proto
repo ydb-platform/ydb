@@ -29,7 +29,7 @@ message ComputationalUnits {
     uint64 count = 3;
 }
 
-// Computational unit allocated for database. Used to register
+// Computational unit allocated for database. Used to register 
 // externally allocated computational resources in CMS.
 message AllocatedComputationalUnit {
     // Required. Computational unit host name.
@@ -96,12 +96,12 @@ message DatabaseQuotas {
     uint32 ttl_min_run_internal_seconds = 4;
 }
 
-// Request to create a new database. For successfull creation
-// specified database shouldn't exist. At least one storage
-// unit should be requested for the database.
-message CreateDatabaseRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-    // Required. Full path to database's home dir. Used as database ID.
+// Request to create a new database. For successfull creation 
+// specified database shouldn't exist. At least one storage 
+// unit should be requested for the database. 
+message CreateDatabaseRequest { 
+    Ydb.Operations.OperationParams operation_params = 1; 
+    // Required. Full path to database's home dir. Used as database ID. 
     string path = 2;
     oneof resources_kind {
         // Resources to allocate for database by CMS.
@@ -114,7 +114,7 @@ message CreateDatabaseRequest {
     // Additional database options.
     DatabaseOptions options = 4;
     // Attach attributes to database.
-    map<string, string> attributes = 5;
+    map<string, string> attributes = 5; 
     // Optional quotas for schema operations
     SchemaOperationQuotas schema_operation_quotas = 8;
     // Optional idempotency key
@@ -123,26 +123,26 @@ message CreateDatabaseRequest {
     DatabaseQuotas database_quotas = 10;
 }
 
-message CreateDatabaseResponse {
-    Ydb.Operations.Operation operation = 1;
+message CreateDatabaseResponse { 
+    Ydb.Operations.Operation operation = 1; 
 }
 
-// Get current database status.
-message GetDatabaseStatusRequest {
-    // Required. Full path to database's home dir.
+// Get current database status. 
+message GetDatabaseStatusRequest { 
+    // Required. Full path to database's home dir. 
     string path = 1;
     // Operation parameters
     Ydb.Operations.OperationParams operation_params = 2;
 }
 
-message GetDatabaseStatusResponse {
+message GetDatabaseStatusResponse { 
     // operation.result holds GetDatabaseStatusResult
-    Ydb.Operations.Operation operation = 1;
+    Ydb.Operations.Operation operation = 1; 
 }
 
-message GetDatabaseStatusResult {
+message GetDatabaseStatusResult { 
     enum State {
-        STATE_UNSPECIFIED = 0;
+        STATE_UNSPECIFIED = 0; 
         CREATING = 1;
         RUNNING = 2;
         REMOVING = 3;
@@ -150,9 +150,9 @@ message GetDatabaseStatusResult {
         CONFIGURING = 5;
     }
 
-    // Full path to database's home dir.
+    // Full path to database's home dir. 
     string path = 1;
-    // Current database state.
+    // Current database state. 
     State state = 2;
     oneof resources_kind {
         // Database resources requested for allocation.
@@ -160,9 +160,9 @@ message GetDatabaseStatusResult {
         Resources required_shared_resources = 7;
         ServerlessResources serverless_resources = 8;
     }
-    // Database resources allocated by CMS.
+    // Database resources allocated by CMS. 
     Resources allocated_resources = 4;
-    // Externally allocated database resources registered in CMS.
+    // Externally allocated database resources registered in CMS. 
     repeated AllocatedComputationalUnit registered_resources = 5;
     // Current database generation. Incremented at each successful
     // alter request.
@@ -173,17 +173,17 @@ message GetDatabaseStatusResult {
     DatabaseQuotas database_quotas = 10;
 }
 
-// Change resources allocated for database.
-message AlterDatabaseRequest {
-    // Required. Full path to database's home dir.
+// Change resources allocated for database. 
+message AlterDatabaseRequest { 
+    // Required. Full path to database's home dir. 
     string path = 1;
-    // Additional computational units to allocate for database.
+    // Additional computational units to allocate for database. 
     repeated ComputationalUnits computational_units_to_add = 2;
     // Computational units to deallocate.
     repeated ComputationalUnits computational_units_to_remove = 3;
-    // Additional storage units to allocate for database.
+    // Additional storage units to allocate for database. 
     repeated StorageUnits storage_units_to_add = 4;
-    // Externally allocated computational units to register for database.
+    // Externally allocated computational units to register for database. 
     repeated AllocatedComputationalUnit computational_units_to_register = 5;
     // Externally allocated computational units to deregister.
     repeated AllocatedComputationalUnit computational_units_to_deregister = 6;
@@ -197,39 +197,39 @@ message AlterDatabaseRequest {
     string idempotency_key = 10;
     // Change quotas for the database
     DatabaseQuotas database_quotas = 11;
-    // Alter attributes. Leave the value blank to drop an attribute.
-    map<string, string> alter_attributes = 12;
+    // Alter attributes. Leave the value blank to drop an attribute. 
+    map<string, string> alter_attributes = 12; 
 }
 
-message AlterDatabaseResponse {
-    Ydb.Operations.Operation operation = 1;
+message AlterDatabaseResponse { 
+    Ydb.Operations.Operation operation = 1; 
 }
 
-// List all databases known by CMS.
-message ListDatabasesRequest {
+// List all databases known by CMS. 
+message ListDatabasesRequest { 
     // Operation parameters
     Ydb.Operations.OperationParams operation_params = 1;
 }
 
-message ListDatabasesResponse {
+message ListDatabasesResponse { 
     // operation.result holds ListDatabasesResult
-    Ydb.Operations.Operation operation = 1;
+    Ydb.Operations.Operation operation = 1; 
 }
 
-message ListDatabasesResult {
+message ListDatabasesResult { 
     repeated string paths = 1;
 }
 
-// Completely remove database and all his data.
-message RemoveDatabaseRequest {
-    // Required. Full path to database's home dir.
+// Completely remove database and all his data. 
+message RemoveDatabaseRequest { 
+    // Required. Full path to database's home dir. 
     string path = 1;
-
-    Ydb.Operations.OperationParams operation_params = 2;
+ 
+    Ydb.Operations.OperationParams operation_params = 2; 
 }
 
-message RemoveDatabaseResponse {
-    Ydb.Operations.Operation operation = 1;
+message RemoveDatabaseResponse { 
+    Ydb.Operations.Operation operation = 1; 
 }
 
 message StorageUnitDescription {

@@ -2,7 +2,7 @@
 
 #include "rpc_calls.h"
 #include "rpc_kqp_base.h"
-#include "rpc_common.h"
+#include "rpc_common.h" 
 
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -41,21 +41,21 @@ public:
     }
 
     void Proceed(const TActorContext &ctx) {
-        const auto req = GetProtoRequest();
+        const auto req = GetProtoRequest(); 
         const auto traceId = Request_->GetTraceId();
-        const auto requestType = Request_->GetRequestType();
+        const auto requestType = Request_->GetRequestType(); 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        SetAuthToken(ev, *Request_);
-        SetDatabase(ev, *Request_);
-
+        SetAuthToken(ev, *Request_); 
+        SetDatabase(ev, *Request_); 
+ 
         if (traceId) {
             ev->Record.SetTraceId(traceId.GetRef());
         }
 
-        if (requestType) {
-            ev->Record.SetRequestType(requestType.GetRef());
-        }
-
+        if (requestType) { 
+            ev->Record.SetRequestType(requestType.GetRef()); 
+        } 
+ 
         NYql::TIssues issues;
         if (CheckSession(req->session_id(), issues)) {
             ev->Record.MutableRequest()->SetSessionId(req->session_id());
@@ -76,9 +76,9 @@ public:
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record.GetRef();
-        SetCost(record.GetConsumedRu());
+        SetCost(record.GetConsumedRu()); 
         AddServerHintsIfAny(record);
-
+ 
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             const auto& kqpResponse = record.GetResponse();
             const auto& queryId = kqpResponse.GetPreparedQuery();
@@ -90,7 +90,7 @@ public:
 
             AddOptionalValue(opId, "id", queryId);
 
-            Ydb::Table::PrepareQueryResult queryResult;
+            Ydb::Table::PrepareQueryResult queryResult; 
             queryResult.set_query_id(ProtoToString(opId));
             for (const auto& queryParameter: queryParameters) {
                 Ydb::Type parameterType;

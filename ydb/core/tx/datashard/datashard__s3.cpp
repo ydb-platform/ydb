@@ -36,8 +36,8 @@ public:
 
         if (Self->State != TShardState::Ready &&
             Self->State != TShardState::Readonly &&
-            Self->State != TShardState::SplitSrcWaitForNoTxInFlight &&
-            Self->State != TShardState::Frozen)
+            Self->State != TShardState::SplitSrcWaitForNoTxInFlight && 
+            Self->State != TShardState::Frozen) 
         {
             SetError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE,
                         Sprintf("Wrong shard state: %" PRIu32 " tablet id: %" PRIu64, Self->State, Self->TabletID()));

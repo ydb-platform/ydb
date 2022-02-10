@@ -204,7 +204,7 @@ namespace NKikimr {
         }
 
         void BeginApplyingLog(const TActorContext& ctx) {
-            auto replayerId = ctx.RegisterWithSameMailbox(CreateRecoveryLogReplayer(ctx.SelfID, LocRecCtx));
+            auto replayerId = ctx.RegisterWithSameMailbox(CreateRecoveryLogReplayer(ctx.SelfID, LocRecCtx)); 
             ActiveActors.Insert(replayerId);
             Become(&TThis::StateApplyRecoveryLog);
             VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::ApplyLog;

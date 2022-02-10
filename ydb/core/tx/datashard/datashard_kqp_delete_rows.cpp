@@ -37,20 +37,20 @@ public:
         void Apply(NUdf::IApplyContext& applyContext) const override {
             auto& engineCtx = *CheckedCast<TKqpDatashardApplyContext*>(&applyContext);
 
-            TVector<TCell> keyTuple(Owner.KeyIndices.size());
-            FillKeyTupleValue(Row, Owner.KeyIndices, Owner.RowTypes, keyTuple, Owner.Env);
-
+            TVector<TCell> keyTuple(Owner.KeyIndices.size()); 
+            FillKeyTupleValue(Row, Owner.KeyIndices, Owner.RowTypes, keyTuple, Owner.Env); 
+ 
             if (engineCtx.Host->IsPathErased(Owner.TableId)) {
                 return;
             }
 
-            if (!engineCtx.Host->IsMyKey(Owner.TableId, keyTuple)) {
+            if (!engineCtx.Host->IsMyKey(Owner.TableId, keyTuple)) { 
                 return;
             }
 
             ui64 nEraseRow = Owner.ShardTableStats.NEraseRow;
 
-            engineCtx.Host->EraseRow(Owner.TableId, keyTuple);
+            engineCtx.Host->EraseRow(Owner.TableId, keyTuple); 
 
             if (i64 delta = Owner.ShardTableStats.NEraseRow - nEraseRow; delta > 0) {
                 Owner.TaskTableStats.NEraseRow += delta;
@@ -94,12 +94,12 @@ public:
 
 public:
     TKqpDeleteRowsWrapper(TComputationMutables& mutables, TKqpDatashardComputeContext& computeCtx,
-        const TTableId& tableId, IComputationNode* rowsNode, TVector<NUdf::TDataTypeId> rowTypes, TVector<ui32> keyIndices, const TTypeEnvironment& env)
+        const TTableId& tableId, IComputationNode* rowsNode, TVector<NUdf::TDataTypeId> rowTypes, TVector<ui32> keyIndices, const TTypeEnvironment& env) 
         : TBase(mutables)
         , TableId(tableId)
         , RowsNode(rowsNode)
-        , RowTypes(std::move(rowTypes))
-        , KeyIndices(std::move(keyIndices))
+        , RowTypes(std::move(rowTypes)) 
+        , KeyIndices(std::move(keyIndices)) 
         , Env(env)
         , ShardTableStats(computeCtx.GetDatashardCounters())
         , TaskTableStats(computeCtx.GetTaskCounters(computeCtx.GetCurrentTaskId())) {}
@@ -112,8 +112,8 @@ private:
 private:
     TTableId TableId;
     IComputationNode* RowsNode;
-    const TVector<NUdf::TDataTypeId> RowTypes;
-    const TVector<ui32> KeyIndices;
+    const TVector<NUdf::TDataTypeId> RowTypes; 
+    const TVector<ui32> KeyIndices; 
     const TTypeEnvironment& Env;
     TKqpTableStats& ShardTableStats;
     TKqpTableStats& TaskTableStats;
@@ -138,12 +138,12 @@ IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeF
     MKQL_ENSURE_S(tableKeyTypes.size() == rowType->GetMembersCount(), "Table key column count mismatch"
         << ", expected: " << tableKeyTypes.size()
         << ", actual: " << rowType->GetMembersCount());
-
-    THashMap<TString, ui32> inputIndex;
-    TVector<NUdf::TDataTypeId> rowTypes(rowType->GetMembersCount());
-    for (ui32 i = 0; i < rowType->GetMembersCount(); ++i) {
-        const auto& name = rowType->GetMemberName(i);
-        MKQL_ENSURE_S(inputIndex.emplace(TString(name), i).second);
+ 
+    THashMap<TString, ui32> inputIndex; 
+    TVector<NUdf::TDataTypeId> rowTypes(rowType->GetMembersCount()); 
+    for (ui32 i = 0; i < rowType->GetMembersCount(); ++i) { 
+        const auto& name = rowType->GetMemberName(i); 
+        MKQL_ENSURE_S(inputIndex.emplace(TString(name), i).second); 
 
         auto memberType = rowType->GetMemberType(i);
         auto typeId = memberType->IsOptional()
@@ -151,22 +151,22 @@ IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeF
             : AS_TYPE(TDataType, memberType)->GetSchemeType();
 
         rowTypes[i] = typeId;
-    }
+    } 
 
-    TVector<ui32> keyIndices(tableKeyTypes.size());
-    for (ui32 i = 0; i < tableKeyTypes.size(); i++) {
-        auto it = inputIndex.find(tableKeyTypes[i].second);
+    TVector<ui32> keyIndices(tableKeyTypes.size()); 
+    for (ui32 i = 0; i < tableKeyTypes.size(); i++) { 
+        auto it = inputIndex.find(tableKeyTypes[i].second); 
 
         MKQL_ENSURE_S(rowTypes[it->second] == tableKeyTypes[i].first, "Key type mismatch"
             << ", column: " << tableKeyTypes[i].second
             << ", expected: " << tableKeyTypes[i].first
             << ", actual: " << rowTypes[it->second]);
 
-        keyIndices[i] = it->second;
-    }
-
+        keyIndices[i] = it->second; 
+    } 
+ 
     return new TKqpDeleteRowsWrapper(ctx.Mutables, computeCtx, tableId,
-        LocateNode(ctx.NodeLocator, *rowsNode.GetNode()), std::move(rowTypes), std::move(keyIndices), ctx.Env);
+        LocateNode(ctx.NodeLocator, *rowsNode.GetNode()), std::move(rowTypes), std::move(keyIndices), ctx.Env); 
 }
 
 } // namespace NMiniKQL

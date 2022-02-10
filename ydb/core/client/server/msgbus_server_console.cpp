@@ -66,7 +66,7 @@ public:
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeConsoleID(StateStorageGroup), pipeConfig);
-        ConsolePipe = ctx.RegisterWithSameMailbox(pipe);
+        ConsolePipe = ctx.RegisterWithSameMailbox(pipe); 
 
         // Don't print security token.
         Request.ClearSecurityToken();

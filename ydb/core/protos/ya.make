@@ -125,7 +125,7 @@ SRCS(
     grpc_pq_old.proto
     grpc_status_proxy.proto
     ydb_result_set_old.proto
-    ydb_table_impl.proto
+    ydb_table_impl.proto 
     scheme_board.proto
     scheme_board_mon.proto
     sys_view.proto

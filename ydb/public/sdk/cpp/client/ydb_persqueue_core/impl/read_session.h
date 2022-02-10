@@ -31,7 +31,7 @@ struct IErrorHandler : public TThrRefBase {
     virtual void AbortSession(TSessionClosedEvent&& closeEvent) = 0;
 
     void AbortSession(EStatus statusCode, NYql::TIssues&& issues) {
-        AbortSession(TSessionClosedEvent(statusCode, std::move(issues)));
+        AbortSession(TSessionClosedEvent(statusCode, std::move(issues))); 
     }
 
     void AbortSession(EStatus statusCode, const TString& message) {
@@ -41,7 +41,7 @@ struct IErrorHandler : public TThrRefBase {
     }
 
     void AbortSession(TPlainStatus&& status) {
-        AbortSession(TSessionClosedEvent(std::move(status)));
+        AbortSession(TSessionClosedEvent(std::move(status))); 
     }
 };
 
@@ -492,7 +492,7 @@ public:
 
     bool AddToCommitRanges(const ui64 startOffset, const ui64 endOffset, bool rangesMode) {
         if (ClientCommits.Intersects(startOffset, endOffset) || startOffset < MaxCommittedOffset) {
-            ThrowFatalError(TStringBuilder() << "Invalid offset range [" << startOffset << ", " << endOffset << ") : range must start from "
+            ThrowFatalError(TStringBuilder() << "Invalid offset range [" << startOffset << ", " << endOffset << ") : range must start from " 
                                              << MaxCommittedOffset << " or has some offsets that are committed already. Partition stream id: " << PartitionStreamId << Endl);
             return false;
         }
@@ -1020,7 +1020,7 @@ public:
 
     ~TReadSession();
 
-    void Start();
+    void Start(); 
 
     NThreading::TFuture<void> WaitEvent() override;
     TVector<TReadSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount, size_t maxByteSize) override;
@@ -1039,20 +1039,20 @@ public:
     void AddTopic(const TTopicReadSettings& topicReadSettings) /*override*/ {
         Y_UNUSED(topicReadSettings);
         // TODO: implement.
-        ThrowFatalError("Method \"AddTopic\" is not implemented");
+        ThrowFatalError("Method \"AddTopic\" is not implemented"); 
     }
 
     void RemoveTopic(const TString& path) /*override*/ {
         Y_UNUSED(path);
         // TODO: implement.
-        ThrowFatalError("Method \"RemoveTopic\" is not implemented");
+        ThrowFatalError("Method \"RemoveTopic\" is not implemented"); 
     }
 
     void RemoveTopic(const TString& path, const TVector<ui64>& partitionGruops) /*override*/ {
         Y_UNUSED(path);
         Y_UNUSED(partitionGruops);
         // TODO: implement.
-        ThrowFatalError("Method \"RemoveTopic\" is not implemented");
+        ThrowFatalError("Method \"RemoveTopic\" is not implemented"); 
     }
 
     void StopReadingData() override;

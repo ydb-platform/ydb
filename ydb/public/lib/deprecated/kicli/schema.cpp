@@ -51,8 +51,8 @@ const TType TType::Utf8(NScheme::NTypeIds::Utf8);
 const TType TType::String(NScheme::NTypeIds::String);
 const TType TType::String4k(NScheme::NTypeIds::String4k);
 const TType TType::String2m(NScheme::NTypeIds::String2m);
-const TType TType::Yson(NScheme::NTypeIds::Yson);
-const TType TType::Json(NScheme::NTypeIds::Json);
+const TType TType::Yson(NScheme::NTypeIds::Yson); 
+const TType TType::Json(NScheme::NTypeIds::Json); 
 const TType TType::JsonDocument(NScheme::NTypeIds::JsonDocument);
 const TType TType::Timestamp(NScheme::NTypeIds::Timestamp);
 

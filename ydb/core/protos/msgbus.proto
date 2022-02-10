@@ -129,7 +129,7 @@ message TResponse {
     optional bytes ProxyErrors = 6;
 
     optional NKikimrIssues.TStatusIds.EStatusCode StatusCode = 7;
-    repeated Ydb.Issue.IssueMessage Issues = 8;
+    repeated Ydb.Issue.IssueMessage Issues = 8; 
 
     optional uint32 ExecutionEngineStatus = 100 [
         (CommonDescription) = "MiniKQL engine processing status, if OK - see ExecutionEngineResponseStatus",
@@ -453,7 +453,7 @@ message TFlatDescribeResponse {
     optional int32 SchemeStatus = 4;
 
     optional NKikimrIssues.TStatusIds.EStatusCode StatusCode = 7;
-    repeated Ydb.Issue.IssueMessage Issues = 8;
+    repeated Ydb.Issue.IssueMessage Issues = 8; 
 };
 
 message TSchemeOperationStatus {
@@ -713,7 +713,7 @@ message TConsoleRequest {
         NKikimrConsole.TGetNodeConfigItemsRequest GetNodeConfigItemsRequest = 9;
         NKikimrConsole.TGetNodeConfigRequest GetNodeConfigRequest = 10;
         NKikimrConsole.TRemoveTenantRequest RemoveTenantRequest = 11;
-        Ydb.Operations.GetOperationRequest GetOperationRequest = 12;
+        Ydb.Operations.GetOperationRequest GetOperationRequest = 12; 
         NKikimrConsole.TCheckConfigUpdatesRequest CheckConfigUpdatesRequest = 13;
         NKikimrConsole.TListConfigValidatorsRequest ListConfigValidatorsRequest = 14;
         NKikimrConsole.TToggleConfigValidatorRequest ToggleConfigValidatorRequest = 15;
@@ -735,7 +735,7 @@ message TConsoleResponse {
         NKikimrConsole.TGetNodeConfigItemsResponse GetNodeConfigItemsResponse = 9;
         NKikimrConsole.TGetNodeConfigResponse GetNodeConfigResponse = 10;
         NKikimrConsole.TRemoveTenantResponse RemoveTenantResponse = 11;
-        Ydb.Operations.GetOperationResponse GetOperationResponse = 12;
+        Ydb.Operations.GetOperationResponse GetOperationResponse = 12; 
         NKikimrConsole.TCheckConfigUpdatesResponse CheckConfigUpdatesResponse = 13;
         NKikimrConsole.TListConfigValidatorsResponse ListConfigValidatorsResponse = 14;
         NKikimrConsole.TToggleConfigValidatorResponse ToggleConfigValidatorResponse = 15;

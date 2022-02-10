@@ -27,14 +27,14 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
     const NKikimrSchemeOp::TTableDescription& baseTableDescription = indexedTable.GetTableDescription();
 
     ui32 indexesCount = indexedTable.IndexDescriptionSize();
-    ui32 indexedTableShards = 0;
-    for (const auto& desc : indexedTable.GetIndexDescription()) {
-        if (desc.HasIndexImplTableDescription()) {
-            indexedTableShards += TTableInfo::ShardsToCreate(desc.GetIndexImplTableDescription());
-        } else {
-            indexedTableShards += 1;
-        }
-    }
+    ui32 indexedTableShards = 0; 
+    for (const auto& desc : indexedTable.GetIndexDescription()) { 
+        if (desc.HasIndexImplTableDescription()) { 
+            indexedTableShards += TTableInfo::ShardsToCreate(desc.GetIndexImplTableDescription()); 
+        } else { 
+            indexedTableShards += 1; 
+        } 
+    } 
     ui32 sequencesCount = indexedTable.SequenceDescriptionSize();
     ui32 baseShards = TTableInfo::ShardsToCreate(baseTableDescription);
     ui32 shardsToCreate = baseShards + indexedTableShards;
@@ -108,12 +108,12 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
     TTableColumns baseTableColumns = ExtractInfo(baseTableDescription);
     for (auto& indexDescription: indexedTable.GetIndexDescription()) {
         const auto& indexName = indexDescription.GetName();
-        bool uniformIndexTable = false;
-        if (indexDescription.HasIndexImplTableDescription()) {
-            if (indexDescription.GetIndexImplTableDescription().HasUniformPartitionsCount()) {
-                uniformIndexTable = true;
-            }
-        }
+        bool uniformIndexTable = false; 
+        if (indexDescription.HasIndexImplTableDescription()) { 
+            if (indexDescription.GetIndexImplTableDescription().HasUniformPartitionsCount()) { 
+                uniformIndexTable = true; 
+            } 
+        } 
 
         TPath indexPath = baseTablePath.Child(indexName);
         {
@@ -143,17 +143,17 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
             break;
         }
 
-        TIndexColumns indexKeys = ExtractInfo(indexDescription);
-        if (indexKeys.KeyColumns.empty()) {
+        TIndexColumns indexKeys = ExtractInfo(indexDescription); 
+        if (indexKeys.KeyColumns.empty()) { 
             TString msg = TStringBuilder() << "no key colums in index creation config";
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
         }
 
         if (!indexKeys.DataColumns.empty() && !AppData()->FeatureFlags.GetEnableDataColumnForIndexTable()) {
-            TString msg = TStringBuilder() << "It is not allowed to create index with data column";
+            TString msg = TStringBuilder() << "It is not allowed to create index with data column"; 
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, msg)};
-        }
-
+        } 
+ 
         TString explainErr;
         if (!IsCompatibleIndex(baseTableColumns, indexKeys, explainErr)) {
             TString msg = TStringBuilder() << "IsCompatibleIndex fail with explain: " << explainErr;
@@ -176,7 +176,7 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
         if (impTableColumns.Keys.size() > domainInfo->GetSchemeLimits().MaxTableKeyColumns) {
             TString msg = TStringBuilder()
                 << "Too many key indexed, index table reaches the limit of the maximum keys colums count"
-                << ": indexing colums: " << indexKeys.KeyColumns.size()
+                << ": indexing colums: " << indexKeys.KeyColumns.size() 
                 << ": requested keys colums for index table: " << impTableColumns.Keys.size()
                 << ". Limit: " << domainInfo->GetSchemeLimits().MaxTableKeyColumns;
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
@@ -285,9 +285,9 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
             TTableColumns impTableColumns = indexes.at(indexDescription.GetName());
 
             auto& indexImplTableDescription = *scheme.MutableCreateTable();
-            // This description provided by user to override partition policy
-            const auto& userIndexDesc = indexDescription.GetIndexImplTableDescription();
-            indexImplTableDescription = CalcImplTableDesc(baseTableDescription, impTableColumns, userIndexDesc);
+            // This description provided by user to override partition policy 
+            const auto& userIndexDesc = indexDescription.GetIndexImplTableDescription(); 
+            indexImplTableDescription = CalcImplTableDesc(baseTableDescription, impTableColumns, userIndexDesc); 
 
             result.push_back(CreateNewTable(NextPartId(nextId, result), scheme));
         }

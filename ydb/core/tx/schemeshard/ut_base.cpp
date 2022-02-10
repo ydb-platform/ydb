@@ -681,8 +681,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             "Columns { Name: \"key2\"       Type: \"Utf8\"}"
                             "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
                             "Columns { Name: \"Value\"      Type: \"Utf8\"}"
-                            "Columns { Name: \"YaValue\"    Type: \"Yson\"}"
-                            "Columns { Name: \"MoreValue\"  Type: \"Json\"}"
+                            "Columns { Name: \"YaValue\"    Type: \"Yson\"}" 
+                            "Columns { Name: \"MoreValue\"  Type: \"Json\"}" 
                             "KeyColumnNames: [\"RowId\", \"key1\", \"key2\"]"
                         );
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
@@ -691,19 +691,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             "KeyColumnNames: [\"key\"]"
                         );
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"Table3\""
-                            "Columns { Name: \"RowId\"      Type: \"Yson\"}"
+                        "Name: \"Table3\"" 
+                            "Columns { Name: \"RowId\"      Type: \"Yson\"}" 
                             "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                             "KeyColumnNames: [\"RowId\"]");
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"Table3\""
-                            "Columns { Name: \"RowId\"      Type: \"Json\"}"
+                        "Name: \"Table3\"" 
+                            "Columns { Name: \"RowId\"      Type: \"Json\"}" 
                             "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                             "KeyColumnNames: [\"RowId\"]");
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"Table3\""
-                            "Columns { Name: \"RowId\"      Type: \"Json\"}"
-                            "Columns { Name: \"key1\"       Type: \"Uint32\"}"
+                        "Name: \"Table3\"" 
+                            "Columns { Name: \"RowId\"      Type: \"Json\"}" 
+                            "Columns { Name: \"key1\"       Type: \"Uint32\"}" 
                             "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                             "KeyColumnNames: [\"RowId\", \"key1\"]");
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
@@ -1052,11 +1052,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               Name: "UserDefinedIndexByValues"
               KeyColumnNames: ["value0", "value1"]
             }
-            IndexDescription {
-              Name: "UserDefinedIndexByValue0CoveringValue1"
-              KeyColumnNames: ["value0"]
-              DataColumnNames: ["value1"]
-            }
+            IndexDescription { 
+              Name: "UserDefinedIndexByValue0CoveringValue1" 
+              KeyColumnNames: ["value0"] 
+              DataColumnNames: ["value1"] 
+            } 
         )");
 
         TestModificationResult(runtime, txId-2, NKikimrScheme::StatusAccepted);
@@ -1069,8 +1069,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::PathVersionEqual(7),
                             NLs::Finished,
                             NLs::PathExist,
-                            NLs::PathsInsideDomain(9),
-                            NLs::ShardsInsideDomain(5),
+                            NLs::PathsInsideDomain(9), 
+                            NLs::ShardsInsideDomain(5), 
                             NLs::ChildrenCount(2)
                            });
 
@@ -1100,8 +1100,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                                NLs::PathExist,
                                                NLs::Finished,
                                                NLs::PathExist,
-                                               NLs::PathsInsideDomain(17),
-                                               NLs::ShardsInsideDomain(10)});
+                                               NLs::PathsInsideDomain(17), 
+                                               NLs::ShardsInsideDomain(10)}); 
 
         TestConsistentCopyTables(runtime, ++txId, "/", R"(
                        CopyTableDescriptions {
@@ -1119,8 +1119,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::PathVersionEqual(15),
                             NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathsInsideDomain(25),
-                            NLs::ShardsInsideDomain(15),
+                            NLs::PathsInsideDomain(25), 
+                            NLs::ShardsInsideDomain(15), 
                             NLs::ChildrenCount(6)
                            });
 
@@ -1153,15 +1153,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            });
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirA/dst2/UserDefinedIndexByValue0CoveringValue1"),
-                           {NLs::Finished,
+                           {NLs::Finished, 
                             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
                             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                            NLs::IndexKeys({"value0"}),
-                            NLs::IndexDataColumns({"value1"})});
-
+                            NLs::IndexKeys({"value0"}), 
+                            NLs::IndexDataColumns({"value1"})}); 
+ 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirA/dst2/UserDefinedIndexByValue0CoveringValue1/indexImplTable"),
-                           {NLs::Finished});
-
+                           {NLs::Finished}); 
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/seconddst1"),
                            {NLs::PathVersionEqual(3),
                             NLs::PathExist,
@@ -1174,7 +1174,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::PathVersionEqual(3),
                             NLs::PathExist,
                             NLs::Finished,
-                            NLs::IndexesCount(3),
+                            NLs::IndexesCount(3), 
                             NLs::CreatedAt(txId)
                            });
 
@@ -1195,8 +1195,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::PathVersionEqual(19),
                             NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathsInsideDomain(27),
-                            NLs::ShardsInsideDomain(17),
+                            NLs::PathsInsideDomain(27), 
+                            NLs::ShardsInsideDomain(17), 
                             NLs::ChildrenCount(8)
                            });
 
@@ -1745,11 +1745,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               Name: "UserDefinedIndexByValues"
               KeyColumnNames: ["value0", "value1"]
             }
-            IndexDescription {
-              Name: "UserDefinedIndexByValue0CoveringValue1"
-              KeyColumnNames: ["value0"]
-              DataColumnNames: ["value1"]
-            }
+            IndexDescription { 
+              Name: "UserDefinedIndexByValue0CoveringValue1" 
+              KeyColumnNames: ["value0"] 
+              DataColumnNames: ["value1"] 
+            } 
         )");
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/Table1"),
                            {NLs::NotFinished,
@@ -1768,7 +1768,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/Table1"),
                            {NLs::Finished,
                             NLs::PathVersionEqual(3),
-                            NLs::IndexesCount(4)});
+                            NLs::IndexesCount(4)}); 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirA/Table1/UserDefinedIndexByValue0"),
                            {NLs::Finished,
                             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
@@ -1791,17 +1791,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirA/Table1/UserDefinedIndexByValues/indexImplTable"),
                            {NLs::Finished});
 
-
+ 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirA/Table1/UserDefinedIndexByValue0CoveringValue1"),
-                           {NLs::Finished,
+                           {NLs::Finished, 
                             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
                             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                            NLs::IndexKeys({"value0"}),
-                            NLs::IndexDataColumns({"value1"})});
-
+                            NLs::IndexKeys({"value0"}), 
+                            NLs::IndexDataColumns({"value1"})}); 
+ 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirA/Table1/UserDefinedIndexByValue0CoveringValue1/indexImplTable"),
-                           {NLs::Finished});
-
+                           {NLs::Finished}); 
+ 
         TestDropTable(runtime, ++txId, "/MyRoot/DirA", "Table1");
         env.TestWaitNotification(runtime, 103);
 
@@ -1836,11 +1836,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               Name: "UserDefinedIndexByValue1"
               KeyColumnNames: ["value1"]
             }
-            IndexDescription {
-             Name: "UserDefinedIndexByValue0CoveringValue1"
-             KeyColumnNames: ["value0"]
-             DataColumnNames: ["value1"]
-           }
+            IndexDescription { 
+             Name: "UserDefinedIndexByValue0CoveringValue1" 
+             KeyColumnNames: ["value0"] 
+             DataColumnNames: ["value1"] 
+           } 
         )");
         env.TestWaitNotification(runtime, {txId, txId-1});
 
@@ -1851,7 +1851,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/copy"),
                            {NLs::Finished,
                             NLs::PathVersionEqual(3),
-                            NLs::IndexesCount(3)});
+                            NLs::IndexesCount(3)}); 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirA/copy/UserDefinedIndexByValue0"),
                            {NLs::Finished,
                             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
@@ -1866,16 +1866,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::IndexKeys({"value1"})});
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirA/copy/UserDefinedIndexByValue1/indexImplTable"),
                            {NLs::Finished});
-
+ 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirA/copy/UserDefinedIndexByValue0CoveringValue1"),
-                           {NLs::Finished,
+                           {NLs::Finished, 
                             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
                             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                            NLs::IndexKeys({"value0"}),
-                            NLs::IndexDataColumns({"value1"})});
-
+                            NLs::IndexKeys({"value0"}), 
+                            NLs::IndexDataColumns({"value1"})}); 
+ 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirA/copy/UserDefinedIndexByValue0CoveringValue1/indexImplTable"),
-                           {NLs::Finished});
+                           {NLs::Finished}); 
     }
 
     Y_UNIT_TEST(CreateIndexedTableRejects) { //+
@@ -2033,81 +2033,81 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             }
         )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
 
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
-            TableDescription {
-              Name: "Table2"
-              Columns { Name: "key"   Type: "Uint64" }
-              Columns { Name: "value0" Type: "Uint64" }
-              Columns { Name: "value1" Type: "Uint64" }
-              KeyColumnNames: ["key"]
-            }
-            IndexDescription {
-              Name: "UserDefinedIndexByValue0CoveringValue1"
-              KeyColumnNames: ["value0"]
-              DataColumnNames: ["value0"]
-            }
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"( 
+            TableDescription { 
+              Name: "Table2" 
+              Columns { Name: "key"   Type: "Uint64" } 
+              Columns { Name: "value0" Type: "Uint64" } 
+              Columns { Name: "value1" Type: "Uint64" } 
+              KeyColumnNames: ["key"] 
+            } 
+            IndexDescription { 
+              Name: "UserDefinedIndexByValue0CoveringValue1" 
+              KeyColumnNames: ["value0"] 
+              DataColumnNames: ["value0"] 
+            } 
         )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
-
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
-            TableDescription {
-              Name: "Table2"
-              Columns { Name: "key"   Type: "Uint64" }
-              Columns { Name: "value0" Type: "Uint64" }
-              Columns { Name: "value1" Type: "Uint64" }
-              KeyColumnNames: ["key"]
-            }
-            IndexDescription {
-              Name: "UserDefinedIndexByValue0CoveringValue1"
-              KeyColumnNames: ["value0"]
-              DataColumnNames: ["value0", "value1"]
-            }
+ 
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"( 
+            TableDescription { 
+              Name: "Table2" 
+              Columns { Name: "key"   Type: "Uint64" } 
+              Columns { Name: "value0" Type: "Uint64" } 
+              Columns { Name: "value1" Type: "Uint64" } 
+              KeyColumnNames: ["key"] 
+            } 
+            IndexDescription { 
+              Name: "UserDefinedIndexByValue0CoveringValue1" 
+              KeyColumnNames: ["value0"] 
+              DataColumnNames: ["value0", "value1"] 
+            } 
         )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
-
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
-            TableDescription {
-              Name: "Table2"
-              Columns { Name: "key"   Type: "Uint64" }
-              Columns { Name: "value0" Type: "Uint64" }
-              Columns { Name: "value1" Type: "Uint64" }
-              KeyColumnNames: ["key"]
-            }
-            IndexDescription {
-              Name: "UserDefinedIndexByValue0CoveringValue1"
-              KeyColumnNames: ["value0"]
-              DataColumnNames: ["key"]
-            }
+ 
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"( 
+            TableDescription { 
+              Name: "Table2" 
+              Columns { Name: "key"   Type: "Uint64" } 
+              Columns { Name: "value0" Type: "Uint64" } 
+              Columns { Name: "value1" Type: "Uint64" } 
+              KeyColumnNames: ["key"] 
+            } 
+            IndexDescription { 
+              Name: "UserDefinedIndexByValue0CoveringValue1" 
+              KeyColumnNames: ["value0"] 
+              DataColumnNames: ["key"] 
+            } 
         )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
-
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
-            TableDescription {
-              Name: "Table2"
-              Columns { Name: "key"   Type: "Uint64" }
-              Columns { Name: "value0" Type: "Uint64" }
-              Columns { Name: "value1" Type: "Uint64" }
-              KeyColumnNames: ["key"]
-            }
-            IndexDescription {
-              Name: "UserDefinedIndexByValue0CoveringValue1"
-              KeyColumnNames: ["value0"]
-              DataColumnNames: ["key", "value1"]
-            }
+ 
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"( 
+            TableDescription { 
+              Name: "Table2" 
+              Columns { Name: "key"   Type: "Uint64" } 
+              Columns { Name: "value0" Type: "Uint64" } 
+              Columns { Name: "value1" Type: "Uint64" } 
+              KeyColumnNames: ["key"] 
+            } 
+            IndexDescription { 
+              Name: "UserDefinedIndexByValue0CoveringValue1" 
+              KeyColumnNames: ["value0"] 
+              DataColumnNames: ["key", "value1"] 
+            } 
         )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
-
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
-            TableDescription {
-              Name: "Table2"
-              Columns { Name: "key"   Type: "Uint64" }
-              Columns { Name: "value0" Type: "Uint64" }
-              Columns { Name: "value1" Type: "Uint64" }
-              KeyColumnNames: ["key"]
-            }
-            IndexDescription {
-              Name: "UserDefinedIndexByValue0CoveringValue1"
-              KeyColumnNames: ["value0"]
-              DataColumnNames: ["blabla"]
-            }
+ 
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"( 
+            TableDescription { 
+              Name: "Table2" 
+              Columns { Name: "key"   Type: "Uint64" } 
+              Columns { Name: "value0" Type: "Uint64" } 
+              Columns { Name: "value1" Type: "Uint64" } 
+              KeyColumnNames: ["key"] 
+            } 
+            IndexDescription { 
+              Name: "UserDefinedIndexByValue0CoveringValue1" 
+              KeyColumnNames: ["value0"] 
+              DataColumnNames: ["blabla"] 
+            } 
         )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
-
+ 
         TestCreateTable(runtime, ++txId, "/MyRoot/DirA/Table1", R"(
               Name: "inside_table"
               Columns { Name: "key"   Type: "Uint64" }

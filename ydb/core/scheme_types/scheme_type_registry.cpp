@@ -28,7 +28,7 @@ TTypeRegistry::TTypeRegistry()
     RegisterType<TLargeBoundedString>();
     RegisterType<TUtf8>();
     RegisterType<TYson>();
-    RegisterType<TJson>();
+    RegisterType<TJson>(); 
     RegisterType<TJsonDocument>();
     RegisterType<TDecimal>();
     RegisterType<TDate>();

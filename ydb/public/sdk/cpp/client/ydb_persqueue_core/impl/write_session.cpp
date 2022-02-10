@@ -133,7 +133,7 @@ void TWriteSession::DoCdsRequest(TDuration delay) {
         if (any) {
             any->UnpackTo(&result);
         }
-        TStatus st(std::move(status));
+        TStatus st(std::move(status)); 
         if (auto sharedThis = weakThis.lock()) {
             sharedThis->OnCdsResponse(st, result);
         }
@@ -267,7 +267,7 @@ NThreading::TFuture<ui64> TWriteSession::GetInitSeqNo() {
     if (Settings.ValidateSeqNo_) {
         if (AutoSeqNoMode.Defined() && *AutoSeqNoMode) {
             DbDriverState->Log << TLOG_ERR << LogPrefix() << "Cannot call GetInitSeqNo in Auto SeqNo mode";
-            ThrowFatalError("Cannot call GetInitSeqNo in Auto SeqNo mode");
+            ThrowFatalError("Cannot call GetInitSeqNo in Auto SeqNo mode"); 
         }
         else
             AutoSeqNoMode = false;
@@ -303,7 +303,7 @@ ui64 TWriteSession::GetNextSeqNoImpl(const TMaybe<ui64>& seqNo) {
     if (seqNo.Defined()) {
         if (*AutoSeqNoMode) {
             DbDriverState->Log << TLOG_ERR << LogPrefix() << "Cannot call write() with defined SeqNo on WriteSession running in auto-seqNo mode";
-            ThrowFatalError(
+            ThrowFatalError( 
                     "Cannot call write() with defined SeqNo on WriteSession running in auto-seqNo mode"
             );
         } else {
@@ -311,7 +311,7 @@ ui64 TWriteSession::GetNextSeqNoImpl(const TMaybe<ui64>& seqNo) {
         }
     } else if (!(*AutoSeqNoMode)) {
         DbDriverState->Log << TLOG_ERR << LogPrefix() << "Cannot call write() without defined SeqNo on WriteSession running in manual-seqNo mode";
-        ThrowFatalError(
+        ThrowFatalError( 
                 "Cannot call write() without defined SeqNo on WriteSession running in manual-seqNo mode"
         );
     }
@@ -1185,7 +1185,7 @@ void TWriteSession::AbortImpl() {
 
 void TWriteSession::CloseImpl(EStatus statusCode, NYql::TIssues&& issues) {
     DbDriverState->Log << TLOG_INFO << LogPrefix() << "Write session will now close";
-    EventsQueue->Close(TSessionClosedEvent(statusCode, std::move(issues)));
+    EventsQueue->Close(TSessionClosedEvent(statusCode, std::move(issues))); 
     AbortImpl();
 }
 
@@ -1197,7 +1197,7 @@ void TWriteSession::CloseImpl(EStatus statusCode, const TString& message) {
 
 void TWriteSession::CloseImpl(TPlainStatus&& status) {
     DbDriverState->Log << TLOG_INFO << LogPrefix() << "Write session will now close";
-    EventsQueue->Close(TSessionClosedEvent(std::move(status)));
+    EventsQueue->Close(TSessionClosedEvent(std::move(status))); 
     AbortImpl();
 }
 
@@ -1228,7 +1228,7 @@ TSimpleBlockingWriteSession::TSimpleBlockingWriteSession(
     alteredSettings.EventHandlers_.SessionClosedHandler_ = [this](const TSessionClosedEvent& event) {this->HandleClosed(event); };
 
     Writer = std::make_shared<TWriteSession>(
-                alteredSettings, client, connections, dbDriverState
+                alteredSettings, client, connections, dbDriverState 
     );
     Writer->Start(TDuration::Max());
 }

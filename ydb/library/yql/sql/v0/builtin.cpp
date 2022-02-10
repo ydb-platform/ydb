@@ -418,7 +418,7 @@ public:
             return nullptr;
         }
 
-        auto parsed = ParseType(*literal, *ctx.Pool, ctx.Issues, Args[0]->GetPos());
+        auto parsed = ParseType(*literal, *ctx.Pool, ctx.Issues, Args[0]->GetPos()); 
         if (!parsed) {
             ctx.Error(Args[0]->GetPos()) << "Failed to parse type";
             return nullptr;
@@ -599,9 +599,9 @@ TNodePtr BuildFileNameArgument(TPosition pos, const TNodePtr& argument) {
     return new TLiteralStringAtom(pos, argument, "FilePath requires string literal as parameter");
 }
 
-class TYqlAtom final: public TCallNode {
+class TYqlAtom final: public TCallNode { 
 public:
-    TYqlAtom(TPosition pos, const TString& opName, const TVector<TNodePtr>& args)
+    TYqlAtom(TPosition pos, const TString& opName, const TVector<TNodePtr>& args) 
         : TCallNode(pos, opName, 1, 1, args)
     {}
 
@@ -613,7 +613,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlAtom(Pos, OpName, Args);
+        return new TYqlAtom(Pos, OpName, Args); 
     }
 };
 
@@ -1909,7 +1909,7 @@ struct TBuiltinFuncData {
 
             // Atom builtins
             {"asatom", BuildSimpleBuiltinFactoryCallback<TYqlAsAtom>()},
-            {"secureparam", BuildNamedBuiltinFactoryCallback<TYqlAtom>("SecureParam")},
+            {"secureparam", BuildNamedBuiltinFactoryCallback<TYqlAtom>("SecureParam")}, 
 
             {"void", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Void", 0, 0)},
             {"callable", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Callable", 2, 2)},
@@ -2007,10 +2007,10 @@ struct TBuiltinFuncData {
             {"flattenmembers", BuildNamedBuiltinFactoryCallback<TFlattenMembers>("FlattenMembers")},
 
             // File builtins
-            {"filepath", BuildNamedBuiltinFactoryCallback<TYqlAtom>("FilePath")},
-            {"filecontent", BuildNamedBuiltinFactoryCallback<TYqlAtom>("FileContent")},
-            {"folderpath", BuildNamedBuiltinFactoryCallback<TYqlAtom>("FolderPath") },
-            {"files", BuildNamedBuiltinFactoryCallback<TYqlAtom>("Files")},
+            {"filepath", BuildNamedBuiltinFactoryCallback<TYqlAtom>("FilePath")}, 
+            {"filecontent", BuildNamedBuiltinFactoryCallback<TYqlAtom>("FileContent")}, 
+            {"folderpath", BuildNamedBuiltinFactoryCallback<TYqlAtom>("FolderPath") }, 
+            {"files", BuildNamedBuiltinFactoryCallback<TYqlAtom>("Files")}, 
             {"parsefile", BuildSimpleBuiltinFactoryCallback<TYqlParseFileOp>()},
 
             // Misc builtins
@@ -2192,7 +2192,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     TString normalizedName(name);
     TString ns = to_lower(nameSpace);
     if (ns.empty()) {
-        TMaybe<TIssue> error = NormalizeName(pos, normalizedName);
+        TMaybe<TIssue> error = NormalizeName(pos, normalizedName); 
         if (!error.Empty()) {
             return new TInvalidBuiltin(pos, error->Message);
         }

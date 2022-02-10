@@ -79,7 +79,7 @@ public:
         TReleaseTabletsWaitActor* waitActor = nullptr;
         if (Self->MigrationFilter.GetWaitForTabletsToRise()) {
             waitActor = new TReleaseTabletsWaitActor(Self);
-            waitActorId = ctx.RegisterWithSameMailbox(waitActor);
+            waitActorId = ctx.RegisterWithSameMailbox(waitActor); 
             Self->SubActors.emplace_back(waitActor);
         }
 

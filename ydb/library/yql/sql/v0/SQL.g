@@ -32,7 +32,7 @@ sql_stmt_core:
   | declare_stmt
   | import_stmt
   | export_stmt
-  | alter_table_stmt
+  | alter_table_stmt 
   | do_stmt
   | define_action_or_subquery_stmt
   | evaluate_if_stmt
@@ -299,12 +299,12 @@ simple_values_source: expr_list | select_stmt;
 
 create_table_stmt: CREATE TABLE simple_table_ref LPAREN create_table_entry (COMMA create_table_entry)* RPAREN;
 create_table_entry: column_schema | table_constraint;
-
+ 
 alter_table_stmt: ALTER TABLE simple_table_ref alter_table_action;
-alter_table_action: alter_table_add_column | alter_table_drop_column;
-alter_table_add_column: ADD COLUMN? column_schema (COMMA ADD COLUMN? column_schema)*;
+alter_table_action: alter_table_add_column | alter_table_drop_column; 
+alter_table_add_column: ADD COLUMN? column_schema (COMMA ADD COLUMN? column_schema)*; 
 alter_table_drop_column: DROP COLUMN? id;
-
+ 
 column_schema: id_schema flex_type (NOT? NULL)?;
 column_order_by_specification: id (ASC | DESC)?;
 
@@ -470,7 +470,7 @@ keyword_in_uncompat:
 keyword_compat: (
     ABORT
   | ACTION
-  | ADD
+  | ADD 
   | AFTER
   | ALTER
   | ANALYZE
@@ -699,7 +699,7 @@ fragment Z:('z'|'Z');
 
 ABORT: A B O R T;
 ACTION: A C T I O N;
-ADD: A D D;
+ADD: A D D; 
 AFTER: A F T E R;
 ALL: A L L;
 ALTER: A L T E R;

@@ -1,4 +1,4 @@
-#include "yql_decimal.h"
+#include "yql_decimal.h" 
 
 #include <cstring>
 #include <ostream>
@@ -16,7 +16,7 @@ TUint128 GetDivider(ui8 scale) {
     return d;
 }
 
-bool IsError(TInt128 v) {
+bool IsError(TInt128 v) { 
     return v > Nan() || v < -Nan();
 }
 
@@ -119,7 +119,7 @@ namespace {
 }
 
 
-TInt128 FromString(const TStringBuf& str, ui8 precision, ui8 scale) {
+TInt128 FromString(const TStringBuf& str, ui8 precision, ui8 scale) { 
     if (scale > precision)
         return Err();
 

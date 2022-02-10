@@ -181,7 +181,7 @@ void PrintValue(IOutputStream& out, TValueParser& parser) {
             break;
 
         default:
-            ThrowFatalError(TStringBuilder()
+            ThrowFatalError(TStringBuilder() 
                 << "Unexpected type kind: " << parser.GetKind());
     }
 }
@@ -244,7 +244,7 @@ TMaybe<TValue> TryReadTable(TDriver driver, const NTable::TTableDescription& des
         if (lastWrittenPK) {
             settings.From(NTable::TKeyBound::Exclusive(*lastWrittenPK));
         }
-        auto result = session.ReadTable(fullTablePath, settings).ExtractValueSync();
+        auto result = session.ReadTable(fullTablePath, settings).ExtractValueSync(); 
         if (result.IsSuccess()) {
             iter = result;
         }
@@ -284,7 +284,7 @@ TMaybe<TValue> TryReadTable(TDriver driver, const NTable::TTableDescription& des
 
             // Next
             if (resultSetCurrent.Truncated()) {
-                auto resultSetStreamPart = nextResult.ExtractValueSync();
+                auto resultSetStreamPart = nextResult.ExtractValueSync(); 
                 if (!resultSetStreamPart.IsSuccess()) {
                     LOG_DEBUG("resultSetStreamPart is not successful, EOS# "
                         << (resultSetStreamPart.EOS() ? "true" : "false"));

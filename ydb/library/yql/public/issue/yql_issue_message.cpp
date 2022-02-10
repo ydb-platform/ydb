@@ -5,47 +5,47 @@
 
 #include <util/generic/deque.h>
 #include <util/generic/yexception.h>
-
+ 
 #include <tuple>
-
-namespace NYql {
-
-using namespace NIssue::NProto;
-
-template<typename TIssueMessage>
-TIssue IssueFromMessage(const TIssueMessage& issueMessage) {
-    TIssue topIssue;
+ 
+namespace NYql { 
+ 
+using namespace NIssue::NProto; 
+ 
+template<typename TIssueMessage> 
+TIssue IssueFromMessage(const TIssueMessage& issueMessage) { 
+    TIssue topIssue; 
     TDeque<std::pair<TIssue*, const TIssueMessage*>> queue;
-    queue.push_front(std::make_pair(&topIssue, &issueMessage));
-    while (!queue.empty()) {
-        TIssue& issue = *queue.back().first;
-        const auto& message = *queue.back().second;
-        queue.pop_back();
-        TPosition position(message.position().column(), message.position().row(), message.position().file());
-        TPosition endPosition(message.end_position().column(), message.end_position().row());
-        if (position.HasValue()) {
-            if (endPosition.HasValue()) {
-                issue = TIssue(position, endPosition, message.message());
-            } else {
-                issue = TIssue(position, message.message());
-            }
-        } else {
-            issue = TIssue(message.message());
-        }
-
+    queue.push_front(std::make_pair(&topIssue, &issueMessage)); 
+    while (!queue.empty()) { 
+        TIssue& issue = *queue.back().first; 
+        const auto& message = *queue.back().second; 
+        queue.pop_back(); 
+        TPosition position(message.position().column(), message.position().row(), message.position().file()); 
+        TPosition endPosition(message.end_position().column(), message.end_position().row()); 
+        if (position.HasValue()) { 
+            if (endPosition.HasValue()) { 
+                issue = TIssue(position, endPosition, message.message()); 
+            } else { 
+                issue = TIssue(position, message.message()); 
+            } 
+        } else { 
+            issue = TIssue(message.message()); 
+        } 
+ 
         for (const auto& subMessage : message.issues()) {
-            auto subIssue = new TIssue();
-            issue.AddSubIssue(subIssue);
-            queue.push_front(std::make_pair(subIssue, &subMessage));
-        }
+            auto subIssue = new TIssue(); 
+            issue.AddSubIssue(subIssue); 
+            queue.push_front(std::make_pair(subIssue, &subMessage)); 
+        } 
 
-        issue.SetCode(message.issue_code(), static_cast<ESeverity>(message.severity()));
-    }
-    return topIssue;
-}
-
-template<typename TIssueMessage>
-void IssuesFromMessage(const ::google::protobuf::RepeatedPtrField<TIssueMessage> &message, TIssues &issues) {
+        issue.SetCode(message.issue_code(), static_cast<ESeverity>(message.severity())); 
+    } 
+    return topIssue; 
+} 
+ 
+template<typename TIssueMessage> 
+void IssuesFromMessage(const ::google::protobuf::RepeatedPtrField<TIssueMessage> &message, TIssues &issues) { 
     issues.Clear();
     if (message.size()) {
         issues.Reserve(message.size());
@@ -54,7 +54,7 @@ void IssuesFromMessage(const ::google::protobuf::RepeatedPtrField<TIssueMessage>
     }
 }
 
-template<typename TIssueMessage>
+template<typename TIssueMessage> 
 void IssueToMessage(const TIssue& topIssue, TIssueMessage* issueMessage) {
     TDeque<std::pair<const TIssue*, TIssueMessage*>> queue;
     queue.push_front(std::make_pair(&topIssue, issueMessage));
@@ -81,10 +81,10 @@ void IssueToMessage(const TIssue& topIssue, TIssueMessage* issueMessage) {
             TIssueMessage* subMessage = message.add_issues();
             queue.push_front(std::make_pair(subIssue.Get(), subMessage));
         }
-    }
-}
-
-template<typename TIssueMessage>
+    } 
+} 
+ 
+template<typename TIssueMessage> 
 void IssuesToMessage(const TIssues& issues, ::google::protobuf::RepeatedPtrField<TIssueMessage> *message) {
     message->Clear();
     if (!issues)
@@ -93,48 +93,48 @@ void IssuesToMessage(const TIssues& issues, ::google::protobuf::RepeatedPtrField
     for (const auto &issue : issues) {
         IssueToMessage(issue, message->Add());
     }
-}
+} 
 
-template
-TIssue IssueFromMessage<Ydb::Issue::IssueMessage>(const Ydb::Issue::IssueMessage& issueMessage);
-template
-TIssue IssueFromMessage<NYql::NIssue::NProto::IssueMessage>(const NYql::NIssue::NProto::IssueMessage& issueMessage);
-
-template
+template 
+TIssue IssueFromMessage<Ydb::Issue::IssueMessage>(const Ydb::Issue::IssueMessage& issueMessage); 
+template 
+TIssue IssueFromMessage<NYql::NIssue::NProto::IssueMessage>(const NYql::NIssue::NProto::IssueMessage& issueMessage); 
+ 
+template 
 void IssuesFromMessage<Ydb::Issue::IssueMessage>(const ::google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& message, TIssues& issues);
-template
+template 
 void IssuesFromMessage<NYql::NIssue::NProto::IssueMessage>(const ::google::protobuf::RepeatedPtrField<NYql::NIssue::NProto::IssueMessage>& message, TIssues& issues);
-
-template
+ 
+template 
 void IssueToMessage<Ydb::Issue::IssueMessage>(const TIssue& topIssue, Ydb::Issue::IssueMessage* issueMessage);
-template
+template 
 void IssueToMessage<NYql::NIssue::NProto::IssueMessage>(const TIssue& topIssue, NYql::NIssue::NProto::IssueMessage* issueMessage);
-
-template
+ 
+template 
 void IssuesToMessage<Ydb::Issue::IssueMessage>(const TIssues& issues, ::google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* message);
-template
+template 
 void IssuesToMessage<NYql::NIssue::NProto::IssueMessage>(const TIssues& issues, ::google::protobuf::RepeatedPtrField<NYql::NIssue::NProto::IssueMessage>* message);
-
+ 
 NIssue::NProto::IssueMessage IssueToMessage(const TIssue& topIssue) {
-    NIssue::NProto::IssueMessage issueMessage;
+    NIssue::NProto::IssueMessage issueMessage; 
     IssueToMessage(topIssue, &issueMessage);
-    return issueMessage;
+    return issueMessage; 
 }
-
+ 
 TString IssueToBinaryMessage(const TIssue& issue) {
-    TString result;
-    Ydb::Issue::IssueMessage protobuf;
+    TString result; 
+    Ydb::Issue::IssueMessage protobuf; 
     IssueToMessage(issue, &protobuf);
     Y_PROTOBUF_SUPPRESS_NODISCARD protobuf.SerializeToString(&result);
-    return result;
-}
-
-TIssue IssueFromBinaryMessage(const TString& binaryMessage) {
-    Ydb::Issue::IssueMessage protobuf;
-    if (!protobuf.ParseFromString(binaryMessage)) {
-        ythrow yexception() << "unable to parse binary string as issue protobuf";
-    }
-    return IssueFromMessage(protobuf);
-}
-
-}
+    return result; 
+} 
+ 
+TIssue IssueFromBinaryMessage(const TString& binaryMessage) { 
+    Ydb::Issue::IssueMessage protobuf; 
+    if (!protobuf.ParseFromString(binaryMessage)) { 
+        ythrow yexception() << "unable to parse binary string as issue protobuf"; 
+    } 
+    return IssueFromMessage(protobuf); 
+} 
+ 
+} 

@@ -64,7 +64,7 @@ std::pair<TString, bool> TScanResult::GetLastKey() const {
 class TScanClient::TImpl : public TClientImplCommon<TScanClient::TImpl> {
 public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
-        : TClientImplCommon(std::move(connections), settings) {}
+        : TClientImplCommon(std::move(connections), settings) {} 
 
     TAsyncScanResult Scan(
             const TString& table, const TVector<TString>& columns,
@@ -88,8 +88,8 @@ public:
 
         auto promise = NThreading::NewPromise<TScanResult>();
 
-        auto extractor = [promise]
-            (google::protobuf::Any* any, TPlainStatus status) mutable {
+        auto extractor = [promise] 
+            (google::protobuf::Any* any, TPlainStatus status) mutable { 
                 Ydb::ClickhouseInternal::ScanResult result;
                 if (any) {
                     any->UnpackTo(&result);
@@ -97,7 +97,7 @@ public:
 //                Cerr << result << Endl;
 
                 TScanResult val(new TScanResult::TResultImpl(std::move(result)),
-                   TStatus(std::move(status)));
+                   TStatus(std::move(status))); 
 
                 promise.SetValue(std::move(val));
             };
@@ -107,7 +107,7 @@ public:
                     extractor,
                     &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncScan,
                     DbDriverState_,
-                    INITIAL_DEFERRED_CALL_DELAY,
+                    INITIAL_DEFERRED_CALL_DELAY, 
                     TRpcRequestSettings::Make(settings),
                     settings.ClientTimeout_,
                     settings.Endpoint_);
@@ -343,7 +343,7 @@ class TMetaClient::TImpl : public TClientImplCommon<TMetaClient::TImpl> {
 
 public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
-        : TClientImplCommon(std::move(connections), settings) {}
+        : TClientImplCommon(std::move(connections), settings) {} 
 
     TAsyncGetShardLocationsResult GetShardLocations(
             const TVector<ui64>& tabletIds,
@@ -356,15 +356,15 @@ public:
 
         auto promise = NThreading::NewPromise<TGetShardLocationsResult>();
 
-        auto extractor = [promise]
-            (google::protobuf::Any* any, TPlainStatus status) mutable {
+        auto extractor = [promise] 
+            (google::protobuf::Any* any, TPlainStatus status) mutable { 
                 Ydb::ClickhouseInternal::GetShardLocationsResult result;
                 if (any) {
                     any->UnpackTo(&result);
                 }
 
                 TGetShardLocationsResult val(new TGetShardLocationsResult::TResultImpl(std::move(result)),
-                   TStatus(std::move(status)));
+                   TStatus(std::move(status))); 
 
                 promise.SetValue(std::move(val));
             };
@@ -374,7 +374,7 @@ public:
                     extractor,
                     &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncGetShardLocations,
                     DbDriverState_,
-                    INITIAL_DEFERRED_CALL_DELAY,
+                    INITIAL_DEFERRED_CALL_DELAY, 
                     TRpcRequestSettings::Make(settings),
                     settings.ClientTimeout_);
 
@@ -392,7 +392,7 @@ public:
 
         auto promise = NThreading::NewPromise<TDescribeTableResult>();
 
-        auto extractor = [promise]
+        auto extractor = [promise] 
             (google::protobuf::Any* any, TPlainStatus status) mutable {
                 Ydb::ClickhouseInternal::DescribeTableResult result;
                 if (any) {
@@ -400,7 +400,7 @@ public:
                 }
 
                 TDescribeTableResult val(new TDescribeTableResult::TResultImpl(std::move(result)),
-                   TStatus(std::move(status)));
+                   TStatus(std::move(status))); 
 
                 promise.SetValue(std::move(val));
             };
@@ -419,7 +419,7 @@ public:
 
     template<class TProtoResult, class TResultWrapper>
     auto MakeResultExtractor(NThreading::TPromise<TResultWrapper> promise) {
-        return [promise = std::move(promise)]
+        return [promise = std::move(promise)] 
             (google::protobuf::Any* any, TPlainStatus status) mutable {
                 std::unique_ptr<TProtoResult> result;
                 if (any) {
@@ -429,7 +429,7 @@ public:
 
                 promise.SetValue(
                     TResultWrapper(
-                        TStatus(std::move(status)),
+                        TStatus(std::move(status)), 
                         std::move(result)));
             };
     }

@@ -21,8 +21,8 @@ public:
         , Cluster(cluster)
         , TxState(txState)
         , TransformCtx(transformCtx)
-        , CurrentMkqlIndex(0)
-    {}
+        , CurrentMkqlIndex(0) 
+    {} 
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;
@@ -30,7 +30,7 @@ public:
         const auto& kql = TransformCtx->GetPreparedKql();
 
         if (CurrentMkqlIndex >= kql.MkqlsSize()) {
-            return Finish(ctx);
+            return Finish(ctx); 
         }
 
         const auto& mkql = kql.GetMkqls(CurrentMkqlIndex);
@@ -92,29 +92,29 @@ public:
     }
 
 private:
-    TStatus Finish(TExprContext& ctx) {
-        const auto& kql = TransformCtx->GetPreparedKql();
-        if (!kql.GetEffects().empty()) {
-            YQL_ENSURE(kql.GetEffects().size() == 1);
-
-            auto& effect = kql.GetEffects(0);
-
-            TExprNode::TPtr expr;
-            if (!GetExpr(effect.GetNodeAst(), expr, ctx)) {
-                return TStatus::Error;
-            }
-
-            TVector<NKikimrKqp::TParameterBinding> bindings(effect.GetBindings().begin(),
-                effect.GetBindings().end());
-
-            bool preserveParams = !TransformCtx->Settings.GetCommitTx();
-            if (!AddDeferredEffect(TExprBase(expr), bindings, ctx, *TxState, *TransformCtx, preserveParams)) {
-                return TStatus::Error;
-            }
-        }
-        return TStatus::Ok;
-    }
-
+    TStatus Finish(TExprContext& ctx) { 
+        const auto& kql = TransformCtx->GetPreparedKql(); 
+        if (!kql.GetEffects().empty()) { 
+            YQL_ENSURE(kql.GetEffects().size() == 1); 
+ 
+            auto& effect = kql.GetEffects(0); 
+ 
+            TExprNode::TPtr expr; 
+            if (!GetExpr(effect.GetNodeAst(), expr, ctx)) { 
+                return TStatus::Error; 
+            } 
+ 
+            TVector<NKikimrKqp::TParameterBinding> bindings(effect.GetBindings().begin(), 
+                effect.GetBindings().end()); 
+ 
+            bool preserveParams = !TransformCtx->Settings.GetCommitTx(); 
+            if (!AddDeferredEffect(TExprBase(expr), bindings, ctx, *TxState, *TransformCtx, preserveParams)) { 
+                return TStatus::Error; 
+            } 
+        } 
+        return TStatus::Ok; 
+    } 
+ 
     bool Execute(const NKikimrKqp::TPreparedMkql& mkql, TFuture<IKqpGateway::TMkqlResult>& future) {
         if (YQL_CLOG_ACTIVE(DEBUG, ProviderKqp)) {
             TString mkqlText;

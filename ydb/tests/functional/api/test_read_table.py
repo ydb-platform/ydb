@@ -315,7 +315,7 @@ class TestReadTableWithTabletKills(AbstractReadTableTest):
                     data_chunks.append(data)
                     total_rows += len(data.rows)
                     logger.debug(iteration)
-                except ydb.Unavailable as e:
+                except ydb.Unavailable as e: 
                     self.logger.debug("received error, %s", e)
                     continue
 

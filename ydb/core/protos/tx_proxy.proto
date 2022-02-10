@@ -57,17 +57,17 @@ message TKeyRange {
 };
 
 message TReadTableTransaction {
-    enum EVersion {
-        UNSPECIFIED = 0;
-        YDB_V1 = 1;
-    }
+    enum EVersion { 
+        UNSPECIFIED = 0; 
+        YDB_V1 = 1; 
+    } 
     optional string Path = 1;
     optional bool Ordered = 2 [default = false];
     optional bool AllowDuplicates = 3 [default = false];
     repeated string Columns = 4; // All by default.
     optional TKeyRange KeyRange = 5;
     optional uint64 RowLimit = 6 [default = 0]; // All rows by default.
-    optional uint32 ApiVersion = 7;
+    optional uint32 ApiVersion = 7; 
     optional uint64 SnapshotStep = 8;
     optional uint64 SnapshotTxId = 9;
 };
@@ -162,9 +162,9 @@ message TMiniKQLTransaction {
 
 message TMiniKQLCompileResults {
     optional bytes CompiledProgram = 1;
-    repeated Ydb.Issue.IssueMessage ProgramCompileErrors = 2;
+    repeated Ydb.Issue.IssueMessage ProgramCompileErrors = 2; 
     optional bytes CompiledParams = 20;
-    repeated Ydb.Issue.IssueMessage ParamsCompileErrors = 21;
+    repeated Ydb.Issue.IssueMessage ParamsCompileErrors = 21; 
 };
 
 message TTransaction {
@@ -214,7 +214,7 @@ message TEvProposeTransactionStatus {
     optional fixed64 Step = 3;
 
     optional NKikimrIssues.TStatusIds.EStatusCode StatusCode = 7;
-    repeated Ydb.Issue.IssueMessage Issues = 8;
+    repeated Ydb.Issue.IssueMessage Issues = 8; 
 
     optional uint32 ExecutionEngineStatus = 10;
     optional uint32 ExecutionEngineResponseStatus = 11;
@@ -242,7 +242,7 @@ message TEvProposeTransactionStatus {
     optional fixed64 DataShardTabletId = 40;
 
     optional bytes SerializedReadTableResponse = 50;
-    optional uint32 ReadTableResponseVersion = 51;
+    optional uint32 ReadTableResponseVersion = 51; 
 }
 
 message TEvNavigate {

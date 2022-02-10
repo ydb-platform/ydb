@@ -92,7 +92,7 @@
 #include <library/cpp/actors/interconnect/interconnect.h>
 
 #include <library/cpp/grpc/server/actors/logger.h>
-
+ 
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
 #include <util/system/env.h>
@@ -246,12 +246,12 @@ namespace Tests {
 
     void TServer::EnableGRpc(const NGrpc::TServerOptions& options) {
         GRpcServer.reset(new NGrpc::TGRpcServer(options));
-        auto grpcService = new NGRpcProxy::TGRpcService();
+        auto grpcService = new NGRpcProxy::TGRpcService(); 
 
         auto system(Runtime->GetAnyNodeActorSystem());
         auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(Settings->AppConfig);
         auto grpcRequestProxyId = system->Register(grpcRequestProxy, TMailboxType::ReadAsFilled);
-        system->RegisterLocalService(NGRpcService::CreateGRpcRequestProxyId(), grpcRequestProxyId);
+        system->RegisterLocalService(NGRpcService::CreateGRpcRequestProxyId(), grpcRequestProxyId); 
         auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled);
         system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);
 
@@ -279,27 +279,27 @@ namespace Tests {
             system->Register(NGRpcService::CreateGrpcEndpointPublishActor(desc.Get()), TMailboxType::ReadAsFilled, appData.UserPoolId);
         }
 
-        auto future = grpcService->Prepare(
+        auto future = grpcService->Prepare( 
             system,
             NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
             NMsgBusProxy::CreateMsgBusProxyId(),
             counters
         );
-        auto startCb = [grpcService] (NThreading::TFuture<void> result) {
-            if (result.HasException()) {
-                try {
-                    result.GetValue();
-                } catch (const std::exception& ex) {
-                    Y_FAIL("Unable to prepare GRpc service: %s", ex.what());
-                }
-            } else {
-                grpcService->Start();
-            }
-        };
-
-        future.Subscribe(startCb);
-
-        GRpcServer->AddService(grpcService);
+        auto startCb = [grpcService] (NThreading::TFuture<void> result) { 
+            if (result.HasException()) { 
+                try { 
+                    result.GetValue(); 
+                } catch (const std::exception& ex) { 
+                    Y_FAIL("Unable to prepare GRpc service: %s", ex.what()); 
+                } 
+            } else { 
+                grpcService->Start(); 
+            } 
+        }; 
+ 
+        future.Subscribe(startCb); 
+ 
+        GRpcServer->AddService(grpcService); 
         GRpcServer->AddService(new NGRpcService::TGRpcYdbExportService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbImportService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbSchemeService(system, counters, grpcRequestProxyId));
@@ -310,7 +310,7 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcPQClusterDiscoveryService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NKesus::TKesusGRpcService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcCmsService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcDiscoveryService(system, counters, grpcRequestProxyId));
+        GRpcServer->AddService(new NGRpcService::TGRpcDiscoveryService(system, counters, grpcRequestProxyId)); 
         GRpcServer->AddService(new NGRpcService::TGRpcYdbExperimentalService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbClickhouseInternalService(system, counters, appData.InFlightLimiterRegistry, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbS3InternalService(system, counters, grpcRequestProxyId));
@@ -321,26 +321,26 @@ namespace Tests {
             GRpcServer->AddService(new NGRpcService::TGRpcYandexQueryService(system, counters, grpcRequestProxyId));
             GRpcServer->AddService(new NGRpcService::TGRpcYqPrivateTaskService(system, counters, grpcRequestProxyId));
         }
-        if (const auto& factory = Settings->GrpcServiceFactory) {
-            // All services enabled by default for ut
-            static const std::unordered_set<TString> dummy;
-            for (const auto& service : factory->Create(dummy, dummy, system, counters, grpcRequestProxyId)) {
-                GRpcServer->AddService(service);
-            }
-        }
+        if (const auto& factory = Settings->GrpcServiceFactory) { 
+            // All services enabled by default for ut 
+            static const std::unordered_set<TString> dummy; 
+            for (const auto& service : factory->Create(dummy, dummy, system, counters, grpcRequestProxyId)) { 
+                GRpcServer->AddService(service); 
+            } 
+        } 
         GRpcServer->AddService(new NGRpcService::TGRpcYdbLogStoreService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcAuthService(system, counters, grpcRequestProxyId));
-        GRpcServer->Start();
+        GRpcServer->Start(); 
     }
 
-    void TServer::EnableGRpc(ui16 port) {
-        EnableGRpc(NGrpc::TServerOptions()
-            .SetHost("localhost")
-            .SetPort(port)
+    void TServer::EnableGRpc(ui16 port) { 
+        EnableGRpc(NGrpc::TServerOptions() 
+            .SetHost("localhost") 
+            .SetPort(port) 
             .SetLogger(NGrpc::CreateActorSystemLogger(*Runtime->GetAnyNodeActorSystem(), NKikimrServices::GRPC_SERVER))
-        );
-    }
-
+        ); 
+    } 
+ 
     void TServer::SetupDomains(TAppPrepare &app) {
         const ui32 domainId = Settings->Domain;
         ui64 planResolution = Settings->DomainPlanResolution;
@@ -875,14 +875,14 @@ namespace Tests {
     }
 
     TServer::~TServer() {
-        if (Runtime->GetAppData().Mon) {
-            Runtime->GetAppData().Mon->Stop();
-        }
-
-        if (GRpcServer) {
-            GRpcServer->Stop();
-        }
-
+        if (Runtime->GetAppData().Mon) { 
+            Runtime->GetAppData().Mon->Stop(); 
+        } 
+ 
+        if (GRpcServer) { 
+            GRpcServer->Stop(); 
+        } 
+ 
         if (Runtime) {
             Runtime.Destroy();
         }
@@ -1333,35 +1333,35 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateTableWithUniformShardedIndex(const TString& parent,
-        const NKikimrSchemeOp::TTableDescription &table, const TString& indexName, const TVector<TString> indexColumns, TDuration timeout)
-    {
-        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-        auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable);
-        op->SetWorkingDir(parent);
-
-        NKikimrSchemeOp::TTableDescription* tableDesc = op->MutableCreateIndexedTable()->MutableTableDescription();
-        tableDesc->CopyFrom(table);
-
-        {
-            auto indexDesc = op->MutableCreateIndexedTable()->MutableIndexDescription()->Add();
-            indexDesc->SetName(indexName);
-            for (const auto& c : indexColumns) {
-                indexDesc->AddKeyColumnNames(c);
-            }
-
-            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
-            indexDesc->MutableIndexImplTableDescription()->SetUniformPartitionsCount(16);
-        }
-
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
-    }
-
+    NMsgBusProxy::EResponseStatus TClient::CreateTableWithUniformShardedIndex(const TString& parent, 
+        const NKikimrSchemeOp::TTableDescription &table, const TString& indexName, const TVector<TString> indexColumns, TDuration timeout) 
+    { 
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+        auto *op = request->Record.MutableTransaction()->MutableModifyScheme(); 
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable); 
+        op->SetWorkingDir(parent); 
+ 
+        NKikimrSchemeOp::TTableDescription* tableDesc = op->MutableCreateIndexedTable()->MutableTableDescription(); 
+        tableDesc->CopyFrom(table); 
+ 
+        { 
+            auto indexDesc = op->MutableCreateIndexedTable()->MutableIndexDescription()->Add(); 
+            indexDesc->SetName(indexName); 
+            for (const auto& c : indexColumns) { 
+                indexDesc->AddKeyColumnNames(c); 
+            } 
+ 
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobal); 
+            indexDesc->MutableIndexImplTableDescription()->SetUniformPartitionsCount(16); 
+        } 
+ 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply, timeout); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
+    } 
+ 
     NMsgBusProxy::EResponseStatus TClient::SplitTable(const TString& table, ui64 datashardId, ui64 border, TDuration timeout) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto op = request->Record.MutableTransaction()->MutableModifyScheme();
@@ -1875,11 +1875,11 @@ namespace Tests {
 
         const auto &compileRes = response.GetMiniKQLCompileResults();
         if (compileRes.ProgramCompileErrorsSize()) {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(compileRes.GetProgramCompileErrors(), issues);
-            TStringStream err;
-            issues.PrintTo(err);
-            Cerr << "error: " << err.Str() << Endl;
+            NYql::TIssues issues; 
+            NYql::IssuesFromMessage(compileRes.GetProgramCompileErrors(), issues); 
+            TStringStream err; 
+            issues.PrintTo(err); 
+            Cerr << "error: " << err.Str() << Endl; 
 
             return false;
         }
@@ -1952,18 +1952,18 @@ namespace Tests {
         if (response.HasMiniKQLCompileResults()) {
             const auto &compileRes = response.GetMiniKQLCompileResults();
             if (compileRes.ProgramCompileErrorsSize()) {
-                NYql::TIssues issues;
-                NYql::IssuesFromMessage(compileRes.GetProgramCompileErrors(), issues);
-                TStringStream err;
-                issues.PrintTo(err);
-                Cerr << "error: " << err.Str() << Endl;
+                NYql::TIssues issues; 
+                NYql::IssuesFromMessage(compileRes.GetProgramCompileErrors(), issues); 
+                TStringStream err; 
+                issues.PrintTo(err); 
+                Cerr << "error: " << err.Str() << Endl; 
             }
             if (compileRes.ParamsCompileErrorsSize()) {
-                NYql::TIssues issues;
-                NYql::IssuesFromMessage(compileRes.GetParamsCompileErrors(), issues);
-                TStringStream err;
-                issues.PrintTo(err);
-                Cerr << "error: " << err.Str() << Endl;
+                NYql::TIssues issues; 
+                NYql::IssuesFromMessage(compileRes.GetParamsCompileErrors(), issues); 
+                TStringStream err; 
+                issues.PrintTo(err); 
+                Cerr << "error: " << err.Str() << Endl; 
             }
         }
         if (response.HasHadFollowerReads() && response.GetHadFollowerReads()) {

@@ -52,8 +52,8 @@ void TPQWriteService::Bootstrap(const TActorContext& ctx) {
 
 ui64 TPQWriteService::NextCookie() {
     return ++LastCookie;
-}
-
+} 
+ 
 void TPQWriteService::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate::TPtr& ev, const TActorContext& ctx) {
 
     if (!DatacenterClassifier) {

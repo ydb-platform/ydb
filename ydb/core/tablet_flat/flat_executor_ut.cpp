@@ -282,7 +282,7 @@ private:
         Scheme = std::move(scheme);
 
         auto ctx = TActivationContext::AsActorContext();
-        ctx.RegisterWithSameMailbox(this);
+        ctx.RegisterWithSameMailbox(this); 
 
         if (Postponed) {
             ctx.Send(Tablet, new NFake::TEvReturn);

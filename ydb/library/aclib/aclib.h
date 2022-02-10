@@ -8,7 +8,7 @@ namespace NACLib {
 
 #define BUILTIN_ACL_DOMAIN "builtin"
 #define BUILTIN_ACL_ROOT "root@" BUILTIN_ACL_DOMAIN
-#define BUILTIN_ERROR_DOMAIN "error"
+#define BUILTIN_ERROR_DOMAIN "error" 
 
 enum EAccessRights : ui32 { // bitmask
     NoAccess = 0x00000000,
@@ -121,8 +121,8 @@ public:
     void RemoveAccess(NACLib::EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance = InheritObject | InheritContainer);
     void AddAccess(const NACLibProto::TACE& access);
     void RemoveAccess(const NACLibProto::TACE& access);
-    void ClearAccess();
-    void ClearAccessForSid(const NACLib::TSID& sid);
+    void ClearAccess(); 
+    void ClearAccessForSid(const NACLib::TSID& sid); 
 };
 
 class TSecurityObject : public NACLibProto::TSecurityObject {
@@ -140,7 +140,7 @@ public:
     void AddAccess(EAccessType type, ui32 access, const TSID& sid, ui32 inheritance = InheritObject | InheritContainer);
     void RemoveAccess(NACLib::EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance = InheritObject | InheritContainer);
     void ApplyDiff(const NACLibProto::TDiffACL& diffACL);
-    void ClearAccess();
+    void ClearAccess(); 
     TInstant GetExpireTime() const;
     TString ToString() const; // simple text format
     void FromString(const TString& string); // simple text format

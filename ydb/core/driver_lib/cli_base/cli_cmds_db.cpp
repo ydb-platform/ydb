@@ -4,12 +4,12 @@
 #include <ydb/core/tx/schemeshard/schemeshard_user_attr_limits.h>
 
 #include <ydb/library/aclib/aclib.h>
-
+ 
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
-
+ 
 
 #include <library/cpp/grpc/client/grpc_client_low.h>
-
+ 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
@@ -854,10 +854,10 @@ public:
         }
 
         NGrpc::TCallMeta meta;
-        if (config.SecurityToken) {
-            meta.Aux.push_back({NYdb::YDB_AUTH_TICKET_HEADER, config.SecurityToken});
-        }
-
+        if (config.SecurityToken) { 
+            meta.Aux.push_back({NYdb::YDB_AUTH_TICKET_HEADER, config.SecurityToken}); 
+        } 
+ 
         Ydb::Operations::Operation response;
         NGrpc::TResponseCallback<Ydb::Table::DescribeTableOptionsResponse> responseCb =
             [&res, &response](NGrpc::TGrpcStatus &&grpcStatus, Ydb::Table::DescribeTableOptionsResponse &&resp) -> void {
@@ -872,8 +872,8 @@ public:
         {
             NGrpc::TGRpcClientLow clientLow;
             Ydb::Table::DescribeTableOptionsRequest request;
-            auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Table::V1::TableService>(ClientConfig);
-            connection->DoRequest(request, std::move(responseCb), &Ydb::Table::V1::TableService::Stub::AsyncDescribeTableOptions, meta);
+            auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Table::V1::TableService>(ClientConfig); 
+            connection->DoRequest(request, std::move(responseCb), &Ydb::Table::V1::TableService::Stub::AsyncDescribeTableOptions, meta); 
         }
 
         if (!res) {

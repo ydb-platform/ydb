@@ -33,12 +33,12 @@ void TGRpcYdbScriptingService::DecRequest() {
 }
 
 void TGRpcYdbScriptingService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
-    using Ydb::Scripting::ExecuteYqlRequest;
-    using Ydb::Scripting::ExecuteYqlResponse;
-    using Ydb::Scripting::ExecuteYqlPartialResponse;
-    using Ydb::Scripting::ExplainYqlRequest;
-    using Ydb::Scripting::ExplainYqlResponse;
-
+    using Ydb::Scripting::ExecuteYqlRequest; 
+    using Ydb::Scripting::ExecuteYqlResponse; 
+    using Ydb::Scripting::ExecuteYqlPartialResponse; 
+    using Ydb::Scripting::ExplainYqlRequest; 
+    using Ydb::Scripting::ExplainYqlResponse; 
+ 
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
 #ifdef ADD_REQUEST
@@ -53,21 +53,21 @@ void TGRpcYdbScriptingService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
         #NAME, logger, getCounterBlock("scripting", #NAME))->Run();
 
     ADD_REQUEST(ExecuteYql, ExecuteYqlRequest, ExecuteYqlResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_,
-            new TGrpcRequestOperationCall<ExecuteYqlRequest, ExecuteYqlResponse>
-                (ctx, &DoExecuteYqlScript, TRequestAuxSettings{TRateLimiterMode::Ru, nullptr}));
+        ActorSystem_->Send(GRpcRequestProxyId_, 
+            new TGrpcRequestOperationCall<ExecuteYqlRequest, ExecuteYqlResponse> 
+                (ctx, &DoExecuteYqlScript, TRequestAuxSettings{TRateLimiterMode::Ru, nullptr})); 
     })
 
     ADD_REQUEST(StreamExecuteYql, ExecuteYqlRequest, ExecuteYqlPartialResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_,
-            new TGrpcRequestNoOperationCall<ExecuteYqlRequest, ExecuteYqlPartialResponse>
-                (ctx, &DoStreamExecuteYqlScript, TRequestAuxSettings{TRateLimiterMode::Rps, nullptr}));
+        ActorSystem_->Send(GRpcRequestProxyId_, 
+            new TGrpcRequestNoOperationCall<ExecuteYqlRequest, ExecuteYqlPartialResponse> 
+                (ctx, &DoStreamExecuteYqlScript, TRequestAuxSettings{TRateLimiterMode::Rps, nullptr})); 
     })
 
     ADD_REQUEST(ExplainYql, ExplainYqlRequest, ExplainYqlResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_,
-            new TGrpcRequestOperationCall<ExplainYqlRequest, ExplainYqlResponse>
-                (ctx, &DoExplainYqlScript, TRequestAuxSettings{TRateLimiterMode::Rps, nullptr}));
+        ActorSystem_->Send(GRpcRequestProxyId_, 
+            new TGrpcRequestOperationCall<ExplainYqlRequest, ExplainYqlResponse> 
+                (ctx, &DoExplainYqlScript, TRequestAuxSettings{TRateLimiterMode::Rps, nullptr})); 
     })
 #undef ADD_REQUEST
 }

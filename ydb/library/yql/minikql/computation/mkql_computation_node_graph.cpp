@@ -225,7 +225,7 @@ public:
     {
         PatternNodes->HolderFactory = MakeHolder<THolderFactory>(opts.AllocState, *PatternNodes->MemInfo, &FunctionRegistry);
         PatternNodes->ValueBuilder = MakeHolder<TDefaultValueBuilder>(*PatternNodes->HolderFactory, ValidatePolicy);
-        PatternNodes->ValueBuilder->SetSecureParamsProvider(opts.SecureParamsProvider);
+        PatternNodes->ValueBuilder->SetSecureParamsProvider(opts.SecureParamsProvider); 
         NodeFactory = MakeHolder<TNodeFactory>(*PatternNodes->MemInfo, PatternNodes->Mutables);
     }
 
@@ -437,7 +437,7 @@ private:
 
         if (!computationNode) {
             THROW yexception()
-                << "Computation graph builder, unsupported function: " << node.GetType()->GetName() << " type: " << Factory.target_type().name() ;
+                << "Computation graph builder, unsupported function: " << node.GetType()->GetName() << " type: " << Factory.target_type().name() ; 
         }
 
         AddNode(node, computationNode);
@@ -534,7 +534,7 @@ public:
 #endif
         HolderFactory = MakeHolder<THolderFactory>(CompOpts.AllocState, *MemInfo, patternNodes->HolderFactory->GetFunctionRegistry());
         ValueBuilder = MakeHolder<TDefaultValueBuilder>(*HolderFactory.Get(), compOpts.ValidatePolicy);
-        ValueBuilder->SetSecureParamsProvider(CompOpts.SecureParamsProvider);
+        ValueBuilder->SetSecureParamsProvider(CompOpts.SecureParamsProvider); 
         ArrowMemoryPool = MakeArrowMemoryPool(CompOpts.AllocState);
     }
 

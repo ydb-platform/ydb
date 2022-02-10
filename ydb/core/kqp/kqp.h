@@ -251,83 +251,83 @@ struct TEvKqp {
 
     struct TEvDataQueryStreamPartAck : public TEventLocal<TEvDataQueryStreamPartAck, TKqpEvents::EvDataQueryStreamPartAck> {};
 
-    // Wrapper to use Arena allocated protobuf with ActorSystem (for serialization path).
-    // Arena deserialization is not supported.
-    // TODO: Add arena support to actor system TEventPB?
-    template<typename TProto>
-    class TProtoArenaHolder : public TNonCopyable {
-    public:
-        TProtoArenaHolder()
-            : Protobuf_(google::protobuf::Arena::CreateMessage<TProto>(nullptr))
-        {}
-
-        ~TProtoArenaHolder() {
-            // Deallocate message only if it was "normal" allocation
-            // In case of protobuf arena memory will be freed during arena deallocation
-            if (!Protobuf_->GetArena()) {
-                delete Protobuf_;
-            }
-        }
-
-        void Realloc(std::shared_ptr<google::protobuf::Arena> arena) {
-            // Allow realloc only if previous allocation was made using "normal" allocator
-            // and no data was writen. It prevents ineffective using of protobuf.
-            Y_ASSERT(!Protobuf_->GetArena());
-            Y_ASSERT(ByteSize() == 0);
-            delete Protobuf_;
-            Protobuf_ = google::protobuf::Arena::CreateMessage<TProto>(arena.get());
-            // Make sure arena is alive
-            Arena_ = arena;
-        }
-
-        bool ParseFromString(const TString& data) {
-            return Protobuf_->ParseFromString(data);
-        }
-
+    // Wrapper to use Arena allocated protobuf with ActorSystem (for serialization path). 
+    // Arena deserialization is not supported. 
+    // TODO: Add arena support to actor system TEventPB? 
+    template<typename TProto> 
+    class TProtoArenaHolder : public TNonCopyable { 
+    public: 
+        TProtoArenaHolder() 
+            : Protobuf_(google::protobuf::Arena::CreateMessage<TProto>(nullptr)) 
+        {} 
+ 
+        ~TProtoArenaHolder() { 
+            // Deallocate message only if it was "normal" allocation 
+            // In case of protobuf arena memory will be freed during arena deallocation 
+            if (!Protobuf_->GetArena()) { 
+                delete Protobuf_; 
+            } 
+        } 
+ 
+        void Realloc(std::shared_ptr<google::protobuf::Arena> arena) { 
+            // Allow realloc only if previous allocation was made using "normal" allocator 
+            // and no data was writen. It prevents ineffective using of protobuf. 
+            Y_ASSERT(!Protobuf_->GetArena()); 
+            Y_ASSERT(ByteSize() == 0); 
+            delete Protobuf_; 
+            Protobuf_ = google::protobuf::Arena::CreateMessage<TProto>(arena.get()); 
+            // Make sure arena is alive 
+            Arena_ = arena; 
+        } 
+ 
+        bool ParseFromString(const TString& data) { 
+            return Protobuf_->ParseFromString(data); 
+        } 
+ 
         bool ParseFromZeroCopyStream(google::protobuf::io::ZeroCopyInputStream* input) {
             return Protobuf_->ParseFromZeroCopyStream(input);
         }
 
-        bool SerializeToZeroCopyStream(google::protobuf::io::ZeroCopyOutputStream* output) const {
-            return Protobuf_->SerializeToZeroCopyStream(output);
-        }
-
-        bool SerializeToString(TString* output) const {
-            return Protobuf_->SerializeToString(output);
-        }
-
-        int ByteSize() const {
-            return Protobuf_->ByteSize();
-        }
-
-        TString DebugString() const {
-            return Protobuf_->DebugString();
-        }
-
+        bool SerializeToZeroCopyStream(google::protobuf::io::ZeroCopyOutputStream* output) const { 
+            return Protobuf_->SerializeToZeroCopyStream(output); 
+        } 
+ 
+        bool SerializeToString(TString* output) const { 
+            return Protobuf_->SerializeToString(output); 
+        } 
+ 
+        int ByteSize() const { 
+            return Protobuf_->ByteSize(); 
+        } 
+ 
+        TString DebugString() const { 
+            return Protobuf_->DebugString(); 
+        } 
+ 
         TString ShortDebugString() const {
             return Protobuf_->ShortDebugString();
         }
 
-        TString GetTypeName() const {
-            return Protobuf_->GetTypeName();
-        }
-
-        const TProto& GetRef() const {
-            return *Protobuf_;
-        }
-
-        TProto& GetRef() {
-            return *Protobuf_;
-        }
-
-    private:
-        TProtoArenaHolder(TProtoArenaHolder&&) = default;
-        TProtoArenaHolder& operator=(TProtoArenaHolder&&) = default;
-        TProto* Protobuf_;
-        std::shared_ptr<google::protobuf::Arena> Arena_;
-    };
-
-    struct TEvQueryResponse : public TEventPB<TEvQueryResponse, TProtoArenaHolder<NKikimrKqp::TEvQueryResponse>,
+        TString GetTypeName() const { 
+            return Protobuf_->GetTypeName(); 
+        } 
+ 
+        const TProto& GetRef() const { 
+            return *Protobuf_; 
+        } 
+ 
+        TProto& GetRef() { 
+            return *Protobuf_; 
+        } 
+ 
+    private: 
+        TProtoArenaHolder(TProtoArenaHolder&&) = default; 
+        TProtoArenaHolder& operator=(TProtoArenaHolder&&) = default; 
+        TProto* Protobuf_; 
+        std::shared_ptr<google::protobuf::Arena> Arena_; 
+    }; 
+ 
+    struct TEvQueryResponse : public TEventPB<TEvQueryResponse, TProtoArenaHolder<NKikimrKqp::TEvQueryResponse>, 
         TKqpEvents::EvQueryResponse> {};
 
     struct TEvCreateSessionResponse : public TEventPB<TEvCreateSessionResponse,

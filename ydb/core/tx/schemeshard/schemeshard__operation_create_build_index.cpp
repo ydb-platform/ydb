@@ -58,7 +58,7 @@ TVector<ISubOperationBase::TPtr> CreateBuildIndex(TOperationId nextId, const TTx
     {
         auto indexImplTableCreation = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable);
         NTableIndex::TTableColumns baseTableColumns = NTableIndex::ExtractInfo(tableInfo);
-        NTableIndex::TIndexColumns indexKeys = NTableIndex::ExtractInfo(indexConfig);
+        NTableIndex::TIndexColumns indexKeys = NTableIndex::ExtractInfo(indexConfig); 
 
         TString explain;
         if (!NTableIndex::IsCompatibleIndex(baseTableColumns, indexKeys, explain)) {

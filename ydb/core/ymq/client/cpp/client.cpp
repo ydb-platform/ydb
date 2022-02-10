@@ -26,7 +26,7 @@ public:
         Y_CAT(Y_CAT(T, name), Response) resp; \
         request.Y_CAT(Mutable, name)()->CopyFrom(req);  \
         TAutoEvent e; \
-        Client_.SqsRequest(request, [e, &resp] (const NGRpcProxy::TGrpcError* error, const NKikimrClient::TSqsResponse& result) mutable \
+        Client_.SqsRequest(request, [e, &resp] (const NGRpcProxy::TGrpcError* error, const NKikimrClient::TSqsResponse& result) mutable \ 
             { \
                 if (error) { \
                     resp.MutableError()->SetStatus(502); \

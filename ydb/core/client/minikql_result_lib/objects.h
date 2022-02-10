@@ -26,14 +26,14 @@ class TDict;
 namespace NPrivate {
 
 template <typename T>
-inline bool HasData(const TProtoValue& value, NScheme::TTypeId schemeType) {
+inline bool HasData(const TProtoValue& value, NScheme::TTypeId schemeType) { 
     Y_UNUSED(value);
     Y_UNUSED(schemeType);
     Y_FAIL("Not scpecified type.");
 }
 
 template <typename T>
-inline T GetData(const TProtoValue& value, NScheme::TTypeId schemeType) {
+inline T GetData(const TProtoValue& value, NScheme::TTypeId schemeType) { 
     Y_UNUSED(value);
     Y_UNUSED(schemeType);
     Y_FAIL("Not scpecified type.");
@@ -252,7 +252,7 @@ T TOptional::GetItem() const {
     Y_ENSURE(HasItem(), "Optional is empty!");
     const auto& itemType = RootType.GetOptional().GetItem();
     ENSURE_KIND(itemType, Data);
-    auto schemeType = itemType.GetData().GetScheme();
+    auto schemeType = itemType.GetData().GetScheme(); 
     return NPrivate::GetData<T>(RootValue.GetOptional(), schemeType);
 }
 
@@ -270,7 +270,7 @@ T TTuple::GetElement(size_t index) const {
     const auto& elementType = RootType.GetTuple().GetElement(index);
     const auto& element = RootValue.GetTuple(index);
     ENSURE_KIND(elementType, Data);
-    auto schemeType = elementType.GetData().GetScheme();
+    auto schemeType = elementType.GetData().GetScheme(); 
     return NPrivate::GetData<T>(element, schemeType);
 }
 
@@ -290,7 +290,7 @@ T TStruct::GetMember(size_t memberIndex) {
     const auto& memberType = RootType.GetStruct().GetMember(memberIndex).GetType();
     const auto& member = RootValue.GetStruct(memberIndex);
     ENSURE_KIND(memberType, Data);
-    auto schemeType = memberType.GetData().GetScheme();
+    auto schemeType = memberType.GetData().GetScheme(); 
     return NPrivate::GetData<T>(member, schemeType);
 }
 

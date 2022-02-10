@@ -38,8 +38,8 @@ void TContext::AddTableLookup(const IDbSchemeResolver::TTable& request) {
     }
 }
 
-template<typename TStringType>
-IDbSchemeResolver::TTableResult* TContext::GetTableLookup(const TExprNode& node, const TStringType& tableName) {
+template<typename TStringType> 
+IDbSchemeResolver::TTableResult* TContext::GetTableLookup(const TExprNode& node, const TStringType& tableName) { 
     auto entry = Tables.FindPtr(tableName);
     if (!entry) {
         ythrow TNodeException(node) << "Table is not found: " << tableName;
@@ -52,11 +52,11 @@ IDbSchemeResolver::TTableResult* TContext::GetTableLookup(const TExprNode& node,
     return entry->Response.Get();
 }
 
-template
-typename IDbSchemeResolver::TTableResult* TContext::GetTableLookup(const TExprNode& node, const TString& tableName);
-template
-typename IDbSchemeResolver::TTableResult* TContext::GetTableLookup(const TExprNode& node, const TStringBuf& tableName);
-
+template 
+typename IDbSchemeResolver::TTableResult* TContext::GetTableLookup(const TExprNode& node, const TString& tableName); 
+template 
+typename IDbSchemeResolver::TTableResult* TContext::GetTableLookup(const TExprNode& node, const TStringBuf& tableName); 
+ 
 TContext::TTableMap& TContext::GetTablesToResolve() {
     return Tables;
 }

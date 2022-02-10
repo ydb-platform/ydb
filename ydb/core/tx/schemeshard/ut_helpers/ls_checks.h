@@ -115,7 +115,7 @@ namespace NLs {
     TCheckFunc IndexType(NKikimrSchemeOp::EIndexType type);
     TCheckFunc IndexState(NKikimrSchemeOp::EIndexState state);
     TCheckFunc IndexKeys(const TVector<TString>& keyNames);
-    TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames);
+    TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames); 
 
     TCheckFunc HasBackupInFly(ui64 txId);
     void NoBackupInFly(const NKikimrScheme::TEvDescribeSchemeResult& record);

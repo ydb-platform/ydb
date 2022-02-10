@@ -20,17 +20,17 @@ struct TEvGrpcMon {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_GRPC_MON), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_GRPC_MON)");
 
     struct TEvReportPeer: public TEventLocal<TEvReportPeer, EvReportPeer> {
-        explicit TEvReportPeer(const TString& name)
+        explicit TEvReportPeer(const TString& name) 
             : Name(name)
         {}
 
-        TEvReportPeer(const TString& name, const TString& buildInfo)
-            : Name(name)
-            , SdkBuildInfo(buildInfo)
-        {}
-
-        const TString Name;
-        const TString SdkBuildInfo;
+        TEvReportPeer(const TString& name, const TString& buildInfo) 
+            : Name(name) 
+            , SdkBuildInfo(buildInfo) 
+        {} 
+ 
+        const TString Name; 
+        const TString SdkBuildInfo; 
     };
 };
 
@@ -62,7 +62,7 @@ private:
         if (it == Peers.End()) {
             TPeerInfo val;
             val.LastRequest = now;
-            val.SdkBuildInfo = info.SdkBuildInfo;
+            val.SdkBuildInfo = info.SdkBuildInfo; 
             Peers.Insert(info.Name, val);
         } else {
             it->LastRequest = now;
@@ -77,7 +77,7 @@ private:
                     TABLER() {
                         TABLEH() { str << "Address";}
                         TABLEH() { str << "Last Request";}
-                        TABLEH() { str << "Sdk BuildInfo";}
+                        TABLEH() { str << "Sdk BuildInfo";} 
                     }
                 }
                 TABLEBODY() {
@@ -85,7 +85,7 @@ private:
                         TABLER() {
                             TABLED() { str << p.Key(); }
                             TABLED() { str << p.Value().LastRequest.ToRfc822StringLocal(); }
-                            TABLED() { str << p.Value().SdkBuildInfo; }
+                            TABLED() { str << p.Value().SdkBuildInfo; } 
                         }
                     }
                 }
@@ -98,7 +98,7 @@ private:
 private:
     struct TPeerInfo {
         TInstant LastRequest;
-        TString SdkBuildInfo;
+        TString SdkBuildInfo; 
     };
 
     TLRUCache<TString, TPeerInfo> Peers;
@@ -113,12 +113,12 @@ IActor* CreateGrpcMonService() {
     return new TGrpcMon;
 }
 
-void ReportGrpcReqToMon(NActors::TActorSystem& actorSystem, const TString& fromAddress) {
+void ReportGrpcReqToMon(NActors::TActorSystem& actorSystem, const TString& fromAddress) { 
     actorSystem.Send(GrpcMonServiceId(), new TEvGrpcMon::TEvReportPeer(fromAddress));
 }
 
-void ReportGrpcReqToMon(NActors::TActorSystem& actorSystem, const TString& fromAddress, const TString& buildInfo) {
-    actorSystem.Send(GrpcMonServiceId(), new TEvGrpcMon::TEvReportPeer(fromAddress, buildInfo));
-}
-
+void ReportGrpcReqToMon(NActors::TActorSystem& actorSystem, const TString& fromAddress, const TString& buildInfo) { 
+    actorSystem.Send(GrpcMonServiceId(), new TEvGrpcMon::TEvReportPeer(fromAddress, buildInfo)); 
+} 
+ 
 }}

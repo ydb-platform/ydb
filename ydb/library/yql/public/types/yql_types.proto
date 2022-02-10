@@ -1,9 +1,9 @@
-syntax = "proto3";
+syntax = "proto3"; 
 package NYql.NProto;
 option java_package = "ru.yandex.yql.proto";
 
-enum TypeIds {
-    UNUSED = 0x0000;
+enum TypeIds { 
+    UNUSED = 0x0000; 
     Bool = 0x0006;
     Int8 = 0x0007;
     Uint8 = 0x0005;

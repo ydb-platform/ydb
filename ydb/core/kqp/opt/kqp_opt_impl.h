@@ -49,7 +49,7 @@ NYql::NNodes::TExprBase KqpBuildJoin(const NYql::NNodes::TExprBase& node, NYql::
     const TKqpOptimizeContext& kqpCtx, NYql::IOptimizationContext& optCtx, const NYql::TParentsMap& parentsMap,
     bool allowStageMultiUsage);
 
-TIntrusivePtr<NYql::TKikimrTableMetadata> GetIndexMetadata(const NYql::NNodes::TKqlReadTableIndex& index,
-    const NYql::TKikimrTablesData& tables, TStringBuf cluster);
-
+TIntrusivePtr<NYql::TKikimrTableMetadata> GetIndexMetadata(const NYql::NNodes::TKqlReadTableIndex& index, 
+    const NYql::TKikimrTablesData& tables, TStringBuf cluster); 
+ 
 } // namespace NKikimr::NKqp::NOpt

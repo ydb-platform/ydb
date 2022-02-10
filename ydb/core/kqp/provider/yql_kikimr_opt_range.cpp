@@ -12,21 +12,21 @@ namespace {
 using namespace NNodes;
 using namespace NCommon;
 
-struct TTakeNode {
-    const TExprBase Input;
-    const TExprBase Count;
-    const bool IsPartial;
-};
+struct TTakeNode { 
+    const TExprBase Input; 
+    const TExprBase Count; 
+    const bool IsPartial; 
+}; 
 
-TTakeNode GetTakeChildren(TExprBase node) {
-    if (auto maybeCoTake = node.Maybe<TCoTake>()) {
-        auto coTake = maybeCoTake.Cast();
-        return TTakeNode {coTake.Input(), coTake.Count(), false};
-    } else {
-        auto kiPartialTake = node.Maybe<TKiPartialTake>().Cast();
-        return TTakeNode {kiPartialTake.Input(), kiPartialTake.Count(), true};
-    }
-}
+TTakeNode GetTakeChildren(TExprBase node) { 
+    if (auto maybeCoTake = node.Maybe<TCoTake>()) { 
+        auto coTake = maybeCoTake.Cast(); 
+        return TTakeNode {coTake.Input(), coTake.Count(), false}; 
+    } else { 
+        auto kiPartialTake = node.Maybe<TKiPartialTake>().Cast(); 
+        return TTakeNode {kiPartialTake.Input(), kiPartialTake.Count(), true}; 
+    } 
+} 
 
 template<typename T>
 TTableLookup::TCompareResult::TResult CompareValues(const T& left, const T& right) {
@@ -288,24 +288,24 @@ TTableLookup::TCompareResult KiTableLookupCompare(TExprBase left, TExprBase righ
         << ", " << right.Ref().Content() << ")");
 }
 
-
+ 
 TExprNode::TPtr KiApplyLimitToSelectRange(TExprBase node, TExprContext& ctx) {
-    if (!node.Maybe<TCoTake>() && !node.Maybe<TKiPartialTake>()) {
-        return node.Ptr();
-    }
-
-    auto takeNode = GetTakeChildren(node);
-
-    if (!takeNode.Input.Maybe<TCoSkip>().Input().Maybe<TKiSelectRangeBase>() &&
-        !takeNode.Input.Maybe<TKiSelectRangeBase>())
+    if (!node.Maybe<TCoTake>() && !node.Maybe<TKiPartialTake>()) { 
+        return node.Ptr(); 
+    } 
+ 
+    auto takeNode = GetTakeChildren(node); 
+ 
+    if (!takeNode.Input.Maybe<TCoSkip>().Input().Maybe<TKiSelectRangeBase>() && 
+        !takeNode.Input.Maybe<TKiSelectRangeBase>()) 
     {
         return node.Ptr();
     }
 
-    auto maybeSkip = takeNode.Input.Maybe<TCoSkip>();
+    auto maybeSkip = takeNode.Input.Maybe<TCoSkip>(); 
     TMaybeNode<TExprBase> limitValue;
 
-    if (auto maybeTakeCount = takeNode.Count.Maybe<TCoUint64>()) {
+    if (auto maybeTakeCount = takeNode.Count.Maybe<TCoUint64>()) { 
         ui64 totalLimit;
         auto takeValue = FromString<ui64>(maybeTakeCount.Cast().Literal().Value());
 
@@ -326,7 +326,7 @@ TExprNode::TPtr KiApplyLimitToSelectRange(TExprBase node, TExprContext& ctx) {
                 .Build()
             .Done();
     } else {
-        limitValue = takeNode.Count;
+        limitValue = takeNode.Count; 
         if (maybeSkip) {
             limitValue = Build<TCoPlus>(ctx, node.Pos())
                 .Left(limitValue.Cast())
@@ -337,14 +337,14 @@ TExprNode::TPtr KiApplyLimitToSelectRange(TExprBase node, TExprContext& ctx) {
 
     YQL_ENSURE(limitValue);
 
-    auto input = maybeSkip
-        ? takeNode.Input.Cast<TCoSkip>().Input()
-        : takeNode.Input;
+    auto input = maybeSkip 
+        ? takeNode.Input.Cast<TCoSkip>().Input() 
+        : takeNode.Input; 
 
-    bool isIndexRange = input.Maybe<TKiSelectIndexRange>().IsValid();
-
-    auto select = input.Cast<TKiSelectRangeBase>();
-
+    bool isIndexRange = input.Maybe<TKiSelectIndexRange>().IsValid(); 
+ 
+    auto select = input.Cast<TKiSelectRangeBase>(); 
+ 
     if (HasSetting(select.Settings().Ref(), "ItemsLimit")) {
         return node.Ptr();
     }
@@ -357,104 +357,104 @@ TExprNode::TPtr KiApplyLimitToSelectRange(TExprBase node, TExprContext& ctx) {
             .Build()
         .Done();
 
-    TExprNode::TPtr newSelect;
-    if (isIndexRange) {
-        newSelect = Build<TKiSelectIndexRange>(ctx, select.Pos())
-            .Cluster(select.Cluster())
-            .Table(select.Table())
-            .Range(select.Range())
-            .Select(select.Select())
-            .IndexName(input.Cast<TKiSelectIndexRange>().IndexName())
-            .Settings(newSettings)
-            .Done()
-            .Ptr();
-    } else {
-        newSelect = Build<TKiSelectRange>(ctx, select.Pos())
-            .Cluster(select.Cluster())
-            .Table(select.Table())
-            .Range(select.Range())
-            .Select(select.Select())
-            .Settings(newSettings)
-            .Done()
-            .Ptr();
-    }
+    TExprNode::TPtr newSelect; 
+    if (isIndexRange) { 
+        newSelect = Build<TKiSelectIndexRange>(ctx, select.Pos()) 
+            .Cluster(select.Cluster()) 
+            .Table(select.Table()) 
+            .Range(select.Range()) 
+            .Select(select.Select()) 
+            .IndexName(input.Cast<TKiSelectIndexRange>().IndexName()) 
+            .Settings(newSettings) 
+            .Done() 
+            .Ptr(); 
+    } else { 
+        newSelect = Build<TKiSelectRange>(ctx, select.Pos()) 
+            .Cluster(select.Cluster()) 
+            .Table(select.Table()) 
+            .Range(select.Range()) 
+            .Select(select.Select()) 
+            .Settings(newSettings) 
+            .Done() 
+            .Ptr(); 
+    } 
 
     YQL_CLOG(INFO, ProviderKikimr) << "KiApplyLimitToSelectRange";
 
     if (maybeSkip) {
-        if (takeNode.IsPartial) {
-            return Build<TKiPartialTake>(ctx, node.Pos())
-                .Input<TCoSkip>()
-                    .Input(newSelect)
-                    .Count(maybeSkip.Cast().Count())
-                    .Build()
-                .Count(takeNode.Count)
-                .Done().Ptr();
-        } else {
-            return Build<TCoTake>(ctx, node.Pos())
-                .Input<TCoSkip>()
-                    .Input(newSelect)
-                    .Count(maybeSkip.Cast().Count())
-                    .Build()
-                .Count(takeNode.Count)
-                .Done().Ptr();
-        }
-    } else {
-        if (takeNode.IsPartial) {
-            return Build<TKiPartialTake>(ctx, node.Pos())
+        if (takeNode.IsPartial) { 
+            return Build<TKiPartialTake>(ctx, node.Pos()) 
+                .Input<TCoSkip>() 
+                    .Input(newSelect) 
+                    .Count(maybeSkip.Cast().Count()) 
+                    .Build() 
+                .Count(takeNode.Count) 
+                .Done().Ptr(); 
+        } else { 
+            return Build<TCoTake>(ctx, node.Pos()) 
+                .Input<TCoSkip>() 
+                    .Input(newSelect) 
+                    .Count(maybeSkip.Cast().Count()) 
+                    .Build() 
+                .Count(takeNode.Count) 
+                .Done().Ptr(); 
+        } 
+    } else { 
+        if (takeNode.IsPartial) { 
+            return Build<TKiPartialTake>(ctx, node.Pos()) 
                 .Input(newSelect)
-                .Count(takeNode.Count)
-                .Done().Ptr();
-
-        } else {
-            return Build<TCoTake>(ctx, node.Pos())
-                .Input(newSelect)
-                .Count(takeNode.Count)
-                .Done().Ptr();
-        }
+                .Count(takeNode.Count) 
+                .Done().Ptr(); 
+ 
+        } else { 
+            return Build<TCoTake>(ctx, node.Pos()) 
+                .Input(newSelect) 
+                .Count(takeNode.Count) 
+                .Done().Ptr(); 
+        } 
     }
 }
 
-TExprNode::TPtr BuildFallbackSelectRange(TCoFlatMap oldFlatMap,
-    TKiSelectRangeBase select, TMaybeNode<TCoFilterNullMembers> filterNull,
-    TMaybeNode<TCoSkipNullMembers> skipNull, const TKikimrTableDescription& tableDesc,
-    TExprContext& ctx)
-{
-    TKikimrKeyRange range(ctx, tableDesc);
-    TExprNode::TPtr input;
-
-    input = Build<TKiSelectRange>(ctx, select.Pos())
-        .Cluster(select.Cluster())
-        .Table(select.Table())
-        .Range(range.ToRangeExpr(select, ctx))
-        .Select(select.Select())
-        .Settings(select.Settings())
-        .Done()
-        .Ptr();
-
-    if (filterNull) {
-        input = Build<TCoFilterNullMembers>(ctx, oldFlatMap.Pos())
-            .Input(input)
-            .Members(filterNull.Cast().Members())
-            .Done()
-            .Ptr();
-    }
-
-    if (skipNull) {
-        input = Build<TCoSkipNullMembers>(ctx, oldFlatMap.Pos())
-            .Input(input)
-            .Members(skipNull.Cast().Members())
-            .Done()
-            .Ptr();
-    }
-
-    return Build<TCoFlatMap>(ctx, oldFlatMap.Pos())
-        .Input(input)
-        .Lambda(oldFlatMap.Lambda())
-        .Done()
-        .Ptr();
-}
-
+TExprNode::TPtr BuildFallbackSelectRange(TCoFlatMap oldFlatMap, 
+    TKiSelectRangeBase select, TMaybeNode<TCoFilterNullMembers> filterNull, 
+    TMaybeNode<TCoSkipNullMembers> skipNull, const TKikimrTableDescription& tableDesc, 
+    TExprContext& ctx) 
+{ 
+    TKikimrKeyRange range(ctx, tableDesc); 
+    TExprNode::TPtr input; 
+ 
+    input = Build<TKiSelectRange>(ctx, select.Pos()) 
+        .Cluster(select.Cluster()) 
+        .Table(select.Table()) 
+        .Range(range.ToRangeExpr(select, ctx)) 
+        .Select(select.Select()) 
+        .Settings(select.Settings()) 
+        .Done() 
+        .Ptr(); 
+ 
+    if (filterNull) { 
+        input = Build<TCoFilterNullMembers>(ctx, oldFlatMap.Pos()) 
+            .Input(input) 
+            .Members(filterNull.Cast().Members()) 
+            .Done() 
+            .Ptr(); 
+    } 
+ 
+    if (skipNull) { 
+        input = Build<TCoSkipNullMembers>(ctx, oldFlatMap.Pos()) 
+            .Input(input) 
+            .Members(skipNull.Cast().Members()) 
+            .Done() 
+            .Ptr(); 
+    } 
+ 
+    return Build<TCoFlatMap>(ctx, oldFlatMap.Pos()) 
+        .Input(input) 
+        .Lambda(oldFlatMap.Lambda()) 
+        .Done() 
+        .Ptr(); 
+} 
+ 
 TExprNode::TPtr KiPushPredicateToSelectRange(TExprBase node, TExprContext& ctx,
     const TKikimrTablesData& tablesData, const TKikimrConfiguration& config)
 {
@@ -467,21 +467,21 @@ TExprNode::TPtr KiPushPredicateToSelectRange(TExprBase node, TExprContext& ctx,
         return node.Ptr();
     }
 
-    TMaybeNode<TKiSelectRangeBase> select;
+    TMaybeNode<TKiSelectRangeBase> select; 
     TMaybeNode<TCoFilterNullMembers> filterNull;
     TMaybeNode<TCoSkipNullMembers> skipNull;
-    TMaybeNode<TCoAtom> indexTable;
+    TMaybeNode<TCoAtom> indexTable; 
 
-    if (auto maybeRange = flatmap.Input().Maybe<TKiSelectRangeBase>()) {
+    if (auto maybeRange = flatmap.Input().Maybe<TKiSelectRangeBase>()) { 
         select = maybeRange.Cast();
     }
 
-    if (auto maybeRange = flatmap.Input().Maybe<TCoFilterNullMembers>().Input().Maybe<TKiSelectRangeBase>()) {
+    if (auto maybeRange = flatmap.Input().Maybe<TCoFilterNullMembers>().Input().Maybe<TKiSelectRangeBase>()) { 
         select = maybeRange.Cast();
         filterNull = flatmap.Input().Cast<TCoFilterNullMembers>();
     }
 
-    if (auto maybeRange = flatmap.Input().Maybe<TCoSkipNullMembers>().Input().Maybe<TKiSelectRangeBase>()) {
+    if (auto maybeRange = flatmap.Input().Maybe<TCoSkipNullMembers>().Input().Maybe<TKiSelectRangeBase>()) { 
         select = maybeRange.Cast();
         skipNull = flatmap.Input().Cast<TCoSkipNullMembers>();
     }
@@ -490,60 +490,60 @@ TExprNode::TPtr KiPushPredicateToSelectRange(TExprBase node, TExprContext& ctx,
         return node.Ptr();
     }
 
-    if (auto indexSelect = select.Maybe<TKiSelectIndexRange>()) {
-        indexTable = indexSelect.Cast().IndexName();
-    }
-
+    if (auto indexSelect = select.Maybe<TKiSelectIndexRange>()) { 
+        indexTable = indexSelect.Cast().IndexName(); 
+    } 
+ 
     auto selectRange = select.Cast();
-    const auto& cluster = TString(selectRange.Cluster());
-
-    const auto& lookupTableName = indexTable ? TString(indexTable.Cast()) : TString(selectRange.Table().Path());
-    auto& lookupTableDesc = tablesData.ExistingTable(cluster, lookupTableName);
+    const auto& cluster = TString(selectRange.Cluster()); 
+ 
+    const auto& lookupTableName = indexTable ? TString(indexTable.Cast()) : TString(selectRange.Table().Path()); 
+    auto& lookupTableDesc = tablesData.ExistingTable(cluster, lookupTableName); 
 
     if (!TKikimrKeyRange::IsFull(selectRange.Range())) {
         return node.Ptr();
     }
 
-    if (indexTable) {
-        bool needDataRead = false;
-        for (const auto& col : selectRange.Select()) {
-            if (!lookupTableDesc.Metadata->Columns.contains(TString(col.Value()))) {
-                needDataRead = true;
-                break;
-            }
-        }
-
-        if (!needDataRead) {
-            // All selected data present in index table
-            // apply this optimizer again after TKiSelectIndexRange -> TKiSelectRange rewriting
-            return node.Ptr();
-        }
-    }
-
+    if (indexTable) { 
+        bool needDataRead = false; 
+        for (const auto& col : selectRange.Select()) { 
+            if (!lookupTableDesc.Metadata->Columns.contains(TString(col.Value()))) { 
+                needDataRead = true; 
+                break; 
+            } 
+        } 
+ 
+        if (!needDataRead) { 
+            // All selected data present in index table 
+            // apply this optimizer again after TKiSelectIndexRange -> TKiSelectRange rewriting 
+            return node.Ptr(); 
+        } 
+    } 
+ 
     auto row = flatmap.Lambda().Args().Arg(0);
     auto predicate = TExprBase(flatmap.Lambda().Body().Ref().ChildPtr(0));
-    TTableLookup lookup = ExtractTableLookup(row, predicate, lookupTableDesc.Metadata->KeyColumnNames,
+    TTableLookup lookup = ExtractTableLookup(row, predicate, lookupTableDesc.Metadata->KeyColumnNames, 
         &KiTableLookupGetValue, &KiTableLookupCanCompare, &KiTableLookupCompare, ctx,
         config.HasAllowNullCompareInIndex());
 
-    auto& dataTableDesc = tablesData.ExistingTable(cluster, TString(selectRange.Table().Path()));
-
+    auto& dataTableDesc = tablesData.ExistingTable(cluster, TString(selectRange.Table().Path())); 
+ 
     if (lookup.IsFullScan()) {
-        // WARNING: Sometimes we want to check index table usage here.
-        // Ok, but we must be aware about other optimizations.
-        // Example SqlIn using secondary index rewriten to EquiJoin on
-        // KiSelectIndexRange. The problem is if predicate contains also
-        // "AND non_index_fiels" clause
-        // (WHERE secondary_key IN (...) AND non_index == )
-        // check for lookup.IsFullScan() returns true here because
-        // EquiJoin optimization has bot been made yet.
-        // See KIKIMR-11041 for more examples and consider KiRewriteSelectIndexRange method
-
+        // WARNING: Sometimes we want to check index table usage here. 
+        // Ok, but we must be aware about other optimizations. 
+        // Example SqlIn using secondary index rewriten to EquiJoin on 
+        // KiSelectIndexRange. The problem is if predicate contains also 
+        // "AND non_index_fiels" clause 
+        // (WHERE secondary_key IN (...) AND non_index == ) 
+        // check for lookup.IsFullScan() returns true here because 
+        // EquiJoin optimization has bot been made yet. 
+        // See KIKIMR-11041 for more examples and consider KiRewriteSelectIndexRange method 
+ 
         return node.Ptr();
     }
 
     TVector<TExprBase> fetches;
-
+ 
     for (auto& keyRange : lookup.GetKeyRanges()) {
         TExprBase predicate = keyRange.GetResidualPredicate()
             ? keyRange.GetResidualPredicate().Cast()
@@ -553,56 +553,56 @@ TExprNode::TPtr KiPushPredicateToSelectRange(TExprBase node, TExprContext& ctx,
 
         auto newBody = ctx.ChangeChild(flatmap.Lambda().Body().Ref(), 0, predicate.Ptr());
 
-        TExprNode::TPtr input;
-
-        if (indexTable) {
-            if (!keyRange.IsEquiRange()) {
-                input = TKikimrKeyRange::BuildIndexReadRangeExpr(lookupTableDesc, keyRange, selectRange.Select(),
-                    config.HasAllowNullCompareInIndex(), dataTableDesc, ctx).Ptr();
-            } else {
-                TCoAtomList columnsToSelect = BuildKeyColumnsList(dataTableDesc, node.Pos(), ctx);
-
-                input = TKikimrKeyRange::BuildReadRangeExpr(lookupTableDesc, keyRange, columnsToSelect,
-                           config.HasAllowNullCompareInIndex(), ctx).Ptr();
-                const auto& fetchItemArg = Build<TCoArgument>(ctx, node.Pos())
-                .Name("fetchItem")
-                .Done();
-
-                input = Build<TCoFlatMap>(ctx, node.Pos())
-                    .Input(input)
-                    .Lambda()
-                        .Args(fetchItemArg)
-                        .Body<TKiSelectRow>()
-                            .Cluster(selectRange.Cluster())
-                            .Table(selectRange.Table())
-                            .Key(ExtractNamedKeyTuples(fetchItemArg, dataTableDesc, ctx))
-                            .Select(selectRange.Select())
-                        .Build()
-                    .Build()
-                    .Done()
-                    .Ptr();
-            }
-        } else {
-            input = TKikimrKeyRange::BuildReadRangeExpr(lookupTableDesc, keyRange, selectRange.Select(),
-                       config.HasAllowNullCompareInIndex(), ctx).Ptr();
-        }
-
-        if (filterNull) {
-            input = Build<TCoFilterNullMembers>(ctx, node.Pos())
-                .Input(input)
-                .Members(filterNull.Cast().Members())
-                .Done()
-                .Ptr();
-        }
-
-        if (skipNull) {
-            input = Build<TCoSkipNullMembers>(ctx, node.Pos())
-                .Input(input)
-                .Members(skipNull.Cast().Members())
-                .Done()
-                .Ptr();
-        }
-
+        TExprNode::TPtr input; 
+ 
+        if (indexTable) { 
+            if (!keyRange.IsEquiRange()) { 
+                input = TKikimrKeyRange::BuildIndexReadRangeExpr(lookupTableDesc, keyRange, selectRange.Select(), 
+                    config.HasAllowNullCompareInIndex(), dataTableDesc, ctx).Ptr(); 
+            } else { 
+                TCoAtomList columnsToSelect = BuildKeyColumnsList(dataTableDesc, node.Pos(), ctx); 
+ 
+                input = TKikimrKeyRange::BuildReadRangeExpr(lookupTableDesc, keyRange, columnsToSelect, 
+                           config.HasAllowNullCompareInIndex(), ctx).Ptr(); 
+                const auto& fetchItemArg = Build<TCoArgument>(ctx, node.Pos()) 
+                .Name("fetchItem") 
+                .Done(); 
+ 
+                input = Build<TCoFlatMap>(ctx, node.Pos()) 
+                    .Input(input) 
+                    .Lambda() 
+                        .Args(fetchItemArg) 
+                        .Body<TKiSelectRow>() 
+                            .Cluster(selectRange.Cluster()) 
+                            .Table(selectRange.Table()) 
+                            .Key(ExtractNamedKeyTuples(fetchItemArg, dataTableDesc, ctx)) 
+                            .Select(selectRange.Select()) 
+                        .Build() 
+                    .Build() 
+                    .Done() 
+                    .Ptr(); 
+            } 
+        } else { 
+            input = TKikimrKeyRange::BuildReadRangeExpr(lookupTableDesc, keyRange, selectRange.Select(), 
+                       config.HasAllowNullCompareInIndex(), ctx).Ptr(); 
+        } 
+ 
+        if (filterNull) { 
+            input = Build<TCoFilterNullMembers>(ctx, node.Pos()) 
+                .Input(input) 
+                .Members(filterNull.Cast().Members()) 
+                .Done() 
+                .Ptr(); 
+        } 
+ 
+        if (skipNull) { 
+            input = Build<TCoSkipNullMembers>(ctx, node.Pos()) 
+                .Input(input) 
+                .Members(skipNull.Cast().Members()) 
+                .Done() 
+                .Ptr(); 
+        } 
+ 
         auto fetch = Build<TCoFlatMap>(ctx, node.Pos())
             .Input(input)
             .Lambda()
@@ -644,8 +644,8 @@ TExprNode::TPtr KiApplyExtractMembersToSelectRow(TExprBase node, TExprContext& c
 
 TKikimrKeyRange::TKikimrKeyRange(TExprContext& ctx, const TKikimrTableDescription& table)
     : Table(table)
-    , KeyRange(ctx, Table.Metadata->KeyColumnNames.size(), TMaybeNode<TExprBase>())
-{}
+    , KeyRange(ctx, Table.Metadata->KeyColumnNames.size(), TMaybeNode<TExprBase>()) 
+{} 
 
 TKikimrKeyRange::TKikimrKeyRange(const TKikimrTableDescription& table, const TKeyRange& keyRange)
     : Table(table)
@@ -757,8 +757,8 @@ TExprList TKikimrKeyRange::ToRangeExpr(TExprBase owner, TExprContext& ctx) {
     TVector<TExprBase> columnRanges;
 
     for (size_t i = 0; i < KeyRange.GetColumnRangesCount(); ++i) {
-        const auto& column = Table.Metadata->KeyColumnNames[i];
-        const auto& range = KeyRange.GetColumnRange(i);
+        const auto& column = Table.Metadata->KeyColumnNames[i]; 
+        const auto& range = KeyRange.GetColumnRange(i); 
 
         auto type = Table.GetColumnType(column);
         YQL_ENSURE(type);
@@ -800,33 +800,33 @@ TExprList TKikimrKeyRange::ToRangeExpr(TExprBase owner, TExprContext& ctx) {
         .Done();
 }
 
-static TVector<TExprNodePtr> GetSkipNullKeys(const NCommon::TKeyRange& keyRange,
-    const TKikimrTableDescription& tableDesc, const NYql::TPositionHandle& pos, TExprContext& ctx)
-{
-    TVector<TExprNodePtr> skipNullKeys;
-    for (size_t i = 0; i < keyRange.GetColumnRangesCount(); ++i) {
-        const auto& column = tableDesc.Metadata->KeyColumnNames[i];
-        auto& range = keyRange.GetColumnRange(i);
-        if (range.IsDefined() && !range.IsNull()) {
-            skipNullKeys.push_back(ctx.NewAtom(pos, column));
-        }
-    }
-    return skipNullKeys;
-}
-
+static TVector<TExprNodePtr> GetSkipNullKeys(const NCommon::TKeyRange& keyRange, 
+    const TKikimrTableDescription& tableDesc, const NYql::TPositionHandle& pos, TExprContext& ctx) 
+{ 
+    TVector<TExprNodePtr> skipNullKeys; 
+    for (size_t i = 0; i < keyRange.GetColumnRangesCount(); ++i) { 
+        const auto& column = tableDesc.Metadata->KeyColumnNames[i]; 
+        auto& range = keyRange.GetColumnRange(i); 
+        if (range.IsDefined() && !range.IsNull()) { 
+            skipNullKeys.push_back(ctx.NewAtom(pos, column)); 
+        } 
+    } 
+    return skipNullKeys; 
+} 
+ 
 NNodes::TExprBase TKikimrKeyRange::BuildReadRangeExpr(const TKikimrTableDescription& tableDesc,
-    const NCommon::TKeyRange& keyRange, NNodes::TCoAtomList select, bool allowNulls,
-    TExprContext& ctx)
+    const NCommon::TKeyRange& keyRange, NNodes::TCoAtomList select, bool allowNulls, 
+    TExprContext& ctx) 
 {
     YQL_ENSURE(tableDesc.Metadata);
     TString cluster = tableDesc.Metadata->Cluster;
 
-    const auto versionedTable = BuildVersionedTable(*tableDesc.Metadata, select.Pos(), ctx);
-
+    const auto versionedTable = BuildVersionedTable(*tableDesc.Metadata, select.Pos(), ctx); 
+ 
     if (keyRange.IsEquiRange()) {
         TVector<TExprBase> columnTuples;
         for (size_t i = 0; i < keyRange.GetColumnRangesCount(); ++i) {
-            const auto& column = tableDesc.Metadata->KeyColumnNames[i];
+            const auto& column = tableDesc.Metadata->KeyColumnNames[i]; 
             auto& range = keyRange.GetColumnRange(i);
 
             auto tuple = Build<TCoNameValueTuple>(ctx, select.Pos())
@@ -840,7 +840,7 @@ NNodes::TExprBase TKikimrKeyRange::BuildReadRangeExpr(const TKikimrTableDescript
         return Build<TCoToList>(ctx, select.Pos())
             .Optional<TKiSelectRow>()
                 .Cluster().Build(cluster)
-                .Table(versionedTable)
+                .Table(versionedTable) 
                 .Key<TCoNameValueTupleList>()
                     .Add(columnTuples)
                     .Build()
@@ -850,7 +850,7 @@ NNodes::TExprBase TKikimrKeyRange::BuildReadRangeExpr(const TKikimrTableDescript
     } else {
         TVector<TExprNodePtr> skipNullKeys;
         if (!allowNulls) {
-            skipNullKeys = GetSkipNullKeys(keyRange, tableDesc, select.Pos(), ctx);
+            skipNullKeys = GetSkipNullKeys(keyRange, tableDesc, select.Pos(), ctx); 
         }
 
         TVector<TCoNameValueTuple> settings;
@@ -869,7 +869,7 @@ NNodes::TExprBase TKikimrKeyRange::BuildReadRangeExpr(const TKikimrTableDescript
 
         return Build<TKiSelectRange>(ctx, select.Pos())
             .Cluster().Build(cluster)
-            .Table(versionedTable)
+            .Table(versionedTable) 
             .Range(tableKeyRange.ToRangeExpr(select, ctx))
             .Select(select)
             .Settings()
@@ -879,51 +879,51 @@ NNodes::TExprBase TKikimrKeyRange::BuildReadRangeExpr(const TKikimrTableDescript
     }
 }
 
-NNodes::TExprBase TKikimrKeyRange::BuildIndexReadRangeExpr(const TKikimrTableDescription& lookupTableDesc,
-    const NCommon::TKeyRange& keyRange, NNodes::TCoAtomList select, bool allowNulls,
-    const TKikimrTableDescription& dataTableDesc, TExprContext& ctx)
-{
-    YQL_ENSURE(lookupTableDesc.Metadata);
-    YQL_ENSURE(dataTableDesc.Metadata);
-    TString cluster = lookupTableDesc.Metadata->Cluster;
-
-    const auto versionedTable = BuildVersionedTable(*dataTableDesc.Metadata, select.Pos(), ctx);
-
-    YQL_ENSURE(!keyRange.IsEquiRange());
-
-    TVector<TExprNodePtr> skipNullKeys;
-    if (!allowNulls) {
-        skipNullKeys = GetSkipNullKeys(keyRange, lookupTableDesc, select.Pos(), ctx);
-    }
-
-    TVector<TCoNameValueTuple> settings;
-    if (!skipNullKeys.empty()) {
-        auto setting = Build<TCoNameValueTuple>(ctx, select.Pos())
-            .Name().Build("SkipNullKeys")
-            .Value<TCoAtomList>()
-                .Add(skipNullKeys)
-                .Build()
-            .Done();
-
-        settings.push_back(setting);
-    }
-
-    TKikimrKeyRange tableKeyRange(lookupTableDesc, keyRange);
-
-    return Build<TKiSelectIndexRange>(ctx, select.Pos())
-        .Cluster().Build(cluster)
-        .Table(versionedTable)
-        .Range(tableKeyRange.ToRangeExpr(select, ctx))
-        .Select(select)
-        .Settings()
-            .Add(settings)
-            .Build()
-        .IndexName()
-            .Value(lookupTableDesc.Metadata->Name)
-            .Build()
-        .Done();
-}
-
+NNodes::TExprBase TKikimrKeyRange::BuildIndexReadRangeExpr(const TKikimrTableDescription& lookupTableDesc, 
+    const NCommon::TKeyRange& keyRange, NNodes::TCoAtomList select, bool allowNulls, 
+    const TKikimrTableDescription& dataTableDesc, TExprContext& ctx) 
+{ 
+    YQL_ENSURE(lookupTableDesc.Metadata); 
+    YQL_ENSURE(dataTableDesc.Metadata); 
+    TString cluster = lookupTableDesc.Metadata->Cluster; 
+ 
+    const auto versionedTable = BuildVersionedTable(*dataTableDesc.Metadata, select.Pos(), ctx); 
+ 
+    YQL_ENSURE(!keyRange.IsEquiRange()); 
+ 
+    TVector<TExprNodePtr> skipNullKeys; 
+    if (!allowNulls) { 
+        skipNullKeys = GetSkipNullKeys(keyRange, lookupTableDesc, select.Pos(), ctx); 
+    } 
+ 
+    TVector<TCoNameValueTuple> settings; 
+    if (!skipNullKeys.empty()) { 
+        auto setting = Build<TCoNameValueTuple>(ctx, select.Pos()) 
+            .Name().Build("SkipNullKeys") 
+            .Value<TCoAtomList>() 
+                .Add(skipNullKeys) 
+                .Build() 
+            .Done(); 
+ 
+        settings.push_back(setting); 
+    } 
+ 
+    TKikimrKeyRange tableKeyRange(lookupTableDesc, keyRange); 
+ 
+    return Build<TKiSelectIndexRange>(ctx, select.Pos()) 
+        .Cluster().Build(cluster) 
+        .Table(versionedTable) 
+        .Range(tableKeyRange.ToRangeExpr(select, ctx)) 
+        .Select(select) 
+        .Settings() 
+            .Add(settings) 
+            .Build() 
+        .IndexName() 
+            .Value(lookupTableDesc.Metadata->Name) 
+            .Build() 
+        .Done(); 
+} 
+ 
 TExprNode::TPtr KiSqlInToEquiJoin(NNodes::TExprBase node, const TKikimrTablesData& tablesData,
     const TKikimrConfiguration& config, TExprContext& ctx)
 {
@@ -937,15 +937,15 @@ TExprNode::TPtr KiSqlInToEquiJoin(NNodes::TExprBase node, const TKikimrTablesDat
     auto flatMap = node.Cast<TCoFlatMap>();
 
     // SqlIn expected to be rewritten to (FlatMap <collection> (OptionalIf ...))
-    // or (FlatMap <collection> (FlatListIf ...))
-    if (!flatMap.Lambda().Body().Maybe<TCoOptionalIf>() && !flatMap.Lambda().Body().Maybe<TCoFlatListIf>()) {
+    // or (FlatMap <collection> (FlatListIf ...)) 
+    if (!flatMap.Lambda().Body().Maybe<TCoOptionalIf>() && !flatMap.Lambda().Body().Maybe<TCoFlatListIf>()) { 
         return node.Ptr();
     }
 
     if (!flatMap.Input().Maybe<TKiSelectRangeBase>()) {
         return node.Ptr();
     }
-
+ 
     auto selectRange = flatMap.Input().Cast<TKiSelectRangeBase>();
 
     TMaybeNode<TCoAtom> indexTable;
@@ -954,7 +954,7 @@ TExprNode::TPtr KiSqlInToEquiJoin(NNodes::TExprBase node, const TKikimrTablesDat
     }
 
     // retrieve selected ranges
-    const TStringBuf lookupTable = indexTable ? indexTable.Cast().Value() : selectRange.Table().Path().Value();
+    const TStringBuf lookupTable = indexTable ? indexTable.Cast().Value() : selectRange.Table().Path().Value(); 
     const TKikimrTableDescription& tableDesc = tablesData.ExistingTable(selectRange.Cluster().Value(), lookupTable);
     auto selectKeyRange = TKikimrKeyRange::GetPointKeyRange(ctx, tableDesc, selectRange.Range());
     if (!selectKeyRange) {

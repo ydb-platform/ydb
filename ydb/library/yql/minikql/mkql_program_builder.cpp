@@ -1857,11 +1857,11 @@ TRuntimeNode TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Yson>(const NUdf::
     return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TYson>::Id, Env), true);
 }
 
-template<>
+template<> 
 TRuntimeNode TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Json>(const NUdf::TStringRef& data) const {
     return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TJson>::Id, Env), true);
-}
-
+} 
+ 
 template<>
 TRuntimeNode TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::JsonDocument>(const NUdf::TStringRef& data) const {
     return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TJsonDocument>::Id, Env), true);
@@ -2104,7 +2104,7 @@ TRuntimeNode TProgramBuilder::NewVariant(TRuntimeNode item, ui32 index, TType* v
 
 TRuntimeNode TProgramBuilder::NewVariant(TRuntimeNode item, const std::string_view& member, TType* variantType) {
     const auto type = AS_TYPE(TVariantType, variantType);
-    MKQL_ENSURE(type->GetUnderlyingType()->IsStruct(), "Expected struct as underlying type");
+    MKQL_ENSURE(type->GetUnderlyingType()->IsStruct(), "Expected struct as underlying type"); 
     ui32 index = AS_TYPE(TStructType, type->GetUnderlyingType())->GetMemberIndex(member);
     return TRuntimeNode(TVariantLiteral::Create(item, index, type, Env), true);
 }
@@ -3040,7 +3040,7 @@ TRuntimeNode TProgramBuilder::UnaryDataFunction(TRuntimeNode data, const std::st
         MKQL_ENSURE(!isOptional, "Optional data is not allowed");
     }
 
-    auto schemeType = type->GetSchemeType();
+    auto schemeType = type->GetSchemeType(); 
     if (flags & TDataFunctionFlags::RequiresBooleanArgs) {
         MKQL_ENSURE(schemeType == NUdf::TDataType<bool>::Id, "Boolean data is required");
     } else if (flags & TDataFunctionFlags::RequiresStringArgs) {
@@ -3986,7 +3986,7 @@ TRuntimeNode TProgramBuilder::FromBytes(TRuntimeNode data, NUdf::TDataTypeId sch
     auto resultType = NewOptionalType(outDataType);
     TCallableBuilder callableBuilder(Env, __func__, resultType);
     callableBuilder.Add(data);
-    callableBuilder.Add(NewDataLiteral(static_cast<ui32>(schemeType)));
+    callableBuilder.Add(NewDataLiteral(static_cast<ui32>(schemeType))); 
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
@@ -5068,37 +5068,37 @@ bool CanExportType(TType* type, const TTypeEnvironment& env) {
             break;
         }
 
-        case TType::EKind::Variant:  {
-            auto variantType = static_cast<TVariantType*>(node);
-            TType* innerType = variantType->GetUnderlyingType();
-
-            if (innerType->IsStruct()) {
-                auto structType = static_cast<TStructType*>(innerType);
-                for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
-                    if (!structType->GetMemberType(index)->GetCookie()) {
-                        canExport = false;
-                        break;
-                    }
-                }
-            }
-
-            if (innerType->IsTuple()) {
-                auto tupleType = static_cast<TTupleType*>(innerType);
-                for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
-                    if (!tupleType->GetElementType(index)->GetCookie()) {
-                        canExport = false;
-                        break;
-                    }
-                }
-            }
-
-            if (canExport) {
-                node->SetCookie(1);
-            }
-
-            break;
-        }
-
+        case TType::EKind::Variant:  { 
+            auto variantType = static_cast<TVariantType*>(node); 
+            TType* innerType = variantType->GetUnderlyingType(); 
+ 
+            if (innerType->IsStruct()) { 
+                auto structType = static_cast<TStructType*>(innerType); 
+                for (ui32 index = 0; index < structType->GetMembersCount(); ++index) { 
+                    if (!structType->GetMemberType(index)->GetCookie()) { 
+                        canExport = false; 
+                        break; 
+                    } 
+                } 
+            } 
+ 
+            if (innerType->IsTuple()) { 
+                auto tupleType = static_cast<TTupleType*>(innerType); 
+                for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) { 
+                    if (!tupleType->GetElementType(index)->GetCookie()) { 
+                        canExport = false; 
+                        break; 
+                    } 
+                } 
+            } 
+ 
+            if (canExport) { 
+                node->SetCookie(1); 
+            } 
+ 
+            break; 
+        } 
+ 
         case TType::EKind::Type:
             break;
 

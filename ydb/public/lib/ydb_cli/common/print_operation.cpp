@@ -14,32 +14,32 @@ namespace {
 
     using namespace NKikimr::NOperationId;
 
-    /// Common
-    TPrettyTable MakeTable(const TOperation&) {
-        return TPrettyTable({"id", "ready", "status"});
-    }
-
-    void PrettyPrint(const TOperation& operation, TPrettyTable& table) {
-        const auto& status = operation.Status();
-
-        auto& row = table.AddRow();
-        row
-            .Column(0, ProtoToString(operation.Id()))
-            .Column(1, operation.Ready() ? "true" : "false")
-            .Column(2, status.GetStatus() == NYdb::EStatus::STATUS_UNDEFINED ? "" : ToString(status.GetStatus()));
-
-        TStringBuilder freeText;
-
-        if (!status.GetIssues().Empty()) {
-            freeText << "Issues: " << Endl;
-            for (const auto& issue : status.GetIssues()) {
-                freeText << "  - " << issue << Endl;
-            }
-        }
-
-        row.FreeText(freeText);
-    }
-
+    /// Common 
+    TPrettyTable MakeTable(const TOperation&) { 
+        return TPrettyTable({"id", "ready", "status"}); 
+    } 
+ 
+    void PrettyPrint(const TOperation& operation, TPrettyTable& table) { 
+        const auto& status = operation.Status(); 
+ 
+        auto& row = table.AddRow(); 
+        row 
+            .Column(0, ProtoToString(operation.Id())) 
+            .Column(1, operation.Ready() ? "true" : "false") 
+            .Column(2, status.GetStatus() == NYdb::EStatus::STATUS_UNDEFINED ? "" : ToString(status.GetStatus())); 
+ 
+        TStringBuilder freeText; 
+ 
+        if (!status.GetIssues().Empty()) { 
+            freeText << "Issues: " << Endl; 
+            for (const auto& issue : status.GetIssues()) { 
+                freeText << "  - " << issue << Endl; 
+            } 
+        } 
+ 
+        row.FreeText(freeText); 
+    } 
+ 
     template <typename EProgress, typename TMetadata>
     TString PrintProgress(const TMetadata& metadata) {
         TStringBuilder result;
@@ -187,36 +187,36 @@ namespace {
     }
 
     /// Index build
-    TPrettyTable MakeTable(const NYdb::NTable::TBuildIndexOperation&) {
-        return TPrettyTable({"id", "ready", "status", "state", "progress", "table", "index"});
-    }
-
-    void PrettyPrint(const NYdb::NTable::TBuildIndexOperation& operation, TPrettyTable& table) {
-        const auto& status = operation.Status();
-        const auto& metadata = operation.Metadata();
-
-        auto& row = table.AddRow();
-        row
-            .Column(0, ProtoToString(operation.Id()))
-            .Column(1, operation.Ready() ? "true" : "false")
-            .Column(2, status.GetStatus() == NYdb::EStatus::STATUS_UNDEFINED ? "" : ToString(status.GetStatus()))
-            .Column(3, metadata.State)
-            .Column(4, FloatToString(metadata.Progress, PREC_POINT_DIGITS, 2) + "%")
-            .Column(5, metadata.Path)
-            .Column(6, metadata.Desctiption ? metadata.Desctiption->GetIndexName() : "");
-
-        TStringBuilder freeText;
-
-        if (!status.GetIssues().Empty()) {
-            freeText << "Issues: " << Endl;
-            for (const auto& issue : status.GetIssues()) {
-                freeText << "  - " << issue << Endl;
-            }
-        }
-
-        row.FreeText(freeText);
-    }
-
+    TPrettyTable MakeTable(const NYdb::NTable::TBuildIndexOperation&) { 
+        return TPrettyTable({"id", "ready", "status", "state", "progress", "table", "index"}); 
+    } 
+ 
+    void PrettyPrint(const NYdb::NTable::TBuildIndexOperation& operation, TPrettyTable& table) { 
+        const auto& status = operation.Status(); 
+        const auto& metadata = operation.Metadata(); 
+ 
+        auto& row = table.AddRow(); 
+        row 
+            .Column(0, ProtoToString(operation.Id())) 
+            .Column(1, operation.Ready() ? "true" : "false") 
+            .Column(2, status.GetStatus() == NYdb::EStatus::STATUS_UNDEFINED ? "" : ToString(status.GetStatus())) 
+            .Column(3, metadata.State) 
+            .Column(4, FloatToString(metadata.Progress, PREC_POINT_DIGITS, 2) + "%") 
+            .Column(5, metadata.Path) 
+            .Column(6, metadata.Desctiption ? metadata.Desctiption->GetIndexName() : ""); 
+ 
+        TStringBuilder freeText; 
+ 
+        if (!status.GetIssues().Empty()) { 
+            freeText << "Issues: " << Endl; 
+            for (const auto& issue : status.GetIssues()) { 
+                freeText << "  - " << issue << Endl; 
+            } 
+        } 
+ 
+        row.FreeText(freeText); 
+    } 
+ 
     // Common
     template <typename T>
     void PrintOperationImpl(const T& operation, EOutputFormat format) {
@@ -273,11 +273,11 @@ namespace {
 
 }
 
-/// Common
-void PrintOperation(const TOperation& operation, EOutputFormat format) {
-    PrintOperationImpl(operation, format);
-}
-
+/// Common 
+void PrintOperation(const TOperation& operation, EOutputFormat format) { 
+    PrintOperationImpl(operation, format); 
+} 
+ 
 /// YT
 void PrintOperation(const NExport::TExportToYtResponse& operation, EOutputFormat format) {
     PrintOperationImpl(operation, format);
@@ -307,13 +307,13 @@ void PrintOperationsList(const NOperation::TOperationsList<NImport::TImportFromS
 }
 
 /// Index build
-void PrintOperation(const NYdb::NTable::TBuildIndexOperation& operation, EOutputFormat format) {
-    PrintOperationImpl(operation, format);
+void PrintOperation(const NYdb::NTable::TBuildIndexOperation& operation, EOutputFormat format) { 
+    PrintOperationImpl(operation, format); 
 }
-
-void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TBuildIndexOperation>& operations, EOutputFormat format) {
-    PrintOperationsListImpl(operations, format);
+ 
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TBuildIndexOperation>& operations, EOutputFormat format) { 
+    PrintOperationsListImpl(operations, format); 
 }
-
-}
-}
+ 
+} 
+} 

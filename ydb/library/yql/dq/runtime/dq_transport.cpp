@@ -109,7 +109,7 @@ void DeserializeBufferArrowV1(const NDqProto::TData& data, const TType* itemType
 NDqProto::TData SerializeParamV1(const TMkqlValueRef& param, const TTypeEnvironment& typeEnv,
     const THolderFactory& holderFactory)
 {
-    auto [type, value] = ImportValueFromProto(param.GetType(), param.GetValue(), typeEnv, holderFactory);
+    auto [type, value] = ImportValueFromProto(param.GetType(), param.GetValue(), typeEnv, holderFactory); 
 
     return SerializeValuePickleV1(type, value);
 }

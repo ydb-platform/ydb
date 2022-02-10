@@ -1,7 +1,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <ydb/core/tx/datashard/datashard.h>
-
+ 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <google/protobuf/text_format.h>
@@ -169,8 +169,8 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
 
 Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
     Y_UNIT_TEST(Fake) {
-    }
-
+    } 
+ 
     Y_UNIT_TEST(CopyWithData) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -353,13 +353,13 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                 IndexDescription {
                   Name: "UserDefinedIndexByValues"
                   KeyColumnNames: ["value0", "value1"]
-                  State: EIndexStateNotReady
+                  State: EIndexStateNotReady 
                 }
-                IndexDescription {
-                  Name: "UserDefinedIndexByValue0CoveringValue1"
-                  KeyColumnNames: ["value0"]
-                  DataColumnNames: ["value1"]
-                }
+                IndexDescription { 
+                  Name: "UserDefinedIndexByValue0CoveringValue1" 
+                  KeyColumnNames: ["value0"] 
+                  DataColumnNames: ["value1"] 
+                } 
             )");
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
 
@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/Table1"),
                                    { NLs::Finished,
                                     NLs::PathVersionEqual(3),
-                                    NLs::IndexesCount(3)});
+                                    NLs::IndexesCount(3)}); 
                 TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValue0"),
                                    {NLs::Finished,
                                     NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
@@ -388,13 +388,13 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                 TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValues/indexImplTable"),
                                    {NLs::Finished});
                 TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValue0CoveringValue1"),
-                                   {NLs::Finished,
+                                   {NLs::Finished, 
                                     NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
                                     NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                                    NLs::IndexKeys({"value0"}),
-                                    NLs::IndexDataColumns({"value1"})});
+                                    NLs::IndexKeys({"value0"}), 
+                                    NLs::IndexDataColumns({"value1"})}); 
                 TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValue0CoveringValue1/indexImplTable"),
-                                   {NLs::Finished});
+                                   {NLs::Finished}); 
 
             }
 
@@ -424,11 +424,11 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                       Name: "UserDefinedIndexByValues"
                       KeyColumnNames: ["value0", "value1"]
                     }
-                    IndexDescription {
-                      Name: "UserDefinedIndexByValue0CoveringValue1"
-                      KeyColumnNames: ["value0"]
-                      DataColumnNames: ["value1"]
-                    }
+                    IndexDescription { 
+                      Name: "UserDefinedIndexByValue0CoveringValue1" 
+                      KeyColumnNames: ["value0"] 
+                      DataColumnNames: ["value1"] 
+                    } 
                 )");
                 t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
             }
@@ -566,13 +566,13 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                                             IndexDescription {
                                               Name: "UserDefinedIndexByValue1"
                                               KeyColumnNames: ["value1"]
-                                            }
-                                            IndexDescription {
-                                                Name: "UserDefinedIndexByValue0CoveringValue1"
-                                                KeyColumnNames: ["value0"]
-                                                DataColumnNames: ["value1"]
-                                            }
-                                        )");
+                                            } 
+                                            IndexDescription { 
+                                                Name: "UserDefinedIndexByValue0CoveringValue1" 
+                                                KeyColumnNames: ["value0"] 
+                                                DataColumnNames: ["value1"] 
+                                            } 
+                                        )"); 
 
                 t.TestEnv->TestWaitNotification(runtime, {t.TxId - 2, t.TxId - 1, t.TxId});
 

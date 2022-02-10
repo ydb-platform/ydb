@@ -8,7 +8,7 @@
 #include <ydb/public/api/grpc/ydb_coordination_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
-#include <util/generic/deque.h>
+#include <util/generic/deque.h> 
 #include <util/random/entropy.h>
 
 namespace NYdb {
@@ -185,11 +185,11 @@ class TSessionContext : public TThrRefBase {
 public:
     TSessionContext(
             TGRpcConnectionsImpl* connections,
-            TDbDriverStatePtr dbState,
+            TDbDriverStatePtr dbState, 
             const TString& path,
             const TSessionSettings& settings)
-        : Connections_(connections)
-        , DbDriverState_(dbState)
+        : Connections_(connections) 
+        , DbDriverState_(dbState) 
         , Path_(path)
         , Settings_(settings)
         , ProtectionKey_(GenerateProtectionKey(8))
@@ -634,12 +634,12 @@ private:
             prevConnectContext->Cancel();
         }
 
-        Connections_->StartBidirectionalStream<TService, TRequest, TResponse>(
+        Connections_->StartBidirectionalStream<TService, TRequest, TResponse>( 
             [self = TPtr(this)] (auto status, auto processor) {
                 self->OnConnect(std::move(status), std::move(processor));
             },
             &TService::Stub::AsyncSession,
-            DbDriverState_,
+            DbDriverState_, 
             TRpcRequestSettings::Make(Settings_),
             std::move(connectContext));
 
@@ -668,20 +668,20 @@ private:
     }
 
     TStatus MakeStatus() const {
-        return TStatus(TPlainStatus());
+        return TStatus(TPlainStatus()); 
     }
 
     template<class TSource>
     TStatus MakeStatus(TSource&& source) const {
-        return TStatus(std::forward<TSource>(source));
+        return TStatus(std::forward<TSource>(source)); 
     }
 
     TStatus MakeStatus(EStatus status, NYql::TIssues&& issues) const {
-        return TStatus(TPlainStatus(status, std::move(issues)));
+        return TStatus(TPlainStatus(status, std::move(issues))); 
     }
 
     TStatus MakeStatus(EStatus status, const TString& message) const {
-        return TStatus(TPlainStatus(status, message));
+        return TStatus(TPlainStatus(status, message)); 
     }
 
 private:
@@ -698,7 +698,7 @@ private:
     template<class TSource>
     void SetCurrentFailure(TSource&& source) {
         Y_VERIFY(!CurrentFailure);
-        CurrentFailure.Reset(new TStatus(std::forward<TSource>(source)));
+        CurrentFailure.Reset(new TStatus(std::forward<TSource>(source))); 
     }
 
     template<class T>
@@ -1725,7 +1725,7 @@ private:
 
 private:
     TGRpcConnectionsImpl* const Connections_;
-    TDbDriverStatePtr DbDriverState_;
+    TDbDriverStatePtr DbDriverState_; 
     const TString Path_;
     const TSessionSettings Settings_;
     const TString ProtectionKey_;
@@ -1786,10 +1786,10 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TClient::TImpl : public TClientImplCommon<TClient::TImpl> {
+class TClient::TImpl : public TClientImplCommon<TClient::TImpl> { 
 public:
-    TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
-        : TClientImplCommon(std::move(connections), settings)
+    TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings) 
+        : TClientImplCommon(std::move(connections), settings) 
     {
     }
 
@@ -1799,7 +1799,7 @@ public:
     {
         auto session = MakeIntrusive<TSessionContext>(
             Connections_.get(),
-            DbDriverState_,
+            DbDriverState_, 
             path,
             settings);
 
@@ -1855,15 +1855,15 @@ public:
     {
         auto promise = NewPromise<TDescribeNodeResult>();
 
-        auto extractor = [promise]
-            (google::protobuf::Any* any, TPlainStatus status) mutable {
+        auto extractor = [promise] 
+            (google::protobuf::Any* any, TPlainStatus status) mutable { 
                 Ydb::Coordination::DescribeNodeResult result;
                 if (any) {
                     any->UnpackTo(&result);
                 }
                 promise.SetValue(
                     TDescribeNodeResult(
-                        TStatus(std::move(status)),
+                        TStatus(std::move(status)), 
                         TNodeDescription(std::move(result))));
             };
 
@@ -1873,8 +1873,8 @@ public:
             std::move(request),
             std::move(extractor),
             &Ydb::Coordination::V1::CoordinationService::Stub::AsyncDescribeNode,
-            DbDriverState_,
-            INITIAL_DEFERRED_CALL_DELAY,
+            DbDriverState_, 
+            INITIAL_DEFERRED_CALL_DELAY, 
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_);
 
@@ -1882,8 +1882,8 @@ public:
     }
 };
 
-TClient::TClient(const TDriver& driver, const TCommonClientSettings& settings)
-    : Impl_(new TImpl(CreateInternalInterface(driver), settings))
+TClient::TClient(const TDriver& driver, const TCommonClientSettings& settings) 
+    : Impl_(new TImpl(CreateInternalInterface(driver), settings)) 
 { }
 
 TClient::~TClient() {

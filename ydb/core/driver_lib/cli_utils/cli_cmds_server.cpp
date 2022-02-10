@@ -73,7 +73,7 @@ protected:
     TString Rack;
     ui32 Body;
     ui32 GRpcPort;
-    ui32 GRpcsPort;
+    ui32 GRpcsPort; 
     TString GRpcPublicHost;
     ui32 GRpcPublicPort;
     ui32 GRpcsPublicPort;
@@ -120,7 +120,7 @@ protected:
         Rack = "";
         Body = 0;
         GRpcPort = 0;
-        GRpcsPort = 0;
+        GRpcsPort = 0; 
         GRpcPublicHost = "";
         GRpcPublicPort = 0;
         GRpcsPublicPort = 0;
@@ -198,7 +198,7 @@ protected:
         config.Opts->AddLongOption("grpc-file", "gRPC config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("tenant-pool-file", "Tenant Pool service config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT").StoreResult(&GRpcPort);
-        config.Opts->AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT").StoreResult(&GRpcsPort);
+        config.Opts->AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT").StoreResult(&GRpcsPort); 
         config.Opts->AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicHost);
         config.Opts->AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT").StoreResult(&GRpcPublicPort);
         config.Opts->AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT").StoreResult(&GRpcsPublicPort);
@@ -531,11 +531,11 @@ protected:
             conf.SetStartGRpcProxy(true);
             conf.SetPort(GRpcPort);
         }
-        if (GRpcsPort) {
-            auto& conf = *AppConfig.MutableGRpcConfig();
-            conf.SetStartGRpcProxy(true);
+        if (GRpcsPort) { 
+            auto& conf = *AppConfig.MutableGRpcConfig(); 
+            conf.SetStartGRpcProxy(true); 
             conf.SetSslPort(GRpcsPort);
-        }
+        } 
         if (GRpcPublicHost) {
             auto& conf = *AppConfig.MutableGRpcConfig();
             conf.SetPublicHost(GRpcPublicHost);

@@ -46,30 +46,30 @@ struct TKikimrQueryLimits {
     TKikimrQueryPhaseLimits PhaseLimits;
 };
 
-struct TIndexDescription {
+struct TIndexDescription { 
     enum class EType : ui32 {
         GlobalSync = 0,
         GlobalAsync = 1,
 
-    };
-
+    }; 
+ 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
-    enum class EIndexState : ui32 {
-        Invalid = 0,  // this state should not be used
-        Ready = 1,    // index is ready to use
+    enum class EIndexState : ui32 { 
+        Invalid = 0,  // this state should not be used 
+        Ready = 1,    // index is ready to use 
         NotReady = 2, // index is visible but not ready to use
         WriteOnly = 3 // index is visible only write operations to index are allowed
-    };
-
-    const TString Name;
-    const TVector<TString> KeyColumns;
-    const TVector<TString> DataColumns;
-    const EType Type;
-    const EIndexState State;
-    const ui64 SchemaVersion;
-    const ui64 LocalPathId;
-    const ui64 PathOwnerId;
-
+    }; 
+ 
+    const TString Name; 
+    const TVector<TString> KeyColumns; 
+    const TVector<TString> DataColumns; 
+    const EType Type; 
+    const EIndexState State; 
+    const ui64 SchemaVersion; 
+    const ui64 LocalPathId; 
+    const ui64 PathOwnerId; 
+ 
     TIndexDescription(const TString& name, const TVector<TString>& keyColumns, const TVector<TString>& dataColumns,
         EType type, EIndexState state, ui64 schemaVersion, ui64 localPathId, ui64 pathOwnerId)
         : Name(name)
@@ -130,12 +130,12 @@ struct TIndexDescription {
         }
     }
 
-    bool IsSameIndex(const TIndexDescription& other) const {
-        return Name == other.Name &&
-            KeyColumns == other.KeyColumns &&
-            DataColumns == other.DataColumns &&
-            Type == other.Type;
-    }
+    bool IsSameIndex(const TIndexDescription& other) const { 
+        return Name == other.Name && 
+            KeyColumns == other.KeyColumns && 
+            DataColumns == other.DataColumns && 
+            Type == other.Type; 
+    } 
 
     bool ItUsedForWrite() const {
         switch (Type) {
@@ -145,8 +145,8 @@ struct TIndexDescription {
                 return false;
         }
     }
-};
-
+}; 
+ 
 struct TColumnFamily {
     TString Name;
     TMaybe<TString> Data;
@@ -292,10 +292,10 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TVector<TString> KeyColumnNames;
     TVector<TString> ColumnOrder;
 
-    // Indexes and SecondaryGlobalIndexMetadata must be in same order
-    TVector<TIndexDescription> Indexes;
-    TVector<TIntrusivePtr<TKikimrTableMetadata>> SecondaryGlobalIndexMetadata;
-
+    // Indexes and SecondaryGlobalIndexMetadata must be in same order 
+    TVector<TIndexDescription> Indexes; 
+    TVector<TIntrusivePtr<TKikimrTableMetadata>> SecondaryGlobalIndexMetadata; 
+ 
     TVector<TColumnFamily> ColumnFamilies;
     TTableSettings TableSettings;
 
@@ -347,10 +347,10 @@ struct TKikimrTableMetadata : public TThrRefBase {
         }
 
         if (Cluster != other.Cluster || Name != other.Name || Columns.size() != other.Columns.size() ||
-                KeyColumnNames != other.KeyColumnNames || Indexes.size() != other.Indexes.size()) {
-            return false;
-        }
-
+                KeyColumnNames != other.KeyColumnNames || Indexes.size() != other.Indexes.size()) { 
+            return false; 
+        } 
+ 
         for (auto& [name, column]: Columns) {
             auto otherColumn = other.Columns.FindPtr(name);
             if (!otherColumn) {
@@ -362,15 +362,15 @@ struct TKikimrTableMetadata : public TThrRefBase {
             }
         }
 
-        for (size_t i = 0; i < Indexes.size(); i++) {
-            if (!Indexes[i].IsSameIndex(other.Indexes[i])) {
-                return false;
-            }
-        }
-
-        return true;
+        for (size_t i = 0; i < Indexes.size(); i++) { 
+            if (!Indexes[i].IsSameIndex(other.Indexes[i])) { 
+                return false; 
+            } 
+        } 
+ 
+        return true; 
     }
-
+ 
     void ToMessage(NKikimrKqp::TKqpTableMetadataProto* message) const {
         message->SetDoesExist(DoesExist);
         message->SetCluster(Cluster);
@@ -407,18 +407,18 @@ struct TKikimrTableMetadata : public TThrRefBase {
         return proto.SerializeAsString();
     }
 
-    std::pair<TIntrusivePtr<TKikimrTableMetadata>, TIndexDescription::EIndexState> GetIndexMetadata(const TString& indexName) const {
-        YQL_ENSURE(Indexes.size(), "GetIndexMetadata called for table without indexes");
-        YQL_ENSURE(Indexes.size() == SecondaryGlobalIndexMetadata.size(), "index metadata has not been loaded yet");
-        for (size_t i = 0; i < Indexes.size(); i++) {
-            if (Indexes[i].Name == indexName) {
-                auto metadata = SecondaryGlobalIndexMetadata[i];
-                YQL_ENSURE(metadata, "unexpected empty metadata for index " << indexName);
-                return {metadata, Indexes[i].State};
-            }
-        }
-        return {nullptr, TIndexDescription::EIndexState::Invalid};
-    }
+    std::pair<TIntrusivePtr<TKikimrTableMetadata>, TIndexDescription::EIndexState> GetIndexMetadata(const TString& indexName) const { 
+        YQL_ENSURE(Indexes.size(), "GetIndexMetadata called for table without indexes"); 
+        YQL_ENSURE(Indexes.size() == SecondaryGlobalIndexMetadata.size(), "index metadata has not been loaded yet"); 
+        for (size_t i = 0; i < Indexes.size(); i++) { 
+            if (Indexes[i].Name == indexName) { 
+                auto metadata = SecondaryGlobalIndexMetadata[i]; 
+                YQL_ENSURE(metadata, "unexpected empty metadata for index " << indexName); 
+                return {metadata, Indexes[i].State}; 
+            } 
+        } 
+        return {nullptr, TIndexDescription::EIndexState::Invalid}; 
+    } 
 };
 
 struct TCreateUserSettings {
@@ -527,8 +527,8 @@ static TIntrusivePtr<TKikimrResultHolder<TResult>> MakeKikimrResultHolder(TResul
 
 class IKikimrGateway : public TThrRefBase {
 public:
-    using TPtr = TIntrusivePtr<IKikimrGateway>;
-
+    using TPtr = TIntrusivePtr<IKikimrGateway>; 
+ 
     struct TGenericResult : public NCommon::TOperationResult {
     };
 
@@ -543,7 +543,7 @@ public:
 
     struct TQueryResult : public TGenericResult {
         TString SessionId;
-        TVector<NKikimrMiniKQL::TResult*> Results;
+        TVector<NKikimrMiniKQL::TResult*> Results; 
         TMaybe<NKikimrKqp::TQueryProfile> Profile; // TODO: Deprecate.
         NKqpProto::TKqpStatsQuery QueryStats;
         std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery;
@@ -551,25 +551,25 @@ public:
         std::optional<NKikimr::NKqp::TQueryTraits> QueryTraits;
         TString QueryAst;
         TString QueryPlan;
-        std::shared_ptr<google::protobuf::Arena> ProtobufArenaPtr;
+        std::shared_ptr<google::protobuf::Arena> ProtobufArenaPtr; 
         TMaybe<ui16> SqlVersion;
     };
 
-    struct TLoadTableMetadataSettings {
-        TLoadTableMetadataSettings& WithTableStats(bool enable) {
-            RequestStats_ = enable;
-            return *this;
-        }
-
-        TLoadTableMetadataSettings& WithPrivateTables(bool enable) {
-            WithPrivateTables_ = enable;
-            return *this;
-        }
-
-        bool RequestStats_ = false;
-        bool WithPrivateTables_ = false;
-    };
-
+    struct TLoadTableMetadataSettings { 
+        TLoadTableMetadataSettings& WithTableStats(bool enable) { 
+            RequestStats_ = enable; 
+            return *this; 
+        } 
+ 
+        TLoadTableMetadataSettings& WithPrivateTables(bool enable) { 
+            WithPrivateTables_ = enable; 
+            return *this; 
+        } 
+ 
+        bool RequestStats_ = false; 
+        bool WithPrivateTables_ = false; 
+    }; 
+ 
     class IKqpTableMetadataLoader : public std::enable_shared_from_this<IKqpTableMetadataLoader> {
     public:
         virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
@@ -593,12 +593,12 @@ public:
     virtual NThreading::TFuture<TListPathResult> ListPath(const TString& cluster, const TString& path) = 0;
 
     virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
-        const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
+        const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0; 
 
     virtual NThreading::TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> AlterTable(Ydb::Table::AlterTableRequest&& req, const TString& cluster) = 0;
-
+    virtual NThreading::TFuture<TGenericResult> AlterTable(Ydb::Table::AlterTableRequest&& req, const TString& cluster) = 0; 
+ 
     virtual NThreading::TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropTable(const TString& cluster, const TString& table) = 0;
@@ -635,20 +635,20 @@ public:
     static bool TrySplitTablePath(const TString& path, std::pair<TString, TString>& result, TString& error);
 
     static NThreading::TFuture<TGenericResult> CreatePath(const TString& path, TCreateDirFunc createDir);
-
-    static TString CreateIndexTablePath(const TString& tableName, const TString& indexName);
-
+ 
+    static TString CreateIndexTablePath(const TString& tableName, const TString& indexName); 
+ 
     static void BuildIndexMetadata(TTableMetadataResult& loadTableMetadataResult);
 };
 
-EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus);
+EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus); 
 Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value);
 
 void SetColumnType(Ydb::Type& protoType, const TString& typeName, bool notNull);
-bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::ReadReplicasSettings& proto,
-    Ydb::StatusIds::StatusCode& code, TString& error);
-void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto);
-
+bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::ReadReplicasSettings& proto, 
+    Ydb::StatusIds::StatusCode& code, TString& error); 
+void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto); 
+ 
 } // namespace NYql
 
 template<>

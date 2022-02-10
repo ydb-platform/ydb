@@ -8,22 +8,22 @@
 #include <ydb/public/sdk/cpp/client/ydb_types/core_facility/core_facility.h>
 
 namespace NYdb {
-
+ 
 class ICredentialsProvider;
 class ICredentialsProviderFactory;
 
 // Represents state of driver for one particular database
-class TDbDriverState
-    : public std::enable_shared_from_this<TDbDriverState>
-    , public ICoreFacility
-{
-public:
+class TDbDriverState 
+    : public std::enable_shared_from_this<TDbDriverState> 
+    , public ICoreFacility 
+{ 
+public: 
     enum class ENotifyType : size_t {
         STOP = 0,
         COUNT = 1 // types count
     };
 
-    using TCb = std::function<NThreading::TFuture<void>()>;
+    using TCb = std::function<NThreading::TFuture<void>()>; 
     using TPtr = std::shared_ptr<TDbDriverState>;
 
     TDbDriverState(
@@ -34,15 +34,15 @@ public:
         IInternalClient* client
     );
 
-    void AddPeriodicTask(TPeriodicCb&& cb, TDuration period) override;
-
+    void AddPeriodicTask(TPeriodicCb&& cb, TDuration period) override; 
+ 
     void AddCb(TCb&& cb, ENotifyType type);
     void ForEachEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
     void ForEachLocalEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
     void ForEachForeignEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
     EBalancingPolicy GetBalancingPolicy() const;
     TStringType GetEndpoint() const;
-    void SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider);
+    void SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider); 
 
     const TStringType Database;
     const TStringType DiscoveryEndpoint;
@@ -53,7 +53,7 @@ public:
     TEndpointPool EndpointPool;
     // StopCb allow client to subscribe for notifications from lower layer
     std::mutex NotifyCbsLock;
-    std::array<std::vector<TCb>, static_cast<size_t>(ENotifyType::COUNT)> NotifyCbs;
+    std::array<std::vector<TCb>, static_cast<size_t>(ENotifyType::COUNT)> NotifyCbs; 
 #ifndef YDB_GRPC_UNSECURE_AUTH
     std::shared_ptr<grpc::CallCredentials> CallCredentials;
 #endif
@@ -66,17 +66,17 @@ public:
 
 // Tracker allows to get driver state by database and credentials
 class TDbDriverStateTracker {
-    using TStateKey = std::tuple<TStringType, TStringType, TStringType, EDiscoveryMode, bool>;
-    struct TStateKeyHash {
-        size_t operator()(const TStateKey& k) const noexcept {
+    using TStateKey = std::tuple<TStringType, TStringType, TStringType, EDiscoveryMode, bool>; 
+    struct TStateKeyHash { 
+        size_t operator()(const TStateKey& k) const noexcept { 
             THash<TStringType> strHash;
-            const size_t h0 = strHash(std::get<0>(k));
-            const size_t h1 = strHash(std::get<1>(k));
-            const size_t h2 = strHash(std::get<2>(k));
-            const size_t h3 = ((size_t)std::get<3>(k) << 1) + (size_t)std::get<4>(k);
-            return (h0 ^ h1 ^ h2 ^ h3);
-        }
-    };
+            const size_t h0 = strHash(std::get<0>(k)); 
+            const size_t h1 = strHash(std::get<1>(k)); 
+            const size_t h2 = strHash(std::get<2>(k)); 
+            const size_t h3 = ((size_t)std::get<3>(k) << 1) + (size_t)std::get<4>(k); 
+            return (h0 ^ h1 ^ h2 ^ h3); 
+        } 
+    }; 
 public:
     TDbDriverStateTracker(IInternalClient* client);
     TDbDriverState::TPtr GetDriverState(
@@ -87,11 +87,11 @@ public:
         std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
     );
     NThreading::TFuture<void> SendNotification(
-        TDbDriverState::ENotifyType type);
+        TDbDriverState::ENotifyType type); 
     void SetMetricRegistry(NMonitoring::TMetricRegistry *sensorsRegistry);
 private:
     IInternalClient* DiscoveryClient_;
-    std::unordered_map<TStateKey, std::weak_ptr<TDbDriverState>, TStateKeyHash> States_;
+    std::unordered_map<TStateKey, std::weak_ptr<TDbDriverState>, TStateKeyHash> States_; 
     std::shared_mutex Lock_;
 };
 

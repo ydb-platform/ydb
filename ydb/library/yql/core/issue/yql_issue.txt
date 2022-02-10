@@ -1,12 +1,12 @@
-ids {
-  code: UNEXPECTED
-  severity: S_FATAL
-}
-ids {
-  code: DEFAULT_ERROR
-  severity: S_ERROR
-}
-ids {
+ids { 
+  code: UNEXPECTED 
+  severity: S_FATAL 
+} 
+ids { 
+  code: DEFAULT_ERROR 
+  severity: S_ERROR 
+} 
+ids { 
   code: INFO
   severity: S_INFO
 }
@@ -19,49 +19,49 @@ ids {
   severity: S_WARNING
 }
 ids {
-  code: CORE
+  code: CORE 
   severity: S_INFO
-}
-ids {
-  code: CORE_GC
+} 
+ids { 
+  code: CORE_GC 
   severity: S_INFO
-}
-ids {
-  code: CORE_PRE_TYPE_ANN
+} 
+ids { 
+  code: CORE_PRE_TYPE_ANN 
   severity: S_INFO
   format: "Pre type annotation"
-}
-ids {
-  code: CORE_TYPE_ANN
+} 
+ids { 
+  code: CORE_TYPE_ANN 
   severity: S_INFO
   format: "Type annotation"
-}
-ids {
+} 
+ids { 
   code: CORE_POST_TYPE_ANN
   severity: S_INFO
   format: "Post type annotation"
 }
 ids {
-  code: CORE_INTENT
+  code: CORE_INTENT 
   severity: S_INFO
   format: "Table intent determination"
-}
-ids {
-  code: CORE_TABLE_METADATA_LOADER
+} 
+ids { 
+  code: CORE_TABLE_METADATA_LOADER 
   severity: S_INFO
   format: "Table metadata loading"
-}
-ids {
-  code: CORE_EXEC
+} 
+ids { 
+  code: CORE_EXEC 
   severity: S_INFO
   format: "Execution"
-}
-ids {
-  code: CORE_OPTIMIZATION
+} 
+ids { 
+  code: CORE_OPTIMIZATION 
   severity: S_INFO
   format: "Optimization"
-}
-ids {
+} 
+ids { 
   code: CORE_PARAM_EVALUATION
   severity: S_INFO
   format: "Parameters evaluation"
@@ -128,10 +128,10 @@ ids {
   severity: S_ERROR
 }
 ids {
-  code: KIKIMR_LOCKS_INVALIDATED
-  severity: S_ERROR
+  code: KIKIMR_LOCKS_INVALIDATED 
+  severity: S_ERROR 
   format: "Transaction locks invalidated."
-}
+} 
 ids {
   code: KIKIMR_LOCKS_ACQUIRE_FAILURE
   severity: S_ERROR
@@ -250,28 +250,28 @@ ids {
   severity: S_WARNING
 }
 ids {
-  code: KIKIMR_WRONG_INDEX_USAGE
-  severity: S_WARNING
-}
-ids {
-  code: KIKIMR_GRPC_CONTEXT_ERROR
-  severity: S_ERROR
-  format: "Operation with grpc context failed"
-}
-ids {
+  code: KIKIMR_WRONG_INDEX_USAGE 
+  severity: S_WARNING 
+} 
+ids { 
+  code: KIKIMR_GRPC_CONTEXT_ERROR 
+  severity: S_ERROR 
+  format: "Operation with grpc context failed" 
+} 
+ids { 
   code: KIKIMR_OPERATION_STATE_UNKNOWN
   severity: S_ERROR
   format: "State of operation is unknown."
 }
 ids {
-  code: KIKIMR_INDEX_IS_NOT_READY
-  severity: S_ERROR
-}
-ids {
-  code: KIKIMR_INDEX_METADATA_LOAD_FAILED
-  severity: S_ERROR
-}
-ids {
+  code: KIKIMR_INDEX_IS_NOT_READY 
+  severity: S_ERROR 
+} 
+ids { 
+  code: KIKIMR_INDEX_METADATA_LOAD_FAILED 
+  severity: S_ERROR 
+} 
+ids { 
   code: KIKIMR_SCHEME_MISMATCH
   severity: S_ERROR
   format: "Scheme mismatch found while executing query."
@@ -443,7 +443,7 @@ ids {
 ids {
   code: YQL_NOT_ALLOWED_IN_DISCOVERY
   severity: S_ERROR
-}
+} 
 ids {
   code: JSONPATH_PARSE_ERROR
   severity: S_ERROR

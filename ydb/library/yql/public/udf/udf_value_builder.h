@@ -144,12 +144,12 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 14)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 14) 
 class IValueBuilder3: public IValueBuilder2 {
 public:
-    virtual bool GetSecureParam(TStringRef key, TStringRef& value) const = 0;
+    virtual bool GetSecureParam(TStringRef key, TStringRef& value) const = 0; 
 };
-#endif
+#endif 
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 17)
 class IValueBuilder4: public IValueBuilder3 {

@@ -206,7 +206,7 @@ public:
     TKqpChannelStorage(ui64 txId, ui64 channelId, TWakeUpCallback&& wakeUp, const TActorContext& ctx)
     {
         SelfActor = new TKqpChannelStorageActor(txId, channelId, std::move(wakeUp));
-        ctx.RegisterWithSameMailbox(SelfActor);
+        ctx.RegisterWithSameMailbox(SelfActor); 
     }
 
     ~TKqpChannelStorage() {

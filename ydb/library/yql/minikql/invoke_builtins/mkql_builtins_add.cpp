@@ -3,7 +3,7 @@
 #include "mkql_builtins_decimal.h"
 
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
- 
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -42,7 +42,7 @@ struct TDecimalAdd {
             return NUdf::TUnboxedValuePod(Nan());
         else
             return NUdf::TUnboxedValuePod(a > 0 ? +Inf() : -Inf());
-    } 
+    }
 
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
@@ -92,9 +92,9 @@ struct TDecimalAdd {
     }
 #endif
     static_assert(Precision <= NYql::NDecimal::MaxPrecision, "Too large precision!");
-}; 
- 
- 
+};
+
+
 template<typename TLeft, typename TRight, typename TOutput, bool Tz = false>
 struct TDateTimeAddT {
     static_assert(std::is_integral<TLeft>::value, "left must be integral");

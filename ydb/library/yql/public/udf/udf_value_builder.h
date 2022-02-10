@@ -134,7 +134,7 @@ public:
 
     virtual TUnboxedValue NewVariant(ui32 index, TUnboxedValue&& value) const = 0;
 
-    inline TUnboxedValue NewEmptyList() const { return NewList(nullptr, 0); } 
+    inline TUnboxedValue NewEmptyList() const { return NewList(nullptr, 0); }
 };
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 1)

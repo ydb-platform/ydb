@@ -1,9 +1,9 @@
-LIBRARY() 
- 
-OWNER( 
+LIBRARY()
+
+OWNER(
     g:yql g:yql_ydb_core
-) 
- 
+)
+
 SRCS(
     translation_settings.cpp
 )
@@ -15,4 +15,4 @@ PEERDIR(
     ydb/library/yql/utils
 )
 
-END() 
+END()

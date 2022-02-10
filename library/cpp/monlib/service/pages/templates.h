@@ -121,20 +121,20 @@ namespace NMonitoring {
         TTag(IOutputStream& str, TStringBuf cls = "", TStringBuf for0 = "", TStringBuf id = "")
             : Str(str)
         {
-            Str << "<" << tag; 
+            Str << "<" << tag;
 
             if (!cls.empty()) {
-                Str << " class=\"" << cls << "\""; 
-            } 
+                Str << " class=\"" << cls << "\"";
+            }
 
             if (!for0.empty()) {
-                Str << " for=\"" << for0 << "\""; 
-            } 
- 
+                Str << " for=\"" << for0 << "\"";
+            }
+
             if (!id.empty()) {
-                Str << "id=\"" << id << "\""; 
-            } 
-            Str << ">"; 
+                Str << "id=\"" << id << "\"";
+            }
+            Str << ">";
         }
 
         TTag(IOutputStream& str, std::initializer_list<std::pair<TStringBuf, TStringBuf>> attributes)

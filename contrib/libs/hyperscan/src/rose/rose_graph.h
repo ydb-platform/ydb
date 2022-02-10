@@ -39,11 +39,11 @@
 
 #include "ue2common.h"
 #include "rose_build.h"
-#include "rose_internal.h" 
+#include "rose_internal.h"
 #include "nfa/nfa_internal.h" // for MO_INVALID_IDX
 #include "util/depth.h"
-#include "util/flat_containers.h" 
-#include "util/ue2_graph.h" 
+#include "util/flat_containers.h"
+#include "util/ue2_graph.h"
 
 #include <memory>
 #include <set>
@@ -53,7 +53,7 @@ namespace ue2 {
 struct CastleProto;
 struct raw_dfa;
 struct raw_som_dfa;
-struct TamaProto; 
+struct TamaProto;
 
 /** \brief Table type for a literal. */
 enum rose_literal_table {
@@ -64,14 +64,14 @@ enum rose_literal_table {
     ROSE_EVENT                 //!< "literal-like" events, such as EOD
 };
 
-/** \brief Edge history types. */ 
-enum RoseRoleHistory { 
-    ROSE_ROLE_HISTORY_NONE,      //!< no special history 
-    ROSE_ROLE_HISTORY_ANCH,      //!< previous role is at a fixed offset 
-    ROSE_ROLE_HISTORY_LAST_BYTE, //!< previous role can only match at EOD 
-    ROSE_ROLE_HISTORY_INVALID    //!< history not yet assigned 
-}; 
- 
+/** \brief Edge history types. */
+enum RoseRoleHistory {
+    ROSE_ROLE_HISTORY_NONE,      //!< no special history
+    ROSE_ROLE_HISTORY_ANCH,      //!< previous role is at a fixed offset
+    ROSE_ROLE_HISTORY_LAST_BYTE, //!< previous role can only match at EOD
+    ROSE_ROLE_HISTORY_INVALID    //!< history not yet assigned
+};
+
 #include "util/order_check.h"
 
 /** \brief Provides information about the (pre|in)fix engine to the left of a
@@ -81,10 +81,10 @@ struct LeftEngInfo {
     std::shared_ptr<CastleProto> castle;
     std::shared_ptr<raw_dfa> dfa;
     std::shared_ptr<raw_som_dfa> haig;
-    std::shared_ptr<TamaProto> tamarama; 
+    std::shared_ptr<TamaProto> tamarama;
     u32 lag = 0U;
     ReportID leftfix_report = MO_INVALID_IDX;
-    depth dfa_min_width{0}; 
+    depth dfa_min_width{0};
     depth dfa_max_width = depth::infinity();
 
     bool operator==(const LeftEngInfo &other) const {
@@ -92,7 +92,7 @@ struct LeftEngInfo {
             && other.castle == castle
             && other.dfa == dfa
             && other.haig == haig
-            && other.tamarama == tamarama 
+            && other.tamarama == tamarama
             && other.lag == lag
             && other.leftfix_report == leftfix_report;
     }
@@ -105,12 +105,12 @@ struct LeftEngInfo {
         ORDER_CHECK(castle);
         ORDER_CHECK(dfa);
         ORDER_CHECK(haig);
-        ORDER_CHECK(tamarama); 
+        ORDER_CHECK(tamarama);
         ORDER_CHECK(lag);
         ORDER_CHECK(leftfix_report);
         return false;
     }
-    size_t hash() const; 
+    size_t hash() const;
     void reset(void);
     explicit operator bool() const;
     bool tracksSom() const { return !!haig; }
@@ -124,14 +124,14 @@ struct RoseSuffixInfo {
     std::shared_ptr<CastleProto> castle;
     std::shared_ptr<raw_som_dfa> haig;
     std::shared_ptr<raw_dfa> rdfa;
-    std::shared_ptr<TamaProto> tamarama; 
-    depth dfa_min_width{0}; 
+    std::shared_ptr<TamaProto> tamarama;
+    depth dfa_min_width{0};
     depth dfa_max_width = depth::infinity();
 
     bool operator==(const RoseSuffixInfo &b) const;
     bool operator!=(const RoseSuffixInfo &b) const { return !(*this == b); }
     bool operator<(const RoseSuffixInfo &b) const;
-    size_t hash() const; 
+    size_t hash() const;
     void reset(void);
     explicit operator bool() const { return graph || castle || haig || rdfa || tamarama; }
 };
@@ -139,7 +139,7 @@ struct RoseSuffixInfo {
 /** \brief Properties attached to each Rose graph vertex. */
 struct RoseVertexProps {
     /** \brief Unique dense vertex index. Used for BGL algorithms. */
-    size_t index = ~size_t{0}; 
+    size_t index = ~size_t{0};
 
     /** \brief IDs of literals in the Rose literal map. */
     flat_set<u32> literals;
@@ -183,9 +183,9 @@ struct RoseVertexProps {
 /** \brief Properties attached to each Rose graph edge. */
 /* bounds are distance from end of prev to start of the next */
 struct RoseEdgeProps {
-    /** \brief Unique dense vertex index. Used for BGL algorithms. */ 
-    size_t index = ~size_t{0}; 
- 
+    /** \brief Unique dense vertex index. Used for BGL algorithms. */
+    size_t index = ~size_t{0};
+
     /**
      * \brief Minimum distance from the end of the source role's match to the
      * start of the target role's match.
@@ -219,9 +219,9 @@ bool operator<(const RoseEdgeProps &a, const RoseEdgeProps &b);
 /**
  * \brief Core Rose graph structure.
  */
-struct RoseGraph : public ue2_graph<RoseGraph, RoseVertexProps, RoseEdgeProps> { 
-    friend class RoseBuildImpl; /* to allow index renumbering */ 
-}; 
+struct RoseGraph : public ue2_graph<RoseGraph, RoseVertexProps, RoseEdgeProps> {
+    friend class RoseBuildImpl; /* to allow index renumbering */
+};
 using RoseVertex = RoseGraph::vertex_descriptor;
 using RoseEdge = RoseGraph::edge_descriptor;
 

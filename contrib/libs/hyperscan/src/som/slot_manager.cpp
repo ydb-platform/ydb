@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -26,11 +26,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/** 
- * \file 
+/**
+ * \file
  * \brief SOM Slot Manager.
  */
- 
+
 #include "slot_manager.h"
 
 #include "slot_manager_internal.h"
@@ -40,7 +40,7 @@
 #include "nfagraph/ng_som_util.h"
 #include "nfagraph/ng_region.h"
 #include "util/charreach.h"
-#include "util/hash.h" 
+#include "util/hash.h"
 #include "util/make_unique.h"
 #include "util/dump_charclass.h"
 #include "util/verify_types.h"
@@ -66,8 +66,8 @@ SlotCacheEntry::SlotCacheEntry(const NGHolder &prefix_in,
 size_t SlotEntryHasher::operator()(const SlotCacheEntry &e) const {
     assert(e.prefix);
 
-    size_t v = hash_all(hash_holder(*e.prefix), e.parent_slot, 
-                        e.is_reset, e.escapes); 
+    size_t v = hash_all(hash_holder(*e.prefix), e.parent_slot,
+                        e.is_reset, e.escapes);
 
     DEBUG_PRINTF("%zu vertices, parent_slot=%u, escapes=%s, is_reset=%d "
                  "hashes to %zx\n", num_vertices(*e.prefix), e.parent_slot,
@@ -137,7 +137,7 @@ u32 SomSlotManager::getSomSlot(const NGHolder &prefix,
 
 u32 SomSlotManager::getInitialResetSomSlot(const NGHolder &prefix,
                 const NGHolder &g,
-                const unordered_map<NFAVertex, u32> &region_map, 
+                const unordered_map<NFAVertex, u32> &region_map,
                 u32 last_sent_region, bool *prefix_already_implemented) {
     DEBUG_PRINTF("getting initial reset; last sent region %u\n",
                  last_sent_region);
@@ -165,9 +165,9 @@ u32 SomSlotManager::getInitialResetSomSlot(const NGHolder &prefix,
     // Clone a copy of g (and its region map) that we will be able to store
     // later on.
     shared_ptr<NGHolder> gg = make_shared<NGHolder>();
-    unordered_map<NFAVertex, NFAVertex> orig_to_copy; 
+    unordered_map<NFAVertex, NFAVertex> orig_to_copy;
     cloneHolder(*gg, g, &orig_to_copy);
-    unordered_map<NFAVertex, u32> gg_region_map; 
+    unordered_map<NFAVertex, u32> gg_region_map;
     for (const auto &m : region_map) {
         assert(contains(region_map, m.first));
         gg_region_map.emplace(orig_to_copy.at(m.first), m.second);
@@ -241,7 +241,7 @@ u32 SomSlotManager::numSomSlots() const {
     return nextSomSlot;
 }
 
-u32 SomSlotManager::addRevNfa(bytecode_ptr<NFA> nfa, u32 maxWidth) { 
+u32 SomSlotManager::addRevNfa(bytecode_ptr<NFA> nfa, u32 maxWidth) {
     u32 rv = verify_u32(rev_nfas.size());
     rev_nfas.push_back(move(nfa));
 

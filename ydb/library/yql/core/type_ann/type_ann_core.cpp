@@ -667,7 +667,7 @@ namespace NTypeAnnImpl {
             }
             else if (input->Content() == "String") {
                 // nothing to do
-            } 
+            }
             else if (input->Content() == "Date") {
                 if (!IsValidSmallData<ui16>(input->Head(), input->Content(), ctx.Expr, NKikimr::NUdf::EDataSlot::Date, textValue)) {
                     return IGraphTransformer::TStatus::Error;
@@ -852,10 +852,10 @@ namespace NTypeAnnImpl {
                 }
             }
             errStr = sb;
-        } 
+        }
         return result;
-    } 
- 
+    }
+
     TMaybe<ui32> FindOrReportMissingMember(TStringBuf memberName, TPositionHandle pos, const TStructExprType& structType, TContext& ctx) {
         TString errStr;
         auto result = FindOrReportMissingMember(memberName, structType, errStr);
@@ -4471,20 +4471,20 @@ namespace NTypeAnnImpl {
 
     template <NKikimr::NUdf::EDataSlot DataSlot>
     IGraphTransformer::TStatus DataGeneratorWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        Y_UNUSED(output); 
+        Y_UNUSED(output);
         if (!EnsureNotInDiscoveryMode(*input, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         if (!EnsureDependsOnTail(*input, ctx.Expr, 0)) {
             return IGraphTransformer::TStatus::Error;
-        } 
- 
+        }
+
         input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(DataSlot));
         input->SetUnorderedChildren();
-        return IGraphTransformer::TStatus::Ok; 
-    } 
- 
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus TablePathWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (ctx.Types.StrictTableProps) {
@@ -6895,12 +6895,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
     IGraphTransformer::TStatus ScriptUdfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureMinArgsCount(*input, 4, ctx.Expr)) { 
+        if (!EnsureMinArgsCount(*input, 4, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
-        if (!EnsureMaxArgsCount(*input, 5, ctx.Expr)) { 
-            return IGraphTransformer::TStatus::Error; 
-        } 
+        if (!EnsureMaxArgsCount(*input, 5, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
 
         // script type
         if (!EnsureAtom(input->Head(), ctx.Expr)) {
@@ -7953,12 +7953,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus SqlAccessWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!EnsureMinArgsCount(*input, 3, ctx.Expr)) { 
+        if (!EnsureMinArgsCount(*input, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
-        if (!EnsureMaxArgsCount(*input, 4, ctx.Expr)) { 
-            return IGraphTransformer::TStatus::Error; 
-        } 
+        if (!EnsureMaxArgsCount(*input, 4, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
 
         if (IsNull(*input->Child(1))) {
             output = input->ChildPtr(1);
@@ -7977,27 +7977,27 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         bool isYson = false;
         bool isYsonNode = false;
         bool isJson = false;
-        bool isYsonAutoConvert = false; 
-        bool isYsonStrict = false; 
+        bool isYsonAutoConvert = false;
+        bool isYsonStrict = false;
         bool isYsonFast = false;
- 
-        if (input->ChildrenSize() == 4) { 
-            auto options = input->ChildPtr(3); 
-            for (ui32 i = 0; i < options->ChildrenSize(); ++i) { 
-                const TStringBuf optionName = options->Child(i)->Content(); 
-                if (optionName == "yson_auto_convert") { 
-                    isYsonAutoConvert = true; 
-                } else if (optionName == "yson_strict") { 
-                    isYsonStrict = true; 
+
+        if (input->ChildrenSize() == 4) {
+            auto options = input->ChildPtr(3);
+            for (ui32 i = 0; i < options->ChildrenSize(); ++i) {
+                const TStringBuf optionName = options->Child(i)->Content();
+                if (optionName == "yson_auto_convert") {
+                    isYsonAutoConvert = true;
+                } else if (optionName == "yson_strict") {
+                    isYsonStrict = true;
                 } else if (optionName == "yson_fast") {
                     isYsonFast = true;
-                } else { 
+                } else {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "Unknown SqlAccess option: " << optionName));
-                    return IGraphTransformer::TStatus::Error; 
-                } 
-            } 
-        } 
- 
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+        }
+
         if (unpacked->GetKind() == ETypeAnnotationKind::Data && unpacked->Cast<TDataExprType>()->GetSlot() == EDataSlot::Yson) {
             isYson = true;
         }
@@ -8026,52 +8026,52 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "Unknown access mode: " << input->Head().Content()));
                 return IGraphTransformer::TStatus::Error;
             }
-            if (isYsonAutoConvert || isYsonStrict) { 
-                auto asStruct = ctx.Expr.Builder(input->Pos()) 
-                    .Callable("AsStruct") 
-                        .List(0) 
-                            .Atom(0, "AutoConvert") 
+            if (isYsonAutoConvert || isYsonStrict) {
+                auto asStruct = ctx.Expr.Builder(input->Pos())
+                    .Callable("AsStruct")
+                        .List(0)
+                            .Atom(0, "AutoConvert")
                             .Add(1, MakeBool(input->Pos(), isYsonAutoConvert, ctx.Expr))
-                        .Seal() 
-                        .List(1) 
-                            .Atom(0, "Strict") 
+                        .Seal()
+                        .List(1)
+                            .Atom(0, "Strict")
                             .Add(1, MakeBool(input->Pos(), isYsonStrict, ctx.Expr))
-                        .Seal() 
-                    .Seal() 
-                    .Build(); 
+                        .Seal()
+                    .Seal()
+                    .Build();
 
-                auto ysonOptions = ctx.Expr.Builder(input->Pos()) 
-                    .Callable("NamedApply") 
-                        .Callable(0, "Udf") 
+                auto ysonOptions = ctx.Expr.Builder(input->Pos())
+                    .Callable("NamedApply")
+                        .Callable(0, "Udf")
                             .Atom(0, isYsonFast ? "Yson2.Options" : "Yson.Options", TNodeFlags::Default)
-                        .Seal() 
-                        .List(1).Seal() 
+                        .Seal()
+                        .List(1).Seal()
                         .Add(2, std::move(asStruct))
                     .Seal()
-                    .Build(); 
- 
-                output = ctx.Expr.Builder(input->Pos()) 
-                    .Callable("Apply") 
-                        .Callable(0, "Udf") 
+                    .Build();
+
+                output = ctx.Expr.Builder(input->Pos())
+                    .Callable("Apply")
+                        .Callable(0, "Udf")
                             .Atom(0, isYsonFast ? "Yson2.Lookup" : "Yson.Lookup", TNodeFlags::Default)
-                        .Seal() 
+                        .Seal()
                         .Add(1, input->ChildPtr(1))
                         .Add(2, std::move(key))
                         .Add(3, std::move(ysonOptions))
-                    .Seal() 
-                    .Build(); 
- 
-            } else { 
-                output = ctx.Expr.Builder(input->Pos()) 
-                    .Callable("Apply") 
-                        .Callable(0, "Udf") 
+                    .Seal()
+                    .Build();
+
+            } else {
+                output = ctx.Expr.Builder(input->Pos())
+                    .Callable("Apply")
+                        .Callable(0, "Udf")
                             .Atom(0, isYsonFast ? "Yson2.Lookup" : "Yson.Lookup", TNodeFlags::Default)
-                        .Seal() 
+                        .Seal()
                         .Add(1, input->ChildPtr(1))
                         .Add(2, std::move(key))
-                    .Seal() 
-                    .Build(); 
-                } 
+                    .Seal()
+                    .Build();
+                }
             return IGraphTransformer::TStatus::Repeat;
         }
 

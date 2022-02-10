@@ -35,15 +35,15 @@
 
 #include "ue2common.h"
 #include "util/charreach.h"
-#include "util/compare.h" 
-#include "util/hash.h" 
-#include "util/operators.h" 
+#include "util/compare.h"
+#include "util/hash.h"
+#include "util/operators.h"
 
 #include <iterator>
 #include <string>
 #include <vector>
 
-#include <boost/dynamic_bitset.hpp> 
+#include <boost/dynamic_bitset.hpp>
 #include <boost/iterator/iterator_facade.hpp>
 
 namespace ue2 {
@@ -59,30 +59,30 @@ size_t maxStringSelfOverlap(const std::string &a, bool nocase);
 /// Compares two strings, returns non-zero if they're different.
 u32 cmp(const char *a, const char *b, size_t len, bool nocase);
 
-/** 
- * \brief String type that also records whether the whole string is caseful or 
- * caseless. 
- * 
- * You should use \ref ue2_literal if you need to represent a mixed-case 
- * literal. 
- */ 
-struct ue2_case_string { 
-    ue2_case_string(std::string s_in, bool nocase_in) 
-        : s(std::move(s_in)), nocase(nocase_in) { 
-        if (nocase) { 
-            upperString(s); 
-        } 
-    } 
+/**
+ * \brief String type that also records whether the whole string is caseful or
+ * caseless.
+ *
+ * You should use \ref ue2_literal if you need to represent a mixed-case
+ * literal.
+ */
+struct ue2_case_string {
+    ue2_case_string(std::string s_in, bool nocase_in)
+        : s(std::move(s_in)), nocase(nocase_in) {
+        if (nocase) {
+            upperString(s);
+        }
+    }
 
-    bool operator==(const ue2_case_string &other) const { 
-        return s == other.s && nocase == other.nocase; 
-    } 
- 
-    std::string s; 
-    bool nocase; 
-}; 
- 
-struct ue2_literal : totally_ordered<ue2_literal> { 
+    bool operator==(const ue2_case_string &other) const {
+        return s == other.s && nocase == other.nocase;
+    }
+
+    std::string s;
+    bool nocase;
+};
+
+struct ue2_literal : totally_ordered<ue2_literal> {
 public:
     /// Single element proxy, pointed to by our const_iterator.
     struct elem {
@@ -110,38 +110,38 @@ public:
     private:
         friend class boost::iterator_core_access;
         void increment() {
-            ++idx; 
+            ++idx;
         }
         void decrement() {
-            --idx; 
+            --idx;
         }
         void advance(size_t n) {
-            idx += n; 
+            idx += n;
         }
         difference_type distance_to(const const_iterator &other) const {
-            return other.idx - idx; 
+            return other.idx - idx;
         }
         bool equal(const const_iterator &other) const {
-            return idx == other.idx && lit == other.lit; 
+            return idx == other.idx && lit == other.lit;
         }
         const elem dereference() const {
-            return elem(lit->s[idx], lit->nocase[idx]); 
+            return elem(lit->s[idx], lit->nocase[idx]);
         }
 
         friend struct ue2_literal;
-        const_iterator(const ue2_literal &lit_in, size_t idx_in) 
-            : lit(&lit_in), idx(idx_in) {} 
+        const_iterator(const ue2_literal &lit_in, size_t idx_in)
+            : lit(&lit_in), idx(idx_in) {}
 
-        const ue2_literal *lit = nullptr; 
-        size_t idx; 
+        const ue2_literal *lit = nullptr;
+        size_t idx;
     };
 
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
-    using size_type = std::string::size_type; 
+    using size_type = std::string::size_type;
 
-    static const size_type npos; 
+    static const size_type npos;
 
-    ue2_literal() = default; 
+    ue2_literal() = default;
     ue2_literal(const std::string &s_in, bool nc_in);
     ue2_literal(char c, bool nc_in);
     ue2_literal(const ue2_literal &) = default;
@@ -149,25 +149,25 @@ public:
     ue2_literal &operator=(const ue2_literal &) = default;
     ue2_literal &operator=(ue2_literal &&) = default;
 
-    template<typename InputIt> 
-    ue2_literal(InputIt b, InputIt e) { 
-        for (; b != e; ++b) { 
-            push_back(*b); 
-        } 
-    } 
- 
+    template<typename InputIt>
+    ue2_literal(InputIt b, InputIt e) {
+        for (; b != e; ++b) {
+            push_back(*b);
+        }
+    }
+
     size_type length() const { return s.length(); }
     bool empty() const { return s.empty(); }
-    ue2_literal substr(size_type pos, size_type n = npos) const; 
+    ue2_literal substr(size_type pos, size_type n = npos) const;
     const char *c_str() const { return s.c_str(); }
     bool any_nocase() const;
 
     const_iterator begin() const {
-        return const_iterator(*this, 0); 
+        return const_iterator(*this, 0);
     }
 
     const_iterator end() const {
-        return const_iterator(*this, s.size()); 
+        return const_iterator(*this, s.size());
     }
 
     const_reverse_iterator rbegin() const {
@@ -178,22 +178,22 @@ public:
         return const_reverse_iterator(begin());
     }
 
-    ue2_literal &erase(size_type pos = 0, size_type n = npos); 
+    ue2_literal &erase(size_type pos = 0, size_type n = npos);
     void push_back(const elem &e) {
         push_back(e.c, e.nocase);
     }
 
     void push_back(char c, bool nc);
-    const elem back() const { return *rbegin(); } 
+    const elem back() const { return *rbegin(); }
 
-    friend ue2_literal operator+(ue2_literal a, const ue2_literal &b) { 
-        a += b; 
-        return a; 
-    } 
- 
-    /// Reverse this literal in-place. 
-    void reverse(); 
- 
+    friend ue2_literal operator+(ue2_literal a, const ue2_literal &b) {
+        a += b;
+        return a;
+    }
+
+    /// Reverse this literal in-place.
+    void reverse();
+
     void operator+=(const ue2_literal &b);
     bool operator==(const ue2_literal &b) const {
         return s == b.s && nocase == b.nocase;
@@ -209,12 +209,12 @@ public:
         nocase.swap(other.nocase);
     }
 
-    size_t hash() const; 
- 
+    size_t hash() const;
+
 private:
-    friend const_iterator; 
+    friend const_iterator;
     std::string s;
-    boost::dynamic_bitset<> nocase; 
+    boost::dynamic_bitset<> nocase;
 };
 
 /// Return a reversed copy of this literal.
@@ -228,37 +228,37 @@ size_t maxStringSelfOverlap(const ue2_literal &a);
 size_t minStringPeriod(const ue2_literal &a);
 size_t maxStringOverlap(const ue2_literal &a, const ue2_literal &b);
 
-/** 
- * \brief True iff the range of a literal given cannot be considered entirely 
- * case-sensitive nor entirely case-insensitive. 
- */ 
-template<class Iter> 
-bool mixed_sensitivity_in(Iter begin, Iter end) { 
-    bool cs = false; 
-    bool nc = false; 
-    for (auto it = begin; it != end; ++it) { 
-        if (!ourisalpha(it->c)) { 
-            continue; 
-        } 
-        if (it->nocase) { 
-            nc = true; 
-        } else { 
-            cs = true; 
-        } 
-    } 
+/**
+ * \brief True iff the range of a literal given cannot be considered entirely
+ * case-sensitive nor entirely case-insensitive.
+ */
+template<class Iter>
+bool mixed_sensitivity_in(Iter begin, Iter end) {
+    bool cs = false;
+    bool nc = false;
+    for (auto it = begin; it != end; ++it) {
+        if (!ourisalpha(it->c)) {
+            continue;
+        }
+        if (it->nocase) {
+            nc = true;
+        } else {
+            cs = true;
+        }
+    }
 
-    return cs && nc; 
-} 
- 
-/** 
- * \brief True iff the literal cannot be considered entirely case-sensitive 
- * nor entirely case-insensitive. 
- */ 
-inline 
-bool mixed_sensitivity(const ue2_literal &s) { 
-    return mixed_sensitivity_in(s.begin(), s.end()); 
-} 
- 
+    return cs && nc;
+}
+
+/**
+ * \brief True iff the literal cannot be considered entirely case-sensitive
+ * nor entirely case-insensitive.
+ */
+inline
+bool mixed_sensitivity(const ue2_literal &s) {
+    return mixed_sensitivity_in(s.begin(), s.end());
+}
+
 void make_nocase(ue2_literal *lit);
 
 struct case_iter {
@@ -315,22 +315,22 @@ std::string escapeString(const ue2_literal &lit);
 
 } // namespace ue2
 
-namespace std { 
- 
-template<> 
-struct hash<ue2::ue2_literal::elem> { 
-    size_t operator()(const ue2::ue2_literal::elem &elem) const { 
-        return ue2::hash_all(elem.c, elem.nocase); 
-    } 
-}; 
- 
-template<> 
-struct hash<ue2::ue2_literal> { 
-    size_t operator()(const ue2::ue2_literal &lit) const { 
-        return lit.hash(); 
-    } 
-}; 
- 
-} // namespace std 
- 
+namespace std {
+
+template<>
+struct hash<ue2::ue2_literal::elem> {
+    size_t operator()(const ue2::ue2_literal::elem &elem) const {
+        return ue2::hash_all(elem.c, elem.nocase);
+    }
+};
+
+template<>
+struct hash<ue2::ue2_literal> {
+    size_t operator()(const ue2::ue2_literal &lit) const {
+        return lit.hash();
+    }
+};
+
+} // namespace std
+
 #endif

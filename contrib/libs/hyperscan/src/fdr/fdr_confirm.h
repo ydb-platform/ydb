@@ -42,30 +42,30 @@ u32 mul_hash_64(u64a lv, u64a andmsk, u64a mult, u32 nBits) {
 #define CONF_TYPE u64a
 #define CONF_HASH_CALL mul_hash_64
 
-/** 
- * \brief Flag indicating this literal doesn't need to be delivered more than 
- * once, used in LitInfo::flags. 
- */ 
-#define FDR_LIT_FLAG_NOREPEAT   1 
+/**
+ * \brief Flag indicating this literal doesn't need to be delivered more than
+ * once, used in LitInfo::flags.
+ */
+#define FDR_LIT_FLAG_NOREPEAT   1
 
 /**
  * \brief Structure describing a literal, linked to by FDRConfirm.
  *
- * This structure is followed in memory by a variable-sized string prefix, for 
- * strings that are longer than CONF_TYPE. 
+ * This structure is followed in memory by a variable-sized string prefix, for
+ * strings that are longer than CONF_TYPE.
  */
 struct LitInfo {
     CONF_TYPE v;
     CONF_TYPE msk;
     hwlm_group_t groups;
     u32 id; // literal ID as passed in
-    u8 size; 
-    u8 flags; //!< bitfield of flags from FDR_LIT_FLAG_* above. 
+    u8 size;
+    u8 flags; //!< bitfield of flags from FDR_LIT_FLAG_* above.
     u8 next;
 };
 
 #define FDRC_FLAG_NO_CONFIRM 1
-#define FDRC_FLAG_NOREPEAT   2 
+#define FDRC_FLAG_NOREPEAT   2
 
 /**
  * \brief FDR confirm header.
@@ -78,7 +78,7 @@ struct LitInfo {
 struct FDRConfirm {
     CONF_TYPE andmsk;
     CONF_TYPE mult;
-    u32 nBits; 
+    u32 nBits;
     hwlm_group_t groups;
 };
 

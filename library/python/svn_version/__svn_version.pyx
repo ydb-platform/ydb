@@ -2,7 +2,7 @@ import future.utils as fu
 
 cdef extern from "library/cpp/svnversion/svnversion.h":
     cdef const char* GetProgramSvnVersion() except +;
-    cdef int GetProgramSvnRevision() except +; 
+    cdef int GetProgramSvnRevision() except +;
     cdef int GetArcadiaLastChangeNum() except +;
     cdef const char* GetProgramCommitId() except +;
     cdef const char* GetProgramHash() except +;
@@ -13,7 +13,7 @@ cdef extern from "library/cpp/svnversion/svnversion.h":
 def svn_version():
     return fu.bytes_to_native_str(GetProgramSvnVersion())
 
-def svn_revision(): 
+def svn_revision():
     return GetProgramSvnRevision()
 
 def svn_last_revision():

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, Intel Corporation 
+ * Copyright (c) 2015-2016, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -36,8 +36,8 @@
 
 namespace ue2 {
 
-/** Max allowed width for transient graphs in block mode */ 
-#define ROSE_BLOCK_TRANSIENT_MAX_WIDTH 255U 
+/** Max allowed width for transient graphs in block mode */
+#define ROSE_BLOCK_TRANSIENT_MAX_WIDTH 255U
 
 /**
  * \brief Add two Rose depths together, coping correctly with infinity at

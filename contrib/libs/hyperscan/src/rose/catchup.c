@@ -26,20 +26,20 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/** 
- * \file 
- * \brief Rose runtime: code for catching up output-exposed engines. 
- */ 
- 
+/**
+ * \file
+ * \brief Rose runtime: code for catching up output-exposed engines.
+ */
+
 #include "catchup.h"
 #include "match.h"
-#include "program_runtime.h" 
+#include "program_runtime.h"
 #include "rose.h"
 #include "nfa/nfa_rev_api.h"
 #include "nfa/mpv.h"
 #include "som/som_runtime.h"
 #include "util/fatbit.h"
-#include "report.h" 
+#include "report.h"
 
 typedef struct queue_match PQ_T;
 #define PQ_COMP(pqc_items, a, b) ((pqc_items)[a].loc < (pqc_items)[b].loc)
@@ -48,57 +48,57 @@ typedef struct queue_match PQ_T;
 #include "util/pqueue.h"
 
 static really_inline
-int roseNfaRunProgram(const struct RoseEngine *rose, struct hs_scratch *scratch, 
-                      u64a som, u64a offset, ReportID id, const char from_mpv) { 
-    const u32 program = id; 
-    u8 flags = ROSE_PROG_FLAG_IN_CATCHUP; 
-    if (from_mpv) { 
-        flags |= ROSE_PROG_FLAG_FROM_MPV; 
+int roseNfaRunProgram(const struct RoseEngine *rose, struct hs_scratch *scratch,
+                      u64a som, u64a offset, ReportID id, const char from_mpv) {
+    const u32 program = id;
+    u8 flags = ROSE_PROG_FLAG_IN_CATCHUP;
+    if (from_mpv) {
+        flags |= ROSE_PROG_FLAG_FROM_MPV;
     }
 
-    roseRunProgram(rose, scratch, program, som, offset, flags); 
- 
-    return can_stop_matching(scratch) ? MO_HALT_MATCHING : MO_CONTINUE_MATCHING; 
+    roseRunProgram(rose, scratch, program, som, offset, flags);
+
+    return can_stop_matching(scratch) ? MO_HALT_MATCHING : MO_CONTINUE_MATCHING;
 }
 
-static rose_inline 
-char roseSuffixInfoIsExhausted(const struct RoseEngine *rose, 
-                               const struct NfaInfo *info, 
-                               const char *exhausted) { 
-    if (!info->ekeyListOffset) { 
+static rose_inline
+char roseSuffixInfoIsExhausted(const struct RoseEngine *rose,
+                               const struct NfaInfo *info,
+                               const char *exhausted) {
+    if (!info->ekeyListOffset) {
         return 0;
     }
 
-    DEBUG_PRINTF("check exhaustion -> start at %u\n", info->ekeyListOffset); 
+    DEBUG_PRINTF("check exhaustion -> start at %u\n", info->ekeyListOffset);
 
-    /* INVALID_EKEY terminated list */ 
-    const u32 *ekeys = getByOffset(rose, info->ekeyListOffset); 
-    while (*ekeys != INVALID_EKEY) { 
-        DEBUG_PRINTF("check %u\n", *ekeys); 
-        if (!isExhausted(rose, exhausted, *ekeys)) { 
-            DEBUG_PRINTF("not exhausted -> alive\n"); 
-            return 0; 
-        } 
-        ++ekeys; 
+    /* INVALID_EKEY terminated list */
+    const u32 *ekeys = getByOffset(rose, info->ekeyListOffset);
+    while (*ekeys != INVALID_EKEY) {
+        DEBUG_PRINTF("check %u\n", *ekeys);
+        if (!isExhausted(rose, exhausted, *ekeys)) {
+            DEBUG_PRINTF("not exhausted -> alive\n");
+            return 0;
+        }
+        ++ekeys;
     }
 
-    DEBUG_PRINTF("all ekeys exhausted -> dead\n"); 
-    return 1; 
-}
-
-static really_inline 
-char roseSuffixIsExhausted(const struct RoseEngine *rose, u32 qi, 
-                           const char *exhausted) { 
-    DEBUG_PRINTF("check queue %u\n", qi); 
-    const struct NfaInfo *info = getNfaInfoByQueue(rose, qi); 
-    return roseSuffixInfoIsExhausted(rose, info, exhausted); 
+    DEBUG_PRINTF("all ekeys exhausted -> dead\n");
+    return 1;
 }
 
 static really_inline
-void deactivateQueue(const struct RoseEngine *t, u8 *aa, u32 qi, 
-                     struct hs_scratch *scratch) { 
-    u32 aaCount = t->activeArrayCount; 
-    u32 qCount = t->queueCount; 
+char roseSuffixIsExhausted(const struct RoseEngine *rose, u32 qi,
+                           const char *exhausted) {
+    DEBUG_PRINTF("check queue %u\n", qi);
+    const struct NfaInfo *info = getNfaInfoByQueue(rose, qi);
+    return roseSuffixInfoIsExhausted(rose, info, exhausted);
+}
+
+static really_inline
+void deactivateQueue(const struct RoseEngine *t, u8 *aa, u32 qi,
+                     struct hs_scratch *scratch) {
+    u32 aaCount = t->activeArrayCount;
+    u32 qCount = t->queueCount;
 
     /* this is sailing close to the wind with regards to invalidating an
      * iteration. We are saved by the fact that unsetting does not clear the
@@ -114,7 +114,7 @@ void ensureQueueActive(const struct RoseEngine *t, u32 qi, u32 qCount,
                        struct mq *q, struct hs_scratch *scratch) {
     if (!fatbit_set(scratch->aqa, qCount, qi)) {
         DEBUG_PRINTF("initing %u\n", qi);
-        initQueue(q, qi, t, scratch); 
+        initQueue(q, qi, t, scratch);
         loadStreamState(q->nfa, q, 0);
         pushQueueAt(q, 0, MQE_START, 0);
     }
@@ -165,8 +165,8 @@ s64a pq_top_loc(struct catchup_pq *pq) {
 
 /* requires that we are the top item on the pq */
 static really_inline
-hwlmcb_rv_t runExistingNfaToNextMatch(const struct RoseEngine *t, u32 qi, 
-                                      struct mq *q, s64a loc, 
+hwlmcb_rv_t runExistingNfaToNextMatch(const struct RoseEngine *t, u32 qi,
+                                      struct mq *q, s64a loc,
                                       struct hs_scratch *scratch, u8 *aa,
                                       char report_curr) {
     assert(pq_top(scratch->catchup_pq.qm)->queue == qi);
@@ -197,7 +197,7 @@ hwlmcb_rv_t runExistingNfaToNextMatch(const struct RoseEngine *t, u32 qi,
             return HWLM_TERMINATE_MATCHING;
         }
 
-        deactivateQueue(t, aa, qi, scratch); 
+        deactivateQueue(t, aa, qi, scratch);
     } else if (q->cur == q->end) {
         DEBUG_PRINTF("queue %u finished, nfa lives\n", qi);
         q->cur = q->end = 0;
@@ -222,8 +222,8 @@ hwlmcb_rv_t runExistingNfaToNextMatch(const struct RoseEngine *t, u32 qi,
 }
 
 static really_inline
-hwlmcb_rv_t runNewNfaToNextMatch(const struct RoseEngine *t, u32 qi, 
-                                 struct mq *q, s64a loc, 
+hwlmcb_rv_t runNewNfaToNextMatch(const struct RoseEngine *t, u32 qi,
+                                 struct mq *q, s64a loc,
                                  struct hs_scratch *scratch, u8 *aa,
                                  s64a report_ok_loc) {
     assert(!q->report_current);
@@ -256,7 +256,7 @@ restart:
             return HWLM_TERMINATE_MATCHING;
         }
 
-        deactivateQueue(t, aa, qi, scratch); 
+        deactivateQueue(t, aa, qi, scratch);
     } else if (q->cur == q->end) {
         DEBUG_PRINTF("queue %u finished, nfa lives\n", qi);
         q->cur = q->end = 0;
@@ -279,23 +279,23 @@ restart:
 }
 
 /* for use by mpv (chained) only */
-static 
-int roseNfaFinalBlastAdaptor(u64a start, u64a end, ReportID id, void *context) { 
-    struct hs_scratch *scratch = context; 
-    assert(scratch && scratch->magic == SCRATCH_MAGIC); 
-    const struct RoseEngine *t = scratch->core_info.rose; 
+static
+int roseNfaFinalBlastAdaptor(u64a start, u64a end, ReportID id, void *context) {
+    struct hs_scratch *scratch = context;
+    assert(scratch && scratch->magic == SCRATCH_MAGIC);
+    const struct RoseEngine *t = scratch->core_info.rose;
 
-    DEBUG_PRINTF("id=%u matched at [%llu,%llu]\n", id, start, end); 
+    DEBUG_PRINTF("id=%u matched at [%llu,%llu]\n", id, start, end);
 
-    int cb_rv = roseNfaRunProgram(t, scratch, start, end, id, 1); 
+    int cb_rv = roseNfaRunProgram(t, scratch, start, end, id, 1);
     if (cb_rv == MO_HALT_MATCHING) {
         return MO_HALT_MATCHING;
     } else if (cb_rv == ROSE_CONTINUE_MATCHING_NO_EXHAUST) {
         return MO_CONTINUE_MATCHING;
     } else {
         assert(cb_rv == MO_CONTINUE_MATCHING);
-        return !roseSuffixIsExhausted(t, 0, 
-                                      scratch->core_info.exhaustionVector); 
+        return !roseSuffixIsExhausted(t, 0,
+                                      scratch->core_info.exhaustionVector);
     }
 }
 
@@ -318,7 +318,7 @@ hwlmcb_rv_t add_to_queue(const struct RoseEngine *t, struct mq *queues,
 
     if (roseSuffixInfoIsExhausted(t, info,
                                   scratch->core_info.exhaustionVector)) {
-        deactivateQueue(t, aa, qi, scratch); 
+        deactivateQueue(t, aa, qi, scratch);
         return HWLM_CONTINUE_MATCHING;
     }
 
@@ -331,7 +331,7 @@ hwlmcb_rv_t add_to_queue(const struct RoseEngine *t, struct mq *queues,
 
     ensureEnd(q, qi, loc);
 
-    return runNewNfaToNextMatch(t, qi, q, loc, scratch, aa, report_ok_loc); 
+    return runNewNfaToNextMatch(t, qi, q, loc, scratch, aa, report_ok_loc);
 }
 
 static really_inline
@@ -352,9 +352,9 @@ s64a findSecondPlace(struct catchup_pq *pq, s64a loc_limit) {
     }
 }
 
-hwlmcb_rv_t roseCatchUpMPV_i(const struct RoseEngine *t, s64a loc, 
+hwlmcb_rv_t roseCatchUpMPV_i(const struct RoseEngine *t, s64a loc,
                              struct hs_scratch *scratch) {
-    char *state = scratch->core_info.state; 
+    char *state = scratch->core_info.state;
     struct mq *queues = scratch->queues;
     u8 *aa = getActiveLeafArray(t, state);
     UNUSED u32 aaCount = t->activeArrayCount;
@@ -377,7 +377,7 @@ hwlmcb_rv_t roseCatchUpMPV_i(const struct RoseEngine *t, s64a loc,
 
     if (roseSuffixInfoIsExhausted(t, info,
                                   scratch->core_info.exhaustionVector)) {
-        deactivateQueue(t, aa, qi, scratch); 
+        deactivateQueue(t, aa, qi, scratch);
         goto done;
     }
 
@@ -392,7 +392,7 @@ hwlmcb_rv_t roseCatchUpMPV_i(const struct RoseEngine *t, s64a loc,
 
     assert(!q->report_current);
 
-    q->cb = roseNfaFinalBlastAdaptor; 
+    q->cb = roseNfaFinalBlastAdaptor;
 
     DEBUG_PRINTF("queue %u blasting, %u/%u [%lld/%lld]\n",
                   qi, q->cur, q->end, q->items[q->cur].location, loc);
@@ -400,13 +400,13 @@ hwlmcb_rv_t roseCatchUpMPV_i(const struct RoseEngine *t, s64a loc,
     scratch->tctxt.mpv_inactive = 0;
 
     /* we know it is going to be an mpv, skip the indirection */
-    next_pos_match_loc = nfaExecMpv_QueueExecRaw(q->nfa, q, loc); 
+    next_pos_match_loc = nfaExecMpv_QueueExecRaw(q->nfa, q, loc);
     assert(!q->report_current);
 
     if (!next_pos_match_loc) { /* 0 means dead */
         DEBUG_PRINTF("mpv is pining for the fjords\n");
         if (can_stop_matching(scratch)) {
-            deactivateQueue(t, aa, qi, scratch); 
+            deactivateQueue(t, aa, qi, scratch);
             return HWLM_TERMINATE_MATCHING;
         }
 
@@ -441,59 +441,59 @@ done:
                                       : HWLM_CONTINUE_MATCHING;
 }
 
-static really_inline 
-char in_mpv(const struct RoseEngine *rose, const struct hs_scratch *scratch) { 
-    const struct RoseContext *tctxt = &scratch->tctxt; 
-    assert(tctxt->curr_qi < rose->queueCount); 
-    if (tctxt->curr_qi < rose->outfixBeginQueue) { 
-        assert(getNfaByQueue(rose, tctxt->curr_qi)->type == MPV_NFA); 
-        return 1; 
+static really_inline
+char in_mpv(const struct RoseEngine *rose, const struct hs_scratch *scratch) {
+    const struct RoseContext *tctxt = &scratch->tctxt;
+    assert(tctxt->curr_qi < rose->queueCount);
+    if (tctxt->curr_qi < rose->outfixBeginQueue) {
+        assert(getNfaByQueue(rose, tctxt->curr_qi)->type == MPV_NFA);
+        return 1;
     }
-    return 0; 
+    return 0;
 }
 
-static 
-int roseNfaBlastAdaptor(u64a start, u64a end, ReportID id, void *context) { 
-    struct hs_scratch *scratch = context; 
-    assert(scratch && scratch->magic == SCRATCH_MAGIC); 
-    const struct RoseEngine *t = scratch->core_info.rose; 
+static
+int roseNfaBlastAdaptor(u64a start, u64a end, ReportID id, void *context) {
+    struct hs_scratch *scratch = context;
+    assert(scratch && scratch->magic == SCRATCH_MAGIC);
+    const struct RoseEngine *t = scratch->core_info.rose;
 
-    DEBUG_PRINTF("id=%u matched at [%llu,%llu]\n", id, start, end); 
+    DEBUG_PRINTF("id=%u matched at [%llu,%llu]\n", id, start, end);
 
-    const char from_mpv = in_mpv(t, scratch); 
-    int cb_rv = roseNfaRunProgram(t, scratch, start, end, id, from_mpv); 
+    const char from_mpv = in_mpv(t, scratch);
+    int cb_rv = roseNfaRunProgram(t, scratch, start, end, id, from_mpv);
     if (cb_rv == MO_HALT_MATCHING) {
         return MO_HALT_MATCHING;
     } else if (cb_rv == ROSE_CONTINUE_MATCHING_NO_EXHAUST) {
         return MO_CONTINUE_MATCHING;
     } else {
         assert(cb_rv == MO_CONTINUE_MATCHING);
-        return !roseSuffixIsExhausted(t, scratch->tctxt.curr_qi, 
-                                      scratch->core_info.exhaustionVector); 
+        return !roseSuffixIsExhausted(t, scratch->tctxt.curr_qi,
+                                      scratch->core_info.exhaustionVector);
     }
 }
 
-int roseNfaAdaptor(u64a start, u64a end, ReportID id, void *context) { 
-    struct hs_scratch *scratch = context; 
-    assert(scratch && scratch->magic == SCRATCH_MAGIC); 
+int roseNfaAdaptor(u64a start, u64a end, ReportID id, void *context) {
+    struct hs_scratch *scratch = context;
+    assert(scratch && scratch->magic == SCRATCH_MAGIC);
 
-    DEBUG_PRINTF("id=%u matched at [%llu,%llu]\n", id, start, end); 
+    DEBUG_PRINTF("id=%u matched at [%llu,%llu]\n", id, start, end);
 
     /* must be a external report as haig cannot directly participate in chain */
-    return roseNfaRunProgram(scratch->core_info.rose, scratch, start, end, id, 
-                             0); 
+    return roseNfaRunProgram(scratch->core_info.rose, scratch, start, end, id,
+                             0);
 }
 
 static really_inline
-char blast_queue(struct hs_scratch *scratch, struct mq *q, u32 qi, s64a to_loc, 
-                 char report_current) { 
-    scratch->tctxt.curr_qi = qi; 
-    q->cb = roseNfaBlastAdaptor; 
+char blast_queue(struct hs_scratch *scratch, struct mq *q, u32 qi, s64a to_loc,
+                 char report_current) {
+    scratch->tctxt.curr_qi = qi;
+    q->cb = roseNfaBlastAdaptor;
     q->report_current = report_current;
     DEBUG_PRINTF("queue %u blasting, %u/%u [%lld/%lld]\n", qi, q->cur, q->end,
                  q_cur_loc(q), to_loc);
     char alive = nfaQueueExec(q->nfa, q, to_loc);
-    q->cb = roseNfaAdaptor; 
+    q->cb = roseNfaAdaptor;
     assert(!q->report_current);
 
     return alive;
@@ -510,7 +510,7 @@ hwlmcb_rv_t buildSufPQ_final(const struct RoseEngine *t, s64a report_ok_loc,
 
     if (roseSuffixInfoIsExhausted(t, info,
                                   scratch->core_info.exhaustionVector)) {
-        deactivateQueue(t, aa, a_qi, scratch); 
+        deactivateQueue(t, aa, a_qi, scratch);
         return HWLM_CONTINUE_MATCHING;
     }
 
@@ -523,9 +523,9 @@ hwlmcb_rv_t buildSufPQ_final(const struct RoseEngine *t, s64a report_ok_loc,
 
     ensureEnd(q, a_qi, final_loc);
 
-    char alive = blast_queue(scratch, q, a_qi, second_place_loc, 0); 
+    char alive = blast_queue(scratch, q, a_qi, second_place_loc, 0);
 
-    /* We have three possible outcomes: 
+    /* We have three possible outcomes:
      * (1) the nfa died
      * (2) we completed the queue (implies that second_place_loc == final_loc)
      * (3) the queue ran to second_place_loc and stopped. In this case we need
@@ -538,7 +538,7 @@ hwlmcb_rv_t buildSufPQ_final(const struct RoseEngine *t, s64a report_ok_loc,
             return HWLM_TERMINATE_MATCHING;
         }
 
-        deactivateQueue(t, aa, a_qi, scratch); 
+        deactivateQueue(t, aa, a_qi, scratch);
     } else if (q->cur == q->end) {
         DEBUG_PRINTF("queue %u finished, nfa lives [%lld]\n", a_qi, final_loc);
 
@@ -554,8 +554,8 @@ hwlmcb_rv_t buildSufPQ_final(const struct RoseEngine *t, s64a report_ok_loc,
         assert(second_place_loc < final_loc);
         assert(q_cur_loc(q) >= second_place_loc);
 
-        if (runNewNfaToNextMatch(t, a_qi, q, final_loc, scratch, aa, 
-                                 report_ok_loc) == HWLM_TERMINATE_MATCHING) { 
+        if (runNewNfaToNextMatch(t, a_qi, q, final_loc, scratch, aa,
+                                 report_ok_loc) == HWLM_TERMINATE_MATCHING) {
             DEBUG_PRINTF("roseCatchUpNfas done\n");
             return HWLM_TERMINATE_MATCHING;
         }
@@ -564,7 +564,7 @@ hwlmcb_rv_t buildSufPQ_final(const struct RoseEngine *t, s64a report_ok_loc,
     return HWLM_CONTINUE_MATCHING;
 }
 
-void streamInitSufPQ(const struct RoseEngine *t, char *state, 
+void streamInitSufPQ(const struct RoseEngine *t, char *state,
                      struct hs_scratch *scratch) {
     assert(scratch->catchup_pq.qm_size == 0);
     assert(t->outfixBeginQueue != t->outfixEndQueue);
@@ -595,7 +595,7 @@ void streamInitSufPQ(const struct RoseEngine *t, char *state,
 
             pq_insert_with(&scratch->catchup_pq, scratch, qi, qcl);
         } else if (!alive) {
-            deactivateQueue(t, aa, qi, scratch); 
+            deactivateQueue(t, aa, qi, scratch);
         } else {
             assert(q->cur == q->end);
             /* TODO: can this be simplified? the nfa will never produce any
@@ -609,7 +609,7 @@ void streamInitSufPQ(const struct RoseEngine *t, char *state,
     }
 }
 
-void blockInitSufPQ(const struct RoseEngine *t, char *state, 
+void blockInitSufPQ(const struct RoseEngine *t, char *state,
                     struct hs_scratch *scratch, char is_small_block) {
     DEBUG_PRINTF("initSufPQ: outfixes [%u,%u)\n", t->outfixBeginQueue,
                  t->outfixEndQueue);
@@ -642,7 +642,7 @@ void blockInitSufPQ(const struct RoseEngine *t, char *state,
         mmbit_set(aa, aaCount, qi);
         fatbit_set(aqa, qCount, qi);
         struct mq *q = queues + qi;
-        initQueue(q, qi, t, scratch); 
+        initQueue(q, qi, t, scratch);
         q->length = len; /* adjust for rev_accel */
         nfaQueueInitState(nfa, q);
         pushQueueAt(q, 0, MQE_START, 0);
@@ -659,7 +659,7 @@ void blockInitSufPQ(const struct RoseEngine *t, char *state,
 
             pq_insert_with(&scratch->catchup_pq, scratch, qi, qcl);
         } else if (!alive) {
-            deactivateQueue(t, aa, qi, scratch); 
+            deactivateQueue(t, aa, qi, scratch);
         } else {
             assert(q->cur == q->end);
             /* TODO: can this be simplified? the nfa will never produce any
@@ -675,7 +675,7 @@ void blockInitSufPQ(const struct RoseEngine *t, char *state,
  * safe_loc is ???
  */
 static rose_inline
-hwlmcb_rv_t buildSufPQ(const struct RoseEngine *t, char *state, s64a safe_loc, 
+hwlmcb_rv_t buildSufPQ(const struct RoseEngine *t, char *state, s64a safe_loc,
                        s64a final_loc, struct hs_scratch *scratch) {
     assert(scratch->catchup_pq.qm_size <= t->outfixEndQueue);
 
@@ -714,9 +714,9 @@ hwlmcb_rv_t buildSufPQ(const struct RoseEngine *t, char *state, s64a safe_loc,
     s64a report_ok_loc = tctxt->minNonMpvMatchOffset + 1
         - scratch->core_info.buf_offset;
 
-    hwlmcb_rv_t rv = roseCatchUpMPV(t, report_ok_loc, scratch); 
+    hwlmcb_rv_t rv = roseCatchUpMPV(t, report_ok_loc, scratch);
     if (rv != HWLM_CONTINUE_MATCHING) {
-        DEBUG_PRINTF("terminating...\n"); 
+        DEBUG_PRINTF("terminating...\n");
         return rv;
     }
 
@@ -728,7 +728,7 @@ hwlmcb_rv_t buildSufPQ(const struct RoseEngine *t, char *state, s64a safe_loc,
             = scratch->catchup_pq.qm_size ? pq_top_loc(&scratch->catchup_pq)
                                           : safe_loc;
         second_place_loc = MIN(second_place_loc, safe_loc);
-        if (n_qi == MMB_INVALID && report_ok_loc <= second_place_loc) { 
+        if (n_qi == MMB_INVALID && report_ok_loc <= second_place_loc) {
             if (buildSufPQ_final(t, report_ok_loc, second_place_loc, final_loc,
                                  scratch, aa, a_qi)
                 == HWLM_TERMINATE_MATCHING) {
@@ -752,19 +752,19 @@ hwlmcb_rv_t buildSufPQ(const struct RoseEngine *t, char *state, s64a safe_loc,
 }
 
 static never_inline
-hwlmcb_rv_t roseCatchUpNfas(const struct RoseEngine *t, s64a loc, 
+hwlmcb_rv_t roseCatchUpNfas(const struct RoseEngine *t, s64a loc,
                             s64a final_loc, struct hs_scratch *scratch) {
     assert(t->activeArrayCount);
 
-    DEBUG_PRINTF("roseCatchUpNfas offset=%llu + %lld/%lld\n", 
-                 scratch->core_info.buf_offset, loc, final_loc); 
+    DEBUG_PRINTF("roseCatchUpNfas offset=%llu + %lld/%lld\n",
+                 scratch->core_info.buf_offset, loc, final_loc);
     DEBUG_PRINTF("min non mpv match offset %llu\n",
                  scratch->tctxt.minNonMpvMatchOffset);
 
-    struct RoseContext *tctxt = &scratch->tctxt; 
-    assert(scratch->core_info.buf_offset + loc >= tctxt->minNonMpvMatchOffset); 
- 
-    char *state = scratch->core_info.state; 
+    struct RoseContext *tctxt = &scratch->tctxt;
+    assert(scratch->core_info.buf_offset + loc >= tctxt->minNonMpvMatchOffset);
+
+    char *state = scratch->core_info.state;
     struct mq *queues = scratch->queues;
     u8 *aa = getActiveLeafArray(t, state);
 
@@ -785,7 +785,7 @@ hwlmcb_rv_t roseCatchUpNfas(const struct RoseEngine *t, s64a loc,
         }
 
         /* catch up char matches to this point */
-        if (roseCatchUpMPV(t, match_loc, scratch) 
+        if (roseCatchUpMPV(t, match_loc, scratch)
             == HWLM_TERMINATE_MATCHING) {
             DEBUG_PRINTF("roseCatchUpNfas done\n");
             return HWLM_TERMINATE_MATCHING;
@@ -812,14 +812,14 @@ hwlmcb_rv_t roseCatchUpNfas(const struct RoseEngine *t, s64a loc,
         DEBUG_PRINTF("second place %lld loc %lld\n", second_place_loc, loc);
 
         if (second_place_loc == q_cur_loc(q)) {
-            if (runExistingNfaToNextMatch(t, qi, q, q_final_loc, scratch, aa, 1) 
+            if (runExistingNfaToNextMatch(t, qi, q, q_final_loc, scratch, aa, 1)
                 == HWLM_TERMINATE_MATCHING) {
                 return HWLM_TERMINATE_MATCHING;
             }
             continue;
         }
 
-        char alive = blast_queue(scratch, q, qi, second_place_loc, 1); 
+        char alive = blast_queue(scratch, q, qi, second_place_loc, 1);
 
         if (!alive) {
             if (can_stop_matching(scratch)) {
@@ -827,7 +827,7 @@ hwlmcb_rv_t roseCatchUpNfas(const struct RoseEngine *t, s64a loc,
                 return HWLM_TERMINATE_MATCHING;
             }
 
-            deactivateQueue(t, aa, qi, scratch); 
+            deactivateQueue(t, aa, qi, scratch);
             pq_pop_nice(&scratch->catchup_pq);
         } else if (q->cur == q->end) {
             DEBUG_PRINTF("queue %u finished, nfa lives [%lld]\n", qi, loc);
@@ -841,7 +841,7 @@ hwlmcb_rv_t roseCatchUpNfas(const struct RoseEngine *t, s64a loc,
         } else {
             DEBUG_PRINTF("queue %u not finished, %u/%u [%lld/%lld]\n",
                           qi, q->cur, q->end, q->items[q->cur].location, loc);
-            runExistingNfaToNextMatch(t, qi, q, q_final_loc, scratch, aa, 0); 
+            runExistingNfaToNextMatch(t, qi, q, q_final_loc, scratch, aa, 0);
         }
     }
 exit:;
@@ -858,23 +858,23 @@ hwlmcb_rv_t roseCatchUpAll(s64a loc, struct hs_scratch *scratch) {
     assert(scratch->core_info.buf_offset + loc
            > scratch->tctxt.minNonMpvMatchOffset);
 
-    const struct RoseEngine *t = scratch->core_info.rose; 
-    char *state = scratch->core_info.state; 
- 
-    hwlmcb_rv_t rv = buildSufPQ(t, state, loc, loc, scratch); 
+    const struct RoseEngine *t = scratch->core_info.rose;
+    char *state = scratch->core_info.state;
+
+    hwlmcb_rv_t rv = buildSufPQ(t, state, loc, loc, scratch);
     if (rv != HWLM_CONTINUE_MATCHING) {
         return rv;
     }
 
-    rv = roseCatchUpNfas(t, loc, loc, scratch); 
+    rv = roseCatchUpNfas(t, loc, loc, scratch);
     if (rv != HWLM_CONTINUE_MATCHING) {
         return rv;
     }
 
-    rv = roseCatchUpMPV(t, loc, scratch); 
+    rv = roseCatchUpMPV(t, loc, scratch);
     assert(rv != HWLM_CONTINUE_MATCHING
-           || scratch->catchup_pq.qm_size <= t->outfixEndQueue); 
-    assert(!can_stop_matching(scratch) || rv == HWLM_TERMINATE_MATCHING); 
+           || scratch->catchup_pq.qm_size <= t->outfixEndQueue);
+    assert(!can_stop_matching(scratch) || rv == HWLM_TERMINATE_MATCHING);
     return rv;
 }
 
@@ -884,17 +884,17 @@ hwlmcb_rv_t roseCatchUpSuf(s64a loc, struct hs_scratch *scratch) {
     assert(scratch->core_info.buf_offset + loc
            > scratch->tctxt.minNonMpvMatchOffset);
 
-    const struct RoseEngine *t = scratch->core_info.rose; 
-    char *state = scratch->core_info.state; 
- 
-    hwlmcb_rv_t rv = buildSufPQ(t, state, loc, loc, scratch); 
+    const struct RoseEngine *t = scratch->core_info.rose;
+    char *state = scratch->core_info.state;
+
+    hwlmcb_rv_t rv = buildSufPQ(t, state, loc, loc, scratch);
     if (rv != HWLM_CONTINUE_MATCHING) {
         return rv;
     }
 
-    rv = roseCatchUpNfas(t, loc, loc, scratch); 
-    assert(rv != HWLM_CONTINUE_MATCHING || 
-           scratch->catchup_pq.qm_size <= t->outfixEndQueue); 
+    rv = roseCatchUpNfas(t, loc, loc, scratch);
+    assert(rv != HWLM_CONTINUE_MATCHING ||
+           scratch->catchup_pq.qm_size <= t->outfixEndQueue);
 
     return rv;
 }

@@ -1,8 +1,8 @@
 #include "node.h"
 #include "context.h"
 
-#include "list_builtin.h" 
- 
+#include "list_builtin.h"
+
 #include <ydb/library/yql/ast/yql_type_string.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
@@ -15,15 +15,15 @@
 #include <library/cpp/yson/node/node_io.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
-#include <util/string/util.h> 
+#include <util/string/util.h>
 #include <util/string/join.h>
-#include <util/system/env.h> 
+#include <util/system/env.h>
 
-#include <unordered_map> 
- 
+#include <unordered_map>
+
 using namespace NYql;
 
-namespace NSQLTranslationV1 { 
+namespace NSQLTranslationV1 {
 
 extern const char SubqueryExtendFor[] = "SubqueryExtendFor";
 extern const char SubqueryUnionAllFor[] = "SubqueryUnionAllFor";
@@ -315,14 +315,14 @@ private:
     TString Info;
 };
 
-class TYqlAsAtom: public TLiteralStringAtom { 
-public: 
+class TYqlAsAtom: public TLiteralStringAtom {
+public:
     TYqlAsAtom(TPosition pos, const TVector<TNodePtr>& args)
-        : TLiteralStringAtom(pos, args.size() == 1 ? args[0] : nullptr, "Literal string is required as argument") 
-    { 
-    } 
-}; 
- 
+        : TLiteralStringAtom(pos, args.size() == 1 ? args[0] : nullptr, "Literal string is required as argument")
+    {
+    }
+};
+
 class TYqlData: public TCallNode {
 public:
     TYqlData(TPosition pos, const TString& type, const TVector<TNodePtr>& args)
@@ -628,7 +628,7 @@ public:
             return false;
         }
 
-        if (!Args[1]->Init(ctx, src)) { 
+        if (!Args[1]->Init(ctx, src)) {
             return false;
         }
         if (Args.size() == 3) {
@@ -662,7 +662,7 @@ public:
         if (!Args[1]->Init(ctx, src)) {
             return false;
         }
-        Args[1] = MakeAtomFromExpression(ctx, Y("FormatType", Args[1])).Build(); 
+        Args[1] = MakeAtomFromExpression(ctx, Y("FormatType", Args[1])).Build();
 
         return TCallNode::DoInit(ctx, src);
     }
@@ -844,137 +844,137 @@ public:
     }
 };
 
-class TTryMember final: public TCallNode { 
-public: 
-    TTryMember(TPosition pos, const TString& opName, const TVector<TNodePtr>& args) 
-        : TCallNode(pos, opName, 3, 3, args) 
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (Args.size() != 3) { 
-            ctx.Error(Pos) << OpName << " requires exactly three arguments"; 
-            return false; 
-        } 
-        for (const auto& arg : Args) { 
-            if (!arg->Init(ctx, src)) { 
-                return false; 
-            } 
-        } 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build(); 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TTryMember(Pos, OpName, Args); 
-    } 
-}; 
- 
-class TAddMember final: public TCallNode { 
-public: 
-    TAddMember(TPosition pos, const TString& opName, const TVector<TNodePtr>& args) 
-        : TCallNode(pos, opName, 3, 3, args) 
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (Args.size() != 3) { 
-            ctx.Error(Pos) << OpName << " requires exactly three arguments"; 
-            return false; 
-        } 
-        for (const auto& arg : Args) { 
-            if (!arg->Init(ctx, src)) { 
-                return false; 
-            } 
-        } 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build(); 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TAddMember(Pos, OpName, Args); 
-    } 
-}; 
- 
-class TRemoveMember final: public TCallNode { 
-public: 
-    TRemoveMember(TPosition pos, const TString& opName, const TVector<TNodePtr>& args) 
-        : TCallNode(pos, opName, 2, 2, args) 
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (Args.size() != 2) { 
-            ctx.Error(Pos) << OpName << " requires exactly two arguments"; 
-            return false; 
-        } 
-        for (const auto& arg : Args) { 
-            if (!arg->Init(ctx, src)) { 
-                return false; 
-            } 
-        } 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build(); 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TRemoveMember(Pos, OpName, Args); 
-    } 
-}; 
- 
-class TCombineMembers final: public TCallNode { 
-public: 
-    TCombineMembers(TPosition pos, const TString& opName, const TVector<TNodePtr>& args) 
-        : TCallNode(pos, opName, 1, -1, args) 
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (Args.empty()) { 
-            ctx.Error(Pos) << "CombineMembers requires at least one argument"; 
-            return false; 
-        } 
-        for (size_t i = 0; i < Args.size(); ++i) { 
-            Args[i] = Q(Y(Q(""), Args[i])); // flatten without prefix 
-        } 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TCombineMembers(Pos, OpName, Args); 
-    } 
-}; 
- 
-class TFlattenMembers final: public TCallNode { 
-public: 
-    TFlattenMembers(TPosition pos, const TString& opName, const TVector<TNodePtr>& args) 
-        : TCallNode(pos, opName, 1, -1, args) 
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (Args.empty()) { 
-            ctx.Error(Pos) << OpName << " requires at least one argument"; 
-            return false; 
-        } 
-        for (size_t i = 0; i < Args.size(); ++i) { 
-            if (!Args[i]->Init(ctx, src)) { 
-                return false; 
-            } 
-            if (Args[i]->GetTupleSize() == 2) { 
-                // flatten with prefix 
-                Args[i] = Q(Y( 
-                    MakeAtomFromExpression(ctx, Args[i]->GetTupleElement(0)).Build(), 
-                    Args[i]->GetTupleElement(1) 
-                )); 
-            } else { 
-                ctx.Error(Pos) << OpName << " requires arguments to be tuples of size 2: prefix and struct"; 
-                return false; 
-            } 
-        } 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TFlattenMembers(Pos, OpName, Args); 
-    } 
-}; 
- 
+class TTryMember final: public TCallNode {
+public:
+    TTryMember(TPosition pos, const TString& opName, const TVector<TNodePtr>& args)
+        : TCallNode(pos, opName, 3, 3, args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (Args.size() != 3) {
+            ctx.Error(Pos) << OpName << " requires exactly three arguments";
+            return false;
+        }
+        for (const auto& arg : Args) {
+            if (!arg->Init(ctx, src)) {
+                return false;
+            }
+        }
+        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TTryMember(Pos, OpName, Args);
+    }
+};
+
+class TAddMember final: public TCallNode {
+public:
+    TAddMember(TPosition pos, const TString& opName, const TVector<TNodePtr>& args)
+        : TCallNode(pos, opName, 3, 3, args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (Args.size() != 3) {
+            ctx.Error(Pos) << OpName << " requires exactly three arguments";
+            return false;
+        }
+        for (const auto& arg : Args) {
+            if (!arg->Init(ctx, src)) {
+                return false;
+            }
+        }
+        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TAddMember(Pos, OpName, Args);
+    }
+};
+
+class TRemoveMember final: public TCallNode {
+public:
+    TRemoveMember(TPosition pos, const TString& opName, const TVector<TNodePtr>& args)
+        : TCallNode(pos, opName, 2, 2, args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (Args.size() != 2) {
+            ctx.Error(Pos) << OpName << " requires exactly two arguments";
+            return false;
+        }
+        for (const auto& arg : Args) {
+            if (!arg->Init(ctx, src)) {
+                return false;
+            }
+        }
+        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TRemoveMember(Pos, OpName, Args);
+    }
+};
+
+class TCombineMembers final: public TCallNode {
+public:
+    TCombineMembers(TPosition pos, const TString& opName, const TVector<TNodePtr>& args)
+        : TCallNode(pos, opName, 1, -1, args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (Args.empty()) {
+            ctx.Error(Pos) << "CombineMembers requires at least one argument";
+            return false;
+        }
+        for (size_t i = 0; i < Args.size(); ++i) {
+            Args[i] = Q(Y(Q(""), Args[i])); // flatten without prefix
+        }
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TCombineMembers(Pos, OpName, Args);
+    }
+};
+
+class TFlattenMembers final: public TCallNode {
+public:
+    TFlattenMembers(TPosition pos, const TString& opName, const TVector<TNodePtr>& args)
+        : TCallNode(pos, opName, 1, -1, args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (Args.empty()) {
+            ctx.Error(Pos) << OpName << " requires at least one argument";
+            return false;
+        }
+        for (size_t i = 0; i < Args.size(); ++i) {
+            if (!Args[i]->Init(ctx, src)) {
+                return false;
+            }
+            if (Args[i]->GetTupleSize() == 2) {
+                // flatten with prefix
+                Args[i] = Q(Y(
+                    MakeAtomFromExpression(ctx, Args[i]->GetTupleElement(0)).Build(),
+                    Args[i]->GetTupleElement(1)
+                ));
+            } else {
+                ctx.Error(Pos) << OpName << " requires arguments to be tuples of size 2: prefix and struct";
+                return false;
+            }
+        }
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TFlattenMembers(Pos, OpName, Args);
+    }
+};
+
 TString NormalizeTypeString(const TString& str) {
     auto ret = to_title(str);
     if (ret.StartsWith("Tz")) {
@@ -1295,32 +1295,32 @@ private:
         }
 
         Args[0] = Y("Coalesce", Args[0], Y("Bool", Q("false")));
-        if (Args.size() == 2) { 
+        if (Args.size() == 2) {
             Args.push_back(Y("Null"));
-        } 
+        }
         return TCallNode::DoInit(ctx, src);
     }
 };
 
-class TYqlSubstring final: public TCallNode { 
-public: 
+class TYqlSubstring final: public TCallNode {
+public:
     TYqlSubstring(TPosition pos, const TString& name, const TVector<TNodePtr>& args)
         : TCallNode(pos, name, 2, 3, args)
-    {} 
- 
-private: 
-    TCallNode::TPtr DoClone() const override { 
+    {}
+
+private:
+    TCallNode::TPtr DoClone() const override {
        return new TYqlSubstring(GetPos(), OpName, CloneContainer(Args));
-    } 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (Args.size() == 2) { 
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (Args.size() == 2) {
             Args.push_back(Y("Null"));
-        } 
-        return TCallNode::DoInit(ctx, src); 
-    } 
-}; 
- 
+        }
+        return TCallNode::DoInit(ctx, src);
+    }
+};
+
 class TYqlIn final: public TCallNode {
 public:
     TYqlIn(TPosition pos, const TVector<TNodePtr>& args)
@@ -1373,10 +1373,10 @@ private:
             hintElements.push_back(hints->GetTupleElement(i));
         }
 
-        if (inNode->GetSource() || inNode->IsSelect()) { 
+        if (inNode->GetSource() || inNode->IsSelect()) {
             hintElements.push_back(BuildHint(pos, "tableSource"));
-        } 
- 
+        }
+
         if (!ctx.AnsiInForEmptyOrNullableItemsCollections.Defined()) {
             hintElements.push_back(BuildHint(pos, "warnNoAnsi"));
         } else if (*ctx.AnsiInForEmptyOrNullableItemsCollections) {
@@ -1586,7 +1586,7 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         if (!src || src->IsFake()) {
-            ctx.Error(Pos) << "TableRow requires data source"; 
+            ctx.Error(Pos) << "TableRow requires data source";
             return false;
         }
 
@@ -1658,37 +1658,37 @@ private:
     TNodePtr Node;
 };
 
-TTableRows::TTableRows(TPosition pos, const TVector<TNodePtr>& args) 
-    : TTableRows(pos, args.size()) 
-{} 
- 
-TTableRows::TTableRows(TPosition pos, ui32 argsCount) 
+TTableRows::TTableRows(TPosition pos, const TVector<TNodePtr>& args)
+    : TTableRows(pos, args.size())
+{}
+
+TTableRows::TTableRows(TPosition pos, ui32 argsCount)
     : INode(pos)
-    , ArgsCount(argsCount) 
-{} 
- 
+    , ArgsCount(argsCount)
+{}
+
 bool TTableRows::DoInit(TContext& ctx, ISource* /*src*/) {
-    if (ArgsCount > 0) { 
-        ctx.Error(Pos) << "TableRows requires exactly 0 arguments"; 
-        return false; 
-    } 
+    if (ArgsCount > 0) {
+        ctx.Error(Pos) << "TableRows requires exactly 0 arguments";
+        return false;
+    }
     Node = ctx.EnableSystemColumns ? Y("RemoveSystemMembers", "inputRowsList") : BuildAtom(Pos, "inputRowsList", 0);
-    return true; 
-} 
- 
+    return true;
+}
+
 TAstNode* TTableRows::Translate(TContext& ctx) const {
     Y_VERIFY_DEBUG(Node);
     return Node->Translate(ctx);
 }
 
-void TTableRows::DoUpdateState() const { 
-    State.Set(ENodeState::Const, false); 
-} 
- 
-TNodePtr TTableRows::DoClone() const { 
-    return MakeIntrusive<TTableRows>(Pos, ArgsCount); 
-} 
- 
+void TTableRows::DoUpdateState() const {
+    State.Set(ENodeState::Const, false);
+}
+
+TNodePtr TTableRows::DoClone() const {
+    return MakeIntrusive<TTableRows>(Pos, ArgsCount);
+}
+
 TSessionWindow::TSessionWindow(TPosition pos, const TVector<TNodePtr>& args)
     : INode(pos)
     , Args(args)
@@ -1898,25 +1898,25 @@ TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNode
     TVector<TNodePtr> userTypeItems;
     userTypeItems.push_back(new TCallNodeImpl(pos, "TupleType", argsTypeItems));
     userTypeItems.push_back(new TCallNodeImpl(pos, "StructType", {}));
-    if (customUserType) { 
-        userTypeItems.push_back(customUserType); 
-    } else { 
-        userTypeItems.push_back(new TCallNodeImpl(pos, "TupleType", {})); 
-    } 
+    if (customUserType) {
+        userTypeItems.push_back(customUserType);
+    } else {
+        userTypeItems.push_back(new TCallNodeImpl(pos, "TupleType", {}));
+    }
 
     return new TCallNodeImpl(pos, "TupleType", userTypeItems);
 }
 
-TNodePtr BuildUdfUserTypeArg(TPosition pos, TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType) { 
+TNodePtr BuildUdfUserTypeArg(TPosition pos, TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType) {
     TVector<TNodePtr> userTypeItems;
-    userTypeItems.reserve(3); 
+    userTypeItems.reserve(3);
     userTypeItems.push_back(positionalArgs->Y("TypeOf", positionalArgs));
     userTypeItems.push_back(positionalArgs->Y("TypeOf", namedArgs));
-    if (customUserType) { 
-        userTypeItems.push_back(customUserType); 
-    } else { 
-        userTypeItems.push_back(new TCallNodeImpl(pos, "TupleType", {})); 
-    } 
+    if (customUserType) {
+        userTypeItems.push_back(customUserType);
+    } else {
+        userTypeItems.push_back(new TCallNodeImpl(pos, "TupleType", {}));
+    }
 
     return new TCallNodeImpl(pos, "TupleType", userTypeItems);
 }
@@ -1930,9 +1930,9 @@ TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector
     udfArgs.push_back(new TAstListNodeImpl(pos));
     udfArgs[0]->Add(new TAstAtomNodeImpl(pos, "Void", 0));
     if (namedArgs) {
-        udfArgs.push_back(BuildUdfUserTypeArg(pos, positionalArgs, namedArgs, customUserType)); 
+        udfArgs.push_back(BuildUdfUserTypeArg(pos, positionalArgs, namedArgs, customUserType));
     } else {
-        udfArgs.push_back(BuildUdfUserTypeArg(pos, args, customUserType)); 
+        udfArgs.push_back(BuildUdfUserTypeArg(pos, args, customUserType));
     }
 
     if (typeConfig) {
@@ -2024,20 +2024,20 @@ public:
                 src->AllColumns();
             }
         } else if (ctx.Settings.ModuleMapping.contains(Module)) {
-            Node = Y("bind", Module + "_module", Q(Name)); 
+            Node = Y("bind", Module + "_module", Q(Name));
             if (src) {
                 src->AllColumns();
             }
         } else {
-            TNodePtr customUserType = nullptr; 
-            if (Module == "Tensorflow" && Name == "RunBatch") { 
-                if (Args.size() > 2) { 
-                    auto passThroughAtom = Q("PassThrough"); 
-                    auto passThroughType = Y("StructMemberType", Y("ListItemType", Y("TypeOf", Args[1])), passThroughAtom); 
-                    customUserType = Y("AddMemberType", Args[2], passThroughAtom, passThroughType); 
-                    Args.erase(Args.begin() + 2); 
-                } 
-            } 
+            TNodePtr customUserType = nullptr;
+            if (Module == "Tensorflow" && Name == "RunBatch") {
+                if (Args.size() > 2) {
+                    auto passThroughAtom = Q("PassThrough");
+                    auto passThroughType = Y("StructMemberType", Y("ListItemType", Y("TypeOf", Args[1])), passThroughAtom);
+                    customUserType = Y("AddMemberType", Args[2], passThroughAtom, passThroughType);
+                    Args.erase(Args.begin() + 2);
+                }
+            }
 
             if ("Datetime" == Module || ("Yson" == Module && ctx.PragmaYsonFast))
                 Module.append('2');
@@ -2105,18 +2105,18 @@ TNodePtr BuildUdf(TContext& ctx, TPosition pos, const TString& module, const TSt
     auto fullName = module + "." + name;
     if (!args.empty()) {
         return new TYqlUdf(pos, fullName, args, args.size() + 1);
- 
+
     } else {
         auto varName = ctx.AddSimpleUdf(fullName);
         return new TAstAtomNodeImpl(pos, varName, TNodeFlags::ArbitraryContent);
     }
-} 
- 
+}
+
 class TScriptUdf final: public INode {
 public:
     TScriptUdf(TPosition pos, const TString& moduleName, const TString& funcName, const TVector<TNodePtr>& args)
         : INode(pos)
-        , ModuleName(moduleName) 
+        , ModuleName(moduleName)
         , FuncName(funcName)
         , Args(args)
     {}
@@ -2147,7 +2147,7 @@ public:
 
         INode::TPtr type;
         if (Args.size() == 2) {
-            type = Args[0]; 
+            type = Args[0];
         } else {
             // Python supports getting functions signatures right from docstrings
             type = Y("EvaluateType", Y("ParseTypeHandle", Y("Apply",
@@ -2192,32 +2192,32 @@ private:
 };
 
 template <bool Sorted>
-class TYqlToDict final: public TCallNode { 
-public: 
+class TYqlToDict final: public TCallNode {
+public:
     TYqlToDict(TPosition pos, const TString& mode, const TVector<TNodePtr>& args)
-        : TCallNode(pos, "ToDict", 4, 4, args) 
-        , Mode(mode) 
-    {} 
- 
-private: 
-    TCallNode::TPtr DoClone() const override { 
+        : TCallNode(pos, "ToDict", 4, 4, args)
+        , Mode(mode)
+    {}
+
+private:
+    TCallNode::TPtr DoClone() const override {
        return new TYqlToDict<Sorted>(GetPos(), Mode, CloneContainer(Args));
-    } 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (Args.size() != 1) { 
-            ctx.Error(Pos) << "ToDict required exactly one argument"; 
-            return false; 
-        } 
-        Args.push_back(BuildLambda(Pos, Y("val"), Y("Nth", "val", Q("0")))); 
-        Args.push_back(BuildLambda(Pos, Y("val"), Y("Nth", "val", Q("1")))); 
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (Args.size() != 1) {
+            ctx.Error(Pos) << "ToDict required exactly one argument";
+            return false;
+        }
+        Args.push_back(BuildLambda(Pos, Y("val"), Y("Nth", "val", Q("0"))));
+        Args.push_back(BuildLambda(Pos, Y("val"), Y("Nth", "val", Q("1"))));
         Args.push_back(Q(Y(Q(Sorted ? "Sorted" : "Hashed"), Q(Mode))));
-        return TCallNode::DoInit(ctx, src); 
-    } 
-private: 
+        return TCallNode::DoInit(ctx, src);
+    }
+private:
     TString Mode;
-}; 
- 
+};
+
 template <bool IsStart>
 class THoppingTime final: public TAstListNode {
 public:
@@ -2284,22 +2284,22 @@ private:
 };
 
 enum EAggrFuncTypeCallback {
-    NORMAL, 
-    KEY_PAYLOAD, 
+    NORMAL,
+    KEY_PAYLOAD,
     PAYLOAD_PREDICATE,
-    TWO_ARGS, 
-    COUNT, 
-    HISTOGRAM, 
-    LINEAR_HISTOGRAM, 
-    PERCENTILE, 
+    TWO_ARGS,
+    COUNT,
+    HISTOGRAM,
+    LINEAR_HISTOGRAM,
+    PERCENTILE,
     TOPFREQ,
     TOP,
     TOP_BY,
-    COUNT_DISTINCT_ESTIMATE, 
+    COUNT_DISTINCT_ESTIMATE,
     LIST,
-    UDAF 
-}; 
- 
+    UDAF
+};
+
 struct TCoreFuncInfo {
     TString Name;
     ui32 MinArgs;
@@ -2311,14 +2311,14 @@ using TAggrFuncFactoryCallbackMap = std::unordered_map<TString, TAggrFuncFactory
 using TBuiltinFactoryCallback = std::function<TNodePtr(TPosition pos, const TVector<TNodePtr>& args)>;
 using TBuiltinFactoryCallbackMap = std::unordered_map<TString, TBuiltinFactoryCallback, THash<TString>>;
 using TCoreFuncMap = std::unordered_map<TString, TCoreFuncInfo, THash<TString>>;
- 
-TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback( 
+
+TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
         const TString& functionName,
         const TString& factoryName,
         EAggrFuncTypeCallback type = NORMAL,
         const TString& functionNameOverride = TString(),
         const TVector<EAggregateMode>& validModes = {}) {
- 
+
     const TString realFunctionName = functionNameOverride.empty() ? functionName : functionNameOverride;
     return [functionName, realFunctionName, factoryName, type, validModes] (TPosition pos, const TVector<TNodePtr>& args, EAggregateMode aggMode, bool isFactory) -> INode::TPtr {
         if (!validModes.empty()) {
@@ -2334,32 +2334,32 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
                 return INode::TPtr(new TInvalidBuiltin(pos, errorText));
             }
         }
-        TAggregationPtr factory = nullptr; 
+        TAggregationPtr factory = nullptr;
         switch (type) {
-        case NORMAL: 
+        case NORMAL:
             factory = BuildFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
-            break; 
-        case KEY_PAYLOAD: 
+            break;
+        case KEY_PAYLOAD:
             factory = BuildKeyPayloadFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
-            break; 
+            break;
         case PAYLOAD_PREDICATE:
             factory = BuildPayloadPredicateFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
             break;
-        case TWO_ARGS: 
-            factory = BuildTwoArgsFactoryAggregation(pos, realFunctionName, factoryName, aggMode); 
-            break; 
-        case COUNT: 
+        case TWO_ARGS:
+            factory = BuildTwoArgsFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
+            break;
+        case COUNT:
             factory = BuildCountAggregation(pos, realFunctionName, factoryName, aggMode);
-            break; 
-        case HISTOGRAM: 
+            break;
+        case HISTOGRAM:
             factory = BuildHistogramFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
-            break; 
-        case LINEAR_HISTOGRAM: 
-            factory = BuildLinearHistogramFactoryAggregation(pos, realFunctionName, factoryName, aggMode); 
-            break; 
-        case PERCENTILE: 
+            break;
+        case LINEAR_HISTOGRAM:
+            factory = BuildLinearHistogramFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
+            break;
+        case PERCENTILE:
             factory = BuildPercentileFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
-            break; 
+            break;
         case TOPFREQ:
             factory = BuildTopFreqFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
             break;
@@ -2369,15 +2369,15 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
         case TOP_BY:
             factory = BuildTopFactoryAggregation<true>(pos, realFunctionName, factoryName, aggMode);
             break;
-        case COUNT_DISTINCT_ESTIMATE: 
-            factory = BuildCountDistinctEstimateFactoryAggregation(pos, realFunctionName, factoryName, aggMode); 
-            break; 
+        case COUNT_DISTINCT_ESTIMATE:
+            factory = BuildCountDistinctEstimateFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
+            break;
         case LIST:
             factory = BuildListFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
             break;
-        case UDAF: 
+        case UDAF:
             factory = BuildUserDefinedFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
-            break; 
+            break;
         }
         if (isFactory) {
             auto realArgs = args;
@@ -2386,8 +2386,8 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
         } else {
             return new TBasicAggrFunc(pos, functionName, factory, args);
         }
-    }; 
-} 
+    };
+}
 
 TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
         const TString& functionName,
@@ -2398,35 +2398,35 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
     return BuildAggrFuncFactoryCallback(functionName, factoryName, type, functionNameOverride, validModes);
 }
 
-template<typename TType> 
-TBuiltinFactoryCallback BuildSimpleBuiltinFactoryCallback() { 
+template<typename TType>
+TBuiltinFactoryCallback BuildSimpleBuiltinFactoryCallback() {
     return [] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
-        return new TType(pos, args); 
-    }; 
-} 
- 
-template<typename TType> 
+        return new TType(pos, args);
+    };
+}
+
+template<typename TType>
 TBuiltinFactoryCallback BuildNamedBuiltinFactoryCallback(const TString& name) {
     return [name] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
-        return new TType(pos, name, args); 
-    }; 
-} 
+        return new TType(pos, name, args);
+    };
+}
 
-template<typename TType> 
-TBuiltinFactoryCallback BuildArgcBuiltinFactoryCallback(i32 minArgs, i32 maxArgs) { 
+template<typename TType>
+TBuiltinFactoryCallback BuildArgcBuiltinFactoryCallback(i32 minArgs, i32 maxArgs) {
     return [minArgs, maxArgs] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
-        return new TType(pos, minArgs, maxArgs, args); 
-    }; 
-} 
+        return new TType(pos, minArgs, maxArgs, args);
+    };
+}
 
-template<typename TType> 
+template<typename TType>
 TBuiltinFactoryCallback BuildNamedArgcBuiltinFactoryCallback(const TString& name, i32 minArgs, i32 maxArgs) {
     return [name, minArgs, maxArgs] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
-        return new TType(pos, name, minArgs, maxArgs, args); 
-    }; 
-} 
- 
-template<typename TType> 
+        return new TType(pos, name, minArgs, maxArgs, args);
+    };
+}
+
+template<typename TType>
 TBuiltinFactoryCallback BuildNamedDepsArgcBuiltinFactoryCallback(ui32 reqArgsCount, const TString& name, i32 minArgs, i32 maxArgs) {
     return [reqArgsCount, name, minArgs, maxArgs](TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
         return new TType(reqArgsCount, pos, name, minArgs, maxArgs, args);
@@ -2434,18 +2434,18 @@ TBuiltinFactoryCallback BuildNamedDepsArgcBuiltinFactoryCallback(ui32 reqArgsCou
 }
 
 template<typename TType>
-TBuiltinFactoryCallback BuildBoolBuiltinFactoryCallback(bool arg) { 
+TBuiltinFactoryCallback BuildBoolBuiltinFactoryCallback(bool arg) {
     return [arg] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
-        return new TType(pos, args, arg); 
-    }; 
-} 
+        return new TType(pos, args, arg);
+    };
+}
 
-template<typename TType> 
+template<typename TType>
 TBuiltinFactoryCallback BuildFoldBuiltinFactoryCallback(const TString& name, const TString& defaultValue) {
     return [name, defaultValue] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
-        return new TType(pos, name, "Bool", defaultValue, 1, args); 
-    }; 
-} 
+        return new TType(pos, name, "Bool", defaultValue, 1, args);
+    };
+}
 
 TNodePtr MakePair(TPosition pos, const TVector<TNodePtr>& args) {
     TNodePtr list = new TAstListNodeImpl(pos, {
@@ -2463,20 +2463,20 @@ struct TBuiltinFuncData {
     const TBuiltinFactoryCallbackMap BuiltinFuncs;
     const TAggrFuncFactoryCallbackMap AggrFuncs;
     const TCoreFuncMap CoreFuncs;
- 
+
     TBuiltinFuncData():
         BuiltinFuncs(MakeBuiltinFuncs()),
         AggrFuncs(MakeAggrFuncs()),
         CoreFuncs(MakeCoreFuncs())
     {
     }
- 
+
     TBuiltinFactoryCallbackMap MakeBuiltinFuncs() {
         TBuiltinFactoryCallbackMap builtinFuncs = {
             // Branching
             {"if", BuildSimpleBuiltinFactoryCallback<TYqlIf<false>>()},
             {"ifstrict", BuildSimpleBuiltinFactoryCallback<TYqlIf<true>>() },
- 
+
             // String builtins
             {"len", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Size", 1, 1)},
             {"length", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Size", 1, 1)},
@@ -2493,14 +2493,14 @@ struct TBuiltinFuncData {
             {"abs", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Abs", 1, 1) },
             {"tobytes", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ToBytes", 1, 1) },
             {"frombytes", BuildSimpleBuiltinFactoryCallback<TFromBytes>() },
- 
+
             // Compare builtins
             {"minof", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Min", 1, -1)},
             {"maxof", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Max", 1, -1)},
             {"greatest", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Max", 1, -1)},
             {"least", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Min", 1, -1)},
             {"in", BuildSimpleBuiltinFactoryCallback<TYqlIn>()},
- 
+
             // List builtins
             {"aslist", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsList", 0, -1)},
             {"asliststrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsListStrict", 0, -1) },
@@ -2543,7 +2543,7 @@ struct TBuiltinFuncData {
             {"listcollect", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListCollect", 1, 1) },
             {"listnotnull", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListNotNull", 1, 1)},
             {"listflatten", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListFlatten", 1, 1)},
- 
+
             // Dict builtins
             {"dictlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Length", 1, 1)},
             {"dicthasitems", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("HasItems", 1, 1)},
@@ -2626,10 +2626,10 @@ struct TBuiltinFuncData {
             {"currentauthenticateduser", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CurrentAuthenticatedUser", 0, 0) },
             {"addtimezone", BuildSimpleBuiltinFactoryCallback<TYqlAddTimezone>() },
             {"removetimezone", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("RemoveTimezone", 1, 1) },
-            {"pickle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Pickle", 1, 1) }, 
-            {"stablepickle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StablePickle", 1, 1) }, 
-            {"unpickle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Unpickle", 2, 2) }, 
- 
+            {"pickle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Pickle", 1, 1) },
+            {"stablepickle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StablePickle", 1, 1) },
+            {"unpickle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Unpickle", 2, 2) },
+
             {"typehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TypeHandle", 1, 1) },
             {"parsetypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ParseTypeHandle", 1, 1) },
             {"typekind", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TypeKind", 1, 1) },
@@ -2676,21 +2676,21 @@ struct TBuiltinFuncData {
             {"subqueryunionmergefor", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryFor<SubqueryUnionMergeFor>>() },
             {"subqueryorderby", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryOrderBy<SubqueryOrderBy>>() },
             {"subqueryassumeorderby", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryOrderBy<SubqueryAssumeOrderBy>>() },
- 
+
             // Tuple builtins
             {"astuple", BuildSimpleBuiltinFactoryCallback<TTupleNode>()},
- 
-            // Struct builtins 
-            {"trymember", BuildNamedBuiltinFactoryCallback<TTryMember>("TryMember")}, 
-            {"addmember", BuildNamedBuiltinFactoryCallback<TAddMember>("AddMember")}, 
-            {"replacemember", BuildNamedBuiltinFactoryCallback<TAddMember>("ReplaceMember")}, 
-            {"removemember", BuildNamedBuiltinFactoryCallback<TRemoveMember>("RemoveMember")}, 
-            {"forceremovemember", BuildNamedBuiltinFactoryCallback<TRemoveMember>("ForceRemoveMember")}, 
-            {"combinemembers", BuildNamedBuiltinFactoryCallback<TCombineMembers>("FlattenMembers")}, 
-            {"flattenmembers", BuildNamedBuiltinFactoryCallback<TFlattenMembers>("FlattenMembers")}, 
-            {"staticmap", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticMap", 2, 2) }, 
+
+            // Struct builtins
+            {"trymember", BuildNamedBuiltinFactoryCallback<TTryMember>("TryMember")},
+            {"addmember", BuildNamedBuiltinFactoryCallback<TAddMember>("AddMember")},
+            {"replacemember", BuildNamedBuiltinFactoryCallback<TAddMember>("ReplaceMember")},
+            {"removemember", BuildNamedBuiltinFactoryCallback<TRemoveMember>("RemoveMember")},
+            {"forceremovemember", BuildNamedBuiltinFactoryCallback<TRemoveMember>("ForceRemoveMember")},
+            {"combinemembers", BuildNamedBuiltinFactoryCallback<TCombineMembers>("FlattenMembers")},
+            {"flattenmembers", BuildNamedBuiltinFactoryCallback<TFlattenMembers>("FlattenMembers")},
+            {"staticmap", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticMap", 2, 2) },
             {"staticzip", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticZip", 1, -1) },
- 
+
             // File builtins
             {"filepath", BuildNamedBuiltinFactoryCallback<TYqlAtom>("FilePath")},
             {"filecontent", BuildNamedBuiltinFactoryCallback<TYqlAtom>("FileContent")},
@@ -2707,10 +2707,10 @@ struct TBuiltinFuncData {
             {"randomnumber", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "RandomNumber", 1, -1)},
             {"randomuuid", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "RandomUuid", 1, -1) },
             {"tablepath", BuildNamedBuiltinFactoryCallback<TCallDirectRow>("TablePath") },
-            {"tablerecordindex", BuildNamedBuiltinFactoryCallback<TCallDirectRow>("TableRecord") }, 
+            {"tablerecordindex", BuildNamedBuiltinFactoryCallback<TCallDirectRow>("TableRecord") },
             {"tablerow", BuildSimpleBuiltinFactoryCallback<TTableRow<false>>() },
             {"jointablerow", BuildSimpleBuiltinFactoryCallback<TTableRow<true>>() },
-            {"tablerows", BuildSimpleBuiltinFactoryCallback<TTableRows>() }, 
+            {"tablerows", BuildSimpleBuiltinFactoryCallback<TTableRows>() },
             {"weakfield", BuildSimpleBuiltinFactoryCallback<TWeakFieldOp>()},
 
             // Hint builtins
@@ -2739,43 +2739,43 @@ struct TBuiltinFuncData {
         constexpr auto OverWindow = EAggregateMode::OverWindow;
 
         TAggrFuncFactoryCallbackMap aggrFuncs = {
-            {"min", BuildAggrFuncFactoryCallback("Min", "min_traits_factory")}, 
-            {"max", BuildAggrFuncFactoryCallback("Max", "max_traits_factory")}, 
- 
-            {"minby", BuildAggrFuncFactoryCallback("MinBy", "min_by_traits_factory", KEY_PAYLOAD)}, 
-            {"maxby", BuildAggrFuncFactoryCallback("MaxBy", "max_by_traits_factory", KEY_PAYLOAD)}, 
- 
-            {"sum", BuildAggrFuncFactoryCallback("Sum", "sum_traits_factory")}, 
+            {"min", BuildAggrFuncFactoryCallback("Min", "min_traits_factory")},
+            {"max", BuildAggrFuncFactoryCallback("Max", "max_traits_factory")},
+
+            {"minby", BuildAggrFuncFactoryCallback("MinBy", "min_by_traits_factory", KEY_PAYLOAD)},
+            {"maxby", BuildAggrFuncFactoryCallback("MaxBy", "max_by_traits_factory", KEY_PAYLOAD)},
+
+            {"sum", BuildAggrFuncFactoryCallback("Sum", "sum_traits_factory")},
             {"sumif", BuildAggrFuncFactoryCallback("SumIf", "sum_if_traits_factory", PAYLOAD_PREDICATE) },
 
-            {"some", BuildAggrFuncFactoryCallback("Some", "some_traits_factory")}, 
-            {"somevalue", BuildAggrFuncFactoryCallback("SomeValue", "some_traits_factory")}, 
- 
-            {"count", BuildAggrFuncFactoryCallback("Count", "count_traits_factory", COUNT)}, 
-            {"countif", BuildAggrFuncFactoryCallback("CountIf", "count_if_traits_factory")}, 
- 
-            {"every", BuildAggrFuncFactoryCallback("Every", "and_traits_factory")}, 
-            {"booland", BuildAggrFuncFactoryCallback("BoolAnd", "and_traits_factory")}, 
-            {"boolor", BuildAggrFuncFactoryCallback("BoolOr", "or_traits_factory")}, 
+            {"some", BuildAggrFuncFactoryCallback("Some", "some_traits_factory")},
+            {"somevalue", BuildAggrFuncFactoryCallback("SomeValue", "some_traits_factory")},
+
+            {"count", BuildAggrFuncFactoryCallback("Count", "count_traits_factory", COUNT)},
+            {"countif", BuildAggrFuncFactoryCallback("CountIf", "count_if_traits_factory")},
+
+            {"every", BuildAggrFuncFactoryCallback("Every", "and_traits_factory")},
+            {"booland", BuildAggrFuncFactoryCallback("BoolAnd", "and_traits_factory")},
+            {"boolor", BuildAggrFuncFactoryCallback("BoolOr", "or_traits_factory")},
             {"boolxor", BuildAggrFuncFactoryCallback("BoolXor", "xor_traits_factory")},
- 
-            {"bitand", BuildAggrFuncFactoryCallback("BitAnd", "bit_and_traits_factory")}, 
-            {"bitor", BuildAggrFuncFactoryCallback("BitOr", "bit_or_traits_factory")}, 
-            {"bitxor", BuildAggrFuncFactoryCallback("BitXor", "bit_xor_traits_factory")}, 
- 
-            {"avg", BuildAggrFuncFactoryCallback("Avg", "avg_traits_factory")}, 
+
+            {"bitand", BuildAggrFuncFactoryCallback("BitAnd", "bit_and_traits_factory")},
+            {"bitor", BuildAggrFuncFactoryCallback("BitOr", "bit_or_traits_factory")},
+            {"bitxor", BuildAggrFuncFactoryCallback("BitXor", "bit_xor_traits_factory")},
+
+            {"avg", BuildAggrFuncFactoryCallback("Avg", "avg_traits_factory")},
             {"avgif", BuildAggrFuncFactoryCallback("AvgIf", "avg_if_traits_factory", PAYLOAD_PREDICATE) },
 
             {"agglist", BuildAggrFuncFactoryCallback("AggregateList", "list2_traits_factory", LIST)},
             {"aggrlist", BuildAggrFuncFactoryCallback("AggregateList", "list2_traits_factory", LIST)},
             {"aggregatelist", BuildAggrFuncFactoryCallback("AggregateList", "list2_traits_factory", LIST)},
-            {"agglistdistinct", BuildAggrFuncFactoryCallback("AggregateListDistinct", "set_traits_factory", LIST)}, 
-            {"aggrlistdistinct", BuildAggrFuncFactoryCallback("AggregateListDistinct", "set_traits_factory", LIST)}, 
-            {"aggregatelistdistinct", BuildAggrFuncFactoryCallback("AggregateListDistinct", "set_traits_factory", LIST)}, 
- 
+            {"agglistdistinct", BuildAggrFuncFactoryCallback("AggregateListDistinct", "set_traits_factory", LIST)},
+            {"aggrlistdistinct", BuildAggrFuncFactoryCallback("AggregateListDistinct", "set_traits_factory", LIST)},
+            {"aggregatelistdistinct", BuildAggrFuncFactoryCallback("AggregateListDistinct", "set_traits_factory", LIST)},
+
             {"median", BuildAggrFuncFactoryCallback("Median", "percentile_traits_factory", PERCENTILE)},
             {"percentile", BuildAggrFuncFactoryCallback("Percentile", "percentile_traits_factory", PERCENTILE)},
- 
+
             {"mode", BuildAggrFuncFactoryCallback("Mode", "topfreq_traits_factory", TOPFREQ) },
             {"topfreq", BuildAggrFuncFactoryCallback("TopFreq", "topfreq_traits_factory", TOPFREQ) },
 
@@ -2784,59 +2784,59 @@ struct TBuiltinFuncData {
             {"topby", BuildAggrFuncFactoryCallback("TopBy", "top_by_traits_factory", TOP_BY)},
             {"bottomby", BuildAggrFuncFactoryCallback("BottomBy", "bottom_by_traits_factory", TOP_BY)},
 
-            {"histogram", BuildAggrFuncFactoryCallback("AdaptiveWardHistogram", "histogram_adaptive_ward_traits_factory", HISTOGRAM, "Histogram")}, 
-            {"adaptivewardhistogram", BuildAggrFuncFactoryCallback("AdaptiveWardHistogram", "histogram_adaptive_ward_traits_factory", HISTOGRAM)}, 
-            {"adaptiveweighthistogram", BuildAggrFuncFactoryCallback("AdaptiveWeightHistogram", "histogram_adaptive_weight_traits_factory", HISTOGRAM)}, 
-            {"adaptivedistancehistogram", BuildAggrFuncFactoryCallback("AdaptiveDistanceHistogram", "histogram_adaptive_distance_traits_factory", HISTOGRAM)}, 
-            {"blockwardhistogram", BuildAggrFuncFactoryCallback("BlockWardHistogram", "histogram_block_ward_traits_factory", HISTOGRAM)}, 
-            {"blockweighthistogram", BuildAggrFuncFactoryCallback("BlockWeightHistogram", "histogram_block_weight_traits_factory", HISTOGRAM)}, 
-            {"linearhistogram", BuildAggrFuncFactoryCallback("LinearHistogram", "histogram_linear_traits_factory", LINEAR_HISTOGRAM)}, 
-            {"logarithmichistogram", BuildAggrFuncFactoryCallback("LogarithmicHistogram", "histogram_logarithmic_traits_factory", LINEAR_HISTOGRAM)}, 
-            {"loghistogram", BuildAggrFuncFactoryCallback("LogarithmicHistogram", "histogram_logarithmic_traits_factory", LINEAR_HISTOGRAM, "LogHistogram")}, 
- 
-            {"hyperloglog", BuildAggrFuncFactoryCallback("HyperLogLog", "hyperloglog_traits_factory", COUNT_DISTINCT_ESTIMATE)}, 
-            {"hll", BuildAggrFuncFactoryCallback("HyperLogLog", "hyperloglog_traits_factory", COUNT_DISTINCT_ESTIMATE, "HLL")}, 
-            {"countdistinctestimate", BuildAggrFuncFactoryCallback("HyperLogLog", "hyperloglog_traits_factory", COUNT_DISTINCT_ESTIMATE, "CountDistinctEstimate")}, 
- 
-            {"variance", BuildAggrFuncFactoryCallback("Variance", "variance_0_1_traits_factory")}, 
-            {"stddev", BuildAggrFuncFactoryCallback("StdDev", "variance_1_1_traits_factory")}, 
+            {"histogram", BuildAggrFuncFactoryCallback("AdaptiveWardHistogram", "histogram_adaptive_ward_traits_factory", HISTOGRAM, "Histogram")},
+            {"adaptivewardhistogram", BuildAggrFuncFactoryCallback("AdaptiveWardHistogram", "histogram_adaptive_ward_traits_factory", HISTOGRAM)},
+            {"adaptiveweighthistogram", BuildAggrFuncFactoryCallback("AdaptiveWeightHistogram", "histogram_adaptive_weight_traits_factory", HISTOGRAM)},
+            {"adaptivedistancehistogram", BuildAggrFuncFactoryCallback("AdaptiveDistanceHistogram", "histogram_adaptive_distance_traits_factory", HISTOGRAM)},
+            {"blockwardhistogram", BuildAggrFuncFactoryCallback("BlockWardHistogram", "histogram_block_ward_traits_factory", HISTOGRAM)},
+            {"blockweighthistogram", BuildAggrFuncFactoryCallback("BlockWeightHistogram", "histogram_block_weight_traits_factory", HISTOGRAM)},
+            {"linearhistogram", BuildAggrFuncFactoryCallback("LinearHistogram", "histogram_linear_traits_factory", LINEAR_HISTOGRAM)},
+            {"logarithmichistogram", BuildAggrFuncFactoryCallback("LogarithmicHistogram", "histogram_logarithmic_traits_factory", LINEAR_HISTOGRAM)},
+            {"loghistogram", BuildAggrFuncFactoryCallback("LogarithmicHistogram", "histogram_logarithmic_traits_factory", LINEAR_HISTOGRAM, "LogHistogram")},
+
+            {"hyperloglog", BuildAggrFuncFactoryCallback("HyperLogLog", "hyperloglog_traits_factory", COUNT_DISTINCT_ESTIMATE)},
+            {"hll", BuildAggrFuncFactoryCallback("HyperLogLog", "hyperloglog_traits_factory", COUNT_DISTINCT_ESTIMATE, "HLL")},
+            {"countdistinctestimate", BuildAggrFuncFactoryCallback("HyperLogLog", "hyperloglog_traits_factory", COUNT_DISTINCT_ESTIMATE, "CountDistinctEstimate")},
+
+            {"variance", BuildAggrFuncFactoryCallback("Variance", "variance_0_1_traits_factory")},
+            {"stddev", BuildAggrFuncFactoryCallback("StdDev", "variance_1_1_traits_factory")},
             {"populationvariance", BuildAggrFuncFactoryCallback("VariancePopulation", "variance_0_0_traits_factory")},
-            {"variancepopulation", BuildAggrFuncFactoryCallback("VariancePopulation", "variance_0_0_traits_factory")}, 
+            {"variancepopulation", BuildAggrFuncFactoryCallback("VariancePopulation", "variance_0_0_traits_factory")},
             {"populationstddev", BuildAggrFuncFactoryCallback("StdDevPopulation", "variance_1_0_traits_factory")},
-            {"stddevpopulation", BuildAggrFuncFactoryCallback("StdDevPopulation", "variance_1_0_traits_factory")}, 
-            {"varpop", BuildAggrFuncFactoryCallback("VariancePopulation", "variance_0_0_traits_factory")}, 
-            {"stddevpop", BuildAggrFuncFactoryCallback("StdDevPopulation", "variance_1_0_traits_factory")}, 
-            {"varp", BuildAggrFuncFactoryCallback("VariancePopulation", "variance_0_0_traits_factory")}, 
-            {"stddevp", BuildAggrFuncFactoryCallback("StdDevPopulation", "variance_1_0_traits_factory")}, 
-            {"variancesample", BuildAggrFuncFactoryCallback("VarianceSample", "variance_0_1_traits_factory")}, 
-            {"stddevsample", BuildAggrFuncFactoryCallback("StdDevSample", "variance_1_1_traits_factory")}, 
-            {"varsamp", BuildAggrFuncFactoryCallback("VarianceSample", "variance_0_1_traits_factory")}, 
-            {"stddevsamp", BuildAggrFuncFactoryCallback("StdDevSample", "variance_1_1_traits_factory")}, 
-            {"vars", BuildAggrFuncFactoryCallback("VarianceSample", "variance_0_1_traits_factory")}, 
-            {"stddevs", BuildAggrFuncFactoryCallback("StdDevSample", "variance_1_1_traits_factory")}, 
- 
-            {"correlation", BuildAggrFuncFactoryCallback("Correlation", "correlation_traits_factory", TWO_ARGS)}, 
-            {"corr", BuildAggrFuncFactoryCallback("Correlation", "correlation_traits_factory", TWO_ARGS, "Corr")}, 
-            {"covariance", BuildAggrFuncFactoryCallback("CovarianceSample", "covariance_sample_traits_factory", TWO_ARGS, "Covariance")}, 
-            {"covariancesample", BuildAggrFuncFactoryCallback("CovarianceSample", "covariance_sample_traits_factory", TWO_ARGS)}, 
-            {"covarsamp", BuildAggrFuncFactoryCallback("CovarianceSample", "covariance_sample_traits_factory", TWO_ARGS, "CovarSamp")}, 
-            {"covar", BuildAggrFuncFactoryCallback("CovarianceSample", "covariance_sample_traits_factory", TWO_ARGS, "Covar")}, 
-            {"covars", BuildAggrFuncFactoryCallback("CovarianceSample", "covariance_sample_traits_factory", TWO_ARGS, "CovarS")}, 
-            {"covariancepopulation", BuildAggrFuncFactoryCallback("CovariancePopulation", "covariance_population_traits_factory", TWO_ARGS)}, 
-            {"covarpop", BuildAggrFuncFactoryCallback("CovariancePopulation", "covariance_population_traits_factory", TWO_ARGS, "CovarPop")}, 
-            {"covarp", BuildAggrFuncFactoryCallback("CovariancePopulation", "covariance_population_traits_factory", TWO_ARGS, "CovarP")}, 
- 
-            {"udaf", BuildAggrFuncFactoryCallback("UDAF", "udaf_traits_factory", UDAF)}, 
+            {"stddevpopulation", BuildAggrFuncFactoryCallback("StdDevPopulation", "variance_1_0_traits_factory")},
+            {"varpop", BuildAggrFuncFactoryCallback("VariancePopulation", "variance_0_0_traits_factory")},
+            {"stddevpop", BuildAggrFuncFactoryCallback("StdDevPopulation", "variance_1_0_traits_factory")},
+            {"varp", BuildAggrFuncFactoryCallback("VariancePopulation", "variance_0_0_traits_factory")},
+            {"stddevp", BuildAggrFuncFactoryCallback("StdDevPopulation", "variance_1_0_traits_factory")},
+            {"variancesample", BuildAggrFuncFactoryCallback("VarianceSample", "variance_0_1_traits_factory")},
+            {"stddevsample", BuildAggrFuncFactoryCallback("StdDevSample", "variance_1_1_traits_factory")},
+            {"varsamp", BuildAggrFuncFactoryCallback("VarianceSample", "variance_0_1_traits_factory")},
+            {"stddevsamp", BuildAggrFuncFactoryCallback("StdDevSample", "variance_1_1_traits_factory")},
+            {"vars", BuildAggrFuncFactoryCallback("VarianceSample", "variance_0_1_traits_factory")},
+            {"stddevs", BuildAggrFuncFactoryCallback("StdDevSample", "variance_1_1_traits_factory")},
+
+            {"correlation", BuildAggrFuncFactoryCallback("Correlation", "correlation_traits_factory", TWO_ARGS)},
+            {"corr", BuildAggrFuncFactoryCallback("Correlation", "correlation_traits_factory", TWO_ARGS, "Corr")},
+            {"covariance", BuildAggrFuncFactoryCallback("CovarianceSample", "covariance_sample_traits_factory", TWO_ARGS, "Covariance")},
+            {"covariancesample", BuildAggrFuncFactoryCallback("CovarianceSample", "covariance_sample_traits_factory", TWO_ARGS)},
+            {"covarsamp", BuildAggrFuncFactoryCallback("CovarianceSample", "covariance_sample_traits_factory", TWO_ARGS, "CovarSamp")},
+            {"covar", BuildAggrFuncFactoryCallback("CovarianceSample", "covariance_sample_traits_factory", TWO_ARGS, "Covar")},
+            {"covars", BuildAggrFuncFactoryCallback("CovarianceSample", "covariance_sample_traits_factory", TWO_ARGS, "CovarS")},
+            {"covariancepopulation", BuildAggrFuncFactoryCallback("CovariancePopulation", "covariance_population_traits_factory", TWO_ARGS)},
+            {"covarpop", BuildAggrFuncFactoryCallback("CovariancePopulation", "covariance_population_traits_factory", TWO_ARGS, "CovarPop")},
+            {"covarp", BuildAggrFuncFactoryCallback("CovariancePopulation", "covariance_population_traits_factory", TWO_ARGS, "CovarP")},
+
+            {"udaf", BuildAggrFuncFactoryCallback("UDAF", "udaf_traits_factory", UDAF)},
 
             // Window functions
             {"firstvalue", BuildAggrFuncFactoryCallback("FirstValue", "first_value_traits_factory", {OverWindow})},
             {"lastvalue", BuildAggrFuncFactoryCallback("LastValue", "last_value_traits_factory", {OverWindow})},
             {"firstvalueignorenulls", BuildAggrFuncFactoryCallback("FirstValueIgnoreNulls", "first_value_ignore_nulls_traits_factory", {OverWindow})},
             {"lastvalueignorenulls", BuildAggrFuncFactoryCallback("LastValueIgnoreNulls", "last_value_ignore_nulls_traits_factory", {OverWindow})},
-        }; 
+        };
         return aggrFuncs;
     }
- 
+
     TCoreFuncMap MakeCoreFuncs() {
         TCoreFuncMap coreFuncs = {
             {"listindexof", { "IndexOf", 2, 2}},
@@ -2878,15 +2878,15 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     const TAggrFuncFactoryCallbackMap& aggrFuncs = funcData->AggrFuncs;
     const TCoreFuncMap& coreFuncs = funcData->CoreFuncs;
 
-    for (auto& arg: args) { 
-        if (!arg) { 
-            return nullptr; 
+    for (auto& arg: args) {
+        if (!arg) {
+            return nullptr;
         }
     }
- 
+
     TString normalizedName(name);
-    TString nameSpace(originalNameSpace); 
-    TString ns = to_lower(nameSpace); 
+    TString nameSpace(originalNameSpace);
+    TString ns = to_lower(nameSpace);
     if (ns.empty()) {
         TMaybe<TIssue> error = NormalizeName(pos, normalizedName);
         if (!error.Empty()) {
@@ -2908,48 +2908,48 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         }
     }
 
-    TString moduleResource; 
+    TString moduleResource;
     if (ctx.Settings.ModuleMapping.contains(ns)) {
-        moduleResource = ctx.Settings.ModuleMapping.at(ns); 
-    } 
- 
-    if (ns == "js") {
-        ns = "javascript";
-        nameSpace = "JavaScript"; 
+        moduleResource = ctx.Settings.ModuleMapping.at(ns);
     }
 
-    if (ns == "datetime2") { 
-        ctx.Warning(pos, TIssuesIds::YQL_DEPRECATED_DATETIME2) << "DateTime2:: is a temporary alias for DateTime:: which will be removed in the future, use DateTime:: instead"; 
-    } 
- 
-    if (ns == "datetime") { 
-        ns = "datetime2"; 
-        nameSpace = "DateTime2"; 
-    } 
- 
+    if (ns == "js") {
+        ns = "javascript";
+        nameSpace = "JavaScript";
+    }
+
+    if (ns == "datetime2") {
+        ctx.Warning(pos, TIssuesIds::YQL_DEPRECATED_DATETIME2) << "DateTime2:: is a temporary alias for DateTime:: which will be removed in the future, use DateTime:: instead";
+    }
+
+    if (ns == "datetime") {
+        ns = "datetime2";
+        nameSpace = "DateTime2";
+    }
+
     auto scriptType = NKikimr::NMiniKQL::ScriptTypeFromStr(ns);
-    switch (scriptType) { 
-        case NKikimr::NMiniKQL::EScriptType::Python: 
-        case NKikimr::NMiniKQL::EScriptType::Python3: 
-        case NKikimr::NMiniKQL::EScriptType::ArcPython3: 
-            scriptType = NKikimr::NMiniKQL::EScriptType::Python3; 
-            break; 
-        case NKikimr::NMiniKQL::EScriptType::Python2: 
-            scriptType = NKikimr::NMiniKQL::EScriptType::ArcPython2; 
-            break; 
-        case NKikimr::NMiniKQL::EScriptType::SystemPython2: 
-            scriptType = NKikimr::NMiniKQL::EScriptType::Python2; 
-            break; 
+    switch (scriptType) {
+        case NKikimr::NMiniKQL::EScriptType::Python:
+        case NKikimr::NMiniKQL::EScriptType::Python3:
+        case NKikimr::NMiniKQL::EScriptType::ArcPython3:
+            scriptType = NKikimr::NMiniKQL::EScriptType::Python3;
+            break;
+        case NKikimr::NMiniKQL::EScriptType::Python2:
+            scriptType = NKikimr::NMiniKQL::EScriptType::ArcPython2;
+            break;
+        case NKikimr::NMiniKQL::EScriptType::SystemPython2:
+            scriptType = NKikimr::NMiniKQL::EScriptType::Python2;
+            break;
         default:
             break;
-    } 
+    }
 
     if (ns == "yql" || ns == "@yql") {
         if (warnOnYqlNameSpace && GetEnv("YQL_DETERMINISTIC_MODE").empty()) {
-            ctx.Warning(pos, TIssuesIds::YQL_S_EXPRESSIONS_CALL) 
-                << "It is not recommended to directly access s-expressions functions via YQL::" << Endl 
-                << "This mechanism is mostly intended for temporary workarounds or internal testing purposes"; 
-        } 
+            ctx.Warning(pos, TIssuesIds::YQL_S_EXPRESSIONS_CALL)
+                << "It is not recommended to directly access s-expressions functions via YQL::" << Endl
+                << "This mechanism is mostly intended for temporary workarounds or internal testing purposes";
+        }
 
         if (ns == "yql") {
             return new TCallNodeImpl(pos, name, -1, -1, args);
@@ -2957,13 +2957,13 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     } else if (moduleResource) {
         auto exportName = ns == "core" ? name : "$" + name;
         TVector<TNodePtr> applyArgs = {
-           new TCallNodeImpl(pos, "bind", { 
+           new TCallNodeImpl(pos, "bind", {
                BuildAtom(pos, ns + "_module", 0), BuildQuotedAtom(pos, exportName)
-           }) 
+           })
         };
         applyArgs.insert(applyArgs.end(), args.begin(), args.end());
         return new TCallNodeImpl(pos, "Apply", applyArgs);
-    } else if (ns == "hyperscan" || ns == "pcre" || ns == "pire" || ns.StartsWith("re2")) { 
+    } else if (ns == "hyperscan" || ns == "pcre" || ns == "pire" || ns.StartsWith("re2")) {
         TString moduleName(nameSpace);
         moduleName.to_title();
         if ((args.size() == 1 || args.size() == 2) && (name.StartsWith("Multi") || (ns.StartsWith("re2") && name == "Capture"))) {
@@ -2989,7 +2989,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             }
 
             return BuildUdf(ctx, pos, moduleName, name, newArgs);
-        } 
+        }
     } else if (ns == "datetime2" && (name == "Format" || name == "Parse")) {
         return BuildUdf(ctx, pos, nameSpace, name, args);
     } else if (name == "MakeLibraPreprocessor") {
@@ -3149,16 +3149,16 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             return new TBasicAggrFunc(pos, name, aggr, args);
         }
 
-        auto aggrCallback = aggrFuncs.find(normalizedName); 
-        if (aggrCallback != aggrFuncs.end()) { 
+        auto aggrCallback = aggrFuncs.find(normalizedName);
+        if (aggrCallback != aggrFuncs.end()) {
             return (*aggrCallback).second(pos, args, aggMode, false).Release();
-        } 
+        }
         if (aggMode == EAggregateMode::Distinct) {
             return new TInvalidBuiltin(pos, "DISTINCT can only be used in aggregation functions");
-        } 
+        }
 
-        auto builtinCallback = builtinFuncs.find(normalizedName); 
-        if (builtinCallback != builtinFuncs.end()) { 
+        auto builtinCallback = builtinFuncs.find(normalizedName);
+        if (builtinCallback != builtinFuncs.end()) {
             return (*builtinCallback).second(pos, args);
         } else if (normalizedName == "asstruct" || normalizedName == "structtype") {
             if (args.empty()) {
@@ -3197,7 +3197,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             if (posArgs->GetTupleSize() != 1) {
                 return new TInvalidBuiltin(pos, TStringBuilder() << "ExpandStruct requires all arguments except first to be named");
             }
- 
+
             TVector<TNodePtr> flattenMembersArgs = {
                 BuildTuple(pos, {BuildQuotedAtom(pos, ""), posArgs->GetTupleElement(0)}),
                 BuildTuple(pos, {BuildQuotedAtom(pos, ""), args[1]}),
@@ -3220,20 +3220,20 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     }
 
     TVector<TNodePtr> usedArgs = args;
- 
-    TNodePtr customUserType = nullptr; 
-    if (ns == "json") { 
+
+    TNodePtr customUserType = nullptr;
+    if (ns == "json") {
         ctx.Warning(pos, TIssuesIds::YQL_DEPRECATED_JSON_UDF) << "Json UDF is deprecated. Please use JSON API instead";
 
-        ns = "yson"; 
-        nameSpace = "Yson"; 
-        if (name == "Serialize") { 
-            name = "SerializeJson"; 
+        ns = "yson";
+        nameSpace = "Yson";
+        if (name == "Serialize") {
+            name = "SerializeJson";
         }
         else if (name == "Parse") {
-            name = "ParseJson"; 
-        } 
-    } 
+            name = "ParseJson";
+        }
+    }
 
     if (ctx.PragmaYsonFast && ns == "yson") {
         ns.append('2');
@@ -3241,10 +3241,10 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     }
 
     if (ns.StartsWith("yson")) {
-        if (name == "ConvertTo" && usedArgs.size() > 1) { 
-            customUserType = usedArgs[1]; 
-            usedArgs.erase(usedArgs.begin() + 1); 
-        } 
+        if (name == "ConvertTo" && usedArgs.size() > 1) {
+            customUserType = usedArgs[1];
+            usedArgs.erase(usedArgs.begin() + 1);
+        }
 
         if (name == "Serialize") {
             if (usedArgs) {
@@ -3273,9 +3273,9 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             if (usedArgs.size() < 3U) {
                 usedArgs.push_back(BuildYsonOptionsNode(pos, ctx.PragmaYsonAutoConvert, ctx.PragmaYsonStrict, ctx.PragmaYsonFast));
             }
-        } 
-    } 
- 
+        }
+    }
+
     if (ns == "datetime2" && name == "Update") {
         if (namedArgs) {
             TStructNode* castedNamedArgs = dynamic_cast<TStructNode*>(namedArgs.Get());
@@ -3298,4 +3298,4 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     return BuildSqlCall(ctx, pos, nameSpace, name, usedArgs, positionalArgs, namedArgs, customUserType, typeConfig);
 }
 
-} // namespace NSQLTranslationV1 
+} // namespace NSQLTranslationV1

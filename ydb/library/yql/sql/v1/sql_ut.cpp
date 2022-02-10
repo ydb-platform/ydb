@@ -45,7 +45,7 @@ NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslation::ES
 }
 
 NYql::TAstParseResult SqlToYql(const TString& query, size_t maxErrors = 10, const TString& provider = {}, EDebugOutput debug = EDebugOutput::None) {
-    return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, maxErrors, provider, debug); 
+    return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, maxErrors, provider, debug);
 }
 
 NYql::TAstParseResult SqlToYqlWithSettings(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
@@ -159,8 +159,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(TableHints) {
-        UNIT_ASSERT(SqlToYql("SELECT * FROM plato.Input WITH INFER_SCHEMA").IsOk()); 
-        UNIT_ASSERT(SqlToYql("SELECT * FROM plato.Input WITH (INFER_SCHEMA)").IsOk()); 
+        UNIT_ASSERT(SqlToYql("SELECT * FROM plato.Input WITH INFER_SCHEMA").IsOk());
+        UNIT_ASSERT(SqlToYql("SELECT * FROM plato.Input WITH (INFER_SCHEMA)").IsOk());
     }
 
     Y_UNIT_TEST(InNoHints) {
@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         VerifySqlInHints(query, { "'('tableSource)" });
     }
 
-    Y_UNIT_TEST(InHintCompactSubquery) { 
+    Y_UNIT_TEST(InHintCompactSubquery) {
         TString query = "$subq = (SELECT key FROM plato.Input); SELECT * FROM plato.Input WHERE key IN COMPACT $subq";
 
         VerifySqlInHints(query, { "'('isCompact)", "'('tableSource)" });
@@ -224,10 +224,10 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(QualifiedAsteriskBefore) {
-        NYql::TAstParseResult res = SqlToYql( 
-            "PRAGMA DisableSimpleColumns;" 
-            "select interested_table.*, LENGTH(value) AS megahelpful_len  from plato.Input as interested_table;" 
-        ); 
+        NYql::TAstParseResult res = SqlToYql(
+            "PRAGMA DisableSimpleColumns;"
+            "select interested_table.*, LENGTH(value) AS megahelpful_len  from plato.Input as interested_table;"
+        );
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -249,10 +249,10 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(QualifiedAsteriskAfter) {
-        NYql::TAstParseResult res = SqlToYql( 
-            "PRAGMA DisableSimpleColumns;" 
-            "select LENGTH(value) AS megahelpful_len, interested_table.*  from plato.Input as interested_table;" 
-        ); 
+        NYql::TAstParseResult res = SqlToYql(
+            "PRAGMA DisableSimpleColumns;"
+            "select LENGTH(value) AS megahelpful_len, interested_table.*  from plato.Input as interested_table;"
+        );
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(JoinParseCorrect) {
         NYql::TAstParseResult res = SqlToYql(
-            "PRAGMA DisableSimpleColumns;" 
+            "PRAGMA DisableSimpleColumns;"
             " SELECT table_bb.*, table_aa.key as megakey"
             " FROM plato.Input AS table_aa"
             " JOIN plato.Input AS table_bb"
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(Join3Table) {
         NYql::TAstParseResult res = SqlToYql(
-            " PRAGMA DisableSimpleColumns;" 
+            " PRAGMA DisableSimpleColumns;"
             " SELECT table_bb.*, table_aa.key as gigakey, table_cc.* "
             " FROM plato.Input AS table_aa"
             " JOIN plato.Input AS table_bb ON table_aa.key == table_bb.key"
@@ -360,8 +360,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql(
             " use plato;"
             " SELECT a.v, b.value"
-            "     FROM `Input1` VIEW `ksv` AS a" 
-            "     JOIN `Input2` AS b" 
+            "     FROM `Input1` VIEW `ksv` AS a"
+            "     JOIN `Input2` AS b"
             "     ON a.k == b.key;"
         );
         UNIT_ASSERT(res.Root);
@@ -494,7 +494,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(SelectOrderByExpressionDesc) {
-        NYql::TAstParseResult res = SqlToYql("pragma disablesimplecolumns; select i.*, key, subkey from plato.Input as i order by cast(i.key as uint32) - cast(i.subkey as uint32) desc"); 
+        NYql::TAstParseResult res = SqlToYql("pragma disablesimplecolumns; select i.*, key, subkey from plato.Input as i order by cast(i.key as uint32) - cast(i.subkey as uint32) desc");
         UNIT_ASSERT(res.Root);
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Sort") {
@@ -804,7 +804,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(EmptyColumnName0) {
         /// Now it's parsed well and error occur on validate step like "4:31:Empty struct member name is not allowed" in "4:31:Function: AddMember"
-        NYql::TAstParseResult res = SqlToYql("insert into plato.Output (``, list1) values (0, AsList(0, 1, 2));"); 
+        NYql::TAstParseResult res = SqlToYql("insert into plato.Output (``, list1) values (0, AsList(0, 1, 2));");
         /// Verify that parsed well without crash
         UNIT_ASSERT(res.Root);
     }
@@ -828,7 +828,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(DoNotCrashOnNamedInFilter) {
-        NYql::TAstParseResult res = SqlToYql("USE plato; $all = ($table_name) -> { return true; }; SELECT * FROM FILTER(Input, $all)"); 
+        NYql::TAstParseResult res = SqlToYql("USE plato; $all = ($table_name) -> { return true; }; SELECT * FROM FILTER(Input, $all)");
         UNIT_ASSERT(res.Root);
     }
 
@@ -846,7 +846,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(ProcessUserType) {
-        NYql::TAstParseResult res = SqlToYql("process plato.Input using Kikimr::PushData(TableRows());", 1, TString(NYql::KikimrProviderName)); 
+        NYql::TAstParseResult res = SqlToYql("process plato.Input using Kikimr::PushData(TableRows());", 1, TString(NYql::KikimrProviderName));
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -862,7 +862,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(ProcessUserTypeAuth) {
-        NYql::TAstParseResult res = SqlToYql("process plato.Input using YDB::PushData(TableRows(), AsTuple('oauth', SecureParam('api:oauth')));", 1, TString(NYql::KikimrProviderName)); 
+        NYql::TAstParseResult res = SqlToYql("process plato.Input using YDB::PushData(TableRows(), AsTuple('oauth', SecureParam('api:oauth')));", 1, TString(NYql::KikimrProviderName));
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -1984,10 +1984,10 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 
     Y_UNIT_TEST(DoubleFrom) {
         NYql::TAstParseResult res = SqlToYql("from plato.Input select * from plato.Input");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:27: Error: Only one FROM clause is allowed\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectJoinMissingCorrName) {
         NYql::TAstParseResult res = SqlToYql("select * from plato.Input1 as a join plato.Input2 as b on a.key == key");
         UNIT_ASSERT(!res.Root);
@@ -2155,7 +2155,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     }
 
     Y_UNIT_TEST(BrokenLabel) {
-        NYql::TAstParseResult res = SqlToYql("select in.*, key as `funny.label` from plato.Input as in;"); 
+        NYql::TAstParseResult res = SqlToYql("select in.*, key as `funny.label` from plato.Input as in;");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:14: Error: Unable to use '.' in column name. Invalid column name: funny.label\n");
     }
@@ -2282,23 +2282,23 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 
     Y_UNIT_TEST(UseInOnStrings) {
         NYql::TAstParseResult res = SqlToYql("select * from plato.Input where \"foo\" in \"foovalue\";");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:42: Error: Unable to use IN predicate with string argument, it won't search substring - "
                                           "expecting tuple, list, dict or single column table source\n");
-    } 
+    }
 
     Y_UNIT_TEST(UseSubqueryInScalarContextInsideIn) {
         NYql::TAstParseResult res = SqlToYql("$q = (select key from plato.Input); select * from plato.Input where subkey in ($q);");
         UNIT_ASSERT(res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:79: Warning: Using subrequest in scalar context after IN, " 
-                                          "perhaps you should remove parenthesis here, code: 4501\n"); 
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:79: Warning: Using subrequest in scalar context after IN, "
+                                          "perhaps you should remove parenthesis here, code: 4501\n");
     }
 
     Y_UNIT_TEST(InHintsWithKeywordClash) {
-        NYql::TAstParseResult res = SqlToYql("SELECT COMPACT FROM plato.Input WHERE COMPACT IN COMPACT `COMPACT`(1,2,3)"); 
+        NYql::TAstParseResult res = SqlToYql("SELECT COMPACT FROM plato.Input WHERE COMPACT IN COMPACT `COMPACT`(1,2,3)");
         UNIT_ASSERT(!res.Root);
         // should try to parse last compact as call expression
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:58: Error: Unknown builtin: COMPACT\n"); 
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:58: Error: Unknown builtin: COMPACT\n");
     }
 
     Y_UNIT_TEST(ErrorColumnPosition) {
@@ -2321,7 +2321,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 
     Y_UNIT_TEST(ReplaceIntoMapReduce) {
         NYql::TAstParseResult res = SqlToYql("REPLACE INTO plato.Output SELECT key FROM plato.Input");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: Meaning of REPLACE INTO has been changed, now you should use INSERT INTO <table> WITH TRUNCATE ... for yt\n");
     }
 
@@ -2449,25 +2449,25 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     }
 
     Y_UNIT_TEST(EmptyAccess0) {
-        NYql::TAstParseResult res = SqlToYql("insert into plato.Output (list0, list1) values (AsList(0, 1, 2), AsList(``));"); 
+        NYql::TAstParseResult res = SqlToYql("insert into plato.Output (list0, list1) values (AsList(0, 1, 2), AsList(``));");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:73: Error: Column reference \"\" is not allowed in current scope\n");
     }
 
     Y_UNIT_TEST(EmptyAccess1) {
-        NYql::TAstParseResult res = SqlToYql("insert into plato.Output (list0, list1) values (AsList(0, 1, 2), ``);"); 
+        NYql::TAstParseResult res = SqlToYql("insert into plato.Output (list0, list1) values (AsList(0, 1, 2), ``);");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:66: Error: Column reference \"\" is not allowed in current scope\n");
     }
 
     Y_UNIT_TEST(UseUnknownColumnInInsert) {
-        NYql::TAstParseResult res = SqlToYql("insert into plato.Output (list0, list1) values (AsList(0, 1, 2), AsList(`test`));"); 
+        NYql::TAstParseResult res = SqlToYql("insert into plato.Output (list0, list1) values (AsList(0, 1, 2), AsList(`test`));");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:73: Error: Column reference \"test\" is not allowed in current scope\n");
     }
 
     Y_UNIT_TEST(GroupByEmptyColumn) {
-        NYql::TAstParseResult res = SqlToYql("select count(1) from plato.Input group by ``;"); 
+        NYql::TAstParseResult res = SqlToYql("select count(1) from plato.Input group by ``;");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:43: Error: Column name can not be empty\n");
     }
@@ -2528,27 +2528,27 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(TooManyErrors) {
         const char* q = R"(
         USE plato;
-        select A, B, C, D, E, F, G, H, I, J, K, L, M, N from (select b from `abc`); 
+        select A, B, C, D, E, F, G, H, I, J, K, L, M, N from (select b from `abc`);
 )";
 
         NYql::TAstParseResult res = SqlToYql(q, 10);
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res),
-            R"(<main>:3:16: Error: Column A is not in source column set. Did you mean b? 
-<main>:3:19: Error: Column B is not in source column set. Did you mean b? 
-<main>:3:22: Error: Column C is not in source column set. Did you mean b? 
-<main>:3:25: Error: Column D is not in source column set. Did you mean b? 
-<main>:3:28: Error: Column E is not in source column set. Did you mean b? 
-<main>:3:31: Error: Column F is not in source column set. Did you mean b? 
-<main>:3:34: Error: Column G is not in source column set. Did you mean b? 
-<main>:3:37: Error: Column H is not in source column set. Did you mean b? 
-<main>:3:40: Error: Column I is not in source column set. Did you mean b? 
+            R"(<main>:3:16: Error: Column A is not in source column set. Did you mean b?
+<main>:3:19: Error: Column B is not in source column set. Did you mean b?
+<main>:3:22: Error: Column C is not in source column set. Did you mean b?
+<main>:3:25: Error: Column D is not in source column set. Did you mean b?
+<main>:3:28: Error: Column E is not in source column set. Did you mean b?
+<main>:3:31: Error: Column F is not in source column set. Did you mean b?
+<main>:3:34: Error: Column G is not in source column set. Did you mean b?
+<main>:3:37: Error: Column H is not in source column set. Did you mean b?
+<main>:3:40: Error: Column I is not in source column set. Did you mean b?
 <main>: Error: Too many issues, code: 1
 )");
-    }; 
+    };
 
     Y_UNIT_TEST(ShouldCloneBindingForNamedParameter) {
-        NYql::TAstParseResult res = SqlToYql(R"($f = () -> { 
+        NYql::TAstParseResult res = SqlToYql(R"($f = () -> {
     $value_type = TypeOf(1);
     $pair_type = StructType(
         TypeOf("2") AS key,

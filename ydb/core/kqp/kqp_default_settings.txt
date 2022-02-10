@@ -85,7 +85,7 @@ DefaultSettings {
 
 DefaultSettings {
     Name: "_ResultRowsLimit"
-    Value: "1000" 
+    Value: "1000"
 }
 
 DefaultSettings {
@@ -111,7 +111,7 @@ DefaultSettings {
 DefaultSettings {
     Name: "UnwrapReadTableValues"
     Value: "false"
-} 
+}
 
 DefaultSettings {
     Name: "StrictDml"

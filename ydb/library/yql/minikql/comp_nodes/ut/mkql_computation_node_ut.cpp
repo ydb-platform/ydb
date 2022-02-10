@@ -1798,7 +1798,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestAdd) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<ui32>(1);
         const auto data2 = pb.NewDataLiteral<ui32>(2);
         const auto pgmReturn = pb.Add(data1, data2);
@@ -1811,7 +1811,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestSub) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<ui32>(7);
         const auto data2 = pb.NewDataLiteral<ui32>(2);
         const auto pgmReturn = pb.Sub(data1, data2);
@@ -1824,7 +1824,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestMul) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<ui32>(3);
         const auto data2 = pb.NewDataLiteral<ui32>(2);
         const auto pgmReturn = pb.Mul(data1, data2);
@@ -1837,7 +1837,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestDiv) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<ui32>(17);
         const auto data2 = pb.NewDataLiteral<ui32>(3);
         const auto pgmReturn = pb.Div(data1, data2);
@@ -1864,7 +1864,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestIDivOverflow) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<i32>(Min<i32>());
         const auto data2 = pb.NewDataLiteral<i32>(-1);
         const auto pgmReturn = pb.Div(data1, data2);
@@ -1877,7 +1877,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestMod) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<ui32>(17);
         const auto data2 = pb.NewDataLiteral<ui32>(3);
         const auto pgmReturn = pb.Mod(data1, data2);
@@ -1891,7 +1891,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestModZero) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<ui32>(17);
         const auto data2 = pb.NewDataLiteral<ui32>(0);
         const auto pgmReturn = pb.Mod(data1, data2);
@@ -1904,7 +1904,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestIModOverflow) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<i32>(Min<i32>());
         const auto data2 = pb.NewDataLiteral<i32>(-1);
         const auto pgmReturn = pb.Mod(data1, data2);
@@ -1917,7 +1917,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestStruct) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<ui32>(1);
         const auto data2 = pb.NewDataLiteral<ui32>(2);
         const auto data3 = pb.NewDataLiteral<ui32>(3);
@@ -1948,7 +1948,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestMapOverList) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto dataType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i32>::Id));
         const auto data1 = pb.NewOptional(pb.NewDataLiteral<i32>(1));
         const auto data2 = pb.NewOptional(pb.NewDataLiteral<i32>(2));
@@ -2242,7 +2242,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestMapOverListLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<ui32>(1U);
         const auto data2 = pb.NewDataLiteral<ui32>(2U);
         const auto data3 = pb.NewDataLiteral<ui32>(3U);
@@ -2272,7 +2272,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestMapOverOptional) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<ui32>(1);
         const auto data2 = pb.NewDataLiteral<ui32>(2);
         const auto list = pb.NewOptional(data1);
@@ -2570,7 +2570,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestCoalesce) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<ui32>(1);
         const auto data2 = pb.NewDataLiteral<ui32>(2);
         const auto data3 = pb.NewDataLiteral<ui32>(3);
@@ -2600,7 +2600,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestExists) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<ui64>(1);
         const auto optionalType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<ui64>::Id));
         const auto list = pb.NewList(optionalType, {pb.NewOptional(data1), pb.NewEmptyOptional(optionalType)});
@@ -2624,7 +2624,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestIf) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<ui32>(1);
         const auto data2 = pb.NewDataLiteral<ui32>(2);
         const auto truth = pb.NewDataLiteral(true);
@@ -2649,7 +2649,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestIfPresent) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<ui32>(1);
         const auto data2 = pb.NewDataLiteral<ui32>(2);
         const auto filled = pb.NewOptional(data1);
@@ -2820,7 +2820,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestIncDec) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<ui32>(7);
         auto pgmReturn = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
         pgmReturn = pb.Append(pgmReturn, pb.Increment(data1));
@@ -2840,7 +2840,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestLogical) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto truth = pb.NewDataLiteral(true);
         const auto falsehood = pb.NewDataLiteral(false);
         auto pgmReturn = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<bool>::Id));
@@ -2911,7 +2911,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestZip) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto list1 = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id), {
             pb.NewDataLiteral<ui32>(34),
             pb.NewDataLiteral<ui32>(56)
@@ -2937,7 +2937,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestZipLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto list1 = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id), {
             pb.NewDataLiteral<ui32>(34),
             pb.NewDataLiteral<ui32>(56)
@@ -2967,7 +2967,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestZipAll) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto list1 = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id), {
             pb.NewDataLiteral<ui32>(34),
             pb.NewDataLiteral<ui32>(56)
@@ -2995,7 +2995,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestZipAllLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto list1 = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id), {
             pb.NewDataLiteral<ui32>(34),
             pb.NewDataLiteral<ui32>(56)
@@ -3029,7 +3029,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestReduce) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewOptional(pb.NewDataLiteral<ui32>(1));
         const auto data2 = pb.NewOptional(pb.NewDataLiteral<ui32>(2));
         const auto data3 = pb.NewOptional(pb.NewDataLiteral<ui32>(3));
@@ -3099,7 +3099,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestListLength) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto list = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id),
             {pb.NewDataLiteral<ui32>(34), pb.NewDataLiteral<ui32>(56)});
         const auto pgmReturn = pb.Length(list);
@@ -3111,7 +3111,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestReverse) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto list = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id),
             {pb.NewDataLiteral<ui32>(34), pb.NewDataLiteral<ui32>(56)});
         const auto pgmReturn = pb.Reverse(list);
@@ -3132,7 +3132,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const ui32 n = 100;
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         for (ui32 i = 0; i < n; ++i) {
             auto list = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
             for (ui32 j = 0; j < n; ++j) {
@@ -3197,7 +3197,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const ui32 n = 100;
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         for (ui32 i = 0; i < n; ++i) {
             auto list = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
             for (ui32 j = 0; j < n; ++j) {
@@ -3259,7 +3259,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const ui32 n = 100;
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         for (ui32 i = 0; i < n; ++i) {
             auto list = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
             for (ui32 j = 0; j < n; ++j) {
@@ -3321,7 +3321,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const ui32 n = 100;
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         for (ui32 i = 0; i < n; ++i) {
             auto list = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
             for (ui32 j = 0; j < n; ++j) {
@@ -3382,7 +3382,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestReplicate) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto pgmReturn = pb.Replicate(pb.NewDataLiteral<ui32>(34),
             pb.NewDataLiteral<ui64>(4), "", 0, 0);
 
@@ -3402,7 +3402,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestIntegralCasts) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<ui32>(258);
         const auto pgmReturn = pb.Convert(data1, pb.NewDataType(NUdf::TDataType<ui8>::Id));
 
@@ -3426,7 +3426,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestSubstring) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("aabbccc");
         const auto start1 = pb.NewDataLiteral<ui32>(3);
         const auto count1 = pb.NewDataLiteral<ui32>(2);
@@ -3775,7 +3775,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestSize) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("aaa");
         const auto data2 = pb.NewDataLiteral<ui32>(3);
         const auto data3 = pb.NewDataLiteral<ui64>(7878786987536ull);
@@ -3802,7 +3802,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestEnumerate) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto list1 = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id),
             {pb.NewDataLiteral<ui32>(34), pb.NewDataLiteral<ui32>(56)});
         const auto pgmReturn = pb.Enumerate(list1);
@@ -3824,7 +3824,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestEnumerateLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto list1 = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id),
             {pb.NewDataLiteral<ui32>(34), pb.NewDataLiteral<ui32>(56)});
         const auto pgmReturn = pb.Enumerate(pb.LazyList(list1));
@@ -3847,7 +3847,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestEnumerateLazyThenReverse) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto list1 = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id),
             {pb.NewDataLiteral<ui32>(34), pb.NewDataLiteral<ui32>(56)});
         const auto pgmReturn = pb.Reverse(pb.Enumerate(pb.LazyList(list1)));
@@ -3870,7 +3870,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestEnumerateLazyThenSkip) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto list1 = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id),
             {pb.NewDataLiteral<ui32>(34), pb.NewDataLiteral<ui32>(56)});
         const auto one = pb.NewDataLiteral<ui64>(1);
@@ -3895,7 +3895,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestEnumerateLazyThenTake) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto list1 = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id),
             {pb.NewDataLiteral<ui32>(34), pb.NewDataLiteral<ui32>(56)});
         const auto one = pb.NewDataLiteral<ui64>(1);
@@ -3921,7 +3921,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     void TestSortImpl(bool asc) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto key1 = pb.NewDataLiteral<ui32>(1);
         const auto key2 = pb.NewDataLiteral<ui32>(2);
         const auto key3 = pb.NewDataLiteral<ui32>(3);
@@ -4044,7 +4044,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestSortTuples) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto listMaker = [&]()
         {
             TTriple testData[] = {
@@ -4193,7 +4193,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(NonDeterministicEnv) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<float>(1);
         const auto data2 = pb.NewDataLiteral<float>(2);
         const auto data3 = pb.NewDataLiteral<float>(3);
@@ -4220,7 +4220,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestIndexDictContains) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto item1 = pb.NewDataLiteral<ui32>(7);
         const auto item2 = pb.NewDataLiteral<ui32>(16);
         const auto list = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id), {item1, item2});
@@ -4251,7 +4251,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestIndexDictLookup) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto item1 = pb.NewDataLiteral<i32>(7);
         const auto item2 = pb.NewDataLiteral<i32>(16);
         const auto list = pb.NewList(pb.NewDataType(NUdf::TDataType<i32>::Id), {item1, item2});
@@ -4284,7 +4284,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestIndexDictContainsLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto item1 = pb.NewDataLiteral<ui32>(7);
         const auto item2 = pb.NewDataLiteral<ui32>(16);
         const auto list = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id), {item1, item2});
@@ -4316,7 +4316,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestIndexDictLookupLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto item1 = pb.NewDataLiteral<ui32>(7);
         const auto item2 = pb.NewDataLiteral<ui32>(16);
         const auto list = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id), {item1, item2});
@@ -4350,7 +4350,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestToBytes) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto type = pb.NewDataType(NUdf::TDataType<float>::Id);
         const auto data1 = pb.NewDataLiteral(0.f);
         const auto data2 = pb.NewDataLiteral(-3.14f);
@@ -4441,7 +4441,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestFromString) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto type = pb.NewDataType(NUdf::TDataType<char*>::Id);
         const auto data1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("234");
         const auto data2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("abc");
@@ -4466,7 +4466,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestStrictFromString) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         TVector<TRuntimeNode> tupleItems;
         const auto data1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("234");
         tupleItems.push_back(pb.StrictFromString(data1, pb.NewDataType(NUdf::TDataType<ui32>::Id)));
@@ -4475,7 +4475,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto data3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("3.1415926");
         tupleItems.push_back(pb.StrictFromString(data3, pb.NewDataType(NUdf::TDataType<double>::Id)));
         const auto pgmReturn = pb.NewTuple(tupleItems);
- 
+
         {
             const auto graph = setup.BuildGraph(pgmReturn);
             const auto res = graph->GetValue();
@@ -4483,7 +4483,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             UNIT_ASSERT_VALUES_EQUAL(res.GetElement(1).template Get<i32>(), -1);
             UNIT_ASSERT_VALUES_EQUAL(res.GetElement(2).template Get<double>(), 3.1415926);
         }
- 
+
         {
             const auto wrongData = pb.NewDataLiteral<NUdf::EDataSlot::String>("vgfsbhj");
             const auto fail = pb.StrictFromString(wrongData, pb.NewDataType(NUdf::TDataType<ui32>::Id));
@@ -4502,7 +4502,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestFromBytes) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         TVector<TRuntimeNode> tupleItems;
         const auto data1 = pb.NewDataLiteral<NUdf::EDataSlot::String>(TString("\xEA\x00\x00\x00", 4));
         tupleItems.push_back(pb.FromBytes(data1, NUdf::TDataType<ui32>::Id));
@@ -4520,7 +4520,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestMTRand) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto seed = pb.NewDataLiteral<ui64>(42);
         auto pgmReturn = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui64>::Id));
         auto rnd = pb.NewMTRand(seed);
@@ -4556,7 +4556,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestRandom) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const double expectedValue1 = 0.13387664401253274;
         const ui64 expectedValue2 = 2516265689700432462;
 
@@ -4572,22 +4572,22 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_DOUBLES_EQUAL(tuple.GetElement(0).template Get<double>(), expectedValue1, 1e-3);
         UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).template Get<ui64>(), expectedValue2);
     }
- 
+
     Y_UNIT_TEST_LLVM(TestNow) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const ui64 expectedValue = 10000000000000;
- 
+
         const auto ts = pb.Now({});
         TVector<TRuntimeNode> args;
-        args.push_back(ts); 
+        args.push_back(ts);
         const auto pgmReturn = pb.NewTuple(args);
- 
+
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto tuple = graph->GetValue();
         UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(0).template Get<ui64>(), expectedValue);
-    } 
+    }
 
     Y_UNIT_TEST_LLVM(TestSkipAndTakeOverStream) {
         TSetup<LLVM> setup;

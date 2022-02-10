@@ -1,37 +1,37 @@
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 #include <ydb/library/yql/public/udf/udf_type_inspection.h>
- 
-#include <util/generic/yexception.h> 
+
+#include <util/generic/yexception.h>
 #include <library/cpp/deprecated/split/split_iterator.h>
-#include <util/string/vector.h> 
- 
-using namespace NKikimr; 
-using namespace NUdf; 
- 
-namespace { 
- 
-struct TKsvIndexes 
-{ 
-    ui32 key; 
-    ui32 subkey; 
-    ui32 value; 
-}; 
- 
-struct TResultIndexes 
-{ 
-    TType* DictType; 
- 
-    ui32 key; 
-    ui32 subkey; 
-    ui32 dict; 
+#include <util/string/vector.h>
+
+using namespace NKikimr;
+using namespace NUdf;
+
+namespace {
+
+struct TKsvIndexes
+{
+    ui32 key;
+    ui32 subkey;
+    ui32 value;
+};
+
+struct TResultIndexes
+{
+    TType* DictType;
+
+    ui32 key;
+    ui32 subkey;
+    ui32 dict;
     static constexpr ui32 FieldsCount = 3U;
-}; 
- 
+};
+
 void ParseDsv(const TUnboxedValuePod& value,
               const std::string_view& separator,
-              const IValueBuilder* valueBuilder, 
-              IDictValueBuilder* builder) { 
+              const IValueBuilder* valueBuilder,
+              IDictValueBuilder* builder) {
     const std::string_view input(value.AsStringRef());
     const std::vector<std::string_view> parts = StringSplitter(input).SplitByString(separator);
     for (const auto& part : parts) {
@@ -43,25 +43,25 @@ void ParseDsv(const TUnboxedValuePod& value,
                 valueBuilder->SubString(value, from + pos + 1U, part.length() - pos - 1U)
             );
         }
-    } 
-} 
- 
-class TDsvReadRecord: public TBoxedValue 
-{ 
-public: 
-    class TFactory : public TBoxedValue { 
-    public: 
-        TFactory(const TResultIndexes& fieldIndexes, 
-                 const TKsvIndexes& ksvIndexes) 
-        : ResultIndexes_(fieldIndexes) 
-        , KsvIndexes_(ksvIndexes) 
-        { 
-        } 
+    }
+}
+
+class TDsvReadRecord: public TBoxedValue
+{
+public:
+    class TFactory : public TBoxedValue {
+    public:
+        TFactory(const TResultIndexes& fieldIndexes,
+                 const TKsvIndexes& ksvIndexes)
+        : ResultIndexes_(fieldIndexes)
+        , KsvIndexes_(ksvIndexes)
+        {
+        }
     private:
-        TUnboxedValue Run( 
-            const IValueBuilder* valueBuilder, 
+        TUnboxedValue Run(
+            const IValueBuilder* valueBuilder,
             const TUnboxedValuePod* args) const final try
-        { 
+        {
             const auto optRunConfig = args[0];
             TUnboxedValue separator;
             if (optRunConfig && !optRunConfig.AsStringRef().Empty()) {
@@ -71,95 +71,95 @@ public:
             }
 
             return TUnboxedValuePod(new TDsvReadRecord(separator, ResultIndexes_, KsvIndexes_));
-        } 
+        }
         catch (const std::exception& e) {
             UdfTerminate(e.what());
         }
- 
-        const TResultIndexes ResultIndexes_; 
-        const TKsvIndexes KsvIndexes_; 
-    }; 
- 
+
+        const TResultIndexes ResultIndexes_;
+        const TKsvIndexes KsvIndexes_;
+    };
+
     explicit TDsvReadRecord(const TUnboxedValue& separator,
-                            const TResultIndexes& fieldIndexes, 
-                            const TKsvIndexes& ksvIndexes) 
+                            const TResultIndexes& fieldIndexes,
+                            const TKsvIndexes& ksvIndexes)
         : Separator_(std::move(separator))
-        , ResultIndexes_(fieldIndexes) 
-        , KsvIndexes_(ksvIndexes) 
-    { 
-    } 
+        , ResultIndexes_(fieldIndexes)
+        , KsvIndexes_(ksvIndexes)
+    {
+    }
 private:
-    TUnboxedValue Run( 
-            const IValueBuilder* valueBuilder, 
+    TUnboxedValue Run(
+            const IValueBuilder* valueBuilder,
             const TUnboxedValuePod* args) const final try
-    { 
+    {
         auto keyData = args[0].GetElement(KsvIndexes_.key);
         auto subkeyData = args[0].GetElement(KsvIndexes_.subkey);
         auto valueData = args[0].GetElement(KsvIndexes_.value);
 
- 
+
         auto dict = valueBuilder->NewDict(ResultIndexes_.DictType, 0);
- 
+
         ParseDsv(valueData, Separator_.AsStringRef(), valueBuilder, dict.Get());
- 
+
         TUnboxedValue* items = nullptr;
         const auto result = valueBuilder->NewArray(ResultIndexes_.FieldsCount, items);
         items[ResultIndexes_.key] = keyData;
         items[ResultIndexes_.subkey] = subkeyData;
         items[ResultIndexes_.dict] = dict->Build();
         return result;
-    } 
+    }
     catch (const std::exception& e) {
         UdfTerminate(e.what());
     }
 
     const TUnboxedValue Separator_;
-    const TResultIndexes ResultIndexes_; 
-    const TKsvIndexes KsvIndexes_; 
-}; 
- 
-class TDsvParse: public TBoxedValue 
-{ 
-public: 
-    explicit TDsvParse(TType* dictType) 
-        : DictType(dictType) 
-    {} 
+    const TResultIndexes ResultIndexes_;
+    const TKsvIndexes KsvIndexes_;
+};
+
+class TDsvParse: public TBoxedValue
+{
+public:
+    explicit TDsvParse(TType* dictType)
+        : DictType(dictType)
+    {}
 private:
-    TUnboxedValue Run( 
-            const IValueBuilder* valueBuilder, 
+    TUnboxedValue Run(
+            const IValueBuilder* valueBuilder,
             const TUnboxedValuePod* args) const final try
-    { 
+    {
         const std::string_view separator = args[1] ?
              std::string_view(args[1].AsStringRef()):
              std::string_view("\t");
- 
+
         auto dict = valueBuilder->NewDict(DictType, 0);
         ParseDsv(args[0], separator, valueBuilder, dict.Get());
         return dict->Build();
-    } 
+    }
     catch (const std::exception& e) {
         UdfTerminate(e.what());
     }
 
-    const TType* DictType; 
-}; 
- 
-#define TYPE_TO_STRING(type) \ 
+    const TType* DictType;
+};
+
+#define TYPE_TO_STRING(type) \
 case TDataType<type>::Id: part += ToString(member.Get<type>()); break;
- 
-class TDsvSerialize: public TBoxedValue 
-{ 
-public: 
+
+class TDsvSerialize: public TBoxedValue
+{
+public:
     explicit TDsvSerialize(const TVector<TDataTypeId>& typeIds, TStructTypeInspector* structInspector)
-        : TypeIds(typeIds) 
-        , StructInspector(structInspector) 
-    {} 
- 
+        : TypeIds(typeIds)
+        , StructInspector(structInspector)
+    {}
+
 private:
-    TUnboxedValue Run( 
-            const IValueBuilder* valueBuilder, 
+    TUnboxedValue Run(
+            const IValueBuilder* valueBuilder,
             const TUnboxedValuePod* args) const final try
-    { 
+    {
         TVector<TString> result;
         if (const ui32 structSize = StructInspector->GetMembersCount()) {
             result.reserve(structSize);
@@ -179,45 +179,45 @@ private:
                     default:
                         part += member.AsStringRef();
                         break;
- 
-                } 
+
+                }
                 result.emplace_back(std::move(part));
-            } 
-        } 
+            }
+        }
         return valueBuilder->NewString(JoinStrings(result, "\t"));
-    } 
+    }
     catch (const std::exception& e) {
         UdfTerminate(e.what());
     }
 
     const TVector<TDataTypeId> TypeIds;
-    THolder<TStructTypeInspector> StructInspector; 
-}; 
- 
-class TDsvModule: public IUdfModule 
-{ 
-public: 
-    TStringRef Name() const { 
-        return TStringRef::Of("Dsv"); 
-    } 
- 
+    THolder<TStructTypeInspector> StructInspector;
+};
+
+class TDsvModule: public IUdfModule
+{
+public:
+    TStringRef Name() const {
+        return TStringRef::Of("Dsv");
+    }
+
     void CleanupOnTerminate() const final {}
 
     void GetAllFunctions(IFunctionsSink& sink) const final {
         sink.Add(TStringRef::Of("ReadRecord"));
         sink.Add(TStringRef::Of("Parse"));
         sink.Add(TStringRef::Of("Serialize"))->SetTypeAwareness();
-    } 
- 
-    void BuildFunctionTypeInfo( 
-            const TStringRef& name, 
+    }
+
+    void BuildFunctionTypeInfo(
+            const TStringRef& name,
             TType* userType,
-            const TStringRef& typeConfig, 
+            const TStringRef& typeConfig,
             ui32 flags,
             IFunctionTypeInfoBuilder& builder) const final try
-    { 
+    {
         Y_UNUSED(typeConfig);
- 
+
         bool typesOnly = (flags & TFlags::TypesOnly);
 
         if (TStringRef::Of("ReadRecord") == name) {
@@ -227,7 +227,7 @@ public:
                     .AddField<char*>("subkey", &ksvIndexes.subkey)
                     .AddField<char*>("value", &ksvIndexes.value)
                     .Build();
- 
+
             TResultIndexes resultIndexes;
             resultIndexes.DictType = builder.Dict()->Key<char*>().Value<char*>().Build();
             const auto structType = builder.Struct(resultIndexes.FieldsCount)
@@ -247,11 +247,11 @@ public:
         } else if (TStringRef::Of("Parse") == name) {
             auto optionalStringType = builder.Optional()->Item<char*>().Build();
             auto dictType = builder.Dict()->Key<char*>().Value<char*>().Build();
- 
+
             builder.Returns(dictType)
                     .Args()->Add<char*>().Flags(ICallablePayload::TArgumentFlags::AutoMap).Add(optionalStringType).Done()
                     .OptionalArgs(1);
- 
+
             if (!typesOnly) {
                 builder.Implementation(new TDsvParse(dictType));
             }
@@ -275,7 +275,7 @@ public:
             if (structInspector) {
                 ui32 memberCount = structInspector->GetMembersCount();
                 typeIds.reserve(memberCount);
- 
+
                 if (memberCount) {
                     for (ui32 i = 0; i < memberCount; ++i) {
                         const TString memberName(structInspector->GetMemberName(i));
@@ -287,27 +287,27 @@ public:
                         }
                         typeIds.push_back(memberInspector.GetTypeId());
                     }
-                } else { 
+                } else {
                     builder.SetError("Zero members in input Struct");
-                    return; 
-                } 
+                    return;
+                }
             } else {
                 builder.SetError("Only Structs are supported at the moment");
                 return;
             }
- 
+
             builder.UserType(userType).Returns<char*>().Args()->Add(structType).Done();
- 
+
             if (!typesOnly) {
                 builder.Implementation(new TDsvSerialize(typeIds, structInspector.Release()));
             }
- 
-        } 
+
+        }
     } catch (const std::exception& e) {
         builder.SetError(CurrentExceptionMessage());
-    } 
-}; 
- 
-} // namespace 
- 
-REGISTER_MODULES(TDsvModule) 
+    }
+};
+
+} // namespace
+
+REGISTER_MODULES(TDsvModule)

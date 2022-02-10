@@ -7,7 +7,7 @@ namespace NMonitoring {
         THtmlMonPage(const TString& path,
                      const TString& title = TString(),
                      bool outputTableSorterJsCss = false)
-            : IMonPage(path, title) 
+            : IMonPage(path, title)
             , OutputTableSorterJsCss(outputTableSorterJsCss)
         {
         }
@@ -18,7 +18,7 @@ namespace NMonitoring {
         void NoContent(NMonitoring::IMonHttpRequest& request) const;
 
         virtual void OutputContent(NMonitoring::IMonHttpRequest& request) = 0;
- 
+
         bool OutputTableSorterJsCss;
     };
 

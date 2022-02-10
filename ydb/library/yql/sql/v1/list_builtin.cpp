@@ -1,114 +1,114 @@
-#include "list_builtin.h" 
+#include "list_builtin.h"
 
 using namespace NYql;
 
-namespace NSQLTranslationV1 { 
+namespace NSQLTranslationV1 {
 
-TAstNode* TListBuiltin::Translate(TContext& ctx) const { 
-    Y_VERIFY_DEBUG(Node); 
-    return Node->Translate(ctx); 
-} 
+TAstNode* TListBuiltin::Translate(TContext& ctx) const {
+    Y_VERIFY_DEBUG(Node);
+    return Node->Translate(ctx);
+}
 
-TNodePtr TListBuiltin::GetIdentityLambda() { 
-    return BuildLambda(Pos, Y("arg"), Y(), "arg"); 
-} 
+TNodePtr TListBuiltin::GetIdentityLambda() {
+    return BuildLambda(Pos, Y("arg"), Y(), "arg");
+}
 
-bool TListSortBuiltin::DoInit(TContext& ctx, ISource* src) { 
-    if (Args.size() < 1 || Args.size() > 2) { 
+bool TListSortBuiltin::DoInit(TContext& ctx, ISource* src) {
+    if (Args.size() < 1 || Args.size() > 2) {
         ctx.Error(Pos) << OpName << " requires one or two parameters.";
-        return false; 
+        return false;
     }
-    if (!Args[0]->Init(ctx, src)) { 
-        return false; 
+    if (!Args[0]->Init(ctx, src)) {
+        return false;
     }
-    if (Args.size() == 2) { 
-        if (!Args[1]->Init(ctx, src)) { 
-            return false; 
-        } 
-    } else { 
-        Args.push_back(GetIdentityLambda()); 
-    } 
-    Node = Y(OpName, Args[0], Y("Bool", Q(Asc ? "true" : "false")), Args[1]); 
-    return true; 
-} 
+    if (Args.size() == 2) {
+        if (!Args[1]->Init(ctx, src)) {
+            return false;
+        }
+    } else {
+        Args.push_back(GetIdentityLambda());
+    }
+    Node = Y(OpName, Args[0], Y("Bool", Q(Asc ? "true" : "false")), Args[1]);
+    return true;
+}
 
-bool TListExtractBuiltin::DoInit(TContext& ctx, ISource* src) { 
-    if (Args.size() != 2) { 
+bool TListExtractBuiltin::DoInit(TContext& ctx, ISource* src) {
+    if (Args.size() != 2) {
         ctx.Error(Pos) << OpName << " requires exactly two parameters.";
-        return false; 
+        return false;
     }
 
-    for (const auto& arg : Args) { 
-        if (!arg->Init(ctx, src)) { 
-            return false; 
-        } 
-    } 
+    for (const auto& arg : Args) {
+        if (!arg->Init(ctx, src)) {
+            return false;
+        }
+    }
 
     Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
-    Node = Y(OpName, Args[0], Args[1]); 
-    return true; 
-} 
- 
-bool TListProcessBuiltin::CheckArgs(TContext& ctx, ISource* src) { 
-    if (Args.size() != 2 ) { 
+    Node = Y(OpName, Args[0], Args[1]);
+    return true;
+}
+
+bool TListProcessBuiltin::CheckArgs(TContext& ctx, ISource* src) {
+    if (Args.size() != 2 ) {
         ctx.Error(Pos) << OpName << " requires exactly two parameters";
-        return false; 
-    } 
- 
-    for (const auto& arg : Args) { 
-        if (!arg->Init(ctx, src)) { 
-            return false; 
-        } 
-    } 
- 
-    return true; 
-} 
- 
-bool TListMapBuiltin::DoInit(TContext& ctx, ISource* src) { 
-    if (!CheckArgs(ctx, src)) { 
-        return false; 
-    }; 
-    Node = Y(OpName, Args[0], Args[1]); 
- 
-    return true; 
-} 
- 
-bool TListFilterBuiltin::DoInit(TContext& ctx, ISource* src) { 
-    if (!CheckArgs(ctx, src)) { 
-        return false; 
-    }; 
+        return false;
+    }
+
+    for (const auto& arg : Args) {
+        if (!arg->Init(ctx, src)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool TListMapBuiltin::DoInit(TContext& ctx, ISource* src) {
+    if (!CheckArgs(ctx, src)) {
+        return false;
+    };
+    Node = Y(OpName, Args[0], Args[1]);
+
+    return true;
+}
+
+bool TListFilterBuiltin::DoInit(TContext& ctx, ISource* src) {
+    if (!CheckArgs(ctx, src)) {
+        return false;
+    };
     Node = Y(OpName, Args[0], GetFilterLambda());
-    return true; 
-} 
- 
-TNodePtr TListFilterBuiltin::GetFilterLambda() { 
+    return true;
+}
+
+TNodePtr TListFilterBuiltin::GetFilterLambda() {
     return BuildLambda(Pos, Y("item"), Y("Coalesce", Y("Apply", Args[1], "item"), Y("Bool", Q("false"))));
 }
 
-bool TListUniqBuiltin::DoInit(TContext& ctx, ISource* src) { 
-    if (Args.size() != 1) { 
-        ctx.Error(Pos) << OpName << " requires only one parameter"; 
-        return false; 
-    } 
-    if (!Args[0]->Init(ctx, src)) { 
-        return false; 
-    } 
+bool TListUniqBuiltin::DoInit(TContext& ctx, ISource* src) {
+    if (Args.size() != 1) {
+        ctx.Error(Pos) << OpName << " requires only one parameter";
+        return false;
+    }
+    if (!Args[0]->Init(ctx, src)) {
+        return false;
+    }
     Node = Y("DictKeys", Y("ToDict", Args[0], GetIdentityLambda(), BuildLambda(Pos, Y("item"), Y("Void")), Q(Y(Q("Hashed"), Q("One")))));
-    return true; 
-} 
- 
-bool TListCreateBuiltin::DoInit(TContext& ctx, ISource* src) { 
-    if (Args.size() != 1) { 
-        ctx.Error(Pos) << OpName << " requires only one parameter"; 
-        return false; 
-    } 
-    if (!Args[0]->Init(ctx, src)) { 
-        return false; 
-    } 
-    Node = Y("List", Y("ListType", Args[0])); 
-    return true; 
-} 
- 
+    return true;
+}
+
+bool TListCreateBuiltin::DoInit(TContext& ctx, ISource* src) {
+    if (Args.size() != 1) {
+        ctx.Error(Pos) << OpName << " requires only one parameter";
+        return false;
+    }
+    if (!Args[0]->Init(ctx, src)) {
+        return false;
+    }
+    Node = Y("List", Y("ListType", Args[0]));
+    return true;
+}
+
 void TListCreateBuiltin::DoUpdateState() const {
     State.Set(ENodeState::Const);
 }
@@ -125,7 +125,7 @@ bool TDictCreateBuiltin::DoInit(TContext& ctx, ISource* src) {
         }
     }
 
-    Node = Y("Dict", Y("DictType", Args[0], Args[1])); 
+    Node = Y("Dict", Y("DictType", Args[0], Args[1]));
     return true;
 }
 
@@ -151,4 +151,4 @@ void TSetCreateBuiltin::DoUpdateState() const {
     State.Set(ENodeState::Const);
 }
 
-} // namespace NSQLTranslationV1 
+} // namespace NSQLTranslationV1

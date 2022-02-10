@@ -50,13 +50,13 @@ namespace {
         }
     };
 
-    class TTopFreq_Create: public TBoxedValue { 
+    class TTopFreq_Create: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
             ui32 minSize = args[1].Get<ui32>();
             return TUnboxedValuePod(new TTopFreqResource(args[0], minSize, minSize * 2, Hash_, Equate_));
         }
- 
+
     public:
         TTopFreq_Create(IHash::TPtr hash, IEquate::TPtr equate)
             : Hash_(hash)
@@ -78,7 +78,7 @@ namespace {
         }
     };
 
-    class TTopFreq_AddValue: public TBoxedValue { 
+    class TTopFreq_AddValue: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
             const auto topFreq = GetTopFreqResource(args[0]);
@@ -86,7 +86,7 @@ namespace {
             return TUnboxedValuePod(topFreq);
         }
     };
- 
+
     template <EDataSlot Slot>
     class TTopFreq_SerializeData: public TBoxedValue {
     private:
@@ -95,13 +95,13 @@ namespace {
         }
     };
 
-    class TTopFreq_Serialize: public TBoxedValue { 
+    class TTopFreq_Serialize: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
             return GetTopFreqResource(args[0])->Get()->Serialize(valueBuilder);
         }
     };
- 
+
     template <EDataSlot Slot>
     class TTopFreq_DeserializeData: public TBoxedValue {
     private:
@@ -110,12 +110,12 @@ namespace {
         }
     };
 
-    class TTopFreq_Deserialize: public TBoxedValue { 
+    class TTopFreq_Deserialize: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
             return TUnboxedValuePod(new TTopFreqResource(args[0], Hash_, Equate_));
         }
- 
+
     public:
         TTopFreq_Deserialize(IHash::TPtr hash, IEquate::TPtr equate)
             : Hash_(hash)
@@ -137,14 +137,14 @@ namespace {
         }
     };
 
-    class TTopFreq_Merge: public TBoxedValue { 
+    class TTopFreq_Merge: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
             const auto topFreq0 = GetTopFreqResource(args[0]);
             const auto topFreq1 = GetTopFreqResource(args[1]);
             return TUnboxedValuePod(new TTopFreqResource(*topFreq0->Get(), *topFreq1->Get(), Hash_, Equate_));
         }
- 
+
     public:
         TTopFreq_Merge(IHash::TPtr hash, IEquate::TPtr equate)
             : Hash_(hash)
@@ -163,7 +163,7 @@ namespace {
             return GetTopFreqResourceData<Slot>(args[0])->Get()->Get(valueBuilder, args[1].Get<ui32>());
         }
     };
- 
+
     class TTopFreq_Get: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
@@ -212,14 +212,14 @@ namespace {
     static const auto MergeName = TStringRef::Of("TopFreq_Merge");
     static const auto GetName = TStringRef::Of("TopFreq_Get");
 
-    class TTopFreqModule: public IUdfModule { 
+    class TTopFreqModule: public IUdfModule {
     public:
         TStringRef Name() const {
             return TStringRef::Of("TopFreq");
         }
 
-        void CleanupOnTerminate() const final { 
-        } 
+        void CleanupOnTerminate() const final {
+        }
 
         void GetAllFunctions(IFunctionsSink& sink) const final {
             sink.Add(CreateName)->SetTypeAwareness();
@@ -379,7 +379,7 @@ namespace {
                     }
                 }
 
-            } catch (const std::exception& e) { 
+            } catch (const std::exception& e) {
                 builder.SetError(CurrentExceptionMessage());
             }
         }

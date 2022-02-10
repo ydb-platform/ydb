@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -35,26 +35,26 @@
 
 #include "container.h"
 #include "ue2common.h"
-#include "util/flat_containers.h" 
+#include "util/flat_containers.h"
 #include "util/graph_range.h"
-#include "util/unordered.h" 
+#include "util/unordered.h"
 
 #include <boost/graph/depth_first_search.hpp>
-#include <boost/graph/strong_components.hpp> 
-#include <boost/range/adaptor/map.hpp> 
+#include <boost/graph/strong_components.hpp>
+#include <boost/range/adaptor/map.hpp>
 
-#include <algorithm> 
-#include <map> 
-#include <set> 
-#include <utility> 
-#include <vector> 
- 
+#include <algorithm>
+#include <map>
+#include <set>
+#include <utility>
+#include <vector>
+
 namespace ue2 {
 
 /** \brief True if the given vertex has no out-edges. */
 template<class Graph>
 bool isLeafNode(const typename Graph::vertex_descriptor& v, const Graph& g) {
-    return out_degree(v, g) == 0; 
+    return out_degree(v, g) == 0;
 }
 
 /** \brief True if vertex \a v has an edge to itself. */
@@ -92,7 +92,7 @@ size_t proper_in_degree(const typename Graph::vertex_descriptor &v,
 /** \brief True if vertex \a v has at least one successor. */
 template<class Graph>
 bool has_successor(const typename Graph::vertex_descriptor &v, const Graph &g) {
-    return out_degree(v, g) > 0; 
+    return out_degree(v, g) > 0;
 }
 
 /** \brief True if vertex \a v has at least one successor other than itself. */
@@ -116,7 +116,7 @@ bool has_proper_successor(const typename Graph::vertex_descriptor &v,
 template<class Graph, class SourceCont, class OutCont>
 void find_reachable(const Graph &g, const SourceCont &sources, OutCont *out) {
     using vertex_descriptor = typename Graph::vertex_descriptor;
-    std::unordered_map<vertex_descriptor, boost::default_color_type> colours; 
+    std::unordered_map<vertex_descriptor, boost::default_color_type> colours;
 
     for (auto v : sources) {
         boost::depth_first_visit(g, v,
@@ -134,7 +134,7 @@ void find_reachable(const Graph &g, const SourceCont &sources, OutCont *out) {
 template<class Graph, class SourceCont, class OutCont>
 void find_unreachable(const Graph &g, const SourceCont &sources, OutCont *out) {
     using vertex_descriptor = typename Graph::vertex_descriptor;
-    std::unordered_set<vertex_descriptor> reachable; 
+    std::unordered_set<vertex_descriptor> reachable;
 
     find_reachable(g, sources, &reachable);
 
@@ -146,46 +146,46 @@ void find_unreachable(const Graph &g, const SourceCont &sources, OutCont *out) {
 }
 
 template <class Graph>
-flat_set<typename Graph::vertex_descriptor> 
-find_vertices_in_cycles(const Graph &g) { 
-    using vertex_descriptor = typename Graph::vertex_descriptor; 
- 
-    std::map<vertex_descriptor, size_t> comp_map; 
- 
-    boost::strong_components(g, boost::make_assoc_property_map(comp_map)); 
- 
-    std::map<size_t, std::vector<vertex_descriptor>> comps; 
- 
-    for (const auto &e : comp_map) { 
-        comps[e.second].push_back(e.first); 
-    } 
- 
-    flat_set<vertex_descriptor> rv; 
- 
-    for (const auto &comp : comps | boost::adaptors::map_values) { 
-        /* every vertex in a strongly connected component is reachable from 
-         * every other vertex in the component. A vertex is involved in a cycle 
-         * therefore if it is in a strongly connected component with more than 
-         * one vertex or if it is the only vertex and it has a self loop. */ 
-        assert(!comp.empty()); 
-        if (comp.size() > 1) { 
-            insert(&rv, comp); 
+flat_set<typename Graph::vertex_descriptor>
+find_vertices_in_cycles(const Graph &g) {
+    using vertex_descriptor = typename Graph::vertex_descriptor;
+
+    std::map<vertex_descriptor, size_t> comp_map;
+
+    boost::strong_components(g, boost::make_assoc_property_map(comp_map));
+
+    std::map<size_t, std::vector<vertex_descriptor>> comps;
+
+    for (const auto &e : comp_map) {
+        comps[e.second].push_back(e.first);
+    }
+
+    flat_set<vertex_descriptor> rv;
+
+    for (const auto &comp : comps | boost::adaptors::map_values) {
+        /* every vertex in a strongly connected component is reachable from
+         * every other vertex in the component. A vertex is involved in a cycle
+         * therefore if it is in a strongly connected component with more than
+         * one vertex or if it is the only vertex and it has a self loop. */
+        assert(!comp.empty());
+        if (comp.size() > 1) {
+            insert(&rv, comp);
             continue;
-        } 
-        vertex_descriptor v = *comp.begin(); 
-        if (hasSelfLoop(v, g)) { 
-            rv.insert(v); 
-        } 
-    } 
- 
-    return rv; 
-} 
- 
-template <class Graph> 
+        }
+        vertex_descriptor v = *comp.begin();
+        if (hasSelfLoop(v, g)) {
+            rv.insert(v);
+        }
+    }
+
+    return rv;
+}
+
+template <class Graph>
 bool has_parallel_edge(const Graph &g) {
     using vertex_descriptor = typename Graph::vertex_descriptor;
-    ue2_unordered_set<std::pair<vertex_descriptor, vertex_descriptor>> seen; 
- 
+    ue2_unordered_set<std::pair<vertex_descriptor, vertex_descriptor>> seen;
+
     for (const auto &e : edges_range(g)) {
         auto u = source(e, g);
         auto v = target(e, g);
@@ -222,45 +222,45 @@ bool is_dag(const Graph &g, bool ignore_self_loops = false) {
     return true;
 }
 
-template<typename Cont> 
-class vertex_recorder : public boost::default_dfs_visitor { 
-public: 
-    explicit vertex_recorder(Cont &o) : out(o) {} 
-    template<class G> 
-    void discover_vertex(typename Cont::value_type v, const G &) { 
-        out.insert(v); 
-    } 
-    Cont &out; 
-}; 
- 
-template<typename Cont> 
-vertex_recorder<Cont> make_vertex_recorder(Cont &o) { 
-    return vertex_recorder<Cont>(o); 
-} 
- 
-/** 
- * \brief A vertex recorder visitor that sets the bits in the given bitset 
- * type (e.g. boost::dynamic_bitset) corresponding to the indices of the 
- * vertices encountered. 
- */ 
-template<typename Bitset> 
-class vertex_index_bitset_recorder : public boost::default_dfs_visitor { 
-public: 
-    explicit vertex_index_bitset_recorder(Bitset &o) : out(o) {} 
-    template<class Graph> 
-    void discover_vertex(typename Graph::vertex_descriptor v, const Graph &g) { 
-        assert(g[v].index < out.size()); 
-        out.set(g[v].index); 
-    } 
-    Bitset &out; 
-}; 
- 
-template<typename Bitset> 
-vertex_index_bitset_recorder<Bitset> 
-make_vertex_index_bitset_recorder(Bitset &o) { 
-    return vertex_index_bitset_recorder<Bitset>(o); 
-} 
- 
+template<typename Cont>
+class vertex_recorder : public boost::default_dfs_visitor {
+public:
+    explicit vertex_recorder(Cont &o) : out(o) {}
+    template<class G>
+    void discover_vertex(typename Cont::value_type v, const G &) {
+        out.insert(v);
+    }
+    Cont &out;
+};
+
+template<typename Cont>
+vertex_recorder<Cont> make_vertex_recorder(Cont &o) {
+    return vertex_recorder<Cont>(o);
+}
+
+/**
+ * \brief A vertex recorder visitor that sets the bits in the given bitset
+ * type (e.g. boost::dynamic_bitset) corresponding to the indices of the
+ * vertices encountered.
+ */
+template<typename Bitset>
+class vertex_index_bitset_recorder : public boost::default_dfs_visitor {
+public:
+    explicit vertex_index_bitset_recorder(Bitset &o) : out(o) {}
+    template<class Graph>
+    void discover_vertex(typename Graph::vertex_descriptor v, const Graph &g) {
+        assert(g[v].index < out.size());
+        out.set(g[v].index);
+    }
+    Bitset &out;
+};
+
+template<typename Bitset>
+vertex_index_bitset_recorder<Bitset>
+make_vertex_index_bitset_recorder(Bitset &o) {
+    return vertex_index_bitset_recorder<Bitset>(o);
+}
+
 template <class Graph>
 std::pair<typename Graph::edge_descriptor, bool>
 add_edge_if_not_present(typename Graph::vertex_descriptor u,
@@ -283,40 +283,40 @@ std::pair<typename Graph::edge_descriptor, bool> add_edge_if_not_present(
     return e;
 }
 
-#ifndef NDEBUG 
- 
-template <class Graph> 
-bool hasCorrectlyNumberedVertices(const Graph &g) { 
-    auto count = num_vertices(g); 
-    std::vector<bool> ids(count, false); 
-    for (auto v : vertices_range(g)) { 
-        auto id = g[v].index; 
-        if (id >= count || ids[id]) { 
-            return false; // duplicate 
-        } 
-        ids[id] = true; 
-    } 
-    return std::find(ids.begin(), ids.end(), false) == ids.end() 
-        && count == vertex_index_upper_bound(g); 
-} 
- 
-template <class Graph> 
-bool hasCorrectlyNumberedEdges(const Graph &g) { 
-    auto count = num_edges(g); 
-    std::vector<bool> ids(count, false); 
-    for (const auto &e : edges_range(g)) { 
-        auto id = g[e].index; 
-        if (id >= count || ids[id]) { 
-            return false; // duplicate 
-        } 
-        ids[id] = true; 
-    } 
-    return std::find(ids.begin(), ids.end(), false) == ids.end() 
-        && count == edge_index_upper_bound(g); 
-} 
- 
-#endif 
- 
+#ifndef NDEBUG
+
+template <class Graph>
+bool hasCorrectlyNumberedVertices(const Graph &g) {
+    auto count = num_vertices(g);
+    std::vector<bool> ids(count, false);
+    for (auto v : vertices_range(g)) {
+        auto id = g[v].index;
+        if (id >= count || ids[id]) {
+            return false; // duplicate
+        }
+        ids[id] = true;
+    }
+    return std::find(ids.begin(), ids.end(), false) == ids.end()
+        && count == vertex_index_upper_bound(g);
+}
+
+template <class Graph>
+bool hasCorrectlyNumberedEdges(const Graph &g) {
+    auto count = num_edges(g);
+    std::vector<bool> ids(count, false);
+    for (const auto &e : edges_range(g)) {
+        auto id = g[e].index;
+        if (id >= count || ids[id]) {
+            return false; // duplicate
+        }
+        ids[id] = true;
+    }
+    return std::find(ids.begin(), ids.end(), false) == ids.end()
+        && count == edge_index_upper_bound(g);
+}
+
+#endif
+
 } // namespace ue2
 
 #endif // UTIL_GRAPH_H

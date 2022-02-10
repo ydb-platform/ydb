@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -36,10 +36,10 @@
 #include "ng_holder.h"
 #include "ng_misc_opt.h"
 #include "ue2common.h"
-#include "nfa/accelcompile.h" 
-#include "util/accel_scheme.h" 
+#include "nfa/accelcompile.h"
+#include "util/accel_scheme.h"
 #include "util/charreach.h"
-#include "util/flat_containers.h" 
+#include "util/flat_containers.h"
 #include "util/order_check.h"
 
 #include <map>
@@ -52,35 +52,35 @@ namespace ue2 {
 #define ACCEL_MAX_STOP_CHAR 24
 #define ACCEL_MAX_FLOATING_STOP_CHAR 192 /* accelerating sds is important */
 
-// forward-declaration of CompileContext 
-struct CompileContext; 
- 
+// forward-declaration of CompileContext
+struct CompileContext;
+
 void findAccelFriends(const NGHolder &g, NFAVertex v,
                   const std::map<NFAVertex, BoundedRepeatSummary> &br_cyclic,
-                  u32 offset, flat_set<NFAVertex> *friends); 
+                  u32 offset, flat_set<NFAVertex> *friends);
 
-#define DOUBLE_SHUFTI_LIMIT 20 
+#define DOUBLE_SHUFTI_LIMIT 20
 
 NFAVertex get_sds_or_proxy(const NGHolder &g);
 
 AccelScheme nfaFindAccel(const NGHolder &g, const std::vector<NFAVertex> &verts,
                     const std::vector<CharReach> &refined_cr,
                     const std::map<NFAVertex, BoundedRepeatSummary> &br_cyclic,
-                    bool allow_wide, bool look_for_double_byte = false); 
+                    bool allow_wide, bool look_for_double_byte = false);
 
-AccelScheme findBestAccelScheme(std::vector<std::vector<CharReach> > paths, 
-                                const CharReach &terminating, 
-                                bool look_for_double_byte = false); 
- 
-/** \brief Check if vertex \a v is an accelerable state (for a limex NFA). If a 
- *  single byte accel scheme is found it is placed into *as 
- */ 
+AccelScheme findBestAccelScheme(std::vector<std::vector<CharReach> > paths,
+                                const CharReach &terminating,
+                                bool look_for_double_byte = false);
+
+/** \brief Check if vertex \a v is an accelerable state (for a limex NFA). If a
+ *  single byte accel scheme is found it is placed into *as
+ */
 bool nfaCheckAccel(const NGHolder &g, NFAVertex v,
                    const std::vector<CharReach> &refined_cr,
                    const std::map<NFAVertex, BoundedRepeatSummary> &br_cyclic,
                    AccelScheme *as, bool allow_wide);
 
- 
+
 } // namespace ue2
 
 #endif

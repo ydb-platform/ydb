@@ -380,7 +380,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFlatMapTest) {
     Y_UNIT_TEST_LLVM(TestOverListAndPartialOptionals) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data0 = pb.NewDataLiteral<ui32>(0);
         const auto data1 = pb.NewDataLiteral<ui32>(1);
         const auto data2 = pb.NewDataLiteral<ui32>(2);
@@ -432,7 +432,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFlatMapTest) {
     Y_UNIT_TEST_LLVM(TestOverOptionalAndPartialOptionals) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data2 = pb.NewDataLiteral<ui32>(2);
         const auto list = pb.NewOptional(data2);
         const auto pgmReturn = pb.FlatMap(list,
@@ -449,7 +449,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFlatMapTest) {
     Y_UNIT_TEST_LLVM(TestOverOptionalAndPartialLists) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<ui32>(1);
         const auto data2 = pb.NewDataLiteral<ui32>(2);
         const auto list = pb.NewOptional(data2);
@@ -472,7 +472,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFlatMapTest) {
     Y_UNIT_TEST_LLVM(TestOverListAndPartialListsLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDataLiteral<ui32>(1U);
         const auto data2 = pb.NewDataLiteral<ui32>(2U);
         const auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
@@ -503,7 +503,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFlatMapTest) {
     Y_UNIT_TEST_LLVM(TestOverListAndPartialOptionalsLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data0 = pb.NewDataLiteral<ui32>(0U);
         const auto data2 = pb.NewDataLiteral<ui32>(2U);
         const auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);

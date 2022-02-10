@@ -1,12 +1,12 @@
-""" 
-Lexer interface and implementation. 
-Used for syntax highlighting. 
-""" 
-from __future__ import unicode_literals 
-from abc import ABCMeta, abstractmethod 
-from six import with_metaclass 
+"""
+Lexer interface and implementation.
+Used for syntax highlighting.
+"""
+from __future__ import unicode_literals
+from abc import ABCMeta, abstractmethod
+from six import with_metaclass
 from six.moves import range
- 
+
 from prompt_toolkit.token import Token
 from prompt_toolkit.filters import to_cli_filter
 from .utils import split_lines
@@ -14,44 +14,44 @@ from .utils import split_lines
 import re
 import six
 
-__all__ = ( 
-    'Lexer', 
-    'SimpleLexer', 
-    'PygmentsLexer', 
+__all__ = (
+    'Lexer',
+    'SimpleLexer',
+    'PygmentsLexer',
     'SyntaxSync',
     'SyncFromStart',
     'RegexSync',
-) 
- 
- 
-class Lexer(with_metaclass(ABCMeta, object)): 
-    """ 
-    Base class for all lexers. 
-    """ 
-    @abstractmethod 
+)
+
+
+class Lexer(with_metaclass(ABCMeta, object)):
+    """
+    Base class for all lexers.
+    """
+    @abstractmethod
     def lex_document(self, cli, document):
-        """ 
+        """
         Takes a :class:`~prompt_toolkit.document.Document` and returns a
         callable that takes a line number and returns the tokens for that line.
-        """ 
- 
- 
-class SimpleLexer(Lexer): 
-    """ 
+        """
+
+
+class SimpleLexer(Lexer):
+    """
     Lexer that doesn't do any tokenizing and returns the whole input as one token.
 
     :param token: The `Token` for this lexer.
-    """ 
+    """
     # `default_token` parameter is deprecated!
     def __init__(self, token=Token, default_token=None):
         self.token = token
- 
+
         if default_token is not None:
             self.token = default_token
- 
+
     def lex_document(self, cli, document):
         lines = document.lines
- 
+
         def get_line(lineno):
             " Return the tokens for the given line. "
             try:
@@ -146,9 +146,9 @@ class RegexSync(SyntaxSync):
         return cls(p)
 
 
-class PygmentsLexer(Lexer): 
-    """ 
-    Lexer that calls a pygments lexer. 
+class PygmentsLexer(Lexer):
+    """
+    Lexer that calls a pygments lexer.
 
     Example::
 
@@ -169,7 +169,7 @@ class PygmentsLexer(Lexer):
         recommended to disable this for inputs that are expected to be more
         than 1,000 lines.
     :param syntax_sync: `SyntaxSync` object.
-    """ 
+    """
     # Minimum amount of lines to go backwards when starting the parser.
     # This is important when the lines are retrieved in reverse order, or when
     # scrolling upwards. (Due to the complexity of calculating the vertical
@@ -185,15 +185,15 @@ class PygmentsLexer(Lexer):
     def __init__(self, pygments_lexer_cls, sync_from_start=True, syntax_sync=None):
         assert syntax_sync is None or isinstance(syntax_sync, SyntaxSync)
 
-        self.pygments_lexer_cls = pygments_lexer_cls 
+        self.pygments_lexer_cls = pygments_lexer_cls
         self.sync_from_start = to_cli_filter(sync_from_start)
- 
-        # Instantiate the Pygments lexer. 
-        self.pygments_lexer = pygments_lexer_cls( 
-            stripnl=False, 
-            stripall=False, 
-            ensurenl=False) 
- 
+
+        # Instantiate the Pygments lexer.
+        self.pygments_lexer = pygments_lexer_cls(
+            stripnl=False,
+            stripall=False,
+            ensurenl=False)
+
         # Create syntax sync instance.
         self.syntax_sync = syntax_sync or RegexSync.from_pygments_lexer_cls(pygments_lexer_cls)
 

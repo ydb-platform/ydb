@@ -1224,7 +1224,7 @@
                 {"Index": 0, "Name": "ScriptType", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "FunctionName", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "FunctionType", "Type": "TExprBase"},
-                {"Index": 3, "Name": "Script", "Type": "TExprBase"}, 
+                {"Index": 3, "Name": "Script", "Type": "TExprBase"},
                 {"Index": 4, "Name": "Options", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },

@@ -436,7 +436,7 @@ private:
 }
 
 IComputationNode* WrapMap(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args, got " << callable.GetInputsCount()); 
+    MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args, got " << callable.GetInputsCount());
     const auto type = callable.GetType()->GetReturnType();
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0);
     const auto newItem = LocateNode(ctx.NodeLocator, callable, 2);

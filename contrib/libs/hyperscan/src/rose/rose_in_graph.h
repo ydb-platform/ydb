@@ -45,8 +45,8 @@
 
 #include "ue2common.h"
 #include "rose/rose_common.h"
-#include "util/flat_containers.h" 
-#include "util/ue2_graph.h" 
+#include "util/flat_containers.h"
+#include "util/ue2_graph.h"
 #include "util/ue2string.h"
 
 #include <memory>
@@ -55,7 +55,7 @@ namespace ue2 {
 
 class NGHolder;
 struct raw_som_dfa;
-struct raw_dfa; 
+struct raw_dfa;
 
 enum RoseInVertexType {
     RIV_LITERAL,
@@ -105,12 +105,12 @@ public:
                                  ROSE_BOUND_INF);
     }
 
-    /* for when there is a suffix graph which handles the reports */ 
-    static RoseInVertexProps makeAcceptEod() { 
-        return RoseInVertexProps(RIV_ACCEPT_EOD, ue2_literal(), 0, 
-                                 ROSE_BOUND_INF); 
-    } 
- 
+    /* for when there is a suffix graph which handles the reports */
+    static RoseInVertexProps makeAcceptEod() {
+        return RoseInVertexProps(RIV_ACCEPT_EOD, ue2_literal(), 0,
+                                 ROSE_BOUND_INF);
+    }
+
     static RoseInVertexProps makeStart(bool anchored) {
         DEBUG_PRINTF("making %s\n", anchored ? "anchored start" : "start");
         if (anchored) {
@@ -167,12 +167,12 @@ struct RoseInEdgeProps {
     /** \brief Maximum bound on 'dot' repeat between literals. */
     u32 maxBound;
 
-    /** \brief Graph on edge. Graph is end to (end - lag). */ 
+    /** \brief Graph on edge. Graph is end to (end - lag). */
     std::shared_ptr<NGHolder> graph;
 
-    /** \brief DFA version of graph, if we have already determinised. */ 
-    std::shared_ptr<raw_dfa> dfa; 
- 
+    /** \brief DFA version of graph, if we have already determinised. */
+    std::shared_ptr<raw_dfa> dfa;
+
     /** \brief Haig version of graph, if required. */
     std::shared_ptr<raw_som_dfa> haig;
 
@@ -183,11 +183,11 @@ struct RoseInEdgeProps {
     u32 graph_lag;
 
     /** \brief Unique edge index. */
-    size_t index = 0; 
-}; 
+    size_t index = 0;
+};
 
-struct RoseInGraph 
-    : public ue2_graph<RoseInGraph, RoseInVertexProps, RoseInEdgeProps> { 
+struct RoseInGraph
+    : public ue2_graph<RoseInGraph, RoseInVertexProps, RoseInEdgeProps> {
 };
 typedef RoseInGraph::vertex_descriptor RoseInVertex;
 typedef RoseInGraph::edge_descriptor RoseInEdge;

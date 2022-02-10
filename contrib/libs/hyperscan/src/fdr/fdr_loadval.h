@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, Intel Corporation 
+ * Copyright (c) 2015-2016, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -32,23 +32,23 @@
 #include "ue2common.h"
 #include "util/unaligned.h"
 
-#define MAKE_LOADVAL(type, name)                \ 
-    static really_inline                                                \ 
-    type name(const u8 *ptr, UNUSED const u8 *lo, UNUSED const u8 *hi) 
+#define MAKE_LOADVAL(type, name)                \
+    static really_inline                                                \
+    type name(const u8 *ptr, UNUSED const u8 *lo, UNUSED const u8 *hi)
 
-#define NORMAL_SAFE(type)                                               \ 
-    do {                                                                \ 
-        assert(ptr >= lo);                                              \ 
-        assert(ptr + sizeof(type) - 1 < hi);                            \ 
-    } while(0) 
+#define NORMAL_SAFE(type)                                               \
+    do {                                                                \
+        assert(ptr >= lo);                                              \
+        assert(ptr + sizeof(type) - 1 < hi);                            \
+    } while(0)
 
-#define MAKE_LOOP_CE(TYPE)                                              \ 
-    TYPE v = 0;                                                         \ 
-    for (TYPE i = 0; i < sizeof(TYPE); i++) {                           \ 
-        if ((lo <= ptr + i) && (ptr + i < hi)) {                        \ 
-            v += (TYPE)ptr[i] << (i*8);                                 \ 
-        }                                                               \ 
-    }                                                                   \ 
+#define MAKE_LOOP_CE(TYPE)                                              \
+    TYPE v = 0;                                                         \
+    for (TYPE i = 0; i < sizeof(TYPE); i++) {                           \
+        if ((lo <= ptr + i) && (ptr + i < hi)) {                        \
+            v += (TYPE)ptr[i] << (i*8);                                 \
+        }                                                               \
+    }                                                                   \
     return v;
 
 // no suffix = normal (unaligned)
@@ -64,8 +64,8 @@ MAKE_LOADVAL(u64a, lv_u64a) {
     return unaligned_load_u64a(ptr);
 }
 
-MAKE_LOADVAL(u16, lv_u16_ce) { MAKE_LOOP_CE(u16); } 
+MAKE_LOADVAL(u16, lv_u16_ce) { MAKE_LOOP_CE(u16); }
 
-MAKE_LOADVAL(u64a, lv_u64a_ce) { MAKE_LOOP_CE(u64a); } 
+MAKE_LOADVAL(u64a, lv_u64a_ce) { MAKE_LOOP_CE(u64a); }
 
 #endif

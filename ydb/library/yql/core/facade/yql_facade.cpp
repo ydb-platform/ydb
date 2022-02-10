@@ -562,7 +562,7 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
         }
 
         if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
-            return dp.RemoteValidate(*cluster, SourceSyntax_, SourceCode_, *ExprCtx_); 
+            return dp.RemoteValidate(*cluster, SourceSyntax_, SourceCode_, *ExprCtx_);
         }
     }
 
@@ -628,7 +628,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
 
         if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
             return dp.RemoteOptimize(*cluster,
-                SourceSyntax_, SourceCode_, nullptr, 
+                SourceSyntax_, SourceCode_, nullptr,
                 TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_);
         }
     }
@@ -692,7 +692,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
 
         if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
             return dp.RemoteOptimize(*cluster,
-                SourceSyntax_, SourceCode_, &pipelineConf, 
+                SourceSyntax_, SourceCode_, &pipelineConf,
                 TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_);
         }
     }
@@ -768,7 +768,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
         }
 
         if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
-            return dp.RemoteRun(*cluster, SourceSyntax_, SourceCode_, 
+            return dp.RemoteRun(*cluster, SourceSyntax_, SourceCode_,
                 OutputFormat_, ResultFormat_, nullptr,
                 TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_, ExternalDiagnostics_,
                 ResultProviderConfig_);
@@ -842,7 +842,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
         }
 
         if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
-            return dp.RemoteRun(*cluster, SourceSyntax_, SourceCode_, 
+            return dp.RemoteRun(*cluster, SourceSyntax_, SourceCode_,
                 OutputFormat_, ResultFormat_, &pipelineConf,
                 TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_, ExternalDiagnostics_,
                 ResultProviderConfig_);

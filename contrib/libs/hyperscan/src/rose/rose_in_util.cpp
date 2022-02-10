@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -51,11 +51,11 @@ namespace ue2 {
  * at the front and all the predecessors of a vertex occur earlier in the list
  * than the vertex. */
 vector<RoseInVertex> topo_order(const RoseInGraph &g) {
-    assert(hasCorrectlyNumberedVertices(g)); 
+    assert(hasCorrectlyNumberedVertices(g));
     vector<RoseInVertex> v_order;
-    v_order.reserve(num_vertices(g)); 
+    v_order.reserve(num_vertices(g));
 
-    boost::topological_sort(g, back_inserter(v_order)); 
+    boost::topological_sort(g, back_inserter(v_order));
 
     reverse(v_order.begin(), v_order.end()); /* put starts at the front */
 
@@ -92,8 +92,8 @@ private:
 }
 
 unique_ptr<RoseInGraph> cloneRoseGraph(const RoseInGraph &ig) {
-    assert(hasCorrectlyNumberedVertices(ig)); 
-    unique_ptr<RoseInGraph> out = std::make_unique<RoseInGraph>(); 
+    assert(hasCorrectlyNumberedVertices(ig));
+    unique_ptr<RoseInGraph> out = std::make_unique<RoseInGraph>();
 
     unordered_map<const NGHolder *, shared_ptr<NGHolder>> graph_map;
     unordered_map<const raw_som_dfa *, shared_ptr<raw_som_dfa>> haig_map;
@@ -109,7 +109,7 @@ unique_ptr<RoseInGraph> cloneRoseGraph(const RoseInGraph &ig) {
     }
 
     copy_graph(ig, *out,
-               boost::edge_copy(RoseEdgeCopier(ig, *out, graph_map, haig_map))); 
+               boost::edge_copy(RoseEdgeCopier(ig, *out, graph_map, haig_map)));
     return out;
 }
 

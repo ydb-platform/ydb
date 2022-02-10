@@ -233,7 +233,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
 
     void Handle(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) {
         if (ev->Sender == LookOnActorID) {
-            LOG_INFO(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, tablet dead", 
+            LOG_INFO(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, tablet dead",
                      TabletInfo->TabletID, GetTabletTypeName());
 
             LookOnActorID = TActorId();
@@ -274,13 +274,13 @@ class TBootstrapper : public TActor<TBootstrapper> {
         BootDelayedUntil = { };
         Round.Destroy();
 
-        LOG_INFO(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, become watch", 
+        LOG_INFO(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, become watch",
                  TabletInfo->TabletID, GetTabletTypeName());
 
         Watches.Reset(new TWatch());
         Watched.Reset(new TWatched());
 
-        LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, add watched node: %" PRIu32, 
+        LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, add watched node: %" PRIu32,
                   TabletInfo->TabletID, GetTabletTypeName(), watchOn.NodeId());
         Watches->Watched.push_back(TWatch::TWatched(watchOn, owner));
 
@@ -406,7 +406,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
 
         // ok, we got all reactions, now boot tablet or sleep for threshold
         if (minAlienSeed < SelfSeed || minAlienSeed == SelfSeed && ctx.SelfID.NodeId() > minAlien) {
-            LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, lost round, wait for threshold", 
+            LOG_DEBUG(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, lost round, wait for threshold",
                       TabletInfo->TabletID, GetTabletTypeName());
 
             const ui64 wx = BootstrapperInfo->WatchThreshold.MicroSeconds();

@@ -166,8 +166,8 @@ namespace NActors {
 
     TAtomic TLoggerActor::IsOverflow = 0;
 
-    TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings, 
-                               TAutoPtr<TLogBackend> logBackend, 
+    TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
+                               TAutoPtr<TLogBackend> logBackend,
                                TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
         : TActor(&TLoggerActor::StateFunc)
         , Settings(settings)
@@ -305,7 +305,7 @@ namespace NActors {
     void TLoggerActor::HandleLogComponentLevelRequest(TLogComponentLevelRequest::TPtr& ev, const NActors::TActorContext& ctx) {
         Metrics->IncLevelRequests();
         TString explanation;
-        int code = Settings->SetLevel(ev->Get()->Priority, ev->Get()->Component, explanation); 
+        int code = Settings->SetLevel(ev->Get()->Priority, ev->Get()->Component, explanation);
         ctx.Send(ev->Sender, new TLogComponentLevelResponse(code, explanation));
     }
 
@@ -370,12 +370,12 @@ namespace NActors {
         const auto& params = ev->Get()->Request.GetParams();
         NLog::EComponent component = NLog::InvalidComponent;
         NLog::EPriority priority = NLog::PRI_DEBUG;
-        NLog::EPriority samplingPriority = NLog::PRI_DEBUG; 
-        ui32 samplingRate = 0; 
+        NLog::EPriority samplingPriority = NLog::PRI_DEBUG;
+        ui32 samplingRate = 0;
         bool hasComponent = false;
         bool hasPriority = false;
-        bool hasSamplingPriority = false; 
-        bool hasSamplingRate = false; 
+        bool hasSamplingPriority = false;
+        bool hasSamplingRate = false;
         bool hasAllowDrop = false;
         int allowDrop = 0;
         if (params.Has("c")) {
@@ -388,18 +388,18 @@ namespace NActors {
                         hasPriority = true;
                     }
                 }
-                if (params.Has("sp")) { 
-                    int rawPriority; 
-                    if (TryFromString(params.Get("sp"), rawPriority) && NLog::TSettings::IsValidPriority((NLog::EPriority)rawPriority)) { 
-                        samplingPriority = (NLog::EPriority)rawPriority; 
-                        hasSamplingPriority = true; 
-                    } 
-                } 
-                if (params.Has("sr")) { 
-                    if (TryFromString(params.Get("sr"), samplingRate)) { 
-                        hasSamplingRate = true; 
-                    } 
-                } 
+                if (params.Has("sp")) {
+                    int rawPriority;
+                    if (TryFromString(params.Get("sp"), rawPriority) && NLog::TSettings::IsValidPriority((NLog::EPriority)rawPriority)) {
+                        samplingPriority = (NLog::EPriority)rawPriority;
+                        hasSamplingPriority = true;
+                    }
+                }
+                if (params.Has("sr")) {
+                    if (TryFromString(params.Get("sr"), samplingRate)) {
+                        hasSamplingRate = true;
+                    }
+                }
             }
         }
         if (params.Has("allowdrop")) {
@@ -409,7 +409,7 @@ namespace NActors {
         }
 
         TStringStream str;
-        if (hasComponent && !hasPriority && !hasSamplingPriority && !hasSamplingRate) { 
+        if (hasComponent && !hasPriority && !hasSamplingPriority && !hasSamplingRate) {
             NLog::TComponentSettings componentSettings = Settings->GetComponentSettings(component);
             ui32 samplingRate = componentSettings.Raw.X.SamplingRate;
             HTML(str) {
@@ -420,16 +420,16 @@ namespace NActors {
                         }
                         UL() {
                             LI() {
-                                str << "Priority: " 
+                                str << "Priority: "
                                     << NLog::PriorityToString(NLog::EPrio(componentSettings.Raw.X.Level));
                             }
                             LI() {
-                                str << "Sampling priority: " 
+                                str << "Sampling priority: "
                                     << NLog::PriorityToString(NLog::EPrio(componentSettings.Raw.X.SamplingLevel));
                             }
                             LI() {
-                                str << "Sampling rate: " 
-                                    << samplingRate; 
+                                str << "Sampling rate: "
+                                    << samplingRate;
                             }
                         }
                     }
@@ -443,10 +443,10 @@ namespace NActors {
                         UL() {
                             for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) {
                                 LI() {
-                                    str << "<a href='logger?c=" << component << "&p=" << p << "'>" 
+                                    str << "<a href='logger?c=" << component << "&p=" << p << "'>"
                                         << NLog::PriorityToString(NLog::EPrio(p)) << "</a>";
                                 }
-                            } 
+                            }
                         }
                         H4() {
                             str << "Change sampling priority" << Endl;
@@ -454,19 +454,19 @@ namespace NActors {
                         UL() {
                             for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) {
                                 LI() {
-                                    str << "<a href='logger?c=" << component << "&sp=" << p << "'>" 
+                                    str << "<a href='logger?c=" << component << "&sp=" << p << "'>"
                                         << NLog::PriorityToString(NLog::EPrio(p)) << "</a>";
                                 }
-                            } 
+                            }
                         }
                         H4() {
                             str << "Change sampling rate" << Endl;
                         }
-                        str << "<form method=\"GET\">" << Endl; 
-                        str << "Rate: <input type=\"number\" name=\"sr\" value=\"" << samplingRate << "\"/>" << Endl; 
-                        str << "<input type=\"hidden\" name=\"c\" value=\"" << component << "\">" << Endl; 
-                        str << "<input class=\"btn btn-primary\" type=\"submit\" value=\"Change\"/>" << Endl; 
-                        str << "</form>" << Endl; 
+                        str << "<form method=\"GET\">" << Endl;
+                        str << "Rate: <input type=\"number\" name=\"sr\" value=\"" << samplingRate << "\"/>" << Endl;
+                        str << "<input type=\"hidden\" name=\"c\" value=\"" << component << "\">" << Endl;
+                        str << "<input class=\"btn btn-primary\" type=\"submit\" value=\"Change\"/>" << Endl;
+                        str << "</form>" << Endl;
                         H4() {
                             str << "<a href='logger'>Cancel</a>" << Endl;
                         }
@@ -477,14 +477,14 @@ namespace NActors {
         } else {
             TString explanation;
             if (hasComponent && hasPriority) {
-                Settings->SetLevel(priority, component, explanation); 
+                Settings->SetLevel(priority, component, explanation);
             }
-            if (hasComponent && hasSamplingPriority) { 
-                Settings->SetSamplingLevel(samplingPriority, component, explanation); 
-            } 
-            if (hasComponent && hasSamplingRate) { 
-                Settings->SetSamplingRate(samplingRate, component, explanation); 
-            } 
+            if (hasComponent && hasSamplingPriority) {
+                Settings->SetSamplingLevel(samplingPriority, component, explanation);
+            }
+            if (hasComponent && hasSamplingRate) {
+                Settings->SetSamplingRate(samplingRate, component, explanation);
+            }
             if (hasAllowDrop) {
                 Settings->SetAllowDrop(allowDrop);
             }
@@ -544,17 +544,17 @@ namespace NActors {
                                                 << NLog::PriorityToString(NLog::EPrio(p)) << "</a>";
                                         }
                                     }
-                                } 
+                                }
                             }
                         }
                         H4() {
                             str << "Change sampling rate for all components";
                         }
-                        str << "<form method=\"GET\">" << Endl; 
-                        str << "Rate: <input type=\"number\" name=\"sr\" value=\"0\"/>" << Endl; 
-                        str << "<input type=\"hidden\" name=\"c\" value=\"-1\">" << Endl; 
-                        str << "<input class=\"btn btn-primary\" type=\"submit\" value=\"Change\"/>" << Endl; 
-                        str << "</form>" << Endl; 
+                        str << "<form method=\"GET\">" << Endl;
+                        str << "Rate: <input type=\"number\" name=\"sr\" value=\"0\"/>" << Endl;
+                        str << "<input type=\"hidden\" name=\"c\" value=\"-1\">" << Endl;
+                        str << "<input class=\"btn btn-primary\" type=\"submit\" value=\"Change\"/>" << Endl;
+                        str << "</form>" << Endl;
                         H4() {
                             str << "Drop log entries in case of overflow: "
                                 << (Settings->AllowDrop ? "Enabled" : "Disabled");
@@ -579,7 +579,7 @@ namespace NActors {
         const auto logPrio = ::ELogPriority(ui16(priority));
 
         char buf[TimeBufSize];
-        switch (Settings->Format) { 
+        switch (Settings->Format) {
             case NActors::NLog::TSettings::PLAIN_FULL_FORMAT: {
                 TStringBuilder logRecord;
                 if (Settings->UseLocalTimestamps) {
@@ -633,7 +633,7 @@ namespace NActors {
                 LogBackend->WriteData(
                     TLogRecord(logPrio, logRecord.data(), logRecord.size()));
             } break;
-        } 
+        }
 
         return true;
     } catch (...) {
@@ -658,7 +658,7 @@ namespace NActors {
     }
 
     TAutoPtr<TLogBackend> CreateSysLogBackend(const TString& ident,
-                                              bool logPError, bool logCons) { 
+                                              bool logPError, bool logCons) {
         int flags = 0;
         if (logPError)
             flags |= TSysLogBackend::LogPerror;

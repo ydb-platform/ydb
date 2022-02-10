@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -34,8 +34,8 @@
 #define DEPTH_H
 
 #include "ue2common.h"
-#include "util/hash.h" 
-#include "util/operators.h" 
+#include "util/hash.h"
+#include "util/operators.h"
 
 #ifdef DUMP_SUPPORT
 #include <string>
@@ -52,12 +52,12 @@ struct DepthOverflowError {};
  * \brief Type used to represent depth information; value is either a count,
  * or the special values "infinity" and "unreachable".
  */
-class depth : totally_ordered<depth> { 
+class depth : totally_ordered<depth> {
 public:
-    /** \brief The default depth is special value "unreachable". */ 
-    depth() = default; 
+    /** \brief The default depth is special value "unreachable". */
+    depth() = default;
 
-    explicit depth(u32 v) : val(v) { 
+    explicit depth(u32 v) : val(v) {
         if (v > max_value()) {
             DEBUG_PRINTF("depth %u too large to represent!\n", v);
             throw DepthOverflowError();
@@ -193,53 +193,53 @@ public:
         return *this;
     }
 
-    depth operator-(s32 d) const { 
-        if (is_unreachable()) { 
-            return unreachable(); 
-        } 
-        if (is_infinite()) { 
-            return infinity(); 
-        } 
- 
-        s64a rv = val - d; 
-        if (rv < 0 || (u64a)rv >= val_infinity) { 
-            DEBUG_PRINTF("depth %lld too large to represent!\n", rv); 
-            throw DepthOverflowError(); 
-        } 
- 
-        return depth((u32)rv); 
-    } 
- 
-    depth operator-=(s32 d) { 
-        depth rv = *this - d; 
-        *this = rv; 
-        return *this; 
-    } 
- 
+    depth operator-(s32 d) const {
+        if (is_unreachable()) {
+            return unreachable();
+        }
+        if (is_infinite()) {
+            return infinity();
+        }
+
+        s64a rv = val - d;
+        if (rv < 0 || (u64a)rv >= val_infinity) {
+            DEBUG_PRINTF("depth %lld too large to represent!\n", rv);
+            throw DepthOverflowError();
+        }
+
+        return depth((u32)rv);
+    }
+
+    depth operator-=(s32 d) {
+        depth rv = *this - d;
+        *this = rv;
+        return *this;
+    }
+
 #ifdef DUMP_SUPPORT
     /** \brief Render as a string, useful for debugging. */
     std::string str() const;
 #endif
 
-    size_t hash() const { 
-        return val; 
+    size_t hash() const {
+        return val;
     }
 
 private:
     static constexpr u32 val_infinity = (1u << 31) - 1;
     static constexpr u32 val_unreachable = 1u << 31;
 
-    u32 val = val_unreachable; 
+    u32 val = val_unreachable;
 };
 
 /**
  * \brief Encapsulates a min/max pair.
  */
-struct DepthMinMax : totally_ordered<DepthMinMax> { 
-    depth min{depth::infinity()}; 
-    depth max{0}; 
+struct DepthMinMax : totally_ordered<DepthMinMax> {
+    depth min{depth::infinity()};
+    depth max{0};
 
-    DepthMinMax() = default; 
+    DepthMinMax() = default;
     DepthMinMax(const depth &mn, const depth &mx) : min(mn), max(mx) {}
 
     bool operator<(const DepthMinMax &b) const {
@@ -257,7 +257,7 @@ struct DepthMinMax : totally_ordered<DepthMinMax> {
     /** \brief Render as a string, useful for debugging. */
     std::string str() const;
 #endif
- 
+
 };
 
 /**
@@ -267,22 +267,22 @@ DepthMinMax unionDepthMinMax(const DepthMinMax &a, const DepthMinMax &b);
 
 } // namespace ue2
 
-namespace std { 
- 
-template<> 
-struct hash<ue2::depth> { 
-    size_t operator()(const ue2::depth &d) const { 
-        return d.hash(); 
-    } 
-}; 
- 
-template<> 
-struct hash<ue2::DepthMinMax> { 
-    size_t operator()(const ue2::DepthMinMax &d) const { 
-        return hash_all(d.min, d.max); 
-    } 
-}; 
- 
-} // namespace 
- 
+namespace std {
+
+template<>
+struct hash<ue2::depth> {
+    size_t operator()(const ue2::depth &d) const {
+        return d.hash();
+    }
+};
+
+template<>
+struct hash<ue2::DepthMinMax> {
+    size_t operator()(const ue2::DepthMinMax &d) const {
+        return hash_all(d.min, d.max);
+    }
+};
+
+} // namespace
+
 #endif // DEPTH_H

@@ -1,9 +1,9 @@
 PY23_LIBRARY()
- 
+
 LICENSE(MIT)
 
 OWNER(g:python-contrib blinkov)
- 
+
 VERSION(0.2.5)
 
 PEERDIR(
@@ -16,15 +16,15 @@ IF (PYTHON2)
     )
 ENDIF()
 
-PY_SRCS( 
-    TOP_LEVEL 
-    wcwidth/__init__.py 
-    wcwidth/table_wide.py 
-    wcwidth/table_zero.py 
+PY_SRCS(
+    TOP_LEVEL
+    wcwidth/__init__.py
+    wcwidth/table_wide.py
+    wcwidth/table_zero.py
     wcwidth/unicode_versions.py
-    wcwidth/wcwidth.py 
-) 
- 
+    wcwidth/wcwidth.py
+)
+
 RESOURCE_FILES(
     PREFIX contrib/python/wcwidth/
     .dist-info/METADATA
@@ -33,7 +33,7 @@ RESOURCE_FILES(
 
 NO_LINT()
 
-END() 
+END()
 
 RECURSE_FOR_TESTS(
     tests

@@ -168,7 +168,7 @@ namespace NKikimr {
         TDiskPartVec &operator=(const TDiskPartVec &) = default;
         TDiskPartVec &operator=(TDiskPartVec &&) = default;
         ~TDiskPartVec() = default;
- 
+
         explicit TDiskPartVec(const NKikimrVDiskData::TDiskPartVec &pb)
             : Vec()
         {

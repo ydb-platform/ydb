@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -30,61 +30,61 @@
 #define UTIL_VERIFY_TYPES
 
 #include "ue2common.h"
-#include "util/compile_error.h" 
+#include "util/compile_error.h"
 
 #include <cassert>
-#include <type_traits> 
+#include <type_traits>
 
 namespace ue2 {
 
-template<typename To_T, typename From_T> 
-To_T verify_cast(From_T val) { 
-    static_assert(std::is_integral<To_T>::value, 
-                  "Output type must be integral."); 
-    static_assert(std::is_integral<From_T>::value || 
-                      std::is_enum<From_T>::value || 
-                      std::is_convertible<From_T, To_T>::value, 
-                  "Must be integral or enum type, or convertible to output."); 
- 
-    To_T conv_val = static_cast<To_T>(val); 
-    if (static_cast<From_T>(conv_val) != val) { 
-        assert(0); 
-        throw ResourceLimitError(); 
-    } 
- 
-    return conv_val; 
+template<typename To_T, typename From_T>
+To_T verify_cast(From_T val) {
+    static_assert(std::is_integral<To_T>::value,
+                  "Output type must be integral.");
+    static_assert(std::is_integral<From_T>::value ||
+                      std::is_enum<From_T>::value ||
+                      std::is_convertible<From_T, To_T>::value,
+                  "Must be integral or enum type, or convertible to output.");
+
+    To_T conv_val = static_cast<To_T>(val);
+    if (static_cast<From_T>(conv_val) != val) {
+        assert(0);
+        throw ResourceLimitError();
+    }
+
+    return conv_val;
 }
 
-template<typename T> 
-s8 verify_s8(T val) { 
-    return verify_cast<s8>(val); 
+template<typename T>
+s8 verify_s8(T val) {
+    return verify_cast<s8>(val);
 }
 
-template<typename T> 
-u8 verify_u8(T val) { 
-    return verify_cast<u8>(val); 
+template<typename T>
+u8 verify_u8(T val) {
+    return verify_cast<u8>(val);
 }
 
-template<typename T> 
-s16 verify_s16(T val) { 
-    return verify_cast<s16>(val); 
+template<typename T>
+s16 verify_s16(T val) {
+    return verify_cast<s16>(val);
 }
 
-template<typename T> 
-u16 verify_u16(T val) { 
-    return verify_cast<u16>(val); 
+template<typename T>
+u16 verify_u16(T val) {
+    return verify_cast<u16>(val);
 }
 
-template<typename T> 
-s32 verify_s32(T val) { 
-    return verify_cast<s32>(val); 
+template<typename T>
+s32 verify_s32(T val) {
+    return verify_cast<s32>(val);
 }
 
-template<typename T> 
-u32 verify_u32(T val) { 
-    return verify_cast<u32>(val); 
-} 
- 
+template<typename T>
+u32 verify_u32(T val) {
+    return verify_cast<u32>(val);
+}
+
 } // namespace ue2
 
 #endif // UTIL_VERIFY_TYPES

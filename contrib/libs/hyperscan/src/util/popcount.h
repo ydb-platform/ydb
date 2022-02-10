@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -30,19 +30,19 @@
  * \brief Platform specific popcount functions
  */
 
-#ifndef UTIL_POPCOUNT_H_ 
-#define UTIL_POPCOUNT_H_ 
+#ifndef UTIL_POPCOUNT_H_
+#define UTIL_POPCOUNT_H_
 
 #include "ue2common.h"
-#include "util/arch.h" 
+#include "util/arch.h"
 
 static really_inline
 u32 popcount32(u32 x) {
 #if defined(HAVE_POPCOUNT_INSTR)
     // Single-instruction builtin.
-    return _mm_popcnt_u32(x); 
+    return _mm_popcnt_u32(x);
 #else
-    // Fast branch-free version from bit-twiddling hacks as older Intel 
+    // Fast branch-free version from bit-twiddling hacks as older Intel
     // processors do not have a POPCNT instruction.
     x -= (x >> 1) & 0x55555555;
     x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
@@ -52,23 +52,23 @@ u32 popcount32(u32 x) {
 
 static really_inline
 u32 popcount64(u64a x) {
-#if defined(ARCH_X86_64) 
-# if defined(HAVE_POPCOUNT_INSTR) 
+#if defined(ARCH_X86_64)
+# if defined(HAVE_POPCOUNT_INSTR)
     // Single-instruction builtin.
-    return (u32)_mm_popcnt_u64(x); 
-# else 
-    // Fast branch-free version from bit-twiddling hacks as older Intel 
+    return (u32)_mm_popcnt_u64(x);
+# else
+    // Fast branch-free version from bit-twiddling hacks as older Intel
     // processors do not have a POPCNT instruction.
     x -= (x >> 1) & 0x5555555555555555;
     x = (x & 0x3333333333333333) + ((x >> 2) & 0x3333333333333333);
     x = (x + (x >> 4)) & 0x0f0f0f0f0f0f0f0f;
     return (x * 0x0101010101010101) >> 56;
-# endif 
+# endif
 #else
     // Synthesise from two 32-bit cases.
     return popcount32(x >> 32) + popcount32(x);
 #endif
 }
 
-#endif /* UTIL_POPCOUNT_H_ */ 
+#endif /* UTIL_POPCOUNT_H_ */
 

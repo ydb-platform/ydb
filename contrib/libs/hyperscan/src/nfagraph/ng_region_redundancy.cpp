@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -60,7 +60,7 @@ struct RegionInfo {
 static
 bool regionHasUnexpectedAccept(const NGHolder &g, const u32 region,
                        const flat_set<ReportID> &expected_reports,
-                       const unordered_map<NFAVertex, u32> &region_map) { 
+                       const unordered_map<NFAVertex, u32> &region_map) {
     /* TODO: only check vertices connected to accept/acceptEOD */
     for (auto v : vertices_range(g)) {
         if (region != region_map.at(v)) {
@@ -84,13 +84,13 @@ bool regionHasUnexpectedAccept(const NGHolder &g, const u32 region,
 static
 void processCyclicStateForward(NGHolder &h, NFAVertex cyc,
                          const map<u32, RegionInfo> &info,
-                         const unordered_map<NFAVertex, u32> &region_map, 
+                         const unordered_map<NFAVertex, u32> &region_map,
                          set<u32> &deadRegions) {
     u32 region = region_map.at(cyc);
     CharReach cr = h[cyc].char_reach;
     auto reports = h[cyc].reports;
 
-    DEBUG_PRINTF("going forward from %zu/%u\n", h[cyc].index, 
+    DEBUG_PRINTF("going forward from %zu/%u\n", h[cyc].index,
                  region);
 
     map<u32, RegionInfo>::const_iterator it;
@@ -98,7 +98,7 @@ void processCyclicStateForward(NGHolder &h, NFAVertex cyc,
         NFAVertex v = it->second.entry;
         const CharReach &region_cr = it->second.cr;
         assert(isRegionEntry(h, v, region_map) && !is_special(v, h));
-        DEBUG_PRINTF("checking %zu\n", h[v].index); 
+        DEBUG_PRINTF("checking %zu\n", h[v].index);
 
         if (!region_cr.isSubsetOf(cr)) {
             DEBUG_PRINTF("doesn't cover the reach of region %u\n", region);
@@ -107,8 +107,8 @@ void processCyclicStateForward(NGHolder &h, NFAVertex cyc,
 
         if (isOptionalRegion(h, v, region_map)
             && !regionHasUnexpectedAccept(h, region, reports, region_map)) {
-            DEBUG_PRINTF("cyclic state %zu leads to optional region leader" 
-                         " %zu\n", h[cyc].index, h[v].index); 
+            DEBUG_PRINTF("cyclic state %zu leads to optional region leader"
+                         " %zu\n", h[cyc].index, h[v].index);
             deadRegions.insert(region);
         } else if (isSingletonRegion(h, v, region_map)) {
             /* we can use this region as straw and suck in optional regions on
@@ -130,20 +130,20 @@ void processCyclicStateForward(NGHolder &h, NFAVertex cyc,
 static
 void processCyclicStateReverse(NGHolder &h, NFAVertex cyc,
                          const map<u32, RegionInfo> &info,
-                         const unordered_map<NFAVertex, u32> &region_map, 
+                         const unordered_map<NFAVertex, u32> &region_map,
                          set<u32> &deadRegions) {
     u32 region = region_map.at(cyc);
     CharReach cr = h[cyc].char_reach;
     auto reports = h[cyc].reports;
 
-    DEBUG_PRINTF("going back from %zu/%u\n", h[cyc].index, region); 
+    DEBUG_PRINTF("going back from %zu/%u\n", h[cyc].index, region);
 
     map<u32, RegionInfo>::const_iterator it;
     while ((it = info.find(--region)) != info.end()) {
         NFAVertex v = it->second.entry;
         const CharReach &region_cr = it->second.cr;
         assert(isRegionEntry(h, v, region_map) && !is_special(v, h));
-        DEBUG_PRINTF("checking %zu\n", h[v].index); 
+        DEBUG_PRINTF("checking %zu\n", h[v].index);
 
         if (!region_cr.isSubsetOf(cr)) {
             DEBUG_PRINTF("doesn't cover the reach of region %u\n", region);
@@ -152,7 +152,7 @@ void processCyclicStateReverse(NGHolder &h, NFAVertex cyc,
 
         if (isOptionalRegion(h, v, region_map)
             && !regionHasUnexpectedAccept(h, region, reports, region_map)) {
-            DEBUG_PRINTF("cyclic state %zu trails optional region leader %zu\n", 
+            DEBUG_PRINTF("cyclic state %zu trails optional region leader %zu\n",
                          h[cyc].index, h[v].index);
             deadRegions.insert(region);
         } else if (isSingletonRegion(h, v, region_map)) {
@@ -179,7 +179,7 @@ void processCyclicStateReverse(NGHolder &h, NFAVertex cyc,
 
 static
 map<u32, RegionInfo> buildRegionInfoMap(const NGHolder &g,
-                   const unordered_map<NFAVertex, u32> &region_map) { 
+                   const unordered_map<NFAVertex, u32> &region_map) {
     map<u32, RegionInfo> info;
 
     for (auto v : vertices_range(g)) {

@@ -1502,7 +1502,7 @@ void TKikimrRunner::BusyLoop() {
 }
 
 TProgramShouldContinue TKikimrRunner::KikimrShouldContinue;
- 
+
 void TKikimrRunner::OnTerminate(int) {
     KikimrShouldContinue.ShouldStop(0);
 }

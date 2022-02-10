@@ -8,7 +8,7 @@
 #include <ydb/library/yql/utils/parse_double.h>
 #include <ydb/library/yql/utils/swap_bytes.h>
 #include <ydb/library/yql/utils/utf8.h>
- 
+
 #include <ydb/library/binary_json/write.h>
 #include <ydb/library/binary_json/read.h>
 #include <ydb/library/dynumber/dynumber.h>
@@ -121,7 +121,7 @@ bool IsValidValue(NUdf::EDataSlot type, const NUdf::TUnboxedValuePod& value) {
 
     case NUdf::EDataSlot::Interval:
         return bool(value) && (ui64)std::abs(value.Get<i64>()) < NUdf::MAX_TIMESTAMP;
- 
+
     case NUdf::EDataSlot::TzDate:
         return bool(value) && value.Get<ui16>() < NUdf::MAX_DATE && value.GetTimezoneId() < NUdf::GetTimezones().size();
 
@@ -479,7 +479,7 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
         out << ',' << tz.name();
         break;
     }
- 
+
     case NUdf::EDataSlot::DyNumber: {
         out << NDyNumber::DyNumberToString(value.AsStringRef());
         break;

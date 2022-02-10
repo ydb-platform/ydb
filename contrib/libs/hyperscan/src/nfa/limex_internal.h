@@ -68,9 +68,9 @@
     The value of NFA.stateSize gives the total state size in bytes (the sum of
     all the above).
 
-    Number of shifts should be always greater or equal to 1 
-    Number of shifts 0 means that no appropriate NFA engine was found. 
- 
+    Number of shifts should be always greater or equal to 1
+    Number of shifts 0 means that no appropriate NFA engine was found.
+
 */
 
 #ifndef LIMEX_INTERNAL_H
@@ -80,12 +80,12 @@
 #include "repeat_internal.h"
 
 // Constants
-#define MAX_SHIFT_COUNT 8   /**< largest number of shifts used by a LimEx NFA */ 
-#define MAX_SHIFT_AMOUNT 16 /**< largest shift amount used by a LimEx NFA */ 
+#define MAX_SHIFT_COUNT 8   /**< largest number of shifts used by a LimEx NFA */
+#define MAX_SHIFT_AMOUNT 16 /**< largest shift amount used by a LimEx NFA */
 
 #define LIMEX_FLAG_COMPRESS_STATE  1 /**< pack state into stream state */
 #define LIMEX_FLAG_COMPRESS_MASKED 2 /**< use reach mask-based compression */
-#define LIMEX_FLAG_CANNOT_DIE      4 /**< limex cannot have no states on */ 
+#define LIMEX_FLAG_CANNOT_DIE      4 /**< limex cannot have no states on */
 #define LIMEX_FLAG_EXTRACT_EXP     8 /**< use limex exception bit extraction */
 
 enum LimExTrigger {
@@ -121,7 +121,7 @@ struct NFAException##size {                                                 \
     u8 trigger; /**< from enum LimExTrigger */                              \
 };                                                                          \
                                                                             \
-struct LimExNFA##size {                                                     \ 
+struct LimExNFA##size {                                                     \
     u8 reachMap[N_CHARS]; /**< map of char -> entry in reach[] */           \
     u32 reachSize; /**< number of reach masks */                            \
     u32 accelCount; /**< number of entries in accel table */                \
@@ -153,18 +153,18 @@ struct LimExNFA##size {                                                     \
                                     *  followers */                         \
     u_##size compressMask; /**< switch off before compress */               \
     u_##size exceptionMask;                                                 \
-    u_##size repeatCyclicMask; /**< also includes tug states */             \ 
+    u_##size repeatCyclicMask; /**< also includes tug states */             \
     u_##size zombieMask; /**< zombie if in any of the set states */         \
-    u_##size shift[MAX_SHIFT_COUNT];                                        \ 
-    u32 shiftCount; /**< number of shift masks used */                      \ 
-    u8 shiftAmount[MAX_SHIFT_COUNT]; /**< shift amount for each mask */     \ 
+    u_##size shift[MAX_SHIFT_COUNT];                                        \
+    u32 shiftCount; /**< number of shift masks used */                      \
+    u8 shiftAmount[MAX_SHIFT_COUNT]; /**< shift amount for each mask */     \
     m512 exceptionShufMask; /**< exception byte shuffle mask  */            \
     m512 exceptionBitMask; /**< exception bit mask */                       \
     m512 exceptionAndMask; /**< exception and mask */                       \
 };
 
 CREATE_NFA_LIMEX(32)
-CREATE_NFA_LIMEX(64) 
+CREATE_NFA_LIMEX(64)
 CREATE_NFA_LIMEX(128)
 CREATE_NFA_LIMEX(256)
 CREATE_NFA_LIMEX(384)
@@ -188,16 +188,16 @@ struct NFARepeatInfo {
 };
 
 struct NFAAccept {
-    u8 single_report; //!< If true, 'reports' is report id. 
- 
-    /** 
-     * \brief If single report is true, this is the report id to fire. 
-     * Otherwise, it is the offset (relative to the start of the LimExNFA 
-     * structure) of a list of reports, terminated with MO_INVALID_IDX. 
-     */ 
-    u32 reports; 
- 
-    u32 squash;  //!< Offset (from LimEx) into squash masks, or MO_INVALID_IDX. 
+    u8 single_report; //!< If true, 'reports' is report id.
+
+    /**
+     * \brief If single report is true, this is the report id to fire.
+     * Otherwise, it is the offset (relative to the start of the LimExNFA
+     * structure) of a list of reports, terminated with MO_INVALID_IDX.
+     */
+    u32 reports;
+
+    u32 squash;  //!< Offset (from LimEx) into squash masks, or MO_INVALID_IDX.
 };
 
 #endif

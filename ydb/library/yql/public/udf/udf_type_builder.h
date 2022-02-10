@@ -25,14 +25,14 @@ public:
 };
 
 template <typename T>
-struct TAutoMap { using ItemType = T; }; 
- 
-template <typename T> 
+struct TAutoMap { using ItemType = T; };
+
+template <typename T>
 struct TOptional { using ItemType = T; };
 
-template <typename T, const char* Name> 
-struct TNamedArg { using ItemType = T; }; 
- 
+template <typename T, const char* Name>
+struct TNamedArg { using ItemType = T; };
+
 template <typename T>
 struct TListType { using ItemType = T; };
 
@@ -45,7 +45,7 @@ struct TDict {
 template <typename... TArgs>
 struct TTuple;
 
-template <const char* Tag> 
+template <const char* Tag>
 struct TResource {};
 
 template <typename... TArgs>
@@ -316,8 +316,8 @@ public:
 
     virtual ~IFunctionArgTypesBuilder() = default;
 
-    template <typename T> 
-    inline IFunctionArgTypesBuilder& Add(); 
+    template <typename T>
+    inline IFunctionArgTypesBuilder& Add();
 
     virtual IFunctionArgTypesBuilder& Add(TDataTypeId type) = 0;
     virtual IFunctionArgTypesBuilder& Add(const TType* type) = 0;
@@ -755,7 +755,7 @@ struct TTypeBuilderHelper<TDecimalDataType<Precision, Scale>> {
 };
 #endif
 
-template <const char* Tag> 
+template <const char* Tag>
 struct TTypeBuilderHelper<TResource<Tag>> {
     static TType* Build(const IFunctionTypeInfoBuilder& builder) {
         return builder.Resource(TStringRef(Tag, std::strlen(Tag)));
@@ -881,37 +881,37 @@ struct TTypeBuilderHelper<NUdf::TVariant<TArgs...>> {
 
 template <>
 struct TArgsHelper<> {
-    static void Add(IFunctionArgTypesBuilder& builder, const char* name = nullptr, ui64 flags = 0) { 
+    static void Add(IFunctionArgTypesBuilder& builder, const char* name = nullptr, ui64 flags = 0) {
         Y_UNUSED(builder);
-        Y_UNUSED(name); 
-        Y_UNUSED(flags); 
+        Y_UNUSED(name);
+        Y_UNUSED(flags);
     }
 };
 
 template <typename TArg, typename... TArgs>
-struct TArgsHelper<TAutoMap<TArg>, TArgs...> { 
-   static void Add(IFunctionArgTypesBuilder& builder, const char* name = nullptr, ui64 flags = 0) { 
-       TArgsHelper<TArg>::Add(builder, name, flags | ICallablePayload::TArgumentFlags::AutoMap); 
-       TArgsHelper<TArgs...>::Add(builder); 
-   } 
-}; 
- 
-template <const char* Name, typename TArg, typename... TArgs> 
-struct TArgsHelper<TNamedArg<TArg, Name>, TArgs...> { 
-    static void Add(IFunctionArgTypesBuilder& builder, const char* name = nullptr, ui64 flags = 0) { 
-        Y_UNUSED(name); 
-        TArgsHelper<TOptional<TArg>>::Add(builder, Name, flags); 
-        TArgsHelper<TArgs...>::Add(builder); 
-  } 
-}; 
- 
-template <typename TArg, typename... TArgs> 
+struct TArgsHelper<TAutoMap<TArg>, TArgs...> {
+   static void Add(IFunctionArgTypesBuilder& builder, const char* name = nullptr, ui64 flags = 0) {
+       TArgsHelper<TArg>::Add(builder, name, flags | ICallablePayload::TArgumentFlags::AutoMap);
+       TArgsHelper<TArgs...>::Add(builder);
+   }
+};
+
+template <const char* Name, typename TArg, typename... TArgs>
+struct TArgsHelper<TNamedArg<TArg, Name>, TArgs...> {
+    static void Add(IFunctionArgTypesBuilder& builder, const char* name = nullptr, ui64 flags = 0) {
+        Y_UNUSED(name);
+        TArgsHelper<TOptional<TArg>>::Add(builder, Name, flags);
+        TArgsHelper<TArgs...>::Add(builder);
+  }
+};
+
+template <typename TArg, typename... TArgs>
 struct TArgsHelper<TArg, TArgs...> {
-    static void Add(IFunctionArgTypesBuilder& builder, const char* name = nullptr, ui64 flags = 0) { 
-        builder.Add(TTypeBuilderHelper<TArg>::Build(builder.Parent())).Flags(flags); 
-        if (name) { 
+    static void Add(IFunctionArgTypesBuilder& builder, const char* name = nullptr, ui64 flags = 0) {
+        builder.Add(TTypeBuilderHelper<TArg>::Build(builder.Parent())).Flags(flags);
+        if (name) {
             builder.Name(TStringRef(name, std::strlen(name)));
-        } 
+        }
         TArgsHelper<TArgs...>::Add(builder);
     }
 };
@@ -926,12 +926,12 @@ struct TSimpleSignatureHelper<TReturn(TArgs...)> {
 
 } // namspace NImpl
 
-template <typename T> 
-inline IFunctionArgTypesBuilder& IFunctionArgTypesBuilder::Add() 
-{ 
-    NImpl::TArgsHelper<T>::Add(*Parent_.Args()); 
-    return *this; 
-} 
- 
+template <typename T>
+inline IFunctionArgTypesBuilder& IFunctionArgTypesBuilder::Add()
+{
+    NImpl::TArgsHelper<T>::Add(*Parent_.Args());
+    return *this;
+}
+
 } // namespace NUdf
 } // namespace NYql

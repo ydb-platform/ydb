@@ -1,18 +1,18 @@
 #pragma once
 
 #include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
- 
+
 #include <library/cpp/resource/resource.h>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/message.h>
 
-#include <util/generic/hash.h> 
-#include <util/generic/singleton.h> 
+#include <util/generic/hash.h>
+#include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
-#include <util/string/subst.h> 
- 
+#include <util/string/subst.h>
+
 namespace NYql {
 
 using TIssueCode = ui32;
@@ -23,18 +23,18 @@ const TIssueCode UNEXPECTED_ERROR = 1;
 inline TString SeverityToString(ESeverity severity)
 {
     auto ret = NYql::TSeverityIds::ESeverityId_Name(severity);
-    return ret.empty() ? "Unknown" : to_title(ret.substr(2)); //remove prefix "S_" 
+    return ret.empty() ? "Unknown" : to_title(ret.substr(2)); //remove prefix "S_"
 }
 
 template <typename T>
 inline TString IssueCodeToString(TIssueCode id) {
     auto ret = T::EIssueCode_Name(static_cast<typename T::EIssueCode>(id));
-    if (!ret.empty()) { 
-        SubstGlobal(ret, '_', ' '); 
-        return to_title(ret); 
-    } else { 
-        return "Unknown"; 
-    } 
+    if (!ret.empty()) {
+        SubstGlobal(ret, '_', ' ');
+        return to_title(ret);
+    } else {
+        return "Unknown";
+    }
 }
 
 template<typename TProto, const char* ResourceName>
@@ -64,13 +64,13 @@ public:
         return it->second;
     }
 
-    TString GetMessage(TIssueCode id) const { 
-        auto it = IssuesFormatMap_.find(id); 
+    TString GetMessage(TIssueCode id) const {
+        auto it = IssuesFormatMap_.find(id);
         Y_ENSURE(it != IssuesFormatMap_.end(), "Unknown issue id: "
-            << id << "(" << IssueCodeToString<TProto>(id) << ")"); 
-        return it->second; 
-    } 
- 
+            << id << "(" << IssueCodeToString<TProto>(id) << ")");
+        return it->second;
+    }
+
     TIssueId() {
         auto configData = NResource::Find(TStringBuf(ResourceName));
         if (!::google::protobuf::TextFormat::ParseFromString(configData, &ProtoIssues_)) {
@@ -99,13 +99,13 @@ public:
                 << eDesc->value(i)->name()
                 << " is not found in protobuf data file");
         }
- 
-        for (const auto& x : ProtoIssues_.ids()) { 
-            auto rv = IssuesFormatMap_.insert(std::make_pair(x.code(), x.format())); 
+
+        for (const auto& x : ProtoIssues_.ids()) {
+            auto rv = IssuesFormatMap_.insert(std::make_pair(x.code(), x.format()));
             Y_ENSURE(rv.second, "Duplicate issue code found, code: "
-                << static_cast<int>(x.code()) 
-                << "(" << IssueCodeToString<TProto>(x.code()) <<")"); 
-        } 
+                << static_cast<int>(x.code())
+                << "(" << IssueCodeToString<TProto>(x.code()) <<")");
+        }
     }
 };
 
@@ -114,9 +114,9 @@ inline ESeverity GetSeverity(TIssueCode id) {
     return Singleton<TIssueId<TProto, ResourceName>>()->GetSeverity(id);
 }
 
-template<typename TProto, const char* ResourceName> 
-inline TString GetMessage(TIssueCode id) { 
-    return Singleton<TIssueId<TProto, ResourceName>>()->GetMessage(id); 
+template<typename TProto, const char* ResourceName>
+inline TString GetMessage(TIssueCode id) {
+    return Singleton<TIssueId<TProto, ResourceName>>()->GetMessage(id);
 }
- 
-} 
+
+}

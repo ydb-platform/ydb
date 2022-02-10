@@ -41,7 +41,7 @@ struct Grey {
 
     bool optimiseComponentTree;
 
-    bool calcComponents; 
+    bool calcComponents;
     bool performGraphSimplification;
     bool prefilterReductions;
     bool removeEdgeRedundancy;
@@ -51,31 +51,31 @@ struct Grey {
     bool allowLitHaig;
     bool allowLbr;
     bool allowMcClellan;
-    bool allowSheng; 
-    bool allowMcSheng; 
+    bool allowSheng;
+    bool allowMcSheng;
     bool allowPuff;
-    bool allowLiteral; 
-    bool allowViolet; 
+    bool allowLiteral;
+    bool allowViolet;
     bool allowExtendedNFA;
     bool allowLimExNFA;
     bool allowAnchoredAcyclic;
     bool allowSmallLiteralSet;
     bool allowCastle;
     bool allowDecoratedLiteral;
-    bool allowApproximateMatching; 
+    bool allowApproximateMatching;
 
     bool allowNoodle;
     bool fdrAllowTeddy;
-    bool fdrAllowFlood; 
+    bool fdrAllowFlood;
 
-    u32  violetAvoidSuffixes; /* 0=never, 1=sometimes, 2=always */ 
-    bool violetAvoidWeakInfixes; 
-    bool violetDoubleCut; 
-    bool violetExtractStrongLiterals; 
-    bool violetLiteralChains; 
-    u32  violetDoubleCutLiteralLen; 
-    u32  violetEarlyCleanLiteralLen; 
- 
+    u32  violetAvoidSuffixes; /* 0=never, 1=sometimes, 2=always */
+    bool violetAvoidWeakInfixes;
+    bool violetDoubleCut;
+    bool violetExtractStrongLiterals;
+    bool violetLiteralChains;
+    u32  violetDoubleCutLiteralLen;
+    u32  violetEarlyCleanLiteralLen;
+
     bool puffImproveHead;
     bool castleExclusive; // enable castle mutual exclusion analysis
 
@@ -110,7 +110,7 @@ struct Grey {
     u32 minRoseLiteralLength;
     u32 minRoseNetflowLiteralLength;
     u32 maxRoseNetflowEdges;
-    u32 maxEditDistance; 
+    u32 maxEditDistance;
 
     u32 minExtBoundedRepeatSize; /* to be considered for ng_repeat */
 
@@ -152,18 +152,18 @@ struct Grey {
 
     // SmallWrite engine
     bool allowSmallWrite;
-    bool allowSmallWriteSheng; 
+    bool allowSmallWriteSheng;
     u32 smallWriteLargestBuffer;  // largest buffer that can be small write
     u32 smallWriteLargestBufferBad;// largest buffer that can be small write
     u32 limitSmallWriteOutfixSize; //!< max total size of outfix DFAs
-    u32 smallWriteMaxPatterns; // only try small writes if fewer patterns 
-    u32 smallWriteMaxLiterals; // only try small writes if fewer literals 
-    u32 smallWriteMergeBatchSize; // number of DFAs to merge in a batch 
+    u32 smallWriteMaxPatterns; // only try small writes if fewer patterns
+    u32 smallWriteMaxLiterals; // only try small writes if fewer literals
+    u32 smallWriteMergeBatchSize; // number of DFAs to merge in a batch
 
-    // Tamarama engine 
-    bool allowTamarama; 
-    u32 tamaChunkSize; //!< max chunk size for exclusivity analysis in Tamarama 
- 
+    // Tamarama engine
+    bool allowTamarama;
+    u32 tamaChunkSize; //!< max chunk size for exclusivity analysis in Tamarama
+
     enum DumpFlags {
         DUMP_NONE       = 0,
         DUMP_BASICS     = 1 << 0, // Dump basic textual data
@@ -204,9 +204,9 @@ struct Grey {
     u32 limitDFASize;    //!< max size of a DFA (in bytes)
     u32 limitNFASize;    //!< max size of an NFA (in bytes)
     u32 limitLBRSize;    //!< max size of an LBR engine (in bytes)
- 
-    // Approximate matching limits. 
-    u32 limitApproxMatchingVertices; //!< max number of vertices per graph 
+
+    // Approximate matching limits.
+    u32 limitApproxMatchingVertices; //!< max number of vertices per graph
 };
 
 #ifndef RELEASE_BUILD

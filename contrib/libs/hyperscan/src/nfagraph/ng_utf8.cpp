@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -34,7 +34,7 @@
 #include "ng.h"
 #include "ng_prune.h"
 #include "ng_util.h"
-#include "compiler/compiler.h" 
+#include "compiler/compiler.h"
 #include "util/graph_range.h"
 #include "util/unicode_def.h"
 
@@ -46,14 +46,14 @@ using namespace std;
 namespace ue2 {
 
 static
-void allowIllegal(NGHolder &g, NFAVertex v, u8 pred_char) { 
-    if (in_degree(v, g) != 1) { 
+void allowIllegal(NGHolder &g, NFAVertex v, u8 pred_char) {
+    if (in_degree(v, g) != 1) {
         DEBUG_PRINTF("unexpected pred\n");
         assert(0); /* should be true due to the early stage of this analysis */
         return;
     }
 
-    CharReach &cr = g[v].char_reach; 
+    CharReach &cr = g[v].char_reach;
     if (pred_char == 0xe0) {
         assert(cr.isSubsetOf(CharReach(0xa0, 0xbf)));
         if (cr == CharReach(0xa0, 0xbf)) {
@@ -80,8 +80,8 @@ void allowIllegal(NGHolder &g, NFAVertex v, u8 pred_char) {
  * above \\x{10ffff} or they represent overlong encodings. As we require valid
  * UTF-8 input, we have no defined behaviour in these cases, as a result we can
  * accept them if it simplifies the graph. */
-void relaxForbiddenUtf8(NGHolder &g, const ExpressionInfo &expr) { 
-    if (!expr.utf8) { 
+void relaxForbiddenUtf8(NGHolder &g, const ExpressionInfo &expr) {
+    if (!expr.utf8) {
         return;
     }
 
@@ -89,12 +89,12 @@ void relaxForbiddenUtf8(NGHolder &g, const ExpressionInfo &expr) {
     const CharReach f0(0xf0);
     const CharReach f4(0xf4);
 
-    for (auto v : vertices_range(g)) { 
-        const CharReach &cr = g[v].char_reach; 
+    for (auto v : vertices_range(g)) {
+        const CharReach &cr = g[v].char_reach;
         if (cr == e0 || cr == f0 || cr == f4) {
             u8 pred_char = cr.find_first();
-            for (auto t : adjacent_vertices_range(v, g)) { 
-                allowIllegal(g, t, pred_char); 
+            for (auto t : adjacent_vertices_range(v, g)) {
+                allowIllegal(g, t, pred_char);
             }
         }
     }
@@ -177,7 +177,7 @@ void findSeeds(const NGHolder &h, const bool som, vector<NFAVertex> *seeds) {
             continue;
         }
 
-        DEBUG_PRINTF("%zu is a seed\n", h[v].index); 
+        DEBUG_PRINTF("%zu is a seed\n", h[v].index);
         seeds->push_back(v);
         already_seeds.insert(v);
     }
@@ -185,12 +185,12 @@ void findSeeds(const NGHolder &h, const bool som, vector<NFAVertex> *seeds) {
 
 static
 bool expandCyclic(NGHolder &h, NFAVertex v) {
-    DEBUG_PRINTF("inspecting %zu\n", h[v].index); 
+    DEBUG_PRINTF("inspecting %zu\n", h[v].index);
     bool changes = false;
 
-    auto v_preds = preds(v, h); 
-    auto v_succs = succs(v, h); 
- 
+    auto v_preds = preds(v, h);
+    auto v_succs = succs(v, h);
+
     set<NFAVertex> start_siblings;
     set<NFAVertex> end_siblings;
 
@@ -199,10 +199,10 @@ bool expandCyclic(NGHolder &h, NFAVertex v) {
     /* We need to find start vertices which have all of our preds.
      * As we have a self loop, it must be one of our succs. */
     for (auto a : adjacent_vertices_range(v, h)) {
-        auto a_preds = preds(a, h); 
+        auto a_preds = preds(a, h);
 
         if (a_preds == v_preds && isutf8start(h[a].char_reach)) {
-            DEBUG_PRINTF("%zu is a start v\n", h[a].index); 
+            DEBUG_PRINTF("%zu is a start v\n", h[a].index);
             start_siblings.insert(a);
         }
     }
@@ -210,10 +210,10 @@ bool expandCyclic(NGHolder &h, NFAVertex v) {
     /* We also need to find full cont vertices which have all our own succs;
      * As we have a self loop, it must be one of our preds. */
     for (auto a : inv_adjacent_vertices_range(v, h)) {
-        auto a_succs = succs(a, h); 
+        auto a_succs = succs(a, h);
 
         if (a_succs == v_succs && h[a].char_reach == UTF_CONT_CR) {
-            DEBUG_PRINTF("%zu is a full tail cont\n", h[a].index); 
+            DEBUG_PRINTF("%zu is a full tail cont\n", h[a].index);
             end_siblings.insert(a);
         }
     }
@@ -227,7 +227,7 @@ bool expandCyclic(NGHolder &h, NFAVertex v) {
         if (cr.isSubsetOf(UTF_TWO_START_CR)) {
             if (end_siblings.find(*adjacent_vertices(s, h).first)
                 == end_siblings.end()) {
-                DEBUG_PRINTF("%zu is odd\n", h[s].index); 
+                DEBUG_PRINTF("%zu is odd\n", h[s].index);
                 continue;
             }
         } else if (cr.isSubsetOf(UTF_THREE_START_CR)) {
@@ -239,7 +239,7 @@ bool expandCyclic(NGHolder &h, NFAVertex v) {
             }
             if (end_siblings.find(*adjacent_vertices(m, h).first)
                 == end_siblings.end()) {
-                DEBUG_PRINTF("%zu is odd\n", h[s].index); 
+                DEBUG_PRINTF("%zu is odd\n", h[s].index);
                 continue;
             }
         } else if (cr.isSubsetOf(UTF_FOUR_START_CR)) {
@@ -259,11 +259,11 @@ bool expandCyclic(NGHolder &h, NFAVertex v) {
 
             if (end_siblings.find(*adjacent_vertices(m2, h).first)
                 == end_siblings.end()) {
-                DEBUG_PRINTF("%zu is odd\n", h[s].index); 
+                DEBUG_PRINTF("%zu is odd\n", h[s].index);
                 continue;
             }
         } else {
-            DEBUG_PRINTF("%zu is bad\n", h[s].index); 
+            DEBUG_PRINTF("%zu is bad\n", h[s].index);
           continue;
         }
 

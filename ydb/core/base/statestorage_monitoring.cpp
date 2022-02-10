@@ -54,7 +54,7 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
             DIV_CLASS("container") {
                 DIV_CLASS("row") {str << "TabletID: " << TabletID;}
                 DIV_CLASS("row") {str << "Response: " << response;}
- 
+
                 if (ProxyReplyTime.GetValue() != Max<ui64>()) {
                     DIV_CLASS("row") {str << "Proxy reply time: " << ProxyReplyTime.ToString(); }
                 }
@@ -62,8 +62,8 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
                 DIV_CLASS("CfgHash") {str << "Config hash: " << SelfConfigContentHash; }
                 DIV_CLASS("row") {str << "&nbsp;";}
             }
- 
- 
+
+
             TABLE_SORTABLE_CLASS("table") {
                 TABLEHEAD() {
                     TABLER() {
@@ -113,7 +113,7 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
                 }
             }
         }
- 
+
         ctx.Send(Sender, new NMon::TEvHttpInfoRes(str.Str()));
         return Die(ctx);
     }

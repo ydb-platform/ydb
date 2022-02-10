@@ -794,7 +794,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLDecimalTest) {
     Y_UNIT_TEST_LLVM(TestMinMax) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto data1 = pb.NewDecimalLiteral(-NYql::NDecimal::Nan(), 13, 2);
         const auto data2 = pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 13, 2);
         const auto data3 = pb.NewDecimalLiteral(314, 13, 2);

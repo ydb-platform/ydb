@@ -1,18 +1,18 @@
-#pragma once 
- 
-#include "udf_value.h" 
-#include "udf_registrator.h" 
+#pragma once
+
+#include "udf_value.h"
+#include "udf_registrator.h"
 #include "udf_value_builder.h"
 #include "udf_terminator.h"
-#include "udf_type_builder.h" 
+#include "udf_type_builder.h"
 #include "udf_type_inspection.h"
 #include "udf_version.h"
- 
+
 #include <util/generic/yexception.h>
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
-#include <util/string/builder.h> 
- 
+#include <util/string/builder.h>
+
 
 namespace NYql {
 namespace NUdf {
@@ -62,12 +62,12 @@ namespace NUdf {
             const ::NYql::NUdf::TUnboxedValuePod* args) const override {                 \
             try {                                                                           \
                 return RunImpl(valueBuilder, args);                                         \
-            } catch (const std::exception&) {                                               \ 
-                    TStringBuilder sb;                                                      \ 
+            } catch (const std::exception&) {                                               \
+                    TStringBuilder sb;                                                      \
                     sb << Pos_ << " ";                                                      \
-                    sb << CurrentExceptionMessage();                                        \ 
-                    sb << Endl << "[" << TStringBuf(Name()) << "]" ;                        \ 
-                    UdfTerminate(sb.c_str());                                               \ 
+                    sb << CurrentExceptionMessage();                                        \
+                    sb << Endl << "[" << TStringBuf(Name()) << "]" ;                        \
+                    UdfTerminate(sb.c_str());                                               \
             }                                                                               \
         }                                                                                   \
         static bool DeclareSignature(                                                       \
@@ -132,12 +132,12 @@ namespace NUdf {
                 const ::NYql::NUdf::TUnboxedValuePod* args) const override {             \
                 try {                                                                       \
                     return RunImpl(valueBuilder, args);                                     \
-                } catch (const std::exception&) {                                           \ 
-                    TStringBuilder sb;                                                      \ 
+                } catch (const std::exception&) {                                           \
+                    TStringBuilder sb;                                                      \
                     sb << Pos_ << " ";                                                      \
-                    sb << CurrentExceptionMessage();                                        \ 
-                    sb << Endl << "[" << TStringBuf(Name()) << "]" ;                        \ 
-                    UdfTerminate(sb.c_str());                                               \ 
+                    sb << CurrentExceptionMessage();                                        \
+                    sb << Endl << "[" << TStringBuf(Name()) << "]" ;                        \
+                    UdfTerminate(sb.c_str());                                               \
                 }                                                                           \
             }                                                                               \
                                                                                             \
@@ -207,10 +207,10 @@ namespace NUdf {
     if (!args[n]) {                              \
         return ::NYql::NUdf::TUnboxedValue(); \
     }
- 
+
 namespace NYql {
-namespace NUdf { 
- 
+namespace NUdf {
+
 template<bool CheckOptional, const char* TFuncName, template<class> class TFunc, typename... TUserTypes>
 class TUserDataTypeFuncFactory : public ::NYql::NUdf::TBoxedValue {
 public:
@@ -305,68 +305,68 @@ public:
     }
 };
 
-template<typename... TUdfs> 
-class TSimpleUdfModuleHelper : public IUdfModule 
-{ 
+template<typename... TUdfs>
+class TSimpleUdfModuleHelper : public IUdfModule
+{
     Y_HAS_SUBTYPE(TTypeAwareMarker);
 
 public:
     void CleanupOnTerminate() const override {
     }
 
-    template<typename TUdfType> 
+    template<typename TUdfType>
     void GetAllFunctionsImpl(IFunctionNamesSink& names) const {
         auto r = names.Add(TUdfType::Name());
         if (THasTTypeAwareMarker<TUdfType>::value) {
             r->SetTypeAwareness();
         }
-    } 
- 
-    template<typename THead1, typename THead2, typename... TTail> 
+    }
+
+    template<typename THead1, typename THead2, typename... TTail>
     void GetAllFunctionsImpl(IFunctionNamesSink& names) const {
         GetAllFunctionsImpl<THead1>(names);
         GetAllFunctionsImpl<THead2, TTail...>(names);
-    } 
- 
-    template<typename TUdfType> 
-    bool BuildFunctionTypeInfoImpl( 
-                const TStringRef& name, 
+    }
+
+    template<typename TUdfType>
+    bool BuildFunctionTypeInfoImpl(
+                const TStringRef& name,
                 TType* userType,
-                const TStringRef& typeConfig, 
-                ui32 flags, 
-                IFunctionTypeInfoBuilder& builder) const 
-    { 
+                const TStringRef& typeConfig,
+                ui32 flags,
+                IFunctionTypeInfoBuilder& builder) const
+    {
         Y_UNUSED(typeConfig);
-        bool typesOnly = (flags & TFlags::TypesOnly); 
+        bool typesOnly = (flags & TFlags::TypesOnly);
         return TUdfType::DeclareSignature(name, userType, builder, typesOnly);
-    } 
- 
-    template<typename THead1, typename THead2, typename... TTail> 
-    bool BuildFunctionTypeInfoImpl( 
-                const TStringRef& name, 
+    }
+
+    template<typename THead1, typename THead2, typename... TTail>
+    bool BuildFunctionTypeInfoImpl(
+                const TStringRef& name,
                 TType* userType,
-                const TStringRef& typeConfig, 
-                ui32 flags, 
-                IFunctionTypeInfoBuilder& builder) const 
-    { 
+                const TStringRef& typeConfig,
+                ui32 flags,
+                IFunctionTypeInfoBuilder& builder) const
+    {
         bool found = BuildFunctionTypeInfoImpl<THead1>(name, userType, typeConfig, flags, builder);
-        if (!found) { 
+        if (!found) {
             found = BuildFunctionTypeInfoImpl<THead2, TTail...>(name, userType, typeConfig, flags, builder);
-        } 
-        return found; 
-    } 
- 
+        }
+        return found;
+    }
+
     void GetAllFunctions(IFunctionsSink& sink) const final {
         GetAllFunctionsImpl<TUdfs...>(sink);
-    } 
- 
-    void BuildFunctionTypeInfo( 
-                        const TStringRef& name, 
+    }
+
+    void BuildFunctionTypeInfo(
+                        const TStringRef& name,
                         TType* userType,
-                        const TStringRef& typeConfig, 
-                        ui32 flags, 
-                        IFunctionTypeInfoBuilder& builder) const override 
-    { 
+                        const TStringRef& typeConfig,
+                        ui32 flags,
+                        IFunctionTypeInfoBuilder& builder) const override
+    {
         try {
             bool found = BuildFunctionTypeInfoImpl<TUdfs...>(name, userType, typeConfig, flags, builder);
             if (!found) {
@@ -374,12 +374,12 @@ public:
                 sb << "Unknown function: " << name.Data();
                 builder.SetError(sb);
             }
-        } catch (const std::exception&) { 
+        } catch (const std::exception&) {
             builder.SetError(CurrentExceptionMessage());
-        } 
-    } 
- 
-}; 
- 
-} // namspace NUdf 
+        }
+    }
+
+};
+
+} // namspace NUdf
 } // namspace NYql

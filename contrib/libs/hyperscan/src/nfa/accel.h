@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -60,8 +60,8 @@ enum AccelType {
     ACCEL_SHUFTI,
     ACCEL_DSHUFTI,
     ACCEL_TRUFFLE,
-    ACCEL_RED_TAPE, 
-    ACCEL_DVERM_MASKED, 
+    ACCEL_RED_TAPE,
+    ACCEL_DVERM_MASKED,
 };
 
 /** \brief Structure for accel framework. */
@@ -81,25 +81,25 @@ union AccelAux {
         u8 offset;
         u8 c1; // uppercase if nocase
         u8 c2; // uppercase if nocase
-        u8 m1; // masked variant 
-        u8 m2; // masked variant 
+        u8 m1; // masked variant
+        u8 m2; // masked variant
     } dverm;
     struct {
         u8 accel_type;
         u8 offset;
-        u8 c; // uppercase if nocase 
-        u8 len; 
-    } mverm; 
-    struct { 
-        u8 accel_type; 
-        u8 offset; 
-        u8 c; // uppercase if nocase 
-        u8 len1; 
-        u8 len2; 
-    } mdverm; 
-    struct { 
-        u8 accel_type; 
-        u8 offset; 
+        u8 c; // uppercase if nocase
+        u8 len;
+    } mverm;
+    struct {
+        u8 accel_type;
+        u8 offset;
+        u8 c; // uppercase if nocase
+        u8 len1;
+        u8 len2;
+    } mdverm;
+    struct {
+        u8 accel_type;
+        u8 offset;
         m128 lo;
         m128 hi;
     } shufti;

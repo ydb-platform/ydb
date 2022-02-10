@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, Intel Corporation 
+ * Copyright (c) 2015-2016, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -36,27 +36,27 @@ using namespace std;
 namespace ue2 {
 
 // internal use only
-static NFAVertex addSpecialVertex(NGHolder &g, SpecialNodes id) { 
-    NFAVertex v(add_vertex(g)); 
+static NFAVertex addSpecialVertex(NGHolder &g, SpecialNodes id) {
+    NFAVertex v(add_vertex(g));
     g[v].index = id;
     return v;
 }
 
 NGHolder::NGHolder(nfa_kind k)
- : kind (k), 
+ : kind (k),
    // add initial special nodes
-   start(addSpecialVertex(*this, NODE_START)), 
-   startDs(addSpecialVertex(*this, NODE_START_DOTSTAR)), 
-   accept(addSpecialVertex(*this, NODE_ACCEPT)), 
-   acceptEod(addSpecialVertex(*this, NODE_ACCEPT_EOD)) { 
+   start(addSpecialVertex(*this, NODE_START)),
+   startDs(addSpecialVertex(*this, NODE_START_DOTSTAR)),
+   accept(addSpecialVertex(*this, NODE_ACCEPT)),
+   acceptEod(addSpecialVertex(*this, NODE_ACCEPT_EOD)) {
 
     // wire up some fake edges for the stylized bits of the NFA
     add_edge(start, startDs, *this);
     add_edge(startDs, startDs, *this);
     add_edge(accept, acceptEod, *this);
 
-    (*this)[start].char_reach.setall(); 
-    (*this)[startDs].char_reach.setall(); 
+    (*this)[start].char_reach.setall();
+    (*this)[startDs].char_reach.setall();
 }
 
 NGHolder::~NGHolder(void) {
@@ -64,7 +64,7 @@ NGHolder::~NGHolder(void) {
 }
 
 void clear_graph(NGHolder &h) {
-    NGHolder::vertex_iterator vi, ve; 
+    NGHolder::vertex_iterator vi, ve;
     for (tie(vi, ve) = vertices(h); vi != ve;) {
         NFAVertex v = *vi;
         ++vi;
@@ -76,8 +76,8 @@ void clear_graph(NGHolder &h) {
     }
 
     assert(num_vertices(h) == N_SPECIALS);
-    renumber_vertices(h); /* ensure that we reset our next allocated index */ 
-    renumber_edges(h); 
+    renumber_vertices(h); /* ensure that we reset our next allocated index */
+    renumber_edges(h);
 
     // Recreate special stylised edges.
     add_edge(h.start, h.startDs, h);
@@ -87,11 +87,11 @@ void clear_graph(NGHolder &h) {
 
 NFAVertex NGHolder::getSpecialVertex(u32 id) const {
     switch (id) {
-    case NODE_START:         return start; 
-    case NODE_START_DOTSTAR: return startDs; 
-    case NODE_ACCEPT:        return accept; 
-    case NODE_ACCEPT_EOD:    return acceptEod; 
-    default:                 return null_vertex(); 
+    case NODE_START:         return start;
+    case NODE_START_DOTSTAR: return startDs;
+    case NODE_ACCEPT:        return accept;
+    case NODE_ACCEPT_EOD:    return acceptEod;
+    default:                 return null_vertex();
     }
 }
 

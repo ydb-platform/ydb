@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, Intel Corporation 
+ * Copyright (c) 2015-2016, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -30,8 +30,8 @@
     \brief Limex Execution Engine Or:
     How I Learned To Stop Worrying And Love The Preprocessor
 
-    This file includes utility functions which do not depend on the size of the 
-    state or shift masks directly. 
+    This file includes utility functions which do not depend on the size of the
+    state or shift masks directly.
 */
 
 #ifndef LIMEX_RUNTIME_H
@@ -95,7 +95,7 @@ int limexRunReports(const ReportID *reports, NfaCallback callback,
     for (; *reports != MO_INVALID_IDX; ++reports) {
         DEBUG_PRINTF("firing report for id %u at offset %llu\n",
                      *reports, offset);
-        int rv = callback(0, offset, *reports, context); 
+        int rv = callback(0, offset, *reports, context);
         if (rv == MO_HALT_MATCHING) {
             return MO_HALT_MATCHING;
         }
@@ -103,38 +103,38 @@ int limexRunReports(const ReportID *reports, NfaCallback callback,
     return MO_CONTINUE_MATCHING; // continue
 }
 
-static really_inline 
-int limexRunAccept(const char *limex_base, const struct NFAAccept *accept, 
-                   NfaCallback callback, void *context, u64a offset) { 
-    if (accept->single_report) { 
-        const ReportID report = accept->reports; 
-        DEBUG_PRINTF("firing single report for id %u at offset %llu\n", report, 
-                     offset); 
-        return callback(0, offset, report, context); 
-    } 
-    const ReportID *reports = (const ReportID *)(limex_base + accept->reports); 
-    return limexRunReports(reports, callback, context, offset); 
-} 
- 
-static really_inline 
-int limexAcceptHasReport(const char *limex_base, const struct NFAAccept *accept, 
-                         ReportID report) { 
-    if (accept->single_report) { 
-        return accept->reports == report; 
-    } 
- 
-    const ReportID *reports = (const ReportID *)(limex_base + accept->reports); 
-    assert(*reports != MO_INVALID_IDX); 
-    do { 
-        if (*reports == report) { 
-            return 1; 
-        } 
-        reports++; 
-    } while (*reports != MO_INVALID_IDX); 
- 
-    return 0; 
-} 
- 
+static really_inline
+int limexRunAccept(const char *limex_base, const struct NFAAccept *accept,
+                   NfaCallback callback, void *context, u64a offset) {
+    if (accept->single_report) {
+        const ReportID report = accept->reports;
+        DEBUG_PRINTF("firing single report for id %u at offset %llu\n", report,
+                     offset);
+        return callback(0, offset, report, context);
+    }
+    const ReportID *reports = (const ReportID *)(limex_base + accept->reports);
+    return limexRunReports(reports, callback, context, offset);
+}
+
+static really_inline
+int limexAcceptHasReport(const char *limex_base, const struct NFAAccept *accept,
+                         ReportID report) {
+    if (accept->single_report) {
+        return accept->reports == report;
+    }
+
+    const ReportID *reports = (const ReportID *)(limex_base + accept->reports);
+    assert(*reports != MO_INVALID_IDX);
+    do {
+        if (*reports == report) {
+            return 1;
+        }
+        reports++;
+    } while (*reports != MO_INVALID_IDX);
+
+    return 0;
+}
+
 /** \brief Return a (correctly typed) pointer to the exception table. */
 #define getExceptionTable(exc_type, lim)                                       \
     ((const exc_type *)((const char *)(lim) + (lim)->exceptionOffset))
@@ -163,7 +163,7 @@ int limexAcceptHasReport(const char *limex_base, const struct NFAAccept *accept,
     }
 
 MAKE_GET_NFA_REPEAT_INFO(32)
-MAKE_GET_NFA_REPEAT_INFO(64) 
+MAKE_GET_NFA_REPEAT_INFO(64)
 MAKE_GET_NFA_REPEAT_INFO(128)
 MAKE_GET_NFA_REPEAT_INFO(256)
 MAKE_GET_NFA_REPEAT_INFO(384)

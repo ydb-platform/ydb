@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -49,71 +49,71 @@ namespace ue2 {
 /** Connect the start vertex to each of the vertices in \p tops. This is useful
  * temporarily for when we need to run a graph algorithm that expects a single
  * source vertex. */
-static 
-void wireStartToTops(NGHolder &g, const flat_set<NFAVertex> &tops, 
-                     vector<NFAEdge> &tempEdges) { 
-    for (NFAVertex v : tops) { 
+static
+void wireStartToTops(NGHolder &g, const flat_set<NFAVertex> &tops,
+                     vector<NFAEdge> &tempEdges) {
+    for (NFAVertex v : tops) {
         assert(!isLeafNode(v, g));
 
-        const NFAEdge &e = add_edge(g.start, v, g); 
-        tempEdges.push_back(e); 
+        const NFAEdge &e = add_edge(g.start, v, g);
+        tempEdges.push_back(e);
     }
 }
 
-/** 
- * Returns true if start's successors (aside from startDs) are subset of 
- * startDs's proper successors or if start has no successors other than startDs. 
- */ 
+/**
+ * Returns true if start's successors (aside from startDs) are subset of
+ * startDs's proper successors or if start has no successors other than startDs.
+ */
 static
-bool startIsRedundant(const NGHolder &g) { 
-    /* We ignore startDs as the self-loop may have been stripped as an 
-     * optimisation for repeats (improveLeadingRepeats()). */ 
-    set<NFAVertex> start; 
-    insert(&start,  adjacent_vertices_range(g.start, g)); 
-    start.erase(g.startDs); 
- 
-    // Trivial case: start has no successors other than startDs. 
-    if (start.empty()) { 
-        DEBUG_PRINTF("start has no out-edges other than to startDs\n"); 
-        return true; 
-    } 
- 
-    set<NFAVertex> startDs; 
-    insert(&startDs,  adjacent_vertices_range(g.startDs, g)); 
-    startDs.erase(g.startDs); 
- 
-    if (!is_subset_of(start, startDs)) { 
-        DEBUG_PRINTF("out-edges of start and startDs aren't equivalent\n"); 
-        return false; 
-    } 
- 
-    return true; 
-} 
- 
-static 
-void getStateOrdering(NGHolder &g, const flat_set<NFAVertex> &tops, 
+bool startIsRedundant(const NGHolder &g) {
+    /* We ignore startDs as the self-loop may have been stripped as an
+     * optimisation for repeats (improveLeadingRepeats()). */
+    set<NFAVertex> start;
+    insert(&start,  adjacent_vertices_range(g.start, g));
+    start.erase(g.startDs);
+
+    // Trivial case: start has no successors other than startDs.
+    if (start.empty()) {
+        DEBUG_PRINTF("start has no out-edges other than to startDs\n");
+        return true;
+    }
+
+    set<NFAVertex> startDs;
+    insert(&startDs,  adjacent_vertices_range(g.startDs, g));
+    startDs.erase(g.startDs);
+
+    if (!is_subset_of(start, startDs)) {
+        DEBUG_PRINTF("out-edges of start and startDs aren't equivalent\n");
+        return false;
+    }
+
+    return true;
+}
+
+static
+void getStateOrdering(NGHolder &g, const flat_set<NFAVertex> &tops,
                       vector<NFAVertex> &ordering) {
     // First, wire up our "tops" to start so that we have a single source,
     // which will give a nicer topo order.
-    vector<NFAEdge> tempEdges; 
-    wireStartToTops(g, tops, tempEdges); 
+    vector<NFAEdge> tempEdges;
+    wireStartToTops(g, tops, tempEdges);
 
-    renumber_vertices(g); 
+    renumber_vertices(g);
 
     vector<NFAVertex> temp = getTopoOrdering(g);
 
-    remove_edges(tempEdges, g); 
+    remove_edges(tempEdges, g);
 
     // Move {start, startDs} to the end, so they'll be first when we reverse
-    // the ordering (if they are required). 
+    // the ordering (if they are required).
     temp.erase(remove(temp.begin(), temp.end(), g.startDs));
     temp.erase(remove(temp.begin(), temp.end(), g.start));
-    if (proper_out_degree(g.startDs, g)) { 
-        temp.push_back(g.startDs); 
-    } 
-    if (!startIsRedundant(g)) { 
-        temp.push_back(g.start); 
-    } 
+    if (proper_out_degree(g.startDs, g)) {
+        temp.push_back(g.startDs);
+    }
+    if (!startIsRedundant(g)) {
+        temp.push_back(g.start);
+    }
 
     // Walk ordering, remove vertices that shouldn't be participating in state
     // numbering, such as accepts.
@@ -131,16 +131,16 @@ void getStateOrdering(NGHolder &g, const flat_set<NFAVertex> &tops,
 
 // Returns the number of states.
 static
-unordered_map<NFAVertex, u32> 
+unordered_map<NFAVertex, u32>
 getStateIndices(const NGHolder &h, const vector<NFAVertex> &ordering) {
-    unordered_map<NFAVertex, u32> states; 
+    unordered_map<NFAVertex, u32> states;
     for (const auto &v : vertices_range(h)) {
         states[v] = NO_STATE;
     }
 
     u32 stateNum = 0;
     for (auto v : ordering) {
-        DEBUG_PRINTF("assigning state num %u to vertex %zu\n", stateNum, 
+        DEBUG_PRINTF("assigning state num %u to vertex %zu\n", stateNum,
                      h[v].index);
         states[v] = stateNum++;
     }
@@ -183,15 +183,15 @@ void optimiseTightLoops(const NGHolder &g, vector<NFAVertex> &ordering) {
             continue;
         }
 
-        DEBUG_PRINTF("moving vertex %zu next to %zu\n", g[v].index, g[u].index); 
+        DEBUG_PRINTF("moving vertex %zu next to %zu\n", g[v].index, g[u].index);
 
         ordering.erase(v_it);
         ordering.insert(++u_it, v);
     }
 }
 
-unordered_map<NFAVertex, u32> 
-numberStates(NGHolder &h, const flat_set<NFAVertex> &tops) { 
+unordered_map<NFAVertex, u32>
+numberStates(NGHolder &h, const flat_set<NFAVertex> &tops) {
     DEBUG_PRINTF("numbering states for holder %p\n", &h);
 
     vector<NFAVertex> ordering;
@@ -199,10 +199,10 @@ numberStates(NGHolder &h, const flat_set<NFAVertex> &tops) {
 
     optimiseTightLoops(h, ordering);
 
-    return getStateIndices(h, ordering); 
+    return getStateIndices(h, ordering);
 }
 
-u32 countStates(const unordered_map<NFAVertex, u32> &state_ids) { 
+u32 countStates(const unordered_map<NFAVertex, u32> &state_ids) {
     if (state_ids.empty()) {
         return 0;
     }

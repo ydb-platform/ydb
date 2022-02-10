@@ -27,7 +27,7 @@
  */
 
 /** \file
- * \brief NG declaration. 
+ * \brief NG declaration.
  */
 
 #ifndef NG_H
@@ -42,7 +42,7 @@
 #include "util/compile_context.h"
 #include "util/depth.h"
 #include "util/graph.h"
-#include "util/noncopyable.h" 
+#include "util/noncopyable.h"
 #include "util/report_manager.h"
 
 #include <deque>
@@ -56,26 +56,26 @@ namespace ue2 {
 struct CompileContext;
 struct ue2_literal;
 
-class ExpressionInfo; 
+class ExpressionInfo;
 class RoseBuild;
 class SmallWriteBuild;
 
-class NG : noncopyable { 
+class NG : noncopyable {
 public:
-    NG(const CompileContext &in_cc, size_t num_patterns, 
-       unsigned in_somPrecision); 
+    NG(const CompileContext &in_cc, size_t num_patterns,
+       unsigned in_somPrecision);
     ~NG();
 
     /** \brief Consumes a pattern, returns false or throws a CompileError
      * exception if the graph cannot be consumed. */
-    bool addGraph(ExpressionInfo &expr, std::unique_ptr<NGHolder> g_ptr); 
+    bool addGraph(ExpressionInfo &expr, std::unique_ptr<NGHolder> g_ptr);
 
     /** \brief Consumes a graph, cut-down version of addGraph for use by SOM
      * processing. */
     bool addHolder(NGHolder &h);
 
-    /** \brief Adds a literal to Rose, used by literal shortcut passes (instead 
-     * of using \ref addGraph) */ 
+    /** \brief Adds a literal to Rose, used by literal shortcut passes (instead
+     * of using \ref addGraph) */
     bool addLiteral(const ue2_literal &lit, u32 expr_index, u32 external_report,
                     bool highlander, som_type som, bool quiet);
 
@@ -94,7 +94,7 @@ public:
     BoundaryReports boundary;
     const CompileContext cc;
 
-    const std::unique_ptr<SmallWriteBuild> smwr; //!< SmallWrite builder. 
+    const std::unique_ptr<SmallWriteBuild> smwr; //!< SmallWrite builder.
     const std::unique_ptr<RoseBuild> rose; //!< Rose builder.
 };
 
@@ -102,8 +102,8 @@ public:
  *
  * Shared with the small write compiler.
  */
-void reduceGraph(NGHolder &g, som_type som, bool utf8, 
-                 const CompileContext &cc); 
+void reduceGraph(NGHolder &g, som_type som, bool utf8,
+                 const CompileContext &cc);
 
 } // namespace ue2
 

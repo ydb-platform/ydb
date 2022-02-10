@@ -1,10 +1,10 @@
-#pragma once 
- 
-#include "mon_page.h" 
- 
+#pragma once
+
+#include "mon_page.h"
+
 #include <library/cpp/resource/resource.h>
- 
-namespace NMonitoring { 
+
+namespace NMonitoring {
     struct TResourceMonPage: public IMonPage {
     public:
         enum EResourceType {
@@ -13,7 +13,7 @@ namespace NMonitoring {
             JSON,
             CSS,
             JAVASCRIPT,
- 
+
             FONT_EOT,
             FONT_TTF,
             FONT_WOFF,
@@ -30,14 +30,14 @@ namespace NMonitoring {
             , ResourceType(resourceType)
         {
         }
- 
+
         void Output(NMonitoring::IMonHttpRequest& request) override;
- 
+
         void NotFound(NMonitoring::IMonHttpRequest& request) const;
- 
+
     private:
         TString ResourceName;
         EResourceType ResourceType;
     };
- 
+
 }

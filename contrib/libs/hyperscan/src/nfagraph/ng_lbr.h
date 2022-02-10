@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -26,8 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/** 
- * \file 
+/**
+ * \file
  * \brief Large Bounded Repeat (LBR) engine build code.
  */
 
@@ -35,7 +35,7 @@
 #define NG_LBR_H
 
 #include "ue2common.h"
-#include "util/bytecode_ptr.h" 
+#include "util/bytecode_ptr.h"
 
 #include <memory>
 #include <vector>
@@ -47,24 +47,24 @@ namespace ue2 {
 class CharReach;
 class NGHolder;
 class ReportManager;
-struct CastleProto; 
+struct CastleProto;
 struct CompileContext;
 struct Grey;
 
 /** \brief Construct an LBR engine from the given graph \p g. */
-bytecode_ptr<NFA> 
+bytecode_ptr<NFA>
 constructLBR(const NGHolder &g,
              const std::vector<std::vector<CharReach>> &triggers,
-             const CompileContext &cc, const ReportManager &rm); 
+             const CompileContext &cc, const ReportManager &rm);
 
-/** 
- * \brief Construct an LBR engine from the given CastleProto, which should 
- * contain only one repeat. 
- */ 
-bytecode_ptr<NFA> 
-constructLBR(const CastleProto &proto, 
+/**
+ * \brief Construct an LBR engine from the given CastleProto, which should
+ * contain only one repeat.
+ */
+bytecode_ptr<NFA>
+constructLBR(const CastleProto &proto,
              const std::vector<std::vector<CharReach>> &triggers,
-             const CompileContext &cc, const ReportManager &rm); 
+             const CompileContext &cc, const ReportManager &rm);
 
 } // namespace ue2
 

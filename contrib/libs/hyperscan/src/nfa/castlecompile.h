@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -26,8 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/** 
- * \file 
+/**
+ * \file
  * \brief Castle: multi-tenant repeat engine, compiler code.
  */
 
@@ -37,14 +37,14 @@
 #include "nfa_kind.h"
 #include "ue2common.h"
 #include "nfagraph/ng_repeat.h"
-#include "util/bytecode_ptr.h" 
+#include "util/bytecode_ptr.h"
 #include "util/depth.h"
-#include "util/flat_containers.h" 
+#include "util/flat_containers.h"
 
 #include <map>
 #include <memory>
 #include <set>
-#include <unordered_map> 
+#include <unordered_map>
 #include <vector>
 
 struct NFA;
@@ -53,7 +53,7 @@ namespace ue2 {
 
 class CharReach;
 class NGHolder;
-class ReportManager; 
+class ReportManager;
 struct CompileContext;
 
 /**
@@ -68,7 +68,7 @@ struct CompileContext;
  */
 struct CastleProto {
     static constexpr size_t max_occupancy = 65536; // arbitrary limit
-    CastleProto(nfa_kind k, const PureRepeat &pr); 
+    CastleProto(nfa_kind k, const PureRepeat &pr);
     const CharReach &reach() const;
 
     /** \brief Add a new repeat. */
@@ -90,16 +90,16 @@ struct CastleProto {
     std::map<u32, PureRepeat> repeats;
 
     /** \brief Mapping from report to associated tops. */
-    std::unordered_map<ReportID, flat_set<u32>> report_map; 
+    std::unordered_map<ReportID, flat_set<u32>> report_map;
 
     /**
      * \brief Next top id to use. Repeats may be removed without top remapping,
      * so we track this explicitly instead of using repeats.size().
      */
     u32 next_top = 1;
- 
-    /** \brief Kind for this engine. */ 
-    nfa_kind kind; 
+
+    /** \brief Kind for this engine. */
+    nfa_kind kind;
 };
 
 std::set<ReportID> all_reports(const CastleProto &proto);
@@ -122,15 +122,15 @@ void remapCastleTops(CastleProto &proto, std::map<u32, u32> &top_map);
  * NOTE: Tops must be contiguous, i.e. \ref remapCastleTops must have been run
  * first.
  */
-bytecode_ptr<NFA> 
+bytecode_ptr<NFA>
 buildCastle(const CastleProto &proto,
             const std::map<u32, std::vector<std::vector<CharReach>>> &triggers,
-            const CompileContext &cc, const ReportManager &rm); 
+            const CompileContext &cc, const ReportManager &rm);
 
 /**
- * \brief Merge two CastleProto prototypes together, if possible. If a 
- * particular repeat from c2 is already in c1, then it will be reused rather 
- * than adding a duplicate repeat. 
+ * \brief Merge two CastleProto prototypes together, if possible. If a
+ * particular repeat from c2 is already in c1, then it will be reused rather
+ * than adding a duplicate repeat.
  *
  * Returns true if merge of all repeats in c2 into c1 succeeds, and fills
  * mapping with the repeat indices.
@@ -158,12 +158,12 @@ bool is_equal(const CastleProto &c1, const CastleProto &c2);
  * of the reports in the given set.
  */
 bool requiresDedupe(const CastleProto &proto,
-                    const flat_set<ReportID> &reports); 
+                    const flat_set<ReportID> &reports);
 
 /**
  * \brief Build an NGHolder from a CastleProto.
  */
-std::unique_ptr<NGHolder> makeHolder(const CastleProto &castle, 
+std::unique_ptr<NGHolder> makeHolder(const CastleProto &castle,
                                      const CompileContext &cc);
 
 } // namespace ue2

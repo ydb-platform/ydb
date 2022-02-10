@@ -60,9 +60,9 @@ namespace {
 
 /** Depths from start, startDs for this graph. */
 struct InitDepths {
-    explicit InitDepths(const NGHolder &g) 
-        : start(calcDepthsFrom(g, g.start)), 
-          startDs(calcDepthsFrom(g, g.startDs)) {} 
+    explicit InitDepths(const NGHolder &g)
+        : start(calcDepthsFrom(g, g.start)),
+          startDs(calcDepthsFrom(g, g.startDs)) {}
 
     depth maxDist(const NGHolder &g, NFAVertex v) const {
         u32 idx = g[v].index;

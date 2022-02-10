@@ -98,12 +98,12 @@ extern "C"
  *      The library was unable to allocate temporary storage used during
  *      compilation time.
  *
- *    - *Allocator returned misaligned memory* 
- * 
- *      The memory allocator (either malloc() or the allocator set with @ref 
- *      hs_set_allocator()) did not correctly return memory suitably aligned 
- *      for the largest representable data type on this platform. 
- * 
+ *    - *Allocator returned misaligned memory*
+ *
+ *      The memory allocator (either malloc() or the allocator set with @ref
+ *      hs_set_allocator()) did not correctly return memory suitably aligned
+ *      for the largest representable data type on this platform.
+ *
  *    - *Internal error*
  *
  *      An unexpected error occurred: if this error is reported, please contact
@@ -164,28 +164,28 @@ typedef struct hs_platform_info {
 
 /**
  * A type containing information related to an expression that is returned by
- * @ref hs_expression_info() or @ref hs_expression_ext_info. 
+ * @ref hs_expression_info() or @ref hs_expression_ext_info.
  */
 typedef struct hs_expr_info {
     /**
      * The minimum length in bytes of a match for the pattern.
-     * 
-     * Note: in some cases when using advanced features to suppress matches 
-     * (such as extended parameters or the @ref HS_FLAG_SINGLEMATCH flag) this 
-     * may represent a conservative lower bound for the true minimum length of 
-     * a match. 
+     *
+     * Note: in some cases when using advanced features to suppress matches
+     * (such as extended parameters or the @ref HS_FLAG_SINGLEMATCH flag) this
+     * may represent a conservative lower bound for the true minimum length of
+     * a match.
      */
     unsigned int min_width;
 
     /**
      * The maximum length in bytes of a match for the pattern. If the pattern
-     * has an unbounded maximum length, this will be set to the maximum value 
-     * of an unsigned int (UINT_MAX). 
-     * 
-     * Note: in some cases when using advanced features to suppress matches 
-     * (such as extended parameters or the @ref HS_FLAG_SINGLEMATCH flag) this 
-     * may represent a conservative upper bound for the true maximum length of 
-     * a match. 
+     * has an unbounded maximum length, this will be set to the maximum value
+     * of an unsigned int (UINT_MAX).
+     *
+     * Note: in some cases when using advanced features to suppress matches
+     * (such as extended parameters or the @ref HS_FLAG_SINGLEMATCH flag) this
+     * may represent a conservative upper bound for the true maximum length of
+     * a match.
      */
     unsigned int max_width;
 
@@ -217,8 +217,8 @@ typedef struct hs_expr_info {
 
 /**
  * A structure containing additional parameters related to an expression,
- * passed in at build time to @ref hs_compile_ext_multi() or @ref 
- * hs_expression_ext_info. 
+ * passed in at build time to @ref hs_compile_ext_multi() or @ref
+ * hs_expression_ext_info.
  *
  * These parameters allow the set of matches produced by a pattern to be
  * constrained at compile time, rather than relying on the application to
@@ -251,20 +251,20 @@ typedef struct hs_expr_ext {
      * @ref HS_EXT_FLAG_MIN_LENGTH flag in the hs_expr_ext::flags field.
      */
     unsigned long long min_length;
- 
-    /** 
-     * Allow patterns to approximately match within this edit distance. To use 
-     * this parameter, set the @ref HS_EXT_FLAG_EDIT_DISTANCE flag in the 
-     * hs_expr_ext::flags field. 
-     */ 
-    unsigned edit_distance; 
- 
-    /** 
-     * Allow patterns to approximately match within this Hamming distance. To 
-     * use this parameter, set the @ref HS_EXT_FLAG_HAMMING_DISTANCE flag in the 
-     * hs_expr_ext::flags field. 
-     */ 
-    unsigned hamming_distance; 
+
+    /**
+     * Allow patterns to approximately match within this edit distance. To use
+     * this parameter, set the @ref HS_EXT_FLAG_EDIT_DISTANCE flag in the
+     * hs_expr_ext::flags field.
+     */
+    unsigned edit_distance;
+
+    /**
+     * Allow patterns to approximately match within this Hamming distance. To
+     * use this parameter, set the @ref HS_EXT_FLAG_HAMMING_DISTANCE flag in the
+     * hs_expr_ext::flags field.
+     */
+    unsigned hamming_distance;
 } hs_expr_ext_t;
 
 /**
@@ -285,12 +285,12 @@ typedef struct hs_expr_ext {
 /** Flag indicating that the hs_expr_ext::min_length field is used. */
 #define HS_EXT_FLAG_MIN_LENGTH      4ULL
 
-/** Flag indicating that the hs_expr_ext::edit_distance field is used. */ 
-#define HS_EXT_FLAG_EDIT_DISTANCE   8ULL 
- 
-/** Flag indicating that the hs_expr_ext::hamming_distance field is used. */ 
-#define HS_EXT_FLAG_HAMMING_DISTANCE 16ULL 
- 
+/** Flag indicating that the hs_expr_ext::edit_distance field is used. */
+#define HS_EXT_FLAG_EDIT_DISTANCE   8ULL
+
+/** Flag indicating that the hs_expr_ext::hamming_distance field is used. */
+#define HS_EXT_FLAG_HAMMING_DISTANCE 16ULL
+
 /** @} */
 
 /**
@@ -303,9 +303,9 @@ typedef struct hs_expr_ext {
  * @param expression
  *      The NULL-terminated expression to parse. Note that this string must
  *      represent ONLY the pattern to be matched, with no delimiters or flags;
- *      any global flags should be specified with the @p flags argument. For 
+ *      any global flags should be specified with the @p flags argument. For
  *      example, the expression `/abc?def/i` should be compiled by providing
- *      `abc?def` as the @p expression, and @ref HS_FLAG_CASELESS as the @a 
+ *      `abc?def` as the @p expression, and @ref HS_FLAG_CASELESS as the @a
  *      flags.
  *
  * @param flags
@@ -357,10 +357,10 @@ typedef struct hs_expr_ext {
  *      HS_COMPILER_ERROR on failure, with details provided in the error
  *      parameter.
  */
-hs_error_t HS_CDECL hs_compile(const char *expression, unsigned int flags, 
-                               unsigned int mode, 
-                               const hs_platform_info_t *platform, 
-                               hs_database_t **db, hs_compile_error_t **error); 
+hs_error_t HS_CDECL hs_compile(const char *expression, unsigned int flags,
+                               unsigned int mode,
+                               const hs_platform_info_t *platform,
+                               hs_database_t **db, hs_compile_error_t **error);
 
 /**
  * The multiple regular expression compiler.
@@ -376,8 +376,8 @@ hs_error_t HS_CDECL hs_compile(const char *expression, unsigned int flags,
  *      hs_compile()) these strings must contain only the pattern to be
  *      matched, with no delimiters or flags. For example, the expression
  *      `/abc?def/i` should be compiled by providing `abc?def` as the first
- *      string in the @p expressions array, and @ref HS_FLAG_CASELESS as the 
- *      first value in the @p flags array. 
+ *      string in the @p expressions array, and @ref HS_FLAG_CASELESS as the
+ *      first value in the @p flags array.
  *
  * @param flags
  *      Array of flags which modify the behaviour of each expression. Multiple
@@ -436,20 +436,20 @@ hs_error_t HS_CDECL hs_compile(const char *expression, unsigned int flags,
  *
  * @return
  *      @ref HS_SUCCESS is returned on successful compilation; @ref
- *      HS_COMPILER_ERROR on failure, with details provided in the @p error 
+ *      HS_COMPILER_ERROR on failure, with details provided in the @p error
  *      parameter.
  *
  */
-hs_error_t HS_CDECL hs_compile_multi(const char *const *expressions, 
-                                     const unsigned int *flags, 
-                                     const unsigned int *ids, 
-                                     unsigned int elements, unsigned int mode, 
-                                     const hs_platform_info_t *platform, 
-                                     hs_database_t **db, 
-                                     hs_compile_error_t **error); 
+hs_error_t HS_CDECL hs_compile_multi(const char *const *expressions,
+                                     const unsigned int *flags,
+                                     const unsigned int *ids,
+                                     unsigned int elements, unsigned int mode,
+                                     const hs_platform_info_t *platform,
+                                     hs_database_t **db,
+                                     hs_compile_error_t **error);
 
 /**
- * The multiple regular expression compiler with extended parameter support. 
+ * The multiple regular expression compiler with extended parameter support.
  *
  * This function call compiles a group of expressions into a database in the
  * same way as @ref hs_compile_multi(), but allows additional parameters to be
@@ -460,8 +460,8 @@ hs_error_t HS_CDECL hs_compile_multi(const char *const *expressions,
  *      hs_compile()) these strings must contain only the pattern to be
  *      matched, with no delimiters or flags. For example, the expression
  *      `/abc?def/i` should be compiled by providing `abc?def` as the first
- *      string in the @p expressions array, and @ref HS_FLAG_CASELESS as the 
- *      first value in the @p flags array. 
+ *      string in the @p expressions array, and @ref HS_FLAG_CASELESS as the
+ *      first value in the @p flags array.
  *
  * @param flags
  *      Array of flags which modify the behaviour of each expression. Multiple
@@ -527,11 +527,11 @@ hs_error_t HS_CDECL hs_compile_multi(const char *const *expressions,
  *
  * @return
  *      @ref HS_SUCCESS is returned on successful compilation; @ref
- *      HS_COMPILER_ERROR on failure, with details provided in the @p error 
+ *      HS_COMPILER_ERROR on failure, with details provided in the @p error
  *      parameter.
  *
  */
-hs_error_t HS_CDECL hs_compile_ext_multi(const char *const *expressions, 
+hs_error_t HS_CDECL hs_compile_ext_multi(const char *const *expressions,
                                 const unsigned int *flags,
                                 const unsigned int *ids,
                                 const hs_expr_ext_t *const *ext,
@@ -707,30 +707,30 @@ hs_error_t HS_CDECL hs_compile_lit_multi(const char * const *expressions,
  * @return
  *      @ref HS_SUCCESS on success, other values on failure.
  */
-hs_error_t HS_CDECL hs_free_compile_error(hs_compile_error_t *error); 
+hs_error_t HS_CDECL hs_free_compile_error(hs_compile_error_t *error);
 
 /**
  * Utility function providing information about a regular expression. The
  * information provided in @ref hs_expr_info_t includes the minimum and maximum
  * width of a pattern match.
  *
- * Note: successful analysis of an expression with this function does not imply 
- * that compilation of the same expression (via @ref hs_compile(), @ref 
- * hs_compile_multi() or @ref hs_compile_ext_multi()) would succeed. This 
- * function may return @ref HS_SUCCESS for regular expressions that Hyperscan 
- * cannot compile. 
- * 
- * Note: some per-pattern flags (such as @ref HS_FLAG_ALLOWEMPTY, @ref 
- * HS_FLAG_SOM_LEFTMOST) are accepted by this call, but as they do not affect 
- * the properties returned in the @ref hs_expr_info_t structure, they will not 
- * affect the outcome of this function. 
- * 
+ * Note: successful analysis of an expression with this function does not imply
+ * that compilation of the same expression (via @ref hs_compile(), @ref
+ * hs_compile_multi() or @ref hs_compile_ext_multi()) would succeed. This
+ * function may return @ref HS_SUCCESS for regular expressions that Hyperscan
+ * cannot compile.
+ *
+ * Note: some per-pattern flags (such as @ref HS_FLAG_ALLOWEMPTY, @ref
+ * HS_FLAG_SOM_LEFTMOST) are accepted by this call, but as they do not affect
+ * the properties returned in the @ref hs_expr_info_t structure, they will not
+ * affect the outcome of this function.
+ *
  * @param expression
  *      The NULL-terminated expression to parse. Note that this string must
  *      represent ONLY the pattern to be matched, with no delimiters or flags;
- *      any global flags should be specified with the @p flags argument.  For 
+ *      any global flags should be specified with the @p flags argument.  For
  *      example, the expression `/abc?def/i` should be compiled by providing
- *      `abc?def` as the @p expression, and @ref HS_FLAG_CASELESS as the @a 
+ *      `abc?def` as the @p expression, and @ref HS_FLAG_CASELESS as the @a
  *      flags.
  *
  * @param flags
@@ -770,84 +770,84 @@ hs_error_t HS_CDECL hs_free_compile_error(hs_compile_error_t *error);
  *      HS_COMPILER_ERROR on failure, with details provided in the error
  *      parameter.
  */
-hs_error_t HS_CDECL hs_expression_info(const char *expression, 
-                                       unsigned int flags, 
-                                       hs_expr_info_t **info, 
-                                       hs_compile_error_t **error); 
+hs_error_t HS_CDECL hs_expression_info(const char *expression,
+                                       unsigned int flags,
+                                       hs_expr_info_t **info,
+                                       hs_compile_error_t **error);
 
 /**
- * Utility function providing information about a regular expression, with 
- * extended parameter support. The information provided in @ref hs_expr_info_t 
- * includes the minimum and maximum width of a pattern match. 
- * 
- * Note: successful analysis of an expression with this function does not imply 
- * that compilation of the same expression (via @ref hs_compile(), @ref 
- * hs_compile_multi() or @ref hs_compile_ext_multi()) would succeed. This 
- * function may return @ref HS_SUCCESS for regular expressions that Hyperscan 
- * cannot compile. 
- * 
- * Note: some per-pattern flags (such as @ref HS_FLAG_ALLOWEMPTY, @ref 
- * HS_FLAG_SOM_LEFTMOST) are accepted by this call, but as they do not affect 
- * the properties returned in the @ref hs_expr_info_t structure, they will not 
- * affect the outcome of this function. 
- * 
- * @param expression 
- *      The NULL-terminated expression to parse. Note that this string must 
- *      represent ONLY the pattern to be matched, with no delimiters or flags; 
- *      any global flags should be specified with the @p flags argument.  For 
- *      example, the expression `/abc?def/i` should be compiled by providing 
- *      `abc?def` as the @p expression, and @ref HS_FLAG_CASELESS as the @a 
- *      flags. 
- * 
- * @param flags 
- *      Flags which modify the behaviour of the expression. Multiple flags may 
- *      be used by ORing them together. Valid values are: 
- *       - HS_FLAG_CASELESS - Matching will be performed case-insensitively. 
- *       - HS_FLAG_DOTALL - Matching a `.` will not exclude newlines. 
- *       - HS_FLAG_MULTILINE - `^` and `$` anchors match any newlines in data. 
- *       - HS_FLAG_SINGLEMATCH - Only one match will be generated by the 
- *                               expression per stream. 
- *       - HS_FLAG_ALLOWEMPTY - Allow expressions which can match against an 
- *                              empty string, such as `.*`. 
- *       - HS_FLAG_UTF8 - Treat this pattern as a sequence of UTF-8 characters. 
- *       - HS_FLAG_UCP - Use Unicode properties for character classes. 
- *       - HS_FLAG_PREFILTER - Compile pattern in prefiltering mode. 
- *       - HS_FLAG_SOM_LEFTMOST - Report the leftmost start of match offset 
- *                                when a match is found. 
+ * Utility function providing information about a regular expression, with
+ * extended parameter support. The information provided in @ref hs_expr_info_t
+ * includes the minimum and maximum width of a pattern match.
+ *
+ * Note: successful analysis of an expression with this function does not imply
+ * that compilation of the same expression (via @ref hs_compile(), @ref
+ * hs_compile_multi() or @ref hs_compile_ext_multi()) would succeed. This
+ * function may return @ref HS_SUCCESS for regular expressions that Hyperscan
+ * cannot compile.
+ *
+ * Note: some per-pattern flags (such as @ref HS_FLAG_ALLOWEMPTY, @ref
+ * HS_FLAG_SOM_LEFTMOST) are accepted by this call, but as they do not affect
+ * the properties returned in the @ref hs_expr_info_t structure, they will not
+ * affect the outcome of this function.
+ *
+ * @param expression
+ *      The NULL-terminated expression to parse. Note that this string must
+ *      represent ONLY the pattern to be matched, with no delimiters or flags;
+ *      any global flags should be specified with the @p flags argument.  For
+ *      example, the expression `/abc?def/i` should be compiled by providing
+ *      `abc?def` as the @p expression, and @ref HS_FLAG_CASELESS as the @a
+ *      flags.
+ *
+ * @param flags
+ *      Flags which modify the behaviour of the expression. Multiple flags may
+ *      be used by ORing them together. Valid values are:
+ *       - HS_FLAG_CASELESS - Matching will be performed case-insensitively.
+ *       - HS_FLAG_DOTALL - Matching a `.` will not exclude newlines.
+ *       - HS_FLAG_MULTILINE - `^` and `$` anchors match any newlines in data.
+ *       - HS_FLAG_SINGLEMATCH - Only one match will be generated by the
+ *                               expression per stream.
+ *       - HS_FLAG_ALLOWEMPTY - Allow expressions which can match against an
+ *                              empty string, such as `.*`.
+ *       - HS_FLAG_UTF8 - Treat this pattern as a sequence of UTF-8 characters.
+ *       - HS_FLAG_UCP - Use Unicode properties for character classes.
+ *       - HS_FLAG_PREFILTER - Compile pattern in prefiltering mode.
+ *       - HS_FLAG_SOM_LEFTMOST - Report the leftmost start of match offset
+ *                                when a match is found.
  *       - HS_FLAG_COMBINATION - Parse the expression in logical combination
  *                               syntax.
  *       - HS_FLAG_QUIET - Ignore match reporting for this expression. Used for
  *                         the sub-expressions in logical combinations.
- * 
- * @param ext 
- *      A pointer to a filled @ref hs_expr_ext_t structure that defines 
- *      extended behaviour for this pattern. NULL may be specified if no 
- *      extended parameters are needed. 
- * 
- * @param info 
- *      On success, a pointer to the pattern information will be returned in 
- *      this parameter, or NULL on failure. This structure is allocated using 
- *      the allocator supplied in @ref hs_set_allocator() (or malloc() if no 
- *      allocator was set) and should be freed by the caller. 
- * 
- * @param error 
- *      If the call fails, a pointer to a @ref hs_compile_error_t will be 
- *      returned, providing details of the error condition. The caller is 
- *      responsible for deallocating the buffer using the @ref 
- *      hs_free_compile_error() function. 
- * 
- * @return 
- *      @ref HS_SUCCESS is returned on successful compilation; @ref 
- *      HS_COMPILER_ERROR on failure, with details provided in the error 
- *      parameter. 
- */ 
-hs_error_t HS_CDECL hs_expression_ext_info(const char *expression, 
-                                           unsigned int flags, 
-                                           const hs_expr_ext_t *ext, 
-                                           hs_expr_info_t **info, 
-                                           hs_compile_error_t **error); 
- 
-/** 
+ *
+ * @param ext
+ *      A pointer to a filled @ref hs_expr_ext_t structure that defines
+ *      extended behaviour for this pattern. NULL may be specified if no
+ *      extended parameters are needed.
+ *
+ * @param info
+ *      On success, a pointer to the pattern information will be returned in
+ *      this parameter, or NULL on failure. This structure is allocated using
+ *      the allocator supplied in @ref hs_set_allocator() (or malloc() if no
+ *      allocator was set) and should be freed by the caller.
+ *
+ * @param error
+ *      If the call fails, a pointer to a @ref hs_compile_error_t will be
+ *      returned, providing details of the error condition. The caller is
+ *      responsible for deallocating the buffer using the @ref
+ *      hs_free_compile_error() function.
+ *
+ * @return
+ *      @ref HS_SUCCESS is returned on successful compilation; @ref
+ *      HS_COMPILER_ERROR on failure, with details provided in the error
+ *      parameter.
+ */
+hs_error_t HS_CDECL hs_expression_ext_info(const char *expression,
+                                           unsigned int flags,
+                                           const hs_expr_ext_t *ext,
+                                           hs_expr_info_t **info,
+                                           hs_compile_error_t **error);
+
+/**
  * Populates the platform information based on the current host.
  *
  * @param platform
@@ -857,7 +857,7 @@ hs_error_t HS_CDECL hs_expression_ext_info(const char *expression,
  * @return
  *      @ref HS_SUCCESS on success, other values on failure.
  */
-hs_error_t HS_CDECL hs_populate_platform(hs_platform_info_t *platform); 
+hs_error_t HS_CDECL hs_populate_platform(hs_platform_info_t *platform);
 
 /**
  * @defgroup HS_PATTERN_FLAG Pattern flags
@@ -1026,14 +1026,14 @@ hs_error_t HS_CDECL hs_populate_platform(hs_platform_info_t *platform);
  */
 #define HS_CPU_FEATURES_AVX2             (1ULL << 2)
 
-/** 
- * CPU features flag - Intel(R) Advanced Vector Extensions 512 (Intel(R) AVX512) 
- * 
- * Setting this flag indicates that the target platform supports AVX512 
- * instructions, specifically AVX-512BW. Using AVX512 implies the use of AVX2. 
- */ 
-#define HS_CPU_FEATURES_AVX512           (1ULL << 3) 
- 
+/**
+ * CPU features flag - Intel(R) Advanced Vector Extensions 512 (Intel(R) AVX512)
+ *
+ * Setting this flag indicates that the target platform supports AVX512
+ * instructions, specifically AVX-512BW. Using AVX512 implies the use of AVX2.
+ */
+#define HS_CPU_FEATURES_AVX512           (1ULL << 3)
+
 /**
  * CPU features flag - Intel(R) Advanced Vector Extensions 512
  * Vector Byte Manipulation Instructions (Intel(R) AVX512VBMI)
@@ -1099,30 +1099,30 @@ hs_error_t HS_CDECL hs_populate_platform(hs_platform_info_t *platform);
  */
 #define HS_TUNE_FAMILY_BDW 5
 
-/** 
- * Tuning Parameter - Intel(R) microarchitecture code name Skylake 
- * 
- * This indicates that the compiled database should be tuned for the 
- * Skylake microarchitecture. 
- */ 
-#define HS_TUNE_FAMILY_SKL 6 
- 
-/** 
- * Tuning Parameter - Intel(R) microarchitecture code name Skylake Server 
- * 
- * This indicates that the compiled database should be tuned for the 
- * Skylake Server microarchitecture. 
- */ 
-#define HS_TUNE_FAMILY_SKX 7 
- 
-/** 
- * Tuning Parameter - Intel(R) microarchitecture code name Goldmont 
- * 
- * This indicates that the compiled database should be tuned for the 
- * Goldmont microarchitecture. 
- */ 
-#define HS_TUNE_FAMILY_GLM 8 
- 
+/**
+ * Tuning Parameter - Intel(R) microarchitecture code name Skylake
+ *
+ * This indicates that the compiled database should be tuned for the
+ * Skylake microarchitecture.
+ */
+#define HS_TUNE_FAMILY_SKL 6
+
+/**
+ * Tuning Parameter - Intel(R) microarchitecture code name Skylake Server
+ *
+ * This indicates that the compiled database should be tuned for the
+ * Skylake Server microarchitecture.
+ */
+#define HS_TUNE_FAMILY_SKX 7
+
+/**
+ * Tuning Parameter - Intel(R) microarchitecture code name Goldmont
+ *
+ * This indicates that the compiled database should be tuned for the
+ * Goldmont microarchitecture.
+ */
+#define HS_TUNE_FAMILY_GLM 8
+
 /**
  * Tuning Parameter - Intel(R) microarchitecture code name Icelake
  *

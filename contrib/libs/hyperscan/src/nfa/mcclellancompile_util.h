@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -29,23 +29,23 @@
 #ifndef MCCLELLAN_COMPILE_UTIL_H
 #define MCCLELLAN_COMPILE_UTIL_H
 
-#include "rdfa.h" 
+#include "rdfa.h"
 #include "ue2common.h"
 
 #include <set>
 
 namespace ue2 {
 
-u32 remove_leading_dots(raw_dfa &raw); 
+u32 remove_leading_dots(raw_dfa &raw);
 
-/** 
- * \brief Clear reports on any states that are deeper than \a max_offset from 
- * start of stream. 
- * 
- * Returns false if no changes are made to the DFA. 
- */ 
-bool clear_deeper_reports(raw_dfa &raw, u32 max_offset); 
- 
+/**
+ * \brief Clear reports on any states that are deeper than \a max_offset from
+ * start of stream.
+ *
+ * Returns false if no changes are made to the DFA.
+ */
+bool clear_deeper_reports(raw_dfa &raw, u32 max_offset);
+
 std::set<ReportID> all_reports(const raw_dfa &rdfa);
 bool has_eod_accepts(const raw_dfa &rdfa);
 bool has_non_eod_accepts(const raw_dfa &rdfa);
@@ -57,15 +57,15 @@ size_t hash_dfa_no_reports(const raw_dfa &rdfa);
 /** \brief Compute a simple hash of this raw_dfa, including its reports. */
 size_t hash_dfa(const raw_dfa &rdfa);
 
-bool can_die_early(const raw_dfa &raw, u32 age_limit); 
- 
-/** 
- * \brief Returns true if this DFA cannot match, i.e. its start state is 
- * DEAD_STATE. 
- */ 
-bool is_dead(const raw_dfa &rdfa); 
- 
- 
+bool can_die_early(const raw_dfa &raw, u32 age_limit);
+
+/**
+ * \brief Returns true if this DFA cannot match, i.e. its start state is
+ * DEAD_STATE.
+ */
+bool is_dead(const raw_dfa &rdfa);
+
+
 } // namespace ue2
 
 #endif

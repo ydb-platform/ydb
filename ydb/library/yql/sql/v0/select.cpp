@@ -9,7 +9,7 @@
 
 using namespace NYql;
 
-namespace NSQLTranslationV0 { 
+namespace NSQLTranslationV0 {
 
 class TSubqueryNode: public INode {
 public:
@@ -590,46 +590,46 @@ public:
         return false;
     }
 
-    bool SetSamplingOptions( 
-            TContext& ctx, 
-            TPosition pos, 
-            ESampleMode mode, 
-            TNodePtr samplingRate, 
-            TNodePtr samplingSeed) override { 
+    bool SetSamplingOptions(
+            TContext& ctx,
+            TPosition pos,
+            ESampleMode mode,
+            TNodePtr samplingRate,
+            TNodePtr samplingSeed) override {
         Y_UNUSED(pos);
         TString modeName;
         if (!samplingSeed) {
             samplingSeed = Y("Int32", Q("0"));
-        } 
- 
-        switch (mode) { 
-        case ESampleMode::Auto: 
-            modeName = "bernoulli"; 
+        }
+
+        switch (mode) {
+        case ESampleMode::Auto:
+            modeName = "bernoulli";
             samplingRate = Y("*", samplingRate, Y("Double", Q("100")));
-            break; 
-        case ESampleMode::Bernoulli: 
-            modeName = "bernoulli"; 
-            break; 
-        case ESampleMode::System: 
-            modeName = "system"; 
-            break; 
-        } 
- 
+            break;
+        case ESampleMode::Bernoulli:
+            modeName = "bernoulli";
+            break;
+        case ESampleMode::System:
+            modeName = "system";
+            break;
+        }
+
         samplingRate = Y("Ensure", samplingRate, Y(">", samplingRate, Y("Double", Q("0"))), Y("String", Q("Expected sampling rate to be positive")));
         samplingRate = Y("Ensure", samplingRate, Y("<=", samplingRate, Y("Double", Q("100"))), Y("String", Q("Sampling rate is over 100%")));
         auto sampleSettings = Q(Y(Q(modeName), Y("EvaluateAtom", Y("ToString", samplingRate)), Y("EvaluateAtom", Y("ToString", samplingSeed))));
-        auto sampleOption = Q(Y(Q("sample"), sampleSettings)); 
-        if (Table.Options) { 
+        auto sampleOption = Q(Y(Q("sample"), sampleSettings));
+        if (Table.Options) {
             if (!Table.Options->Init(ctx, this)) {
                 return false;
             }
-            Table.Options = L(Table.Options, sampleOption); 
-        } else { 
-            Table.Options = Y(sampleOption); 
-        } 
-        return true; 
-    } 
- 
+            Table.Options = L(Table.Options, sampleOption);
+        } else {
+            Table.Options = Y(sampleOption);
+        }
+        return true;
+    }
+
     TNodePtr Build(TContext& ctx) override {
         if (!Table.Keys->Init(ctx, nullptr)) {
             return nullptr;
@@ -1199,7 +1199,7 @@ public:
                 );
             }
         } else if (Having) {
-            ctx.Error(Having->GetPos()) << "HAVING with meaning GROUP BY () should be with aggregation function."; 
+            ctx.Error(Having->GetPos()) << "HAVING with meaning GROUP BY () should be with aggregation function.";
             hasError = true;
         } else if (!Distinct && !GroupBy.empty()) {
             ctx.Error(Pos) << "No aggregations were specified";
@@ -2368,4 +2368,4 @@ TNodePtr BuildSelectResult(TPosition pos, TSourcePtr source, bool writeResult, b
     return new TSelectResultNode(pos, std::move(source), writeResult, inSubquery);
 }
 
-} // namespace NSQLTranslationV0 
+} // namespace NSQLTranslationV0

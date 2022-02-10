@@ -6,28 +6,28 @@ A lot of thanks, regarding outputting of colors, goes to the Pygments project:
 everything has been highly optimized.)
 http://pygments.org/
 """
-from __future__ import unicode_literals 
- 
+from __future__ import unicode_literals
+
 from prompt_toolkit.filters import to_simple_filter, Condition
-from prompt_toolkit.layout.screen import Size 
-from prompt_toolkit.renderer import Output 
-from prompt_toolkit.styles import ANSI_COLOR_NAMES 
- 
+from prompt_toolkit.layout.screen import Size
+from prompt_toolkit.renderer import Output
+from prompt_toolkit.styles import ANSI_COLOR_NAMES
+
 from six.moves import range
-import array 
-import errno 
+import array
+import errno
 import os
-import six 
- 
-__all__ = ( 
-    'Vt100_Output', 
-) 
- 
- 
-FG_ANSI_COLORS = { 
+import six
+
+__all__ = (
+    'Vt100_Output',
+)
+
+
+FG_ANSI_COLORS = {
     'ansidefault': 39,
- 
-    # Low intensity. 
+
+    # Low intensity.
     'ansiblack':       30,
     'ansidarkred':     31,
     'ansidarkgreen':   32,
@@ -36,8 +36,8 @@ FG_ANSI_COLORS = {
     'ansipurple':      35,
     'ansiteal':        36,
     'ansilightgray':   37,
- 
-    # High intensity. 
+
+    # High intensity.
     'ansidarkgray':    90,
     'ansired':         91,
     'ansigreen':       92,
@@ -46,12 +46,12 @@ FG_ANSI_COLORS = {
     'ansifuchsia':     95,
     'ansiturquoise':   96,
     'ansiwhite':       97,
-} 
- 
-BG_ANSI_COLORS = { 
+}
+
+BG_ANSI_COLORS = {
     'ansidefault':     49,
- 
-    # Low intensity. 
+
+    # Low intensity.
     'ansiblack':       40,
     'ansidarkred':     41,
     'ansidarkgreen':   42,
@@ -60,8 +60,8 @@ BG_ANSI_COLORS = {
     'ansipurple':      45,
     'ansiteal':        46,
     'ansilightgray':   47,
- 
-    # High intensity. 
+
+    # High intensity.
     'ansidarkgray':    100,
     'ansired':         101,
     'ansigreen':       102,
@@ -70,8 +70,8 @@ BG_ANSI_COLORS = {
     'ansifuchsia':     105,
     'ansiturquoise':   106,
     'ansiwhite':       107,
-} 
- 
+}
+
 
 ANSI_COLORS_TO_RGB = {
     'ansidefault':   (0x00, 0x00, 0x00),  # Don't use, 'default' doesn't really have a value.
@@ -98,11 +98,11 @@ ANSI_COLORS_TO_RGB = {
 }
 
 
-assert set(FG_ANSI_COLORS) == set(ANSI_COLOR_NAMES) 
-assert set(BG_ANSI_COLORS) == set(ANSI_COLOR_NAMES) 
+assert set(FG_ANSI_COLORS) == set(ANSI_COLOR_NAMES)
+assert set(BG_ANSI_COLORS) == set(ANSI_COLOR_NAMES)
 assert set(ANSI_COLORS_TO_RGB) == set(ANSI_COLOR_NAMES)
- 
- 
+
+
 def _get_closest_ansi_color(r, g, b, exclude=()):
     """
     Find closest ANSI color. Return it by name.
@@ -238,43 +238,43 @@ _16_bg_colors = _16ColorCache(bg=True)
 _256_colors = _256ColorCache()
 
 
-class _EscapeCodeCache(dict): 
-    """ 
-    Cache for VT100 escape codes. It maps 
-    (fgcolor, bgcolor, bold, underline, reverse) tuples to VT100 escape sequences. 
- 
-    :param true_color: When True, use 24bit colors instead of 256 colors. 
-    """ 
+class _EscapeCodeCache(dict):
+    """
+    Cache for VT100 escape codes. It maps
+    (fgcolor, bgcolor, bold, underline, reverse) tuples to VT100 escape sequences.
+
+    :param true_color: When True, use 24bit colors instead of 256 colors.
+    """
     def __init__(self, true_color=False, ansi_colors_only=False):
-        assert isinstance(true_color, bool) 
-        self.true_color = true_color 
+        assert isinstance(true_color, bool)
+        self.true_color = true_color
         self.ansi_colors_only = to_simple_filter(ansi_colors_only)
- 
-    def __missing__(self, attrs): 
-        fgcolor, bgcolor, bold, underline, italic, blink, reverse = attrs 
-        parts = [] 
- 
+
+    def __missing__(self, attrs):
+        fgcolor, bgcolor, bold, underline, italic, blink, reverse = attrs
+        parts = []
+
         parts.extend(self._colors_to_code(fgcolor, bgcolor))
 
-        if bold: 
-            parts.append('1') 
-        if italic: 
-            parts.append('3') 
-        if blink: 
-            parts.append('5') 
-        if underline: 
-            parts.append('4') 
-        if reverse: 
-            parts.append('7') 
- 
-        if parts: 
-            result = '\x1b[0;' + ';'.join(parts) + 'm' 
-        else: 
-            result = '\x1b[0m' 
- 
-        self[attrs] = result 
-        return result 
- 
+        if bold:
+            parts.append('1')
+        if italic:
+            parts.append('3')
+        if blink:
+            parts.append('5')
+        if underline:
+            parts.append('4')
+        if reverse:
+            parts.append('7')
+
+        if parts:
+            result = '\x1b[0;' + ';'.join(parts) + 'm'
+        else:
+            result = '\x1b[0m'
+
+        self[attrs] = result
+        return result
+
     def _color_name_to_rgb(self, color):
         " Turn 'ffffff', into (0xff, 0xff, 0xff). "
         try:
@@ -282,35 +282,35 @@ class _EscapeCodeCache(dict):
         except ValueError:
             raise
         else:
-            r = (rgb >> 16) & 0xff 
-            g = (rgb >> 8) & 0xff 
-            b = rgb & 0xff 
+            r = (rgb >> 16) & 0xff
+            g = (rgb >> 8) & 0xff
+            b = rgb & 0xff
             return r, g, b
- 
+
     def _colors_to_code(self, fg_color, bg_color):
         " Return a tuple with the vt100 values  that represent this color. "
         # When requesting ANSI colors only, and both fg/bg color were converted
         # to ANSI, ensure that the foreground and background color are not the
         # same. (Unless they were explicitely defined to be the same color.)
         fg_ansi = [()]
- 
+
         def get(color, bg):
             table = BG_ANSI_COLORS if bg else FG_ANSI_COLORS
- 
+
             if color is None:
                 return ()
- 
+
             # 16 ANSI colors. (Given by name.)
             elif color in table:
                 return (table[color], )
- 
+
             # RGB colors. (Defined as 'ffffff'.)
             else:
                 try:
                     rgb = self._color_name_to_rgb(color)
                 except ValueError:
                     return ()
- 
+
                 # When only 16 colors are supported, use that.
                 if self.ansi_colors_only():
                     if bg:  # Background.
@@ -324,7 +324,7 @@ class _EscapeCodeCache(dict):
                         code, name = _16_fg_colors.get_code(rgb)
                         fg_ansi[0] = name
                         return (code, )
- 
+
                 # True colors. (Only when this feature is enabled.)
                 elif self.true_color:
                     r, g, b = rgb
@@ -341,44 +341,44 @@ class _EscapeCodeCache(dict):
         return map(six.text_type, result)
 
 
-def _get_size(fileno): 
-    # Thanks to fabric (fabfile.org), and 
-    # http://sqizit.bartletts.id.au/2011/02/14/pseudo-terminals-in-python/ 
-    """ 
-    Get the size of this pseudo terminal. 
- 
-    :param fileno: stdout.fileno() 
-    :returns: A (rows, cols) tuple. 
-    """ 
-    # Inline imports, because these modules are not available on Windows. 
-    # (This file is used by ConEmuOutput, which is used on Windows.) 
-    import fcntl 
-    import termios 
- 
-    # Buffer for the C call 
+def _get_size(fileno):
+    # Thanks to fabric (fabfile.org), and
+    # http://sqizit.bartletts.id.au/2011/02/14/pseudo-terminals-in-python/
+    """
+    Get the size of this pseudo terminal.
+
+    :param fileno: stdout.fileno()
+    :returns: A (rows, cols) tuple.
+    """
+    # Inline imports, because these modules are not available on Windows.
+    # (This file is used by ConEmuOutput, which is used on Windows.)
+    import fcntl
+    import termios
+
+    # Buffer for the C call
     buf = array.array(b'h' if six.PY2 else u'h', [0, 0, 0, 0])
- 
-    # Do TIOCGWINSZ (Get) 
+
+    # Do TIOCGWINSZ (Get)
     # Note: We should not pass 'True' as a fourth parameter to 'ioctl'. (True
     #       is the default.) This causes segmentation faults on some systems.
     #       See: https://github.com/jonathanslenders/python-prompt-toolkit/pull/364
     fcntl.ioctl(fileno, termios.TIOCGWINSZ, buf)
- 
-    # Return rows, cols 
-    return buf[0], buf[1] 
- 
- 
-class Vt100_Output(Output): 
-    """ 
-    :param get_size: A callable which returns the `Size` of the output terminal. 
+
+    # Return rows, cols
+    return buf[0], buf[1]
+
+
+class Vt100_Output(Output):
+    """
+    :param get_size: A callable which returns the `Size` of the output terminal.
     :param stdout: Any object with has a `write` and `flush` method + an 'encoding' property.
-    :param true_color: Use 24bit color instead of 256 colors. (Can be a :class:`SimpleFilter`.) 
+    :param true_color: Use 24bit color instead of 256 colors. (Can be a :class:`SimpleFilter`.)
         When `ansi_colors_only` is set, only 16 colors are used.
     :param ansi_colors_only: Restrict to 16 ANSI colors only.
     :param term: The terminal environment variable. (xterm, xterm-256color, linux, ...)
     :param write_binary: Encode the output before writing it. If `True` (the
         default), the `stdout` object is supposed to expose an `encoding` attribute.
-    """ 
+    """
     def __init__(self, stdout, get_size, true_color=False,
                  ansi_colors_only=None, term=None, write_binary=True):
         assert callable(get_size)
@@ -388,13 +388,13 @@ class Vt100_Output(Output):
         if write_binary:
             assert hasattr(stdout, 'encoding')
 
-        self._buffer = [] 
-        self.stdout = stdout 
+        self._buffer = []
+        self.stdout = stdout
         self.write_binary = write_binary
-        self.get_size = get_size 
-        self.true_color = to_simple_filter(true_color) 
+        self.get_size = get_size
+        self.true_color = to_simple_filter(true_color)
         self.term = term or 'xterm'
- 
+
         # ANSI colors only?
         if ansi_colors_only is None:
             # When not given, use the following default.
@@ -414,23 +414,23 @@ class Vt100_Output(Output):
         self._escape_code_cache_true_color = _EscapeCodeCache(
             true_color=True, ansi_colors_only=ansi_colors_only)
 
-    @classmethod 
+    @classmethod
     def from_pty(cls, stdout, true_color=False, ansi_colors_only=None, term=None):
-        """ 
-        Create an Output class from a pseudo terminal. 
-        (This will take the dimensions by reading the pseudo 
-        terminal attributes.) 
-        """ 
+        """
+        Create an Output class from a pseudo terminal.
+        (This will take the dimensions by reading the pseudo
+        terminal attributes.)
+        """
         assert stdout.isatty()
-        def get_size(): 
-            rows, columns = _get_size(stdout.fileno()) 
+        def get_size():
+            rows, columns = _get_size(stdout.fileno())
             # If terminal (incorrectly) reports its size as 0, pick a reasonable default.
             # See https://github.com/ipython/ipython/issues/10071
             return Size(rows=(rows or 24), columns=(columns or 80))
- 
+
         return cls(stdout, get_size, true_color=true_color,
                    ansi_colors_only=ansi_colors_only, term=term)
- 
+
     def fileno(self):
         " Return file descriptor. "
         return self.stdout.fileno()
@@ -439,194 +439,194 @@ class Vt100_Output(Output):
         " Return encoding used for stdout. "
         return self.stdout.encoding
 
-    def write_raw(self, data): 
-        """ 
-        Write raw data to output. 
-        """ 
-        self._buffer.append(data) 
- 
-    def write(self, data): 
-        """ 
-        Write text to output. 
-        (Removes vt100 escape codes. -- used for safely writing text.) 
-        """ 
-        self._buffer.append(data.replace('\x1b', '?')) 
- 
-    def set_title(self, title): 
-        """ 
-        Set terminal title. 
-        """ 
+    def write_raw(self, data):
+        """
+        Write raw data to output.
+        """
+        self._buffer.append(data)
+
+    def write(self, data):
+        """
+        Write text to output.
+        (Removes vt100 escape codes. -- used for safely writing text.)
+        """
+        self._buffer.append(data.replace('\x1b', '?'))
+
+    def set_title(self, title):
+        """
+        Set terminal title.
+        """
         if self.term not in ('linux', 'eterm-color'):  # Not supported by the Linux console.
             self.write_raw('\x1b]2;%s\x07' % title.replace('\x1b', '').replace('\x07', ''))
- 
-    def clear_title(self): 
-        self.set_title('') 
- 
-    def erase_screen(self): 
-        """ 
-        Erases the screen with the background colour and moves the cursor to 
-        home. 
-        """ 
-        self.write_raw('\x1b[2J') 
- 
-    def enter_alternate_screen(self): 
-        self.write_raw('\x1b[?1049h\x1b[H') 
- 
-    def quit_alternate_screen(self): 
-        self.write_raw('\x1b[?1049l') 
- 
-    def enable_mouse_support(self): 
-        self.write_raw('\x1b[?1000h') 
- 
-        # Enable urxvt Mouse mode. (For terminals that understand this.) 
-        self.write_raw('\x1b[?1015h') 
- 
-        # Also enable Xterm SGR mouse mode. (For terminals that understand this.) 
-        self.write_raw('\x1b[?1006h') 
- 
-        # Note: E.g. lxterminal understands 1000h, but not the urxvt or sgr 
-        #       extensions. 
- 
-    def disable_mouse_support(self): 
-        self.write_raw('\x1b[?1000l') 
-        self.write_raw('\x1b[?1015l') 
-        self.write_raw('\x1b[?1006l') 
- 
-    def erase_end_of_line(self): 
-        """ 
-        Erases from the current cursor position to the end of the current line. 
-        """ 
-        self.write_raw('\x1b[K') 
- 
-    def erase_down(self): 
-        """ 
-        Erases the screen from the current line down to the bottom of the 
-        screen. 
-        """ 
-        self.write_raw('\x1b[J') 
- 
-    def reset_attributes(self): 
-        self.write_raw('\x1b[0m') 
- 
-    def set_attributes(self, attrs): 
-        """ 
-        Create new style and output. 
- 
-        :param attrs: `Attrs` instance. 
-        """ 
+
+    def clear_title(self):
+        self.set_title('')
+
+    def erase_screen(self):
+        """
+        Erases the screen with the background colour and moves the cursor to
+        home.
+        """
+        self.write_raw('\x1b[2J')
+
+    def enter_alternate_screen(self):
+        self.write_raw('\x1b[?1049h\x1b[H')
+
+    def quit_alternate_screen(self):
+        self.write_raw('\x1b[?1049l')
+
+    def enable_mouse_support(self):
+        self.write_raw('\x1b[?1000h')
+
+        # Enable urxvt Mouse mode. (For terminals that understand this.)
+        self.write_raw('\x1b[?1015h')
+
+        # Also enable Xterm SGR mouse mode. (For terminals that understand this.)
+        self.write_raw('\x1b[?1006h')
+
+        # Note: E.g. lxterminal understands 1000h, but not the urxvt or sgr
+        #       extensions.
+
+    def disable_mouse_support(self):
+        self.write_raw('\x1b[?1000l')
+        self.write_raw('\x1b[?1015l')
+        self.write_raw('\x1b[?1006l')
+
+    def erase_end_of_line(self):
+        """
+        Erases from the current cursor position to the end of the current line.
+        """
+        self.write_raw('\x1b[K')
+
+    def erase_down(self):
+        """
+        Erases the screen from the current line down to the bottom of the
+        screen.
+        """
+        self.write_raw('\x1b[J')
+
+    def reset_attributes(self):
+        self.write_raw('\x1b[0m')
+
+    def set_attributes(self, attrs):
+        """
+        Create new style and output.
+
+        :param attrs: `Attrs` instance.
+        """
         if self.true_color() and not self.ansi_colors_only():
             self.write_raw(self._escape_code_cache_true_color[attrs])
-        else: 
+        else:
             self.write_raw(self._escape_code_cache[attrs])
- 
-    def disable_autowrap(self): 
-        self.write_raw('\x1b[?7l') 
- 
-    def enable_autowrap(self): 
-        self.write_raw('\x1b[?7h') 
- 
-    def enable_bracketed_paste(self): 
-        self.write_raw('\x1b[?2004h') 
- 
-    def disable_bracketed_paste(self): 
-        self.write_raw('\x1b[?2004l') 
- 
-    def cursor_goto(self, row=0, column=0): 
-        """ Move cursor position. """ 
-        self.write_raw('\x1b[%i;%iH' % (row, column)) 
- 
-    def cursor_up(self, amount): 
-        if amount == 0: 
+
+    def disable_autowrap(self):
+        self.write_raw('\x1b[?7l')
+
+    def enable_autowrap(self):
+        self.write_raw('\x1b[?7h')
+
+    def enable_bracketed_paste(self):
+        self.write_raw('\x1b[?2004h')
+
+    def disable_bracketed_paste(self):
+        self.write_raw('\x1b[?2004l')
+
+    def cursor_goto(self, row=0, column=0):
+        """ Move cursor position. """
+        self.write_raw('\x1b[%i;%iH' % (row, column))
+
+    def cursor_up(self, amount):
+        if amount == 0:
             pass
-        elif amount == 1: 
-            self.write_raw('\x1b[A') 
-        else: 
-            self.write_raw('\x1b[%iA' % amount) 
- 
-    def cursor_down(self, amount): 
-        if amount == 0: 
+        elif amount == 1:
+            self.write_raw('\x1b[A')
+        else:
+            self.write_raw('\x1b[%iA' % amount)
+
+    def cursor_down(self, amount):
+        if amount == 0:
             pass
-        elif amount == 1: 
-            # Note: Not the same as '\n', '\n' can cause the window content to 
-            #       scroll. 
-            self.write_raw('\x1b[B') 
-        else: 
-            self.write_raw('\x1b[%iB' % amount) 
- 
-    def cursor_forward(self, amount): 
-        if amount == 0: 
+        elif amount == 1:
+            # Note: Not the same as '\n', '\n' can cause the window content to
+            #       scroll.
+            self.write_raw('\x1b[B')
+        else:
+            self.write_raw('\x1b[%iB' % amount)
+
+    def cursor_forward(self, amount):
+        if amount == 0:
             pass
-        elif amount == 1: 
-            self.write_raw('\x1b[C') 
-        else: 
-            self.write_raw('\x1b[%iC' % amount) 
- 
-    def cursor_backward(self, amount): 
-        if amount == 0: 
+        elif amount == 1:
+            self.write_raw('\x1b[C')
+        else:
+            self.write_raw('\x1b[%iC' % amount)
+
+    def cursor_backward(self, amount):
+        if amount == 0:
             pass
-        elif amount == 1: 
-            self.write_raw('\b')  # '\x1b[D' 
-        else: 
-            self.write_raw('\x1b[%iD' % amount) 
- 
-    def hide_cursor(self): 
-        self.write_raw('\x1b[?25l') 
- 
-    def show_cursor(self): 
-        self.write_raw('\x1b[?12l\x1b[?25h')  # Stop blinking cursor and show. 
- 
-    def flush(self): 
-        """ 
-        Write to output stream and flush. 
-        """ 
-        if not self._buffer: 
-            return 
- 
-        data = ''.join(self._buffer) 
- 
-        try: 
-            # (We try to encode ourself, because that way we can replace 
-            # characters that don't exist in the character set, avoiding 
-            # UnicodeEncodeError crashes. E.g. u'\xb7' does not appear in 'ascii'.) 
-            # My Arch Linux installation of july 2015 reported 'ANSI_X3.4-1968' 
-            # for sys.stdout.encoding in xterm. 
+        elif amount == 1:
+            self.write_raw('\b')  # '\x1b[D'
+        else:
+            self.write_raw('\x1b[%iD' % amount)
+
+    def hide_cursor(self):
+        self.write_raw('\x1b[?25l')
+
+    def show_cursor(self):
+        self.write_raw('\x1b[?12l\x1b[?25h')  # Stop blinking cursor and show.
+
+    def flush(self):
+        """
+        Write to output stream and flush.
+        """
+        if not self._buffer:
+            return
+
+        data = ''.join(self._buffer)
+
+        try:
+            # (We try to encode ourself, because that way we can replace
+            # characters that don't exist in the character set, avoiding
+            # UnicodeEncodeError crashes. E.g. u'\xb7' does not appear in 'ascii'.)
+            # My Arch Linux installation of july 2015 reported 'ANSI_X3.4-1968'
+            # for sys.stdout.encoding in xterm.
             if self.write_binary:
                 if hasattr(self.stdout, 'buffer'):
                     out = self.stdout.buffer  # Py3.
                 else:
                     out = self.stdout
-                out.write(data.encode(self.stdout.encoding or 'utf-8', 'replace')) 
-            else: 
-                self.stdout.write(data) 
- 
-            self.stdout.flush() 
-        except IOError as e: 
-            if e.args and e.args[0] == errno.EINTR: 
-                # Interrupted system call. Can happpen in case of a window 
-                # resize signal. (Just ignore. The resize handler will render 
-                # again anyway.) 
-                pass 
-            elif e.args and e.args[0] == 0: 
-                # This can happen when there is a lot of output and the user 
-                # sends a KeyboardInterrupt by pressing Control-C. E.g. in 
-                # a Python REPL when we execute "while True: print('test')". 
-                # (The `ptpython` REPL uses this `Output` class instead of 
-                # `stdout` directly -- in order to be network transparent.) 
-                # So, just ignore. 
-                pass 
-            else: 
-                raise 
- 
-        self._buffer = [] 
- 
-    def ask_for_cpr(self): 
-        """ 
-        Asks for a cursor position report (CPR). 
-        """ 
-        self.write_raw('\x1b[6n') 
-        self.flush() 
- 
-    def bell(self): 
-        " Sound bell. " 
-        self.write_raw('\a') 
-        self.flush() 
+                out.write(data.encode(self.stdout.encoding or 'utf-8', 'replace'))
+            else:
+                self.stdout.write(data)
+
+            self.stdout.flush()
+        except IOError as e:
+            if e.args and e.args[0] == errno.EINTR:
+                # Interrupted system call. Can happpen in case of a window
+                # resize signal. (Just ignore. The resize handler will render
+                # again anyway.)
+                pass
+            elif e.args and e.args[0] == 0:
+                # This can happen when there is a lot of output and the user
+                # sends a KeyboardInterrupt by pressing Control-C. E.g. in
+                # a Python REPL when we execute "while True: print('test')".
+                # (The `ptpython` REPL uses this `Output` class instead of
+                # `stdout` directly -- in order to be network transparent.)
+                # So, just ignore.
+                pass
+            else:
+                raise
+
+        self._buffer = []
+
+    def ask_for_cpr(self):
+        """
+        Asks for a cursor position report (CPR).
+        """
+        self.write_raw('\x1b[6n')
+        self.flush()
+
+    def bell(self):
+        " Sound bell. "
+        self.write_raw('\a')
+        self.flush()

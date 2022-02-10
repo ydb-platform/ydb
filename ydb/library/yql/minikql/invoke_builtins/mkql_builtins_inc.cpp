@@ -35,7 +35,7 @@ struct TDecimalInc {
             return NUdf::TUnboxedValuePod(++v);
 
         return NUdf::TUnboxedValuePod(IsNan(v) ? Nan() : (v > 0 ? +Inf() : -Inf()));
-    } 
+    }
 
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
@@ -60,8 +60,8 @@ struct TDecimalInc {
     }
 #endif
     static_assert(Precision <= NYql::NDecimal::MaxPrecision, "Too large precision!");
-}; 
- 
+};
+
 }
 
 void RegisterIncrement(IBuiltinFunctionRegistry& registry) {

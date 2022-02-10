@@ -4,7 +4,7 @@
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <library/cpp/yson/node/node_io.h>
- 
+
 #include <util/system/env.h>
 
 namespace NKikimr {
@@ -235,5 +235,5 @@ bool TDefaultValueBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef
     return false;
 }
 
-} // namespace NMiniKQL 
-} // namespace Nkikimr 
+} // namespace NMiniKQL
+} // namespace Nkikimr

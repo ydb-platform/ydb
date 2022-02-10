@@ -26,8 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/** 
- * \file 
+/**
+ * \file
  * \brief Limex NFA construction code.
  */
 
@@ -36,7 +36,7 @@
 
 #include "ue2common.h"
 #include "som/som.h"
-#include "util/bytecode_ptr.h" 
+#include "util/bytecode_ptr.h"
 
 #include <map>
 #include <memory>
@@ -52,8 +52,8 @@ class NGHolder;
 class ReportManager;
 struct CompileContext;
 
-/** 
- * \brief Determine if the given graph is implementable as an NFA. 
+/**
+ * \brief Determine if the given graph is implementable as an NFA.
  *
  * Returns zero if the NFA is not implementable (usually because it has too
  * many states for any of our models). Otherwise returns the number of states.
@@ -64,14 +64,14 @@ struct CompileContext;
 u32 isImplementableNFA(const NGHolder &g, const ReportManager *rm,
                        const CompileContext &cc);
 
-/** 
- * \brief Late-stage graph reductions. 
+/**
+ * \brief Late-stage graph reductions.
  *
  * This will call \ref removeRedundancy and apply its changes to the given
- * holder only if it is implementable afterwards. 
- */ 
-void reduceImplementableGraph(NGHolder &g, som_type som, 
-                              const ReportManager *rm, 
+ * holder only if it is implementable afterwards.
+ */
+void reduceImplementableGraph(NGHolder &g, som_type som,
+                              const ReportManager *rm,
                               const CompileContext &cc);
 
 /**
@@ -84,8 +84,8 @@ void reduceImplementableGraph(NGHolder &g, som_type som,
 u32 countAccelStates(const NGHolder &g, const ReportManager *rm,
                      const CompileContext &cc);
 
-/** 
- * \brief Construct an NFA from the given graph. 
+/**
+ * \brief Construct an NFA from the given graph.
  *
  * Returns zero if the NFA is not implementable (usually because it has too
  * many states for any of our models). Otherwise returns the number of states.
@@ -96,25 +96,25 @@ u32 countAccelStates(const NGHolder &g, const ReportManager *rm,
  * Note: this variant of the function allows a model to be specified with the
  * \a hint parameter.
  */
-bytecode_ptr<NFA> 
+bytecode_ptr<NFA>
 constructNFA(const NGHolder &g, const ReportManager *rm,
              const std::map<u32, u32> &fixed_depth_tops,
              const std::map<u32, std::vector<std::vector<CharReach>>> &triggers,
              bool compress_state, bool &fast, const CompileContext &cc);
 
-/** 
- * \brief Build a reverse NFA from the graph given, which should have already 
+/**
+ * \brief Build a reverse NFA from the graph given, which should have already
  * been reversed.
  *
  * Used for reverse NFAs used in SOM mode.
  */
-bytecode_ptr<NFA> constructReversedNFA(const NGHolder &h, 
-                                       const CompileContext &cc); 
+bytecode_ptr<NFA> constructReversedNFA(const NGHolder &h,
+                                       const CompileContext &cc);
 
 #ifndef RELEASE_BUILD
 
-/** 
- * \brief Construct an NFA (with model type hint) from the given graph. 
+/**
+ * \brief Construct an NFA (with model type hint) from the given graph.
  *
  * Returns zero if the NFA is not implementable (usually because it has too
  * many states for any of our models). Otherwise returns the number of states.
@@ -125,20 +125,20 @@ bytecode_ptr<NFA> constructReversedNFA(const NGHolder &h,
  * Note: this variant of the function allows a model to be specified with the
  * \a hint parameter.
  */
-bytecode_ptr<NFA> 
+bytecode_ptr<NFA>
 constructNFA(const NGHolder &g, const ReportManager *rm,
              const std::map<u32, u32> &fixed_depth_tops,
              const std::map<u32, std::vector<std::vector<CharReach>>> &triggers,
              bool compress_state, bool &fast, u32 hint, const CompileContext &cc);
 
-/** 
- * \brief Build a reverse NFA (with model type hint) from the graph given, 
+/**
+ * \brief Build a reverse NFA (with model type hint) from the graph given,
  * which should have already been reversed.
  *
  * Used for reverse NFAs used in SOM mode.
  */
-bytecode_ptr<NFA> constructReversedNFA(const NGHolder &h, u32 hint, 
-                                       const CompileContext &cc); 
+bytecode_ptr<NFA> constructReversedNFA(const NGHolder &h, u32 hint,
+                                       const CompileContext &cc);
 
 #endif // RELEASE_BUILD
 

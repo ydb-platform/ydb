@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, Intel Corporation 
+ * Copyright (c) 2015-2016, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -60,8 +60,8 @@ struct BoundedRepeatSummary {
 bool improveGraph(NGHolder &g, som_type som);
 
 /** Sometimes the reach of a vertex is greater than it needs to be to reduce
- * stop chars for the benefit of the rest of our code base (accel, etc). In 
- * these circumstances, we can treat the reach as the smaller one as 
+ * stop chars for the benefit of the rest of our code base (accel, etc). In
+ * these circumstances, we can treat the reach as the smaller one as
  * the graphs are equivalent. */
 CharReach reduced_cr(NFAVertex v, const NGHolder &g,
         const std::map<NFAVertex, BoundedRepeatSummary> &br_cyclic);
@@ -72,13 +72,13 @@ std::vector<CharReach> reduced_cr(const NGHolder &g,
 /** Remove cyclic stars connected to start */
 bool mergeCyclicDotStars(NGHolder &g);
 
-/** 
- * Given a cyclic state 'c' with a broad reach and a later state 'v' that is 
- * only reachable if c is still on, then any edges to a successor of a direct 
- * successor of c with reach a superset of v are redundant. 
- */ 
-bool prunePathsRedundantWithSuccessorOfCyclics(NGHolder &h, som_type som); 
- 
+/**
+ * Given a cyclic state 'c' with a broad reach and a later state 'v' that is
+ * only reachable if c is still on, then any edges to a successor of a direct
+ * successor of c with reach a superset of v are redundant.
+ */
+bool prunePathsRedundantWithSuccessorOfCyclics(NGHolder &h, som_type som);
+
 } // namespace ue2
 
 #endif

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -34,31 +34,31 @@
 #include "grey.h"
 #include "ng.h"
 #include "ng_util.h"
-#include "compiler/compiler.h" 
+#include "compiler/compiler.h"
 
 using namespace std;
 
 namespace ue2 {
 
 static
-ReportID getInternalId(ReportManager &rm, const ExpressionInfo &expr) { 
-    Report ir = rm.getBasicInternalReport(expr); 
+ReportID getInternalId(ReportManager &rm, const ExpressionInfo &expr) {
+    Report ir = rm.getBasicInternalReport(expr);
 
     // Apply any extended params.
-    if (expr.min_offset || expr.max_offset != MAX_OFFSET) { 
-        ir.minOffset = expr.min_offset; 
-        ir.maxOffset = expr.max_offset; 
+    if (expr.min_offset || expr.max_offset != MAX_OFFSET) {
+        ir.minOffset = expr.min_offset;
+        ir.maxOffset = expr.max_offset;
     }
 
-    assert(!expr.min_length); // should be handled elsewhere. 
+    assert(!expr.min_length); // should be handled elsewhere.
 
     return rm.getInternalId(ir);
 }
 
 static
-void makeFirehose(BoundaryReports &boundary, ReportManager &rm, NGHolder &g, 
-                  const ExpressionInfo &expr) { 
-    const ReportID r = getInternalId(rm, expr); 
+void makeFirehose(BoundaryReports &boundary, ReportManager &rm, NGHolder &g,
+                  const ExpressionInfo &expr) {
+    const ReportID r = getInternalId(rm, expr);
 
     boundary.report_at_0_eod.insert(r);
     boundary.report_at_0.insert(r);
@@ -83,8 +83,8 @@ void makeFirehose(BoundaryReports &boundary, ReportManager &rm, NGHolder &g,
 
 static
 void makeAnchoredAcceptor(BoundaryReports &boundary, ReportManager &rm,
-                          NGHolder &g, const ExpressionInfo &expr) { 
-    boundary.report_at_0.insert(getInternalId(rm, expr)); 
+                          NGHolder &g, const ExpressionInfo &expr) {
+    boundary.report_at_0.insert(getInternalId(rm, expr));
     remove_edge(g.start, g.accept, g);
     remove_edge(g.start, g.acceptEod, g);
     g[g.start].reports.clear();
@@ -92,8 +92,8 @@ void makeAnchoredAcceptor(BoundaryReports &boundary, ReportManager &rm,
 
 static
 void makeEndAnchoredAcceptor(BoundaryReports &boundary, ReportManager &rm,
-                             NGHolder &g, const ExpressionInfo &expr) { 
-    boundary.report_at_eod.insert(getInternalId(rm, expr)); 
+                             NGHolder &g, const ExpressionInfo &expr) {
+    boundary.report_at_eod.insert(getInternalId(rm, expr));
     remove_edge(g.startDs, g.acceptEod, g);
     remove_edge(g.start, g.acceptEod, g);
     g[g.start].reports.clear();
@@ -102,18 +102,18 @@ void makeEndAnchoredAcceptor(BoundaryReports &boundary, ReportManager &rm,
 
 static
 void makeNothingAcceptor(BoundaryReports &boundary, ReportManager &rm,
-                         NGHolder &g, const ExpressionInfo &expr) { 
-    boundary.report_at_0_eod.insert(getInternalId(rm, expr)); 
+                         NGHolder &g, const ExpressionInfo &expr) {
+    boundary.report_at_0_eod.insert(getInternalId(rm, expr));
     remove_edge(g.start, g.acceptEod, g);
     g[g.start].reports.clear();
 }
 
 bool splitOffVacuous(BoundaryReports &boundary, ReportManager &rm,
-                     NGHolder &g, const ExpressionInfo &expr) { 
+                     NGHolder &g, const ExpressionInfo &expr) {
     if (edge(g.startDs, g.accept, g).second) {
         // e.g. '.*'; match "between" every byte
         DEBUG_PRINTF("graph is firehose\n");
-        makeFirehose(boundary, rm, g, expr); 
+        makeFirehose(boundary, rm, g, expr);
         return true;
     }
 
@@ -121,19 +121,19 @@ bool splitOffVacuous(BoundaryReports &boundary, ReportManager &rm,
 
     if (edge(g.start, g.accept, g).second) {
         DEBUG_PRINTF("creating anchored acceptor\n");
-        makeAnchoredAcceptor(boundary, rm, g, expr); 
+        makeAnchoredAcceptor(boundary, rm, g, expr);
         work_done = true;
     }
 
     if (edge(g.startDs, g.acceptEod, g).second) {
         DEBUG_PRINTF("creating end-anchored acceptor\n");
-        makeEndAnchoredAcceptor(boundary, rm, g, expr); 
+        makeEndAnchoredAcceptor(boundary, rm, g, expr);
         work_done = true;
     }
 
     if (edge(g.start, g.acceptEod, g).second) {
         DEBUG_PRINTF("creating nothing acceptor\n");
-        makeNothingAcceptor(boundary, rm, g, expr); 
+        makeNothingAcceptor(boundary, rm, g, expr);
         work_done = true;
     }
 

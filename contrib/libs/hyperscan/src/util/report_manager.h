@@ -36,20 +36,20 @@
 
 #include "ue2common.h"
 #include "util/compile_error.h"
-#include "util/noncopyable.h" 
+#include "util/noncopyable.h"
 #include "util/report.h"
 #include "parser/logical_combination.h"
 
 #include <map>
 #include <set>
-#include <unordered_map> 
+#include <unordered_map>
 #include <vector>
 
 namespace ue2 {
 
 struct Grey;
 class RoseBuild;
-class ExpressionInfo; 
+class ExpressionInfo;
 
 struct external_report_info {
     external_report_info(bool h, u32 fpi)
@@ -59,7 +59,7 @@ struct external_report_info {
 };
 
 /** \brief Tracks Report structures, exhaustion and dedupe keys. */
-class ReportManager : noncopyable { 
+class ReportManager : noncopyable {
 public:
     explicit ReportManager(const Grey &g);
 
@@ -103,13 +103,13 @@ public:
     const std::vector<Report> &reports() const { return reportIds; }
 
     /**
-     * Get a simple internal report corresponding to the expression. An ekey 
-     * will be setup if required. 
+     * Get a simple internal report corresponding to the expression. An ekey
+     * will be setup if required.
      *
      * Note: this function may throw a CompileError if constraints on external
      * match id are violated (mixed highlander status for example).
      */
-    Report getBasicInternalReport(const ExpressionInfo &expr, s32 adj = 0); 
+    Report getBasicInternalReport(const ExpressionInfo &expr, s32 adj = 0);
 
     /** \brief Register an external report and validate that we are not
      * violating highlander constraints (which will cause an exception to be
@@ -137,14 +137,14 @@ public:
      * ~0U if no dkey is needed. */
     u32 getDkey(const Report &r) const;
 
-    /** \brief Register a Rose program offset with the given report. */ 
-    void setProgramOffset(ReportID id, u32 programOffset); 
- 
-    /** \brief Fetch the program offset for a given report. It is a fatal error 
-     * for this to be called with a report for which no program offset has been 
-     * set. */ 
-    u32 getProgramOffset(ReportID id) const; 
- 
+    /** \brief Register a Rose program offset with the given report. */
+    void setProgramOffset(ReportID id, u32 programOffset);
+
+    /** \brief Fetch the program offset for a given report. It is a fatal error
+     * for this to be called with a report for which no program offset has been
+     * set. */
+    u32 getProgramOffset(ReportID id) const;
+
     /** \brief Parsed logical combination structure. */
     ParsedLogical pl;
 
@@ -156,18 +156,18 @@ private:
     std::vector<Report> reportIds;
 
     /** \brief Mapping from Report to ID (inverse of \ref reportIds
-     * vector). */ 
-    std::unordered_map<Report, size_t> reportIdToInternalMap; 
+     * vector). */
+    std::unordered_map<Report, size_t> reportIdToInternalMap;
 
     /** \brief Mapping from ReportID to dedupe key. */
-    std::unordered_map<ReportID, u32> reportIdToDedupeKey; 
+    std::unordered_map<ReportID, u32> reportIdToDedupeKey;
 
-    /** \brief Mapping from ReportID to Rose program offset in bytecode. */ 
-    std::unordered_map<ReportID, u32> reportIdToProgramOffset; 
- 
+    /** \brief Mapping from ReportID to Rose program offset in bytecode. */
+    std::unordered_map<ReportID, u32> reportIdToProgramOffset;
+
     /** \brief Mapping from external match ids to information about that
      * id. */
-    std::unordered_map<ReportID, external_report_info> externalIdMap; 
+    std::unordered_map<ReportID, external_report_info> externalIdMap;
 
     /** \brief Mapping from expression index to exhaustion key. */
     std::map<s64a, u32> toExhaustibleKeyMap;

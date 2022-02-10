@@ -24,7 +24,7 @@ struct TDecimalMinus {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         const auto v = arg.GetInt128();
         return NYql::NDecimal::IsComparable(v) ? NUdf::TUnboxedValuePod(-v) : arg;
-    } 
+    }
 
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
@@ -36,7 +36,7 @@ struct TDecimalMinus {
         return res;
     }
 #endif
-}; 
+};
 }
 
 void RegisterMinus(IBuiltinFunctionRegistry& registry) {

@@ -1,6 +1,6 @@
 #include "math_ir.h"
 
- 
+
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 
 #define MATH_UDF_MAP(XX, XXL)                                                                       \
@@ -52,25 +52,25 @@
         TUnboxedValuePod res;                                                                               \
         name##IR(this, &res, valueBuilder, args);                                                           \
         return res;                                                                                         \
-    } 
- 
+    }
+
 #define REGISTER_MATH_UDF(udfName, ...)         T##udfName,
 #define REGISTER_MATH_UDF_LAST(udfName, ...)    T##udfName
- 
+
 using namespace NKikimr;
 using namespace NUdf;
 
-namespace { 
-    extern const char epsilon[] = "Epsilon"; 
-    using TEpsilon = TNamedArg<double, epsilon>; 
+namespace {
+    extern const char epsilon[] = "Epsilon";
+    using TEpsilon = TNamedArg<double, epsilon>;
 
-    extern const char precision[] = "Precision"; 
-    using TPrecision = TNamedArg<int, precision>; 
- 
+    extern const char precision[] = "Precision";
+    using TPrecision = TNamedArg<int, precision>;
+
     MATH_UDF_MAP(MATH_UDF_IMPL, MATH_UDF_IMPL)
- 
-    SIMPLE_MODULE(TMathModule, 
+
+    SIMPLE_MODULE(TMathModule,
         MATH_UDF_MAP(REGISTER_MATH_UDF, REGISTER_MATH_UDF_LAST))
-} 
- 
-REGISTER_MODULES(TMathModule) 
+}
+
+REGISTER_MODULES(TMathModule)

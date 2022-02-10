@@ -270,8 +270,8 @@ message TLogConfig {
     message TEntry {
         optional bytes Component = 1;
         optional uint32 Level = 2;
-        optional uint32 SamplingLevel = 3; 
-        optional uint32 SamplingRate = 4; 
+        optional uint32 SamplingLevel = 3;
+        optional uint32 SamplingRate = 4;
     }
 
     repeated TEntry Entry = 1;

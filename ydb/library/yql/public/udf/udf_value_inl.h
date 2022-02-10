@@ -906,7 +906,7 @@ inline TStringRef TUnboxedValuePod::AsStringRef() const&
     switch (Raw.GetMarkers()) {
     case EMarkers::Embedded: return { Raw.Embedded.Buffer, Raw.Embedded.Size };
     case EMarkers::String: return { Raw.String.Value->Data() + (Raw.String.Offset & 0xFFFFFF), Raw.String.Size };
-    default: Y_FAIL("Value is not a string."); 
+    default: Y_FAIL("Value is not a string.");
     }
 }
 
@@ -915,6 +915,6 @@ inline TMutableStringRef TUnboxedValuePod::AsStringRef() &
     switch (Raw.GetMarkers()) {
     case EMarkers::Embedded: return { Raw.Embedded.Buffer, Raw.Embedded.Size };
     case EMarkers::String: return { Raw.String.Value->Data() + (Raw.String.Offset & 0xFFFFFF), Raw.String.Size };
-    default: Y_FAIL("Value is not a string."); 
+    default: Y_FAIL("Value is not a string.");
     }
 }

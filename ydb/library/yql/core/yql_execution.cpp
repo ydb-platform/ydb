@@ -79,7 +79,7 @@ public:
         if (!ReplaceNewNodes(output, ctx)) {
             return TStatus::Error;
         }
-        YQL_CLOG(INFO, CoreExecution) << "Finish, output #" << output->UniqueId() << ", status: " << status; 
+        YQL_CLOG(INFO, CoreExecution) << "Finish, output #" << output->UniqueId() << ", status: " << status;
 
         if (status != TStatus::Ok || !WithFinalize) {
             return status;
@@ -700,7 +700,7 @@ IGraphTransformer::TStatus ValidateCallable(const TExprNode::TPtr& node, TExprCo
 
     if (!dataProvider) {
         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to execute callable with name: " << node->Content()
-            << ", you possibly used cross provider/cluster operations or pulled not materialized result in refselect mode")); 
+            << ", you possibly used cross provider/cluster operations or pulled not materialized result in refselect mode"));
         return TStatus::Error;
     }
 

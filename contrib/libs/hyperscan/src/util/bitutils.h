@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -35,13 +35,13 @@
 
 #include "ue2common.h"
 #include "popcount.h"
-#include "util/arch.h" 
-#include "util/intrinsics.h" 
+#include "util/arch.h"
+#include "util/intrinsics.h"
 
 #define CASE_BIT          0x20
 #define CASE_CLEAR        0xdf
 #define DOUBLE_CASE_CLEAR 0xdfdf
-#define OCTO_CASE_CLEAR   0xdfdfdfdfdfdfdfdfULL 
+#define OCTO_CASE_CLEAR   0xdfdfdfdfdfdfdfdfULL
 
 static really_inline
 u32 clz32(u32 x) {
@@ -58,20 +58,20 @@ u32 clz32(u32 x) {
 static really_inline
 u32 clz64(u64a x) {
     assert(x); // behaviour not defined for x == 0
-#if defined(_WIN64) 
+#if defined(_WIN64)
     unsigned long r;
     _BitScanReverse64(&r, x);
     return 63 - r;
-#elif defined(_WIN32) 
-    unsigned long x1 = (u32)x; 
-    unsigned long x2 = (u32)(x >> 32); 
-    unsigned long r; 
-    if (x2) { 
-        _BitScanReverse(&r, x2); 
-        return (u32)(31 - r); 
-    } 
-    _BitScanReverse(&r, (u32)x1); 
-    return (u32)(63 - r); 
+#elif defined(_WIN32)
+    unsigned long x1 = (u32)x;
+    unsigned long x2 = (u32)(x >> 32);
+    unsigned long r;
+    if (x2) {
+        _BitScanReverse(&r, x2);
+        return (u32)(31 - r);
+    }
+    _BitScanReverse(&r, (u32)x1);
+    return (u32)(63 - r);
 #else
     return (u32)__builtin_clzll(x);
 #endif
@@ -93,17 +93,17 @@ u32 ctz32(u32 x) {
 static really_inline
 u32 ctz64(u64a x) {
     assert(x); // behaviour not defined for x == 0
-#if defined(_WIN64) 
+#if defined(_WIN64)
     unsigned long r;
     _BitScanForward64(&r, x);
     return r;
-#elif defined(_WIN32) 
-    unsigned long r; 
-    if (_BitScanForward(&r, (u32)x)) { 
-        return (u32)r; 
-    } 
-    _BitScanForward(&r, x >> 32); 
-    return (u32)(r + 32); 
+#elif defined(_WIN32)
+    unsigned long r;
+    if (_BitScanForward(&r, (u32)x)) {
+        return (u32)r;
+    }
+    _BitScanForward(&r, x >> 32);
+    return (u32)(r + 32);
 #else
     return (u32)__builtin_ctzll(x);
 #endif
@@ -166,8 +166,8 @@ u32 findAndClearLSB_64(u64a *v) {
 #else
     // fall back to doing things with two 32-bit cases, since gcc-4.1 doesn't
     // inline calls to __builtin_ctzll
-    u32 v1 = (u32)*v; 
-    u32 v2 = (u32)(*v >> 32); 
+    u32 v1 = (u32)*v;
+    u32 v2 = (u32)(*v >> 32);
     u32 offset;
     if (v1) {
         offset = findAndClearLSB_32(&v1);
@@ -222,7 +222,7 @@ u32 findAndClearMSB_64(u64a *v) {
 #else
     // fall back to doing things with two 32-bit cases, since gcc-4.1 doesn't
     // inline calls to __builtin_ctzll
-    u32 v1 = (u32)*v; 
+    u32 v1 = (u32)*v;
     u32 v2 = (*v >> 32);
     u32 offset;
     if (v2) {
@@ -240,7 +240,7 @@ u32 findAndClearMSB_64(u64a *v) {
 
 static really_inline
 u32 compress32(u32 x, u32 m) {
-#if defined(HAVE_BMI2) 
+#if defined(HAVE_BMI2)
     // BMI2 has a single instruction for this operation.
     return _pext_u32(x, m);
 #else
@@ -275,7 +275,7 @@ u32 compress32(u32 x, u32 m) {
 
 static really_inline
 u64a compress64(u64a x, u64a m) {
-#if defined(ARCH_X86_64) && defined(HAVE_BMI2) 
+#if defined(ARCH_X86_64) && defined(HAVE_BMI2)
     // BMI2 has a single instruction for this operation.
     return _pext_u64(x, m);
 #else
@@ -311,7 +311,7 @@ u64a compress64(u64a x, u64a m) {
 
 static really_inline
 u32 expand32(u32 x, u32 m) {
-#if defined(HAVE_BMI2) 
+#if defined(HAVE_BMI2)
     // BMI2 has a single instruction for this operation.
     return _pdep_u32(x, m);
 #else
@@ -351,7 +351,7 @@ u32 expand32(u32 x, u32 m) {
 
 static really_inline
 u64a expand64(u64a x, u64a m) {
-#if defined(ARCH_X86_64) && defined(HAVE_BMI2) 
+#if defined(ARCH_X86_64) && defined(HAVE_BMI2)
     // BMI2 has a single instruction for this operation.
     return _pdep_u64(x, m);
 #else
@@ -426,67 +426,67 @@ void bf64_unset(u64a *bitfield, u32 i) {
     *bitfield &= ~(1ULL << i);
 }
 
-static really_inline 
-u32 rank_in_mask32(u32 mask, u32 bit) { 
-    assert(bit < sizeof(u32) * 8); 
-    assert(mask & (u32)(1U << bit)); 
-    mask &= (u32)(1U << bit) - 1; 
-    return popcount32(mask); 
-} 
- 
-static really_inline 
-u32 rank_in_mask64(u64a mask, u32 bit) { 
-    assert(bit < sizeof(u64a) * 8); 
-    assert(mask & (u64a)(1ULL << bit)); 
-    mask &= (u64a)(1ULL << bit) - 1; 
-    return popcount64(mask); 
-} 
- 
-static really_inline 
-u32 pext32(u32 x, u32 mask) { 
-#if defined(HAVE_BMI2) 
-    // Intel BMI2 can do this operation in one instruction. 
-    return _pext_u32(x, mask); 
-#else 
- 
-    u32 result = 0, num = 1; 
-    while (mask != 0) { 
-        u32 bit = findAndClearLSB_32(&mask); 
-        if (x & (1U << bit)) { 
-            assert(num != 0); // more than 32 bits! 
-            result |= num; 
-        } 
-        num <<= 1; 
-    } 
-    return result; 
-#endif 
-} 
- 
-static really_inline 
-u64a pext64(u64a x, u64a mask) { 
-#if defined(HAVE_BMI2) && defined(ARCH_64_BIT) 
-    // Intel BMI2 can do this operation in one instruction. 
-    return _pext_u64(x, mask); 
-#else 
- 
-    u32 result = 0, num = 1; 
-    while (mask != 0) { 
-        u32 bit = findAndClearLSB_64(&mask); 
-        if (x & (1ULL << bit)) { 
-            assert(num != 0); // more than 32 bits! 
-            result |= num; 
-        } 
-        num <<= 1; 
-    } 
-    return result; 
-#endif 
-} 
- 
-#if defined(HAVE_BMI2) && defined(ARCH_64_BIT) 
-static really_inline 
-u64a pdep64(u64a x, u64a mask) { 
-    return _pdep_u64(x, mask); 
-} 
-#endif 
- 
+static really_inline
+u32 rank_in_mask32(u32 mask, u32 bit) {
+    assert(bit < sizeof(u32) * 8);
+    assert(mask & (u32)(1U << bit));
+    mask &= (u32)(1U << bit) - 1;
+    return popcount32(mask);
+}
+
+static really_inline
+u32 rank_in_mask64(u64a mask, u32 bit) {
+    assert(bit < sizeof(u64a) * 8);
+    assert(mask & (u64a)(1ULL << bit));
+    mask &= (u64a)(1ULL << bit) - 1;
+    return popcount64(mask);
+}
+
+static really_inline
+u32 pext32(u32 x, u32 mask) {
+#if defined(HAVE_BMI2)
+    // Intel BMI2 can do this operation in one instruction.
+    return _pext_u32(x, mask);
+#else
+
+    u32 result = 0, num = 1;
+    while (mask != 0) {
+        u32 bit = findAndClearLSB_32(&mask);
+        if (x & (1U << bit)) {
+            assert(num != 0); // more than 32 bits!
+            result |= num;
+        }
+        num <<= 1;
+    }
+    return result;
+#endif
+}
+
+static really_inline
+u64a pext64(u64a x, u64a mask) {
+#if defined(HAVE_BMI2) && defined(ARCH_64_BIT)
+    // Intel BMI2 can do this operation in one instruction.
+    return _pext_u64(x, mask);
+#else
+
+    u32 result = 0, num = 1;
+    while (mask != 0) {
+        u32 bit = findAndClearLSB_64(&mask);
+        if (x & (1ULL << bit)) {
+            assert(num != 0); // more than 32 bits!
+            result |= num;
+        }
+        num <<= 1;
+    }
+    return result;
+#endif
+}
+
+#if defined(HAVE_BMI2) && defined(ARCH_64_BIT)
+static really_inline
+u64a pdep64(u64a x, u64a mask) {
+    return _pdep_u64(x, mask);
+}
+#endif
+
 #endif // BITUTILS_H

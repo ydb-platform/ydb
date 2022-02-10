@@ -156,7 +156,7 @@ EUnescapeResult UnescapeArbitraryAtom(
 {
     const char *p = atom.begin(),
                *e = atom.end();
- 
+
     while (p != e) {
         char current = *p++;
 
@@ -208,24 +208,24 @@ EUnescapeResult UnescapeArbitraryAtom(
                     out->Write(buf, written);
                     continue;
                 }
-                default: { 
-                    current = next; 
-                } 
+                default: {
+                    current = next;
+                }
             }
-        } else if (endChar == '`') { 
-            if (current == '`') { 
-                if (p == e) { 
-                    *readBytes = p - atom.begin(); 
-                    return EUnescapeResult::OK; 
-                } else { 
-                    if (*p != '`') { 
-                        *readBytes = p - atom.begin(); 
-                        return EUnescapeResult::INVALID_ESCAPE_SEQUENCE; 
-                    } else { 
-                        p++; 
-                    } 
-                } 
-            } 
+        } else if (endChar == '`') {
+            if (current == '`') {
+                if (p == e) {
+                    *readBytes = p - atom.begin();
+                    return EUnescapeResult::OK;
+                } else {
+                    if (*p != '`') {
+                        *readBytes = p - atom.begin();
+                        return EUnescapeResult::INVALID_ESCAPE_SEQUENCE;
+                    } else {
+                        p++;
+                    }
+                }
+            }
         } else if (current == endChar) {
             *readBytes = p - atom.begin();
             return EUnescapeResult::OK;

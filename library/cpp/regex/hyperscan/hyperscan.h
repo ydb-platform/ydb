@@ -6,7 +6,7 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
-#include <util/system/cpu_id.h> 
+#include <util/system/cpu_id.h>
 
 namespace NHyperscan {
     using TCPUFeatures = decltype(hs_platform_info_t::cpu_features);
@@ -30,7 +30,7 @@ namespace NHyperscan {
     };
 
 
-    namespace NPrivate { 
+    namespace NPrivate {
         enum class ERuntime {
             Core2 = 0,
             Corei7 = 1,
@@ -44,9 +44,9 @@ namespace NHyperscan {
 
         hs_platform_info_t MakePlatformInfo(TCPUFeatures cpuFeatures);
 
-        struct TImpl { 
+        struct TImpl {
             hs_error_t (*AllocScratch)(const hs_database_t* db, hs_scratch_t** scratch);
- 
+
             hs_error_t (*Scan)(const hs_database_t* db, const char* data,
                                 unsigned length, unsigned flags, hs_scratch_t* scratch,
                                 match_event_handler onEvent, void* userCtx);
@@ -58,7 +58,7 @@ namespace NHyperscan {
             TImpl() : TImpl(DetectCurrentRuntime()) {}
 
             explicit TImpl(ERuntime runtime);
-        }; 
+        };
 
         TDatabase Compile(const TStringBuf& regex, unsigned int flags, hs_platform_info_t* platform);
 
@@ -114,8 +114,8 @@ namespace NHyperscan {
             const TScratch& scratch,
             const TStringBuf& text,
             const TImpl& impl);
-    } 
- 
+    }
+
     TDatabase Compile(const TStringBuf& regex, unsigned int flags);
 
     TDatabase Compile(const TStringBuf& regex, unsigned int flags, TCPUFeatures cpuFeatures);

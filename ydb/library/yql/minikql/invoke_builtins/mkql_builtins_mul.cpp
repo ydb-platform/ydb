@@ -2,7 +2,7 @@
 #include "mkql_builtins_datetime.h"
 
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
- 
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -55,8 +55,8 @@ struct TNumMulInterval {
 #endif
 };
 
-} 
- 
+}
+
 void RegisterMul(IBuiltinFunctionRegistry& registry) {
     RegisterBinaryNumericFunctionOpt<TMul, TBinaryArgsOpt>(registry, "Mul");
 

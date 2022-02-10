@@ -16,7 +16,7 @@
 #include <library/cpp/enumbitset/enumbitset.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
- 
+
 #include <util/string/builder.h>
 #include <util/generic/array_ref.h>
 #include <util/generic/deque.h>
@@ -498,15 +498,15 @@ public:
         return (*it)->GetItemType();
     }
 
-    TMaybe<TStringBuf> FindMistype(const TStringBuf& name) const { 
+    TMaybe<TStringBuf> FindMistype(const TStringBuf& name) const {
         for (const auto& item: Items) {
             if (NLevenshtein::Distance(name, item->GetName()) < DefaultMistypeDistance) {
                 return item->GetName();
-            } 
-        } 
-        return TMaybe<TStringBuf>(); 
-    } 
- 
+            }
+        }
+        return TMaybe<TStringBuf>();
+    }
+
     bool operator==(const TStructExprType& other) const {
         if (GetSize() != other.GetSize()) {
             return false;
@@ -2251,7 +2251,7 @@ struct TExprContext : private TNonCopyable {
 
     ui64 NextUniqueId = 0;
     ui64 NodeAllocationCounter = 0;
-    ui64 NodesAllocationLimit = 3000000; 
+    ui64 NodesAllocationLimit = 3000000;
     ui64 StringsAllocationLimit = 100000000;
     ui64 RepeatTransformLimit = 1000000;
     ui64 RepeatTransformCounter = 0;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -44,8 +44,8 @@ namespace ue2 {
 
 FDREngineDescription::FDREngineDescription(const FDREngineDef &def)
     : EngineDescription(def.id, targetByArchFeatures(def.cpu_features),
-                        def.numBuckets), 
-      schemeWidth(def.schemeWidth), stride(0), bits(0) {} 
+                        def.numBuckets),
+      schemeWidth(def.schemeWidth), stride(0), bits(0) {}
 
 u32 FDREngineDescription::getDefaultFloodSuffixLength() const {
     // rounding up, so that scheme width 32 and 6 buckets is 6 not 5!
@@ -53,12 +53,12 @@ u32 FDREngineDescription::getDefaultFloodSuffixLength() const {
     return ((getSchemeWidth() + getNumBuckets() - 1) / getNumBuckets()) + 1;
 }
 
-void getFdrDescriptions(vector<FDREngineDescription> *out) { 
-    static const FDREngineDef def = {0, 64, 8, 0}; 
-    out->clear(); 
-    out->emplace_back(def); 
-} 
- 
+void getFdrDescriptions(vector<FDREngineDescription> *out) {
+    static const FDREngineDef def = {0, 64, 8, 0};
+    out->clear();
+    out->emplace_back(def);
+}
+
 static
 u32 findDesiredStride(size_t num_lits, size_t min_len, size_t min_len_count) {
     u32 desiredStride = 1; // always our safe fallback
@@ -111,33 +111,33 @@ unique_ptr<FDREngineDescription> chooseEngine(const target_t &target,
     FDREngineDescription *best = nullptr;
     u32 best_score = 0;
 
-    FDREngineDescription &eng = allDescs[0]; 
- 
+    FDREngineDescription &eng = allDescs[0];
+
     for (u32 domain = 9; domain <= 15; domain++) {
-        for (size_t stride = 1; stride <= 4; stride *= 2) { 
+        for (size_t stride = 1; stride <= 4; stride *= 2) {
             // to make sure that domains >=14 have stride 1 according to origin
-            if (domain > 13 && stride > 1) { 
+            if (domain > 13 && stride > 1) {
                 continue;
             }
             if (!eng.isValidOnTarget(target)) {
                 continue;
             }
-            if (msl < stride) { 
+            if (msl < stride) {
                 continue;
             }
 
             u32 score = 100;
 
-            score -= absdiff(desiredStride, stride); 
+            score -= absdiff(desiredStride, stride);
 
-            if (stride <= desiredStride) { 
-                score += stride; 
+            if (stride <= desiredStride) {
+                score += stride;
             }
 
             u32 effLits = vl.size(); /* * desiredStride;*/
             u32 ideal;
             if (effLits < eng.getNumBuckets()) {
-                if (stride == 1) { 
+                if (stride == 1) {
                     ideal = 8;
                 } else {
                     ideal = 10;
@@ -162,28 +162,28 @@ unique_ptr<FDREngineDescription> chooseEngine(const target_t &target,
                 ideal -= 2;
             }
 
-            if (stride > 1) { 
+            if (stride > 1) {
                 ideal++;
             }
 
             DEBUG_PRINTF("effLits %u\n", effLits);
 
             if (target.is_atom_class() && !make_small && effLits < 4000) {
-                /* Unless it is a very heavy case, we want to build smaller 
-                 * tables on lightweight machines due to their small caches. */ 
+                /* Unless it is a very heavy case, we want to build smaller
+                 * tables on lightweight machines due to their small caches. */
                 ideal -= 2;
             }
 
             score -= absdiff(ideal, domain);
 
-            DEBUG_PRINTF("fdr %u: width=%u, domain=%u, buckets=%u, stride=%zu " 
+            DEBUG_PRINTF("fdr %u: width=%u, domain=%u, buckets=%u, stride=%zu "
                          "-> score=%u\n",
-                         eng.getID(), eng.schemeWidth, domain, 
-                         eng.getNumBuckets(), stride, score); 
+                         eng.getID(), eng.schemeWidth, domain,
+                         eng.getNumBuckets(), stride, score);
 
             if (!best || score > best_score) {
                 eng.bits = domain;
-                eng.stride = stride; 
+                eng.stride = stride;
                 best = &eng;
                 best_score = score;
             }

@@ -164,47 +164,47 @@
 (let variance_1_1_traits_factory_raw (lambda '(list_type) (Apply variance_traits_factory_raw list_type (Bool '1) (Bool '1))))
 
 # list_type:type
-# doesn't support optional values 
-(let correlation_traits_factory_raw (lambda '(list_type) (block '( 
-    (let init (lambda '(value) '((Uint64 '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0))) (* (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)))))) 
-    (let update (lambda '(value state) '((+ (Nth state '0) (Uint64 '1)) (+ (Nth state '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0))) (+ (Nth state '2) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))) (+ (Nth state '3) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)))) (+ (Nth state '4) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)))) (+ (Nth state '5) (* (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))))))) 
-    (let save (lambda '(state) state)) 
-    (let load (lambda '(state) state)) 
-    (let merge (lambda '(one two) '((+ (Nth one '0) (Nth two '0)) (+ (Nth one '1) (Nth two '1)) (+ (Nth one '2) (Nth two '2)) (+ (Nth one '3) (Nth two '3)) (+ (Nth one '4) (Nth two '4)) (+ (Nth one '5) (Nth two '5))))) 
-    (let finish (lambda '(state) (block '( 
-        # Math comes from ISO9075-2:2011(E) and differs from what Excel uses 
-        (let dividend (* (Nth state '3) (Nth state '0))) 
-        (let dividend (- dividend (* (Nth state '1) (Nth state '2)))) 
-        (let divisor1 (* (Nth state '4) (Nth state '0))) 
+# doesn't support optional values
+(let correlation_traits_factory_raw (lambda '(list_type) (block '(
+    (let init (lambda '(value) '((Uint64 '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0))) (* (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))))))
+    (let update (lambda '(value state) '((+ (Nth state '0) (Uint64 '1)) (+ (Nth state '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0))) (+ (Nth state '2) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))) (+ (Nth state '3) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)))) (+ (Nth state '4) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)))) (+ (Nth state '5) (* (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)))))))
+    (let save (lambda '(state) state))
+    (let load (lambda '(state) state))
+    (let merge (lambda '(one two) '((+ (Nth one '0) (Nth two '0)) (+ (Nth one '1) (Nth two '1)) (+ (Nth one '2) (Nth two '2)) (+ (Nth one '3) (Nth two '3)) (+ (Nth one '4) (Nth two '4)) (+ (Nth one '5) (Nth two '5)))))
+    (let finish (lambda '(state) (block '(
+        # Math comes from ISO9075-2:2011(E) and differs from what Excel uses
+        (let dividend (* (Nth state '3) (Nth state '0)))
+        (let dividend (- dividend (* (Nth state '1) (Nth state '2))))
+        (let divisor1 (* (Nth state '4) (Nth state '0)))
         (let divisor1 (- divisor1 (* (Nth state '1) (Nth state '1))))
-        (let divisor2 (* (Nth state '5) (Nth state '0))) 
+        (let divisor2 (* (Nth state '5) (Nth state '0)))
         (let divisor2 (- divisor2 (* (Nth state '2) (Nth state '2))))
-        (return (/ dividend (Apply (Udf 'Math.Sqrt) (* divisor1 divisor2)))) 
-    )))) 
+        (return (/ dividend (Apply (Udf 'Math.Sqrt) (* divisor1 divisor2))))
+    ))))
     (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
-)))) 
- 
-# list_type:type sample:bool 
-# doesn't support optional values 
-(let covariance_traits_factory_raw (lambda '(list_type sample) (block '( 
-    (let init (lambda '(value) '((Uint64 '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)))))) 
-    (let update (lambda '(value state) '((+ (Nth state '0) (Uint64 '1)) (+ (Nth state '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0))) (+ (Nth state '2) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))) (+ (Nth state '3) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))))))) 
-    (let save (lambda '(state) state)) 
-    (let load (lambda '(state) state)) 
-    (let merge (lambda '(one two) '((+ (Nth one '0) (Nth two '0)) (+ (Nth one '1) (Nth two '1)) (+ (Nth one '2) (Nth two '2)) (+ (Nth one '3) (Nth two '3))))) 
-    (let finish (lambda '(state) (block '( 
-        (let covariance_result (- (Nth state '3) (/ (* (Nth state '1) (Nth state '2)) (Nth state '0)))) 
-        (let covariance_result (/ covariance_result (If sample (- (Nth state '0) (Uint64 '1)) (Nth state '0)))) 
-        (return covariance_result) 
-    )))) 
+))))
+
+# list_type:type sample:bool
+# doesn't support optional values
+(let covariance_traits_factory_raw (lambda '(list_type sample) (block '(
+    (let init (lambda '(value) '((Uint64 '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))))))
+    (let update (lambda '(value state) '((+ (Nth state '0) (Uint64 '1)) (+ (Nth state '1) (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0))) (+ (Nth state '2) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0))) (+ (Nth state '3) (* (Coalesce (Convert (Nth value '0) 'Double) (Double '0.0)) (Coalesce (Convert (Nth value '1) 'Double) (Double '0.0)))))))
+    (let save (lambda '(state) state))
+    (let load (lambda '(state) state))
+    (let merge (lambda '(one two) '((+ (Nth one '0) (Nth two '0)) (+ (Nth one '1) (Nth two '1)) (+ (Nth one '2) (Nth two '2)) (+ (Nth one '3) (Nth two '3)))))
+    (let finish (lambda '(state) (block '(
+        (let covariance_result (- (Nth state '3) (/ (* (Nth state '1) (Nth state '2)) (Nth state '0))))
+        (let covariance_result (/ covariance_result (If sample (- (Nth state '0) (Uint64 '1)) (Nth state '0))))
+        (return covariance_result)
+    ))))
     (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
-)))) 
- 
-# list_type:type 
-# doesn't support optional values 
-(let covariance_population_traits_factory_raw (lambda '(list_type) (Apply covariance_traits_factory_raw list_type (Bool '0)))) 
-(let covariance_sample_traits_factory_raw (lambda '(list_type) (Apply covariance_traits_factory_raw list_type (Bool '1)))) 
- 
+))))
+
+# list_type:type
+# doesn't support optional values
+(let covariance_population_traits_factory_raw (lambda '(list_type) (Apply covariance_traits_factory_raw list_type (Bool '0))))
+(let covariance_sample_traits_factory_raw (lambda '(list_type) (Apply covariance_traits_factory_raw list_type (Bool '1))))
+
 # list_type:type histogram:atom value:lambda weight:lambda intervals:integer
 # doesn't support optional values
 (let histogram_traits_factory_raw (lambda '(list_type histogram value weight intervals) (block '(
@@ -355,18 +355,18 @@
     (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
 ))))
 
-# list_type:type 
-# doesn't support optional values 
-(let hyperloglog_traits_factory_raw (lambda '(list_type precision) (block '( 
-    (let init (lambda '(value parent) (NamedApply (Udf 'HyperLogLog.Create) '((Apply (Udf 'Digest.MurMurHash) (Pickle value)) precision) (AsStruct) (DependsOn parent)))) 
-    (let update (lambda '(value state parent) (NamedApply (Udf 'HyperLogLog.AddValue) '(state (Apply (Udf 'Digest.MurMurHash) (Pickle value))) (AsStruct) (DependsOn parent)))) 
-    (let save (lambda '(state) (Apply (Udf 'HyperLogLog.Serialize) state))) 
-    (let load (lambda '(state) (Apply (Udf 'HyperLogLog.Deserialize) state))) 
-    (let merge (lambda '(one two) (Apply (Udf 'HyperLogLog.Merge) one two))) 
-    (let finish (lambda '(state) (Apply (Udf 'HyperLogLog.GetResult) state))) 
+# list_type:type
+# doesn't support optional values
+(let hyperloglog_traits_factory_raw (lambda '(list_type precision) (block '(
+    (let init (lambda '(value parent) (NamedApply (Udf 'HyperLogLog.Create) '((Apply (Udf 'Digest.MurMurHash) (Pickle value)) precision) (AsStruct) (DependsOn parent))))
+    (let update (lambda '(value state parent) (NamedApply (Udf 'HyperLogLog.AddValue) '(state (Apply (Udf 'Digest.MurMurHash) (Pickle value))) (AsStruct) (DependsOn parent))))
+    (let save (lambda '(state) (Apply (Udf 'HyperLogLog.Serialize) state)))
+    (let load (lambda '(state) (Apply (Udf 'HyperLogLog.Deserialize) state)))
+    (let merge (lambda '(one two) (Apply (Udf 'HyperLogLog.Merge) one two)))
+    (let finish (lambda '(state) (Apply (Udf 'HyperLogLog.GetResult) state)))
     (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
-)))) 
- 
+))))
+
 # list_type:type value:lambda weight:lambda intervals:integer
 # doesn't support optional values
 (let histogram_adaptive_ward_traits_factory_raw (lambda '(list_type value weight intervals) (Apply histogram_traits_factory_raw list_type 'Histogram.AdaptiveWardHistogram value weight intervals)))
@@ -375,23 +375,23 @@
 (let histogram_block_ward_traits_factory_raw (lambda '(list_type value weight intervals) (Apply histogram_traits_factory_raw list_type 'Histogram.BlockWardHistogram value weight intervals)))
 (let histogram_block_weight_traits_factory_raw (lambda '(list_type value weight intervals) (Apply histogram_traits_factory_raw list_type 'Histogram.BlockWeightHistogram value weight intervals)))
 
-# list_type:type histogram:atom value:lamba binsize:double minimum:double maximum:double 
-# doesn't support optional values 
-(let histogram_linear_traits_factory_impl (lambda '(list_type histogram value binsize minimum maximum) (block '( 
-    (let init (lambda '(row parent) (NamedApply (Udf (Combine histogram '_Create)) '((Apply value row) binsize minimum maximum) (AsStruct) (DependsOn parent)))) 
-    (let update (lambda '(row state parent) (NamedApply (Udf (Combine histogram '_AddValue)) '(state (Apply value row) (Double '"1.0")) (AsStruct) (DependsOn parent)))) 
-    (let save (lambda '(state) (Apply (Udf (Combine histogram '_Serialize)) state))) 
-    (let load (lambda '(state) (Apply (Udf (Combine histogram '_Deserialize)) state binsize minimum maximum))) 
-    (let merge (lambda '(one two) (Apply (Udf (Combine histogram '_Merge)) one two))) 
-    (let finish (lambda '(state) (Apply (Udf (Combine histogram '_GetResult)) state))) 
+# list_type:type histogram:atom value:lamba binsize:double minimum:double maximum:double
+# doesn't support optional values
+(let histogram_linear_traits_factory_impl (lambda '(list_type histogram value binsize minimum maximum) (block '(
+    (let init (lambda '(row parent) (NamedApply (Udf (Combine histogram '_Create)) '((Apply value row) binsize minimum maximum) (AsStruct) (DependsOn parent))))
+    (let update (lambda '(row state parent) (NamedApply (Udf (Combine histogram '_AddValue)) '(state (Apply value row) (Double '"1.0")) (AsStruct) (DependsOn parent))))
+    (let save (lambda '(state) (Apply (Udf (Combine histogram '_Serialize)) state)))
+    (let load (lambda '(state) (Apply (Udf (Combine histogram '_Deserialize)) state binsize minimum maximum)))
+    (let merge (lambda '(one two) (Apply (Udf (Combine histogram '_Merge)) one two)))
+    (let finish (lambda '(state) (Apply (Udf (Combine histogram '_GetResult)) state)))
     (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
-)))) 
- 
-# list_type:type value:lambda binsize:double minimum:double maximum:double 
-# doesn't support optional values 
-(let histogram_linear_traits_factory_raw (lambda '(list_type value binsize minimum maximum) (Apply histogram_linear_traits_factory_impl list_type 'Histogram.LinearHistogram value binsize minimum maximum))) 
-(let histogram_logarithmic_traits_factory_raw (lambda '(list_type value binsize minimum maximum) (Apply histogram_linear_traits_factory_impl list_type 'Histogram.LogarithmicHistogram value binsize minimum maximum))) 
- 
+))))
+
+# list_type:type value:lambda binsize:double minimum:double maximum:double
+# doesn't support optional values
+(let histogram_linear_traits_factory_raw (lambda '(list_type value binsize minimum maximum) (Apply histogram_linear_traits_factory_impl list_type 'Histogram.LinearHistogram value binsize minimum maximum)))
+(let histogram_logarithmic_traits_factory_raw (lambda '(list_type value binsize minimum maximum) (Apply histogram_linear_traits_factory_impl list_type 'Histogram.LogarithmicHistogram value binsize minimum maximum)))
+
 # list_type:type factory:lambda
 # support optional values
 (let optional_traits_factory (lambda '(list_type factory) (block '(
@@ -570,9 +570,9 @@
 (let variance_1_0_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type variance_1_0_traits_factory_raw)))
 (let variance_0_1_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type variance_0_1_traits_factory_raw)))
 (let variance_1_1_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type variance_1_1_traits_factory_raw)))
-(let correlation_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type correlation_traits_factory_raw))) 
-(let covariance_population_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type covariance_population_traits_factory_raw))) 
-(let covariance_sample_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type covariance_sample_traits_factory_raw))) 
+(let correlation_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type correlation_traits_factory_raw)))
+(let covariance_population_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type covariance_population_traits_factory_raw)))
+(let covariance_sample_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type covariance_sample_traits_factory_raw)))
 
 # list_type:type n:double
 # support optional values
@@ -586,13 +586,13 @@
 # support optional values
 (let topfreq_traits_factory_opt (lambda '(list_type n buffer) (Apply flatten_traits_factory_parent list_type (lambda '(list_type) (Apply topfreq_traits_factory_raw list_type n buffer)))))
 
-# list_type:type 
-# support optional values 
-(let hyperloglog_traits_factory_opt (lambda '(list_type precision) (Apply optional_traits_factory_parent list_type (lambda '(list_type) (Apply hyperloglog_traits_factory_raw list_type precision))))) 
- 
+# list_type:type
+# support optional values
+(let hyperloglog_traits_factory_opt (lambda '(list_type precision) (Apply optional_traits_factory_parent list_type (lambda '(list_type) (Apply hyperloglog_traits_factory_raw list_type precision)))))
+
 # list_type:type init:lambda update:lambda merge:lambda finish:lambda save:lambda load:lambda
 # support optional values
-(let udaf_traits_factory_opt (lambda '(list_type init update merge finish save load defval) (Apply optional_traits_factory_parent list_type (lambda '(list_type) 
+(let udaf_traits_factory_opt (lambda '(list_type init update merge finish save load defval) (Apply optional_traits_factory_parent list_type (lambda '(list_type)
   (AggregationTraits (ListItemType list_type) init update save load merge finish defval)))))
 
 # list_type:type, factory:lambda, extractor:lambda
@@ -647,9 +647,9 @@
 (let variance_1_0_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor variance_1_0_traits_factory_opt)))
 (let variance_0_1_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor variance_0_1_traits_factory_opt)))
 (let variance_1_1_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor variance_1_1_traits_factory_opt)))
-(let correlation_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor correlation_traits_factory_opt))) 
-(let covariance_population_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor covariance_population_traits_factory_opt))) 
-(let covariance_sample_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor covariance_sample_traits_factory_opt))) 
+(let correlation_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor correlation_traits_factory_opt)))
+(let covariance_population_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor covariance_population_traits_factory_opt)))
+(let covariance_sample_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor covariance_sample_traits_factory_opt)))
 
 # list_type:type extractor:lambda n:double
 # support optional values
@@ -663,10 +663,10 @@
 # support optional values
 (let topfreq_traits_factory (lambda '(list_type extractor n buffer) (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type) (Apply topfreq_traits_factory_opt list_type n buffer)))))
 
-# list_type:type extractor:lambda precision:ui32 
-# support optional values 
-(let hyperloglog_traits_factory (lambda '(list_type extractor precision) (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type) (Apply hyperloglog_traits_factory_opt list_type precision))))) 
- 
+# list_type:type extractor:lambda precision:ui32
+# support optional values
+(let hyperloglog_traits_factory (lambda '(list_type extractor precision) (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type) (Apply hyperloglog_traits_factory_opt list_type precision)))))
+
 # list_type:type extractor:lambda init:lambda update:lambda merge:lambda finish:lambda save:lambda load:lambda
 # support optional values
 (let udaf_traits_factory (lambda '(list_type extractor init update merge finish save load defval) (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type) (Apply udaf_traits_factory_opt list_type init update merge finish save load defval)))))
@@ -834,13 +834,13 @@
 (let histogram_block_ward_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_block_ward_traits_factory_raw list_type value weight intervals)) list_type value weight)))
 (let histogram_block_weight_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_block_weight_traits_factory_raw list_type value weight intervals)) list_type value weight)))
 
-# list_type:type value:lambda binsize:double minimum:double maximum:double 
-# support optional values 
-(let histogram_linear_traits_factory (lambda '(list_type value binsize minimum maximum) (Apply double_traits_factory_opt_parent (lambda '(list_type value binsize) (Apply histogram_linear_traits_factory_raw list_type value binsize minimum maximum)) list_type value binsize))) 
-(let histogram_logarithmic_traits_factory (lambda '(list_type value binsize minimum maximum) (Apply double_traits_factory_opt_parent (lambda '(list_type value binsize) (Apply histogram_logarithmic_traits_factory_raw list_type value binsize minimum maximum)) list_type value binsize))) 
- 
-(let compare_by_traits_factory_opt (lambda '(list_type compare first second limit) (Apply double_traits_factory_opt (lambda '(list_type first second) (Apply compare_traits_factory_raw list_type compare first second limit)) list_type first second))) 
-(let list_compare_by_traits_factory_opt (lambda '(list_type compare first second limit) (Apply double_traits_factory_opt (lambda '(list_type first second) (Apply compare_traits_factory_list_raw list_type compare first second limit)) list_type first second))) 
+# list_type:type value:lambda binsize:double minimum:double maximum:double
+# support optional values
+(let histogram_linear_traits_factory (lambda '(list_type value binsize minimum maximum) (Apply double_traits_factory_opt_parent (lambda '(list_type value binsize) (Apply histogram_linear_traits_factory_raw list_type value binsize minimum maximum)) list_type value binsize)))
+(let histogram_logarithmic_traits_factory (lambda '(list_type value binsize minimum maximum) (Apply double_traits_factory_opt_parent (lambda '(list_type value binsize) (Apply histogram_logarithmic_traits_factory_raw list_type value binsize minimum maximum)) list_type value binsize)))
+
+(let compare_by_traits_factory_opt (lambda '(list_type compare first second limit) (Apply double_traits_factory_opt (lambda '(list_type first second) (Apply compare_traits_factory_raw list_type compare first second limit)) list_type first second)))
+(let list_compare_by_traits_factory_opt (lambda '(list_type compare first second limit) (Apply double_traits_factory_opt (lambda '(list_type first second) (Apply compare_traits_factory_list_raw list_type compare first second limit)) list_type first second)))
 
 # deprecated
 (let compare_by_traits_factory (lambda '(list_type compare first second limit) (IfType limit (VoidType)
@@ -916,21 +916,21 @@
 (export variance_1_0_traits_factory)
 (export variance_0_1_traits_factory)
 (export variance_1_1_traits_factory)
-(export correlation_traits_factory) 
-(export covariance_population_traits_factory) 
-(export covariance_sample_traits_factory) 
+(export correlation_traits_factory)
+(export covariance_population_traits_factory)
+(export covariance_sample_traits_factory)
 (export histogram_adaptive_ward_traits_factory)
 (export histogram_adaptive_weight_traits_factory)
 (export histogram_adaptive_distance_traits_factory)
 (export histogram_block_ward_traits_factory)
 (export histogram_block_weight_traits_factory)
-(export histogram_linear_traits_factory) 
-(export histogram_logarithmic_traits_factory) 
+(export histogram_linear_traits_factory)
+(export histogram_logarithmic_traits_factory)
 (export udaf_traits_factory)
 (export percentile_traits_factory)
 (export set_traits_factory)
 (export topfreq_traits_factory)
-(export hyperloglog_traits_factory) 
+(export hyperloglog_traits_factory)
 (export top_traits_factory)
 (export bottom_traits_factory)
 (export top_by_traits_factory)

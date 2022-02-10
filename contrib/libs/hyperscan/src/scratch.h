@@ -70,19 +70,19 @@ struct catchup_pq {
     u32 qm_size; /**< current size of the priority queue */
 };
 
-/** \brief Status flag: user requested termination. */ 
-#define STATUS_TERMINATED   (1U << 0) 
+/** \brief Status flag: user requested termination. */
+#define STATUS_TERMINATED   (1U << 0)
 
-/** \brief Status flag: it has been determined that it is not possible for this 
- * stream to raise any more matches. 
- * 
- * This may be because all its exhaustion keys are on or for other reasons 
- * (anchored sections not matching). */ 
-#define STATUS_EXHAUSTED    (1U << 1) 
+/** \brief Status flag: it has been determined that it is not possible for this
+ * stream to raise any more matches.
+ *
+ * This may be because all its exhaustion keys are on or for other reasons
+ * (anchored sections not matching). */
+#define STATUS_EXHAUSTED    (1U << 1)
 
-/** \brief Status flag: Rose requires rebuild as delay literal matched in 
- * history. */ 
-#define STATUS_DELAY_DIRTY  (1U << 2) 
+/** \brief Status flag: Rose requires rebuild as delay literal matched in
+ * history. */
+#define STATUS_DELAY_DIRTY  (1U << 2)
 
 /** \brief Status flag: Unexpected Rose program error. */
 #define STATUS_ERROR        (1U << 3)
@@ -106,7 +106,7 @@ struct core_info {
     const u8 *hbuf; /**< history buffer */
     size_t hlen; /**< length of history buffer in bytes. */
     u64a buf_offset; /**< stream offset, for the base of the buffer */
-    u8 status; /**< stream status bitmask, using STATUS_ flags above */ 
+    u8 status; /**< stream status bitmask, using STATUS_ flags above */
 };
 
 /** \brief Rose state information. */
@@ -132,33 +132,33 @@ struct RoseContext {
     u32 filledDelayedSlots;
     u32 curr_qi;    /**< currently executing main queue index during
                      * \ref nfaQueueExec */
- 
-    /** 
-     * \brief Buffer for caseful long literal support, used in streaming mode 
-     * only. 
-     * 
-     * If a long literal prefix was at the end of the buffer at the end of a 
-     * stream write, then the long lit table hashes it and stores the result in 
-     * stream state. At the start of the next write, this value is used to set 
-     * this buffer to the matching prefix string (stored in the bytecode. 
-     */ 
-    const u8 *ll_buf; 
- 
-    /** \brief Length in bytes of the string pointed to by ll_buf. */ 
-    size_t ll_len; 
- 
-    /** \brief Caseless version of ll_buf. */ 
-    const u8 *ll_buf_nocase; 
- 
-    /** \brief Length in bytes of the string pointed to by ll_buf_nocase. */ 
-    size_t ll_len_nocase; 
+
+    /**
+     * \brief Buffer for caseful long literal support, used in streaming mode
+     * only.
+     *
+     * If a long literal prefix was at the end of the buffer at the end of a
+     * stream write, then the long lit table hashes it and stores the result in
+     * stream state. At the start of the next write, this value is used to set
+     * this buffer to the matching prefix string (stored in the bytecode.
+     */
+    const u8 *ll_buf;
+
+    /** \brief Length in bytes of the string pointed to by ll_buf. */
+    size_t ll_len;
+
+    /** \brief Caseless version of ll_buf. */
+    const u8 *ll_buf_nocase;
+
+    /** \brief Length in bytes of the string pointed to by ll_buf_nocase. */
+    size_t ll_len_nocase;
 };
 
 struct match_deduper {
     struct fatbit *log[2]; /**< even, odd logs */
-    struct fatbit *som_log[2]; /**< even, odd fatbit logs for som */ 
+    struct fatbit *som_log[2]; /**< even, odd fatbit logs for som */
     u64a *som_start_log[2]; /**< even, odd start offset logs for som */
-    u32 dkey_count; 
+    u32 dkey_count;
     u32 log_size;
     u64a current_report_offset;
     u8 som_log_dirty;
@@ -171,9 +171,9 @@ struct match_deduper {
  */
 struct ALIGN_CL_DIRECTIVE hs_scratch {
     u32 magic;
-    u8 in_use; /**< non-zero when being used by an API call. */ 
+    u8 in_use; /**< non-zero when being used by an API call. */
     u32 queueCount;
-    u32 activeQueueArraySize; /**< size of active queue array fatbit in bytes */ 
+    u32 activeQueueArraySize; /**< size of active queue array fatbit in bytes */
     u32 bStateSize; /**< sizeof block mode states */
     u32 tStateSize; /**< sizeof transient rose states */
     u32 fullStateSize; /**< size of uncompressed nfa state */
@@ -184,15 +184,15 @@ struct ALIGN_CL_DIRECTIVE hs_scratch {
     struct mq *queues;
     struct fatbit *aqa; /**< active queue array; fatbit of queues that are valid
                          * & active */
-    struct fatbit **delay_slots; 
-    struct fatbit **al_log; 
+    struct fatbit **delay_slots;
+    struct fatbit **al_log;
     u64a al_log_sum;
     struct catchup_pq catchup_pq;
     struct core_info core_info;
     struct match_deduper deduper;
     u32 anchored_literal_region_len;
-    u32 anchored_literal_fatbit_size; /**< size of each anch fatbit in bytes */ 
-    struct fatbit *handled_roles; /**< fatbit of ROLES (not states) already 
+    u32 anchored_literal_fatbit_size; /**< size of each anch fatbit in bytes */
+    struct fatbit *handled_roles; /**< fatbit of ROLES (not states) already
                                    * handled by this literal */
     u64a *som_store; /**< array of som locations */
     u64a *som_attempted_store; /**< array of som locations for fail stores */
@@ -203,34 +203,34 @@ struct ALIGN_CL_DIRECTIVE hs_scratch {
                             * location had been writable */
     u64a som_set_now_offset; /**< offset at which som_set_now represents */
     u32 som_store_count;
-    u32 som_fatbit_size; /**< size of som location fatbit structures in bytes */ 
-    u32 handledKeyFatbitSize; /**< size of handled_keys fatbit in bytes */ 
-    u32 delay_fatbit_size; /**< size of each delay fatbit in bytes */ 
-    u32 scratchSize; 
-    char *scratch_alloc; /* user allocated scratch object */ 
-    u64a *fdr_conf; /**< FDR confirm value */ 
-    u8 fdr_conf_offset; /**< offset where FDR/Teddy front end matches 
-                         * in buffer */ 
+    u32 som_fatbit_size; /**< size of som location fatbit structures in bytes */
+    u32 handledKeyFatbitSize; /**< size of handled_keys fatbit in bytes */
+    u32 delay_fatbit_size; /**< size of each delay fatbit in bytes */
+    u32 scratchSize;
+    char *scratch_alloc; /* user allocated scratch object */
+    u64a *fdr_conf; /**< FDR confirm value */
+    u8 fdr_conf_offset; /**< offset where FDR/Teddy front end matches
+                         * in buffer */
 };
 
-/* array of fatbit ptr; TODO: why not an array of fatbits? */ 
+/* array of fatbit ptr; TODO: why not an array of fatbits? */
 static really_inline
-struct fatbit **getAnchoredLiteralLog(struct hs_scratch *scratch) { 
-    return scratch->al_log; 
+struct fatbit **getAnchoredLiteralLog(struct hs_scratch *scratch) {
+    return scratch->al_log;
 }
 
 static really_inline
-struct fatbit **getDelaySlots(struct hs_scratch *scratch) { 
-    return scratch->delay_slots; 
+struct fatbit **getDelaySlots(struct hs_scratch *scratch) {
+    return scratch->delay_slots;
 }
 
 static really_inline
-char told_to_stop_matching(const struct hs_scratch *scratch) { 
-    return scratch->core_info.status & STATUS_TERMINATED; 
+char told_to_stop_matching(const struct hs_scratch *scratch) {
+    return scratch->core_info.status & STATUS_TERMINATED;
 }
 
 static really_inline
-char can_stop_matching(const struct hs_scratch *scratch) { 
+char can_stop_matching(const struct hs_scratch *scratch) {
     return scratch->core_info.status &
            (STATUS_TERMINATED | STATUS_EXHAUSTED | STATUS_ERROR);
 }
@@ -240,32 +240,32 @@ char internal_matching_error(const struct hs_scratch *scratch) {
     return scratch->core_info.status & STATUS_ERROR;
 }
 
-/** 
- * \brief Mark scratch as in use. 
- * 
- * Returns non-zero if it was already in use, zero otherwise. 
- */ 
+/**
+ * \brief Mark scratch as in use.
+ *
+ * Returns non-zero if it was already in use, zero otherwise.
+ */
 static really_inline
-char markScratchInUse(struct hs_scratch *scratch) { 
-    DEBUG_PRINTF("marking scratch as in use\n"); 
-    assert(scratch && scratch->magic == SCRATCH_MAGIC); 
-    if (scratch->in_use) { 
-        DEBUG_PRINTF("scratch already in use!\n"); 
-        return 1; 
-    } 
-    scratch->in_use = 1; 
-    return 0; 
+char markScratchInUse(struct hs_scratch *scratch) {
+    DEBUG_PRINTF("marking scratch as in use\n");
+    assert(scratch && scratch->magic == SCRATCH_MAGIC);
+    if (scratch->in_use) {
+        DEBUG_PRINTF("scratch already in use!\n");
+        return 1;
+    }
+    scratch->in_use = 1;
+    return 0;
 }
 
-/** 
- * \brief Mark scratch as no longer in use. 
- */ 
+/**
+ * \brief Mark scratch as no longer in use.
+ */
 static really_inline
-void unmarkScratchInUse(struct hs_scratch *scratch) { 
-    DEBUG_PRINTF("marking scratch as not in use\n"); 
-    assert(scratch && scratch->magic == SCRATCH_MAGIC); 
-    assert(scratch->in_use == 1); 
-    scratch->in_use = 0; 
+void unmarkScratchInUse(struct hs_scratch *scratch) {
+    DEBUG_PRINTF("marking scratch as not in use\n");
+    assert(scratch && scratch->magic == SCRATCH_MAGIC);
+    assert(scratch->in_use == 1);
+    scratch->in_use = 0;
 }
 
 #ifdef __cplusplus

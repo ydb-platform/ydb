@@ -14,11 +14,11 @@
 
 using namespace NYql;
 
-namespace NSQLTranslationV1 { 
+namespace NSQLTranslationV1 {
 
 namespace {
 
-TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferredAtom& path) { 
+TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferredAtom& path) {
     Y_UNUSED(ctx);
     if (prefixPath.empty()) {
         return path.Build();
@@ -27,7 +27,7 @@ TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferre
     if (path.GetLiteral()) {
         return BuildQuotedAtom(path.Build()->GetPos(), BuildTablePath(prefixPath, *path.GetLiteral()));
     }
- 
+
     auto pathNode = path.Build();
     pathNode = new TCallNodeImpl(pathNode->GetPos(), "String", { pathNode });
     auto prefixNode = BuildLiteralRawString(pathNode->GetPos(), TString(prefixPath));
@@ -65,7 +65,7 @@ THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
 
 } // namespace
 
-TContext::TContext(const NSQLTranslation::TTranslationSettings& settings, 
+TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
                    TIssues& issues)
     : ClusterMapping(settings.ClusterMapping)
     , PathPrefix(settings.PathPrefix)
@@ -477,11 +477,11 @@ TNodePtr TTranslation::GetNamedNode(const TString& name) {
     }
     auto res = Ctx.Scoped->LookupNode(name);
     if (!res) {
-        Ctx.Error() << "Unknown name: " << name; 
-    } 
+        Ctx.Error() << "Unknown name: " << name;
+    }
     return res;
-} 
- 
+}
+
 TString TTranslation::PushNamedNode(TPosition namePos, const TString& name, const TNodeBuilderByName& builder) {
     TString resultName = name;
     if (IsAnonymousName(name)) {
@@ -556,4 +556,4 @@ void TTranslation::AltNotImplemented(const TString& ruleName, ui32 altCase, cons
     Error() << ruleName << ": alternative is not implemented yet: " << AltDescription(node, altCase, descr);
 }
 
-} // namespace NSQLTranslationV1 
+} // namespace NSQLTranslationV1

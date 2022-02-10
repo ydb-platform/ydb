@@ -385,7 +385,7 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
         auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
         UNIT_ASSERT(funcPtr(7, 4, 8) == 4289);
 #endif
-#if !defined(_asan_enabled_) && !defined(_msan_enabled_) && !defined(_tsan_enabled_) && !defined(_hardening_enabled_) 
+#if !defined(_asan_enabled_) && !defined(_msan_enabled_) && !defined(_tsan_enabled_) && !defined(_hardening_enabled_)
         if (str.Str().Contains("call")) {
             UNIT_FAIL("Expected inline, disasm:\n" + str.Str());
         }

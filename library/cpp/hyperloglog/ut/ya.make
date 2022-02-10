@@ -6,7 +6,7 @@ OWNER(
 )
 
 SRCS(
-    hyperloglog_ut.cpp 
+    hyperloglog_ut.cpp
 )
 
 END()

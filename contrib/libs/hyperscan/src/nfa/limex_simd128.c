@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, Intel Corporation 
+ * Copyright (c) 2015-2016, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -48,11 +48,11 @@
 
 #include "limex_runtime.h"
 
-#define SIZE          128 
-#define STATE_T       m128 
-#define ENG_STATE_T   m128 
-#define LOAD_FROM_ENG load_m128 
- 
+#define SIZE          128
+#define STATE_T       m128
+#define ENG_STATE_T   m128
+#define LOAD_FROM_ENG load_m128
+
 #include "limex_exceptional.h"
 
 #include "limex_state_impl.h"

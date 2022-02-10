@@ -140,7 +140,7 @@ const u8 *dvermSearchAligned(m128 chars1, m128 chars2, u8 c1, u8 c2,
     for (; buf + 16 < buf_end; buf += 16) {
         m128 data = load128(buf);
         u32 z = movemask128(and128(eq128(chars1, data),
-                                   rshiftbyte_m128(eq128(chars2, data), 1))); 
+                                   rshiftbyte_m128(eq128(chars2, data), 1)));
         if (buf[15] == c1 && buf[16] == c2) {
             z |= (1 << 15);
         }
@@ -149,8 +149,8 @@ const u8 *dvermSearchAligned(m128 chars1, m128 chars2, u8 c1, u8 c2,
             return buf + pos;
         }
     }
- 
-    return NULL; 
+
+    return NULL;
 }
 
 static really_inline
@@ -163,7 +163,7 @@ const u8 *dvermSearchAlignedNocase(m128 chars1, m128 chars2, u8 c1, u8 c2,
         m128 data = load128(buf);
         m128 v = and128(casemask, data);
         u32 z = movemask128(and128(eq128(chars1, v),
-                                   rshiftbyte_m128(eq128(chars2, v), 1))); 
+                                   rshiftbyte_m128(eq128(chars2, v), 1)));
         if ((buf[15] & CASE_CLEAR) == c1 && (buf[16] & CASE_CLEAR) == c2) {
             z |= (1 << 15);
         }
@@ -172,40 +172,40 @@ const u8 *dvermSearchAlignedNocase(m128 chars1, m128 chars2, u8 c1, u8 c2,
             return buf + pos;
         }
     }
- 
-    return NULL; 
+
+    return NULL;
 }
 
-static really_inline 
-const u8 *dvermSearchAlignedMasked(m128 chars1, m128 chars2, 
-                                   m128 mask1, m128 mask2, u8 c1, u8 c2, u8 m1, 
-                                   u8 m2, const u8 *buf, const u8 *buf_end) { 
-    assert((size_t)buf % 16 == 0); 
- 
-    for (; buf + 16 < buf_end; buf += 16) { 
-        m128 data = load128(buf); 
-        m128 v1 = eq128(chars1, and128(data, mask1)); 
-        m128 v2 = eq128(chars2, and128(data, mask2)); 
-        u32 z = movemask128(and128(v1, rshiftbyte_m128(v2, 1))); 
- 
-        if ((buf[15] & m1) == c1 && (buf[16] & m2) == c2) { 
-            z |= (1 << 15); 
-        } 
-        if (unlikely(z)) { 
-            u32 pos = ctz32(z); 
-            return buf + pos; 
-        } 
-    } 
- 
-    return NULL; 
-} 
- 
+static really_inline
+const u8 *dvermSearchAlignedMasked(m128 chars1, m128 chars2,
+                                   m128 mask1, m128 mask2, u8 c1, u8 c2, u8 m1,
+                                   u8 m2, const u8 *buf, const u8 *buf_end) {
+    assert((size_t)buf % 16 == 0);
+
+    for (; buf + 16 < buf_end; buf += 16) {
+        m128 data = load128(buf);
+        m128 v1 = eq128(chars1, and128(data, mask1));
+        m128 v2 = eq128(chars2, and128(data, mask2));
+        u32 z = movemask128(and128(v1, rshiftbyte_m128(v2, 1)));
+
+        if ((buf[15] & m1) == c1 && (buf[16] & m2) == c2) {
+            z |= (1 << 15);
+        }
+        if (unlikely(z)) {
+            u32 pos = ctz32(z);
+            return buf + pos;
+        }
+    }
+
+    return NULL;
+}
+
 // returns NULL if not found
 static really_inline
 const u8 *dvermPrecondition(m128 chars1, m128 chars2, const u8 *buf) {
     m128 data = loadu128(buf); // unaligned
     u32 z = movemask128(and128(eq128(chars1, data),
-                               rshiftbyte_m128(eq128(chars2, data), 1))); 
+                               rshiftbyte_m128(eq128(chars2, data), 1)));
 
     /* no fixup of the boundary required - the aligned run will pick it up */
     if (unlikely(z)) {
@@ -223,7 +223,7 @@ const u8 *dvermPreconditionNocase(m128 chars1, m128 chars2, const u8 *buf) {
     m128 data = loadu128(buf); // unaligned
     m128 v = and128(casemask, data);
     u32 z = movemask128(and128(eq128(chars1, v),
-                               rshiftbyte_m128(eq128(chars2, v), 1))); 
+                               rshiftbyte_m128(eq128(chars2, v), 1)));
 
     /* no fixup of the boundary required - the aligned run will pick it up */
     if (unlikely(z)) {
@@ -233,24 +233,24 @@ const u8 *dvermPreconditionNocase(m128 chars1, m128 chars2, const u8 *buf) {
     return NULL;
 }
 
-// returns NULL if not found 
+// returns NULL if not found
 static really_inline
-const u8 *dvermPreconditionMasked(m128 chars1, m128 chars2, 
-                                  m128 mask1, m128 mask2, const u8 *buf) { 
-    m128 data = loadu128(buf); // unaligned 
-    m128 v1 = eq128(chars1, and128(data, mask1)); 
-    m128 v2 = eq128(chars2, and128(data, mask2)); 
-    u32 z = movemask128(and128(v1, rshiftbyte_m128(v2, 1))); 
- 
-    /* no fixup of the boundary required - the aligned run will pick it up */ 
-    if (unlikely(z)) { 
-        u32 pos = ctz32(z); 
-        return buf + pos; 
-    } 
-    return NULL; 
-} 
- 
-static really_inline 
+const u8 *dvermPreconditionMasked(m128 chars1, m128 chars2,
+                                  m128 mask1, m128 mask2, const u8 *buf) {
+    m128 data = loadu128(buf); // unaligned
+    m128 v1 = eq128(chars1, and128(data, mask1));
+    m128 v2 = eq128(chars2, and128(data, mask2));
+    u32 z = movemask128(and128(v1, rshiftbyte_m128(v2, 1)));
+
+    /* no fixup of the boundary required - the aligned run will pick it up */
+    if (unlikely(z)) {
+        u32 pos = ctz32(z);
+        return buf + pos;
+    }
+    return NULL;
+}
+
+static really_inline
 const u8 *lastMatchOffset(const u8 *buf_end, u32 z) {
     assert(z);
     return buf_end - 16 + 31 - clz32(z);
@@ -329,7 +329,7 @@ const u8 *rdvermSearchAligned(m128 chars1, m128 chars2, u8 c1, u8 c2,
     for (; buf + 16 < buf_end; buf_end -= 16) {
         m128 data = load128(buf_end - 16);
         u32 z = movemask128(and128(eq128(chars2, data),
-                                   lshiftbyte_m128(eq128(chars1, data), 1))); 
+                                   lshiftbyte_m128(eq128(chars1, data), 1)));
         if (buf_end[-17] == c1 && buf_end[-16] == c2) {
             z |= 1;
         }
@@ -350,7 +350,7 @@ const u8 *rdvermSearchAlignedNocase(m128 chars1, m128 chars2, u8 c1, u8 c2,
         m128 data = load128(buf_end - 16);
         m128 v = and128(casemask, data);
         u32 z = movemask128(and128(eq128(chars2, v),
-                                   lshiftbyte_m128(eq128(chars1, v), 1))); 
+                                   lshiftbyte_m128(eq128(chars1, v), 1)));
         if ((buf_end[-17] & CASE_CLEAR) == c1
             && (buf_end[-16] & CASE_CLEAR) == c2) {
             z |= 1;
@@ -367,7 +367,7 @@ static really_inline
 const u8 *rdvermPrecondition(m128 chars1, m128 chars2, const u8 *buf) {
     m128 data = loadu128(buf);
     u32 z = movemask128(and128(eq128(chars2, data),
-                               lshiftbyte_m128(eq128(chars1, data), 1))); 
+                               lshiftbyte_m128(eq128(chars1, data), 1)));
 
     /* no fixup of the boundary required - the aligned run will pick it up */
     if (unlikely(z)) {
@@ -385,7 +385,7 @@ const u8 *rdvermPreconditionNocase(m128 chars1, m128 chars2, const u8 *buf) {
     m128 data = loadu128(buf);
     m128 v = and128(casemask, data);
     u32 z = movemask128(and128(eq128(chars2, v),
-                               lshiftbyte_m128(eq128(chars1, v), 1))); 
+                               lshiftbyte_m128(eq128(chars1, v), 1)));
     /* no fixup of the boundary required - the aligned run will pick it up */
     if (unlikely(z)) {
         return lastMatchOffset(buf + 16, z);

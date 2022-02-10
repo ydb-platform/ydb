@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016, Intel Corporation 
+ * Copyright (c) 2015-2016, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -54,52 +54,52 @@
 #include <set>
 #include <vector>
 
-#include <boost/range/adaptor/map.hpp> 
- 
+#include <boost/range/adaptor/map.hpp>
+
 using namespace std;
-using boost::adaptors::map_values; 
+using boost::adaptors::map_values;
 
 namespace ue2 {
 
 static const u32 FAST_STATE_LIMIT = 256; /**< largest possible desirable NFA */
 
 /** Sentinel value meaning no component has yet been selected. */
-static const u32 NO_COMPONENT = ~0U; 
+static const u32 NO_COMPONENT = ~0U;
 
-static const u32 UNUSED_STATE = ~0U; 
+static const u32 UNUSED_STATE = ~0U;
 
-namespace { 
-struct ranking_info { 
-    explicit ranking_info(const NGHolder &h) : to_vertex(getTopoOrdering(h)) { 
-        u32 rank = 0; 
- 
-        reverse(to_vertex.begin(), to_vertex.end()); 
- 
-        for (NFAVertex v : to_vertex) { 
-            to_rank[v] = rank++; 
+namespace {
+struct ranking_info {
+    explicit ranking_info(const NGHolder &h) : to_vertex(getTopoOrdering(h)) {
+        u32 rank = 0;
+
+        reverse(to_vertex.begin(), to_vertex.end());
+
+        for (NFAVertex v : to_vertex) {
+            to_rank[v] = rank++;
         }
- 
-        for (NFAVertex v : vertices_range(h)) { 
-            if (!contains(to_rank, v)) { 
-                to_rank[v] = UNUSED_STATE; 
-            } 
-        } 
+
+        for (NFAVertex v : vertices_range(h)) {
+            if (!contains(to_rank, v)) {
+                to_rank[v] = UNUSED_STATE;
+            }
+        }
     }
 
-    NFAVertex at(u32 ranking) const { return to_vertex.at(ranking); } 
-    u32 get(NFAVertex v) const { return to_rank.at(v); } 
-    u32 size() const { return (u32)to_vertex.size(); } 
-    u32 add_to_tail(NFAVertex v) { 
-        u32 rank = size(); 
-        to_rank[v] = rank; 
-        to_vertex.push_back(v); 
-        return rank; 
+    NFAVertex at(u32 ranking) const { return to_vertex.at(ranking); }
+    u32 get(NFAVertex v) const { return to_rank.at(v); }
+    u32 size() const { return (u32)to_vertex.size(); }
+    u32 add_to_tail(NFAVertex v) {
+        u32 rank = size();
+        to_rank[v] = rank;
+        to_vertex.push_back(v);
+        return rank;
     }
 
-private: 
-    vector<NFAVertex> to_vertex; 
-    unordered_map<NFAVertex, u32> to_rank; 
-}; 
+private:
+    vector<NFAVertex> to_vertex;
+    unordered_map<NFAVertex, u32> to_rank;
+};
 }
 
 static never_inline
@@ -131,9 +131,9 @@ bool cplVerticesMatch(const NGHolder &ga, NFAVertex va,
 }
 
 static never_inline
-u32 cplCommonReachAndSimple(const NGHolder &ga, const ranking_info &a_ranking, 
-                            const NGHolder &gb, const ranking_info &b_ranking) { 
-    u32 ml = min(a_ranking.size(), b_ranking.size()); 
+u32 cplCommonReachAndSimple(const NGHolder &ga, const ranking_info &a_ranking,
+                            const NGHolder &gb, const ranking_info &b_ranking) {
+    u32 ml = min(a_ranking.size(), b_ranking.size());
     if (ml > 65535) {
         ml = 65535;
     }
@@ -142,7 +142,7 @@ u32 cplCommonReachAndSimple(const NGHolder &ga, const ranking_info &a_ranking,
     // "startedness" properties.
     u32 max = 0;
     for (; max < ml; max++) {
-        if (!cplVerticesMatch(ga, a_ranking.at(max), gb, b_ranking.at(max))) { 
+        if (!cplVerticesMatch(ga, a_ranking.at(max), gb, b_ranking.at(max))) {
             break;
         }
     }
@@ -150,30 +150,30 @@ u32 cplCommonReachAndSimple(const NGHolder &ga, const ranking_info &a_ranking,
     return max;
 }
 
-static 
-u32 commonPrefixLength(const NGHolder &ga, const ranking_info &a_ranking, 
-                       const NGHolder &gb, const ranking_info &b_ranking) { 
+static
+u32 commonPrefixLength(const NGHolder &ga, const ranking_info &a_ranking,
+                       const NGHolder &gb, const ranking_info &b_ranking) {
     /* upper bound on the common region based on local properties */
-    u32 max = cplCommonReachAndSimple(ga, a_ranking, gb, b_ranking); 
+    u32 max = cplCommonReachAndSimple(ga, a_ranking, gb, b_ranking);
     DEBUG_PRINTF("cpl upper bound %u\n", max);
 
     while (max > 0) {
         /* shrink max region based on in-edges from outside the region */
         for (size_t j = max; j > 0; j--) {
-            NFAVertex a_v = a_ranking.at(j - 1); 
-            NFAVertex b_v = b_ranking.at(j - 1); 
-            for (auto u : inv_adjacent_vertices_range(a_v, ga)) { 
-                u32 state_id = a_ranking.get(u); 
-                if (state_id != UNUSED_STATE && state_id >= max) { 
+            NFAVertex a_v = a_ranking.at(j - 1);
+            NFAVertex b_v = b_ranking.at(j - 1);
+            for (auto u : inv_adjacent_vertices_range(a_v, ga)) {
+                u32 state_id = a_ranking.get(u);
+                if (state_id != UNUSED_STATE && state_id >= max) {
                     max = j - 1;
                     DEBUG_PRINTF("lowering max to %u\n", max);
                     goto next_vertex;
                 }
             }
 
-            for (auto u : inv_adjacent_vertices_range(b_v, gb)) { 
-                u32 state_id = b_ranking.get(u); 
-                if (state_id != UNUSED_STATE && state_id >= max) { 
+            for (auto u : inv_adjacent_vertices_range(b_v, gb)) {
+                u32 state_id = b_ranking.get(u);
+                if (state_id != UNUSED_STATE && state_id >= max) {
                     max = j - 1;
                     DEBUG_PRINTF("lowering max to %u\n", max);
                     goto next_vertex;
@@ -185,37 +185,37 @@ u32 commonPrefixLength(const NGHolder &ga, const ranking_info &a_ranking,
 
         /* Ensure that every pair of vertices has same out-edges to vertices in
            the region. */
-        for (size_t i = 0; i < max; i++) { 
+        for (size_t i = 0; i < max; i++) {
             size_t a_count = 0;
             size_t b_count = 0;
 
-            for (NFAEdge a_edge : out_edges_range(a_ranking.at(i), ga)) { 
-                u32 sid = a_ranking.get(target(a_edge, ga)); 
-                if (sid == UNUSED_STATE || sid >= max) { 
+            for (NFAEdge a_edge : out_edges_range(a_ranking.at(i), ga)) {
+                u32 sid = a_ranking.get(target(a_edge, ga));
+                if (sid == UNUSED_STATE || sid >= max) {
                     continue;
                 }
 
                 a_count++;
 
-                NFAEdge b_edge = edge(b_ranking.at(i), b_ranking.at(sid), gb); 
+                NFAEdge b_edge = edge(b_ranking.at(i), b_ranking.at(sid), gb);
 
-                if (!b_edge) { 
+                if (!b_edge) {
                     max = i;
                     DEBUG_PRINTF("lowering max to %u due to edge %zu->%u\n",
                                  max, i, sid);
-                    goto try_smaller; 
+                    goto try_smaller;
                 }
 
-                if (ga[a_edge].tops != gb[b_edge].tops) { 
+                if (ga[a_edge].tops != gb[b_edge].tops) {
                     max = i;
-                    DEBUG_PRINTF("tops don't match on edge %zu->%u\n", i, sid); 
-                    goto try_smaller; 
+                    DEBUG_PRINTF("tops don't match on edge %zu->%u\n", i, sid);
+                    goto try_smaller;
                 }
             }
 
-            for (NFAVertex b_v : adjacent_vertices_range(b_ranking.at(i), gb)) { 
-                u32 sid = b_ranking.get(b_v); 
-                if (sid == UNUSED_STATE || sid >= max) { 
+            for (NFAVertex b_v : adjacent_vertices_range(b_ranking.at(i), gb)) {
+                u32 sid = b_ranking.get(b_v);
+                if (sid == UNUSED_STATE || sid >= max) {
                     continue;
                 }
 
@@ -224,54 +224,54 @@ u32 commonPrefixLength(const NGHolder &ga, const ranking_info &a_ranking,
 
             if (a_count != b_count) {
                 max = i;
-                DEBUG_PRINTF("lowering max to %u due to a,b count (a_count=%zu," 
-                             " b_count=%zu)\n", max, a_count, b_count); 
-                goto try_smaller; 
+                DEBUG_PRINTF("lowering max to %u due to a,b count (a_count=%zu,"
+                             " b_count=%zu)\n", max, a_count, b_count);
+                goto try_smaller;
             }
         }
 
-        DEBUG_PRINTF("survived checks, returning cpl %u\n", max); 
-        return max; 
-    try_smaller:; 
+        DEBUG_PRINTF("survived checks, returning cpl %u\n", max);
+        return max;
+    try_smaller:;
     }
 
     DEBUG_PRINTF("failed to find any common region\n");
     return 0;
 }
 
-u32 commonPrefixLength(const NGHolder &ga, const NGHolder &gb) { 
-    return commonPrefixLength(ga, ranking_info(ga), gb, ranking_info(gb)); 
-} 
- 
+u32 commonPrefixLength(const NGHolder &ga, const NGHolder &gb) {
+    return commonPrefixLength(ga, ranking_info(ga), gb, ranking_info(gb));
+}
+
 static never_inline
-void mergeNfaComponent(NGHolder &dest, const NGHolder &vic, size_t common_len) { 
-    assert(&dest != &vic); 
- 
-    auto dest_info = ranking_info(dest); 
-    auto vic_info = ranking_info(vic); 
- 
+void mergeNfaComponent(NGHolder &dest, const NGHolder &vic, size_t common_len) {
+    assert(&dest != &vic);
+
+    auto dest_info = ranking_info(dest);
+    auto vic_info = ranking_info(vic);
+
     map<NFAVertex, NFAVertex> vmap; // vic -> dest
 
     vmap[vic.start]     = dest.start;
     vmap[vic.startDs]   = dest.startDs;
     vmap[vic.accept]    = dest.accept;
     vmap[vic.acceptEod] = dest.acceptEod;
-    vmap[NGHolder::null_vertex()] = NGHolder::null_vertex(); 
+    vmap[NGHolder::null_vertex()] = NGHolder::null_vertex();
 
     // For vertices in the common len, add to vmap and merge in the reports, if
     // any.
     for (u32 i = 0; i < common_len; i++) {
-        NFAVertex v_old = vic_info.at(i); 
-        NFAVertex v = dest_info.at(i); 
+        NFAVertex v_old = vic_info.at(i);
+        NFAVertex v = dest_info.at(i);
         vmap[v_old] = v;
 
         const auto &reports = vic[v_old].reports;
         dest[v].reports.insert(reports.begin(), reports.end());
     }
 
-    // Add in vertices beyond the common len 
-    for (u32 i = common_len; i < vic_info.size(); i++) { 
-        NFAVertex v_old = vic_info.at(i); 
+    // Add in vertices beyond the common len
+    for (u32 i = common_len; i < vic_info.size(); i++) {
+        NFAVertex v_old = vic_info.at(i);
 
         if (is_special(v_old, vic)) {
             // Dest already has start vertices, just merge the reports.
@@ -283,17 +283,17 @@ void mergeNfaComponent(NGHolder &dest, const NGHolder &vic, size_t common_len) {
         }
 
         NFAVertex v = add_vertex(vic[v_old], dest);
-        dest_info.add_to_tail(v); 
+        dest_info.add_to_tail(v);
         vmap[v_old] = v;
     }
 
     /* add edges */
     DEBUG_PRINTF("common_len=%zu\n", common_len);
     for (const auto &e : edges_range(vic)) {
-        NFAVertex u_old = source(e, vic); 
-        NFAVertex v_old = target(e, vic); 
-        NFAVertex u = vmap[u_old]; 
-        NFAVertex v = vmap[v_old]; 
+        NFAVertex u_old = source(e, vic);
+        NFAVertex v_old = target(e, vic);
+        NFAVertex u = vmap[u_old];
+        NFAVertex v = vmap[v_old];
         bool uspecial = is_special(u, dest);
         bool vspecial = is_special(v, dest);
 
@@ -304,14 +304,14 @@ void mergeNfaComponent(NGHolder &dest, const NGHolder &vic, size_t common_len) {
 
         // We're in the common region if v's state ID is low enough, unless v
         // is a special (an accept), in which case we use u's state ID.
-        bool in_common_region = dest_info.get(v) < common_len; 
-        if (vspecial && dest_info.get(u) < common_len) { 
+        bool in_common_region = dest_info.get(v) < common_len;
+        if (vspecial && dest_info.get(u) < common_len) {
             in_common_region = true;
         }
 
-        DEBUG_PRINTF("adding idx=%zu (state %u) -> idx=%zu (state %u)%s\n", 
-                     dest[u].index, dest_info.get(u), 
-                     dest[v].index, dest_info.get(v), 
+        DEBUG_PRINTF("adding idx=%zu (state %u) -> idx=%zu (state %u)%s\n",
+                     dest[u].index, dest_info.get(u),
+                     dest[v].index, dest_info.get(v),
                      in_common_region ? " [common]" : "");
 
         if (in_common_region) {
@@ -319,7 +319,7 @@ void mergeNfaComponent(NGHolder &dest, const NGHolder &vic, size_t common_len) {
                 DEBUG_PRINTF("skipping common edge\n");
                 assert(edge(u, v, dest).second);
                 // Should never merge edges with different top values.
-                assert(vic[e].tops == dest[edge(u, v, dest)].tops); 
+                assert(vic[e].tops == dest[edge(u, v, dest)].tops);
                 continue;
             } else {
                 assert(is_any_accept(v, dest));
@@ -335,8 +335,8 @@ void mergeNfaComponent(NGHolder &dest, const NGHolder &vic, size_t common_len) {
         add_edge(u, v, vic[e], dest);
     }
 
-    renumber_edges(dest); 
-    renumber_vertices(dest); 
+    renumber_edges(dest);
+    renumber_vertices(dest);
 }
 
 namespace {
@@ -363,20 +363,20 @@ struct NfaMergeCandidateH {
 
 /** Returns true if graphs \p h1 and \p h2 can (and should) be merged. */
 static
-bool shouldMerge(const NGHolder &ha, const NGHolder &hb, size_t cpl, 
-                 const ReportManager *rm, const CompileContext &cc) { 
-    size_t combinedStateCount = num_vertices(ha) + num_vertices(hb) - cpl; 
+bool shouldMerge(const NGHolder &ha, const NGHolder &hb, size_t cpl,
+                 const ReportManager *rm, const CompileContext &cc) {
+    size_t combinedStateCount = num_vertices(ha) + num_vertices(hb) - cpl;
 
-    combinedStateCount -= 2 * 2; /* discount accepts from both */ 
- 
-    if (is_triggered(ha)) { 
-        /* allow for a state for each top, ignore existing starts */ 
-        combinedStateCount -= 2; /* for start, startDs */ 
-        auto tops = getTops(ha); 
-        insert(&tops, getTops(hb)); 
-        combinedStateCount += tops.size(); 
-    } 
- 
+    combinedStateCount -= 2 * 2; /* discount accepts from both */
+
+    if (is_triggered(ha)) {
+        /* allow for a state for each top, ignore existing starts */
+        combinedStateCount -= 2; /* for start, startDs */
+        auto tops = getTops(ha);
+        insert(&tops, getTops(hb));
+        combinedStateCount += tops.size();
+    }
+
     if (combinedStateCount > FAST_STATE_LIMIT) {
         // More complex implementability check.
         NGHolder h_temp;
@@ -418,13 +418,13 @@ void buildNfaMergeQueue(const vector<NGHolder *> &cluster,
 
     // First, make sure all holders have numbered states and collect their
     // counts.
-    vector<ranking_info> states_map; 
-    states_map.reserve(cs); 
+    vector<ranking_info> states_map;
+    states_map.reserve(cs);
     for (size_t i = 0; i < cs; i++) {
         assert(cluster[i]);
-        assert(states_map.size() == i); 
-        const NGHolder &g = *(cluster[i]); 
-        states_map.emplace_back(g); 
+        assert(states_map.size() == i);
+        const NGHolder &g = *(cluster[i]);
+        states_map.emplace_back(g);
     }
 
     vector<u16> seen_cpl(cs * cs, 0);
@@ -482,46 +482,46 @@ void buildNfaMergeQueue(const vector<NGHolder *> &cluster,
     }
 }
 
-/** 
- * True if the graphs have mergeable starts. 
- * 
- * Nowadays, this means that any vacuous edges must have the same tops. In 
- * addition, mixed-accept cases need to have matching reports. 
- */ 
+/**
+ * True if the graphs have mergeable starts.
+ *
+ * Nowadays, this means that any vacuous edges must have the same tops. In
+ * addition, mixed-accept cases need to have matching reports.
+ */
 static
 bool mergeableStarts(const NGHolder &h1, const NGHolder &h2) {
-    if (!isVacuous(h1) || !isVacuous(h2)) { 
-        return true; 
-    } 
-
-    // Vacuous edges from startDs should not occur: we have better ways to 
-    // implement true dot-star relationships. Just in case they do, ban them 
-    // from being merged unless they have identical reports. 
-    if (is_match_vertex(h1.startDs, h1) || is_match_vertex(h2.startDs, h2)) { 
-        assert(0); 
-        return false; 
-    }
- 
-    /* TODO: relax top checks if reports match */ 
- 
-    // If both graphs have edge (start, accept), the tops must match. 
-    NFAEdge e1_accept = edge(h1.start, h1.accept, h1); 
-    NFAEdge e2_accept = edge(h2.start, h2.accept, h2); 
-    if (e1_accept && e2_accept && h1[e1_accept].tops != h2[e2_accept].tops) { 
-        return false; 
+    if (!isVacuous(h1) || !isVacuous(h2)) {
+        return true;
     }
 
-    // If both graphs have edge (start, acceptEod), the tops must match. 
-    NFAEdge e1_eod = edge(h1.start, h1.acceptEod, h1); 
-    NFAEdge e2_eod = edge(h2.start, h2.acceptEod, h2); 
-    if (e1_eod && e2_eod && h1[e1_eod].tops != h2[e2_eod].tops) { 
-        return false; 
-    } 
+    // Vacuous edges from startDs should not occur: we have better ways to
+    // implement true dot-star relationships. Just in case they do, ban them
+    // from being merged unless they have identical reports.
+    if (is_match_vertex(h1.startDs, h1) || is_match_vertex(h2.startDs, h2)) {
+        assert(0);
+        return false;
+    }
 
-    // If one graph has an edge to accept and the other has an edge to 
-    // acceptEod, the reports must match for the merge to be safe. 
-    if ((e1_accept && e2_eod) || (e2_accept && e1_eod)) { 
-        if (h1[h1.start].reports != h2[h2.start].reports) { 
+    /* TODO: relax top checks if reports match */
+
+    // If both graphs have edge (start, accept), the tops must match.
+    NFAEdge e1_accept = edge(h1.start, h1.accept, h1);
+    NFAEdge e2_accept = edge(h2.start, h2.accept, h2);
+    if (e1_accept && e2_accept && h1[e1_accept].tops != h2[e2_accept].tops) {
+        return false;
+    }
+
+    // If both graphs have edge (start, acceptEod), the tops must match.
+    NFAEdge e1_eod = edge(h1.start, h1.acceptEod, h1);
+    NFAEdge e2_eod = edge(h2.start, h2.acceptEod, h2);
+    if (e1_eod && e2_eod && h1[e1_eod].tops != h2[e2_eod].tops) {
+        return false;
+    }
+
+    // If one graph has an edge to accept and the other has an edge to
+    // acceptEod, the reports must match for the merge to be safe.
+    if ((e1_accept && e2_eod) || (e2_accept && e1_eod)) {
+        if (h1[h1.start].reports != h2[h2.start].reports) {
             return false;
         }
     }
@@ -530,19 +530,19 @@ bool mergeableStarts(const NGHolder &h1, const NGHolder &h2) {
 }
 
 /** Merge graph \p ga into graph \p gb. Returns false on failure. */
-bool mergeNfaPair(const NGHolder &ga, NGHolder &gb, const ReportManager *rm, 
+bool mergeNfaPair(const NGHolder &ga, NGHolder &gb, const ReportManager *rm,
                   const CompileContext &cc) {
     assert(ga.kind == gb.kind);
 
-    // Vacuous NFAs require special checks on their starts to ensure that tops 
-    // match, and that reports match for mixed-accept cases. 
+    // Vacuous NFAs require special checks on their starts to ensure that tops
+    // match, and that reports match for mixed-accept cases.
     if (!mergeableStarts(ga, gb)) {
         DEBUG_PRINTF("starts aren't mergeable\n");
         return false;
     }
 
-    u32 cpl = commonPrefixLength(ga, gb); 
-    if (!shouldMerge(gb, ga, cpl, rm, cc)) { 
+    u32 cpl = commonPrefixLength(ga, gb);
+    if (!shouldMerge(gb, ga, cpl, rm, cc)) {
         return false;
     }
 
@@ -551,13 +551,13 @@ bool mergeNfaPair(const NGHolder &ga, NGHolder &gb, const ReportManager *rm,
     return true;
 }
 
-map<NGHolder *, NGHolder *> mergeNfaCluster(const vector<NGHolder *> &cluster, 
-                                            const ReportManager *rm, 
-                                            const CompileContext &cc) { 
-    map<NGHolder *, NGHolder *> merged; 
- 
+map<NGHolder *, NGHolder *> mergeNfaCluster(const vector<NGHolder *> &cluster,
+                                            const ReportManager *rm,
+                                            const CompileContext &cc) {
+    map<NGHolder *, NGHolder *> merged;
+
     if (cluster.size() < 2) {
-        return merged; 
+        return merged;
     }
 
     DEBUG_PRINTF("new cluster, size %zu\n", cluster.size());
@@ -589,8 +589,8 @@ map<NGHolder *, NGHolder *> mergeNfaCluster(const vector<NGHolder *> &cluster,
             }
         }
     }
- 
-    return merged; 
+
+    return merged;
 }
 
 } // namespace ue2

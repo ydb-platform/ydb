@@ -10,7 +10,7 @@
 
 using namespace NYql;
 
-namespace NSQLTranslationV1 { 
+namespace NSQLTranslationV1 {
 
 class TSubqueryNode: public INode {
 public:
@@ -669,31 +669,31 @@ public:
         return false;
     }
 
-    bool SetSamplingOptions( 
-            TContext& ctx, 
-            TPosition pos, 
-            ESampleMode mode, 
-            TNodePtr samplingRate, 
+    bool SetSamplingOptions(
+            TContext& ctx,
+            TPosition pos,
+            ESampleMode mode,
+            TNodePtr samplingRate,
             TNodePtr samplingSeed) override
     {
         TString modeName;
         if (!samplingSeed) {
             samplingSeed = Y("Int32", Q("0"));
-        } 
- 
-        switch (mode) { 
-        case ESampleMode::Auto: 
-            modeName = "bernoulli"; 
+        }
+
+        switch (mode) {
+        case ESampleMode::Auto:
+            modeName = "bernoulli";
             samplingRate = Y("*", samplingRate, Y("Double", Q("100")));
-            break; 
-        case ESampleMode::Bernoulli: 
-            modeName = "bernoulli"; 
-            break; 
-        case ESampleMode::System: 
-            modeName = "system"; 
-            break; 
-        } 
- 
+            break;
+        case ESampleMode::Bernoulli:
+            modeName = "bernoulli";
+            break;
+        case ESampleMode::System:
+            modeName = "system";
+            break;
+        }
+
         if (!samplingRate->Init(ctx, FakeSource.Get())) {
             return false;
         }
@@ -708,18 +708,18 @@ public:
         samplingRate = Y("block", Q(L(block, Y("return", "samplingRate"))));
 
         auto sampleSettings = Q(Y(Q(modeName), Y("EvaluateAtom", Y("ToString", samplingRate)), Y("EvaluateAtom", Y("ToString", samplingSeed))));
-        auto sampleOption = Q(Y(Q("sample"), sampleSettings)); 
-        if (Table.Options) { 
+        auto sampleOption = Q(Y(Q("sample"), sampleSettings));
+        if (Table.Options) {
             if (!Table.Options->Init(ctx, this)) {
                 return false;
             }
-            Table.Options = L(Table.Options, sampleOption); 
-        } else { 
-            Table.Options = Y(sampleOption); 
-        } 
-        return true; 
-    } 
- 
+            Table.Options = L(Table.Options, sampleOption);
+        } else {
+            Table.Options = Y(sampleOption);
+        }
+        return true;
+    }
+
     bool SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hints, const TTableHints& contextHints) override {
         Y_UNUSED(ctx);
         TTableHints merged = contextHints;
@@ -2168,14 +2168,14 @@ public:
             Columns.SetAll();
         } else {
             if (ListCall) {
-                ctx.Error(With->GetPos()) << "Label is not allowed to use with TableRows()"; 
+                ctx.Error(With->GetPos()) << "Label is not allowed to use with TableRows()";
                 return false;
             }
             Columns.Add(&With->GetLabel(), false);
         }
 
         bool hasError = false;
- 
+
         TNodePtr produce;
         if (WithExtFunction) {
             produce = Y();
@@ -2930,4 +2930,4 @@ TNodePtr BuildSelectResult(TPosition pos, TSourcePtr source, bool writeResult, b
     return new TSelectResultNode(pos, std::move(source), writeResult, inSubquery, scoped);
 }
 
-} // namespace NSQLTranslationV1 
+} // namespace NSQLTranslationV1

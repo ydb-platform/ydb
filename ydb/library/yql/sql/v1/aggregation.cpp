@@ -11,24 +11,24 @@
 
 using namespace NYql;
 
-namespace NSQLTranslationV1 { 
+namespace NSQLTranslationV1 {
 
-namespace { 
+namespace {
     bool BlockWindowAggregationWithoutFrameSpec(TPosition pos, TStringBuf name, ISource* src, TContext& ctx) {
-        if (src) { 
-            auto winNamePtr = src->GetWindowName(); 
-            if (winNamePtr) { 
-                auto winSpecPtr = src->FindWindowSpecification(ctx, *winNamePtr); 
-                if (!winSpecPtr) { 
+        if (src) {
+            auto winNamePtr = src->GetWindowName();
+            if (winNamePtr) {
+                auto winSpecPtr = src->FindWindowSpecification(ctx, *winNamePtr);
+                if (!winSpecPtr) {
                     ctx.Error(pos) << "Failed to use aggregation function " << name << " without window specification or in wrong place";
                     return true;
-                } 
-            } 
-        } 
+                }
+            }
+        }
         return false;
-    } 
-} 
- 
+    }
+}
+
 class TAggregationFactory : public IAggregation {
 public:
     TAggregationFactory(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode, bool multi = false)
@@ -55,9 +55,9 @@ protected:
         }
 
         if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
-            return false; 
-        } 
- 
+            return false;
+        }
+
         if (!Factory) {
             Factory = exprs[1];
         }
@@ -195,8 +195,8 @@ private:
             return false;
         }
         if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
-            return false; 
-        } 
+            return false;
+        }
 
         if (!isFactory) {
             Payload = exprs.front();
@@ -299,9 +299,9 @@ private:
         }
 
         if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
-            return false; 
-        } 
- 
+            return false;
+        }
+
         if (!isFactory) {
             Payload = exprs.front();
             Predicate = exprs.back();
@@ -341,26 +341,26 @@ private:
 
         if (!Predicate->Init(ctx, src)) {
             return false;
-        } 
+        }
         if (!Payload->Init(ctx, src)) {
             return false;
         }
- 
+
         if (Payload->IsAggregated()) {
             ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
             return false;
         }
- 
+
         return true;
-    } 
- 
+    }
+
     TNodePtr Payload, Predicate;
 };
- 
+
 TAggregationPtr BuildPayloadPredicateFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
     return new TPayloadPredicateAggregationFactory(pos, name, factory, aggMode);
 }
- 
+
 class TTwoArgsAggregationFactory final : public TAggregationFactory {
 public:
     TTwoArgsAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
@@ -374,12 +374,12 @@ private:
             ctx.Error(Pos) << "Aggregation function " << (isFactory ? "factory " : "") << Name << " requires " <<
                 adjustArgsCount << " arguments, given: " << exprs.size();
             return false;
-        } 
+        }
 
         if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
-            return false; 
-        } 
- 
+            return false;
+        }
+
         if (!isFactory) {
             One = exprs.front();
             Two = exprs.back();
@@ -388,7 +388,7 @@ private:
 
         if (!Init(ctx, src)) {
             return false;
-        } 
+        }
 
         if (!isFactory) {
             node.Add("Member", "row", Q(Name));
@@ -399,11 +399,11 @@ private:
 
         return true;
     }
- 
+
     TNodePtr DoClone() const final {
         return new TTwoArgsAggregationFactory(Pos, Name, Func, AggMode);
     }
- 
+
     TNodePtr GetApply(const TNodePtr& type) const final {
         auto tuple = Q(Y(One, Two));
         return Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), tuple));
@@ -420,7 +420,7 @@ private:
         if (!Two->Init(ctx, src)) {
             return false;
         }
- 
+
         if ((One->IsAggregated() || Two->IsAggregated()) && !IsOverWindow()) {
             ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
             return false;
@@ -521,7 +521,7 @@ private:
 
         return TAggregationFactory::DoInit(ctx, src);
     }
- 
+
     TSourcePtr FakeSource;
     TNodePtr Weight, Intervals;
 };
@@ -552,33 +552,33 @@ private:
                 ctx.Error(Pos) << "Aggregation function " << Name << " requires one to four arguments, given: " << exprs.size();
                 return false;
             }
-        } 
- 
+        }
+
         if (exprs.size() > 1 - isFactory) {
             BinSize = exprs[1 - isFactory];
-        } 
- 
+        }
+
         if (exprs.size() > 2 - isFactory) {
             Minimum = exprs[2 - isFactory];
-        } 
- 
+        }
+
         if (exprs.size() > 3 - isFactory) {
             Maximum = exprs[3 - isFactory];
-        } 
- 
+        }
+
         return TAggregationFactory::InitAggr(ctx, isFactory, src, node, isFactory ? TVector<TNodePtr>() : TVector<TNodePtr>(1, exprs.front()));
     }
- 
+
     TNodePtr DoClone() const final {
         return new TLinearHistogramAggregationFactory(Pos, Name, Func, AggMode);
-    } 
- 
+    }
+
     TNodePtr GetApply(const TNodePtr& type) const final {
         return Y("Apply", Factory, type,
             BuildLambda(Pos, Y("row"), Expr),
             BinSize, Minimum, Maximum);
     }
- 
+
     void AddFactoryArguments(TNodePtr& apply) const final {
         apply = L(apply, BinSize, Minimum, Maximum);
     }
@@ -586,25 +586,25 @@ private:
     bool DoInit(TContext& ctx, ISource* src) final {
         if (!BinSize->Init(ctx, FakeSource.Get())) {
             return false;
-        } 
+        }
         if (!Minimum->Init(ctx, FakeSource.Get())) {
             return false;
-        } 
+        }
         if (!Maximum->Init(ctx, FakeSource.Get())) {
             return false;
         }
- 
+
         return TAggregationFactory::DoInit(ctx, src);
     }
- 
+
     TSourcePtr FakeSource;
     TNodePtr BinSize, Minimum, Maximum;
 };
- 
+
 TAggregationPtr BuildLinearHistogramFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
     return new TLinearHistogramAggregationFactory(pos, name, factory, aggMode);
 }
- 
+
 class TPercentileFactory final : public TAggregationFactory {
 public:
     TPercentileFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
@@ -867,9 +867,9 @@ private:
         }
 
         if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
-            return false; 
-        } 
- 
+            return false;
+        }
+
         if (!isFactory) {
             Payload = exprs[0];
             if (HasKey) {
@@ -962,43 +962,43 @@ TAggregationPtr BuildTopFactoryAggregation(TPosition pos, const TString& name, c
 template TAggregationPtr BuildTopFactoryAggregation<false>(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
 template TAggregationPtr BuildTopFactoryAggregation<true >(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
 
-class TCountDistinctEstimateAggregationFactory final : public TAggregationFactory { 
-public: 
-    TCountDistinctEstimateAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) 
-        : TAggregationFactory(pos, name, factory, aggMode) 
-    {} 
- 
-private: 
+class TCountDistinctEstimateAggregationFactory final : public TAggregationFactory {
+public:
+    TCountDistinctEstimateAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
+        : TAggregationFactory(pos, name, factory, aggMode)
+    {}
+
+private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
         ui32 adjustArgsCount = isFactory ? 0 : 1;
         if (exprs.size() < adjustArgsCount || exprs.size() > 1 + adjustArgsCount) {
             ctx.Error(Pos) << Name << " aggregation function " << (isFactory ? "factory " : "") << " requires " <<
                 adjustArgsCount << " or " << (1 + adjustArgsCount) << " argument(s), given: " << exprs.size();
-            return false; 
-        } 
- 
-        Precision = 14; 
+            return false;
+        }
+
+        Precision = 14;
         if (1 + adjustArgsCount <= exprs.size()) {
             auto posSecondArg = exprs[adjustArgsCount]->GetPos();
             if (!Parseui32(exprs[adjustArgsCount], Precision)) {
                 ctx.Error(posSecondArg) << Name << ": invalid argument, numeric literal is expected";
-                return false; 
-            } 
-        } 
-        if (Precision > 18 || Precision < 4) { 
-            ctx.Error(Pos) << Name << ": precision is expected to be between 4 and 18 (inclusive), got " << Precision; 
-            return false; 
-        } 
- 
+                return false;
+            }
+        }
+        if (Precision > 18 || Precision < 4) {
+            ctx.Error(Pos) << Name << ": precision is expected to be between 4 and 18 (inclusive), got " << Precision;
+            return false;
+        }
+
         if (!isFactory) {
             Expr = exprs[0];
             Name = src->MakeLocalName(Name);
         }
 
-        if (!Init(ctx, src)) { 
-            return false; 
-        } 
- 
+        if (!Init(ctx, src)) {
+            return false;
+        }
+
         if (!isFactory) {
             node.Add("Member", "row", Q(Name));
             if (IsOverWindow()) {
@@ -1006,31 +1006,31 @@ private:
             }
         }
 
-        return true; 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TCountDistinctEstimateAggregationFactory(Pos, Name, Func, AggMode); 
-    } 
- 
-    TNodePtr GetApply(const TNodePtr& type) const final { 
+        return true;
+    }
+
+    TNodePtr DoClone() const final {
+        return new TCountDistinctEstimateAggregationFactory(Pos, Name, Func, AggMode);
+    }
+
+    TNodePtr GetApply(const TNodePtr& type) const final {
         auto apply = Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), Expr));
         AddFactoryArguments(apply);
         return apply;
-    } 
- 
+    }
+
     void AddFactoryArguments(TNodePtr& apply) const final {
         apply = L(apply, Y("Uint32", Q(ToString(Precision))));
     }
 
-private: 
-    ui32 Precision = 0; 
-}; 
- 
-TAggregationPtr BuildCountDistinctEstimateFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) { 
-    return new TCountDistinctEstimateAggregationFactory(pos, name, factory, aggMode); 
-} 
- 
+private:
+    ui32 Precision = 0;
+};
+
+TAggregationPtr BuildCountDistinctEstimateFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
+    return new TCountDistinctEstimateAggregationFactory(pos, name, factory, aggMode);
+}
+
 class TListAggregationFactory final : public TAggregationFactory {
 public:
     TListAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
@@ -1051,9 +1051,9 @@ private:
         }
 
         if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
-            return false; 
-        } 
- 
+            return false;
+        }
+
         Limit = nullptr;
         if (adjustArgsCount + 1U <= exprs.size()) {
             auto posSecondArg = exprs[adjustArgsCount]->GetPos();
@@ -1204,4 +1204,4 @@ TAggregationPtr BuildCountAggregation(TPosition pos, const TString& name, const 
     return new TCountAggregation(pos, name, func, aggMode);
 }
 
-} // namespace NSQLTranslationV1 
+} // namespace NSQLTranslationV1

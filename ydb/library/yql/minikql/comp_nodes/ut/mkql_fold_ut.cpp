@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
     Y_UNIT_TEST_LLVM(TestFoldOverList) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         auto data1 = pb.NewDataLiteral<ui32>(1);
         auto data2 = pb.NewDataLiteral<ui32>(2);
         auto data3 = pb.NewDataLiteral<ui32>(3);
@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
     Y_UNIT_TEST_LLVM(TestFold1OverEmptyList) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
         auto list = pb.NewEmptyList(dataType);
         auto data2 = pb.NewDataLiteral<ui32>(2);
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
     Y_UNIT_TEST_LLVM(TestFold1OverSingleElementList) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
         auto data1 = pb.NewDataLiteral<ui32>(1);
         auto data2 = pb.NewDataLiteral<ui32>(2);
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
     Y_UNIT_TEST_LLVM(TestFold1OverManyElementList) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
         auto data1 = pb.NewDataLiteral<ui32>(1);
         auto data2 = pb.NewDataLiteral<ui32>(2);
@@ -429,7 +429,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
     Y_UNIT_TEST_LLVM(TestFoldWithListInState) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         auto data1 = pb.NewDataLiteral<ui32>(1);
         auto data2 = pb.NewDataLiteral<ui32>(2);
         auto data3 = pb.NewDataLiteral<ui32>(3);
@@ -470,7 +470,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
     Y_UNIT_TEST_LLVM(TestManyAppend) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         auto zeroList = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
         zeroList = pb.Append(zeroList, pb.NewDataLiteral<ui32>(0));
         const ui32 n = 13;
@@ -508,7 +508,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
     Y_UNIT_TEST_LLVM(TestManyPrepend) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         auto zeroList = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
         zeroList = pb.Append(zeroList, pb.NewDataLiteral<ui32>(0));
         const ui32 n = 13;
@@ -546,7 +546,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
     Y_UNIT_TEST_LLVM(TestManyExtend) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         auto zeroList = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
         zeroList = pb.Append(zeroList, pb.NewDataLiteral<ui32>(0));
         const ui32 n = 13;
@@ -588,7 +588,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
     Y_UNIT_TEST_LLVM(TestFoldSingular) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         auto data1 = pb.NewDataLiteral<ui32>(1);
         auto data2 = pb.NewDataLiteral<ui32>(2);
         auto data3 = pb.NewDataLiteral<ui32>(3);
@@ -623,7 +623,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
     Y_UNIT_TEST_LLVM(TestSumListSizes) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         auto itemType = pb.NewDataType(NUdf::TDataType<float>::Id);
         auto item = pb.NewDataLiteral<float>(0.f);
 
@@ -633,7 +633,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         auto data1 = pb.NewList(itemType, {item});
         auto data2 = pb.NewList(itemType, {item, item, item});
         auto data3 = pb.NewList(itemType, {item, item, item, item, item});
- 
+
         auto list = pb.NewList(listType, {data0, data1, data2, data3});
 
         auto pgmReturn = pb.Fold1(list,
@@ -671,7 +671,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
     Y_UNIT_TEST_LLVM(TestConcat) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         auto data0 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
         auto data1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("aa");
         auto data2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("bbb");
@@ -734,12 +734,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
             const ui32 n = 1000;
- 
+
             auto firstList = pb.Replicate(pb.NewDataLiteral<ui32>(0),
                 pb.NewDataLiteral<ui64>(n), "", 0, 0);
- 
+
             auto secondList = pb.Replicate(firstList, pb.NewDataLiteral<ui64>(n), "", 0, 0);
- 
+
             auto pgmReturn = pb.Fold(secondList, pb.NewDataLiteral<ui32>(0),
                 [&](TRuntimeNode item, TRuntimeNode state) {
             auto partialSum = pb.Fold(item, pb.NewDataLiteral<ui32>(0),
@@ -831,13 +831,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
 
     Y_UNIT_TEST_LLVM(TestSumDoubleLazyListPerf) {
         TSetup<LLVM> setup;
- 
+
         const auto t = TInstant::Now();
         const double sum = std::accumulate(Samples.cbegin(), Samples.cend(), 0.0);
         const auto cppTime = TInstant::Now() - t;
 
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto listType = pb.NewListType(pb.NewDataType(NUdf::TDataType<double>::Id));
         const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
@@ -924,9 +924,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
 
     Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleArrayListPerf) {
         TSetup<LLVM> setup;
- 
+
         double min(Samples.front()), max(Samples.front()), sum(0.0);
- 
+
         const auto t = TInstant::Now();
         for (const auto v : Samples) {
             min = std::fmin(min, v);
@@ -934,9 +934,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
             sum += v;
         }
         const auto cppTime = TInstant::Now() - t;
- 
+
         TProgramBuilder& pb = *setup.PgmBuilder;
- 
+
         const auto listType = pb.NewListType(pb.NewDataType(NUdf::TDataType<double>::Id));
         const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -135,38 +135,38 @@ public:
     size_t find_nth(size_t n) const { return bits.find_nth(n); }
 
     /// Bitwise OR.
-    CharReach operator|(const CharReach &a) const { 
-        CharReach cr(*this); 
-        cr.bits |= a.bits; 
-        return cr; 
-    } 
+    CharReach operator|(const CharReach &a) const {
+        CharReach cr(*this);
+        cr.bits |= a.bits;
+        return cr;
+    }
 
     /// Bitwise OR-equals.
-    void operator|=(const CharReach &a) { bits |= a.bits; } 
+    void operator|=(const CharReach &a) { bits |= a.bits; }
 
     /// Bitwise AND.
-    CharReach operator&(const CharReach &a) const { 
-        CharReach cr(*this); 
-        cr.bits &= a.bits; 
-        return cr; 
-    } 
+    CharReach operator&(const CharReach &a) const {
+        CharReach cr(*this);
+        cr.bits &= a.bits;
+        return cr;
+    }
 
     /// Bitwise AND-equals.
-    void operator&=(const CharReach &a) { bits &= a.bits; } 
+    void operator&=(const CharReach &a) { bits &= a.bits; }
 
     /// Bitwise XOR.
-    CharReach operator^(const CharReach &a) const { 
-        CharReach cr(*this); 
-        cr.bits ^= a.bits; 
-        return cr; 
-    } 
+    CharReach operator^(const CharReach &a) const {
+        CharReach cr(*this);
+        cr.bits ^= a.bits;
+        return cr;
+    }
 
     /// Bitwise complement.
-    CharReach operator~(void) const { 
-        CharReach cr(*this); 
-        cr.flip(); 
-        return cr; 
-    } 
+    CharReach operator~(void) const {
+        CharReach cr(*this);
+        cr.flip();
+        return cr;
+    }
 
     /// Do we only contain bits representing alpha characters?
     bool isAlpha() const;
@@ -198,15 +198,15 @@ bool isutf8start(const CharReach &cr);
 
 } // namespace ue2
 
-namespace std { 
- 
-template<> 
-struct hash<ue2::CharReach> { 
-    size_t operator()(const ue2::CharReach &cr) const { 
-        return cr.hash(); 
-    } 
-}; 
- 
-} // namespace std 
- 
+namespace std {
+
+template<>
+struct hash<ue2::CharReach> {
+    size_t operator()(const ue2::CharReach &cr) const {
+        return cr.hash();
+    }
+};
+
+} // namespace std
+
 #endif // NG_CHARREACH_H

@@ -6,8 +6,8 @@ OWNER(
 )
 
 SRCS(
-    hyperloglog.h 
-    hyperloglog.cpp 
+    hyperloglog.h
+    hyperloglog.cpp
 )
 
 END()

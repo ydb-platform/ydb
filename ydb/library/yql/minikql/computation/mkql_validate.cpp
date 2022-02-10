@@ -346,7 +346,7 @@ struct TValidateModeGreedy {
 template<class TValidateErrorPolicy, class TValidateMode>
 NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const IValueBuilder* valueBuilder, const TType* type, NUdf::TUnboxedValue&& value, const TString& message, bool* wrapped) {
     if (!value && !(type->IsOptional() || type->IsNull())) {
-        TValidateErrorPolicy::Generate(TStringBuilder() << "Expected value '" << PrintNode(type, true) << "', but got Empty" << VERIFY_DELIMITER << message); 
+        TValidateErrorPolicy::Generate(TStringBuilder() << "Expected value '" << PrintNode(type, true) << "', but got Empty" << VERIFY_DELIMITER << message);
     }
 
     switch (type->GetKind()) {
@@ -361,10 +361,10 @@ NUdf::TUnboxedValue TValidate<TValidateErrorPolicy, TValidateMode>::Value(const 
         auto dataTypeId = dataType->GetSchemeType();
         auto slot = NUdf::FindDataSlot(dataTypeId);
         if (!slot) {
-            TValidateErrorPolicy::GenerateExc(TUdfValidateException() << "Unregistered TypeId: " << dataTypeId << VERIFY_DELIMITER << message); 
+            TValidateErrorPolicy::GenerateExc(TUdfValidateException() << "Unregistered TypeId: " << dataTypeId << VERIFY_DELIMITER << message);
         }
         if (!IsValidValue(*slot, value)) {
-            TValidateErrorPolicy::Generate(TStringBuilder() << "Expected value '" << PrintNode(type, true) << "' does not conform" << VERIFY_DELIMITER << message); 
+            TValidateErrorPolicy::Generate(TStringBuilder() << "Expected value '" << PrintNode(type, true) << "' does not conform" << VERIFY_DELIMITER << message);
         }
         break;
     }

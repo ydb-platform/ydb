@@ -10,7 +10,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
     Y_UNIT_TEST_LLVM(TestDictLength) {
         TSetup<LLVM> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
- 
+
         const auto key1 = pgmBuilder.NewDataLiteral<ui32>(1);
         const auto key2 = pgmBuilder.NewDataLiteral<ui32>(2);
         const auto key3 = pgmBuilder.NewDataLiteral<ui32>(2);
@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
     Y_UNIT_TEST_LLVM(TestDictContains) {
         TSetup<LLVM> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
- 
+
         const auto key1 = pgmBuilder.NewDataLiteral<ui32>(1);
         const auto key2 = pgmBuilder.NewDataLiteral<ui32>(2);
         const auto key3 = pgmBuilder.NewDataLiteral<ui32>(2);
@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
     Y_UNIT_TEST_LLVM(TestDictLookup) {
         TSetup<LLVM> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
- 
+
         const auto key1 = pgmBuilder.NewDataLiteral<ui32>(1);
         const auto key2 = pgmBuilder.NewDataLiteral<ui32>(2);
         const auto key3 = pgmBuilder.NewDataLiteral<ui32>(2);
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
         TSetup<LLVM> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
         const auto dict = PrepareTestDict<false>(pgmBuilder, factory);
- 
+
         const auto key1 = pgmBuilder.NewDataLiteral<ui32>(1);
         const auto key2 = pgmBuilder.NewDataLiteral<ui32>(2);
         const auto missingKey = pgmBuilder.NewDataLiteral<ui32>(18);

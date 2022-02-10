@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -42,8 +42,8 @@
  * word-to-word and word-to-nonword) are dropped.
  */
 #include "asserts.h"
- 
-#include "compiler/compiler.h" 
+
+#include "compiler/compiler.h"
 #include "nfagraph/ng.h"
 #include "nfagraph/ng_prune.h"
 #include "nfagraph/ng_redundancy.h"
@@ -117,13 +117,13 @@ u32 conjunct(u32 flags1, u32 flags2) {
 typedef map<pair<NFAVertex, NFAVertex>, NFAEdge> edge_cache_t;
 
 static
-void replaceAssertVertex(NGHolder &g, NFAVertex t, const ExpressionInfo &expr, 
-                         edge_cache_t &edge_cache, u32 &assert_edge_count) { 
-    DEBUG_PRINTF("replacing assert vertex %zu\n", g[t].index); 
+void replaceAssertVertex(NGHolder &g, NFAVertex t, const ExpressionInfo &expr,
+                         edge_cache_t &edge_cache, u32 &assert_edge_count) {
+    DEBUG_PRINTF("replacing assert vertex %zu\n", g[t].index);
 
     const u32 flags = g[t].assert_flags;
-    DEBUG_PRINTF("consider assert vertex %zu with flags %u\n", g[t].index, 
-                 flags); 
+    DEBUG_PRINTF("consider assert vertex %zu with flags %u\n", g[t].index,
+                 flags);
 
     // Wire up all the predecessors to all the successors.
 
@@ -144,7 +144,7 @@ void replaceAssertVertex(NGHolder &g, NFAVertex t, const ExpressionInfo &expr,
         for (const auto &outEdge : out_edges_range(t, g)) {
             NFAVertex v = target(outEdge, g);
 
-            DEBUG_PRINTF("consider path [%zu,%zu,%zu]\n", g[u].index, 
+            DEBUG_PRINTF("consider path [%zu,%zu,%zu]\n", g[u].index,
                          g[t].index, g[v].index);
 
             if (v == t) {
@@ -175,16 +175,16 @@ void replaceAssertVertex(NGHolder &g, NFAVertex t, const ExpressionInfo &expr,
             auto cache_key = make_pair(u, v);
             auto ecit = edge_cache.find(cache_key);
             if (ecit == edge_cache.end()) {
-                DEBUG_PRINTF("adding edge %zu %zu\n", g[u].index, g[v].index); 
-                NFAEdge e = add_edge(u, v, g); 
+                DEBUG_PRINTF("adding edge %zu %zu\n", g[u].index, g[v].index);
+                NFAEdge e = add_edge(u, v, g);
                 edge_cache.emplace(cache_key, e);
                 g[e].assert_flags = flags;
                 if (++assert_edge_count > MAX_ASSERT_EDGES) {
-                    throw CompileError(expr.index, "Pattern is too large."); 
+                    throw CompileError(expr.index, "Pattern is too large.");
                 }
             } else {
                 NFAEdge e = ecit->second;
-                DEBUG_PRINTF("updating edge %zu %zu [a %zu]\n", g[u].index, 
+                DEBUG_PRINTF("updating edge %zu %zu [a %zu]\n", g[u].index,
                              g[v].index, g[t].index);
                 // Edge already exists.
                 u32 &e_flags = g[e].assert_flags;
@@ -201,29 +201,29 @@ void replaceAssertVertex(NGHolder &g, NFAVertex t, const ExpressionInfo &expr,
 }
 
 static
-void setReportId(ReportManager &rm, NGHolder &g, const ExpressionInfo &expr, 
-                 NFAVertex v, s32 adj) { 
+void setReportId(ReportManager &rm, NGHolder &g, const ExpressionInfo &expr,
+                 NFAVertex v, s32 adj) {
     // Don't try and set the report ID of a special vertex.
     assert(!is_special(v, g));
 
     // There should be no reports set already.
     assert(g[v].reports.empty());
 
-    Report r = rm.getBasicInternalReport(expr, adj); 
+    Report r = rm.getBasicInternalReport(expr, adj);
 
     g[v].reports.insert(rm.getInternalId(r));
-    DEBUG_PRINTF("set report id for vertex %zu, adj %d\n", g[v].index, adj); 
+    DEBUG_PRINTF("set report id for vertex %zu, adj %d\n", g[v].index, adj);
 }
 
 static
-void checkForMultilineStart(ReportManager &rm, NGHolder &g, 
-                            const ExpressionInfo &expr) { 
+void checkForMultilineStart(ReportManager &rm, NGHolder &g,
+                            const ExpressionInfo &expr) {
     vector<NFAEdge> dead;
     for (auto v : adjacent_vertices_range(g.start, g)) {
         if (!(g[v].assert_flags & POS_FLAG_MULTILINE_START)) {
             continue;
         }
-        DEBUG_PRINTF("mls %zu %08x\n", g[v].index, g[v].assert_flags); 
+        DEBUG_PRINTF("mls %zu %08x\n", g[v].index, g[v].assert_flags);
 
         /* we have found a multi-line start (maybe more than one) */
 
@@ -241,7 +241,7 @@ void checkForMultilineStart(ReportManager &rm, NGHolder &g,
     for (const auto &e : dead) {
         NFAVertex dummy = add_vertex(g);
         g[dummy].char_reach.setall();
-        setReportId(rm, g, expr, dummy, -1); 
+        setReportId(rm, g, expr, dummy, -1);
         add_edge(source(e, g), dummy, g[e], g);
         add_edge(dummy, g.accept, g);
     }
@@ -266,8 +266,8 @@ bool hasAssertVertices(const NGHolder &g) {
  * Remove the horrors that are the temporary assert vertices which arise from
  * our construction method. Allows the rest of our code base to live in
  * blissful ignorance of their existence. */
-void removeAssertVertices(ReportManager &rm, NGHolder &g, 
-                          const ExpressionInfo &expr) { 
+void removeAssertVertices(ReportManager &rm, NGHolder &g,
+                          const ExpressionInfo &expr) {
     size_t num = 0;
 
     DEBUG_PRINTF("before: graph has %zu vertices\n", num_vertices(g));
@@ -289,19 +289,19 @@ void removeAssertVertices(ReportManager &rm, NGHolder &g,
 
     for (auto v : vertices_range(g)) {
         if (g[v].assert_flags & WORDBOUNDARY_FLAGS) {
-            replaceAssertVertex(g, v, expr, edge_cache, assert_edge_count); 
+            replaceAssertVertex(g, v, expr, edge_cache, assert_edge_count);
             num++;
         }
     }
 
-    checkForMultilineStart(rm, g, expr); 
+    checkForMultilineStart(rm, g, expr);
 
     if (num) {
         DEBUG_PRINTF("resolved %zu assert vertices\n", num);
         pruneUseless(g);
         pruneEmptyVertices(g);
-        renumber_vertices(g); 
-        renumber_edges(g); 
+        renumber_vertices(g);
+        renumber_edges(g);
     }
 
     DEBUG_PRINTF("after: graph has %zu vertices\n", num_vertices(g));

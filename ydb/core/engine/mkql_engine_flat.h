@@ -253,7 +253,7 @@ namespace NMiniKQL {
         const IEngineFlat::EProtocol Protocol;
         const IFunctionRegistry* FunctionRegistry;
         IRandomProvider& RandomProvider;
-        ITimeProvider& TimeProvider; 
+        ITimeProvider& TimeProvider;
         IEngineFlatHost* Host;
         TAlignedPagePoolCounters AllocCounters;
         std::function<void(const char* operation, ui32 line, const TBackTrace*)> BacktraceWriter;
@@ -267,14 +267,14 @@ namespace NMiniKQL {
                 IEngineFlat::EProtocol protocol,
                 const IFunctionRegistry* functionRegistry,
                 IRandomProvider& randomProvider,
-                ITimeProvider& timeProvider, 
+                ITimeProvider& timeProvider,
                 IEngineFlatHost* host = nullptr,
                 const TAlignedPagePoolCounters& allocCounters = TAlignedPagePoolCounters()
                 )
             : Protocol(protocol)
             , FunctionRegistry(functionRegistry)
             , RandomProvider(randomProvider)
-            , TimeProvider(timeProvider) 
+            , TimeProvider(timeProvider)
             , Host(host)
             , AllocCounters(allocCounters)
             , ForceOnline(false)

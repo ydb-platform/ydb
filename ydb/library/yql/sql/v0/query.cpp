@@ -12,7 +12,7 @@
 
 using namespace NYql;
 
-namespace NSQLTranslationV0 { 
+namespace NSQLTranslationV0 {
 
 class TUniqueTableKey: public ITableKeys {
 public:
@@ -32,13 +32,13 @@ public:
         return Name.GetLiteral() ? &Full : nullptr;
     }
 
-    TNodePtr BuildKeys(TContext& ctx, ITableKeys::EBuildKeysMode mode) override { 
+    TNodePtr BuildKeys(TContext& ctx, ITableKeys::EBuildKeysMode mode) override {
         if (View == "@") {
             auto key = Y("TempTable", Name.Build());
             return key;
         }
 
-        bool tableScheme = mode == ITableKeys::EBuildKeysMode::CREATE; 
+        bool tableScheme = mode == ITableKeys::EBuildKeysMode::CREATE;
         if (tableScheme && !View.empty()) {
             ctx.Error(Pos) << "Table view can not be created with CREATE TABLE clause";
             return nullptr;
@@ -51,13 +51,13 @@ public:
         if (!View.empty()) {
             key = L(key, Q(Y(Q("view"), Y("String", BuildQuotedAtom(Pos, View)))));
         }
-        if (mode == ITableKeys::EBuildKeysMode::INPUT && 
+        if (mode == ITableKeys::EBuildKeysMode::INPUT &&
             IsQueryMode(ctx.Settings.Mode) &&
             ctx.GetClusterProvider(Cluster).GetRef() != "kikimr" &&
             ctx.GetClusterProvider(Cluster).GetRef() != "rtmr") {
- 
-            key = Y("MrTableConcat", key); 
-        } 
+
+            key = Y("MrTableConcat", key);
+        }
         return key;
     }
 
@@ -86,8 +86,8 @@ public:
         MakeTableFromExpression(ctx, arg.Expr, arg.Id);
     }
 
-    TNodePtr BuildKeys(TContext& ctx, ITableKeys::EBuildKeysMode mode) override { 
-        if (mode == ITableKeys::EBuildKeysMode::CREATE) { 
+    TNodePtr BuildKeys(TContext& ctx, ITableKeys::EBuildKeysMode mode) override {
+        if (mode == ITableKeys::EBuildKeysMode::CREATE) {
             // TODO: allow creation of multiple tables
             ctx.Error(Pos) << "Mutiple table creation is not implemented yet";
             return nullptr;
@@ -144,12 +144,12 @@ public:
 
         else if (func == "range" || func == "range_strict" || func == "like" || func == "like_strict" ||
             func == "regexp" || func == "regexp_strict" || func == "filter" || func == "filter_strict") {
-            bool isRange = func.StartsWith("range"); 
-            bool isFilter = func.StartsWith("filter"); 
+            bool isRange = func.StartsWith("range");
+            bool isFilter = func.StartsWith("filter");
             size_t minArgs = isRange ? 1 : 2;
             size_t maxArgs = isRange ? 5 : 4;
             if (Args.size() < minArgs || Args.size() > maxArgs) {
-                ctx.Error(Pos) << Func << " requires from " << minArgs << " to " << maxArgs << " arguments, but got: " << Args.size(); 
+                ctx.Error(Pos) << Func << " requires from " << minArgs << " to " << maxArgs << " arguments, but got: " << Args.size();
                 return nullptr;
             }
 
@@ -161,18 +161,18 @@ public:
                 }
 
                 if (!arg.View.empty()) {
-                    TStringBuilder sb; 
-                    sb << "Use the last argument of " << Func << " to specify a VIEW." << Endl; 
-                    if (isRange) { 
-                        sb << "Possible arguments are: prefix, from, to, suffix, view." << Endl; 
-                    } else if (isFilter) { 
-                        sb << "Possible arguments are: prefix, filtering callable, suffix, view." << Endl; 
-                    } else { 
-                        sb << "Possible arguments are: prefix, pattern, suffix, view." << Endl; 
-                    } 
-                    sb << "Pass [] to arguments you want to skip."; 
- 
-                    ctx.Error(Pos) << sb; 
+                    TStringBuilder sb;
+                    sb << "Use the last argument of " << Func << " to specify a VIEW." << Endl;
+                    if (isRange) {
+                        sb << "Possible arguments are: prefix, from, to, suffix, view." << Endl;
+                    } else if (isFilter) {
+                        sb << "Possible arguments are: prefix, filtering callable, suffix, view." << Endl;
+                    } else {
+                        sb << "Possible arguments are: prefix, pattern, suffix, view." << Endl;
+                    }
+                    sb << "Pass [] to arguments you want to skip.";
+
+                    ctx.Error(Pos) << sb;
                     return nullptr;
                 }
 
@@ -224,7 +224,7 @@ public:
 
                 if (func.StartsWith("regexp")) {
                     auto pattern = Args[1].Id;
-                    auto udf = Y("Udf", Q("Pcre.BacktrackingGrep"), Y("String", pattern.Build())); 
+                    auto udf = Y("Udf", Q("Pcre.BacktrackingGrep"), Y("String", pattern.Build()));
                     predicate = BuildLambda(Pos, Y("item"), Y("Apply", udf, "item"));
                 } else if (func.StartsWith("like")) {
                     auto pattern = Args[1].Id;
@@ -301,7 +301,7 @@ public:
             return folder;
         }
 
-        ctx.Error(Pos) << "Unknown table name preprocessor: " << Func; 
+        ctx.Error(Pos) << "Unknown table name preprocessor: " << Func;
         return nullptr;
     }
 
@@ -320,19 +320,19 @@ public:
     TInputOptions(TPosition pos, const TVector<TString>& hints)
         : TAstListNode(pos)
         , Hints(hints)
-    { 
-    } 
+    {
+    }
 
     bool DoInit(TContext& ctx, ISource* src) override {
         Y_UNUSED(src);
         TSet<TString> used;
-        for (auto& hint: Hints) { 
+        for (auto& hint: Hints) {
             TMaybe<TIssue> normalizeError = NormalizeName(Pos, hint);
-            if (!normalizeError.Empty()) { 
-                ctx.Error() << normalizeError->Message; 
-                ctx.IncrementMonCounter("sql_errors", "NormalizeHintError"); 
-                return false; 
-            } 
+            if (!normalizeError.Empty()) {
+                ctx.Error() << normalizeError->Message;
+                ctx.IncrementMonCounter("sql_errors", "NormalizeHintError");
+                return false;
+            }
             TNodePtr option;
             if (used.insert(hint).second) {
                 option = Y(BuildQuotedAtom(Pos, hint));
@@ -379,7 +379,7 @@ public:
                 return false;
             }
             auto tableKeys = tr.Keys->GetTableKeys();
-            auto keys = tableKeys->BuildKeys(ctx, ITableKeys::EBuildKeysMode::INPUT); 
+            auto keys = tableKeys->BuildKeys(ctx, ITableKeys::EBuildKeysMode::INPUT);
             ctx.PushBlockShortcuts();
             if (!keys || !keys->Init(ctx, src)) {
                 return false;
@@ -435,7 +435,7 @@ public:
         if (!Table.Check(ctx)) {
             return false;
         }
-        auto keys = Table.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::CREATE); 
+        auto keys = Table.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::CREATE);
         ctx.PushBlockShortcuts();
         if (!keys || !keys->Init(ctx, src)) {
             return false;
@@ -677,7 +677,7 @@ public:
         if (!Table.Check(ctx)) {
             return false;
         }
-        auto keys = Table.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::DROP); 
+        auto keys = Table.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::DROP);
         ctx.PushBlockShortcuts();
         if (!keys || !keys->Init(ctx, FakeSource.Get())) {
             return false;
@@ -745,7 +745,7 @@ public:
         if (!Table.Check(ctx)) {
             return false;
         }
-        auto keys = Table.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::WRITE); 
+        auto keys = Table.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::WRITE);
         ctx.PushBlockShortcuts();
         if (!keys || !keys->Init(ctx, src)) {
             return false;
@@ -981,10 +981,10 @@ public:
                 }
             }
 
-            if (ctx.Settings.Mode != NSQLTranslation::ESqlMode::LIBRARY) { 
+            if (ctx.Settings.Mode != NSQLTranslation::ESqlMode::LIBRARY) {
                 auto configSource = Y("DataSource", BuildQuotedAtom(Pos, TString(ConfigProviderName)));
                 auto resultSink = Y("DataSink", BuildQuotedAtom(Pos, TString(ResultProviderName)));
- 
+
                 for (const auto& warningPragma : ctx.WarningPolicy.GetRules()) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                         BuildQuotedAtom(Pos, "Warning"), BuildQuotedAtom(Pos, warningPragma.GetPattern()),
@@ -1044,9 +1044,9 @@ public:
             }
         }
 
-        if (!TopLevel || ctx.Settings.Mode != NSQLTranslation::ESqlMode::LIBRARY) { 
-            Add(Y("return", "world")); 
-        } 
+        if (!TopLevel || ctx.Settings.Mode != NSQLTranslation::ESqlMode::LIBRARY) {
+            Add(Y("return", "world"));
+        }
 
         return !hasError;
     }
@@ -1316,4 +1316,4 @@ private:
 TNodePtr BuildEvaluateForNode(TPosition pos, TNodePtr list, TNodePtr bodyNode, TNodePtr elseNode) {
     return new TEvaluateFor(pos, list, bodyNode, elseNode);
 }
-} // namespace NSQLTranslationV0 
+} // namespace NSQLTranslationV0

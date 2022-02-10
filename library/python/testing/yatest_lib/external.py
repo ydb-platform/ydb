@@ -9,8 +9,8 @@ from . import tools
 from datetime import date, datetime
 
 import enum
-import six 
- 
+import six
+
 logger = logging.getLogger(__name__)
 MDS_URI_PREFIX = 'https://storage.yandex-team.ru/get-devtools/'
 
@@ -65,11 +65,11 @@ def serialize(value):
     def _serialize(val, _):
         if val is None:
             return val
-        if isinstance(val, six.string_types) or isinstance(val, bytes): 
+        if isinstance(val, six.string_types) or isinstance(val, bytes):
             return tools.to_utf8(val)
         if isinstance(val, enum.Enum):
             return str(val)
-        if isinstance(val, six.integer_types) or type(val) in [float, bool]: 
+        if isinstance(val, six.integer_types) or type(val) in [float, bool]:
             return val
         if is_external(val):
             return dict(val)

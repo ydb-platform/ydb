@@ -7,7 +7,7 @@
 
 #include <util/string/split.h>
 
-using namespace NSQLTranslationV0; 
+using namespace NSQLTranslationV0;
 
 enum class EDebugOutput {
     None,
@@ -24,11 +24,11 @@ TString Err2Str(NYql::TAstParseResult& res, EDebugOutput debug = EDebugOutput::N
     return s.Str();
 }
 
-NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslation::ESqlMode mode = NSQLTranslation::ESqlMode::QUERY, size_t maxErrors = 10, const TString& provider = {}, EDebugOutput debug = EDebugOutput::None) { 
+NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslation::ESqlMode mode = NSQLTranslation::ESqlMode::QUERY, size_t maxErrors = 10, const TString& provider = {}, EDebugOutput debug = EDebugOutput::None) {
     google::protobuf::Arena arena;
     const auto service = provider ? provider : TString(NYql::YtProviderName);
     const TString cluster = "plato";
-    NSQLTranslation::TTranslationSettings settings; 
+    NSQLTranslation::TTranslationSettings settings;
     settings.ClusterMapping[cluster] = service;
     settings.MaxErrors = maxErrors;
     settings.Mode = mode;
@@ -43,7 +43,7 @@ NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslation::ES
 }
 
 NYql::TAstParseResult SqlToYql(const TString& query, size_t maxErrors = 10, const TString& provider = {}, EDebugOutput debug = EDebugOutput::None) {
-    return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, maxErrors, provider, debug); 
+    return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, maxErrors, provider, debug);
 }
 
 TString GetPrettyPrint(const NYql::TAstParseResult& res) {
@@ -1127,10 +1127,10 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 
     Y_UNIT_TEST(DoubleFrom) {
         NYql::TAstParseResult res = SqlToYql("from plato.Input select * from plato.Input");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:27: Error: Only one FROM clause is allowed\n");
-    } 
- 
+    }
+
     Y_UNIT_TEST(SelectJoinMissingCorrName) {
         NYql::TAstParseResult res = SqlToYql("select * from plato.Input1 as a join plato.Input2 as b on a.key == key");
         UNIT_ASSERT(!res.Root);
@@ -1428,10 +1428,10 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 
     Y_UNIT_TEST(UseInOnStrings) {
         NYql::TAstParseResult res = SqlToYql("select * from plato.Input where \"foo\" in \"foovalue\";");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:42: Error: Unable to use IN predicate with string argument, it won't search substring - "
                                           "expecting tuple, list, dict or single column table source\n");
-    } 
+    }
 
     Y_UNIT_TEST(UseSubqueryInScalarContextInsideIn) {
         NYql::TAstParseResult res = SqlToYql("$q = (select key from plato.Input); select * from plato.Input where subkey in ($q);");
@@ -1466,7 +1466,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 
     Y_UNIT_TEST(ReplaceIntoMapReduce) {
         NYql::TAstParseResult res = SqlToYql("REPLACE INTO plato.Output SELECT key FROM plato.Input");
-        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: Meaning of REPLACE INTO has been changed, now you should use INSERT INTO <table> WITH TRUNCATE ... for yt\n");
     }
 

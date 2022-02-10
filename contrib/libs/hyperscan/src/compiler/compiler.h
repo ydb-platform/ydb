@@ -35,9 +35,9 @@
 
 #include "ue2common.h"
 #include "database.h"
-#include "compiler/expression_info.h" 
+#include "compiler/expression_info.h"
 #include "parser/Component.h"
-#include "util/noncopyable.h" 
+#include "util/noncopyable.h"
 #include "util/ue2string.h"
 
 #include <memory>
@@ -51,21 +51,21 @@ struct CompileContext;
 struct Grey;
 struct target_t;
 class NG;
-class NGHolder; 
+class NGHolder;
 class ReportManager;
 
-/** \brief Class gathering together the pieces of a parsed expression. */ 
-class ParsedExpression : noncopyable { 
+/** \brief Class gathering together the pieces of a parsed expression. */
+class ParsedExpression : noncopyable {
 public:
     ParsedExpression(unsigned index, const char *expression, unsigned flags,
-                     ReportID report, const hs_expr_ext *ext = nullptr); 
+                     ReportID report, const hs_expr_ext *ext = nullptr);
 
-    /** \brief Expression information (from flags, extparam etc) */ 
-    ExpressionInfo expr; 
+    /** \brief Expression information (from flags, extparam etc) */
+    ExpressionInfo expr;
 
-    /** \brief Root node of parsed component tree. */ 
-    std::unique_ptr<Component> component; 
-}; 
+    /** \brief Root node of parsed component tree. */
+    std::unique_ptr<Component> component;
+};
 
 
 /** \brief Class gathering together the pieces of a parsed lit-expression. */
@@ -83,16 +83,16 @@ public:
     ue2_literal lit;
 };
 
-/** 
- * \brief Class gathering together the pieces of an expression that has been 
- * built into an NFA graph. 
- */ 
-struct BuiltExpression { 
-    /** \brief Expression information (from flags, extparam etc) */ 
-    ExpressionInfo expr; 
+/**
+ * \brief Class gathering together the pieces of an expression that has been
+ * built into an NFA graph.
+ */
+struct BuiltExpression {
+    /** \brief Expression information (from flags, extparam etc) */
+    ExpressionInfo expr;
 
-    /** \brief Built Glushkov NFA graph. */ 
-    std::unique_ptr<NGHolder> g; 
+    /** \brief Built Glushkov NFA graph. */
+    std::unique_ptr<NGHolder> g;
 };
 
 /**
@@ -109,12 +109,12 @@ struct BuiltExpression {
  * @param ext
  *      Struct containing extra parameters for this expression, or NULL if
  *      none.
- * @param report 
+ * @param report
  *      The identifier to associate with the expression; returned by engine on
  *      match.
  */
 void addExpression(NG &ng, unsigned index, const char *expression,
-                   unsigned flags, const hs_expr_ext *ext, ReportID report); 
+                   unsigned flags, const hs_expr_ext *ext, ReportID report);
 
 void addLitExpression(NG &ng, unsigned index, const char *expression,
                       unsigned flags, const hs_expr_ext *ext, ReportID id,
@@ -148,8 +148,8 @@ struct hs_database *build(NG &ng, unsigned int *length, u8 pureFlag);
  * @return
  *      nullptr on error.
  */
-BuiltExpression buildGraph(ReportManager &rm, const CompileContext &cc, 
-                           const ParsedExpression &expr); 
+BuiltExpression buildGraph(ReportManager &rm, const CompileContext &cc,
+                           const ParsedExpression &expr);
 
 /**
  * Build a platform_t out of a target_t.

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -36,7 +36,7 @@
 #include "ConstComponentVisitor.h"
 #include "parse_error.h"
 #include "util/container.h"
-#include "util/flat_containers.h" 
+#include "util/flat_containers.h"
 
 #include <sstream>
 
@@ -73,8 +73,8 @@ public:
         throw ParseError(str.str());
     }
 
-    using DefaultConstComponentVisitor::pre; 
- 
+    using DefaultConstComponentVisitor::pre;
+
     void pre(const ComponentBackReference &c) override {
         if (c.ref_id) {
             if (c.ref_id >= num_ids) {
@@ -114,7 +114,7 @@ public:
 ReferenceVisitor::~ReferenceVisitor() {}
 
 void checkReferences(const Component &root, unsigned int groupIndices,
-                     const flat_set<std::string> &groupNames) { 
+                     const flat_set<std::string> &groupNames) {
     ReferenceVisitor vis(groupIndices, groupNames);
     root.accept(vis);
 }

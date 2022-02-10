@@ -29,11 +29,11 @@
 #ifndef CHARREACH_UTIL_H
 #define CHARREACH_UTIL_H
 
-#include "ue2common.h" 
+#include "ue2common.h"
 
 namespace ue2 {
 
-class CharReach; 
+class CharReach;
 
 void make_caseless(CharReach *cr);
 

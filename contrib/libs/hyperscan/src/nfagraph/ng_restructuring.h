@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -28,16 +28,16 @@
 
 /** \file
  * \brief State numbering and late graph restructuring code.
- */ 
+ */
 
 #ifndef NG_RESTRUCTURING_H
 #define NG_RESTRUCTURING_H
 
 #include "ng_holder.h"
 #include "ue2common.h"
-#include "util/flat_containers.h" 
+#include "util/flat_containers.h"
 
-#include <unordered_map> 
+#include <unordered_map>
 
 namespace ue2 {
 
@@ -50,14 +50,14 @@ static constexpr u32 NO_STATE = ~0;
 /**
  * \brief Gives each participating vertex in the graph a unique state index.
  */
-std::unordered_map<NFAVertex, u32> 
-numberStates(NGHolder &h, const flat_set<NFAVertex> &tops); 
+std::unordered_map<NFAVertex, u32>
+numberStates(NGHolder &h, const flat_set<NFAVertex> &tops);
 
 /**
  * \brief Counts the number of states (vertices with state indices) in the
  * graph.
  */
-u32 countStates(const std::unordered_map<NFAVertex, u32> &state_ids); 
+u32 countStates(const std::unordered_map<NFAVertex, u32> &state_ids);
 
 } // namespace ue2
 

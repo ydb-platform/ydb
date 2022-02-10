@@ -29,10 +29,10 @@
 #ifndef MCCLELLANCOMPILE_H
 #define MCCLELLANCOMPILE_H
 
-#include "accel_dfa_build_strat.h" 
+#include "accel_dfa_build_strat.h"
 #include "rdfa.h"
 #include "ue2common.h"
-#include "util/bytecode_ptr.h" 
+#include "util/bytecode_ptr.h"
 
 #include <memory>
 #include <vector>
@@ -42,54 +42,54 @@ struct NFA;
 
 namespace ue2 {
 
-class ReportManager; 
+class ReportManager;
 struct CompileContext;
 
-class mcclellan_build_strat : public accel_dfa_build_strat { 
+class mcclellan_build_strat : public accel_dfa_build_strat {
 public:
-    mcclellan_build_strat(raw_dfa &rdfa_in, const ReportManager &rm_in, 
-                          bool only_accel_init_in) 
-        : accel_dfa_build_strat(rm_in, only_accel_init_in), rdfa(rdfa_in) {} 
+    mcclellan_build_strat(raw_dfa &rdfa_in, const ReportManager &rm_in,
+                          bool only_accel_init_in)
+        : accel_dfa_build_strat(rm_in, only_accel_init_in), rdfa(rdfa_in) {}
     raw_dfa &get_raw() const override { return rdfa; }
     std::unique_ptr<raw_report_info> gatherReports(
-                                  std::vector<u32> &reports /* out */, 
-                                  std::vector<u32> &reports_eod /* out */, 
-                                  u8 *isSingleReport /* out */, 
-                                  ReportID *arbReport /* out */) const override; 
+                                  std::vector<u32> &reports /* out */,
+                                  std::vector<u32> &reports_eod /* out */,
+                                  u8 *isSingleReport /* out */,
+                                  ReportID *arbReport /* out */) const override;
     size_t accelSize(void) const override;
-    u32 max_allowed_offset_accel() const override; 
-    u32 max_stop_char() const override; 
-    u32 max_floating_stop_char() const override; 
+    u32 max_allowed_offset_accel() const override;
+    u32 max_stop_char() const override;
+    u32 max_floating_stop_char() const override;
     DfaType getType() const override { return McClellan; }
 
 private:
     raw_dfa &rdfa;
 };
 
-/** 
- * \brief Construct an implementation DFA. 
- * 
- * \param raw the raw dfa to construct from 
- * \param cc compile context 
- * \param rm report manger 
- * \param only_accel_init if true, only the init states will be examined for 
- *        acceleration opportunities 
- * \param trust_daddy_states if true, trust the daddy state set in the raw dfa 
- *        rather than conducting a search for a better daddy (for Sherman 
- *        states) 
- * \param accel_states (optional) success, is filled with the set of 
- *        accelerable states 
- */ 
-bytecode_ptr<NFA> 
+/**
+ * \brief Construct an implementation DFA.
+ *
+ * \param raw the raw dfa to construct from
+ * \param cc compile context
+ * \param rm report manger
+ * \param only_accel_init if true, only the init states will be examined for
+ *        acceleration opportunities
+ * \param trust_daddy_states if true, trust the daddy state set in the raw dfa
+ *        rather than conducting a search for a better daddy (for Sherman
+ *        states)
+ * \param accel_states (optional) success, is filled with the set of
+ *        accelerable states
+ */
+bytecode_ptr<NFA>
 mcclellanCompile(raw_dfa &raw, const CompileContext &cc,
-                 const ReportManager &rm, bool only_accel_init, 
-                 bool trust_daddy_states = false, 
+                 const ReportManager &rm, bool only_accel_init,
+                 bool trust_daddy_states = false,
                  std::set<dstate_id_t> *accel_states = nullptr);
 
 /* used internally by mcclellan/haig/gough compile process */
-bytecode_ptr<NFA> 
-mcclellanCompile_i(raw_dfa &raw, accel_dfa_build_strat &strat, 
-                   const CompileContext &cc, bool trust_daddy_states = false, 
+bytecode_ptr<NFA>
+mcclellanCompile_i(raw_dfa &raw, accel_dfa_build_strat &strat,
+                   const CompileContext &cc, bool trust_daddy_states = false,
                    std::set<dstate_id_t> *accel_states = nullptr);
 
 /**
@@ -99,8 +99,8 @@ u32 mcclellanStartReachSize(const raw_dfa *raw);
 
 std::set<ReportID> all_reports(const raw_dfa &rdfa);
 
-bool has_accel_mcclellan(const NFA *nfa); 
+bool has_accel_mcclellan(const NFA *nfa);
 
 } // namespace ue2
 
-#endif // MCCLELLANCOMPILE_H 
+#endif // MCCLELLANCOMPILE_H

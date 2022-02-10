@@ -15,7 +15,7 @@
 
 #include <library/cpp/enumbitset/enumbitset.h>
 
-namespace NSQLTranslationV0 { 
+namespace NSQLTranslationV0 {
     constexpr const size_t SQL_MAX_INLINE_SCRIPT_LEN = 24;
 
     using NYql::TPosition;
@@ -306,9 +306,9 @@ namespace NSQLTranslationV0 {
     public:
         TCallNode(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args);
         TCallNode(TPosition pos, const TString& opName, const TVector<TNodePtr>& args)
-            : TCallNode(pos, opName, args.size(), args.size(), args) 
-        {} 
- 
+            : TCallNode(pos, opName, args.size(), args.size(), args)
+        {}
+
         TString GetOpName() const override;
         const TString* GetSourceName() const override;
 
@@ -392,16 +392,16 @@ namespace NSQLTranslationV0 {
 
     class ITableKeys: public INode {
     public:
-        enum class EBuildKeysMode { 
-            CREATE, 
-            DROP, 
-            INPUT, 
-            WRITE 
-        }; 
- 
+        enum class EBuildKeysMode {
+            CREATE,
+            DROP,
+            INPUT,
+            WRITE
+        };
+
         ITableKeys(TPosition pos);
         virtual const TString* GetTableName() const;
-        virtual TNodePtr BuildKeys(TContext& ctx, EBuildKeysMode mode) = 0; 
+        virtual TNodePtr BuildKeys(TContext& ctx, EBuildKeysMode mode) = 0;
 
     private:
         /// all TableKeys no clonnable
@@ -413,12 +413,12 @@ namespace NSQLTranslationV0 {
         TAstNode* Translate(TContext& ctx) const override;
     };
 
-    enum class ESampleMode { 
-        Auto, 
-        Bernoulli, 
-        System 
-    }; 
- 
+    enum class ESampleMode {
+        Auto,
+        Bernoulli,
+        System
+    };
+
     struct TTableRef {
         const TString RefName;
         const TString Cluster;
@@ -728,7 +728,7 @@ namespace NSQLTranslationV0 {
         virtual bool IsStream() const;
         virtual bool IsOrdered() const;
         virtual TWriteSettings GetWriteSettings() const;
-        virtual bool SetSamplingOptions(TContext& ctx, TPosition pos, ESampleMode mode, TNodePtr samplingRate, TNodePtr samplingSeed); 
+        virtual bool SetSamplingOptions(TContext& ctx, TPosition pos, ESampleMode mode, TNodePtr samplingRate, TNodePtr samplingSeed);
         virtual bool CalculateGroupingHint(TContext& ctx, const TVector<TString>& columns, ui64& hint) const;
         virtual TNodePtr BuildFilter(TContext& ctx, const TString& label, const TNodePtr& groundNode);
         virtual TNodePtr BuildFilterLambda(const TNodePtr& groundNode);
@@ -898,7 +898,7 @@ namespace NSQLTranslationV0 {
     TNodePtr BuildBinaryOp(TPosition pos, const TString& opName, TNodePtr a, TNodePtr b);
 
     TNodePtr BuildCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr call);
-    TNodePtr BuildYsonOptionsNode(TPosition pos, bool autoConvert, bool strict); 
+    TNodePtr BuildYsonOptionsNode(TPosition pos, bool autoConvert, bool strict);
 
     TNodePtr BuildShortcutNode(const TNodePtr& node, const TString& baseName);
     TNodePtr BuildDoCall(TPosition pos, const TNodePtr& node);
@@ -915,7 +915,7 @@ namespace NSQLTranslationV0 {
     template <bool HasKey>
     TAggregationPtr BuildTopFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
     TAggregationPtr BuildTopFreqFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
-    TAggregationPtr BuildCountDistinctEstimateFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode); 
+    TAggregationPtr BuildCountDistinctEstimateFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
     TAggregationPtr BuildListFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
     TAggregationPtr BuildPercentileFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
     TAggregationPtr BuildCountAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode);
@@ -1037,4 +1037,4 @@ namespace NSQLTranslationV0 {
     TDeferredAtom MakeAtomFromExpression(TContext& ctx, TNodePtr node);
     bool TryMakeClusterAndTableFromExpression(TNodePtr node, TString& cluster, TDeferredAtom& table, TContext& ctx);
     TString NormalizeTypeString(const TString& str);
-}  // namespace NSQLTranslationV0 
+}  // namespace NSQLTranslationV0

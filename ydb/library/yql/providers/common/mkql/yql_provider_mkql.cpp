@@ -911,8 +911,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto data = NDecimal::FromString(node.Head().Content(), precision, scale);
         MKQL_ENSURE(!NDecimal::IsError(data), "Bad decimal.");
         return ctx.ProgramBuilder.NewDecimalLiteral(data, precision, scale);
-    }); 
- 
+    });
+
     AddCallable("Bool", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return ctx.ProgramBuilder.NewDataLiteral(FromString<bool>(node.Head(), NUdf::EDataSlot::Bool));
     });

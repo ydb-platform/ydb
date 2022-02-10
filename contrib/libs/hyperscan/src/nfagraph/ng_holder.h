@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -26,75 +26,75 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/** \file 
- * \brief Definition of the NGHolder type used for to represent general nfa 
- * graphs as well as all associated types (vertex and edge properties, etc). 
- * 
- * The NGHolder also contains the special vertices used to represents starts and 
- * accepts. 
- */ 
- 
+/** \file
+ * \brief Definition of the NGHolder type used for to represent general nfa
+ * graphs as well as all associated types (vertex and edge properties, etc).
+ *
+ * The NGHolder also contains the special vertices used to represents starts and
+ * accepts.
+ */
+
 #ifndef NG_HOLDER_H
 #define NG_HOLDER_H
 
 #include "ue2common.h"
 #include "nfa/nfa_kind.h"
-#include "util/charreach.h" 
-#include "util/flat_containers.h" 
-#include "util/ue2_graph.h" 
+#include "util/charreach.h"
+#include "util/flat_containers.h"
+#include "util/ue2_graph.h"
 
 namespace ue2 {
 
-/** \brief Properties associated with each vertex in an NFAGraph. */ 
-struct NFAGraphVertexProps { 
-    /** \brief Set of characters on which this vertex is reachable. */ 
-    CharReach char_reach; 
- 
-    /** \brief Set of reports raised by this vertex. */ 
-    flat_set<ReportID> reports; 
- 
-    /** \brief Unique index for this vertex, used for BGL algorithms. */ 
-    size_t index = 0; 
- 
-    /** \brief Flags associated with assertions. */ 
-    u32 assert_flags = 0; 
-}; 
- 
-/** \brief Properties associated with each edge in an NFAGraph. */ 
-struct NFAGraphEdgeProps { 
-    /** \brief Unique index for this edge, used for BGL algorithms. */ 
-    size_t index = 0; 
- 
-    /** \brief For graphs that will be implemented as multi-top engines, this 
-     * specifies the top events. Only used on edges from the start vertex. */ 
-    flat_set<u32> tops; 
- 
-    /** \brief Flags associated with assertions. */ 
-    u32 assert_flags = 0; 
-}; 
- 
-/** \brief vertex_index values for special nodes in the NFAGraph. */ 
-enum SpecialNodes { 
-    /** \brief Anchored start vertex. WARNING: this may be triggered at various 
-     * locations (not just zero) for triggered graphs. */ 
-    NODE_START, 
- 
-    /** \brief Unanchored start-dotstar vertex. WARNING: this may not have a 
-     * proper self-loop. */ 
-    NODE_START_DOTSTAR, 
- 
-    /** \brief Accept vertex. All vertices that can match at arbitrary offsets 
-     * must have an edge to this vertex. */ 
-    NODE_ACCEPT, 
- 
-    /** \brief Accept-EOD vertex. Vertices that must raise a match at EOD only 
-     * must have an edge to this vertex. */ 
-    NODE_ACCEPT_EOD, 
- 
-    /** \brief Sentinel, number of special vertices. */ 
-    N_SPECIALS 
-}; 
- 
+/** \brief Properties associated with each vertex in an NFAGraph. */
+struct NFAGraphVertexProps {
+    /** \brief Set of characters on which this vertex is reachable. */
+    CharReach char_reach;
+
+    /** \brief Set of reports raised by this vertex. */
+    flat_set<ReportID> reports;
+
+    /** \brief Unique index for this vertex, used for BGL algorithms. */
+    size_t index = 0;
+
+    /** \brief Flags associated with assertions. */
+    u32 assert_flags = 0;
+};
+
+/** \brief Properties associated with each edge in an NFAGraph. */
+struct NFAGraphEdgeProps {
+    /** \brief Unique index for this edge, used for BGL algorithms. */
+    size_t index = 0;
+
+    /** \brief For graphs that will be implemented as multi-top engines, this
+     * specifies the top events. Only used on edges from the start vertex. */
+    flat_set<u32> tops;
+
+    /** \brief Flags associated with assertions. */
+    u32 assert_flags = 0;
+};
+
+/** \brief vertex_index values for special nodes in the NFAGraph. */
+enum SpecialNodes {
+    /** \brief Anchored start vertex. WARNING: this may be triggered at various
+     * locations (not just zero) for triggered graphs. */
+    NODE_START,
+
+    /** \brief Unanchored start-dotstar vertex. WARNING: this may not have a
+     * proper self-loop. */
+    NODE_START_DOTSTAR,
+
+    /** \brief Accept vertex. All vertices that can match at arbitrary offsets
+     * must have an edge to this vertex. */
+    NODE_ACCEPT,
+
+    /** \brief Accept-EOD vertex. Vertices that must raise a match at EOD only
+     * must have an edge to this vertex. */
+    NODE_ACCEPT_EOD,
+
+    /** \brief Sentinel, number of special vertices. */
+    N_SPECIALS
+};
+
 /** \brief Encapsulates an NFAGraph, stores special vertices and other
  * metadata.
  *
@@ -105,31 +105,31 @@ enum SpecialNodes {
  * - (startDs, startDs) (self-loop)
  * - (accept, acceptEod)
  */
-class NGHolder : public ue2_graph<NGHolder, NFAGraphVertexProps, 
-                                  NFAGraphEdgeProps> { 
+class NGHolder : public ue2_graph<NGHolder, NFAGraphVertexProps,
+                                  NFAGraphEdgeProps> {
 public:
     explicit NGHolder(nfa_kind kind);
-    NGHolder(void) : NGHolder(NFA_OUTFIX) {}; 
+    NGHolder(void) : NGHolder(NFA_OUTFIX) {};
     virtual ~NGHolder(void);
 
-    nfa_kind kind; /* Role that this plays in Rose */ 
+    nfa_kind kind; /* Role that this plays in Rose */
 
-    static const size_t N_SPECIAL_VERTICES = N_SPECIALS; 
-public: 
-    const vertex_descriptor start;     //!< Anchored start vertex. 
-    const vertex_descriptor startDs;   //!< Unanchored start-dotstar vertex. 
-    const vertex_descriptor accept;    //!< Accept vertex. 
-    const vertex_descriptor acceptEod; //!< Accept at EOD vertex. 
+    static const size_t N_SPECIAL_VERTICES = N_SPECIALS;
+public:
+    const vertex_descriptor start;     //!< Anchored start vertex.
+    const vertex_descriptor startDs;   //!< Unanchored start-dotstar vertex.
+    const vertex_descriptor accept;    //!< Accept vertex.
+    const vertex_descriptor acceptEod; //!< Accept at EOD vertex.
 
-    vertex_descriptor getSpecialVertex(u32 id) const; 
-}; 
+    vertex_descriptor getSpecialVertex(u32 id) const;
+};
 
-typedef NGHolder::vertex_descriptor NFAVertex; 
-typedef NGHolder::edge_descriptor NFAEdge; 
+typedef NGHolder::vertex_descriptor NFAVertex;
+typedef NGHolder::edge_descriptor NFAEdge;
 
 /** \brief True if the vertex \p v is one of our special vertices. */
 template <typename GraphT>
-bool is_special(const typename GraphT::vertex_descriptor v, const GraphT &g) { 
+bool is_special(const typename GraphT::vertex_descriptor v, const GraphT &g) {
     return g[v].index < N_SPECIALS;
 }
 
@@ -167,8 +167,8 @@ void remove_vertices(Iter begin, Iter end, NGHolder &h, bool renumber = true) {
     }
 
     if (renumber) {
-        renumber_edges(h); 
-        renumber_vertices(h); 
+        renumber_edges(h);
+        renumber_vertices(h);
     }
 }
 
@@ -203,12 +203,12 @@ void remove_edges(Iter begin, Iter end, NGHolder &h, bool renumber = true) {
     }
 
     if (renumber) {
-        renumber_edges(h); 
+        renumber_edges(h);
     }
 }
 
-#define DEFAULT_TOP 0U 
- 
+#define DEFAULT_TOP 0U
+
 /** \brief Clear and remove all of the edges pointed to by the edge descriptors
  * in the given container.
  *
@@ -219,26 +219,26 @@ void remove_edges(const Container &c, NGHolder &h, bool renumber = true) {
     remove_edges(c.begin(), c.end(), h, renumber);
 }
 
-inline 
+inline
 bool is_triggered(const NGHolder &g) {
     return is_triggered(g.kind);
 }
 
-inline 
+inline
 bool generates_callbacks(const NGHolder &g) {
     return generates_callbacks(g.kind);
 }
- 
-inline 
-bool has_managed_reports(const NGHolder &g) { 
-    return has_managed_reports(g.kind); 
-} 
- 
-inline 
-bool inspects_states_for_accepts(const NGHolder &g) { 
-    return inspects_states_for_accepts(g.kind); 
-} 
- 
+
+inline
+bool has_managed_reports(const NGHolder &g) {
+    return has_managed_reports(g.kind);
+}
+
+inline
+bool inspects_states_for_accepts(const NGHolder &g) {
+    return inspects_states_for_accepts(g.kind);
+}
+
 } // namespace ue2
 
 #endif

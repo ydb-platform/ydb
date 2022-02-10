@@ -22,8 +22,8 @@ struct TPlus : public TSimpleArithmeticUnary<TInput, TOutput, TPlus<TInput, TOut
 
 struct TDecimalPlus {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
-        return arg; 
-    } 
+        return arg;
+    }
 
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext&, BasicBlock*&)
@@ -31,7 +31,7 @@ struct TDecimalPlus {
         return arg;
     }
 #endif
-}; 
+};
 }
 
 void RegisterPlus(IBuiltinFunctionRegistry& registry) {

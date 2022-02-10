@@ -62,7 +62,7 @@ public:
     }
 };
 
-} // namespace 
+} // namespace
 
 
 ui32 TStatKey::IdSequence_ = 0;
@@ -85,5 +85,5 @@ IStatsRegistryPtr CreateDefaultStatsRegistry() {
     return new TDefaultStatsRegistry;
 }
 
-} // namespace NMiniKQL 
-} // namespace NKikimr 
+} // namespace NMiniKQL
+} // namespace NKikimr

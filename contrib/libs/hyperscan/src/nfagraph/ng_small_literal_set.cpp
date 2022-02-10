@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -33,7 +33,7 @@
 #include "ng_small_literal_set.h"
 
 #include "grey.h"
-#include "ng_holder.h" 
+#include "ng_holder.h"
 #include "ng_util.h"
 #include "rose/rose_build.h"
 #include "util/compare.h"
@@ -100,7 +100,7 @@ bool operator<(const sls_literal &a, const sls_literal &b) {
 
 static
 bool checkLongMixedSensitivityLiterals(
-        const map<sls_literal, flat_set<ReportID>> &literals) { 
+        const map<sls_literal, flat_set<ReportID>> &literals) {
     const size_t len = MAX_MASK2_WIDTH;
 
     for (const sls_literal &lit : literals | map_keys) {
@@ -114,7 +114,7 @@ bool checkLongMixedSensitivityLiterals(
 
 static
 bool findLiterals(const NGHolder &g,
-                  map<sls_literal, flat_set<ReportID>> *literals) { 
+                  map<sls_literal, flat_set<ReportID>> *literals) {
     vector<NFAVertex> order = getTopoOrdering(g);
 
     vector<set<sls_literal>> built(num_vertices(g));
@@ -125,7 +125,7 @@ bool findLiterals(const NGHolder &g,
         set<sls_literal> &out = built[g[v].index];
         read_count[g[v].index] = out_degree(v, g);
 
-        DEBUG_PRINTF("setting read_count to %zu for %zu\n", 
+        DEBUG_PRINTF("setting read_count to %zu for %zu\n",
                       read_count[g[v].index], g[v].index);
 
         assert(out.empty());
@@ -154,7 +154,7 @@ bool findLiterals(const NGHolder &g,
             }
 
             set<sls_literal> &in = built[g[u].index];
-            DEBUG_PRINTF("getting from %zu (%zu reads to go)\n", 
+            DEBUG_PRINTF("getting from %zu (%zu reads to go)\n",
                           g[u].index, read_count[g[u].index]);
             assert(!in.empty());
             assert(read_count[g[u].index]);
@@ -188,7 +188,7 @@ bool findLiterals(const NGHolder &g,
 
             read_count[g[u].index]--;
             if (!read_count[g[u].index]) {
-                DEBUG_PRINTF("clearing %zu as finished reading\n", g[u].index); 
+                DEBUG_PRINTF("clearing %zu as finished reading\n", g[u].index);
                 in.clear();
             }
         }
@@ -198,7 +198,7 @@ bool findLiterals(const NGHolder &g,
 }
 
 static
-size_t min_period(const map<sls_literal, flat_set<ReportID>> &literals) { 
+size_t min_period(const map<sls_literal, flat_set<ReportID>> &literals) {
     size_t rv = SIZE_MAX;
 
     for (const sls_literal &lit : literals | map_keys) {
@@ -222,14 +222,14 @@ bool handleSmallLiteralSets(RoseBuild &rose, const NGHolder &g,
         return false;
     }
 
-    if (!hasNarrowReachVertex(g, MAX_LITERAL_SET_SIZE * 2 + 1)) { 
-        DEBUG_PRINTF("vertex with wide reach found\n"); 
-        return false; 
-    } 
- 
+    if (!hasNarrowReachVertex(g, MAX_LITERAL_SET_SIZE * 2 + 1)) {
+        DEBUG_PRINTF("vertex with wide reach found\n");
+        return false;
+    }
+
     DEBUG_PRINTF("looking for literals\n");
 
-    map<sls_literal, flat_set<ReportID>> literals; 
+    map<sls_literal, flat_set<ReportID>> literals;
     if (!findLiterals(g, &literals)) {
         DEBUG_PRINTF(":(\n");
         return false;

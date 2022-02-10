@@ -13,22 +13,22 @@ inline ESeverity GetSeverity(EYqlIssueCode id) {
     return GetSeverity<TIssuesIds, IssueMapResource>(id);
 }
 
-inline TString GetMessage(EYqlIssueCode id) { 
-    return GetMessage<TIssuesIds, IssueMapResource>(id); 
-} 
- 
+inline TString GetMessage(EYqlIssueCode id) {
+    return GetMessage<TIssuesIds, IssueMapResource>(id);
+}
+
 inline TIssue& SetIssueCode(EYqlIssueCode id, TIssue& issue) {
     issue.SetCode(id, GetSeverity(id));
     return issue;
 }
 
 inline TString IssueCodeToString(EYqlIssueCode id) {
-    const TString& message = GetMessage(id); 
-    if (message) { 
-        return message; 
-    } else { 
-        return IssueCodeToString<TIssuesIds>(id); 
-    } 
+    const TString& message = GetMessage(id);
+    if (message) {
+        return message;
+    } else {
+        return IssueCodeToString<TIssuesIds>(id);
+    }
 }
 
 inline TIssue YqlIssue(const TPosition& position, EYqlIssueCode id, const TString& message) {

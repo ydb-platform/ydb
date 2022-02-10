@@ -52,9 +52,9 @@
 #define ALIGN_ATTR(x) __attribute__((aligned((x))))
 #endif
 
-#define ALIGN_DIRECTIVE ALIGN_ATTR(16) 
-#define ALIGN_AVX_DIRECTIVE ALIGN_ATTR(32) 
-#define ALIGN_CL_DIRECTIVE ALIGN_ATTR(64) 
+#define ALIGN_DIRECTIVE ALIGN_ATTR(16)
+#define ALIGN_AVX_DIRECTIVE ALIGN_ATTR(32)
+#define ALIGN_CL_DIRECTIVE ALIGN_ATTR(64)
 
 typedef signed char s8;
 typedef unsigned char u8;
@@ -194,24 +194,24 @@ typedef u32 ReportID;
   #define unlikely(x)   __builtin_expect(!!(x), 0)
 #endif
 #else
-#define likely(x)   (x) 
-#define unlikely(x) (x) 
+#define likely(x)   (x)
+#define unlikely(x) (x)
 #endif
 
-#if !defined(RELEASE_BUILD) || defined(DEBUG) 
-#ifdef _WIN32 
-#define PATH_SEP '\\' 
-#else 
-#define PATH_SEP '/' 
-#endif 
-#endif 
- 
+#if !defined(RELEASE_BUILD) || defined(DEBUG)
+#ifdef _WIN32
+#define PATH_SEP '\\'
+#else
+#define PATH_SEP '/'
+#endif
+#endif
+
 #if defined(DEBUG) && !defined(DEBUG_PRINTF)
 #include <string.h>
 #include <stdio.h>
 #define DEBUG_PRINTF(format, ...) printf("%s:%s:%d:" format, \
-                                         strrchr(__FILE__, PATH_SEP) + 1, \ 
-                                         __func__, __LINE__,  ## __VA_ARGS__) 
+                                         strrchr(__FILE__, PATH_SEP) + 1, \
+                                         __func__, __LINE__,  ## __VA_ARGS__)
 #elif !defined(DEBUG_PRINTF)
 #define DEBUG_PRINTF(format, ...) do { } while(0)
 #endif
@@ -220,8 +220,8 @@ typedef u32 ReportID;
 #include <string.h>
 #include <stdio.h>
 #define ADEBUG_PRINTF(format, ...) printf("!%s:%s:%d:" format, \
-                                          strrchr(__FILE__, PATH_SEP) + 1, \ 
-                                          __func__, __LINE__,  ## __VA_ARGS__) 
+                                          strrchr(__FILE__, PATH_SEP) + 1, \
+                                          __func__, __LINE__,  ## __VA_ARGS__)
 #else
 #define ADEBUG_PRINTF(format, ...) do { } while(0)
 #endif

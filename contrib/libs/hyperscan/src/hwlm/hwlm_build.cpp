@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -29,24 +29,24 @@
 /** \file
  * \brief Hamster Wheel Literal Matcher: build code.
  */
- 
-#include "hwlm_build.h" 
- 
+
+#include "hwlm_build.h"
+
 #include "grey.h"
 #include "hwlm.h"
 #include "hwlm_internal.h"
-#include "hwlm_literal.h" 
+#include "hwlm_literal.h"
 #include "noodle_engine.h"
 #include "noodle_build.h"
-#include "scratch.h" 
+#include "scratch.h"
 #include "ue2common.h"
 #include "fdr/fdr_compile.h"
-#include "fdr/fdr_compile_internal.h" 
-#include "fdr/fdr_engine_description.h" 
-#include "fdr/teddy_engine_description.h" 
+#include "fdr/fdr_compile_internal.h"
+#include "fdr/fdr_engine_description.h"
+#include "fdr/teddy_engine_description.h"
 #include "util/compile_context.h"
 #include "util/compile_error.h"
-#include "util/make_unique.h" 
+#include "util/make_unique.h"
 #include "util/ue2string.h"
 
 #include <cassert>
@@ -57,27 +57,27 @@ using namespace std;
 
 namespace ue2 {
 
-HWLMProto::HWLMProto(u8 engType_in, vector<hwlmLiteral> lits_in) 
-    : engType(engType_in), lits(move(lits_in)) {} 
+HWLMProto::HWLMProto(u8 engType_in, vector<hwlmLiteral> lits_in)
+    : engType(engType_in), lits(move(lits_in)) {}
 
-HWLMProto::HWLMProto(u8 engType_in, 
-                     unique_ptr<FDREngineDescription> eng_in, 
-                     vector<hwlmLiteral> lits_in, 
-                     map<u32, vector<u32>> bucketToLits_in, 
-                     bool make_small_in) 
-    : engType(engType_in), fdrEng(move(eng_in)), lits(move(lits_in)), 
-      bucketToLits(move(bucketToLits_in)), make_small(make_small_in) {} 
+HWLMProto::HWLMProto(u8 engType_in,
+                     unique_ptr<FDREngineDescription> eng_in,
+                     vector<hwlmLiteral> lits_in,
+                     map<u32, vector<u32>> bucketToLits_in,
+                     bool make_small_in)
+    : engType(engType_in), fdrEng(move(eng_in)), lits(move(lits_in)),
+      bucketToLits(move(bucketToLits_in)), make_small(make_small_in) {}
 
-HWLMProto::HWLMProto(u8 engType_in, 
-                     unique_ptr<TeddyEngineDescription> eng_in, 
-                     vector<hwlmLiteral> lits_in, 
-                     map<u32, vector<u32>> bucketToLits_in, 
-                     bool make_small_in) 
-    : engType(engType_in), teddyEng(move(eng_in)), 
-      lits(move(lits_in)), 
-      bucketToLits(move(bucketToLits_in)), make_small(make_small_in) {} 
+HWLMProto::HWLMProto(u8 engType_in,
+                     unique_ptr<TeddyEngineDescription> eng_in,
+                     vector<hwlmLiteral> lits_in,
+                     map<u32, vector<u32>> bucketToLits_in,
+                     bool make_small_in)
+    : engType(engType_in), teddyEng(move(eng_in)),
+      lits(move(lits_in)),
+      bucketToLits(move(bucketToLits_in)), make_small(make_small_in) {}
 
-HWLMProto::~HWLMProto() {} 
+HWLMProto::~HWLMProto() {}
 
 static
 void dumpLits(UNUSED const vector<hwlmLiteral> &lits) {
@@ -115,55 +115,55 @@ bool isNoodleable(const vector<hwlmLiteral> &lits,
         return false;
     }
 
-    return true; 
-} 
- 
-bytecode_ptr<HWLM> hwlmBuild(const HWLMProto &proto, const CompileContext &cc, 
-                             UNUSED hwlm_group_t expected_groups) { 
-    size_t engSize = 0; 
-    shared_ptr<void> eng; 
- 
-    const auto &lits = proto.lits; 
-    DEBUG_PRINTF("building table with %zu strings\n", lits.size()); 
- 
-    if (proto.engType == HWLM_ENGINE_NOOD) { 
-        DEBUG_PRINTF("build noodle table\n"); 
-        const hwlmLiteral &lit = lits.front(); 
-        auto noodle = noodBuildTable(lit); 
-        if (noodle) { 
-            engSize = noodle.size(); 
-        }
-        eng = move(noodle); 
-    } else { 
-        DEBUG_PRINTF("building a new deal\n"); 
-        auto fdr = fdrBuildTable(proto, cc.grey); 
-        if (fdr) { 
-            engSize = fdr.size(); 
-        } 
-        eng = move(fdr); 
-    }
-
-    if (!eng) { 
-        return nullptr; 
-    }
-
-    assert(engSize); 
-    if (engSize > cc.grey.limitLiteralMatcherSize) { 
-        throw ResourceLimitError(); 
-    } 
- 
-    const size_t hwlm_len = ROUNDUP_CL(sizeof(HWLM)) + engSize; 
-    auto h = make_zeroed_bytecode_ptr<HWLM>(hwlm_len, 64); 
- 
-    h->type = proto.engType; 
-    memcpy(HWLM_DATA(h.get()), eng.get(), engSize); 
- 
-    return h; 
+    return true;
 }
 
-unique_ptr<HWLMProto> 
-hwlmBuildProto(vector<hwlmLiteral> &lits, bool make_small, 
-               const CompileContext &cc) { 
+bytecode_ptr<HWLM> hwlmBuild(const HWLMProto &proto, const CompileContext &cc,
+                             UNUSED hwlm_group_t expected_groups) {
+    size_t engSize = 0;
+    shared_ptr<void> eng;
+
+    const auto &lits = proto.lits;
+    DEBUG_PRINTF("building table with %zu strings\n", lits.size());
+
+    if (proto.engType == HWLM_ENGINE_NOOD) {
+        DEBUG_PRINTF("build noodle table\n");
+        const hwlmLiteral &lit = lits.front();
+        auto noodle = noodBuildTable(lit);
+        if (noodle) {
+            engSize = noodle.size();
+        }
+        eng = move(noodle);
+    } else {
+        DEBUG_PRINTF("building a new deal\n");
+        auto fdr = fdrBuildTable(proto, cc.grey);
+        if (fdr) {
+            engSize = fdr.size();
+        }
+        eng = move(fdr);
+    }
+
+    if (!eng) {
+        return nullptr;
+    }
+
+    assert(engSize);
+    if (engSize > cc.grey.limitLiteralMatcherSize) {
+        throw ResourceLimitError();
+    }
+
+    const size_t hwlm_len = ROUNDUP_CL(sizeof(HWLM)) + engSize;
+    auto h = make_zeroed_bytecode_ptr<HWLM>(hwlm_len, 64);
+
+    h->type = proto.engType;
+    memcpy(HWLM_DATA(h.get()), eng.get(), engSize);
+
+    return h;
+}
+
+unique_ptr<HWLMProto>
+hwlmBuildProto(vector<hwlmLiteral> &lits, bool make_small,
+               const CompileContext &cc) {
     assert(!lits.empty());
     dumpLits(lits);
 
@@ -193,25 +193,25 @@ hwlmBuildProto(vector<hwlmLiteral> &lits, bool make_small,
         }
     }
 
-    unique_ptr<HWLMProto> proto; 
+    unique_ptr<HWLMProto> proto;
 
     DEBUG_PRINTF("building table with %zu strings\n", lits.size());
 
     assert(everyoneHasGroups(lits));
 
-    if (isNoodleable(lits, cc)) { 
+    if (isNoodleable(lits, cc)) {
         DEBUG_PRINTF("build noodle table\n");
-        proto = ue2::make_unique<HWLMProto>(HWLM_ENGINE_NOOD, lits); 
+        proto = ue2::make_unique<HWLMProto>(HWLM_ENGINE_NOOD, lits);
     } else {
         DEBUG_PRINTF("building a new deal\n");
-        proto = fdrBuildProto(HWLM_ENGINE_FDR, lits, make_small, 
-                              cc.target_info, cc.grey); 
-        if (!proto) { 
-            return nullptr; 
+        proto = fdrBuildProto(HWLM_ENGINE_FDR, lits, make_small,
+                              cc.target_info, cc.grey);
+        if (!proto) {
+            return nullptr;
         }
     }
 
-    return proto; 
+    return proto;
 }
 
 size_t hwlmSize(const HWLM *h) {

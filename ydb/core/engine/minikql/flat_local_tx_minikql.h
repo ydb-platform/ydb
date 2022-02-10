@@ -250,7 +250,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                 functionRegistry,
                 *TAppData::RandomProvider, *TAppData::TimeProvider,
                 nullptr, poolCounters
-            ); 
+            );
             proxySettings.EvaluateResultType = true;
             proxySettings.EvaluateResultValue = true;
 
@@ -294,7 +294,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                     functionRegistry,
                     *TAppData::RandomProvider, *TAppData::TimeProvider,
                     &host, poolCounters
-                ); 
+                );
                 TAutoPtr<IEngineFlat> engine = CreateEngineFlat(engineSettings);
                 EngineResultStatusCode = engine->AddProgram(TabletId, shardProgram);
                 if (EngineResultStatusCode != IEngineFlat::EResult::Ok)

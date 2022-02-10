@@ -29,11 +29,11 @@
 #ifndef HS_COMMON_H_
 #define HS_COMMON_H_
 
-#if defined(_WIN32) 
-#define HS_CDECL    __cdecl 
-#else 
-#define HS_CDECL 
-#endif 
+#if defined(_WIN32)
+#define HS_CDECL    __cdecl
+#else
+#define HS_CDECL
+#endif
 #include <stdlib.h>
 
 /**
@@ -81,7 +81,7 @@ typedef int hs_error_t;
  * @return
  *      @ref HS_SUCCESS on success, other values on failure.
  */
-hs_error_t HS_CDECL hs_free_database(hs_database_t *db); 
+hs_error_t HS_CDECL hs_free_database(hs_database_t *db);
 
 /**
  * Serialize a pattern database to a stream of bytes.
@@ -105,8 +105,8 @@ hs_error_t HS_CDECL hs_free_database(hs_database_t *db);
  *      @ref HS_SUCCESS on success, @ref HS_NOMEM if the byte array cannot be
  *      allocated, other values may be returned if errors are detected.
  */
-hs_error_t HS_CDECL hs_serialize_database(const hs_database_t *db, char **bytes, 
-                                          size_t *length); 
+hs_error_t HS_CDECL hs_serialize_database(const hs_database_t *db, char **bytes,
+                                          size_t *length);
 
 /**
  * Reconstruct a pattern database from a stream of bytes previously generated
@@ -134,16 +134,16 @@ hs_error_t HS_CDECL hs_serialize_database(const hs_database_t *db, char **bytes,
  * @return
  *      @ref HS_SUCCESS on success, other values on failure.
  */
-hs_error_t HS_CDECL hs_deserialize_database(const char *bytes, 
-                                            const size_t length, 
-                                            hs_database_t **db); 
+hs_error_t HS_CDECL hs_deserialize_database(const char *bytes,
+                                            const size_t length,
+                                            hs_database_t **db);
 
 /**
  * Reconstruct a pattern database from a stream of bytes previously generated
  * by @ref hs_serialize_database() at a given memory location.
  *
  * This function (unlike @ref hs_deserialize_database()) will write the
- * reconstructed database to the memory location given in the @p db parameter. 
+ * reconstructed database to the memory location given in the @p db parameter.
  * The amount of space required at this location can be determined with the
  * @ref hs_serialized_database_size() function.
  *
@@ -166,9 +166,9 @@ hs_error_t HS_CDECL hs_deserialize_database(const char *bytes,
  * @return
  *      @ref HS_SUCCESS on success, other values on failure.
  */
-hs_error_t HS_CDECL hs_deserialize_database_at(const char *bytes, 
-                                               const size_t length, 
-                                               hs_database_t *db); 
+hs_error_t HS_CDECL hs_deserialize_database_at(const char *bytes,
+                                               const size_t length,
+                                               hs_database_t *db);
 
 /**
  * Provides the size of the stream state allocated by a single stream opened
@@ -184,8 +184,8 @@ hs_error_t HS_CDECL hs_deserialize_database_at(const char *bytes,
  * @return
  *      @ref HS_SUCCESS on success, other values on failure.
  */
-hs_error_t HS_CDECL hs_stream_size(const hs_database_t *database, 
-                                   size_t *stream_size); 
+hs_error_t HS_CDECL hs_stream_size(const hs_database_t *database,
+                                   size_t *stream_size);
 
 /**
  * Provides the size of the given database in bytes.
@@ -200,8 +200,8 @@ hs_error_t HS_CDECL hs_stream_size(const hs_database_t *database,
  * @return
  *      @ref HS_SUCCESS on success, other values on failure.
  */
-hs_error_t HS_CDECL hs_database_size(const hs_database_t *database, 
-                                     size_t *database_size); 
+hs_error_t HS_CDECL hs_database_size(const hs_database_t *database,
+                                     size_t *database_size);
 
 /**
  * Utility function for reporting the size that would be required by a
@@ -227,9 +227,9 @@ hs_error_t HS_CDECL hs_database_size(const hs_database_t *database,
  * @return
  *      @ref HS_SUCCESS on success, other values on failure.
  */
-hs_error_t HS_CDECL hs_serialized_database_size(const char *bytes, 
-                                                const size_t length, 
-                                                size_t *deserialized_size); 
+hs_error_t HS_CDECL hs_serialized_database_size(const char *bytes,
+                                                const size_t length,
+                                                size_t *deserialized_size);
 
 /**
  * Utility function providing information about a database.
@@ -246,8 +246,8 @@ hs_error_t HS_CDECL hs_serialized_database_size(const char *bytes,
  * @return
  *      @ref HS_SUCCESS on success, other values on failure.
  */
-hs_error_t HS_CDECL hs_database_info(const hs_database_t *database, 
-                                     char **info); 
+hs_error_t HS_CDECL hs_database_info(const hs_database_t *database,
+                                     char **info);
 
 /**
  * Utility function providing information about a serialized database.
@@ -268,8 +268,8 @@ hs_error_t HS_CDECL hs_database_info(const hs_database_t *database,
  * @return
  *      @ref HS_SUCCESS on success, other values on failure.
  */
-hs_error_t HS_CDECL hs_serialized_database_info(const char *bytes, 
-                                                size_t length, char **info); 
+hs_error_t HS_CDECL hs_serialized_database_info(const char *bytes,
+                                                size_t length, char **info);
 
 /**
  * The type of the callback function that will be used by Hyperscan to allocate
@@ -285,7 +285,7 @@ hs_error_t HS_CDECL hs_serialized_database_info(const char *bytes,
  * @return
  *      A pointer to the region of memory allocated, or NULL on error.
  */
-typedef void *(HS_CDECL *hs_alloc_t)(size_t size); 
+typedef void *(HS_CDECL *hs_alloc_t)(size_t size);
 
 /**
  * The type of the callback function that will be used by Hyperscan to free
@@ -294,7 +294,7 @@ typedef void *(HS_CDECL *hs_alloc_t)(size_t size);
  * @param ptr
  *      The region of memory to be freed.
  */
-typedef void (HS_CDECL *hs_free_t)(void *ptr); 
+typedef void (HS_CDECL *hs_free_t)(void *ptr);
 
 /**
  * Set the allocate and free functions used by Hyperscan for allocating
@@ -322,8 +322,8 @@ typedef void (HS_CDECL *hs_free_t)(void *ptr);
  * @return
  *      @ref HS_SUCCESS on success, other values on failure.
  */
-hs_error_t HS_CDECL hs_set_allocator(hs_alloc_t alloc_func, 
-                                     hs_free_t free_func); 
+hs_error_t HS_CDECL hs_set_allocator(hs_alloc_t alloc_func,
+                                     hs_free_t free_func);
 
 /**
  * Set the allocate and free functions used by Hyperscan for allocating memory
@@ -355,8 +355,8 @@ hs_error_t HS_CDECL hs_set_allocator(hs_alloc_t alloc_func,
  * @return
  *      @ref HS_SUCCESS on success, other values on failure.
  */
-hs_error_t HS_CDECL hs_set_database_allocator(hs_alloc_t alloc_func, 
-                                              hs_free_t free_func); 
+hs_error_t HS_CDECL hs_set_database_allocator(hs_alloc_t alloc_func,
+                                              hs_free_t free_func);
 
 /**
  * Set the allocate and free functions used by Hyperscan for allocating memory
@@ -382,8 +382,8 @@ hs_error_t HS_CDECL hs_set_database_allocator(hs_alloc_t alloc_func,
  * @return
  *      @ref HS_SUCCESS on success, other values on failure.
  */
-hs_error_t HS_CDECL hs_set_misc_allocator(hs_alloc_t alloc_func, 
-                                          hs_free_t free_func); 
+hs_error_t HS_CDECL hs_set_misc_allocator(hs_alloc_t alloc_func,
+                                          hs_free_t free_func);
 
 /**
  * Set the allocate and free functions used by Hyperscan for allocating memory
@@ -409,8 +409,8 @@ hs_error_t HS_CDECL hs_set_misc_allocator(hs_alloc_t alloc_func,
  * @return
  *      @ref HS_SUCCESS on success, other values on failure.
  */
-hs_error_t HS_CDECL hs_set_scratch_allocator(hs_alloc_t alloc_func, 
-                                             hs_free_t free_func); 
+hs_error_t HS_CDECL hs_set_scratch_allocator(hs_alloc_t alloc_func,
+                                             hs_free_t free_func);
 
 /**
  * Set the allocate and free functions used by Hyperscan for allocating memory
@@ -436,8 +436,8 @@ hs_error_t HS_CDECL hs_set_scratch_allocator(hs_alloc_t alloc_func,
  * @return
  *      @ref HS_SUCCESS on success, other values on failure.
  */
-hs_error_t HS_CDECL hs_set_stream_allocator(hs_alloc_t alloc_func, 
-                                            hs_free_t free_func); 
+hs_error_t HS_CDECL hs_set_stream_allocator(hs_alloc_t alloc_func,
+                                            hs_free_t free_func);
 
 /**
  * Utility function for identifying this release version.
@@ -447,26 +447,26 @@ hs_error_t HS_CDECL hs_set_stream_allocator(hs_alloc_t alloc_func,
  *      date of the build. It is allocated statically, so it does not need to
  *      be freed by the caller.
  */
-const char * HS_CDECL hs_version(void); 
+const char * HS_CDECL hs_version(void);
 
 /**
- * Utility function to test the current system architecture. 
- * 
- * Hyperscan requires the Supplemental Streaming SIMD Extensions 3 instruction 
- * set. This function can be called on any x86 platform to determine if the 
- * system provides the required instruction set. 
- * 
- * This function does not test for more advanced features if Hyperscan has 
- * been built for a more specific architecture, for example the AVX2 
- * instruction set. 
- * 
- * @return 
- *      @ref HS_SUCCESS on success, @ref HS_ARCH_ERROR if system does not 
- *      support Hyperscan. 
- */ 
-hs_error_t HS_CDECL hs_valid_platform(void); 
- 
-/** 
+ * Utility function to test the current system architecture.
+ *
+ * Hyperscan requires the Supplemental Streaming SIMD Extensions 3 instruction
+ * set. This function can be called on any x86 platform to determine if the
+ * system provides the required instruction set.
+ *
+ * This function does not test for more advanced features if Hyperscan has
+ * been built for a more specific architecture, for example the AVX2
+ * instruction set.
+ *
+ * @return
+ *      @ref HS_SUCCESS on success, @ref HS_ARCH_ERROR if system does not
+ *      support Hyperscan.
+ */
+hs_error_t HS_CDECL hs_valid_platform(void);
+
+/**
  * @defgroup HS_ERROR hs_error_t values
  *
  * @{
@@ -479,10 +479,10 @@ hs_error_t HS_CDECL hs_valid_platform(void);
 
 /**
  * A parameter passed to this function was invalid.
- * 
- * This error is only returned in cases where the function can detect an 
- * invalid parameter -- it cannot be relied upon to detect (for example) 
- * pointers to freed memory or other invalid data. 
+ *
+ * This error is only returned in cases where the function can detect an
+ * invalid parameter -- it cannot be relied upon to detect (for example)
+ * pointers to freed memory or other invalid data.
  */
 #define HS_INVALID              (-1)
 
@@ -535,48 +535,48 @@ hs_error_t HS_CDECL hs_valid_platform(void);
  */
 #define HS_BAD_ALLOC            (-9)
 
-/** 
- * The scratch region was already in use. 
- * 
- * This error is returned when Hyperscan is able to detect that the scratch 
- * region given is already in use by another Hyperscan API call. 
- * 
- * A separate scratch region, allocated with @ref hs_alloc_scratch() or @ref 
- * hs_clone_scratch(), is required for every concurrent caller of the Hyperscan 
- * API. 
- * 
- * For example, this error might be returned when @ref hs_scan() has been 
- * called inside a callback delivered by a currently-executing @ref hs_scan() 
- * call using the same scratch region. 
- * 
- * Note: Not all concurrent uses of scratch regions may be detected. This error 
- * is intended as a best-effort debugging tool, not a guarantee. 
- */ 
-#define HS_SCRATCH_IN_USE       (-10) 
- 
-/** 
- * Unsupported CPU architecture. 
- * 
- * This error is returned when Hyperscan is able to detect that the current 
- * system does not support the required instruction set. 
- * 
- * At a minimum, Hyperscan requires Supplemental Streaming SIMD Extensions 3 
- * (SSSE3). 
- */ 
-#define HS_ARCH_ERROR           (-11) 
- 
-/** 
- * Provided buffer was too small. 
- * 
- * This error indicates that there was insufficient space in the buffer. The 
- * call should be repeated with a larger provided buffer. 
- * 
- * Note: in this situation, it is normal for the amount of space required to be 
- * returned in the same manner as the used space would have been returned if the 
- * call was successful. 
- */ 
-#define HS_INSUFFICIENT_SPACE   (-12) 
- 
+/**
+ * The scratch region was already in use.
+ *
+ * This error is returned when Hyperscan is able to detect that the scratch
+ * region given is already in use by another Hyperscan API call.
+ *
+ * A separate scratch region, allocated with @ref hs_alloc_scratch() or @ref
+ * hs_clone_scratch(), is required for every concurrent caller of the Hyperscan
+ * API.
+ *
+ * For example, this error might be returned when @ref hs_scan() has been
+ * called inside a callback delivered by a currently-executing @ref hs_scan()
+ * call using the same scratch region.
+ *
+ * Note: Not all concurrent uses of scratch regions may be detected. This error
+ * is intended as a best-effort debugging tool, not a guarantee.
+ */
+#define HS_SCRATCH_IN_USE       (-10)
+
+/**
+ * Unsupported CPU architecture.
+ *
+ * This error is returned when Hyperscan is able to detect that the current
+ * system does not support the required instruction set.
+ *
+ * At a minimum, Hyperscan requires Supplemental Streaming SIMD Extensions 3
+ * (SSSE3).
+ */
+#define HS_ARCH_ERROR           (-11)
+
+/**
+ * Provided buffer was too small.
+ *
+ * This error indicates that there was insufficient space in the buffer. The
+ * call should be repeated with a larger provided buffer.
+ *
+ * Note: in this situation, it is normal for the amount of space required to be
+ * returned in the same manner as the used space would have been returned if the
+ * call was successful.
+ */
+#define HS_INSUFFICIENT_SPACE   (-12)
+
 /**
  * Unexpected internal error.
  *

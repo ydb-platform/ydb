@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -62,11 +62,11 @@
 #include "ng_prune.h"
 #include "ng_util.h"
 #include "util/container.h"
-#include "util/flat_containers.h" 
+#include "util/flat_containers.h"
 #include "util/graph_range.h"
-#include "util/graph_small_color_map.h" 
+#include "util/graph_small_color_map.h"
 
-#include <algorithm> 
+#include <algorithm>
 #include <boost/graph/depth_first_search.hpp>
 #include <boost/graph/reverse_graph.hpp>
 
@@ -101,7 +101,7 @@ class SearchVisitor : public boost::default_dfs_visitor {
 
         template<class Vertex, class Graph>
         void discover_vertex(const Vertex &v, const Graph &g) const {
-            DEBUG_PRINTF("vertex %zu\n", g[v].index); 
+            DEBUG_PRINTF("vertex %zu\n", g[v].index);
             if (is_special(v, g)) {
                 DEBUG_PRINTF("start or accept\n");
                 throw SearchFailed();
@@ -125,17 +125,17 @@ class SearchVisitor : public boost::default_dfs_visitor {
 
 } // namespace
 
-template<class Graph, class ColorMap> 
+template<class Graph, class ColorMap>
 static
 bool searchForward(const Graph &g, const CharReach &reach,
-                   ColorMap &colours, 
+                   ColorMap &colours,
                    const flat_set<typename Graph::vertex_descriptor> &s,
                    typename Graph::vertex_descriptor w) {
-    colours.fill(small_color::white); 
+    colours.fill(small_color::white);
     try {
-        depth_first_visit(g, w, SearchVisitor(reach), colours, 
-            VertexInSet<typename Graph::vertex_descriptor, Graph>(s)); 
-    } catch (SearchFailed &) { 
+        depth_first_visit(g, w, SearchVisitor(reach), colours,
+            VertexInSet<typename Graph::vertex_descriptor, Graph>(s));
+    } catch (SearchFailed &) {
         return false;
     }
 
@@ -143,14 +143,14 @@ bool searchForward(const Graph &g, const CharReach &reach,
 }
 
 static
-NFAEdge to_raw(const NFAEdge &e, const NGHolder &) { 
+NFAEdge to_raw(const NFAEdge &e, const NGHolder &) {
     return e;
 }
 
 static
-NFAEdge to_raw(const reverse_graph<NGHolder, NGHolder &>::edge_descriptor &e, 
-               const reverse_graph<NGHolder, NGHolder &> &g) { 
-    return get(boost::edge_underlying, g, e); 
+NFAEdge to_raw(const reverse_graph<NGHolder, NGHolder &>::edge_descriptor &e,
+               const reverse_graph<NGHolder, NGHolder &> &g) {
+    return get(boost::edge_underlying, g, e);
 }
 
 /* returns true if we did stuff */
@@ -164,9 +164,9 @@ bool removeCyclicPathRedundancy(Graph &g, typename Graph::vertex_descriptor v,
 
     typedef typename Graph::vertex_descriptor vertex_descriptor;
 
-    // Colour map used for depth_first_visit(). 
-    auto colours = make_small_color_map(g); 
- 
+    // Colour map used for depth_first_visit().
+    auto colours = make_small_color_map(g);
+
     // precalc successors of v.
     flat_set<vertex_descriptor> succ_v;
     insert(&succ_v, adjacent_vertices(v, g));
@@ -182,7 +182,7 @@ bool removeCyclicPathRedundancy(Graph &g, typename Graph::vertex_descriptor v,
             continue;
         }
 
-        DEBUG_PRINTF("- checking u %zu\n", g[u].index); 
+        DEBUG_PRINTF("- checking u %zu\n", g[u].index);
 
         // let s be intersection(succ(u), succ(v))
         s.clear();
@@ -203,18 +203,18 @@ bool removeCyclicPathRedundancy(Graph &g, typename Graph::vertex_descriptor v,
                 continue;
             }
 
-            DEBUG_PRINTF("  - checking w %zu\n", g[w].index); 
+            DEBUG_PRINTF("  - checking w %zu\n", g[w].index);
 
             if (!searchForward(g, reach, colours, succ_v, w)) {
-                continue; 
+                continue;
             }
- 
-            DEBUG_PRINTF("removing edge (%zu,%zu)\n", g[u].index, g[w].index); 
-            /* we are currently iterating over the in-edges of v, so it 
-               would be unwise to remove edges to v. However, */ 
-            assert(w != v); /* as v is in s */ 
-            remove_edge(to_raw(e_u, g), raw); 
-            did_stuff = true; 
+
+            DEBUG_PRINTF("removing edge (%zu,%zu)\n", g[u].index, g[w].index);
+            /* we are currently iterating over the in-edges of v, so it
+               would be unwise to remove edges to v. However, */
+            assert(w != v); /* as v is in s */
+            remove_edge(to_raw(e_u, g), raw);
+            did_stuff = true;
         }
     }
 
@@ -231,7 +231,7 @@ bool cyclicPathRedundancyPass(Graph &g, NGHolder &raw) {
             continue;
         }
 
-        DEBUG_PRINTF("examining cyclic vertex %zu\n", g[v].index); 
+        DEBUG_PRINTF("examining cyclic vertex %zu\n", g[v].index);
         did_stuff |= removeCyclicPathRedundancy(g, v, raw);
     }
 
@@ -239,10 +239,10 @@ bool cyclicPathRedundancyPass(Graph &g, NGHolder &raw) {
 }
 
 bool removeCyclicPathRedundancy(NGHolder &g) {
-    assert(hasCorrectlyNumberedVertices(g)); 
- 
+    assert(hasCorrectlyNumberedVertices(g));
+
     // Forward pass.
-    bool f_changed = cyclicPathRedundancyPass(g, g); 
+    bool f_changed = cyclicPathRedundancyPass(g, g);
     if (f_changed) {
         DEBUG_PRINTF("edges removed by forward pass\n");
         pruneUseless(g);
@@ -250,8 +250,8 @@ bool removeCyclicPathRedundancy(NGHolder &g) {
 
     // Reverse pass.
     DEBUG_PRINTF("REVERSE PASS\n");
-    typedef reverse_graph<NGHolder, NGHolder &> RevGraph; 
-    RevGraph revg(g); 
+    typedef reverse_graph<NGHolder, NGHolder &> RevGraph;
+    RevGraph revg(g);
     bool r_changed = cyclicPathRedundancyPass(revg, g);
     if (r_changed) {
         DEBUG_PRINTF("edges removed by reverse pass\n");

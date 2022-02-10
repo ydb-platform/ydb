@@ -43,17 +43,17 @@
 #include "nfa/nfa_api_util.h"
 #include "nfa/nfa_internal.h"
 #include "nfa/nfa_rev_api.h"
-#include "nfa/sheng.h" 
+#include "nfa/sheng.h"
 #include "smallwrite/smallwrite_internal.h"
 #include "rose/rose.h"
 #include "rose/runtime.h"
 #include "database.h"
-#include "report.h" 
+#include "report.h"
 #include "scratch.h"
 #include "som/som_runtime.h"
 #include "som/som_stream.h"
 #include "state.h"
-#include "stream_compress.h" 
+#include "stream_compress.h"
 #include "ue2common.h"
 #include "util/exhaust.h"
 #include "util/multibit.h"
@@ -120,8 +120,8 @@ static really_inline
 void populateCoreInfo(struct hs_scratch *s, const struct RoseEngine *rose,
                       char *state, match_event_handler onEvent, void *userCtx,
                       const char *data, size_t length, const u8 *history,
-                      size_t hlen, u64a offset, u8 status, 
-                      UNUSED unsigned int flags) { 
+                      size_t hlen, u64a offset, u8 status,
+                      UNUSED unsigned int flags) {
     assert(rose);
     s->core_info.userContext = userCtx;
     s->core_info.userCallback = onEvent ? onEvent : null_onEvent;
@@ -129,7 +129,7 @@ void populateCoreInfo(struct hs_scratch *s, const struct RoseEngine *rose,
     s->core_info.state = state; /* required for chained queues + evec */
 
     s->core_info.exhaustionVector = state + rose->stateOffsets.exhausted;
-    s->core_info.status = status; 
+    s->core_info.status = status;
     s->core_info.buf = (const u8 *)data;
     s->core_info.len = length;
     s->core_info.hbuf = history;
@@ -140,40 +140,40 @@ void populateCoreInfo(struct hs_scratch *s, const struct RoseEngine *rose,
     s->som_set_now_offset = ~0ULL;
     s->deduper.current_report_offset = ~0ULL;
     s->deduper.som_log_dirty = 1; /* som logs have not been cleared */
-    s->fdr_conf = NULL; 
+    s->fdr_conf = NULL;
 
-    // Rose program execution (used for some report paths) depends on these 
-    // values being initialised. 
-    s->tctxt.lastMatchOffset = 0; 
-    s->tctxt.minMatchOffset = offset; 
-    s->tctxt.minNonMpvMatchOffset = offset; 
+    // Rose program execution (used for some report paths) depends on these
+    // values being initialised.
+    s->tctxt.lastMatchOffset = 0;
+    s->tctxt.minMatchOffset = offset;
+    s->tctxt.minNonMpvMatchOffset = offset;
 }
 
-#define STATUS_VALID_BITS                                                      \ 
+#define STATUS_VALID_BITS                                                      \
     (STATUS_TERMINATED | STATUS_EXHAUSTED | STATUS_DELAY_DIRTY | STATUS_ERROR)
 
-/** \brief Retrieve status bitmask from stream state. */ 
+/** \brief Retrieve status bitmask from stream state. */
 static really_inline
-u8 getStreamStatus(const char *state) { 
-    u8 status = *(const u8 *)(state + ROSE_STATE_OFFSET_STATUS_FLAGS); 
-    assert((status & ~STATUS_VALID_BITS) == 0); 
-    return status; 
+u8 getStreamStatus(const char *state) {
+    u8 status = *(const u8 *)(state + ROSE_STATE_OFFSET_STATUS_FLAGS);
+    assert((status & ~STATUS_VALID_BITS) == 0);
+    return status;
 }
 
-/** \brief Store status bitmask to stream state. */ 
+/** \brief Store status bitmask to stream state. */
 static really_inline
-void setStreamStatus(char *state, u8 status) { 
-    assert((status & ~STATUS_VALID_BITS) == 0); 
-    *(u8 *)(state + ROSE_STATE_OFFSET_STATUS_FLAGS) = status; 
+void setStreamStatus(char *state, u8 status) {
+    assert((status & ~STATUS_VALID_BITS) == 0);
+    *(u8 *)(state + ROSE_STATE_OFFSET_STATUS_FLAGS) = status;
 }
 
 /** \brief Initialise SOM state. Used in both block and streaming mode. */
 static really_inline
-void initSomState(const struct RoseEngine *rose, char *state) { 
+void initSomState(const struct RoseEngine *rose, char *state) {
     assert(rose && state);
     const u32 somCount = rose->somLocationCount;
-    mmbit_clear((u8 *)state + rose->stateOffsets.somValid, somCount); 
-    mmbit_clear((u8 *)state + rose->stateOffsets.somWritable, somCount); 
+    mmbit_clear((u8 *)state + rose->stateOffsets.somValid, somCount);
+    mmbit_clear((u8 *)state + rose->stateOffsets.somWritable, somCount);
 }
 
 static really_inline
@@ -181,47 +181,47 @@ void rawBlockExec(const struct RoseEngine *rose, struct hs_scratch *scratch) {
     assert(rose);
     assert(scratch);
 
-    initSomState(rose, scratch->core_info.state); 
+    initSomState(rose, scratch->core_info.state);
 
     DEBUG_PRINTF("blockmode scan len=%zu\n", scratch->core_info.len);
 
-    roseBlockExec(rose, scratch); 
+    roseBlockExec(rose, scratch);
 }
 
 static really_inline
-void pureLiteralInitScratch(struct hs_scratch *scratch, u64a offset) { 
-    // Some init has already been done. 
-    assert(offset == scratch->core_info.buf_offset); 
- 
-    scratch->tctxt.lit_offset_adjust = offset + 1; 
-    scratch->tctxt.lastEndOffset = offset; 
-    scratch->tctxt.delayLastEndOffset = offset; 
-    scratch->tctxt.filledDelayedSlots = 0; 
-    scratch->al_log_sum = 0; 
-} 
- 
-static really_inline 
+void pureLiteralInitScratch(struct hs_scratch *scratch, u64a offset) {
+    // Some init has already been done.
+    assert(offset == scratch->core_info.buf_offset);
+
+    scratch->tctxt.lit_offset_adjust = offset + 1;
+    scratch->tctxt.lastEndOffset = offset;
+    scratch->tctxt.delayLastEndOffset = offset;
+    scratch->tctxt.filledDelayedSlots = 0;
+    scratch->al_log_sum = 0;
+}
+
+static really_inline
 void pureLiteralBlockExec(const struct RoseEngine *rose,
                           struct hs_scratch *scratch) {
     assert(rose);
     assert(scratch);
 
     const struct HWLM *ftable = getFLiteralMatcher(rose);
-    initSomState(rose, scratch->core_info.state); 
+    initSomState(rose, scratch->core_info.state);
     const u8 *buffer = scratch->core_info.buf;
     size_t length = scratch->core_info.len;
     DEBUG_PRINTF("rose engine %d\n", rose->runtimeImpl);
 
-    pureLiteralInitScratch(scratch, 0); 
-    scratch->tctxt.groups = rose->initialGroups; 
- 
-    hwlmExec(ftable, buffer, length, 0, roseCallback, scratch, 
-             rose->initialGroups & rose->floating_group_mask); 
+    pureLiteralInitScratch(scratch, 0);
+    scratch->tctxt.groups = rose->initialGroups;
+
+    hwlmExec(ftable, buffer, length, 0, roseCallback, scratch,
+             rose->initialGroups & rose->floating_group_mask);
 }
 
 static really_inline
-void initOutfixQueue(struct mq *q, u32 qi, const struct RoseEngine *t, 
-                     struct hs_scratch *scratch) { 
+void initOutfixQueue(struct mq *q, u32 qi, const struct RoseEngine *t,
+                     struct hs_scratch *scratch) {
     const struct NfaInfo *info = getNfaInfoByQueue(t, qi);
     q->nfa = getNfaByInfo(t, info);
     q->end = 0;
@@ -233,7 +233,7 @@ void initOutfixQueue(struct mq *q, u32 qi, const struct RoseEngine *t,
     q->length = scratch->core_info.len;
     q->history = scratch->core_info.hbuf;
     q->hlength = scratch->core_info.hlen;
-    q->cb = roseReportAdaptor; 
+    q->cb = roseReportAdaptor;
     q->context = scratch;
     q->report_current = 0;
 
@@ -248,7 +248,7 @@ void soleOutfixBlockExec(const struct RoseEngine *t,
     assert(t);
     assert(scratch);
 
-    initSomState(t, scratch->core_info.state); 
+    initSomState(t, scratch->core_info.state);
     assert(t->outfixEndQueue == 1);
     assert(!t->amatcherOffset);
     assert(!t->ematcherOffset);
@@ -263,7 +263,7 @@ void soleOutfixBlockExec(const struct RoseEngine *t,
     }
 
     struct mq *q = scratch->queues;
-    initOutfixQueue(q, 0, t, scratch); 
+    initOutfixQueue(q, 0, t, scratch);
     q->length = len; /* adjust for rev_accel */
     nfaQueueInitState(nfa, q);
     pushQueueAt(q, 0, MQE_START, 0);
@@ -273,8 +273,8 @@ void soleOutfixBlockExec(const struct RoseEngine *t,
     char rv = nfaQueueExec(q->nfa, q, scratch->core_info.len);
 
     if (rv && nfaAcceptsEod(nfa) && len == scratch->core_info.len) {
-        nfaCheckFinalState(nfa, q->state, q->streamState, q->length, q->cb, 
-                           scratch); 
+        nfaCheckFinalState(nfa, q->state, q->streamState, q->length, q->cb,
+                           scratch);
     }
 }
 
@@ -299,24 +299,24 @@ void runSmallWriteEngine(const struct SmallWriteEngine *smwr,
     size_t local_alen = length - smwr->start_offset;
     const u8 *local_buffer = buffer + smwr->start_offset;
 
-    assert(isDfaType(nfa->type)); 
+    assert(isDfaType(nfa->type));
     if (nfa->type == MCCLELLAN_NFA_8) {
         nfaExecMcClellan8_B(nfa, smwr->start_offset, local_buffer,
-                            local_alen, roseReportAdaptor, scratch); 
-    } else if (nfa->type == MCCLELLAN_NFA_16) { 
-        nfaExecMcClellan16_B(nfa, smwr->start_offset, local_buffer, 
-                             local_alen, roseReportAdaptor, scratch); 
+                            local_alen, roseReportAdaptor, scratch);
+    } else if (nfa->type == MCCLELLAN_NFA_16) {
+        nfaExecMcClellan16_B(nfa, smwr->start_offset, local_buffer,
+                             local_alen, roseReportAdaptor, scratch);
     } else {
-        nfaExecSheng_B(nfa, smwr->start_offset, local_buffer, 
-                       local_alen, roseReportAdaptor, scratch); 
+        nfaExecSheng_B(nfa, smwr->start_offset, local_buffer,
+                       local_alen, roseReportAdaptor, scratch);
     }
 }
 
 HS_PUBLIC_API
-hs_error_t HS_CDECL hs_scan(const hs_database_t *db, const char *data, 
-                            unsigned length, unsigned flags, 
-                            hs_scratch_t *scratch, match_event_handler onEvent, 
-                            void *userCtx) { 
+hs_error_t HS_CDECL hs_scan(const hs_database_t *db, const char *data,
+                            unsigned length, unsigned flags,
+                            hs_scratch_t *scratch, match_event_handler onEvent,
+                            void *userCtx) {
     if (unlikely(!scratch || !data)) {
         return HS_INVALID;
     }
@@ -339,13 +339,13 @@ hs_error_t HS_CDECL hs_scan(const hs_database_t *db, const char *data,
         return HS_INVALID;
     }
 
-    if (unlikely(markScratchInUse(scratch))) { 
-        return HS_SCRATCH_IN_USE; 
-    } 
- 
+    if (unlikely(markScratchInUse(scratch))) {
+        return HS_SCRATCH_IN_USE;
+    }
+
     if (rose->minWidth > length) {
         DEBUG_PRINTF("minwidth=%u > length=%u\n", rose->minWidth, length);
-        unmarkScratchInUse(scratch); 
+        unmarkScratchInUse(scratch);
         return HS_SUCCESS;
     }
 
@@ -353,9 +353,9 @@ hs_error_t HS_CDECL hs_scan(const hs_database_t *db, const char *data,
 
     /* populate core info in scratch */
     populateCoreInfo(scratch, rose, scratch->bstate, onEvent, userCtx, data,
-                     length, NULL, 0, 0, 0, flags); 
+                     length, NULL, 0, 0, 0, flags);
 
-    clearEvec(rose, scratch->core_info.exhaustionVector); 
+    clearEvec(rose, scratch->core_info.exhaustionVector);
     if (rose->ckeyCount) {
         scratch->core_info.logicalVector = scratch->bstate +
                                            rose->stateOffsets.logicalVec;
@@ -368,18 +368,18 @@ hs_error_t HS_CDECL hs_scan(const hs_database_t *db, const char *data,
 
     if (!length) {
         if (rose->boundary.reportZeroEodOffset) {
-            roseRunBoundaryProgram(rose, rose->boundary.reportZeroEodOffset, 0, 
-                                   scratch); 
+            roseRunBoundaryProgram(rose, rose->boundary.reportZeroEodOffset, 0,
+                                   scratch);
         }
         goto set_retval;
     }
 
     if (rose->boundary.reportZeroOffset) {
-        int rv = roseRunBoundaryProgram(rose, rose->boundary.reportZeroOffset, 
-                                        0, scratch); 
-        if (rv == MO_HALT_MATCHING) { 
-            goto set_retval; 
-        } 
+        int rv = roseRunBoundaryProgram(rose, rose->boundary.reportZeroOffset,
+                                        0, scratch);
+        if (rv == MO_HALT_MATCHING) {
+            goto set_retval;
+        }
     }
 
     if (rose->minWidthExcludingBoundaries > length) {
@@ -428,7 +428,7 @@ hs_error_t HS_CDECL hs_scan(const hs_database_t *db, const char *data,
 
 done_scan:
     if (unlikely(internal_matching_error(scratch))) {
-        unmarkScratchInUse(scratch); 
+        unmarkScratchInUse(scratch);
         return HS_UNKNOWN_ERROR;
     } else if (told_to_stop_matching(scratch)) {
         unmarkScratchInUse(scratch);
@@ -438,14 +438,14 @@ done_scan:
     if (rose->hasSom) {
         int halt = flushStoredSomMatches(scratch, ~0ULL);
         if (halt) {
-            unmarkScratchInUse(scratch); 
+            unmarkScratchInUse(scratch);
             return HS_SCAN_TERMINATED;
         }
     }
 
     if (rose->boundary.reportEodOffset) {
-        roseRunBoundaryProgram(rose, rose->boundary.reportEodOffset, length, 
-                               scratch); 
+        roseRunBoundaryProgram(rose, rose->boundary.reportEodOffset, length,
+                               scratch);
     }
 
 set_retval:
@@ -468,10 +468,10 @@ set_retval:
 
     DEBUG_PRINTF("done. told_to_stop_matching=%d\n",
                  told_to_stop_matching(scratch));
-    hs_error_t rv = told_to_stop_matching(scratch) ? HS_SCAN_TERMINATED 
-                                                   : HS_SUCCESS; 
-    unmarkScratchInUse(scratch); 
-    return rv; 
+    hs_error_t rv = told_to_stop_matching(scratch) ? HS_SCAN_TERMINATED
+                                                   : HS_SUCCESS;
+    unmarkScratchInUse(scratch);
+    return rv;
 }
 
 static really_inline
@@ -508,27 +508,27 @@ void maintainHistoryBuffer(const struct RoseEngine *rose, char *state,
 }
 
 static really_inline
-void init_stream(struct hs_stream *s, const struct RoseEngine *rose, 
-                 char init_history) { 
-    char *state = getMultiState(s); 
- 
-    if (init_history) { 
-        // Make absolutely sure that the 16 bytes leading up to the end of the 
-        // history buffer are initialised, as we rely on this (regardless of the 
-        // actual values used) in FDR. 
-        char *hist_end = 
-            state + rose->stateOffsets.history + rose->historyRequired; 
-        assert(hist_end - 16 >= (const char *)s); 
-        memset(hist_end - 16, 0x5a, 16); 
-    } 
- 
+void init_stream(struct hs_stream *s, const struct RoseEngine *rose,
+                 char init_history) {
+    char *state = getMultiState(s);
+
+    if (init_history) {
+        // Make absolutely sure that the 16 bytes leading up to the end of the
+        // history buffer are initialised, as we rely on this (regardless of the
+        // actual values used) in FDR.
+        char *hist_end =
+            state + rose->stateOffsets.history + rose->historyRequired;
+        assert(hist_end - 16 >= (const char *)s);
+        memset(hist_end - 16, 0x5a, 16);
+    }
+
     s->rose = rose;
     s->offset = 0;
 
-    setStreamStatus(state, 0); 
+    setStreamStatus(state, 0);
     roseInitState(rose, state);
 
-    clearEvec(rose, state + rose->stateOffsets.exhausted); 
+    clearEvec(rose, state + rose->stateOffsets.exhausted);
     if (rose->ckeyCount) {
         clearLvec(rose, state + rose->stateOffsets.logicalVec,
                   state + rose->stateOffsets.combVec);
@@ -539,9 +539,9 @@ void init_stream(struct hs_stream *s, const struct RoseEngine *rose,
 }
 
 HS_PUBLIC_API
-hs_error_t HS_CDECL hs_open_stream(const hs_database_t *db, 
-                                   UNUSED unsigned flags, 
-                                   hs_stream_t **stream) { 
+hs_error_t HS_CDECL hs_open_stream(const hs_database_t *db,
+                                   UNUSED unsigned flags,
+                                   hs_stream_t **stream) {
     if (unlikely(!stream)) {
         return HS_INVALID;
     }
@@ -568,7 +568,7 @@ hs_error_t HS_CDECL hs_open_stream(const hs_database_t *db,
         return HS_NOMEM;
     }
 
-    init_stream(s, rose, 1); 
+    init_stream(s, rose, 1);
 
     *stream = s;
     return HS_SUCCESS;
@@ -579,7 +579,7 @@ static really_inline
 void rawEodExec(hs_stream_t *id, hs_scratch_t *scratch) {
     const struct RoseEngine *rose = id->rose;
 
-    if (can_stop_matching(scratch)) { 
+    if (can_stop_matching(scratch)) {
         DEBUG_PRINTF("stream already broken\n");
         return;
     }
@@ -589,14 +589,14 @@ void rawEodExec(hs_stream_t *id, hs_scratch_t *scratch) {
         return;
     }
 
-    roseStreamEodExec(rose, id->offset, scratch); 
+    roseStreamEodExec(rose, id->offset, scratch);
 }
 
 static never_inline
 void soleOutfixEodExec(hs_stream_t *id, hs_scratch_t *scratch) {
     const struct RoseEngine *t = id->rose;
 
-    if (can_stop_matching(scratch)) { 
+    if (can_stop_matching(scratch)) {
         DEBUG_PRINTF("stream already broken\n");
         return;
     }
@@ -614,7 +614,7 @@ void soleOutfixEodExec(hs_stream_t *id, hs_scratch_t *scratch) {
     const struct NFA *nfa = getNfaByQueue(t, 0);
 
     struct mq *q = scratch->queues;
-    initOutfixQueue(q, 0, t, scratch); 
+    initOutfixQueue(q, 0, t, scratch);
     if (!scratch->core_info.buf_offset) {
         DEBUG_PRINTF("buf_offset is zero\n");
         return; /* no vacuous engines */
@@ -625,7 +625,7 @@ void soleOutfixEodExec(hs_stream_t *id, hs_scratch_t *scratch) {
 
     assert(nfaAcceptsEod(nfa));
     nfaCheckFinalState(nfa, q->state, q->streamState, q->offset, q->cb,
-                       scratch); 
+                       scratch);
 }
 
 static really_inline
@@ -636,7 +636,7 @@ void report_eod_matches(hs_stream_t *id, hs_scratch_t *scratch,
 
     const struct RoseEngine *rose = id->rose;
     char *state = getMultiState(id);
-    u8 status = getStreamStatus(state); 
+    u8 status = getStreamStatus(state);
 
     if (status & (STATUS_TERMINATED | STATUS_EXHAUSTED | STATUS_ERROR)) {
         DEBUG_PRINTF("stream is broken, just freeing storage\n");
@@ -645,7 +645,7 @@ void report_eod_matches(hs_stream_t *id, hs_scratch_t *scratch,
 
     populateCoreInfo(scratch, rose, state, onEvent, context, NULL, 0,
                      getHistory(state, rose, id->offset),
-                     getHistoryAmount(rose, id->offset), id->offset, status, 0); 
+                     getHistoryAmount(rose, id->offset), id->offset, status, 0);
 
     if (rose->ckeyCount) {
         scratch->core_info.logicalVector = state +
@@ -662,19 +662,19 @@ void report_eod_matches(hs_stream_t *id, hs_scratch_t *scratch,
 
     if (!id->offset) {
         if (rose->boundary.reportZeroEodOffset) {
-            int rv = roseRunBoundaryProgram( 
-                rose, rose->boundary.reportZeroEodOffset, 0, scratch); 
-            if (rv == MO_HALT_MATCHING) { 
-                return; 
-            } 
+            int rv = roseRunBoundaryProgram(
+                rose, rose->boundary.reportZeroEodOffset, 0, scratch);
+            if (rv == MO_HALT_MATCHING) {
+                return;
+            }
         }
     } else {
         if (rose->boundary.reportEodOffset) {
-            int rv = roseRunBoundaryProgram( 
-                rose, rose->boundary.reportEodOffset, id->offset, scratch); 
-            if (rv == MO_HALT_MATCHING) { 
-                return; 
-            } 
+            int rv = roseRunBoundaryProgram(
+                rose, rose->boundary.reportEodOffset, id->offset, scratch);
+            if (rv == MO_HALT_MATCHING) {
+                return;
+            }
         }
 
         if (rose->requiresEodCheck) {
@@ -696,7 +696,7 @@ void report_eod_matches(hs_stream_t *id, hs_scratch_t *scratch,
         int halt = flushStoredSomMatches(scratch, ~0ULL);
         if (halt) {
             DEBUG_PRINTF("told to stop matching\n");
-            scratch->core_info.status |= STATUS_TERMINATED; 
+            scratch->core_info.status |= STATUS_TERMINATED;
         }
     }
 
@@ -710,8 +710,8 @@ void report_eod_matches(hs_stream_t *id, hs_scratch_t *scratch,
 }
 
 HS_PUBLIC_API
-hs_error_t HS_CDECL hs_copy_stream(hs_stream_t **to_id, 
-                                   const hs_stream_t *from_id) { 
+hs_error_t HS_CDECL hs_copy_stream(hs_stream_t **to_id,
+                                   const hs_stream_t *from_id) {
     if (!to_id) {
         return HS_INVALID;
     }
@@ -738,11 +738,11 @@ hs_error_t HS_CDECL hs_copy_stream(hs_stream_t **to_id,
 }
 
 HS_PUBLIC_API
-hs_error_t HS_CDECL hs_reset_and_copy_stream(hs_stream_t *to_id, 
-                                             const hs_stream_t *from_id, 
-                                             hs_scratch_t *scratch, 
-                                             match_event_handler onEvent, 
-                                             void *context) { 
+hs_error_t HS_CDECL hs_reset_and_copy_stream(hs_stream_t *to_id,
+                                             const hs_stream_t *from_id,
+                                             hs_scratch_t *scratch,
+                                             match_event_handler onEvent,
+                                             void *context) {
     if (!from_id || !from_id->rose) {
         return HS_INVALID;
     }
@@ -759,15 +759,15 @@ hs_error_t HS_CDECL hs_reset_and_copy_stream(hs_stream_t *to_id,
         if (!scratch || !validScratch(to_id->rose, scratch)) {
             return HS_INVALID;
         }
-        if (unlikely(markScratchInUse(scratch))) { 
-            return HS_SCRATCH_IN_USE; 
-        } 
+        if (unlikely(markScratchInUse(scratch))) {
+            return HS_SCRATCH_IN_USE;
+        }
         report_eod_matches(to_id, scratch, onEvent, context);
         if (unlikely(internal_matching_error(scratch))) {
             unmarkScratchInUse(scratch);
             return HS_UNKNOWN_ERROR;
         }
-        unmarkScratchInUse(scratch); 
+        unmarkScratchInUse(scratch);
     }
 
     size_t stateSize
@@ -782,19 +782,19 @@ static really_inline
 void rawStreamExec(struct hs_stream *stream_state, struct hs_scratch *scratch) {
     assert(stream_state);
     assert(scratch);
-    assert(!can_stop_matching(scratch)); 
+    assert(!can_stop_matching(scratch));
 
     DEBUG_PRINTF("::: streaming rose ::: offset = %llu len = %zu\n",
                  stream_state->offset, scratch->core_info.len);
 
     const struct RoseEngine *rose = stream_state->rose;
     assert(rose);
-    roseStreamExec(rose, scratch); 
+    roseStreamExec(rose, scratch);
 
     if (!told_to_stop_matching(scratch) &&
         isAllExhausted(rose, scratch->core_info.exhaustionVector)) {
         DEBUG_PRINTF("stream exhausted\n");
-        scratch->core_info.status |= STATUS_EXHAUSTED; 
+        scratch->core_info.status |= STATUS_EXHAUSTED;
     }
 }
 
@@ -803,7 +803,7 @@ void pureLiteralStreamExec(struct hs_stream *stream_state,
                            struct hs_scratch *scratch) {
     assert(stream_state);
     assert(scratch);
-    assert(!can_stop_matching(scratch)); 
+    assert(!can_stop_matching(scratch));
 
     const struct RoseEngine *rose = stream_state->rose;
     const struct HWLM *ftable = getFLiteralMatcher(rose);
@@ -813,20 +813,20 @@ void pureLiteralStreamExec(struct hs_stream *stream_state,
     DEBUG_PRINTF("::: streaming rose ::: offset = %llu len = %zu\n",
                  stream_state->offset, scratch->core_info.len);
 
-    pureLiteralInitScratch(scratch, stream_state->offset); 
-    scratch->tctxt.groups = loadGroups(rose, scratch->core_info.state); 
- 
+    pureLiteralInitScratch(scratch, stream_state->offset);
+    scratch->tctxt.groups = loadGroups(rose, scratch->core_info.state);
+
     // Pure literal cases don't have floatingMinDistance set, so we always
     // start the match region at zero.
     const size_t start = 0;
 
-    hwlmExecStreaming(ftable, len2, start, roseCallback, scratch, 
-                      rose->initialGroups & rose->floating_group_mask); 
+    hwlmExecStreaming(ftable, len2, start, roseCallback, scratch,
+                      rose->initialGroups & rose->floating_group_mask);
 
     if (!told_to_stop_matching(scratch) &&
         isAllExhausted(rose, scratch->core_info.exhaustionVector)) {
         DEBUG_PRINTF("stream exhausted\n");
-        scratch->core_info.status |= STATUS_EXHAUSTED; 
+        scratch->core_info.status |= STATUS_EXHAUSTED;
     }
 }
 
@@ -835,7 +835,7 @@ void soleOutfixStreamExec(struct hs_stream *stream_state,
                           struct hs_scratch *scratch) {
     assert(stream_state);
     assert(scratch);
-    assert(!can_stop_matching(scratch)); 
+    assert(!can_stop_matching(scratch));
 
     const struct RoseEngine *t = stream_state->rose;
     assert(t->outfixEndQueue == 1);
@@ -846,7 +846,7 @@ void soleOutfixStreamExec(struct hs_stream *stream_state,
     const struct NFA *nfa = getNfaByQueue(t, 0);
 
     struct mq *q = scratch->queues;
-    initOutfixQueue(q, 0, t, scratch); 
+    initOutfixQueue(q, 0, t, scratch);
     if (!scratch->core_info.buf_offset) {
         nfaQueueInitState(nfa, q);
         pushQueueAt(q, 0, MQE_START, 0);
@@ -862,7 +862,7 @@ void soleOutfixStreamExec(struct hs_stream *stream_state,
     if (nfaQueueExec(q->nfa, q, scratch->core_info.len)) {
         nfaQueueCompressState(nfa, q, scratch->core_info.len);
     } else if (!told_to_stop_matching(scratch)) {
-        scratch->core_info.status |= STATUS_EXHAUSTED; 
+        scratch->core_info.status |= STATUS_EXHAUSTED;
     }
 }
 
@@ -871,17 +871,17 @@ hs_error_t hs_scan_stream_internal(hs_stream_t *id, const char *data,
                                    unsigned length, UNUSED unsigned flags,
                                    hs_scratch_t *scratch,
                                    match_event_handler onEvent, void *context) {
-    assert(id); 
-    assert(scratch); 
- 
-    if (unlikely(!data)) { 
+    assert(id);
+    assert(scratch);
+
+    if (unlikely(!data)) {
         return HS_INVALID;
     }
 
     const struct RoseEngine *rose = id->rose;
     char *state = getMultiState(id);
 
-    u8 status = getStreamStatus(state); 
+    u8 status = getStreamStatus(state);
     if (status & (STATUS_TERMINATED | STATUS_EXHAUSTED | STATUS_ERROR)) {
         DEBUG_PRINTF("stream is broken, halting scan\n");
         if (status & STATUS_ERROR) {
@@ -904,7 +904,7 @@ hs_error_t hs_scan_stream_internal(hs_stream_t *id, const char *data,
     u32 historyAmount = getHistoryAmount(rose, id->offset);
     populateCoreInfo(scratch, rose, state, onEvent, context, data, length,
                      getHistory(state, rose, id->offset), historyAmount,
-                     id->offset, status, flags); 
+                     id->offset, status, flags);
     if (rose->ckeyCount) {
         scratch->core_info.logicalVector = state +
                                            rose->stateOffsets.logicalVec;
@@ -924,18 +924,18 @@ hs_error_t hs_scan_stream_internal(hs_stream_t *id, const char *data,
 
     if (!id->offset && rose->boundary.reportZeroOffset) {
         DEBUG_PRINTF("zero reports\n");
-        int rv = roseRunBoundaryProgram(rose, rose->boundary.reportZeroOffset, 
-                                        0, scratch); 
-        if (rv == MO_HALT_MATCHING) { 
-            DEBUG_PRINTF("halting scan\n"); 
-            setStreamStatus(state, scratch->core_info.status); 
-            if (told_to_stop_matching(scratch)) { 
-                return HS_SCAN_TERMINATED; 
-            } else { 
-                assert(scratch->core_info.status & STATUS_EXHAUSTED); 
-                return HS_SUCCESS; 
-            } 
-        } 
+        int rv = roseRunBoundaryProgram(rose, rose->boundary.reportZeroOffset,
+                                        0, scratch);
+        if (rv == MO_HALT_MATCHING) {
+            DEBUG_PRINTF("halting scan\n");
+            setStreamStatus(state, scratch->core_info.status);
+            if (told_to_stop_matching(scratch)) {
+                return HS_SCAN_TERMINATED;
+            } else {
+                assert(scratch->core_info.status & STATUS_EXHAUSTED);
+                return HS_SUCCESS;
+            }
+        }
     }
 
     switch (rose->runtimeImpl) {
@@ -954,16 +954,16 @@ hs_error_t hs_scan_stream_internal(hs_stream_t *id, const char *data,
     if (rose->hasSom && !told_to_stop_matching(scratch)) {
         int halt = flushStoredSomMatches(scratch, ~0ULL);
         if (halt) {
-            scratch->core_info.status |= STATUS_TERMINATED; 
+            scratch->core_info.status |= STATUS_TERMINATED;
         }
     }
 
-    setStreamStatus(state, scratch->core_info.status); 
- 
+    setStreamStatus(state, scratch->core_info.status);
+
     if (unlikely(internal_matching_error(scratch))) {
         return HS_UNKNOWN_ERROR;
     } else if (likely(!can_stop_matching(scratch))) {
-        maintainHistoryBuffer(rose, state, data, length); 
+        maintainHistoryBuffer(rose, state, data, length);
         id->offset += length; /* maintain offset */
 
         if (rose->somLocationCount) {
@@ -977,28 +977,28 @@ hs_error_t hs_scan_stream_internal(hs_stream_t *id, const char *data,
 }
 
 HS_PUBLIC_API
-hs_error_t HS_CDECL hs_scan_stream(hs_stream_t *id, const char *data, 
-                                   unsigned length, unsigned flags, 
-                                   hs_scratch_t *scratch, 
-                                   match_event_handler onEvent, void *context) { 
-    if (unlikely(!id || !scratch || !data || 
-                 !validScratch(id->rose, scratch))) { 
-        return HS_INVALID; 
-    } 
- 
-    if (unlikely(markScratchInUse(scratch))) { 
-        return HS_SCRATCH_IN_USE; 
-    } 
-    hs_error_t rv = hs_scan_stream_internal(id, data, length, flags, scratch, 
-                                            onEvent, context); 
-    unmarkScratchInUse(scratch); 
-    return rv; 
+hs_error_t HS_CDECL hs_scan_stream(hs_stream_t *id, const char *data,
+                                   unsigned length, unsigned flags,
+                                   hs_scratch_t *scratch,
+                                   match_event_handler onEvent, void *context) {
+    if (unlikely(!id || !scratch || !data ||
+                 !validScratch(id->rose, scratch))) {
+        return HS_INVALID;
+    }
+
+    if (unlikely(markScratchInUse(scratch))) {
+        return HS_SCRATCH_IN_USE;
+    }
+    hs_error_t rv = hs_scan_stream_internal(id, data, length, flags, scratch,
+                                            onEvent, context);
+    unmarkScratchInUse(scratch);
+    return rv;
 }
 
 HS_PUBLIC_API
-hs_error_t HS_CDECL hs_close_stream(hs_stream_t *id, hs_scratch_t *scratch, 
-                                    match_event_handler onEvent, 
-                                    void *context) { 
+hs_error_t HS_CDECL hs_close_stream(hs_stream_t *id, hs_scratch_t *scratch,
+                                    match_event_handler onEvent,
+                                    void *context) {
     if (!id) {
         return HS_INVALID;
     }
@@ -1007,15 +1007,15 @@ hs_error_t HS_CDECL hs_close_stream(hs_stream_t *id, hs_scratch_t *scratch,
         if (!scratch || !validScratch(id->rose, scratch)) {
             return HS_INVALID;
         }
-        if (unlikely(markScratchInUse(scratch))) { 
-            return HS_SCRATCH_IN_USE; 
-        } 
+        if (unlikely(markScratchInUse(scratch))) {
+            return HS_SCRATCH_IN_USE;
+        }
         report_eod_matches(id, scratch, onEvent, context);
         if (unlikely(internal_matching_error(scratch))) {
             unmarkScratchInUse(scratch);
             return HS_UNKNOWN_ERROR;
         }
-        unmarkScratchInUse(scratch); 
+        unmarkScratchInUse(scratch);
     }
 
     hs_stream_free(id);
@@ -1024,10 +1024,10 @@ hs_error_t HS_CDECL hs_close_stream(hs_stream_t *id, hs_scratch_t *scratch,
 }
 
 HS_PUBLIC_API
-hs_error_t HS_CDECL hs_reset_stream(hs_stream_t *id, UNUSED unsigned int flags, 
-                                    hs_scratch_t *scratch, 
-                                    match_event_handler onEvent, 
-                                    void *context) { 
+hs_error_t HS_CDECL hs_reset_stream(hs_stream_t *id, UNUSED unsigned int flags,
+                                    hs_scratch_t *scratch,
+                                    match_event_handler onEvent,
+                                    void *context) {
     if (!id) {
         return HS_INVALID;
     }
@@ -1036,26 +1036,26 @@ hs_error_t HS_CDECL hs_reset_stream(hs_stream_t *id, UNUSED unsigned int flags,
         if (!scratch || !validScratch(id->rose, scratch)) {
             return HS_INVALID;
         }
-        if (unlikely(markScratchInUse(scratch))) { 
-            return HS_SCRATCH_IN_USE; 
-        } 
+        if (unlikely(markScratchInUse(scratch))) {
+            return HS_SCRATCH_IN_USE;
+        }
         report_eod_matches(id, scratch, onEvent, context);
         if (unlikely(internal_matching_error(scratch))) {
             unmarkScratchInUse(scratch);
             return HS_UNKNOWN_ERROR;
         }
-        unmarkScratchInUse(scratch); 
+        unmarkScratchInUse(scratch);
     }
 
-    // history already initialised 
-    init_stream(id, id->rose, 0); 
+    // history already initialised
+    init_stream(id, id->rose, 0);
 
     return HS_SUCCESS;
 }
 
 HS_PUBLIC_API
-hs_error_t HS_CDECL hs_stream_size(const hs_database_t *db, 
-                                   size_t *stream_size) { 
+hs_error_t HS_CDECL hs_stream_size(const hs_database_t *db,
+                                   size_t *stream_size) {
     if (!stream_size) {
         return HS_INVALID;
     }
@@ -1102,13 +1102,13 @@ void dumpData(const char *data, size_t len) {
 #endif
 
 HS_PUBLIC_API
-hs_error_t HS_CDECL hs_scan_vector(const hs_database_t *db, 
-                                   const char * const * data, 
-                                   const unsigned int *length, 
-                                   unsigned int count, 
-                                   UNUSED unsigned int flags, 
-                                   hs_scratch_t *scratch, 
-                                   match_event_handler onEvent, void *context) { 
+hs_error_t HS_CDECL hs_scan_vector(const hs_database_t *db,
+                                   const char * const * data,
+                                   const unsigned int *length,
+                                   unsigned int count,
+                                   UNUSED unsigned int flags,
+                                   hs_scratch_t *scratch,
+                                   match_event_handler onEvent, void *context) {
     if (unlikely(!scratch || !data || !length)) {
         return HS_INVALID;
     }
@@ -1131,13 +1131,13 @@ hs_error_t HS_CDECL hs_scan_vector(const hs_database_t *db,
         return HS_INVALID;
     }
 
-    if (unlikely(markScratchInUse(scratch))) { 
-        return HS_SCRATCH_IN_USE; 
-    } 
- 
+    if (unlikely(markScratchInUse(scratch))) {
+        return HS_SCRATCH_IN_USE;
+    }
+
     hs_stream_t *id = (hs_stream_t *)(scratch->bstate);
 
-    init_stream(id, rose, 1); /* open stream */ 
+    init_stream(id, rose, 1); /* open stream */
 
     for (u32 i = 0; i < count; i++) {
         DEBUG_PRINTF("block %u/%u offset=%llu len=%u\n", i, count, id->offset,
@@ -1149,7 +1149,7 @@ hs_error_t HS_CDECL hs_scan_vector(const hs_database_t *db,
             = hs_scan_stream_internal(id, data[i], length[i], 0, scratch,
                                       onEvent, context);
         if (ret != HS_SUCCESS) {
-            unmarkScratchInUse(scratch); 
+            unmarkScratchInUse(scratch);
             return ret;
         }
     }
@@ -1159,7 +1159,7 @@ hs_error_t HS_CDECL hs_scan_vector(const hs_database_t *db,
         report_eod_matches(id, scratch, onEvent, context);
 
         if (unlikely(internal_matching_error(scratch))) {
-            unmarkScratchInUse(scratch); 
+            unmarkScratchInUse(scratch);
             return HS_UNKNOWN_ERROR;
         } else if (told_to_stop_matching(scratch)) {
             unmarkScratchInUse(scratch);
@@ -1167,108 +1167,108 @@ hs_error_t HS_CDECL hs_scan_vector(const hs_database_t *db,
         }
     }
 
-    unmarkScratchInUse(scratch); 
- 
+    unmarkScratchInUse(scratch);
+
     return HS_SUCCESS;
 }
- 
-HS_PUBLIC_API 
-hs_error_t HS_CDECL hs_compress_stream(const hs_stream_t *stream, char *buf, 
-                                       size_t buf_space, size_t *used_space) { 
-    if (unlikely(!stream || !used_space)) { 
-        return HS_INVALID; 
-    } 
- 
-    if (unlikely(buf_space && !buf)) { 
-        return HS_INVALID; 
-    } 
- 
-    const struct RoseEngine *rose = stream->rose; 
- 
-    size_t stream_size = size_compress_stream(rose, stream); 
- 
-    DEBUG_PRINTF("require %zu [orig %zu]\n", stream_size, 
-                 rose->stateOffsets.end + sizeof(struct hs_stream)); 
-    *used_space = stream_size; 
- 
-    if (buf_space < stream_size) { 
-        return HS_INSUFFICIENT_SPACE; 
-    } 
-    compress_stream(buf, stream_size, rose, stream); 
- 
-    return HS_SUCCESS; 
-} 
- 
-HS_PUBLIC_API 
-hs_error_t HS_CDECL hs_expand_stream(const hs_database_t *db, 
-                                     hs_stream_t **stream, 
-                                     const char *buf, size_t buf_size) { 
-    if (unlikely(!stream || !buf)) { 
-        return HS_INVALID; 
-    } 
- 
-    *stream = NULL; 
- 
-    hs_error_t err = validDatabase(db); 
-    if (unlikely(err != HS_SUCCESS)) { 
-        return err; 
-    } 
- 
-    const struct RoseEngine *rose = hs_get_bytecode(db); 
-    if (unlikely(!ISALIGNED_16(rose))) { 
-        return HS_INVALID; 
-    } 
- 
-    if (unlikely(rose->mode != HS_MODE_STREAM)) { 
-        return HS_DB_MODE_ERROR; 
-    } 
- 
-    size_t stream_size = rose->stateOffsets.end + sizeof(struct hs_stream); 
- 
-    struct hs_stream *s = hs_stream_alloc(stream_size); 
-    if (unlikely(!s)) { 
-        return HS_NOMEM; 
-    } 
- 
-    if (!expand_stream(s, rose, buf, buf_size)) { 
-        hs_stream_free(s); 
-        return HS_INVALID; 
-    } 
- 
-    *stream = s; 
-    return HS_SUCCESS; 
-} 
- 
-HS_PUBLIC_API 
-hs_error_t HS_CDECL hs_reset_and_expand_stream(hs_stream_t *to_stream, 
-                                               const char *buf, size_t buf_size, 
-                                               hs_scratch_t *scratch, 
-                                               match_event_handler onEvent, 
-                                               void *context) { 
-    if (unlikely(!to_stream || !buf)) { 
-        return HS_INVALID; 
-    } 
- 
-    const struct RoseEngine *rose = to_stream->rose; 
- 
-    if (onEvent) { 
-        if (!scratch || !validScratch(to_stream->rose, scratch)) { 
-            return HS_INVALID; 
-        } 
-        if (unlikely(markScratchInUse(scratch))) { 
-            return HS_SCRATCH_IN_USE; 
-        } 
-        report_eod_matches(to_stream, scratch, onEvent, context); 
+
+HS_PUBLIC_API
+hs_error_t HS_CDECL hs_compress_stream(const hs_stream_t *stream, char *buf,
+                                       size_t buf_space, size_t *used_space) {
+    if (unlikely(!stream || !used_space)) {
+        return HS_INVALID;
+    }
+
+    if (unlikely(buf_space && !buf)) {
+        return HS_INVALID;
+    }
+
+    const struct RoseEngine *rose = stream->rose;
+
+    size_t stream_size = size_compress_stream(rose, stream);
+
+    DEBUG_PRINTF("require %zu [orig %zu]\n", stream_size,
+                 rose->stateOffsets.end + sizeof(struct hs_stream));
+    *used_space = stream_size;
+
+    if (buf_space < stream_size) {
+        return HS_INSUFFICIENT_SPACE;
+    }
+    compress_stream(buf, stream_size, rose, stream);
+
+    return HS_SUCCESS;
+}
+
+HS_PUBLIC_API
+hs_error_t HS_CDECL hs_expand_stream(const hs_database_t *db,
+                                     hs_stream_t **stream,
+                                     const char *buf, size_t buf_size) {
+    if (unlikely(!stream || !buf)) {
+        return HS_INVALID;
+    }
+
+    *stream = NULL;
+
+    hs_error_t err = validDatabase(db);
+    if (unlikely(err != HS_SUCCESS)) {
+        return err;
+    }
+
+    const struct RoseEngine *rose = hs_get_bytecode(db);
+    if (unlikely(!ISALIGNED_16(rose))) {
+        return HS_INVALID;
+    }
+
+    if (unlikely(rose->mode != HS_MODE_STREAM)) {
+        return HS_DB_MODE_ERROR;
+    }
+
+    size_t stream_size = rose->stateOffsets.end + sizeof(struct hs_stream);
+
+    struct hs_stream *s = hs_stream_alloc(stream_size);
+    if (unlikely(!s)) {
+        return HS_NOMEM;
+    }
+
+    if (!expand_stream(s, rose, buf, buf_size)) {
+        hs_stream_free(s);
+        return HS_INVALID;
+    }
+
+    *stream = s;
+    return HS_SUCCESS;
+}
+
+HS_PUBLIC_API
+hs_error_t HS_CDECL hs_reset_and_expand_stream(hs_stream_t *to_stream,
+                                               const char *buf, size_t buf_size,
+                                               hs_scratch_t *scratch,
+                                               match_event_handler onEvent,
+                                               void *context) {
+    if (unlikely(!to_stream || !buf)) {
+        return HS_INVALID;
+    }
+
+    const struct RoseEngine *rose = to_stream->rose;
+
+    if (onEvent) {
+        if (!scratch || !validScratch(to_stream->rose, scratch)) {
+            return HS_INVALID;
+        }
+        if (unlikely(markScratchInUse(scratch))) {
+            return HS_SCRATCH_IN_USE;
+        }
+        report_eod_matches(to_stream, scratch, onEvent, context);
         if (unlikely(internal_matching_error(scratch))) {
             unmarkScratchInUse(scratch);
             return HS_UNKNOWN_ERROR;
         }
-        unmarkScratchInUse(scratch); 
-    } 
- 
-    if (expand_stream(to_stream, rose, buf, buf_size)) { 
-        return HS_SUCCESS; 
-    } else { 
-        return HS_INVALID; 
-    } 
-} 
+        unmarkScratchInUse(scratch);
+    }
+
+    if (expand_stream(to_stream, rose, buf, buf_size)) {
+        return HS_SUCCESS;
+    } else {
+        return HS_INVALID;
+    }
+}

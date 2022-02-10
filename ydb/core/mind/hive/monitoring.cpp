@@ -116,13 +116,13 @@ public:
                           }
                           TABLEBODY() {
                              ui64 index = 0;
-                             for (const auto &tabletPair : TabletInfo) { 
-                                 const ui64 tabletId = tabletPair.first; 
-                                 const auto &x = tabletPair.second; 
+                             for (const auto &tabletPair : TabletInfo) {
+                                 const ui64 tabletId = tabletPair.first;
+                                 const auto &x = tabletPair.second;
                                  TABLER() {
                                       out << "<td data-text='" << index << "'>" << "<a href=\"../tablets?TabletID="
-                                                  << tabletId << "\">" 
-                                                  << TTabletTypes::TypeToStr((TTabletTypes::EType)x.TabletType) 
+                                                  << tabletId << "\">"
+                                                  << TTabletTypes::TypeToStr((TTabletTypes::EType)x.TabletType)
                                                   << "</a></td>";
                                       TABLED() {out << tabletId;}
                                       TABLED() {out << x.KnownGeneration;}
@@ -130,13 +130,13 @@ public:
                                              {out << x.LeaderNode;}
                                       TABLED() {out << ETabletStateName(x.TabletState);}
                                       TABLED() {out << " <a href=\"../tablets?SsId="
-                                                  << tabletId << "\">" 
+                                                  << tabletId << "\">"
                                                   << "<span class=\"glyphicon glyphicon-tasks\""
                                                   << " title=\"State Storage\"/>"
                                                   << "</a>";}
                                  }
                                  ++index;
-                             } 
+                             }
                          }
                      }
                  }

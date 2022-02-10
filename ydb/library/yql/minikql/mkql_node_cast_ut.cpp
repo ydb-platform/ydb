@@ -68,5 +68,5 @@ private:
 
 UNIT_TEST_SUITE_REGISTRATION(TMiniKQLNodeCast);
 
-} // namespace NMiniKQL 
-} // namespace NKikimr 
+} // namespace NMiniKQL
+} // namespace NKikimr

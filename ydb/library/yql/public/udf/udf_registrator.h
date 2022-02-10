@@ -8,8 +8,8 @@
 
 #include <functional>
 
-#include <stdarg.h> 
- 
+#include <stdarg.h>
+
 #ifdef _win_
 #  ifdef BUILD_UDF
 #    define UDF_API __declspec(dllexport)
@@ -20,7 +20,7 @@
 #  define UDF_API __attribute__ ((visibility("default")))
 #endif
 
-#ifdef BUILD_UDF 
+#ifdef BUILD_UDF
 #define REGISTER_MODULES(...) \
     extern "C" UDF_API void Register( \
             ::NYql::NUdf::IRegistrator& registrator, ui32 flags) { \
@@ -33,7 +33,7 @@
     extern "C" UDF_API void SetBackTraceCallback(::NYql::NUdf::TBackTraceCallback callback) { \
         ::NYql::NUdf::SetBackTraceCallbackImpl(callback); \
     }
-#else 
+#else
 #define REGISTER_MODULES(...) \
     namespace { \
         struct TYqlStaticUdfRegistrator { \
@@ -42,8 +42,8 @@
             } \
         } YQL_REGISTRATOR; \
     }
-#endif 
- 
+#endif
+
 namespace NYql {
 namespace NUdf {
 
@@ -157,19 +157,19 @@ using TAbiVersionFunctionPtr = ui32 (*)();
 using TBindSymbolsFunctionPtr = void (*)(const TStaticSymbols& symbols);
 using TSetBackTraceCallbackPtr = void(*)(TBackTraceCallback callback);
 
-template<typename TModule> 
-static inline void RegisterHelper(IRegistrator& registrator) { 
-    TUniquePtr<TModule> ptr(new TModule()); 
-    auto name = ptr->Name(); 
-    registrator.AddModule(name, ptr.Release()); 
-} 
- 
-template<typename THead1, typename THead2, typename... TTail> 
-static inline void RegisterHelper(IRegistrator& registrator) { 
-    RegisterHelper<THead1>(registrator); 
-    RegisterHelper<THead2, TTail...>(registrator); 
-} 
- 
+template<typename TModule>
+static inline void RegisterHelper(IRegistrator& registrator) {
+    TUniquePtr<TModule> ptr(new TModule());
+    auto name = ptr->Name();
+    registrator.AddModule(name, ptr.Release());
+}
+
+template<typename THead1, typename THead2, typename... TTail>
+static inline void RegisterHelper(IRegistrator& registrator) {
+    RegisterHelper<THead1>(registrator);
+    RegisterHelper<THead2, TTail...>(registrator);
+}
+
 void SetBackTraceCallbackImpl(TBackTraceCallback callback);
 
 

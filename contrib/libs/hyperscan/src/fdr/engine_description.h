@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -41,8 +41,8 @@ class EngineDescription {
 
 public:
     EngineDescription(u32 id_in, const target_t &code_target_in,
-                      u32 numBuckets_in) 
-        : id(id_in), code_target(code_target_in), numBuckets(numBuckets_in) {} 
+                      u32 numBuckets_in)
+        : id(id_in), code_target(code_target_in), numBuckets(numBuckets_in) {}
 
     virtual ~EngineDescription();
 

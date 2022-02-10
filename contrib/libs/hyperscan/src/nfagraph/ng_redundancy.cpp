@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -78,7 +78,7 @@
 #include "ng_util.h"
 #include "ue2common.h"
 #include "util/container.h"
-#include "util/flat_containers.h" 
+#include "util/flat_containers.h"
 #include "util/graph_range.h"
 
 #include <algorithm>
@@ -158,7 +158,7 @@ void populateContainers(const NGHolder &g, VertexInfoMap &infoMap) {
 static
 void inplaceIntersection(vector<NFAVertex> &vset1,
                          const flat_set<NFAVertex> &vset2) {
-    const NFAVertex GONE = NGHolder::null_vertex(); 
+    const NFAVertex GONE = NGHolder::null_vertex();
 
     vector<NFAVertex>::iterator it = vset1.begin(), ite = vset1.end();
     flat_set<NFAVertex>::const_iterator jt = vset2.begin(), jte = vset2.end();
@@ -307,8 +307,8 @@ void markForRemoval(const NFAVertex v, VertexInfoMap &infoMap,
 
 static
 bool hasInEdgeTops(const NGHolder &g, NFAVertex v) {
-    NFAEdge e = edge(g.start, v, g); 
-    return e && !g[e].tops.empty(); 
+    NFAEdge e = edge(g.start, v, g);
+    return e && !g[e].tops.empty();
 }
 
 /** Transform (1), removal of redundant vertices. */
@@ -342,7 +342,7 @@ bool doUselessMergePass(NGHolder &g, som_type som, VertexInfoMap &infoMap,
         }
 
         if (info.pred.empty() || info.succ.empty()) {
-            DEBUG_PRINTF("vertex %zu has empty pred/succ list\n", g[v].index); 
+            DEBUG_PRINTF("vertex %zu has empty pred/succ list\n", g[v].index);
             assert(0); // non-special states should always have succ/pred lists
             continue;
         }
@@ -441,7 +441,7 @@ bool doUselessMergePass(NGHolder &g, som_type som, VertexInfoMap &infoMap,
 
             CharReach &otherReach = g[t].char_reach;
             if (currReach.isSubsetOf(otherReach)) {
-                DEBUG_PRINTF("removing redundant vertex %zu (keeping %zu)\n", 
+                DEBUG_PRINTF("removing redundant vertex %zu (keeping %zu)\n",
                              g[v].index, g[t].index);
                 markForRemoval(v, infoMap, removable);
                 changed = true;
@@ -568,8 +568,8 @@ bool doDiamondMergePass(NGHolder &g, som_type som, VertexInfoMap &infoMap,
                 CharReach &otherReach = g[t].char_reach;
                 otherReach |= currReach;
                 // v can be removed
-                DEBUG_PRINTF("removing redundant vertex %zu and merging " 
-                             "reachability with vertex %zu\n", 
+                DEBUG_PRINTF("removing redundant vertex %zu and merging "
+                             "reachability with vertex %zu\n",
                              g[v].index, g[t].index);
                 markForRemoval(v, infoMap, removable);
                 changed = true;
@@ -635,14 +635,14 @@ bool reversePathReachSubset(const NFAEdge &e, const NFAVertex &dom,
     }
 
     NFAVertex start = source(e, g);
-    using RevGraph = boost::reverse_graph<NGHolder, const NGHolder &>; 
+    using RevGraph = boost::reverse_graph<NGHolder, const NGHolder &>;
     map<RevGraph::vertex_descriptor, boost::default_color_type> vertexColor;
 
     // Walk the graph backwards from v, examining each node. We fail (return
     // false) if we encounter a node with reach NOT a subset of domReach, and
     // we stop searching at dom.
     try {
-        depth_first_visit(RevGraph(g), start, 
+        depth_first_visit(RevGraph(g), start,
                           ReachSubsetVisitor(domReach),
                           make_assoc_property_map(vertexColor),
                           VertexIs<RevGraph, RevGraph::vertex_descriptor>(dom));
@@ -664,15 +664,15 @@ bool forwardPathReachSubset(const NFAEdge &e, const NFAVertex &dom,
     }
 
     NFAVertex start = target(e, g);
-    map<NFAVertex, boost::default_color_type> vertexColor; 
+    map<NFAVertex, boost::default_color_type> vertexColor;
 
     // Walk the graph forward from v, examining each node. We fail (return
     // false) if we encounter a node with reach NOT a subset of domReach, and
     // we stop searching at dom.
     try {
-        depth_first_visit(g, start, ReachSubsetVisitor(domReach), 
+        depth_first_visit(g, start, ReachSubsetVisitor(domReach),
                           make_assoc_property_map(vertexColor),
-                          VertexIs<NGHolder, NFAVertex>(dom)); 
+                          VertexIs<NGHolder, NFAVertex>(dom));
     } catch(ReachMismatch&) {
         return false;
     }
@@ -735,9 +735,9 @@ u32 findCyclic(const NGHolder &g, vector<bool> &cyclic) {
 
     for (auto v : vertices_range(g)) {
         assert(g[v].index < cyclic.size());
-        if (hasSelfLoop(v, g)) { 
+        if (hasSelfLoop(v, g)) {
             count++;
-            cyclic[g[v].index] = true; 
+            cyclic[g[v].index] = true;
         }
     }
 
@@ -747,7 +747,7 @@ u32 findCyclic(const NGHolder &g, vector<bool> &cyclic) {
 static
 void findCyclicDom(NGHolder &g, vector<bool> &cyclic,
                    set<NFAEdge> &dead, som_type som) {
-    auto dominators = findDominators(g); 
+    auto dominators = findDominators(g);
 
     for (auto v : vertices_range(g)) {
         if (is_special(v, g)) {
@@ -763,8 +763,8 @@ void findCyclicDom(NGHolder &g, vector<bool> &cyclic,
                 continue;
             }
 
-            DEBUG_PRINTF("vertex %zu is dominated by directly-connected cyclic " 
-                         "vertex %zu\n", g[v].index, g[dom].index); 
+            DEBUG_PRINTF("vertex %zu is dominated by directly-connected cyclic "
+                         "vertex %zu\n", g[v].index, g[dom].index);
 
             // iff all paths through in-edge e of v involve vertices whose
             // reachability is a subset of reach(dom), we can delete edge e.
@@ -774,8 +774,8 @@ void findCyclicDom(NGHolder &g, vector<bool> &cyclic,
                 }
 
                 if (reversePathReachSubset(e, dom, g)) {
-                    DEBUG_PRINTF("edge (%zu, %zu) can be removed: leading " 
-                                 "paths share dom reach\n", 
+                    DEBUG_PRINTF("edge (%zu, %zu) can be removed: leading "
+                                 "paths share dom reach\n",
                                  g[source(e, g)].index, g[target(e, g)].index);
                     dead.insert(e);
                     if (source(e, g) == v) {
@@ -791,7 +791,7 @@ void findCyclicDom(NGHolder &g, vector<bool> &cyclic,
 static
 void findCyclicPostDom(NGHolder &g, vector<bool> &cyclic,
                        set<NFAEdge> &dead) {
-    auto postdominators = findPostDominators(g); 
+    auto postdominators = findPostDominators(g);
 
     for (auto v : vertices_range(g)) {
         if (is_special(v, g)) {
@@ -800,9 +800,9 @@ void findCyclicPostDom(NGHolder &g, vector<bool> &cyclic,
 
         // Path out through a post-dominator (e.g. a?.+foobar')
         NFAVertex postdom = postdominators[v];
-        if (postdom && cyclic[g[postdom].index] && edge(v, postdom, g).second) { 
-            DEBUG_PRINTF("vertex %zu is postdominated by directly-connected " 
-                         "cyclic vertex %zu\n", g[v].index, g[postdom].index); 
+        if (postdom && cyclic[g[postdom].index] && edge(v, postdom, g).second) {
+            DEBUG_PRINTF("vertex %zu is postdominated by directly-connected "
+                         "cyclic vertex %zu\n", g[v].index, g[postdom].index);
 
             // iff all paths through in-edge e of v involve vertices whose
             // reachability is a subset of reach(dom), we can delete edge e.
@@ -812,8 +812,8 @@ void findCyclicPostDom(NGHolder &g, vector<bool> &cyclic,
                 }
 
                 if (forwardPathReachSubset(e, postdom, g)) {
-                    DEBUG_PRINTF("edge (%zu, %zu) can be removed: trailing " 
-                                 "paths share postdom reach\n", 
+                    DEBUG_PRINTF("edge (%zu, %zu) can be removed: trailing "
+                                 "paths share postdom reach\n",
                                  g[source(e, g)].index, g[target(e, g)].index);
                     if (target(e, g) == v) {
                         cyclic[g[v].index] = false;
@@ -828,7 +828,7 @@ void findCyclicPostDom(NGHolder &g, vector<bool> &cyclic,
 
 bool removeRedundancy(NGHolder &g, som_type som) {
     DEBUG_PRINTF("rr som = %d\n", (int)som);
-    renumber_vertices(g); 
+    renumber_vertices(g);
 
     // Cheap check: if all the non-special vertices have in-degree one and
     // out-degree one, there's no redundancy in this here graph and we can

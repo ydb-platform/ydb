@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -33,8 +33,8 @@
 #include "mcclellancompile.h"
 #include "ue2common.h"
 #include "util/charreach.h"
-#include "util/flat_containers.h" 
-#include "util/noncopyable.h" 
+#include "util/flat_containers.h"
+#include "util/noncopyable.h"
 #include "util/order_check.h"
 
 #include <map>
@@ -103,13 +103,13 @@ struct GoughSSAVarWithInputs;
 struct GoughSSAVarMin;
 struct GoughSSAVarJoin;
 
-struct GoughSSAVar : noncopyable { 
+struct GoughSSAVar : noncopyable {
     GoughSSAVar(void) : seen(false), slot(INVALID_SLOT) {}
     virtual ~GoughSSAVar();
-    const flat_set<GoughSSAVar *> &get_inputs() const { 
+    const flat_set<GoughSSAVar *> &get_inputs() const {
         return inputs;
     }
-    const flat_set<GoughSSAVarWithInputs *> &get_outputs() const { 
+    const flat_set<GoughSSAVarWithInputs *> &get_outputs() const {
         return outputs;
     }
     virtual void replace_input(GoughSSAVar *old_v, GoughSSAVar *new_v) = 0;
@@ -127,8 +127,8 @@ struct GoughSSAVar : noncopyable {
         clear_outputs();
     }
 protected:
-    flat_set<GoughSSAVar *> inputs; 
-    flat_set<GoughSSAVarWithInputs *> outputs; 
+    flat_set<GoughSSAVar *> inputs;
+    flat_set<GoughSSAVarWithInputs *> outputs;
     friend struct GoughSSAVarWithInputs;
     friend struct GoughSSAVarMin;
     friend struct GoughSSAVarJoin;
@@ -184,14 +184,14 @@ struct GoughSSAVarJoin : public GoughSSAVarWithInputs {
 
     void add_input(GoughSSAVar *v, GoughEdge prev);
 
-    const flat_set<GoughEdge> &get_edges_for_input(GoughSSAVar *input) const; 
-    const std::map<GoughSSAVar *, flat_set<GoughEdge>> &get_input_map() const; 
+    const flat_set<GoughEdge> &get_edges_for_input(GoughSSAVar *input) const;
+    const std::map<GoughSSAVar *, flat_set<GoughEdge>> &get_input_map() const;
 
 protected:
     void remove_input_raw(GoughSSAVar *v) override;
 
 private:
-    std::map<GoughSSAVar *, flat_set<GoughEdge>> input_map; 
+    std::map<GoughSSAVar *, flat_set<GoughEdge>> input_map;
 };
 
 struct gough_accel_state_info {

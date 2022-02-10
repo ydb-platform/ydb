@@ -29,7 +29,7 @@
 #ifndef FDR_CONFIRM_RUNTIME_H
 #define FDR_CONFIRM_RUNTIME_H
 
-#include "scratch.h" 
+#include "scratch.h"
 #include "fdr_internal.h"
 #include "fdr_loadval.h"
 #include "hwlm/hwlm.h"
@@ -40,65 +40,65 @@
 // this is ordinary confirmation function which runs through
 // the whole confirmation procedure
 static really_inline
-void confWithBit(const struct FDRConfirm *fdrc, const struct FDR_Runtime_Args *a, 
-                 size_t i, hwlmcb_rv_t *control, u32 *last_match, 
-                 u64a conf_key, u64a *conf, u8 bit) { 
+void confWithBit(const struct FDRConfirm *fdrc, const struct FDR_Runtime_Args *a,
+                 size_t i, hwlmcb_rv_t *control, u32 *last_match,
+                 u64a conf_key, u64a *conf, u8 bit) {
     assert(i < a->len);
-    assert(i >= a->start_offset); 
+    assert(i >= a->start_offset);
     assert(ISALIGNED(fdrc));
 
     const u8 * buf = a->buf;
-    u32 c = CONF_HASH_CALL(conf_key, fdrc->andmsk, fdrc->mult, 
-                           fdrc->nBits); 
-    u32 start = getConfirmLitIndex(fdrc)[c]; 
-    if (likely(!start)) { 
-        return; 
+    u32 c = CONF_HASH_CALL(conf_key, fdrc->andmsk, fdrc->mult,
+                           fdrc->nBits);
+    u32 start = getConfirmLitIndex(fdrc)[c];
+    if (likely(!start)) {
+        return;
     }
 
-    const struct LitInfo *li 
-        = (const struct LitInfo *)((const u8 *)fdrc + start); 
+    const struct LitInfo *li
+        = (const struct LitInfo *)((const u8 *)fdrc + start);
 
-    struct hs_scratch *scratch = a->scratch; 
-    assert(!scratch->fdr_conf); 
-    scratch->fdr_conf = conf; 
-    scratch->fdr_conf_offset = bit; 
-    u8 oldNext; // initialized in loop 
-    do { 
-        assert(ISALIGNED(li)); 
+    struct hs_scratch *scratch = a->scratch;
+    assert(!scratch->fdr_conf);
+    scratch->fdr_conf = conf;
+    scratch->fdr_conf_offset = bit;
+    u8 oldNext; // initialized in loop
+    do {
+        assert(ISALIGNED(li));
 
-        if (unlikely((conf_key & li->msk) != li->v)) { 
-            goto out; 
-        } 
+        if (unlikely((conf_key & li->msk) != li->v)) {
+            goto out;
+        }
 
-        if ((*last_match == li->id) && (li->flags & FDR_LIT_FLAG_NOREPEAT)) { 
-            goto out; 
-        } 
+        if ((*last_match == li->id) && (li->flags & FDR_LIT_FLAG_NOREPEAT)) {
+            goto out;
+        }
 
-        const u8 *loc = buf + i - li->size + 1; 
+        const u8 *loc = buf + i - li->size + 1;
 
-        if (loc < buf) { 
-            u32 full_overhang = buf - loc; 
-            size_t len_history = a->len_history; 
+        if (loc < buf) {
+            u32 full_overhang = buf - loc;
+            size_t len_history = a->len_history;
 
-            // can't do a vectored confirm either if we don't have 
-            // the bytes 
-            if (full_overhang > len_history) { 
+            // can't do a vectored confirm either if we don't have
+            // the bytes
+            if (full_overhang > len_history) {
                 goto out;
             }
         }
-        assert(li->size <= sizeof(CONF_TYPE)); 
+        assert(li->size <= sizeof(CONF_TYPE));
 
-        if (unlikely(!(li->groups & *control))) { 
-            goto out; 
+        if (unlikely(!(li->groups & *control))) {
+            goto out;
         }
 
-        *last_match = li->id; 
-        *control = a->cb(i, li->id, scratch); 
-    out: 
-        oldNext = li->next; // oldNext is either 0 or an 'adjust' value 
-        li++; 
-    } while (oldNext); 
-    scratch->fdr_conf = NULL; 
+        *last_match = li->id;
+        *control = a->cb(i, li->id, scratch);
+    out:
+        oldNext = li->next; // oldNext is either 0 or an 'adjust' value
+        li++;
+    } while (oldNext);
+    scratch->fdr_conf = NULL;
 }
 
 #endif

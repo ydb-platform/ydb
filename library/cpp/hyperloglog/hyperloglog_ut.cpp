@@ -1,4 +1,4 @@
-#include "hyperloglog.h" 
+#include "hyperloglog.h"
 
 #include <util/generic/buffer.h>
 #include <util/random/mersenne.h>
@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(THyperLogLog) {
     Y_UNIT_TEST(TestPrecision18) {
         TMersenne<ui64> rand;
 
-        auto counter = THyperLogLog::Create(18); 
+        auto counter = THyperLogLog::Create(18);
 
         static const std::pair<ui64, ui64> POINTS[] = {
             {10, 10},
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(THyperLogLog) {
             UNIT_ASSERT_EQUAL(estimation, pnt.second);
         }
         {
-            auto counter2 = THyperLogLog::Create(18); 
+            auto counter2 = THyperLogLog::Create(18);
             while (unique < 2000000000) {
                 const auto val = rand();
                 counter2.Update(val);
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(THyperLogLog) {
             UNIT_ASSERT_EQUAL(stream.Buffer().Size(), 1 + (1 << 18));
 
             stream.Rewind();
-            const auto copy = THyperLogLog::Load(stream); 
+            const auto copy = THyperLogLog::Load(stream);
 
             UNIT_ASSERT_EQUAL(counter.Estimate(), copy.Estimate());
         }

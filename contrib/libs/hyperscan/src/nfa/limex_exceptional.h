@@ -32,8 +32,8 @@
  * X-macro generic impl, included into the various LimEx model implementations.
  */
 
-#if !defined(SIZE) || !defined(STATE_T) || !defined(LOAD_FROM_ENG) 
-#  error Must define SIZE, STATE_T, LOAD_FROM_ENG in includer. 
+#if !defined(SIZE) || !defined(STATE_T) || !defined(LOAD_FROM_ENG)
+#  error Must define SIZE, STATE_T, LOAD_FROM_ENG in includer.
 #endif
 
 #include "config.h"
@@ -59,7 +59,7 @@
 #define ESTATE_ARG STATE_T estate
 #else
 #define ESTATE_ARG const STATE_T *estatep
-#define estate (*estatep) 
+#define estate (*estatep)
 #endif
 
 #ifdef STATE_ON_STACK
@@ -79,13 +79,13 @@
 #ifdef ARCH_64_BIT
 #define CHUNK_T u64a
 #define FIND_AND_CLEAR_FN findAndClearLSB_64
-#define POPCOUNT_FN popcount64 
-#define RANK_IN_MASK_FN rank_in_mask64 
+#define POPCOUNT_FN popcount64
+#define RANK_IN_MASK_FN rank_in_mask64
 #else
 #define CHUNK_T u32
 #define FIND_AND_CLEAR_FN findAndClearLSB_32
-#define POPCOUNT_FN popcount32 
-#define RANK_IN_MASK_FN rank_in_mask32 
+#define POPCOUNT_FN popcount32
+#define RANK_IN_MASK_FN rank_in_mask32
 #endif
 
 /** \brief Process a single exception. Returns 1 if exception handling should
@@ -132,7 +132,7 @@ int RUN_EXCEPTION_FN(const EXCEPTION_T *e, STATE_ARG,
         char *repeat_state = ctx->repeat_state + info->stateOffset;
 
         if (e->trigger == LIMEX_TRIGGER_POS) {
-            char cyclic_on = TESTBIT_STATE(*STATE_ARG_P, info->cyclicState); 
+            char cyclic_on = TESTBIT_STATE(*STATE_ARG_P, info->cyclicState);
             processPosTrigger(repeat, repeat_ctrl, repeat_state, offset,
                               cyclic_on);
             *cacheable = DO_NOT_CACHE_RESULT_AND_FLUSH_BR_ENTRIES;
@@ -148,7 +148,7 @@ int RUN_EXCEPTION_FN(const EXCEPTION_T *e, STATE_ARG,
                 *cacheable = DO_NOT_CACHE_RESULT_AND_FLUSH_BR_ENTRIES;
                 DEBUG_PRINTF("stale history, squashing cyclic state\n");
                 assert(e->hasSquash == LIMEX_SQUASH_TUG);
-                *succ = AND_STATE(*succ, LOAD_FROM_ENG(&e->squash)); 
+                *succ = AND_STATE(*succ, LOAD_FROM_ENG(&e->squash));
                 return 1; // continue
             } else if (rv == TRIGGER_SUCCESS_CACHE) {
                 new_cache->br = 1;
@@ -162,8 +162,8 @@ int RUN_EXCEPTION_FN(const EXCEPTION_T *e, STATE_ARG,
     // Some exceptions fire accepts.
     if (e->reports != MO_INVALID_IDX) {
         if (flags & CALLBACK_OUTPUT) {
-            const ReportID *reports = 
-                (const ReportID *)((const char *)limex + e->reports); 
+            const ReportID *reports =
+                (const ReportID *)((const char *)limex + e->reports);
             if (unlikely(limexRunReports(reports, ctx->callback,
                             ctx->context, offset)
                         == MO_HALT_MATCHING)) {
@@ -187,16 +187,16 @@ int RUN_EXCEPTION_FN(const EXCEPTION_T *e, STATE_ARG,
     // Most exceptions have a set of successors to switch on. `local_succ' is
     // ORed into `succ' at the end of the caller's loop.
 #ifndef BIG_MODEL
-    *local_succ = OR_STATE(*local_succ, LOAD_FROM_ENG(&e->successors)); 
+    *local_succ = OR_STATE(*local_succ, LOAD_FROM_ENG(&e->successors));
 #else
-    ctx->local_succ = OR_STATE(ctx->local_succ, LOAD_FROM_ENG(&e->successors)); 
+    ctx->local_succ = OR_STATE(ctx->local_succ, LOAD_FROM_ENG(&e->successors));
 #endif
 
     // Some exceptions squash states behind them. Note that we squash states in
     // 'succ', not local_succ.
-    if (e->hasSquash == LIMEX_SQUASH_CYCLIC 
-        || e->hasSquash == LIMEX_SQUASH_REPORT) { 
-        *succ = AND_STATE(*succ, LOAD_FROM_ENG(&e->squash)); 
+    if (e->hasSquash == LIMEX_SQUASH_CYCLIC
+        || e->hasSquash == LIMEX_SQUASH_REPORT) {
+        *succ = AND_STATE(*succ, LOAD_FROM_ENG(&e->squash));
         if (*cacheable == CACHE_RESULT) {
             *cacheable = DO_NOT_CACHE_RESULT;
         }
@@ -207,17 +207,17 @@ int RUN_EXCEPTION_FN(const EXCEPTION_T *e, STATE_ARG,
 
 #ifndef RUN_EXCEPTION_FN_ONLY
 
-/** \brief Process all of the exceptions associated with the states in the \a 
- * estate. */ 
+/** \brief Process all of the exceptions associated with the states in the \a
+ * estate. */
 static really_inline
 int PE_FN(STATE_ARG, ESTATE_ARG, UNUSED u32 diffmask, STATE_T *succ,
-          const struct IMPL_NFA_T *limex, const EXCEPTION_T *exceptions, 
+          const struct IMPL_NFA_T *limex, const EXCEPTION_T *exceptions,
           u64a offset, struct CONTEXT_T *ctx, char in_rev, char flags) {
     assert(diffmask > 0); // guaranteed by caller macro
 
-    if (EQ_STATE(estate, ctx->cached_estate)) { 
+    if (EQ_STATE(estate, ctx->cached_estate)) {
         DEBUG_PRINTF("using cached succ from previous state\n");
-        *succ = OR_STATE(*succ, ctx->cached_esucc); 
+        *succ = OR_STATE(*succ, ctx->cached_esucc);
         if (ctx->cached_reports && (flags & CALLBACK_OUTPUT)) {
             DEBUG_PRINTF("firing cached reports from previous state\n");
             if (unlikely(limexRunReports(ctx->cached_reports, ctx->callback,
@@ -232,7 +232,7 @@ int PE_FN(STATE_ARG, ESTATE_ARG, UNUSED u32 diffmask, STATE_T *succ,
 #ifndef BIG_MODEL
     STATE_T local_succ = ZERO_STATE;
 #else
-    ctx->local_succ = ZERO_STATE; 
+    ctx->local_succ = ZERO_STATE;
 #endif
 
     struct proto_cache new_cache = {0, NULL};
@@ -303,20 +303,20 @@ int PE_FN(STATE_ARG, ESTATE_ARG, UNUSED u32 diffmask, STATE_T *succ,
 #else
     // A copy of the estate as an array of GPR-sized chunks.
     CHUNK_T chunks[sizeof(STATE_T) / sizeof(CHUNK_T)];
-    CHUNK_T emask_chunks[sizeof(STATE_T) / sizeof(CHUNK_T)]; 
+    CHUNK_T emask_chunks[sizeof(STATE_T) / sizeof(CHUNK_T)];
 #ifdef ESTATE_ON_STACK
     memcpy(chunks, &estate, sizeof(STATE_T));
 #else
     memcpy(chunks, estatep, sizeof(STATE_T));
 #endif
-    memcpy(emask_chunks, &limex->exceptionMask, sizeof(STATE_T)); 
+    memcpy(emask_chunks, &limex->exceptionMask, sizeof(STATE_T));
 
-    u32 base_index[sizeof(STATE_T) / sizeof(CHUNK_T)]; 
-    base_index[0] = 0; 
-    for (s32 i = 0; i < (s32)ARRAY_LENGTH(base_index) - 1; i++) { 
-        base_index[i + 1] = base_index[i] + POPCOUNT_FN(emask_chunks[i]); 
-    } 
- 
+    u32 base_index[sizeof(STATE_T) / sizeof(CHUNK_T)];
+    base_index[0] = 0;
+    for (s32 i = 0; i < (s32)ARRAY_LENGTH(base_index) - 1; i++) {
+        base_index[i + 1] = base_index[i] + POPCOUNT_FN(emask_chunks[i]);
+    }
+
     do {
         u32 t = findAndClearLSB_32(&diffmask);
 #ifdef ARCH_64_BIT
@@ -326,17 +326,17 @@ int PE_FN(STATE_ARG, ESTATE_ARG, UNUSED u32 diffmask, STATE_T *succ,
         CHUNK_T word = chunks[t];
         assert(word != 0);
         do {
-            u32 bit = FIND_AND_CLEAR_FN(&word); 
-            u32 local_index = RANK_IN_MASK_FN(emask_chunks[t], bit); 
-            u32 idx = local_index + base_index[t]; 
+            u32 bit = FIND_AND_CLEAR_FN(&word);
+            u32 local_index = RANK_IN_MASK_FN(emask_chunks[t], bit);
+            u32 idx = local_index + base_index[t];
             const EXCEPTION_T *e = &exceptions[idx];
 
             if (!RUN_EXCEPTION_FN(e, STATE_ARG_NAME, succ,
 #ifndef BIG_MODEL
                                   &local_succ,
 #endif
-                                  limex, offset, ctx, &new_cache, &cacheable, 
-                                  in_rev, flags)) { 
+                                  limex, offset, ctx, &new_cache, &cacheable,
+                                  in_rev, flags)) {
                 return PE_RV_HALT;
             }
         } while (word);
@@ -344,23 +344,23 @@ int PE_FN(STATE_ARG, ESTATE_ARG, UNUSED u32 diffmask, STATE_T *succ,
 #endif
 
 #ifndef BIG_MODEL
-    *succ = OR_STATE(*succ, local_succ); 
+    *succ = OR_STATE(*succ, local_succ);
 #else
-    *succ = OR_STATE(*succ, ctx->local_succ); 
+    *succ = OR_STATE(*succ, ctx->local_succ);
 #endif
 
     if (cacheable == CACHE_RESULT) {
-        ctx->cached_estate = estate; 
+        ctx->cached_estate = estate;
 #ifndef BIG_MODEL
         ctx->cached_esucc = local_succ;
 #else
-        ctx->cached_esucc = ctx->local_succ; 
+        ctx->cached_esucc = ctx->local_succ;
 #endif
         ctx->cached_reports = new_cache.reports;
         ctx->cached_br = new_cache.br;
     } else if (cacheable == DO_NOT_CACHE_RESULT_AND_FLUSH_BR_ENTRIES) {
         if (ctx->cached_br) {
-            ctx->cached_estate = ZERO_STATE; 
+            ctx->cached_estate = ZERO_STATE;
         }
     }
 
@@ -393,9 +393,9 @@ int PE_FN(STATE_ARG, ESTATE_ARG, UNUSED u32 diffmask, STATE_T *succ,
 #undef STATE_ARG_NAME
 #undef STATE_ARG_P
 
-#undef IMPL_NFA_T 
- 
+#undef IMPL_NFA_T
+
 #undef CHUNK_T
 #undef FIND_AND_CLEAR_FN
-#undef POPCOUNT_FN 
-#undef RANK_IN_MASK_FN 
+#undef POPCOUNT_FN
+#undef RANK_IN_MASK_FN

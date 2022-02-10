@@ -5,7 +5,7 @@
 
 using namespace NYql;
 
-namespace NSQLTranslationV1 { 
+namespace NSQLTranslationV1 {
 
 static const TMap<ESQLWriteColumnMode, EWriteColumnMode> sqlIntoMode2WriteColumn = {
     {ESQLWriteColumnMode::InsertInto, EWriteColumnMode::Insert},
@@ -65,13 +65,13 @@ class TUpdateByValues: public TModifySourceBase {
 public:
     TUpdateByValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, const TVector<TNodePtr>& values)
         : TModifySourceBase(pos, columnsHint)
-        , OperationHumanName(operationHumanName) 
+        , OperationHumanName(operationHumanName)
         , Values(values)
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
         if (ColumnsHint.size() != Values.size()) {
-            ctx.Error(Pos) << "VALUES have " << Values.size() << " columns, " << OperationHumanName << " expects: " << ColumnsHint.size(); 
+            ctx.Error(Pos) << "VALUES have " << Values.size() << " columns, " << OperationHumanName << " expects: " << ColumnsHint.size();
             return false;
         }
         for (auto& value: Values) {
@@ -112,7 +112,7 @@ class TModifyByValues: public TModifySourceBase {
 public:
     TModifyByValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, const TVector<TVector<TNodePtr>>& values)
         : TModifySourceBase(pos, columnsHint)
-        , OperationHumanName(operationHumanName) 
+        , OperationHumanName(operationHumanName)
         , Values(values)
     {
         FakeSource = BuildFakeSource(pos);
@@ -121,22 +121,22 @@ public:
     bool DoInit(TContext& ctx, ISource* src) override {
         Y_UNUSED(src);
         bool hasError = false;
-        for (const auto& row: Values) { 
+        for (const auto& row: Values) {
             if (ColumnsHint.empty()) {
                 ctx.Error(Pos) << OperationHumanName << " ... VALUES requires specification of table columns";
                 hasError = true;
                 continue;
             }
-            if (ColumnsHint.size() != row.size()) { 
-                ctx.Error(Pos) << "VALUES have " << row.size() << " columns, " << OperationHumanName << " expects: " << ColumnsHint.size(); 
+            if (ColumnsHint.size() != row.size()) {
+                ctx.Error(Pos) << "VALUES have " << row.size() << " columns, " << OperationHumanName << " expects: " << ColumnsHint.size();
                 hasError = true;
                 continue;
             }
-            for (auto& value: row) { 
+            for (auto& value: row) {
                 if (!value->Init(ctx, FakeSource.Get())) {
                     hasError = true;
                     continue;
-                } 
+                }
             }
         }
         return !hasError;
@@ -145,13 +145,13 @@ public:
     TNodePtr Build(TContext& ctx) override {
         Y_UNUSED(ctx);
         auto tuple = Y();
-        for (const auto& row: Values) { 
+        for (const auto& row: Values) {
             auto rowValues = Y("AsStruct"); // ordered struct
-            auto column = ColumnsHint.begin(); 
-            for (auto value: row) { 
-                rowValues = L(rowValues, Q(Y(BuildQuotedAtom(Pos, *column), value))); 
-                ++column; 
-            } 
+            auto column = ColumnsHint.begin();
+            for (auto value: row) {
+                rowValues = L(rowValues, Q(Y(BuildQuotedAtom(Pos, *column), value)));
+                ++column;
+            }
             tuple = L(tuple, rowValues);
         }
         return Y("PersistableRepr", Q(tuple));
@@ -176,7 +176,7 @@ class TModifyBySource: public TModifySourceBase {
 public:
     TModifyBySource(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, TSourcePtr source)
         : TModifySourceBase(pos, columnsHint)
-        , OperationHumanName(operationHumanName) 
+        , OperationHumanName(operationHumanName)
         , Source(std::move(source))
     {}
 
@@ -193,7 +193,7 @@ public:
         const auto& sourceColumns = Source->GetColumns();
         const auto numColumns = !ColumnsHint.empty() && sourceColumns ? sourceColumns->List.size() : 0;
         if (ColumnsHint.size() != numColumns) {
-            ctx.Error(Pos) << "SELECT have " << numColumns << " columns, " << OperationHumanName << " expects: " << ColumnsHint.size(); 
+            ctx.Error(Pos) << "SELECT have " << numColumns << " columns, " << OperationHumanName << " expects: " << ColumnsHint.size();
             return false;
         }
         if (numColumns) {
@@ -250,13 +250,13 @@ private:
 };
 
 TSourcePtr BuildWriteValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, const TVector<TVector<TNodePtr>>& values) {
-    return new TModifyByValues(pos, operationHumanName, columnsHint, values); 
+    return new TModifyByValues(pos, operationHumanName, columnsHint, values);
 }
 
 TSourcePtr BuildWriteValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, TSourcePtr source) {
     return new TModifyBySource(pos, operationHumanName, columnsHint, std::move(source));
-} 
- 
+}
+
 TSourcePtr BuildUpdateValues(TPosition pos, const TVector<TString>& columnsHint, const TVector<TNodePtr>& values) {
     return new TUpdateByValues(pos, "UPDATE", columnsHint, values);
 }
@@ -423,4 +423,4 @@ TNodePtr BuildEraseColumns(TPosition pos, const TVector<TString>& columns) {
     return new TEraseColumnsNode(pos, columns);
 }
 
-} // namespace NSQLTranslationV1 
+} // namespace NSQLTranslationV1

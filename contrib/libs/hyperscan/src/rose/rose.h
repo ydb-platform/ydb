@@ -31,27 +31,27 @@
 
 #include "ue2common.h"
 
-struct RoseEngine; 
-struct hs_scratch; 
- 
-// Initialise state space for engine use.
-void roseInitState(const struct RoseEngine *t, char *state); 
+struct RoseEngine;
+struct hs_scratch;
 
-/* assumes core_info in scratch has been init to point to data */ 
-void roseBlockExec(const struct RoseEngine *t, struct hs_scratch *scratch); 
+// Initialise state space for engine use.
+void roseInitState(const struct RoseEngine *t, char *state);
 
 /* assumes core_info in scratch has been init to point to data */
-void roseStreamExec(const struct RoseEngine *t, struct hs_scratch *scratch); 
+void roseBlockExec(const struct RoseEngine *t, struct hs_scratch *scratch);
 
-void roseStreamEodExec(const struct RoseEngine *t, u64a offset, 
-                       struct hs_scratch *scratch); 
+/* assumes core_info in scratch has been init to point to data */
+void roseStreamExec(const struct RoseEngine *t, struct hs_scratch *scratch);
 
-hwlmcb_rv_t roseCallback(size_t end, u32 id, struct hs_scratch *scratch); 
+void roseStreamEodExec(const struct RoseEngine *t, u64a offset,
+                       struct hs_scratch *scratch);
 
-int roseReportAdaptor(u64a start, u64a end, ReportID id, void *context); 
+hwlmcb_rv_t roseCallback(size_t end, u32 id, struct hs_scratch *scratch);
 
-int roseRunBoundaryProgram(const struct RoseEngine *rose, u32 program, 
-                           u64a stream_offset, struct hs_scratch *scratch); 
+int roseReportAdaptor(u64a start, u64a end, ReportID id, void *context);
+
+int roseRunBoundaryProgram(const struct RoseEngine *rose, u32 program,
+                           u64a stream_offset, struct hs_scratch *scratch);
 
 int roseRunFlushCombProgram(const struct RoseEngine *rose,
                             struct hs_scratch *scratch, u64a end);

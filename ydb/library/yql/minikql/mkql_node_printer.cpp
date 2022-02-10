@@ -78,8 +78,8 @@ namespace {
                 Out << "<" << node.GetSchemeType() << ">";
             }
 
-            Out << ", schemeTypeId: "; 
-            Out << node.GetSchemeType(); 
+            Out << ", schemeTypeId: ";
+            Out << node.GetSchemeType();
             WriteNewline();
         }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Intel Corporation 
+ * Copyright (c) 2015-2017, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -37,8 +37,8 @@
 #include "ng_holder.h" // for graph types
 #include "ue2common.h"
 
-#include <unordered_map> 
- 
+#include <unordered_map>
+
 #ifdef DUMP_SUPPORT
 #include <fstream>
 #endif
@@ -49,7 +49,7 @@ namespace ue2 {
 
 class NGHolder;
 class NG;
-class ExpressionInfo; 
+class ExpressionInfo;
 class ReportManager;
 
 // Implementations for stubs below -- all have the suffix "Impl".
@@ -62,8 +62,8 @@ void dumpGraphImpl(const char *name, const GraphT &g);
 template <typename GraphT>
 void dumpGraphImpl(const char *name, const GraphT &g, const ReportManager &rm);
 
-void dumpDotWrapperImpl(const NGHolder &g, const ExpressionInfo &expr, 
-                        const char *name, const Grey &grey); 
+void dumpDotWrapperImpl(const NGHolder &g, const ExpressionInfo &expr,
+                        const char *name, const Grey &grey);
 
 void dumpComponentImpl(const NGHolder &g, const char *name, u32 expr, u32 comp,
                        const Grey &grey);
@@ -76,7 +76,7 @@ void dumpHolderImpl(const NGHolder &h, unsigned int stageNumber,
 
 // Variant that takes a region map as well.
 void dumpHolderImpl(const NGHolder &h,
-                    const std::unordered_map<NFAVertex, u32> &region_map, 
+                    const std::unordered_map<NFAVertex, u32> &region_map,
                     unsigned int stageNumber, const char *stageName,
                     const Grey &grey);
 
@@ -90,10 +90,10 @@ static inline void dumpGraph(UNUSED const char *name, UNUSED const GraphT &g) {
 // Stubs which call through to dump code if compiled in.
 
 UNUSED static inline
-void dumpDotWrapper(UNUSED const NGHolder &g, UNUSED const ExpressionInfo &expr, 
-                    UNUSED const char *name, UNUSED const Grey &grey) { 
+void dumpDotWrapper(UNUSED const NGHolder &g, UNUSED const ExpressionInfo &expr,
+                    UNUSED const char *name, UNUSED const Grey &grey) {
 #ifdef DUMP_SUPPORT
-    dumpDotWrapperImpl(g, expr, name, grey); 
+    dumpDotWrapperImpl(g, expr, name, grey);
 #endif
 }
 
@@ -124,7 +124,7 @@ void dumpHolder(UNUSED const NGHolder &h, UNUSED unsigned int stageNumber,
 
 UNUSED static inline
 void dumpHolder(UNUSED const NGHolder &h,
-                UNUSED const std::unordered_map<NFAVertex, u32> &region_map, 
+                UNUSED const std::unordered_map<NFAVertex, u32> &region_map,
                 UNUSED unsigned int stageNumber, UNUSED const char *name,
                 UNUSED const Grey &grey) {
 #ifdef DUMP_SUPPORT

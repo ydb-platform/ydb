@@ -219,8 +219,8 @@ inline void Return(TMemoryUsageInfo* memInfo, const void* mem)
 }
 #endif
 
-} // namespace NMiniKQL 
-} // namespace NKikimr 
+} // namespace NMiniKQL
+} // namespace NKikimr
 
 template <>
 inline void Out<NKikimr::NMiniKQL::TMemoryUsageInfo>(

@@ -1,14 +1,14 @@
-#include "fixed_bin_histogram.h"
+#include "fixed_bin_histogram.h" 
 #include "auto_histogram.h"
-
+ 
 #include <library/cpp/histogram/adaptive/protos/histo.pb.h>
-
+ 
 #include <util/generic/algorithm.h>
 #include <util/generic/yexception.h>
 #include <util/generic/ymath.h>
 #include <util/string/printf.h>
 
-namespace NKiwiAggr {
+namespace NKiwiAggr { 
     TFixedBinHistogram::TFixedBinHistogram(size_t intervals, ui64 id, size_t trainingSetSize)
         : TrainingSetSize(trainingSetSize)
         , IsInitialized(false)
@@ -37,7 +37,7 @@ namespace NKiwiAggr {
     {
         FromProto(histo);
     }
-
+ 
     TFixedBinHistogram::TFixedBinHistogram(IHistogram* histo, size_t defaultIntervals, ui64 defaultId, size_t trainingSetSize)
         : TrainingSetSize(trainingSetSize)
         , IsInitialized(false)
@@ -203,7 +203,7 @@ namespace NKiwiAggr {
                 }
             }
         }
-    }
+    } 
 
     void TFixedBinHistogram::Multiply(double factor) {
         if (!IsValidFloat(factor) || factor <= 0) {
@@ -252,8 +252,8 @@ namespace NKiwiAggr {
             }
             Sum += Freqs[i];
         }
-    }
-
+    } 
+ 
     void TFixedBinHistogram::ToProto(THistogram& histo) {
         histo.Clear();
         if (!IsInitialized) {
@@ -286,9 +286,9 @@ namespace NKiwiAggr {
     bool TFixedBinHistogram::Empty() {
         if (!IsInitialized) {
             Initialize();
-        }
+        } 
         return IsEmpty;
-    }
+    } 
 
     double TFixedBinHistogram::GetMinValue() {
         if (!IsInitialized) {
@@ -296,18 +296,18 @@ namespace NKiwiAggr {
         }
         return MinValue;
     }
-
+ 
     double TFixedBinHistogram::GetMaxValue() {
         if (!IsInitialized) {
             Initialize();
         }
         return MaxValue;
-    }
+    } 
 
     double TFixedBinHistogram::GetSum() {
         return Sum;
-    }
-
+    } 
+ 
     double TFixedBinHistogram::GetSumInRange(double leftBound, double rightBound) {
         if (!IsInitialized) {
             Initialize();

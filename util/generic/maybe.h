@@ -479,10 +479,10 @@ void swap(TMaybe<T, TPolicy>& lhs, TMaybe<T, TPolicy>& rhs) {
 template <typename T, class TPolicy>
 struct THash<TMaybe<T, TPolicy>> {
     constexpr size_t operator()(const TMaybe<T, TPolicy>& data) const {
-        return (data.Defined()) ? THash<T>()(data.GetRef()) : 42; 
-    } 
-}; 
- 
+        return (data.Defined()) ? THash<T>()(data.GetRef()) : 42;
+    }
+};
+
 // Comparisons between TMaybe
 template <class T, class TPolicy>
 constexpr bool operator==(const ::TMaybe<T, TPolicy>& left, const ::TMaybe<T, TPolicy>& right) {

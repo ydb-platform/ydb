@@ -28,8 +28,8 @@
 
 #include "stringprep.h"
 
-#define USE_FAST_SEARCH 
- 
+#define USE_FAST_SEARCH
+
 static ssize_t
 stringprep_find_character_in_table (uint32_t ucs4,
 				    const Stringprep_table_element * table)
@@ -53,43 +53,43 @@ stringprep_find_character_in_table (uint32_t ucs4,
 }
 
 static ssize_t
-stringprep_find_character_in_table_fast (uint32_t ucs4, 
-				    const Stringprep_table_element * table, size_t table_size) 
-{ 
-#ifndef USE_FAST_SEARCH 
-  //fallback to original search 
-  return stringprep_find_character_in_table(ucs4, table); 
-#endif 
-  int l = 0; 
-  int r = table_size - 1; 
-  int pivot = (l + r) / 2; 
- 
-  while (l <= r) { 
-    if (ucs4 >= table[pivot].start && 
-      ucs4 <= (table[pivot].end ? table[pivot].end : table[pivot].start)) 
-        return pivot; 
-    else if (ucs4 < table[pivot].start) 
-      r = pivot - 1; 
-    else 
-      l = pivot + 1; 
-    pivot = (l + r) / 2; 
-  } 
-  if (l > r) 
-    return -1; 
-} 
- 
-static ssize_t 
+stringprep_find_character_in_table_fast (uint32_t ucs4,
+				    const Stringprep_table_element * table, size_t table_size)
+{
+#ifndef USE_FAST_SEARCH
+  //fallback to original search
+  return stringprep_find_character_in_table(ucs4, table);
+#endif
+  int l = 0;
+  int r = table_size - 1;
+  int pivot = (l + r) / 2;
+
+  while (l <= r) {
+    if (ucs4 >= table[pivot].start &&
+      ucs4 <= (table[pivot].end ? table[pivot].end : table[pivot].start))
+        return pivot;
+    else if (ucs4 < table[pivot].start)
+      r = pivot - 1;
+    else
+      l = pivot + 1;
+    pivot = (l + r) / 2;
+  }
+  if (l > r)
+    return -1;
+}
+
+static ssize_t
 stringprep_find_string_in_table (uint32_t * ucs4,
 				 size_t ucs4len,
 				 size_t * tablepos,
-				 const Stringprep_table_element * table, 
-				 const size_t table_size) 
+				 const Stringprep_table_element * table,
+				 const size_t table_size)
 {
   size_t j;
   ssize_t pos;
 
   for (j = 0; j < ucs4len; j++)
-    if ((pos = stringprep_find_character_in_table_fast (ucs4[j], table, table_size)) != -1) 
+    if ((pos = stringprep_find_character_in_table_fast (ucs4[j], table, table_size)) != -1)
       {
 	if (tablepos)
 	  *tablepos = pos;
@@ -103,14 +103,14 @@ static int
 stringprep_apply_table_to_string (uint32_t * ucs4,
 				  size_t * ucs4len,
 				  size_t maxucs4len,
-				  const Stringprep_table_element * table, 
-				  const size_t table_size) 
+				  const Stringprep_table_element * table,
+				  const size_t table_size)
 {
   ssize_t pos;
   size_t i, maplen;
 
   while ((pos = stringprep_find_string_in_table (ucs4, *ucs4len,
-						 &i, table, table_size)) != -1) 
+						 &i, table, table_size)) != -1)
     {
       for (maplen = STRINGPREP_MAX_MAP_CHARS;
 	   maplen > 0 && table[i].map[maplen - 1] == 0; maplen--)
@@ -176,11 +176,11 @@ stringprep_4i (uint32_t * ucs4, size_t * len, size_t maxucs4len,
 
   for (i = 0; profile[i].operation; i++)
     {
-      size_t table_size = 0; 
-      size_t j = 0; 
-      if (profile[i].table != NULL) 
-        for (j = 0; profile[i].table[j].start || profile[i].table[j].end; j++) 
-          table_size++; 
+      size_t table_size = 0;
+      size_t j = 0;
+      if (profile[i].table != NULL)
+        for (j = 0; profile[i].table[j].start || profile[i].table[j].end; j++)
+          table_size++;
       switch (profile[i].operation)
 	{
 	case STRINGPREP_NFKC:
@@ -215,7 +215,7 @@ stringprep_4i (uint32_t * ucs4, size_t * len, size_t maxucs4len,
 
 	case STRINGPREP_PROHIBIT_TABLE:
 	  k = stringprep_find_string_in_table (ucs4, ucs4len,
-					       NULL, profile[i].table, table_size); 
+					       NULL, profile[i].table, table_size);
 	  if (k != -1)
 	    return STRINGPREP_CONTAINS_PROHIBITED;
 	  break;
@@ -226,7 +226,7 @@ stringprep_4i (uint32_t * ucs4, size_t * len, size_t maxucs4len,
 	  if (flags & STRINGPREP_NO_UNASSIGNED)
 	    {
 	      k = stringprep_find_string_in_table
-		(ucs4, ucs4len, NULL, profile[i].table, table_size); 
+		(ucs4, ucs4len, NULL, profile[i].table, table_size);
 	      if (k != -1)
 		return STRINGPREP_CONTAINS_UNASSIGNED;
 	    }
@@ -236,7 +236,7 @@ stringprep_4i (uint32_t * ucs4, size_t * len, size_t maxucs4len,
 	  if (UNAPPLICAPLEFLAGS (flags, profile[i].flags))
 	    break;
 	  rc = stringprep_apply_table_to_string
-	    (ucs4, &ucs4len, maxucs4len, profile[i].table, table_size); 
+	    (ucs4, &ucs4len, maxucs4len, profile[i].table, table_size);
 	  if (rc != STRINGPREP_OK)
 	    return rc;
 	  break;
@@ -260,7 +260,7 @@ stringprep_4i (uint32_t * ucs4, size_t * len, size_t maxucs4len,
 		  done_prohibited = 1;
 		  k = stringprep_find_string_in_table (ucs4, ucs4len,
 						       NULL,
-						       profile[j].table, table_size); 
+						       profile[j].table, table_size);
 		  if (k != -1)
 		    return STRINGPREP_BIDI_CONTAINS_PROHIBITED;
 		}
@@ -268,14 +268,14 @@ stringprep_4i (uint32_t * ucs4, size_t * len, size_t maxucs4len,
 		{
 		  done_ral = 1;
 		  if (stringprep_find_string_in_table
-		      (ucs4, ucs4len, NULL, profile[j].table, table_size) != -1) 
+		      (ucs4, ucs4len, NULL, profile[j].table, table_size) != -1)
 		    contains_ral = j;
 		}
 	      else if (profile[j].operation == STRINGPREP_BIDI_L_TABLE)
 		{
 		  done_l = 1;
 		  if (stringprep_find_string_in_table
-		      (ucs4, ucs4len, NULL, profile[j].table, table_size) != -1) 
+		      (ucs4, ucs4len, NULL, profile[j].table, table_size) != -1)
 		    contains_l = j;
 		}
 
@@ -287,10 +287,10 @@ stringprep_4i (uint32_t * ucs4, size_t * len, size_t maxucs4len,
 
 	    if (contains_ral != -1)
 	      {
-		if (!(stringprep_find_character_in_table_fast 
-		      (ucs4[0], profile[contains_ral].table, table_size) != -1 && 
-		      stringprep_find_character_in_table_fast 
-		      (ucs4[ucs4len - 1], profile[contains_ral].table, table_size) != -1)) 
+		if (!(stringprep_find_character_in_table_fast
+		      (ucs4[0], profile[contains_ral].table, table_size) != -1 &&
+		      stringprep_find_character_in_table_fast
+		      (ucs4[ucs4len - 1], profile[contains_ral].table, table_size) != -1))
 		  return STRINGPREP_BIDI_LEADTRAIL_NOT_RAL;
 	      }
 	  }

@@ -92,9 +92,9 @@ ALLOW infra/temporal -> vendor/github.com/uber-go/tally
 # CONTRIB-2116
 ALLOW .* -> vendor/github.com/google/licensecheck
 
-# CONTRIB-2087
-ALLOW .* -> vendor/github.com/armon/go-radix
-
+# CONTRIB-2087 
+ALLOW .* -> vendor/github.com/armon/go-radix 
+ 
 # CONTRIB-1972 stomp protocol
 ALLOW .* -> vendor/github.com/go-stomp/stomp
 
@@ -942,7 +942,7 @@ ALLOW transfer_manager/go/pkg/source/pg -> vendor/github.com/jackc/pgx
 ALLOW transfer_manager/go/pkg/storage/pg -> vendor/github.com/jackc/pgx
 ALLOW transfer_manager/go/pkg/worker/tasks -> vendor/github.com/jackc/pgx
 ALLOW transfer_manager/go/pkg/dataagent/pg -> vendor/github.com/jackc/pgx
-ALLOW transfer_manager/go/tests/e2e/pg2pg/replication -> vendor/github.com/jackc/pgx
+ALLOW transfer_manager/go/tests/e2e/pg2pg/replication -> vendor/github.com/jackc/pgx 
 ALLOW yabs/telephony/platform/common/db -> vendor/github.com/jackc/pgx
 ALLOW yabs/telephony/platform/common/lifecycle -> vendor/github.com/jackc/pgx
 ALLOW yabs/telephony/platform/registrar-agent -> vendor/github.com/jackc/pgx

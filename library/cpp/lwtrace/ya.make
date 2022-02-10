@@ -24,6 +24,6 @@ SRCS(
 
 END()
 
-RECURSE(mon) 
- 
+RECURSE(mon)
+
 RECURSE_FOR_TESTS(ut)

@@ -3,57 +3,57 @@
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
-#include <util/string/builder.h> 
-#include <util/string/cast.h> 
+#include <util/string/builder.h>
+#include <util/string/cast.h>
 
-#include <variant> 
- 
+#include <variant>
+
 namespace NAnalytics {
 
-using TRowValue = std::variant<i64, ui64, double, TString>; 
- 
-TString ToString(const TRowValue& val) { 
-    TStringBuilder builder; 
-    std::visit([&builder] (auto&& arg) { 
-        builder << arg; 
-    }, val); 
-    return builder; 
-} 
- 
-struct TRow : public THashMap<TString, TRowValue> { 
+using TRowValue = std::variant<i64, ui64, double, TString>;
+
+TString ToString(const TRowValue& val) {
+    TStringBuilder builder;
+    std::visit([&builder] (auto&& arg) {
+        builder << arg;
+    }, val);
+    return builder;
+}
+
+struct TRow : public THashMap<TString, TRowValue> {
     TString Name;
 
-    template<typename T> 
-    bool Get(const TString& name, T& value) const { 
-        if constexpr (std::is_same_v<double, T>) { 
-            if (name == "_count") { // Special values 
-                value = 1.0; 
-                return true; 
-            } 
+    template<typename T>
+    bool Get(const TString& name, T& value) const {
+        if constexpr (std::is_same_v<double, T>) {
+            if (name == "_count") { // Special values
+                value = 1.0;
+                return true;
+            }
         }
         auto iter = find(name);
         if (iter != end()) {
-            try { 
-                value = std::get<T>(iter->second); 
-                return true; 
-            } catch (...) {} 
-        } 
-        return false; 
-    } 
- 
-    template<typename T = double> 
-    T GetOrDefault(const TString& name, T dflt = T()) { 
-        Get(name, dflt); 
-        return dflt; 
-    } 
- 
-    bool GetAsString(const TString& name, TString& value) const { 
-        auto iter = find(name); 
-        if (iter != end()) { 
-            value = ToString(iter->second); 
+            try {
+                value = std::get<T>(iter->second);
+                return true;
+            } catch (...) {}
+        }
+        return false;
+    }
+
+    template<typename T = double>
+    T GetOrDefault(const TString& name, T dflt = T()) {
+        Get(name, dflt);
+        return dflt;
+    }
+
+    bool GetAsString(const TString& name, TString& value) const {
+        auto iter = find(name);
+        if (iter != end()) {
+            value = ToString(iter->second);
             return true;
         }
-        return false; 
+        return false;
     }
 };
 

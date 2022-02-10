@@ -44,12 +44,12 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/html/pcdata 
+    library/cpp/html/pcdata
     library/cpp/lwtrace
     library/cpp/lwtrace/mon/analytics
     library/cpp/monlib/dynamic_counters
     library/cpp/resource
-    library/cpp/string_utils/base64 
+    library/cpp/string_utils/base64
 )
 
 END()

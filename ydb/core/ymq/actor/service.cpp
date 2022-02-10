@@ -24,7 +24,7 @@
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/base/counters.h>
-#include <library/cpp/lwtrace/mon/mon_lwtrace.h> 
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/hfunc.h>

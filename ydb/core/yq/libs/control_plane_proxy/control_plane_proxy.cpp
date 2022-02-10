@@ -25,7 +25,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 
-#include <library/cpp/lwtrace/mon/mon_lwtrace.h> 
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <ydb/library/security/util.h>
 
 #include <ydb/core/base/appdata.h>

@@ -35,8 +35,8 @@ inline TString ToHtml(const TTable& in)
             ss << "<th>" << row.Name << "</th>";
         }
         for (const TString& c : cols) {
-            TString value; 
-            ss << "<td>" << (row.GetAsString(c, value) ? value : TString("-")) << "</td>"; 
+            TString value;
+            ss << "<td>" << (row.GetAsString(c, value) ? value : TString("-")) << "</td>";
         }
         ss << "</tr>";
     }
@@ -73,8 +73,8 @@ inline TString ToTransposedHtml(const TTable& in)
         ss << "<tr>";
         ss << "<th>" << c << "</th>";
         for (const TRow& row : in) {
-            TString value; 
-            ss << "<td>" << (row.GetAsString(c, value) ? value : TString("-")) << "</td>"; 
+            TString value;
+            ss << "<td>" << (row.GetAsString(c, value) ? value : TString("-")) << "</td>";
         }
         ss << "</tr>";
     }

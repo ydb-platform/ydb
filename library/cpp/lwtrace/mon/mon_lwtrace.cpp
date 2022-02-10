@@ -4,7 +4,7 @@
 #include <iterator>
 
 #include <google/protobuf/text_format.h>
-#include <library/cpp/lwtrace/mon/analytics/all.h> 
+#include <library/cpp/lwtrace/mon/analytics/all.h>
 #include <library/cpp/lwtrace/all.h>
 #include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/monlib/service/pages/resource_mon_page.h>
@@ -1404,24 +1404,24 @@ void RequireMultipleSelection(TStringStream& ss, const TCgiParameters& e, const 
     }
 }
 
-void OptionalSelection(TStringStream& ss, const TCgiParameters& e, const TString& param, 
-                       const TString& text, const TVariants& variants) 
-{ 
-    TSet<TString> selectedValues; 
-    for (const TString& subvalue : Subvalues(e, param)) { 
-        selectedValues.insert(subvalue); 
-    } 
-    if (!selectedValues.empty()) { 
-        SelectorTitle(ss, text); 
-    } 
-    for (const TString& subvalue : Subvalues(e, param)) { 
-        DropdownSelector<Erasable, true>(ss, e, param, subvalue, "", variants); 
-    } 
-    if (selectedValues.empty()) { 
-        BtnHref<Button|ExtraSmall>(ss, text, MakeUrlAddSub(e, param, "")); 
-    } 
-} 
- 
+void OptionalSelection(TStringStream& ss, const TCgiParameters& e, const TString& param,
+                       const TString& text, const TVariants& variants)
+{
+    TSet<TString> selectedValues;
+    for (const TString& subvalue : Subvalues(e, param)) {
+        selectedValues.insert(subvalue);
+    }
+    if (!selectedValues.empty()) {
+        SelectorTitle(ss, text);
+    }
+    for (const TString& subvalue : Subvalues(e, param)) {
+        DropdownSelector<Erasable, true>(ss, e, param, subvalue, "", variants);
+    }
+    if (selectedValues.empty()) {
+        BtnHref<Button|ExtraSmall>(ss, text, MakeUrlAddSub(e, param, ""));
+    }
+}
+
 void OptionalMultipleSelection(TStringStream& ss, const TCgiParameters& e, const TString& param,
                               const TString& text, const TVariants& variants)
 {
@@ -1650,54 +1650,54 @@ private:
 };
 
 void TDashboardRegistry::Register(const NLWTrace::TDashboard& dashboard) {
-    TGuard<TMutex> g(Mutex); 
-    Dashboards[dashboard.GetName()] = dashboard; 
-} 
- 
+    TGuard<TMutex> g(Mutex);
+    Dashboards[dashboard.GetName()] = dashboard;
+}
+
 void TDashboardRegistry::Register(const TVector<NLWTrace::TDashboard>& dashboards) {
     for (const auto& dashboard : dashboards) {
         Register(dashboard);
     }
 }
 
-void TDashboardRegistry::Register(const TString& dashText) { 
+void TDashboardRegistry::Register(const TString& dashText) {
     NLWTrace::TDashboard dash;
-    if (!google::protobuf::TextFormat::ParseFromString(dashText, &dash)) { 
-        ythrow yexception() << "Couldn't parse into dashboard"; 
-    } 
-    Register(dash); 
-} 
- 
+    if (!google::protobuf::TextFormat::ParseFromString(dashText, &dash)) {
+        ythrow yexception() << "Couldn't parse into dashboard";
+    }
+    Register(dash);
+}
+
 bool TDashboardRegistry::Get(const TString& name, NLWTrace::TDashboard& dash) {
-    TGuard<TMutex> g(Mutex); 
-    if (!Dashboards.contains(name)) { 
-        return false; 
-    } 
-    dash = Dashboards[name]; 
-    return true; 
-} 
- 
-void TDashboardRegistry::Output(TStringStream& ss) { 
-    HTML(ss) { 
-        TABLE() { 
-            TABLEHEAD() { 
-                TABLEH() { ss << "Name"; } 
-            } 
-            TABLEBODY() { 
-                TGuard<TMutex> g(Mutex); 
-                for (auto& kv : Dashboards) { 
-                    const auto& dash = kv.second; 
-                    TABLER() { 
-                        TABLED() { 
-                            ss << "<a href='?mode=dashboard&name=" << dash.GetName() << "'>" << dash.GetName() << "</a>"; 
-                        } 
-                    } 
-                } 
-            } 
-        } 
-    } 
-} 
- 
+    TGuard<TMutex> g(Mutex);
+    if (!Dashboards.contains(name)) {
+        return false;
+    }
+    dash = Dashboards[name];
+    return true;
+}
+
+void TDashboardRegistry::Output(TStringStream& ss) {
+    HTML(ss) {
+        TABLE() {
+            TABLEHEAD() {
+                TABLEH() { ss << "Name"; }
+            }
+            TABLEBODY() {
+                TGuard<TMutex> g(Mutex);
+                for (auto& kv : Dashboards) {
+                    const auto& dash = kv.second;
+                    TABLER() {
+                        TABLED() {
+                            ss << "<a href='?mode=dashboard&name=" << dash.GetName() << "'>" << dash.GetName() << "</a>";
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 class ILogSource {
 public:
     virtual ~ILogSource() {}
@@ -2267,17 +2267,17 @@ public:
         , ShowTs(showTs)
     {}
 
-    TLogTextPrinter(const TCgiParameters& e) 
-        : TLogTextPrinter( 
+    TLogTextPrinter(const TCgiParameters& e)
+        : TLogTextPrinter(
             Subvalues(e, "f"),
             e.Has("head")? FromString<ui64>(e.Get("head")): 0,
-            e.Has("tail")? FromString<ui64>(e.Get("tail")): 0, 
-            e.Get("s"), 
-            e.Get("reverse") == "y", 
-            e.Get("cutts") == "y", 
-            e.Get("showts") == "y") 
-    {} 
- 
+            e.Has("tail")? FromString<ui64>(e.Get("tail")): 0,
+            e.Get("s"),
+            e.Get("reverse") == "y",
+            e.Get("cutts") == "y",
+            e.Get("showts") == "y")
+    {}
+
     enum EFormat {
         Text,
         Json
@@ -2548,11 +2548,11 @@ private:
             item.Probe->Event.Signature.SerializeParams(item.Params, paramValues);
             for (size_t i = 0; i < item.SavedParamsCount; i++) {
                 double value = FromString<double>(paramValues[i].data(), paramValues[i].size(), NAN);
-                // If value cannot be cast to double or is inf/nan -- assume it's a string 
+                // If value cannot be cast to double or is inf/nan -- assume it's a string
                 if (isfinite(value)) {
                     row[item.Probe->Event.Signature.ParamNames[i]] = value;
-                } else { 
-                    row[item.Probe->Event.Signature.ParamNames[i]] = paramValues[i]; 
+                } else {
+                    row[item.Probe->Event.Signature.ParamNames[i]] = paramValues[i];
                 }
             }
         }
@@ -2749,8 +2749,8 @@ struct TPatternNode {
         return ret;
     }
 
-    template <typename TReader> 
-    void OutputSample(const TString& bn, double b1, double b2, const TSampleOpts& opts, TReader& reader) const 
+    template <typename TReader>
+    void OutputSample(const TString& bn, double b1, double b2, const TSampleOpts& opts, TReader& reader) const
     {
         bool filterTotal = false;
         if (bn == "resTotal") {
@@ -2775,13 +2775,13 @@ struct TPatternNode {
                 }
             }
 
-            NLWTrace::TTrackLog tl; 
-            for (TTrackIter i = TTrackTr::begin(*track), e = TTrackTr::end(*track); i != e; ++i) { 
+            NLWTrace::TTrackLog tl;
+            for (TTrackIter i = TTrackTr::begin(*track), e = TTrackTr::end(*track); i != e; ++i) {
                 const NLWTrace::TLogItem& item = *i;
-                const auto threadId = i->ThreadId; 
-                tl.Items.push_back(NLWTrace::TTrackLog::TItem(threadId, item)); 
+                const auto threadId = i->ThreadId;
+                tl.Items.push_back(NLWTrace::TTrackLog::TItem(threadId, item));
             }
-            reader.Push(0, tl); 
+            reader.Push(0, tl);
             if (spaceLeft) {
                 spaceLeft--;
                 if (!spaceLeft) {
@@ -2941,11 +2941,11 @@ public:
         }
     }
 
-    template <typename TReader> 
-    void OutputSelectedSample(const TString& bn, double b1, double b2, const TSampleOpts& opts, TReader& reader) 
+    template <typename TReader>
+    void OutputSelectedSample(const TString& bn, double b1, double b2, const TSampleOpts& opts, TReader& reader)
     {
         if (SelectedNode) {
-            SelectedNode->OutputSample(bn, b1, b2, opts, reader); 
+            SelectedNode->OutputSample(bn, b1, b2, opts, reader);
         }
     }
 
@@ -3276,10 +3276,10 @@ public:
     }
 
     // Selected sample
-    template <typename TReader> 
-    void OutputSample(const TString& bn, double b1, double b2, const TSampleOpts& opts, TReader& reader) 
+    template <typename TReader>
+    void OutputSample(const TString& bn, double b1, double b2, const TSampleOpts& opts, TReader& reader)
     {
-        Tree.OutputSelectedSample(bn, b1, b2, opts, reader); 
+        Tree.OutputSelectedSample(bn, b1, b2, opts, reader);
     }
 
     // Tabular representation of tracks data
@@ -3770,7 +3770,7 @@ NLWTrace::TProbeRegistry g_Probes;
 TString g_sanitizerTest("TString g_sanitizerTest");
 NLWTrace::TManager g_SafeManager(g_Probes, false);
 NLWTrace::TManager g_UnsafeManager(g_Probes, true);
-TDashboardRegistry g_DashboardRegistry; 
+TDashboardRegistry g_DashboardRegistry;
 
 class TLWTraceMonPage : public NMonitoring::IMonPage {
 private:
@@ -3796,10 +3796,10 @@ public:
                 OutputTracesAndSnapshots(request, out);
             } else if (request.GetParams().Get("mode") == "probes") {
                 OutputProbes(request, out);
-            } else if (request.GetParams().Get("mode") == "dashboards") { 
-                OutputDashboards(request, out); 
-            } else if (request.GetParams().Get("mode") == "dashboard") { 
-                OutputDashboard(request, out); 
+            } else if (request.GetParams().Get("mode") == "dashboards") {
+                OutputDashboards(request, out);
+            } else if (request.GetParams().Get("mode") == "dashboard") {
+                OutputDashboard(request, out);
             } else if (request.GetParams().Get("mode") == "log") {
                 OutputLog(request, out);
             } else if (request.GetParams().Get("mode") == "query") {
@@ -3849,7 +3849,7 @@ private:
               "<ul class=\"nav navbar-nav\">"
                 "<li" << (request.GetParams().Get("mode") == ""? active: "") << "><a href=\"?mode=\">Traces</a></li>"
                 "<li" << (request.GetParams().Get("mode") == "probes"? active: "") << "><a href=\"?mode=probes\">Probes</a></li>"
-                "<li" << (request.GetParams().Get("mode") == "dashboards"? active: "") << "><a href=\"?mode=dashboards\">Dashboard</a></li>" 
+                "<li" << (request.GetParams().Get("mode") == "dashboards"? active: "") << "><a href=\"?mode=dashboards\">Dashboard</a></li>"
                 "<li" << (request.GetParams().Get("mode") == "builder"? active: "") << "><a href=\"?mode=builder\">Builder</a></li>"
                 "<li" << (request.GetParams().Get("mode") == "analytics"? active: "") << "><a href=\"?mode=analytics&id=\">Analytics</a></li>"
                 "<li><a href=\"https://wiki.yandex-team.ru/development/poisk/arcadia/library/cpp/lwtrace/\" target=\"_blank\">Documentation</a></li>"
@@ -3902,28 +3902,28 @@ private:
         }
     }
 
-    void OutputDashboards(const NMonitoring::IMonHttpRequest& request, IOutputStream& out) 
-    { 
-        TStringStream ss; 
-        g_DashboardRegistry.Output(ss); 
- 
-        WWW_HTML(out) { 
-            OutputNavbar(request, out); 
-            out << ss.Str(); 
+    void OutputDashboards(const NMonitoring::IMonHttpRequest& request, IOutputStream& out)
+    {
+        TStringStream ss;
+        g_DashboardRegistry.Output(ss);
+
+        WWW_HTML(out) {
+            OutputNavbar(request, out);
+            out << ss.Str();
         }
-    } 
- 
-    void OutputDashboard(const NMonitoring::IMonHttpRequest& request, IOutputStream& out) { 
-        if (!request.GetParams().Has("name")) { 
-            ythrow yexception() << "Cgi-parameter 'name' is not specified"; 
-        } else { 
-            auto name = request.GetParams().Get("name"); 
+    }
+
+    void OutputDashboard(const NMonitoring::IMonHttpRequest& request, IOutputStream& out) {
+        if (!request.GetParams().Has("name")) {
+            ythrow yexception() << "Cgi-parameter 'name' is not specified";
+        } else {
+            auto name = request.GetParams().Get("name");
             NLWTrace::TDashboard dash;
-            if (!g_DashboardRegistry.Get(name, dash)) { 
-                ythrow yexception() << "Dashboard doesn't exist"; 
-            } 
-            WWW_HTML(out) { 
-                OutputNavbar(request, out); 
+            if (!g_DashboardRegistry.Get(name, dash)) {
+                ythrow yexception() << "Dashboard doesn't exist";
+            }
+            WWW_HTML(out) {
+                OutputNavbar(request, out);
                 out << "<style type='text/css'>html, body { height: 100%; }</style>";
                 out << "<h2>" << dash.GetName() << "</h2>";
                 if (dash.GetDescription()) {
@@ -3955,7 +3955,7 @@ private:
                         if (url) {
                             if (title) {
                                 out << "<td rowspan='" << rowSpan << "' colSpan='1'><a href=" << url << ">" << title << "</a><br>";
-                            } 
+                            }
                             out << "<iframe scrolling='no' width='" << 100 * colSpan << "%' height='" << height << "%' style='border: 0' src=" << url << "></iframe></td>";
                             // Add fake cells to fix html table
                             for (ui32 left = 1; left < colSpan; ++left) {
@@ -3964,14 +3964,14 @@ private:
                             }
                         } else {
                             out << "<td style='font-size: 25px' align='left' rowspan='" << rowSpan << "' colSpan='" << colSpan << "'>" << text << "</td>";
-                        } 
-                    } 
+                        }
+                    }
                 }
-                out << "</tbody></table>"; 
-            } 
-        } 
-    } 
- 
+                out << "</tbody></table>";
+            }
+        }
+    }
+
     static double ParseDouble(const TString& s)
     {
         if (s == "inf") {
@@ -3988,7 +3988,7 @@ private:
         if (request.GetParams().NumOfValues("id") == 0) {
             ythrow yexception() << "Cgi-parameter 'id' is not specified";
         } else {
-            const TCgiParameters& e = request.GetParams(); 
+            const TCgiParameters& e = request.GetParams();
             TStringStream ss;
             if (e.Get("format") == "json") {
                 TLogJsonPrinter printer(ss);
@@ -4009,38 +4009,38 @@ private:
                 printer.OutputJson(ss);
                 out << HTTPOKJSON;
                 out << ss.Str();
-            } else if (e.Get("format") == "analytics" && e.Get("aggr") == "tracks") { 
-                TLogTrackExtractor logTrackExtractor(e, 
-                    Subvalues(e, "f"), 
-                    Subvalues(e, "g") 
-                ); 
-                for (const TString& id : Subvalues(e, "id")) { 
-                    CheckAdHocTrace(id, TDuration::Minutes(1)); 
-                    TraceMngr->ReadLog(id, logTrackExtractor); 
-                    TraceMngr->ReadDepot(id, logTrackExtractor); 
-                } 
-                TString patternAnalyzer; 
-                if (e.Get("pattern")) { 
-                    patternAnalyzer = e.Get("ptrn_anlz"); 
-                } 
-                logTrackExtractor.Run(); 
- 
-                TLogTextPrinter printer(e); 
-                const TString& distBy = patternAnalyzer; 
+            } else if (e.Get("format") == "analytics" && e.Get("aggr") == "tracks") {
+                TLogTrackExtractor logTrackExtractor(e,
+                    Subvalues(e, "f"),
+                    Subvalues(e, "g")
+                );
+                for (const TString& id : Subvalues(e, "id")) {
+                    CheckAdHocTrace(id, TDuration::Minutes(1));
+                    TraceMngr->ReadLog(id, logTrackExtractor);
+                    TraceMngr->ReadDepot(id, logTrackExtractor);
+                }
+                TString patternAnalyzer;
+                if (e.Get("pattern")) {
+                    patternAnalyzer = e.Get("ptrn_anlz");
+                }
+                logTrackExtractor.Run();
+
+                TLogTextPrinter printer(e);
+                const TString& distBy = patternAnalyzer;
                 double sel_x1 = e.Get("sel_x1")? ParseDouble(e.Get("sel_x1")): NAN;
                 double sel_x2 = e.Get("sel_x2")? ParseDouble(e.Get("sel_x2")): NAN;
-                TSampleOpts opts; 
-                opts.ShowProvider = (e.Get("show_provider") == "y"); 
-                if (e.Get("size_limit")) { 
-                    opts.SizeLimit = FromString<size_t>(e.Get("size_limit")); 
-                } 
-                logTrackExtractor.OutputSample(distBy, sel_x1, sel_x2, opts, printer); 
-                printer.Output(ss); 
-                out << HTTPOKTEXT; 
-                out << ss.Str(); 
+                TSampleOpts opts;
+                opts.ShowProvider = (e.Get("show_provider") == "y");
+                if (e.Get("size_limit")) {
+                    opts.SizeLimit = FromString<size_t>(e.Get("size_limit"));
+                }
+                logTrackExtractor.OutputSample(distBy, sel_x1, sel_x2, opts, printer);
+                printer.Output(ss);
+                out << HTTPOKTEXT;
+                out << ss.Str();
             } else {
-                TLogTextPrinter printer(e); 
-                for (const TString& id : Subvalues(e, "id")) { 
+                TLogTextPrinter printer(e);
+                for (const TString& id : Subvalues(e, "id")) {
                     CheckAdHocTrace(id, TDuration::Minutes(1));
                     TraceMngr->ReadLog(id, printer);
                     TraceMngr->ReadDepot(id, printer);
@@ -4131,23 +4131,23 @@ private:
         }
 
         logFilter->FilterSelectors(out, e, "f");
- 
-        OptionalMultipleSelection(out, e, "g", "group by", logFilter->ListParamNames());
-        { 
-            auto paramNamesList = logFilter->ListParamNames(); 
-            if (e.Get("aggr") == "tracks") { 
-                paramNamesList.emplace_back("_trackMs", "_trackMs"); 
-            } 
-            OptionalSelection(out, e, "s", "order by", paramNamesList); 
-        } 
 
-        if (e.Get("s")) { 
-            TVariants variants; 
-            variants.emplace_back("", "asc"); 
-            variants.emplace_back("y", "desc"); 
-            DropdownSelector<Link>(out, e, "reverse", e.Get("reverse"), "", variants); 
-        } 
- 
+        OptionalMultipleSelection(out, e, "g", "group by", logFilter->ListParamNames());
+        {
+            auto paramNamesList = logFilter->ListParamNames();
+            if (e.Get("aggr") == "tracks") {
+                paramNamesList.emplace_back("_trackMs", "_trackMs");
+            }
+            OptionalSelection(out, e, "s", "order by", paramNamesList);
+        }
+
+        if (e.Get("s")) {
+            TVariants variants;
+            variants.emplace_back("", "asc");
+            variants.emplace_back("y", "desc");
+            DropdownSelector<Link>(out, e, "reverse", e.Get("reverse"), "", variants);
+        }
+
         TString aggr = e.Get("aggr");
         TVariants variants1; // MSVS2013 doesn't understand complex initializer lists
         variants1.emplace_back("", "without aggregation");
@@ -4211,7 +4211,7 @@ private:
 
             NAnalytics::TTable distData;
             bool showSample = false;
-            TLogTextPrinter printer(e); 
+            TLogTextPrinter printer(e);
 
             if (patternAnalyzer == "resTotal" || patternAnalyzer == "resLast") {
                 distBy = patternAnalyzer;
@@ -4225,7 +4225,7 @@ private:
                     if (e.Get("size_limit")) {
                         opts.SizeLimit = FromString<size_t>(e.Get("size_limit"));
                     }
-                    logTracks->OutputSample(distBy, sel_x1, sel_x2, opts, printer); 
+                    logTracks->OutputSample(distBy, sel_x1, sel_x2, opts, printer);
                 }
             }
 
@@ -4273,35 +4273,35 @@ private:
                         if (distBy) {
                             out << NResource::Find("lwtrace/mon/static/analytics.flot.html") << Endl;
                             if (showSample) {
-                                static const THashSet<TString> keepParams = { 
-                                    "f", 
-                                    "g", 
-                                    "head", 
-                                    "tail", 
-                                    "s", 
-                                    "reverse", 
-                                    "cutts", 
-                                    "showts", 
-                                    "show_provider", 
-                                    "size_limit", 
-                                    "aggr", 
-                                    "id", 
-                                    "pattern", 
-                                    "ptrn_anlz", 
-                                    "sel_x1", 
-                                    "sel_x2" 
-                                }; 
-                                TCgiParameters cgiParams; 
-                                for (const auto& kv : request.GetParams()) { 
-                                    if (keepParams.count(kv.first)) { 
-                                        cgiParams.insert(kv); 
-                                    } 
-                                } 
-                                cgiParams.insert(std::pair<TString, TString>("mode", "log")); 
-                                BtnHref<Button|Medium>(out, "Open logs", MakeUrlAdd(cgiParams, "format", "analytics")); 
-                                out << "<pre>\n"; 
-                                printer.Output(out); 
-                                out << "</pre>\n"; 
+                                static const THashSet<TString> keepParams = {
+                                    "f",
+                                    "g",
+                                    "head",
+                                    "tail",
+                                    "s",
+                                    "reverse",
+                                    "cutts",
+                                    "showts",
+                                    "show_provider",
+                                    "size_limit",
+                                    "aggr",
+                                    "id",
+                                    "pattern",
+                                    "ptrn_anlz",
+                                    "sel_x1",
+                                    "sel_x2"
+                                };
+                                TCgiParameters cgiParams;
+                                for (const auto& kv : request.GetParams()) {
+                                    if (keepParams.count(kv.first)) {
+                                        cgiParams.insert(kv);
+                                    }
+                                }
+                                cgiParams.insert(std::pair<TString, TString>("mode", "log"));
+                                BtnHref<Button|Medium>(out, "Open logs", MakeUrlAdd(cgiParams, "format", "analytics"));
+                                out << "<pre>\n";
+                                printer.Output(out);
+                                out << "</pre>\n";
                             }
                         }
 
@@ -4342,7 +4342,7 @@ private:
             variants2.emplace_back("text", "text");
             variants2.emplace_back("csv", "CSV");
             variants2.emplace_back("json_flot", "JSON");
- 
+
             RequireSelection(out, e, "out", "and show", variants2);
             if (outFormat == "csv") {
                 TString sep = e.Get("sep")? e.Get("sep"): TString("\t");
@@ -4427,90 +4427,90 @@ private:
                         }
                     }
                 }
-            } else if (outFormat = "text") { 
+            } else if (outFormat = "text") {
                 out << " <input type='text' id='logsLimit' size='2' placeholder='Limit'>" << Endl;
                 out <<
-                    R"END(<script> 
-                    { 
-                        var url = new URL(window.location.href); 
-                        if (url.searchParams.has('head')) { 
-                            document.getElementById('logsLimit').value = url.searchParams.get('head'); 
-                        } 
-                    } 
- 
-                    $('#logsLimit').on('keypress', function(ev) { 
-                        if (ev.keyCode == 13) { 
-                            var url = new URL(window.location.href); 
-                            var limit_value = document.getElementById('logsLimit').value; 
-                            if (limit_value && !isNaN(limit_value)) { 
-                                url.searchParams.set('head', limit_value); 
-                                window.location.href = url.toString(); 
-                            } else if (!limit_value) { 
-                                url.searchParams.delete('head'); 
-                                window.location.href = url.toString(); 
-                            } 
-                        } 
-                    }); 
-                    </script>)END"; 
-                TString selectors = out.Str(); 
-                TLogTextPrinter printer(e); 
-                TStringStream ss; 
-                for (const TString& id : Subvalues(e, "id")) { 
-                    CheckAdHocTrace(id, TDuration::Minutes(1)); 
-                    TraceMngr->ReadLog(id, printer); 
-                    TraceMngr->ReadDepot(id, printer); 
-                } 
-                printer.Output(ss); 
- 
-                out.Clear(); 
-                out << NMonitoring::HTTPOKHTML; 
-                out << "<!DOCTYPE html>" << Endl; 
-                HTML(out) { 
-                    HTML_TAG() { 
-                        HEAD() { 
+                    R"END(<script>
+                    {
+                        var url = new URL(window.location.href);
+                        if (url.searchParams.has('head')) {
+                            document.getElementById('logsLimit').value = url.searchParams.get('head');
+                        }
+                    }
+
+                    $('#logsLimit').on('keypress', function(ev) {
+                        if (ev.keyCode == 13) {
+                            var url = new URL(window.location.href);
+                            var limit_value = document.getElementById('logsLimit').value;
+                            if (limit_value && !isNaN(limit_value)) {
+                                url.searchParams.set('head', limit_value);
+                                window.location.href = url.toString();
+                            } else if (!limit_value) {
+                                url.searchParams.delete('head');
+                                window.location.href = url.toString();
+                            }
+                        }
+                    });
+                    </script>)END";
+                TString selectors = out.Str();
+                TLogTextPrinter printer(e);
+                TStringStream ss;
+                for (const TString& id : Subvalues(e, "id")) {
+                    CheckAdHocTrace(id, TDuration::Minutes(1));
+                    TraceMngr->ReadLog(id, printer);
+                    TraceMngr->ReadDepot(id, printer);
+                }
+                printer.Output(ss);
+
+                out.Clear();
+                out << NMonitoring::HTTPOKHTML;
+                out << "<!DOCTYPE html>" << Endl;
+                HTML(out) {
+                    HTML_TAG() {
+                        HEAD() {
                             out << NResource::Find("lwtrace/mon/static/analytics.header.html") << Endl;
-                        } 
-                        BODY() { 
-                            // Wrap selectors with navbar 
-                            { TSelectorsContainer sc(out); 
-                                out << selectors; 
-                            } 
-                            static const THashSet<TString> keepParams = { 
-                                "s", 
-                                "head", 
-                                "reverse", 
-                                "cutts", 
-                                "showts", 
-                                "id", 
-                                "out" 
-                            }; 
-                            TCgiParameters cgiParams; 
-                            for (const auto& kv : request.GetParams()) { 
-                                if (keepParams.count(kv.first)) { 
-                                    cgiParams.insert(kv); 
-                                } 
-                            } 
-                            cgiParams.insert(std::pair<TString, TString>("mode", "analytics")); 
- 
-                            auto toggledButton = [&out, &e, &cgiParams] (const TString& label, const TString& cgiKey) { 
-                                if (e.Get(cgiKey) == "y") { 
-                                    BtnHref<Button|Medium>(out, label, MakeUrlErase(cgiParams, cgiKey, "y"), true); 
-                                } else { 
-                                    BtnHref<Button|Medium>(out, label, MakeUrlAdd(cgiParams, cgiKey, "y")); 
-                                } 
-                            }; 
-                            toggledButton("Cut Tails", "cutts"); 
-                            toggledButton("Relative Time", "showts"); 
- 
-                            cgiParams.erase("mode"); 
-                            cgiParams.insert(std::pair<TString, TString>("mode", "log")); 
-                            BtnHref<Button|Medium>(out, "Fullscreen", MakeUrlAdd(cgiParams, "format", "text")); 
-                            out << "<pre>\n"; 
-                            out << ss.Str() << Endl; 
-                            out << "</pre>\n"; 
-                        } 
-                    } 
-                } 
+                        }
+                        BODY() {
+                            // Wrap selectors with navbar
+                            { TSelectorsContainer sc(out);
+                                out << selectors;
+                            }
+                            static const THashSet<TString> keepParams = {
+                                "s",
+                                "head",
+                                "reverse",
+                                "cutts",
+                                "showts",
+                                "id",
+                                "out"
+                            };
+                            TCgiParameters cgiParams;
+                            for (const auto& kv : request.GetParams()) {
+                                if (keepParams.count(kv.first)) {
+                                    cgiParams.insert(kv);
+                                }
+                            }
+                            cgiParams.insert(std::pair<TString, TString>("mode", "analytics"));
+
+                            auto toggledButton = [&out, &e, &cgiParams] (const TString& label, const TString& cgiKey) {
+                                if (e.Get(cgiKey) == "y") {
+                                    BtnHref<Button|Medium>(out, label, MakeUrlErase(cgiParams, cgiKey, "y"), true);
+                                } else {
+                                    BtnHref<Button|Medium>(out, label, MakeUrlAdd(cgiParams, cgiKey, "y"));
+                                }
+                            };
+                            toggledButton("Cut Tails", "cutts");
+                            toggledButton("Relative Time", "showts");
+
+                            cgiParams.erase("mode");
+                            cgiParams.insert(std::pair<TString, TString>("mode", "log"));
+                            BtnHref<Button|Medium>(out, "Fullscreen", MakeUrlAdd(cgiParams, "format", "text"));
+                            out << "<pre>\n";
+                            out << ss.Str() << Endl;
+                            out << "</pre>\n";
+                        }
+                    }
+                }
             }
         }
     }
@@ -4650,11 +4650,11 @@ private:
             out << "OK\n";
         }
     }
- 
-    void RegisterDashboard(const TString& dashConfig) { 
-        g_DashboardRegistry.Register(dashConfig); 
-    } 
- 
+
+    void RegisterDashboard(const TString& dashConfig) {
+        g_DashboardRegistry.Register(dashConfig);
+    }
+
 private:
     // Returns true iff trace is ad-hoc and ensures trace is created
     bool CheckAdHocTrace(const TString& id, TDuration timeout)
@@ -4716,8 +4716,8 @@ NLWTrace::TManager& TraceManager(bool allowUnsafe) {
     return allowUnsafe? g_UnsafeManager: g_SafeManager;
 }
 
-TDashboardRegistry& DashboardRegistry() { 
-    return g_DashboardRegistry; 
-} 
- 
+TDashboardRegistry& DashboardRegistry() {
+    return g_DashboardRegistry;
+}
+
 } // namespace NLwTraceMonPage

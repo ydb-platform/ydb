@@ -8,8 +8,8 @@ import logging
 import platform
 import threading
 
-import six
-
+import six 
+ 
 UI16MAXVAL = (1 << 16) - 1
 logger = logging.getLogger(__name__)
 
@@ -144,7 +144,7 @@ class PortManager(object):
             raise PortManagerException("All valid ports are taken ({}): {}".format(self._valid_range, self._filelocks))
 
         salt = random.randint(0, UI16MAXVAL)
-        for attempt in six.moves.range(self._valid_port_count):
+        for attempt in six.moves.range(self._valid_port_count): 
             probe_port = (salt + attempt) % self._valid_port_count
 
             for left, right in self._valid_range:

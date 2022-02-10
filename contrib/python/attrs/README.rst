@@ -27,7 +27,7 @@
 
 Its main goal is to help you to write **concise** and **correct** software without slowing down your code.
 
-.. teaser-end
+.. teaser-end 
 
 For that, it gives you a class decorator and a way to declaratively define the attributes on that class:
 
@@ -85,7 +85,7 @@ Which in turn encourages you to write *small classes* that do `one thing well <h
 Never again violate the `single responsibility principle <https://en.wikipedia.org/wiki/Single_responsibility_principle>`_ just because implementing ``__init__`` et al is a painful drag.
 
 
-.. -getting-help-
+.. -getting-help- 
 
 Getting Help
 ============
@@ -95,8 +95,8 @@ Please use the ``python-attrs`` tag on `StackOverflow <https://stackoverflow.com
 Answering questions of your fellow developers is also a great way to help the project!
 
 
-.. -project-information-
-
+.. -project-information- 
+ 
 Project Information
 ===================
 
@@ -104,19 +104,19 @@ Project Information
 its documentation lives at `Read the Docs <https://www.attrs.org/>`_,
 the code on `GitHub <https://github.com/python-attrs/attrs>`_,
 and the latest release on `PyPI <https://pypi.org/project/attrs/>`_.
-It’s rigorously tested on Python 2.7, 3.5+, and PyPy.
+It’s rigorously tested on Python 2.7, 3.5+, and PyPy. 
 
 We collect information on **third-party extensions** in our `wiki <https://github.com/python-attrs/attrs/wiki/Extensions-to-attrs>`_.
 Feel free to browse and add your own!
 
 If you'd like to contribute to ``attrs`` you're most welcome and we've written `a little guide <https://www.attrs.org/en/latest/contributing.html>`_ to get you started!
-
-
-``attrs`` for Enterprise
-------------------------
-
-Available as part of the Tidelift Subscription.
-
-The maintainers of ``attrs`` and thousands of other packages are working with Tidelift to deliver commercial support and maintenance for the open source packages you use to build your applications.
-Save time, reduce risk, and improve code health, while paying the maintainers of the exact packages you use.
-`Learn more. <https://tidelift.com/subscription/pkg/pypi-attrs?utm_source=pypi-attrs&utm_medium=referral&utm_campaign=enterprise&utm_term=repo>`_
+ 
+ 
+``attrs`` for Enterprise 
+------------------------ 
+ 
+Available as part of the Tidelift Subscription. 
+ 
+The maintainers of ``attrs`` and thousands of other packages are working with Tidelift to deliver commercial support and maintenance for the open source packages you use to build your applications. 
+Save time, reduce risk, and improve code health, while paying the maintainers of the exact packages you use. 
+`Learn more. <https://tidelift.com/subscription/pkg/pypi-attrs?utm_source=pypi-attrs&utm_medium=referral&utm_campaign=enterprise&utm_term=repo>`_ 

@@ -1,4 +1,4 @@
-PY23_LIBRARY()
+PY23_LIBRARY() 
 
 LICENSE(MIT)
 
@@ -26,19 +26,19 @@ PY_SRCS(
     attr/exceptions.pyi
     attr/filters.py
     attr/filters.pyi
-    attr/setters.py
+    attr/setters.py 
     attr/setters.pyi
     attr/validators.py
     attr/validators.pyi
 )
 
-IF (PYTHON3)
-    PY_SRCS(
-        TOP_LEVEL
-        attr/_next_gen.py
-    )
-ENDIF()
-
+IF (PYTHON3) 
+    PY_SRCS( 
+        TOP_LEVEL 
+        attr/_next_gen.py 
+    ) 
+ENDIF() 
+ 
 RESOURCE_FILES(
     PREFIX contrib/python/attrs/
     .dist-info/METADATA

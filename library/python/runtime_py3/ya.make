@@ -43,7 +43,7 @@ ELSE()
 ENDIF()
 
 END()
-
-RECURSE_FOR_TESTS(
-    test
-)
+ 
+RECURSE_FOR_TESTS( 
+    test 
+) 

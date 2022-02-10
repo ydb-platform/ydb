@@ -21,8 +21,8 @@ else:
 if PY2:
     from collections import Mapping, Sequence
 
-    from UserDict import IterableUserDict
-
+    from UserDict import IterableUserDict 
+ 
     # We 'bundle' isclass instead of using inspect as importing inspect is
     # fairly expensive (order of 10-15 ms for a modern machine in 2016)
     def isclass(klass):

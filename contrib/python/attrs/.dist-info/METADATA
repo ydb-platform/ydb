@@ -30,7 +30,7 @@ Classifier: Programming Language :: Python :: 3.5
 Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
-Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.9 
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
@@ -38,7 +38,7 @@ Classifier: Topic :: Software Development :: Libraries :: Python Modules
 Requires-Python: >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*
 Description-Content-Type: text/x-rst
 Provides-Extra: dev
-Requires-Dist: coverage[toml] (>=5.0.2) ; extra == 'dev'
+Requires-Dist: coverage[toml] (>=5.0.2) ; extra == 'dev' 
 Requires-Dist: hypothesis ; extra == 'dev'
 Requires-Dist: pympler ; extra == 'dev'
 Requires-Dist: pytest (>=4.3.0) ; extra == 'dev'
@@ -56,7 +56,7 @@ Requires-Dist: sphinx ; extra == 'docs'
 Requires-Dist: zope.interface ; extra == 'docs'
 Requires-Dist: sphinx-notfound-page ; extra == 'docs'
 Provides-Extra: tests
-Requires-Dist: coverage[toml] (>=5.0.2) ; extra == 'tests'
+Requires-Dist: coverage[toml] (>=5.0.2) ; extra == 'tests' 
 Requires-Dist: hypothesis ; extra == 'tests'
 Requires-Dist: pympler ; extra == 'tests'
 Requires-Dist: pytest (>=4.3.0) ; extra == 'tests'
@@ -64,12 +64,12 @@ Requires-Dist: six ; extra == 'tests'
 Requires-Dist: mypy ; extra == 'tests'
 Requires-Dist: pytest-mypy-plugins ; extra == 'tests'
 Requires-Dist: zope.interface ; extra == 'tests'
-Provides-Extra: tests_no_zope
-Requires-Dist: coverage[toml] (>=5.0.2) ; extra == 'tests_no_zope'
-Requires-Dist: hypothesis ; extra == 'tests_no_zope'
-Requires-Dist: pympler ; extra == 'tests_no_zope'
-Requires-Dist: pytest (>=4.3.0) ; extra == 'tests_no_zope'
-Requires-Dist: six ; extra == 'tests_no_zope'
+Provides-Extra: tests_no_zope 
+Requires-Dist: coverage[toml] (>=5.0.2) ; extra == 'tests_no_zope' 
+Requires-Dist: hypothesis ; extra == 'tests_no_zope' 
+Requires-Dist: pympler ; extra == 'tests_no_zope' 
+Requires-Dist: pytest (>=4.3.0) ; extra == 'tests_no_zope' 
+Requires-Dist: six ; extra == 'tests_no_zope' 
 Requires-Dist: mypy ; extra == 'tests_no_zope'
 Requires-Dist: pytest-mypy-plugins ; extra == 'tests_no_zope'
 
@@ -83,7 +83,7 @@ Requires-Dist: pytest-mypy-plugins ; extra == 'tests_no_zope'
 
 Its main goal is to help you to write **concise** and **correct** software without slowing down your code.
 
-.. teaser-end
+.. teaser-end 
 
 For that, it gives you a class decorator and a way to declaratively define the attributes on that class:
 
@@ -141,7 +141,7 @@ Which in turn encourages you to write *small classes* that do `one thing well <h
 Never again violate the `single responsibility principle <https://en.wikipedia.org/wiki/Single_responsibility_principle>`_ just because implementing ``__init__`` et al is a painful drag.
 
 
-.. -getting-help-
+.. -getting-help- 
 
 Getting Help
 ============
@@ -151,8 +151,8 @@ Please use the ``python-attrs`` tag on `StackOverflow <https://stackoverflow.com
 Answering questions of your fellow developers is also a great way to help the project!
 
 
-.. -project-information-
-
+.. -project-information- 
+ 
 Project Information
 ===================
 
@@ -160,7 +160,7 @@ Project Information
 its documentation lives at `Read the Docs <https://www.attrs.org/>`_,
 the code on `GitHub <https://github.com/python-attrs/attrs>`_,
 and the latest release on `PyPI <https://pypi.org/project/attrs/>`_.
-It’s rigorously tested on Python 2.7, 3.5+, and PyPy.
+It’s rigorously tested on Python 2.7, 3.5+, and PyPy. 
 
 We collect information on **third-party extensions** in our `wiki <https://github.com/python-attrs/attrs/wiki/Extensions-to-attrs>`_.
 Feel free to browse and add your own!
@@ -168,32 +168,32 @@ Feel free to browse and add your own!
 If you'd like to contribute to ``attrs`` you're most welcome and we've written `a little guide <https://www.attrs.org/en/latest/contributing.html>`_ to get you started!
 
 
-``attrs`` for Enterprise
-------------------------
-
-Available as part of the Tidelift Subscription.
-
-The maintainers of ``attrs`` and thousands of other packages are working with Tidelift to deliver commercial support and maintenance for the open source packages you use to build your applications.
-Save time, reduce risk, and improve code health, while paying the maintainers of the exact packages you use.
-`Learn more. <https://tidelift.com/subscription/pkg/pypi-attrs?utm_source=pypi-attrs&utm_medium=referral&utm_campaign=enterprise&utm_term=repo>`_
-
-
+``attrs`` for Enterprise 
+------------------------ 
+ 
+Available as part of the Tidelift Subscription. 
+ 
+The maintainers of ``attrs`` and thousands of other packages are working with Tidelift to deliver commercial support and maintenance for the open source packages you use to build your applications. 
+Save time, reduce risk, and improve code health, while paying the maintainers of the exact packages you use. 
+`Learn more. <https://tidelift.com/subscription/pkg/pypi-attrs?utm_source=pypi-attrs&utm_medium=referral&utm_campaign=enterprise&utm_term=repo>`_ 
+ 
+ 
 Release Information
 ===================
 
 21.2.0 (2021-05-07)
 -------------------
 
-Backward-incompatible Changes
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
+Backward-incompatible Changes 
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ 
+ 
 - We had to revert the recursive feature for ``attr.evolve()`` because it broke some use-cases -- sorry!
   `#806 <https://github.com/python-attrs/attrs/issues/806>`_
 - Python 3.4 is now blocked using packaging metadata because ``attrs`` can't be imported on it anymore.
   To ensure that 3.4 users can keep installing  ``attrs`` easily, we will `yank <https://pypi.org/help/#yanked>`_ 21.1.0 from PyPI.
   This has **no** consequences if you pin ``attrs`` to 21.1.0.
   `#807 <https://github.com/python-attrs/attrs/issues/807>`_
-
+ 
 `Full changelog <https://www.attrs.org/en/stable/changelog.html>`_.
 
 Credits

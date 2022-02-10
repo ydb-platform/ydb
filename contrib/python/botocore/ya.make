@@ -885,9 +885,9 @@ RESOURCE_FILES(
     #botocore/data/transcribe/2017-10-26/service-2.json
     #botocore/data/transfer/2018-11-05/paginators-1.json
     #botocore/data/transfer/2018-11-05/service-2.json
-    botocore/data/translate/2017-07-01/examples-1.json
-    botocore/data/translate/2017-07-01/paginators-1.json
-    botocore/data/translate/2017-07-01/service-2.json
+    botocore/data/translate/2017-07-01/examples-1.json 
+    botocore/data/translate/2017-07-01/paginators-1.json 
+    botocore/data/translate/2017-07-01/service-2.json 
     #botocore/data/waf-regional/2016-11-28/examples-1.json
     #botocore/data/waf-regional/2016-11-28/paginators-1.json
     #botocore/data/waf-regional/2016-11-28/service-2.json

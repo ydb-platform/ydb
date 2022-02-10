@@ -1,12 +1,12 @@
-PY3TEST()
-
+PY3TEST() 
+ 
 OWNER(
     abodrov
     borman
-)
-
+) 
+ 
 DEPENDS(library/python/runtime_py3/test/traceback)
-
+ 
 PEERDIR(
     contrib/python/parameterized
     contrib/python/PyYAML
@@ -35,6 +35,6 @@ RESOURCE_FILES(
     resources/submodule/bar.txt
 )
 
-END()
+END() 
 
 RECURSE_FOR_TESTS(traceback)

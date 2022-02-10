@@ -11,8 +11,8 @@ import subprocess
 import errno
 import distutils.version
 
-import six
-
+import six 
+ 
 try:
     # yatest.common should try to be hermetic, otherwise, PYTEST_SCRIPT (aka USE_ARCADIA_PYTHON=no) won't work.
     import library.python.cores as cores
@@ -37,17 +37,17 @@ def truncate(s, size):
     elif len(s) <= size:
         return s
     else:
-        return (b'...' if isinstance(s, bytes) else '...') + s[-(size - 3):]
+        return (b'...' if isinstance(s, bytes) else '...') + s[-(size - 3):] 
 
 
 def get_command_name(command):
-    return os.path.basename(command.split()[0] if isinstance(command, six.string_types) else command[0])
+    return os.path.basename(command.split()[0] if isinstance(command, six.string_types) else command[0]) 
 
 
 class ExecutionError(Exception):
 
     def __init__(self, execution_result):
-        if not isinstance(execution_result.command, six.string_types):
+        if not isinstance(execution_result.command, six.string_types): 
             command = " ".join(str(arg) for arg in execution_result.command)
         else:
             command = execution_result.command
@@ -228,7 +228,7 @@ class _Execution(object):
         yatest_logger.debug("Command (pid %s) rc: %s", self._process.pid, self.exit_code)
         yatest_logger.debug("Command (pid %s) elapsed time (sec): %s", self._process.pid, self.elapsed)
         if self._metrics:
-            for key, value in six.iteritems(self._metrics):
+            for key, value in six.iteritems(self._metrics): 
                 yatest_logger.debug("Command (pid %s) %s: %s", self._process.pid, key, value)
 
         # Since this code is Python2/3 compatible, we don't know is _std_out/_std_err is real bytes or bytes-str.
@@ -270,7 +270,7 @@ class _Execution(object):
             if os.path.exists(runtime.gdb_path()):
                 self._backtrace = cores.get_gdb_full_backtrace(self.command[0], core_path, runtime.gdb_path())
                 bt_filename = path.get_unique_file_path(runtime.output_path(), "{}.{}.backtrace".format(os.path.basename(self.command[0]), self._process.pid))
-                with open(bt_filename, "wb") as afile:
+                with open(bt_filename, "wb") as afile: 
                     afile.write(six.ensure_binary(self._backtrace))
                 # generate pretty html version of backtrace aka Tri Korochki
                 pbt_filename = bt_filename + ".html"
@@ -473,7 +473,7 @@ def execute(
             # No stream is supplied: open new temp file
             return _get_command_output_file(command, default_name), False
 
-        if isinstance(stream, six.string_types):
+        if isinstance(stream, six.string_types): 
             # User filename is supplied: open file for writing
             return open(stream, 'wb+'), stream.startswith('/dev/')
 
@@ -586,7 +586,7 @@ def py_execute(
     :param process_progress_listener=object that is polled while execution is in progress
     :return _Execution: Execution object
     """
-    if isinstance(command, six.string_types):
+    if isinstance(command, six.string_types): 
         command = [command]
     command = [runtime.python_path()] + command
     if shell:

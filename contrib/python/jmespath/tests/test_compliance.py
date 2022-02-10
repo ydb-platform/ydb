@@ -1,5 +1,5 @@
 import os
-import pytest
+import pytest 
 from pprint import pformat
 from . import OrderedDict
 from . import json
@@ -14,7 +14,7 @@ NOT_SPECIFIED = object()
 OPTIONS = Options(dict_cls=OrderedDict)
 
 
-def _load_all_cases():
+def _load_all_cases(): 
     for full_path in _walk_files():
         if full_path.endswith('.json'):
             for given, test_type, test_data in load_cases(full_path):
@@ -23,9 +23,9 @@ def _load_all_cases():
                 # test suite, so we only care about 'result' and
                 # 'error' test_types.
                 if test_type == 'result':
-                    yield (given, t['expression'], t['result'], os.path.basename(full_path))
+                    yield (given, t['expression'], t['result'], os.path.basename(full_path)) 
                 elif test_type == 'error':
-                    yield (given, t['expression'], t['error'], os.path.basename(full_path))
+                    yield (given, t['expression'], t['error'], os.path.basename(full_path)) 
 
 
 def _walk_files():
@@ -60,14 +60,14 @@ def load_cases(full_path):
             yield (given, test_type, case)
 
 
-@pytest.mark.parametrize(
-    'given,expression,expected,filename',
-    list(_load_all_cases())
-)
-def test_compliance(given, expression, expected, filename):
-    _test_expression(given, expression, expected, filename)
-
-
+@pytest.mark.parametrize( 
+    'given,expression,expected,filename', 
+    list(_load_all_cases()) 
+) 
+def test_compliance(given, expression, expected, filename): 
+    _test_expression(given, expression, expected, filename) 
+ 
+ 
 def _test_expression(given, expression, expected, filename):
     import jmespath.parser
     try:

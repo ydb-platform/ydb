@@ -96,12 +96,12 @@ public:
             if ((got = TAgent::read(bufptr, buffree)) < 0) {
                 fetcherr = errno;
                 if (errno == EINTR)
-                    header->error = HTTP_INTERRUPTED; 
+                    header->error = HTTP_INTERRUPTED;
                 else if (errno == ETIMEDOUT)
-                    header->error = HTTP_TIMEDOUT_WHILE_BYTES_RECEIVING; 
-                else 
-                    header->error = HTTP_CONNECTION_LOST; 
- 
+                    header->error = HTTP_TIMEDOUT_WHILE_BYTES_RECEIVING;
+                else
+                    header->error = HTTP_CONNECTION_LOST;
+
                 break;
             }
 
@@ -111,7 +111,7 @@ public:
             buffree -= got;
 
             THttpParser<TCheck>::Parse(parsebuf, got);
- 
+
             if (header->error)
                 break; //if ANY error ocurred we will stop download that file or will have unprognosed stream position until MAX size reached
 
@@ -139,20 +139,20 @@ public:
             }
         } while (THttpParser<TCheck>::GetState() > THttpParser<TCheck>::hp_eof);
 
-        i64 Adjustment = 0; 
-        if (!header->error) { 
+        i64 Adjustment = 0;
+        if (!header->error) {
             if (header->transfer_chunked) {
-                Adjustment = header->header_size + header->entity_size - bufsize - 1; 
+                Adjustment = header->header_size + header->entity_size - bufsize - 1;
             } else if (header->content_length >= 0) {
-                Adjustment = header->header_size + header->content_length - bufsize; 
-            } 
+                Adjustment = header->header_size + header->content_length - bufsize;
+            }
             if (Adjustment > 0)
-                Adjustment = 0; 
-        } 
- 
+                Adjustment = 0;
+        }
+
         if (buf) {
-            TAlloc::Shrink(buf, buflen - buffree + Adjustment); 
- 
+            TAlloc::Shrink(buf, buflen - buffree + Adjustment);
+
             if (TWriter::Write(buf, buflen - buffree) < 0)
                 ret = EIO;
         }

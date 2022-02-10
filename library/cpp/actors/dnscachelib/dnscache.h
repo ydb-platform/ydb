@@ -55,7 +55,7 @@ private:
     struct THost {
         THost() noexcept {
         }
- 
+
         TVector<TIpHost> AddrsV4;
         time_t ResolvedV4 = 0;
         time_t NotFoundV4 = 0;

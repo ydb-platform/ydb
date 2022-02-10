@@ -107,11 +107,11 @@ public:
     }
 
     constexpr friend bool operator==(TEnum l, TFlags r) {
-        return static_cast<TInt>(l) == r.Value_; 
+        return static_cast<TInt>(l) == r.Value_;
     }
 
     constexpr friend bool operator==(TFlags l, TEnum r) {
-        return l.Value_ == static_cast<TInt>(r); 
+        return l.Value_ == static_cast<TInt>(r);
     }
 
     constexpr friend bool operator!=(TFlags l, TFlags r) {
@@ -119,11 +119,11 @@ public:
     }
 
     constexpr friend bool operator!=(TEnum l, TFlags r) {
-        return static_cast<TInt>(l) != r.Value_; 
+        return static_cast<TInt>(l) != r.Value_;
     }
 
     constexpr friend bool operator!=(TFlags l, TEnum r) {
-        return l.Value_ != static_cast<TInt>(r); 
+        return l.Value_ != static_cast<TInt>(r);
     }
 
     TFlags& operator&=(TFlags mask) {
@@ -168,15 +168,15 @@ public:
         return Value_;
     }
 
-    constexpr bool HasFlags(TFlags flags) const { 
-        return (Value_ & flags.Value_) == flags.Value_; 
-    } 
- 
-    TFlags RemoveFlags(TFlags flags) { 
-        Value_ &= ~flags.Value_; 
-        return *this; 
-    } 
- 
+    constexpr bool HasFlags(TFlags flags) const {
+        return (Value_ & flags.Value_) == flags.Value_;
+    }
+
+    TFlags RemoveFlags(TFlags flags) {
+        Value_ &= ~flags.Value_;
+        return *this;
+    }
+
     friend IOutputStream& operator<<(IOutputStream& stream, const TFlags& flags) {
         ::NPrivate::PrintFlags(stream, static_cast<ui64>(flags.Value_), sizeof(TInt));
         return stream;

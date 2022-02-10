@@ -1,5 +1,5 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     davenger
     fomichev
@@ -8,17 +8,17 @@ OWNER(
     single
 )
 
-SRCS( 
-    dnscache.cpp 
-    dnscache.h 
+SRCS(
+    dnscache.cpp
+    dnscache.h
     probes.cpp
     probes.h
-    timekeeper.h 
-) 
- 
-PEERDIR( 
-    contrib/libs/c-ares 
+    timekeeper.h
+)
+
+PEERDIR(
+    contrib/libs/c-ares
     library/cpp/lwtrace
-) 
- 
-END() 
+)
+
+END()

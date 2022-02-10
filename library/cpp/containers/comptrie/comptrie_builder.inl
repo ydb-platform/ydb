@@ -142,7 +142,7 @@ public:
         const_iterator Find(char ch) const;
         void Add(const TBlob& s, TNode* node);
 
-        bool IsLast() const override { 
+        bool IsLast() const override {
             return this->Empty();
         }
 
@@ -151,7 +151,7 @@ public:
             return Find(key, value, result, packer);
         }
 
-        ui64 Measure(const TBuilderImpl* builder) const override { 
+        ui64 Measure(const TBuilderImpl* builder) const override {
             return MeasureRange(builder, 0, this->size());
         }
 
@@ -200,7 +200,7 @@ public:
             return written;
         }
 
-        void Destroy(TBuilderImpl* builder) override { 
+        void Destroy(TBuilderImpl* builder) override {
             // Delete all nodes down the stream.
             for (iterator it = this->begin(); it != this->end(); ++it) {
                 builder->DestroyNode(it->Node);
@@ -221,7 +221,7 @@ public:
             Y_ASSERT(reinterpret_cast<ISubtree*>(this) == static_cast<void*>(this)); // This assumption is used in TNode::Subtree()
         }
 
-        bool IsLast() const override { 
+        bool IsLast() const override {
             return Buffer.Empty();
         }
 
@@ -251,7 +251,7 @@ public:
             return nullptr;
         }
 
-        ui64 Measure(const TBuilderImpl*) const override { 
+        ui64 Measure(const TBuilderImpl*) const override {
             return Buffer.Size();
         }
 
@@ -287,7 +287,7 @@ public:
             Y_ASSERT(reinterpret_cast<ISubtree*>(this) == static_cast<void*>(this)); // This assumption is used in TNode::Subtree()
         }
 
-        bool IsLast() const override { 
+        bool IsLast() const override {
             return Data->Size == 0;
         }
 
@@ -316,7 +316,7 @@ public:
             return nullptr;
         }
 
-        ui64 Measure(const TBuilderImpl*) const override { 
+        ui64 Measure(const TBuilderImpl*) const override {
             return Data->Size;
         }
 

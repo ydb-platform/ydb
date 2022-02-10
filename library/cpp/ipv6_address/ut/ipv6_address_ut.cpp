@@ -1,6 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/ipv6_address/ipv6_address.h>
-#include <unordered_set> 
+#include <unordered_set>
 
 class TIpv6AddressTest: public TTestBase {
     UNIT_TEST_SUITE(TIpv6AddressTest);
@@ -11,7 +11,7 @@ class TIpv6AddressTest: public TTestBase {
 private:
     void ParseHostAndMayBePortFromString_data();
     void CheckAddressValidity();
-    void HashCompileTest(); 
+    void HashCompileTest();
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TIpv6AddressTest);
@@ -78,7 +78,7 @@ void TIpv6AddressTest::ParseHostAndMayBePortFromString_data() {
 
     CheckIpDefPortAgainstIpPortDefPort("ya.ru", 123, HostRes("ya.ru", 123), true);
 }
- 
+
 void TIpv6AddressTest::CheckAddressValidity() {
     bool Ok;
 
@@ -106,7 +106,7 @@ void TIpv6AddressTest::CheckAddressValidity() {
     static_assert(Get1() == TIpv6Address(0, 0, 0, 0, 0, 0, 0, 1));
 }
 
-void TIpv6AddressTest::HashCompileTest() { 
-    std::unordered_set<TIpv6Address> test; 
-    Y_UNUSED(test); 
-} 
+void TIpv6AddressTest::HashCompileTest() {
+    std::unordered_set<TIpv6Address> test;
+    Y_UNUSED(test);
+}

@@ -329,10 +329,10 @@ bool TCompactTrie<T, D, S>::Find(const TSymbol* key, size_t keylen, TData* value
     const char* valuepos = nullptr;
     bool hasNext;
     if (!LookupLongestPrefix(key, keylen, prefixLen, valuepos, hasNext) || prefixLen != keylen)
-        return false; 
-    if (value) 
+        return false;
+    if (value)
         Packer.UnpackLeaf(valuepos, *value);
-    return true; 
+    return true;
 }
 
 template <class T, class D, class S>
@@ -467,31 +467,31 @@ bool TCompactTrie<T, D, S>::FindLongestPrefix(const TSymbol* key, size_t keylen,
     bool found = LookupLongestPrefix(key, keylen, tempPrefixLen, valuepos, tempHasNext);
     if (prefixLen)
         *prefixLen = tempPrefixLen;
-    if (found && value) 
+    if (found && value)
         Packer.UnpackLeaf(valuepos, *value);
     if (hasNext)
         *hasNext = tempHasNext;
-    return found; 
-} 
- 
+    return found;
+}
+
 template <class T, class D, class S>
 bool TCompactTrie<T, D, S>::LookupLongestPrefix(const TSymbol* key, size_t keylen, size_t& prefixLen, const char*& valuepos, bool& hasNext) const {
     using namespace NCompactTrie;
 
     const char* datapos = DataHolder.AsCharPtr();
     size_t len = DataHolder.Length();
- 
+
     prefixLen = 0;
     hasNext = false;
-    bool found = false; 
- 
+    bool found = false;
+
     if (EmptyValue) {
         valuepos = EmptyValue;
         found = true;
     }
 
     if (!key || !len)
-        return found; 
+        return found;
 
     const char* const dataend = datapos + len;
 
@@ -509,8 +509,8 @@ bool TCompactTrie<T, D, S>::LookupLongestPrefix(const TSymbol* key, size_t keyle
                 prefixLen = keylen - (keyend - key) - (i ? 1 : 0);
                 valuepos = datapos;
                 hasNext = flags & MT_NEXT;
-                found = true; 
- 
+                found = true;
+
                 if (!i && key == keyend) { // last byte, and got a match
                     return found;
                 }
@@ -523,7 +523,7 @@ bool TCompactTrie<T, D, S>::LookupLongestPrefix(const TSymbol* key, size_t keyle
         }
     }
 
-    return found; 
+    return found;
 }
 
 template <class T, class D, class S>

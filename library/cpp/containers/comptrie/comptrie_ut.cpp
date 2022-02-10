@@ -366,55 +366,55 @@ void TCompactTrieTest::CheckData(const char* data, size_t datalen) {
     for (auto& i : SampleData) {
         size_t len = strlen(i);
         ui64 value = 0;
-        size_t prefixLen = 0; 
+        size_t prefixLen = 0;
 
         typename TCompactTrie<T>::TKey key = MakeWideKey<T>(i, len);
         UNIT_ASSERT(trie.Find(key, &value));
         UNIT_ASSERT_EQUAL(len * 2, value);
         UNIT_ASSERT(trie.FindLongestPrefix(key, &prefixLen, &value));
-        UNIT_ASSERT_EQUAL(len, prefixLen); 
-        UNIT_ASSERT_EQUAL(len * 2, value); 
+        UNIT_ASSERT_EQUAL(len, prefixLen);
+        UNIT_ASSERT_EQUAL(len * 2, value);
 
         TString badkey("bb");
         badkey += i;
         key = MakeWideKey<T>(badkey);
         UNIT_ASSERT(!trie.Find(key));
-        value = 123; 
+        value = 123;
         UNIT_ASSERT(!trie.Find(key, &value));
-        UNIT_ASSERT_EQUAL(123, value); 
+        UNIT_ASSERT_EQUAL(123, value);
         UNIT_ASSERT(trie.FindLongestPrefix(key, &prefixLen, &value));
-        UNIT_ASSERT_EQUAL(1, prefixLen); 
-        UNIT_ASSERT_EQUAL(2, value); 
+        UNIT_ASSERT_EQUAL(1, prefixLen);
+        UNIT_ASSERT_EQUAL(2, value);
 
         badkey = i;
         badkey += "x";
         key = MakeWideKey<T>(badkey);
         UNIT_ASSERT(!trie.Find(key));
-        value = 1234; 
+        value = 1234;
         UNIT_ASSERT(!trie.Find(key, &value));
-        UNIT_ASSERT_EQUAL(1234, value); 
+        UNIT_ASSERT_EQUAL(1234, value);
         UNIT_ASSERT(trie.FindLongestPrefix(key, &prefixLen, &value));
-        UNIT_ASSERT_EQUAL(len, prefixLen); 
-        UNIT_ASSERT_EQUAL(len * 2, value); 
+        UNIT_ASSERT_EQUAL(len, prefixLen);
+        UNIT_ASSERT_EQUAL(len * 2, value);
         UNIT_ASSERT(trie.FindLongestPrefix(key, &prefixLen, nullptr));
-        UNIT_ASSERT_EQUAL(len, prefixLen); 
+        UNIT_ASSERT_EQUAL(len, prefixLen);
     }
- 
+
     TString testkey("fbbaa");
     typename TCompactTrie<T>::TKey key = MakeWideKey<T>(testkey);
-    ui64 value = 0; 
-    size_t prefixLen = 0; 
+    ui64 value = 0;
+    size_t prefixLen = 0;
     UNIT_ASSERT(trie.FindLongestPrefix(key.data(), testkey.length() - 1, &prefixLen, &value));
-    UNIT_ASSERT_EQUAL(prefixLen, 3); 
-    UNIT_ASSERT_EQUAL(6, value); 
- 
-    testkey = "fbbax"; 
+    UNIT_ASSERT_EQUAL(prefixLen, 3);
+    UNIT_ASSERT_EQUAL(6, value);
+
+    testkey = "fbbax";
     key = MakeWideKey<T>(testkey);
     UNIT_ASSERT(trie.FindLongestPrefix(key, &prefixLen, &value));
-    UNIT_ASSERT_EQUAL(prefixLen, 3); 
-    UNIT_ASSERT_EQUAL(6, value); 
+    UNIT_ASSERT_EQUAL(prefixLen, 3);
+    UNIT_ASSERT_EQUAL(6, value);
 
-    value = 12345678; 
+    value = 12345678;
     UNIT_ASSERT(!trie.Find(key, &value));
     UNIT_ASSERT_EQUAL(12345678, value); //Failed Find() should not change value
 }
@@ -601,8 +601,8 @@ void TCompactTrieTest::TestAddGet() {
 
 void TCompactTrieTest::TestEmpty() {
     TCompactTrieBuilder<char> builder;
-    ui64 dummy = 12345; 
-    size_t prefixLen; 
+    ui64 dummy = 12345;
+    size_t prefixLen;
     UNIT_ASSERT(!builder.Find("abc", 3, &dummy));
     TBufferOutput bufout;
     builder.Save(bufout);
@@ -610,9 +610,9 @@ void TCompactTrieTest::TestEmpty() {
     TCompactTrie<char> trie(bufout.Buffer().Data(), bufout.Buffer().Size());
     UNIT_ASSERT(!trie.Find("abc", 3, &dummy));
     UNIT_ASSERT(!trie.Find("", 0, &dummy));
-    UNIT_ASSERT(!trie.FindLongestPrefix("abc", 3, &prefixLen, &dummy)); 
-    UNIT_ASSERT(!trie.FindLongestPrefix("", 0, &prefixLen, &dummy)); 
-    UNIT_ASSERT_EQUAL(12345, dummy); 
+    UNIT_ASSERT(!trie.FindLongestPrefix("abc", 3, &prefixLen, &dummy));
+    UNIT_ASSERT(!trie.FindLongestPrefix("", 0, &prefixLen, &dummy));
+    UNIT_ASSERT_EQUAL(12345, dummy);
 
     UNIT_ASSERT(trie.Begin() == trie.End());
 

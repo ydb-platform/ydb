@@ -32,18 +32,24 @@ class TPrettyTable {
 public:
     class TRow {
         friend class TPrettyTable;
+        friend class std::allocator<TRow>; // for emplace_back()
 
+        // header row ctor
         explicit TRow(const TVector<TString>& columnNames) {
+            Columns.reserve(columnNames.size());
             for (const auto& name : columnNames) {
                 Columns.push_back({name});
             }
         }
 
+        // generic row ctor
         explicit TRow(size_t nColumns);
 
     public:
         template <typename T>
         TRow& Column(size_t index, const T& data) {
+            Y_VERIFY(index < Columns.size());
+
             TString lines = TStringBuilder() << data;
 
             for (auto& line : StringSplitter(lines).Split('\n')) {
@@ -57,7 +63,12 @@ public:
             return *this;
         }
 
-        TRow& FreeText(TString text) {
+        inline TRow& FreeText(const TString& text) {
+            Text = text;
+            return *this;
+        }
+
+        inline TRow& FreeText(TString&& text) {
             Text = std::move(text);
             return *this;
         }
@@ -71,16 +82,15 @@ public:
     private:
         TVector<TVector<TString>> Columns;
         TString Text;
-
     };
 
 public:
-    explicit TPrettyTable(const TVector<TString>& columnNames, const TPrettyTableConfig& config = TPrettyTableConfig())
+    explicit TPrettyTable(const TVector<TString>& columnNames, const TPrettyTableConfig& config = {})
         : Columns(columnNames.size())
         , Config(config)
     {
         if (Config.Header) {
-            Rows.push_back(TRow(columnNames));
+            Rows.emplace_back(columnNames);
         }
     }
 
@@ -100,7 +110,6 @@ private:
 }
 }
 
-template <>
-inline void Out<NYdb::NConsoleClient::TPrettyTable>(IOutputStream& o, const NYdb::NConsoleClient::TPrettyTable& x) {
+Y_DECLARE_OUT_SPEC(inline, NYdb::NConsoleClient::TPrettyTable, o, x) {
     return x.Print(o);
 }

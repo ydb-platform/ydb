@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(TMD5Test) {
     }
 
     Y_UNIT_TEST(TestIsMD5) {
-        UNIT_ASSERT_EQUAL(false, MD5::IsMD5(TStringBuf())); 
+        UNIT_ASSERT_EQUAL(false, MD5::IsMD5(TStringBuf()));
         UNIT_ASSERT_EQUAL(false, MD5::IsMD5(TStringBuf("4136ebb0e4c45d21e2b09294c75cfa0")));   // length 31
         UNIT_ASSERT_EQUAL(false, MD5::IsMD5(TStringBuf("4136ebb0e4c45d21e2b09294c75cfa000"))); // length 33
         UNIT_ASSERT_EQUAL(false, MD5::IsMD5(TStringBuf("4136ebb0e4c45d21e2b09294c75cfa0g")));  // wrong character 'g'

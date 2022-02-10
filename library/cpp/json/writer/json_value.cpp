@@ -118,7 +118,7 @@ namespace NJson {
             return *this;
         TJsonValue tmp(std::move(val));
         tmp.Swap(*this);
-        return *this; 
+        return *this;
     }
 
     TJsonValue::TJsonValue(const bool value) noexcept {
@@ -165,7 +165,7 @@ namespace NJson {
         SetType(JSON_STRING);
         Value.String = std::move(value);
     }
- 
+
     TJsonValue::TJsonValue(const TStringBuf value) {
         SetType(JSON_STRING);
         Value.String = value;
@@ -222,7 +222,7 @@ namespace NJson {
         SetType(JSON_MAP);
         return (*Value.Map)[key] = value;
     }
- 
+
     TJsonValue& TJsonValue::InsertValue(const TStringBuf key, const TJsonValue& value) {
         SetType(JSON_MAP);
         return (*Value.Map)[key] = value;
@@ -242,17 +242,17 @@ namespace NJson {
         SetType(JSON_MAP);
         return (*Value.Map)[key] = std::move(value);
     }
- 
+
     TJsonValue& TJsonValue::InsertValue(const char* key, TJsonValue&& value) {
         SetType(JSON_MAP);
         return (*Value.Map)[key] = std::move(value);
     }
- 
+
     TJsonValue& TJsonValue::Back() {
         BackChecks();
         return Value.Array->back();
     }
- 
+
     const TJsonValue& TJsonValue::Back() const {
         BackChecks();
         return Value.Array->back();
@@ -277,7 +277,7 @@ namespace NJson {
                 Value.Map->erase(it);
         }
     }
- 
+
     void TJsonValue::EraseValue(const size_t index) {
         if (IsArray()) {
             if (index >= Value.Array->size()) {
@@ -821,20 +821,20 @@ namespace NJson {
         TPtr* CreateOrNullptr(TPtr* p, T key, std::true_type /*create*/) {
             return &(*p)[key];
         }
- 
+
         template <class TPtr, class T>
         TPtr* CreateOrNullptr(const TPtr* p, T key, std::false_type /*create*/) noexcept {
             const TPtr* const next = &(*p)[key];
             return next->IsDefined() ? const_cast<TPtr*>(next) : nullptr;
         }
- 
+
         template <bool Create, class TJsonPtr>
         TJsonPtr GetValuePtrByPath(TJsonPtr currentJson, TStringBuf path, char delimiter) noexcept(!Create) {
             static_assert(
                 !(Create && std::is_const<std::remove_pointer_t<TJsonPtr>>::value),
                 "TJsonPtr must be a `TJsonValue*` if `Create` is true");
             constexpr std::integral_constant<bool, Create> create_tag{};
- 
+
             while (!path.empty()) {
                 size_t index = 0;
                 const TStringBuf step = path.NextTok(delimiter);
@@ -847,12 +847,12 @@ namespace NJson {
                 if (!currentJson) {
                     return nullptr;
                 }
-            } 
- 
+            }
+
             return currentJson;
         }
     } // anonymous namespace
- 
+
     bool TJsonValue::GetValueByPath(const TStringBuf path, TJsonValue& result, char delimiter) const {
         const TJsonValue* const ptr = GetValuePtrByPath<false>(this, path, delimiter);
         if (ptr) {
@@ -887,7 +887,7 @@ namespace NJson {
     TJsonValue* TJsonValue::GetValueByPath(const TStringBuf key, char delim) noexcept {
         return GetValuePtrByPath<false>(this, key, delim);
     }
- 
+
     void TJsonValue::DoScan(const TString& path, TJsonValue* parent, IScanCallback& callback) {
         if (!callback.Do(path, parent, *this)) {
             return;
@@ -968,8 +968,8 @@ namespace NJson {
                 Y_ASSERT(false && "Unknown type.");
                 return false;
         }
-    } 
- 
+    }
+
     void TJsonValue::SwapWithUndefined(TJsonValue& output) noexcept {
         if (Type == JSON_STRING) {
             static_assert(std::is_nothrow_move_constructible<TString>::value, "noexcept violation! Add some try {} catch (...) logic");
@@ -982,7 +982,7 @@ namespace NJson {
         output.Type = Type;
         Type = JSON_UNDEFINED;
     }
- 
+
     void TJsonValue::Swap(TJsonValue& rhs) noexcept {
         TJsonValue tmp(std::move(*this));
         rhs.SwapWithUndefined(*this);

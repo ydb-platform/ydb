@@ -88,37 +88,37 @@ constexpr bool IsNegative(const TType value) noexcept {
 }
 
 namespace NPrivate {
-    template <class T> 
-    using TUnderlyingTypeOrSelf = typename std::conditional< 
-        std::is_enum<T>::value, 
-        std::underlying_type<T>, // Lazy evaluatuion: do not call ::type here, because underlying_type<T> is undefined if T is not an enum. 
-        std::enable_if<true, T>  // Wrapping T in a class, that has member ::type typedef. 
+    template <class T>
+    using TUnderlyingTypeOrSelf = typename std::conditional<
+        std::is_enum<T>::value,
+        std::underlying_type<T>, // Lazy evaluatuion: do not call ::type here, because underlying_type<T> is undefined if T is not an enum.
+        std::enable_if<true, T>  // Wrapping T in a class, that has member ::type typedef.
         >::type::type;           // Left ::type is for std::conditional, right ::type is for underlying_type/enable_if
- 
-    template <class TSmall, class TLarge> 
+
+    template <class TSmall, class TLarge>
     struct TSafelyConvertible {
-        using TSmallInt = TUnderlyingTypeOrSelf<TSmall>; 
-        using TLargeInt = TUnderlyingTypeOrSelf<TLarge>; 
- 
-        static constexpr bool Result = std::is_integral<TSmallInt>::value && std::is_integral<TLargeInt>::value && 
-                                       ((std::is_signed<TSmallInt>::value == std::is_signed<TLargeInt>::value && sizeof(TSmallInt) >= sizeof(TLargeInt)) || 
-                                        (std::is_signed<TSmallInt>::value && sizeof(TSmallInt) > sizeof(TLargeInt))); 
+        using TSmallInt = TUnderlyingTypeOrSelf<TSmall>;
+        using TLargeInt = TUnderlyingTypeOrSelf<TLarge>;
+
+        static constexpr bool Result = std::is_integral<TSmallInt>::value && std::is_integral<TLargeInt>::value &&
+                                       ((std::is_signed<TSmallInt>::value == std::is_signed<TLargeInt>::value && sizeof(TSmallInt) >= sizeof(TLargeInt)) ||
+                                        (std::is_signed<TSmallInt>::value && sizeof(TSmallInt) > sizeof(TLargeInt)));
     };
 }
 
 template <class TSmallInt, class TLargeInt>
 constexpr std::enable_if_t<::NPrivate::TSafelyConvertible<TSmallInt, TLargeInt>::Result, TSmallInt> SafeIntegerCast(TLargeInt largeInt) noexcept {
-    return static_cast<TSmallInt>(largeInt); 
+    return static_cast<TSmallInt>(largeInt);
 }
 
-template <class TSmall, class TLarge> 
+template <class TSmall, class TLarge>
 inline std::enable_if_t<!::NPrivate::TSafelyConvertible<TSmall, TLarge>::Result, TSmall> SafeIntegerCast(TLarge largeInt) {
-    using TSmallInt = ::NPrivate::TUnderlyingTypeOrSelf<TSmall>; 
-    using TLargeInt = ::NPrivate::TUnderlyingTypeOrSelf<TLarge>; 
- 
+    using TSmallInt = ::NPrivate::TUnderlyingTypeOrSelf<TSmall>;
+    using TLargeInt = ::NPrivate::TUnderlyingTypeOrSelf<TLarge>;
+
     if (std::is_unsigned<TSmallInt>::value && std::is_signed<TLargeInt>::value) {
         if (IsNegative(largeInt)) {
-            ythrow TBadCastException() << "Conversion '" << TypeName<TLarge>() << '{' << TLargeInt(largeInt) << "}' to '" 
+            ythrow TBadCastException() << "Conversion '" << TypeName<TLarge>() << '{' << TLargeInt(largeInt) << "}' to '"
                                        << TypeName<TSmallInt>()
                                        << "', negative value converted to unsigned";
         }
@@ -128,18 +128,18 @@ inline std::enable_if_t<!::NPrivate::TSafelyConvertible<TSmall, TLarge>::Result,
 
     if (std::is_signed<TSmallInt>::value && std::is_unsigned<TLargeInt>::value) {
         if (IsNegative(smallInt)) {
-            ythrow TBadCastException() << "Conversion '" << TypeName<TLarge>() << '{' << TLargeInt(largeInt) << "}' to '" 
+            ythrow TBadCastException() << "Conversion '" << TypeName<TLarge>() << '{' << TLargeInt(largeInt) << "}' to '"
                                        << TypeName<TSmallInt>()
                                        << "', positive value converted to negative";
         }
     }
 
     if (TLargeInt(smallInt) != largeInt) {
-        ythrow TBadCastException() << "Conversion '" << TypeName<TLarge>() << '{' << TLargeInt(largeInt) << "}' to '" 
+        ythrow TBadCastException() << "Conversion '" << TypeName<TLarge>() << '{' << TLargeInt(largeInt) << "}' to '"
                                    << TypeName<TSmallInt>() << "', loss of data";
     }
 
-    return static_cast<TSmall>(smallInt); 
+    return static_cast<TSmall>(smallInt);
 }
 
 template <class TSmallInt, class TLargeInt>

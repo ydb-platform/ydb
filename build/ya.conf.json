@@ -3414,13 +3414,13 @@
                 }
             ]
         },
-        "cmake": { 
-            "tools": { 
+        "cmake": {
+            "tools": {
                 "cmake": {
                     "bottle": "cmake",
                     "executable": "cmake"
                 }
-            }, 
+            },
             "platforms": [
                 {
                     "host": {
@@ -3441,7 +3441,7 @@
                     "default": true
                 }
             ]
-        }, 
+        },
         "cling": {
             "tools": {
                 "cling": {
@@ -3464,13 +3464,13 @@
                 }
             ]
         },
-        "ninja": { 
-            "tools": { 
+        "ninja": {
+            "tools": {
                 "ninja": {
                     "bottle": "ninja",
                     "executable": "ninja"
                 }
-            }, 
+            },
             "platforms": [
                 {
                     "host": {
@@ -3491,7 +3491,7 @@
                     "default": true
                 }
             ]
-        }, 
+        },
         "valgrind": {
             "tools": {
                 "valgrind": {
@@ -6994,18 +6994,18 @@
                 ]
             }
         },
-        "cmake": { 
-            "formula": { 
+        "cmake": {
+            "formula": {
                 "sandbox_id": 105454515,
-                "match": "cmake" 
-            }, 
-            "executable": { 
+                "match": "cmake"
+            },
+            "executable": {
                 "cmake": [
                     "bin",
                     "cmake"
                 ]
-            } 
-        }, 
+            }
+        },
         "cling": {
             "formula": {
                 "sandbox_id": 87671454,
@@ -7017,13 +7017,13 @@
                 ]
             }
         },
-        "ninja": { 
-            "formula": { 
-                "sandbox_id": 19094385, 
-                "match": "ninja" 
-            }, 
-            "executable": "ninja" 
-        }, 
+        "ninja": {
+            "formula": {
+                "sandbox_id": 19094385,
+                "match": "ninja"
+            },
+            "executable": "ninja"
+        },
         "kwfeed": {
             "formula": {
                 "sandbox_id": 36077631,

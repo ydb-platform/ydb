@@ -219,12 +219,12 @@ def which(prog):
         return None
 
     path = os.getenv('PATH', '')
- 
+
     pathext = os.environ.get('PATHEXT')
     # На Windows %PATHEXT% указывает на список расширений, которые нужно проверять
     # при поиске команды в пути. Точное совпадение без расширения имеет приоритет.
     pathext = [''] if pathext is None else [''] + pathext.lower().split(os.pathsep)
- 
+
     for dir_ in path.split(os.path.pathsep):
         for ext in pathext:
             p = os.path.join(dir_, prog + ext)
@@ -399,15 +399,15 @@ def unique(it):
 
 class Options(object):
     def __init__(self, argv):
-        def parse_presets(raw_presets): 
-            presets = {} 
+        def parse_presets(raw_presets):
+            presets = {}
             for p in raw_presets:
                 toks = p.split('=', 1)
-                name = toks[0] 
-                value = toks[1] if len(toks) >= 2 else '' 
-                presets[name] = value 
-            return presets 
- 
+                name = toks[0]
+                value = toks[1] if len(toks) >= 2 else ''
+                presets[name] = value
+            return presets
+
         parser = optparse.OptionParser(add_help_option=False)
         opt_group = optparse.OptionGroup(parser, 'Conf script options')
         opt_group.add_option('--toolchain-params', dest='toolchain_params', action='store', help='Set toolchain params via file')
@@ -446,7 +446,7 @@ class Profiler(object):
     Generic = 'generic'
     GProf = 'gprof'
 
- 
+
 class Arcadia(object):
     def __init__(self, root):
         self.root = root
@@ -969,7 +969,7 @@ class ToolchainOptions(object):
 
         logger.debug('c_compiler=%s', self.c_compiler)
         logger.debug('cxx_compiler=%s', self.cxx_compiler)
- 
+
         self.compiler_platform_projects = self.target.find_in_dict(self.params.get('platform'), [])
 
     def version_at_least(self, *args):
@@ -1011,8 +1011,8 @@ class ToolchainOptions(object):
                 logger.debug('Unexpected values in environment: %s', self._env)
                 raise ConfigureError('Internal error')
         return r
- 
- 
+
+
 class GnuToolchainOptions(ToolchainOptions):
     def __init__(self, build, detector):
         super(GnuToolchainOptions, self).__init__(build, detector)

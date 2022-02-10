@@ -1,10 +1,10 @@
 import errno
 import logging
 import os
-import sys 
- 
+import sys
+
 import library.python.windows
- 
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,22 +18,22 @@ def set_close_on_exec(stream):
 
 class AbstractFileLock(object):
 
-    def __init__(self, path): 
-        self.path = path 
- 
+    def __init__(self, path):
+        self.path = path
+
     def acquire(self, blocking=True):
         raise NotImplementedError
- 
-    def release(self): 
-        raise NotImplementedError
- 
-    def __enter__(self): 
-        self.acquire() 
-        return self 
 
-    def __exit__(self, type, value, traceback): 
-        self.release() 
- 
+    def release(self):
+        raise NotImplementedError
+
+    def __enter__(self):
+        self.acquire()
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.release()
+
 
 class _NixFileLock(AbstractFileLock):
 

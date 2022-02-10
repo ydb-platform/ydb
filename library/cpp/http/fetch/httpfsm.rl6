@@ -265,7 +265,7 @@ location        = "location"i def loc_url eoh %set_location;
 refresh         = "refresh"i def int ';' lws "url="i loc_url eoh %set_location;
 
 ################# x-robots-tag ################
-action set_x_robots {
+action set_x_robots { 
     if (hd && AcceptingXRobots) {
         if (I > 0)
             hd->x_robots_tag |= I;
@@ -285,7 +285,7 @@ x_robots_directive = "none"i      %{c(3)} | "all"i     %{c(-3)}
                    | "noindex"i   %{c(1)} | "index"i   %{c(-1)}
                    | "nofollow"i  %{c(2)} | "follow"i  %{c(-2)}
                    | "noarchive"i %{c(4)} | "archive"i %{c(-4)}
-                   | "noyaca"i    %{c(16)}
+                   | "noyaca"i    %{c(16)} 
                    | "noodp"i     %{c(8)};
 
 any_value = (any_text_char - [, \t])+ (lws (any_text_char - [, \t])+)*;
@@ -507,24 +507,24 @@ action set_if_modified_since {
 if_modified_since = "if-modified-since"i def http_date eoh
                     %set_if_modified_since;
 
-################ retry-after ################
-action set_retry_after_withdate {
-    if (hd) {
-        hd->retry_after = DateTimeFields.ToTimeT(-1);
-    }
-}
-
-action set_retry_after_withdelta {
-    if (hd) {
-        hd->retry_after = TInstant::Now().Seconds() + I;
-    }
-}
-
-retry_after_withdate = "retry-after"i def http_date eoh
-                    %set_retry_after_withdate;
-retry_after_withdelta = "retry-after"i def int eoh
-                    %set_retry_after_withdelta;
-
+################ retry-after ################ 
+action set_retry_after_withdate { 
+    if (hd) { 
+        hd->retry_after = DateTimeFields.ToTimeT(-1); 
+    } 
+} 
+ 
+action set_retry_after_withdelta { 
+    if (hd) { 
+        hd->retry_after = TInstant::Now().Seconds() + I; 
+    } 
+} 
+ 
+retry_after_withdate = "retry-after"i def http_date eoh 
+                    %set_retry_after_withdate; 
+retry_after_withdelta = "retry-after"i def int eoh 
+                    %set_retry_after_withdelta; 
+ 
 ############## request-cache-control ##############
 action SETMAXAGE { if (request_hd) request_hd->max_age = I; }
 
@@ -580,9 +580,9 @@ response_header = message_header        $0
                 | x_robots_tag          @1
                 | rel_canonical         @1
                 | hreflang              @1
-                | squid_error           @1
-                | retry_after_withdate  @1
-                | retry_after_withdelta @1;
+                | squid_error           @1 
+                | retry_after_withdate  @1 
+                | retry_after_withdelta @1; 
 request_header  = message_header        $0
                 | from_header           @1
                 | host_header           @1

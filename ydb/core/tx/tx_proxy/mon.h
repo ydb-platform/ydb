@@ -43,7 +43,7 @@ namespace NTxProxy {
 
         NMonitoring::TDynamicCounters::TCounterPtr ReportStatusOK;
         NMonitoring::TDynamicCounters::TCounterPtr ReportStatusNotOK;
-        NMonitoring::TDynamicCounters::TCounterPtr ReportStatusStreamData; 
+        NMonitoring::TDynamicCounters::TCounterPtr ReportStatusStreamData;
 
         NMonitoring::THistogramPtr TxPrepareTimeHgram;
         NMonitoring::THistogramPtr TxExecuteTimeHgram;
@@ -61,9 +61,9 @@ namespace NTxProxy {
         NMonitoring::TDynamicCounters::TCounterPtr MiniKQLResolveSentToShard;
         NMonitoring::TDynamicCounters::TCounterPtr MiniKQLWrongRequest;
 
-        NMonitoring::TDynamicCounters::TCounterPtr ReadTableResolveSentToShard; 
-        NMonitoring::TDynamicCounters::TCounterPtr ReadTableWrongRequest; 
- 
+        NMonitoring::TDynamicCounters::TCounterPtr ReadTableResolveSentToShard;
+        NMonitoring::TDynamicCounters::TCounterPtr ReadTableWrongRequest;
+
         NMonitoring::TDynamicCounters::TCounterPtr MiniKQLProgramSize;
         NMonitoring::TDynamicCounters::TCounterPtr MiniKQLParamsSize;
 
@@ -93,7 +93,7 @@ namespace NTxProxy {
 
         NMonitoring::TDynamicCounters::TCounterPtr ResolveKeySetLegacySuccess;
         NMonitoring::TDynamicCounters::TCounterPtr ResolveKeySetMiniKQLSuccess;
-        NMonitoring::TDynamicCounters::TCounterPtr ResolveKeySetReadTableSuccess; 
+        NMonitoring::TDynamicCounters::TCounterPtr ResolveKeySetReadTableSuccess;
         NMonitoring::TDynamicCounters::TCounterPtr ResolveKeySetFail;
         NMonitoring::TDynamicCounters::TCounterPtr ResolveKeySetWrongRequest;
         NMonitoring::TDynamicCounters::TCounterPtr ResolveKeySetDomainLocalityFail;

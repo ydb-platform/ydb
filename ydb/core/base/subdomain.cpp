@@ -3,10 +3,10 @@
 #include <ydb/core/base/defs.h>
 
 namespace NKikimr {
-TSubDomainKey::TSubDomainKey(ui64 shardId, ui64 pathId) 
-    : TBase(shardId, pathId) 
-{} 
- 
+TSubDomainKey::TSubDomainKey(ui64 shardId, ui64 pathId)
+    : TBase(shardId, pathId)
+{}
+
 TSubDomainKey::TSubDomainKey(const NKikimrSubDomains::TDomainKey &domainKey)
     : TBase(domainKey.GetSchemeShard(), domainKey.GetPathId())
 {}

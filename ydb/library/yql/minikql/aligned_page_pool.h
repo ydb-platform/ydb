@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 #include <util/stream/output.h>
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
@@ -34,7 +34,7 @@ struct TAlignedPagePoolCounters {
 // NOTE: We intentionally avoid inheritance from std::exception here to make it harder
 // to catch this exception in UDFs code, so we can handle it in the host.
 class TMemoryLimitExceededException {};
- 
+
 class TAlignedPagePool {
 public:
     static constexpr ui64 POOL_PAGE_SIZE = 1ULL << 16; // 64k
@@ -150,15 +150,15 @@ public:
     static ui64 GetGlobalPagePoolSize();
 
     ui64 GetLimit() const noexcept {
-        return Limit; 
-    } 
- 
+        return Limit;
+    }
+
     void SetLimit(size_t limit) noexcept {
-        Limit = limit; 
-    } 
- 
-    void ReleaseFreePages(); 
- 
+        Limit = limit;
+    }
+
+    void ReleaseFreePages();
+
     void DisableStrictAllocationCheck() noexcept {
         CheckLostMem = false;
     }
@@ -188,14 +188,14 @@ protected:
     bool TryIncreaseLimit(ui64 required);
 
 protected:
-    std::stack<void*, std::vector<void*>> FreePages; 
+    std::stack<void*, std::vector<void*>> FreePages;
     std::unordered_set<void*> AllPages;
     std::unordered_map<void*, size_t> ActiveBlocks;
     size_t TotalAllocated = 0;
     size_t PeakAllocated = 0;
     size_t PeakUsed = 0;
-    size_t Limit = 0; 
- 
+    size_t Limit = 0;
+
     ui64 AllocCount = 0;
     ui64 PageAllocCount = 0;
     ui64 PageHitCount = 0;

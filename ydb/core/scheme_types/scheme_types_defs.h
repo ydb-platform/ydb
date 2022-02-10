@@ -210,26 +210,26 @@ namespace NNames {
 using TSmallBoundedString = TBoundedString<0x1000, NTypeIds::String4k, NNames::SmallBoundedString>; // 4K
 using TLargeBoundedString = TBoundedString<0x200000, NTypeIds::String2m, NNames::LargeBoundedString>; // 2Mb
 
-namespace NNames { 
+namespace NNames {
     extern const char Decimal[8];
-} 
- 
-class TDecimal : public IIntegerPair<ui64, i64, NTypeIds::Decimal, NNames::Decimal> {}; 
- 
-//////////////////////////////////////////////////////// 
-/// Datetime types 
-namespace NNames { 
-    extern const char Date[5]; 
-    extern const char Datetime[9]; 
-    extern const char Timestamp[10]; 
-    extern const char Interval[9]; 
-} 
- 
-class TDate : public IIntegerTypeWithKeyString<ui16, NTypeIds::Date, NNames::Date> {}; 
-class TDatetime : public IIntegerTypeWithKeyString<ui32, NTypeIds::Datetime, NNames::Datetime> {}; 
-class TTimestamp : public IIntegerTypeWithKeyString<ui64, NTypeIds::Timestamp, NNames::Timestamp> {}; 
-class TInterval : public IIntegerTypeWithKeyString<i64, NTypeIds::Interval, NNames::Interval> {}; 
- 
+}
+
+class TDecimal : public IIntegerPair<ui64, i64, NTypeIds::Decimal, NNames::Decimal> {};
+
+////////////////////////////////////////////////////////
+/// Datetime types
+namespace NNames {
+    extern const char Date[5];
+    extern const char Datetime[9];
+    extern const char Timestamp[10];
+    extern const char Interval[9];
+}
+
+class TDate : public IIntegerTypeWithKeyString<ui16, NTypeIds::Date, NNames::Date> {};
+class TDatetime : public IIntegerTypeWithKeyString<ui32, NTypeIds::Datetime, NNames::Datetime> {};
+class TTimestamp : public IIntegerTypeWithKeyString<ui64, NTypeIds::Timestamp, NNames::Timestamp> {};
+class TInterval : public IIntegerTypeWithKeyString<i64, NTypeIds::Interval, NNames::Interval> {};
+
 #define KIKIMR_FOREACH_MINIKQL_TYPE_I(name, size, macro, ...) macro(name, T##name, __VA_ARGS__)
 
 #define KIKIMR_FOREACH_MINIKQL_TYPE(xx, ...) \
@@ -249,11 +249,11 @@ class TInterval : public IIntegerTypeWithKeyString<i64, NTypeIds::Interval, NNam
     xx(Yson, TYson, __VA_ARGS__) \
     xx(Json, TJson, __VA_ARGS__) \
     xx(JsonDocument, TJsonDocument, __VA_ARGS__) \
-    xx(Decimal, TDecimal, __VA_ARGS__) \ 
-    xx(Date, TDate, __VA_ARGS__) \ 
-    xx(Datetime, TDatetime, __VA_ARGS__) \ 
-    xx(Timestamp, TTimestamp, __VA_ARGS__) \ 
-    xx(Interval, TInterval, __VA_ARGS__) \ 
+    xx(Decimal, TDecimal, __VA_ARGS__) \
+    xx(Date, TDate, __VA_ARGS__) \
+    xx(Datetime, TDatetime, __VA_ARGS__) \
+    xx(Timestamp, TTimestamp, __VA_ARGS__) \
+    xx(Interval, TInterval, __VA_ARGS__) \
     xx(DyNumber, TDyNumber, __VA_ARGS__) \
     /**/
 

@@ -146,10 +146,10 @@ public:
             const ui64 planResolution = domain.HasPlanResolution() ? domain.GetPlanResolution() : 500;
             const TString domainName = domain.HasName() ? domain.GetName() : Sprintf("domain-%" PRIu32, domainId);
             TDomainsInfo::TDomain::TStoragePoolKinds poolTypes;
-            for (auto &type : domain.GetStoragePoolTypes()) { 
+            for (auto &type : domain.GetStoragePoolTypes()) {
                 Y_VERIFY(!poolTypes.contains(type.GetKind()), "duplicated slot type");
                 poolTypes[type.GetKind()] = type.GetPoolConfig();
-            } 
+            }
 
             bool isExplicitTabletIds = domain.ExplicitCoordinatorsSize() + domain.ExplicitMediatorsSize() + domain.ExplicitAllocatorsSize();
 
@@ -163,7 +163,7 @@ public:
                 domainPtr = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(domainName, domainId, schemeRoot,
                                                                                      defaultSSId, schemeBoardSSId, domain.GetSSId(),
                                                                                      domainId, domain.GetHiveUid(),
-                                                                                     planResolution, 
+                                                                                     planResolution,
                                                                                      domain.GetExplicitCoordinators(),
                                                                                      domain.GetExplicitMediators(),
                                                                                      domain.GetExplicitAllocators(),
@@ -172,7 +172,7 @@ public:
                 domainPtr = TDomainsInfo::TDomain::ConstructDomain(domainName, domainId, schemeRoot,
                                                                 defaultSSId, schemeBoardSSId, domain.GetSSId(),
                                                                 domainId, domain.GetHiveUid(),
-                                                                planResolution, 
+                                                                planResolution,
                                                                 domain.GetCoordinator(), domain.GetMediator(),
                                                                 domain.GetProxy(), poolTypes);
             }
@@ -281,42 +281,42 @@ public:
 };
 
 
-class TDynamicNameserviceInitializer : public IAppDataInitializer { 
-    const NKikimrConfig::TAppConfig& Config; 
- 
-public: 
-    TDynamicNameserviceInitializer(const TKikimrRunConfig& runConfig) 
-        : Config(runConfig.AppConfig) 
-    { 
-    } 
- 
-    virtual void Initialize(NKikimr::TAppData* appData) override 
-    { 
-        auto &dnConfig = Config.GetDynamicNameserviceConfig(); 
-        TIntrusivePtr<TDynamicNameserviceConfig> config = new TDynamicNameserviceConfig; 
-        config->MaxStaticNodeId = dnConfig.GetMaxStaticNodeId(); 
-        config->MaxDynamicNodeId = dnConfig.GetMaxDynamicNodeId(); 
-        appData->DynamicNameserviceConfig = config; 
-    } 
-}; 
- 
- 
-class TCmsInitializer : public IAppDataInitializer { 
-    const NKikimrConfig::TAppConfig& Config; 
- 
-public: 
-    TCmsInitializer(const TKikimrRunConfig& runConfig) 
-        : Config(runConfig.AppConfig) 
-    { 
-    } 
- 
-    virtual void Initialize(NKikimr::TAppData* appData) override 
-    { 
-        if (Config.HasCmsConfig()) 
+class TDynamicNameserviceInitializer : public IAppDataInitializer {
+    const NKikimrConfig::TAppConfig& Config;
+
+public:
+    TDynamicNameserviceInitializer(const TKikimrRunConfig& runConfig)
+        : Config(runConfig.AppConfig)
+    {
+    }
+
+    virtual void Initialize(NKikimr::TAppData* appData) override
+    {
+        auto &dnConfig = Config.GetDynamicNameserviceConfig();
+        TIntrusivePtr<TDynamicNameserviceConfig> config = new TDynamicNameserviceConfig;
+        config->MaxStaticNodeId = dnConfig.GetMaxStaticNodeId();
+        config->MaxDynamicNodeId = dnConfig.GetMaxDynamicNodeId();
+        appData->DynamicNameserviceConfig = config;
+    }
+};
+
+
+class TCmsInitializer : public IAppDataInitializer {
+    const NKikimrConfig::TAppConfig& Config;
+
+public:
+    TCmsInitializer(const TKikimrRunConfig& runConfig)
+        : Config(runConfig.AppConfig)
+    {
+    }
+
+    virtual void Initialize(NKikimr::TAppData* appData) override
+    {
+        if (Config.HasCmsConfig())
             appData->DefaultCmsConfig = MakeHolder<NKikimrCms::TCmsConfig>(Config.GetCmsConfig());
-    } 
-}; 
- 
+    }
+};
+
 TKikimrRunner::TKikimrRunner(std::shared_ptr<TModuleFactories> factories)
     : ModuleFactories(std::move(factories))
     , Counters(MakeIntrusive<NMonitoring::TDynamicCounters>())
@@ -869,11 +869,11 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->PollerThreads = PollerThreads;
     AppData->LocalScopeId = runConfig.ScopeId;
 
-    // setup streaming config 
+    // setup streaming config
     if (runConfig.AppConfig.GetGRpcConfig().HasStreamingConfig()) {
-        AppData->StreamingConfig.CopyFrom(runConfig.AppConfig.GetGRpcConfig().GetStreamingConfig()); 
+        AppData->StreamingConfig.CopyFrom(runConfig.AppConfig.GetGRpcConfig().GetStreamingConfig());
     }
- 
+
     if (runConfig.AppConfig.HasPQConfig()) {
         AppData->PQConfig.CopyFrom(runConfig.AppConfig.GetPQConfig());
     }
@@ -914,11 +914,11 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->MeteringConfig = runConfig.AppConfig.GetMeteringConfig();
     }
 
-    // setup resource profiles 
-    AppData->ResourceProfiles = new TResourceProfiles; 
-    if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize()) 
-        AppData->ResourceProfiles->LoadProfiles(runConfig.AppConfig.GetBootstrapConfig().GetResourceProfiles()); 
- 
+    // setup resource profiles
+    AppData->ResourceProfiles = new TResourceProfiles;
+    if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())
+        AppData->ResourceProfiles->LoadProfiles(runConfig.AppConfig.GetBootstrapConfig().GetResourceProfiles());
+
     if (runConfig.AppConfig.GetBootstrapConfig().HasEnableIntrospection())
         AppData->EnableIntrospection = runConfig.AppConfig.GetBootstrapConfig().GetEnableIntrospection();
 
@@ -929,10 +929,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     appDataInitializers.AddAppDataInitializer(new TChannelProfilesInitializer(runConfig));
     // setup proxy scheme cache
     appDataInitializers.AddAppDataInitializer(new TProxySchemeCacheInitializer(runConfig));
-    // setup dynamic nameservice 
-    appDataInitializers.AddAppDataInitializer(new TDynamicNameserviceInitializer(runConfig)); 
-    // setup cms 
-    appDataInitializers.AddAppDataInitializer(new TCmsInitializer(runConfig)); 
+    // setup dynamic nameservice
+    appDataInitializers.AddAppDataInitializer(new TDynamicNameserviceInitializer(runConfig));
+    // setup cms
+    appDataInitializers.AddAppDataInitializer(new TCmsInitializer(runConfig));
 
     appDataInitializers.Initialize(AppData.Get());
 }
@@ -1015,9 +1015,9 @@ void TKikimrRunner::ApplyLogSettings(const TKikimrRunConfig& runConfig)
         }
 
         TString explanation;
-        if (entry.HasLevel()) { 
-            Y_VERIFY(LogSettings->SetLevel((NLog::EPriority)entry.GetLevel(), component, explanation) == 0); 
-        } 
+        if (entry.HasLevel()) {
+            Y_VERIFY(LogSettings->SetLevel((NLog::EPriority)entry.GetLevel(), component, explanation) == 0);
+        }
         if (entry.HasSamplingLevel()) {
             Y_VERIFY(LogSettings->SetSamplingLevel((NLog::EPriority)entry.GetSamplingLevel(), component, explanation) == 0);
         }
@@ -1177,8 +1177,8 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnableProfiler) {
         sil->AddServiceInitializer(new TProfilerInitializer(runConfig));
     }
-    if (serviceMask.EnableResourceBroker) { 
-        sil->AddServiceInitializer(new TResourceBrokerInitializer(runConfig)); 
+    if (serviceMask.EnableResourceBroker) {
+        sil->AddServiceInitializer(new TResourceBrokerInitializer(runConfig));
     }
     if (serviceMask.EnableTabletResolver) {
         sil->AddServiceInitializer(new TTabletResolverInitializer(runConfig));
@@ -1222,10 +1222,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new THealthCheckInitializer(runConfig));
     }
 
-    if (serviceMask.EnableGRpcService) { 
+    if (serviceMask.EnableGRpcService) {
         sil->AddServiceInitializer(new TGRpcServicesInitializer(runConfig, ModuleFactories));
-    } 
- 
+    }
+
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
     if (serviceMask.EnableStatsCollector) {
         sil->AddServiceInitializer(new TStatsCollectorInitializer(runConfig));
@@ -1272,18 +1272,18 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories));
     }
 
-    if (serviceMask.EnableCms) { 
-        sil->AddServiceInitializer(new TCmsServiceInitializer(runConfig)); 
-    } 
- 
+    if (serviceMask.EnableCms) {
+        sil->AddServiceInitializer(new TCmsServiceInitializer(runConfig));
+    }
+
     if (serviceMask.EnableSqs) {
         sil->AddServiceInitializer(new TSqsServiceInitializer(runConfig, ModuleFactories));
     }
 
-    if (serviceMask.EnableConfigsDispatcher) { 
-        sil->AddServiceInitializer(new TConfigsDispatcherInitializer(runConfig)); 
-    } 
- 
+    if (serviceMask.EnableConfigsDispatcher) {
+        sil->AddServiceInitializer(new TConfigsDispatcherInitializer(runConfig));
+    }
+
     if (serviceMask.EnableConfigsCache) {
         sil->AddServiceInitializer(new TConfigsCacheInitializer(runConfig));
     }
@@ -1292,9 +1292,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TTabletInfoInitializer(runConfig));
     }
 
-    sil->AddServiceInitializer(new TLeaseHolderInitializer(runConfig)); 
-    sil->AddServiceInitializer(new TConfigValidatorsInitializer(runConfig)); 
- 
+    sil->AddServiceInitializer(new TLeaseHolderInitializer(runConfig));
+    sil->AddServiceInitializer(new TConfigValidatorsInitializer(runConfig));
+
     if (serviceMask.EnableQuoterService) {
         sil->AddServiceInitializer(new TQuoterServiceInitializer(runConfig));
     }

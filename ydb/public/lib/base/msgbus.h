@@ -32,7 +32,7 @@ enum {
     MTYPE_CLIENT_REQUEST_JOB_INFORMATION = 10417, // deprecated
     MTYPE_CLIENT_DATASHARD_SET_CONFIG = 10418, // deprecated
     MTYPE_CLIENT_DESTROY_JOB = 10419, // deprecated
-    MTYPE_CLIENT_COMPACTION_BROKER_SET_CONFIG = 10420, // deprecated 
+    MTYPE_CLIENT_COMPACTION_BROKER_SET_CONFIG = 10420, // deprecated
     MTYPE_CLIENT_OLD_HIVE_CREATE_TABLET = 10421, // deprecated
     MTYPE_CLIENT_HIVE_CREATE_TABLET_RESULT = 10422, // deprecated
     MTYPE_CLIENT_OLD_LOCAL_ENUMERATE_TABLETS = 10423, // deprecated
@@ -71,23 +71,23 @@ enum {
     MTYPE_CLIENT_DRAIN_NODE = 10460,
     MTYPE_CLIENT_FILL_NODE = 10461,
     MTYPE_CLIENT_RESOLVE_NODE = 10462,
-    MTYPE_CLIENT_NODE_REGISTRATION_REQUEST = 10463, 
-    MTYPE_CLIENT_NODE_REGISTRATION_RESPONSE = 10464, 
-    MTYPE_CLIENT_CMS_REQUEST = 10465, 
-    MTYPE_CLIENT_CMS_RESPONSE = 10466, 
-    MTYPE_CLIENT_RESOURCE_BROKER_SET_CONFIG = 10467, 
+    MTYPE_CLIENT_NODE_REGISTRATION_REQUEST = 10463,
+    MTYPE_CLIENT_NODE_REGISTRATION_RESPONSE = 10464,
+    MTYPE_CLIENT_CMS_REQUEST = 10465,
+    MTYPE_CLIENT_CMS_RESPONSE = 10466,
+    MTYPE_CLIENT_RESOURCE_BROKER_SET_CONFIG = 10467,
     MTYPE_CLIENT_CHOOSE_PROXY = 10468,
     MTYPE_CLIENT_SQS_REQUEST = 10469,
     MTYPE_CLIENT_SQS_RESPONSE = 10470,
     MTYPE_CLIENT_WHOAMI = 10471,
-    MTYPE_CLIENT_STREAM_REQUEST = 10472, 
+    MTYPE_CLIENT_STREAM_REQUEST = 10472,
     MTYPE_CLIENT_S3_LISTING_REQUEST = 10474,
     MTYPE_CLIENT_S3_LISTING_RESPONSE = 10475,
     MTYPE_CLIENT_INTERCONNECT_DEBUG = 10476,
-    MTYPE_CLIENT_CONSOLE_REQUEST = 10477, 
-    MTYPE_CLIENT_CONSOLE_RESPONSE = 10478, 
-    MTYPE_CLIENT_TENANT_SLOT_BROKER_REQUEST = 10479, 
-    MTYPE_CLIENT_TENANT_SLOT_BROKER_RESPONSE = 10480, 
+    MTYPE_CLIENT_CONSOLE_REQUEST = 10477,
+    MTYPE_CLIENT_CONSOLE_RESPONSE = 10478,
+    MTYPE_CLIENT_TENANT_SLOT_BROKER_REQUEST = 10479,
+    MTYPE_CLIENT_TENANT_SLOT_BROKER_RESPONSE = 10480,
     MTYPE_CLIENT_TEST_SHARD_CONTROL = 10481,
 };
 
@@ -136,20 +136,20 @@ struct TBusBlobStorageConfigRequest : TBusMessage<TBusBlobStorageConfigRequest, 
 struct TBusDrainNode : TBusMessage<TBusDrainNode, NKikimrClient::TDrainNodeRequest, MTYPE_CLIENT_DRAIN_NODE> {};
 struct TBusFillNode : TBusMessage<TBusFillNode, NKikimrClient::TFillNodeRequest, MTYPE_CLIENT_FILL_NODE> {};
 struct TBusResolveNode : TBusMessage<TBusResolveNode, NKikimrClient::TResolveNodeRequest, MTYPE_CLIENT_RESOLVE_NODE> {};
-struct TBusNodeRegistrationRequest : TBusMessage<TBusNodeRegistrationRequest, NKikimrClient::TNodeRegistrationRequest, MTYPE_CLIENT_NODE_REGISTRATION_REQUEST> {}; 
-struct TBusNodeRegistrationResponse : TBusMessage<TBusNodeRegistrationResponse, NKikimrClient::TNodeRegistrationResponse, MTYPE_CLIENT_NODE_REGISTRATION_RESPONSE> {}; 
-struct TBusCmsRequest : TBusMessage<TBusCmsRequest, NKikimrClient::TCmsRequest, MTYPE_CLIENT_CMS_REQUEST> {}; 
-struct TBusCmsResponse : TBusMessage<TBusCmsResponse, NKikimrClient::TCmsResponse, MTYPE_CLIENT_CMS_RESPONSE> {}; 
+struct TBusNodeRegistrationRequest : TBusMessage<TBusNodeRegistrationRequest, NKikimrClient::TNodeRegistrationRequest, MTYPE_CLIENT_NODE_REGISTRATION_REQUEST> {};
+struct TBusNodeRegistrationResponse : TBusMessage<TBusNodeRegistrationResponse, NKikimrClient::TNodeRegistrationResponse, MTYPE_CLIENT_NODE_REGISTRATION_RESPONSE> {};
+struct TBusCmsRequest : TBusMessage<TBusCmsRequest, NKikimrClient::TCmsRequest, MTYPE_CLIENT_CMS_REQUEST> {};
+struct TBusCmsResponse : TBusMessage<TBusCmsResponse, NKikimrClient::TCmsResponse, MTYPE_CLIENT_CMS_RESPONSE> {};
 struct TBusChooseProxy : TBusMessage<TBusChooseProxy, NKikimrClient::TChooseProxyRequest, MTYPE_CLIENT_CHOOSE_PROXY> {};
 struct TBusSqsRequest : TBusMessage<TBusSqsRequest, NKikimrClient::TSqsRequest, MTYPE_CLIENT_SQS_REQUEST> {};
 struct TBusSqsResponse : TBusMessage<TBusSqsResponse, NKikimrClient::TSqsResponse, MTYPE_CLIENT_SQS_RESPONSE> {};
 struct TBusWhoAmI : TBusMessage<TBusWhoAmI, NKikimrClient::TWhoAmI, MTYPE_CLIENT_WHOAMI> {};
-struct TBusStreamRequest : TBusMessage<TBusStreamRequest, NKikimrClient::TRequest, MTYPE_CLIENT_STREAM_REQUEST> {}; 
+struct TBusStreamRequest : TBusMessage<TBusStreamRequest, NKikimrClient::TRequest, MTYPE_CLIENT_STREAM_REQUEST> {};
 struct TBusS3ListingRequest : TBusMessage<TBusS3ListingRequest, NKikimrClient::TS3ListingRequest, MTYPE_CLIENT_S3_LISTING_REQUEST> {};
 struct TBusS3ListingResponse : TBusMessage<TBusS3ListingResponse, NKikimrClient::TS3ListingResponse, MTYPE_CLIENT_S3_LISTING_RESPONSE> {};
 struct TBusInterconnectDebug : TBusMessage<TBusInterconnectDebug, NKikimrClient::TInterconnectDebug, MTYPE_CLIENT_INTERCONNECT_DEBUG> {};
-struct TBusConsoleRequest : TBusMessage<TBusConsoleRequest, NKikimrClient::TConsoleRequest, MTYPE_CLIENT_CONSOLE_REQUEST> {}; 
-struct TBusConsoleResponse : TBusMessage<TBusConsoleResponse, NKikimrClient::TConsoleResponse, MTYPE_CLIENT_CONSOLE_RESPONSE> {}; 
+struct TBusConsoleRequest : TBusMessage<TBusConsoleRequest, NKikimrClient::TConsoleRequest, MTYPE_CLIENT_CONSOLE_REQUEST> {};
+struct TBusConsoleResponse : TBusMessage<TBusConsoleResponse, NKikimrClient::TConsoleResponse, MTYPE_CLIENT_CONSOLE_RESPONSE> {};
 struct TBusTestShardControlRequest : TBusMessage<TBusTestShardControlRequest, NKikimrClient::TTestShardControlRequest, MTYPE_CLIENT_TEST_SHARD_CONTROL> {};
 
 class TBusResponseStatus : public TBusResponse {
@@ -233,18 +233,18 @@ public:
         RegisterType(new TBusDrainNode);
         RegisterType(new TBusFillNode);
         RegisterType(new TBusResolveNode);
-        RegisterType(new TBusNodeRegistrationRequest); 
-        RegisterType(new TBusNodeRegistrationResponse); 
-        RegisterType(new TBusCmsRequest); 
-        RegisterType(new TBusCmsResponse); 
+        RegisterType(new TBusNodeRegistrationRequest);
+        RegisterType(new TBusNodeRegistrationResponse);
+        RegisterType(new TBusCmsRequest);
+        RegisterType(new TBusCmsResponse);
         RegisterType(new TBusChooseProxy);
         RegisterType(new TBusWhoAmI);
-        RegisterType(new TBusStreamRequest); 
+        RegisterType(new TBusStreamRequest);
         RegisterType(new TBusS3ListingRequest);
         RegisterType(new TBusS3ListingResponse);
         RegisterType(new TBusInterconnectDebug);
-        RegisterType(new TBusConsoleRequest); 
-        RegisterType(new TBusConsoleResponse); 
+        RegisterType(new TBusConsoleRequest);
+        RegisterType(new TBusConsoleResponse);
         RegisterType(new TBusTestShardControlRequest);
     }
 

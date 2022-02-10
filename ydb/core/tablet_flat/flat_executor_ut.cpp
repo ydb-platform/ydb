@@ -240,90 +240,90 @@ namespace NTabletFlatExecutor {
 struct TDummyResult: public IDestructable {
     TDummyResult(ui64 count, ui64 expect)
         : Count(count), Expect(expect)
-    {} 
+    {}
 
     ui64 Count = 0;
     ui64 Expect = 0;
-}; 
- 
+};
+
 class TDummyScan : public TActor<TDummyScan>, public NTable::IScan {
-public: 
+public:
     TDummyScan(TActorId tablet, bool postponed, EAbort abort, ui32 rows)
-        : TActor(&TThis::StateWork) 
-        , Tablet(tablet) 
+        : TActor(&TThis::StateWork)
+        , Tablet(tablet)
         , ExpectedRows(rows)
         , Postponed(postponed)
-        , Abort(abort) 
-    {} 
-    ~TDummyScan() {} 
- 
-    void Describe(IOutputStream &out) const noexcept override 
-    { 
-        out << "DummyScan"; 
-    } 
- 
-    void Handle(TEvents::TEvWakeup::TPtr &, const TActorContext &) 
-    { 
-        Driver->Touch(EScan::Feed); 
-    } 
- 
-    STFUNC(StateWork) { 
-        switch (ev->GetTypeRewrite()) { 
-            HFunc(TEvents::TEvWakeup, Handle); 
-        default: 
-            break; 
-        } 
-    } 
- 
-private: 
+        , Abort(abort)
+    {}
+    ~TDummyScan() {}
+
+    void Describe(IOutputStream &out) const noexcept override
+    {
+        out << "DummyScan";
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr &, const TActorContext &)
+    {
+        Driver->Touch(EScan::Feed);
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvents::TEvWakeup, Handle);
+        default:
+            break;
+        }
+    }
+
+private:
     THello Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override
-    { 
-        Driver = driver; 
-        Scheme = std::move(scheme); 
- 
-        auto ctx = TActivationContext::AsActorContext(); 
+    {
+        Driver = driver;
+        Scheme = std::move(scheme);
+
+        auto ctx = TActivationContext::AsActorContext();
         ctx.RegisterWithSameMailbox(this);
- 
+
         if (Postponed) {
             ctx.Send(Tablet, new NFake::TEvReturn);
             return { EScan::Sleep, { } };
-        } else { 
+        } else {
             return { EScan::Feed, { } };
-        } 
-    } 
- 
-    EScan Seek(TLead &lead, ui64 seq) noexcept override 
-    { 
-        if (seq && Abort == EAbort::None) 
-            return EScan::Final; 
- 
+        }
+    }
+
+    EScan Seek(TLead &lead, ui64 seq) noexcept override
+    {
+        if (seq && Abort == EAbort::None)
+            return EScan::Final;
+
         lead.To(Scheme->Tags(), { }, NTable::ESeek::Lower);
-        return EScan::Feed; 
-    } 
- 
-    EScan Feed(TArrayRef<const TCell> key, const TRow &) noexcept override 
-    { 
+        return EScan::Feed;
+    }
+
+    EScan Feed(TArrayRef<const TCell> key, const TRow &) noexcept override
+    {
         UNIT_ASSERT_VALUES_EQUAL(key[0].AsValue<ui64>(), ExpectedRowId);
-        ++ExpectedRowId; 
-        ++StoredRows; 
-        return EScan::Feed; 
-    } 
- 
+        ++ExpectedRowId;
+        ++StoredRows;
+        return EScan::Feed;
+    }
+
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override
-    { 
-        UNIT_ASSERT_VALUES_EQUAL((int)Abort, (int)abort); 
- 
-        auto ctx = TActivationContext::ActorContextFor(SelfId()); 
+    {
+        UNIT_ASSERT_VALUES_EQUAL((int)Abort, (int)abort);
+
+        auto ctx = TActivationContext::ActorContextFor(SelfId());
         if (abort == EAbort::None) {
             UNIT_ASSERT_VALUES_EQUAL(ExpectedRows, StoredRows);
         }
 
-        Die(ctx); 
- 
+        Die(ctx);
+
         return new TDummyResult(StoredRows, ExpectedRows);
-    } 
- 
-private: 
+    }
+
+private:
     TActorId Tablet;
     IDriver *Driver = nullptr;
     TIntrusiveConstPtr<TScheme> Scheme;
@@ -331,31 +331,31 @@ private:
     ui64 ExpectedRowId = 1;
     ui64 ExpectedRows = 0;
     bool Postponed = false;
-    EAbort Abort; 
-}; 
- 
-struct TEvTestFlatTablet { 
-    enum EEv { 
-        EvScanFinished = 2015 + EventSpaceBegin(TKikimrEvents::ES_TABLET), 
-        EvQueueScan, 
-        EvStartQueuedScan, 
-        EvMakeScanSnapshot, 
-        EvCancelScan, 
+    EAbort Abort;
+};
+
+struct TEvTestFlatTablet {
+    enum EEv {
+        EvScanFinished = 2015 + EventSpaceBegin(TKikimrEvents::ES_TABLET),
+        EvQueueScan,
+        EvStartQueuedScan,
+        EvMakeScanSnapshot,
+        EvCancelScan,
         EvSnapshotComplete,
- 
-        EvEnd 
-    }; 
- 
-    struct TEvScanFinished : public TEventLocal<TEvScanFinished, EvScanFinished> {}; 
-    struct TEvQueueScan : public TEventLocal<TEvQueueScan, EvQueueScan> { 
+
+        EvEnd
+    };
+
+    struct TEvScanFinished : public TEventLocal<TEvScanFinished, EvScanFinished> {};
+    struct TEvQueueScan : public TEventLocal<TEvQueueScan, EvQueueScan> {
         TEvQueueScan(ui32 rows, bool postponed = false, bool snap = false, NTable::EAbort abort = NTable::EAbort::None)
             : Postponed(postponed)
             , UseSnapshot(snap)
-            , Abort(abort) 
+            , Abort(abort)
             , ReadVersion(TRowVersion::Max())
             , ExpectRows(rows)
-        {} 
- 
+        {}
+
         TEvQueueScan(ui32 rows, TRowVersion snapshot, bool postponed = false, NTable::EAbort abort = NTable::EAbort::None)
             : Postponed(postponed)
             , UseSnapshot(false)
@@ -365,14 +365,14 @@ struct TEvTestFlatTablet {
         {}
 
         bool Postponed;
-        bool UseSnapshot; 
-        NTable::EAbort Abort; 
+        bool UseSnapshot;
+        NTable::EAbort Abort;
         const TRowVersion ReadVersion;
         const ui32 ExpectRows = 0;
-    }; 
-    struct TEvStartQueuedScan : public TEventLocal<TEvStartQueuedScan, EvStartQueuedScan> {}; 
-    struct TEvMakeScanSnapshot : public TEventLocal<TEvMakeScanSnapshot, EvMakeScanSnapshot> {}; 
-    struct TEvCancelScan : public TEventLocal<TEvCancelScan, EvCancelScan> {}; 
+    };
+    struct TEvStartQueuedScan : public TEventLocal<TEvStartQueuedScan, EvStartQueuedScan> {};
+    struct TEvMakeScanSnapshot : public TEventLocal<TEvMakeScanSnapshot, EvMakeScanSnapshot> {};
+    struct TEvCancelScan : public TEventLocal<TEvCancelScan, EvCancelScan> {};
 
     struct TEvSnapshotComplete : public TEventLocal<TEvSnapshotComplete, EvSnapshotComplete> {
         TIntrusivePtr<TTableSnapshotContext> SnapContext;
@@ -382,13 +382,13 @@ struct TEvTestFlatTablet {
         { }
     };
 };
- 
+
 class TTestTableSnapshotContext : public TTableSnapshotContext {
 public:
     TTestTableSnapshotContext(TVector<ui32> tables)
         : Tables(std::move(tables))
     { }
- 
+
     TConstArrayRef<ui32> TablesToSnapshot() const override {
         return Tables;
     }
@@ -404,42 +404,42 @@ protected:
     NFlatExecutorSetup::IExecutor* Executor = nullptr;
 };
 
-class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFlat { 
-    TDummyScan *Scan; 
-    ui64 ScanTaskId; 
-    ui64 ScanCookie; 
-    ui64 SnapshotId; 
+class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFlat {
+    TDummyScan *Scan;
+    ui64 ScanTaskId;
+    ui64 ScanCookie;
+    ui64 SnapshotId;
     TActorId Sender;
- 
+
     void SnapshotComplete(TIntrusivePtr<TTableSnapshotContext> snapContext, const TActorContext&) override {
         Send(Sender, new TEvTestFlatTablet::TEvSnapshotComplete(std::move(snapContext)));
-    } 
- 
+    }
+
     void CompactionComplete(ui32 table, const TActorContext&) override {
         Send(Sender, new NFake::TEvCompacted(table));
     }
 
     void ScanComplete(NTable::EAbort, TAutoPtr<IDestructable>, ui64 cookie, const TActorContext&) override
-    { 
-        UNIT_ASSERT_VALUES_EQUAL(cookie, ScanCookie); 
+    {
+        UNIT_ASSERT_VALUES_EQUAL(cookie, ScanCookie);
         Send(Sender, new TEvTestFlatTablet::TEvScanFinished);
-    } 
- 
+    }
+
     void Handle(TEvTestFlatTablet::TEvMakeScanSnapshot::TPtr&) {
         SnapshotId = Executor()->MakeScanSnapshot(TRowsModel::TableId);
-        UNIT_ASSERT(SnapshotId); 
+        UNIT_ASSERT(SnapshotId);
         Send(Sender, new TEvents::TEvWakeup);
-    } 
- 
-    void Handle(TEvTestFlatTablet::TEvCancelScan::TPtr &/*ev*/, const TActorContext &ctx) { 
+    }
+
+    void Handle(TEvTestFlatTablet::TEvCancelScan::TPtr &/*ev*/, const TActorContext &ctx) {
         Executor()->CancelScan(TRowsModel::TableId, ScanTaskId);
         ctx.Send(Sender, new TEvents::TEvWakeup);
-    } 
- 
+    }
+
     void Handle(TEvTestFlatTablet::TEvQueueScan::TPtr &ev) {
         bool postpone = ev->Get()->Postponed;
-        ui64 snap = ev->Get()->UseSnapshot ? SnapshotId : 0; 
-        auto abort = ev->Get()->Abort; 
+        ui64 snap = ev->Get()->UseSnapshot ? SnapshotId : 0;
+        auto abort = ev->Get()->Abort;
         auto rows = abort != NTable::EAbort::None ? 0 : ev->Get()->ExpectRows;
         Scan = new TDummyScan(SelfId(), postpone, abort, rows);
         TScanOptions options;
@@ -450,12 +450,12 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
             options.SetSnapshotRowVersion(ev->Get()->ReadVersion);
         }
         ScanTaskId = Executor()->QueueScan(TRowsModel::TableId, Scan, ScanCookie, options);
-    } 
- 
-    void Handle(TEvTestFlatTablet::TEvStartQueuedScan::TPtr &/*ev*/, const TActorContext &ctx) { 
-        ctx.Send(Scan->SelfId(), new TEvents::TEvWakeup); 
-    } 
- 
+    }
+
+    void Handle(TEvTestFlatTablet::TEvStartQueuedScan::TPtr &/*ev*/, const TActorContext &ctx) {
+        ctx.Send(Scan->SelfId(), new TEvents::TEvWakeup);
+    }
+
     void Handle(NFake::TEvExecute::TPtr &ev, const TActorContext &ctx) {
         for (auto& f : ev->Get()->Funcs) {
             if (auto* tx = dynamic_cast<ITransactionWithExecutor*>(f.Get())) {
@@ -463,8 +463,8 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
             }
             Execute(f.Release(), ctx);
         }
-    } 
- 
+    }
+
     void Handle(NFake::TEvCompact::TPtr &ev, const TActorContext&) {
         if (ev->Get()->MemOnly) {
             Executor()->CompactMemTable(ev->Get()->Table);
@@ -476,81 +476,81 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
 
     void Handle(NFake::TEvReturn::TPtr&, const TActorContext&) {
         Send(Sender, new TEvents::TEvWakeup);
-    } 
- 
+    }
+
     void Handle(TEvents::TEvPoison::TPtr &, const TActorContext &ctx) {
-        Become(&TThis::StateBroken); 
+        Become(&TThis::StateBroken);
         Executor()->DetachTablet(ctx), Detach(ctx); /* see TDummy tablet */
         ctx.Send(Sender, new TEvents::TEvGone);
-    } 
- 
+    }
+
     void OnActivateExecutor(const TActorContext&) override {
-        Become(&TThis::StateWork); 
+        Become(&TThis::StateWork);
         Send(Sender, new TEvents::TEvWakeup);
-    } 
- 
-    void OnDetach(const TActorContext &ctx) override { 
-        Die(ctx); 
-    } 
- 
-    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &, const TActorContext &ctx) override { 
-        Die(ctx); 
-    } 
- 
-public: 
+    }
+
+    void OnDetach(const TActorContext &ctx) override {
+        Die(ctx);
+    }
+
+    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &, const TActorContext &ctx) override {
+        Die(ctx);
+    }
+
+public:
     TTestFlatTablet(const TActorId &sender, const TActorId &tablet, TTabletStorageInfo *info)
-        : TActor(&TThis::StateInit) 
+        : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, nullptr)
-        , Scan(nullptr) 
-        , ScanTaskId(0) 
-        , ScanCookie(123) 
-        , SnapshotId(0) 
-        , Sender(sender) 
-    {} 
- 
-    STFUNC(StateInit) { 
-        StateInitImpl(ev, ctx); 
-    } 
- 
-    STFUNC(StateWork) { 
-        switch (ev->GetTypeRewrite()) { 
+        , Scan(nullptr)
+        , ScanTaskId(0)
+        , ScanCookie(123)
+        , SnapshotId(0)
+        , Sender(sender)
+    {}
+
+    STFUNC(StateInit) {
+        StateInitImpl(ev, ctx);
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvTestFlatTablet::TEvQueueScan, Handle);
-            HFunc(TEvTestFlatTablet::TEvStartQueuedScan, Handle); 
+            HFunc(TEvTestFlatTablet::TEvStartQueuedScan, Handle);
             hFunc(TEvTestFlatTablet::TEvMakeScanSnapshot, Handle);
-            HFunc(TEvTestFlatTablet::TEvCancelScan, Handle); 
+            HFunc(TEvTestFlatTablet::TEvCancelScan, Handle);
             HFunc(NFake::TEvExecute, Handle);
             HFunc(NFake::TEvCompact, Handle);
-            HFunc(TEvTablet::TEvTabletDead, HandleTabletDead); 
+            HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
             HFunc(NFake::TEvReturn, Handle);
             HFunc(TEvents::TEvPoison, Handle);
-        default: 
-            HandleDefaultEvents(ev, ctx); 
-            break; 
-        } 
-    } 
- 
-    STFUNC(StateBroken) { 
-        switch (ev->GetTypeRewrite()) { 
-            HFunc(TEvTablet::TEvTabletDead, HandleTabletDead); 
-        } 
-    } 
-}; 
- 
- 
-/** 
- * Test scan going in parallel with compactions. 
- * 
- * 1. Fill table with rows so that one more row will cause three cascading compaction. 
- * 2. Create scan. When scan is activated it sends wake-up to tablet and then sleeps. 
- * 3. Add one more row and wait for compactions to finish. 
- * 4. Resume scan. 
- * 5. Check number of scanned rows. 
- */ 
+        default:
+            HandleDefaultEvents(ev, ctx);
+            break;
+        }
+    }
+
+    STFUNC(StateBroken) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
+        }
+    }
+};
+
+
+/**
+ * Test scan going in parallel with compactions.
+ *
+ * 1. Fill table with rows so that one more row will cause three cascading compaction.
+ * 2. Create scan. When scan is activated it sends wake-up to tablet and then sleeps.
+ * 3. Add one more row and wait for compactions to finish.
+ * 4. Resume scan.
+ * 5. Check number of scanned rows.
+ */
 Y_UNIT_TEST_SUITE(TFlatTableCompactionScan) {
     Y_UNIT_TEST(TestCompactionScan) {
         TMyEnvBase env;
         TRowsModel data;
- 
+
         env->SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG);
 
         env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
@@ -560,15 +560,15 @@ Y_UNIT_TEST_SUITE(TFlatTableCompactionScan) {
         env.WaitForWakeUp();
 
         TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
-        policy->InMemSizeToSnapshot = 40 * 1024 *1024; 
-        policy->InMemStepsToSnapshot = 10; 
-        policy->InMemForceStepsToSnapshot = 10; 
-        policy->InMemForceSizeToSnapshot = 64 * 1024 * 1024; 
-        policy->InMemResourceBrokerTask = NLocalDb::LegacyQueueIdToTaskName(0); 
-        policy->ReadAheadHiThreshold = 100000; 
-        policy->ReadAheadLoThreshold = 50000; 
-        policy->Generations.push_back({100 * 1024 * 1024, 5, 5, 200 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true}); 
-        policy->Generations.push_back({400 * 1024 * 1024, 5, 5, 800 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(2), false}); 
+        policy->InMemSizeToSnapshot = 40 * 1024 *1024;
+        policy->InMemStepsToSnapshot = 10;
+        policy->InMemForceStepsToSnapshot = 10;
+        policy->InMemForceSizeToSnapshot = 64 * 1024 * 1024;
+        policy->InMemResourceBrokerTask = NLocalDb::LegacyQueueIdToTaskName(0);
+        policy->ReadAheadHiThreshold = 100000;
+        policy->ReadAheadLoThreshold = 50000;
+        policy->Generations.push_back({100 * 1024 * 1024, 5, 5, 200 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true});
+        policy->Generations.push_back({400 * 1024 * 1024, 5, 5, 800 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(2), false});
         for (auto& gen : policy->Generations) {
             gen.ExtraCompactionPercent = 0;
             gen.ExtraCompactionMinSize = 0;
@@ -576,12 +576,12 @@ Y_UNIT_TEST_SUITE(TFlatTableCompactionScan) {
             gen.ExtraCompactionExpMaxSize = 0;
             gen.UpliftPartSize = 0;
         }
- 
+
         env.SendSync(data.MakeScheme(std::move(policy)));
         env.SendAsync(data.MakeRows(249));
         env.WaitFor<NFake::TEvCompacted>(28);
         env.WaitForWakeUp();
- 
+
         env.SendSync(new TEvTestFlatTablet::TEvQueueScan(data.Rows(), true));
         env.SendAsync(data.MakeRows(1));
         env.WaitFor<NFake::TEvCompacted>(3);
@@ -590,128 +590,128 @@ Y_UNIT_TEST_SUITE(TFlatTableCompactionScan) {
         TAutoPtr<IEventHandle> handle;
         env->GrabEdgeEventRethrow<TEvTestFlatTablet::TEvScanFinished>(handle);
         env.SendSync(new TEvents::TEvPoison, false, true);
-    } 
+    }
 }
- 
- 
+
+
 Y_UNIT_TEST_SUITE(TFlatTableExecutorTxLimit) {
- 
+
     struct TTxSchema : public ITransaction {
         TTxSchema(TActorId owner) : Owner(owner) { }
- 
+
         bool Execute(TTransactionContext &txc, const TActorContext&) override
         {
             txc.DB.Alter().SetExecutorLimitInFlyTx(2);
- 
+
             return true;
         }
- 
+
         void Complete(const TActorContext &ctx) override
         {
             ctx.Send(Owner, new NFake::TEvResult);
         }
- 
+
         const TActorId Owner;
     };
- 
+
     struct TTxNoop : public ITransaction {
         TTxNoop(TActorId owner) : Owner(owner) { }
- 
+
         bool Execute(TTransactionContext&, const TActorContext&) override
         {
             return true;
         }
- 
+
         void Complete(const TActorContext &ctx) override
         {
             ctx.Send(Owner, new NFake::TEvResult);
         }
- 
+
         const TActorId Owner;
     };
- 
+
     Y_UNIT_TEST(TestExecutorTxLimit) {
         TMyEnvBase env;
- 
+
         env.FireDummyTablet();
         env.SendAsync(new NFake::TEvExecute{ new TTxSchema(env.Edge) });
         env.WaitFor<NFake::TEvResult>();
- 
+
         for (size_t seq = 0; seq++ < 5;)
            env.SendAsync(new NFake::TEvExecute{ new TTxNoop(env.Edge) });
- 
+
         env.WaitFor<NFake::TEvResult>(5);
         env.SendSync(new TEvents::TEvPoison, false, true);
     }
 }
- 
- 
+
+
 Y_UNIT_TEST_SUITE(TFlatTableBackgroundCompactions) {
- 
+
     using namespace NKikimrResourceBroker;
     using namespace NResourceBroker;
- 
+
     struct TIsTaskSubmission {
         TIsTaskSubmission(const TString &type, ui32 maxPriority = Max<ui32>())
             : Type(type)
             , MaxPriority(maxPriority)
         {}
- 
+
         bool operator()(IEventHandle &ev) {
             if (ev.GetTypeRewrite() == NResourceBroker::TEvResourceBroker::EvSubmitTask) {
                 auto *e = ev.Get<NResourceBroker::TEvResourceBroker::TEvSubmitTask>();
                 if (e->Task.Type == Type && e->Task.Priority <= MaxPriority) {
                     return true;
                 }
-            } 
- 
+            }
+
             return false;
-        } 
- 
+        }
+
         TString Type;
         ui32 MaxPriority;
     };
- 
+
     struct TIsTaskUpdate {
         TIsTaskUpdate(const TString &type, ui32 maxPriority = Max<ui32>())
             : Type(type)
             , MaxPriority(maxPriority)
         {}
- 
+
         bool operator()(IEventHandle &ev) {
             if (ev.GetTypeRewrite() == NResourceBroker::TEvResourceBroker::EvUpdateTask) {
                 auto *e = ev.Get<NResourceBroker::TEvResourceBroker::TEvUpdateTask>();
                 if (e->Type == Type && e->Priority <= MaxPriority)
                     return true;
             }
- 
+
             return false;
-        } 
- 
+        }
+
         TString Type;
         ui32 MaxPriority;
     };
 
     struct TIsResourceAllocation {
         TIsResourceAllocation()
-        {} 
- 
+        {}
+
         bool operator()(IEventHandle &ev) {
             if (ev.GetTypeRewrite() == NResourceBroker::TEvResourceBroker::EvResourceAllocated)
                 return true;
- 
+
             return false;
-        } 
-    }; 
- 
+        }
+    };
+
     struct TMyEnvCompaction : public TMyEnvBase {
         TMyEnvCompaction()
         {
             Env.SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG);
             FireDummyTablet();
             SendSync(Rows.MakeScheme(MakeCompactionPolicy()));
-        } 
- 
+        }
+
         ~TMyEnvCompaction()
         {
             SendSync(new TEvents::TEvPoison, false, true);
@@ -728,14 +728,14 @@ Y_UNIT_TEST_SUITE(TFlatTableBackgroundCompactions) {
                                                        level,
                                                        nullptr);
             SendEv(MakeResourceBrokerID(), event.Release());
- 
+
             if (instant) {
                 TAutoPtr<IEventHandle> handle;
                 auto reply = Env.GrabEdgeEventRethrow<TEvResourceBroker::TEvResourceAllocated>(handle);
                 UNIT_ASSERT_VALUES_EQUAL(reply->TaskId, id);
             }
         }
- 
+
         void UnblockBackgroundQueue(ui64 block = 0)
         {
             ui64 id = 987987987987 + block;
@@ -743,7 +743,7 @@ Y_UNIT_TEST_SUITE(TFlatTableBackgroundCompactions) {
                 = new TEvResourceBroker::TEvFinishTask(id);
             SendEv(MakeResourceBrokerID(), event.Release());
         }
- 
+
         static TCompactionPolicy* MakeCompactionPolicy() noexcept
         {
             auto *policy = new TCompactionPolicy();
@@ -772,124 +772,124 @@ Y_UNIT_TEST_SUITE(TFlatTableBackgroundCompactions) {
 
         TRowsModel Rows;
     };
- 
+
     Y_UNIT_TEST(TestRunBackgroundSnapshot) {
         TMyEnvCompaction env;
- 
+
         env.SendAsync(env.Rows.MakeRows(5));
-        TDispatchOptions options; 
-        options.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen0")); 
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen0"));
         env->DispatchEvents(options);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestChangeBackgroundSnapshotToRegular) {
         TMyEnvCompaction env;
- 
+
         env.BlockBackgroundQueue();
- 
+
         env.SendAsync(env.Rows.MakeRows(5));
-        TDispatchOptions options1; 
-        options1.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen0")); 
+        TDispatchOptions options1;
+        options1.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen0"));
         env->DispatchEvents(options1);
- 
+
         env.SendAsync(env.Rows.MakeRows(5));
-        TDispatchOptions options2; 
-        options2.FinalEvents.emplace_back(TIsTaskUpdate("compaction_gen0", 5)); 
+        TDispatchOptions options2;
+        options2.FinalEvents.emplace_back(TIsTaskUpdate("compaction_gen0", 5));
         env->DispatchEvents(options2);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestRunBackgroundCompactionGen1) {
         TMyEnvCompaction env;
- 
+
         env.BlockBackgroundQueue();
         env.SendAsync(env.Rows.MakeRows(50));
-        TDispatchOptions options; 
-        options.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen1")); 
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen1"));
         env->DispatchEvents(options);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestChangeBackgroundCompactionToRegular) {
         TMyEnvCompaction env;
- 
+
         env.BlockBackgroundQueue();
         env.SendAsync(env.Rows.MakeRows(50));
- 
-        TDispatchOptions options1; 
-        options1.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen1")); 
+
+        TDispatchOptions options1;
+        options1.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen1"));
         env->DispatchEvents(options1);
- 
+
         env.SendAsync(env.Rows.MakeRows(50));
 
-        TDispatchOptions options2; 
-        options2.FinalEvents.emplace_back(TIsTaskUpdate("compaction_gen1", 5)); 
+        TDispatchOptions options2;
+        options2.FinalEvents.emplace_back(TIsTaskUpdate("compaction_gen1", 5));
         env->DispatchEvents(options2);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestRunBackgroundCompactionGen2) {
         TMyEnvCompaction env;
- 
+
         env.BlockBackgroundQueue();
         env.SendAsync(env.Rows.MakeRows(500));
- 
-        TDispatchOptions options; 
-        options.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen2")); 
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen2"));
         env->DispatchEvents(options);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestChangeBackgroundSnapshotPriorityByTime) {
         TMyEnvCompaction env;
- 
+
         env.BlockBackgroundQueue();
         env.SendAsync(env.Rows.MakeRows(5));
- 
-        TDispatchOptions options1; 
-        options1.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen0")); 
+
+        TDispatchOptions options1;
+        options1.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen0"));
         env->DispatchEvents(options1);
- 
-        TDispatchOptions options2; 
-        options2.FinalEvents.emplace_back(TIsTaskUpdate("background_compaction_gen0", 50)); 
+
+        TDispatchOptions options2;
+        options2.FinalEvents.emplace_back(TIsTaskUpdate("background_compaction_gen0", 50));
         env->SetDispatchTimeout(TDuration::Minutes(1));
         env->DispatchEvents(options2);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestChangeBackgroundCompactionPriorityByTime) {
         TMyEnvCompaction env;
- 
+
         env.BlockBackgroundQueue();
         env.SendAsync(env.Rows.MakeRows(550));
- 
-        TDispatchOptions options1; 
-        options1.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen1"), 6); 
-        options1.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen2")); 
+
+        TDispatchOptions options1;
+        options1.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen1"), 6);
+        options1.FinalEvents.emplace_back(TIsTaskSubmission("background_compaction_gen2"));
         env->DispatchEvents(options1);
- 
-        TDispatchOptions options2; 
-        options2.FinalEvents.emplace_back(TIsTaskUpdate("background_compaction_gen2", 100)); 
- 
+
+        TDispatchOptions options2;
+        options2.FinalEvents.emplace_back(TIsTaskUpdate("background_compaction_gen2", 100));
+
         env->SetDispatchTimeout(TDuration::Minutes(1));
         env->DispatchEvents(options2);
 
-        // GEN2 compaction should become more prioritized due to time factor. 
-        TDispatchOptions options3; 
+        // GEN2 compaction should become more prioritized due to time factor.
+        TDispatchOptions options3;
         env.BlockBackgroundQueue(1, 150, false);
         env.UnblockBackgroundQueue();
-        options3.FinalEvents.emplace_back(TIsResourceAllocation()); 
+        options3.FinalEvents.emplace_back(TIsResourceAllocation());
         env->DispatchEvents(options3);
- 
+
         env.SendAsync(env.Rows.MakeRows(10));
 
-        TDispatchOptions options4; 
-        options4.FinalEvents.emplace_back(TIsTaskUpdate("background_compaction_gen1", 170)); 
+        TDispatchOptions options4;
+        options4.FinalEvents.emplace_back(TIsTaskUpdate("background_compaction_gen1", 170));
         env->DispatchEvents(options4);
-    } 
-} 
- 
- 
+    }
+}
+
+
 Y_UNIT_TEST_SUITE(TFlatTablePostponedScan) {
- 
-    using namespace NKikimrResourceBroker; 
-    using namespace NResourceBroker; 
- 
+
+    using namespace NKikimrResourceBroker;
+    using namespace NResourceBroker;
+
     struct TMyEnvScans : public TMyEnvBase {
 
         TMyEnvScans()
@@ -897,16 +897,16 @@ Y_UNIT_TEST_SUITE(TFlatTablePostponedScan) {
             Env.SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_INFO);
             Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_INFO);
             Env.SetLogPriority(NKikimrServices::TABLET_OPS_HOST, NActors::NLog::PRI_INFO);
- 
+
             FireTablet(Edge, Tablet, [this](const TActorId &tablet, TTabletStorageInfo *info) {
                 return new TTestFlatTablet(Edge, tablet, info);
-            }); 
- 
+            });
+
             WaitForWakeUp();
 
             SendSync(Rows.MakeScheme(MakeCompactionPolicy()));
         }
- 
+
         ~TMyEnvScans()
         {
             SendSync(new TEvents::TEvPoison, false, true);
@@ -928,18 +928,18 @@ Y_UNIT_TEST_SUITE(TFlatTablePostponedScan) {
 
         TRowsModel Rows;
     };
- 
+
     Y_UNIT_TEST(TestPostponedScan) {
         TMyEnvScans env;
         TAutoPtr<IEventHandle> handle;
- 
+
         env.SendSync(env.Rows.MakeRows(111));
         env.SendSync(new TEvTestFlatTablet::TEvMakeScanSnapshot);
         env.SendSync(env.Rows.MakeRows(111));
         env.SendAsync(new TEvTestFlatTablet::TEvQueueScan(111, false, true));
         env->GrabEdgeEventRethrow<TEvTestFlatTablet::TEvScanFinished>(handle);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestCancelFinishedScan) {
         TMyEnvScans env;
         TAutoPtr<IEventHandle> handle;
@@ -955,13 +955,13 @@ Y_UNIT_TEST_SUITE(TFlatTablePostponedScan) {
     Y_UNIT_TEST(TestCancelRunningPostponedScan) {
         TMyEnvScans env;
         TAutoPtr<IEventHandle> handle;
- 
+
         env.SendSync(env.Rows.MakeRows(111));
         env.SendSync(new TEvTestFlatTablet::TEvMakeScanSnapshot);
         env.SendSync(new TEvTestFlatTablet::TEvQueueScan(111, true, true, NTable::EAbort::Term));
         env.SendSync(new TEvTestFlatTablet::TEvCancelScan);
 //        env->GrabEdgeEventRethrow<TEvTestFlatTablet::TEvScanFinished>(handle);
-    } 
+    }
 
     Y_UNIT_TEST(TestPostponedScanSnapshotMVCC) {
         TMyEnvScans env;
@@ -973,10 +973,10 @@ Y_UNIT_TEST_SUITE(TFlatTablePostponedScan) {
         env.GrabEdgeEvent<TEvTestFlatTablet::TEvScanFinished>();
     }
 
-} 
- 
+}
+
 Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
- 
+
     struct TTaskSequence {
         struct TEvent {
             ui32 EventType;
@@ -1025,120 +1025,120 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
         size_t Current = 0;
     };
 
-    struct TMemoryCheckEntry { 
-        struct TEntryEvents { 
-            TString MergeTask; 
-            TString UpdateTask; 
-            TString SubmitTask; 
-            ui32 FinishTasks; 
- 
-            TEntryEvents(const TString &submitTask = "", 
-                         const TString &updateTask = "", 
-                         const TString &mergeTask = "", 
-                         ui32 finishTasks = 0) 
-                : MergeTask(mergeTask) 
-                , UpdateTask(updateTask) 
-                , SubmitTask(submitTask) 
-                , FinishTasks(finishTasks) 
-            {} 
-        }; 
- 
-        TVector<ui64> Keys; 
-        ui64 NewSize; 
-        bool Static; 
-        bool Hold; 
-        ui64 HoldSize; 
-        bool Use; 
-        bool Finish; 
-        bool OutOfMemory; 
-        TEntryEvents Events; 
- 
-        TMemoryCheckEntry(std::initializer_list<ui64> keys, ui64 newSize, TEntryEvents events, 
-                          bool isStatic = false, bool outOfMemory = false) 
-            : Keys(keys) 
-            , NewSize(newSize) 
-            , Static(isStatic) 
-            , Hold(false) 
-            , HoldSize(0) 
-            , Use(false) 
-            , Finish(false) 
-            , OutOfMemory(outOfMemory) 
-            , Events(std::move(events)) 
-        {} 
- 
-        TMemoryCheckEntry(ui64 newSize, TEntryEvents events, 
-                          bool isStatic = false, bool outOfMemory = false) 
-            : NewSize(newSize) 
-            , Static(isStatic) 
-            , Hold(false) 
-            , HoldSize(0) 
-            , Use(false) 
-            , Finish(false) 
-            , OutOfMemory(outOfMemory) 
-            , Events(std::move(events)) 
-        {} 
- 
-        TMemoryCheckEntry(bool hold, ui64 newSize, TEntryEvents events, 
-                          bool isStatic = false, bool outOfMemory = false) 
-            : NewSize(newSize) 
-            , Static(isStatic) 
-            , Hold(hold) 
-            , HoldSize(0) 
-            , Use(false) 
-            , Finish(hold) 
-            , OutOfMemory(outOfMemory) 
-            , Events(std::move(events)) 
-        {} 
- 
-        TMemoryCheckEntry(bool hold, bool use, ui64 newSize, TEntryEvents events, 
-                          bool isStatic = false, bool outOfMemory = false) 
-            : NewSize(newSize) 
-            , Static(isStatic) 
-            , Hold(hold) 
-            , HoldSize(0) 
-            , Use(use) 
-            , Finish(hold) 
-            , OutOfMemory(outOfMemory) 
-            , Events(std::move(events)) 
-        {} 
- 
-        TMemoryCheckEntry(bool hold, bool use, bool finish, ui64 newSize, TEntryEvents events, 
-                          bool isStatic = false, bool outOfMemory = false) 
-            : NewSize(newSize) 
-            , Static(isStatic) 
-            , Hold(hold) 
-            , HoldSize(0) 
-            , Use(use) 
-            , Finish(finish) 
-            , OutOfMemory(outOfMemory) 
-            , Events(std::move(events)) 
-        {} 
- 
-        TMemoryCheckEntry(ui64 hold, ui64 newSize, TEntryEvents events, 
-                          bool isStatic = false, bool outOfMemory = false) 
-            : NewSize(newSize) 
-            , Static(isStatic) 
-            , Hold(true) 
-            , HoldSize(hold) 
-            , Use(false) 
-            , Finish(true) 
-            , OutOfMemory(outOfMemory) 
-            , Events(std::move(events)) 
-        {} 
- 
-        TMemoryCheckEntry(ui64 hold, bool use, ui64 newSize, TEntryEvents events, 
-                          bool isStatic = false, bool outOfMemory = false) 
-            : NewSize(newSize) 
-            , Static(isStatic) 
-            , Hold(true) 
-            , HoldSize(hold) 
-            , Use(use) 
-            , Finish(true) 
-            , OutOfMemory(outOfMemory) 
-            , Events(std::move(events)) 
-        {} 
-    }; 
- 
+    struct TMemoryCheckEntry {
+        struct TEntryEvents {
+            TString MergeTask;
+            TString UpdateTask;
+            TString SubmitTask;
+            ui32 FinishTasks;
+
+            TEntryEvents(const TString &submitTask = "",
+                         const TString &updateTask = "",
+                         const TString &mergeTask = "",
+                         ui32 finishTasks = 0)
+                : MergeTask(mergeTask)
+                , UpdateTask(updateTask)
+                , SubmitTask(submitTask)
+                , FinishTasks(finishTasks)
+            {}
+        };
+
+        TVector<ui64> Keys;
+        ui64 NewSize;
+        bool Static;
+        bool Hold;
+        ui64 HoldSize;
+        bool Use;
+        bool Finish;
+        bool OutOfMemory;
+        TEntryEvents Events;
+
+        TMemoryCheckEntry(std::initializer_list<ui64> keys, ui64 newSize, TEntryEvents events,
+                          bool isStatic = false, bool outOfMemory = false)
+            : Keys(keys)
+            , NewSize(newSize)
+            , Static(isStatic)
+            , Hold(false)
+            , HoldSize(0)
+            , Use(false)
+            , Finish(false)
+            , OutOfMemory(outOfMemory)
+            , Events(std::move(events))
+        {}
+
+        TMemoryCheckEntry(ui64 newSize, TEntryEvents events,
+                          bool isStatic = false, bool outOfMemory = false)
+            : NewSize(newSize)
+            , Static(isStatic)
+            , Hold(false)
+            , HoldSize(0)
+            , Use(false)
+            , Finish(false)
+            , OutOfMemory(outOfMemory)
+            , Events(std::move(events))
+        {}
+
+        TMemoryCheckEntry(bool hold, ui64 newSize, TEntryEvents events,
+                          bool isStatic = false, bool outOfMemory = false)
+            : NewSize(newSize)
+            , Static(isStatic)
+            , Hold(hold)
+            , HoldSize(0)
+            , Use(false)
+            , Finish(hold)
+            , OutOfMemory(outOfMemory)
+            , Events(std::move(events))
+        {}
+
+        TMemoryCheckEntry(bool hold, bool use, ui64 newSize, TEntryEvents events,
+                          bool isStatic = false, bool outOfMemory = false)
+            : NewSize(newSize)
+            , Static(isStatic)
+            , Hold(hold)
+            , HoldSize(0)
+            , Use(use)
+            , Finish(hold)
+            , OutOfMemory(outOfMemory)
+            , Events(std::move(events))
+        {}
+
+        TMemoryCheckEntry(bool hold, bool use, bool finish, ui64 newSize, TEntryEvents events,
+                          bool isStatic = false, bool outOfMemory = false)
+            : NewSize(newSize)
+            , Static(isStatic)
+            , Hold(hold)
+            , HoldSize(0)
+            , Use(use)
+            , Finish(finish)
+            , OutOfMemory(outOfMemory)
+            , Events(std::move(events))
+        {}
+
+        TMemoryCheckEntry(ui64 hold, ui64 newSize, TEntryEvents events,
+                          bool isStatic = false, bool outOfMemory = false)
+            : NewSize(newSize)
+            , Static(isStatic)
+            , Hold(true)
+            , HoldSize(hold)
+            , Use(false)
+            , Finish(true)
+            , OutOfMemory(outOfMemory)
+            , Events(std::move(events))
+        {}
+
+        TMemoryCheckEntry(ui64 hold, bool use, ui64 newSize, TEntryEvents events,
+                          bool isStatic = false, bool outOfMemory = false)
+            : NewSize(newSize)
+            , Static(isStatic)
+            , Hold(true)
+            , HoldSize(hold)
+            , Use(use)
+            , Finish(true)
+            , OutOfMemory(outOfMemory)
+            , Events(std::move(events))
+        {}
+    };
+
     struct TTxSetResourceProfile : public ITransaction {
         TString ProfileName;
 
@@ -1287,7 +1287,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
     };
 
     struct TMyEnvProfiles : public TMyEnvBase {
- 
+
         TMyEnvProfiles()
         {
             Env.SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG);
@@ -1298,8 +1298,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
             SendSync(new NFake::TEvExecute(new TTxSetResourceProfile("profile1")));
 
             Profile = Env.GetAppData().ResourceProfiles->GetProfile(NKikimrTabletBase::TTabletTypes::Unknown, "profile1");
-        } 
- 
+        }
+
         ~TMyEnvProfiles()
         {
             SendSync(new TEvents::TEvPoison, false, true);
@@ -1318,12 +1318,12 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
             policy->Generations.push_back({100 * 1024 * 1024, 100, 100, 200 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true});
             return policy;
         }
- 
+
         void SetupProfile(const TString profileName)
         {
             auto &appData = Env.GetAppData();
             appData.ResourceProfiles = new TResourceProfiles;
- 
+
             TResourceProfiles::TResourceProfile profile;
             profile.SetTabletType(NKikimrTabletBase::TTabletTypes::Unknown);
             profile.SetName(profileName);
@@ -1337,8 +1337,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
             profile.SetMediumTxTaskType("medium_transaction");
             profile.SetLargeTxTaskType("large_transaction");
             appData.ResourceProfiles->AddProfile(profile);
-        } 
- 
+        }
+
         void CheckMemoryRequest(std::initializer_list<TMemoryCheckEntry> list,
                                     TTxRequestMemory::TCfg cfg = { },
                                     bool follower = false)
@@ -1346,7 +1346,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
             TAutoPtr<TTxRequestMemory> event = new TTxRequestMemory({ }, 0, nullptr, cfg);
 
             TTaskSequence sequence;
- 
+
             for (auto &entry : list) {
                 event->Requests.push_back({entry.Keys, entry.NewSize, entry.Static, entry.OutOfMemory,
                             entry.Hold, entry.Use, entry.HoldSize, entry.Finish});
@@ -1366,19 +1366,19 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
                     sequence.Add(NResourceBroker::TEvResourceBroker::EvFinishTask);
                 }
             }
- 
+
             if (follower) {
                 SendFollowerAsync(new NFake::TEvExecute{ event.Release() });
             } else {
                 SendAsync(new NFake::TEvExecute{ event.Release() });
             }
- 
+
             if (!sequence.Events.empty()) {
                 TDispatchOptions options;
                 options.FinalEvents.emplace_back(sequence);
                 Env.DispatchEvents(options);
             }
- 
+
             WaitForWakeUp();
         }
 
@@ -1400,131 +1400,131 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
         env.SendSync(new TEvents::TEvPoison(), false, true);
         env.FireDummyTablet();
         env.SendSync(new NFake::TEvExecute{ new TTxCheckResourceProfile("profile1") }, true);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestExecutorRequestTxData) {
         TMyEnvProfiles env;
- 
-        // Request static memory. 
+
+        // Request static memory.
         env.CheckMemoryRequest(
-                           {{10 << 10, {}, true}}); 
-        // Request dynamic memory (small task). 
+                           {{10 << 10, {}, true}});
+        // Request dynamic memory (small task).
         env.CheckMemoryRequest(
-                           {{20 << 10, {"small_transaction"}}}); 
-        // Request dynamic memory (medium task). 
+                           {{20 << 10, {"small_transaction"}}});
+        // Request dynamic memory (medium task).
         env.CheckMemoryRequest(
-                           {{50 << 10, {"medium_transaction"}}}); 
-        // Request dynamic memory (large task). 
+                           {{50 << 10, {"medium_transaction"}}});
+        // Request dynamic memory (large task).
         env.CheckMemoryRequest(
-                           {{110 << 10, {"large_transaction"}}}); 
-        // Request static memory, into small task, into medium task, into large task. 
+                           {{110 << 10, {"large_transaction"}}});
+        // Request static memory, into small task, into medium task, into large task.
         env.CheckMemoryRequest(
-                           {{10 << 10, {}, true}, 
-                            {20 << 10, {"small_transaction"}}, 
-                            {50 << 10, {"", "medium_transaction"}}, 
-                            {110 << 10, {"", "large_transaction"}}}); 
-    } 
- 
+                           {{10 << 10, {}, true},
+                            {20 << 10, {"small_transaction"}},
+                            {50 << 10, {"", "medium_transaction"}},
+                            {110 << 10, {"", "large_transaction"}}});
+    }
+
     Y_UNIT_TEST(TestExecutorStaticMemoryLimits) {
         TMyEnvProfiles env;
- 
+
         const ui64 limit = env.Profile->GetStaticTabletTxMemoryLimit();
- 
-        // Check static tablet limit has priority over tx limits. 
+
+        // Check static tablet limit has priority over tx limits.
         env.Profile->SetStaticTxMemoryLimit(limit * 2);
         env.CheckMemoryRequest({{limit + 1, {"large_transaction"}}});
 
-        // Check unlimited tablet memory. 
+        // Check unlimited tablet memory.
         env.Profile->SetStaticTabletTxMemoryLimit(0);
         env.CheckMemoryRequest({{limit + 1, {}, true}});
         env.CheckMemoryRequest({{limit * 2 + 1, {"large_transaction"}}});
 
-        // Check unlimited tx memory. 
+        // Check unlimited tx memory.
         env.Profile->SetStaticTxMemoryLimit(0);
         env.CheckMemoryRequest({{limit * 2 + 1, {}, true}});
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestExecutorReuseStaticMemory) {
         TMyEnvProfiles env;
- 
+
         env.Profile->SetStaticTxMemoryLimit(100 << 20);
-        // Check static tablet memory is freed and reused by transactions. 
-        for (int i = 0; i < 100; ++i) { 
-            if (i % 2) { 
+        // Check static tablet memory is freed and reused by transactions.
+        for (int i = 0; i < 100; ++i) {
+            if (i % 2) {
                 env.CheckMemoryRequest(
-                                   {{50 << 20, {}, true}, 
-                                    {150 << 20, {"large_transaction"}}}); 
-            } else { 
+                                   {{50 << 20, {}, true},
+                                    {150 << 20, {"large_transaction"}}});
+            } else {
                 env.CheckMemoryRequest(
-                                   {{50 << 20, {}, true}}); 
-            } 
-        } 
-    } 
- 
+                                   {{50 << 20, {}, true}});
+            }
+        }
+    }
+
     Y_UNIT_TEST(TestExecutorTxDataLimitExceeded) {
         TMyEnvProfiles().CheckMemoryRequest({{500 << 20, {}, false, true}});
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestExecutorRequestPages) {
         TMyEnvProfiles env;
- 
+
         env.SendSync(env.Rows.MakeRows(100, 2 << 10));
- 
-        // Static memory for pages. 
+
+        // Static memory for pages.
         env.CheckMemoryRequest(
-                           {{{1}, 0, {}, true}}); 
-        // Dynamic memory for pages. 
+                           {{{1}, 0, {}, true}});
+        // Dynamic memory for pages.
         env.CheckMemoryRequest(
-                           {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, 0, {"small_transaction"}}}); 
-        // Dynamic memory for pages. 
+                           {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, 0, {"small_transaction"}}});
+        // Dynamic memory for pages.
         env.CheckMemoryRequest(
-                           {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 
-                              16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, 
-                             0, {"medium_transaction"}}}); 
-        // Dynamic memory for pages. 
+                           {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+                              16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30},
+                             0, {"medium_transaction"}}});
+        // Dynamic memory for pages.
         env.CheckMemoryRequest(
-                           {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 
-                              11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 
-                              21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 
-                              31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 
-                              41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 
-                              51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 
-                              61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 
-                              71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 
-                              81, 82, 83, 84, 85, 86, 87, 88, 89, 90}, 
-                             0, {"large_transaction"}}}); 
-    } 
- 
+                           {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+                              11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+                              21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+                              31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+                              41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
+                              51, 52, 53, 54, 55, 56, 57, 58, 59, 60,
+                              61, 62, 63, 64, 65, 66, 67, 68, 69, 70,
+                              71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
+                              81, 82, 83, 84, 85, 86, 87, 88, 89, 90},
+                             0, {"large_transaction"}}});
+    }
+
     Y_UNIT_TEST(TestExecutorPageLimitExceeded) {
         TMyEnvProfiles env;
- 
+
         env.Profile->SetTxMemoryLimit(50 << 10);
         env.SendSync(env.Rows.MakeRows(20, 10 << 10));
- 
-        // Pages are out of tx limit. 
+
+        // Pages are out of tx limit.
         env.CheckMemoryRequest(
-                           {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, 0, {}, false, true}}); 
-    } 
- 
+                           {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, 0, {}, false, true}});
+    }
+
     Y_UNIT_TEST(TestExecutorRequestMemory) {
         TMyEnvProfiles env;
- 
+
         env.SendSync(env.Rows.MakeRows(100, 2 << 10));
- 
-        // Static memory. 
+
+        // Static memory.
         env.CheckMemoryRequest(
-                           {{{1}, 4 << 10, {}, true}}); 
-        // Dynamic memory. 
+                           {{{1}, 4 << 10, {}, true}});
+        // Dynamic memory.
         env.CheckMemoryRequest(
-                           {{{1, 2, 3, 4, 5}, 14 << 10, {"small_transaction"}}}); 
-        // Dynamic memory. 
+                           {{{1, 2, 3, 4, 5}, 14 << 10, {"small_transaction"}}});
+        // Dynamic memory.
         env.CheckMemoryRequest(
-                           {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 35 << 10, {"medium_transaction"}}}); 
-        // Dynamic memory. 
+                           {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 35 << 10, {"medium_transaction"}}});
+        // Dynamic memory.
         env.CheckMemoryRequest(
-                           {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 95 << 10, {"large_transaction"}}}); 
-    } 
- 
+                           {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 95 << 10, {"large_transaction"}}});
+    }
+
     Y_UNIT_TEST(TestExecutorRequestMemoryFollower) {
         TMyEnvProfiles env;
 
@@ -1548,166 +1548,166 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
 
     Y_UNIT_TEST(TestExecutorMemoryLimitExceeded) {
         TMyEnvProfiles env;
- 
+
         env.Profile->SetTxMemoryLimit(50 << 10);
         env.SendSync(env.Rows.MakeRows(20, 2 << 10));
- 
-        // Memory is out of tx limit. 
+
+        // Memory is out of tx limit.
         env.CheckMemoryRequest({{{1, 2, 3, 4, 5}, 45 << 10, {}, false, true}});
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestExecutorPreserveTxData) {
         TMyEnvProfiles env;
- 
-        // Preserved static replaces static. 
+
+        // Preserved static replaces static.
         env.CheckMemoryRequest(
-                           {{10 << 10, {}, true}, 
-                            {true, 0, {}, true}, 
-                            {12 << 10, {}, true}, 
-                            {false, true, 0, {}, true}}); 
-        // Preserved static replaces dynamic. 
+                           {{10 << 10, {}, true},
+                            {true, 0, {}, true},
+                            {12 << 10, {}, true},
+                            {false, true, 0, {}, true}});
+        // Preserved static replaces dynamic.
         env.CheckMemoryRequest(
-                           {{10 << 10, {}, true}, 
-                            {true, 0, {}, true}, 
-                            {20 << 10, {"small_transaction"}}, 
-                            {false, true, 0, {}}}); 
-        // Preserved dynamic replaces static. 
+                           {{10 << 10, {}, true},
+                            {true, 0, {}, true},
+                            {20 << 10, {"small_transaction"}},
+                            {false, true, 0, {}}});
+        // Preserved dynamic replaces static.
         env.CheckMemoryRequest(
-                           {{20 << 10, {"small_transaction"}}, 
-                            {true, 0, {}}, 
-                            {10 << 10, {}, true}, 
-                            {false, true, 0, {}}}); 
-        // Preserved dynamic replaces dynamic. 
+                           {{20 << 10, {"small_transaction"}},
+                            {true, 0, {}},
+                            {10 << 10, {}, true},
+                            {false, true, 0, {}}});
+        // Preserved dynamic replaces dynamic.
         env.CheckMemoryRequest(
-                           {{20 << 10, {"small_transaction"}}, 
-                            {true, 0, {}}, 
-                            {20 << 10, {"small_transaction"}}, 
-                            {false, true, 0, {}}}); 
- 
-        // Preserved static replaces static. 
+                           {{20 << 10, {"small_transaction"}},
+                            {true, 0, {}},
+                            {20 << 10, {"small_transaction"}},
+                            {false, true, 0, {}}});
+
+        // Preserved static replaces static.
         env.CheckMemoryRequest(
-                           {{10 << 10, {}, true}, 
-                            {true, 0, {}, true}, 
-                            {12 << 10, {}, true}, 
-                            {false, true, 11 << 10, {}, true}}); 
-        // Preserved static replaces dynamic. 
+                           {{10 << 10, {}, true},
+                            {true, 0, {}, true},
+                            {12 << 10, {}, true},
+                            {false, true, 11 << 10, {}, true}});
+        // Preserved static replaces dynamic.
         env.CheckMemoryRequest(
-                           {{10 << 10, {}, true}, 
-                            {true, 0, {}, true}, 
-                            {20 << 10, {"small_transaction"}}, 
-                            {false, true, 30 << 10, {}}}); 
-        // Preserved dynamic replaces static. 
+                           {{10 << 10, {}, true},
+                            {true, 0, {}, true},
+                            {20 << 10, {"small_transaction"}},
+                            {false, true, 30 << 10, {}}});
+        // Preserved dynamic replaces static.
         env.CheckMemoryRequest(
-                           {{20 << 10, {"small_transaction"}}, 
-                            {true, 0, {}}, 
-                            {10 << 10, {}, true}, 
-                            {false, true, 50 << 10, {"", "medium_transaction"}}}); 
-        // Preserved dynamic replaces dynamic. 
+                           {{20 << 10, {"small_transaction"}},
+                            {true, 0, {}},
+                            {10 << 10, {}, true},
+                            {false, true, 50 << 10, {"", "medium_transaction"}}});
+        // Preserved dynamic replaces dynamic.
         env.CheckMemoryRequest(
-                           {{20 << 10, {"small_transaction"}}, 
-                            {true, 0, {}, true}, 
-                            {20 << 10, {"small_transaction"}}, 
-                            {false, true, 50 << 10, {"", "medium_transaction", "small_transaction"}}}); 
- 
-        // Preserved static replaces static. 
+                           {{20 << 10, {"small_transaction"}},
+                            {true, 0, {}, true},
+                            {20 << 10, {"small_transaction"}},
+                            {false, true, 50 << 10, {"", "medium_transaction", "small_transaction"}}});
+
+        // Preserved static replaces static.
         env.CheckMemoryRequest(
-                           {{10 << 10, {}, true}, 
-                            {true, 0, {}, true}, 
-                            {12 << 10, {}, true}, 
-                            {false, true, 500 << 20, {}, true, true}}); 
-        // Preserved static replaces dynamic. 
+                           {{10 << 10, {}, true},
+                            {true, 0, {}, true},
+                            {12 << 10, {}, true},
+                            {false, true, 500 << 20, {}, true, true}});
+        // Preserved static replaces dynamic.
         env.CheckMemoryRequest(
-                           {{10 << 10, {}, true}, 
-                            {true, 0, {}, true}, 
-                            {20 << 10, {"small_transaction"}}, 
-                            {false, true, 500 << 20, {}, false, true}}); 
-        // Preserved dynamic replaces static. 
+                           {{10 << 10, {}, true},
+                            {true, 0, {}, true},
+                            {20 << 10, {"small_transaction"}},
+                            {false, true, 500 << 20, {}, false, true}});
+        // Preserved dynamic replaces static.
         env.CheckMemoryRequest(
-                           {{20 << 10, {"small_transaction"}}, 
-                            {true, 0, {}}, 
-                            {10 << 10, {}, true}, 
-                            {false, true, 500 << 20, {}, false, true}}); 
-        // Preserved dynamic replaces dynamic. 
+                           {{20 << 10, {"small_transaction"}},
+                            {true, 0, {}},
+                            {10 << 10, {}, true},
+                            {false, true, 500 << 20, {}, false, true}});
+        // Preserved dynamic replaces dynamic.
         env.CheckMemoryRequest(
-                           {{20 << 10, {"small_transaction"}}, 
-                            {true, 0, {}, true}, 
-                            {20 << 10, {"small_transaction"}}, 
-                            {false, true, 500 << 20, {}, false, true}}); 
-    } 
- 
+                           {{20 << 10, {"small_transaction"}},
+                            {true, 0, {}, true},
+                            {20 << 10, {"small_transaction"}},
+                            {false, true, 500 << 20, {}, false, true}});
+    }
+
     Y_UNIT_TEST(TestExecutorTxDataGC) {
         TMyEnvProfiles env;
- 
-        // Preserve dynamic and drop it. 
+
+        // Preserve dynamic and drop it.
         env.CheckMemoryRequest(
-                           {{50 << 20, {"large_transaction"}}, 
-                            {true, 0, {}}}); 
-    } 
- 
+                           {{50 << 20, {"large_transaction"}},
+                            {true, 0, {}}});
+    }
+
     Y_UNIT_TEST(TestExecutorTxPartialDataHold) {
         TMyEnvProfiles env;
- 
-        // Hold part of static data. 
+
+        // Hold part of static data.
         env.CheckMemoryRequest(
-                           {{10 << 10, {}, true}, 
-                            {(ui64)(5 << 10), 0, {}, true}, 
-                            {false, true, 0, {}, true}}); 
-        // Hold part of dynamic data. 
+                           {{10 << 10, {}, true},
+                            {(ui64)(5 << 10), 0, {}, true},
+                            {false, true, 0, {}, true}});
+        // Hold part of dynamic data.
         env.CheckMemoryRequest(
-                           {{20 << 10, {"small_transaction"}}, 
-                            {(ui64)(10 << 10), 0, {}}, 
-                            {false, true, 0, {}}}); 
-    } 
- 
+                           {{20 << 10, {"small_transaction"}},
+                            {(ui64)(10 << 10), 0, {}},
+                            {false, true, 0, {}}});
+    }
+
     Y_UNIT_TEST(TestExecutorTxHoldAndUse) {
         TMyEnvProfiles env;
- 
-        // Hold part of static data. 
+
+        // Hold part of static data.
         env.CheckMemoryRequest(
-                           {{10 << 10, {}, true}, 
-                            {(ui64)(5 << 10), 0, {}, true}, 
-                            {true, true, 0, {}, true}}); 
-        // Hold part of dynamic data. Merge two small tasks into one medium. 
+                           {{10 << 10, {}, true},
+                            {(ui64)(5 << 10), 0, {}, true},
+                            {true, true, 0, {}, true}});
+        // Hold part of dynamic data. Merge two small tasks into one medium.
         env.CheckMemoryRequest(
-                           {{20 << 10, {"small_transaction"}}, 
-                            {(ui64)(15 << 10), 0, {}}, 
-                            {30 << 10, {"small_transaction"}}, 
-                            {true, true, 0, {"", "", ""}}, 
-                            {30 << 10, {"small_transaction"}}, 
-                            {false, true, 0, {"", "", "medium_transaction"}}}); 
-    } 
- 
+                           {{20 << 10, {"small_transaction"}},
+                            {(ui64)(15 << 10), 0, {}},
+                            {30 << 10, {"small_transaction"}},
+                            {true, true, 0, {"", "", ""}},
+                            {30 << 10, {"small_transaction"}},
+                            {false, true, 0, {"", "", "medium_transaction"}}});
+    }
+
     Y_UNIT_TEST(TestExecutorTxHoldOnRelease) {
         TMyEnvProfiles env;
- 
-        // Hold dynamic data on task extend. Merge two small tasks into one medium. 
+
+        // Hold dynamic data on task extend. Merge two small tasks into one medium.
         env.CheckMemoryRequest(
-                           {{20 << 10, {"small_transaction"}}, 
-                            // 20KB is captured on ReleaseTxData -> small task is requested. 
-                            {30 << 10, {"small_transaction"}}, 
+                           {{20 << 10, {"small_transaction"}},
+                            // 20KB is captured on ReleaseTxData -> small task is requested.
+                            {30 << 10, {"small_transaction"}},
                             {false, true, 0, {"", "", "medium_transaction", 1}}},
                             { false /* static */, true /* dynamic */ });
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestUpdateConfig) {
         TMyEnvProfiles env;
- 
-        // Request dynamic memory (large task). 
+
+        // Request dynamic memory (large task).
         env.CheckMemoryRequest({{110 << 10, {"large_transaction"}}});
- 
-        // Gen new profile with no required profile. EvUpdateConfig should cause 
-        // default profile to be chosen then. 
+
+        // Gen new profile with no required profile. EvUpdateConfig should cause
+        // default profile to be chosen then.
         env.SetupProfile("profile2");
         env.SendAsync(new TEvTablet::TEvUpdateConfig(env->GetAppData().ResourceProfiles));
- 
-        // Profile name in schema is unmodified. 
+
+        // Profile name in schema is unmodified.
         env.SendSync(new NFake::TEvExecute{ new TTxCheckResourceProfile("profile1") });
- 
-        // But default profile is actually used now. 
+
+        // But default profile is actually used now.
         env.CheckMemoryRequest({{200 << 20, {}, true}});
-    } 
-} 
- 
+    }
+}
+
 Y_UNIT_TEST_SUITE(TFlatTableExecutorSliceOverlapScan) {
 
     Y_UNIT_TEST(TestSliceOverlapScan) {
@@ -1742,7 +1742,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorSliceOverlapScan) {
         env.SendSync(new TEvents::TEvPoison, false, true);
     }
 
-} 
+}
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutorShardedCompaction) {
 
@@ -1852,7 +1852,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorShardedCompaction) {
         }
     }
 
-} 
+}
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutorColumnGroups) {
 

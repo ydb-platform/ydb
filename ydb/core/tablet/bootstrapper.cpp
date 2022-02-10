@@ -221,7 +221,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
             ctx.Send(LookOnActorID, new TEvTablet::TEvPromoteToLeader(0, TabletInfo));
         } else {
             TTabletSetupInfo *x = BootstrapperInfo->SetupInfo.Get();
-            LookOnActorID = x->Tablet(TabletInfo.Get(), ctx.SelfID, ctx, 0, AppData(ctx)->ResourceProfiles); 
+            LookOnActorID = x->Tablet(TabletInfo.Get(), ctx.SelfID, ctx, 0, AppData(ctx)->ResourceProfiles);
         }
 
         Y_VERIFY(LookOnActorID);

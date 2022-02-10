@@ -71,15 +71,15 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
 
     Self->SwitchToWork(ctx);
     Self->SendRegistrationRequestTimeCast(ctx);
- 
-    // InReadSets table might have a lot of garbage due to old bug. 
+
+    // InReadSets table might have a lot of garbage due to old bug.
     // Run transaction to collect if shard is not going offline.
     if (Self->State != TShardState::Offline && Self->State != TShardState::PreOffline)
-        Self->Execute(Self->CreateTxCheckInReadSets(), ctx); 
- 
-    // Tables created with older SchemeShard versions don't have 
-    // path filled for user tables. Resolve path for them. 
-    Self->ResolveTablePath(ctx); 
+        Self->Execute(Self->CreateTxCheckInReadSets(), ctx);
+
+    // Tables created with older SchemeShard versions don't have
+    // path filled for user tables. Resolve path for them.
+    Self->ResolveTablePath(ctx);
 
     // Plan cleanup if needed
     if (Self->State == TShardState::Ready ||
@@ -371,16 +371,16 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::TxMain::TableId)) {
         if (!Self->TransQueue.Load(db))
             return false;
- 
-        for (auto &pr : Self->TransQueue.GetTxsInFly()) { 
-            pr.second->BuildExecutionPlan(true); 
-            if (!pr.second->IsExecutionPlanFinished()) 
-                Self->Pipeline.GetExecutionUnit(pr.second->GetCurrentUnit()).AddOperation(pr.second); 
-        } 
- 
-        if (Self->TransQueue.GetPlan().size()) 
-            Self->Pipeline.AddCandidateUnit(EExecutionUnitKind::PlanQueue); 
-        // TODO: add propose blockers to blockers list 
+
+        for (auto &pr : Self->TransQueue.GetTxsInFly()) {
+            pr.second->BuildExecutionPlan(true);
+            if (!pr.second->IsExecutionPlanFinished())
+                Self->Pipeline.GetExecutionUnit(pr.second->GetCurrentUnit()).AddOperation(pr.second);
+        }
+
+        if (Self->TransQueue.GetPlan().size())
+            Self->Pipeline.AddCandidateUnit(EExecutionUnitKind::PlanQueue);
+        // TODO: add propose blockers to blockers list
     }
 
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::Snapshots::TableId)) {
@@ -505,13 +505,13 @@ public:
             LOAD_SYS_UI64(db, Schema::Sys_State, Self->State);
         }
 
-        // Skip full schema migration (and dropped system table recreation) 
-        // if the datashard is in the process of drop. 
-        if (Self->State == TShardState::PreOffline || Self->State == TShardState::Offline) { 
+        // Skip full schema migration (and dropped system table recreation)
+        // if the datashard is in the process of drop.
+        if (Self->State == TShardState::PreOffline || Self->State == TShardState::Offline) {
             db.MaterializeExisting<Schema>();
             Schema::SchemaTables<Schema::SchemaOperations>::Materialize(txc.DB, NIceDb::EMaterializationMode::NonExisting);
             Schema::SchemaTables<Schema::ScanProgress>::Materialize(txc.DB, NIceDb::EMaterializationMode::NonExisting);
-        } else { 
+        } else {
             db.Materialize<Schema>();
         }
 

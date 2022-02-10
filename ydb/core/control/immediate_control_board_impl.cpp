@@ -28,13 +28,13 @@ void TControlBoard::RestoreDefaults() {
     }
 }
 
-void TControlBoard::RestoreDefault(TString name) { 
+void TControlBoard::RestoreDefault(TString name) {
     TIntrusivePtr<TControl> control;
     if (Board.Get(name, control)) {
         control->RestoreDefault();
     }
-} 
- 
+}
+
 bool TControlBoard::SetValue(TString name, TAtomic value, TAtomic &outPrevValue) {
     TIntrusivePtr<TControl> control;
     if (Board.Get(name, control)) {

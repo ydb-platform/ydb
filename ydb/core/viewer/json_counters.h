@@ -173,7 +173,7 @@ public:
     template <typename ResponseType>
     void RenderStats(TStringStream& json,
                      THolder<ResponseType>& response,
-                     const TEvInterconnect::TNodeInfo& nodeInfo, 
+                     const TEvInterconnect::TNodeInfo& nodeInfo,
                      const TString& subsystem,
                      const TVector<const FieldDescriptor*>& groupFields) {
 
@@ -206,7 +206,7 @@ public:
 
     void RenderStats(TStringStream& json,
                      THolder<TEvWhiteboard::TEvVDiskStateResponse>& response,
-                     const TEvInterconnect::TNodeInfo& nodeInfo) { 
+                     const TEvInterconnect::TNodeInfo& nodeInfo) {
         if (response == nullptr)
             return;
         static TVector<const FieldDescriptor*> groupFields
@@ -216,7 +216,7 @@ public:
 
     void RenderStats(TStringStream& json,
                      THolder<TEvWhiteboard::TEvPDiskStateResponse>& response,
-                     const TEvInterconnect::TNodeInfo& nodeInfo) { 
+                     const TEvInterconnect::TNodeInfo& nodeInfo) {
         if (response == nullptr)
             return;
         static TVector<const FieldDescriptor*> groupFields
@@ -226,7 +226,7 @@ public:
 
     void RenderStats(TStringStream& json,
                      THolder<TEvWhiteboard::TEvTabletStateResponse>& response,
-                     const TEvInterconnect::TNodeInfo& nodeInfo) { 
+                     const TEvInterconnect::TNodeInfo& nodeInfo) {
         if (response == nullptr)
             return;
         static TVector<const FieldDescriptor*> groupFields
@@ -241,8 +241,8 @@ public:
         json << "\"sensors\":[";
 
         Sort(NodesInfo->Nodes, [](
-             const TEvInterconnect::TNodeInfo& a, 
-             const TEvInterconnect::TNodeInfo& b) -> bool { 
+             const TEvInterconnect::TNodeInfo& a,
+             const TEvInterconnect::TNodeInfo& b) -> bool {
             return a.NodeId < b.NodeId;
         });
 

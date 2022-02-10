@@ -2,7 +2,7 @@
 #include "defs.h"
 
 #include "flat_scan_iface.h"
- 
+
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/blobstorage.h>
 #include <library/cpp/lwtrace/shuttle.h>
@@ -40,21 +40,21 @@ public:
     NTable::TSnapEdge Edge(ui32 table) const;
 };
 
-class TMemoryGCToken : public TThrRefBase { 
-public: 
-    TMemoryGCToken(ui64 size, ui64 taskId) 
-        : Size(size) 
-        , TaskId(taskId) 
-    {} 
-    virtual ~TMemoryGCToken() {} 
- 
-    bool IsDropped() const { 
-        return AtomicLoad(&Dropped); 
-    } 
-    void Drop() { 
-        AtomicStore(&Dropped, true); 
-    } 
- 
+class TMemoryGCToken : public TThrRefBase {
+public:
+    TMemoryGCToken(ui64 size, ui64 taskId)
+        : Size(size)
+        , TaskId(taskId)
+    {}
+    virtual ~TMemoryGCToken() {}
+
+    bool IsDropped() const {
+        return AtomicLoad(&Dropped);
+    }
+    void Drop() {
+        AtomicStore(&Dropped, true);
+    }
+
     void Describe(IOutputStream &out) const noexcept
     {
         out << "Res{";
@@ -68,26 +68,26 @@ public:
         out << " " << Size << "b}";
     }
 
-    const ui64 Size; 
-    const ui64 TaskId; 
- 
-private: 
-    volatile bool Dropped = false; 
-}; 
- 
-class TMemoryToken { 
-public: 
+    const ui64 Size;
+    const ui64 TaskId;
+
+private:
+    volatile bool Dropped = false;
+};
+
+class TMemoryToken {
+public:
     TMemoryToken(TIntrusivePtr<TMemoryGCToken> gcToken)
-        : GCToken(gcToken) 
-    {} 
- 
-    ~TMemoryToken() { 
-        GCToken->Drop(); 
-    } 
- 
+        : GCToken(gcToken)
+    {}
+
+    ~TMemoryToken() {
+        GCToken->Drop();
+    }
+
     const TIntrusivePtr<TMemoryGCToken> GCToken;
-}; 
- 
+};
+
 struct IExecuting {
     /* Functionality available only in tx execution contextt */
 
@@ -102,39 +102,39 @@ struct IExecuting {
     virtual void ConfirmLoan(const TLogoBlobID &bundleId, const TLogoBlobID &borrowId) = 0; // confirm loan update delivery (called on part destination)
 };
 
-class TTxMemoryProviderBase : TNonCopyable { 
+class TTxMemoryProviderBase : TNonCopyable {
 public:
-    TTxMemoryProviderBase(ui64 memoryLimit, ui64 taskId) 
-        : MemoryLimit(memoryLimit) 
-        , TaskId(taskId) 
-        , RequestedMemory(0) 
+    TTxMemoryProviderBase(ui64 memoryLimit, ui64 taskId)
+        : MemoryLimit(memoryLimit)
+        , TaskId(taskId)
+        , RequestedMemory(0)
         , NotEnoughMemoryCount(0)
     {}
 
-    ~TTxMemoryProviderBase() {} 
- 
-    ui64 GetMemoryLimit() const 
-    { 
-        if (MemoryToken) 
-            return MemoryToken->GCToken->Size; 
-        return MemoryLimit; 
-    } 
- 
-    ui64 GetTaskId() const 
-    { 
-        if (MemoryToken) 
-            return MemoryToken->GCToken->TaskId; 
-        return TaskId; 
-    } 
- 
-    void RequestMemory(ui64 bytes) 
-    { 
-        Y_VERIFY(!MemoryGCToken); 
-        RequestedMemory += bytes; 
-    } 
- 
-    ui64 GetRequestedMemory() const { return RequestedMemory; } 
- 
+    ~TTxMemoryProviderBase() {}
+
+    ui64 GetMemoryLimit() const
+    {
+        if (MemoryToken)
+            return MemoryToken->GCToken->Size;
+        return MemoryLimit;
+    }
+
+    ui64 GetTaskId() const
+    {
+        if (MemoryToken)
+            return MemoryToken->GCToken->TaskId;
+        return TaskId;
+    }
+
+    void RequestMemory(ui64 bytes)
+    {
+        Y_VERIFY(!MemoryGCToken);
+        RequestedMemory += bytes;
+    }
+
+    ui64 GetRequestedMemory() const { return RequestedMemory; }
+
     void NotEnoughMemory(ui32 add = 1)
     {
         NotEnoughMemoryCount += add;
@@ -142,74 +142,74 @@ public:
 
     ui32 GetNotEnoughMemoryCount() const { return NotEnoughMemoryCount; }
 
-    /** 
-     * Memory token should be captured only when tx is finished 
-     * or within ReleaseTxData method. 
-     */ 
-    TAutoPtr<TMemoryToken> HoldMemory() 
-    { 
-        return HoldMemory(MemoryLimit); 
-    } 
- 
-    TAutoPtr<TMemoryToken> HoldMemory(ui64 size) 
-    { 
-        Y_VERIFY(!MemoryGCToken); 
-        Y_VERIFY(size <= MemoryLimit); 
-        Y_VERIFY(size > 0); 
-        MemoryGCToken = new TMemoryGCToken(size, TaskId); 
-        return new TMemoryToken(MemoryGCToken); 
-    } 
- 
-    void UseMemoryToken(TAutoPtr<TMemoryToken> token) 
-    { 
-        Y_VERIFY(!MemoryToken); 
-        MemoryToken = std::move(token); 
-    } 
- 
-    TAutoPtr<TMemoryToken> ExtractMemoryToken() 
-    { 
-        return std::move(MemoryToken); 
-    } 
- 
+    /**
+     * Memory token should be captured only when tx is finished
+     * or within ReleaseTxData method.
+     */
+    TAutoPtr<TMemoryToken> HoldMemory()
+    {
+        return HoldMemory(MemoryLimit);
+    }
+
+    TAutoPtr<TMemoryToken> HoldMemory(ui64 size)
+    {
+        Y_VERIFY(!MemoryGCToken);
+        Y_VERIFY(size <= MemoryLimit);
+        Y_VERIFY(size > 0);
+        MemoryGCToken = new TMemoryGCToken(size, TaskId);
+        return new TMemoryToken(MemoryGCToken);
+    }
+
+    void UseMemoryToken(TAutoPtr<TMemoryToken> token)
+    {
+        Y_VERIFY(!MemoryToken);
+        MemoryToken = std::move(token);
+    }
+
+    TAutoPtr<TMemoryToken> ExtractMemoryToken()
+    {
+        return std::move(MemoryToken);
+    }
+
     TIntrusivePtr<TMemoryGCToken> GetMemoryGCToken() const { return MemoryGCToken; }
- 
-private: 
-    const ui64 MemoryLimit; 
-    const ui64 TaskId; 
-    ui64 RequestedMemory; 
+
+private:
+    const ui64 MemoryLimit;
+    const ui64 TaskId;
+    ui64 RequestedMemory;
     ui32 NotEnoughMemoryCount;
     TIntrusivePtr<TMemoryGCToken> MemoryGCToken;
-    TAutoPtr<TMemoryToken> MemoryToken; 
+    TAutoPtr<TMemoryToken> MemoryToken;
 };
 
-class TTxMemoryProvider : public TTxMemoryProviderBase { 
-public: 
-    TTxMemoryProvider(ui64 memoryLimit, ui64 taskId) 
-        : TTxMemoryProviderBase(memoryLimit, taskId) 
-    {} 
-    ~TTxMemoryProvider() {} 
- 
-private: 
-    using TTxMemoryProviderBase::RequestMemory; 
-    using TTxMemoryProviderBase::UseMemoryToken; 
-    using TTxMemoryProviderBase::ExtractMemoryToken; 
-}; 
- 
-class TTransactionContext : public TTxMemoryProviderBase { 
+class TTxMemoryProvider : public TTxMemoryProviderBase {
+public:
+    TTxMemoryProvider(ui64 memoryLimit, ui64 taskId)
+        : TTxMemoryProviderBase(memoryLimit, taskId)
+    {}
+    ~TTxMemoryProvider() {}
+
+private:
+    using TTxMemoryProviderBase::RequestMemory;
+    using TTxMemoryProviderBase::UseMemoryToken;
+    using TTxMemoryProviderBase::ExtractMemoryToken;
+};
+
+class TTransactionContext : public TTxMemoryProviderBase {
     friend class TExecutor;
 
-public: 
-    TTransactionContext(ui64 tablet, ui32 gen, ui32 step, NTable::TDatabase &db, IExecuting &env, 
-                        ui64 memoryLimit, ui64 taskId) 
-        : TTxMemoryProviderBase(memoryLimit, taskId) 
-        , Tablet(tablet) 
-        , Generation(gen) 
-        , Step(step) 
-        , Env(env) 
-        , DB(db) 
-    {} 
- 
-    ~TTransactionContext() {} 
+public:
+    TTransactionContext(ui64 tablet, ui32 gen, ui32 step, NTable::TDatabase &db, IExecuting &env,
+                        ui64 memoryLimit, ui64 taskId)
+        : TTxMemoryProviderBase(memoryLimit, taskId)
+        , Tablet(tablet)
+        , Generation(gen)
+        , Step(step)
+        , Env(env)
+        , DB(db)
+    {}
+
+    ~TTransactionContext() {}
 
     void OnCommitted(std::function<void()> callback) {
         OnCommitted_.emplace_back(std::move(callback));
@@ -224,8 +224,8 @@ public:
 
 private:
     TVector<std::function<void()>> OnCommitted_;
-}; 
- 
+};
+
 struct TCompactedPartLoans {
     TLogoBlobID MetaInfoId;
     ui64 Lender;
@@ -249,11 +249,11 @@ struct TFinishedCompactionInfo {
     {}
 };
 
-enum class ETerminationReason { 
-    None = 0, 
-    MemoryLimitExceeded = 1, 
-}; 
- 
+enum class ETerminationReason {
+    None = 0,
+    MemoryLimitExceeded = 1,
+};
+
 
 class ITransaction : TNonCopyable {
 public:
@@ -269,10 +269,10 @@ public:
     /// @return true if execution complete and transaction is ready for commit
     virtual bool Execute(TTransactionContext &txc, const TActorContext &ctx) = 0;
     virtual void Complete(const TActorContext &ctx) = 0;
-    virtual void Terminate(ETerminationReason reason, const TActorContext &/*ctx*/) { 
-        Y_FAIL("Unexpected transaction termination (reason %" PRIu32 ")", (ui32)reason); 
-    } 
-    virtual void ReleaseTxData(TTxMemoryProvider &/*provider*/, const TActorContext &/*ctx*/) {} 
+    virtual void Terminate(ETerminationReason reason, const TActorContext &/*ctx*/) {
+        Y_FAIL("Unexpected transaction termination (reason %" PRIu32 ")", (ui32)reason);
+    }
+    virtual void ReleaseTxData(TTxMemoryProvider &/*provider*/, const TActorContext &/*ctx*/) {}
     virtual TTxType GetTxType() const { return UnknownTxType; }
 
     virtual void Describe(IOutputStream &out) const noexcept
@@ -447,9 +447,9 @@ namespace NFlatExecutorSetup {
 
         virtual bool ReassignChannelsEnabled() const;
 
-        // memory usage excluding transactions and executor cache. 
-        virtual ui64 GetMemoryUsage() const { return 50 << 10; } 
- 
+        // memory usage excluding transactions and executor cache.
+        virtual ui64 GetMemoryUsage() const { return 50 << 10; }
+
         virtual void OnLeaderUserAuxUpdate(TString) { /* default */ }
 
         // create transaction?
@@ -504,7 +504,7 @@ namespace NFlatExecutorSetup {
             4. May return empty blob on lack of some vital pages in cache.
          */
         virtual TString BorrowSnapshot(ui32 tableId, const TTableSnapshotContext&, TRawVals from, TRawVals to, ui64 loaner) const = 0;
-        // Prepare snapshot which can later be used for scan task. 
+        // Prepare snapshot which can later be used for scan task.
         virtual ui64 MakeScanSnapshot(ui32 table) = 0;
         virtual void DropScanSnapshot(ui64 snapId) = 0;
         virtual ui64 QueueScan(ui32 tableId, TAutoPtr<NTable::IScan> scan, ui64 cookie, const TScanOptions& options = TScanOptions()) = 0;
@@ -527,7 +527,7 @@ namespace NFlatExecutorSetup {
         virtual void GetTabletCounters(TEvTablet::TEvGetCounters::TPtr&) = 0;
 
         virtual void UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr&) = 0;
- 
+
         virtual void SendUserAuxUpdateToFollowers(TString upd, const TActorContext &ctx) = 0;
 
         // Returns parts owned by this tablet and borrowed by other tablets

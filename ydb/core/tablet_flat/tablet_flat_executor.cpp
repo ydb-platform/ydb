@@ -28,7 +28,7 @@ namespace NFlatExecutorSetup {
     {
         Y_UNUSED(status);
         Y_UNUSED(prod);
-        Y_UNUSED(cookie); 
+        Y_UNUSED(cookie);
         Y_UNUSED(ctx);
     }
 

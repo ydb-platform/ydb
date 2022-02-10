@@ -128,7 +128,7 @@ public:
         bool LogFastTactic = true;
         TDuration LogFlushPeriod = TDuration::MicroSeconds(500);
         ui32 LimitInFlyTx = 0;
-        TString ResourceProfile = "default"; 
+        TString ResourceProfile = "default";
         ECompactionStrategy DefaultCompactionStrategy = NKikimrSchemeOp::CompactionStrategyGenerational;
     };
 

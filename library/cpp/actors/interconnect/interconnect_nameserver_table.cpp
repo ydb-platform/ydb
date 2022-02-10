@@ -48,34 +48,34 @@ namespace NActors {
         for (const auto& x : StaticNodeTable)
             infos.push_back(&x.second);
 
-        auto CompareAddressLambda = 
+        auto CompareAddressLambda =
             [](const TNodeInfo* left, const TNodeInfo* right) {
                 return left->Port == right->Port ? left->Address < right->Address : left->Port < right->Port;
             };
 
-        Sort(infos, CompareAddressLambda); 
+        Sort(infos, CompareAddressLambda);
 
         for (ui32 idx = 1, end = StaticNodeTable.size(); idx < end; ++idx) {
             const TNodeInfo* left = infos[idx - 1];
             const TNodeInfo* right = infos[idx];
-            if (left->Address && left->Address == right->Address && left->Port == right->Port) 
+            if (left->Address && left->Address == right->Address && left->Port == right->Port)
                 return false;
         }
 
-        auto CompareHostLambda = 
-            [](const TNodeInfo* left, const TNodeInfo* right) { 
-                return left->Port == right->Port ? left->ResolveHost < right->ResolveHost : left->Port < right->Port; 
-            }; 
- 
-        Sort(infos, CompareHostLambda); 
- 
-        for (ui32 idx = 1, end = StaticNodeTable.size(); idx < end; ++idx) { 
-            const TNodeInfo* left = infos[idx - 1]; 
-            const TNodeInfo* right = infos[idx]; 
-            if (left->ResolveHost == right->ResolveHost && left->Port == right->Port) 
-                return false; 
-        } 
- 
+        auto CompareHostLambda =
+            [](const TNodeInfo* left, const TNodeInfo* right) {
+                return left->Port == right->Port ? left->ResolveHost < right->ResolveHost : left->Port < right->Port;
+            };
+
+        Sort(infos, CompareHostLambda);
+
+        for (ui32 idx = 1, end = StaticNodeTable.size(); idx < end; ++idx) {
+            const TNodeInfo* left = infos[idx - 1];
+            const TNodeInfo* right = infos[idx];
+            if (left->ResolveHost == right->ResolveHost && left->Port == right->Port)
+                return false;
+        }
+
         return true;
     }
 

@@ -22,7 +22,7 @@ namespace NKikimr {
     XX(EDM_DEBUG, "debug", "admin running kikimr") \
     XX(EDM_BS, "bs", "admin running kikimr") \
     XX(EDM_BLOBSTORAGE, "blobstorage", "admin running kikimr") \
-    XX(EDM_CMS, "cms", "admin running kikimr") \ 
+    XX(EDM_CMS, "cms", "admin running kikimr") \
     XX(EDM_DISCOVERY, "discovery", "discover endpoints") \
     XX(EDM_WHOAMI, "whoami", "admin running kikimr") \
     XX(EDM_FORMAT_INFO, "format-info", "read pdisk format info") \

@@ -5,14 +5,14 @@
 #include <ydb/core/driver_lib/run/run.h>
 #include <ydb/library/yaml_config/yaml_config_parser.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
-#include <util/digest/city.h> 
+#include <util/digest/city.h>
 #include <util/random/random.h>
 #include <util/string/cast.h>
 #include <util/system/file.h>
 #include <util/system/fs.h>
-#include <util/system/hostname.h> 
+#include <util/system/hostname.h>
 #include <google/protobuf/text_format.h>
- 
+
 extern TAutoPtr<NKikimrConfig::TActorSystemConfig> DummyActorSystemConfig();
 extern TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig();
 
@@ -34,7 +34,7 @@ protected:
     TString ClusterName; // log settings
 
     ui32 NodeId;
-    TString NodeIdValue; 
+    TString NodeIdValue;
     ui32 DefaultInterconnectPort = 19001;
     ui32 BusProxyPort;
     NBus::TBusQueueConfig ProxyBusQueueConfig;
@@ -50,29 +50,29 @@ protected:
     TVector<TString> UDFsPaths;
     TString HostLabelOverride;
     TString TenantName;
-    TString TenantDomain; 
-    TString TenantSlotType; 
-    TString TenantSlotId; 
+    TString TenantDomain;
+    TString TenantSlotType;
+    TString TenantSlotId;
     ui64 TenantCPU;
     ui64 TenantMemory;
     ui64 TenantNetwork;
     TVector<TString> NodeBrokerAddresses;
-    ui32 NodeBrokerPort; 
+    ui32 NodeBrokerPort;
     bool NodeBrokerUseTls;
-    bool FixedNodeID; 
-    bool IgnoreCmsConfigs; 
+    bool FixedNodeID;
+    bool IgnoreCmsConfigs;
     bool HierarchicalCfg;
     TString NodeAddress;
     TString NodeHost;
-    TString NodeResolveHost; 
-    TString NodeDomain; 
-    ui32 InterconnectPort; 
+    TString NodeResolveHost;
+    TString NodeDomain;
+    ui32 InterconnectPort;
     ui32 SqsHttpPort;
-    TString NodeType; 
-    TString DataCenter; 
-    TString Rack; 
-    ui32 Body; 
-    ui32 GRpcPort; 
+    TString NodeType;
+    TString DataCenter;
+    TString Rack;
+    ui32 Body;
+    ui32 GRpcPort;
     ui32 GRpcsPort;
     TString GRpcPublicHost;
     ui32 GRpcPublicPort;
@@ -98,28 +98,28 @@ protected:
         LogSamplingRate = 0;
 
         NodeId = 0;
-        NodeIdValue = ""; 
+        NodeIdValue = "";
         BusProxyPort = NMsgBusProxy::TProtocol::DefaultPort;
         MonitoringPort = 0;
         MonitoringThreads = 10;
         RestartsCountFile = "";
         CompileInflightLimit = 100000;
         TenantName = "";
-        TenantSlotType = "default"; 
-        TenantSlotId = ""; 
+        TenantSlotType = "default";
+        TenantSlotId = "";
         TenantCPU = 0;
         TenantMemory = 0;
         TenantNetwork = 0;
-        NodeBrokerPort = 0; 
+        NodeBrokerPort = 0;
         NodeBrokerUseTls = false;
-        FixedNodeID = false; 
-        InterconnectPort = 0; 
+        FixedNodeID = false;
+        InterconnectPort = 0;
         SqsHttpPort = 0;
-        IgnoreCmsConfigs = false; 
-        DataCenter = ""; 
-        Rack = ""; 
-        Body = 0; 
-        GRpcPort = 0; 
+        IgnoreCmsConfigs = false;
+        DataCenter = "";
+        Rack = "";
+        Body = 0;
+        GRpcPort = 0;
         GRpcsPort = 0;
         GRpcPublicHost = "";
         GRpcPublicPort = 0;
@@ -144,36 +144,36 @@ protected:
         config.Opts->AddLongOption("syslog-service-tag", "unique tag for syslog").RequiredArgument("NAME").StoreResult(&SysLogServiceTag);
         config.Opts->AddLongOption("log-file-name", "file name for log backend").RequiredArgument("NAME").StoreResult(&LogFileName);
         config.Opts->AddLongOption("tcp", "start tcp interconnect").NoArgument();
-        config.Opts->AddLongOption('n', "node", "Node ID or 'static' to auto-detect using naming file and ic-port, or 'dynamic' for dynamic nodes, or 'dynamic-fixed' for dynamic nodes with infinite node ID lease (for dynamic storage nodes)") 
-            .RequiredArgument("[NUM|static|dynamic]").StoreResult(&NodeIdValue); 
-        config.Opts->AddLongOption("node-broker", "node broker address host:port") 
+        config.Opts->AddLongOption('n', "node", "Node ID or 'static' to auto-detect using naming file and ic-port, or 'dynamic' for dynamic nodes, or 'dynamic-fixed' for dynamic nodes with infinite node ID lease (for dynamic storage nodes)")
+            .RequiredArgument("[NUM|static|dynamic]").StoreResult(&NodeIdValue);
+        config.Opts->AddLongOption("node-broker", "node broker address host:port")
                 .RequiredArgument("ADDR").AppendTo(&NodeBrokerAddresses);
-        config.Opts->AddLongOption("node-broker-port", "node broker port (hosts from naming file are used)") 
-                .RequiredArgument("PORT").StoreResult(&NodeBrokerPort); 
+        config.Opts->AddLongOption("node-broker-port", "node broker port (hosts from naming file are used)")
+                .RequiredArgument("PORT").StoreResult(&NodeBrokerPort);
         config.Opts->AddLongOption("node-broker-use-tls", "use tls for node broker (hosts from naming file are used)")
                 .RequiredArgument("PORT").StoreResult(&NodeBrokerUseTls);
         config.Opts->AddLongOption("node-address", "address for dynamic node")
                 .RequiredArgument("ADDR").StoreResult(&NodeAddress);
         config.Opts->AddLongOption("node-host", "hostname for dynamic node")
                 .RequiredArgument("NAME").StoreResult(&NodeHost);
-        config.Opts->AddLongOption("node-resolve-host", "resolve hostname for dynamic node") 
-                .RequiredArgument("NAME").StoreResult(&NodeResolveHost); 
-        config.Opts->AddLongOption("node-domain", "domain for dynamic node to register in") 
-                .RequiredArgument("NAME").StoreResult(&NodeDomain); 
-        config.Opts->AddLongOption("ic-port", "interconnect port") 
-                .RequiredArgument("NUM").StoreResult(&InterconnectPort); 
+        config.Opts->AddLongOption("node-resolve-host", "resolve hostname for dynamic node")
+                .RequiredArgument("NAME").StoreResult(&NodeResolveHost);
+        config.Opts->AddLongOption("node-domain", "domain for dynamic node to register in")
+                .RequiredArgument("NAME").StoreResult(&NodeDomain);
+        config.Opts->AddLongOption("ic-port", "interconnect port")
+                .RequiredArgument("NUM").StoreResult(&InterconnectPort);
         config.Opts->AddLongOption("sqs-port", "sqs port")
                 .RequiredArgument("NUM").StoreResult(&SqsHttpPort);
         config.Opts->AddLongOption("proxy", "Bind to proxy(-ies)").RequiredArgument("ADDR").AppendTo(&ProxyBindToProxy);
         config.Opts->AddLongOption("host-label-override", "overrides host label for slot").RequiredArgument("NAME").StoreResult(&HostLabelOverride);
-        config.Opts->AddLongOption("tenant", "add binding for Local service to specified tenant, might be one of {'no', 'dynamic', '/<root>', '/<root>/<path_to_user>'}") 
+        config.Opts->AddLongOption("tenant", "add binding for Local service to specified tenant, might be one of {'no', 'dynamic', '/<root>', '/<root>/<path_to_user>'}")
             .RequiredArgument("NAME").StoreResult(&TenantName);
-        config.Opts->AddLongOption("tenant-slot-type", "set tenant slot type for dynamic tenant") 
-            .RequiredArgument("NAME").StoreResult(&TenantSlotType); 
-        config.Opts->AddLongOption("tenant-slot-id", "set tenant slot id (for static tenants it is used for monitoring)") 
-            .RequiredArgument("NAME").StoreResult(&TenantSlotId); 
-        config.Opts->AddLongOption("tenant-domain", "specify domain for dynamic tenant") 
-            .RequiredArgument("NAME").StoreResult(&TenantDomain); 
+        config.Opts->AddLongOption("tenant-slot-type", "set tenant slot type for dynamic tenant")
+            .RequiredArgument("NAME").StoreResult(&TenantSlotType);
+        config.Opts->AddLongOption("tenant-slot-id", "set tenant slot id (for static tenants it is used for monitoring)")
+            .RequiredArgument("NAME").StoreResult(&TenantSlotId);
+        config.Opts->AddLongOption("tenant-domain", "specify domain for dynamic tenant")
+            .RequiredArgument("NAME").StoreResult(&TenantDomain);
         config.Opts->AddLongOption("tenant-cpu", "specify CPU limit tenant binding")
             .RequiredArgument("NUM").StoreResult(&TenantCPU);
         config.Opts->AddLongOption("tenant-memory", "specify Memory limit for tenant binding")
@@ -188,16 +188,16 @@ protected:
 //        config.Opts->AddLongOption('u', "url-base", "url base to request configs from").OptionalArgument("URL");
         config.Opts->AddLongOption("sys-file", "actor system config file (use dummy config by default)").OptionalArgument("PATH");
         config.Opts->AddLongOption("naming-file", "static nameservice config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("domains-file", "domain config file").OptionalArgument("PATH"); 
+        config.Opts->AddLongOption("domains-file", "domain config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("bs-file", "blobstorage config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("log-file", "log config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("ic-file", "interconnect config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("channels-file", "tablet channel profile config file").OptionalArgument("PATH"); 
+        config.Opts->AddLongOption("channels-file", "tablet channel profile config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("vdisk-file", "vdisk kind config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("drivemodel-file", "drive model config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("grpc-file", "gRPC config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("tenant-pool-file", "Tenant Pool service config file").OptionalArgument("PATH"); 
-        config.Opts->AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT").StoreResult(&GRpcPort); 
+        config.Opts->AddLongOption("tenant-pool-file", "Tenant Pool service config file").OptionalArgument("PATH");
+        config.Opts->AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT").StoreResult(&GRpcPort);
         config.Opts->AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT").StoreResult(&GRpcsPort);
         config.Opts->AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicHost);
         config.Opts->AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT").StoreResult(&GRpcPublicPort);
@@ -217,8 +217,8 @@ protected:
         config.Opts->AddLongOption("pdisk-key-file", "pdisk encryption key configuration").OptionalArgument("PATH");
         config.Opts->AddLongOption("sqs-file", "SQS config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("bootstrap-file", "Bootstrap config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("dyn-nodes-file", "Dynamic nodes config file").OptionalArgument("PATH"); 
-        config.Opts->AddLongOption("cms-file", "CMS config file").OptionalArgument("PATH"); 
+        config.Opts->AddLongOption("dyn-nodes-file", "Dynamic nodes config file").OptionalArgument("PATH");
+        config.Opts->AddLongOption("cms-file", "CMS config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("alloc-file", "Allocator config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("yql-file", "Yql Analytics config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("yq-file", "Yandex Query config file").OptionalArgument("PATH");
@@ -230,19 +230,19 @@ protected:
         config.Opts->AddLongOption("compile-inflight-limit", "Limit on parallel programs compilation").OptionalArgument("NUM").StoreResult(&CompileInflightLimit);
         config.Opts->AddLongOption("udf", "Load shared library with UDF by given path").AppendTo(&UDFsPaths);
         config.Opts->AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").StoreResult(&UDFsDir);
-        config.Opts->AddLongOption("node-type", "Type of the node") 
-                .RequiredArgument("NAME").StoreResult(&NodeType); 
-        config.Opts->AddLongOption("ignore-cms-configs", "Don't load configs from CMS") 
-                .NoArgument().SetFlag(&IgnoreCmsConfigs); 
+        config.Opts->AddLongOption("node-type", "Type of the node")
+                .RequiredArgument("NAME").StoreResult(&NodeType);
+        config.Opts->AddLongOption("ignore-cms-configs", "Don't load configs from CMS")
+                .NoArgument().SetFlag(&IgnoreCmsConfigs);
         config.Opts->AddLongOption("cert", "Path to client certificate file (PEM)").RequiredArgument("PATH").StoreResult(&PathToCert);
         config.Opts->AddLongOption("key", "Path to private key file (PEM)").RequiredArgument("PATH").StoreResult(&PathToPKey);
         config.Opts->AddLongOption("ca", "Path to certificate authority file (PEM)").RequiredArgument("PATH").StoreResult(&PathToCA);
-        config.Opts->AddLongOption("data-center", "data center name (used to describe dynamic node location)") 
-                .RequiredArgument("NAME").StoreResult(&DataCenter); 
-        config.Opts->AddLongOption("rack", "rack name (used to describe dynamic node location)") 
-                .RequiredArgument("NAME").StoreResult(&Rack); 
-        config.Opts->AddLongOption("body", "body name (used to describe dynamic node location)") 
-                .RequiredArgument("NUM").StoreResult(&Body); 
+        config.Opts->AddLongOption("data-center", "data center name (used to describe dynamic node location)")
+                .RequiredArgument("NAME").StoreResult(&DataCenter);
+        config.Opts->AddLongOption("rack", "rack name (used to describe dynamic node location)")
+                .RequiredArgument("NAME").StoreResult(&Rack);
+        config.Opts->AddLongOption("body", "body name (used to describe dynamic node location)")
+                .RequiredArgument("NUM").StoreResult(&Body);
         config.Opts->AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").AppendTo(&YamlConfigFiles);
         config.Opts->AddLongOption("cms-config-cache-file", "Path to CMS cache config file").OptionalArgument("PATH")
             .StoreResult(&RunConfig.PathToConfigCacheFile);
@@ -326,79 +326,79 @@ protected:
         }
 
         OPTION("naming-file", NameserviceConfig);
- 
-        if (config.ParseResult->Has("node")) { 
-            if (NodeIdValue == "static") { 
+
+        if (config.ParseResult->Has("node")) {
+            if (NodeIdValue == "static") {
                 if (!AppConfig.HasNameserviceConfig() || !InterconnectPort)
-                    ythrow yexception() << "'--node static' requires naming file and IC port to be specified"; 
-                TString hostname; 
-                try { 
-                    hostname = HostName(); 
-                    hostname.to_lower(); 
-                    const NKikimrConfig::TStaticNameserviceConfig& nameserviceConfig = AppConfig.GetNameserviceConfig(); 
-                    for (const auto& node : nameserviceConfig.GetNode()) { 
-                        if (node.GetHost() == hostname && InterconnectPort == node.GetPort()) { 
-                            NodeId = node.GetNodeId(); 
-                            break; 
-                        } 
-                    } 
-                } catch(TSystemError& e) { 
-                    ythrow yexception() << "cannot detect host name: " << e.what(); 
-                } 
-                if (!NodeId) 
-                    ythrow yexception() << "cannot detect node ID for " << hostname << ":" << InterconnectPort; 
-                Cout << "Determined node ID: " << NodeId << Endl; 
-            } else if (NodeIdValue == "dynamic") { 
-            } else if (NodeIdValue == "dynamic-fixed") { 
-                FixedNodeID = true; 
-            } else { 
-                if (!TryFromString(NodeIdValue, NodeId)) 
-                    ythrow yexception() << "wrong '--node' value (should be NUM, 'static', or 'dynamic')"; 
-            } 
-        } 
- 
-        if (config.ParseResult->Has("tenant")) { 
-            if (!IsStartWithSlash(TenantName) && TenantName != "no" && TenantName != "dynamic") { 
-                ythrow yexception() << "lead / in --tenant parametr is always required except from 'no' and 'dynamic'"; 
-            } 
-            if (TenantName != "no" && NodeId) { 
-                ythrow yexception() << "opt '--node' compatible only with '--tenant no', opt 'node' incompatible with any other values of opt '--tenant'"; 
-            } 
-            if (config.ParseResult->Has("tenant-pool-file")) { 
-                ythrow yexception() << "opt '--tenant' is incompatible with --tenant-pool-file"; 
-            } 
-        } 
- 
-        MaybeRegisterAndLoadConfigs(); 
- 
+                    ythrow yexception() << "'--node static' requires naming file and IC port to be specified";
+                TString hostname;
+                try {
+                    hostname = HostName();
+                    hostname.to_lower();
+                    const NKikimrConfig::TStaticNameserviceConfig& nameserviceConfig = AppConfig.GetNameserviceConfig();
+                    for (const auto& node : nameserviceConfig.GetNode()) {
+                        if (node.GetHost() == hostname && InterconnectPort == node.GetPort()) {
+                            NodeId = node.GetNodeId();
+                            break;
+                        }
+                    }
+                } catch(TSystemError& e) {
+                    ythrow yexception() << "cannot detect host name: " << e.what();
+                }
+                if (!NodeId)
+                    ythrow yexception() << "cannot detect node ID for " << hostname << ":" << InterconnectPort;
+                Cout << "Determined node ID: " << NodeId << Endl;
+            } else if (NodeIdValue == "dynamic") {
+            } else if (NodeIdValue == "dynamic-fixed") {
+                FixedNodeID = true;
+            } else {
+                if (!TryFromString(NodeIdValue, NodeId))
+                    ythrow yexception() << "wrong '--node' value (should be NUM, 'static', or 'dynamic')";
+            }
+        }
+
+        if (config.ParseResult->Has("tenant")) {
+            if (!IsStartWithSlash(TenantName) && TenantName != "no" && TenantName != "dynamic") {
+                ythrow yexception() << "lead / in --tenant parametr is always required except from 'no' and 'dynamic'";
+            }
+            if (TenantName != "no" && NodeId) {
+                ythrow yexception() << "opt '--node' compatible only with '--tenant no', opt 'node' incompatible with any other values of opt '--tenant'";
+            }
+            if (config.ParseResult->Has("tenant-pool-file")) {
+                ythrow yexception() << "opt '--tenant' is incompatible with --tenant-pool-file";
+            }
+        }
+
+        MaybeRegisterAndLoadConfigs();
+
         LoadYamlConfig();
 
         OPTION("sys-file", ActorSystemConfig);
-        if (!AppConfig.HasActorSystemConfig()) { 
+        if (!AppConfig.HasActorSystemConfig()) {
             AppConfig.MutableActorSystemConfig()->CopyFrom(*DummyActorSystemConfig());
-        } 
- 
+        }
+
         OPTION("domains-file", DomainsConfig);
         OPTION("bs-file", BlobStorageConfig);
 
         if (auto logConfig = OPTION("log-file", LogConfig)) {
-            if (config.ParseResult->Has("syslog")) 
-                logConfig->SetSysLog(true); 
-            if (config.ParseResult->Has("log-level")) 
-                logConfig->SetDefaultLevel(LogLevel); 
-            if (config.ParseResult->Has("log-sampling-level")) 
-                logConfig->SetDefaultSamplingLevel(LogSamplingLevel); 
-            if (config.ParseResult->Has("log-sampling-rate")) 
-                logConfig->SetDefaultSamplingRate(LogSamplingRate); 
-            if (config.ParseResult->Has("log-format")) 
-                logConfig->SetFormat(LogFormat); 
-            if (config.ParseResult->Has("cluster-name")) 
-                logConfig->SetClusterName(ClusterName); 
+            if (config.ParseResult->Has("syslog"))
+                logConfig->SetSysLog(true);
+            if (config.ParseResult->Has("log-level"))
+                logConfig->SetDefaultLevel(LogLevel);
+            if (config.ParseResult->Has("log-sampling-level"))
+                logConfig->SetDefaultSamplingLevel(LogSamplingLevel);
+            if (config.ParseResult->Has("log-sampling-rate"))
+                logConfig->SetDefaultSamplingRate(LogSamplingRate);
+            if (config.ParseResult->Has("log-format"))
+                logConfig->SetFormat(LogFormat);
+            if (config.ParseResult->Has("cluster-name"))
+                logConfig->SetClusterName(ClusterName);
         }
-        // This flag is set per node and we prefer flag over CMS. 
-        if (config.ParseResult->Has("syslog-service-tag") 
-            && !AppConfig.GetLogConfig().GetSysLogService()) 
-            AppConfig.MutableLogConfig()->SetSysLogService(SysLogServiceTag); 
+        // This flag is set per node and we prefer flag over CMS.
+        if (config.ParseResult->Has("syslog-service-tag")
+            && !AppConfig.GetLogConfig().GetSysLogService())
+            AppConfig.MutableLogConfig()->SetSysLogService(SysLogServiceTag);
 
         if (config.ParseResult->Has("log-file-name"))
             AppConfig.MutableLogConfig()->SetBackendFileName(LogFileName);
@@ -470,8 +470,8 @@ protected:
             Y_VERIFY(RunConfig.ScopeId.IsEmpty());
             RunConfig.ScopeId = TKikimrScopeId::DynamicTenantScopeId;
         }
-        if (NodeId) 
-            RunConfig.NodeId = NodeId; 
+        if (NodeId)
+            RunConfig.NodeId = NodeId;
         if (AppConfig.HasNameserviceConfig() && NodeId) {
             bool nodeIdMatchesConfig = false;
             TString localhost("localhost");
@@ -505,31 +505,31 @@ protected:
             }
         }
 
-        // apply options affecting UDF paths 
-        if (!AppConfig.HasUDFsDir()) 
-            AppConfig.SetUDFsDir(UDFsDir); 
-        if (!AppConfig.UDFsPathsSize()) { 
-            for (const auto& path : UDFsPaths) { 
-                AppConfig.AddUDFsPaths(path); 
-            } 
-        } 
+        // apply options affecting UDF paths
+        if (!AppConfig.HasUDFsDir())
+            AppConfig.SetUDFsDir(UDFsDir);
+        if (!AppConfig.UDFsPathsSize()) {
+            for (const auto& path : UDFsPaths) {
+                AppConfig.AddUDFsPaths(path);
+            }
+        }
 
-        if (!AppConfig.HasMonitoringConfig()) 
-            AppConfig.MutableMonitoringConfig()->SetMonitoringThreads(MonitoringThreads); 
-        if (!AppConfig.HasRestartsCountConfig() && RestartsCountFile) 
-            AppConfig.MutableRestartsCountConfig()->SetRestartsCountFile(RestartsCountFile); 
+        if (!AppConfig.HasMonitoringConfig())
+            AppConfig.MutableMonitoringConfig()->SetMonitoringThreads(MonitoringThreads);
+        if (!AppConfig.HasRestartsCountConfig() && RestartsCountFile)
+            AppConfig.MutableRestartsCountConfig()->SetRestartsCountFile(RestartsCountFile);
 
-        // Ports and node type are always applied (event if config was loaded from CMS). 
-        if (MonitoringPort) 
-            AppConfig.MutableMonitoringConfig()->SetMonitoringPort(MonitoringPort); 
+        // Ports and node type are always applied (event if config was loaded from CMS).
+        if (MonitoringPort)
+            AppConfig.MutableMonitoringConfig()->SetMonitoringPort(MonitoringPort);
         if (MonitoringAddress)
             AppConfig.MutableMonitoringConfig()->SetMonitoringAddress(MonitoringAddress);
         if (SqsHttpPort)
             RunConfig.AppConfig.MutableSqsConfig()->MutableHttpServerConfig()->SetPort(SqsHttpPort);
-        if (GRpcPort) { 
-            auto& conf = *AppConfig.MutableGRpcConfig(); 
-            conf.SetStartGRpcProxy(true); 
-            conf.SetPort(GRpcPort); 
+        if (GRpcPort) {
+            auto& conf = *AppConfig.MutableGRpcConfig();
+            conf.SetStartGRpcProxy(true);
+            conf.SetPort(GRpcPort);
         }
         if (GRpcsPort) {
             auto& conf = *AppConfig.MutableGRpcConfig();
@@ -557,9 +557,9 @@ protected:
         if (GRpcPublicTargetNameOverride) {
             AppConfig.MutableGRpcConfig()->SetPublicTargetNameOverride(GRpcPublicTargetNameOverride);
         }
-        if (config.ParseResult->Has("node-type")) 
-            AppConfig.MutableTenantPoolConfig()->SetNodeType(NodeType); 
- 
+        if (config.ParseResult->Has("node-type"))
+            AppConfig.MutableTenantPoolConfig()->SetNodeType(NodeType);
+
         if (config.ParseResult->Has("host-label-override")) {
             AppConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostLabelOverride);
         } else {
@@ -578,55 +578,55 @@ protected:
             AppConfig.MutableMonitoringConfig()->SetProcessLocation(HostAndICPort());
         }
 
-        // Add binding. 
-        if (!AppConfig.HasTenantPoolConfig() && config.ParseResult->Has("tenant")) { 
-            if (TenantName == "no") { 
-                AppConfig.MutableTenantPoolConfig()->SetIsEnabled(false); 
-            } else { 
-                auto &slot = *AppConfig.MutableTenantPoolConfig()->AddSlots(); 
-                if (TenantName == "dynamic") { 
-                    TString tenantDomain = DeduceTenantDomain(); 
-                    if (!tenantDomain) { 
-                        ythrow yexception() << "cannot deduce domain for dynamic tenant, use '--tenant-domain' opt"; 
-                    } 
-                    slot.SetId(TenantSlotId ? TenantSlotId : "dynamic-slot"); 
-                    slot.SetDomainName(tenantDomain); 
-                    slot.SetIsDynamic(true); 
-                    slot.SetType(TenantSlotType); 
-                } else { 
-                    slot.SetId(TenantSlotId ? TenantSlotId : "static-slot"); 
-                    slot.SetTenantName(TenantName); 
-                    slot.SetIsDynamic(false); 
-                } 
-                if (config.ParseResult->Has("tenant-cpu")) 
-                    slot.MutableResourceLimit()->SetCPU(TenantCPU); 
-                if (config.ParseResult->Has("tenant-memory")) 
-                    slot.MutableResourceLimit()->SetMemory(TenantMemory); 
-                if (config.ParseResult->Has("tenant-network")) 
-                    slot.MutableResourceLimit()->SetNetwork(TenantNetwork); 
-            } 
-        } 
- 
+        // Add binding.
+        if (!AppConfig.HasTenantPoolConfig() && config.ParseResult->Has("tenant")) {
+            if (TenantName == "no") {
+                AppConfig.MutableTenantPoolConfig()->SetIsEnabled(false);
+            } else {
+                auto &slot = *AppConfig.MutableTenantPoolConfig()->AddSlots();
+                if (TenantName == "dynamic") {
+                    TString tenantDomain = DeduceTenantDomain();
+                    if (!tenantDomain) {
+                        ythrow yexception() << "cannot deduce domain for dynamic tenant, use '--tenant-domain' opt";
+                    }
+                    slot.SetId(TenantSlotId ? TenantSlotId : "dynamic-slot");
+                    slot.SetDomainName(tenantDomain);
+                    slot.SetIsDynamic(true);
+                    slot.SetType(TenantSlotType);
+                } else {
+                    slot.SetId(TenantSlotId ? TenantSlotId : "static-slot");
+                    slot.SetTenantName(TenantName);
+                    slot.SetIsDynamic(false);
+                }
+                if (config.ParseResult->Has("tenant-cpu"))
+                    slot.MutableResourceLimit()->SetCPU(TenantCPU);
+                if (config.ParseResult->Has("tenant-memory"))
+                    slot.MutableResourceLimit()->SetMemory(TenantMemory);
+                if (config.ParseResult->Has("tenant-network"))
+                    slot.MutableResourceLimit()->SetNetwork(TenantNetwork);
+            }
+        }
+
         // MessageBus options.
 
-        if (!AppConfig.HasMessageBusConfig()) { 
-            auto messageBusConfig = AppConfig.MutableMessageBusConfig(); 
-            messageBusConfig->SetStartBusProxy(config.ParseResult->Has(config.Opts->FindLongOption("mbus"))); 
-            messageBusConfig->SetBusProxyPort(BusProxyPort); 
+        if (!AppConfig.HasMessageBusConfig()) {
+            auto messageBusConfig = AppConfig.MutableMessageBusConfig();
+            messageBusConfig->SetStartBusProxy(config.ParseResult->Has(config.Opts->FindLongOption("mbus")));
+            messageBusConfig->SetBusProxyPort(BusProxyPort);
 
-            if (!messageBusConfig->GetStartBusProxy()) { 
-                for (const auto &option : config.Opts->Opts_) { 
-                    for (const TString &longName : option->GetLongNames()) { 
-                        if (longName.StartsWith("mbus-") && config.ParseResult->Has(option.Get())) { 
-                            ythrow yexception() << "option --" << longName << " is useless without --mbus option"; 
-                        } 
+            if (!messageBusConfig->GetStartBusProxy()) {
+                for (const auto &option : config.Opts->Opts_) {
+                    for (const TString &longName : option->GetLongNames()) {
+                        if (longName.StartsWith("mbus-") && config.ParseResult->Has(option.Get())) {
+                            ythrow yexception() << "option --" << longName << " is useless without --mbus option";
+                        }
                     }
                 }
             }
 
-            auto queueConfig = messageBusConfig->MutableProxyBusQueueConfig(); 
-            queueConfig->SetName(ProxyBusQueueConfig.Name); 
-            queueConfig->SetNumWorkers(ProxyBusQueueConfig.NumWorkers); 
+            auto queueConfig = messageBusConfig->MutableProxyBusQueueConfig();
+            queueConfig->SetName(ProxyBusQueueConfig.Name);
+            queueConfig->SetNumWorkers(ProxyBusQueueConfig.NumWorkers);
 
             auto sessionConfig = messageBusConfig->MutableProxyBusSessionConfig();
 
@@ -656,11 +656,11 @@ protected:
             sessionConfig->SetExecuteOnReplyInWorkerPool(ProxyBusSessionConfig.ExecuteOnReplyInWorkerPool);
             sessionConfig->SetListenPort(ProxyBusSessionConfig.ListenPort);
 
-            for (auto proxy : ProxyBindToProxy) { 
-                messageBusConfig->AddProxyBindToProxy(proxy); 
-            } 
-            messageBusConfig->SetStartTracingBusProxy(!!TracePath); 
-            messageBusConfig->SetTracePath(TracePath); 
+            for (auto proxy : ProxyBindToProxy) {
+                messageBusConfig->AddProxyBindToProxy(proxy);
+            }
+            messageBusConfig->SetStartTracingBusProxy(!!TracePath);
+            messageBusConfig->SetTracePath(TracePath);
         }
     }
 
@@ -788,34 +788,34 @@ protected:
         }
     }
 
-    TString DeduceTenantDomain() { 
-        if (TenantDomain) 
-            return TenantDomain; 
-        if (AppConfig.GetDomainsConfig().DomainSize() == 1) 
-            return AppConfig.GetDomainsConfig().GetDomain(0).GetName(); 
-        if (NodeDomain) 
-            return NodeDomain; 
-        return ""; 
-    } 
- 
-    TString DeduceNodeDomain() { 
-        if (NodeDomain) 
-            return NodeDomain; 
-        if (AppConfig.GetDomainsConfig().DomainSize() == 1) 
-            return AppConfig.GetDomainsConfig().GetDomain(0).GetName(); 
-        if (TenantDomain) 
-            return TenantDomain; 
-        if (AppConfig.GetTenantPoolConfig().SlotsSize() == 1) { 
-            auto &slot = AppConfig.GetTenantPoolConfig().GetSlots(0); 
-            if (slot.GetDomainName()) 
-                return slot.GetDomainName(); 
-            auto &tenantName = slot.GetTenantName(); 
-            if (IsStartWithSlash(tenantName)) 
-                return ToString(ExtractDomain(tenantName)); 
-        } 
-        return ""; 
-    } 
- 
+    TString DeduceTenantDomain() {
+        if (TenantDomain)
+            return TenantDomain;
+        if (AppConfig.GetDomainsConfig().DomainSize() == 1)
+            return AppConfig.GetDomainsConfig().GetDomain(0).GetName();
+        if (NodeDomain)
+            return NodeDomain;
+        return "";
+    }
+
+    TString DeduceNodeDomain() {
+        if (NodeDomain)
+            return NodeDomain;
+        if (AppConfig.GetDomainsConfig().DomainSize() == 1)
+            return AppConfig.GetDomainsConfig().GetDomain(0).GetName();
+        if (TenantDomain)
+            return TenantDomain;
+        if (AppConfig.GetTenantPoolConfig().SlotsSize() == 1) {
+            auto &slot = AppConfig.GetTenantPoolConfig().GetSlots(0);
+            if (slot.GetDomainName())
+                return slot.GetDomainName();
+            auto &tenantName = slot.GetTenantName();
+            if (IsStartWithSlash(tenantName))
+                return ToString(ExtractDomain(tenantName));
+        }
+        return "";
+    }
+
     bool GetCachedConfig(NKikimrConfig::TAppConfig &appConfig) {
         Y_VERIFY_DEBUG(RunConfig.PathToConfigCacheFile, "GetCachedConfig called with a cms config cache file set");
 
@@ -839,23 +839,23 @@ protected:
         }
     }
 
-    void MaybeRegisterAndLoadConfigs() 
-    { 
+    void MaybeRegisterAndLoadConfigs()
+    {
         // static node
         if (NodeBrokerAddresses.empty() && !NodeBrokerPort) {
-            if (!NodeId) 
-                ythrow yexception() << "Either --node [NUM|'static'] or --node-broker[-port] should be specified"; 
+            if (!NodeId)
+                ythrow yexception() << "Either --node [NUM|'static'] or --node-broker[-port] should be specified";
 
             if (!HierarchicalCfg && RunConfig.PathToConfigCacheFile)
                 LoadCachedConfigsForStaticNode();
-            return; 
-        } 
- 
-        RegisterDynamicNode(); 
+            return;
+        }
+
+        RegisterDynamicNode();
         if (!HierarchicalCfg && !IgnoreCmsConfigs)
             LoadConfigForDynamicNode();
     }
- 
+
     THolder<NClient::TRegistrationResult> TryToRegisterDynamicNode(
             const TString &addr,
             const TString &domainName,
@@ -864,14 +864,14 @@ protected:
             const TString &nodeResolveHost,
         const TMaybe<TString>& path) {
         NClient::TKikimr kikimr(GetKikimr(addr));
-        auto registrant = kikimr.GetNodeRegistrant(); 
+        auto registrant = kikimr.GetNodeRegistrant();
 
         NActorsInterconnect::TNodeLocation location;
         location.SetDataCenter(DataCenter);
         location.SetRack(Rack);
         location.SetUnit(ToString(Body));
         TNodeLocation loc(location);
- 
+
         NActorsInterconnect::TNodeLocation legacy;
         legacy.SetDataCenterNum(DataCenterFromString(DataCenter));
         legacy.SetRoomNum(0);
@@ -879,33 +879,33 @@ protected:
         legacy.SetBodyNum(Body);
         loc.InheritLegacyValue(TNodeLocation(legacy));
 
-        Cout << "Trying to register at " << addr << Endl; 
- 
-        return MakeHolder<NClient::TRegistrationResult> 
-            (registrant.SyncRegisterNode(ToString(domainName), 
+        Cout << "Trying to register at " << addr << Endl;
+
+        return MakeHolder<NClient::TRegistrationResult>
+            (registrant.SyncRegisterNode(ToString(domainName),
                                          nodeHost,
-                                         InterconnectPort, 
+                                         InterconnectPort,
                                          nodeAddress,
                                          nodeResolveHost,
                                          std::move(loc),
                                          FixedNodeID,
                                          path));
-    } 
- 
-    void FillClusterEndpoints(TVector<TString> &addrs) { 
+    }
+
+    void FillClusterEndpoints(TVector<TString> &addrs) {
         if (!NodeBrokerAddresses.empty()) {
             for (auto addr: NodeBrokerAddresses) {
                 addrs.push_back(addr);
             }
-        } else { 
-            Y_VERIFY(NodeBrokerPort); 
-            for (auto &node : RunConfig.AppConfig.MutableNameserviceConfig()->GetNode()) { 
+        } else {
+            Y_VERIFY(NodeBrokerPort);
+            for (auto &node : RunConfig.AppConfig.MutableNameserviceConfig()->GetNode()) {
                 addrs.emplace_back(TStringBuilder() << (NodeBrokerUseTls ? "grpcs://" : "") << node.GetHost() << ':' << NodeBrokerPort);
-            } 
-        } 
-        ShuffleRange(addrs); 
-    } 
- 
+            }
+        }
+        ShuffleRange(addrs);
+    }
+
     TString HostAndICPort() {
         try {
             auto hostname = to_lower(HostName());
@@ -923,64 +923,64 @@ protected:
         return {};
     }
 
-    void RegisterDynamicNode() { 
-        TVector<TString> addrs; 
-        auto &dnConfig = *RunConfig.AppConfig.MutableDynamicNodeConfig(); 
- 
-        FillClusterEndpoints(addrs); 
- 
-        if (!InterconnectPort) 
-            ythrow yexception() << "Either --node or --ic-port should be specified"; 
- 
-        if (addrs.empty()) { 
-            ythrow yexception() << "List of Node Broker end-points is empty"; 
-        } 
- 
-        TString domainName = DeduceNodeDomain(); 
-        if (!NodeHost) 
-            NodeHost = FQDNHostName(); 
-        if (!NodeResolveHost) 
-            NodeResolveHost = NodeHost; 
- 
-        THolder<NClient::TRegistrationResult> result; 
+    void RegisterDynamicNode() {
+        TVector<TString> addrs;
+        auto &dnConfig = *RunConfig.AppConfig.MutableDynamicNodeConfig();
+
+        FillClusterEndpoints(addrs);
+
+        if (!InterconnectPort)
+            ythrow yexception() << "Either --node or --ic-port should be specified";
+
+        if (addrs.empty()) {
+            ythrow yexception() << "List of Node Broker end-points is empty";
+        }
+
+        TString domainName = DeduceNodeDomain();
+        if (!NodeHost)
+            NodeHost = FQDNHostName();
+        if (!NodeResolveHost)
+            NodeResolveHost = NodeHost;
+
+        THolder<NClient::TRegistrationResult> result;
         while (!result || !result->IsSuccess()) {
-            for (auto addr : addrs) { 
+            for (auto addr : addrs) {
                 result = TryToRegisterDynamicNode(addr, domainName, NodeHost, NodeAddress, NodeResolveHost, GetSchemePath());
-                if (result->IsSuccess()) { 
-                    Cout << "Success. Registered as " << result->GetNodeId() << Endl; 
-                    break; 
-                } 
-                Cerr << "Registration error: " << result->GetErrorMessage() << Endl; 
-            } 
-            if (!result || !result->IsSuccess()) 
-                Sleep(TDuration::Seconds(1)); 
-        } 
-        Y_VERIFY(result); 
- 
-        if (!result->IsSuccess()) 
-            ythrow yexception() << "Cannot register dynamic node: " << result->GetErrorMessage(); 
- 
-        RunConfig.NodeId = result->GetNodeId(); 
+                if (result->IsSuccess()) {
+                    Cout << "Success. Registered as " << result->GetNodeId() << Endl;
+                    break;
+                }
+                Cerr << "Registration error: " << result->GetErrorMessage() << Endl;
+            }
+            if (!result || !result->IsSuccess())
+                Sleep(TDuration::Seconds(1));
+        }
+        Y_VERIFY(result);
+
+        if (!result->IsSuccess())
+            ythrow yexception() << "Cannot register dynamic node: " << result->GetErrorMessage();
+
+        RunConfig.NodeId = result->GetNodeId();
         RunConfig.ScopeId = TKikimrScopeId(result->GetScopeId());
-        auto &nsConfig = *RunConfig.AppConfig.MutableNameserviceConfig(); 
- 
-        nsConfig.ClearNode(); 
- 
-        for (auto &node : result->Record().GetNodes()) { 
-            if (node.GetNodeId() == result->GetNodeId()) { 
-                dnConfig.MutableNodeInfo()->CopyFrom(node); 
+        auto &nsConfig = *RunConfig.AppConfig.MutableNameserviceConfig();
+
+        nsConfig.ClearNode();
+
+        for (auto &node : result->Record().GetNodes()) {
+            if (node.GetNodeId() == result->GetNodeId()) {
+                dnConfig.MutableNodeInfo()->CopyFrom(node);
             } else {
-                auto &info = *nsConfig.AddNode(); 
-                info.SetNodeId(node.GetNodeId()); 
-                info.SetAddress(node.GetAddress()); 
-                info.SetPort(node.GetPort()); 
-                info.SetHost(node.GetHost()); 
-                info.SetInterconnectHost(node.GetResolveHost()); 
-                info.MutableLocation()->CopyFrom(node.GetLocation()); 
-            } 
-        } 
-    } 
- 
+                auto &info = *nsConfig.AddNode();
+                info.SetNodeId(node.GetNodeId());
+                info.SetAddress(node.GetAddress());
+                info.SetPort(node.GetPort());
+                info.SetHost(node.GetHost());
+                info.SetInterconnectHost(node.GetResolveHost());
+                info.MutableLocation()->CopyFrom(node.GetLocation());
+            }
+        }
+    }
+
     void ApplyConfigForNode(NKikimrConfig::TAppConfig &appConfig) {
         AppConfig.Swap(&appConfig);
         // Dynamic node config is defined by options and Node Broker response.
@@ -1018,27 +1018,27 @@ protected:
 
     bool TryToLoadConfigForDynamicNodeFromCMS(const TString &addr, TString &error) {
         NClient::TKikimr kikimr(GetKikimr(addr));
-        auto configurator = kikimr.GetNodeConfigurator(); 
- 
-        Cout << "Trying to get configs from " << addr << Endl; 
- 
-        auto result = configurator.SyncGetNodeConfig(RunConfig.NodeId, 
-                                                     FQDNHostName(), 
-                                                     TenantName, 
-                                                     NodeType, 
+        auto configurator = kikimr.GetNodeConfigurator();
+
+        Cout << "Trying to get configs from " << addr << Endl;
+
+        auto result = configurator.SyncGetNodeConfig(RunConfig.NodeId,
+                                                     FQDNHostName(),
+                                                     TenantName,
+                                                     NodeType,
                                                      DeduceNodeDomain(),
                                                      AppConfig.GetAuthConfig().GetStaffApiUserToken());
- 
-        if (!result.IsSuccess()) { 
-            error = result.GetErrorMessage(); 
-            Cerr << "Configuration error: " << error << Endl; 
-            return false; 
-        } 
- 
-        Cout << "Success." << Endl; 
- 
-        auto appConfig = result.GetConfig(); 
- 
+
+        if (!result.IsSuccess()) {
+            error = result.GetErrorMessage();
+            Cerr << "Configuration error: " << error << Endl;
+            return false;
+        }
+
+        Cout << "Success." << Endl;
+
+        auto appConfig = result.GetConfig();
+
         if (RunConfig.PathToConfigCacheFile) {
             Cout << "Saving config to cache file " << RunConfig.PathToConfigCacheFile << Endl;
             if (!SaveConfigForNodeToCache(appConfig)) {
@@ -1048,9 +1048,9 @@ protected:
 
         ApplyConfigForNode(appConfig);
 
-        return true; 
-    } 
- 
+        return true;
+    }
+
     bool LoadConfigForDynamicNodeFromCache() {
         NKikimrConfig::TAppConfig config;
         if (GetCachedConfig(config)) {
@@ -1061,27 +1061,27 @@ protected:
     }
 
     void LoadConfigForDynamicNode() {
-        auto res = false; 
-        TString error; 
-        TVector<TString> addrs; 
- 
-        FillClusterEndpoints(addrs); 
- 
+        auto res = false;
+        TString error;
+        TVector<TString> addrs;
+
+        FillClusterEndpoints(addrs);
+
         SetRandomSeed(TInstant::Now().MicroSeconds());
-        int minAttempts = 10; 
-        int attempts = 0; 
-        while (!res && attempts < minAttempts) { 
-            for (auto addr : addrs) { 
+        int minAttempts = 10;
+        int attempts = 0;
+        while (!res && attempts < minAttempts) {
+            for (auto addr : addrs) {
                 res = TryToLoadConfigForDynamicNodeFromCMS(addr, error);
-                ++attempts; 
-                if (res) 
-                    break; 
-            } 
+                ++attempts;
+                if (res)
+                    break;
+            }
             // Randomized backoff
-            if (!res) 
+            if (!res)
                 Sleep(TDuration::MilliSeconds(500 + RandomNumber<ui64>(1000)));
-        } 
- 
+        }
+
         if (!res) {
             Cerr << "WARNING: couldn't load config from CMS: " << error << Endl;
             if (RunConfig.PathToConfigCacheFile) {
@@ -1093,7 +1093,7 @@ protected:
                 Cerr << "couldn't load config from cache file" << Endl;
             }
         }
-    } 
+    }
 
 private:
     NClient::TKikimr GetKikimr(const TString& addr) {

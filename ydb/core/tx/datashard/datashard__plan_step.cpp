@@ -34,7 +34,7 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
         Y_VERIFY(tx.HasTxId());
         Y_VERIFY(tx.HasAckTo());
 
-        txIds.push_back(tx.GetTxId()); 
+        txIds.push_back(tx.GetTxId());
 
         TActorId txOwner = ActorIdFromProto(tx.GetAckTo());
         TxByAck[txOwner].push_back(tx.GetTxId());
@@ -45,7 +45,7 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
         // transactions that have already been executed.
         // NOTE: There is a scenario when because of retries the Coordinator might send some old Tx with
         // a new Step.
-        IsAccepted = Self->Pipeline.PlanTxs(step, txIds, txc, ctx); 
+        IsAccepted = Self->Pipeline.PlanTxs(step, txIds, txc, ctx);
     }
 
     if (! IsAccepted) {
@@ -87,7 +87,7 @@ void TDataShard::TTxPlanStep::Complete(const TActorContext &ctx) {
     ctx.Send(Ev->Sender, accepted.Release()); // Reply to the mediator
 
     if (IsAccepted) {
-        TDuration duration = TAppData::TimeProvider->Now() - RequestStartTime; 
+        TDuration duration = TAppData::TimeProvider->Now() - RequestStartTime;
         Self->IncCounter(COUNTER_ACCEPTED_PLAN_STEP_COMPLETE_LATENCY, duration);
     }
 }

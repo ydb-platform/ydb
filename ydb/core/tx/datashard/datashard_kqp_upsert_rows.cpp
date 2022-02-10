@@ -44,7 +44,7 @@ public:
             auto& dsApplyCtx = *CheckedCast<TKqpDatashardApplyContext*>(&applyContext);
 
             TVector<TCell> keyTuple(Owner.KeyIndices.size());
-            FillKeyTupleValue(Row, Owner.KeyIndices, Owner.RowTypes, keyTuple, Owner.Env); 
+            FillKeyTupleValue(Row, Owner.KeyIndices, Owner.RowTypes, keyTuple, Owner.Env);
 
             if (dsApplyCtx.Host->IsPathErased(Owner.TableId)) {
                 return;
@@ -150,7 +150,7 @@ private:
     TVector<NUdf::TDataTypeId> RowTypes;
     TVector<ui32> KeyIndices;
     TVector<TUpsertColumn> UpsertColumns;
-    const TTypeEnvironment& Env; 
+    const TTypeEnvironment& Env;
     TKqpTableStats& ShardTableStats;
     TKqpTableStats& TaskTableStats;
 };

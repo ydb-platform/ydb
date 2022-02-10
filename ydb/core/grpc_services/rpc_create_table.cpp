@@ -3,7 +3,7 @@
 #include "rpc_calls.h"
 #include "rpc_scheme_base.h"
 #include "rpc_common.h"
-#include "table_profiles.h" 
+#include "table_profiles.h"
 #include "table_settings.h"
 
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -17,7 +17,7 @@ namespace NGRpcService {
 
 using namespace NSchemeShard;
 using namespace NActors;
-using namespace NConsole; 
+using namespace NConsole;
 using namespace Ydb;
 using namespace Ydb::Table;
 
@@ -31,44 +31,44 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
 
-        SendConfigRequest(ctx); 
+        SendConfigRequest(ctx);
         ctx.Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup(WakeupTagGetConfig));
-        Become(&TCreateTableRPC::StateGetConfig); 
-    } 
- 
-private: 
-    void StateGetConfig(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
-        switch (ev->GetTypeRewrite()) { 
-            HFunc(TEvConfigsDispatcher::TEvGetConfigResponse, Handle); 
-            HFunc(TEvents::TEvUndelivered, Handle); 
+        Become(&TCreateTableRPC::StateGetConfig);
+    }
+
+private:
+    void StateGetConfig(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
+            HFunc(TEvents::TEvUndelivered, Handle);
             HFunc(TEvents::TEvWakeup, HandleWakeup);
             default: TBase::StateFuncBase(ev, ctx);
-        } 
-    } 
- 
+        }
+    }
+
     void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
         switch (ev->GetTypeRewrite()) {
             default: TBase::StateWork(ev, ctx);
         }
     }
 
-    void Handle(TEvents::TEvUndelivered::TPtr &/*ev*/, const TActorContext &ctx) 
-    { 
+    void Handle(TEvents::TEvUndelivered::TPtr &/*ev*/, const TActorContext &ctx)
+    {
         LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY,
-                   "TCreateTableRPC: cannot deliver config request to Configs Dispatcher" 
-                   " (empty default profile is available only)"); 
+                   "TCreateTableRPC: cannot deliver config request to Configs Dispatcher"
+                   " (empty default profile is available only)");
         SendProposeRequest(ctx);
         Become(&TCreateTableRPC::StateWork);
     }
 
-    void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev, const TActorContext &ctx) { 
-        auto &config = ev->Get()->Config->GetTableProfilesConfig(); 
-        Profiles.Load(config); 
- 
-        SendProposeRequest(ctx); 
-        Become(&TCreateTableRPC::StateWork); 
-    } 
- 
+    void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr &ev, const TActorContext &ctx) {
+        auto &config = ev->Get()->Config->GetTableProfilesConfig();
+        Profiles.Load(config);
+
+        SendProposeRequest(ctx);
+        Become(&TCreateTableRPC::StateWork);
+    }
+
     void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
         switch (ev->Get()->Tag) {
             case WakeupTagGetConfig: {
@@ -80,15 +80,15 @@ private:
             default:
                 TBase::HandleWakeup(ev, ctx);
         }
-    } 
- 
-    void SendConfigRequest(const TActorContext &ctx) { 
-        ui32 configKind = (ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem; 
-        ctx.Send(MakeConfigsDispatcherID(ctx.SelfID.NodeId()), 
-                 new TEvConfigsDispatcher::TEvGetConfigRequest(configKind), 
-                 IEventHandle::FlagTrackDelivery); 
-    } 
- 
+    }
+
+    void SendConfigRequest(const TActorContext &ctx) {
+        ui32 configKind = (ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem;
+        ctx.Send(MakeConfigsDispatcherID(ctx.SelfID.NodeId()),
+                 new TEvConfigsDispatcher::TEvGetConfigRequest(configKind),
+                 IEventHandle::FlagTrackDelivery);
+    }
+
     // Mutually exclusive settings
     void MEWarning(const TString& settingName) {
         Request_->RaiseIssue(
@@ -221,9 +221,9 @@ private:
 
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
- 
-private: 
-    TTableProfiles Profiles; 
+
+private:
+    TTableProfiles Profiles;
 };
 
 void TGRpcRequestProxy::Handle(TEvCreateTableRequest::TPtr& ev, const TActorContext& ctx) {

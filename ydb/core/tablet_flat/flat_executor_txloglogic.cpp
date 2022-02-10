@@ -56,20 +56,20 @@ TArrayRef<const NRedo::TUsage> TLogicRedo::GrabLogUsage() const noexcept
 }
 
 bool TLogicRedo::TerminateTransaction(TAutoPtr<TSeat> seat, const TActorContext &ctx, const TActorId &ownerID) {
-    if (CompletionQueue.empty()) { 
+    if (CompletionQueue.empty()) {
         const TTxType txType = seat->Self->GetTxType();
- 
+
         seat->Self->Terminate(seat->TerminationReason, ctx.MakeFor(ownerID));
-        Counters->Cumulative()[TExecutorCounters::TX_TERMINATED].Increment(1); 
-        if (AppTxCounters && txType != UnknownTxType) 
-            AppTxCounters->TxCumulative(txType, COUNTER_TT_TERMINATED).Increment(1); 
-        return true; 
-    } else { 
+        Counters->Cumulative()[TExecutorCounters::TX_TERMINATED].Increment(1);
+        if (AppTxCounters && txType != UnknownTxType)
+            AppTxCounters->TxCumulative(txType, COUNTER_TT_TERMINATED).Increment(1);
+        return true;
+    } else {
         CompletionQueue.back().WaitingTerminatedTransactions.push_back(seat);
-        return false; 
-    } 
-} 
- 
+        return false;
+    }
+}
+
 void CompleteRoTransaction(TAutoPtr<TSeat> seat, const TActorContext &ownerCtx, TExecutorCounters *counters, TTabletCountersWithTxTypes *appTxCounters ) {
     const TTxType txType = seat->Self->GetTxType();
 
@@ -261,17 +261,17 @@ ui64 TLogicRedo::Confirm(ui32 step, const TActorContext &ctx, const TActorId &ow
             CompleteRoTransaction(x, ownerCtx, Counters, AppTxCounters);
         }
 
-        for (auto &x : entry.WaitingTerminatedTransactions) { 
+        for (auto &x : entry.WaitingTerminatedTransactions) {
             const TTxType roTxType = x->Self->GetTxType();
             x->Self->Terminate(x->TerminationReason, ownerCtx);
- 
-            Counters->Cumulative()[TExecutorCounters::TX_TERMINATED].Increment(1); 
-            if (AppTxCounters && roTxType != UnknownTxType) 
-                AppTxCounters->TxCumulative(roTxType, COUNTER_TT_TERMINATED).Increment(1); 
- 
-            ++confirmedTransactions; 
-        } 
- 
+
+            Counters->Cumulative()[TExecutorCounters::TX_TERMINATED].Increment(1);
+            if (AppTxCounters && roTxType != UnknownTxType)
+                AppTxCounters->TxCumulative(roTxType, COUNTER_TT_TERMINATED).Increment(1);
+
+            ++confirmedTransactions;
+        }
+
         CompletionQueue.pop_front();
     } while (!CompletionQueue.empty() && CompletionQueue[0].Step == step);
 

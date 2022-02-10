@@ -11,7 +11,7 @@ namespace NDataShard {
 // TLockInfo
 
 TLockInfo::TLockInfo(TLockLocker * locker, ui64 lockId)
-    : Locker(locker) 
+    : Locker(locker)
     , LockId(lockId)
     , Counter(locker->IncCounter())
     , CreationTime(TAppData::TimeProvider->Now())
@@ -42,8 +42,8 @@ bool TLockInfo::AddRange(const TRangeKey& range) {
         Ranges.emplace_back(range);
     }
     return !ShardLock;
-} 
- 
+}
+
 void TLockInfo::SetBroken(const TRowVersion& at) {
 #if 1 // optimisation: remove at next Remove
     if (!IsBroken(at))
@@ -481,13 +481,13 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
     ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::DataShard, tabletId);
     Y_VERIFY(ok && Self->TabletID() == tabletId);
 
-    if (Cache) { 
-        auto it = Cache->Locks.find(lockTxId); 
-        if (it != Cache->Locks.end()) 
-            return it->second; 
-        return TLock(); 
-    } 
- 
+    if (Cache) {
+        auto it = Cache->Locks.find(lockTxId);
+        if (it != Cache->Locks.end())
+            return it->second;
+        return TLock();
+    }
+
     Y_VERIFY(Update);
 
     auto &checkVersion = Update->CheckVersion;
@@ -495,7 +495,7 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
     if (txLock) {
         const auto& tableIds = txLock->GetAffectedTables();
         if (key.size() == 2) { // locks v1
-            Y_VERIFY(tableIds.size() == 1); 
+            Y_VERIFY(tableIds.size() == 1);
             return MakeAndLogLock(lockTxId, txLock->GetCounter(checkVersion), *tableIds.begin());
         } else { // locks v2
             Y_VERIFY(key.size() == 4);
@@ -588,11 +588,11 @@ TSysLocks::TLock TSysLocks::MakeLock(ui64 lockTxId, ui64 counter, const TPathId&
 }
 
 TSysLocks::TLock TSysLocks::MakeAndLogLock(ui64 lockTxId, ui64 counter, const TPathId& pathId) const {
-    TLock lock = MakeLock(lockTxId, counter, pathId); 
-    if (AccessLog) 
-        AccessLog->Locks[lockTxId] = lock; 
-    return lock; 
-} 
- 
- 
+    TLock lock = MakeLock(lockTxId, counter, pathId);
+    if (AccessLog)
+        AccessLog->Locks[lockTxId] = lock;
+    return lock;
+}
+
+
 }}

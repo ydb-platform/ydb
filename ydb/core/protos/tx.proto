@@ -230,54 +230,54 @@ message TEvReadSetAck {
     optional uint32 Flags = 6;
     optional uint64 Seqno = 7; // Should be equal to TEvReadSet.Seqno which we are ACKing
 }
- 
-message TKeyRange { 
-    optional bytes From = 1; 
-    optional bytes To = 2; 
-    optional bool FromInclusive = 3; 
-    optional bool ToInclusive = 4; 
-}; 
- 
-message TEvStreamClearanceRequest { 
-    optional uint64 TxId = 1; 
-    optional uint64 ShardId = 2; 
-    optional TKeyRange KeyRange = 3; 
-} 
- 
-message TEvStreamClearanceResponse { 
-    optional uint64 TxId = 1; 
-    optional bool   Cleared = 2; 
-} 
- 
-message TEvStreamClearancePending { 
-    optional uint64 TxId = 1; 
-} 
- 
-message TEvStreamQuotaRequest { 
-    optional uint64 TxId = 1; 
-    optional uint64 ShardId = 2; 
-} 
- 
-message TEvStreamQuotaResponse { 
-    optional uint64 TxId = 1; 
-    optional uint64 MessageSizeLimit = 2; 
-    optional uint32 ReservedMessages = 3; 
-    optional uint64 RowLimit = 4; 
-} 
- 
-message TEvStreamQuotaRelease { 
-    optional uint64 TxId = 1; 
-    optional uint64 ShardId = 2; 
-} 
- 
-message TEvStreamIsDead { 
-    optional uint64 TxId = 1; 
-} 
- 
-message TEvInterruptTransaction { 
-    optional uint64 TxId = 1; 
-} 
- 
-message TEvStreamDataAck { 
+
+message TKeyRange {
+    optional bytes From = 1;
+    optional bytes To = 2;
+    optional bool FromInclusive = 3;
+    optional bool ToInclusive = 4;
+};
+
+message TEvStreamClearanceRequest {
+    optional uint64 TxId = 1;
+    optional uint64 ShardId = 2;
+    optional TKeyRange KeyRange = 3;
+}
+
+message TEvStreamClearanceResponse {
+    optional uint64 TxId = 1;
+    optional bool   Cleared = 2;
+}
+
+message TEvStreamClearancePending {
+    optional uint64 TxId = 1;
+}
+
+message TEvStreamQuotaRequest {
+    optional uint64 TxId = 1;
+    optional uint64 ShardId = 2;
+}
+
+message TEvStreamQuotaResponse {
+    optional uint64 TxId = 1;
+    optional uint64 MessageSizeLimit = 2;
+    optional uint32 ReservedMessages = 3;
+    optional uint64 RowLimit = 4;
+}
+
+message TEvStreamQuotaRelease {
+    optional uint64 TxId = 1;
+    optional uint64 ShardId = 2;
+}
+
+message TEvStreamIsDead {
+    optional uint64 TxId = 1;
+}
+
+message TEvInterruptTransaction {
+    optional uint64 TxId = 1;
+}
+
+message TEvStreamDataAck {
 }
 

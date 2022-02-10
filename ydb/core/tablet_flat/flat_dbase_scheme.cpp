@@ -52,7 +52,7 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
     delta.SetExecutorCacheSize(Executor.CacheSize);
     delta.SetExecutorAllowLogBatching(Executor.AllowLogBatching);
     delta.SetExecutorLogFlushPeriod(Executor.LogFlushPeriod);
-    delta.SetExecutorResourceProfile(Executor.ResourceProfile); 
+    delta.SetExecutorResourceProfile(Executor.ResourceProfile);
     delta.SetExecutorFastLogPolicy(Executor.LogFastTactic);
 
     return delta.Flush();
@@ -241,11 +241,11 @@ TAlter& TAlter::SetExecutorResourceProfile(const TString &name)
 {
     TAlterRecord &delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::UpdateExecutorInfo);
-    delta.SetExecutorResourceProfile(name); 
+    delta.SetExecutorResourceProfile(name);
 
     return *this;
-} 
- 
+}
+
 TAlter& TAlter::SetCompactionPolicy(ui32 tableId, const TCompactionPolicy& newPolicy)
 {
     TAlterRecord &delta = *Log.AddDelta();

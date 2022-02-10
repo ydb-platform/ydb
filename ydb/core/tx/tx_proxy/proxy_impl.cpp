@@ -433,7 +433,7 @@ public:
                     "actor# " << SelfId() <<
                     " Bootstrap");
         TxProxyMon = new TTxProxyMon(AppData(ctx)->Counters);
-        CacheCounters = GetServiceCounters(AppData(ctx)->Counters, "proxy")->GetSubgroup("subsystem", "cache"); 
+        CacheCounters = GetServiceCounters(AppData(ctx)->Counters, "proxy")->GetSubgroup("subsystem", "cache");
 
         Services.Proxy = SelfId();
 

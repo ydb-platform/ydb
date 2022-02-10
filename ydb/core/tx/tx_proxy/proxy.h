@@ -99,8 +99,8 @@ struct TEvTxUserProxy {
 
         bool HasMakeProposal() const {
                 const NKikimrTxUserProxy::TTransaction &tx = Record.GetTransaction();
-                return (tx.HasMiniKQLTransaction() && tx.GetMiniKQLTransaction().HasProgram()) 
-                        || tx.HasReadTableTransaction(); 
+                return (tx.HasMiniKQLTransaction() && tx.GetMiniKQLTransaction().HasProgram())
+                        || tx.HasReadTableTransaction();
         }
 
         bool HasSnapshotProposal() const {

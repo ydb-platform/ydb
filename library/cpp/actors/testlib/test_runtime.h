@@ -231,7 +231,7 @@ namespace NActors {
         TIntrusivePtr<ITimeProvider> GetTimeProvider();
         TInstant GetCurrentTime() const;
         void UpdateCurrentTime(TInstant newTime);
-        void AdvanceCurrentTime(TDuration duration); 
+        void AdvanceCurrentTime(TDuration duration);
         void AddLocalService(const TActorId& actorId, const TActorSetupCmd& cmd, ui32 nodeIndex = 0);
         virtual void Initialize();
         ui32 GetNodeId(ui32 index = 0) const;
@@ -269,21 +269,21 @@ namespace NActors {
         bool IsScheduleForActorEnabled(const TActorId& actorId) const;
         TIntrusivePtr<NMonitoring::TDynamicCounters> GetDynamicCounters(ui32 nodeIndex = 0);
         void SetupMonitoring();
- 
-        template<typename T> 
-        void AppendToLogSettings(NLog::EComponent minVal, NLog::EComponent maxVal, T func) { 
-            Y_VERIFY(!IsInitialized); 
- 
-            for (const auto& pair : Nodes) { 
-                pair.second->LogSettings->Append(minVal, maxVal, func); 
-            } 
-        } 
- 
-        TIntrusivePtr<NLog::TSettings> GetLogSettings(ui32 nodeIdx) 
-        { 
-            return Nodes[FirstNodeId + nodeIdx]->LogSettings; 
-        } 
- 
+
+        template<typename T>
+        void AppendToLogSettings(NLog::EComponent minVal, NLog::EComponent maxVal, T func) {
+            Y_VERIFY(!IsInitialized);
+
+            for (const auto& pair : Nodes) {
+                pair.second->LogSettings->Append(minVal, maxVal, func);
+            }
+        }
+
+        TIntrusivePtr<NLog::TSettings> GetLogSettings(ui32 nodeIdx)
+        {
+            return Nodes[FirstNodeId + nodeIdx]->LogSettings;
+        }
+
         TActorSystem* SingleSys() const;
         TActorSystem* GetAnyNodeActorSystem();
         TActorSystem* GetActorSystem(ui32 nodeId);

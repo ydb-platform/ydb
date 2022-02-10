@@ -386,7 +386,7 @@ private:
             auto systemColumnType = KikimrSystemColumns().find(columnName);
             if (systemColumnType != KikimrSystemColumns().end()) {
                 columnDataType = ctx.MakeType<TDataExprType>(systemColumnType->second);
-            } else { 
+            } else {
                 auto column = lookup->Columns.FindPtr(columnName);
                 YQL_ENSURE(column);
 
@@ -401,7 +401,7 @@ private:
                         TDataType::Create(column->Type, *MkqlCtx->TypeEnv),
                         ctx);
                 }
-            } 
+            }
             auto columnOptType = ctx.MakeType<TOptionalExprType>(columnDataType);
 
             resultItems.push_back(ctx.MakeType<TItemExprType>(columnName, columnOptType));

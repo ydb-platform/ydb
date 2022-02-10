@@ -8,9 +8,9 @@
 namespace NKikimr {
 namespace NScheme {
 
-constexpr ui32 DECIMAL_PRECISION = 22; 
-constexpr ui32 DECIMAL_SCALE = 9; 
- 
+constexpr ui32 DECIMAL_PRECISION = 22;
+constexpr ui32 DECIMAL_SCALE = 9;
+
 using TTypeId = ui16;
 
 namespace NTypeIds {
@@ -48,8 +48,8 @@ static constexpr TTypeId JsonDocument = NYql::NProto::JsonDocument;
 
 static constexpr TTypeId DyNumber = NYql::NProto::DyNumber;
 
-static constexpr TTypeId Decimal = NYql::NProto::Decimal; 
- 
+static constexpr TTypeId Decimal = NYql::NProto::Decimal;
+
 static constexpr TTypeId YqlIds[] = {
     Int32,
     Uint32,
@@ -62,11 +62,11 @@ static constexpr TTypeId YqlIds[] = {
     String,
     Utf8,
     Yson,
-    Json, 
-    Decimal, 
-    Date, 
-    Datetime, 
-    Timestamp, 
+    Json,
+    Decimal,
+    Date,
+    Datetime,
+    Timestamp,
     Interval,
     JsonDocument,
     DyNumber,
@@ -115,7 +115,7 @@ const char *TypeName(TTypeId typeId) {
         case NTypeIds::Yson:            return "Yson";
         case NTypeIds::Json:            return "Json";
         case NTypeIds::JsonDocument:    return "JsonDocument";
-        case NTypeIds::Decimal:         return "Decimal"; 
+        case NTypeIds::Decimal:         return "Decimal";
         case NTypeIds::DyNumber:        return "DyNumber";
         default:                        return "Unknown";
     }

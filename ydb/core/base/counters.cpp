@@ -1,28 +1,28 @@
-#include "counters.h" 
- 
+#include "counters.h"
+
 #include "monitoring_provider.h"
 
 LWTRACE_DEFINE_PROVIDER(MONITORING_PROVIDER)
 
-namespace NKikimr { 
- 
-static const THashSet<TString> DATABASE_SERVICES 
-    = {{ TString("compile"), 
-         TString("coordinator"), 
-         TString("dsproxy"), 
-         TString("dsproxynode"), 
-         TString("dsproxy_overview"), 
-         TString("dsproxy_percentile"), 
-         TString("dsproxy_queue"), 
-         TString("grpc"), 
-         TString("interconnect"), 
-         TString("kqp"), 
-         TString("processing"), 
-         TString("proxy"), 
+namespace NKikimr {
+
+static const THashSet<TString> DATABASE_SERVICES
+    = {{ TString("compile"),
+         TString("coordinator"),
+         TString("dsproxy"),
+         TString("dsproxynode"),
+         TString("dsproxy_overview"),
+         TString("dsproxy_percentile"),
+         TString("dsproxy_queue"),
+         TString("grpc"),
+         TString("interconnect"),
+         TString("kqp"),
+         TString("processing"),
+         TString("proxy"),
          TString("followers"),
-         TString("sqs"), 
+         TString("sqs"),
          TString("storage_pool_stat"),
-         TString("tablets"), 
+         TString("tablets"),
          TString("utils"),
          TString("auth"),
          TString("ydb"),
@@ -39,25 +39,25 @@ static const THashSet<TString> DATABASE_SERVICES
          TString("pqproxy|readSession"),
          TString("pqproxy|schemecache"),
          TString("pqproxy|mirrorWriteTimeLag"),
-    }}; 
- 
+    }};
 
-static const THashSet<TString> DATABASE_ATTRIBUTE_SERVICES 
-    = {{ TString("ydb") }}; 
- 
-static const THashSet<TString> DATABASE_ATTRIBUTE_LABELS 
-    = {{ TString("cloud_id"), 
+
+static const THashSet<TString> DATABASE_ATTRIBUTE_SERVICES
+    = {{ TString("ydb") }};
+
+static const THashSet<TString> DATABASE_ATTRIBUTE_LABELS
+    = {{ TString("cloud_id"),
          TString("folder_id"),
          TString("database_id")
-    }}; 
- 
-using NMonitoring::TDynamicCounters; 
- 
-const THashSet<TString> &GetDatabaseSensorServices() 
-{ 
-    return DATABASE_SERVICES; 
-} 
- 
+    }};
+
+using NMonitoring::TDynamicCounters;
+
+const THashSet<TString> &GetDatabaseSensorServices()
+{
+    return DATABASE_SERVICES;
+}
+
 void ReplaceSubgroup(TIntrusivePtr<TDynamicCounters> root, const TString &service)
 {
     auto serviceGroup = GetServiceCounters(root, service);
@@ -66,35 +66,35 @@ void ReplaceSubgroup(TIntrusivePtr<TDynamicCounters> root, const TString &servic
     rt->ReplaceSubgroup(subSvc.empty() ? "counters" : "subsystem", subSvc.empty() ? svc : subSvc, serviceGroup);
 }
 
-const THashSet<TString> &GetDatabaseAttributeSensorServices() 
-{ 
-    return DATABASE_ATTRIBUTE_SERVICES; 
-} 
- 
-const THashSet<TString> &GetDatabaseAttributeLabels() 
-{ 
-    return DATABASE_ATTRIBUTE_LABELS; 
-} 
- 
-static TIntrusivePtr<TDynamicCounters> SkipLabels(TIntrusivePtr<TDynamicCounters> counters, 
-                                                  const THashSet<TString> &labels) 
-{ 
-    TString name, value; 
-    do { 
-        name = ""; 
-        counters->EnumerateSubgroups([&name, &value, &labels](const TString &n, const TString &v) { 
-                if (labels.contains(n)) { 
-                    name = n; 
-                    value = v; 
-                } 
-            }); 
-        if (name) 
-            counters = counters->GetSubgroup(name, value); 
-    } while (name); 
- 
-    return counters; 
-} 
- 
+const THashSet<TString> &GetDatabaseAttributeSensorServices()
+{
+    return DATABASE_ATTRIBUTE_SERVICES;
+}
+
+const THashSet<TString> &GetDatabaseAttributeLabels()
+{
+    return DATABASE_ATTRIBUTE_LABELS;
+}
+
+static TIntrusivePtr<TDynamicCounters> SkipLabels(TIntrusivePtr<TDynamicCounters> counters,
+                                                  const THashSet<TString> &labels)
+{
+    TString name, value;
+    do {
+        name = "";
+        counters->EnumerateSubgroups([&name, &value, &labels](const TString &n, const TString &v) {
+                if (labels.contains(n)) {
+                    name = n;
+                    value = v;
+                }
+            });
+        if (name)
+            counters = counters->GetSubgroup(name, value);
+    } while (name);
+
+    return counters;
+}
+
 void OnCounterLookup(const char *methodName, const TString &name, const TString &value) {
     GLOBAL_LWPROBE(MONITORING_PROVIDER, MonitoringCounterLookup, methodName, name, value);
 }
@@ -108,8 +108,8 @@ std::pair<TString, TString> ExtractSubServiceName(const TString &service)
 }
 
 TIntrusivePtr<TDynamicCounters> GetServiceCountersRoot(TIntrusivePtr<TDynamicCounters> root,
-                                                   const TString &service) 
-{ 
+                                                   const TString &service)
+{
     auto pair = ExtractSubServiceName(service);
     if (pair.second.empty())
         return root;
@@ -140,15 +140,15 @@ TIntrusivePtr<TDynamicCounters> GetServiceCounters(TIntrusivePtr<TDynamicCounter
         return res;
 
     res = SkipLabels(res, SERVICE_COUNTERS_EXTRA_LABELS);
- 
+
     auto utils = root->GetSubgroup("counters", "utils");
     utils = SkipLabels(utils, SERVICE_COUNTERS_EXTRA_LABELS);
     auto lookupCounter = utils->GetSubgroup("component", service)->GetCounter("CounterLookups", true);
     res->SetLookupCounter(lookupCounter);
     res->SetOnLookup(OnCounterLookup);
- 
-    return res; 
-} 
- 
- 
-} // namespace NKikimr 
+
+    return res;
+}
+
+
+} // namespace NKikimr

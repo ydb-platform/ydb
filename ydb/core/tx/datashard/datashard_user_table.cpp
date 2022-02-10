@@ -17,7 +17,7 @@ TUserTable::TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& 
 {
     Y_PROTOBUF_SUPPRESS_NODISCARD descr.SerializeToString(&Schema);
     Name = descr.GetName();
-    Path = descr.GetPath(); 
+    Path = descr.GetPath();
     ParseProto(descr);
 }
 
@@ -29,17 +29,17 @@ TUserTable::TUserTable(const TUserTable& table, const NKikimrSchemeOp::TTableDes
     AlterSchema();
 }
 
-void TUserTable::SetPath(const TString &path) 
-{ 
+void TUserTable::SetPath(const TString &path)
+{
     auto name = ExtractBase(path);
     if (!name) {
         return;
     }
 
     Name = name;
-    Path = path; 
-    AlterSchema(); 
-} 
+    Path = path;
+    AlterSchema();
+}
 
 void TUserTable::SetTableSchemaVersion(ui64 schemaVersion)
 {
@@ -187,7 +187,7 @@ bool TUserTable::HasCdcStreams() const {
 }
 
 void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
-{ 
+{
     // We expect schemeshard to send us full list of storage rooms
     if (descr.GetPartitionConfig().StorageRoomsSize()) {
         Rooms.clear();
@@ -252,14 +252,14 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 
         Y_VERIFY(KeyColumnIds.size() == KeyColumnTypes.size());
     }
- 
-    if (descr.HasPartitionRangeBegin()) { 
-        Y_VERIFY(descr.HasPartitionRangeEnd()); 
-        Range = TSerializedTableRange(descr.GetPartitionRangeBegin(), 
-                                      descr.GetPartitionRangeEnd(), 
-                                      descr.GetPartitionRangeBeginIsInclusive(), 
-                                      descr.GetPartitionRangeEndIsInclusive()); 
-    } 
+
+    if (descr.HasPartitionRangeBegin()) {
+        Y_VERIFY(descr.HasPartitionRangeEnd());
+        Range = TSerializedTableRange(descr.GetPartitionRangeBegin(),
+                                      descr.GetPartitionRangeEnd(),
+                                      descr.GetPartitionRangeBeginIsInclusive(),
+                                      descr.GetPartitionRangeEndIsInclusive());
+    }
 
     TableSchemaVersion = descr.GetTableSchemaVersion();
     IsBackup = descr.GetIsBackup();
@@ -334,14 +334,14 @@ void TUserTable::AlterSchema() {
         descr->SetNotNull(column.NotNull);
     }
 
-    schema.SetPartitionRangeBegin(Range.From.GetBuffer()); 
-    schema.SetPartitionRangeBeginIsInclusive(Range.FromInclusive); 
-    schema.SetPartitionRangeEnd(Range.To.GetBuffer()); 
-    schema.SetPartitionRangeEndIsInclusive(Range.ToInclusive); 
- 
+    schema.SetPartitionRangeBegin(Range.From.GetBuffer());
+    schema.SetPartitionRangeBeginIsInclusive(Range.FromInclusive);
+    schema.SetPartitionRangeEnd(Range.To.GetBuffer());
+    schema.SetPartitionRangeEndIsInclusive(Range.ToInclusive);
+
     schema.SetPath(Name);
-    schema.SetPath(Path); 
- 
+    schema.SetPath(Path);
+
     SetSchema(schema);
 }
 

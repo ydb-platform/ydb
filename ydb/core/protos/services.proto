@@ -78,8 +78,8 @@ enum EServiceKikimr {
     HIVE = 300;
     LOCAL = 301;
     BOOTSTRAPPER = 302;
-    TENANT_POOL = 303; 
-    LABELS_MAINTAINER = 305; 
+    TENANT_POOL = 303;
+    LABELS_MAINTAINER = 305;
 
     // TABLET section
     TABLET_EXECUTOR = 310;
@@ -193,17 +193,17 @@ enum EServiceKikimr {
     MEMORY_PROFILER = 510;
 
     DATASHARD_BACKUP = 522;
- 
-    CMS = 523; 
+
+    CMS = 523;
 
     HTTP = 524;
 
-    NODE_BROKER = 525; 
-    TENANT_SLOT_BROKER = 526; 
-    CMS_TENANTS = 527; 
-    CMS_CONFIGS = 528; 
-    CMS_CLUSTER = 529; 
- 
+    NODE_BROKER = 525;
+    TENANT_SLOT_BROKER = 526;
+    CMS_TENANTS = 527;
+    CMS_CONFIGS = 528;
+    CMS_CLUSTER = 529;
+
     KQP_PROXY = 530;
     KQP_WORKER = 531;
     KQP_GATEWAY = 532;
@@ -228,9 +228,9 @@ enum EServiceKikimr {
     KESYS_PROXY_REQUEST = 552;
     KESUS_TABLET = 553;
 
-    CONFIGS_DISPATCHER = 560; 
+    CONFIGS_DISPATCHER = 560;
     CONFIGS_CACHE = 561;
- 
+
     // SchemeBoard section
     SCHEME_BOARD_REPLICA = 570;
     SCHEME_BOARD_SUBSCRIBER = 571;

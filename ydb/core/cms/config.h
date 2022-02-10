@@ -1,16 +1,16 @@
-#pragma once 
- 
+#pragma once
+
 #include "pdisk_state.h"
 
 #include <ydb/core/protos/cms.pb.h>
- 
-#include <util/datetime/base.h> 
-#include <util/generic/hash.h> 
+
+#include <util/datetime/base.h>
+#include <util/generic/hash.h>
 #include <util/generic/map.h>
- 
-namespace NKikimr { 
-namespace NCms { 
- 
+
+namespace NKikimr {
+namespace NCms {
+
 struct TCmsSentinelConfig {
     bool Enable = false;
     bool DryRun = false;
@@ -137,94 +137,94 @@ struct TCmsSentinelConfig {
     }
 };
 
-struct TCmsLogConfig { 
-    THashMap<ui32, bool> RecordLevels; 
-    bool EnabledByDefault = true; 
-    TDuration TTL; 
- 
-    void Serialize(NKikimrCms::TCmsConfig::TLogConfig &config) const 
-    { 
-        config.SetDefaultLevel(EnabledByDefault 
-                               ? NKikimrCms::TCmsConfig::TLogConfig::ENABLED 
-                               : NKikimrCms::TCmsConfig::TLogConfig::DISABLED); 
-        for (auto pr : RecordLevels) { 
-            auto &entry = *config.AddComponentLevels(); 
-            entry.SetRecordType(pr.first); 
-            entry.SetLevel(pr.second 
-                           ? NKikimrCms::TCmsConfig::TLogConfig::ENABLED 
-                           : NKikimrCms::TCmsConfig::TLogConfig::DISABLED); 
-        } 
-        config.SetTTL(TTL.GetValue()); 
-    } 
- 
-    void Deserialize(const NKikimrCms::TCmsConfig::TLogConfig &config) 
-    { 
-        RecordLevels.clear(); 
- 
-        EnabledByDefault = (config.GetDefaultLevel() 
-                            == NKikimrCms::TCmsConfig::TLogConfig::ENABLED); 
-        for (auto &entry : config.GetComponentLevels()) { 
-            RecordLevels[entry.GetRecordType()] 
-                = entry.GetLevel() == NKikimrCms::TCmsConfig::TLogConfig::ENABLED; 
-        } 
-        TTL = TDuration::FromValue(config.GetTTL()); 
-    } 
- 
-    bool IsLogEnabled(ui32 recordType) const 
-    { 
+struct TCmsLogConfig {
+    THashMap<ui32, bool> RecordLevels;
+    bool EnabledByDefault = true;
+    TDuration TTL;
+
+    void Serialize(NKikimrCms::TCmsConfig::TLogConfig &config) const
+    {
+        config.SetDefaultLevel(EnabledByDefault
+                               ? NKikimrCms::TCmsConfig::TLogConfig::ENABLED
+                               : NKikimrCms::TCmsConfig::TLogConfig::DISABLED);
+        for (auto pr : RecordLevels) {
+            auto &entry = *config.AddComponentLevels();
+            entry.SetRecordType(pr.first);
+            entry.SetLevel(pr.second
+                           ? NKikimrCms::TCmsConfig::TLogConfig::ENABLED
+                           : NKikimrCms::TCmsConfig::TLogConfig::DISABLED);
+        }
+        config.SetTTL(TTL.GetValue());
+    }
+
+    void Deserialize(const NKikimrCms::TCmsConfig::TLogConfig &config)
+    {
+        RecordLevels.clear();
+
+        EnabledByDefault = (config.GetDefaultLevel()
+                            == NKikimrCms::TCmsConfig::TLogConfig::ENABLED);
+        for (auto &entry : config.GetComponentLevels()) {
+            RecordLevels[entry.GetRecordType()]
+                = entry.GetLevel() == NKikimrCms::TCmsConfig::TLogConfig::ENABLED;
+        }
+        TTL = TDuration::FromValue(config.GetTTL());
+    }
+
+    bool IsLogEnabled(ui32 recordType) const
+    {
         if (RecordLevels.contains(recordType))
-            return RecordLevels.at(recordType); 
-        return EnabledByDefault; 
-    } 
-}; 
- 
-struct TCmsConfig { 
-    TDuration DefaultRetryTime; 
-    TDuration DefaultPermissionDuration; 
-    TDuration DefaultWalleCleanupPeriod = TDuration::Minutes(1); 
-    TDuration InfoCollectionTimeout; 
-    NKikimrCms::TLimits TenantLimits; 
-    NKikimrCms::TLimits ClusterLimits; 
+            return RecordLevels.at(recordType);
+        return EnabledByDefault;
+    }
+};
+
+struct TCmsConfig {
+    TDuration DefaultRetryTime;
+    TDuration DefaultPermissionDuration;
+    TDuration DefaultWalleCleanupPeriod = TDuration::Minutes(1);
+    TDuration InfoCollectionTimeout;
+    NKikimrCms::TLimits TenantLimits;
+    NKikimrCms::TLimits ClusterLimits;
     TCmsSentinelConfig SentinelConfig;
-    TCmsLogConfig LogConfig; 
- 
-    TCmsConfig() 
-    { 
-        Deserialize(NKikimrCms::TCmsConfig()); 
-    } 
- 
-    TCmsConfig(const NKikimrCms::TCmsConfig &config) 
-    { 
-        Deserialize(config); 
-    } 
- 
-    void Serialize(NKikimrCms::TCmsConfig &config) const 
-    { 
-        config.SetDefaultRetryTime(DefaultRetryTime.GetValue()); 
-        config.SetDefaultPermissionDuration(DefaultPermissionDuration.GetValue()); 
+    TCmsLogConfig LogConfig;
+
+    TCmsConfig()
+    {
+        Deserialize(NKikimrCms::TCmsConfig());
+    }
+
+    TCmsConfig(const NKikimrCms::TCmsConfig &config)
+    {
+        Deserialize(config);
+    }
+
+    void Serialize(NKikimrCms::TCmsConfig &config) const
+    {
+        config.SetDefaultRetryTime(DefaultRetryTime.GetValue());
+        config.SetDefaultPermissionDuration(DefaultPermissionDuration.GetValue());
         config.SetInfoCollectionTimeout(InfoCollectionTimeout.GetValue());
-        config.MutableTenantLimits()->CopyFrom(TenantLimits); 
-        config.MutableClusterLimits()->CopyFrom(ClusterLimits); 
+        config.MutableTenantLimits()->CopyFrom(TenantLimits);
+        config.MutableClusterLimits()->CopyFrom(ClusterLimits);
         SentinelConfig.Serialize(*config.MutableSentinelConfig());
-        LogConfig.Serialize(*config.MutableLogConfig()); 
-    } 
- 
-    void Deserialize(const NKikimrCms::TCmsConfig &config) 
-    { 
+        LogConfig.Serialize(*config.MutableLogConfig());
+    }
+
+    void Deserialize(const NKikimrCms::TCmsConfig &config)
+    {
         DefaultRetryTime = TDuration::MicroSeconds(config.GetDefaultRetryTime());
         DefaultPermissionDuration = TDuration::MicroSeconds(config.GetDefaultPermissionDuration());
         InfoCollectionTimeout = TDuration::MicroSeconds(config.GetInfoCollectionTimeout());
-        TenantLimits.CopyFrom(config.GetTenantLimits()); 
-        ClusterLimits.CopyFrom(config.GetClusterLimits()); 
+        TenantLimits.CopyFrom(config.GetTenantLimits());
+        ClusterLimits.CopyFrom(config.GetClusterLimits());
         SentinelConfig.Deserialize(config.GetSentinelConfig());
-        LogConfig.Deserialize(config.GetLogConfig()); 
-    } 
- 
-    bool IsLogEnabled(ui32 recordType) const 
-    { 
-        return LogConfig.IsLogEnabled(recordType); 
-    } 
-}; 
- 
-} // NCms 
-} // NKikimr 
+        LogConfig.Deserialize(config.GetLogConfig());
+    }
+
+    bool IsLogEnabled(ui32 recordType) const
+    {
+        return LogConfig.IsLogEnabled(recordType);
+    }
+};
+
+} // NCms
+} // NKikimr

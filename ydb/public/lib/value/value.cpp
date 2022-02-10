@@ -1,7 +1,7 @@
 #include "value.h"
 
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
- 
+
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/charset/utf8.h>
@@ -402,16 +402,16 @@ TString TValue::GetDataText() const {
     case NScheme::NTypeIds::String4k:
     case NScheme::NTypeIds::String2m:
         return Value.GetBytes();
-    case NScheme::NTypeIds::Decimal: 
-        { 
-            NYql::NDecimal::TInt128 val; 
-            auto p = reinterpret_cast<char*>(&val); 
-            reinterpret_cast<ui64*>(p)[0] = Value.GetLow128(); 
-            reinterpret_cast<ui64*>(p)[1] = Value.GetHi128(); 
-            return NYql::NDecimal::ToString(val, 
-                                            Type.GetData().GetDecimalParams().GetPrecision(), 
-                                            Type.GetData().GetDecimalParams().GetScale()); 
-        } 
+    case NScheme::NTypeIds::Decimal:
+        {
+            NYql::NDecimal::TInt128 val;
+            auto p = reinterpret_cast<char*>(&val);
+            reinterpret_cast<ui64*>(p)[0] = Value.GetLow128();
+            reinterpret_cast<ui64*>(p)[1] = Value.GetHi128();
+            return NYql::NDecimal::ToString(val,
+                                            Type.GetData().GetDecimalParams().GetPrecision(),
+                                            Type.GetData().GetDecimalParams().GetScale());
+        }
     case NScheme::NTypeIds::Date:
     case NScheme::NTypeIds::Datetime:
         return ToString(Value.GetUint32());
@@ -518,65 +518,65 @@ TString EscapeJsonASCII(const TString& s) {
     return result;
 }
 
-TString TFormatCSV::EscapeString(const TString& s) { 
-    TString result; 
-    result.reserve(s.size()); 
-    const char* b = s.begin(); 
-    const char* e = s.end(); 
-    const char* p = b; 
-    while (p < e) { 
-        char c = *p; 
-        auto len = UTF8RuneLen(c); 
-        if (len < 2) { 
-            if (c < ' ') { 
-                result += Sprintf("\\u%04x", int(c)); 
-            } else if (c == '"') { 
-                result += "\"\""; 
-            } else { 
-                result += c; 
-            } 
-            ++p; 
-        } else { 
-            len = std::min<decltype(len)>(len, e - p); 
-            result.append(p, len); 
-            p += len; 
-        } 
-    } 
-    return result; 
-} 
- 
-TString PrintCsvHeader(const NKikimrMiniKQL::TType& type, 
-                       const TFormatCSV &format) { 
-    TString hdr = ""; 
- 
-    switch(type.GetKind()) { 
-    case NKikimrMiniKQL::ETypeKind::Void: 
-    case NKikimrMiniKQL::ETypeKind::Data: 
-    case NKikimrMiniKQL::ETypeKind::Optional: 
-        break; 
-    case NKikimrMiniKQL::ETypeKind::List: 
-        return PrintCsvHeader(type.GetList().GetItem(), format); 
-    case NKikimrMiniKQL::ETypeKind::Tuple: 
-    case NKikimrMiniKQL::ETypeKind::Dict: 
-        break; 
-    case NKikimrMiniKQL::ETypeKind::Struct: 
-        { 
-            const auto& member = type.GetStruct().GetMember(); 
-            for (auto it = member.begin(); it != member.end(); ++it) { 
-                if (it != member.begin()) 
-                    hdr += format.Delim; 
-                hdr += it->GetName(); 
-            } 
-            break; 
-        } 
-    default: 
-        hdr = "<unknown>"; 
-        break; 
-    } 
- 
-    return hdr; 
-} 
- 
+TString TFormatCSV::EscapeString(const TString& s) {
+    TString result;
+    result.reserve(s.size());
+    const char* b = s.begin();
+    const char* e = s.end();
+    const char* p = b;
+    while (p < e) {
+        char c = *p;
+        auto len = UTF8RuneLen(c);
+        if (len < 2) {
+            if (c < ' ') {
+                result += Sprintf("\\u%04x", int(c));
+            } else if (c == '"') {
+                result += "\"\"";
+            } else {
+                result += c;
+            }
+            ++p;
+        } else {
+            len = std::min<decltype(len)>(len, e - p);
+            result.append(p, len);
+            p += len;
+        }
+    }
+    return result;
+}
+
+TString PrintCsvHeader(const NKikimrMiniKQL::TType& type,
+                       const TFormatCSV &format) {
+    TString hdr = "";
+
+    switch(type.GetKind()) {
+    case NKikimrMiniKQL::ETypeKind::Void:
+    case NKikimrMiniKQL::ETypeKind::Data:
+    case NKikimrMiniKQL::ETypeKind::Optional:
+        break;
+    case NKikimrMiniKQL::ETypeKind::List:
+        return PrintCsvHeader(type.GetList().GetItem(), format);
+    case NKikimrMiniKQL::ETypeKind::Tuple:
+    case NKikimrMiniKQL::ETypeKind::Dict:
+        break;
+    case NKikimrMiniKQL::ETypeKind::Struct:
+        {
+            const auto& member = type.GetStruct().GetMember();
+            for (auto it = member.begin(); it != member.end(); ++it) {
+                if (it != member.begin())
+                    hdr += format.Delim;
+                hdr += it->GetName();
+            }
+            break;
+        }
+    default:
+        hdr = "<unknown>";
+        break;
+    }
+
+    return hdr;
+}
+
 template <> TString TValue::GetValueText<TFormatJSON>(const TFormatJSON& format) const {
     switch(Type.GetKind()) {
     case NKikimrMiniKQL::ETypeKind::Void:
@@ -777,96 +777,96 @@ template <> TString TValue::GetValueText<TFormatRowset>(const TFormatRowset& for
     return "<null>";
 }
 
-template <> TString TValue::GetValueText<TFormatCSV>(const TFormatCSV &format) const { 
-    if (format.PrintHeader) { 
-        auto hdr = PrintCsvHeader(Type, format) + "\n"; 
-        TFormatCSV fmt = format; 
-        fmt.PrintHeader = false; 
-        return hdr + GetValueText(fmt); 
-    } 
- 
-    switch(Type.GetKind()) { 
-    case NKikimrMiniKQL::ETypeKind::Void: 
-        return "null"; 
-    case NKikimrMiniKQL::ETypeKind::Data: { 
-        switch (Type.GetData().GetScheme()) { 
-        case NScheme::NTypeIds::Utf8: 
-        case NScheme::NTypeIds::String: 
-        case NScheme::NTypeIds::String4k: 
-        case NScheme::NTypeIds::String2m: 
-            return "\"" + format.EscapeString(GetDataText()) + "\""; 
-        default: 
-            return GetDataText(); 
-        } 
-    } 
-    case NKikimrMiniKQL::ETypeKind::Optional: { 
-        if (Value.HasOptional()) { 
-            return TValue::Create(Value.GetOptional(), Type.GetOptional().GetItem()).GetValueText(format); 
-        } else { 
-            return "null"; 
-        } 
-    } 
-    case NKikimrMiniKQL::ETypeKind::List: 
-    { 
-        TString valueText = ""; 
-        const auto& list = Value.GetList(); 
-        const auto& type = Type.GetList().GetItem(); 
-        for (auto it = list.begin(); it != list.end(); ++it) { 
-            if (it != list.begin()) 
-                valueText += "\n"; 
-            valueText += TValue::Create(*it, type).GetValueText(format); 
-        } 
-        return valueText; 
-    } 
-    case NKikimrMiniKQL::ETypeKind::Tuple: 
-    { 
-        TString valueText = "["; 
-        const auto& tuple = Value.GetTuple(); 
-        const auto& type = Type.GetTuple().GetElement(); 
-        size_t maxElements = type.size(); 
-        for (size_t element = 0; element < maxElements; ++element) { 
-            if (element != 0) 
-                valueText += ", "; 
-            valueText += TValue::Create(tuple.Get(element), type.Get(element)).GetValueText(format); 
-        } 
-        valueText += "]"; 
-        return valueText; 
-    } 
-    case NKikimrMiniKQL::ETypeKind::Struct: 
-    { 
-        TString valueText = ""; 
-        const auto& str = Value.GetStruct(); 
-        const auto& type = Type.GetStruct().GetMember(); 
-        size_t maxElements = type.size(); 
-        for (size_t element = 0; element < maxElements; ++element) { 
-            if (element != 0) 
-                valueText += format.Delim; 
-            valueText += TValue::Create(str.Get(element), type.Get(element).GetType()).GetValueText(format); 
-        } 
-        return valueText; 
-    } 
-    case NKikimrMiniKQL::ETypeKind::Dict: 
-    { 
-        TString valueText = "{"; 
-        const auto& dict = Value.GetDict(); 
-        const auto& type = Type.GetDict(); 
-        for (auto it = dict.begin(); it != dict.end(); ++it) { 
-            if (it != dict.begin()) 
-                valueText += ", "; 
-            valueText += "\"Key\": "; 
-            valueText += TValue::Create(it->GetKey(), type.GetKey()).GetValueText(format); 
-            valueText += ", "; 
-            valueText += "\"Payload\": "; 
-            valueText += TValue::Create(it->GetPayload(), type.GetPayload()).GetValueText(format); 
-        } 
-        valueText += '}'; 
-        return valueText; 
-    } 
-    default: 
-        return "null"; 
-    } 
-} 
- 
+template <> TString TValue::GetValueText<TFormatCSV>(const TFormatCSV &format) const {
+    if (format.PrintHeader) {
+        auto hdr = PrintCsvHeader(Type, format) + "\n";
+        TFormatCSV fmt = format;
+        fmt.PrintHeader = false;
+        return hdr + GetValueText(fmt);
+    }
+
+    switch(Type.GetKind()) {
+    case NKikimrMiniKQL::ETypeKind::Void:
+        return "null";
+    case NKikimrMiniKQL::ETypeKind::Data: {
+        switch (Type.GetData().GetScheme()) {
+        case NScheme::NTypeIds::Utf8:
+        case NScheme::NTypeIds::String:
+        case NScheme::NTypeIds::String4k:
+        case NScheme::NTypeIds::String2m:
+            return "\"" + format.EscapeString(GetDataText()) + "\"";
+        default:
+            return GetDataText();
+        }
+    }
+    case NKikimrMiniKQL::ETypeKind::Optional: {
+        if (Value.HasOptional()) {
+            return TValue::Create(Value.GetOptional(), Type.GetOptional().GetItem()).GetValueText(format);
+        } else {
+            return "null";
+        }
+    }
+    case NKikimrMiniKQL::ETypeKind::List:
+    {
+        TString valueText = "";
+        const auto& list = Value.GetList();
+        const auto& type = Type.GetList().GetItem();
+        for (auto it = list.begin(); it != list.end(); ++it) {
+            if (it != list.begin())
+                valueText += "\n";
+            valueText += TValue::Create(*it, type).GetValueText(format);
+        }
+        return valueText;
+    }
+    case NKikimrMiniKQL::ETypeKind::Tuple:
+    {
+        TString valueText = "[";
+        const auto& tuple = Value.GetTuple();
+        const auto& type = Type.GetTuple().GetElement();
+        size_t maxElements = type.size();
+        for (size_t element = 0; element < maxElements; ++element) {
+            if (element != 0)
+                valueText += ", ";
+            valueText += TValue::Create(tuple.Get(element), type.Get(element)).GetValueText(format);
+        }
+        valueText += "]";
+        return valueText;
+    }
+    case NKikimrMiniKQL::ETypeKind::Struct:
+    {
+        TString valueText = "";
+        const auto& str = Value.GetStruct();
+        const auto& type = Type.GetStruct().GetMember();
+        size_t maxElements = type.size();
+        for (size_t element = 0; element < maxElements; ++element) {
+            if (element != 0)
+                valueText += format.Delim;
+            valueText += TValue::Create(str.Get(element), type.Get(element).GetType()).GetValueText(format);
+        }
+        return valueText;
+    }
+    case NKikimrMiniKQL::ETypeKind::Dict:
+    {
+        TString valueText = "{";
+        const auto& dict = Value.GetDict();
+        const auto& type = Type.GetDict();
+        for (auto it = dict.begin(); it != dict.end(); ++it) {
+            if (it != dict.begin())
+                valueText += ", ";
+            valueText += "\"Key\": ";
+            valueText += TValue::Create(it->GetKey(), type.GetKey()).GetValueText(format);
+            valueText += ", ";
+            valueText += "\"Payload\": ";
+            valueText += TValue::Create(it->GetPayload(), type.GetPayload()).GetValueText(format);
+        }
+        valueText += '}';
+        return valueText;
+    }
+    default:
+        return "null";
+    }
+}
+
 TValue TValue::EatOptional() const {
     if (Type.HasOptional() && (Value.HasOptional() || !HaveValue()))
         return TValue::Create(Value.HasOptional() ? Value.GetOptional() : Null, Type.GetOptional().GetItem()).EatOptional();

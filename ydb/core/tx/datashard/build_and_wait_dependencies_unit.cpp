@@ -1,40 +1,40 @@
-#include "datashard_impl.h" 
+#include "datashard_impl.h"
 #include "datashard_counters.h"
-#include "datashard_pipeline.h" 
-#include "execution_unit_ctors.h" 
- 
-namespace NKikimr { 
+#include "datashard_pipeline.h"
+#include "execution_unit_ctors.h"
+
+namespace NKikimr {
 namespace NDataShard {
- 
-class TBuildAndWaitDependenciesUnit : public TExecutionUnit { 
-public: 
+
+class TBuildAndWaitDependenciesUnit : public TExecutionUnit {
+public:
     TBuildAndWaitDependenciesUnit(TDataShard &dataShard,
-                                  TPipeline &pipeline); 
-    ~TBuildAndWaitDependenciesUnit() override; 
- 
+                                  TPipeline &pipeline);
+    ~TBuildAndWaitDependenciesUnit() override;
+
     bool HasDirectBlockers(const TOperation::TPtr& op) const;
 
-    bool IsReadyToExecute(TOperation::TPtr op) const override; 
-    EExecutionStatus Execute(TOperation::TPtr op, 
-                             TTransactionContext &txc, 
-                             const TActorContext &ctx) override; 
-    void Complete(TOperation::TPtr op, 
-                  const TActorContext &ctx) override; 
- 
-private: 
+    bool IsReadyToExecute(TOperation::TPtr op) const override;
+    EExecutionStatus Execute(TOperation::TPtr op,
+                             TTransactionContext &txc,
+                             const TActorContext &ctx) override;
+    void Complete(TOperation::TPtr op,
+                  const TActorContext &ctx) override;
+
+private:
     void BuildDependencies(const TOperation::TPtr &op);
-}; 
- 
+};
+
 TBuildAndWaitDependenciesUnit::TBuildAndWaitDependenciesUnit(TDataShard &dataShard,
-                                                             TPipeline &pipeline) 
-    : TExecutionUnit(EExecutionUnitKind::BuildAndWaitDependencies, false, dataShard, pipeline) 
-{ 
-} 
- 
-TBuildAndWaitDependenciesUnit::~TBuildAndWaitDependenciesUnit() 
-{ 
-} 
- 
+                                                             TPipeline &pipeline)
+    : TExecutionUnit(EExecutionUnitKind::BuildAndWaitDependencies, false, dataShard, pipeline)
+{
+}
+
+TBuildAndWaitDependenciesUnit::~TBuildAndWaitDependenciesUnit()
+{
+}
+
 /**
  * Returns true if operation has blockers that prevent it from starting
  */
@@ -45,35 +45,35 @@ bool TBuildAndWaitDependenciesUnit::HasDirectBlockers(const TOperation::TPtr& op
     return !op->GetDependencies().empty() || !op->GetSpecialDependencies().empty();
 }
 
-bool TBuildAndWaitDependenciesUnit::IsReadyToExecute(TOperation::TPtr op) const 
-{ 
-    // Dependencies were not built yet. Allow to execute to build dependencies. 
-    if (!op->IsWaitingDependencies()) 
+bool TBuildAndWaitDependenciesUnit::IsReadyToExecute(TOperation::TPtr op) const
+{
+    // Dependencies were not built yet. Allow to execute to build dependencies.
+    if (!op->IsWaitingDependencies())
         return true;
- 
+
     // Perform fast checks for existing blockers
     if (HasDirectBlockers(op))
         return false;
 
     // Looks like nothing else is preventing us from starting
-    return true; 
-} 
- 
-EExecutionStatus TBuildAndWaitDependenciesUnit::Execute(TOperation::TPtr op, 
-                                                        TTransactionContext &txc, 
-                                                        const TActorContext &ctx) 
-{ 
-    // Build dependencies if not yet. 
-    if (!op->IsWaitingDependencies()) { 
+    return true;
+}
+
+EExecutionStatus TBuildAndWaitDependenciesUnit::Execute(TOperation::TPtr op,
+                                                        TTransactionContext &txc,
+                                                        const TActorContext &ctx)
+{
+    // Build dependencies if not yet.
+    if (!op->IsWaitingDependencies()) {
         BuildDependencies(op);
- 
-        // After dependencies are built we can add operation to active ops. 
-        // For planned operations it means we can load and process the next 
-        // one. 
-        Pipeline.AddActiveOp(op); 
-        Pipeline.AddExecuteBlocker(op); 
-        op->SetWaitingDependenciesFlag(); 
- 
+
+        // After dependencies are built we can add operation to active ops.
+        // For planned operations it means we can load and process the next
+        // one.
+        Pipeline.AddActiveOp(op);
+        Pipeline.AddExecuteBlocker(op);
+        op->SetWaitingDependenciesFlag();
+
         if (!op->IsImmediate()) {
             if (Pipeline.RemoveProposeDelayer(op->GetTxId())) {
                 DataShard.CheckDelayedProposeQueue(ctx);
@@ -85,35 +85,35 @@ EExecutionStatus TBuildAndWaitDependenciesUnit::Execute(TOperation::TPtr op,
             Pipeline.ActivateWaitingTxOps(ctx);
         }
 
-        if (!IsReadyToExecute(op)) { 
-            TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get()); 
-            if (tx) { 
-                // We should put conflicting tx into cache 
-                // or release its data. 
-                ui64 mem = tx->GetMemoryConsumption(); 
-                if (DataShard.TryCaptureTxCache(mem)) { 
-                    tx->SetTxCacheUsage(mem); 
-                } else { 
-                    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, 
-                               "TBuildAndWaitDependenciesUnit at " << DataShard.TabletID() 
-                               << " released data for tx " << tx->GetTxId()); 
- 
-                    DataShard.IncCounter(COUNTER_INACTIVE_TX_DATA_RELEASES); 
-                    tx->ReleaseTxData(txc, ctx); 
-                } 
-            } 
- 
-            DataShard.IncCounter(COUNTER_TX_WAIT_ORDER); 
- 
-            return EExecutionStatus::Continue; 
-        } 
-    } 
- 
+        if (!IsReadyToExecute(op)) {
+            TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
+            if (tx) {
+                // We should put conflicting tx into cache
+                // or release its data.
+                ui64 mem = tx->GetMemoryConsumption();
+                if (DataShard.TryCaptureTxCache(mem)) {
+                    tx->SetTxCacheUsage(mem);
+                } else {
+                    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
+                               "TBuildAndWaitDependenciesUnit at " << DataShard.TabletID()
+                               << " released data for tx " << tx->GetTxId());
+
+                    DataShard.IncCounter(COUNTER_INACTIVE_TX_DATA_RELEASES);
+                    tx->ReleaseTxData(txc, ctx);
+                }
+            }
+
+            DataShard.IncCounter(COUNTER_TX_WAIT_ORDER);
+
+            return EExecutionStatus::Continue;
+        }
+    }
+
     DataShard.IncCounter(COUNTER_WAIT_DEPENDENCIES_LATENCY_MS, op->GetCurrentElapsedAndReset().MilliSeconds());
 
-    op->ResetWaitingDependenciesFlag(); 
-    op->MarkAsExecuting(); 
- 
+    op->ResetWaitingDependenciesFlag();
+    op->MarkAsExecuting();
+
     // Replicate legacy behavior when mvcc is not enabled
     // When mvcc enabled we don't mark transactions until as late as possible
     if (!DataShard.IsMvccEnabled()) {
@@ -131,9 +131,9 @@ EExecutionStatus TBuildAndWaitDependenciesUnit::Execute(TOperation::TPtr op,
         }
     }
 
-    return EExecutionStatus::Executed; 
-} 
- 
+    return EExecutionStatus::Executed;
+}
+
 void TBuildAndWaitDependenciesUnit::BuildDependencies(const TOperation::TPtr &op) {
     TMicrosecTimerCounter measureBuildDependencies(DataShard, COUNTER_BUILD_DEPENDENCIES_USEC);
 
@@ -168,16 +168,16 @@ void TBuildAndWaitDependenciesUnit::BuildDependencies(const TOperation::TPtr &op
     op->ResetCurrentTimer();
 }
 
-void TBuildAndWaitDependenciesUnit::Complete(TOperation::TPtr, 
-                                             const TActorContext &) 
-{ 
-} 
- 
+void TBuildAndWaitDependenciesUnit::Complete(TOperation::TPtr,
+                                             const TActorContext &)
+{
+}
+
 THolder<TExecutionUnit> CreateBuildAndWaitDependenciesUnit(TDataShard &dataShard,
-                                                           TPipeline &pipeline) 
-{ 
+                                                           TPipeline &pipeline)
+{
     return THolder(new TBuildAndWaitDependenciesUnit(dataShard, pipeline));
-} 
- 
+}
+
 } // namespace NDataShard
-} // namespace NKikimr 
+} // namespace NKikimr

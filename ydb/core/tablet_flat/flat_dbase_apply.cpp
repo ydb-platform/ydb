@@ -116,8 +116,8 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
             changes |= SetExecutorLogFlushPeriod(TDuration::MicroSeconds(delta.GetExecutorLogFlushPeriod()));
         if (delta.HasExecutorLimitInFlyTx())
             changes |= SetExecutorLimitInFlyTx(delta.GetExecutorLimitInFlyTx());
-        if (delta.HasExecutorResourceProfile()) 
-            changes |= SetExecutorResourceProfile(delta.GetExecutorResourceProfile()); 
+        if (delta.HasExecutorResourceProfile())
+            changes |= SetExecutorResourceProfile(delta.GetExecutorResourceProfile());
         if (delta.HasExecutorLogFastCommitTactic())
             changes |= SetExecutorLogFastCommitTactic(delta.GetExecutorLogFastCommitTactic());
     } else if (action == TAlterRecord::SetCompactionPolicy) {
@@ -260,11 +260,11 @@ bool TSchemeModifier::SetExecutorLimitInFlyTx(ui32 limit)
     return std::exchange(Scheme.Executor.LimitInFlyTx, limit) != limit;
 }
 
-bool TSchemeModifier::SetExecutorResourceProfile(const TString &name) 
-{ 
-    return std::exchange(Scheme.Executor.ResourceProfile, name) != name; 
-} 
- 
+bool TSchemeModifier::SetExecutorResourceProfile(const TString &name)
+{
+    return std::exchange(Scheme.Executor.ResourceProfile, name) != name;
+}
+
 bool TSchemeModifier::SetCompactionPolicy(ui32 tid, const NKikimrSchemeOp::TCompactionPolicy &proto)
 {
     auto *table = Table(tid);

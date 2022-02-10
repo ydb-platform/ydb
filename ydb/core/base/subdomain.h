@@ -13,7 +13,7 @@ struct TSubDomainKey : public std::pair<ui64, ui64> {
     TSubDomainKey() = default;
     TSubDomainKey(const TSubDomainKey&) = default;
     TSubDomainKey(TSubDomainKey&&) = default;
-    TSubDomainKey(ui64 shardId, ui64 pathId); 
+    TSubDomainKey(ui64 shardId, ui64 pathId);
     explicit TSubDomainKey(const NKikimrSubDomains::TDomainKey &domainKey);
 
     TSubDomainKey& operator =(const TSubDomainKey&) = default;

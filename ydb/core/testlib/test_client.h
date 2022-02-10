@@ -83,7 +83,7 @@ namespace Tests {
         using TPtr = TIntrusivePtr<TServerSettings>;
         using TConstPtr = TIntrusiveConstPtr<TServerSettings>;
 
-        using TControls = NKikimrConfig::TImmediateControlsConfig; 
+        using TControls = NKikimrConfig::TImmediateControlsConfig;
         using TLoggerInitializer = std::function<void (TTestActorRuntime&)>;
         using TStoragePoolKinds = TDomainsInfo::TDomain::TStoragePoolKinds;
 
@@ -100,7 +100,7 @@ namespace Tests {
         ui32 NodeCount = 1;
         ui32 DynamicNodeCount = 0;
         NFake::TStorage CustomDiskParams;
-        TControls Controls; 
+        TControls Controls;
         TAppPrepare::TFnReg FrFactory = &DefaultFrFactory;
         TIntrusivePtr<TFormatFactory> Formats;
         bool EnableMockOnSingleNode = true;
@@ -108,9 +108,9 @@ namespace Tests {
         TLoggerInitializer LoggerInitializer;
         TStoragePoolKinds StoragePoolTypes;
         TVector<NKikimrKqp::TKqpSetting> KqpSettings;
-        bool EnableConsole = true; 
-        bool EnableConfigsDispatcher = true; 
-        bool UseRealThreads = true; 
+        bool EnableConsole = true;
+        bool EnableConfigsDispatcher = true;
+        bool UseRealThreads = true;
         bool EnableKqpSpilling = false;
         bool EnableYq = false;
         TDuration KeepSnapshotTimeout = TDuration::Zero();
@@ -136,7 +136,7 @@ namespace Tests {
         TServerSettings& SetNodeCount(ui32 value) { NodeCount = value; return *this; }
         TServerSettings& SetDynamicNodeCount(ui32 value) { DynamicNodeCount = value; return *this; }
         TServerSettings& SetCustomDiskParams(const NFake::TStorage& value) { CustomDiskParams = value; return *this; }
-        TServerSettings& SetControls(const TControls& value) { Controls = value; return *this; } 
+        TServerSettings& SetControls(const TControls& value) { Controls = value; return *this; }
         TServerSettings& SetFrFactory(const TAppPrepare::TFnReg& value) { FrFactory = value; return *this; }
         TServerSettings& SetEnableMockOnSingleNode(bool value) { EnableMockOnSingleNode = value; return *this; }
         TServerSettings& SetLogBackend(TAutoPtr<TLogBackend> value) { LogBackend = value; return *this; }
@@ -144,9 +144,9 @@ namespace Tests {
         TServerSettings& AddStoragePoolType(const TString& poolKind, ui32 encryptionMode = 0);
         TServerSettings& AddStoragePool(const TString& poolKind, const TString& poolName = {}, ui32 numGroups = 1, ui32 encryptionMode = 0);
         TServerSettings& SetKqpSettings(const TVector<NKikimrKqp::TKqpSetting>& settings) { KqpSettings = settings; return *this; }
-        TServerSettings& SetEnableConsole(bool value) { EnableConsole = value; return *this; } 
-        TServerSettings& SetEnableConfigsDispatcher(bool value) { EnableConfigsDispatcher = value; return *this; } 
-        TServerSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; } 
+        TServerSettings& SetEnableConsole(bool value) { EnableConsole = value; return *this; }
+        TServerSettings& SetEnableConfigsDispatcher(bool value) { EnableConfigsDispatcher = value; return *this; }
+        TServerSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; }
         TServerSettings& SetAppConfig(const NKikimrConfig::TAppConfig value) { AppConfig = value; return *this; }
         TServerSettings& SetKeyFor(ui32 nodeId, TString keyValue) { NodeKeys[nodeId] = keyValue; return *this; }
         TServerSettings& SetEnableKqpSpilling(bool value) { EnableKqpSpilling = value; return *this; }
@@ -200,7 +200,7 @@ namespace Tests {
         void SetupLocalConfig(TLocalConfig &localConfig, const NKikimr::TAppData &appData);
         void SetupDomainLocalService(ui32 nodeIdx);
         void SetupLocalService(ui32 nodeIdx, const TString &domainName);
-        void SetupConfigurators(ui32 nodeIdx); 
+        void SetupConfigurators(ui32 nodeIdx);
         void SetupProxies(ui32 nodeIdx);
         void SetupLogging();
 

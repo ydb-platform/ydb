@@ -14,8 +14,8 @@ ENDIF()
 OWNER(g:kikimr)
 
 SRCS(
-    datetime_ut.cpp 
-    decimal_ut.cpp 
+    datetime_ut.cpp
+    decimal_ut.cpp
     flat_cxx_database_ut.cpp
     ut_db_iface.cpp
     ut_db_scheme.cpp

@@ -9,7 +9,7 @@ message TOperationId {
         OPERATION_DML = 2;
         SESSION_YQL = 3;
         PREPARED_QUERY_ID = 4;
-        CMS_REQUEST = 5; 
+        CMS_REQUEST = 5;
         EXPORT = 6;
         BUILD_INDEX = 7;
         IMPORT = 8;

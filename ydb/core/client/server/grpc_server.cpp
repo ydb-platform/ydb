@@ -22,7 +22,7 @@
 using grpc::Server;
 using grpc::ServerContext;
 using grpc::ServerAsyncResponseWriter;
-using grpc::ServerAsyncWriter; 
+using grpc::ServerAsyncWriter;
 using grpc::Status;
 using grpc::StatusCode;
 using grpc::ServerCompletionQueue;
@@ -70,10 +70,10 @@ public:
         , ActorSystem(as)
         , Name(name)
         , Counters(std::move(counters))
-        , Writer(new ServerAsyncResponseWriter<TOut>(&Context)) 
+        , Writer(new ServerAsyncResponseWriter<TOut>(&Context))
         , StateFunc(&TSimpleRequest::RequestDone)
-        , RequestSize(0) 
-        , ResponseSize(0) 
+        , RequestSize(0)
+        , ResponseSize(0)
         , ResponseStatus(0)
         , InProgress_(false)
     {
@@ -105,7 +105,7 @@ public:
     //! Start another instance of request to grab next incoming query (only when the server is not shutting down)
     void Clone() {
         if (!Server->IsShuttingDown()) {
-            if (RequestCallback) 
+            if (RequestCallback)
                 (new TSimpleRequest(Server, Service, CQ, Cb, RequestCallback, ActorSystem, Name, Counters))->Start();
         }
     }
@@ -153,22 +153,22 @@ public:
         }
     }
 
-    void Reply(const NKikimrClient::TNodeRegistrationResponse& resp) override { 
-        try { 
+    void Reply(const NKikimrClient::TNodeRegistrationResponse& resp) override {
+        try {
             Finish(dynamic_cast<const TOut&>(resp), 0);
-        } catch (const std::bad_cast&) { 
-            Y_FAIL("unexpected response type generated"); 
-        } 
-    } 
- 
-    void Reply(const NKikimrClient::TCmsResponse& resp) override { 
-        try { 
+        } catch (const std::bad_cast&) {
+            Y_FAIL("unexpected response type generated");
+        }
+    }
+
+    void Reply(const NKikimrClient::TCmsResponse& resp) override {
+        try {
             Finish(dynamic_cast<const TOut&>(resp), 0);
-        } catch (const std::bad_cast&) { 
-            Y_FAIL("unexpected response type generated"); 
-        } 
-    } 
- 
+        } catch (const std::bad_cast&) {
+            Y_FAIL("unexpected response type generated");
+        }
+    }
+
     void Reply(const NKikimrClient::TSqsResponse& resp) override {
         try {
             Finish(dynamic_cast<const TOut&>(resp), 0);
@@ -185,14 +185,14 @@ public:
         }
     }
 
-    void Reply(const NKikimrClient::TConsoleResponse& resp) override { 
-        try { 
+    void Reply(const NKikimrClient::TConsoleResponse& resp) override {
+        try {
             Finish(dynamic_cast<const TOut&>(resp), 0);
-        } catch (const std::bad_cast&) { 
-            Y_FAIL("unexpected response type generated"); 
-        } 
-    } 
- 
+        } catch (const std::bad_cast&) {
+            Y_FAIL("unexpected response type generated");
+        }
+    }
+
     //! Send error reply.
     void ReplyError(const TString& reason) override {
         TOut resp;
@@ -207,16 +207,16 @@ public:
         }
     }
 
-    static void GenerateErrorResponse(NKikimrClient::TNodeRegistrationResponse& resp, const TString& reason) { 
-        resp.MutableStatus()->SetCode(NKikimrNodeBroker::TStatus::ERROR); 
-        resp.MutableStatus()->SetReason(reason); 
-    } 
- 
-    static void GenerateErrorResponse(NKikimrClient::TCmsResponse& resp, const TString& reason) { 
-        resp.MutableStatus()->SetCode(NKikimrCms::TStatus::ERROR); 
-        resp.MutableStatus()->SetReason(reason); 
-    } 
- 
+    static void GenerateErrorResponse(NKikimrClient::TNodeRegistrationResponse& resp, const TString& reason) {
+        resp.MutableStatus()->SetCode(NKikimrNodeBroker::TStatus::ERROR);
+        resp.MutableStatus()->SetReason(reason);
+    }
+
+    static void GenerateErrorResponse(NKikimrClient::TCmsResponse& resp, const TString& reason) {
+        resp.MutableStatus()->SetCode(NKikimrCms::TStatus::ERROR);
+        resp.MutableStatus()->SetReason(reason);
+    }
+
     static void GenerateErrorResponse(NKikimrClient::TJSON& resp, const TString& reason) {
         NJson::TJsonValue json(NJson::JSON_MAP);
         json["ErrorReason"] = reason;
@@ -231,10 +231,10 @@ public:
         resp.SetDescription(reason);
     }
 
-    static void GenerateErrorResponse(NKikimrClient::TConsoleResponse& resp, const TString& reason) { 
+    static void GenerateErrorResponse(NKikimrClient::TConsoleResponse& resp, const TString& reason) {
         resp.MutableStatus()->SetCode(Ydb::StatusIds::GENERIC_ERROR);
-        resp.MutableStatus()->SetReason(reason); 
-    } 
+        resp.MutableStatus()->SetReason(reason);
+    }
 
     NMsgBusProxy::TBusMessageContext BindBusContext(int type) override {
         return BusContext.ConstructInPlace(this, type);
@@ -353,12 +353,12 @@ private:
     const char* const Name;
     NGrpc::ICounterBlockPtr Counters;
 
-    THolder<ServerAsyncResponseWriter<TOut>> Writer; 
+    THolder<ServerAsyncResponseWriter<TOut>> Writer;
 
     TStateFunc StateFunc;
     TIn Request;
-    ui32 RequestSize; 
-    ui32 ResponseSize; 
+    ui32 RequestSize;
+    ui32 ResponseSize;
     ui32 ResponseStatus;
     THPTimer RequestTimer;
 
@@ -467,18 +467,18 @@ void TGRpcService::SetupIncomingRequests() {
     ADD_ACTOR_REQUEST(InterconnectDebug,         TInterconnectDebug,                MTYPE_CLIENT_INTERCONNECT_DEBUG)
     ADD_ACTOR_REQUEST(TestShardControl,          TTestShardControlRequest,          MTYPE_CLIENT_TEST_SHARD_CONTROL)
 
-    // dynamic node registration 
-    ADD_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse, { 
-        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_NODE_REGISTRATION_REQUEST)); 
+    // dynamic node registration
+    ADD_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse, {
+        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_NODE_REGISTRATION_REQUEST));
         RegisterRequestActor(CreateMessageBusRegisterNode(msg));
-    }) 
- 
-    // CMS request 
-    ADD_REQUEST(CmsRequest, TCmsRequest, TCmsResponse, { 
-        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_CMS_REQUEST)); 
+    })
+
+    // CMS request
+    ADD_REQUEST(CmsRequest, TCmsRequest, TCmsResponse, {
+        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_CMS_REQUEST));
         RegisterRequestActor(CreateMessageBusCmsRequest(msg));
-    }) 
- 
+    })
+
     // SQS request
     ADD_REQUEST(SqsRequest, TSqsRequest, TSqsResponse, {
         NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_SQS_REQUEST));
@@ -491,11 +491,11 @@ void TGRpcService::SetupIncomingRequests() {
         RegisterRequestActor(CreateMessageBusS3ListingRequest(msg));
     })
 
-    // Console request 
-    ADD_REQUEST(ConsoleRequest, TConsoleRequest, TConsoleResponse, { 
-        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST)); 
+    // Console request
+    ADD_REQUEST(ConsoleRequest, TConsoleRequest, TConsoleResponse, {
+        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST));
         RegisterRequestActor(CreateMessageBusConsoleRequest(msg));
-    }) 
+    })
 
 #define ADD_PROXY_REQUEST_BASE(NAME, TYPE, RES_TYPE, EVENT_TYPE, MTYPE) \
     ADD_REQUEST(NAME, TYPE, RES_TYPE, { \

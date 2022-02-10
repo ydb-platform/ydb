@@ -1,358 +1,358 @@
-#pragma once 
- 
-#include "config_helpers.h" 
-#include "config_index.h" 
-#include "console_configs_provider.h" 
-#include "console_impl.h" 
-#include "console_tenants_manager.h" 
- 
+#pragma once
+
+#include "config_helpers.h"
+#include "config_index.h"
+#include "console_configs_provider.h"
+#include "console_impl.h"
+#include "console_tenants_manager.h"
+
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/core/testlib/tenant_helpers.h>
- 
+
 #include <library/cpp/testing/unittest/registar.h>
- 
-namespace NKikimr { 
-namespace NConsole { 
-namespace NUT { 
- 
-struct TUnitRegistration { 
-    TUnitRegistration(const TString &host = "", ui32 port = 0, const TString &kind = "") 
-        : Host(host) 
-        , Port(port) 
-        , Kind(kind) 
-    { 
-    } 
- 
-    TString Host; 
-    ui32 Port; 
-    TString Kind; 
-}; 
- 
-inline NKikimrConsole::TUsageScope MakeUsageScope(const TVector<ui32> &nodes) 
-{ 
-    NKikimrConsole::TUsageScope res; 
-    auto &filter = *res.MutableNodeFilter(); 
-    for (auto &host : nodes) 
-        filter.AddNodes(host); 
-    return res; 
-} 
- 
-inline NKikimrConsole::TUsageScope MakeUsageScope(const TVector<TString> &hosts) 
-{ 
-    NKikimrConsole::TUsageScope res; 
-    auto &filter = *res.MutableHostFilter(); 
-    for (auto &host : hosts) 
-        filter.AddHosts(host); 
-    return res; 
-} 
- 
-inline NKikimrConsole::TUsageScope MakeUsageScope(const TString &tenant, const TString &nodeType) 
-{ 
-    NKikimrConsole::TUsageScope res; 
-    res.MutableTenantAndNodeTypeFilter()->SetTenant(tenant); 
-    res.MutableTenantAndNodeTypeFilter()->SetNodeType(nodeType); 
-    return res; 
-} 
- 
-inline NKikimrConsole::TConfigItem MakeConfigItem(ui32 kind, const NKikimrConfig::TAppConfig &config, 
-                                                  TVector<ui32> nodes, TVector<TString> hosts, 
-                                                  const TString &tenant, const TString &nodeType, 
-                                                  ui32 order, ui32 merge, const TString &cookie = "") 
-{ 
-    NKikimrConsole::TConfigItem item; 
-    item.SetKind(kind); 
-    item.MutableConfig()->CopyFrom(config); 
-    for (auto id : nodes) 
-        item.MutableUsageScope()->MutableNodeFilter()->AddNodes(id); 
-    for (auto host : hosts) 
-        item.MutableUsageScope()->MutableHostFilter()->AddHosts(host); 
-    if (nodes.empty() && hosts.empty()) { 
-        item.MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetTenant(tenant); 
-        item.MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetNodeType(nodeType); 
-    } 
-    item.SetOrder(order); 
-    item.SetMergeStrategy(merge); 
-    item.SetCookie(cookie); 
-    return item; 
-} 
- 
-inline NKikimrConsole::TConfigureAction MakeAddAction(const NKikimrConsole::TConfigItem &item, bool split = false) 
-{ 
-    NKikimrConsole::TConfigureAction res; 
-    res.MutableAddConfigItem()->MutableConfigItem()->CopyFrom(item); 
-    res.MutableAddConfigItem()->SetEnableAutoSplit(split); 
-    return res; 
-} 
- 
-inline NKikimrConsole::TConfigureAction MakeModifyAction(const NKikimrConsole::TConfigItem &item) 
-{ 
-    NKikimrConsole::TConfigureAction res; 
-    res.MutableModifyConfigItem()->MutableConfigItem()->CopyFrom(item); 
-    return res; 
-} 
- 
-inline NKikimrConsole::TConfigureAction MakeRemoveAction(ui64 id, ui64 generation) 
-{ 
-    NKikimrConsole::TConfigureAction res; 
-    res.MutableRemoveConfigItem()->MutableConfigItemId()->SetId(id); 
-    res.MutableRemoveConfigItem()->MutableConfigItemId()->SetGeneration(generation); 
-    return res; 
-} 
- 
-inline NKikimrConsole::TConfigureAction MakeRemoveAction(const NKikimrConsole::TConfigItem &item) 
-{ 
-    return MakeRemoveAction(item.GetId().GetId(), item.GetId().GetGeneration()); 
-} 
- 
-inline NKikimrConsole::TConfigureAction MakeRemoveByCookieAction(const TString &cookie) 
-{ 
-    NKikimrConsole::TConfigureAction res; 
-    res.MutableRemoveConfigItems()->MutableCookieFilter()->AddCookies(cookie); 
-    return res; 
-} 
- 
-inline NKikimrConsole::TConfigureAction MakeRemoveByCookieAction(const TString &cookie1, 
-                                                                 const TString &cookie2) 
-{ 
-    NKikimrConsole::TConfigureAction res; 
-    res.MutableRemoveConfigItems()->MutableCookieFilter()->AddCookies(cookie1); 
-    res.MutableRemoveConfigItems()->MutableCookieFilter()->AddCookies(cookie2); 
-    return res; 
-} 
- 
-inline void CollectActions(NKikimrConsole::TConfigureRequest &request, 
-                           const NKikimrConsole::TConfigureAction &action) 
-{ 
-    request.AddActions()->CopyFrom(action); 
-} 
- 
-template <typename ...Ts> 
-void CollectActions(NKikimrConsole::TConfigureRequest &request, 
-                    const NKikimrConsole::TConfigureAction &action, Ts... args) 
-{ 
-    CollectActions(request, action); 
-    CollectActions(request, args...); 
-} 
- 
-template <typename ...Ts> 
-TVector<ui64> CheckConfigure(TTenantTestRuntime &runtime, 
-                             Ydb::StatusIds::StatusCode code, 
-                             bool dryRun, 
-                             bool fillAffected, 
-                             Ts... args) 
-{ 
-    auto *event = new TEvConsole::TEvConfigureRequest; 
-    event->Record.SetDryRun(dryRun); 
-    event->Record.SetFillAffectedConfigs(fillAffected); 
-    CollectActions(event->Record, args...); 
- 
-    TAutoPtr<IEventHandle> handle; 
-    runtime.SendToConsole(event); 
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigureResponse>(handle); 
-    UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code); 
-    return {reply->Record.GetAddedItemIds().begin(), reply->Record.GetAddedItemIds().end()}; 
-} 
- 
-template <typename ...Ts> 
-TVector<ui64> CheckConfigure(TTenantTestRuntime &runtime, 
-                             Ydb::StatusIds::StatusCode code, 
-                             Ts... args) 
-{ 
-    return CheckConfigure(runtime, code, false, false, args...); 
-} 
- 
-template <typename ...Ts> 
-void SendConfigure(TTenantTestRuntime &runtime, Ts... args) 
-{ 
-    auto *event = new TEvConsole::TEvConfigureRequest; 
-    CollectActions(event->Record, args...); 
-    runtime.SendToConsole(event); 
-} 
- 
-inline void CollectSubscriptions(THashMap<ui64, TSubscription> &) 
-{ 
-} 
- 
-inline void CollectSubscriptions(THashMap<ui64, TSubscription> &subscriptions, 
-                                 ui64 id, ui32 nodeId, const TString &host, const TString &tenant, 
+
+namespace NKikimr {
+namespace NConsole {
+namespace NUT {
+
+struct TUnitRegistration {
+    TUnitRegistration(const TString &host = "", ui32 port = 0, const TString &kind = "")
+        : Host(host)
+        , Port(port)
+        , Kind(kind)
+    {
+    }
+
+    TString Host;
+    ui32 Port;
+    TString Kind;
+};
+
+inline NKikimrConsole::TUsageScope MakeUsageScope(const TVector<ui32> &nodes)
+{
+    NKikimrConsole::TUsageScope res;
+    auto &filter = *res.MutableNodeFilter();
+    for (auto &host : nodes)
+        filter.AddNodes(host);
+    return res;
+}
+
+inline NKikimrConsole::TUsageScope MakeUsageScope(const TVector<TString> &hosts)
+{
+    NKikimrConsole::TUsageScope res;
+    auto &filter = *res.MutableHostFilter();
+    for (auto &host : hosts)
+        filter.AddHosts(host);
+    return res;
+}
+
+inline NKikimrConsole::TUsageScope MakeUsageScope(const TString &tenant, const TString &nodeType)
+{
+    NKikimrConsole::TUsageScope res;
+    res.MutableTenantAndNodeTypeFilter()->SetTenant(tenant);
+    res.MutableTenantAndNodeTypeFilter()->SetNodeType(nodeType);
+    return res;
+}
+
+inline NKikimrConsole::TConfigItem MakeConfigItem(ui32 kind, const NKikimrConfig::TAppConfig &config,
+                                                  TVector<ui32> nodes, TVector<TString> hosts,
+                                                  const TString &tenant, const TString &nodeType,
+                                                  ui32 order, ui32 merge, const TString &cookie = "")
+{
+    NKikimrConsole::TConfigItem item;
+    item.SetKind(kind);
+    item.MutableConfig()->CopyFrom(config);
+    for (auto id : nodes)
+        item.MutableUsageScope()->MutableNodeFilter()->AddNodes(id);
+    for (auto host : hosts)
+        item.MutableUsageScope()->MutableHostFilter()->AddHosts(host);
+    if (nodes.empty() && hosts.empty()) {
+        item.MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetTenant(tenant);
+        item.MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetNodeType(nodeType);
+    }
+    item.SetOrder(order);
+    item.SetMergeStrategy(merge);
+    item.SetCookie(cookie);
+    return item;
+}
+
+inline NKikimrConsole::TConfigureAction MakeAddAction(const NKikimrConsole::TConfigItem &item, bool split = false)
+{
+    NKikimrConsole::TConfigureAction res;
+    res.MutableAddConfigItem()->MutableConfigItem()->CopyFrom(item);
+    res.MutableAddConfigItem()->SetEnableAutoSplit(split);
+    return res;
+}
+
+inline NKikimrConsole::TConfigureAction MakeModifyAction(const NKikimrConsole::TConfigItem &item)
+{
+    NKikimrConsole::TConfigureAction res;
+    res.MutableModifyConfigItem()->MutableConfigItem()->CopyFrom(item);
+    return res;
+}
+
+inline NKikimrConsole::TConfigureAction MakeRemoveAction(ui64 id, ui64 generation)
+{
+    NKikimrConsole::TConfigureAction res;
+    res.MutableRemoveConfigItem()->MutableConfigItemId()->SetId(id);
+    res.MutableRemoveConfigItem()->MutableConfigItemId()->SetGeneration(generation);
+    return res;
+}
+
+inline NKikimrConsole::TConfigureAction MakeRemoveAction(const NKikimrConsole::TConfigItem &item)
+{
+    return MakeRemoveAction(item.GetId().GetId(), item.GetId().GetGeneration());
+}
+
+inline NKikimrConsole::TConfigureAction MakeRemoveByCookieAction(const TString &cookie)
+{
+    NKikimrConsole::TConfigureAction res;
+    res.MutableRemoveConfigItems()->MutableCookieFilter()->AddCookies(cookie);
+    return res;
+}
+
+inline NKikimrConsole::TConfigureAction MakeRemoveByCookieAction(const TString &cookie1,
+                                                                 const TString &cookie2)
+{
+    NKikimrConsole::TConfigureAction res;
+    res.MutableRemoveConfigItems()->MutableCookieFilter()->AddCookies(cookie1);
+    res.MutableRemoveConfigItems()->MutableCookieFilter()->AddCookies(cookie2);
+    return res;
+}
+
+inline void CollectActions(NKikimrConsole::TConfigureRequest &request,
+                           const NKikimrConsole::TConfigureAction &action)
+{
+    request.AddActions()->CopyFrom(action);
+}
+
+template <typename ...Ts>
+void CollectActions(NKikimrConsole::TConfigureRequest &request,
+                    const NKikimrConsole::TConfigureAction &action, Ts... args)
+{
+    CollectActions(request, action);
+    CollectActions(request, args...);
+}
+
+template <typename ...Ts>
+TVector<ui64> CheckConfigure(TTenantTestRuntime &runtime,
+                             Ydb::StatusIds::StatusCode code,
+                             bool dryRun,
+                             bool fillAffected,
+                             Ts... args)
+{
+    auto *event = new TEvConsole::TEvConfigureRequest;
+    event->Record.SetDryRun(dryRun);
+    event->Record.SetFillAffectedConfigs(fillAffected);
+    CollectActions(event->Record, args...);
+
+    TAutoPtr<IEventHandle> handle;
+    runtime.SendToConsole(event);
+    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigureResponse>(handle);
+    UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code);
+    return {reply->Record.GetAddedItemIds().begin(), reply->Record.GetAddedItemIds().end()};
+}
+
+template <typename ...Ts>
+TVector<ui64> CheckConfigure(TTenantTestRuntime &runtime,
+                             Ydb::StatusIds::StatusCode code,
+                             Ts... args)
+{
+    return CheckConfigure(runtime, code, false, false, args...);
+}
+
+template <typename ...Ts>
+void SendConfigure(TTenantTestRuntime &runtime, Ts... args)
+{
+    auto *event = new TEvConsole::TEvConfigureRequest;
+    CollectActions(event->Record, args...);
+    runtime.SendToConsole(event);
+}
+
+inline void CollectSubscriptions(THashMap<ui64, TSubscription> &)
+{
+}
+
+inline void CollectSubscriptions(THashMap<ui64, TSubscription> &subscriptions,
+                                 ui64 id, ui32 nodeId, const TString &host, const TString &tenant,
                                  const TString &nodeType, ui64 tabletId, TActorId serviceId,
-                                 TVector<ui32> kinds) 
-{ 
-    TSubscription subscription; 
-    subscription.Id = id; 
-    subscription.NodeId = nodeId; 
-    subscription.Host = host; 
-    subscription.Tenant = tenant; 
-    subscription.NodeType = nodeType; 
-    subscription.Subscriber.TabletId = tabletId; 
-    subscription.Subscriber.ServiceId = serviceId; 
-    for (auto &kind : kinds) 
-        subscription.ItemKinds.insert(kind); 
-    subscriptions[id] = subscription; 
-} 
- 
-template <typename ...Ts> 
-void CollectSubscriptions(THashMap<ui64, TSubscription> &subscriptions, 
-                          ui64 id, ui32 nodeId, const TString &host, const TString &tenant, 
+                                 TVector<ui32> kinds)
+{
+    TSubscription subscription;
+    subscription.Id = id;
+    subscription.NodeId = nodeId;
+    subscription.Host = host;
+    subscription.Tenant = tenant;
+    subscription.NodeType = nodeType;
+    subscription.Subscriber.TabletId = tabletId;
+    subscription.Subscriber.ServiceId = serviceId;
+    for (auto &kind : kinds)
+        subscription.ItemKinds.insert(kind);
+    subscriptions[id] = subscription;
+}
+
+template <typename ...Ts>
+void CollectSubscriptions(THashMap<ui64, TSubscription> &subscriptions,
+                          ui64 id, ui32 nodeId, const TString &host, const TString &tenant,
                           const TString &nodeType, ui64 tabletId, TActorId serviceId,
-                          TVector<ui32> kinds, Ts ...args) 
-{ 
-    CollectSubscriptions(subscriptions, id, nodeId, host, tenant, nodeType, tabletId, serviceId, kinds); 
-    CollectSubscriptions(subscriptions, args...); 
-} 
- 
-template <typename ...Ts> 
-void CheckListConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds::StatusCode code, 
+                          TVector<ui32> kinds, Ts ...args)
+{
+    CollectSubscriptions(subscriptions, id, nodeId, host, tenant, nodeType, tabletId, serviceId, kinds);
+    CollectSubscriptions(subscriptions, args...);
+}
+
+template <typename ...Ts>
+void CheckListConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds::StatusCode code,
                                   ui64 tabletId, TActorId serviceId, Ts ...args)
-{ 
-    THashMap<ui64, TSubscription> subscriptions; 
-    CollectSubscriptions(subscriptions, args...); 
- 
-    auto *event = new TEvConsole::TEvListConfigSubscriptionsRequest; 
-    if (tabletId) 
-        event->Record.MutableSubscriber()->SetTabletId(tabletId); 
-    else if (serviceId) 
+{
+    THashMap<ui64, TSubscription> subscriptions;
+    CollectSubscriptions(subscriptions, args...);
+
+    auto *event = new TEvConsole::TEvListConfigSubscriptionsRequest;
+    if (tabletId)
+        event->Record.MutableSubscriber()->SetTabletId(tabletId);
+    else if (serviceId)
         ActorIdToProto(serviceId, event->Record.MutableSubscriber()->MutableServiceId());
- 
-    TAutoPtr<IEventHandle> handle; 
-    runtime.SendToConsole(event); 
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvListConfigSubscriptionsResponse>(handle); 
-    UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code); 
- 
-    for (auto &rec : reply->Record.GetSubscriptions()) { 
-        TSubscription subscription(rec); 
+
+    TAutoPtr<IEventHandle> handle;
+    runtime.SendToConsole(event);
+    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvListConfigSubscriptionsResponse>(handle);
+    UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code);
+
+    for (auto &rec : reply->Record.GetSubscriptions()) {
+        TSubscription subscription(rec);
         UNIT_ASSERT(subscriptions.contains(subscription.Id));
-        UNIT_ASSERT(subscriptions.at(subscription.Id).IsEqual(subscription)); 
-        subscriptions.erase(subscription.Id); 
-    } 
-    UNIT_ASSERT(subscriptions.empty()); 
-} 
- 
-inline bool CompareState(THashMap<std::pair<TString, TString>, TSlotState> slots, 
-                         THashMap<TString, TPoolAllocation> pools, 
-                         THashMap<std::pair<TString, ui32>, TUnitRegistration> registrations, 
+        UNIT_ASSERT(subscriptions.at(subscription.Id).IsEqual(subscription));
+        subscriptions.erase(subscription.Id);
+    }
+    UNIT_ASSERT(subscriptions.empty());
+}
+
+inline bool CompareState(THashMap<std::pair<TString, TString>, TSlotState> slots,
+                         THashMap<TString, TPoolAllocation> pools,
+                         THashMap<std::pair<TString, ui32>, TUnitRegistration> registrations,
                          const Ydb::Cms::GetDatabaseStatusResult &status, bool shared = false)
-{ 
+{
     const auto& resources = shared ? status.required_shared_resources() : status.required_resources();
 
     for (auto &unit : resources.computational_units()) {
-        auto key = std::make_pair(unit.unit_kind(), unit.availability_zone()); 
-        auto count = unit.count(); 
+        auto key = std::make_pair(unit.unit_kind(), unit.availability_zone());
+        auto count = unit.count();
         if (!slots.contains(key))
-            return false; 
-        if (slots[key].Required != count) 
-            return false; 
-        slots[key].Required = 0; 
-    } 
- 
+            return false;
+        if (slots[key].Required != count)
+            return false;
+        slots[key].Required = 0;
+    }
+
     for (auto &unit : resources.storage_units()) {
-        auto key = unit.unit_kind(); 
-        auto size = unit.count(); 
+        auto key = unit.unit_kind();
+        auto size = unit.count();
         if (!pools.contains(key))
-            return false; 
-        if (pools[key].PoolSize != size) 
-            return false; 
-        pools[key].PoolSize = 0; 
-    } 
- 
-    for (auto &unit : status.allocated_resources().computational_units()) { 
-        auto key = std::make_pair(unit.unit_kind(), unit.availability_zone()); 
-        auto count = unit.count(); 
+            return false;
+        if (pools[key].PoolSize != size)
+            return false;
+        pools[key].PoolSize = 0;
+    }
+
+    for (auto &unit : status.allocated_resources().computational_units()) {
+        auto key = std::make_pair(unit.unit_kind(), unit.availability_zone());
+        auto count = unit.count();
         if (!slots.contains(key))
-            return false; 
-        if (slots[key].Allocated != count) 
-            return false; 
-        slots[key].Allocated = 0; 
-    } 
- 
-    for (auto &unit : status.allocated_resources().storage_units()) { 
-        auto key = unit.unit_kind(); 
-        auto size = unit.count(); 
+            return false;
+        if (slots[key].Allocated != count)
+            return false;
+        slots[key].Allocated = 0;
+    }
+
+    for (auto &unit : status.allocated_resources().storage_units()) {
+        auto key = unit.unit_kind();
+        auto size = unit.count();
         if (!pools.contains(key))
-            return false; 
-        if (pools[key].Allocated != size) 
-            return false; 
-        pools[key].Allocated = 0; 
-    } 
- 
-    for (auto &unit : status.registered_resources()) { 
-        auto key = std::make_pair(unit.host(), unit.port()); 
+            return false;
+        if (pools[key].Allocated != size)
+            return false;
+        pools[key].Allocated = 0;
+    }
+
+    for (auto &unit : status.registered_resources()) {
+        auto key = std::make_pair(unit.host(), unit.port());
         if (!registrations.contains(key))
-            return false; 
-        if (registrations.at(key).Kind != unit.unit_kind()) 
-            return false; 
-        registrations.erase(key); 
-    } 
- 
-    for (auto &pr : slots) { 
-        if (pr.second.Required || pr.second.Allocated) 
-            return false; 
-    } 
- 
-    for (auto &pr : pools) { 
-        if (pr.second.PoolSize || pr.second.Allocated) 
-            return false; 
-    } 
- 
-    if (registrations.size()) 
-        return false; 
- 
-    return true; 
-} 
- 
-template <typename ...Ts> 
+            return false;
+        if (registrations.at(key).Kind != unit.unit_kind())
+            return false;
+        registrations.erase(key);
+    }
+
+    for (auto &pr : slots) {
+        if (pr.second.Required || pr.second.Allocated)
+            return false;
+    }
+
+    for (auto &pr : pools) {
+        if (pr.second.PoolSize || pr.second.Allocated)
+            return false;
+    }
+
+    if (registrations.size())
+        return false;
+
+    return true;
+}
+
+template <typename ...Ts>
 void CheckTenantStatus(TTenantTestRuntime &runtime, const TString &path, bool shared,
-                       Ydb::StatusIds::StatusCode code, 
-                       Ydb::Cms::GetDatabaseStatusResult::State state, 
-                       TVector<TPoolAllocation> poolTypes, 
-                       TVector<TUnitRegistration> unitRegistrations, 
-                       Ts... args) 
-{ 
-    THashMap<std::pair<TString, TString>, TSlotState> slots; 
-    CollectSlots(slots, args...); 
- 
-    THashMap<TString, TPoolAllocation> pools; 
-    for (auto &pool : poolTypes) 
-        pools[pool.PoolType] = pool; 
- 
-    THashMap<std::pair<TString, ui32>, TUnitRegistration> registrations; 
-    for (auto &reg : unitRegistrations) 
-        registrations[std::make_pair(reg.Host, reg.Port)] = reg; 
- 
-    bool ok = false; 
-    while (!ok) { 
-        auto *event = new TEvConsole::TEvGetTenantStatusRequest; 
-        event->Record.MutableRequest()->set_path(path); 
- 
-        TAutoPtr<IEventHandle> handle; 
-        runtime.SendToConsole(event); 
-        auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetTenantStatusResponse>(handle); 
-        auto &operation = reply->Record.GetResponse().operation(); 
-        UNIT_ASSERT_VALUES_EQUAL(operation.status(), code); 
-        if (code != Ydb::StatusIds::SUCCESS) 
-            return; 
- 
-        Ydb::Cms::GetDatabaseStatusResult status; 
-        UNIT_ASSERT(operation.result().UnpackTo(&status)); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(status.path(), CanonizePath(path)); 
- 
+                       Ydb::StatusIds::StatusCode code,
+                       Ydb::Cms::GetDatabaseStatusResult::State state,
+                       TVector<TPoolAllocation> poolTypes,
+                       TVector<TUnitRegistration> unitRegistrations,
+                       Ts... args)
+{
+    THashMap<std::pair<TString, TString>, TSlotState> slots;
+    CollectSlots(slots, args...);
+
+    THashMap<TString, TPoolAllocation> pools;
+    for (auto &pool : poolTypes)
+        pools[pool.PoolType] = pool;
+
+    THashMap<std::pair<TString, ui32>, TUnitRegistration> registrations;
+    for (auto &reg : unitRegistrations)
+        registrations[std::make_pair(reg.Host, reg.Port)] = reg;
+
+    bool ok = false;
+    while (!ok) {
+        auto *event = new TEvConsole::TEvGetTenantStatusRequest;
+        event->Record.MutableRequest()->set_path(path);
+
+        TAutoPtr<IEventHandle> handle;
+        runtime.SendToConsole(event);
+        auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetTenantStatusResponse>(handle);
+        auto &operation = reply->Record.GetResponse().operation();
+        UNIT_ASSERT_VALUES_EQUAL(operation.status(), code);
+        if (code != Ydb::StatusIds::SUCCESS)
+            return;
+
+        Ydb::Cms::GetDatabaseStatusResult status;
+        UNIT_ASSERT(operation.result().UnpackTo(&status));
+
+        UNIT_ASSERT_VALUES_EQUAL(status.path(), CanonizePath(path));
+
         ok = status.state() == state && CompareState(slots, pools, registrations, status, shared);
-        if (!ok) { 
-            TDispatchOptions options; 
-            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvRetryAllocateResources); 
-            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvSubdomainFailed); 
-            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvSubdomainCreated); 
-            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvSubdomainReady); 
-            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvSubdomainRemoved); 
-            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvPoolAllocated); 
-            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvPoolFailed); 
-            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvPoolDeleted); 
-            runtime.DispatchEvents(options, TDuration::Seconds(10)); 
-        } 
-    } 
-} 
- 
+        if (!ok) {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvRetryAllocateResources);
+            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvSubdomainFailed);
+            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvSubdomainCreated);
+            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvSubdomainReady);
+            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvSubdomainRemoved);
+            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvPoolAllocated);
+            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvPoolFailed);
+            options.FinalEvents.emplace_back(NConsole::TTenantsManager::TEvPrivate::EvPoolDeleted);
+            runtime.DispatchEvents(options, TDuration::Seconds(10));
+        }
+    }
+}
+
 template <typename ...Ts>
 void CheckTenantStatus(TTenantTestRuntime &runtime, const TString &path,
                        Ydb::StatusIds::StatusCode code,
@@ -364,78 +364,78 @@ void CheckTenantStatus(TTenantTestRuntime &runtime, const TString &path,
     CheckTenantStatus(runtime, path, false, code, state, poolTypes, unitRegistrations, args...);
 }
 
-inline void WaitForTenantStatus(TTenantTestRuntime &runtime, 
-                                const TString &path, 
-                                Ydb::StatusIds::StatusCode code) 
-{ 
-   while (true) { 
-       auto *event = new TEvConsole::TEvGetTenantStatusRequest; 
-       event->Record.MutableRequest()->set_path(path); 
- 
-       TAutoPtr<IEventHandle> handle; 
-       runtime.SendToConsole(event); 
-       auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetTenantStatusResponse>(handle); 
-       auto &operation = reply->Record.GetResponse().operation(); 
-       if (operation.status() == code) 
-           return; 
- 
-       TDispatchOptions options; 
-       runtime.DispatchEvents(options, TDuration::MilliSeconds(100)); 
-   } 
-} 
- 
-inline void ChangeTenant(TTenantTestRuntime &runtime, 
-                         const TString &tenant, 
-                         ui32 nodeIdx = 0, 
-                         bool wait = true) 
-{ 
-    runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(nodeIdx)), 
-                                  runtime.Sender, 
-                                  new TEvTenantPool::TEvTakeOwnership)); 
- 
-    TAutoPtr<IEventHandle> handle; 
-    runtime.GrabEdgeEventRethrow<TEvTenantPool::TEvTenantPoolStatus>(handle); 
- 
-    auto *request = new TEvTenantPool::TEvConfigureSlot; 
-    request->Record.SetSlotId("slot"); 
-    request->Record.SetAssignedTenant(tenant); 
-    request->Record.SetLabel("slot-1"); 
-    runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(nodeIdx)), 
-                                  runtime.Sender, 
-                                  request)); 
- 
-    if (wait) { 
-        auto reply = runtime.GrabEdgeEventRethrow<TEvTenantPool::TEvConfigureSlotResult>(handle); 
-        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrTenantPool::SUCCESS); 
-    } 
-} 
- 
-inline int AssignIds(const TVector<ui64> &ids, 
-                     int no, 
-                     NKikimrConsole::TConfigItem &item) 
-{ 
-    item.MutableId()->SetId(ids[no]); 
-    item.MutableId()->SetGeneration(1); 
-    return no + 1; 
-} 
- 
-template <typename ...Ts> 
-int AssignIds(const TVector<ui64> &ids, 
-              int no, 
-              NKikimrConsole::TConfigItem &item, Ts&... args) 
-{ 
-    AssignIds(ids, no, item); 
-    return AssignIds(ids, no + 1, args...); 
-} 
- 
-template <typename ...Ts> 
-void AssignIds(const TVector<ui64> &ids, 
-               Ts&... args) 
-{ 
-    UNIT_ASSERT_VALUES_EQUAL(ids.size(), AssignIds(ids, 0, args...)); 
-} 
- 
- 
+inline void WaitForTenantStatus(TTenantTestRuntime &runtime,
+                                const TString &path,
+                                Ydb::StatusIds::StatusCode code)
+{
+   while (true) {
+       auto *event = new TEvConsole::TEvGetTenantStatusRequest;
+       event->Record.MutableRequest()->set_path(path);
+
+       TAutoPtr<IEventHandle> handle;
+       runtime.SendToConsole(event);
+       auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetTenantStatusResponse>(handle);
+       auto &operation = reply->Record.GetResponse().operation();
+       if (operation.status() == code)
+           return;
+
+       TDispatchOptions options;
+       runtime.DispatchEvents(options, TDuration::MilliSeconds(100));
+   }
+}
+
+inline void ChangeTenant(TTenantTestRuntime &runtime,
+                         const TString &tenant,
+                         ui32 nodeIdx = 0,
+                         bool wait = true)
+{
+    runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(nodeIdx)),
+                                  runtime.Sender,
+                                  new TEvTenantPool::TEvTakeOwnership));
+
+    TAutoPtr<IEventHandle> handle;
+    runtime.GrabEdgeEventRethrow<TEvTenantPool::TEvTenantPoolStatus>(handle);
+
+    auto *request = new TEvTenantPool::TEvConfigureSlot;
+    request->Record.SetSlotId("slot");
+    request->Record.SetAssignedTenant(tenant);
+    request->Record.SetLabel("slot-1");
+    runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(nodeIdx)),
+                                  runtime.Sender,
+                                  request));
+
+    if (wait) {
+        auto reply = runtime.GrabEdgeEventRethrow<TEvTenantPool::TEvConfigureSlotResult>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrTenantPool::SUCCESS);
+    }
+}
+
+inline int AssignIds(const TVector<ui64> &ids,
+                     int no,
+                     NKikimrConsole::TConfigItem &item)
+{
+    item.MutableId()->SetId(ids[no]);
+    item.MutableId()->SetGeneration(1);
+    return no + 1;
+}
+
+template <typename ...Ts>
+int AssignIds(const TVector<ui64> &ids,
+              int no,
+              NKikimrConsole::TConfigItem &item, Ts&... args)
+{
+    AssignIds(ids, no, item);
+    return AssignIds(ids, no + 1, args...);
+}
+
+template <typename ...Ts>
+void AssignIds(const TVector<ui64> &ids,
+               Ts&... args)
+{
+    UNIT_ASSERT_VALUES_EQUAL(ids.size(), AssignIds(ids, 0, args...));
+}
+
+
 inline void CheckEqualsIgnoringVersion(NKikimrConfig::TAppConfig config1, NKikimrConfig::TAppConfig config2)
 {
     config1.ClearVersion();
@@ -445,6 +445,6 @@ inline void CheckEqualsIgnoringVersion(NKikimrConfig::TAppConfig config1, NKikim
 }
 
 
-} // namespace NUT 
-} // namespace NConsole 
-} // namesapce NKikimr 
+} // namespace NUT
+} // namespace NConsole
+} // namesapce NKikimr

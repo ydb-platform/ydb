@@ -10,14 +10,14 @@ namespace NDataShard {
     {}
 
     bool TDataShard::TTxReadSet::Execute(TTransactionContext &txc, const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, 
-                    "TTxReadSet::Execute at " << Self->TabletID() << " got read set: " 
-                    << Ev->Get()->ToString().data()); 
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "TTxReadSet::Execute at " << Self->TabletID() << " got read set: "
+                    << Ev->Get()->ToString().data());
 
         auto state = Self->State;
-        Y_VERIFY(state != TShardState::Unknown 
-                 && state != TShardState::Uninitialized 
-                 && state != TShardState::Readonly, 
+        Y_VERIFY(state != TShardState::Unknown
+                 && state != TShardState::Uninitialized
+                 && state != TShardState::Readonly,
                  "State %" PRIu32 " event %s", state, Ev->Get()->ToString().data());
 
         Ack = MakeAck(ctx);
@@ -30,7 +30,7 @@ namespace NDataShard {
             return true;
         }
 
-        bool saved = Self->Pipeline.SaveInReadSet(*Ev->Get(), Ack, txc, ctx); 
+        bool saved = Self->Pipeline.SaveInReadSet(*Ev->Get(), Ack, txc, ctx);
         if (!saved) { // delayed. Do not ack
             Y_VERIFY(!Ack);
             Ev.Reset();
@@ -45,9 +45,9 @@ namespace NDataShard {
     }
 
     void TDataShard::TTxReadSet::Complete(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, 
-                    "TTxReadSet::Complete at " << Self->TabletID()); 
- 
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "TTxReadSet::Complete at " << Self->TabletID());
+
         // If it was read set for non-active tx we should send ACK back after successful save in DB
         // Note that, active tx will send "delayed" ACK after tx complete
         if (Ack) {

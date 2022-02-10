@@ -1,84 +1,84 @@
-#pragma once 
-#include "defs.h" 
- 
-namespace NKikimr { 
-namespace NConsole { 
- 
-/** 
- * Node config courier is used to get full or partial node config from 
- * Console. You can specify tenant to get config for. If tenant is 
- * not specified then current tenant is received from Tenant Pool. 
- * Node type is always received from Tenant Pool. 
- * 
- * Courier forwards TEvConsole::TEvGetNodeConfigResponse event to the 
- * owner. 
- */ 
+#pragma once
+#include "defs.h"
+
+namespace NKikimr {
+namespace NConsole {
+
+/**
+ * Node config courier is used to get full or partial node config from
+ * Console. You can specify tenant to get config for. If tenant is
+ * not specified then current tenant is received from Tenant Pool.
+ * Node type is always received from Tenant Pool.
+ *
+ * Courier forwards TEvConsole::TEvGetNodeConfigResponse event to the
+ * owner.
+ */
 IActor *CreateNodeConfigCourier(TActorId owner,
-                                ui64 cookie = 0); 
-IActor *CreateNodeConfigCourier(ui32 configItemKind, 
+                                ui64 cookie = 0);
+IActor *CreateNodeConfigCourier(ui32 configItemKind,
                                 TActorId owner,
-                                ui64 cookie = 0); 
-IActor *CreateNodeConfigCourier(const TVector<ui32> &configItemKinds, 
+                                ui64 cookie = 0);
+IActor *CreateNodeConfigCourier(const TVector<ui32> &configItemKinds,
                                 TActorId owner,
-                                ui64 cookie = 0); 
-IActor *CreateNodeConfigCourier(const TString &tenant, 
+                                ui64 cookie = 0);
+IActor *CreateNodeConfigCourier(const TString &tenant,
                                 TActorId owner,
-                                ui64 cookie = 0); 
-IActor *CreateNodeConfigCourier(ui32 configItemKind, 
-                                const TString &tenant, 
+                                ui64 cookie = 0);
+IActor *CreateNodeConfigCourier(ui32 configItemKind,
+                                const TString &tenant,
                                 TActorId owner,
-                                ui64 cookie = 0); 
-IActor *CreateNodeConfigCourier(const TVector<ui32> &configItemKinds, 
-                                const TString &tenant, 
+                                ui64 cookie = 0);
+IActor *CreateNodeConfigCourier(const TVector<ui32> &configItemKinds,
+                                const TString &tenant,
                                 TActorId owner,
-                                ui64 cookie = 0); 
- 
-/* 
- * Config subscriber is used to add/refresh config subscription in Console 
- * using TEvConsole::TEvReplaceSubscriptionsRequest. This helper actor 
- * should be used by tablets and services which use only single config 
- * subscription. 
- * You can pass subscription tenant to subscriber or let subscriber get it 
- * from Tenant Pool. Node type is always received from Tenant Pool. 
- * If replace option is set TEvConsole::TEvReplaceConfigSubscriptionsRequest 
- * is used for subscription and all existing subscriber's subscriptions 
- * are removed. Otherwise TEvConsole::TEvAddConfigSubscriptionRequest 
- * is used. 
- * 
- * Subscriber forwards TEvConsole::TEvAddConfigSubscriptionResponse and 
- * TEvConsole::TEvReplaceConfigSubscriptionsResponse event to the owner. 
- */ 
-IActor *CreateConfigSubscriber(ui64 tabletId, 
-                               const TVector<ui32> &configItemKinds, 
+                                ui64 cookie = 0);
+
+/*
+ * Config subscriber is used to add/refresh config subscription in Console
+ * using TEvConsole::TEvReplaceSubscriptionsRequest. This helper actor
+ * should be used by tablets and services which use only single config
+ * subscription.
+ * You can pass subscription tenant to subscriber or let subscriber get it
+ * from Tenant Pool. Node type is always received from Tenant Pool.
+ * If replace option is set TEvConsole::TEvReplaceConfigSubscriptionsRequest
+ * is used for subscription and all existing subscriber's subscriptions
+ * are removed. Otherwise TEvConsole::TEvAddConfigSubscriptionRequest
+ * is used.
+ *
+ * Subscriber forwards TEvConsole::TEvAddConfigSubscriptionResponse and
+ * TEvConsole::TEvReplaceConfigSubscriptionsResponse event to the owner.
+ */
+IActor *CreateConfigSubscriber(ui64 tabletId,
+                               const TVector<ui32> &configItemKinds,
                                TActorId owner,
-                               bool replace = true, 
-                               ui64 cookie = 0); 
-IActor *CreateConfigSubscriber(ui64 tabletId, 
-                               const TVector<ui32> &configItemKinds, 
-                               const TString &tenant, 
+                               bool replace = true,
+                               ui64 cookie = 0);
+IActor *CreateConfigSubscriber(ui64 tabletId,
+                               const TVector<ui32> &configItemKinds,
+                               const TString &tenant,
                                TActorId owner,
-                               bool replace = true, 
-                               ui64 cookie = 0); 
+                               bool replace = true,
+                               ui64 cookie = 0);
 IActor *CreateConfigSubscriber(TActorId serviceId,
-                               const TVector<ui32> &configItemKinds, 
+                               const TVector<ui32> &configItemKinds,
                                TActorId owner,
-                               bool replace = true, 
-                               ui64 cookie = 0); 
+                               bool replace = true,
+                               ui64 cookie = 0);
 IActor *CreateConfigSubscriber(TActorId serviceId,
-                               const TVector<ui32> &configItemKinds, 
-                               const TString &tenant, 
+                               const TVector<ui32> &configItemKinds,
+                               const TString &tenant,
                                TActorId owner,
-                               bool replace = true, 
-                               ui64 cookie = 0); 
- 
-/** 
- * Subscription eraser is used to remove config subscriptions by ID. If owner is 
- * specified then TEvConsole::TEvRemoveConfigSubscriptionRepsonse event is 
- * forwared to it. 
- */ 
-IActor *CreateSubscriptionEraser(ui64 subscriptionId, 
+                               bool replace = true,
+                               ui64 cookie = 0);
+
+/**
+ * Subscription eraser is used to remove config subscriptions by ID. If owner is
+ * specified then TEvConsole::TEvRemoveConfigSubscriptionRepsonse event is
+ * forwared to it.
+ */
+IActor *CreateSubscriptionEraser(ui64 subscriptionId,
                                  TActorId owner = TActorId(),
-                                 ui64 cookie = 0); 
- 
-} // namespace NConsole 
-} // namespace NKikimr 
+                                 ui64 cookie = 0);
+
+} // namespace NConsole
+} // namespace NKikimr

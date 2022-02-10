@@ -1442,13 +1442,13 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         diskParams.SectorSize = 512;
         diskParams.ChunkSize = 50ull*1024*1024;
 
-        NKikimrConfig::TImmediateControlsConfig controls; 
-        controls.MutableTxLimitControls()->SetPerRequestDataSizeLimit(1000000000); 
-        controls.MutableTxLimitControls()->SetPerShardIncomingReadSetSizeLimit(1000000000); 
-        controls.MutableTxLimitControls()->SetPerShardReadSizeLimit(1000000000); 
+        NKikimrConfig::TImmediateControlsConfig controls;
+        controls.MutableTxLimitControls()->SetPerRequestDataSizeLimit(1000000000);
+        controls.MutableTxLimitControls()->SetPerShardIncomingReadSetSizeLimit(1000000000);
+        controls.MutableTxLimitControls()->SetPerShardReadSizeLimit(1000000000);
 
         TServer cleverServer = TServer(TServerSettings(port)
-                                       .SetControls(controls) 
+                                       .SetControls(controls)
                                        .SetCustomDiskParams(diskParams)
                                        .SetEnableMockOnSingleNode(false));
 
@@ -1509,12 +1509,12 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(status, NMsgBusProxy::MSTATUS_REJECTED, "Multi-shard read query should fail");
     }
 
-    void TestRejectByPerShardReadSize(const NKikimrConfig::TImmediateControlsConfig& controls, 
-                                      TString tableConfig) { 
+    void TestRejectByPerShardReadSize(const NKikimrConfig::TImmediateControlsConfig& controls,
+                                      TString tableConfig) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port) 
-                                       .SetControls(controls)); 
+        TServer cleverServer = TServer(TServerSettings(port)
+                                       .SetControls(controls));
 
         TFlatMsgBusClient annoyingClient(port);
 
@@ -1558,34 +1558,34 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             )"
         ), opts, response);
 
-        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)status, NMsgBusProxy::MSTATUS_ERROR, "Big read should fail"); 
+        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)status, NMsgBusProxy::MSTATUS_ERROR, "Big read should fail");
     }
 
     Y_UNIT_TEST(RejectByPerShardReadSize) {
-        NKikimrConfig::TImmediateControlsConfig controls; 
-        controls.MutableTxLimitControls()->SetPerRequestDataSizeLimit(1000000000); 
-        controls.MutableTxLimitControls()->SetPerShardIncomingReadSetSizeLimit(1000000000); 
-        controls.MutableTxLimitControls()->SetPerShardReadSizeLimit(1000000000); 
+        NKikimrConfig::TImmediateControlsConfig controls;
+        controls.MutableTxLimitControls()->SetPerRequestDataSizeLimit(1000000000);
+        controls.MutableTxLimitControls()->SetPerShardIncomingReadSetSizeLimit(1000000000);
+        controls.MutableTxLimitControls()->SetPerShardReadSizeLimit(1000000000);
 
         // Test per-table limit
-        TestRejectByPerShardReadSize(controls, " PartitionConfig { TxReadSizeLimit: 10000 } "); 
+        TestRejectByPerShardReadSize(controls, " PartitionConfig { TxReadSizeLimit: 10000 } ");
 
         // Test per-domain limit
-        controls.MutableTxLimitControls()->SetPerShardReadSizeLimit(10000); 
-        TestRejectByPerShardReadSize(controls, ""); 
+        controls.MutableTxLimitControls()->SetPerShardReadSizeLimit(10000);
+        TestRejectByPerShardReadSize(controls, "");
     }
 
     Y_UNIT_TEST(RejectByPerRequestSize) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
 
-        NKikimrConfig::TImmediateControlsConfig controls; 
-        controls.MutableTxLimitControls()->SetPerRequestDataSizeLimit(10000); 
-        controls.MutableTxLimitControls()->SetPerShardIncomingReadSetSizeLimit(1000000000); 
-        controls.MutableTxLimitControls()->SetPerShardReadSizeLimit(1000000000); 
+        NKikimrConfig::TImmediateControlsConfig controls;
+        controls.MutableTxLimitControls()->SetPerRequestDataSizeLimit(10000);
+        controls.MutableTxLimitControls()->SetPerShardIncomingReadSetSizeLimit(1000000000);
+        controls.MutableTxLimitControls()->SetPerShardReadSizeLimit(1000000000);
 
-        TServer cleverServer = TServer(TServerSettings(port) 
-                                       .SetControls(controls)); 
+        TServer cleverServer = TServer(TServerSettings(port)
+                                       .SetControls(controls));
 
         TFlatMsgBusClient annoyingClient(port);
 
@@ -1651,13 +1651,13 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(RejectByIncomingReadSetSize) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        NKikimrConfig::TImmediateControlsConfig controls; 
-        controls.MutableTxLimitControls()->SetPerRequestDataSizeLimit(100000000); 
-        controls.MutableTxLimitControls()->SetPerShardIncomingReadSetSizeLimit(1000); 
-        controls.MutableTxLimitControls()->SetPerShardReadSizeLimit(100000000); 
+        NKikimrConfig::TImmediateControlsConfig controls;
+        controls.MutableTxLimitControls()->SetPerRequestDataSizeLimit(100000000);
+        controls.MutableTxLimitControls()->SetPerShardIncomingReadSetSizeLimit(1000);
+        controls.MutableTxLimitControls()->SetPerShardReadSizeLimit(100000000);
 
-        TServer cleverServer = TServer(TServerSettings(port) 
-                                       .SetControls(controls)); 
+        TServer cleverServer = TServer(TServerSettings(port)
+                                       .SetControls(controls));
 
         TFlatMsgBusClient annoyingClient(port);
 

@@ -316,7 +316,7 @@ void TTxCoordinator::TryInitMonCounters(const TActorContext &ctx) {
         return;
 
     auto &counters = AppData(ctx)->Counters;
-    MonCounters.Coordinator = GetServiceCounters(counters, "coordinator"); 
+    MonCounters.Coordinator = GetServiceCounters(counters, "coordinator");
     MonCounters.TxIn = MonCounters.Coordinator->GetCounter("TxIn", true);
     MonCounters.TxPlanned = MonCounters.Coordinator->GetCounter("TxPlanned", true);
     MonCounters.TxDeclined = MonCounters.Coordinator->GetCounter("TxDeclined", true);

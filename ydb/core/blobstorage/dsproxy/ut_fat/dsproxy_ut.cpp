@@ -4263,7 +4263,7 @@ public:
         setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(env->ProxyTestId, proxyTestSetup));
 
         //////////////////////////////////////////////////////////////////////////////
-        GetServiceCounters(counters, "utils"); 
+        GetServiceCounters(counters, "utils");
         TIntrusivePtr<NActors::NLog::TSettings> logSettings1 = AddLoggerActor(setup1, *counters);
         TIntrusivePtr<NActors::NLog::TSettings> logSettings2 = AddLoggerActor(setup2, *counters);
 

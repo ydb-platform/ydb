@@ -1,27 +1,27 @@
 import "ydb/core/protos/console_base.proto";
 import "ydb/core/protos/console_tenant.proto";
 import "ydb/core/protos/console_config.proto";
- 
-package NKikimrConsole; 
-option java_package = "ru.yandex.kikimr.proto"; 
- 
-message TConfig { 
-    optional TTenantsConfig TenantsConfig = 1; 
-    optional TConfigsConfig ConfigsConfig = 2; 
-} 
- 
-message TGetConfigRequest { 
-} 
- 
-message TGetConfigResponse { 
-    optional TConfig Config = 1; 
-} 
- 
-message TSetConfigRequest { 
-    optional TConfig Config = 1; 
-    optional TConfigItem.EMergeStrategy Merge = 2 [default = OVERWRITE]; 
-} 
- 
-message TSetConfigResponse { 
-    optional TStatus Status = 1; 
-} 
+
+package NKikimrConsole;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TConfig {
+    optional TTenantsConfig TenantsConfig = 1;
+    optional TConfigsConfig ConfigsConfig = 2;
+}
+
+message TGetConfigRequest {
+}
+
+message TGetConfigResponse {
+    optional TConfig Config = 1;
+}
+
+message TSetConfigRequest {
+    optional TConfig Config = 1;
+    optional TConfigItem.EMergeStrategy Merge = 2 [default = OVERWRITE];
+}
+
+message TSetConfigResponse {
+    optional TStatus Status = 1;
+}

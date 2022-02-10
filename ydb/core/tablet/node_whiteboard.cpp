@@ -619,7 +619,7 @@ protected:
 //        TAutoPtr<TEvWhiteboard::TEvNodeStateResponse> response = new TEvWhiteboard::TEvNodeStateResponse();
 //        auto& record = response->Record;
 //        const TIntrusivePtr<NMonitoring::TDynamicCounters> &counters = AppData(ctx)->Counters;
-//        TIntrusivePtr<NMonitoring::TDynamicCounters> interconnectCounters = GetServiceCounters(counters, "interconnect"); 
+//        TIntrusivePtr<NMonitoring::TDynamicCounters> interconnectCounters = GetServiceCounters(counters, "interconnect");
 //        interconnectCounters->EnumerateSubgroups([&record, &interconnectCounters](const TString &name, const TString &value) -> void {
 //            NKikimrWhiteboard::TNodeStateInfo &nodeStateInfo = *record.AddNodeStateInfo();
 //            TIntrusivePtr<NMonitoring::TDynamicCounters> peerCounters = interconnectCounters->GetSubgroup(name, value);

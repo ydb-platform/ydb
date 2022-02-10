@@ -142,10 +142,10 @@ void TDataShard::Handle(TEvDataShard::TEvReturnBorrowedPartAck::TPtr& ev, const 
 
 bool TDataShard::HasSharedBlobs() const {
     const bool* hasSharedBlobsPtr = Executor()->GetStats().HasSharedBlobs;
-    if (!hasSharedBlobsPtr) { 
+    if (!hasSharedBlobsPtr) {
         Y_VERIFY(Executor()->GetStats().IsFollower);
-        return false; 
-    } 
+        return false;
+    }
     return *hasSharedBlobsPtr;
 }
 

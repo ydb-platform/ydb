@@ -1,67 +1,67 @@
-syntax = "proto3"; 
-option cc_enable_arenas = true; 
- 
-package Ydb.Cms; 
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.Cms;
 option java_package = "com.yandex.ydb.cms";
- 
+
 import "ydb/public/api/protos/ydb_operation.proto";
- 
-// A set of uniform storage units. 
-// Single storage unit can be thought of as a reserved part of a RAID. 
-message StorageUnits { 
-    // Required. Kind of the storage unit. Determine guarantees 
-    // for all main unit parameters: used hard disk type, capacity 
-    // throughput, IOPS etc. 
-    string unit_kind = 1; 
-    // Required. The number of units in this set. 
-    uint64 count = 2; 
-} 
- 
-// A set of uniform computational units. 
-message ComputationalUnits { 
-    // Required. Kind of the computational unit. Determine main 
-    // unit parameters like available memory, CPU, etc. 
-    string unit_kind = 1; 
-    // The availability zone all unit should be located in. 
-    // By default any availability zone can be used. 
-    string availability_zone = 2; 
-    // Required. The number of units in this set. 
-    uint64 count = 3; 
-} 
- 
+
+// A set of uniform storage units.
+// Single storage unit can be thought of as a reserved part of a RAID.
+message StorageUnits {
+    // Required. Kind of the storage unit. Determine guarantees
+    // for all main unit parameters: used hard disk type, capacity
+    // throughput, IOPS etc.
+    string unit_kind = 1;
+    // Required. The number of units in this set.
+    uint64 count = 2;
+}
+
+// A set of uniform computational units.
+message ComputationalUnits {
+    // Required. Kind of the computational unit. Determine main
+    // unit parameters like available memory, CPU, etc.
+    string unit_kind = 1;
+    // The availability zone all unit should be located in.
+    // By default any availability zone can be used.
+    string availability_zone = 2;
+    // Required. The number of units in this set.
+    uint64 count = 3;
+}
+
 // Computational unit allocated for database. Used to register
-// externally allocated computational resources in CMS. 
-message AllocatedComputationalUnit { 
-    // Required. Computational unit host name. 
-    string host = 1; 
-    // Required. Computational unit port. 
-    uint32 port = 2; 
-    // Required. Computational unit kind. 
-    string unit_kind = 3; 
-} 
- 
-// A set of computational and storage resources. 
-message Resources { 
-    // Storage resources. 
-    repeated StorageUnits storage_units = 1; 
-    // Computational resources. 
-    repeated ComputationalUnits computational_units = 2; 
-} 
- 
+// externally allocated computational resources in CMS.
+message AllocatedComputationalUnit {
+    // Required. Computational unit host name.
+    string host = 1;
+    // Required. Computational unit port.
+    uint32 port = 2;
+    // Required. Computational unit kind.
+    string unit_kind = 3;
+}
+
+// A set of computational and storage resources.
+message Resources {
+    // Storage resources.
+    repeated StorageUnits storage_units = 1;
+    // Computational resources.
+    repeated ComputationalUnits computational_units = 2;
+}
+
 message ServerlessResources {
     // Full path to shared database's home dir whose resources will be used.
     string shared_database_path = 1;
 }
 
-message DatabaseOptions { 
-    // Do not initialize services required for transactions processing. 
-    bool disable_tx_service = 1; 
+message DatabaseOptions {
+    // Do not initialize services required for transactions processing.
+    bool disable_tx_service = 1;
     // Old-style database, do not create external schemeshard for database
     bool disable_external_subdomain = 2;
     // Transaction plan resolution in milliseconds
     uint32 plan_resolution = 3;
-} 
- 
+}
+
 // A set of quotas for schema operations
 message SchemaOperationQuotas {
     // A single quota based on leaky bucket
@@ -102,7 +102,7 @@ message DatabaseQuotas {
 message CreateDatabaseRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     // Required. Full path to database's home dir. Used as database ID.
-    string path = 2; 
+    string path = 2;
     oneof resources_kind {
         // Resources to allocate for database by CMS.
         Resources resources = 3;
@@ -111,9 +111,9 @@ message CreateDatabaseRequest {
         // If specified, the created database will be "serverless".
         ServerlessResources serverless_resources = 7;
     }
-    // Additional database options. 
-    DatabaseOptions options = 4; 
-    // Attach attributes to database. 
+    // Additional database options.
+    DatabaseOptions options = 4;
+    // Attach attributes to database.
     map<string, string> attributes = 5;
     // Optional quotas for schema operations
     SchemaOperationQuotas schema_operation_quotas = 8;
@@ -121,39 +121,39 @@ message CreateDatabaseRequest {
     string idempotency_key = 9;
     // Optional quotas for the database
     DatabaseQuotas database_quotas = 10;
-} 
- 
+}
+
 message CreateDatabaseResponse {
     Ydb.Operations.Operation operation = 1;
-} 
- 
+}
+
 // Get current database status.
 message GetDatabaseStatusRequest {
     // Required. Full path to database's home dir.
-    string path = 1; 
+    string path = 1;
     // Operation parameters
     Ydb.Operations.OperationParams operation_params = 2;
 }
- 
+
 message GetDatabaseStatusResponse {
-    // operation.result holds GetDatabaseStatusResult 
+    // operation.result holds GetDatabaseStatusResult
     Ydb.Operations.Operation operation = 1;
 }
- 
+
 message GetDatabaseStatusResult {
-    enum State { 
+    enum State {
         STATE_UNSPECIFIED = 0;
-        CREATING = 1; 
-        RUNNING = 2; 
-        REMOVING = 3; 
-        PENDING_RESOURCES = 4; 
+        CREATING = 1;
+        RUNNING = 2;
+        REMOVING = 3;
+        PENDING_RESOURCES = 4;
         CONFIGURING = 5;
-    } 
- 
+    }
+
     // Full path to database's home dir.
-    string path = 1; 
+    string path = 1;
     // Current database state.
-    State state = 2; 
+    State state = 2;
     oneof resources_kind {
         // Database resources requested for allocation.
         Resources required_resources = 3;
@@ -161,36 +161,36 @@ message GetDatabaseStatusResult {
         ServerlessResources serverless_resources = 8;
     }
     // Database resources allocated by CMS.
-    Resources allocated_resources = 4; 
+    Resources allocated_resources = 4;
     // Externally allocated database resources registered in CMS.
-    repeated AllocatedComputationalUnit registered_resources = 5; 
-    // Current database generation. Incremented at each successful 
-    // alter request. 
-    uint64 generation = 6; 
+    repeated AllocatedComputationalUnit registered_resources = 5;
+    // Current database generation. Incremented at each successful
+    // alter request.
+    uint64 generation = 6;
     // Current quotas for schema operations
     SchemaOperationQuotas schema_operation_quotas = 9;
     // Current quotas for the database
     DatabaseQuotas database_quotas = 10;
 }
- 
+
 // Change resources allocated for database.
 message AlterDatabaseRequest {
     // Required. Full path to database's home dir.
-    string path = 1; 
+    string path = 1;
     // Additional computational units to allocate for database.
-    repeated ComputationalUnits computational_units_to_add = 2; 
-    // Computational units to deallocate. 
-    repeated ComputationalUnits computational_units_to_remove = 3; 
+    repeated ComputationalUnits computational_units_to_add = 2;
+    // Computational units to deallocate.
+    repeated ComputationalUnits computational_units_to_remove = 3;
     // Additional storage units to allocate for database.
-    repeated StorageUnits storage_units_to_add = 4; 
+    repeated StorageUnits storage_units_to_add = 4;
     // Externally allocated computational units to register for database.
-    repeated AllocatedComputationalUnit computational_units_to_register = 5; 
-    // Externally allocated computational units to deregister. 
-    repeated AllocatedComputationalUnit computational_units_to_deregister = 6; 
-    // Operation parameters. 
+    repeated AllocatedComputationalUnit computational_units_to_register = 5;
+    // Externally allocated computational units to deregister.
+    repeated AllocatedComputationalUnit computational_units_to_deregister = 6;
+    // Operation parameters.
     Ydb.Operations.OperationParams operation_params = 7;
-    // Current generation of altered database. 
-    uint64 generation = 8; 
+    // Current generation of altered database.
+    uint64 generation = 8;
     // Change quotas for schema operations
     SchemaOperationQuotas schema_operation_quotas = 9;
     // Optional idempotency key
@@ -199,67 +199,67 @@ message AlterDatabaseRequest {
     DatabaseQuotas database_quotas = 11;
     // Alter attributes. Leave the value blank to drop an attribute.
     map<string, string> alter_attributes = 12;
-} 
- 
+}
+
 message AlterDatabaseResponse {
     Ydb.Operations.Operation operation = 1;
-} 
- 
+}
+
 // List all databases known by CMS.
 message ListDatabasesRequest {
     // Operation parameters
     Ydb.Operations.OperationParams operation_params = 1;
-} 
- 
+}
+
 message ListDatabasesResponse {
-    // operation.result holds ListDatabasesResult 
+    // operation.result holds ListDatabasesResult
     Ydb.Operations.Operation operation = 1;
-} 
- 
+}
+
 message ListDatabasesResult {
-    repeated string paths = 1; 
-} 
- 
+    repeated string paths = 1;
+}
+
 // Completely remove database and all his data.
 message RemoveDatabaseRequest {
     // Required. Full path to database's home dir.
-    string path = 1; 
+    string path = 1;
 
     Ydb.Operations.OperationParams operation_params = 2;
-} 
- 
+}
+
 message RemoveDatabaseResponse {
     Ydb.Operations.Operation operation = 1;
-} 
- 
-message StorageUnitDescription { 
-    string kind = 1; 
-    map<string, string> labels = 2; 
-} 
- 
-message AvailabilityZoneDescription { 
-    string name = 1; 
-    map<string, string> labels = 2; 
-} 
- 
-message ComputationalUnitDescription { 
-    string kind = 1; 
-    map<string, string> labels = 2; 
-    repeated string allowed_availability_zones = 3; 
-} 
- 
-message DescribeDatabaseOptionsRequest { 
+}
+
+message StorageUnitDescription {
+    string kind = 1;
+    map<string, string> labels = 2;
+}
+
+message AvailabilityZoneDescription {
+    string name = 1;
+    map<string, string> labels = 2;
+}
+
+message ComputationalUnitDescription {
+    string kind = 1;
+    map<string, string> labels = 2;
+    repeated string allowed_availability_zones = 3;
+}
+
+message DescribeDatabaseOptionsRequest {
     // Operation parameters
     Ydb.Operations.OperationParams operation_params = 1;
-} 
- 
-message DescribeDatabaseOptionsResponse { 
-    // operation.result holds DescribeDatabaseOptionsResult 
-    Ydb.Operations.Operation operation = 1; 
-} 
- 
-message DescribeDatabaseOptionsResult { 
-    repeated StorageUnitDescription storage_units = 1; 
-    repeated AvailabilityZoneDescription availability_zones = 2; 
-    repeated ComputationalUnitDescription computational_units = 3; 
-} 
+}
+
+message DescribeDatabaseOptionsResponse {
+    // operation.result holds DescribeDatabaseOptionsResult
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribeDatabaseOptionsResult {
+    repeated StorageUnitDescription storage_units = 1;
+    repeated AvailabilityZoneDescription availability_zones = 2;
+    repeated ComputationalUnitDescription computational_units = 3;
+}

@@ -11,9 +11,9 @@ SRCS(
     cli_cmds.h
     cli_cmds_admin.cpp
     cli_cmds_bs.cpp
-    cli_cmds_cms.cpp 
+    cli_cmds_cms.cpp
     cli_cmds_config.cpp
-    cli_cmds_console.cpp 
+    cli_cmds_console.cpp
     cli_cmds_debug.cpp
     cli_cmds_disk.cpp
     cli_cmds_genconfig.cpp
@@ -23,7 +23,7 @@ SRCS(
     cli_cmds_root.cpp
     cli_cmds_server.cpp
     cli_cmds_tablet.cpp
-    cli_cmds_tenant.cpp 
+    cli_cmds_tenant.cpp
     cli_fakeinitshard.cpp
     cli_keyvalue.cpp
     cli_persqueue.cpp

@@ -1,60 +1,60 @@
-#include "const.h" 
-#include "datashard_impl.h" 
-#include "datashard_pipeline.h" 
-#include "execution_unit_ctors.h" 
- 
-namespace NKikimr { 
+#include "const.h"
+#include "datashard_impl.h"
+#include "datashard_pipeline.h"
+#include "execution_unit_ctors.h"
+
+namespace NKikimr {
 namespace NDataShard {
- 
-class TStoreSchemeTxUnit : public TExecutionUnit { 
-public: 
+
+class TStoreSchemeTxUnit : public TExecutionUnit {
+public:
     TStoreSchemeTxUnit(TDataShard &dataShard,
-                       TPipeline &pipeline); 
-    ~TStoreSchemeTxUnit() override; 
- 
-    bool IsReadyToExecute(TOperation::TPtr op) const override; 
-    EExecutionStatus Execute(TOperation::TPtr op, 
-                             TTransactionContext &txc, 
-                             const TActorContext &ctx) override; 
-    void Complete(TOperation::TPtr op, 
-                  const TActorContext &ctx) override; 
- 
-private: 
-}; 
- 
+                       TPipeline &pipeline);
+    ~TStoreSchemeTxUnit() override;
+
+    bool IsReadyToExecute(TOperation::TPtr op) const override;
+    EExecutionStatus Execute(TOperation::TPtr op,
+                             TTransactionContext &txc,
+                             const TActorContext &ctx) override;
+    void Complete(TOperation::TPtr op,
+                  const TActorContext &ctx) override;
+
+private:
+};
+
 TStoreSchemeTxUnit::TStoreSchemeTxUnit(TDataShard &dataShard,
-                                       TPipeline &pipeline) 
-    : TExecutionUnit(EExecutionUnitKind::StoreSchemeTx, false, dataShard, pipeline) 
-{ 
-} 
- 
-TStoreSchemeTxUnit::~TStoreSchemeTxUnit() 
-{ 
-} 
- 
-bool TStoreSchemeTxUnit::IsReadyToExecute(TOperation::TPtr) const 
-{ 
-    return true; 
-} 
- 
-EExecutionStatus TStoreSchemeTxUnit::Execute(TOperation::TPtr op, 
-                                             TTransactionContext &txc, 
+                                       TPipeline &pipeline)
+    : TExecutionUnit(EExecutionUnitKind::StoreSchemeTx, false, dataShard, pipeline)
+{
+}
+
+TStoreSchemeTxUnit::~TStoreSchemeTxUnit()
+{
+}
+
+bool TStoreSchemeTxUnit::IsReadyToExecute(TOperation::TPtr) const
+{
+    return true;
+}
+
+EExecutionStatus TStoreSchemeTxUnit::Execute(TOperation::TPtr op,
+                                             TTransactionContext &txc,
                                              const TActorContext &ctx)
-{ 
-    Y_VERIFY(op->IsSchemeTx()); 
-    Y_VERIFY(!op->IsAborted() && !op->IsInterrupted()); 
- 
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get()); 
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind()); 
-    ui64 ssTabletId = tx->GetSchemeShardId(); 
- 
+{
+    Y_VERIFY(op->IsSchemeTx());
+    Y_VERIFY(!op->IsAborted() && !op->IsInterrupted());
+
+    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
+    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    ui64 ssTabletId = tx->GetSchemeShardId();
+
     if (DataShard.GetCurrentSchemeShardId() == INVALID_TABLET_ID) {
         DataShard.PersistCurrentSchemeShardId(ssTabletId, txc);
-    } else { 
+    } else {
         Y_VERIFY(DataShard.GetCurrentSchemeShardId() == ssTabletId,
-                 "Got scheme transaction from unknown SchemeShard %" PRIu64, ssTabletId); 
-    } 
- 
+                 "Got scheme transaction from unknown SchemeShard %" PRIu64, ssTabletId);
+    }
+
     if (ui64 subDomainPathId = tx->GetSubDomainPathId()) {
         DataShard.PersistSubDomainPathId(ssTabletId, subDomainPathId, txc);
         DataShard.StopFindSubDomainPathId();
@@ -73,33 +73,33 @@ EExecutionStatus TStoreSchemeTxUnit::Execute(TOperation::TPtr op,
     }
 
     if (!DataShard.GetProcessingParams()) {
-        DataShard.PersistProcessingParams(tx->GetProcessingParams(), txc); 
+        DataShard.PersistProcessingParams(tx->GetProcessingParams(), txc);
     }
- 
+
     TSchemaOperation schemeOp(op->GetTxId(), tx->GetSchemeTxType(), op->GetTarget(),
-                             tx->GetSchemeShardId(), op->GetMinStep(), op->GetMaxStep(), 
+                             tx->GetSchemeShardId(), op->GetMinStep(), op->GetMaxStep(),
                              0, op->IsReadOnly(), false, TString(), 0, 0);
-    Pipeline.ProposeSchemeTx(schemeOp, txc); 
- 
+    Pipeline.ProposeSchemeTx(schemeOp, txc);
+
     Pipeline.ProposeTx(op, tx->GetTxBody(), txc, ctx);
-    tx->ClearTxBody(); 
-    // TODO: make cache for scheme tx similar to data tx. 
-    tx->ClearSchemeTx(); 
- 
+    tx->ClearTxBody();
+    // TODO: make cache for scheme tx similar to data tx.
+    tx->ClearSchemeTx();
+
     return EExecutionStatus::DelayCompleteNoMoreRestarts;
-} 
- 
+}
+
 void TStoreSchemeTxUnit::Complete(TOperation::TPtr op,
                                   const TActorContext &ctx)
-{ 
+{
     Pipeline.ProposeComplete(op, ctx);
-} 
- 
+}
+
 THolder<TExecutionUnit> CreateStoreSchemeTxUnit(TDataShard &dataShard,
-                                                TPipeline &pipeline) 
-{ 
+                                                TPipeline &pipeline)
+{
     return THolder(new TStoreSchemeTxUnit(dataShard, pipeline));
-} 
- 
+}
+
 } // namespace NDataShard
-} // namespace NKikimr 
+} // namespace NKikimr

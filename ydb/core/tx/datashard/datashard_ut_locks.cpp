@@ -1,6 +1,6 @@
 #include "defs.h"
-#include "datashard_locks.h" 
-#include "datashard_ut_common.h" 
+#include "datashard_locks.h"
+#include "datashard_ut_common.h"
 
 #include <ydb/core/tablet_flat/flat_dbase_apply.h>
 #include <ydb/core/tablet_flat/flat_exec_commit.h>
@@ -14,8 +14,8 @@
 namespace NKikimr {
 
 using namespace NSchemeShard;
-using namespace Tests; 
- 
+using namespace Tests;
+
 struct TTableId;
 
 namespace NTest {
@@ -580,157 +580,157 @@ Y_UNIT_TEST(Points_ManyTx_BreakHalf_RemoveHalf) {
     }
 }
 
-void CheckLocksCacheUsage(bool waitForLocksStore) { 
-    TPortManager pm; 
-    TServerSettings serverSettings(pm.GetPort(2134)); 
-    serverSettings.SetDomainName("Root") 
-        .SetUseRealThreads(false); 
- 
-    Tests::TServer::TPtr server = new TServer(serverSettings); 
-    auto &runtime = *server->GetRuntime(); 
- 
+void CheckLocksCacheUsage(bool waitForLocksStore) {
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false);
+
+    Tests::TServer::TPtr server = new TServer(serverSettings);
+    auto &runtime = *server->GetRuntime();
+
     auto sender = runtime.AllocateEdgeActor();
 
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
-    //runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE); 
-    //runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE); 
- 
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+    //runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+    //runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
+
     InitRoot(server, sender);
 
 
-    TAutoPtr<IEventHandle> handle; 
-    NTabletPipe::TClientConfig pipeConfig; 
+    TAutoPtr<IEventHandle> handle;
+    NTabletPipe::TClientConfig pipeConfig;
     pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-    auto pipe = runtime.ConnectToPipe(ChangeStateStorage(SchemeRoot, serverSettings.Domain), sender, 0, pipeConfig); 
- 
-    // Create table with two shards. 
-    ui64 txId; 
-    { 
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
-        request->Record.SetExecTimeoutPeriod(Max<ui64>()); 
-        auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme(); 
+    auto pipe = runtime.ConnectToPipe(ChangeStateStorage(SchemeRoot, serverSettings.Domain), sender, 0, pipeConfig);
+
+    // Create table with two shards.
+    ui64 txId;
+    {
+        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        request->Record.SetExecTimeoutPeriod(Max<ui64>());
+        auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
         tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
-        tx.SetWorkingDir("/Root"); 
-        auto &desc = *tx.MutableCreateTable(); 
-        desc.SetName("table-1"); 
-        { 
-            auto col = desc.AddColumns(); 
-            col->SetName("key"); 
-            col->SetType("Uint32"); 
-        } 
-        { 
-            auto col = desc.AddColumns(); 
-            col->SetName("value"); 
-            col->SetType("Uint32"); 
-        } 
-        desc.AddKeyColumnNames("key"); 
-        desc.SetUniformPartitionsCount(2); 
- 
-        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release())); 
-        auto reply = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(handle); 
-        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress); 
-        txId = reply->Record.GetTxId(); 
-    } 
-    { 
+        tx.SetWorkingDir("/Root");
+        auto &desc = *tx.MutableCreateTable();
+        desc.SetName("table-1");
+        {
+            auto col = desc.AddColumns();
+            col->SetName("key");
+            col->SetType("Uint32");
+        }
+        {
+            auto col = desc.AddColumns();
+            col->SetName("value");
+            col->SetType("Uint32");
+        }
+        desc.AddKeyColumnNames("key");
+        desc.SetUniformPartitionsCount(2);
+
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+        auto reply = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
+        txId = reply->Record.GetTxId();
+    }
+    {
         auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
-        request->Record.SetTxId(txId); 
-        runtime.SendToPipe(pipe, sender, request.Release()); 
+        request->Record.SetTxId(txId);
+        runtime.SendToPipe(pipe, sender, request.Release());
         runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
-    } 
- 
-    { 
-        auto request = MakeSQLRequest("UPSERT INTO [/Root/table-1] (key, value) VALUES (1,0x80000002),(0x80000001,2)"); 
+    }
+
+    {
+        auto request = MakeSQLRequest("UPSERT INTO [/Root/table-1] (key, value) VALUES (1,0x80000002),(0x80000001,2)");
         runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
-        runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(handle); 
-    } 
- 
-    { 
-        auto request = MakeSQLRequest("UPSERT INTO [/Root/table-1] (key, value) SELECT value as key, value FROM [/Root/table-1]"); 
+        runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(handle);
+    }
+
+    {
+        auto request = MakeSQLRequest("UPSERT INTO [/Root/table-1] (key, value) SELECT value as key, value FROM [/Root/table-1]");
         runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
- 
-        // Get shard IDs. 
-        ui64 shards[2]; 
-        { 
-            auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>(); 
-            request->Record.MutableDescribePath()->SetPath("/Root/table-1"); 
-            runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release())); 
+
+        // Get shard IDs.
+        ui64 shards[2];
+        {
+            auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+            request->Record.MutableDescribePath()->SetPath("/Root/table-1");
+            runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
             auto reply = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
-            for (auto i = 0; i < 2; ++i) 
-                shards[i] = reply->GetRecord().GetPathDescription() 
-                    .GetTablePartitions(i).GetDatashardId(); 
-        } 
- 
-        // Query should be split to two phases and second one 
-        // should use RS. Hold one RS to 'pause' one transaction 
-        // and then restart its shard. This will cause locks 
-        // cache to be used. 
+            for (auto i = 0; i < 2; ++i)
+                shards[i] = reply->GetRecord().GetPathDescription()
+                    .GetTablePartitions(i).GetDatashardId();
+        }
+
+        // Query should be split to two phases and second one
+        // should use RS. Hold one RS to 'pause' one transaction
+        // and then restart its shard. This will cause locks
+        // cache to be used.
         auto captureRS = [shards](TTestActorRuntimeBase&,
-                                  TAutoPtr<IEventHandle> &event) -> auto { 
-            if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) { 
-                auto &rec = event->Get<TEvTxProcessing::TEvReadSet>()->Record; 
-                if (rec.GetTabletDest() == shards[0]) 
-                    return TTestActorRuntime::EEventAction::DROP; 
-            } 
-            return TTestActorRuntime::EEventAction::PROCESS; 
-        }; 
-        runtime.SetObserverFunc(captureRS); 
-        { 
-            TDispatchOptions options; 
-            options.FinalEvents.emplace_back(TEvTxProcessing::EvReadSet, 1); 
-            runtime.DispatchEvents(options); 
-        } 
- 
-        runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc); 
-        // If we want to wait until locks are stored then wait for log commits. 
-        if (waitForLocksStore) { 
-            struct IsCommitResult { 
-                bool operator()(IEventHandle& ev) 
-                { 
-                    if (ev.GetTypeRewrite() == TEvTablet::EvCommitResult) { 
+                                  TAutoPtr<IEventHandle> &event) -> auto {
+            if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
+                auto &rec = event->Get<TEvTxProcessing::TEvReadSet>()->Record;
+                if (rec.GetTabletDest() == shards[0])
+                    return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(captureRS);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvTxProcessing::EvReadSet, 1);
+            runtime.DispatchEvents(options);
+        }
+
+        runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+        // If we want to wait until locks are stored then wait for log commits.
+        if (waitForLocksStore) {
+            struct IsCommitResult {
+                bool operator()(IEventHandle& ev)
+                {
+                    if (ev.GetTypeRewrite() == TEvTablet::EvCommitResult) {
                         if (ev.Cookie == (ui64)NKikimr::NTabletFlatExecutor::ECommit::Redo) {
-                            if (!Recipient) 
-                                Recipient = ev.Recipient; 
-                            else if (Recipient != ev.Recipient) 
-                                return true; 
-                        } 
-                    } 
- 
-                    return false; 
-                } 
- 
+                            if (!Recipient)
+                                Recipient = ev.Recipient;
+                            else if (Recipient != ev.Recipient)
+                                return true;
+                        }
+                    }
+
+                    return false;
+                }
+
                 TActorId Recipient;
-            }; 
- 
-            TDispatchOptions options; 
-            options.FinalEvents.emplace_back(IsCommitResult(), 1); 
-            runtime.DispatchEvents(options); 
-        } 
- 
-        runtime.Register(CreateTabletKiller(shards[0])); 
-        runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(handle); 
-    } 
- 
-    { 
-        auto request = MakeSQLRequest("SELECT * FROM [/Root/table-1]"); 
+            };
+
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(IsCommitResult(), 1);
+            runtime.DispatchEvents(options);
+        }
+
+        runtime.Register(CreateTabletKiller(shards[0]));
+        runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(handle);
+    }
+
+    {
+        auto request = MakeSQLRequest("SELECT * FROM [/Root/table-1]");
         runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
-        auto reply = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(handle); 
-        auto &resp = reply->Record.GetRef().GetResponse(); 
-        UNIT_ASSERT_VALUES_EQUAL(resp.ResultsSize(), 1); 
-        if (waitForLocksStore) 
-            UNIT_ASSERT_VALUES_EQUAL(resp.GetResults(0).GetValue().GetStruct(0).ListSize(), 4); 
-        else { 
-            // We don't actually know whether we killed tablet before locks were stored or after. 
-            // So either 2 or 4 records are allowed. 
-            UNIT_ASSERT(resp.GetResults(0).GetValue().GetStruct(0).ListSize() == 4 
-                        || resp.GetResults(0).GetValue().GetStruct(0).ListSize() == 2); 
-        } 
-    } 
-} 
- 
-Y_UNIT_TEST(UseLocksCache) { 
-    CheckLocksCacheUsage(true); 
-    CheckLocksCacheUsage(false); 
-} 
+        auto reply = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(handle);
+        auto &resp = reply->Record.GetRef().GetResponse();
+        UNIT_ASSERT_VALUES_EQUAL(resp.ResultsSize(), 1);
+        if (waitForLocksStore)
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetResults(0).GetValue().GetStruct(0).ListSize(), 4);
+        else {
+            // We don't actually know whether we killed tablet before locks were stored or after.
+            // So either 2 or 4 records are allowed.
+            UNIT_ASSERT(resp.GetResults(0).GetValue().GetStruct(0).ListSize() == 4
+                        || resp.GetResults(0).GetValue().GetStruct(0).ListSize() == 2);
+        }
+    }
+}
+
+Y_UNIT_TEST(UseLocksCache) {
+    CheckLocksCacheUsage(true);
+    CheckLocksCacheUsage(false);
+}
 // TODO
 
 }

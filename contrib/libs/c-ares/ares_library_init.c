@@ -21,8 +21,8 @@
 #include "ares_library_init.h"
 #include "ares_private.h"
 
-#include "atomic.h" 
- 
+#include "atomic.h"
+
 /* library-private global and unique instance vars */
 
 #ifdef USE_WINSOCK
@@ -38,7 +38,7 @@ fpGetBestRoute2_t ares_fpGetBestRoute2 = ZERO_NULL;
 
 /* library-private global vars with source visibility restricted to this file */
 
-static atomic_t     ares_init_lock; 
+static atomic_t     ares_init_lock;
 static unsigned int ares_initialized;
 static int          ares_init_flags;
 
@@ -130,23 +130,23 @@ static void ares_win32_cleanup(void)
 
 int ares_library_init(int flags)
 {
-  int res = ARES_SUCCESS; 
+  int res = ARES_SUCCESS;
 
-  acquire_lock(&ares_init_lock); 
- 
-  ares_initialized++; 
-  if (ares_initialized == 1) 
+  acquire_lock(&ares_init_lock);
+
+  ares_initialized++;
+  if (ares_initialized == 1)
     {
-      if (flags & ARES_LIB_INIT_WIN32) 
-        res = ares_win32_init(); 
+      if (flags & ARES_LIB_INIT_WIN32)
+        res = ares_win32_init();
 
-      if (res == ARES_SUCCESS) 
-        ares_init_flags = flags; 
+      if (res == ARES_SUCCESS)
+        ares_init_flags = flags;
     }
 
-  release_lock(&ares_init_lock); 
+  release_lock(&ares_init_lock);
 
-  return res; 
+  return res;
 }
 
 int ares_library_init_mem(int flags,
@@ -166,28 +166,28 @@ int ares_library_init_mem(int flags,
 
 void ares_library_cleanup(void)
 {
-  acquire_lock(&ares_init_lock); 
- 
+  acquire_lock(&ares_init_lock);
+
   if (ares_initialized)
-    { 
-      ares_initialized--; 
-      if (!ares_initialized) 
-        { 
-          if (ares_init_flags & ARES_LIB_INIT_WIN32) 
-            ares_win32_cleanup(); 
+    {
+      ares_initialized--;
+      if (!ares_initialized)
+        {
+          if (ares_init_flags & ARES_LIB_INIT_WIN32)
+            ares_win32_cleanup();
 
 #if defined(ANDROID) || defined(__ANDROID__)
           ares_library_cleanup_android();
 #endif
 
-          ares_init_flags = ARES_LIB_INIT_NONE; 
+          ares_init_flags = ARES_LIB_INIT_NONE;
           ares_malloc = malloc;
           ares_realloc = realloc;
           ares_free = free;
-        } 
-    } 
+        }
+    }
 
-  release_lock(&ares_init_lock); 
+  release_lock(&ares_init_lock);
 }
 
 

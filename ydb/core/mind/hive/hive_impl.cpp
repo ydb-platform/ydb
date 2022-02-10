@@ -7,7 +7,7 @@
 #include <ydb/core/util/yverify_stream.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <util/generic/array_ref.h>
- 
+
 template <>
 inline IOutputStream& operator <<(IOutputStream& out, const TArrayRef<const NKikimrHive::TDataCentersGroup*>& vec) {
     out << '[';
@@ -509,11 +509,11 @@ void THive::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext&) 
 }
 
 void THive::BuildLocalConfig() {
-    LocalConfig.Clear(); 
-    if (ResourceProfiles) 
-        ResourceProfiles->StoreProfiles(*LocalConfig.MutableResourceProfiles()); 
-} 
- 
+    LocalConfig.Clear();
+    if (ResourceProfiles)
+        ResourceProfiles->StoreProfiles(*LocalConfig.MutableResourceProfiles());
+}
+
 void THive::BuildCurrentConfig() {
     BLOG_D("THive::BuildCurrentConfig ClusterConfig = " << ClusterConfig.ShortDebugString());
     CurrentConfig = ClusterConfig;
@@ -630,11 +630,11 @@ void THive::Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
             }
         }
     }
-} 
- 
+}
+
 void THive::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
     THashSet<TDataCenterId> dataCenters;
-    for (const TEvInterconnect::TNodeInfo& node : ev->Get()->Nodes) { 
+    for (const TEvInterconnect::TNodeInfo& node : ev->Get()->Nodes) {
         NodesInfo[node.NodeId] = node;
         dataCenters.insert(node.Location.GetDataCenterId());
     }
@@ -838,7 +838,7 @@ void THive::OnActivateExecutor(const TActorContext&) {
     RootDomainName = "/" + domain.Name;
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     ResourceProfiles = AppData()->ResourceProfiles ? AppData()->ResourceProfiles : new TResourceProfiles;
-    BuildLocalConfig(); 
+    BuildLocalConfig();
     ClusterConfig = AppData()->HiveConfig;
     Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
         new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(NKikimrConsole::TConfigItem::HiveConfigItem));
@@ -1281,9 +1281,9 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
 }
 
 const TNodeLocation& THive::GetNodeLocation(TNodeId nodeId) const {
-    auto it = NodesInfo.find(nodeId); 
-    if (it != NodesInfo.end()) 
-        return it->second.Location; 
+    auto it = NodesInfo.find(nodeId);
+    if (it != NodesInfo.end())
+        return it->second.Location;
     static TNodeLocation defaultLocation;
     return defaultLocation;
 }

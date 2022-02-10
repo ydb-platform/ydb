@@ -2,9 +2,9 @@
 #include "defs.h"
 #include "tabletid.h"
 #include "localdb.h"
- 
+
 #include <ydb/core/protos/blobstorage_config.pb.h>
- 
+
 #include <util/generic/map.h>
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
@@ -17,8 +17,8 @@ struct TDomainsInfo : public TThrRefBase {
     static const ui32 MaxUserTag = 0xFFFFF;
     static const ui32 BadDomainId = 0xFFFFFFFFu;
     static const ui64 BadTabletId = 0xFFFFFFFFFFFFFFFFull;
-    static const ui32 DomainBits = 5; 
-    static const ui32 MaxDomainId = (1 << DomainBits) - 1; 
+    static const ui32 DomainBits = 5;
+    static const ui32 MaxDomainId = (1 << DomainBits) - 1;
 
     // it's very sad mistake
     // MakeTabletID should be called with hiveUid == 0 for all domain's static tablets
@@ -73,10 +73,10 @@ struct TDomainsInfo : public TThrRefBase {
     struct TDomain : public TThrRefBase {
         using TPtr = TIntrusivePtr<TDomain>;
 
-        using TVectorUi64 = TVector<ui64>; 
-        using TVectorUi32 = TVector<ui32>; 
+        using TVectorUi64 = TVector<ui64>;
+        using TVectorUi32 = TVector<ui32>;
         using TStoragePoolKinds = THashMap<TString, NKikimrBlobStorage::TDefineStoragePool>;
- 
+
         const ui32 DomainUid;
         const ui32 DefaultStateStorageGroup;
         const ui32 DefaultSchemeBoardGroup;
@@ -98,9 +98,9 @@ struct TDomainsInfo : public TThrRefBase {
         TDomain(const TString &name, ui32 domainUid, ui64 schemeRootId,
                 ui32 defaultStateStorageGroup, ui32 defaultSchemeBoardGroup,
                 TVectorUi32 stateStorageGroup,
-                TVectorUi64 coordinators, TVectorUi64 mediators, TVectorUi64 allocators, 
-                ui32 defaultHiveUid, TVectorUi32 hivesUids, 
-                ui64 domainPlanResolution, const TStoragePoolKinds &poolTypes) 
+                TVectorUi64 coordinators, TVectorUi64 mediators, TVectorUi64 allocators,
+                ui32 defaultHiveUid, TVectorUi32 hivesUids,
+                ui64 domainPlanResolution, const TStoragePoolKinds &poolTypes)
             : DomainUid(domainUid)
             , DefaultStateStorageGroup(defaultStateStorageGroup)
             , DefaultSchemeBoardGroup(defaultSchemeBoardGroup)
@@ -113,7 +113,7 @@ struct TDomainsInfo : public TThrRefBase {
             , DefaultHiveUid(defaultHiveUid)
             , HiveUids(std::move(hivesUids))
             , DomainPlanResolution(domainPlanResolution)
-            , StoragePoolTypes(poolTypes) 
+            , StoragePoolTypes(poolTypes)
         {}
 
      public:
@@ -123,10 +123,10 @@ struct TDomainsInfo : public TThrRefBase {
                                              ui32 defaultStateStorageGroup, ui32 defaultSchemeBoardGroup,
                                             const TUidsContainerUi32 &stateStorageGroups,
                                              ui32 defaultHiveUid,const TUidsContainerUi32 &hiveUids,
-                                             ui64 planResolution, 
-                                             const TUidsContainerUi64 &coordinatorUids, 
-                                             const TUidsContainerUi64 &mediatorUids, 
-                                             const TUidsContainerUi64 &allocatorUids, 
+                                             ui64 planResolution,
+                                             const TUidsContainerUi64 &coordinatorUids,
+                                             const TUidsContainerUi64 &mediatorUids,
+                                             const TUidsContainerUi64 &allocatorUids,
                                              const TStoragePoolKinds &poolTypes = TStoragePoolKinds())
         {
             return new TDomain(name, domainUid, schemeRoot,
@@ -257,7 +257,7 @@ struct TDomainsInfo : public TThrRefBase {
     }
 
     void AddDomain(TDomain *domain) {
-        Y_VERIFY(domain->DomainUid <= MaxDomainId); 
+        Y_VERIFY(domain->DomainUid <= MaxDomainId);
         Domains[domain->DomainUid] = domain;
         DomainByName[domain->Name] = domain;
         Y_VERIFY(Domains.size() == DomainByName.size());

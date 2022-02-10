@@ -815,9 +815,9 @@ namespace NActors {
     }
 
     void TTestActorRuntimeBase::AdvanceCurrentTime(TDuration duration) {
-        UpdateCurrentTime(GetCurrentTime() + duration); 
-    } 
- 
+        UpdateCurrentTime(GetCurrentTime() + duration);
+    }
+
     TIntrusivePtr<ITimeProvider> TTestActorRuntimeBase::GetTimeProvider() {
         Y_VERIFY(!UseRealThreads);
         return TimeProvider;
@@ -1650,7 +1650,7 @@ namespace NActors {
         common.Reset(new TInterconnectProxyCommon);
         common->NameserviceId = nameserviceId;
         common->MonCounters = interconnectCounters;
-        common->TechnicalSelfHostName = "::1"; 
+        common->TechnicalSelfHostName = "::1";
 
         if (!UseRealThreads) {
             common->Settings.DeadPeer = TDuration::Max();

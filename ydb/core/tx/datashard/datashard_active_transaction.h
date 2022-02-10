@@ -1,9 +1,9 @@
 #pragma once
 
 #include "datashard.h"
-#include "datashard_locks.h" 
+#include "datashard_locks.h"
 #include "datashard__engine_host.h"
-#include "operation.h" 
+#include "operation.h"
 
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -20,7 +20,7 @@ static constexpr char MemoryLabelValidatedDataTx[] = "Datashard/TValidatedDataTx
 static constexpr char MemoryLabelActiveTransactionBody[] = "Datashard/TActiveTransaction/TxBody";
 
 using NTabletFlatExecutor::TTransactionContext;
-using NTabletFlatExecutor::TTableSnapshotContext; 
+using NTabletFlatExecutor::TTableSnapshotContext;
 
 class TDataShard;
 class TSysLocks;
@@ -35,12 +35,12 @@ struct TScanState {
 };
 
 struct TSchemaOperation {
-    enum EType : ui32 { 
-        ETypeDrop = 0, 
-        ETypeCreate = 1, 
-        ETypeAlter = 2, 
-        ETypeBackup = 3, 
-        ETypeCopy = 4, 
+    enum EType : ui32 {
+        ETypeDrop = 0,
+        ETypeCreate = 1,
+        ETypeAlter = 2,
+        ETypeBackup = 3,
+        ETypeCopy = 4,
         EType_DEPRECATED_05 = 5,
         ETypeCreatePersistentSnapshot = 6,
         ETypeDropPersistentSnapshot = 7,
@@ -52,51 +52,51 @@ struct TSchemaOperation {
         ETypeCreateCdcStream = 13,
         ETypeAlterCdcStream = 14,
         ETypeDropCdcStream = 15,
- 
-        ETypeUnknown = Max<ui32>() 
-    }; 
- 
-    ui64 TxId; 
-    EType Type; 
+
+        ETypeUnknown = Max<ui32>()
+    };
+
+    ui64 TxId;
+    EType Type;
     TActorId Source;
-    ui64 TabletId; 
-    ui64 MinStep; 
-    ui64 MaxStep; 
-    ui64 PlanStep; 
-    bool ReadOnly; 
-    bool Done; 
- 
+    ui64 TabletId;
+    ui64 MinStep;
+    ui64 MaxStep;
+    ui64 PlanStep;
+    bool ReadOnly;
+    bool Done;
+
     bool Success;
     TString Error;
     ui64 BytesProcessed;
     ui64 RowsProcessed;
- 
+
     TScanState ScanState;
 
     TSchemaOperation(ui64 txId, EType type, TActorId source, ui64 tabletId,
                     ui64 minStep, ui64 maxStep, ui64 planStep, bool readOnly,
                     bool success, const TString& error, ui64 bytes, ui64 rows)
-        : TxId(txId) 
-        , Type(type) 
-        , Source(source) 
-        , TabletId(tabletId) 
-        , MinStep(minStep) 
-        , MaxStep(maxStep) 
-        , PlanStep(planStep) 
-        , ReadOnly(readOnly) 
-        , Done(false) 
+        : TxId(txId)
+        , Type(type)
+        , Source(source)
+        , TabletId(tabletId)
+        , MinStep(minStep)
+        , MaxStep(maxStep)
+        , PlanStep(planStep)
+        , ReadOnly(readOnly)
+        , Done(false)
         , Success(success)
         , Error(error)
         , BytesProcessed(bytes)
         , RowsProcessed(rows)
-    {} 
- 
-    bool IsDrop() const { return Type == ETypeDrop; } 
-    bool IsCreate() const { return Type == ETypeCreate; } 
-    bool IsAlter() const { return Type == ETypeAlter; } 
-    bool IsBackup() const { return Type == ETypeBackup; } 
+    {}
+
+    bool IsDrop() const { return Type == ETypeDrop; }
+    bool IsCreate() const { return Type == ETypeCreate; }
+    bool IsAlter() const { return Type == ETypeAlter; }
+    bool IsBackup() const { return Type == ETypeBackup; }
     bool IsRestore() const { return Type == ETypeRestore; }
-    bool IsCopy() const { return Type == ETypeCopy; } 
+    bool IsCopy() const { return Type == ETypeCopy; }
     bool IsCreatePersistentSnapshot() const { return Type == ETypeCreatePersistentSnapshot; }
     bool IsDropPersistentSnapshot() const { return Type == ETypeDropPersistentSnapshot; }
     bool IsInitiateBuildIndex() const { return Type == ETypeInitiateBuildIndex; }
@@ -106,21 +106,21 @@ struct TSchemaOperation {
     bool IsCreateCdcStream() const { return Type == ETypeCreateCdcStream; }
     bool IsAlterCdcStream() const { return Type == ETypeAlterCdcStream; }
     bool IsDropCdcStream() const { return Type == ETypeDropCdcStream; }
- 
-    bool IsReadOnly() const { return ReadOnly; } 
-}; 
- 
+
+    bool IsReadOnly() const { return ReadOnly; }
+};
+
 /// @note This class incapsulates Engine stuff for minor needs. Do not return TEngine out of it.
 class TValidatedDataTx : TNonCopyable {
 public:
     using TPtr = std::shared_ptr<TValidatedDataTx>;
 
     TValidatedDataTx(TDataShard *self,
-                     TTransactionContext &txc, 
-                     const TActorContext &ctx, 
-                     const TStepOrder &stepTxId, 
-                     TInstant receivedAt, 
-                     const TString &txBody); 
+                     TTransactionContext &txc,
+                     const TActorContext &ctx,
+                     const TStepOrder &stepTxId,
+                     TInstant receivedAt,
+                     const TString &txBody);
 
     ~TValidatedDataTx();
 
@@ -165,7 +165,7 @@ public:
         return 0;
     }
 
-    NMiniKQL::IEngineFlat *GetEngine() { return EngineBay.GetEngine(); } 
+    NMiniKQL::IEngineFlat *GetEngine() { return EngineBay.GetEngine(); }
     void DestroyEngine() { EngineBay.DestroyEngine(); }
     const NMiniKQL::TEngineHostCounters& GetCounters() { return EngineBay.GetCounters(); }
     void ResetCounters() { EngineBay.ResetCounters(); }
@@ -183,8 +183,8 @@ public:
     void SetStep(ui64 step) { StepTxId_.Step = step; }
     bool IsProposed() const { return Source_ != TActorId(); }
 
-    bool IsTableRead() const { return Tx.HasReadTableTransaction(); } 
- 
+    bool IsTableRead() const { return Tx.HasReadTableTransaction(); }
+
     bool IsKqpTx() const { return Tx.HasKqpTransaction(); }
 
     bool IsKqpDataTx() const {
@@ -195,37 +195,37 @@ public:
         return IsKqpTx() && Tx.GetKqpTransaction().GetType() == NKikimrTxDataShard::KQP_TX_TYPE_SCAN;
     }
 
-    const NKikimrTxDataShard::TKqpTransaction &GetKqpTransaction() const { return Tx.GetKqpTransaction(); } 
+    const NKikimrTxDataShard::TKqpTransaction &GetKqpTransaction() const { return Tx.GetKqpTransaction(); }
     const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& GetKqpTasks() const;
     NKqp::TKqpTasksRunner& GetKqpTasksRunner() { Y_VERIFY(IsKqpDataTx()); return EngineBay.GetKqpTasksRunner(Tx.GetKqpTransaction()); }
     NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx() { Y_VERIFY(IsKqpDataTx()); return EngineBay.GetKqpComputeCtx(); }
 
-    bool HasStreamResponse() const { return Tx.GetStreamResponse(); } 
+    bool HasStreamResponse() const { return Tx.GetStreamResponse(); }
     TActorId GetSink() const { return ActorIdFromProto(Tx.GetSink()); }
-    const NKikimrTxDataShard::TReadTableTransaction &GetReadTableTransaction() const { return Tx.GetReadTableTransaction(); } 
- 
+    const NKikimrTxDataShard::TReadTableTransaction &GetReadTableTransaction() const { return Tx.GetReadTableTransaction(); }
+
     ui32 ExtractKeys(bool allowErrors);
     bool ReValidateKeys();
     ETxOrder CheckOrder(const TSysLocks& sysLocks, const TValidatedDataTx& dataTx) const;
 
-    ui64 GetTxSize() const { return TxSize; } 
+    ui64 GetTxSize() const { return TxSize; }
     ui32 KeysCount() const { return TxInfo().ReadsCount + TxInfo().WritesCount; }
- 
-    void SetTxCacheUsage(ui64 val) { TxCacheUsage = val; } 
-    ui64 GetTxCacheUsage() const { return TxCacheUsage; } 
- 
-    void ReleaseTxData(); 
-    bool IsTxDataReleased() const { return IsReleased; } 
- 
+
+    void SetTxCacheUsage(ui64 val) { TxCacheUsage = val; }
+    ui64 GetTxCacheUsage() const { return TxCacheUsage; }
+
+    void ReleaseTxData();
+    bool IsTxDataReleased() const { return IsReleased; }
+
     bool IsTxInfoLoaded() const { return TxInfo().Loaded; }
- 
+
     bool IsTxReadOnly() const { return IsReadOnly; }
 
     bool HasOutReadsets() const { return TxInfo().HasOutReadsets; }
     bool HasInReadsets() const { return TxInfo().HasInReadsets; }
 
-    const NMiniKQL::IEngineFlat::TValidationInfo& TxInfo() const { return EngineBay.TxInfo(); } 
- 
+    const NMiniKQL::IEngineFlat::TValidationInfo& TxInfo() const { return EngineBay.TxInfo(); }
+
 private:
     TStepOrder StepTxId_;
     ui64 TabletId_;
@@ -235,9 +235,9 @@ private:
     NKikimrTxDataShard::TDataTransaction Tx;
     NKikimrTxDataShard::TError::EKind ErrCode;
     TString ErrStr;
-    ui64 TxSize; 
-    ui64 TxCacheUsage; 
-    bool IsReleased; 
+    ui64 TxSize;
+    ui64 TxCacheUsage;
+    bool IsReleased;
     TMaybe<ui64> PerShardKeysSizeLimitBytes_;
     bool IsReadOnly;
     bool AllowCancelROwithReadsets;
@@ -245,7 +245,7 @@ private:
     const TInstant ReceivedAt_; // For local timeout tracking
     TInstant Deadline_;
 
-    void ComputeTxSize(); 
+    void ComputeTxSize();
     void ComputeDeadline();
 };
 
@@ -302,52 +302,52 @@ private:
 };
 
 ///
-class TActiveTransaction : public TOperation { 
-public: 
-    enum EArtifactFlags { 
-        OUT_RS_STORED = (1 << 0), 
-        LOCKS_STORED = (1 << 1), 
-    }; 
- 
-    using TPtr = TIntrusivePtr<TActiveTransaction>; 
+class TActiveTransaction : public TOperation {
+public:
+    enum EArtifactFlags {
+        OUT_RS_STORED = (1 << 0),
+        LOCKS_STORED = (1 << 1),
+    };
 
-    explicit TActiveTransaction(const TBasicOpInfo &op) 
-        : TOperation(op) 
-        , ArtifactFlags(0) 
-        , TxCacheUsage(0) 
-        , ReleasedTxDataSize(0) 
-        , SchemeShardId(0) 
+    using TPtr = TIntrusivePtr<TActiveTransaction>;
+
+    explicit TActiveTransaction(const TBasicOpInfo &op)
+        : TOperation(op)
+        , ArtifactFlags(0)
+        , TxCacheUsage(0)
+        , ReleasedTxDataSize(0)
+        , SchemeShardId(0)
         , SubDomainPathId(0)
         , SchemeTxType(TSchemaOperation::ETypeUnknown)
-        , ScanSnapshotId(0) 
-        , ScanTask(0) 
+        , ScanSnapshotId(0)
+        , ScanTask(0)
     {
         TrackMemory();
     }
 
-    TActiveTransaction(const TBasicOpInfo &op, 
-                       TValidatedDataTx::TPtr savedTx); 
+    TActiveTransaction(const TBasicOpInfo &op,
+                       TValidatedDataTx::TPtr savedTx);
     TActiveTransaction(TDataShard *self,
-                       TTransactionContext &txc, 
-                       const TActorContext &ctx, 
-                       const TBasicOpInfo &op, 
+                       TTransactionContext &txc,
+                       const TActorContext &ctx,
+                       const TBasicOpInfo &op,
                        const TActorId &target,
-                       const TString &txBody, 
-                       const TVector<TSysTables::TLocksTable::TLock> &locks, 
-                       ui64 artifactFlags); 
+                       const TString &txBody,
+                       const TVector<TSysTables::TLocksTable::TLock> &locks,
+                       ui64 artifactFlags);
 
     ~TActiveTransaction();
 
-    void FillTxData(TValidatedDataTx::TPtr dataTx); 
+    void FillTxData(TValidatedDataTx::TPtr dataTx);
     void FillTxData(TDataShard *self,
-                    TTransactionContext &txc, 
-                    const TActorContext &ctx, 
+                    TTransactionContext &txc,
+                    const TActorContext &ctx,
                     const TActorId &target,
-                    const TString &txBody, 
-                    const TVector<TSysTables::TLocksTable::TLock> &locks, 
-                    ui64 artifactFlags); 
- 
-    const TString &GetTxBody() const { return TxBody; } 
+                    const TString &txBody,
+                    const TVector<TSysTables::TLocksTable::TLock> &locks,
+                    ui64 artifactFlags);
+
+    const TString &GetTxBody() const { return TxBody; }
     void SetTxBody(const TString &txBody) {
         UntrackMemory();
         TxBody = txBody;
@@ -358,43 +358,43 @@ public:
         TxBody.clear();
         TrackMemory();
     }
- 
-    ui64 GetSchemeShardId() const { return SchemeShardId; } 
-    void SetSchemeShardId(ui64 id) { SchemeShardId = id; } 
+
+    ui64 GetSchemeShardId() const { return SchemeShardId; }
+    void SetSchemeShardId(ui64 id) { SchemeShardId = id; }
     ui64 GetSubDomainPathId() const { return SubDomainPathId; }
     void SetSubDomainPathId(ui64 pathId) { SubDomainPathId = pathId; }
- 
-    const NKikimrSubDomains::TProcessingParams &GetProcessingParams() const 
-    { 
-        return ProcessingParams; 
-    } 
-    void SetProcessingParams(const NKikimrSubDomains::TProcessingParams &params) 
-    { 
-        ProcessingParams.CopyFrom(params); 
-    } 
- 
-    void Deactivate() override { 
-        ClearSchemeTx(); 
-        ClearTxBody(); 
- 
-        TOperation::Deactivate(); 
+
+    const NKikimrSubDomains::TProcessingParams &GetProcessingParams() const
+    {
+        return ProcessingParams;
+    }
+    void SetProcessingParams(const NKikimrSubDomains::TProcessingParams &params)
+    {
+        ProcessingParams.CopyFrom(params);
+    }
+
+    void Deactivate() override {
+        ClearSchemeTx();
+        ClearTxBody();
+
+        TOperation::Deactivate();
     }
 
     const TValidatedDataTx::TPtr& GetDataTx() const { return DataTx; }
     TValidatedDataTx::TPtr BuildDataTx(TDataShard *self,
-                                       TTransactionContext &txc, 
-                                       const TActorContext &ctx); 
-    void ClearDataTx() { DataTx = nullptr; } 
- 
-    const NKikimrTxDataShard::TFlatSchemeTransaction &GetSchemeTx() const 
-    { 
+                                       TTransactionContext &txc,
+                                       const TActorContext &ctx);
+    void ClearDataTx() { DataTx = nullptr; }
+
+    const NKikimrTxDataShard::TFlatSchemeTransaction &GetSchemeTx() const
+    {
         Y_VERIFY_S(SchemeTx, "No ptr");
-        return *SchemeTx; 
-    } 
-    bool BuildSchemeTx(); 
-    void ClearSchemeTx() { SchemeTx = nullptr; } 
+        return *SchemeTx;
+    }
+    bool BuildSchemeTx();
+    void ClearSchemeTx() { SchemeTx = nullptr; }
     TSchemaOperation::EType GetSchemeTxType() const { return SchemeTxType; }
- 
+
     const NKikimrTxDataShard::TSnapshotTransaction& GetSnapshotTx() const {
         Y_VERIFY_DEBUG(SnapshotTx);
         return *SnapshotTx;
@@ -430,45 +430,45 @@ public:
         return true;
     }
 
-    void MarkAsUsingSnapshot() { 
-        SetUsingSnapshotFlag(); 
-    } 
- 
-    void SetTxCacheUsage(ui64 val) { TxCacheUsage = val; } 
-    ui64 GetTxCacheUsage() const { return TxCacheUsage; } 
- 
-    ui64 GetReleasedTxDataSize() const { return ReleasedTxDataSize; } 
+    void MarkAsUsingSnapshot() {
+        SetUsingSnapshotFlag();
+    }
+
+    void SetTxCacheUsage(ui64 val) { TxCacheUsage = val; }
+    ui64 GetTxCacheUsage() const { return TxCacheUsage; }
+
+    ui64 GetReleasedTxDataSize() const { return ReleasedTxDataSize; }
     bool IsTxDataReleased() const { return ReleasedTxDataSize > 0; }
- 
-    void MarkOutRSStored() 
-    { 
-        ArtifactFlags |= OUT_RS_STORED; 
-    } 
- 
-    bool IsOutRSStored() 
-    { 
-        return ArtifactFlags & OUT_RS_STORED; 
-    } 
- 
-    void MarkLocksStored() 
-    { 
-        ArtifactFlags |= LOCKS_STORED; 
-    } 
- 
-    bool IsLocksStored() 
-    { 
-        return ArtifactFlags & LOCKS_STORED; 
-    } 
- 
+
+    void MarkOutRSStored()
+    {
+        ArtifactFlags |= OUT_RS_STORED;
+    }
+
+    bool IsOutRSStored()
+    {
+        return ArtifactFlags & OUT_RS_STORED;
+    }
+
+    void MarkLocksStored()
+    {
+        ArtifactFlags |= LOCKS_STORED;
+    }
+
+    bool IsLocksStored()
+    {
+        return ArtifactFlags & LOCKS_STORED;
+    }
+
     void DbStoreLocksAccessLog(TDataShard * self,
-                               TTransactionContext &txc, 
-                               const TActorContext &ctx); 
+                               TTransactionContext &txc,
+                               const TActorContext &ctx);
     void DbStoreArtifactFlags(TDataShard * self,
-                              TTransactionContext &txc, 
-                              const TActorContext &ctx); 
- 
-    ui64 GetMemoryConsumption() const; 
- 
+                              TTransactionContext &txc,
+                              const TActorContext &ctx);
+
+    ui64 GetMemoryConsumption() const;
+
     ui64 GetRequiredMemory() const {
         Y_VERIFY(!GetTxCacheUsage() || !IsTxDataReleased());
         ui64 requiredMem = GetTxCacheUsage() + GetReleasedTxDataSize();
@@ -477,58 +477,58 @@ public:
         return requiredMem;
     }
 
-    void ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase &provider, const TActorContext &ctx); 
+    void ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase &provider, const TActorContext &ctx);
     ERestoreDataStatus RestoreTxData(TDataShard * self, TTransactionContext &txc, const TActorContext &ctx);
     void FinalizeDataTxPlan();
- 
-    // TOperation iface. 
-    void BuildExecutionPlan(bool loaded) override; 
- 
-    const NMiniKQL::IEngineFlat::TValidationInfo &GetKeysInfo() const override 
-    { 
-        if (DataTx) { 
+
+    // TOperation iface.
+    void BuildExecutionPlan(bool loaded) override;
+
+    const NMiniKQL::IEngineFlat::TValidationInfo &GetKeysInfo() const override
+    {
+        if (DataTx) {
             Y_VERIFY(DataTx->TxInfo().Loaded);
-            return DataTx->TxInfo(); 
-        } 
+            return DataTx->TxInfo();
+        }
         Y_VERIFY_DEBUG(IsSchemeTx() || IsSnapshotTx() || IsDistributedEraseTx() || IsCommitWritesTx(),
             "Unexpected access to invalidated keys: non-scheme tx %" PRIu64, GetTxId());
-        // For scheme tx global reader and writer flags should 
-        // result in all required dependencies. 
-        return TOperation::GetKeysInfo(); 
-    } 
- 
-    ui64 LockTxId() const override 
-    { 
-        if (DataTx) 
-            return DataTx->LockTxId(); 
-        return 0; 
-    } 
- 
-    bool HasLockedWrites() const  override 
-    { 
-        if (DataTx) 
-            return DataTx->HasLockedWrites(); 
-        return false; 
-    } 
- 
-    void FillState(NKikimrTxDataShard::TEvGetOperationResponse &resp) const; 
- 
-    void SetScanSnapshotId(ui64 id) { ScanSnapshotId = id; } 
-    ui64 GetScanSnapshotId() const { return ScanSnapshotId; } 
- 
-    void SetScanTask(ui64 id) { ScanTask = id; } 
-    ui64 GetScanTask() const { return ScanTask; } 
- 
+        // For scheme tx global reader and writer flags should
+        // result in all required dependencies.
+        return TOperation::GetKeysInfo();
+    }
+
+    ui64 LockTxId() const override
+    {
+        if (DataTx)
+            return DataTx->LockTxId();
+        return 0;
+    }
+
+    bool HasLockedWrites() const  override
+    {
+        if (DataTx)
+            return DataTx->HasLockedWrites();
+        return false;
+    }
+
+    void FillState(NKikimrTxDataShard::TEvGetOperationResponse &resp) const;
+
+    void SetScanSnapshotId(ui64 id) { ScanSnapshotId = id; }
+    ui64 GetScanSnapshotId() const { return ScanSnapshotId; }
+
+    void SetScanTask(ui64 id) { ScanTask = id; }
+    ui64 GetScanTask() const { return ScanTask; }
+
     void SetAsyncJobActor(TActorId aid) { AsyncJobActor = aid; }
     TActorId GetAsyncJobActor() const { return AsyncJobActor; }
     void KillAsyncJobActor(const TActorContext& ctx);
 
     void SetStreamSink(TActorId sink) { StreamSink = sink; }
     TActorId GetStreamSink() const { return StreamSink; }
- 
+
     void SetScanActor(TActorId aid) { ScanActor = aid; }
     TActorId GetScanActor() const { return ScanActor; }
- 
+
     ui64 IncrementPageFaultCount() {
         return ++PageFaultCount;
     }
@@ -539,22 +539,22 @@ private:
 
 private:
     TValidatedDataTx::TPtr DataTx;
-    THolder<NKikimrTxDataShard::TFlatSchemeTransaction> SchemeTx; 
+    THolder<NKikimrTxDataShard::TFlatSchemeTransaction> SchemeTx;
     THolder<NKikimrTxDataShard::TSnapshotTransaction> SnapshotTx;
     TDistributedEraseTx::TPtr DistributedEraseTx;
     TCommitWritesTx::TPtr CommitWritesTx;
-    TString TxBody; 
+    TString TxBody;
 
-    // TODO: move to persistent part of operation's flags 
-    ui64 ArtifactFlags; 
-    ui64 TxCacheUsage; 
-    ui64 ReleasedTxDataSize; 
-    ui64 SchemeShardId; 
+    // TODO: move to persistent part of operation's flags
+    ui64 ArtifactFlags;
+    ui64 TxCacheUsage;
+    ui64 ReleasedTxDataSize;
+    ui64 SchemeShardId;
     ui64 SubDomainPathId;
-    NKikimrSubDomains::TProcessingParams ProcessingParams; 
+    NKikimrSubDomains::TProcessingParams ProcessingParams;
     TSchemaOperation::EType SchemeTxType;
-    ui64 ScanSnapshotId; 
-    ui64 ScanTask; 
+    ui64 ScanSnapshotId;
+    ui64 ScanTask;
     TActorId AsyncJobActor;
     TActorId StreamSink;
     TActorId ScanActor;
@@ -562,7 +562,7 @@ private:
 };
 
 inline IOutputStream& operator << (IOutputStream& out, const TActiveTransaction& tx) {
-    out << '[' << tx.GetStep() << ':' << tx.GetTxId() << ']'; 
+    out << '[' << tx.GetStep() << ':' << tx.GetTxId() << ']';
     return out;
 }
 

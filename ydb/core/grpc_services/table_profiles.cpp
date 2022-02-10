@@ -1,50 +1,50 @@
-#include "table_profiles.h" 
- 
+#include "table_profiles.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
- 
-#include <util/string/printf.h> 
- 
-namespace NKikimr { 
-namespace NGRpcService { 
- 
-TTableProfiles::TTableProfiles() 
-{ 
-} 
- 
-TTableProfiles::TTableProfiles(const NKikimrConfig::TTableProfilesConfig &config) 
-{ 
-    Load(config); 
-} 
- 
-void TTableProfiles::Load(const NKikimrConfig::TTableProfilesConfig &config) 
-{ 
-    CompactionPolicies.clear(); 
-    ExecutionPolicies.clear(); 
-    PartitioningPolicies.clear(); 
-    StoragePolicies.clear(); 
-    ReplicationPolicies.clear(); 
-    CachingPolicies.clear(); 
-    TableProfiles.clear(); 
- 
-    for (auto &profile : config.GetTableProfiles()) 
-        TableProfiles[profile.GetName()] = profile; 
-    for (auto &policy : config.GetCompactionPolicies()) 
-        CompactionPolicies[policy.GetName()] = policy; 
-    for (auto &policy : config.GetExecutionPolicies()) 
-        ExecutionPolicies[policy.GetName()] = policy; 
-    for (auto &policy : config.GetPartitioningPolicies()) 
-        PartitioningPolicies[policy.GetName()] = policy; 
-    for (auto &policy : config.GetStoragePolicies()) 
-        StoragePolicies[policy.GetName()] = policy; 
-    for (auto &policy : config.GetReplicationPolicies()) 
-        ReplicationPolicies[policy.GetName()] = policy; 
-    for (auto &policy : config.GetCachingPolicies()) 
-        CachingPolicies[policy.GetName()] = policy; 
-} 
- 
+
+#include <util/string/printf.h>
+
+namespace NKikimr {
+namespace NGRpcService {
+
+TTableProfiles::TTableProfiles()
+{
+}
+
+TTableProfiles::TTableProfiles(const NKikimrConfig::TTableProfilesConfig &config)
+{
+    Load(config);
+}
+
+void TTableProfiles::Load(const NKikimrConfig::TTableProfilesConfig &config)
+{
+    CompactionPolicies.clear();
+    ExecutionPolicies.clear();
+    PartitioningPolicies.clear();
+    StoragePolicies.clear();
+    ReplicationPolicies.clear();
+    CachingPolicies.clear();
+    TableProfiles.clear();
+
+    for (auto &profile : config.GetTableProfiles())
+        TableProfiles[profile.GetName()] = profile;
+    for (auto &policy : config.GetCompactionPolicies())
+        CompactionPolicies[policy.GetName()] = policy;
+    for (auto &policy : config.GetExecutionPolicies())
+        ExecutionPolicies[policy.GetName()] = policy;
+    for (auto &policy : config.GetPartitioningPolicies())
+        PartitioningPolicies[policy.GetName()] = policy;
+    for (auto &policy : config.GetStoragePolicies())
+        StoragePolicies[policy.GetName()] = policy;
+    for (auto &policy : config.GetReplicationPolicies())
+        ReplicationPolicies[policy.GetName()] = policy;
+    for (auto &policy : config.GetCachingPolicies())
+        CachingPolicies[policy.GetName()] = policy;
+}
+
 NKikimrSchemeOp::TFamilyDescription *TTableProfiles::GetNamedFamilyDescription(NKikimrConfig::TStoragePolicy &policy, const TString& name) const {
     for (size_t i = 0; i < policy.ColumnFamiliesSize(); ++i) {
         const auto& family = policy.GetColumnFamilies(i);
@@ -63,163 +63,163 @@ NKikimrSchemeOp::TFamilyDescription *TTableProfiles::GetDefaultFamilyDescription
         if ((family.HasId() && family.GetId() == 0) ||
             (!family.HasId() && !family.HasName()))
         {
-            return policy.MutableColumnFamilies(i); 
+            return policy.MutableColumnFamilies(i);
         }
     }
-    auto res = policy.AddColumnFamilies(); 
-    res->SetId(0); 
-    return res; 
-} 
- 
+    auto res = policy.AddColumnFamilies();
+    res->SetId(0);
+    return res;
+}
+
 NKikimrSchemeOp::TStorageConfig *TTableProfiles::GetDefaultStorageConfig(NKikimrConfig::TStoragePolicy &policy) const {
-    return GetDefaultFamilyDescription(policy)->MutableStorageConfig(); 
-} 
- 
+    return GetDefaultFamilyDescription(policy)->MutableStorageConfig();
+}
+
 bool TTableProfiles::HasPresetName(const TString &presetName) const {
     return TableProfiles.contains(presetName);
 }
 
-bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile, 
+bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
                                        NKikimrSchemeOp::TTableDescription &tableDesc,
-                                       Ydb::StatusIds::StatusCode &code, 
-                                       TString &error) const 
-{ 
-    NKikimrConfig::TCompactionPolicy compactionPolicy; 
-    NKikimrConfig::TExecutionPolicy executionPolicy; 
-    NKikimrConfig::TPartitioningPolicy partitioningPolicy; 
-    NKikimrConfig::TStoragePolicy storagePolicy; 
-    NKikimrConfig::TReplicationPolicy replicationPolicy; 
-    NKikimrConfig::TCachingPolicy cachingPolicy; 
+                                       Ydb::StatusIds::StatusCode &code,
+                                       TString &error) const
+{
+    NKikimrConfig::TCompactionPolicy compactionPolicy;
+    NKikimrConfig::TExecutionPolicy executionPolicy;
+    NKikimrConfig::TPartitioningPolicy partitioningPolicy;
+    NKikimrConfig::TStoragePolicy storagePolicy;
+    NKikimrConfig::TReplicationPolicy replicationPolicy;
+    NKikimrConfig::TCachingPolicy cachingPolicy;
     auto &partitionConfig = *tableDesc.MutablePartitionConfig();
- 
+
     if (profile.preset_name() && !TableProfiles.contains(profile.preset_name())) {
-        code = Ydb::StatusIds::BAD_REQUEST; 
+        code = Ydb::StatusIds::BAD_REQUEST;
         error = Sprintf("unknown table profile preset '%s'", profile.preset_name().data());
-        return false; 
-    } 
- 
-    TString name = profile.preset_name() ? profile.preset_name() : "default"; 
-    NKikimrConfig::TTableProfile tableProfile; 
+        return false;
+    }
+
+    TString name = profile.preset_name() ? profile.preset_name() : "default";
+    NKikimrConfig::TTableProfile tableProfile;
     if (TableProfiles.contains(name))
-        tableProfile = TableProfiles.at(name); 
- 
-    // Determine used compaction policy. 
-    if (profile.has_compaction_policy()) { 
-        auto &policy = profile.compaction_policy(); 
+        tableProfile = TableProfiles.at(name);
+
+    // Determine used compaction policy.
+    if (profile.has_compaction_policy()) {
+        auto &policy = profile.compaction_policy();
         if (!CompactionPolicies.contains(policy.preset_name())) {
-            code = Ydb::StatusIds::BAD_REQUEST; 
+            code = Ydb::StatusIds::BAD_REQUEST;
             error = Sprintf("unknown compaction policy preset '%s'", policy.preset_name().data());
-            return false; 
-        } 
-        compactionPolicy = CompactionPolicies.at(policy.preset_name()); 
+            return false;
+        }
+        compactionPolicy = CompactionPolicies.at(policy.preset_name());
     } else if (CompactionPolicies.contains(tableProfile.GetCompactionPolicy())) {
-        compactionPolicy = CompactionPolicies.at(tableProfile.GetCompactionPolicy()); 
-    } 
- 
-    // Determine used execution policy. 
-    if (profile.has_execution_policy()) { 
-        auto &policy = profile.execution_policy(); 
+        compactionPolicy = CompactionPolicies.at(tableProfile.GetCompactionPolicy());
+    }
+
+    // Determine used execution policy.
+    if (profile.has_execution_policy()) {
+        auto &policy = profile.execution_policy();
         if (!ExecutionPolicies.contains(policy.preset_name())) {
-            code = Ydb::StatusIds::BAD_REQUEST; 
+            code = Ydb::StatusIds::BAD_REQUEST;
             error = Sprintf("unknown execution policy preset '%s'", policy.preset_name().data());
-            return false; 
-        } 
-        executionPolicy = ExecutionPolicies.at(policy.preset_name()); 
+            return false;
+        }
+        executionPolicy = ExecutionPolicies.at(policy.preset_name());
     } else if (ExecutionPolicies.contains(tableProfile.GetExecutionPolicy())) {
-        executionPolicy = ExecutionPolicies.at(tableProfile.GetExecutionPolicy()); 
-    } 
- 
-    // Determine used partitioning policy. 
-    if (profile.has_partitioning_policy()) { 
-        auto &policy = profile.partitioning_policy(); 
-        if (policy.preset_name()) { 
+        executionPolicy = ExecutionPolicies.at(tableProfile.GetExecutionPolicy());
+    }
+
+    // Determine used partitioning policy.
+    if (profile.has_partitioning_policy()) {
+        auto &policy = profile.partitioning_policy();
+        if (policy.preset_name()) {
             if (!PartitioningPolicies.contains(policy.preset_name())) {
-                code = Ydb::StatusIds::BAD_REQUEST; 
+                code = Ydb::StatusIds::BAD_REQUEST;
                 error = Sprintf("unknown partitioning policy preset '%s'", policy.preset_name().data());
-                return false; 
-            } 
-            partitioningPolicy = PartitioningPolicies.at(policy.preset_name()); 
+                return false;
+            }
+            partitioningPolicy = PartitioningPolicies.at(policy.preset_name());
         } else if (PartitioningPolicies.contains(tableProfile.GetPartitioningPolicy())) {
-            partitioningPolicy = PartitioningPolicies.at(tableProfile.GetPartitioningPolicy()); 
-        } 
-        // Apply auto partitioning overwrites. 
-        switch (policy.auto_partitioning()) { 
-        case Ydb::Table::PartitioningPolicy::AUTO_PARTITIONING_POLICY_UNSPECIFIED: 
-            break; 
-        case Ydb::Table::PartitioningPolicy::DISABLED: 
-            partitioningPolicy.SetAutoSplit(false); 
-            partitioningPolicy.SetAutoMerge(false); 
-            break; 
-        case Ydb::Table::PartitioningPolicy::AUTO_SPLIT: 
-            partitioningPolicy.SetAutoSplit(true); 
-            partitioningPolicy.SetAutoMerge(false); 
-            break; 
-        case Ydb::Table::PartitioningPolicy::AUTO_SPLIT_MERGE: 
-            partitioningPolicy.SetAutoSplit(true); 
-            partitioningPolicy.SetAutoMerge(true); 
-            break; 
-        default: 
-            code = Ydb::StatusIds::BAD_REQUEST; 
-            error = Sprintf("unknown auto partitioning policy %" PRIu32, 
-                            (ui32)policy.auto_partitioning()); 
-            return false; 
-        } 
-        // Apply uniform partitions overwrites. 
-        switch (policy.partitions_case()) { 
-        case Ydb::Table::PartitioningPolicy::kUniformPartitions: 
-            partitioningPolicy.SetUniformPartitionsCount(policy.uniform_partitions()); 
-            break; 
-        case Ydb::Table::PartitioningPolicy::kExplicitPartitions: 
+            partitioningPolicy = PartitioningPolicies.at(tableProfile.GetPartitioningPolicy());
+        }
+        // Apply auto partitioning overwrites.
+        switch (policy.auto_partitioning()) {
+        case Ydb::Table::PartitioningPolicy::AUTO_PARTITIONING_POLICY_UNSPECIFIED:
+            break;
+        case Ydb::Table::PartitioningPolicy::DISABLED:
+            partitioningPolicy.SetAutoSplit(false);
+            partitioningPolicy.SetAutoMerge(false);
+            break;
+        case Ydb::Table::PartitioningPolicy::AUTO_SPLIT:
+            partitioningPolicy.SetAutoSplit(true);
+            partitioningPolicy.SetAutoMerge(false);
+            break;
+        case Ydb::Table::PartitioningPolicy::AUTO_SPLIT_MERGE:
+            partitioningPolicy.SetAutoSplit(true);
+            partitioningPolicy.SetAutoMerge(true);
+            break;
+        default:
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = Sprintf("unknown auto partitioning policy %" PRIu32,
+                            (ui32)policy.auto_partitioning());
+            return false;
+        }
+        // Apply uniform partitions overwrites.
+        switch (policy.partitions_case()) {
+        case Ydb::Table::PartitioningPolicy::kUniformPartitions:
+            partitioningPolicy.SetUniformPartitionsCount(policy.uniform_partitions());
+            break;
+        case Ydb::Table::PartitioningPolicy::kExplicitPartitions:
             if (!CopyExplicitPartitions(tableDesc, policy.explicit_partitions(), code, error))
-                return false; 
-            break; 
-        default: 
-            break; 
-        } 
+                return false;
+            break;
+        default:
+            break;
+        }
     } else if (PartitioningPolicies.contains(tableProfile.GetPartitioningPolicy())) {
-        partitioningPolicy = PartitioningPolicies.at(tableProfile.GetPartitioningPolicy()); 
-    } 
- 
-    // Determine used storage policy. 
-    if (profile.has_storage_policy()) { 
-        auto &policy = profile.storage_policy(); 
-        if (policy.preset_name()) { 
+        partitioningPolicy = PartitioningPolicies.at(tableProfile.GetPartitioningPolicy());
+    }
+
+    // Determine used storage policy.
+    if (profile.has_storage_policy()) {
+        auto &policy = profile.storage_policy();
+        if (policy.preset_name()) {
             if (!StoragePolicies.contains(policy.preset_name())) {
-                code = Ydb::StatusIds::BAD_REQUEST; 
+                code = Ydb::StatusIds::BAD_REQUEST;
                 error = Sprintf("unknown storage policy preset '%s'", policy.preset_name().data());
-                return false; 
-            } 
-            storagePolicy = StoragePolicies.at(policy.preset_name()); 
+                return false;
+            }
+            storagePolicy = StoragePolicies.at(policy.preset_name());
         } else if (StoragePolicies.contains(tableProfile.GetStoragePolicy())) {
-            storagePolicy = StoragePolicies.at(tableProfile.GetStoragePolicy()); 
-        } 
-        // Apply overwritten storage settings for syslog. 
-        if (policy.has_syslog()) { 
-            auto &settings = *GetDefaultStorageConfig(storagePolicy)->MutableSysLog(); 
+            storagePolicy = StoragePolicies.at(tableProfile.GetStoragePolicy());
+        }
+        // Apply overwritten storage settings for syslog.
+        if (policy.has_syslog()) {
+            auto &settings = *GetDefaultStorageConfig(storagePolicy)->MutableSysLog();
             settings.SetPreferredPoolKind(policy.syslog().media());
-            settings.SetAllowOtherKinds(false); 
-        } 
-        // Apply overwritten storage settings for log. 
-        if (policy.has_log()) { 
-            auto &settings = *GetDefaultStorageConfig(storagePolicy)->MutableLog(); 
+            settings.SetAllowOtherKinds(false);
+        }
+        // Apply overwritten storage settings for log.
+        if (policy.has_log()) {
+            auto &settings = *GetDefaultStorageConfig(storagePolicy)->MutableLog();
             settings.SetPreferredPoolKind(policy.log().media());
-            settings.SetAllowOtherKinds(false); 
-        } 
-        // Apply overwritten storage settings for data. 
-        if (policy.has_data()) { 
-            auto &settings = *GetDefaultStorageConfig(storagePolicy)->MutableData(); 
+            settings.SetAllowOtherKinds(false);
+        }
+        // Apply overwritten storage settings for data.
+        if (policy.has_data()) {
+            auto &settings = *GetDefaultStorageConfig(storagePolicy)->MutableData();
             settings.SetPreferredPoolKind(policy.data().media());
-            settings.SetAllowOtherKinds(false); 
-        } 
-        // Apply overwritten storage settings for external. 
-        if (policy.has_external()) { 
-            auto &settings = *GetDefaultStorageConfig(storagePolicy)->MutableExternal(); 
+            settings.SetAllowOtherKinds(false);
+        }
+        // Apply overwritten storage settings for external.
+        if (policy.has_external()) {
+            auto &settings = *GetDefaultStorageConfig(storagePolicy)->MutableExternal();
             settings.SetPreferredPoolKind(policy.external().media());
-            settings.SetAllowOtherKinds(false); 
-        } 
-        switch (policy.keep_in_memory()) { 
+            settings.SetAllowOtherKinds(false);
+        }
+        switch (policy.keep_in_memory()) {
         case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
-            break; 
+            break;
         case Ydb::FeatureFlag::ENABLED:
             if (!AppData()->FeatureFlags.GetEnablePublicApiKeepInMemory()) {
                 code = Ydb::StatusIds::BAD_REQUEST;
@@ -227,16 +227,16 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
                 return false;
             }
             GetDefaultFamilyDescription(storagePolicy)->SetColumnCache(NKikimrSchemeOp::ColumnCacheEver);
-            break; 
+            break;
         case Ydb::FeatureFlag::DISABLED:
-            GetDefaultFamilyDescription(storagePolicy)->ClearColumnCache(); 
-            break; 
-        default: 
-            code = Ydb::StatusIds::BAD_REQUEST; 
-            error = Sprintf("unknown keep-in-memory featrure flag status %" PRIu32, 
-                            (ui32)policy.keep_in_memory()); 
-            return false; 
-        } 
+            GetDefaultFamilyDescription(storagePolicy)->ClearColumnCache();
+            break;
+        default:
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = Sprintf("unknown keep-in-memory featrure flag status %" PRIu32,
+                            (ui32)policy.keep_in_memory());
+            return false;
+        }
 
         // Perform the same overrides for each named policy there is
         for (auto& family : policy.column_families()) {
@@ -306,87 +306,87 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
             }
         }
     } else if (StoragePolicies.contains(tableProfile.GetStoragePolicy())) {
-        storagePolicy = StoragePolicies.at(tableProfile.GetStoragePolicy()); 
-    } 
- 
-    // Determine used replication policy. 
-    if (profile.has_replication_policy()) { 
-        auto &policy = profile.replication_policy(); 
-        if (policy.preset_name()) { 
+        storagePolicy = StoragePolicies.at(tableProfile.GetStoragePolicy());
+    }
+
+    // Determine used replication policy.
+    if (profile.has_replication_policy()) {
+        auto &policy = profile.replication_policy();
+        if (policy.preset_name()) {
             if (!ReplicationPolicies.contains(policy.preset_name())) {
-                code = Ydb::StatusIds::BAD_REQUEST; 
+                code = Ydb::StatusIds::BAD_REQUEST;
                 error = Sprintf("unknown replciation policy preset '%s'", policy.preset_name().data());
-                return false; 
-            } 
-            replicationPolicy = ReplicationPolicies.at(policy.preset_name()); 
+                return false;
+            }
+            replicationPolicy = ReplicationPolicies.at(policy.preset_name());
         } else if (ReplicationPolicies.contains(tableProfile.GetReplicationPolicy())) {
-            replicationPolicy = ReplicationPolicies.at(tableProfile.GetReplicationPolicy()); 
-        } 
-        if (policy.replicas_count()) 
+            replicationPolicy = ReplicationPolicies.at(tableProfile.GetReplicationPolicy());
+        }
+        if (policy.replicas_count())
             replicationPolicy.SetFollowerCount(policy.replicas_count());
-        switch (policy.create_per_availability_zone()) { 
+        switch (policy.create_per_availability_zone()) {
         case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
-            break; 
+            break;
         case Ydb::FeatureFlag::ENABLED:
-            replicationPolicy.SetCrossDataCenter(true); 
-            break; 
+            replicationPolicy.SetCrossDataCenter(true);
+            break;
         case Ydb::FeatureFlag::DISABLED:
-            replicationPolicy.SetCrossDataCenter(false); 
-            break; 
-        default: 
-            code = Ydb::StatusIds::BAD_REQUEST; 
-            error = Sprintf("unknown create_per_availability_zone featrure flag status %" PRIu32, 
-                            (ui32)policy.create_per_availability_zone()); 
-            return false; 
-        } 
-        switch (policy.allow_promotion()) { 
+            replicationPolicy.SetCrossDataCenter(false);
+            break;
+        default:
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = Sprintf("unknown create_per_availability_zone featrure flag status %" PRIu32,
+                            (ui32)policy.create_per_availability_zone());
+            return false;
+        }
+        switch (policy.allow_promotion()) {
         case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
-            break; 
+            break;
         case Ydb::FeatureFlag::ENABLED:
             replicationPolicy.SetAllowFollowerPromotion(true);
-            break; 
+            break;
         case Ydb::FeatureFlag::DISABLED:
             replicationPolicy.SetAllowFollowerPromotion(false);
-            break; 
-        default: 
-            code = Ydb::StatusIds::BAD_REQUEST; 
-            error = Sprintf("unknown allow_promotion featrure flag status %" PRIu32, 
-                            (ui32)policy.allow_promotion()); 
-            return false; 
-        } 
+            break;
+        default:
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = Sprintf("unknown allow_promotion featrure flag status %" PRIu32,
+                            (ui32)policy.allow_promotion());
+            return false;
+        }
     } else if (ReplicationPolicies.contains(tableProfile.GetReplicationPolicy())) {
-        replicationPolicy = ReplicationPolicies.at(tableProfile.GetReplicationPolicy()); 
-    } 
- 
-    // Determine used caching policy. 
-    if (profile.has_caching_policy()) { 
-        auto &policy = profile.caching_policy(); 
+        replicationPolicy = ReplicationPolicies.at(tableProfile.GetReplicationPolicy());
+    }
+
+    // Determine used caching policy.
+    if (profile.has_caching_policy()) {
+        auto &policy = profile.caching_policy();
         if (!CachingPolicies.contains(policy.preset_name())) {
-            code = Ydb::StatusIds::BAD_REQUEST; 
+            code = Ydb::StatusIds::BAD_REQUEST;
             error = Sprintf("unknown caching policy preset '%s'", policy.preset_name().data());
-            return false; 
-        } 
-        cachingPolicy = CachingPolicies.at(policy.preset_name()); 
+            return false;
+        }
+        cachingPolicy = CachingPolicies.at(policy.preset_name());
     } else if (CachingPolicies.contains(tableProfile.GetCachingPolicy())) {
-        cachingPolicy = CachingPolicies.at(tableProfile.GetCachingPolicy()); 
-    } 
- 
-    // Apply compaction policy to table description. 
-    if (compactionPolicy.HasCompactionPolicy()) 
-        partitionConfig.MutableCompactionPolicy()->CopyFrom(compactionPolicy.GetCompactionPolicy()); 
- 
-    // Apply execution policy. 
-    if (executionPolicy.HasPipelineConfig()) 
-        partitionConfig.MutablePipelineConfig()->CopyFrom(executionPolicy.GetPipelineConfig()); 
-    if (executionPolicy.HasResourceProfile()) 
-        partitionConfig.SetResourceProfile(executionPolicy.GetResourceProfile()); 
-    if (executionPolicy.HasEnableFilterByKey()) 
-        partitionConfig.SetEnableFilterByKey(executionPolicy.GetEnableFilterByKey()); 
-    if (executionPolicy.HasExecutorFastLogPolicy()) 
-        partitionConfig.SetExecutorFastLogPolicy(executionPolicy.GetExecutorFastLogPolicy()); 
-    if (executionPolicy.HasTxReadSizeLimit()) 
-        partitionConfig.SetTxReadSizeLimit(executionPolicy.GetTxReadSizeLimit()); 
- 
+        cachingPolicy = CachingPolicies.at(tableProfile.GetCachingPolicy());
+    }
+
+    // Apply compaction policy to table description.
+    if (compactionPolicy.HasCompactionPolicy())
+        partitionConfig.MutableCompactionPolicy()->CopyFrom(compactionPolicy.GetCompactionPolicy());
+
+    // Apply execution policy.
+    if (executionPolicy.HasPipelineConfig())
+        partitionConfig.MutablePipelineConfig()->CopyFrom(executionPolicy.GetPipelineConfig());
+    if (executionPolicy.HasResourceProfile())
+        partitionConfig.SetResourceProfile(executionPolicy.GetResourceProfile());
+    if (executionPolicy.HasEnableFilterByKey())
+        partitionConfig.SetEnableFilterByKey(executionPolicy.GetEnableFilterByKey());
+    if (executionPolicy.HasExecutorFastLogPolicy())
+        partitionConfig.SetExecutorFastLogPolicy(executionPolicy.GetExecutorFastLogPolicy());
+    if (executionPolicy.HasTxReadSizeLimit())
+        partitionConfig.SetTxReadSizeLimit(executionPolicy.GetTxReadSizeLimit());
+
     if (executionPolicy.HasEnableEraseCache())
         partitionConfig.SetEnableEraseCache(executionPolicy.GetEnableEraseCache());
     if (executionPolicy.HasEraseCacheMinRows())
@@ -394,54 +394,54 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
     if (executionPolicy.HasEraseCacheMaxBytes())
         partitionConfig.SetEraseCacheMaxBytes(executionPolicy.GetEraseCacheMaxBytes());
 
-    // Apply partitioning policy. 
-    if (partitioningPolicy.HasUniformPartitionsCount()) 
-        tableDesc.SetUniformPartitionsCount(partitioningPolicy.GetUniformPartitionsCount()); 
-    if (partitioningPolicy.GetAutoSplit()) { 
-        auto &policy = *partitionConfig.MutablePartitioningPolicy(); 
-        policy.SetSizeToSplit(partitioningPolicy.GetSizeToSplit()); 
-        if (!policy.GetSizeToSplit()) 
-            policy.SetSizeToSplit(1 << 30); 
-        if (partitioningPolicy.HasMaxPartitionsCount()) 
-            policy.SetMaxPartitionsCount(partitioningPolicy.GetMaxPartitionsCount()); 
-        if (partitioningPolicy.GetAutoMerge()) { 
-            policy.SetMinPartitionsCount(1); 
-            if (policy.GetMinPartitionsCount() < partitioningPolicy.GetUniformPartitionsCount()) 
-                policy.SetMinPartitionsCount(partitioningPolicy.GetUniformPartitionsCount()); 
+    // Apply partitioning policy.
+    if (partitioningPolicy.HasUniformPartitionsCount())
+        tableDesc.SetUniformPartitionsCount(partitioningPolicy.GetUniformPartitionsCount());
+    if (partitioningPolicy.GetAutoSplit()) {
+        auto &policy = *partitionConfig.MutablePartitioningPolicy();
+        policy.SetSizeToSplit(partitioningPolicy.GetSizeToSplit());
+        if (!policy.GetSizeToSplit())
+            policy.SetSizeToSplit(1 << 30);
+        if (partitioningPolicy.HasMaxPartitionsCount())
+            policy.SetMaxPartitionsCount(partitioningPolicy.GetMaxPartitionsCount());
+        if (partitioningPolicy.GetAutoMerge()) {
+            policy.SetMinPartitionsCount(1);
+            if (policy.GetMinPartitionsCount() < partitioningPolicy.GetUniformPartitionsCount())
+                policy.SetMinPartitionsCount(partitioningPolicy.GetUniformPartitionsCount());
             if (policy.GetMinPartitionsCount() < (ui32)tableDesc.GetSplitBoundary().size() + 1)
                 policy.SetMinPartitionsCount(tableDesc.GetSplitBoundary().size() + 1);
-        } 
-    } 
- 
-    // Apply storage config. 
-    for (auto &family : storagePolicy.GetColumnFamilies()) 
-        partitionConfig.AddColumnFamilies()->CopyFrom(family); 
- 
-    // Apply replication policy. 
+        }
+    }
+
+    // Apply storage config.
+    for (auto &family : storagePolicy.GetColumnFamilies())
+        partitionConfig.AddColumnFamilies()->CopyFrom(family);
+
+    // Apply replication policy.
     if (replicationPolicy.GetFollowerCount()) {
         auto& followerGroup = *partitionConfig.AddFollowerGroups();
         followerGroup.SetFollowerCount(replicationPolicy.GetFollowerCount());
-        if (replicationPolicy.GetCrossDataCenter()) 
+        if (replicationPolicy.GetCrossDataCenter())
             followerGroup.SetRequireAllDataCenters(true);
-        else 
+        else
             followerGroup.SetRequireAllDataCenters(false);
         if (replicationPolicy.HasAllowFollowerPromotion()) {
             followerGroup.SetAllowLeaderPromotion(replicationPolicy.GetAllowFollowerPromotion());
         }
-    } 
- 
-    if (cachingPolicy.HasExecutorCacheSize()) 
-        partitionConfig.SetExecutorCacheSize(cachingPolicy.GetExecutorCacheSize()); 
- 
-    return true; 
-} 
- 
+    }
+
+    if (cachingPolicy.HasExecutorCacheSize())
+        partitionConfig.SetExecutorCacheSize(cachingPolicy.GetExecutorCacheSize());
+
+    return true;
+}
+
 bool TTableProfiles::ApplyCompactionPolicy(const TString &name,
     NKikimrSchemeOp::TPartitionConfig &partitionConfig, Ydb::StatusIds::StatusCode &code,
     TString &error, const TAppData* appData) const
 {
     NKikimrConfig::TCompactionPolicy compactionPolicy;
- 
+
     if (!CompactionPolicies.contains(name)) {
         code = Ydb::StatusIds::BAD_REQUEST;
         error = Sprintf("unknown compaction policy preset '%s'", name.c_str());
@@ -459,5 +459,5 @@ bool TTableProfiles::ApplyCompactionPolicy(const TString &name,
 }
 
 
-} // namespace NGRpcService 
-} // namespace NKikimr 
+} // namespace NGRpcService
+} // namespace NKikimr

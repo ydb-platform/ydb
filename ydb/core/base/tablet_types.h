@@ -33,8 +33,8 @@ public:
     static constexpr EType BLOCKSTORE_PARTITION = BlockStorePartition;
     static constexpr EType BLOCKSTORE_PARTITION2 = BlockStorePartition2;
     static constexpr EType BLOCKSTORE_DISK_REGISTRY = BlockStoreDiskRegistry;
-    static constexpr EType TENANT_SLOT_BROKER = TenantSlotBroker; 
-    static constexpr EType CONSOLE = Console; 
+    static constexpr EType TENANT_SLOT_BROKER = TenantSlotBroker;
+    static constexpr EType CONSOLE = Console;
     static constexpr EType KESUS = Kesus;
     static constexpr EType SYS_VIEW_PROCESSOR = SysViewProcessor;
     static constexpr EType FILESTORE = FileStore;

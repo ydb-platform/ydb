@@ -120,9 +120,9 @@ namespace NMiniKQL {
     TComputationNodeFactory GetFlatProxyExecutionFactory(TProxyExecData& execData);
 
     NUdf::TUnboxedValue PerformLocalSelectRow(TCallable& callable, IEngineFlatHost& engineHost,
-        const THolderFactory& holderFactory, const TTypeEnvironment& env); 
+        const THolderFactory& holderFactory, const TTypeEnvironment& env);
     NUdf::TUnboxedValue PerformLocalSelectRange(TCallable& callable, IEngineFlatHost& engineHost,
-        const THolderFactory& holderFactory, const TTypeEnvironment& env); 
+        const THolderFactory& holderFactory, const TTypeEnvironment& env);
 
     struct TEngineFlatApplyContext : public NUdf::IApplyContext {
         bool IsAborted = false;

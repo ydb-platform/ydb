@@ -20,7 +20,7 @@ message StatusIds {
         TIMEOUT =             400090;
         BAD_SESSION =         400100;
         PRECONDITION_FAILED = 400120;
-        ALREADY_EXISTS      = 400130; 
+        ALREADY_EXISTS      = 400130;
         NOT_FOUND =           400140;
         SESSION_EXPIRED =     400150;
         CANCELLED =           400160;

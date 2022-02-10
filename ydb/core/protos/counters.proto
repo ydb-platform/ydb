@@ -80,7 +80,7 @@ enum ETxTypeCumulativeCounters {
     COUNTER_TT_COMMITED_CPUTIME = 9                      [(CounterOpts) = {Name: "CommitedCPUTime"}];
     COUNTER_TT_TOUCHED_BLOCKS = 10                       [(CounterOpts) = {Name: "TouchedBlocks"}];
     COUNTER_TT_LOADED_BLOCKS = 11                        [(CounterOpts) = {Name: "LoadedBlocks"}];
-    COUNTER_TT_TERMINATED = 12                           [(CounterOpts) = {Name: "Terminated"}]; 
+    COUNTER_TT_TERMINATED = 12                           [(CounterOpts) = {Name: "Terminated"}];
     COUNTER_TT_REDO_WRITTEN_BYTES = 13                   [(CounterOpts) = {Name: "RedoWrittenBytes"}];
     COUNTER_TT_ANNEX_WRITTEN_BYTES = 14                  [(CounterOpts) = {Name: "AnnexWrittenBytes"}];
 }

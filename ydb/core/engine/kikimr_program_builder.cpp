@@ -1,7 +1,7 @@
 #include "kikimr_program_builder.h"
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
- 
+
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_node_visitor.h>
 #include <ydb/library/yql/minikql/mkql_node_printer.h>
@@ -24,14 +24,14 @@ TType* ValidateColumns(
     tagsBuilder.Reserve(columns.size());
     for (auto& col : columns) {
         MKQL_ENSURE(col.SchemeType != 0, "Null type is not allowed");
-        TDataType *dataType; 
-        if (col.SchemeType == NYql::NProto::TypeIds::Decimal) 
-            dataType = TDataDecimalType::Create( 
-                NScheme::DECIMAL_PRECISION, 
-                NScheme::DECIMAL_SCALE, 
-                builder->GetTypeEnvironment()); 
-        else 
-            dataType = TDataType::Create(col.SchemeType, builder->GetTypeEnvironment()); 
+        TDataType *dataType;
+        if (col.SchemeType == NYql::NProto::TypeIds::Decimal)
+            dataType = TDataDecimalType::Create(
+                NScheme::DECIMAL_PRECISION,
+                NScheme::DECIMAL_SCALE,
+                builder->GetTypeEnvironment());
+        else
+            dataType = TDataType::Create(col.SchemeType, builder->GetTypeEnvironment());
         auto optType = TOptionalType::Create(dataType, builder->GetTypeEnvironment());
         rowTypeBuilder.Add(col.Label, optType);
         tagsBuilder.Add(col.Label, builder->NewDataLiteral<ui32>(col.ColumnId));

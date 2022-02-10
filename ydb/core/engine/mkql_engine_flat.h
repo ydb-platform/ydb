@@ -174,7 +174,7 @@ public:
         TValidationInfo(const TValidationInfo&) = delete;
 
         bool HasWrites() const { return WritesCount > 0; }
-        bool HasReads() const { return ReadsCount > 0; } 
+        bool HasReads() const { return ReadsCount > 0; }
 
         void Clear() {
             Keys.clear();
@@ -220,7 +220,7 @@ public:
     virtual ui32 GetOutgoingReadsetsCount() const noexcept = 0;
     virtual TReadSet GetOutgoingReadset(ui32 index) const = 0;
     virtual void AfterOutgoingReadsetsExtracted() noexcept = 0;
-    virtual bool IsAfterOutgoingReadsetsExtracted() noexcept = 0; 
+    virtual bool IsAfterOutgoingReadsetsExtracted() noexcept = 0;
 
     virtual EResult PrepareIncomingReadsets() = 0;
     virtual ui32 GetExpectedIncomingReadsetsCount() const noexcept = 0;
@@ -231,16 +231,16 @@ public:
     virtual EResult PinPages(ui64 pageFaultCount = 0) = 0;
     virtual EResult Execute() = 0;
     virtual TString GetShardReply(ui64 origin) const noexcept = 0;
- 
-    virtual size_t GetMemoryUsed() const noexcept = 0; 
-    virtual size_t GetMemoryAllocated() const noexcept = 0; 
- 
-    virtual size_t GetMemoryLimit() const noexcept = 0; 
-    virtual void SetMemoryLimit(size_t limit) noexcept = 0; 
- 
+
+    virtual size_t GetMemoryUsed() const noexcept = 0;
+    virtual size_t GetMemoryAllocated() const noexcept = 0;
+
+    virtual size_t GetMemoryLimit() const noexcept = 0;
+    virtual void SetMemoryLimit(size_t limit) noexcept = 0;
+
     virtual void SetDeadline(const TInstant& deadline) noexcept = 0;
 
-    virtual void ReleaseUnusedMemory() noexcept = 0; 
+    virtual void ReleaseUnusedMemory() noexcept = 0;
 };
 
 } // namespace NMiniKQL

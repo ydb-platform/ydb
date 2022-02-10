@@ -1,20 +1,20 @@
-#pragma once 
-#include "defs.h" 
-#include "operation.h" 
-#include "datashard_impl.h" 
- 
-namespace NKikimr { 
+#pragma once
+#include "defs.h"
+#include "operation.h"
+#include "datashard_impl.h"
+
+namespace NKikimr {
 namespace NDataShard {
- 
-struct TSetupSysLocks { 
-    TSysLocks &SysLocksTable; 
- 
-    TSetupSysLocks(TOperation::TPtr op, 
+
+struct TSetupSysLocks {
+    TSysLocks &SysLocksTable;
+
+    TSetupSysLocks(TOperation::TPtr op,
                    TDataShard &self)
-        : SysLocksTable(self.SysLocksTable()) 
-    { 
+        : SysLocksTable(self.SysLocksTable())
+    {
         TLocksUpdate &update = op->LocksUpdate();
- 
+
         update.Clear();
         update.LockTxId = op->LockTxId();
 
@@ -33,18 +33,18 @@ struct TSetupSysLocks {
         }
 
         SysLocksTable.SetTxUpdater(&update);
-        if (!op->LocksCache().Locks.empty()) 
-            SysLocksTable.SetCache(&op->LocksCache()); 
-        else 
-            SysLocksTable.SetAccessLog(&op->LocksAccessLog()); 
-    } 
- 
-    ~TSetupSysLocks() { 
-        SysLocksTable.SetTxUpdater(nullptr); 
-        SysLocksTable.SetCache(nullptr); 
-        SysLocksTable.SetAccessLog(nullptr); 
-    } 
-}; 
- 
+        if (!op->LocksCache().Locks.empty())
+            SysLocksTable.SetCache(&op->LocksCache());
+        else
+            SysLocksTable.SetAccessLog(&op->LocksAccessLog());
+    }
+
+    ~TSetupSysLocks() {
+        SysLocksTable.SetTxUpdater(nullptr);
+        SysLocksTable.SetCache(nullptr);
+        SysLocksTable.SetAccessLog(nullptr);
+    }
+};
+
 } // namespace NDataShard
-} // namespace NKikimr 
+} // namespace NKikimr

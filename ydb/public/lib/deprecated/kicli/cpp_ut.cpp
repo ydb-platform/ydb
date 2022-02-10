@@ -30,8 +30,8 @@ Tests::TServer StartupKikimr(NMsgBusProxy::TMsgBusClientConfig& clientConfig,
 }
 
 Tests::TServer StartupKikimr(NGRpcProxy::TGRpcClientConfig& clientConfig,
-                             const TAutoPtr<TLogBackend> logBackend = {}, 
-                             const NKikimrConfig::TAppConfig &config = {}) 
+                             const TAutoPtr<TLogBackend> logBackend = {},
+                             const NKikimrConfig::TAppConfig &config = {})
 {
     TPortManager pm;
     const ui32 msgbusPort = pm.GetPort(12001);
@@ -39,7 +39,7 @@ Tests::TServer StartupKikimr(NGRpcProxy::TGRpcClientConfig& clientConfig,
 
     auto settings = Tests::TServerSettings(msgbusPort);
     settings.SetLogBackend(logBackend);
-    settings.AppConfig.CopyFrom(config); 
+    settings.AppConfig.CopyFrom(config);
     settings.SetEnableSystemViews(false);
     settings.SetEnableMvcc(false);
 
@@ -2138,37 +2138,37 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 }
 
 NKikimrTxUserProxy::TKeyRange MakeRange(const TVector<TString> from, const TVector<TString> to,
-                                        bool fromInclusive, bool toInclusive) 
-{ 
-    NKikimrTxUserProxy::TKeyRange range; 
-    if (!from.empty()) { 
-        range.MutableFrom()->MutableType()->SetKind(NKikimrMiniKQL::Tuple); 
-        auto &tuple = *range.MutableFrom()->MutableType()->MutableTuple(); 
-        for (auto &s : from) { 
-            if (s) 
+                                        bool fromInclusive, bool toInclusive)
+{
+    NKikimrTxUserProxy::TKeyRange range;
+    if (!from.empty()) {
+        range.MutableFrom()->MutableType()->SetKind(NKikimrMiniKQL::Tuple);
+        auto &tuple = *range.MutableFrom()->MutableType()->MutableTuple();
+        for (auto &s : from) {
+            if (s)
                 range.MutableFrom()->MutableValue()->AddTuple()->MutableOptional()->SetText(s);
-            auto &elem = *tuple.AddElement(); 
+            auto &elem = *tuple.AddElement();
             elem.SetKind(NKikimrMiniKQL::Optional);
             auto &item = *elem.MutableOptional()->MutableItem();
             item.SetKind(NKikimrMiniKQL::Data);
             item.MutableData()->SetScheme(NUdf::TDataType<NUdf::TUtf8>::Id);
-        } 
-    } 
-    if (!to.empty()) { 
-        range.MutableTo()->MutableType()->SetKind(NKikimrMiniKQL::Tuple); 
-        auto &tuple = *range.MutableTo()->MutableType()->MutableTuple(); 
-        for (auto &s : to) { 
-            if (s) 
+        }
+    }
+    if (!to.empty()) {
+        range.MutableTo()->MutableType()->SetKind(NKikimrMiniKQL::Tuple);
+        auto &tuple = *range.MutableTo()->MutableType()->MutableTuple();
+        for (auto &s : to) {
+            if (s)
                 range.MutableTo()->MutableValue()->AddTuple()->MutableOptional()->SetText(s);
-            auto &elem = *tuple.AddElement(); 
+            auto &elem = *tuple.AddElement();
             elem.SetKind(NKikimrMiniKQL::Optional);
             auto &item = *elem.MutableOptional()->MutableItem();
             item.SetKind(NKikimrMiniKQL::Data);
             item.MutableData()->SetScheme(NUdf::TDataType<NUdf::TUtf8>::Id);
-        } 
-    } 
-    range.SetFromInclusive(fromInclusive); 
-    range.SetToInclusive(toInclusive); 
- 
-    return range; 
-} 
+        }
+    }
+    range.SetFromInclusive(fromInclusive);
+    range.SetToInclusive(toInclusive);
+
+    return range;
+}

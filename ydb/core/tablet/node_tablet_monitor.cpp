@@ -69,7 +69,7 @@ public:
                 }
                 TABLEBODY() {
                 for (const auto& ni : NodesInfo->Nodes) {
-                    const TEvInterconnect::TNodeInfo &nodeInfo = ni; 
+                    const TEvInterconnect::TNodeInfo &nodeInfo = ni;
                     TABLER() {
                         TABLED() {str << "<a href=\"nodetabmon?action=browse_tablets&node_id=" << nodeInfo.NodeId << "\">"
                                 << nodeInfo.NodeId << "</a>";}
@@ -233,7 +233,7 @@ public:
                 continue;
             auto eq_it = EqualRange(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end(), ni.first);
             if (eq_it.first != NodesInfo->Nodes.end() && ni.second) {
-                const TEvInterconnect::TNodeInfo& nodeInfo = *eq_it.first; 
+                const TEvInterconnect::TNodeInfo& nodeInfo = *eq_it.first;
                 for (const auto& ti : ni.second->Record.GetTabletStateInfo()) {
                     if (filter(ti)) {
                         ui64 index = EqualRange(tabletIdIndex.begin(), tabletIdIndex.end(), ti.GetTabletId()).first - tabletIdIndex.begin();

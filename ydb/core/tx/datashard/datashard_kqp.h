@@ -31,7 +31,7 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
 void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrTxDataShard::TKqpTransaction& kqpTx,
     NKqp::TKqpTasksRunner& tasksRunner, TSysLocks& sysLocks, ui64 tabletId);
 
-void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets, 
+void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets,
     const NKikimrTxDataShard::TKqpTransaction& kqpTx, ui64 tabletId);
 
 bool KqpValidateLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks);

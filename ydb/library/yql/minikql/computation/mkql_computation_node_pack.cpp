@@ -489,12 +489,12 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
             buf.Skip(16);
             return MakeString(NUdf::TStringRef(ptr, 16));
         }
-        case NUdf::EDataSlot::Decimal: { 
+        case NUdf::EDataSlot::Decimal: {
             const auto des = NYql::NDecimal::Deserialize(buf.data());
             MKQL_ENSURE(!NYql::NDecimal::IsError(des.first), "Bad packed data: invalid decimal.");
             buf.Skip(des.second);
             return NUdf::TUnboxedValuePod(des.first);
-        } 
+        }
         default:
             ui32 size = 0;
             if (Properties.Test(EProps::UseTopLength)) {
@@ -734,11 +734,11 @@ void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& val
             NDetails::PackUInt16(value.GetTimezoneId(), Buffer);
             break;
         }
-        case NUdf::EDataSlot::Decimal: { 
+        case NUdf::EDataSlot::Decimal: {
             char buff[0x10U];
             Buffer.Append(buff, NYql::NDecimal::Serialize(value.GetInt128(), buff));
-            break; 
-        } 
+            break;
+        }
         default: {
             auto stringRef = value.AsStringRef();
             if (!Properties.Test(EProps::UseTopLength)) {

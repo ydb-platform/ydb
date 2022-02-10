@@ -20,16 +20,16 @@ class TEngineHolder;
 class TFakeMiniKQLProxy;
 class TFakeProxyTx;
 
-constexpr ui64 FAKE_SCHEMESHARD_TABLET_ID = 4200; 
+constexpr ui64 FAKE_SCHEMESHARD_TABLET_ID = 4200;
 constexpr ui64 FAKE_TX_ALLOCATOR_TABLET_ID = 4201;
- 
+
 ///
 class TTester : public TNonCopyable {
 public:
     friend class TEngineHolder;
     friend class TFakeMiniKQLProxy;
     friend class TFakeProxyTx;
-    friend class TFakeScanTx; 
+    friend class TFakeScanTx;
 
     using TKeyResolver = std::function<void(TKeyDesc&)>;
 
@@ -184,27 +184,27 @@ public:
 
     /// @return shards count
     ui32 SetProgram(TTester& tester, const TString& programText);
-    virtual ui32 SetProgram(TTester& tester); 
+    virtual ui32 SetProgram(TTester& tester);
     /// @return shardId
-    virtual ui32 GetShardProgram(ui32 idx, TString& outTxBody); 
+    virtual ui32 GetShardProgram(ui32 idx, TString& outTxBody);
     void AddProposeShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event);
-    virtual void AddPlanStepShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event, bool complete); 
+    virtual void AddPlanStepShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event, bool complete);
 
-    virtual IEngineFlat::EStatus GetStatus(bool atPropose); 
-    virtual NKikimrMiniKQL::TResult GetResult() const; 
+    virtual IEngineFlat::EStatus GetStatus(bool atPropose);
+    virtual NKikimrMiniKQL::TResult GetResult() const;
 
     ui64 TxId() const { return TxId_; }
     ui32 TxFlags() const { return TxFlags_; }
     TString TxBody() const { return TxBody_; }
-    NKikimrTxDataShard::ETransactionKind TxKind() { return TxKind_; } 
+    NKikimrTxDataShard::ETransactionKind TxKind() { return TxKind_; }
     bool IsDataTx() const { return TxKind_ == NKikimrTxDataShard::TX_KIND_DATA; }
-    bool IsReadTable() const { return TxKind_ == NKikimrTxDataShard::TX_KIND_SCAN; } 
+    bool IsReadTable() const { return TxKind_ == NKikimrTxDataShard::TX_KIND_SCAN; }
     bool HasErrors() const { return !Errors.empty(); }
     bool Immediate() const { return IsDataTx() && (ShardsCount_ < 2) && !(TxFlags_ & NDataShard::TTxFlags::ForceOnline); }
     ui32 ShardsCount() const { return ShardsCount_; }
 
     void SetKindSchema() { TxKind_ = NKikimrTxDataShard::TX_KIND_SCHEME; }
-    void SetKindScan() { TxKind_ = NKikimrTxDataShard::TX_KIND_SCAN; } 
+    void SetKindScan() { TxKind_ = NKikimrTxDataShard::TX_KIND_SCAN; }
 
     TBalanceCoverageBuilder * GetCoverageBuilder(ui64 shard);
 
@@ -218,9 +218,9 @@ public:
         return true;
     }
 
-protected: 
+protected:
     ui64 TxId_;
-    NKikimrTxDataShard::ETransactionKind TxKind_; 
+    NKikimrTxDataShard::ETransactionKind TxKind_;
     TString TxBody_;
     ui32 TxFlags_;
     ui32 ShardsCount_;
@@ -229,27 +229,27 @@ protected:
 };
 
 ///
-class TFakeScanTx : public TFakeProxyTx { 
-public: 
+class TFakeScanTx : public TFakeProxyTx {
+public:
     TFakeScanTx(ui64 txId, const TString& txBody, ui32 flags = NDataShard::TTxFlags::Default)
-        : TFakeProxyTx(txId, txBody, flags) 
-        , Status(IEngineFlat::EStatus::Unknown) 
-    { 
-        SetKindScan(); 
-    } 
- 
-    ui32 SetProgram(TTester& tester) override; 
-    ui32 GetShardProgram(ui32 idx, TString& outTxBody) override; 
-    void AddPlanStepShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event, bool complete) override; 
+        : TFakeProxyTx(txId, txBody, flags)
+        , Status(IEngineFlat::EStatus::Unknown)
+    {
+        SetKindScan();
+    }
+
+    ui32 SetProgram(TTester& tester) override;
+    ui32 GetShardProgram(ui32 idx, TString& outTxBody) override;
+    void AddPlanStepShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event, bool complete) override;
     YdbOld::ResultSet GetScanResult() const;
-    IEngineFlat::EStatus GetStatus(bool atPropose) override; 
- 
-private: 
+    IEngineFlat::EStatus GetStatus(bool atPropose) override;
+
+private:
     YdbOld::ResultSet Result;
-    IEngineFlat::EStatus Status; 
-}; 
- 
-/// 
+    IEngineFlat::EStatus Status;
+};
+
+///
 class TFakeMiniKQLProxy {
 public:
     using IEngineFlat = NMiniKQL::IEngineFlat;
@@ -264,11 +264,11 @@ public:
 
     // Propose + Plan (if needed) in own step
     IEngineFlat::EStatus ExecSchemeCreateTable(const TString& schemaText, const TVector<ui64>& shards);
-    IEngineFlat::EStatus Execute(const TString& programText, NKikimrMiniKQL::TResult& out, 
-                                 bool waitForResult = true); 
-    IEngineFlat::EStatus Execute(const TString& programText, bool waitForResult = true) { 
+    IEngineFlat::EStatus Execute(const TString& programText, NKikimrMiniKQL::TResult& out,
+                                 bool waitForResult = true);
+    IEngineFlat::EStatus Execute(const TString& programText, bool waitForResult = true) {
         NKikimrMiniKQL::TResult result;
-        return Execute(programText, result, waitForResult); 
+        return Execute(programText, result, waitForResult);
     }
 
     void CheckedExecute(const TString& programText) {
@@ -283,7 +283,7 @@ public:
 
     void Enqueue(const TString& programText, std::function<bool(TFakeProxyTx&)> check = DoNothing,
                  ui32 flags = NDataShard::TTxFlags::ForceOnline);
-    void EnqueueScan(const TString& programText, std::function<bool(TFakeProxyTx&)> check = DoNothing, 
+    void EnqueueScan(const TString& programText, std::function<bool(TFakeProxyTx&)> check = DoNothing,
                  ui32 flags = NDataShard::TTxFlags::ForceOnline);
     void ExecQueue();
 
@@ -317,7 +317,7 @@ private:
     void ProposeSchemeCreateTable(TFakeProxyTx& tx, const TVector<ui64>& shards);
     void ProposeScheme(TFakeProxyTx& tx, const TVector<ui64>& shards,
         const std::function<NKikimrTxDataShard::TFlatSchemeTransaction(ui64)>& txBodyForShard);
-    ui64 Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& txs, bool waitForResult = true); 
+    ui64 Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& txs, bool waitForResult = true);
     void ResolveShards(const TSet<ui64>& shards);
 };
 
@@ -356,12 +356,12 @@ public:
     const TVector<TPKey>& GetKeys() const { return Engine->GetDbKeys(); }
 };
 
-THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql, 
-                                                      bool dml = true); 
- 
-void InitRoot(Tests::TServer::TPtr server, 
+THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
+                                                      bool dml = true);
+
+void InitRoot(Tests::TServer::TPtr server,
               TActorId sender);
- 
+
 enum class EShadowDataMode {
     Default,
     Enabled,
@@ -451,25 +451,25 @@ struct TShardedTableOptions {
     template<bool OPT1, bool OPT2>                                                                                                   \
     void N(NUnitTest::TTestContext&)
 
-void CreateShardedTable(Tests::TServer::TPtr server, 
+void CreateShardedTable(Tests::TServer::TPtr server,
                         TActorId sender,
-                        const TString &root, 
-                        const TString &name, 
+                        const TString &root,
+                        const TString &name,
                         const TShardedTableOptions &opts = TShardedTableOptions());
 
 void CreateShardedTable(Tests::TServer::TPtr server,
                         TActorId sender,
                         const TString &root,
                         const TString &name,
-                        ui64 shards, 
+                        ui64 shards,
                         bool enableOutOfOrder = true,
                         const NLocalDb::TCompactionPolicy* policy = nullptr,
                         EShadowDataMode shadowData = EShadowDataMode::Default);
- 
-TVector<ui64> GetTableShards(Tests::TServer::TPtr server, 
+
+TVector<ui64> GetTableShards(Tests::TServer::TPtr server,
                              TActorId sender,
-                             const TString &path); 
- 
+                             const TString &path);
+
 using TTableInfoMap = THashMap<TString, NKikimrTxDataShard::TEvGetInfoResponse::TUserTable>;
 
 std::pair<TTableInfoMap, ui64> GetTables(Tests::TServer::TPtr server,
@@ -601,28 +601,28 @@ void WaitTxNotification(Tests::TServer::TPtr server, ui64 txId);
 
 void SimulateSleep(Tests::TServer::TPtr server, TDuration duration);
 
-void SendSQL(Tests::TServer::TPtr server, 
+void SendSQL(Tests::TServer::TPtr server,
              TActorId sender,
-             const TString &sql, 
-             bool dml = true); 
-void ExecSQL(Tests::TServer::TPtr server, 
+             const TString &sql,
+             bool dml = true);
+void ExecSQL(Tests::TServer::TPtr server,
              TActorId sender,
-             const TString &sql, 
-             bool dml = true, 
-             Ydb::StatusIds::StatusCode code = Ydb::StatusIds::SUCCESS); 
- 
-struct IsTxResultComplete { 
-    bool operator()(IEventHandle& ev) 
-    { 
-        if (ev.GetTypeRewrite() == TEvDataShard::EvProposeTransactionResult) { 
-            auto status = ev.Get<TEvDataShard::TEvProposeTransactionResult>()->GetStatus(); 
-            if (status == NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE) 
-                return true; 
-        } 
-        return false; 
-    } 
-}; 
- 
+             const TString &sql,
+             bool dml = true,
+             Ydb::StatusIds::StatusCode code = Ydb::StatusIds::SUCCESS);
+
+struct IsTxResultComplete {
+    bool operator()(IEventHandle& ev)
+    {
+        if (ev.GetTypeRewrite() == TEvDataShard::EvProposeTransactionResult) {
+            auto status = ev.Get<TEvDataShard::TEvProposeTransactionResult>()->GetStatus();
+            if (status == NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE)
+                return true;
+        }
+        return false;
+    }
+};
+
 void WaitTabletBecomesOffline(Tests::TServer::TPtr server, ui64 tabletId);
 
 }

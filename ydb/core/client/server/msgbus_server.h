@@ -102,10 +102,10 @@ struct TEvBusProxy {
         EvDbBatch,
         EvInitRoot,
         EvChooseProxy,
- 
+
         EvStreamIsReadyNotUsed = EvRequest + 512,
         EvStreamIsDeadNotUsed,
- 
+
         EvEnd
     };
 
@@ -301,13 +301,13 @@ IActor* CreateMessageBusBlobStorageConfig(TBusMessageContext &msg);
 IActor* CreateMessageBusDrainNode(TBusMessageContext &msg);
 IActor* CreateMessageBusFillNode(TBusMessageContext &msg);
 IActor* CreateMessageBusResolveNode(TBusMessageContext &msg);
-IActor* CreateMessageBusRegisterNode(TBusMessageContext &msg); 
-IActor* CreateMessageBusCmsRequest(TBusMessageContext &msg); 
+IActor* CreateMessageBusRegisterNode(TBusMessageContext &msg);
+IActor* CreateMessageBusCmsRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusSqsRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusWhoAmI(TBusMessageContext &msg);
 IActor* CreateMessageBusS3ListingRequest(TBusMessageContext& msg);
 IActor* CreateMessageBusInterconnectDebug(TBusMessageContext& msg);
-IActor* CreateMessageBusConsoleRequest(TBusMessageContext &msg); 
+IActor* CreateMessageBusConsoleRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusTestShardControl(TBusMessageContext &msg);
 
 TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status, const NKikimrTxUserProxy::TEvProposeTransactionStatus &result);

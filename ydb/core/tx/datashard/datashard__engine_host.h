@@ -50,7 +50,7 @@ public:
     EResult Validate() {
         if (Info.Loaded)
             return EResult::Ok;
-        Y_VERIFY(Engine); 
+        Y_VERIFY(Engine);
         return Engine->Validate(Info);
     }
 
@@ -62,7 +62,7 @@ public:
 
     void AddReadRange(const TTableId& tableId, const TVector<ui32>& columns, const TTableRange& range,
                       const TVector<NScheme::TTypeId>& keyTypes, ui64 itemsLimit = 0, bool reverse = false);
- 
+
     void AddWriteRange(const TTableId& tableId, const TTableRange& range, const TVector<NScheme::TTypeId>& keyTypes);
 
     void MarkTxLoaded() {

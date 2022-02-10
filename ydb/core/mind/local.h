@@ -11,37 +11,37 @@
 #include <ydb/core/tablet/tablet_metrics.h>
 
 namespace NKikimr {
- 
-struct TRegistrationInfo { 
-    TString DomainName; 
-    TString TenantName; 
-    NKikimrTabletBase::TMetrics ResourceLimit; 
- 
-    TRegistrationInfo(const TString &domainPath) 
-    { 
-        DomainName = ExtractDomain(domainPath); 
-        TenantName = domainPath; 
-    } 
- 
-    TRegistrationInfo(const TString &domainName, NKikimrTabletBase::TMetrics resourceLimit) 
-        : TRegistrationInfo(domainName) 
-    { 
-        ResourceLimit.Swap(&resourceLimit); 
-    } 
- 
-    bool TenantIsDomain() const { 
-        return IsEqualPaths(DomainName, TenantName); 
-    } 
- 
-    TString GetDomain() const { 
-        return DomainName; 
-    } 
- 
-    TString GetTenant() const { 
-        return TenantName; 
-    } 
-}; 
- 
+
+struct TRegistrationInfo {
+    TString DomainName;
+    TString TenantName;
+    NKikimrTabletBase::TMetrics ResourceLimit;
+
+    TRegistrationInfo(const TString &domainPath)
+    {
+        DomainName = ExtractDomain(domainPath);
+        TenantName = domainPath;
+    }
+
+    TRegistrationInfo(const TString &domainName, NKikimrTabletBase::TMetrics resourceLimit)
+        : TRegistrationInfo(domainName)
+    {
+        ResourceLimit.Swap(&resourceLimit);
+    }
+
+    bool TenantIsDomain() const {
+        return IsEqualPaths(DomainName, TenantName);
+    }
+
+    TString GetDomain() const {
+        return DomainName;
+    }
+
+    TString GetTenant() const {
+        return TenantName;
+    }
+};
+
 
 struct TDrainProgress : public TThrRefBase {
     std::atomic_uint64_t Events = 0;
@@ -85,11 +85,11 @@ struct TEvLocal {
         EvEnumerateTabletsResult,
         EvTabletMetricsAck,
 
-        EvAddTenant = EvRegisterNode + 1024, 
-        EvRemoveTenant, 
-        EvAlterTenant, 
-        EvTenantStatus, 
- 
+        EvAddTenant = EvRegisterNode + 1024,
+        EvRemoveTenant,
+        EvAlterTenant,
+        EvTenantStatus,
+
         EvLocalDrainNode,
 
         EvEnd
@@ -111,11 +111,11 @@ struct TEvLocal {
         TEvPing()
         {}
 
-        TEvPing(ui64 hiveId, ui32 hiveGeneration, bool purge, const NKikimrLocal::TLocalConfig &config) { 
+        TEvPing(ui64 hiveId, ui32 hiveGeneration, bool purge, const NKikimrLocal::TLocalConfig &config) {
             Record.SetHiveId(hiveId);
             Record.SetHiveGeneration(hiveGeneration);
             Record.SetPurge(purge);
-            Record.MutableConfig()->CopyFrom(config); 
+            Record.MutableConfig()->CopyFrom(config);
         }
     };
 
@@ -262,83 +262,83 @@ struct TEvLocal {
     struct TEvTabletMetricsAck : public TEventPB<TEvTabletMetricsAck, NKikimrLocal::TEvTabletMetricsAck, EvTabletMetricsAck> {
     };
 
-    struct TEvAddTenant : public TEventLocal<TEvAddTenant, EvAddTenant> { 
-        TRegistrationInfo TenantInfo; 
+    struct TEvAddTenant : public TEventLocal<TEvAddTenant, EvAddTenant> {
+        TRegistrationInfo TenantInfo;
 
-        TEvAddTenant(const TString &domainName) 
-            : TenantInfo(domainName) 
-        {} 
-
-        TEvAddTenant(const TString &domainName, NKikimrTabletBase::TMetrics resourceLimit) 
-            : TenantInfo(domainName, resourceLimit) 
+        TEvAddTenant(const TString &domainName)
+            : TenantInfo(domainName)
         {}
 
-        TEvAddTenant(const TRegistrationInfo &info) 
-            : TenantInfo(info) 
+        TEvAddTenant(const TString &domainName, NKikimrTabletBase::TMetrics resourceLimit)
+            : TenantInfo(domainName, resourceLimit)
+        {}
+
+        TEvAddTenant(const TRegistrationInfo &info)
+            : TenantInfo(info)
         {}
     };
 
-    struct TEvRemoveTenant : public TEventLocal<TEvRemoveTenant, EvRemoveTenant> { 
+    struct TEvRemoveTenant : public TEventLocal<TEvRemoveTenant, EvRemoveTenant> {
         TString TenantName;
- 
-        TEvRemoveTenant(const TString &name) 
-            : TenantName(name) 
-        {} 
-    }; 
- 
-    struct TEvAlterTenant : public TEventLocal<TEvAlterTenant, EvAlterTenant> { 
-        TRegistrationInfo TenantInfo; 
- 
-        TEvAlterTenant(const TString &domainName) 
-            : TenantInfo(domainName) 
-        {} 
- 
-        TEvAlterTenant(const TString &domainName, NKikimrTabletBase::TMetrics resourceLimit) 
-            : TenantInfo(domainName, resourceLimit) 
-        {} 
- 
-        TEvAlterTenant(const TRegistrationInfo &info) 
-            : TenantInfo(info) 
-        {} 
-    }; 
- 
-    struct TEvTenantStatus : public TEventLocal<TEvTenantStatus, EvTenantStatus> { 
-        enum EStatus { 
-            STARTED, 
-            STOPPED, 
-            UNKNOWN_TENANT 
-        }; 
- 
-        TString TenantName; 
-        EStatus Status; 
-        NKikimrTabletBase::TMetrics ResourceLimit;
-        TString Error; 
-        THashMap<TString, TString> Attributes; 
-        TSubDomainKey DomainKey;
- 
-        TEvTenantStatus(const TString &tenant, EStatus status) 
-            : TenantName(tenant) 
-            , Status(status) 
-        {} 
 
-        TEvTenantStatus(const TString &tenant, EStatus status, const TString &error) 
-            : TenantName(tenant) 
-            , Status(status) 
-            , Error(error) 
-        {} 
- 
-        TEvTenantStatus(const TString &tenant, 
-                        EStatus status, 
-                        NKikimrTabletBase::TMetrics resourceLimit, 
+        TEvRemoveTenant(const TString &name)
+            : TenantName(name)
+        {}
+    };
+
+    struct TEvAlterTenant : public TEventLocal<TEvAlterTenant, EvAlterTenant> {
+        TRegistrationInfo TenantInfo;
+
+        TEvAlterTenant(const TString &domainName)
+            : TenantInfo(domainName)
+        {}
+
+        TEvAlterTenant(const TString &domainName, NKikimrTabletBase::TMetrics resourceLimit)
+            : TenantInfo(domainName, resourceLimit)
+        {}
+
+        TEvAlterTenant(const TRegistrationInfo &info)
+            : TenantInfo(info)
+        {}
+    };
+
+    struct TEvTenantStatus : public TEventLocal<TEvTenantStatus, EvTenantStatus> {
+        enum EStatus {
+            STARTED,
+            STOPPED,
+            UNKNOWN_TENANT
+        };
+
+        TString TenantName;
+        EStatus Status;
+        NKikimrTabletBase::TMetrics ResourceLimit;
+        TString Error;
+        THashMap<TString, TString> Attributes;
+        TSubDomainKey DomainKey;
+
+        TEvTenantStatus(const TString &tenant, EStatus status)
+            : TenantName(tenant)
+            , Status(status)
+        {}
+
+        TEvTenantStatus(const TString &tenant, EStatus status, const TString &error)
+            : TenantName(tenant)
+            , Status(status)
+            , Error(error)
+        {}
+
+        TEvTenantStatus(const TString &tenant,
+                        EStatus status,
+                        NKikimrTabletBase::TMetrics resourceLimit,
                         const THashMap<TString, TString> &attrs,
                         const TSubDomainKey &domainKey)
-            : TenantName(tenant) 
-            , Status(status) 
-            , ResourceLimit(resourceLimit) 
-            , Attributes(attrs) 
+            : TenantName(tenant)
+            , Status(status)
+            , ResourceLimit(resourceLimit)
+            , Attributes(attrs)
             , DomainKey(domainKey)
-        {} 
-    }; 
+        {}
+    };
 
     struct TEvLocalDrainNode : public TEventLocal<TEvLocalDrainNode, EvLocalDrainNode> {
         TIntrusivePtr<TDrainProgress> DrainProgress;
@@ -347,23 +347,23 @@ struct TEvLocal {
             : DrainProgress(drainProgress)
         {}
     };
-}; 
+};
 
-struct TLocalConfig : public TThrRefBase { 
-    using TPtr = TIntrusivePtr<TLocalConfig>; 
+struct TLocalConfig : public TThrRefBase {
+    using TPtr = TIntrusivePtr<TLocalConfig>;
 
-    struct TTabletClassInfo { 
-        TTabletSetupInfo::TPtr SetupInfo; 
+    struct TTabletClassInfo {
+        TTabletSetupInfo::TPtr SetupInfo;
         ui64 MaxCount = 0; // maximum allowed number of running tablets, 0 means unlimited
 
-        TTabletClassInfo() 
-        {} 
- 
-        TTabletClassInfo(TTabletSetupInfo::TPtr setupInfo) 
-            : SetupInfo(setupInfo) 
-        {} 
-    }; 
- 
+        TTabletClassInfo()
+        {}
+
+        TTabletClassInfo(TTabletSetupInfo::TPtr setupInfo)
+            : SetupInfo(setupInfo)
+        {}
+    };
+
     TMap<TTabletTypes::EType, TTabletClassInfo> TabletClassInfo;
 };
 

@@ -1,6 +1,6 @@
 #include "cli.h"
 #include "cli_cmds.h"
- 
+
 #include <ydb/core/tx/schemeshard/schemeshard_user_attr_limits.h>
 
 #include <ydb/library/aclib/aclib.h>
@@ -12,10 +12,10 @@
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
- 
+
 #include <util/generic/hash.h>
 #include <util/string/split.h>
-#include <util/string/join.h> 
+#include <util/string/join.h>
 #include <util/string/printf.h>
 
 namespace NKikimr {
@@ -466,8 +466,8 @@ public:
             type = "<dir>";
             break;
         case NKikimrSchemeOp::EPathTypeSubDomain:
-            type = "<database>"; 
-            break; 
+            type = "<database>";
+            break;
         case NKikimrSchemeOp::EPathTypeTable:
             type = "<table>";
             break;
@@ -803,124 +803,124 @@ public:
     }
 };
 
-class TClientCommandSchemaTableOptions : public TClientCommand { 
-public: 
+class TClientCommandSchemaTableOptions : public TClientCommand {
+public:
     NGrpc::TGRpcClientConfig ClientConfig;
- 
-    TClientCommandSchemaTableOptions() 
-        : TClientCommand("options", {}, "Describe table options") 
-    {} 
- 
-    virtual void Config(TConfig& config) override { 
-        TClientCommand::Config(config); 
-    } 
- 
-    virtual void Parse(TConfig& config) override { 
-        TClientCommand::Parse(config); 
- 
+
+    TClientCommandSchemaTableOptions()
+        : TClientCommand("options", {}, "Describe table options")
+    {}
+
+    virtual void Config(TConfig& config) override {
+        TClientCommand::Config(config);
+    }
+
+    virtual void Parse(TConfig& config) override {
+        TClientCommand::Parse(config);
+
         if (CommandConfig.ClientConfig.Defined()) {
             auto *p = std::get_if<NGrpc::TGRpcClientConfig>(&CommandConfig.ClientConfig.GetRef());
-            if (p) { 
-                ClientConfig.Locator = p->Locator; 
-                ClientConfig.Timeout = p->Timeout; 
-                ClientConfig.MaxMessageSize = p->MaxMessageSize; 
-                ClientConfig.MaxInFlight = p->MaxInFlight; 
+            if (p) {
+                ClientConfig.Locator = p->Locator;
+                ClientConfig.Timeout = p->Timeout;
+                ClientConfig.MaxMessageSize = p->MaxMessageSize;
+                ClientConfig.MaxInFlight = p->MaxInFlight;
                 ClientConfig.EnableSsl = p->EnableSsl;
                 ClientConfig.SslCaCert = p->SslCaCert;
-            } 
-        } 
-    } 
- 
-    template<typename T> 
-    void PrintLabels(const T &rec) { 
-        for (auto &pr : rec.labels()) 
-            Cout << "     " << pr.first << ": " << pr.second << Endl; 
-    } 
- 
-    template<typename T> 
-    void PrintPolicies(const T &array) { 
-        for (auto &policy : array) { 
-            Cout << " - " << policy.name() << Endl; 
-            PrintLabels(policy); 
-        } 
-    } 
- 
-    virtual int Run(TConfig& config) override { 
-        int res = 0; 
- 
-        if (!ClientConfig.Locator) { 
-            Cerr << "GRPC call error: GRPC server is not specified (MBus protocol is not supported for this command)." << Endl; 
-            return -2; 
-        } 
- 
+            }
+        }
+    }
+
+    template<typename T>
+    void PrintLabels(const T &rec) {
+        for (auto &pr : rec.labels())
+            Cout << "     " << pr.first << ": " << pr.second << Endl;
+    }
+
+    template<typename T>
+    void PrintPolicies(const T &array) {
+        for (auto &policy : array) {
+            Cout << " - " << policy.name() << Endl;
+            PrintLabels(policy);
+        }
+    }
+
+    virtual int Run(TConfig& config) override {
+        int res = 0;
+
+        if (!ClientConfig.Locator) {
+            Cerr << "GRPC call error: GRPC server is not specified (MBus protocol is not supported for this command)." << Endl;
+            return -2;
+        }
+
         NGrpc::TCallMeta meta;
         if (config.SecurityToken) {
             meta.Aux.push_back({NYdb::YDB_AUTH_TICKET_HEADER, config.SecurityToken});
         }
 
-        Ydb::Operations::Operation response; 
+        Ydb::Operations::Operation response;
         NGrpc::TResponseCallback<Ydb::Table::DescribeTableOptionsResponse> responseCb =
             [&res, &response](NGrpc::TGrpcStatus &&grpcStatus, Ydb::Table::DescribeTableOptionsResponse &&resp) -> void {
-            res = (int)grpcStatus.GRpcStatusCode; 
-            if (!res) { 
-                response.CopyFrom(resp.operation()); 
-            } else { 
-                Cerr << "GRPC call error: " << grpcStatus.Msg << Endl; 
-            } 
-        }; 
- 
-        { 
+            res = (int)grpcStatus.GRpcStatusCode;
+            if (!res) {
+                response.CopyFrom(resp.operation());
+            } else {
+                Cerr << "GRPC call error: " << grpcStatus.Msg << Endl;
+            }
+        };
+
+        {
             NGrpc::TGRpcClientLow clientLow;
-            Ydb::Table::DescribeTableOptionsRequest request; 
+            Ydb::Table::DescribeTableOptionsRequest request;
             auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Table::V1::TableService>(ClientConfig);
             connection->DoRequest(request, std::move(responseCb), &Ydb::Table::V1::TableService::Stub::AsyncDescribeTableOptions, meta);
-        } 
- 
-        if (!res) { 
-            Y_VERIFY(response.ready()); 
-            if (response.status() == Ydb::StatusIds::SUCCESS) { 
-                Ydb::Table::DescribeTableOptionsResult result; 
-                response.result().UnpackTo(&result); 
-                Cout << "Table profiles" << Endl; 
-                for (auto &profile : result.table_profile_presets()) { 
-                    Cout << " - " << profile.name() << Endl 
-                         << "     Compaction policy: " << profile.default_compaction_policy() << Endl 
-                         << "     Execution policy: " << profile.default_execution_policy() << Endl 
-                         << "     Partitioning policy: " << profile.default_partitioning_policy() << Endl 
-                         << "     Storage policy: " << profile.default_storage_policy() << Endl 
-                         << "     Replication policy: " << profile.default_replication_policy() << Endl 
-                         << "     Caching policy: " << profile.default_caching_policy() << Endl 
-                         << "     Allowed compaction policies: " << JoinSeq(", ", profile.allowed_compaction_policies()) << Endl 
-                         << "     Allowed execution policies: " << JoinSeq(", ", profile.allowed_execution_policies()) << Endl 
-                         << "     Allowed partitioning policies: " << JoinSeq(", ", profile.allowed_partitioning_policies()) << Endl 
-                         << "     Allowed storage policies: " << JoinSeq(", ", profile.allowed_storage_policies()) << Endl 
-                         << "     Allowed replication policies: " << JoinSeq(", ", profile.allowed_replication_policies()) << Endl 
-                         << "     Allowed caching policies: " << JoinSeq(", ", profile.allowed_caching_policies()) << Endl; 
-                    PrintLabels(profile); 
-                } 
-                Cout << "Compaction policies" << Endl; 
-                PrintPolicies(result.compaction_policy_presets()); 
-                Cout << "Execution policies" << Endl; 
-                PrintPolicies(result.execution_policy_presets()); 
-                Cout << "Partitioning policies" << Endl; 
-                PrintPolicies(result.partitioning_policy_presets()); 
-                Cout << "Storage policies" << Endl; 
-                PrintPolicies(result.storage_policy_presets()); 
-                Cout << "Replication policies" << Endl; 
-                PrintPolicies(result.replication_policy_presets()); 
-                Cout << "Caching policies" << Endl; 
-                PrintPolicies(result.caching_policy_presets()); 
-            } else { 
-                Cerr << "ERROR: " << response.status() << Endl; 
-                for (auto &issue : response.issues()) 
-                    Cerr << issue.message() << Endl; 
-            } 
-        } 
- 
-        return res; 
-    } 
-}; 
- 
+        }
+
+        if (!res) {
+            Y_VERIFY(response.ready());
+            if (response.status() == Ydb::StatusIds::SUCCESS) {
+                Ydb::Table::DescribeTableOptionsResult result;
+                response.result().UnpackTo(&result);
+                Cout << "Table profiles" << Endl;
+                for (auto &profile : result.table_profile_presets()) {
+                    Cout << " - " << profile.name() << Endl
+                         << "     Compaction policy: " << profile.default_compaction_policy() << Endl
+                         << "     Execution policy: " << profile.default_execution_policy() << Endl
+                         << "     Partitioning policy: " << profile.default_partitioning_policy() << Endl
+                         << "     Storage policy: " << profile.default_storage_policy() << Endl
+                         << "     Replication policy: " << profile.default_replication_policy() << Endl
+                         << "     Caching policy: " << profile.default_caching_policy() << Endl
+                         << "     Allowed compaction policies: " << JoinSeq(", ", profile.allowed_compaction_policies()) << Endl
+                         << "     Allowed execution policies: " << JoinSeq(", ", profile.allowed_execution_policies()) << Endl
+                         << "     Allowed partitioning policies: " << JoinSeq(", ", profile.allowed_partitioning_policies()) << Endl
+                         << "     Allowed storage policies: " << JoinSeq(", ", profile.allowed_storage_policies()) << Endl
+                         << "     Allowed replication policies: " << JoinSeq(", ", profile.allowed_replication_policies()) << Endl
+                         << "     Allowed caching policies: " << JoinSeq(", ", profile.allowed_caching_policies()) << Endl;
+                    PrintLabels(profile);
+                }
+                Cout << "Compaction policies" << Endl;
+                PrintPolicies(result.compaction_policy_presets());
+                Cout << "Execution policies" << Endl;
+                PrintPolicies(result.execution_policy_presets());
+                Cout << "Partitioning policies" << Endl;
+                PrintPolicies(result.partitioning_policy_presets());
+                Cout << "Storage policies" << Endl;
+                PrintPolicies(result.storage_policy_presets());
+                Cout << "Replication policies" << Endl;
+                PrintPolicies(result.replication_policy_presets());
+                Cout << "Caching policies" << Endl;
+                PrintPolicies(result.caching_policy_presets());
+            } else {
+                Cerr << "ERROR: " << response.status() << Endl;
+                for (auto &issue : response.issues())
+                    Cerr << issue.message() << Endl;
+            }
+        }
+
+        return res;
+    }
+};
+
 class TClientCommandSchemaTableCopy : public TClientCommand {
 public:
     NGrpc::TGRpcClientConfig ClientConfig;
@@ -1009,16 +1009,16 @@ public:
     }
 };
 
-class TClientCommandSchemaTable : public TClientCommandTree { 
-public: 
-    TClientCommandSchemaTable() 
-        : TClientCommandTree("table", {}, "Table operations") 
-    { 
+class TClientCommandSchemaTable : public TClientCommandTree {
+public:
+    TClientCommandSchemaTable()
+        : TClientCommandTree("table", {}, "Table operations")
+    {
         AddCommand(std::make_unique<TClientCommandSchemaTableOptions>());
         AddCommand(std::make_unique<TClientCommandSchemaTableCopy>());
-    } 
-}; 
- 
+    }
+};
+
 class TClientCommandSchemaUserAttributeGet: public TClientCommand {
 public:
     TClientCommandSchemaUserAttributeGet()

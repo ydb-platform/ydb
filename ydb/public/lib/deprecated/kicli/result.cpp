@@ -3,8 +3,8 @@
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 
-#include <util/generic/ymath.h> 
- 
+#include <util/generic/ymath.h>
+
 namespace NKikimr {
 namespace NClient {
 
@@ -86,198 +86,198 @@ TValue TQueryResult::GetValue() const {
     return TValue::Create(result.GetValue(), result.GetType());
 }
 
-TReadTableResult::TReadTableResult(const TResult& result) 
-    : TResult(result) 
-{} 
- 
+TReadTableResult::TReadTableResult(const TResult& result)
+    : TResult(result)
+{}
+
 const YdbOld::ResultSet &TReadTableResult::GetResultSet() const {
-    if (!Parsed) { 
-        const NKikimrClient::TResponse& response = GetResult<NKikimrClient::TResponse>(); 
-        const auto& result = response.GetSerializedReadTableResponse(); 
+    if (!Parsed) {
+        const NKikimrClient::TResponse& response = GetResult<NKikimrClient::TResponse>();
+        const auto& result = response.GetSerializedReadTableResponse();
         Y_PROTOBUF_SUPPRESS_NODISCARD Result.ParseFromArray(result.data(), result.size());
-    } 
-    return Result; 
-} 
- 
+    }
+    return Result;
+}
+
 template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Value &value,
                                                                 const YdbOld::DataType &type) {
     switch (type.id()) {
-    case NYql::NProto::Bool: 
+    case NYql::NProto::Bool:
         return value.bool_value() ? "true" : "false";
-    case NYql::NProto::Uint64: 
+    case NYql::NProto::Uint64:
         return ToString(value.uint64_value());
-    case NScheme::NTypeIds::Int64: 
+    case NScheme::NTypeIds::Int64:
         return ToString(value.int64_value());
-    case NScheme::NTypeIds::Uint32: 
+    case NScheme::NTypeIds::Uint32:
         return ToString(value.uint32_value());
-    case NScheme::NTypeIds::Int32: 
+    case NScheme::NTypeIds::Int32:
         return ToString(value.int32_value());
-    case NScheme::NTypeIds::Uint16: 
+    case NScheme::NTypeIds::Uint16:
         return ToString(static_cast<ui16>(value.uint32_value()));
-    case NScheme::NTypeIds::Int16: 
+    case NScheme::NTypeIds::Int16:
         return ToString(static_cast<i16>(value.int32_value()));
-    case NScheme::NTypeIds::Uint8: 
+    case NScheme::NTypeIds::Uint8:
         return ToString(static_cast<ui8>(value.uint32_value()));
-    case NScheme::NTypeIds::Int8: 
+    case NScheme::NTypeIds::Int8:
         return ToString(static_cast<i8>(value.int32_value()));
-    case NScheme::NTypeIds::Double: 
+    case NScheme::NTypeIds::Double:
         return ToString(value.double_value());
-    case NScheme::NTypeIds::Float: 
+    case NScheme::NTypeIds::Float:
         return ToString(value.float_value());
-    case NScheme::NTypeIds::Utf8: 
-    case NScheme::NTypeIds::Json: 
-    case NScheme::NTypeIds::Yson: 
+    case NScheme::NTypeIds::Utf8:
+    case NScheme::NTypeIds::Json:
+    case NScheme::NTypeIds::Yson:
         return "\"" + TFormatCSV::EscapeString(value.text_value()) + "\"";
-    case NScheme::NTypeIds::String: 
+    case NScheme::NTypeIds::String:
         return value.bytes_value();
-    case NScheme::NTypeIds::Date: 
-        { 
-            auto val = TInstant::Days(value.uint32_value()); 
-            return val.FormatGmTime("%Y-%m-%d"); 
-        } 
-    case NScheme::NTypeIds::Datetime: 
-        { 
-            auto val = TInstant::Seconds(value.uint32_value()); 
-            return val.FormatGmTime("%Y-%m-%dT%H:%M:%SZ"); 
-        } 
-    case NScheme::NTypeIds::Timestamp: 
-        { 
-            auto val = TInstant::MicroSeconds(value.uint64_value()); 
-            return val.ToString(); 
-        } 
-    case NScheme::NTypeIds::Interval: 
-        { 
-            i64 val = value.int64_value(); 
-            if (val >= 0) 
-                return TDuration::MicroSeconds(static_cast<ui64>(val)).ToString(); 
-            return TString("-") + TDuration::MicroSeconds(static_cast<ui64>(-val)).ToString(); 
-        } 
-    case NScheme::NTypeIds::Decimal: 
-        { 
+    case NScheme::NTypeIds::Date:
+        {
+            auto val = TInstant::Days(value.uint32_value());
+            return val.FormatGmTime("%Y-%m-%d");
+        }
+    case NScheme::NTypeIds::Datetime:
+        {
+            auto val = TInstant::Seconds(value.uint32_value());
+            return val.FormatGmTime("%Y-%m-%dT%H:%M:%SZ");
+        }
+    case NScheme::NTypeIds::Timestamp:
+        {
+            auto val = TInstant::MicroSeconds(value.uint64_value());
+            return val.ToString();
+        }
+    case NScheme::NTypeIds::Interval:
+        {
+            i64 val = value.int64_value();
+            if (val >= 0)
+                return TDuration::MicroSeconds(static_cast<ui64>(val)).ToString();
+            return TString("-") + TDuration::MicroSeconds(static_cast<ui64>(-val)).ToString();
+        }
+    case NScheme::NTypeIds::Decimal:
+        {
             NYql::NDecimal::TInt128 val;
-            auto p = reinterpret_cast<char*>(&val); 
-            reinterpret_cast<ui64*>(p)[0] = value.low_128(); 
+            auto p = reinterpret_cast<char*>(&val);
+            reinterpret_cast<ui64*>(p)[0] = value.low_128();
             reinterpret_cast<ui64*>(p)[1] = value.high_128();
-            // In Kikimr the only decimal column type supported is Decimal(22,9). 
-            return NYql::NDecimal::ToString(val, NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE); 
-        } 
-    default: 
-        return "<UNSUPPORTED VALUE>"; 
-    } 
-} 
- 
+            // In Kikimr the only decimal column type supported is Decimal(22,9).
+            return NYql::NDecimal::ToString(val, NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
+        }
+    default:
+        return "<UNSUPPORTED VALUE>";
+    }
+}
+
 template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Value &value,
                                                                 const YdbOld::Type &type) {
-    switch (type.type_type_case()) { 
+    switch (type.type_type_case()) {
     case YdbOld::Type::kDataType:
         return ValueToString<TFormatCSV>(value, type.data_type());
     case YdbOld::Type::kOptionalType:
         if (value.Hasnull_flag_value())
-            return "NULL"; 
-        // If we have Value field for optional type then it is always 
-        // should be followed (even for Optional<Variant<T>> case). 
+            return "NULL";
+        // If we have Value field for optional type then it is always
+        // should be followed (even for Optional<Variant<T>> case).
         if (value.Hasnested_value())
             return ValueToString<TFormatCSV>(value.nested_value(), type.optional_type().item());
         return ValueToString<TFormatCSV>(value, type.optional_type().item());
     case YdbOld::Type::kListType:
-        { 
-            TString res = "["; 
+        {
+            TString res = "[";
             const auto &items = value.items();
             const auto &itemType = type.list_type().item();
-            for (auto it = items.begin(); it != items.end(); ++it) { 
-                if (it != items.begin()) 
-                    res += ","; 
-                res += ValueToString<TFormatCSV>(*it, itemType); 
-            } 
-            res += "]"; 
-            return res; 
-        } 
+            for (auto it = items.begin(); it != items.end(); ++it) {
+                if (it != items.begin())
+                    res += ",";
+                res += ValueToString<TFormatCSV>(*it, itemType);
+            }
+            res += "]";
+            return res;
+        }
     case YdbOld::Type::kTupleType:
-        { 
-            TString res = "["; 
+        {
+            TString res = "[";
             const auto &items = value.items();
             const auto &types = type.tuple_type().elements();
-            for (int i = 0; i < items.size(); ++i) { 
-                if (i) 
-                    res += ","; 
-                res += ValueToString<TFormatCSV>(items[i], types[i]); 
-            } 
-            res += "]"; 
-            return res; 
-        } 
+            for (int i = 0; i < items.size(); ++i) {
+                if (i)
+                    res += ",";
+                res += ValueToString<TFormatCSV>(items[i], types[i]);
+            }
+            res += "]";
+            return res;
+        }
     case YdbOld::Type::kStructType:
-        { 
-            TString res = "{"; 
+        {
+            TString res = "{";
             const auto &items = value.items();
             const auto &members = type.struct_type().members();
-            for (int i = 0; i < members.size(); ++i) { 
-                if (i) 
-                    res += ","; 
+            for (int i = 0; i < members.size(); ++i) {
+                if (i)
+                    res += ",";
                 res += ValueToString<TFormatCSV>(items[i], members[i].type());
-            } 
-            res += "}"; 
-            return res; 
-        } 
+            }
+            res += "}";
+            return res;
+        }
     case YdbOld::Type::kDictType:
-        { 
-            TString res = "["; 
+        {
+            TString res = "[";
             const auto &pairs = value.pairs();
             const auto &dictType = type.dict_type();
-            for (int i = 0; i < pairs.size(); ++i) { 
-                if (i) 
-                    res += ","; 
+            for (int i = 0; i < pairs.size(); ++i) {
+                if (i)
+                    res += ",";
                 res += ValueToString<TFormatCSV>(pairs[i].key(), dictType.key());
-                res += ":"; 
+                res += ":";
                 res += ValueToString<TFormatCSV>(pairs[i].payload(), dictType.payload());
-            } 
-            res += "]"; 
-            return res; 
-        } 
+            }
+            res += "]";
+            return res;
+        }
     case YdbOld::Type::kVariantType:
-        return "<VARIANT IS NOT SUPPORTED>"; 
-    default: 
-        return ""; 
-    } 
-} 
- 
-template <> TString TReadTableResult::GetTypeText<TFormatCSV>(const TFormatCSV &format) const { 
-    auto &proto = GetResultSet(); 
-    TString res; 
-    bool first = true; 
+        return "<VARIANT IS NOT SUPPORTED>";
+    default:
+        return "";
+    }
+}
+
+template <> TString TReadTableResult::GetTypeText<TFormatCSV>(const TFormatCSV &format) const {
+    auto &proto = GetResultSet();
+    TString res;
+    bool first = true;
     for (auto &meta : proto.column_meta()) {
-        if (!first) 
-            res += format.Delim; 
-        first = false; 
+        if (!first)
+            res += format.Delim;
+        first = false;
         res += meta.name();
-    } 
-    return res; 
-} 
- 
-template <> TString TReadTableResult::GetValueText<TFormatCSV>(const TFormatCSV &format) const { 
-    auto &proto = GetResultSet(); 
-    TString res; 
- 
-    if (format.PrintHeader) { 
-        res += GetTypeText(format); 
-        res += "\n"; 
-    } 
- 
+    }
+    return res;
+}
+
+template <> TString TReadTableResult::GetValueText<TFormatCSV>(const TFormatCSV &format) const {
+    auto &proto = GetResultSet();
+    TString res;
+
+    if (format.PrintHeader) {
+        res += GetTypeText(format);
+        res += "\n";
+    }
+
     auto &colTypes = proto.column_meta();
-    bool first = true; 
+    bool first = true;
     for (auto &row : proto.rows()) {
-        if (!first) 
-            res += "\n"; 
-        first = false; 
-        for (int i = 0; i < colTypes.size(); ++i) { 
-            if (i) 
-                res += format.Delim; 
+        if (!first)
+            res += "\n";
+        first = false;
+        for (int i = 0; i < colTypes.size(); ++i) {
+            if (i)
+                res += format.Delim;
             res += ValueToString<TFormatCSV>(row.items(i), colTypes[i].type());
-        } 
-    } 
- 
-    return res; 
-} 
- 
+        }
+    }
+
+    return res;
+}
+
 /// @warning It's mistake to store Query as a row pointer here. TQuery could be a tmp object.
 ///          TPrepareResult result = kikimr.Query(some).SyncPrepare();
 ///          TPreparedQuery query = result.GetQuery(); //< error here. Query is obsolete.

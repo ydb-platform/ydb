@@ -1,12 +1,12 @@
 #include "export_iface.h"
 #include "backup_restore_common.h"
-#include "execution_unit_ctors.h" 
+#include "execution_unit_ctors.h"
 #include "export_scan.h"
 #include "export_s3.h"
- 
-namespace NKikimr { 
+
+namespace NKikimr {
 namespace NDataShard {
- 
+
 class TBackupUnit : public TBackupRestoreUnitBase<TEvDataShard::TEvCancelBackup> {
     using IBuffer = NExportScan::IBuffer;
 
@@ -14,34 +14,34 @@ protected:
     bool IsRelevant(TActiveTransaction* tx) const override {
         return tx->GetSchemeTx().HasBackup();
     }
- 
+
     bool IsWaiting(TOperation::TPtr op) const override {
         return op->IsWaitingForScan();
     }
- 
+
     void SetWaiting(TOperation::TPtr op) override {
         op->SetWaitingForScanFlag();
     }
- 
+
     void ResetWaiting(TOperation::TPtr op) override {
         op->ResetWaitingForScanFlag();
     }
- 
+
     bool Run(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
- 
+
         Y_VERIFY(tx->GetSchemeTx().HasBackup());
         const auto& backup = tx->GetSchemeTx().GetBackup();
- 
+
         const ui64 tableId = backup.GetTableId();
-        Y_VERIFY(DataShard.GetUserTables().contains(tableId)); 
+        Y_VERIFY(DataShard.GetUserTables().contains(tableId));
 
         const ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
         Y_VERIFY(txc.DB.GetScheme().GetTableInfo(localTableId));
 
         auto* appData = AppData(ctx);
- 
+
         std::shared_ptr<::NKikimr::NDataShard::IExport> exp;
         if (backup.HasYTSettings()) {
             auto* exportFactory = appData->DataShardExportFactory;
@@ -98,53 +98,53 @@ protected:
         ));
 
         return true;
-    } 
- 
+    }
+
     bool HasResult(TOperation::TPtr op) const override {
         return op->HasScanResult();
     }
- 
+
     void ProcessResult(TOperation::TPtr op, const TActorContext&) override {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
         auto* result = CheckedCast<TExportScanProduct*>(op->ScanResult().Get());
         auto* schemeOp = DataShard.FindSchemaTx(op->GetTxId());
- 
+
         schemeOp->Success = result->Success;
         schemeOp->Error = std::move(result->Error);
         schemeOp->BytesProcessed = result->BytesRead;
         schemeOp->RowsProcessed = result->RowsRead;
- 
+
         op->SetScanResult(nullptr);
         tx->SetScanTask(0);
-    } 
- 
+    }
+
     void Cancel(TActiveTransaction* tx, const TActorContext&) override {
         if (!tx->GetScanTask()) {
             return;
         }
- 
+
         const ui64 tableId = tx->GetSchemeTx().GetBackup().GetTableId();
- 
-        Y_VERIFY(DataShard.GetUserTables().contains(tableId)); 
+
+        Y_VERIFY(DataShard.GetUserTables().contains(tableId));
         const ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
- 
-        DataShard.CancelScan(localTableId, tx->GetScanTask()); 
-        tx->SetScanTask(0); 
-    } 
- 
+
+        DataShard.CancelScan(localTableId, tx->GetScanTask());
+        tx->SetScanTask(0);
+    }
+
 public:
     TBackupUnit(TDataShard& self, TPipeline& pipeline)
         : TBase(EExecutionUnitKind::Backup, self, pipeline)
     {
     }
- 
+
 }; // TBackupUnit
- 
+
 THolder<TExecutionUnit> CreateBackupUnit(TDataShard& self, TPipeline& pipeline) {
     return THolder(new TBackupUnit(self, pipeline));
-} 
- 
+}
+
 } // NDataShard
 } // NKikimr

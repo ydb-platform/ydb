@@ -13,8 +13,8 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
- 
-    TCell ExtractCell(TRuntimeNode value, const TTypeEnvironment& env) { 
+
+    TCell ExtractCell(TRuntimeNode value, const TTypeEnvironment& env) {
         TRuntimeNode data = value;
         if (value.GetStaticType()->IsOptional()) {
             auto opt = AS_VALUE(TOptionalLiteral, value);
@@ -26,14 +26,14 @@ namespace {
         }
 
         const auto literal = AS_VALUE(TDataLiteral, data);
-        return MakeCell(literal->GetType()->GetSchemeType(), literal->AsValue(), env, false); 
+        return MakeCell(literal->GetType()->GetSchemeType(), literal->AsValue(), env, false);
     }
 
-    void ExtractRow(TVector<TCell>& row, TTupleLiteral* tupleNode, const TTypeEnvironment& env) { 
+    void ExtractRow(TVector<TCell>& row, TTupleLiteral* tupleNode, const TTypeEnvironment& env) {
         row.resize(tupleNode->GetValuesCount());
         for (ui32 i = 0; i < tupleNode->GetValuesCount(); ++i) {
             auto value = tupleNode->GetValue(i);
-            row[i] = ExtractCell(value, env); 
+            row[i] = ExtractCell(value, env);
         }
     }
 
@@ -486,7 +486,7 @@ namespace {
     {
         TUnboxedValueVector values;
         if (localReadCallables.contains(callable.GetUniqueId())) {
-            values.push_back(PerformLocalSelectRow(callable, *host, ctx.HolderFactory, ctx.Env)); 
+            values.push_back(PerformLocalSelectRow(callable, *host, ctx.HolderFactory, ctx.Env));
         }
 
         auto returnType = callable.GetType()->GetReturnType();
@@ -576,7 +576,7 @@ namespace {
     {
         TUnboxedValueVector values;
         if (localReadCallables.contains(callable.GetUniqueId())) {
-            values.push_back(PerformLocalSelectRange(callable, *host, ctx.HolderFactory, ctx.Env)); 
+            values.push_back(PerformLocalSelectRange(callable, *host, ctx.HolderFactory, ctx.Env));
         }
 
         auto returnType = GetActualReturnType(callable, ctx.Env, strings);
@@ -952,14 +952,14 @@ TComputationNodeFactory GetFlatProxyExecutionFactory(TProxyExecData& execData)
 }
 
 NUdf::TUnboxedValue PerformLocalSelectRow(TCallable& callable, IEngineFlatHost& engineHost,
-    const THolderFactory& holderFactory, const TTypeEnvironment& env) 
+    const THolderFactory& holderFactory, const TTypeEnvironment& env)
 {
     MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
     auto tableNode = callable.GetInput(0);
     const auto tableId = ExtractTableId(tableNode);
     auto tupleNode = AS_VALUE(TTupleLiteral, callable.GetInput(3));
     TVector<TCell> row;
-    ExtractRow(row, tupleNode, env); 
+    ExtractRow(row, tupleNode, env);
 
     auto returnType = callable.GetType()->GetReturnType();
     MKQL_ENSURE(callable.GetInput(1).GetNode()->GetType()->IsType(), "Expected type");
@@ -970,7 +970,7 @@ NUdf::TUnboxedValue PerformLocalSelectRow(TCallable& callable, IEngineFlatHost& 
 }
 
 NUdf::TUnboxedValue PerformLocalSelectRange(TCallable& callable, IEngineFlatHost& engineHost,
-    const THolderFactory& holderFactory, const TTypeEnvironment& env) 
+    const THolderFactory& holderFactory, const TTypeEnvironment& env)
 {
     MKQL_ENSURE(callable.GetInputsCount() >= 9 && callable.GetInputsCount() <= 13, "Expected 9 to 13 args");
     auto tableNode = callable.GetInput(0);
@@ -981,8 +981,8 @@ NUdf::TUnboxedValue PerformLocalSelectRange(TCallable& callable, IEngineFlatHost
 
     TVector<TCell> fromValues;
     TVector<TCell> toValues;
-    ExtractRow(fromValues, AS_VALUE(TTupleLiteral, callable.GetInput(3)), env); 
-    ExtractRow(toValues, AS_VALUE(TTupleLiteral, callable.GetInput(4)), env); 
+    ExtractRow(fromValues, AS_VALUE(TTupleLiteral, callable.GetInput(3)), env);
+    ExtractRow(toValues, AS_VALUE(TTupleLiteral, callable.GetInput(4)), env);
 
     bool inclusiveFrom = !(flags & TReadRangeOptions::TFlags::ExcludeInitValue);
     bool inclusiveTo = !(flags & TReadRangeOptions::TFlags::ExcludeTermValue);

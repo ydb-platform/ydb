@@ -1,85 +1,85 @@
-#include "cms_impl.h" 
-#include "scheme.h" 
- 
+#include "cms_impl.h"
+#include "scheme.h"
+
 #include <google/protobuf/text_format.h>
- 
-namespace NKikimr { 
-namespace NCms { 
- 
-class TCms::TTxRemoveExpiredNotifications : public TTransactionBase<TCms> { 
-public: 
-    TTxRemoveExpiredNotifications(TCms *self) 
-        : TBase(self) 
-    { 
-    } 
- 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override 
-    { 
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRemoveExpiredNotifications Execute"); 
- 
-        TInstant now = ctx.Now(); 
-        for (auto entry = Self->State->Notifications.begin(); entry != Self->State->Notifications.end();) { 
-            auto &info = entry->second; 
+
+namespace NKikimr {
+namespace NCms {
+
+class TCms::TTxRemoveExpiredNotifications : public TTransactionBase<TCms> {
+public:
+    TTxRemoveExpiredNotifications(TCms *self)
+        : TBase(self)
+    {
+    }
+
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
+    {
+        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRemoveExpiredNotifications Execute");
+
+        TInstant now = ctx.Now();
+        for (auto entry = Self->State->Notifications.begin(); entry != Self->State->Notifications.end();) {
+            auto &info = entry->second;
             TInstant time = TInstant::MicroSeconds(info.Notification.GetTime());
-            bool modified = false; 
- 
-            auto next = entry; 
-            ++next; 
- 
-            auto *actions = info.Notification.MutableActions(); 
-            for (auto i = actions->begin(); i != actions->end(); ) { 
+            bool modified = false;
+
+            auto next = entry;
+            ++next;
+
+            auto *actions = info.Notification.MutableActions();
+            for (auto i = actions->begin(); i != actions->end(); ) {
                 TInstant deadline = time + TDuration::MicroSeconds(i->GetDuration());
- 
-                if (deadline <= now) { 
+
+                if (deadline <= now) {
                     LOG_INFO(ctx, NKikimrServices::CMS, "Removing expired action from notification %s: %s",
                               info.NotificationId.data(), i->ShortDebugString().data());
- 
-                    i = actions->erase(i); 
-                    modified = true; 
-                } else 
-                    ++i; 
-            } 
- 
-            if (actions->empty()) { 
+
+                    i = actions->erase(i);
+                    modified = true;
+                } else
+                    ++i;
+            }
+
+            if (actions->empty()) {
                 Self->AuditLog(ctx, TStringBuilder() << "Remove notification"
                     << ": id# " << info.NotificationId
                     << ", reason# " << "scheduled cleanup");
- 
-                NIceDb::TNiceDb db(txc.DB); 
-                db.Table<Schema::Notification>().Key(info.NotificationId).Delete(); 
- 
-                Self->State->Notifications.erase(entry); 
-            } else if (modified) { 
-                TString notificationStr; 
-                google::protobuf::TextFormat::PrintToString(info.Notification, &notificationStr); 
- 
-                NIceDb::TNiceDb db(txc.DB); 
-                auto row = db.Table<Schema::Notification>().Key(info.NotificationId); 
-                row.Update(NIceDb::TUpdate<Schema::Notification::NotificationProto>(notificationStr)); 
- 
+
+                NIceDb::TNiceDb db(txc.DB);
+                db.Table<Schema::Notification>().Key(info.NotificationId).Delete();
+
+                Self->State->Notifications.erase(entry);
+            } else if (modified) {
+                TString notificationStr;
+                google::protobuf::TextFormat::PrintToString(info.Notification, &notificationStr);
+
+                NIceDb::TNiceDb db(txc.DB);
+                auto row = db.Table<Schema::Notification>().Key(info.NotificationId);
+                row.Update(NIceDb::TUpdate<Schema::Notification::NotificationProto>(notificationStr));
+
                 Self->AuditLog(ctx, TStringBuilder() << "Update notification"
                     << ": id# " << info.NotificationId
                     << ", body# " << notificationStr);
-            } 
- 
-            entry = next; 
-        } 
- 
-        return true; 
-    } 
- 
-    void Complete(const TActorContext &ctx) override 
-    { 
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRemoveExpiredNotifications Complete"); 
-    } 
- 
-private: 
-}; 
- 
-ITransaction *TCms::CreateTxRemoveExpiredNotifications() 
-{ 
-    return new TTxRemoveExpiredNotifications(this); 
-} 
- 
-} // NCms 
-} // NKikimr 
+            }
+
+            entry = next;
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override
+    {
+        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRemoveExpiredNotifications Complete");
+    }
+
+private:
+};
+
+ITransaction *TCms::CreateTxRemoveExpiredNotifications()
+{
+    return new TTxRemoveExpiredNotifications(this);
+}
+
+} // NCms
+} // NKikimr

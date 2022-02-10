@@ -23,12 +23,12 @@
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
- 
+
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 
 #include <util/generic/hash_set.h>
-#include <util/generic/queue.h> 
+#include <util/generic/queue.h>
 
 #ifndef KIKIMR_DATAREQ_WATCHDOG_PERIOD
 #define KIKIMR_DATAREQ_WATCHDOG_PERIOD 10000
@@ -85,103 +85,103 @@ struct TFlatMKQLRequest : public TThrRefBase {
     }
 };
 
-// Class used to merge key ranges and arrange shards for ordered scans. 
-class TKeySpace { 
-public: 
-    TKeySpace(); 
- 
-    void Initialize(bool ordered, TConstArrayRef<NScheme::TTypeId> keyTypes, const TTableRange &range); 
- 
+// Class used to merge key ranges and arrange shards for ordered scans.
+class TKeySpace {
+public:
+    TKeySpace();
+
+    void Initialize(bool ordered, TConstArrayRef<NScheme::TTypeId> keyTypes, const TTableRange &range);
+
     const TVector<NScheme::TTypeId> &GetKeyTypes() { return KeyTypes; }
- 
-    void AddRange(const NKikimrTx::TKeyRange &range, ui64 shard); 
-    bool IsFull() const; 
- 
-    const TQueue<ui64> &GetShardsQueue() const { return ShardsQueue; } 
-    bool IsShardsQueueEmpty() const { return ShardsQueue.empty(); } 
-    ui64 ShardsQueueFront() const { return ShardsQueue.front(); } 
-    void ShardsQueuePop() { ShardsQueue.pop(); } 
-    void FlushShardsToQueue(); 
- 
-    const TSerializedTableRange &GetSpace() const { return SpaceRange; } 
- 
-private: 
-    class TRange : public TSerializedTableRange { 
-    public: 
-        TRange() = default; 
-        TRange(const TRange &other) = default; 
- 
-        TRange(const NKikimrTx::TKeyRange &range) 
-            : TSerializedTableRange(range) 
-        {} 
- 
-        TRange &operator=(const TRange &other) = default; 
- 
+
+    void AddRange(const NKikimrTx::TKeyRange &range, ui64 shard);
+    bool IsFull() const;
+
+    const TQueue<ui64> &GetShardsQueue() const { return ShardsQueue; }
+    bool IsShardsQueueEmpty() const { return ShardsQueue.empty(); }
+    ui64 ShardsQueueFront() const { return ShardsQueue.front(); }
+    void ShardsQueuePop() { ShardsQueue.pop(); }
+    void FlushShardsToQueue();
+
+    const TSerializedTableRange &GetSpace() const { return SpaceRange; }
+
+private:
+    class TRange : public TSerializedTableRange {
+    public:
+        TRange() = default;
+        TRange(const TRange &other) = default;
+
+        TRange(const NKikimrTx::TKeyRange &range)
+            : TSerializedTableRange(range)
+        {}
+
+        TRange &operator=(const TRange &other) = default;
+
         TVector<ui64> Shards;
-    }; 
+    };
     using TRanges = TList<TRange>;
- 
-    bool IsGreater(const TConstArrayRef<TCell> &lhs, const TConstArrayRef<TCell> &rhs) const; 
-    void TryToMergeRange(TRanges::iterator it); 
-    bool TryToMergeWithPrev(TRanges::iterator it); 
- 
+
+    bool IsGreater(const TConstArrayRef<TCell> &lhs, const TConstArrayRef<TCell> &rhs) const;
+    void TryToMergeRange(TRanges::iterator it);
+    bool TryToMergeWithPrev(TRanges::iterator it);
+
     TVector<NScheme::TTypeId> KeyTypes;
-    TSerializedTableRange SpaceRange; 
-    TRanges Ranges; 
-    bool OrderedQueue; 
+    TSerializedTableRange SpaceRange;
+    TRanges Ranges;
+    bool OrderedQueue;
     TQueue<ui64> ShardsQueue;
-    TSerializedCellVec QueuePoint; 
-}; 
- 
-struct TReadTableRequest : public TThrRefBase { 
-    struct TQuotaRequest { 
+    TSerializedCellVec QueuePoint;
+};
+
+struct TReadTableRequest : public TThrRefBase {
+    struct TQuotaRequest {
         TActorId Sender;
-        ui64 ShardId; 
-    }; 
- 
-    TString TablePath; 
-    TTableId TableId; 
-    bool Ordered; 
-    bool AllowDuplicates; 
+        ui64 ShardId;
+    };
+
+    TString TablePath;
+    TTableId TableId;
+    bool Ordered;
+    bool AllowDuplicates;
     TVector<TTableColumnInfo> Columns;
-    NKikimrTxUserProxy::TKeyRange Range; 
-    TString ResponseData; 
-    ui64 ResponseDataFrom; 
-    TKeySpace KeySpace; 
+    NKikimrTxUserProxy::TKeyRange Range;
+    TString ResponseData;
+    ui64 ResponseDataFrom;
+    TKeySpace KeySpace;
     THashMap<ui64, TActorId> ClearanceSenders;
     THashMap<ui64, TActorId> StreamingShards;
     TSerializedCellVec FromValues;
     TSerializedCellVec ToValues;
     THolder<TKeyDesc> KeyDesc;
-    bool RowsLimited; 
-    ui64 RowsRemain; 
-    THashMap<ui64, TQuotaRequest> QuotaRequests; 
-    ui64 QuotaRequestId; 
+    bool RowsLimited;
+    ui64 RowsRemain;
+    THashMap<ui64, TQuotaRequest> QuotaRequests;
+    ui64 QuotaRequestId;
     ui32 RequestVersion;
     ui32 ResponseVersion = NKikimrTxUserProxy::TReadTableTransaction::UNSPECIFIED;
     TRowVersion Snapshot = TRowVersion::Max();
- 
-    TReadTableRequest(const NKikimrTxUserProxy::TReadTableTransaction &tx) 
-        : TablePath(tx.GetPath()) 
-        , Ordered(tx.GetOrdered()) 
-        , AllowDuplicates(tx.GetAllowDuplicates()) 
-        , Range(tx.GetKeyRange()) 
-        , RowsLimited(tx.GetRowLimit() > 0) 
-        , RowsRemain(tx.GetRowLimit()) 
-        , QuotaRequestId(1) 
+
+    TReadTableRequest(const NKikimrTxUserProxy::TReadTableTransaction &tx)
+        : TablePath(tx.GetPath())
+        , Ordered(tx.GetOrdered())
+        , AllowDuplicates(tx.GetAllowDuplicates())
+        , Range(tx.GetKeyRange())
+        , RowsLimited(tx.GetRowLimit() > 0)
+        , RowsRemain(tx.GetRowLimit())
+        , QuotaRequestId(1)
         , RequestVersion(tx.HasApiVersion() ? tx.GetApiVersion() : (ui32)NKikimrTxUserProxy::TReadTableTransaction::UNSPECIFIED)
-    { 
-        for (auto &col : tx.GetColumns()) { 
-            Columns.emplace_back(col, 0, 0); 
-        } 
+    {
+        for (auto &col : tx.GetColumns()) {
+            Columns.emplace_back(col, 0, 0);
+        }
 
         if (tx.HasSnapshotStep() && tx.HasSnapshotTxId()) {
             Snapshot.Step = tx.GetSnapshotStep();
             Snapshot.TxId = tx.GetSnapshotTxId();
         }
-    } 
-}; 
- 
+    }
+};
+
 class TDataReq : public TActor<TDataReq> {
 public:
     enum class EParseRangeKeyExp {
@@ -265,7 +265,7 @@ public:
         ui64 ProgramSize = 0;
         ui64 IncomingReadSetsSize = 0;
         ui64 OutgoingReadSetsSize = 0;
-        bool StreamCleared = false; 
+        bool StreamCleared = false;
         bool Restarting = false;
         size_t RestartCount = 0;
         TTableId TableId;
@@ -306,10 +306,10 @@ private:
     TActorId RequestSource;
     ui32 TxFlags;
     bool CanUseFollower;
-    bool StreamResponse; 
+    bool StreamResponse;
 
     TIntrusivePtr<TFlatMKQLRequest> FlatMKQLRequest;
-    TIntrusivePtr<TReadTableRequest> ReadTableRequest; 
+    TIntrusivePtr<TReadTableRequest> ReadTableRequest;
     TString DatashardErrors;
     TVector<ui64> ComplainingDatashards;
     TVector<TString> UnresolvedKeys;
@@ -331,7 +331,7 @@ private:
     ui64 ResultsReceivedSize;
 
     TRequestControls RequestControls;
- 
+
     TInstant WallClockAccepted;
     TInstant WallClockResolveStarted;
     TInstant WallClockResolved;
@@ -358,7 +358,7 @@ private:
 
     TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> PrepareFlatMKQLRequest(TStringBuf miniKQLProgram, TStringBuf miniKQLParams, const TActorContext &ctx);
     void ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRequest, const TActorContext &ctx);
-    void ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheRequest, const TActorContext &ctx); 
+    void ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheRequest, const TActorContext &ctx);
 
     TIntrusivePtr<TTxProxyMon> TxProxyMon;
 
@@ -368,13 +368,13 @@ private:
         Send(Services.FollowerPipeCache, new TEvPipeCache::TEvUnlink(0));
         Send(Services.LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
 
-        ProcessStreamClearance(false, ctx); 
-        if (ReadTableRequest) { 
-            for (auto &tr : ReadTableRequest->StreamingShards) { 
-                ctx.Send(tr.second, new TEvTxProcessing::TEvInterruptTransaction(TxId)); 
-            } 
-        } 
- 
+        ProcessStreamClearance(false, ctx);
+        if (ReadTableRequest) {
+            for (auto &tr : ReadTableRequest->StreamingShards) {
+                ctx.Send(tr.second, new TEvTxProcessing::TEvInterruptTransaction(TxId));
+            }
+        }
+
         TActor::Die(ctx);
     }
 
@@ -389,12 +389,12 @@ private:
     void RegisterPlan(const TActorContext &ctx);
     void MergeResult(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
     void MakeFlatMKQLResponse(const TActorContext &ctx, const NCpuTime::TCpuTimer& timer);
- 
-    void ProcessStreamResponseData(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, 
-                                   const TActorContext &ctx); 
-    void FinishShardStream(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx); 
-    void FinishStreamResponse(const TActorContext &ctx); 
- 
+
+    void ProcessStreamResponseData(TEvDataShard::TEvProposeTransactionResult::TPtr &ev,
+                                   const TActorContext &ctx);
+    void FinishShardStream(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
+    void FinishStreamResponse(const TActorContext &ctx);
+
     ui64 SelectCoordinator(NSchemeCache::TSchemeCacheRequest &cacheRequest, const TActorContext &ctx);
     const TDomainsInfo::TDomain& SelectDomain(NSchemeCache::TSchemeCacheRequest &cacheRequest, const TActorContext &ctx);
 
@@ -404,7 +404,7 @@ private:
     void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx);
 
     void Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvProposeTransactionRestart::TPtr &ev, const TActorContext &ctx);
     void HandlePrepare(TEvDataShard::TEvProposeTransactionAttachResult::TPtr &ev, const TActorContext &ctx);
@@ -413,15 +413,15 @@ private:
     void HandlePrepareErrorTimeout(const TActorContext &ctx);
     void HandlePlan(TEvDataShard::TEvProposeTransactionAttachResult::TPtr &ev, const TActorContext &ctx);
     void HandlePlan(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr &ev, const TActorContext &ctx); 
-    void Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProxy::TEvProposeTransactionStatus::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvTxProcessing::TEvStreamClearanceRequest::TPtr &ev, const TActorContext &ctx); 
-    void Handle(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvTxProcessing::TEvStreamClearanceRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const TActorContext &ctx);
     void HandleResolve(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvTxProcessing::TEvStreamQuotaRequest::TPtr &ev, const TActorContext &ctx); 
-    void Handle(TEvTxProcessing::TEvStreamQuotaResponse::TPtr &ev, const TActorContext &ctx); 
-    void Handle(TEvTxProcessing::TEvStreamQuotaRelease::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvTxProcessing::TEvStreamQuotaRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvTxProcessing::TEvStreamQuotaResponse::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvTxProcessing::TEvStreamQuotaRelease::TPtr &ev, const TActorContext &ctx);
 
     void Handle(TEvPrivate::TEvReattachToShard::TPtr &ev, const TActorContext &ctx);
     void HandlePrepare(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx);
@@ -433,16 +433,16 @@ private:
     void ExtractDatashardErrors(const NKikimrTxDataShard::TEvProposeTransactionResult & record);
     void CancelProposal(ui64 exceptTablet);
     void FailProposedRequest(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, TString errMsg, const TActorContext &ctx);
- 
-    void SendStreamClearanceResponse(ui64 shard, bool cleared, const TActorContext &ctx); 
-    void ProcessNextStreamClearance(bool cleared, const TActorContext &ctx); 
-    void ProcessStreamClearance(bool cleared, const TActorContext &ctx); 
- 
-    bool ParseRangeKey(const NKikimrMiniKQL::TParams &proto, 
+
+    void SendStreamClearanceResponse(ui64 shard, bool cleared, const TActorContext &ctx);
+    void ProcessNextStreamClearance(bool cleared, const TActorContext &ctx);
+    void ProcessStreamClearance(bool cleared, const TActorContext &ctx);
+
+    bool ParseRangeKey(const NKikimrMiniKQL::TParams &proto,
                           TConstArrayRef<NScheme::TTypeId> keyType,
                           TSerializedCellVec &buf,
                           EParseRangeKeyExp exp);
- 
+
     bool CheckDomainLocality(NSchemeCache::TSchemeCacheRequest &cacheRequest);
     void BuildTxStats(NKikimrQueryStats::TTxStats& stats);
     bool IsReadOnlyRequest() const;
@@ -490,7 +490,7 @@ public:
         TRACE_EVENT(NKikimrServices::TX_PROXY);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvTxProcessing::TEvStreamIsDead, HandleResolve);
-            HFuncTraced(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle); 
+            HFuncTraced(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             HFuncTraced(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
             HFuncTraced(TEvents::TEvUndelivered, HandleUndeliveredResolve); // we must wait for resolve completion
             CFunc(TEvents::TSystem::Wakeup, HandleExecTimeoutResolve); // we must wait for resolve completion to keep key description
@@ -516,7 +516,7 @@ public:
             HFuncTraced(TEvDataShard::TEvProposeTransactionRestart, Handle);
             HFuncTraced(TEvDataShard::TEvProposeTransactionAttachResult, HandlePrepare);
             HFuncTraced(TEvTxProcessing::TEvStreamClearanceRequest, Handle);
-            HFuncTraced(TEvTxProcessing::TEvStreamIsDead, Handle); 
+            HFuncTraced(TEvTxProcessing::TEvStreamIsDead, Handle);
             HFuncTraced(TEvTxProcessing::TEvStreamQuotaRequest, Handle);
             HFuncTraced(TEvTxProcessing::TEvStreamQuotaResponse, Handle);
             HFuncTraced(TEvTxProcessing::TEvStreamQuotaRelease, Handle);
@@ -532,7 +532,7 @@ public:
         TRACE_EVENT(NKikimrServices::TX_PROXY);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvDataShard::TEvProposeTransactionResult, HandlePrepareErrors);
-            HFuncTraced(TEvTxProcessing::TEvStreamIsDead, Handle); 
+            HFuncTraced(TEvTxProcessing::TEvStreamIsDead, Handle);
             HFuncTraced(TEvPipeCache::TEvDeliveryProblem, HandlePrepareErrors);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandlePrepareErrorTimeout);
@@ -542,17 +542,17 @@ public:
     STFUNC(StateWaitPlan) {
         TRACE_EVENT(NKikimrServices::TX_PROXY);
         switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvDataShard::TEvGetReadTableSinkStateRequest, Handle); 
-            HFuncTraced(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle); 
+            HFuncTraced(TEvDataShard::TEvGetReadTableSinkStateRequest, Handle);
+            HFuncTraced(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
             HFuncTraced(TEvTxProxy::TEvProposeTransactionStatus, Handle);
             HFuncTraced(TEvDataShard::TEvProposeTransactionResult, HandlePlan);
             HFuncTraced(TEvDataShard::TEvProposeTransactionRestart, Handle);
             HFuncTraced(TEvDataShard::TEvProposeTransactionAttachResult, HandlePlan);
-            HFuncTraced(TEvTxProcessing::TEvStreamClearanceRequest, Handle); 
-            HFuncTraced(TEvTxProcessing::TEvStreamIsDead, Handle); 
-            HFuncTraced(TEvTxProcessing::TEvStreamQuotaRequest, Handle); 
-            HFuncTraced(TEvTxProcessing::TEvStreamQuotaResponse, Handle); 
-            HFuncTraced(TEvTxProcessing::TEvStreamQuotaRelease, Handle); 
+            HFuncTraced(TEvTxProcessing::TEvStreamClearanceRequest, Handle);
+            HFuncTraced(TEvTxProcessing::TEvStreamIsDead, Handle);
+            HFuncTraced(TEvTxProcessing::TEvStreamQuotaRequest, Handle);
+            HFuncTraced(TEvTxProcessing::TEvStreamQuotaResponse, Handle);
+            HFuncTraced(TEvTxProcessing::TEvStreamQuotaRelease, Handle);
             HFuncTraced(TEvPipeCache::TEvDeliveryProblem, HandlePlan);
             HFuncTraced(TEvPrivate::TEvReattachToShard, Handle);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
@@ -562,151 +562,151 @@ public:
     }
 };
 
-TKeySpace::TKeySpace() 
-    : OrderedQueue(false) 
-{ 
-} 
- 
-void TKeySpace::Initialize(bool ordered, 
-                           TConstArrayRef<NScheme::TTypeId> keyTypes, 
-                           const TTableRange &range) 
-{ 
-    SpaceRange.From.Parse(TSerializedCellVec::Serialize(range.From)); 
-    SpaceRange.FromInclusive = range.InclusiveFrom; 
-    SpaceRange.To.Parse(TSerializedCellVec::Serialize(range.To)); 
-    SpaceRange.ToInclusive = range.InclusiveTo; 
- 
+TKeySpace::TKeySpace()
+    : OrderedQueue(false)
+{
+}
+
+void TKeySpace::Initialize(bool ordered,
+                           TConstArrayRef<NScheme::TTypeId> keyTypes,
+                           const TTableRange &range)
+{
+    SpaceRange.From.Parse(TSerializedCellVec::Serialize(range.From));
+    SpaceRange.FromInclusive = range.InclusiveFrom;
+    SpaceRange.To.Parse(TSerializedCellVec::Serialize(range.To));
+    SpaceRange.ToInclusive = range.InclusiveTo;
+
     // +INF should not be included
     if (SpaceRange.To.GetCells().empty())
         SpaceRange.ToInclusive = false;
 
-    OrderedQueue = ordered; 
-    KeyTypes.assign(keyTypes.begin(), keyTypes.end()); 
-    QueuePoint = SpaceRange.From; 
-} 
- 
-bool TKeySpace::IsGreater(const TConstArrayRef<TCell> &lhs, const TConstArrayRef<TCell> &rhs) const 
-{ 
-    return CompareBorders<true, true>(lhs, rhs, true, true, KeyTypes) > 0; 
-} 
- 
-void TKeySpace::AddRange(const NKikimrTx::TKeyRange &range, ui64 shard) 
-{ 
-    TRange newRange(range); 
-    newRange.Shards.push_back(shard); 
- 
-    const auto &fromCells = newRange.From.GetCells(); 
- 
-    TRanges::iterator it = Ranges.begin(); 
-    for ( ; ; ++it) { 
-        if (it == Ranges.end() 
-            || IsGreater(it->From.GetCells(), fromCells)) { 
-            it = Ranges.insert(it, std::move(newRange)); 
-            break; 
-        } 
-    } 
- 
-    // Advance shards queue. 
-    if (OrderedQueue) { 
-        auto point = it; 
-        while (point != Ranges.end() 
-               && !IsGreater(point->From.GetCells(), QueuePoint.GetCells()) 
-               && IsGreater(point->To.GetCells(), QueuePoint.GetCells())) { 
-            for (auto s : point->Shards) 
-                ShardsQueue.push(s); 
-            QueuePoint = point->To; 
-            ++point; 
-        } 
-    } else { 
-        ShardsQueue.push(shard); 
-    } 
- 
-    TryToMergeRange(it); 
-} 
- 
-bool TKeySpace::IsFull() const 
-{ 
-    if (Ranges.size() != 1) 
-        return false; 
- 
-    auto &range = Ranges.front(); 
- 
-    Y_VERIFY_DEBUG(range.FromInclusive); 
-    Y_VERIFY_DEBUG(!range.ToInclusive); 
- 
-    if (IsGreater(range.From.GetCells(), SpaceRange.From.GetCells())) 
-        return false; 
- 
-    if (IsGreater(SpaceRange.To.GetCells(), range.To.GetCells())) 
-        return false; 
-    else if (SpaceRange.To.GetBuffer() == range.To.GetBuffer() 
-             && SpaceRange.ToInclusive) 
-        return false; 
- 
-    Y_VERIFY_DEBUG(!OrderedQueue || !IsGreater(SpaceRange.To.GetCells(), QueuePoint.GetCells())); 
- 
-    return true; 
-} 
- 
-void TKeySpace::FlushShardsToQueue() 
-{ 
-    if (!OrderedQueue) 
-        return; 
- 
-    TRanges::iterator it; 
- 
-    for (it = Ranges.begin(); it != Ranges.end(); ++it) { 
-        if (IsGreater(it->From.GetCells(), QueuePoint.GetCells())) 
-            break; 
-    } 
- 
-    while (it != Ranges.end()) { 
-        for (auto s : it->Shards) 
-            ShardsQueue.push(s); 
-        ++it; 
-    } 
-} 
- 
-void TKeySpace::TryToMergeRange(TRanges::iterator it) 
-{ 
-    while (TryToMergeWithPrev(it)) { 
-    } 
-    TryToMergeWithPrev(++it); 
-} 
- 
-bool TKeySpace::TryToMergeWithPrev(TRanges::iterator it) 
-{ 
-    if (it == Ranges.begin() || it == Ranges.end()) 
-        return false; 
- 
-    auto prev = it; 
-    --prev; 
- 
-    const auto &toCells = prev->To.GetCells(); 
-    const auto &fromCells = it->From.GetCells(); 
- 
-    // Check range is covered by the prev. 
-    if (!IsGreater(it->To.GetCells(), toCells)) { 
-        *it = std::move(*prev); 
-        Ranges.erase(prev); 
-        return true; 
-    } 
- 
-    if (toCells.size() != fromCells.size()) 
-        return false; 
- 
-    if (CompareTypedCellVectors(toCells.data(), fromCells.data(), KeyTypes.data(), toCells.size()) == 0 
-        && (it->FromInclusive || it->ToInclusive)) { 
-        it->FromInclusive = prev->FromInclusive; 
-        it->From = prev->From; 
-        it->Shards.insert(it->Shards.begin(), prev->Shards.begin(), prev->Shards.end()); 
-        Ranges.erase(prev); 
-        return true; 
-    } 
- 
-    return false; 
-} 
- 
+    OrderedQueue = ordered;
+    KeyTypes.assign(keyTypes.begin(), keyTypes.end());
+    QueuePoint = SpaceRange.From;
+}
+
+bool TKeySpace::IsGreater(const TConstArrayRef<TCell> &lhs, const TConstArrayRef<TCell> &rhs) const
+{
+    return CompareBorders<true, true>(lhs, rhs, true, true, KeyTypes) > 0;
+}
+
+void TKeySpace::AddRange(const NKikimrTx::TKeyRange &range, ui64 shard)
+{
+    TRange newRange(range);
+    newRange.Shards.push_back(shard);
+
+    const auto &fromCells = newRange.From.GetCells();
+
+    TRanges::iterator it = Ranges.begin();
+    for ( ; ; ++it) {
+        if (it == Ranges.end()
+            || IsGreater(it->From.GetCells(), fromCells)) {
+            it = Ranges.insert(it, std::move(newRange));
+            break;
+        }
+    }
+
+    // Advance shards queue.
+    if (OrderedQueue) {
+        auto point = it;
+        while (point != Ranges.end()
+               && !IsGreater(point->From.GetCells(), QueuePoint.GetCells())
+               && IsGreater(point->To.GetCells(), QueuePoint.GetCells())) {
+            for (auto s : point->Shards)
+                ShardsQueue.push(s);
+            QueuePoint = point->To;
+            ++point;
+        }
+    } else {
+        ShardsQueue.push(shard);
+    }
+
+    TryToMergeRange(it);
+}
+
+bool TKeySpace::IsFull() const
+{
+    if (Ranges.size() != 1)
+        return false;
+
+    auto &range = Ranges.front();
+
+    Y_VERIFY_DEBUG(range.FromInclusive);
+    Y_VERIFY_DEBUG(!range.ToInclusive);
+
+    if (IsGreater(range.From.GetCells(), SpaceRange.From.GetCells()))
+        return false;
+
+    if (IsGreater(SpaceRange.To.GetCells(), range.To.GetCells()))
+        return false;
+    else if (SpaceRange.To.GetBuffer() == range.To.GetBuffer()
+             && SpaceRange.ToInclusive)
+        return false;
+
+    Y_VERIFY_DEBUG(!OrderedQueue || !IsGreater(SpaceRange.To.GetCells(), QueuePoint.GetCells()));
+
+    return true;
+}
+
+void TKeySpace::FlushShardsToQueue()
+{
+    if (!OrderedQueue)
+        return;
+
+    TRanges::iterator it;
+
+    for (it = Ranges.begin(); it != Ranges.end(); ++it) {
+        if (IsGreater(it->From.GetCells(), QueuePoint.GetCells()))
+            break;
+    }
+
+    while (it != Ranges.end()) {
+        for (auto s : it->Shards)
+            ShardsQueue.push(s);
+        ++it;
+    }
+}
+
+void TKeySpace::TryToMergeRange(TRanges::iterator it)
+{
+    while (TryToMergeWithPrev(it)) {
+    }
+    TryToMergeWithPrev(++it);
+}
+
+bool TKeySpace::TryToMergeWithPrev(TRanges::iterator it)
+{
+    if (it == Ranges.begin() || it == Ranges.end())
+        return false;
+
+    auto prev = it;
+    --prev;
+
+    const auto &toCells = prev->To.GetCells();
+    const auto &fromCells = it->From.GetCells();
+
+    // Check range is covered by the prev.
+    if (!IsGreater(it->To.GetCells(), toCells)) {
+        *it = std::move(*prev);
+        Ranges.erase(prev);
+        return true;
+    }
+
+    if (toCells.size() != fromCells.size())
+        return false;
+
+    if (CompareTypedCellVectors(toCells.data(), fromCells.data(), KeyTypes.data(), toCells.size()) == 0
+        && (it->FromInclusive || it->ToInclusive)) {
+        it->FromInclusive = prev->FromInclusive;
+        it->From = prev->From;
+        it->Shards.insert(it->Shards.begin(), prev->Shards.begin(), prev->Shards.end());
+        Ranges.erase(prev);
+        return true;
+    }
+
+    return false;
+}
+
 void TDataReq::ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, NKikimrIssues::TStatusIds::EStatusCode code, bool reportIssues, const TActorContext &ctx) {
     auto *x = new TEvTxUserProxy::TEvProposeTransactionStatus(status);
     x->Record.SetTxId(TxId);
@@ -740,12 +740,12 @@ void TDataReq::ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus
         }
     }
 
-    if (ReadTableRequest) { 
-        x->Record.SetSerializedReadTableResponse(ReadTableRequest->ResponseData); 
-        x->Record.SetDataShardTabletId(ReadTableRequest->ResponseDataFrom); 
+    if (ReadTableRequest) {
+        x->Record.SetSerializedReadTableResponse(ReadTableRequest->ResponseData);
+        x->Record.SetDataShardTabletId(ReadTableRequest->ResponseDataFrom);
         x->Record.SetReadTableResponseVersion(ReadTableRequest->ResponseVersion);
-    } 
- 
+    }
+
     if (!DatashardErrors.empty())
         x->Record.SetDataShardErrors(DatashardErrors);
 
@@ -849,13 +849,13 @@ void TDataReq::ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus
             << "  marker# P13b");
         TxProxyMon->ReportStatusNotOK->Inc();
         break;
-    case TEvTxUserProxy::TResultStatus::ExecResponseData: 
-        LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_DEBUG, NKikimrServices::TX_PROXY, TxId, 
-            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId 
-            << " RESPONSE Status# " << TEvTxUserProxy::TResultStatus::Str(status) 
-            << "  marker# P13d"); 
-        TxProxyMon->ReportStatusStreamData->Inc(); 
-        break; 
+    case TEvTxUserProxy::TResultStatus::ExecResponseData:
+        LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_DEBUG, NKikimrServices::TX_PROXY, TxId,
+            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+            << " RESPONSE Status# " << TEvTxUserProxy::TResultStatus::Str(status)
+            << "  marker# P13d");
+        TxProxyMon->ReportStatusStreamData->Inc();
+        break;
     default:
         LOG_LOG_S_SAMPLED_BY(ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_PROXY, TxId,
             "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
@@ -1067,14 +1067,14 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
     Become(&TThis::StateWaitPrepare);
 }
 
-void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheRequest, const TActorContext &ctx) 
-{ 
-    auto &entry = cacheRequest->ResultSet[0]; 
+void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheRequest, const TActorContext &ctx)
+{
+    auto &entry = cacheRequest->ResultSet[0];
     ReadTableRequest->KeyDesc = std::move(entry.KeyDescription);
- 
+
     bool singleShard = ReadTableRequest->KeyDesc->Partitions.size() == 1;
     CanUseFollower = false;
- 
+
     bool immediate = singleShard;
 
     if (!ReadTableRequest->Snapshot.IsMax()) {
@@ -1083,58 +1083,58 @@ void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheR
     }
 
     for (auto& partition : ReadTableRequest->KeyDesc->Partitions) {
-        NKikimrTxDataShard::TDataTransaction dataTransaction; 
-        dataTransaction.SetStreamResponse(StreamResponse); 
+        NKikimrTxDataShard::TDataTransaction dataTransaction;
+        dataTransaction.SetStreamResponse(StreamResponse);
         dataTransaction.SetImmediate(immediate);
-        dataTransaction.SetReadOnly(true); 
+        dataTransaction.SetReadOnly(true);
         ActorIdToProto(SelfId(), dataTransaction.MutableSink());
-        auto &tx = *dataTransaction.MutableReadTableTransaction(); 
+        auto &tx = *dataTransaction.MutableReadTableTransaction();
         tx.MutableTableId()->SetOwnerId(ReadTableRequest->KeyDesc->TableId.PathId.OwnerId);
         tx.MutableTableId()->SetTableId(ReadTableRequest->KeyDesc->TableId.PathId.LocalPathId);
         tx.SetApiVersion(ReadTableRequest->RequestVersion);
-        for (auto &col : ReadTableRequest->Columns) { 
-            auto &c = *tx.AddColumns(); 
-            c.SetId(col.Id); 
-            c.SetName(col.Name); 
-            c.SetTypeId(col.PType); 
-        } 
-        auto &range = *tx.MutableRange(); 
-        ReadTableRequest->KeySpace.GetSpace().Serialize(range); 
- 
+        for (auto &col : ReadTableRequest->Columns) {
+            auto &c = *tx.AddColumns();
+            c.SetId(col.Id);
+            c.SetName(col.Name);
+            c.SetTypeId(col.PType);
+        }
+        auto &range = *tx.MutableRange();
+        ReadTableRequest->KeySpace.GetSpace().Serialize(range);
+
         if (!ReadTableRequest->Snapshot.IsMax()) {
             tx.SetSnapshotStep(ReadTableRequest->Snapshot.Step);
             tx.SetSnapshotTxId(ReadTableRequest->Snapshot.TxId);
         }
 
-        const TString transactionBuffer = dataTransaction.SerializeAsString(); 
- 
+        const TString transactionBuffer = dataTransaction.SerializeAsString();
+
         TPerTablet &perTablet = PerTablet[partition.ShardId];
         perTablet.TableId = ReadTableRequest->KeyDesc->TableId;
-        perTablet.TabletStatus = TPerTablet::ETabletStatus::StatusWait; 
-        perTablet.AffectedFlags = TPerTablet::AffectedRead; 
-        ++TabletsLeft; 
- 
-        TxProxyMon->ReadTableResolveSentToShard->Inc(); 
- 
-        LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, 
-            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId 
+        perTablet.TabletStatus = TPerTablet::ETabletStatus::StatusWait;
+        perTablet.AffectedFlags = TPerTablet::AffectedRead;
+        ++TabletsLeft;
+
+        TxProxyMon->ReadTableResolveSentToShard->Inc();
+
+        LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
+            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << " SEND TEvProposeTransaction to datashard " << partition.ShardId
-            << " with read table request" 
+            << " with read table request"
             << " affected shards " << ReadTableRequest->KeyDesc->Partitions.size()
             << " followers " << (CanUseFollower ? "allowed" : "disallowed") << " marker# P4b");
- 
+
         const TActorId pipeCache = CanUseFollower ? Services.FollowerPipeCache : Services.LeaderPipeCache;
- 
-        Send(pipeCache, new TEvPipeCache::TEvForward( 
-                new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCAN, 
-                    ctx.SelfID, TxId, transactionBuffer, 
+
+        Send(pipeCache, new TEvPipeCache::TEvForward(
+                new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCAN,
+                    ctx.SelfID, TxId, transactionBuffer,
                     TxFlags | (immediate ? NTxDataShard::TTxFlags::Immediate : 0)),
                 partition.ShardId, true));
-    } 
- 
-    Become(&TThis::StateWaitPrepare); 
-} 
- 
+    }
+
+    Become(&TThis::StateWaitPrepare);
+}
+
 TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> TDataReq::PrepareFlatMKQLRequest(TStringBuf miniKQLProgram, TStringBuf miniKQLParams, const TActorContext &ctx) {
     Y_UNUSED(ctx);
 
@@ -1199,14 +1199,14 @@ void TDataReq::MarkShardError(ui64 shardId, TDataReq::TPerTablet &perTablet, boo
 
 void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorContext &ctx) {
     RequestControls.Reqister(ctx);
- 
+
     TEvTxProxyReq::TEvMakeRequest *msg = ev->Get();
     const NKikimrTxUserProxy::TEvProposeTransaction &record = msg->Ev->Get()->Record;
     Y_VERIFY(record.HasTransaction());
 
     ProxyFlags = record.HasProxyFlags() ? record.GetProxyFlags() : 0;
-    ExecTimeoutPeriod = record.HasExecTimeoutPeriod() 
-        ? TDuration::MilliSeconds(record.GetExecTimeoutPeriod()) 
+    ExecTimeoutPeriod = record.HasExecTimeoutPeriod()
+        ? TDuration::MilliSeconds(record.GetExecTimeoutPeriod())
         : TDuration::MilliSeconds(RequestControls.DefaultTimeoutMs);
     if (ExecTimeoutPeriod.Minutes() > 60) {
         LOG_WARN_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
@@ -1239,12 +1239,12 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
     const NKikimrTxUserProxy::TTransaction &txbody = record.GetTransaction();
     RequestSource = msg->Ev->Sender;
     TxFlags = txbody.GetFlags() & ~NTxDataShard::TTxFlags::Immediate; // Ignore external immediate flag
-    StreamResponse = record.GetStreamResponse(); 
+    StreamResponse = record.GetStreamResponse();
 
-    // Subscribe for TEvStreamIsDead event. 
-    if (StreamResponse) 
+    // Subscribe for TEvStreamIsDead event.
+    if (StreamResponse)
         ctx.Send(RequestSource, new TEvents::TEvSubscribe, IEventHandle::FlagTrackDelivery);
- 
+
     LOG_DEBUG_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
         "Actor# " << ctx.SelfID.ToString() << " Cookie# " << (ui64)ev->Cookie
         << " txid# " << TxId << " HANDLE TDataReq marker# P1");
@@ -1253,25 +1253,25 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
         UserToken = new NACLib::TUserToken(record.GetUserToken());
     }
 
-    // For read table transaction we need to resolve table path. 
-    if (txbody.HasReadTableTransaction()) { 
-        ReadTableRequest = new TReadTableRequest(txbody.GetReadTableTransaction()); 
-        TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate()); 
+    // For read table transaction we need to resolve table path.
+    if (txbody.HasReadTableTransaction()) {
+        ReadTableRequest = new TReadTableRequest(txbody.GetReadTableTransaction());
+        TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
         request->DatabaseName = record.GetDatabaseName();
- 
-        NSchemeCache::TSchemeCacheNavigate::TEntry entry; 
+
+        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.Path = SplitPath(ReadTableRequest->TablePath);
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable; 
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
         entry.ShowPrivatePath = true;
-        request->ResultSet.push_back(entry); 
- 
-        ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request)); 
-        Become(&TThis::StateWaitResolve); 
-        return; 
-    } 
- 
-    TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq; 
- 
+        request->ResultSet.push_back(entry);
+
+        ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
+        Become(&TThis::StateWaitResolve);
+        return;
+    }
+
+    TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq;
+
     NCpuTime::TCpuTimer timer(CpuTime);
     if (txbody.HasMiniKQLTransaction()) {
         const auto& mkqlTxBody = txbody.GetMiniKQLTransaction();
@@ -1376,48 +1376,48 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
     Become(&TThis::StateWaitResolve);
 }
 
-void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx) { 
-    TEvTxProxySchemeCache::TEvNavigateKeySetResult *msg = ev->Get(); 
-    NSchemeCache::TSchemeCacheNavigate *resp = msg->Request.Get(); 
- 
-    LOG_LOG_S_SAMPLED_BY(ctx, (resp->ErrorCount == 0 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR), 
-                         NKikimrServices::TX_PROXY, TxId, 
-                         "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId 
-                         << " HANDLE EvNavigateKeySetResult TDataReq marker# P3b ErrorCount# " 
-                         << resp->ErrorCount); 
- 
-    if (resp->ErrorCount > 0) { 
+void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx) {
+    TEvTxProxySchemeCache::TEvNavigateKeySetResult *msg = ev->Get();
+    NSchemeCache::TSchemeCacheNavigate *resp = msg->Request.Get();
+
+    LOG_LOG_S_SAMPLED_BY(ctx, (resp->ErrorCount == 0 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR),
+                         NKikimrServices::TX_PROXY, TxId,
+                         "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
+                         << " HANDLE EvNavigateKeySetResult TDataReq marker# P3b ErrorCount# "
+                         << resp->ErrorCount);
+
+    if (resp->ErrorCount > 0) {
         const TString errorExplanation = "unresolved table: " + ReadTableRequest->TablePath;
         IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, errorExplanation));
- 
+
         UnresolvedKeys.push_back(errorExplanation);
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx);
 
-        TxProxyMon->ResolveKeySetWrongRequest->Inc(); 
-        return Die(ctx); 
-    } 
- 
-    Y_VERIFY(ReadTableRequest); 
-    bool projection = !ReadTableRequest->Columns.empty(); 
+        TxProxyMon->ResolveKeySetWrongRequest->Inc();
+        return Die(ctx);
+    }
+
+    Y_VERIFY(ReadTableRequest);
+    bool projection = !ReadTableRequest->Columns.empty();
     TMap<TString, size_t> colNames;
-    for (size_t i = 0; i < ReadTableRequest->Columns.size(); ++i) { 
-        auto &col = ReadTableRequest->Columns[i]; 
+    for (size_t i = 0; i < ReadTableRequest->Columns.size(); ++i) {
+        auto &col = ReadTableRequest->Columns[i];
         if (colNames.contains(col.Name)) {
             const TString errorExplanation = "duplicated columns are not supported: " + col.Name;
             IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, errorExplanation));
             UnresolvedKeys.push_back(errorExplanation);
             ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx);
- 
-            TxProxyMon->ResolveKeySetWrongRequest->Inc(); 
- 
-            return Die(ctx); 
-        } 
-        colNames[col.Name] = i; 
-    } 
- 
-    auto &res = resp->ResultSet[0]; 
-    ReadTableRequest->TableId = res.TableId; 
- 
+
+            TxProxyMon->ResolveKeySetWrongRequest->Inc();
+
+            return Die(ctx);
+        }
+        colNames[col.Name] = i;
+    }
+
+    auto &res = resp->ResultSet[0];
+    ReadTableRequest->TableId = res.TableId;
+
     if (res.TableId.IsSystemView()) {
         IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR,
             Sprintf("Table '%s' is a system view. Read table is not supported", ReadTableRequest->TablePath.data())));
@@ -1428,46 +1428,46 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
 
     TVector<NScheme::TTypeId> keyColumnTypes(res.Columns.size());
     TVector<TKeyDesc::TColumnOp> columns(res.Columns.size());
-    size_t keySize = 0; 
-    size_t no = 0; 
- 
-    for (auto &entry : res.Columns) { 
-        auto &col = entry.second; 
- 
-        if (col.KeyOrder != -1) { 
-            keyColumnTypes[col.KeyOrder] = col.PType; 
-            ++keySize; 
-        } 
- 
-        columns[no].Column = col.Id; 
-        columns[no].Operation = TKeyDesc::EColumnOperation::Read; 
-        columns[no].ExpectedType = col.PType; 
-        ++no; 
- 
-        if (projection) { 
+    size_t keySize = 0;
+    size_t no = 0;
+
+    for (auto &entry : res.Columns) {
+        auto &col = entry.second;
+
+        if (col.KeyOrder != -1) {
+            keyColumnTypes[col.KeyOrder] = col.PType;
+            ++keySize;
+        }
+
+        columns[no].Column = col.Id;
+        columns[no].Operation = TKeyDesc::EColumnOperation::Read;
+        columns[no].ExpectedType = col.PType;
+        ++no;
+
+        if (projection) {
             if (colNames.contains(col.Name)) {
-                ReadTableRequest->Columns[colNames[col.Name]] = col; 
-                colNames.erase(col.Name); 
-            } 
-        } else { 
-            ReadTableRequest->Columns.push_back(col); 
-        } 
-    } 
- 
-    // Report unresolved columns. 
-    if (!colNames.empty()) { 
+                ReadTableRequest->Columns[colNames[col.Name]] = col;
+                colNames.erase(col.Name);
+            }
+        } else {
+            ReadTableRequest->Columns.push_back(col);
+        }
+    }
+
+    // Report unresolved columns.
+    if (!colNames.empty()) {
         for (auto entry: colNames) {
             const TString &errorExplanation = "unresolved column: " + entry.first;
             IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, errorExplanation));
             UnresolvedKeys.push_back(errorExplanation);
         }
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx);
-        TxProxyMon->ResolveKeySetWrongRequest->Inc(); 
-        return Die(ctx); 
-    } 
- 
-    // Parse range. 
-    TConstArrayRef<NScheme::TTypeId> keyTypes(keyColumnTypes.data(), keySize); 
+        TxProxyMon->ResolveKeySetWrongRequest->Inc();
+        return Die(ctx);
+    }
+
+    // Parse range.
+    TConstArrayRef<NScheme::TTypeId> keyTypes(keyColumnTypes.data(), keySize);
     // Fix KeyRanges
     bool fromInclusive = ReadTableRequest->Range.GetFromInclusive();
     EParseRangeKeyExp fromExpand = EParseRangeKeyExp::TO_NULL;
@@ -1486,42 +1486,42 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
             toExpand = toInclusive ? EParseRangeKeyExp::NONE : EParseRangeKeyExp::TO_NULL;
         }
     }
-    if (!ParseRangeKey(ReadTableRequest->Range.GetFrom(), keyTypes, 
+    if (!ParseRangeKey(ReadTableRequest->Range.GetFrom(), keyTypes,
                        ReadTableRequest->FromValues, fromExpand)
-        || !ParseRangeKey(ReadTableRequest->Range.GetTo(), keyTypes, 
+        || !ParseRangeKey(ReadTableRequest->Range.GetTo(), keyTypes,
                           ReadTableRequest->ToValues, toExpand)) {
         IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::KEY_PARSE_ERROR, "could not parse key string"));
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::QUERY_ERROR, true, ctx);
-        TxProxyMon->ResolveKeySetWrongRequest->Inc(); 
-        return Die(ctx); 
-    } 
- 
+        TxProxyMon->ResolveKeySetWrongRequest->Inc();
+        return Die(ctx);
+    }
+
     TTableRange range(ReadTableRequest->FromValues.GetCells(),
                       fromInclusive,
                       ReadTableRequest->ToValues.GetCells(),
                       toInclusive);
- 
-    if (range.IsEmptyRange({keyTypes.begin(), keyTypes.end()})) { 
+
+    if (range.IsEmptyRange({keyTypes.begin(), keyTypes.end()})) {
         const TString errorExplanation = "empty range requested";
         IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::EMPTY_OP_RANGE, errorExplanation));
         UnresolvedKeys.push_back(errorExplanation);
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::QUERY_ERROR, true, ctx);
-        TxProxyMon->ResolveKeySetWrongRequest->Inc(); 
-        return Die(ctx); 
-    } 
- 
+        TxProxyMon->ResolveKeySetWrongRequest->Inc();
+        return Die(ctx);
+    }
+
     ReadTableRequest->KeyDesc.Reset(new TKeyDesc(res.TableId, range, TKeyDesc::ERowOperation::Read,
                                              keyTypes, columns));
-    ReadTableRequest->KeySpace.Initialize(ReadTableRequest->Ordered, keyTypes, range); 
- 
-    WallClockResolveStarted = Now(); 
- 
-    TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest); 
+    ReadTableRequest->KeySpace.Initialize(ReadTableRequest->Ordered, keyTypes, range);
+
+    WallClockResolveStarted = Now();
+
+    TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest);
     request->DomainOwnerId = res.DomainInfo->ExtractSchemeShard();
     request->ResultSet.emplace_back(std::move(ReadTableRequest->KeyDesc));
-    ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvResolveKeySet(request)); 
-} 
- 
+    ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+}
+
 void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, const TActorContext &ctx) {
     TEvTxProxySchemeCache::TEvResolveKeySetResult *msg = ev->Get();
     NSchemeCache::TSchemeCacheRequest *request = msg->Request.Get();
@@ -1576,26 +1576,26 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
     TxProxyMon->TxPrepareResolveHgram->Collect((WallClockResolved - WallClockResolveStarted).MicroSeconds());
 
     NCpuTime::TCpuTimer timer(CpuTime);
-    for (const NSchemeCache::TSchemeCacheRequest::TEntry& entry : request->ResultSet) { 
-        ui32 access = 0; 
-        switch (entry.KeyDescription->RowOperation) { 
-        case TKeyDesc::ERowOperation::Update: 
-            access |= NACLib::EAccessRights::UpdateRow; 
-            break; 
-        case TKeyDesc::ERowOperation::Read: 
-            access |= NACLib::EAccessRights::SelectRow; 
-            break; 
-        case TKeyDesc::ERowOperation::Erase: 
-            access |= NACLib::EAccessRights::EraseRow; 
-            break; 
-        default: 
-            break; 
-        } 
-        if (access != 0 
-                && UserToken != nullptr 
-                && entry.KeyDescription->Status == TKeyDesc::EStatus::Ok 
+    for (const NSchemeCache::TSchemeCacheRequest::TEntry& entry : request->ResultSet) {
+        ui32 access = 0;
+        switch (entry.KeyDescription->RowOperation) {
+        case TKeyDesc::ERowOperation::Update:
+            access |= NACLib::EAccessRights::UpdateRow;
+            break;
+        case TKeyDesc::ERowOperation::Read:
+            access |= NACLib::EAccessRights::SelectRow;
+            break;
+        case TKeyDesc::ERowOperation::Erase:
+            access |= NACLib::EAccessRights::EraseRow;
+            break;
+        default:
+            break;
+        }
+        if (access != 0
+                && UserToken != nullptr
+                && entry.KeyDescription->Status == TKeyDesc::EStatus::Ok
                 && entry.KeyDescription->SecurityObject != nullptr
-                && !entry.KeyDescription->SecurityObject->CheckAccess(access, *UserToken)) { 
+                && !entry.KeyDescription->SecurityObject->CheckAccess(access, *UserToken)) {
             TStringStream explanation;
             explanation << "Access denied for " << UserToken->GetUserSID()
                 << " with access " << NACLib::AccessRightsToString(access)
@@ -1604,8 +1604,8 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
             LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, explanation.Str());
             IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, explanation.Str()));
             ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, NKikimrIssues::TStatusIds::ACCESS_DENIED, true, ctx);
-            return Die(ctx); 
-        } 
+            return Die(ctx);
+        }
 
         if (FlatMKQLRequest && entry.Kind == NSchemeCache::TSchemeCacheRequest::KindAsyncIndexTable) {
             TMaybe<TString> error;
@@ -1625,26 +1625,26 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
                 return Die(ctx);
             }
         }
-    } 
- 
+    }
+
     if (!CheckDomainLocality(*request)) {
         IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DOMAIN_LOCALITY_ERROR));
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::DomainLocalityError, NKikimrIssues::TStatusIds::BAD_REQUEST, true, ctx);
         TxProxyMon->ResolveKeySetDomainLocalityFail->Inc();
-        return Die(ctx); 
-    } 
- 
-    SelectedCoordinator = SelectCoordinator(*request, ctx); 
- 
-    if (ReadTableRequest) { 
-        TxProxyMon->ResolveKeySetReadTableSuccess->Inc(); 
-        ProcessReadTableResolve(request, ctx); 
-    } else if (FlatMKQLRequest) { 
-        TxProxyMon->ResolveKeySetMiniKQLSuccess->Inc(); 
-        ProcessFlatMKQLResolve(request, ctx); 
-    } else { 
-        Y_FAIL("No request"); 
-    } 
+        return Die(ctx);
+    }
+
+    SelectedCoordinator = SelectCoordinator(*request, ctx);
+
+    if (ReadTableRequest) {
+        TxProxyMon->ResolveKeySetReadTableSuccess->Inc();
+        ProcessReadTableResolve(request, ctx);
+    } else if (FlatMKQLRequest) {
+        TxProxyMon->ResolveKeySetMiniKQLSuccess->Inc();
+        ProcessFlatMKQLResolve(request, ctx);
+    } else {
+        Y_FAIL("No request");
+    }
 }
 
 void TDataReq::Handle(TEvPrivate::TEvReattachToShard::TPtr &ev, const TActorContext &ctx) {
@@ -1928,11 +1928,11 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecCancelled, NKikimrIssues::TStatusIds::ERROR, true, ctx);
         TxProxyMon->TxResultCancelled->Inc();
         return Die(ctx);
-    case NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST: 
-        ExtractDatashardErrors(record); 
-        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, NKikimrIssues::TStatusIds::BAD_REQUEST, true, ctx); 
-        TxProxyMon->TxResultCancelled->Inc(); 
-        return Die(ctx); 
+    case NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST:
+        ExtractDatashardErrors(record);
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, NKikimrIssues::TStatusIds::BAD_REQUEST, true, ctx);
+        TxProxyMon->TxResultCancelled->Inc();
+        return Die(ctx);
     default:
         // everything other is hard error
         ExtractDatashardErrors(record);
@@ -2188,8 +2188,8 @@ void TDataReq::HandlePlan(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, c
     TPerTablet *perTablet = PerTablet.FindPtr(tabletId);
 
     LOG_LOG_S_SAMPLED_BY(ctx, ((msg->GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE ||
-        msg->GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::ABORTED || 
-        msg->GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::RESPONSE_DATA) 
+        msg->GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::ABORTED ||
+        msg->GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::RESPONSE_DATA)
         ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR),
         NKikimrServices::TX_PROXY, TxId,
         "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
@@ -2330,76 +2330,76 @@ void TDataReq::HandlePlan(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TAct
         "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId << " lost pipe with unknown endpoint, ignoring");
 }
 
-void TDataReq::Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr &ev, const TActorContext &ctx) { 
-    auto *response = new TEvDataShard::TEvGetReadTableSinkStateResponse; 
- 
-    if (!ReadTableRequest) { 
-        response->Record.MutableStatus()->SetCode(Ydb::StatusIds::GENERIC_ERROR); 
-        auto *issue = response->Record.MutableStatus()->AddIssues(); 
-        issue->set_severity(NYql::TSeverityIds::S_ERROR); 
-        issue->set_message("not a ReadTable request"); 
-        ctx.Send(ev->Sender, response); 
-        return; 
-    } 
- 
-    auto &rec = response->Record; 
-    rec.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS); 
- 
-    rec.SetTxId(TxId); 
-    rec.SetWallClockAccepted(WallClockAccepted.GetValue()); 
-    rec.SetWallClockResolveStarted(WallClockResolveStarted.GetValue()); 
-    rec.SetWallClockResolved(WallClockResolved.GetValue()); 
-    rec.SetWallClockPrepared(WallClockPrepared.GetValue()); 
-    rec.SetWallClockPlanned(WallClockPlanned.GetValue()); 
-    rec.SetExecTimeoutPeriod(ExecTimeoutPeriod.GetValue()); 
-    rec.SetSelectedCoordinator(SelectedCoordinator); 
-    rec.SetRequestSource(ToString(RequestSource)); 
-    rec.SetRequestVersion(ReadTableRequest->RequestVersion); 
-    rec.SetResponseVersion(ReadTableRequest->ResponseVersion); 
-    for (auto &pr : ReadTableRequest->ClearanceSenders) 
-        rec.AddClearanceRequests()->SetId(pr.first); 
-    for (auto &pr : ReadTableRequest->QuotaRequests) 
-        rec.AddQuotaRequests()->SetId(pr.second.ShardId); 
-    for (auto &pr : ReadTableRequest->StreamingShards) 
-        rec.AddStreamingShards()->SetId(pr.first); 
-    auto queue = ReadTableRequest->KeySpace.GetShardsQueue(); 
-    while (!queue.empty()) { 
-        rec.AddShardsQueue()->SetId(queue.front()); 
-        queue.pop(); 
-    } 
-    rec.SetOrdered(ReadTableRequest->Ordered); 
-    rec.SetRowsLimited(ReadTableRequest->RowsLimited); 
-    rec.SetRowsRemain(ReadTableRequest->RowsRemain); 
- 
-    ctx.Send(ev->Sender, response); 
-} 
- 
-void TDataReq::Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx) { 
-    if (ReadTableRequest) { 
-        ctx.Send(ev->Forward(RequestSource)); 
-    } else { 
-        auto *response = new TEvDataShard::TEvGetReadTableStreamStateResponse; 
-        response->Record.MutableStatus()->SetCode(Ydb::StatusIds::GENERIC_ERROR); 
-        auto *issue = response->Record.MutableStatus()->AddIssues(); 
-        issue->set_severity(NYql::TSeverityIds::S_ERROR); 
-        issue->set_message("Proxy actor doesn't process ReadTable request"); 
-        ctx.Send(ev->Sender, response); 
-    } 
-} 
- 
-void TDataReq::Handle(TEvTxProcessing::TEvStreamClearanceRequest::TPtr &ev, const TActorContext &ctx) 
-{ 
-    auto &rec = ev->Get()->Record; 
-    ui64 shard = rec.GetShardId(); 
- 
-    Y_VERIFY(ReadTableRequest); 
- 
-    // Handle shard restart. For now temporary snapshots are used by scan transaction 
-    // and therefore any shard restart may cause inconsistent response. 
+void TDataReq::Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr &ev, const TActorContext &ctx) {
+    auto *response = new TEvDataShard::TEvGetReadTableSinkStateResponse;
+
+    if (!ReadTableRequest) {
+        response->Record.MutableStatus()->SetCode(Ydb::StatusIds::GENERIC_ERROR);
+        auto *issue = response->Record.MutableStatus()->AddIssues();
+        issue->set_severity(NYql::TSeverityIds::S_ERROR);
+        issue->set_message("not a ReadTable request");
+        ctx.Send(ev->Sender, response);
+        return;
+    }
+
+    auto &rec = response->Record;
+    rec.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
+
+    rec.SetTxId(TxId);
+    rec.SetWallClockAccepted(WallClockAccepted.GetValue());
+    rec.SetWallClockResolveStarted(WallClockResolveStarted.GetValue());
+    rec.SetWallClockResolved(WallClockResolved.GetValue());
+    rec.SetWallClockPrepared(WallClockPrepared.GetValue());
+    rec.SetWallClockPlanned(WallClockPlanned.GetValue());
+    rec.SetExecTimeoutPeriod(ExecTimeoutPeriod.GetValue());
+    rec.SetSelectedCoordinator(SelectedCoordinator);
+    rec.SetRequestSource(ToString(RequestSource));
+    rec.SetRequestVersion(ReadTableRequest->RequestVersion);
+    rec.SetResponseVersion(ReadTableRequest->ResponseVersion);
+    for (auto &pr : ReadTableRequest->ClearanceSenders)
+        rec.AddClearanceRequests()->SetId(pr.first);
+    for (auto &pr : ReadTableRequest->QuotaRequests)
+        rec.AddQuotaRequests()->SetId(pr.second.ShardId);
+    for (auto &pr : ReadTableRequest->StreamingShards)
+        rec.AddStreamingShards()->SetId(pr.first);
+    auto queue = ReadTableRequest->KeySpace.GetShardsQueue();
+    while (!queue.empty()) {
+        rec.AddShardsQueue()->SetId(queue.front());
+        queue.pop();
+    }
+    rec.SetOrdered(ReadTableRequest->Ordered);
+    rec.SetRowsLimited(ReadTableRequest->RowsLimited);
+    rec.SetRowsRemain(ReadTableRequest->RowsRemain);
+
+    ctx.Send(ev->Sender, response);
+}
+
+void TDataReq::Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx) {
+    if (ReadTableRequest) {
+        ctx.Send(ev->Forward(RequestSource));
+    } else {
+        auto *response = new TEvDataShard::TEvGetReadTableStreamStateResponse;
+        response->Record.MutableStatus()->SetCode(Ydb::StatusIds::GENERIC_ERROR);
+        auto *issue = response->Record.MutableStatus()->AddIssues();
+        issue->set_severity(NYql::TSeverityIds::S_ERROR);
+        issue->set_message("Proxy actor doesn't process ReadTable request");
+        ctx.Send(ev->Sender, response);
+    }
+}
+
+void TDataReq::Handle(TEvTxProcessing::TEvStreamClearanceRequest::TPtr &ev, const TActorContext &ctx)
+{
+    auto &rec = ev->Get()->Record;
+    ui64 shard = rec.GetShardId();
+
+    Y_VERIFY(ReadTableRequest);
+
+    // Handle shard restart. For now temporary snapshots are used by scan transaction
+    // and therefore any shard restart may cause inconsistent response.
     if (ReadTableRequest->ClearanceSenders.contains(shard) || PerTablet[shard].StreamCleared) {
             LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY,
                         "Cannot recover from shard restart, shard: " << shard << ", txid: " << TxId);
- 
+
             // We must send response to current request too
             auto response = MakeHolder<TEvTxProcessing::TEvStreamClearanceResponse>();
             response->Record.SetTxId(TxId);
@@ -2410,36 +2410,36 @@ void TDataReq::Handle(TEvTxProcessing::TEvStreamClearanceRequest::TPtr &ev, cons
             Die(ctx);
             return;
         }
- 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, 
-                "Got clearance request, shard: " << rec.GetShardId() 
-                << ", txid: " << rec.GetTxId()); 
- 
-    ctx.Send(ev->Sender, new TEvTxProcessing::TEvStreamClearancePending(TxId)); 
- 
-    ReadTableRequest->ClearanceSenders.emplace(shard, ev->Sender); 
-    ReadTableRequest->KeySpace.AddRange(rec.GetKeyRange(), shard); 
- 
-    if (ReadTableRequest->KeySpace.IsFull()) { 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, 
-                    "Collected all clerance requests, txid: " << TxId); 
-    } 
- 
-    ProcessStreamClearance(true, ctx); 
-} 
- 
+
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
+                "Got clearance request, shard: " << rec.GetShardId()
+                << ", txid: " << rec.GetTxId());
+
+    ctx.Send(ev->Sender, new TEvTxProcessing::TEvStreamClearancePending(TxId));
+
+    ReadTableRequest->ClearanceSenders.emplace(shard, ev->Sender);
+    ReadTableRequest->KeySpace.AddRange(rec.GetKeyRange(), shard);
+
+    if (ReadTableRequest->KeySpace.IsFull()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
+                    "Collected all clerance requests, txid: " << TxId);
+    }
+
+    ProcessStreamClearance(true, ctx);
+}
+
 void TDataReq::Handle(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const TActorContext &ctx)
-{ 
+{
     Y_UNUSED(ev);
-    Y_VERIFY(ReadTableRequest); 
- 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, 
-                "Abort read table transaction because stream is dead txid: " << TxId); 
- 
-    ReportStatus(TEvTxUserProxy::TResultStatus::ExecComplete, NKikimrIssues::TStatusIds::REJECTED, true, ctx); 
-    Die(ctx); 
-} 
- 
+    Y_VERIFY(ReadTableRequest);
+
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
+                "Abort read table transaction because stream is dead txid: " << TxId);
+
+    ReportStatus(TEvTxUserProxy::TResultStatus::ExecComplete, NKikimrIssues::TStatusIds::REJECTED, true, ctx);
+    Die(ctx);
+}
+
 void TDataReq::HandleResolve(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev);
     Y_VERIFY(ReadTableRequest);
@@ -2450,35 +2450,35 @@ void TDataReq::HandleResolve(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const T
     Become(&TThis::StateResolveTimeout);
 }
 
-void TDataReq::Handle(TEvTxProcessing::TEvStreamQuotaRequest::TPtr &ev, const TActorContext &ctx) 
-{ 
-    Y_VERIFY_DEBUG(ReadTableRequest); 
- 
-    auto id = ReadTableRequest->QuotaRequestId++; 
-    TReadTableRequest::TQuotaRequest req{ev->Sender, ev->Get()->Record.GetShardId()}; 
-    ReadTableRequest->QuotaRequests.insert(std::make_pair(id, req)); 
-    ctx.Send(RequestSource, ev->Release().Release(), 0, id); 
-} 
- 
-void TDataReq::Handle(TEvTxProcessing::TEvStreamQuotaResponse::TPtr &ev, const TActorContext &ctx) 
-{ 
-    Y_VERIFY_DEBUG(ReadTableRequest); 
- 
-    auto it = ReadTableRequest->QuotaRequests.find(ev->Cookie); 
-    Y_VERIFY_DEBUG(it != ReadTableRequest->QuotaRequests.end()); 
- 
-    if (ReadTableRequest->RowsLimited) 
-        ev->Get()->Record.SetRowLimit(ReadTableRequest->RowsRemain); 
- 
-    ctx.Send(it->second.Sender, ev->Release().Release()); 
-    ReadTableRequest->QuotaRequests.erase(it); 
-} 
- 
-void TDataReq::Handle(TEvTxProcessing::TEvStreamQuotaRelease::TPtr &ev, const TActorContext &ctx) 
-{ 
-    ctx.Send(ev->Forward(RequestSource)); 
-} 
- 
+void TDataReq::Handle(TEvTxProcessing::TEvStreamQuotaRequest::TPtr &ev, const TActorContext &ctx)
+{
+    Y_VERIFY_DEBUG(ReadTableRequest);
+
+    auto id = ReadTableRequest->QuotaRequestId++;
+    TReadTableRequest::TQuotaRequest req{ev->Sender, ev->Get()->Record.GetShardId()};
+    ReadTableRequest->QuotaRequests.insert(std::make_pair(id, req));
+    ctx.Send(RequestSource, ev->Release().Release(), 0, id);
+}
+
+void TDataReq::Handle(TEvTxProcessing::TEvStreamQuotaResponse::TPtr &ev, const TActorContext &ctx)
+{
+    Y_VERIFY_DEBUG(ReadTableRequest);
+
+    auto it = ReadTableRequest->QuotaRequests.find(ev->Cookie);
+    Y_VERIFY_DEBUG(it != ReadTableRequest->QuotaRequests.end());
+
+    if (ReadTableRequest->RowsLimited)
+        ev->Get()->Record.SetRowLimit(ReadTableRequest->RowsRemain);
+
+    ctx.Send(it->second.Sender, ev->Release().Release());
+    ReadTableRequest->QuotaRequests.erase(it);
+}
+
+void TDataReq::Handle(TEvTxProcessing::TEvStreamQuotaRelease::TPtr &ev, const TActorContext &ctx)
+{
+    ctx.Send(ev->Forward(RequestSource));
+}
+
 void TDataReq::HandleExecTimeoutResolve(const TActorContext &ctx) {
     LOG_ERROR_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
         "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
@@ -2517,10 +2517,10 @@ void TDataReq::MergeResult(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, 
                     "Got stats for txid: " << TxId << " datashard: " << tabletId << " " << *perTablet->Stats);
     }
 
-    if (StreamResponse) { 
-        return FinishShardStream(ev, ctx); 
-    } 
- 
+    if (StreamResponse) {
+        return FinishShardStream(ev, ctx);
+    }
+
     Y_VERIFY(FlatMKQLRequest);
     NCpuTime::TCpuTimer timer;
     NMiniKQL::IEngineFlat &engine = *FlatMKQLRequest->Engine;
@@ -2646,58 +2646,58 @@ void TDataReq::MakeFlatMKQLResponse(const TActorContext &ctx, const NCpuTime::TC
     }
 }
 
-void TDataReq::ProcessStreamResponseData(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, 
-                                         const TActorContext &ctx) 
-{ 
-    Y_VERIFY_DEBUG(ReadTableRequest); 
- 
-    ctx.Send(ev->Sender, new TEvTxProcessing::TEvStreamDataAck); 
- 
-    auto &rec = ev->Get()->Record; 
-    ReadTableRequest->ResponseData = rec.GetTxResult(); 
-    ReadTableRequest->ResponseDataFrom = rec.GetOrigin(); 
+void TDataReq::ProcessStreamResponseData(TEvDataShard::TEvProposeTransactionResult::TPtr &ev,
+                                         const TActorContext &ctx)
+{
+    Y_VERIFY_DEBUG(ReadTableRequest);
+
+    ctx.Send(ev->Sender, new TEvTxProcessing::TEvStreamDataAck);
+
+    auto &rec = ev->Get()->Record;
+    ReadTableRequest->ResponseData = rec.GetTxResult();
+    ReadTableRequest->ResponseDataFrom = rec.GetOrigin();
     if (rec.HasApiVersion()) {
         ReadTableRequest->ResponseVersion = rec.GetApiVersion();
     }
- 
-    if (ReadTableRequest->RowsLimited) { 
-        auto rows = rec.RowOffsetsSize(); 
-        if (rows > ReadTableRequest->RowsRemain) { 
-            ReadTableRequest->ResponseData.resize(rec.GetRowOffsets(ReadTableRequest->RowsRemain)); 
-            ReadTableRequest->RowsRemain = 0; 
-        } else { 
-            ReadTableRequest->RowsRemain -= rows; 
-        } 
-    } 
- 
-    ReportStatus(TEvTxUserProxy::TResultStatus::ExecResponseData, NKikimrIssues::TStatusIds::TRANSIENT, false, ctx); 
- 
-    if (ReadTableRequest->RowsLimited && !ReadTableRequest->RowsRemain) 
-        FinishStreamResponse(ctx); 
-} 
- 
-void TDataReq::FinishShardStream(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) { 
- 
-    auto &rec = ev->Get()->Record; 
-    auto shard = rec.GetOrigin(); 
- 
+
+    if (ReadTableRequest->RowsLimited) {
+        auto rows = rec.RowOffsetsSize();
+        if (rows > ReadTableRequest->RowsRemain) {
+            ReadTableRequest->ResponseData.resize(rec.GetRowOffsets(ReadTableRequest->RowsRemain));
+            ReadTableRequest->RowsRemain = 0;
+        } else {
+            ReadTableRequest->RowsRemain -= rows;
+        }
+    }
+
+    ReportStatus(TEvTxUserProxy::TResultStatus::ExecResponseData, NKikimrIssues::TStatusIds::TRANSIENT, false, ctx);
+
+    if (ReadTableRequest->RowsLimited && !ReadTableRequest->RowsRemain)
+        FinishStreamResponse(ctx);
+}
+
+void TDataReq::FinishShardStream(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) {
+
+    auto &rec = ev->Get()->Record;
+    auto shard = rec.GetOrigin();
+
     Y_VERIFY_DEBUG(ReadTableRequest->StreamingShards.contains(shard));
-    ReadTableRequest->StreamingShards.erase(shard); 
- 
-    if (ReadTableRequest->KeySpace.IsFull() 
-        && ReadTableRequest->StreamingShards.empty() 
-        && ReadTableRequest->KeySpace.IsShardsQueueEmpty()) { 
-        FinishStreamResponse(ctx); 
-    } else { 
-        ProcessStreamClearance(true, ctx); 
-    } 
-} 
- 
-void TDataReq::FinishStreamResponse(const TActorContext &ctx) { 
+    ReadTableRequest->StreamingShards.erase(shard);
+
+    if (ReadTableRequest->KeySpace.IsFull()
+        && ReadTableRequest->StreamingShards.empty()
+        && ReadTableRequest->KeySpace.IsShardsQueueEmpty()) {
+        FinishStreamResponse(ctx);
+    } else {
+        ProcessStreamClearance(true, ctx);
+    }
+}
+
+void TDataReq::FinishStreamResponse(const TActorContext &ctx) {
     ReportStatus(TEvTxUserProxy::TResultStatus::ExecComplete, NKikimrIssues::TStatusIds::SUCCESS, true, ctx);
-    Die(ctx); 
-} 
- 
+    Die(ctx);
+}
+
 NSchemeCache::TDomainInfo::TPtr FindDomainInfo(NSchemeCache::TSchemeCacheRequest &cacheRequest) {
     for (const auto& entry :cacheRequest.ResultSet) {
         if (entry.DomainInfo) {
@@ -2866,84 +2866,84 @@ void TDataReq::HandleWatchdog(const TActorContext &ctx) {
     ctx.Schedule(TDuration::MilliSeconds(KIKIMR_DATAREQ_WATCHDOG_PERIOD), new TEvPrivate::TEvProxyDataReqOngoingTransactionWatchdog());
 }
 
-void TDataReq::SendStreamClearanceResponse(ui64 shard, bool cleared, const TActorContext &ctx) 
-{ 
-    TAutoPtr<TEvTxProcessing::TEvStreamClearanceResponse> response 
-        = new TEvTxProcessing::TEvStreamClearanceResponse; 
-    response->Record.SetTxId(TxId); 
-    response->Record.SetCleared(cleared); 
- 
-    // For unordered streams we may get multiple entries for the same 
-    // shard in clearance queue due to shard restarts. Avoid multiple 
-    // responses by removing sender from the senders map. 
-    auto it = ReadTableRequest->ClearanceSenders.find(shard); 
-    if (it == ReadTableRequest->ClearanceSenders.end()) { 
-        LOG_WARN_S(ctx, NKikimrServices::TX_PROXY, 
-                   "No sender for clearance request, shard: " << shard 
-                   << ", txid: " << TxId << ", cleared: " << cleared); 
-        return; 
-    } 
- 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, 
-                "Send stream clearance, shard: " << shard 
-                << ", txid: " << TxId << ", cleared: " << cleared); 
- 
-    ctx.Send(it->second, response.Release()); 
- 
-    if (cleared) { 
-        ReadTableRequest->StreamingShards.insert(*it); 
-        PerTablet[shard].StreamCleared = true; 
-    } 
- 
-    ReadTableRequest->ClearanceSenders.erase(it); 
-} 
- 
-void TDataReq::ProcessNextStreamClearance(bool cleared, const TActorContext &ctx) 
-{ 
-    Y_VERIFY(ReadTableRequest); 
-    Y_VERIFY_DEBUG(!ReadTableRequest->KeySpace.IsShardsQueueEmpty()); 
- 
-    auto shard = ReadTableRequest->KeySpace.ShardsQueueFront(); 
-    ReadTableRequest->KeySpace.ShardsQueuePop(); 
- 
-    SendStreamClearanceResponse(shard, cleared, ctx); 
-} 
- 
-void TDataReq::ProcessStreamClearance(bool cleared, const TActorContext &ctx) 
-{ 
-    if (!ReadTableRequest) 
-        return; 
- 
-    if (cleared) { 
-        auto &cfg = AppData(ctx)->StreamingConfig.GetOutputStreamConfig(); 
- 
-        ui32 limit = ReadTableRequest->Ordered ? 1 : cfg.GetMaxStreamingShards(); 
-        while (!ReadTableRequest->KeySpace.IsShardsQueueEmpty() 
-               && limit > ReadTableRequest->StreamingShards.size()) { 
-            ProcessNextStreamClearance(cleared, ctx); 
-        } 
-    } else { 
-        if (ReadTableRequest->Ordered && !ReadTableRequest->KeySpace.IsFull()) { 
-            ReadTableRequest->KeySpace.FlushShardsToQueue(); 
-        } 
- 
-        while (!ReadTableRequest->KeySpace.IsShardsQueueEmpty()) 
-            ProcessNextStreamClearance(cleared, ctx); 
-    } 
-} 
- 
-bool TDataReq::ParseRangeKey(const NKikimrMiniKQL::TParams &proto, 
-                             TConstArrayRef<NScheme::TTypeId> keyType, 
+void TDataReq::SendStreamClearanceResponse(ui64 shard, bool cleared, const TActorContext &ctx)
+{
+    TAutoPtr<TEvTxProcessing::TEvStreamClearanceResponse> response
+        = new TEvTxProcessing::TEvStreamClearanceResponse;
+    response->Record.SetTxId(TxId);
+    response->Record.SetCleared(cleared);
+
+    // For unordered streams we may get multiple entries for the same
+    // shard in clearance queue due to shard restarts. Avoid multiple
+    // responses by removing sender from the senders map.
+    auto it = ReadTableRequest->ClearanceSenders.find(shard);
+    if (it == ReadTableRequest->ClearanceSenders.end()) {
+        LOG_WARN_S(ctx, NKikimrServices::TX_PROXY,
+                   "No sender for clearance request, shard: " << shard
+                   << ", txid: " << TxId << ", cleared: " << cleared);
+        return;
+    }
+
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
+                "Send stream clearance, shard: " << shard
+                << ", txid: " << TxId << ", cleared: " << cleared);
+
+    ctx.Send(it->second, response.Release());
+
+    if (cleared) {
+        ReadTableRequest->StreamingShards.insert(*it);
+        PerTablet[shard].StreamCleared = true;
+    }
+
+    ReadTableRequest->ClearanceSenders.erase(it);
+}
+
+void TDataReq::ProcessNextStreamClearance(bool cleared, const TActorContext &ctx)
+{
+    Y_VERIFY(ReadTableRequest);
+    Y_VERIFY_DEBUG(!ReadTableRequest->KeySpace.IsShardsQueueEmpty());
+
+    auto shard = ReadTableRequest->KeySpace.ShardsQueueFront();
+    ReadTableRequest->KeySpace.ShardsQueuePop();
+
+    SendStreamClearanceResponse(shard, cleared, ctx);
+}
+
+void TDataReq::ProcessStreamClearance(bool cleared, const TActorContext &ctx)
+{
+    if (!ReadTableRequest)
+        return;
+
+    if (cleared) {
+        auto &cfg = AppData(ctx)->StreamingConfig.GetOutputStreamConfig();
+
+        ui32 limit = ReadTableRequest->Ordered ? 1 : cfg.GetMaxStreamingShards();
+        while (!ReadTableRequest->KeySpace.IsShardsQueueEmpty()
+               && limit > ReadTableRequest->StreamingShards.size()) {
+            ProcessNextStreamClearance(cleared, ctx);
+        }
+    } else {
+        if (ReadTableRequest->Ordered && !ReadTableRequest->KeySpace.IsFull()) {
+            ReadTableRequest->KeySpace.FlushShardsToQueue();
+        }
+
+        while (!ReadTableRequest->KeySpace.IsShardsQueueEmpty())
+            ProcessNextStreamClearance(cleared, ctx);
+    }
+}
+
+bool TDataReq::ParseRangeKey(const NKikimrMiniKQL::TParams &proto,
+                             TConstArrayRef<NScheme::TTypeId> keyType,
                              TSerializedCellVec &buf,
                              EParseRangeKeyExp exp)
-{ 
+{
     TVector<TCell> key;
     if (proto.HasValue()) {
         if (!proto.HasType()) {
             UnresolvedKeys.push_back("No type was specified in the range key tuple");
             return false;
         }
- 
+
         auto& value = proto.GetValue();
         auto& type = proto.GetType();
         TString errStr;
@@ -2951,9 +2951,9 @@ bool TDataReq::ParseRangeKey(const NKikimrMiniKQL::TParams &proto,
         if (!res) {
             UnresolvedKeys.push_back("Failed to parse range key tuple: " + errStr);
             return false;
-        } 
-    } 
- 
+        }
+    }
+
     switch (exp) {
         case EParseRangeKeyExp::TO_NULL:
             key.resize(keyType.size());
@@ -2963,9 +2963,9 @@ bool TDataReq::ParseRangeKey(const NKikimrMiniKQL::TParams &proto,
     }
 
     buf.Parse(TSerializedCellVec::Serialize(key));
-    return true; 
-} 
- 
+    return true;
+}
+
 bool TDataReq::IsReadOnlyRequest() const {
     if (FlatMKQLRequest) {
         return FlatMKQLRequest->ReadOnlyProgram;

@@ -1,54 +1,54 @@
-#include "datashard_impl.h" 
-#include "datashard_kqp.h" 
-#include "datashard_pipeline.h" 
-#include "execution_unit_ctors.h" 
-#include "setup_sys_locks.h" 
- 
+#include "datashard_impl.h"
+#include "datashard_kqp.h"
+#include "datashard_pipeline.h"
+#include "execution_unit_ctors.h"
+#include "setup_sys_locks.h"
+
 #include <ydb/core/kqp/rm/kqp_rm.h>
 
-namespace NKikimr { 
+namespace NKikimr {
 namespace NDataShard {
- 
-using namespace NMiniKQL; 
- 
+
+using namespace NMiniKQL;
+
 #define LOG_T(stream) LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_D(stream) LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_E(stream) LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_C(stream) LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_W(stream) LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, stream)
 
-class TBuildKqpDataTxOutRSUnit : public TExecutionUnit { 
-public: 
+class TBuildKqpDataTxOutRSUnit : public TExecutionUnit {
+public:
     TBuildKqpDataTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline);
-    ~TBuildKqpDataTxOutRSUnit() override; 
- 
-    bool IsReadyToExecute(TOperation::TPtr op) const override; 
+    ~TBuildKqpDataTxOutRSUnit() override;
+
+    bool IsReadyToExecute(TOperation::TPtr op) const override;
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
     EExecutionStatus OnTabletNotReady(TActiveTransaction& tx, TValidatedDataTx& dataTx, TTransactionContext& txc,
                                       const TActorContext& ctx);
-}; 
- 
+};
+
 TBuildKqpDataTxOutRSUnit::TBuildKqpDataTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline)
     : TExecutionUnit(EExecutionUnitKind::BuildKqpDataTxOutRS, true, dataShard, pipeline) {}
- 
+
 TBuildKqpDataTxOutRSUnit::~TBuildKqpDataTxOutRSUnit() {}
- 
+
 bool TBuildKqpDataTxOutRSUnit::IsReadyToExecute(TOperation::TPtr) const {
-    return true; 
-} 
- 
+    return true;
+}
+
 EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransactionContext& txc,
     const TActorContext& ctx)
 {
-    TSetupSysLocks guardLocks(op, DataShard); 
+    TSetupSysLocks guardLocks(op, DataShard);
     TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind()); 
- 
-    DataShard.ReleaseCache(*tx); 
- 
+    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+
+    DataShard.ReleaseCache(*tx);
+
     if (tx->IsTxDataReleased()) {
         switch (Pipeline.RestoreDataTx(tx, txc, ctx)) {
             case ERestoreDataStatus::Ok:
@@ -59,7 +59,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
                 Y_FAIL("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
         }
     }
- 
+
     const auto& dataTx = tx->GetDataTx();
     ui64 tabletId = DataShard.TabletID();
 
@@ -73,7 +73,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
         return EExecutionStatus::Executed;
     }
 
-    try { 
+    try {
         const auto& kqpTx = dataTx->GetKqpTransaction();
         auto& tasksRunner = dataTx->GetKqpTasksRunner();
 
@@ -101,7 +101,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
                 return OnTabletNotReady(*tx, *dataTx, txc, ctx);
             }
         }
- 
+
         KqpFillOutReadSets(op->OutReadSets(), kqpTx, tasksRunner, DataShard.SysLocksTable(), tabletId);
     } catch (const TMemoryLimitExceededException&) {
         LOG_T("Operation " << *op << " at " << tabletId
@@ -130,13 +130,13 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
         } else {
             Y_FAIL_S("Unexpected exception in KQP out-readsets prepare: " << e.what());
         }
-    } 
- 
-    return EExecutionStatus::Executed; 
-} 
- 
+    }
+
+    return EExecutionStatus::Executed;
+}
+
 void TBuildKqpDataTxOutRSUnit::Complete(TOperation::TPtr, const TActorContext&) {}
- 
+
 EExecutionStatus TBuildKqpDataTxOutRSUnit::OnTabletNotReady(TActiveTransaction& tx, TValidatedDataTx& dataTx,
     TTransactionContext& txc, const TActorContext& ctx)
 {
@@ -153,7 +153,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::OnTabletNotReady(TActiveTransaction& 
 
 THolder<TExecutionUnit> CreateBuildKqpDataTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TBuildKqpDataTxOutRSUnit(dataShard, pipeline));
-} 
- 
+}
+
 } // namespace NDataShard
-} // namespace NKikimr 
+} // namespace NKikimr

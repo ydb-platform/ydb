@@ -1492,10 +1492,10 @@ function tabletTypeToSymbol(type) {
         return "BP";
     case "BlockStoreVolume":
         return "BV";
-    case "Console": 
-        return "CN"; 
-    case "TenantSlotBroker": 
-        return "TB"; 
+    case "Console":
+        return "CN";
+    case "TenantSlotBroker":
+        return "TB";
     case "Kesus":
         return "K";
     case "OlapShard":
@@ -1546,10 +1546,10 @@ function tabletTypeToColor(type) {
         return "#B0E0E6";
     case "BlockStoreVolume":
         return "#B0C4DE";
-    case "Console": 
-        return "SlateBlue"; 
-    case "TenantSlotBroker": 
-        return "SlateGray"; 
+    case "Console":
+        return "SlateBlue";
+    case "TenantSlotBroker":
+        return "SlateGray";
     default:
         return "white";
     }

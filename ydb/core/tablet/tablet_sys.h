@@ -352,7 +352,7 @@ class TTablet : public TActor<TTablet> {
     void CancelTablet(TEvTablet::TEvTabletDead::EReason reason, const TString &details = TString());
 
     void Handle(TEvTablet::TEvUpdateConfig::TPtr &ev);
- 
+
     void LockedInitializationPath();
     void Bootstrap();
     void BootstrapFollower();

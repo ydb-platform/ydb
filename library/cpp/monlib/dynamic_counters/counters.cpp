@@ -102,17 +102,17 @@ THistogramPtr TDynamicCounters::FindNamedHistogram(const TString& name,const TSt
     return AsHistogramRef(FindNamedCounterImpl<THistogramCounter>(name, value));
 }
 
-void TDynamicCounters::RemoveCounter(const TString &value) { 
-    RemoveNamedCounter("sensor", value); 
-} 
- 
-void TDynamicCounters::RemoveNamedCounter(const TString& name, const TString &value) { 
+void TDynamicCounters::RemoveCounter(const TString &value) {
+    RemoveNamedCounter("sensor", value);
+}
+
+void TDynamicCounters::RemoveNamedCounter(const TString& name, const TString &value) {
     auto g = LockForUpdate("RemoveNamedCounter", name, value);
     if (const auto it = Counters.find({name, value}); it != Counters.end() && AsCounter(it->second)) {
-        Counters.erase(it); 
+        Counters.erase(it);
     }
-} 
- 
+}
+
 TIntrusivePtr<TDynamicCounters> TDynamicCounters::GetSubgroup(const TString& name, const TString& value) {
     auto res = FindSubgroup(name, value);
     if (!res) {
@@ -134,21 +134,21 @@ TIntrusivePtr<TDynamicCounters> TDynamicCounters::FindSubgroup(const TString& na
     return it != Counters.end() ? AsDynamicCounters(it->second) : nullptr;
 }
 
-void TDynamicCounters::RemoveSubgroup(const TString& name, const TString& value) { 
+void TDynamicCounters::RemoveSubgroup(const TString& name, const TString& value) {
     auto g = LockForUpdate("RemoveSubgroup", name, value);
     if (const auto it = Counters.find({name, value}); it != Counters.end() && AsDynamicCounters(it->second)) {
-        Counters.erase(it); 
+        Counters.erase(it);
     }
-} 
- 
+}
+
 void TDynamicCounters::ReplaceSubgroup(const TString& name, const TString& value, TIntrusivePtr<TDynamicCounters> subgroup) {
     auto g = LockForUpdate("ReplaceSubgroup", name, value);
     const auto it = Counters.find({name, value});
     Y_VERIFY(it != Counters.end() && AsDynamicCounters(it->second));
     it->second = std::move(subgroup);
-} 
- 
-void TDynamicCounters::MergeWithSubgroup(const TString& name, const TString& value) { 
+}
+
+void TDynamicCounters::MergeWithSubgroup(const TString& name, const TString& value) {
     auto g = LockForUpdate("MergeWithSubgroup", name, value);
     auto it = Counters.find({name, value});
     Y_VERIFY(it != Counters.end());
@@ -159,30 +159,30 @@ void TDynamicCounters::MergeWithSubgroup(const TString& name, const TString& val
     AtomicAdd(ExpiringCount, AtomicSwap(&subgroup->ExpiringCount, 0));
 }
 
-void TDynamicCounters::ResetCounters(bool derivOnly) { 
+void TDynamicCounters::ResetCounters(bool derivOnly) {
     TReadGuard g(Lock);
     for (auto& [key, value] : Counters) {
         if (auto counter = AsCounter(value)) {
             if (!derivOnly || counter->ForDerivative()) {
-                *counter = 0; 
+                *counter = 0;
             }
         } else if (auto subgroup = AsDynamicCounters(value)) {
-            subgroup->ResetCounters(derivOnly); 
-        } 
-    } 
-} 
- 
+            subgroup->ResetCounters(derivOnly);
+        }
+    }
+}
+
 void TDynamicCounters::RegisterCountable(const TString& name, const TString& value, TCountablePtr countable) {
     Y_VERIFY(countable);
     auto g = LockForUpdate("RegisterCountable", name, value);
     const bool inserted = Counters.emplace(TChildId(name, value), std::move(countable)).second;
     Y_VERIFY(inserted);
-} 
- 
-void TDynamicCounters::RegisterSubgroup(const TString& name, const TString& value, TIntrusivePtr<TDynamicCounters> subgroup) { 
+}
+
+void TDynamicCounters::RegisterSubgroup(const TString& name, const TString& value, TIntrusivePtr<TDynamicCounters> subgroup) {
     RegisterCountable(name, value, subgroup);
-} 
- 
+}
+
 void TDynamicCounters::OutputHtml(IOutputStream& os) const {
     HTML(os) {
         PRE() {

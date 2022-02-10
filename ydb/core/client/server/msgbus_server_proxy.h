@@ -19,7 +19,7 @@ struct TMessageBusDbOpsCounters : TAtomicRefCount<TMessageBusDbOpsCounters> {
     NMon::THistogramCounterHelper RequestQueryTimeHistogram;
 
     TMessageBusDbOpsCounters(const NMonitoring::TDynamicCounterPtr& counters) {
-        DbOperationsCounters = GetServiceCounters(counters, "proxy")->GetSubgroup("subsystem", "db"); 
+        DbOperationsCounters = GetServiceCounters(counters, "proxy")->GetSubgroup("subsystem", "db");
         RequestTotalTimeHistogram.Init(DbOperationsCounters.Get(), "RequestTotalTime", "ms", 1, 20);
         RequestPrepareTimeHistogram.Init(DbOperationsCounters.Get(), "RequestPrepareTime", "ms", 1, 20);
         RequestUpdateTimeHistogram.Init(DbOperationsCounters.Get(), "RequestUpdateTime", "ms", 1, 20);

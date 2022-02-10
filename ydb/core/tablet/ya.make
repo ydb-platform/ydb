@@ -13,9 +13,9 @@ SRCS(
     node_whiteboard.cpp
     pipe_tracker.cpp
     pipe_tracker.h
-    resource_broker.cpp 
-    resource_broker.h 
-    resource_broker_impl.h 
+    resource_broker.cpp
+    resource_broker.h
+    resource_broker_impl.h
     tablet_counters.cpp
     tablet_counters.h
     tablet_counters_aggregator.cpp

@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*-
 import os
-import logging 
+import logging
 import time
- 
+
 from hamcrest import (
     any_of,
     assert_that,
@@ -12,12 +12,12 @@ from hamcrest import (
 )
 
 import ydb
- 
+
 from common import DBWithDynamicSlot, DBForStaticSlots, Runtime
- 
-logger = logging.getLogger(__name__) 
- 
- 
+
+logger = logging.getLogger(__name__)
+
+
 class TestCreateTenantNoCPU(DBWithDynamicSlot):
     def test_case(self):
         database = '/Root/users/database'
@@ -26,9 +26,9 @@ class TestCreateTenantNoCPU(DBWithDynamicSlot):
             storage_pool_units_count={
                 'hdd': 1
             }
-        ) 
+        )
         self.cluster.remove_database(database)
- 
+
 
 class TestCreateTenantWithCPU(DBWithDynamicSlot):
     def test_case(self):
@@ -115,10 +115,10 @@ class TestCreateTenantThenExecYQL(DBWithDynamicSlot):
             storage_pool_units_count={
                 'hdd': 1
             }
-        ) 
+        )
         self.cluster.register_and_start_slots(database, count=1)
         self.cluster.wait_tenant_up(database)
- 
+
         d_configs = [driver_config, driver_config2]
         for d_config in d_configs:
             table_path = '%s/table-1' % database
@@ -130,12 +130,12 @@ class TestCreateTenantThenExecYQL(DBWithDynamicSlot):
                                 table_path
                             )
                         )
- 
+
                         session.transaction().execute(
                             "upsert into `{}` (key) values (101);".format(table_path),
                             commit_tx=True
                         )
- 
+
                         session.transaction().execute("select key from `{}`;".format(table_path), commit_tx=True)
 
 

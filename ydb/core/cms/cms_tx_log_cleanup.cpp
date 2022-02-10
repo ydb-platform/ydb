@@ -1,37 +1,37 @@
-#include "cms_impl.h" 
-#include "scheme.h" 
- 
-namespace NKikimr { 
-namespace NCms { 
- 
-class TCms::TTxLogCleanup : public TTransactionBase<TCms> { 
-public: 
-    TTxLogCleanup(TCms *self) 
-        : TBase(self) 
-    { 
-    } 
- 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override 
-    { 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS, 
-                    "TTxLogCleanup Execute"); 
- 
-        return Self->Logger.DbCleanupLog(txc, ctx); 
-    } 
- 
-    void Complete(const TActorContext &ctx) override 
-    { 
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxLogCleanup Complete"); 
-        Self->ScheduleLogCleanup(ctx); 
-    } 
- 
-private: 
-}; 
- 
-ITransaction *TCms::CreateTxLogCleanup() 
-{ 
-    return new TTxLogCleanup(this); 
-} 
- 
-} // NCms 
-} // NKikimr 
+#include "cms_impl.h"
+#include "scheme.h"
+
+namespace NKikimr {
+namespace NCms {
+
+class TCms::TTxLogCleanup : public TTransactionBase<TCms> {
+public:
+    TTxLogCleanup(TCms *self)
+        : TBase(self)
+    {
+    }
+
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
+    {
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS,
+                    "TTxLogCleanup Execute");
+
+        return Self->Logger.DbCleanupLog(txc, ctx);
+    }
+
+    void Complete(const TActorContext &ctx) override
+    {
+        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxLogCleanup Complete");
+        Self->ScheduleLogCleanup(ctx);
+    }
+
+private:
+};
+
+ITransaction *TCms::CreateTxLogCleanup()
+{
+    return new TTxLogCleanup(this);
+}
+
+} // NCms
+} // NKikimr

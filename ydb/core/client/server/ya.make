@@ -16,9 +16,9 @@ SRCS(
     msgbus_http_server.cpp
     msgbus_server.cpp
     msgbus_server.h
-    msgbus_server_cms.cpp 
+    msgbus_server_cms.cpp
     msgbus_server_configdummy.cpp
-    msgbus_server_console.cpp 
+    msgbus_server_console.cpp
     msgbus_server_db.cpp
     msgbus_server_drain_node.cpp
     msgbus_server_fill_node.cpp
@@ -38,7 +38,7 @@ SRCS(
     msgbus_server_local_enumerate_tablets.cpp
     msgbus_server_local_minikql.cpp
     msgbus_server_local_scheme_tx.cpp
-    msgbus_server_node_registration.cpp 
+    msgbus_server_node_registration.cpp
     msgbus_server_proxy.cpp
     msgbus_server_proxy.h
     msgbus_server_request.cpp

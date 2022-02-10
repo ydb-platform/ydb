@@ -228,7 +228,7 @@ public:
         const TLogoBlobID Id;
         const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TPageMap<THolder<TPage>> PageMap;
-        ui64 Users; 
+        ui64 Users;
 
         explicit TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollection> pack);
         TInfo(const TInfo &info);
@@ -243,7 +243,7 @@ public:
     void LockPageCollection(TLogoBlobID id);
     // Return true for page collections removed after unlock.
     bool UnlockPageCollection(TLogoBlobID id);
- 
+
     TInfo* Info(TLogoBlobID id);
 
     void Touch(ui32 page, TInfo *collectionInfo);

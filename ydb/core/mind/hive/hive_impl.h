@@ -357,7 +357,7 @@ protected:
     bool ProcessBootQueueScheduled = false;
     bool ProcessBootQueuePostponed = false;
 
-    THashMap<ui32, TEvInterconnect::TNodeInfo> NodesInfo; 
+    THashMap<ui32, TEvInterconnect::TNodeInfo> NodesInfo;
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
     i32 BalancerProgress; // all values below 0 mean that balancer is not active (-1 = dead, -2 = starting)
@@ -382,7 +382,7 @@ protected:
     //TDuration ResourceChangeReactionPeriod = TDuration::Seconds(10);
     TVector<ISubActor*> SubActors;
     TResourceProfilesPtr ResourceProfiles;
-    NKikimrLocal::TLocalConfig LocalConfig; 
+    NKikimrLocal::TLocalConfig LocalConfig;
     bool ReadyForConnections = false; // is Hive ready for incoming connections?
     ui64 NextTabletUnlockSeqNo = 1; // sequence number for unlock events
     bool SpreadNeighbours = true; // spread tablets of the same object across cluster
@@ -429,7 +429,7 @@ protected:
         return true;
     }
 
-    void BuildLocalConfig(); 
+    void BuildLocalConfig();
     void BuildCurrentConfig();
     void Cleanup();
 
@@ -774,7 +774,7 @@ protected:
 
     THiveStats GetStats() const;
     void RemoveSubActor(ISubActor* subActor);
-    const NKikimrLocal::TLocalConfig &GetLocalConfig() const { return LocalConfig; } 
+    const NKikimrLocal::TLocalConfig &GetLocalConfig() const { return LocalConfig; }
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForObject(TObjectId objectId);
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForTabletType(TTabletTypes::EType type);
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForProfile(TTabletTypes::EType type, const TString& resourceProfile);

@@ -71,9 +71,9 @@ namespace NMonitoring {
         TStringBuf GetPostContent() const override {
             return TStringBuf(PostContent.Buffer().Data(), PostContent.Buffer().Size());
         }
-        HTTP_METHOD GetMethod() const override { 
-            return (HTTP_METHOD)Header.http_method; 
-        } 
+        HTTP_METHOD GetMethod() const override {
+            return (HTTP_METHOD)Header.http_method;
+        }
         void ScanPostParams() {
             PostParams.Scan(TStringBuf(PostContent.Buffer().data(), PostContent.Buffer().size()));
         }

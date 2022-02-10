@@ -1,60 +1,60 @@
-#include "datashard_impl.h" 
-#include "datashard_pipeline.h" 
-#include "execution_unit_ctors.h" 
- 
-namespace NKikimr { 
+#include "datashard_impl.h"
+#include "datashard_pipeline.h"
+#include "execution_unit_ctors.h"
+
+namespace NKikimr {
 namespace NDataShard {
- 
-class TReceiveSnapshotUnit : public TExecutionUnit { 
-public: 
+
+class TReceiveSnapshotUnit : public TExecutionUnit {
+public:
     TReceiveSnapshotUnit(TDataShard &dataShard,
-                         TPipeline &pipeline); 
-    ~TReceiveSnapshotUnit() override; 
- 
-    bool IsReadyToExecute(TOperation::TPtr op) const override; 
-    EExecutionStatus Execute(TOperation::TPtr op, 
-                             TTransactionContext &txc, 
-                             const TActorContext &ctx) override; 
-    void Complete(TOperation::TPtr op, 
-                  const TActorContext &ctx) override; 
- 
-private: 
-}; 
- 
+                         TPipeline &pipeline);
+    ~TReceiveSnapshotUnit() override;
+
+    bool IsReadyToExecute(TOperation::TPtr op) const override;
+    EExecutionStatus Execute(TOperation::TPtr op,
+                             TTransactionContext &txc,
+                             const TActorContext &ctx) override;
+    void Complete(TOperation::TPtr op,
+                  const TActorContext &ctx) override;
+
+private:
+};
+
 TReceiveSnapshotUnit::TReceiveSnapshotUnit(TDataShard &dataShard,
-                                           TPipeline &pipeline) 
-    : TExecutionUnit(EExecutionUnitKind::ReceiveSnapshot, false, dataShard, pipeline) 
-{ 
-} 
- 
-TReceiveSnapshotUnit::~TReceiveSnapshotUnit() 
-{ 
-} 
- 
-bool TReceiveSnapshotUnit::IsReadyToExecute(TOperation::TPtr) const 
-{ 
-    return true; 
-} 
- 
-EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op, 
-                                               TTransactionContext &txc, 
-                                               const TActorContext &) 
-{ 
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get()); 
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind()); 
- 
-    auto &schemeTx = tx->GetSchemeTx(); 
-    if (!schemeTx.HasReceiveSnapshot()) 
-        return EExecutionStatus::Executed; 
- 
+                                           TPipeline &pipeline)
+    : TExecutionUnit(EExecutionUnitKind::ReceiveSnapshot, false, dataShard, pipeline)
+{
+}
+
+TReceiveSnapshotUnit::~TReceiveSnapshotUnit()
+{
+}
+
+bool TReceiveSnapshotUnit::IsReadyToExecute(TOperation::TPtr) const
+{
+    return true;
+}
+
+EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
+                                               TTransactionContext &txc,
+                                               const TActorContext &)
+{
+    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
+    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+
+    auto &schemeTx = tx->GetSchemeTx();
+    if (!schemeTx.HasReceiveSnapshot())
+        return EExecutionStatus::Executed;
+
     NIceDb::TNiceDb db(txc.DB);
 
-    Y_VERIFY(schemeTx.HasCreateTable()); 
+    Y_VERIFY(schemeTx.HasCreateTable());
 
     const bool mvcc = DataShard.IsMvccEnabled();
 
-    for (auto &pr : op->InReadSets()) { 
-        for (auto& rsdata : pr.second) { 
+    for (auto &pr : op->InReadSets()) {
+        for (auto& rsdata : pr.second) {
             NKikimrTxDataShard::TSnapshotTransferReadSet rs;
 
             // We currently support a single readset for a single user table
@@ -90,9 +90,9 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
             }
 
             txc.Env.LoanTable(localTableId, snapBody);
-        } 
-    } 
- 
+        }
+    }
+
     Y_VERIFY(DataShard.GetSnapshotManager().GetSnapshots().empty(),
         "Found unexpected persistent snapshots at CopyTable destination");
 
@@ -107,19 +107,19 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
         }
     }
 
-    return EExecutionStatus::ExecutedNoMoreRestarts; 
-} 
- 
-void TReceiveSnapshotUnit::Complete(TOperation::TPtr, 
-                                    const TActorContext &) 
-{ 
-} 
- 
+    return EExecutionStatus::ExecutedNoMoreRestarts;
+}
+
+void TReceiveSnapshotUnit::Complete(TOperation::TPtr,
+                                    const TActorContext &)
+{
+}
+
 THolder<TExecutionUnit> CreateReceiveSnapshotUnit(TDataShard &dataShard,
-                                                  TPipeline &pipeline) 
-{ 
+                                                  TPipeline &pipeline)
+{
     return MakeHolder<TReceiveSnapshotUnit>(dataShard, pipeline);
-} 
- 
+}
+
 } // namespace NDataShard
-} // namespace NKikimr 
+} // namespace NKikimr

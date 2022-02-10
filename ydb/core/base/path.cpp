@@ -1,8 +1,8 @@
 #include "path.h"
 
 #include <util/string/builder.h>
-#include <util/string/printf.h> 
- 
+#include <util/string/printf.h>
+
 namespace NKikimr {
 
 TVector<TString> SplitPath(TString path) {
@@ -47,15 +47,15 @@ TString JoinPath(const TVector<TString>& path) {
     return result;
 }
 
-TString CanonizePath(const TString &path) 
-{ 
-    if (!path) 
+TString CanonizePath(const TString &path)
+{
+    if (!path)
         return TString();
- 
+
     const auto parts = SplitPath(path);
     return CanonizePath(parts);
-} 
- 
+}
+
 TString CanonizePath(const TVector<TString>& path) {
     if (path.empty())
         return TString();
@@ -108,29 +108,29 @@ TString::const_iterator PathPartBrokenAt(const TString &part, const TStringBuf e
                 && !basicSymbols.Contains(*it)
                 && !extraSymbols.Contains(*it)) {
             return it;
-        } 
-    } 
- 
+        }
+    }
+
     return part.end();
 }
- 
-bool CheckDbPath(const TString &path, const TString &domain, TString &error) { 
-    auto parts = SplitPath(path); 
- 
-    if (parts.empty()) { 
-        error = "Database path cannot be empty or root"; 
-        return false; 
-    } 
- 
-    if (parts.front() != domain) { 
+
+bool CheckDbPath(const TString &path, const TString &domain, TString &error) {
+    auto parts = SplitPath(path);
+
+    if (parts.empty()) {
+        error = "Database path cannot be empty or root";
+        return false;
+    }
+
+    if (parts.front() != domain) {
         error = Sprintf("Database path should be in domain /%s", domain.data());
-        return false; 
-    } 
- 
-    for (auto &part : parts) { 
+        return false;
+    }
+
+    for (auto &part : parts) {
         if (!part) {
             error = "Database names and path parts shouldn't be empty";
-            return false; 
+            return false;
         }
 
         auto brokenAt = PathPartBrokenAt(part);
@@ -138,11 +138,11 @@ bool CheckDbPath(const TString &path, const TString &domain, TString &error) {
             error = Sprintf("Symbol '%c' is not allowed in database names and path parts ", *brokenAt);
             return false;
         }
-    } 
- 
-    return true; 
-} 
- 
+    }
+
+    return true;
+}
+
 TStringBuf ExtractParent(const TString &path) noexcept {
     TStringBuf parent = TStringBuf(path);
 
@@ -150,7 +150,7 @@ TStringBuf ExtractParent(const TString &path) noexcept {
     parent.ChopSuffix(TStringBuf("/"));
 
     return parent.RBefore('/');
-} 
+}
 
 TStringBuf ExtractBase(const TString &path) noexcept {
     TStringBuf parent = TStringBuf(path);

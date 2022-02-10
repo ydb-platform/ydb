@@ -52,7 +52,7 @@ public:
             return true;
         }
 
-        const TUserTable& tableInfo = *Self->TableInfos[tableId]; 
+        const TUserTable& tableInfo = *Self->TableInfos[tableId];
         if (tableInfo.IsBackup) {
             SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, "Cannot read from a backup table");
             return true;

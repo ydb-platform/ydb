@@ -9,9 +9,9 @@ OWNER(
 )
 
 SRCS(
-    configurator.cpp 
-    dynamic_node.cpp 
-    error.cpp 
+    configurator.cpp
+    dynamic_node.cpp
+    error.cpp
     kicli.h
     kikimr.cpp
     query.cpp

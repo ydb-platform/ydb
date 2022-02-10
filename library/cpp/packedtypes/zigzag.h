@@ -10,8 +10,8 @@
 template <typename TSignedInt>
 inline auto ZigZagEncode(TSignedInt n) -> std::make_unsigned_t<TSignedInt> {
     static_assert(std::is_signed<TSignedInt>::value && std::is_integral<TSignedInt>::value, "Expected signed integral type.");
-    auto un = static_cast<std::make_unsigned_t<TSignedInt>>(n); 
-    return (un << 1) ^ (n >> (CHAR_BIT * sizeof(TSignedInt) - 1)); 
+    auto un = static_cast<std::make_unsigned_t<TSignedInt>>(n);
+    return (un << 1) ^ (n >> (CHAR_BIT * sizeof(TSignedInt) - 1));
 }
 
 template <typename TUnsignedInt>

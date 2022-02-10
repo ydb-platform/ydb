@@ -6,9 +6,9 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 
-#include <util/generic/ptr.h> 
+#include <util/generic/ptr.h>
 #include <util/generic/hash.h>
- 
+
 namespace NKikimr {
 
 namespace NTabletFlatExecutor {
@@ -18,10 +18,10 @@ class TTransactionContext;
 namespace NDataShard {
 
 //
-struct TUserTable : public TThrRefBase { 
-    using TPtr = TIntrusivePtr<TUserTable>; 
+struct TUserTable : public TThrRefBase {
+    using TPtr = TIntrusivePtr<TUserTable>;
     using TCPtr = TIntrusiveConstPtr<TUserTable>;
- 
+
     struct TUserFamily {
         using ECodec = NTable::NPage::ECodec;
         using ECache = NTable::NPage::ECache;
@@ -345,13 +345,13 @@ struct TUserTable : public TThrRefBase {
     ui32 LocalTid = Max<ui32>();
     ui32 ShadowTid = 0;
     TString Name;
-    TString Path; 
+    TString Path;
     TMap<ui32, TStorageRoom::TPtr> Rooms;
     TMap<ui32, TUserFamily> Families;
     TMap<ui32, TUserColumn> Columns;
     TVector<NScheme::TTypeId> KeyColumnTypes;
     TVector<ui32> KeyColumnIds;
-    TSerializedTableRange Range; 
+    TSerializedTableRange Range;
     bool IsBackup = false;
 
     TMap<TPathId, TTableIndex> Indexes;
@@ -393,8 +393,8 @@ struct TUserTable : public TThrRefBase {
         Y_PROTOBUF_SUPPRESS_NODISCARD description.SerializeToString(&Schema);
     }
 
-    void SetPath(const TString &path); 
- 
+    void SetPath(const TString &path);
+
     ui64 GetTableSchemaVersion() const { return TableSchemaVersion; }
     void SetTableSchemaVersion(ui64 schemaVersion);
     bool ResetTableSchemaVersion();

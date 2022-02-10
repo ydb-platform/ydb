@@ -44,7 +44,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <library/cpp/actors/interconnect/interconnect.h>
- 
+
 #include <util/string/join.h>
 
 namespace NKikimr {
@@ -52,9 +52,9 @@ namespace NDataShard {
 
 extern TStringBuf SnapshotTransferReadSetMagic;
 
-using NTabletFlatExecutor::ITransaction; 
+using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TScanOptions;
- 
+
 // For CopyTable and MoveShadow
 class TTxTableSnapshotContext : public NTabletFlatExecutor::TTableSnapshotContext {
 public:
@@ -164,25 +164,25 @@ class TDataShard
     class TTxSplitTransferSnapshot;
     class TTxSplitTransferSnapshotAck;
     class TTxSplitPartitioningChanged;
-    class TTxStoreTablePath; 
+    class TTxStoreTablePath;
     class TTxGoOffline;
     class TTxGetTableStats;
     class TTxMonitoring;
     class TTxMonitoringCleanupBorrowedParts;
     class TTxMonitoringCleanupBorrowedPartsActor;
     class TTxMonitoringResetSchemaVersion;
-    class TTxUndelivered; 
+    class TTxUndelivered;
     class TTxS3Listing;
-    class TTxInterruptTransaction; 
+    class TTxInterruptTransaction;
     class TTxInitiateStatsUpdate;
-    class TTxCheckInReadSets; 
-    class TTxRemoveOldInReadSets; 
+    class TTxCheckInReadSets;
+    class TTxRemoveOldInReadSets;
     class TTxRead;
     class TTxReadContinue;
     class TTxReadColumns;
-    class TTxGetInfo; 
-    class TTxListOperations; 
-    class TTxGetOperation; 
+    class TTxGetInfo;
+    class TTxListOperations;
+    class TTxGetOperation;
     class TTxStoreScanState;
     class TTxRefreshVolatileSnapshot;
     class TTxDiscardVolatileSnapshot;
@@ -205,14 +205,14 @@ class TDataShard
     class TTxEraseRows;
 
     ITransaction *CreateTxMonitoring(TDataShard *self,
-                                     NMon::TEvRemoteHttpInfo::TPtr ev); 
+                                     NMon::TEvRemoteHttpInfo::TPtr ev);
     ITransaction *CreateTxGetInfo(TDataShard *self,
-                                  TEvDataShard::TEvGetInfoRequest::TPtr ev); 
+                                  TEvDataShard::TEvGetInfoRequest::TPtr ev);
     ITransaction *CreateTxListOperations(TDataShard *self,
-                                         TEvDataShard::TEvListOperationsRequest::TPtr ev); 
+                                         TEvDataShard::TEvListOperationsRequest::TPtr ev);
     ITransaction *CreateTxGetOperation(TDataShard *self,
-                                       TEvDataShard::TEvGetOperationRequest::TPtr ev); 
- 
+                                       TEvDataShard::TEvGetOperationRequest::TPtr ev);
+
     ITransaction *CreateTxMonitoringCleanupBorrowedParts(
             TDataShard *self,
             NMon::TEvRemoteHttpInfo::TPtr ev);
@@ -224,7 +224,7 @@ class TDataShard
     friend class TDataShardMiniKQLFactory;
     friend class TDataTransactionProcessor;
     friend class TSchemeTransactionProcessor;
-    friend class TScanTransactionProcessor; 
+    friend class TScanTransactionProcessor;
     friend class TDataShardEngineHost;
     friend class TTxS3Listing;
     friend class TExecuteKqpScanTxUnit;
@@ -236,7 +236,7 @@ class TDataShard
     friend class TPipeline;
     friend class TLocksDataShardAdapter<TDataShard>;
     friend class TActiveTransaction;
-    friend class TValidatedDataTx; 
+    friend class TValidatedDataTx;
     friend class TEngineBay;
     friend class NMiniKQL::TKqpScanComputeContext;
     friend class TSnapshotManager;
@@ -245,8 +245,8 @@ class TDataShard
     friend class TReplicationSourceOffsetsServer;
 
     friend class TAsyncTableStatsBuilder;
-    friend class TReadTableScan; 
-    friend class TWaitForStreamClearanceUnit; 
+    friend class TReadTableScan;
+    friend class TWaitForStreamClearanceUnit;
     friend class TBuildIndexScan;
     friend class TReadColumnsScan;
     friend class TCondEraseScan;
@@ -286,8 +286,8 @@ class TDataShard
             EvPeriodicWakeup,
             EvAsyncTableStats,
             EvRemoveOldInReadSets, // WARNING: tests use ES_PRIVATE + 9
-            EvRegisterScanActor, 
-            EvNodeDisconnected, 
+            EvRegisterScanActor,
+            EvNodeDisconnected,
             EvScanStats,
             EvPersistScanState,
             EvPersistScanStateAck,
@@ -332,26 +332,26 @@ class TDataShard
             ui64 MemDataSize = 0;
             ui64 SearchHeight = 0;
         };
- 
-        struct TEvRemoveOldInReadSets : public TEventLocal<TEvRemoveOldInReadSets, EvRemoveOldInReadSets> {}; 
- 
-        struct TEvRegisterScanActor : public TEventLocal<TEvRegisterScanActor, EvRegisterScanActor> { 
-            TEvRegisterScanActor(ui64 txId) 
-                : TxId(txId) 
-            { 
-            } 
- 
-            ui64 TxId; 
-        }; 
- 
-        struct TEvNodeDisconnected : public TEventLocal<TEvNodeDisconnected, EvNodeDisconnected> { 
-            TEvNodeDisconnected(ui32 nodeId) 
-                : NodeId(nodeId) 
-            { 
-            } 
- 
-            ui32 NodeId; 
-        }; 
+
+        struct TEvRemoveOldInReadSets : public TEventLocal<TEvRemoveOldInReadSets, EvRemoveOldInReadSets> {};
+
+        struct TEvRegisterScanActor : public TEventLocal<TEvRegisterScanActor, EvRegisterScanActor> {
+            TEvRegisterScanActor(ui64 txId)
+                : TxId(txId)
+            {
+            }
+
+            ui64 TxId;
+        };
+
+        struct TEvNodeDisconnected : public TEventLocal<TEvNodeDisconnected, EvNodeDisconnected> {
+            TEvNodeDisconnected(ui32 nodeId)
+                : NodeId(nodeId)
+            {
+            }
+
+            ui32 NodeId;
+        };
 
         struct TEvScanStats : public TEventLocal<TEvScanStats, EvScanStats> {
             TEvScanStats(ui64 rows, ui64 bytes) : Rows(rows), Bytes(bytes) {}
@@ -463,12 +463,12 @@ class TDataShard
 
         struct TxMain : Table<3> {
             struct TxId :           Column<1, NScheme::NTypeIds::Uint64> {};
-            struct Kind :           Column<2, NScheme::NTypeIds::Uint32> { using Type = EOperationKind; }; 
+            struct Kind :           Column<2, NScheme::NTypeIds::Uint32> { using Type = EOperationKind; };
             struct Flags :          Column<3, NScheme::NTypeIds::Uint32> {};
             struct State :          Column<4, NScheme::NTypeIds::Uint32> {};
             struct InRSRemain :     Column<5, NScheme::NTypeIds::Uint64> {};
             struct MaxStep :        Column<6, NScheme::NTypeIds::Uint64> {};
-            struct ReceivedAt :     Column<7, NScheme::NTypeIds::Uint64> {}; 
+            struct ReceivedAt :     Column<7, NScheme::NTypeIds::Uint64> {};
             struct Flags64 :        Column<8, NScheme::NTypeIds::Uint64> {};
             struct Source :         Column<9, NScheme::NTypeIds::ActorId> {};
             struct Cookie :         Column<10, NScheme::NTypeIds::Uint64> {};
@@ -538,7 +538,7 @@ class TDataShard
             struct MinStep :        Column<5, NScheme::NTypeIds::Uint64> {};
             struct MaxStep :        Column<6, NScheme::NTypeIds::Uint64> {};
             struct PlanStep :       Column<7, NScheme::NTypeIds::Uint64> {};
-            struct ReadOnly :       Column<8, NScheme::NTypeIds::Bool> {}; 
+            struct ReadOnly :       Column<8, NScheme::NTypeIds::Bool> {};
 
             struct Success :        Column<9, NScheme::NTypeIds::Bool> {};
             struct Error :          Column<10, NScheme::NTypeIds::String> { using Type = TString; };
@@ -546,7 +546,7 @@ class TDataShard
             struct Rows :           Column<12, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<TxId>;
-            using TColumns = TableColumns<TxId, Operation, Source, SourceTablet, 
+            using TColumns = TableColumns<TxId, Operation, Source, SourceTablet,
                 MinStep, MaxStep, PlanStep, ReadOnly, Success, Error, DataSize, Rows>;
         };
 
@@ -568,17 +568,17 @@ class TDataShard
         };
 
         // Additional tx artifacts which can be reused on tx restart.
-        struct TxArtifacts : Table<12> { 
-            struct TxId :            Column<1, NScheme::NTypeIds::Uint64> {}; 
-            // Specify which tx artifacts have been stored to local DB and can be 
-            // reused on tx replay. See TActiveTransaction::EArtifactFlags. 
-            struct Flags :           Column<2, NScheme::NTypeIds::Uint64> {}; 
-            struct Locks :           Column<3, NScheme::NTypeIds::String> { using Type = TVector<TSysTables::TLocksTable::TLock>; }; 
- 
-            using TKey = TableKey<TxId>; 
-            using TColumns = TableColumns<TxId, Flags, Locks>; 
-        }; 
- 
+        struct TxArtifacts : Table<12> {
+            struct TxId :            Column<1, NScheme::NTypeIds::Uint64> {};
+            // Specify which tx artifacts have been stored to local DB and can be
+            // reused on tx replay. See TActiveTransaction::EArtifactFlags.
+            struct Flags :           Column<2, NScheme::NTypeIds::Uint64> {};
+            struct Locks :           Column<3, NScheme::NTypeIds::String> { using Type = TVector<TSysTables::TLocksTable::TLock>; };
+
+            using TKey = TableKey<TxId>;
+            using TColumns = TableColumns<TxId, Flags, Locks>;
+        };
+
         struct ScanProgress : Table<13> {
             struct TxId :            Column<1, NScheme::NTypeIds::Uint64> {};
             struct LastKey :         Column<2, NScheme::NTypeIds::String> {};
@@ -863,22 +863,22 @@ class TDataShard
         return true;
     }
 
-    template <typename TEvHandle> 
-    void ForwardEventToOperation(TAutoPtr<TEvHandle> ev, const TActorContext &ctx) { 
-        TOperation::TPtr op = Pipeline.FindOp(ev->Get()->Record.GetTxId()); 
-        if (op) 
-            ForwardEventToOperation(ev, op, ctx); 
-    } 
- 
-    template <typename TEvHandle> 
-    void ForwardEventToOperation(TAutoPtr<TEvHandle> ev, 
-                                 TOperation::TPtr op, 
-                                 const TActorContext &ctx) { 
-        op->AddInputEvent(ev.Release()); 
-        Pipeline.AddCandidateOp(op); 
-        PlanQueue.Progress(ctx); 
-    } 
- 
+    template <typename TEvHandle>
+    void ForwardEventToOperation(TAutoPtr<TEvHandle> ev, const TActorContext &ctx) {
+        TOperation::TPtr op = Pipeline.FindOp(ev->Get()->Record.GetTxId());
+        if (op)
+            ForwardEventToOperation(ev, op, ctx);
+    }
+
+    template <typename TEvHandle>
+    void ForwardEventToOperation(TAutoPtr<TEvHandle> ev,
+                                 TOperation::TPtr op,
+                                 const TActorContext &ctx) {
+        op->AddInputEvent(ev.Release());
+        Pipeline.AddCandidateOp(op);
+        PlanQueue.Progress(ctx);
+    }
+
     void Handle(TEvents::TEvGone::TPtr &ev);
     void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvGetShardState::TPtr &ev, const TActorContext &ctx);
@@ -895,8 +895,8 @@ class TDataShard
     void Handle(TEvPrivate::TEvCleanupTransaction::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvProgressResendReadSet::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvPrivate::TEvRemoveOldInReadSets::TPtr &ev, const TActorContext &ctx); 
-    void Handle(TEvPrivate::TEvRegisterScanActor::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvPrivate::TEvRemoveOldInReadSets::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvRegisterScanActor::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvScanStats::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPersistScanState::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
@@ -927,15 +927,15 @@ class TDataShard
     void Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReadColumnsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvDataShard::TEvListOperationsRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvDataShard::TEvGetOperationRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvDataShard::TEvGetReadTableScanStateRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvDataShard::TEvGetRSInfoRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvDataShard::TEvGetSlowOpProfilesRequest::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvListOperationsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvGetOperationRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvGetReadTableScanStateRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvGetRSInfoRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvGetSlowOpProfilesRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvMigrateSchemeShardRequest::TPtr& ev, const TActorContext& ctx);
@@ -951,20 +951,20 @@ class TDataShard
     void Handle(TEvDataShard::TEvCancelBackup::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvCancelRestore::TPtr &ev, const TActorContext &ctx);
 
-    void Handle(TEvTxProcessing::TEvStreamClearanceResponse::TPtr &ev, const TActorContext &ctx) { 
-        ForwardEventToOperation(ev, ctx); 
-    } 
-    void Handle(TEvTxProcessing::TEvStreamClearancePending::TPtr &ev, const TActorContext &ctx) { 
-        ForwardEventToOperation(ev, ctx); 
-    } 
-    void Handle(TEvTxProcessing::TEvInterruptTransaction::TPtr &ev, const TActorContext &ctx) { 
-        ForwardEventToOperation(ev, ctx); 
-    } 
+    void Handle(TEvTxProcessing::TEvStreamClearanceResponse::TPtr &ev, const TActorContext &ctx) {
+        ForwardEventToOperation(ev, ctx);
+    }
+    void Handle(TEvTxProcessing::TEvStreamClearancePending::TPtr &ev, const TActorContext &ctx) {
+        ForwardEventToOperation(ev, ctx);
+    }
+    void Handle(TEvTxProcessing::TEvInterruptTransaction::TPtr &ev, const TActorContext &ctx) {
+        ForwardEventToOperation(ev, ctx);
+    }
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const TActorContext &ctx);
- 
-    void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx); 
- 
+
+    void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
+
     void Handle(TEvPrivate::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
@@ -995,18 +995,18 @@ class TDataShard
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
     void DoPeriodicTasks(const TActorContext &ctx);
- 
-    TDuration GetDataTxCompleteLag() 
-    { 
-        ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0; 
-        return TDuration::MilliSeconds(Pipeline.GetDataTxCompleteLag(mediatorTime)); 
-    } 
-    TDuration GetScanTxCompleteLag() 
-    { 
-        ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0; 
-        return TDuration::MilliSeconds(Pipeline.GetScanTxCompleteLag(mediatorTime)); 
-    } 
- 
+
+    TDuration GetDataTxCompleteLag()
+    {
+        ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;
+        return TDuration::MilliSeconds(Pipeline.GetDataTxCompleteLag(mediatorTime));
+    }
+    TDuration GetScanTxCompleteLag()
+    {
+        ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;
+        return TDuration::MilliSeconds(Pipeline.GetScanTxCompleteLag(mediatorTime));
+    }
+
     void UpdateLagCounters(const TActorContext &ctx);
     static NTabletPipe::TClientConfig GetPipeClientConfig();
 
@@ -1065,24 +1065,24 @@ public:
     TDataShard(const TActorId &tablet, TTabletStorageInfo *info);
 
 
-    void PrepareAndSaveOutReadSets(ui64 step, 
-                                   ui64 txId, 
-                                   const TMap<std::pair<ui64, ui64>, TString>& outReadSets, 
-                                   TVector<THolder<TEvTxProcessing::TEvReadSet>> &preparedRS, 
-                                   TTransactionContext& txc, 
-                                   const TActorContext& ctx); 
-    THolder<TEvTxProcessing::TEvReadSet> PrepareReadSet(ui64 step, ui64 txId, ui64 source, ui64 target, 
-                                                        const TString& body, ui64 seqno); 
+    void PrepareAndSaveOutReadSets(ui64 step,
+                                   ui64 txId,
+                                   const TMap<std::pair<ui64, ui64>, TString>& outReadSets,
+                                   TVector<THolder<TEvTxProcessing::TEvReadSet>> &preparedRS,
+                                   TTransactionContext& txc,
+                                   const TActorContext& ctx);
+    THolder<TEvTxProcessing::TEvReadSet> PrepareReadSet(ui64 step, ui64 txId, ui64 source, ui64 target,
+                                                        const TString& body, ui64 seqno);
     void SendReadSet(const TActorContext& ctx, ui64 step, ui64 txId, ui64 source, ui64 target, const TString& body, ui64 seqno);
-    void SendReadSets(const TActorContext& ctx, 
-                      TVector<THolder<TEvTxProcessing::TEvReadSet>> &&readsets); 
+    void SendReadSets(const TActorContext& ctx,
+                      TVector<THolder<TEvTxProcessing::TEvReadSet>> &&readsets);
     void ResendReadSet(const TActorContext& ctx, ui64 step, ui64 txId, ui64 source, ui64 target, const TString& body, ui64 seqno);
     void SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEventHandle>>& delayedAcks) const;
-    void SendResult(const TActorContext &ctx, 
-                    TOutputOpData::TResultPtr &result, 
+    void SendResult(const TActorContext &ctx,
+                    TOutputOpData::TResultPtr &result,
                     const TActorId &target,
-                    ui64 step, 
-                    ui64 txId); 
+                    ui64 step,
+                    ui64 txId);
     void FillSplitTrajectory(ui64 origin, NKikimrTx::TBalanceTrackList& tracks);
 
     void SetCounter(NDataShard::ESimpleCounters counter, ui64 num) const {
@@ -1123,13 +1123,13 @@ public:
         return State == TShardState::Frozen;
     }
 
- 
+
     ui32 Generation() const { return Executor()->Generation(); }
     bool IsFollower() const { return Executor()->GetStats().IsFollower; }
     bool SyncSchemeOnFollower(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx,
                            NKikimrTxDataShard::TError::EKind & status, TString& errMessage);
 
-    ui64 GetMaxTxInFly() { return MaxTxInFly; } 
+    ui64 GetMaxTxInFly() { return MaxTxInFly; }
 
     static constexpr ui64 DefaultTxStepDeadline() { return 30 * 1000; }
     static constexpr ui64 PipeClientCachePoolLimit() { return 100; }
@@ -1155,7 +1155,7 @@ public:
     void CheckDelayedProposeQueue(const TActorContext &ctx);
 
     bool CheckDataTxReject(const TString& opDescr,
-                           const TActorContext &ctx, 
+                           const TActorContext &ctx,
                            NKikimrTxDataShard::TEvProposeTransactionResult::EStatus& rejectStatus,
                            TString &reason);
     bool CheckDataTxRejectAndReply(TEvDataShard::TEvProposeTransaction* msg, const TActorContext& ctx);
@@ -1175,7 +1175,7 @@ public:
 
     void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
         TableInfos[tableId.LocalPathId] = tableInfo;
-        SysLocks.UpdateSchema(tableId, *tableInfo); 
+        SysLocks.UpdateSchema(tableId, *tableInfo);
         Pipeline.GetDepTracker().UpdateSchema(tableId, *tableInfo);
     }
 
@@ -1185,11 +1185,11 @@ public:
     }
 
     const THashMap<ui64, TUserTable::TCPtr> &GetUserTables() const { return TableInfos; }
- 
+
     ui64 GetLocalTableId(const TTableId& tableId) const {
         Y_VERIFY(!TSysTables::IsSystemTable(tableId));
         auto it = TableInfos.find(tableId.PathId.LocalPathId);
-        return it == TableInfos.end() ? 0 : it->second->LocalTid; 
+        return it == TableInfos.end() ? 0 : it->second->LocalTid;
     }
 
     ui64 GetShadowTableId(const TTableId& tableId) const {
@@ -1199,21 +1199,21 @@ public:
     }
 
     ui64 GetTxReadSizeLimit() const {
-        return TxReadSizeLimit ? TxReadSizeLimit : (ui64)PerShardReadSizeLimit; 
+        return TxReadSizeLimit ? TxReadSizeLimit : (ui64)PerShardReadSizeLimit;
     }
 
-    ui64 GetDataTxProfileLogThresholdMs() const { 
-        return DataTxProfileLogThresholdMs; 
-    } 
- 
-    ui64 GetDataTxProfileBufferThresholdMs() const { 
-        return DataTxProfileBufferThresholdMs; 
-    } 
- 
-    ui64 GetDataTxProfileBufferSize() const { 
-        return DataTxProfileBufferSize; 
-    } 
- 
+    ui64 GetDataTxProfileLogThresholdMs() const {
+        return DataTxProfileLogThresholdMs;
+    }
+
+    ui64 GetDataTxProfileBufferThresholdMs() const {
+        return DataTxProfileBufferThresholdMs;
+    }
+
+    ui64 GetDataTxProfileBufferSize() const {
+        return DataTxProfileBufferSize;
+    }
+
     ui64 GetOutdatedCleanupStep() const {
         ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;
         ui64 pipelineTime = Pipeline.OutdatedCleanupStep();
@@ -1234,22 +1234,22 @@ public:
         tx.SetTxCacheUsage(0);
     }
 
-    ui64 MakeScanSnapshot(ui32 tableId) { return Executor()->MakeScanSnapshot(tableId); } 
+    ui64 MakeScanSnapshot(ui32 tableId) { return Executor()->MakeScanSnapshot(tableId); }
     ui64 QueueScan(ui32 tableId, TAutoPtr<NTable::IScan> scan, ui64 cookie, const TScanOptions& options = TScanOptions())
-    { 
+    {
         return Executor()->QueueScan(tableId, scan, cookie, options);
-    } 
-    void DropScanSnapshot(ui64 id) { Executor()->DropScanSnapshot(id); } 
-    void CancelScan(ui32 tableId, ui64 scanId) { Executor()->CancelScan(tableId, scanId); } 
-    TString BorrowSnapshot(ui32 tableId, 
-                           const TTableSnapshotContext &ctx, 
-                           NTable::TRawVals from, 
-                           NTable::TRawVals to, 
-                           ui64 loaner) const 
-    { 
-        return Executor()->BorrowSnapshot(tableId, ctx, from, to, loaner); 
-    } 
- 
+    }
+    void DropScanSnapshot(ui64 id) { Executor()->DropScanSnapshot(id); }
+    void CancelScan(ui32 tableId, ui64 scanId) { Executor()->CancelScan(tableId, scanId); }
+    TString BorrowSnapshot(ui32 tableId,
+                           const TTableSnapshotContext &ctx,
+                           NTable::TRawVals from,
+                           NTable::TRawVals to,
+                           ui64 loaner) const
+    {
+        return Executor()->BorrowSnapshot(tableId, ctx, from, to, loaner);
+    }
+
     void SnapshotComplete(TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> snapContext, const TActorContext &ctx) override;
     void CompactionComplete(ui32 tableId, const TActorContext &ctx) override;
     void CompletedLoansChanged(const TActorContext &ctx) override;
@@ -1270,7 +1270,7 @@ public:
 
     void ScanComplete(NTable::EAbort status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx) override;
     bool ReassignChannelsEnabled() const override;
-    ui64 GetMemoryUsage() const override; 
+    ui64 GetMemoryUsage() const override;
 
     bool HasSharedBlobs() const;
     void CheckInitiateBorrowedPartsReturn(const TActorContext& ctx);
@@ -1278,54 +1278,54 @@ public:
     void CheckSplitCanStart(const TActorContext& ctx);
     void CheckMvccStateChangeCanStart(const TActorContext& ctx);
 
-    ui32 GetState() const { return State; } 
+    ui32 GetState() const { return State; }
     TSwitchState GetMvccSwitchState() { return MvccSwitchState; }
-    void SetPersistState(ui32 state, TTransactionContext &txc) 
-    { 
-        NIceDb::TNiceDb db(txc.DB); 
-        PersistSys(db, Schema::Sys_State, state); 
- 
-        State = state; 
-    } 
- 
+    void SetPersistState(ui32 state, TTransactionContext &txc)
+    {
+        NIceDb::TNiceDb db(txc.DB);
+        PersistSys(db, Schema::Sys_State, state);
+
+        State = state;
+    }
+
     bool IsStopping() const { return Stopping; }
 
     ui64 GetPathOwnerId() const { return PathOwnerId; }
     ui64 GetCurrentSchemeShardId() const { return CurrentSchemeShardId; }
- 
-    TSchemeOpSeqNo GetLastSchemeOpSeqNo() { return LastSchemeOpSeqNo; } 
-    void UpdateLastSchemeOpSeqNo(const TSchemeOpSeqNo &newSeqNo, 
-                                 TTransactionContext &txc); 
+
+    TSchemeOpSeqNo GetLastSchemeOpSeqNo() { return LastSchemeOpSeqNo; }
+    void UpdateLastSchemeOpSeqNo(const TSchemeOpSeqNo &newSeqNo,
+                                 TTransactionContext &txc);
     void ResetLastSchemeOpSeqNo(TTransactionContext &txc);
-    void PersistProcessingParams(const NKikimrSubDomains::TProcessingParams &params, 
-                                 NTabletFlatExecutor::TTransactionContext &txc); 
+    void PersistProcessingParams(const NKikimrSubDomains::TProcessingParams &params,
+                                 NTabletFlatExecutor::TTransactionContext &txc);
     void PersistCurrentSchemeShardId(ui64 id,
-                                    NTabletFlatExecutor::TTransactionContext &txc); 
+                                    NTabletFlatExecutor::TTransactionContext &txc);
     void PersistSubDomainPathId(ui64 ownerId, ui64 localPathId,
                                 NTabletFlatExecutor::TTransactionContext &txc);
     void PersistOwnerPathId(ui64 id,
                             NTabletFlatExecutor::TTransactionContext &txc);
- 
+
     TDuration CleanupTimeout() const;
-    void PlanCleanup(const TActorContext &ctx) { 
+    void PlanCleanup(const TActorContext &ctx) {
         CleanupQueue.Schedule(ctx, CleanupTimeout());
-    } 
- 
-    void SendRegistrationRequestTimeCast(const TActorContext &ctx); 
- 
-    const NKikimrSubDomains::TProcessingParams *GetProcessingParams() const 
-    { 
-        return ProcessingParams.get(); 
-    } 
- 
-    const TSysLocks &GetSysLocks() const { return SysLocks; } 
- 
-    using TTabletExecutedFlat::TryCaptureTxCache; 
- 
+    }
+
+    void SendRegistrationRequestTimeCast(const TActorContext &ctx);
+
+    const NKikimrSubDomains::TProcessingParams *GetProcessingParams() const
+    {
+        return ProcessingParams.get();
+    }
+
+    const TSysLocks &GetSysLocks() const { return SysLocks; }
+
+    using TTabletExecutedFlat::TryCaptureTxCache;
+
     bool IsAnyChannelYellowMove() const {
         return Executor()->GetStats().IsAnyChannelYellowMove;
-    } 
- 
+    }
+
     bool IsAnyChannelYellowStop() const {
         return Executor()->GetStats().IsAnyChannelYellowStop;
     }
@@ -1335,13 +1335,13 @@ public:
         return SubDomainOutOfSpace;
     }
 
-    ui64 GetExecutorStep() const 
-    { 
-        return Executor()->Step(); 
-    } 
- 
+    ui64 GetExecutorStep() const
+    {
+        return Executor()->Step();
+    }
+
     TSchemaOperation *FindSchemaTx(ui64 txId) { return TransQueue.FindSchemaTx(txId); }
- 
+
     TUserTable::TPtr AlterTableSchemaVersion(
         const TActorContext& ctx, TTransactionContext& txc,
         const TPathId& pathId, const ui64 tableSchemaVersion,
@@ -1377,10 +1377,10 @@ public:
                                     const NKikimrSchemeOp::TTableDescription& tableScheme);
     static THashMap<TPathId, TPathId> GetRemapIndexes(const NKikimrTxDataShard::TMoveTable& move);
     TUserTable::TPtr MoveUserTable(const TActorContext& ctx, TTransactionContext& txc, const NKikimrTxDataShard::TMoveTable& move);
-    void DropUserTable(TTransactionContext& txc, ui64 tableId); 
- 
-    ui32 GetLastLocalTid() const { return LastLocalTid; } 
- 
+    void DropUserTable(TTransactionContext& txc, ui64 tableId);
+
+    ui32 GetLastLocalTid() const { return LastLocalTid; }
+
     ui64 AllocateChangeRecordOrder(NIceDb::TNiceDb& db);
     ui64 AllocateChangeRecordGroup(NIceDb::TNiceDb& db);
     void PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record);
@@ -1395,10 +1395,10 @@ public:
 
 
     static void PersistSchemeTxResult(NIceDb::TNiceDb &db, const TSchemaOperation& op);
-    void NotifySchemeshard(const TActorContext& ctx, ui64 txId = 0); 
+    void NotifySchemeshard(const TActorContext& ctx, ui64 txId = 0);
 
     TThrRefBase* GetDataShardSysTables() { return DataShardSysTables.Get(); }
- 
+
     TSnapshotManager& GetSnapshotManager() { return SnapshotManager; }
     const TSnapshotManager& GetSnapshotManager() const { return SnapshotManager; }
 
@@ -1973,29 +1973,29 @@ private:
     TSet<ui64> MediatorTimeCastWaitingSteps;
 
     TControlWrapper DisableByKeyFilter;
-    TControlWrapper MaxTxInFly; 
+    TControlWrapper MaxTxInFly;
     TControlWrapper MaxTxLagMilliseconds;
-    TControlWrapper CanCancelROWithReadSets; 
-    TControlWrapper PerShardReadSizeLimit; 
+    TControlWrapper CanCancelROWithReadSets;
+    TControlWrapper PerShardReadSizeLimit;
     TControlWrapper CpuUsageReportThreshlodPercent;
     TControlWrapper CpuUsageReportIntervalSeconds;
     TControlWrapper HighDataSizeReportThreshlodBytes;
     TControlWrapper HighDataSizeReportIntervalSeconds;
 
-    TControlWrapper DataTxProfileLogThresholdMs; 
-    TControlWrapper DataTxProfileBufferThresholdMs; 
-    TControlWrapper DataTxProfileBufferSize; 
- 
+    TControlWrapper DataTxProfileLogThresholdMs;
+    TControlWrapper DataTxProfileBufferThresholdMs;
+    TControlWrapper DataTxProfileBufferSize;
+
     TControlWrapper ReadColumnsScanEnabled;
     TControlWrapper ReadColumnsScanInUserPool;
 
     TControlWrapper BackupReadAheadLo;
     TControlWrapper BackupReadAheadHi;
 
-    // Set of InRS keys to remove from local DB. 
-    THashSet<TReadSetKey> InRSToRemove; 
+    // Set of InRS keys to remove from local DB.
+    THashSet<TReadSetKey> InRSToRemove;
     TIntrusivePtr<TThrRefBase> DataShardSysTables;
- 
+
     // Simple volatile counter
     ui64 NextTieBreakerIndex = 1;
 
@@ -2149,15 +2149,15 @@ protected:
             HFuncTraced(TEvTxProcessing::TEvPlanStep, Handle);
             HFuncTraced(TEvTxProcessing::TEvReadSet, Handle);
             HFuncTraced(TEvTxProcessing::TEvReadSetAck, Handle);
-            HFuncTraced(TEvTxProcessing::TEvStreamClearanceResponse, Handle); 
-            HFuncTraced(TEvTxProcessing::TEvStreamClearancePending, Handle); 
-            HFuncTraced(TEvTxProcessing::TEvInterruptTransaction, Handle); 
+            HFuncTraced(TEvTxProcessing::TEvStreamClearanceResponse, Handle);
+            HFuncTraced(TEvTxProcessing::TEvStreamClearancePending, Handle);
+            HFuncTraced(TEvTxProcessing::TEvInterruptTransaction, Handle);
             HFuncTraced(TEvPrivate::TEvProgressTransaction, Handle);
             HFuncTraced(TEvPrivate::TEvCleanupTransaction, Handle);
             HFuncTraced(TEvPrivate::TEvDelayedProposeTransaction, Handle);
             HFuncTraced(TEvPrivate::TEvProgressResendReadSet, Handle);
-            HFuncTraced(TEvPrivate::TEvRemoveOldInReadSets, Handle); 
-            HFuncTraced(TEvPrivate::TEvRegisterScanActor, Handle); 
+            HFuncTraced(TEvPrivate::TEvRemoveOldInReadSets, Handle);
+            HFuncTraced(TEvPrivate::TEvRegisterScanActor, Handle);
             HFuncTraced(TEvPrivate::TEvScanStats, Handle);
             HFuncTraced(TEvPrivate::TEvPersistScanState, Handle);
             HFuncTraced(TEvTabletPipe::TEvClientConnected, Handle);
@@ -2189,23 +2189,23 @@ protected:
             HFunc(TEvDataShard::TEvReadAck, Handle);
             HFunc(TEvDataShard::TEvReadCancel, Handle);
             HFunc(TEvDataShard::TEvReadColumnsRequest, Handle);
-            HFunc(TEvDataShard::TEvGetInfoRequest, Handle); 
-            HFunc(TEvDataShard::TEvListOperationsRequest, Handle); 
-            HFunc(TEvDataShard::TEvGetDataHistogramRequest, Handle); 
-            HFunc(TEvDataShard::TEvGetOperationRequest, Handle); 
-            HFunc(TEvDataShard::TEvGetReadTableSinkStateRequest, Handle); 
-            HFunc(TEvDataShard::TEvGetReadTableScanStateRequest, Handle); 
-            HFunc(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle); 
-            HFunc(TEvDataShard::TEvGetRSInfoRequest, Handle); 
-            HFunc(TEvDataShard::TEvGetSlowOpProfilesRequest, Handle); 
+            HFunc(TEvDataShard::TEvGetInfoRequest, Handle);
+            HFunc(TEvDataShard::TEvListOperationsRequest, Handle);
+            HFunc(TEvDataShard::TEvGetDataHistogramRequest, Handle);
+            HFunc(TEvDataShard::TEvGetOperationRequest, Handle);
+            HFunc(TEvDataShard::TEvGetReadTableSinkStateRequest, Handle);
+            HFunc(TEvDataShard::TEvGetReadTableScanStateRequest, Handle);
+            HFunc(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
+            HFunc(TEvDataShard::TEvGetRSInfoRequest, Handle);
+            HFunc(TEvDataShard::TEvGetSlowOpProfilesRequest, Handle);
             HFunc(TEvDataShard::TEvRefreshVolatileSnapshotRequest, Handle);
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
             HFunc(TEvPrivate::TEvAsyncJobComplete, Handle);
             CFunc(TEvPrivate::EvPeriodicWakeup, DoPeriodicTasks);
-            HFunc(TEvents::TEvUndelivered, Handle); 
+            HFunc(TEvents::TEvUndelivered, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
-            HFunc(TEvInterconnect::TEvNodeDisconnected, Handle); 
+            HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             HFunc(TEvPrivate::TEvSubDomainPathIdFound, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted);
@@ -2300,12 +2300,12 @@ protected:
         return IActor::Die(ctx);
     }
 
-    void BecomeBroken(const TActorContext &ctx) 
-    { 
-        Become(&TThis::StateBroken); 
-        ctx.Send(Tablet(), new TEvents::TEvPoisonPill); 
-    } 
- 
+    void BecomeBroken(const TActorContext &ctx)
+    {
+        Become(&TThis::StateBroken);
+        ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
+    }
+
     void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, THolder<TEvDataShard::TEvSchemaChanged> event) {
         Y_VERIFY(tabletId);
         Y_VERIFY(CurrentSchemeShardId == tabletId);
@@ -2345,7 +2345,7 @@ protected:
         for (const auto& t : TableInfos) {
             ui64 tableId = t.first;
 
-            const TUserTable &ti = *t.second; 
+            const TUserTable &ti = *t.second;
 
             // Don't report stats until they are build for the first time
             if (!ti.Stats.StatsUpdateTime)
@@ -2408,35 +2408,35 @@ protected:
     }
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) override;
-    void SerializeHistogram(const TUserTable &tinfo, 
-                            const NTable::THistogram &histogram, 
-                            const NScheme::TTypeRegistry &typeRegistry, 
-                            NKikimrTxDataShard::TEvGetDataHistogramResponse::THistogram &hist); 
+    void SerializeHistogram(const TUserTable &tinfo,
+                            const NTable::THistogram &histogram,
+                            const NScheme::TTypeRegistry &typeRegistry,
+                            NKikimrTxDataShard::TEvGetDataHistogramResponse::THistogram &hist);
     void SerializeKeySample(const TUserTable &tinfo,
                             const NTable::TKeyAccessSample &keySample,
                             const NScheme::TTypeRegistry &typeRegistry,
                             NKikimrTxDataShard::TEvGetDataHistogramResponse::THistogram &hist);
- 
+
     bool ByKeyFilterDisabled() const;
     bool AllowCancelROwithReadsets() const;
- 
-    void ResolveTablePath(const TActorContext &ctx); 
+
+    void ResolveTablePath(const TActorContext &ctx);
 };
 
 NKikimrTxDataShard::TError::EKind ConvertErrCode(NMiniKQL::IEngineFlat::EResult code);
 
 Ydb::StatusIds::StatusCode ConvertToYdbStatusCode(NKikimrTxDataShard::TError::EKind);
 
-template <class T> 
-void SetStatusError(T &rec, 
-                    Ydb::StatusIds::StatusCode status, 
-                    const TString &msg, 
-                    ui32 severity = NYql::TSeverityIds::S_ERROR) 
-{ 
-    rec.MutableStatus()->SetCode(status); 
-    auto *issue = rec.MutableStatus()->AddIssues(); 
-    issue->set_severity(severity); 
-    issue->set_message(msg); 
-} 
- 
+template <class T>
+void SetStatusError(T &rec,
+                    Ydb::StatusIds::StatusCode status,
+                    const TString &msg,
+                    ui32 severity = NYql::TSeverityIds::S_ERROR)
+{
+    rec.MutableStatus()->SetCode(status);
+    auto *issue = rec.MutableStatus()->AddIssues();
+    issue->set_severity(severity);
+    issue->set_message(msg);
+}
+
 }}

@@ -1,10 +1,10 @@
-#pragma once 
- 
-#include "execution_unit.h" 
- 
-namespace NKikimr { 
+#pragma once
+
+#include "execution_unit.h"
+
+namespace NKikimr {
 namespace NDataShard {
- 
+
 THolder<TExecutionUnit> CreateCheckDataTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateCheckSchemeTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateCheckSnapshotTxUnit(TDataShard &dataShard, TPipeline &pipeline);
@@ -64,4 +64,4 @@ THolder<TExecutionUnit> CreateAlterCdcStreamUnit(TDataShard &dataShard, TPipelin
 THolder<TExecutionUnit> CreateDropCdcStreamUnit(TDataShard &dataShard, TPipeline &pipeline);
 
 } // namespace NDataShard
-} // namespace NKikimr 
+} // namespace NKikimr

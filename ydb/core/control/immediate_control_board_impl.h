@@ -18,8 +18,8 @@ public:
 
     void RestoreDefaults();
 
-    void RestoreDefault(TString name); 
- 
+    void RestoreDefault(TString name);
+
     bool SetValue(TString name, TAtomic value, TAtomic &outPrevValue);
 
     // Only for tests

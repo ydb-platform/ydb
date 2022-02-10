@@ -477,11 +477,11 @@ Val Accumulate(const C& c, Val val, BinOp binOp) {
     return Accumulate(std::begin(c), std::end(c), std::move(val), binOp);
 }
 
-template <typename It1, typename It2, typename Val>
-static inline Val InnerProduct(It1 begin1, It1 end1, It2 begin2, Val val) {
-    return std::inner_product(begin1, end1, begin2, val);
-}
-
+template <typename It1, typename It2, typename Val> 
+static inline Val InnerProduct(It1 begin1, It1 end1, It2 begin2, Val val) { 
+    return std::inner_product(begin1, end1, begin2, val); 
+} 
+ 
 template <typename It1, typename It2, typename Val, typename BinOp1, typename BinOp2>
 static inline Val InnerProduct(It1 begin1, It1 end1, It2 begin2, Val val, BinOp1 binOp1, BinOp2 binOp2) {
     return std::inner_product(begin1, end1, begin2, val, binOp1, binOp2);

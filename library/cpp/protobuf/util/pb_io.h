@@ -29,7 +29,7 @@ namespace NProtoBuf {
         ParseFromBase64String(dataBase64, m, allowUneven);
         return m;
     }
-
+ 
     /* Serialize message into string and apply base64 URL encoding.
      */
     TString SerializeToBase64String(const Message& m);

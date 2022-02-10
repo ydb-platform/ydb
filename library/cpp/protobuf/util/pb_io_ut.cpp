@@ -44,11 +44,11 @@ static const TString INCORRECT_ENUM_ID_MESSAGE =
 )";
 
 static const TString CORRECT_BASE64_MESSAGE = "CCo,";
-
+ 
 static const TString CORRECT_UNEVEN_BASE64_MESSAGE = "CCo";
 
 static const TString INCORRECT_BASE64_MESSAGE = "CC";
-
+ 
 Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
     Y_UNIT_TEST(TestBase64) {
         {

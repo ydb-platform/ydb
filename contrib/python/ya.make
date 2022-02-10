@@ -499,7 +499,7 @@ RECURSE(
     hypercorn
     hyperframe
     hyperlink
-    hyperopt
+    hyperopt 
     hypothesis
     ibm-db
     icalendar
@@ -1039,7 +1039,7 @@ RECURSE(
     StrEnum
     structlog
     subprocess32
-    subword-nmt
+    subword-nmt 
     suds-jurko
     supervenn
     supervisor

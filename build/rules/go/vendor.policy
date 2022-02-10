@@ -122,9 +122,9 @@ ALLOW .* -> vendor/github.com/360EntSecGroup-Skylar/excelize/v2
 # in-process redis server for tests
 ALLOW .* -> vendor/github.com/alicebob/miniredis/v2
 
-# AMQP client with RabbitMQ extensions
-ALLOW .* -> vendor/github.com/streadway/amqp
-
+# AMQP client with RabbitMQ extensions 
+ALLOW .* -> vendor/github.com/streadway/amqp 
+ 
 # AWS client libraries
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/aws
 ALLOW .* -> vendor/github.com/aws/aws-sdk-go/service/s3
@@ -346,9 +346,9 @@ ALLOW .* -> vendor/github.com/pmezard/go-difflib
 # statsd client library
 ALLOW .* -> vendor/github.com/smira/go-statsd
 
-# ICMP Ping library
-ALLOW .* -> vendor/github.com/sparrc/go-ping
-
+# ICMP Ping library 
+ALLOW .* -> vendor/github.com/sparrc/go-ping 
+ 
 # safe and easy casting from one type to another
 ALLOW .* -> vendor/github.com/spf13/cast
 
@@ -464,9 +464,9 @@ ALLOW .* -> vendor/github.com/google/go-cmp
 # CORS is a net/http handler implementing Cross Origin Resource Sharing W3 specification
 ALLOW .* -> vendor/github.com/rs/cors
 
-# read and write from the serial port as a stream of bytes
-ALLOW .* -> vendor/github.com/tarm/serial
-
+# read and write from the serial port as a stream of bytes 
+ALLOW .* -> vendor/github.com/tarm/serial 
+ 
 # generation tool and serialization library for MessagePack
 ALLOW .* -> vendor/github.com/tinylib/msgp
 ALLOW .* -> vendor/github.com/vmihailenco/msgpack
@@ -731,10 +731,10 @@ ALLOW library/go/core/log/compat/logrus -> vendor/github.com/sirupsen/logrus
 # CONTRIB-2127
 ALLOW .* -> vendor/github.com/hashicorp/terraform-plugin-sdk/v2
 
-# CONTRIB-2139 library for building GraphQL servers without any fuss.
-ALLOW .* -> vendor/github.com/99designs/gqlgen
-ALLOW .* -> vendor/github.com/vektah/gqlparser/v2
-
+# CONTRIB-2139 library for building GraphQL servers without any fuss. 
+ALLOW .* -> vendor/github.com/99designs/gqlgen 
+ALLOW .* -> vendor/github.com/vektah/gqlparser/v2 
+ 
 # CONTRIB-2148 dsl for json generating
 DENY .* -> vendor/github.com/google/go-jsonnet/c-bindings
 ALLOW .* -> vendor/github.com/google/go-jsonnet

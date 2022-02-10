@@ -12,20 +12,20 @@ RECURSE(
     aiochclient
     aiodns
     aiodocker
-    aiofiles
+    aiofiles 
     aioftp
     aiogram
     aiographite
     aiohttp
     aiohttp-apispec
-    aiohttp-cors
+    aiohttp-cors 
     aiohttp-jinja2
     aiohttp-remotes
     aiohttp-retry
-    aiohttp-swagger
+    aiohttp-swagger 
     aiohttp-xmlrpc
     aioitertools
-    aiojobs
+    aiojobs 
     aiomysql
     aiopg
     aioredis
@@ -72,7 +72,7 @@ RECURSE(
     asttokens
     astunparse
     async-generator
-    async-lru
+    async-lru 
     async-timeout
     asyncio-pool
     asyncmc
@@ -267,7 +267,7 @@ RECURSE(
     django-model-utils
     django-modeladmin-reorder
     django-modeltranslation
-    django-moderation
+    django-moderation 
     django-mptt
     django-mptt-admin
     django-nested-inline
@@ -307,7 +307,7 @@ RECURSE(
     django-whatever
     django-widget-tweaks
     djangorestframework
-    djangorestframework-camel-case
+    djangorestframework-camel-case 
     djangorestframework-csv
     djangorestframework-filters
     djangorestframework-jsonp
@@ -468,8 +468,8 @@ RECURSE(
     grpcio-opentracing
     gspread
     gunicorn
-    h11
-    h2
+    h11 
+    h2 
     h3
     h5py
     hammock
@@ -479,8 +479,8 @@ RECURSE(
     hjson
     holidays
     horovod
-    hpack
-    hstspreload
+    hpack 
+    hstspreload 
     html2text
     html5lib
     httmock
@@ -489,15 +489,15 @@ RECURSE(
     httpcore
     httplib2
     httpretty
-    httptools
-    httpx
+    httptools 
+    httpx 
     humanfriendly
     humanize
     humongous
     hurry.filesize
     Hydra
     hypercorn
-    hyperframe
+    hyperframe 
     hyperlink
     hyperopt
     hypothesis
@@ -803,7 +803,7 @@ RECURSE(
     pycryptodome
     pycurl
     pycurl/example
-    pydantic
+    pydantic 
     pydash
     PyDispatcher
     pyDOE
@@ -950,7 +950,7 @@ RECURSE(
     respx
     retry
     retrying
-    rfc3986
+    rfc3986 
     rfc3986-validator
     RPi.GPIO
     RPI-ST7789
@@ -964,7 +964,7 @@ RECURSE(
     sacrebleu
     salt-pepper
     saneyaml
-    sanic
+    sanic 
     sanic-routing
     sanic-testing
     scales
@@ -1006,7 +1006,7 @@ RECURSE(
     smart-open
     smmap
     snappy
-    sniffio
+    sniffio 
     snowballstemmer
     sobol-seq
     sockjs
@@ -1144,7 +1144,7 @@ RECURSE(
     webencodings
     WebOb
     websocket-client
-    websockets
+    websockets 
     webstruct
     WebTest
     webvtt-py

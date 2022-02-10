@@ -15,8 +15,8 @@ namespace NMonitoring {
         HIST = 5,
         HIST_RATE = 6,
         DSUMMARY = 7,
-        // ISUMMARY = 8, reserved
-        LOGHIST = 9,
+        // ISUMMARY = 8, reserved 
+        LOGHIST = 9, 
     };
 
     TStringBuf MetricTypeToStr(EMetricType type);

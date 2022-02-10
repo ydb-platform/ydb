@@ -14,14 +14,14 @@ namespace NMonitoring {
         virtual ~IMetricFactory() = default;
 
         virtual IGauge* Gauge(ILabelsPtr labels) = 0;
-        virtual ILazyGauge* LazyGauge(ILabelsPtr labels, std::function<double()> supplier) = 0;
+        virtual ILazyGauge* LazyGauge(ILabelsPtr labels, std::function<double()> supplier) = 0; 
         virtual IIntGauge* IntGauge(ILabelsPtr labels) = 0;
-        virtual ILazyIntGauge* LazyIntGauge(ILabelsPtr labels, std::function<i64()> supplier) = 0;
+        virtual ILazyIntGauge* LazyIntGauge(ILabelsPtr labels, std::function<i64()> supplier) = 0; 
         virtual ICounter* Counter(ILabelsPtr labels) = 0;
-        virtual ILazyCounter* LazyCounter(ILabelsPtr labels, std::function<ui64()> supplier) = 0;
-
+        virtual ILazyCounter* LazyCounter(ILabelsPtr labels, std::function<ui64()> supplier) = 0; 
+ 
         virtual IRate* Rate(ILabelsPtr labels) = 0;
-        virtual ILazyRate* LazyRate(ILabelsPtr labels, std::function<ui64()> supplier) = 0;
+        virtual ILazyRate* LazyRate(ILabelsPtr labels, std::function<ui64()> supplier) = 0; 
 
         virtual IHistogram* HistogramCounter(
                 ILabelsPtr labels,
@@ -63,13 +63,13 @@ namespace NMonitoring {
         static TMetricRegistry* Instance();
 
         TGauge* Gauge(TLabels labels);
-        TLazyGauge* LazyGauge(TLabels labels, std::function<double()> supplier);
+        TLazyGauge* LazyGauge(TLabels labels, std::function<double()> supplier); 
         TIntGauge* IntGauge(TLabels labels);
-        TLazyIntGauge* LazyIntGauge(TLabels labels, std::function<i64()> supplier);
+        TLazyIntGauge* LazyIntGauge(TLabels labels, std::function<i64()> supplier); 
         TCounter* Counter(TLabels labels);
-        TLazyCounter* LazyCounter(TLabels labels, std::function<ui64()> supplier);
+        TLazyCounter* LazyCounter(TLabels labels, std::function<ui64()> supplier); 
         TRate* Rate(TLabels labels);
-        TLazyRate* LazyRate(TLabels labels, std::function<ui64()> supplier);
+        TLazyRate* LazyRate(TLabels labels, std::function<ui64()> supplier); 
 
         THistogram* HistogramCounter(
                 TLabels labels,
@@ -99,13 +99,13 @@ namespace NMonitoring {
 
     private:
         TGauge* Gauge(ILabelsPtr labels) override;
-        TLazyGauge* LazyGauge(ILabelsPtr labels, std::function<double()> supplier) override;
+        TLazyGauge* LazyGauge(ILabelsPtr labels, std::function<double()> supplier) override; 
         TIntGauge* IntGauge(ILabelsPtr labels) override;
-        TLazyIntGauge* LazyIntGauge(ILabelsPtr labels, std::function<i64()> supplier) override;
+        TLazyIntGauge* LazyIntGauge(ILabelsPtr labels, std::function<i64()> supplier) override; 
         TCounter* Counter(ILabelsPtr labels) override;
-        TLazyCounter* LazyCounter(ILabelsPtr labels, std::function<ui64()> supplier) override;
+        TLazyCounter* LazyCounter(ILabelsPtr labels, std::function<ui64()> supplier) override; 
         TRate* Rate(ILabelsPtr labels) override;
-        TLazyRate* LazyRate(ILabelsPtr labels, std::function<ui64()> supplier) override;
+        TLazyRate* LazyRate(ILabelsPtr labels, std::function<ui64()> supplier) override; 
 
         THistogram* HistogramCounter(
                 ILabelsPtr labels,

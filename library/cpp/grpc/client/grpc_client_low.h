@@ -1320,7 +1320,7 @@ private:
 };
 
 class TGRpcClientLow
-    :  public IQueueClientContextProvider
+    :  public IQueueClientContextProvider 
 {
     class TContextImpl;
     friend class TContextImpl;
@@ -1332,7 +1332,7 @@ class TGRpcClientLow
     };
 
 public:
-    explicit TGRpcClientLow(size_t numWorkerThread = DEFAULT_NUM_THREADS, bool useCompletionQueuePerThread = false);
+    explicit TGRpcClientLow(size_t numWorkerThread = DEFAULT_NUM_THREADS, bool useCompletionQueuePerThread = false); 
     ~TGRpcClientLow();
 
     // Tries to stop all currently running requests (via their stop callbacks)
@@ -1372,7 +1372,7 @@ public:
 
 private:
     using IThreadRef = std::unique_ptr<IThreadFactory::IThread>;
-    using CompletionQueueRef = std::unique_ptr<grpc::CompletionQueue>;
+    using CompletionQueueRef = std::unique_ptr<grpc::CompletionQueue>; 
     void Init(size_t numWorkerThread);
 
     inline ECqState GetCqState() const { return (ECqState) AtomicGet(CqState_); }
@@ -1384,7 +1384,7 @@ private:
     void ForgetContext(TContextImpl* context);
 
 private:
-    bool UseCompletionQueuePerThread_;
+    bool UseCompletionQueuePerThread_; 
     std::vector<CompletionQueueRef> CQS_;
     std::vector<IThreadRef> WorkerThreads_;
     TAtomic CqState_ = -1;

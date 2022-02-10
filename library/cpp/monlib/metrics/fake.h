@@ -17,13 +17,13 @@ namespace NMonitoring {
         }
 
         IGauge* Gauge(ILabelsPtr labels) override;
-        ILazyGauge* LazyGauge(ILabelsPtr labels, std::function<double()> supplier) override;
+        ILazyGauge* LazyGauge(ILabelsPtr labels, std::function<double()> supplier) override; 
         IIntGauge* IntGauge(ILabelsPtr labels) override;
-        ILazyIntGauge* LazyIntGauge(ILabelsPtr labels, std::function<i64()> supplier) override;
+        ILazyIntGauge* LazyIntGauge(ILabelsPtr labels, std::function<i64()> supplier) override; 
         ICounter* Counter(ILabelsPtr labels) override;
-        ILazyCounter* LazyCounter(ILabelsPtr labels, std::function<ui64()> supplier) override;
+        ILazyCounter* LazyCounter(ILabelsPtr labels, std::function<ui64()> supplier) override; 
         IRate* Rate(ILabelsPtr labels) override;
-        ILazyRate* LazyRate(ILabelsPtr labels, std::function<ui64()> supplier) override;
+        ILazyRate* LazyRate(ILabelsPtr labels, std::function<ui64()> supplier) override; 
 
         IHistogram* HistogramCounter(
         ILabelsPtr labels,
@@ -70,12 +70,12 @@ namespace NMonitoring {
         }
     };
 
-    struct TFakeLazyIntGauge final: public TFakeAcceptor<ILazyIntGauge> {
-        i64 Get() const noexcept override {
-            return 0;
-        }
-    };
-
+    struct TFakeLazyIntGauge final: public TFakeAcceptor<ILazyIntGauge> { 
+        i64 Get() const noexcept override { 
+            return 0; 
+        } 
+    }; 
+ 
     struct TFakeRate final: public TFakeAcceptor<IRate> {
         ui64 Add(ui64 n) noexcept override {
             Y_UNUSED(n);
@@ -90,12 +90,12 @@ namespace NMonitoring {
         }
     };
 
-    struct TFakeLazyRate final: public TFakeAcceptor<ILazyRate> {
-        ui64 Get() const noexcept override {
-            return 0;
-        }
-    };
-
+    struct TFakeLazyRate final: public TFakeAcceptor<ILazyRate> { 
+        ui64 Get() const noexcept override { 
+            return 0; 
+        } 
+    }; 
+ 
     struct TFakeGauge final: public TFakeAcceptor<IGauge> {
         double Add(double n) noexcept override {
             Y_UNUSED(n);
@@ -111,12 +111,12 @@ namespace NMonitoring {
         }
     };
 
-    struct TFakeLazyGauge final: public TFakeAcceptor<ILazyGauge> {
-        double Get() const noexcept override {
-            return 0;
-        }
-    };
-
+    struct TFakeLazyGauge final: public TFakeAcceptor<ILazyGauge> { 
+        double Get() const noexcept override { 
+            return 0; 
+        } 
+    }; 
+ 
     struct TFakeHistogram final: public IHistogram {
         TFakeHistogram(bool isRate = false)
             : IHistogram{isRate}
@@ -156,10 +156,10 @@ namespace NMonitoring {
         void Reset() noexcept override {
         }
     };
-
-    struct TFakeLazyCounter final: public TFakeAcceptor<ILazyCounter> {
-        ui64 Get() const noexcept override {
-            return 0;
-        }
-    };
+ 
+    struct TFakeLazyCounter final: public TFakeAcceptor<ILazyCounter> { 
+        ui64 Get() const noexcept override { 
+            return 0; 
+        } 
+    }; 
 } // namespace NMonitoring

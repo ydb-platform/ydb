@@ -52,14 +52,14 @@ namespace NMonitoring {
         return Metric<TGauge, EMetricType::GAUGE>(std::move(labels));
     }
 
-    TLazyGauge* TMetricRegistry::LazyGauge(TLabels labels, std::function<double()> supplier) {
-        return Metric<TLazyGauge, EMetricType::GAUGE>(std::move(labels), std::move(supplier));
-    }
-
-    TLazyGauge* TMetricRegistry::LazyGauge(ILabelsPtr labels, std::function<double()> supplier) {
-        return Metric<TLazyGauge, EMetricType::GAUGE>(std::move(labels), std::move(supplier));
-    }
-
+    TLazyGauge* TMetricRegistry::LazyGauge(TLabels labels, std::function<double()> supplier) { 
+        return Metric<TLazyGauge, EMetricType::GAUGE>(std::move(labels), std::move(supplier)); 
+    } 
+ 
+    TLazyGauge* TMetricRegistry::LazyGauge(ILabelsPtr labels, std::function<double()> supplier) { 
+        return Metric<TLazyGauge, EMetricType::GAUGE>(std::move(labels), std::move(supplier)); 
+    } 
+ 
     TIntGauge* TMetricRegistry::IntGauge(TLabels labels) {
         return Metric<TIntGauge, EMetricType::IGAUGE>(std::move(labels));
     }
@@ -68,14 +68,14 @@ namespace NMonitoring {
         return Metric<TIntGauge, EMetricType::IGAUGE>(std::move(labels));
     }
 
-    TLazyIntGauge* TMetricRegistry::LazyIntGauge(TLabels labels, std::function<i64()> supplier) {
-        return Metric<TLazyIntGauge, EMetricType::GAUGE>(std::move(labels), std::move(supplier));
-    }
-
-    TLazyIntGauge* TMetricRegistry::LazyIntGauge(ILabelsPtr labels, std::function<i64()> supplier) {
-        return Metric<TLazyIntGauge, EMetricType::GAUGE>(std::move(labels), std::move(supplier));
-    }
-
+    TLazyIntGauge* TMetricRegistry::LazyIntGauge(TLabels labels, std::function<i64()> supplier) { 
+        return Metric<TLazyIntGauge, EMetricType::GAUGE>(std::move(labels), std::move(supplier)); 
+    } 
+ 
+    TLazyIntGauge* TMetricRegistry::LazyIntGauge(ILabelsPtr labels, std::function<i64()> supplier) { 
+        return Metric<TLazyIntGauge, EMetricType::GAUGE>(std::move(labels), std::move(supplier)); 
+    } 
+ 
     TCounter* TMetricRegistry::Counter(TLabels labels) {
         return Metric<TCounter, EMetricType::COUNTER>(std::move(labels));
     }
@@ -84,14 +84,14 @@ namespace NMonitoring {
         return Metric<TCounter, EMetricType::COUNTER>(std::move(labels));
     }
 
-    TLazyCounter* TMetricRegistry::LazyCounter(TLabels labels, std::function<ui64()> supplier) {
-        return Metric<TLazyCounter, EMetricType::COUNTER>(std::move(labels), std::move(supplier));
-    }
-
-    TLazyCounter* TMetricRegistry::LazyCounter(ILabelsPtr labels, std::function<ui64()> supplier) {
-        return Metric<TLazyCounter, EMetricType::COUNTER>(std::move(labels), std::move(supplier));
-    }
-
+    TLazyCounter* TMetricRegistry::LazyCounter(TLabels labels, std::function<ui64()> supplier) { 
+        return Metric<TLazyCounter, EMetricType::COUNTER>(std::move(labels), std::move(supplier)); 
+    } 
+ 
+    TLazyCounter* TMetricRegistry::LazyCounter(ILabelsPtr labels, std::function<ui64()> supplier) { 
+        return Metric<TLazyCounter, EMetricType::COUNTER>(std::move(labels), std::move(supplier)); 
+    } 
+ 
     TRate* TMetricRegistry::Rate(TLabels labels) {
         return Metric<TRate, EMetricType::RATE>(std::move(labels));
     }
@@ -100,14 +100,14 @@ namespace NMonitoring {
         return Metric<TRate, EMetricType::RATE>(std::move(labels));
     }
 
-    TLazyRate* TMetricRegistry::LazyRate(TLabels labels, std::function<ui64()> supplier) {
-        return Metric<TLazyRate, EMetricType::RATE>(std::move(labels), std::move(supplier));
-    }
-
-    TLazyRate* TMetricRegistry::LazyRate(ILabelsPtr labels, std::function<ui64()> supplier) {
-        return Metric<TLazyRate, EMetricType::RATE>(std::move(labels), std::move(supplier));
-    }
-
+    TLazyRate* TMetricRegistry::LazyRate(TLabels labels, std::function<ui64()> supplier) { 
+        return Metric<TLazyRate, EMetricType::RATE>(std::move(labels), std::move(supplier)); 
+    } 
+ 
+    TLazyRate* TMetricRegistry::LazyRate(ILabelsPtr labels, std::function<ui64()> supplier) { 
+        return Metric<TLazyRate, EMetricType::RATE>(std::move(labels), std::move(supplier)); 
+    } 
+ 
     THistogram* TMetricRegistry::HistogramCounter(TLabels labels, IHistogramCollectorPtr collector) {
         return Metric<THistogram, EMetricType::HIST>(std::move(labels), std::move(collector), false);
     }

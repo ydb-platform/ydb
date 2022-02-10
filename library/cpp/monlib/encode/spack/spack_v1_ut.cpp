@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
     };
 
     ui8 expectedMetric8[] = {
-        0x26,                                           // types (LOGHIST | ONE_WITH_TS)           (fixed ui8)
+        0x26,                                           // types (LOGHIST | ONE_WITH_TS)           (fixed ui8) 
         0x00,                                           // flags                                   (fixed ui8)
         0x01,                                           // metric labels count                     (variant)
         0x00,                                           // label name index                        (variant)

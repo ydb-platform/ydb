@@ -53,9 +53,9 @@ struct TServerOptions {
     //! Number of worker threads.
     DECLARE_FIELD(WorkerThreads, size_t, 2);
 
-    //! Create one completion queue per thread
-    DECLARE_FIELD(UseCompletionQueuePerThread, bool, false);
-
+    //! Create one completion queue per thread 
+    DECLARE_FIELD(UseCompletionQueuePerThread, bool, false); 
+ 
     //! Memory quota size for grpc server in bytes. Zero means unlimited.
     DECLARE_FIELD(GRpcMemoryQuotaBytes, size_t, 0);
 
@@ -328,7 +328,7 @@ private:
     TAdaptiveLock Lock_;
 };
 
-class TGRpcServer {
+class TGRpcServer { 
 public:
     using IGRpcServicePtr = TIntrusivePtr<IGRpcService>;
     TGRpcServer(const TServerOptions& opts);
@@ -346,7 +346,7 @@ private:
 
     const TServerOptions Options_;
     std::unique_ptr<grpc::Server> Server_;
-    std::vector<std::unique_ptr<grpc::ServerCompletionQueue>> CQS_;
+    std::vector<std::unique_ptr<grpc::ServerCompletionQueue>> CQS_; 
     TVector<IThreadRef> Ts;
 
     TVector<IGRpcServicePtr> Services_;

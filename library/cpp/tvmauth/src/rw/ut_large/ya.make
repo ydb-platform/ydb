@@ -1,4 +1,4 @@
-PY2TEST() 
+PY2TEST()
 
 OWNER(g:passport_infra)
 

@@ -3405,12 +3405,12 @@
                         "os": "LINUX"
                     },
                     "default": true
-                }, 
-                { 
-                    "host": { 
-                        "os": "darwin" 
-                    }, 
-                    "default": true 
+                },
+                {
+                    "host": {
+                        "os": "darwin"
+                    },
+                    "default": true
                 }
             ]
         },
@@ -6985,7 +6985,7 @@
         },
         "zipatcher": {
             "formula": {
-                "sandbox_id": 897674372, 
+                "sandbox_id": 897674372,
                 "match": "zipatcher"
             },
             "executable": {

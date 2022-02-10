@@ -3,7 +3,7 @@ OWNER(
     g:util
 )
 
-PY2TEST() 
+PY2TEST()
 
 SIZE(LARGE)
 

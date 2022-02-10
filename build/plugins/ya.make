@@ -1,6 +1,6 @@
 OWNER(g:ymake)
 
-PY2_LIBRARY() 
+PY2_LIBRARY()
 
 PY_SRCS(
     code_generator.py

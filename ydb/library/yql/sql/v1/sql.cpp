@@ -7407,7 +7407,7 @@ bool TGroupByClause::HoppingWindow(const TRule_hopping_window_specification& nod
     if (!HoppingWindowSpec->Delay) {
         return false;
     }
-    HoppingWindowSpec->DataWatermarks = Ctx.PragmaDataWatermarks;
+    HoppingWindowSpec->DataWatermarks = Ctx.PragmaDataWatermarks; 
 
     return true;
 }
@@ -9574,22 +9574,22 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableunorderedsubqueries") {
             Ctx.UnorderedSubqueries = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableUnorderedSubqueries");
-        } else if (normalizedPragma == "datawatermarks") {
-            if (values.size() != 1 || !values[0].GetLiteral()
-                || ! (*values[0].GetLiteral() == "enable" || *values[0].GetLiteral() == "disable"))
-            {
-                Error() << "Expected `enable|disable' argument for: " << pragma;
-                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-
-            if (*values[0].GetLiteral() == "enable") {
-                Ctx.PragmaDataWatermarks = true;
-            } else if (*values[0].GetLiteral() == "disable") {
-                Ctx.PragmaDataWatermarks = false;
-            }
-
-            Ctx.IncrementMonCounter("sql_pragma", "DataWatermarks");
+        } else if (normalizedPragma == "datawatermarks") { 
+            if (values.size() != 1 || !values[0].GetLiteral() 
+                || ! (*values[0].GetLiteral() == "enable" || *values[0].GetLiteral() == "disable")) 
+            { 
+                Error() << "Expected `enable|disable' argument for: " << pragma; 
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue"); 
+                return {}; 
+            } 
+ 
+            if (*values[0].GetLiteral() == "enable") { 
+                Ctx.PragmaDataWatermarks = true; 
+            } else if (*values[0].GetLiteral() == "disable") { 
+                Ctx.PragmaDataWatermarks = false; 
+            } 
+ 
+            Ctx.IncrementMonCounter("sql_pragma", "DataWatermarks"); 
         } else if (normalizedPragma == "flexibletypes") {
             Ctx.FlexibleTypes = true;
             Ctx.IncrementMonCounter("sql_pragma", "FlexibleTypes");

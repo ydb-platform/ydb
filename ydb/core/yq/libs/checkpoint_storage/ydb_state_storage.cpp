@@ -150,9 +150,9 @@ class TStateStorage : public IStateStorage {
     const NConfig::TYdbStorageConfig Config;
 
 public:
-    explicit TStateStorage(
-        const NConfig::TYdbStorageConfig& config,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory);
+    explicit TStateStorage( 
+        const NConfig::TYdbStorageConfig& config, 
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory); 
     ~TStateStorage() = default;
 
     TFuture<TIssues> Init() override;
@@ -186,10 +186,10 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TStateStorage::TStateStorage(
-    const NConfig::TYdbStorageConfig& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
-    : YdbConnection(NewYdbConnection(config, credentialsProviderFactory))
+TStateStorage::TStateStorage( 
+    const NConfig::TYdbStorageConfig& config, 
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory) 
+    : YdbConnection(NewYdbConnection(config, credentialsProviderFactory)) 
     , Config(config)
 {
 }
@@ -554,11 +554,11 @@ TFuture<TStatus> TStateStorage::UpsertState(const TContextPtr& context) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TStateStoragePtr NewYdbStateStorage(
-    const NConfig::TYdbStorageConfig& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
+TStateStoragePtr NewYdbStateStorage( 
+    const NConfig::TYdbStorageConfig& config, 
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory) 
 {
-    return new TStateStorage(config, credentialsProviderFactory);
+    return new TStateStorage(config, credentialsProviderFactory); 
 }
 
 } // namespace NYq

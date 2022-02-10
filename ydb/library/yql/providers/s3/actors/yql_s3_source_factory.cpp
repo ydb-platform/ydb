@@ -2,7 +2,7 @@
 #include "yql_s3_read_actor.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sources.h>
-
+ 
 namespace NYql::NDq {
 
 void RegisterS3ReadActorFactory(

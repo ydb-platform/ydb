@@ -19,7 +19,7 @@ public:
         : State_ {state}
         , TypeAnnotationTransformer_(CreateSolomonDataSinkTypeAnnotationTransformer(State_))
         , ExecutionTransformer_(CreateSolomonDataSinkExecTransformer(State_))
-        , PhysicalOptProposalTransformer_(CreateSoPhysicalOptProposalTransformer(State_))
+        , PhysicalOptProposalTransformer_(CreateSoPhysicalOptProposalTransformer(State_)) 
     {
     }
 
@@ -39,10 +39,10 @@ public:
             .Done().Ptr();
     }
 
-    const THashMap<TString, TString>* GetClusterTokens() override {
-        return &State_->Configuration->Tokens;
-    }
-
+    const THashMap<TString, TString>* GetClusterTokens() override { 
+        return &State_->Configuration->Tokens; 
+    } 
+ 
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
         Y_UNUSED(instantOnly);
         return *TypeAnnotationTransformer_;
@@ -52,10 +52,10 @@ public:
         return *ExecutionTransformer_;
     }
 
-    IGraphTransformer& GetPhysicalOptProposalTransformer() override {
-        return *PhysicalOptProposalTransformer_;
-    }
-
+    IGraphTransformer& GetPhysicalOptProposalTransformer() override { 
+        return *PhysicalOptProposalTransformer_; 
+    } 
+ 
     bool CanParse(const TExprNode& node) override {
         if (node.IsCallable(TCoWrite::CallableName())) {
             return TSoDataSink::Match(node.Child(1));
@@ -160,16 +160,16 @@ public:
         return TStringBuilder() << SolomonProviderName << '.' << node.Child(1)->Content();
     }
 
-    IDqIntegration* GetDqIntegration() override {
-        return State_->IsRtmrMode() ? nullptr : State_->DqIntegration.Get();
-    }
-
+    IDqIntegration* GetDqIntegration() override { 
+        return State_->IsRtmrMode() ? nullptr : State_->DqIntegration.Get(); 
+    } 
+ 
 private:
     TSolomonState::TPtr State_;
 
     THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
     THolder<TExecTransformerBase> ExecutionTransformer_;
-    THolder<IGraphTransformer> PhysicalOptProposalTransformer_;
+    THolder<IGraphTransformer> PhysicalOptProposalTransformer_; 
 };
 
 

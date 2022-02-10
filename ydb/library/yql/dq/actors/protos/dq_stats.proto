@@ -100,12 +100,12 @@ message TDqTableStats {
     google.protobuf.Any Extra = 100;
 }
 
-message TDqMkqlStat {
-    string Name = 1;
-    int64 Value = 2;
-    bool Deriv = 3;
-}
-
+message TDqMkqlStat { 
+    string Name = 1; 
+    int64 Value = 2; 
+    bool Deriv = 3; 
+} 
+ 
 message TDqTaskStats {
     // basic stats
     uint64 TaskId = 1;
@@ -128,7 +128,7 @@ message TDqTaskStats {
     uint64 PendingInputTimeUs = 107; // time waiting input data
     uint64 PendingOutputTimeUs = 108; // time waiting output data
     uint64 FinishTimeUs = 109; // time in finished state // ComputeCpuTimeUs + PendingInputTimeUs + PendingOutputTimeUs + FinishTimeUs == 100% (or == const in aggregated graphs for several stages/tasks)
-    repeated TDqMkqlStat MkqlStats = 110; // stats from mkql
+    repeated TDqMkqlStat MkqlStats = 110; // stats from mkql 
 
     message THistBucket {
         double Bound = 1;

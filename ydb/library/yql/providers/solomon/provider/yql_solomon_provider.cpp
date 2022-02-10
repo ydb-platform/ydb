@@ -6,8 +6,8 @@
 
 namespace NYql {
 
-TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr gateway, bool supportRtmrMode) {
-    return [gateway, supportRtmrMode] (
+TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr gateway, bool supportRtmrMode) { 
+    return [gateway, supportRtmrMode] ( 
         const TString& userName,
         const TString& sessionId,
         const TGatewaysConfig* gatewaysConfig,
@@ -26,12 +26,12 @@ TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr
 
         auto solomonState = MakeIntrusive<TSolomonState>();
 
-        solomonState->SupportRtmrMode = supportRtmrMode;
+        solomonState->SupportRtmrMode = supportRtmrMode; 
         solomonState->Types = typeCtx.Get();
         solomonState->Gateway = gateway;
-        solomonState->DqIntegration = CreateSolomonDqIntegration(solomonState);
+        solomonState->DqIntegration = CreateSolomonDqIntegration(solomonState); 
         if (gatewaysConfig) {
-            solomonState->Configuration->Init(gatewaysConfig->GetSolomon(), typeCtx);
+            solomonState->Configuration->Init(gatewaysConfig->GetSolomon(), typeCtx); 
         }
 
         TDataProviderInfo info;

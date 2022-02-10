@@ -552,12 +552,12 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "HoppingTraits"},
             "Children": [
-                {"Index": 0, "Name": "ItemType",       "Type": "TExprBase"},
-                {"Index": 1, "Name": "TimeExtractor",  "Type": "TCoLambda"},
-                {"Index": 2, "Name": "Hop",            "Type": "TExprBase"},
-                {"Index": 3, "Name": "Interval",       "Type": "TExprBase"},
-                {"Index": 4, "Name": "Delay",          "Type": "TExprBase"},
-                {"Index": 5, "Name": "DataWatermarks", "Type": "TExprBase"}
+                {"Index": 0, "Name": "ItemType",       "Type": "TExprBase"}, 
+                {"Index": 1, "Name": "TimeExtractor",  "Type": "TCoLambda"}, 
+                {"Index": 2, "Name": "Hop",            "Type": "TExprBase"}, 
+                {"Index": 3, "Name": "Interval",       "Type": "TExprBase"}, 
+                {"Index": 4, "Name": "Delay",          "Type": "TExprBase"}, 
+                {"Index": 5, "Name": "DataWatermarks", "Type": "TExprBase"} 
             ]
         },
         {
@@ -1601,38 +1601,38 @@
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "HoppingCore"},
             "Children": [
-                {"Index": 1,  "Name": "TimeExtractor",  "Type": "TCoLambda"},
-                {"Index": 2,  "Name": "Hop",            "Type": "TExprBase"},
-                {"Index": 3,  "Name": "Interval",       "Type": "TExprBase"},
-                {"Index": 4,  "Name": "Delay",          "Type": "TExprBase"},
-                {"Index": 5,  "Name": "InitHandler",    "Type": "TCoLambda"},
-                {"Index": 6,  "Name": "UpdateHandler",  "Type": "TCoLambda"},
-                {"Index": 7,  "Name": "SaveHandler",    "Type": "TExprBase"},
-                {"Index": 8,  "Name": "LoadHandler",    "Type": "TExprBase"},
-                {"Index": 9,  "Name": "MergeHandler",   "Type": "TCoLambda"},
-                {"Index": 10, "Name": "FinishHandler",  "Type": "TCoLambda"}
+                {"Index": 1,  "Name": "TimeExtractor",  "Type": "TCoLambda"}, 
+                {"Index": 2,  "Name": "Hop",            "Type": "TExprBase"}, 
+                {"Index": 3,  "Name": "Interval",       "Type": "TExprBase"}, 
+                {"Index": 4,  "Name": "Delay",          "Type": "TExprBase"}, 
+                {"Index": 5,  "Name": "InitHandler",    "Type": "TCoLambda"}, 
+                {"Index": 6,  "Name": "UpdateHandler",  "Type": "TCoLambda"}, 
+                {"Index": 7,  "Name": "SaveHandler",    "Type": "TExprBase"}, 
+                {"Index": 8,  "Name": "LoadHandler",    "Type": "TExprBase"}, 
+                {"Index": 9,  "Name": "MergeHandler",   "Type": "TCoLambda"}, 
+                {"Index": 10, "Name": "FinishHandler",  "Type": "TCoLambda"} 
             ]
         },
         {
-            "Name": "TCoMultiHoppingCore",
-            "Base": "TCoInputBase",
-            "Match": {"Type": "Callable", "Name": "MultiHoppingCore"},
-            "Children": [
-                {"Index": 1,  "Name": "KeyExtractor",   "Type": "TCoLambda"},
-                {"Index": 2,  "Name": "TimeExtractor",  "Type": "TCoLambda"},
-                {"Index": 3,  "Name": "Hop",            "Type": "TExprBase"},
-                {"Index": 4,  "Name": "Interval",       "Type": "TExprBase"},
-                {"Index": 5,  "Name": "Delay",          "Type": "TExprBase"},
-                {"Index": 6,  "Name": "DataWatermarks", "Type": "TExprBase"},
-                {"Index": 7,  "Name": "InitHandler",    "Type": "TCoLambda"},
-                {"Index": 8,  "Name": "UpdateHandler",  "Type": "TCoLambda"},
-                {"Index": 9,  "Name": "SaveHandler",    "Type": "TExprBase"},
-                {"Index": 10, "Name": "LoadHandler",    "Type": "TExprBase"},
-                {"Index": 11, "Name": "MergeHandler",   "Type": "TCoLambda"},
-                {"Index": 12, "Name": "FinishHandler",  "Type": "TCoLambda"}
-            ]
-        },
-        {
+            "Name": "TCoMultiHoppingCore", 
+            "Base": "TCoInputBase", 
+            "Match": {"Type": "Callable", "Name": "MultiHoppingCore"}, 
+            "Children": [ 
+                {"Index": 1,  "Name": "KeyExtractor",   "Type": "TCoLambda"}, 
+                {"Index": 2,  "Name": "TimeExtractor",  "Type": "TCoLambda"}, 
+                {"Index": 3,  "Name": "Hop",            "Type": "TExprBase"}, 
+                {"Index": 4,  "Name": "Interval",       "Type": "TExprBase"}, 
+                {"Index": 5,  "Name": "Delay",          "Type": "TExprBase"}, 
+                {"Index": 6,  "Name": "DataWatermarks", "Type": "TExprBase"}, 
+                {"Index": 7,  "Name": "InitHandler",    "Type": "TCoLambda"}, 
+                {"Index": 8,  "Name": "UpdateHandler",  "Type": "TCoLambda"}, 
+                {"Index": 9,  "Name": "SaveHandler",    "Type": "TExprBase"}, 
+                {"Index": 10, "Name": "LoadHandler",    "Type": "TExprBase"}, 
+                {"Index": 11, "Name": "MergeHandler",   "Type": "TCoLambda"}, 
+                {"Index": 12, "Name": "FinishHandler",  "Type": "TCoLambda"} 
+            ] 
+        }, 
+        { 
             "Name": "TCoCombineCore",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "CombineCore"},

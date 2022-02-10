@@ -16,7 +16,7 @@ namespace ErrorCodes
 RawBLOBRowInputFormat::RawBLOBRowInputFormat(const Block & header_, ReadBuffer & in_, Params params_)
     : IRowInputFormat(header_, in_, std::move(params_))
 {
-    if (header_.columns() > 1 || header_.columns() == 0)
+    if (header_.columns() > 1 || header_.columns() == 0) 
         throw Exception(ErrorCodes::BAD_ARGUMENTS,
             "This input format is only suitable for tables with a single column of type String but the number of columns is {}",
             header_.columns());

@@ -35,7 +35,7 @@ struct TDqSettings {
     NCommon::TConfSetting<ui32, false> MaxTasksPerOperation;
     NCommon::TConfSetting<ui32, false> WorkersPerOperation;
     NCommon::TConfSetting<ui64, false> MaxDataSizePerQuery;
-    NCommon::TConfSetting<bool, false> AnalyticsHopping;
+    NCommon::TConfSetting<bool, false> AnalyticsHopping; 
     NCommon::TConfSetting<bool, false> AnalyzeQuery;
     NCommon::TConfSetting<int, false> _AnalyzeQueryPercentage;
     NCommon::TConfSetting<int, false> MaxRetries;
@@ -78,7 +78,7 @@ struct TDqSettings {
             s->SetValue(ToString(*this->name.Get())); \
         }
 
-        SAVE_SETTING(AnalyticsHopping);
+        SAVE_SETTING(AnalyticsHopping); 
         SAVE_SETTING(MaxRetries);
         SAVE_SETTING(MaxNetworkRetries);
         SAVE_SETTING(WorkersPerOperation);

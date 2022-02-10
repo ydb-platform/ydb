@@ -609,7 +609,7 @@ namespace NSQLTranslationV1 {
         TNodePtr Hop;
         TNodePtr Interval;
         TNodePtr Delay;
-        bool DataWatermarks;
+        bool DataWatermarks; 
 
         TIntrusivePtr<THoppingWindowSpec> Clone() const;
         ~THoppingWindowSpec() {}

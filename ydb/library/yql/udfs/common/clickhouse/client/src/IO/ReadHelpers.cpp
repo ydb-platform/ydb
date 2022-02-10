@@ -1010,7 +1010,7 @@ void skipJSONField(ReadBuffer & buf, const StringRef & name_of_field)
     }
     else
     {
-        throw Exception("Unexpected symbol '" + std::string(buf.position(), 1) + "' for key '" + name_of_field.toString() + "'", ErrorCodes::INCORRECT_DATA);
+        throw Exception("Unexpected symbol '" + std::string(buf.position(), 1) + "' for key '" + name_of_field.toString() + "'", ErrorCodes::INCORRECT_DATA); 
     }
 }
 

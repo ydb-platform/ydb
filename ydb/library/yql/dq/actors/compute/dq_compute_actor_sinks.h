@@ -10,7 +10,7 @@
 
 namespace NYql::NDqProto {
 class TCheckpoint;
-class TTaskOutput;
+class TTaskOutput; 
 class TSinkState;
 } // namespace NYql::NDqProto
 
@@ -42,7 +42,7 @@ namespace NYql::NDq {
 struct IDqSinkActor {
     struct ICallbacks { // Compute actor
         virtual void ResumeExecution() = 0;
-        virtual void OnSinkError(ui64 outputIndex, const TIssues& issues, bool isFatal) = 0;
+        virtual void OnSinkError(ui64 outputIndex, const TIssues& issues, bool isFatal) = 0; 
 
         // Checkpointing
         virtual void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
@@ -74,20 +74,20 @@ struct IDqSinkActor {
 struct IDqSinkActorFactory : public TThrRefBase {
     using TPtr = TIntrusivePtr<IDqSinkActorFactory>;
 
-    struct TArguments {
-        const NDqProto::TTaskOutput& OutputDesc;
-        ui64 OutputIndex;
-        TTxId TxId;
-        const THashMap<TString, TString>& SecureParams;
-        IDqSinkActor::ICallbacks* Callback;
-        const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
-        const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
-    };
-
+    struct TArguments { 
+        const NDqProto::TTaskOutput& OutputDesc; 
+        ui64 OutputIndex; 
+        TTxId TxId; 
+        const THashMap<TString, TString>& SecureParams; 
+        IDqSinkActor::ICallbacks* Callback; 
+        const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv; 
+        const NKikimr::NMiniKQL::THolderFactory& HolderFactory; 
+    }; 
+ 
     // Creates sink actor.
     // Could throw YQL errors.
     // IActor* and IDqSinkActor* returned by method must point to the objects with consistent lifetime.
-    virtual std::pair<IDqSinkActor*, NActors::IActor*> CreateDqSinkActor(TArguments&& args) const = 0;
+    virtual std::pair<IDqSinkActor*, NActors::IActor*> CreateDqSinkActor(TArguments&& args) const = 0; 
 };
 
 } // namespace NYql::NDq

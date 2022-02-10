@@ -63,28 +63,28 @@
                 {"Index": 2, "Name": "Shard", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Input", "Type": "TExprBase"}
             ]
-        },
-        {
-            "Name": "TSoShard",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "SoShard"},
-            "Children": [
-                {"Index": 0, "Name": "SolomonCluster", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Project", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "Cluster", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Service", "Type": "TCoAtom"},
+        }, 
+        { 
+            "Name": "TSoShard", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "SoShard"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "SolomonCluster", "Type": "TCoAtom"}, 
+                {"Index": 1, "Name": "Project", "Type": "TCoAtom"}, 
+                {"Index": 2, "Name": "Cluster", "Type": "TCoAtom"}, 
+                {"Index": 3, "Name": "Service", "Type": "TCoAtom"}, 
                 {"Index": 4, "Name": "Token", "Type": "TCoSecureParam", "Optional": true}
-            ]
-        },
-        {
-            "Name": "TDqSoShardSink",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "DqSoShardSink"},
-            "Children": [
-                {"Index": 0, "Name": "Shard", "Type": "TSoShard"},
-                {"Index": 1, "Name": "Settings", "Type": "TCoNameValueTupleList"},
-                {"Index": 2, "Name": "Token", "Type": "TCoSecureParam", "Optional": true}
-            ]
+            ] 
+        }, 
+        { 
+            "Name": "TDqSoShardSink", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "DqSoShardSink"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Shard", "Type": "TSoShard"}, 
+                {"Index": 1, "Name": "Settings", "Type": "TCoNameValueTupleList"}, 
+                {"Index": 2, "Name": "Token", "Type": "TCoSecureParam", "Optional": true} 
+            ] 
         }
     ]
 }

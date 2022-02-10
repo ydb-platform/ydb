@@ -38,11 +38,11 @@ NActors::TActorId ControlPlaneStorageServiceActorId(ui32 nodeId = 0);
 
 NActors::IActor* CreateInMemoryControlPlaneStorageServiceActor(const NConfig::TControlPlaneStorageConfig& config);
 
-NActors::IActor* CreateYdbControlPlaneStorageServiceActor(
+NActors::IActor* CreateYdbControlPlaneStorageServiceActor( 
     const NConfig::TControlPlaneStorageConfig& config,
     const NConfig::TCommonConfig& common,
-    const NMonitoring::TDynamicCounterPtr& counters,
-    const NYq::TYqSharedResources::TPtr& yqSharedResources,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory);
+    const NMonitoring::TDynamicCounterPtr& counters, 
+    const NYq::TYqSharedResources::TPtr& yqSharedResources, 
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory); 
 
 } // namespace NYq

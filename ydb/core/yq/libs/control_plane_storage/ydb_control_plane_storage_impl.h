@@ -183,20 +183,20 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
 
     static constexpr int64_t InitialRevision = 1;
 
-    NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
-
+    NKikimr::TYdbCredentialsProviderFactory CredProviderFactory; 
+ 
 public:
-    TYdbControlPlaneStorageActor(
+    TYdbControlPlaneStorageActor( 
         const NConfig::TControlPlaneStorageConfig& config,
         const NConfig::TCommonConfig& common,
-        const NMonitoring::TDynamicCounterPtr& counters,
-        const ::NYq::TYqSharedResources::TPtr& yqSharedResources,
-        const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory)
+        const NMonitoring::TDynamicCounterPtr& counters, 
+        const ::NYq::TYqSharedResources::TPtr& yqSharedResources, 
+        const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory) 
         : Counters(counters)
         , FinalStatusCounters(counters)
         , Config(config, common)
         , YqSharedResources(yqSharedResources)
-        , CredProviderFactory(credProviderFactory)
+        , CredProviderFactory(credProviderFactory) 
     {
     }
 

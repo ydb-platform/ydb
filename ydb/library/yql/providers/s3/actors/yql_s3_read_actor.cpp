@@ -190,7 +190,7 @@ private:
             return;
         }
         ++IsDoneCounter;
-        Callbacks->OnSourceError(InputIndex, result->Get()->Error, true);
+        Callbacks->OnSourceError(InputIndex, result->Get()->Error, true); 
     }
 
     // IActor & IDqSourceActor

@@ -731,11 +731,11 @@ TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, cons
         auto traits = TCoHoppingTraits(hoppingSetting->Child(1));
         auto timeExtractor = traits.TimeExtractor();
 
-        auto usedType = traits.ItemType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-        for (const auto& usedField : usedType->GetItems()) {
-            usedFields.insert(usedField->GetName());
-        }
-
+        auto usedType = traits.ItemType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>(); 
+        for (const auto& usedField : usedType->GetItems()) { 
+            usedFields.insert(usedField->GetName()); 
+        } 
+ 
         TSet<TStringBuf> lambdaSubset;
         if (HaveFieldsSubset(timeExtractor.Body().Ptr(), *timeExtractor.Args().Arg(0).Raw(), lambdaSubset, parentsMap)) {
             usedFields.insert(lambdaSubset.cbegin(), lambdaSubset.cend());

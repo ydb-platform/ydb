@@ -12,8 +12,8 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/csv/api.h> // for WriteCSV()
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
 
-#include <functional>
-
+#include <functional> 
+ 
 using namespace NKikimr;
 namespace NYdb {
 
@@ -47,8 +47,8 @@ public:
             const TVector<NKikimrKqp::TKqpSetting>& kqpSettings = {},
             TAutoPtr<TLogBackend> logBackend = {},
             bool enableYq = false,
-            TAppPrepare::TFnReg udfFrFactory = nullptr,
-            std::function<void(TServerSettings& settings)> builder = nullptr)
+            TAppPrepare::TFnReg udfFrFactory = nullptr, 
+            std::function<void(TServerSettings& settings)> builder = nullptr) 
     {
         ui16 port = PortManager.GetPort(2134);
         ui16 grpc = PortManager.GetPort(2135);
@@ -69,7 +69,7 @@ public:
             ServerSettings->AddStoragePoolType("hdd2");
         }
         ServerSettings->SetAppConfig(appConfig);
-        ServerSettings->AuthConfig = appConfig.GetAuthConfig();
+        ServerSettings->AuthConfig = appConfig.GetAuthConfig(); 
         ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
         ServerSettings->SetKqpSettings(kqpSettings);
         ServerSettings->SetEnableAsyncIndexes(true);
@@ -87,9 +87,9 @@ public:
         if (udfFrFactory) {
             ServerSettings->SetFrFactory(udfFrFactory);
         }
-        if (builder) {
-            builder(*ServerSettings);;
-        }
+        if (builder) { 
+            builder(*ServerSettings);; 
+        } 
 
         Server_.Reset(new TServer(*ServerSettings));
         Tenants_.Reset(new Tests::TTenants(Server_));

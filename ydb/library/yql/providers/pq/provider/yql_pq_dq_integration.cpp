@@ -131,14 +131,14 @@ public:
         return {};
     }
 
-    static NPq::NProto::EClusterType ToClusterType(NYql::TPqClusterConfig::EClusterType t) {
+    static NPq::NProto::EClusterType ToClusterType(NYql::TPqClusterConfig::EClusterType t) { 
         switch (t) {
         case NYql::TPqClusterConfig::CT_UNSPECIFIED:
-            return NPq::NProto::Unspecified;
+            return NPq::NProto::Unspecified; 
         case NYql::TPqClusterConfig::CT_PERS_QUEUE:
-            return NPq::NProto::PersQueue;
+            return NPq::NProto::PersQueue; 
         case NYql::TPqClusterConfig::CT_DATA_STREAMS:
-            return NPq::NProto::DataStreams;
+            return NPq::NProto::DataStreams; 
         }
     }
 

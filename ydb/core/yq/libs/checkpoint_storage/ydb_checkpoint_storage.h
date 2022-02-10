@@ -10,8 +10,8 @@ namespace NYq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCheckpointStoragePtr NewYdbCheckpointStorage(
-    const NConfig::TYdbStorageConfig& config,
+TCheckpointStoragePtr NewYdbCheckpointStorage( 
+    const NConfig::TYdbStorageConfig& config, 
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const IEntityIdGenerator::TPtr& entityIdGenerator);
 

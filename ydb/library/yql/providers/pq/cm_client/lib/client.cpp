@@ -246,7 +246,7 @@ private:
     NGrpc::TGRpcClientConfig MakeConnectionConfig() const {
         NGrpc::TGRpcClientConfig cfg(Options.GetEndpoint(), Options.GetRequestTimeout());
         cfg.CompressionAlgoritm = GRPC_COMPRESS_GZIP;
-        cfg.EnableSsl = Options.GetEnableSsl();
+        cfg.EnableSsl = Options.GetEnableSsl(); 
         return cfg;
     }
 

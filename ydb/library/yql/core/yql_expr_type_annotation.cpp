@@ -2144,18 +2144,18 @@ IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& 
     return IGraphTransformer::TStatus::Repeat;
 }
 
-bool EnsureSpecificDataType(const TExprNode& node, EDataSlot expectedDataSlot, TExprContext& ctx, bool allowOptional) {
+bool EnsureSpecificDataType(const TExprNode& node, EDataSlot expectedDataSlot, TExprContext& ctx, bool allowOptional) { 
     if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected data type, but got lambda"));
         return false;
     }
 
-    if (allowOptional && node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
-        auto optionalType = node.GetTypeAnn()->Cast<TOptionalExprType>();
-        return EnsureSpecificDataType(node.Pos(), *optionalType->GetItemType(), expectedDataSlot, ctx);
-    }
-
+    if (allowOptional && node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) { 
+        auto optionalType = node.GetTypeAnn()->Cast<TOptionalExprType>(); 
+        return EnsureSpecificDataType(node.Pos(), *optionalType->GetItemType(), expectedDataSlot, ctx); 
+    } 
+ 
     if (node.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Data) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected data type, but got: " << *node.GetTypeAnn()));
         return false;

@@ -11545,15 +11545,15 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                                 break;
                             }
                         }
-                        for (auto& x : ctx.Types.DataSinks) {
-                            auto tokens = x->GetClusterTokens();
-                            auto token = tokens ? tokens->FindPtr(clusterName) : nullptr;
-                            if (token) {
-                                clusterCred.ConstructInPlace(TString(x->GetName()), "", *token);
-                                cred = clusterCred.Get();
-                                break;
-                            }
-                        }
+                        for (auto& x : ctx.Types.DataSinks) { 
+                            auto tokens = x->GetClusterTokens(); 
+                            auto token = tokens ? tokens->FindPtr(clusterName) : nullptr; 
+                            if (token) { 
+                                clusterCred.ConstructInPlace(TString(x->GetName()), "", *token); 
+                                cred = clusterCred.Get(); 
+                                break; 
+                            } 
+                        } 
                     }
                 }
             }
@@ -12996,7 +12996,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["GroupingCore"] = &GroupingCoreWrapper;
         Functions["HoppingTraits"] = &HoppingTraitsWrapper;
         Functions["HoppingCore"] = &HoppingCoreWrapper;
-        Functions["MultiHoppingCore"] = &MultiHoppingCoreWrapper;
+        Functions["MultiHoppingCore"] = &MultiHoppingCoreWrapper; 
         Functions["EquiJoin"] = &EquiJoinWrapper;
         Functions["OptionalReduce"] = &OptionalReduceWrapper;
         Functions["OptionalItemType"] = &TypeArgWrapper<ETypeArgument::OptionalItem>;

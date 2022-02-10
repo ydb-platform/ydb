@@ -4546,7 +4546,7 @@ namespace {
                     const auto item = tupleType->GetItems()[index];
                     rowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(
                         child->Head().Child(index)->Content(),
-                        (isOptional || (input->Child(1)->ChildrenSize() == 0 && !isHopping)) &&
+                        (isOptional || (input->Child(1)->ChildrenSize() == 0 && !isHopping)) && 
                             item->GetKind() != ETypeAnnotationKind::Optional ? ctx.Expr.MakeType<TOptionalExprType>(item) : item));
                 }
             } else {
@@ -5399,7 +5399,7 @@ namespace {
 
     IGraphTransformer::TStatus HoppingTraitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureMinArgsCount(*input, 5, ctx.Expr) || !EnsureMaxArgsCount(*input, 6, ctx.Expr)) {
+        if (!EnsureMinArgsCount(*input, 5, ctx.Expr) || !EnsureMaxArgsCount(*input, 6, ctx.Expr)) { 
             return IGraphTransformer::TStatus::Error;
         }
         if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
@@ -5470,46 +5470,46 @@ namespace {
             return convertStatus;
         }
 
-        if (input->ChildrenSize() == 6) {
-            const auto& dataWatermarksNodePtr = input->ChildRef(5);
-            if (dataWatermarksNodePtr->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Unit) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(dataWatermarksNodePtr->Pos()), TStringBuilder()
-                    << "Expected unit type, but got: "
-                    << *dataWatermarksNodePtr->GetTypeAnn()));
-                return IGraphTransformer::TStatus::Error;
-            }
-        }
-
+        if (input->ChildrenSize() == 6) { 
+            const auto& dataWatermarksNodePtr = input->ChildRef(5); 
+            if (dataWatermarksNodePtr->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Unit) { 
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(dataWatermarksNodePtr->Pos()), TStringBuilder() 
+                    << "Expected unit type, but got: " 
+                    << *dataWatermarksNodePtr->GetTypeAnn())); 
+                return IGraphTransformer::TStatus::Error; 
+            } 
+        } 
+ 
         input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
         return IGraphTransformer::TStatus::Ok;
     }
 
     IGraphTransformer::TStatus HoppingCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureArgsCount(*input, 11, ctx.Expr)) {
+        if (!EnsureArgsCount(*input, 11, ctx.Expr)) { 
             return IGraphTransformer::TStatus::Error;
         }
-
+ 
         auto& item = input->ChildRef(0);
 
-        auto& lambdaTimeExtractor = input->ChildRef(1);
-        auto* hop = input->Child(2);
-        auto* interval = input->Child(3);
-        auto* delay = input->Child(4);
-
-        auto& lambdaInit = input->ChildRef(5);
-        auto& lambdaUpdate = input->ChildRef(6);
-        auto& saveLambda = input->ChildRef(7);
-        auto& loadLambda = input->ChildRef(8);
-        auto& lambdaMerge = input->ChildRef(9);
-        auto& lambdaFinish = input->ChildRef(10);
-
+        auto& lambdaTimeExtractor = input->ChildRef(1); 
+        auto* hop = input->Child(2); 
+        auto* interval = input->Child(3); 
+        auto* delay = input->Child(4); 
+ 
+        auto& lambdaInit = input->ChildRef(5); 
+        auto& lambdaUpdate = input->ChildRef(6); 
+        auto& saveLambda = input->ChildRef(7); 
+        auto& loadLambda = input->ChildRef(8); 
+        auto& lambdaMerge = input->ChildRef(9); 
+        auto& lambdaFinish = input->ChildRef(10); 
+ 
         if (!EnsureStreamType(*item, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto status = ConvertToLambda(lambdaTimeExtractor, ctx.Expr, 1);
-        status = status.Combine(ConvertToLambda(lambdaInit, ctx.Expr, 1));
+        auto status = ConvertToLambda(lambdaTimeExtractor, ctx.Expr, 1); 
+        status = status.Combine(ConvertToLambda(lambdaInit, ctx.Expr, 1)); 
         status = status.Combine(ConvertToLambda(lambdaUpdate, ctx.Expr, 2));
         status = status.Combine(ConvertToLambda(lambdaMerge, ctx.Expr, 2));
         status = status.Combine(ConvertToLambda(lambdaFinish, ctx.Expr, 2));
@@ -5524,24 +5524,24 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!UpdateLambdaAllArgumentsTypes(lambdaTimeExtractor, {itemType}, ctx.Expr))
-        {
-            return IGraphTransformer::TStatus::Error;
-        }
-        if (!lambdaTimeExtractor->GetTypeAnn()) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        if (!EnsureSpecificDataType(*hop, EDataSlot::Interval, ctx.Expr, true)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-        if (!EnsureSpecificDataType(*interval, EDataSlot::Interval, ctx.Expr, true)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-        if (!EnsureSpecificDataType(*delay, EDataSlot::Interval, ctx.Expr, true)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
+        if (!UpdateLambdaAllArgumentsTypes(lambdaTimeExtractor, {itemType}, ctx.Expr)) 
+        { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+        if (!lambdaTimeExtractor->GetTypeAnn()) { 
+            return IGraphTransformer::TStatus::Repeat; 
+        } 
+ 
+        if (!EnsureSpecificDataType(*hop, EDataSlot::Interval, ctx.Expr, true)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+        if (!EnsureSpecificDataType(*interval, EDataSlot::Interval, ctx.Expr, true)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+        if (!EnsureSpecificDataType(*delay, EDataSlot::Interval, ctx.Expr, true)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
         if (!UpdateLambdaAllArgumentsTypes(lambdaInit, {itemType}, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -5635,167 +5635,167 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus MultiHoppingCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        Y_UNUSED(output);
-        if (!EnsureArgsCount(*input, 13, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-        auto& item = input->ChildRef(0);
-        auto& lambdaKeyExtractor = input->ChildRef(1);
-
-        auto& lambdaTimeExtractor = input->ChildRef(2);
-        auto* hop = input->Child(3);
-        auto* interval = input->Child(4);
-        auto* delay = input->Child(5);
-
-        auto& lambdaInit = input->ChildRef(7);
-        auto& lambdaUpdate = input->ChildRef(8);
-        auto& saveLambda = input->ChildRef(9);
-        auto& loadLambda = input->ChildRef(10);
-        auto& lambdaMerge = input->ChildRef(11);
-        auto& lambdaFinish = input->ChildRef(12);
-
-        if (!EnsureStreamType(*item, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        auto status = ConvertToLambda(lambdaKeyExtractor, ctx.Expr, 1);
-        status = status.Combine(ConvertToLambda(lambdaTimeExtractor, ctx.Expr, 1));
-        status = status.Combine(ConvertToLambda(lambdaInit, ctx.Expr, 1));
-        status = status.Combine(ConvertToLambda(lambdaUpdate, ctx.Expr, 2));
-        status = status.Combine(ConvertToLambda(lambdaMerge, ctx.Expr, 2));
-        status = status.Combine(ConvertToLambda(lambdaFinish, ctx.Expr, 3));
-        if (status.Level != IGraphTransformer::TStatus::Ok) {
-            return status;
-        }
-
-        auto timeType = ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Timestamp));
-        auto itemType = item->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
-
-        if (!EnsureStructType(input->Pos(), *itemType, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (!UpdateLambdaAllArgumentsTypes(lambdaKeyExtractor, {itemType}, ctx.Expr))
-        {
-            return IGraphTransformer::TStatus::Error;
-        }
-        auto keyType = lambdaKeyExtractor->GetTypeAnn();
-        if (!keyType) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        if (!UpdateLambdaAllArgumentsTypes(lambdaTimeExtractor, {itemType}, ctx.Expr))
-        {
-            return IGraphTransformer::TStatus::Error;
-        }
-        if (!lambdaTimeExtractor->GetTypeAnn()) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        if (!EnsureSpecificDataType(*hop, EDataSlot::Interval, ctx.Expr, true)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-        if (!EnsureSpecificDataType(*interval, EDataSlot::Interval, ctx.Expr, true)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-        if (!EnsureSpecificDataType(*delay, EDataSlot::Interval, ctx.Expr, true)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (!UpdateLambdaAllArgumentsTypes(lambdaInit, {itemType}, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-        if (!lambdaInit->GetTypeAnn()) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        auto stateType = lambdaInit->GetTypeAnn();
-        if (!EnsureComputableType(lambdaInit->Pos(), *stateType, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (!UpdateLambdaAllArgumentsTypes(lambdaUpdate, {itemType, stateType}, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-        if (!lambdaUpdate->GetTypeAnn()) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        if (!IsSameAnnotation(*lambdaUpdate->GetTypeAnn(), *stateType)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaUpdate->Pos()), TStringBuilder() << "Mismatch update lambda result type, expected: "
-                << *stateType << ", but got: " << *lambdaUpdate->GetTypeAnn()));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (!UpdateLambdaAllArgumentsTypes(lambdaMerge, {stateType, stateType}, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-        if (!lambdaMerge->GetTypeAnn()) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        if (!IsSameAnnotation(*lambdaMerge->GetTypeAnn(), *stateType)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaMerge->Pos()), TStringBuilder() << "Mismatch merge lambda result type, expected: "
-                << *stateType << ", but got: " << *lambdaMerge->GetTypeAnn()));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (!UpdateLambdaAllArgumentsTypes(lambdaFinish, {keyType, stateType, timeType}, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-        if (!lambdaFinish->GetTypeAnn()) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
-        if (lambdaFinish->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Struct) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaFinish->Pos()), TStringBuilder() <<
-                "Expected struct type as finish lambda result type, but got: " << *lambdaMerge->GetTypeAnn()));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (saveLambda->IsCallable("Void") != loadLambda->IsCallable("Void")) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(saveLambda->Pos()), TStringBuilder() <<
-                "Save and load lambdas must be specified at the same time"));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (!saveLambda->IsCallable("Void")) {
-            auto status = ConvertToLambda(saveLambda, ctx.Expr, 1);
-            status = status.Combine(ConvertToLambda(loadLambda, ctx.Expr, 1));
-            if (status.Level != IGraphTransformer::TStatus::Ok) {
-                return status;
-            }
-
-            if (!UpdateLambdaAllArgumentsTypes(saveLambda, {stateType}, ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-            if (!saveLambda->GetTypeAnn()) {
-                return IGraphTransformer::TStatus::Repeat;
-            }
-
-            auto savedStateType = saveLambda->GetTypeAnn();
-            if (!EnsurePersistableType(saveLambda->Pos(), *savedStateType, ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (!UpdateLambdaAllArgumentsTypes(loadLambda, {savedStateType}, ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-            if (!loadLambda->GetTypeAnn()) {
-                return IGraphTransformer::TStatus::Repeat;
-            }
-
-            if (!IsSameAnnotation(*loadLambda->GetTypeAnn(), *stateType)) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(loadLambda->Pos()), TStringBuilder() << "Mismatch of load lambda return type and state type, "
-                    << *loadLambda->GetTypeAnn() << " != " << *stateType));
-                return IGraphTransformer::TStatus::Error;
-            }
-        }
-
-        input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(lambdaFinish->GetTypeAnn()));
-        return IGraphTransformer::TStatus::Ok;
-    }
-
+    IGraphTransformer::TStatus MultiHoppingCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) { 
+        Y_UNUSED(output); 
+        if (!EnsureArgsCount(*input, 13, ctx.Expr)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+        auto& item = input->ChildRef(0); 
+        auto& lambdaKeyExtractor = input->ChildRef(1); 
+ 
+        auto& lambdaTimeExtractor = input->ChildRef(2); 
+        auto* hop = input->Child(3); 
+        auto* interval = input->Child(4); 
+        auto* delay = input->Child(5); 
+ 
+        auto& lambdaInit = input->ChildRef(7); 
+        auto& lambdaUpdate = input->ChildRef(8); 
+        auto& saveLambda = input->ChildRef(9); 
+        auto& loadLambda = input->ChildRef(10); 
+        auto& lambdaMerge = input->ChildRef(11); 
+        auto& lambdaFinish = input->ChildRef(12); 
+ 
+        if (!EnsureStreamType(*item, ctx.Expr)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        auto status = ConvertToLambda(lambdaKeyExtractor, ctx.Expr, 1); 
+        status = status.Combine(ConvertToLambda(lambdaTimeExtractor, ctx.Expr, 1)); 
+        status = status.Combine(ConvertToLambda(lambdaInit, ctx.Expr, 1)); 
+        status = status.Combine(ConvertToLambda(lambdaUpdate, ctx.Expr, 2)); 
+        status = status.Combine(ConvertToLambda(lambdaMerge, ctx.Expr, 2)); 
+        status = status.Combine(ConvertToLambda(lambdaFinish, ctx.Expr, 3)); 
+        if (status.Level != IGraphTransformer::TStatus::Ok) { 
+            return status; 
+        } 
+ 
+        auto timeType = ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Timestamp)); 
+        auto itemType = item->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType(); 
+ 
+        if (!EnsureStructType(input->Pos(), *itemType, ctx.Expr)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        if (!UpdateLambdaAllArgumentsTypes(lambdaKeyExtractor, {itemType}, ctx.Expr)) 
+        { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+        auto keyType = lambdaKeyExtractor->GetTypeAnn(); 
+        if (!keyType) { 
+            return IGraphTransformer::TStatus::Repeat; 
+        } 
+ 
+        if (!UpdateLambdaAllArgumentsTypes(lambdaTimeExtractor, {itemType}, ctx.Expr)) 
+        { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+        if (!lambdaTimeExtractor->GetTypeAnn()) { 
+            return IGraphTransformer::TStatus::Repeat; 
+        } 
+ 
+        if (!EnsureSpecificDataType(*hop, EDataSlot::Interval, ctx.Expr, true)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+        if (!EnsureSpecificDataType(*interval, EDataSlot::Interval, ctx.Expr, true)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+        if (!EnsureSpecificDataType(*delay, EDataSlot::Interval, ctx.Expr, true)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        if (!UpdateLambdaAllArgumentsTypes(lambdaInit, {itemType}, ctx.Expr)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+        if (!lambdaInit->GetTypeAnn()) { 
+            return IGraphTransformer::TStatus::Repeat; 
+        } 
+ 
+        auto stateType = lambdaInit->GetTypeAnn(); 
+        if (!EnsureComputableType(lambdaInit->Pos(), *stateType, ctx.Expr)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        if (!UpdateLambdaAllArgumentsTypes(lambdaUpdate, {itemType, stateType}, ctx.Expr)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+        if (!lambdaUpdate->GetTypeAnn()) { 
+            return IGraphTransformer::TStatus::Repeat; 
+        } 
+ 
+        if (!IsSameAnnotation(*lambdaUpdate->GetTypeAnn(), *stateType)) { 
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaUpdate->Pos()), TStringBuilder() << "Mismatch update lambda result type, expected: " 
+                << *stateType << ", but got: " << *lambdaUpdate->GetTypeAnn())); 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        if (!UpdateLambdaAllArgumentsTypes(lambdaMerge, {stateType, stateType}, ctx.Expr)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+        if (!lambdaMerge->GetTypeAnn()) { 
+            return IGraphTransformer::TStatus::Repeat; 
+        } 
+ 
+        if (!IsSameAnnotation(*lambdaMerge->GetTypeAnn(), *stateType)) { 
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaMerge->Pos()), TStringBuilder() << "Mismatch merge lambda result type, expected: " 
+                << *stateType << ", but got: " << *lambdaMerge->GetTypeAnn())); 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        if (!UpdateLambdaAllArgumentsTypes(lambdaFinish, {keyType, stateType, timeType}, ctx.Expr)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+        if (!lambdaFinish->GetTypeAnn()) { 
+            return IGraphTransformer::TStatus::Repeat; 
+        } 
+        if (lambdaFinish->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Struct) { 
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaFinish->Pos()), TStringBuilder() << 
+                "Expected struct type as finish lambda result type, but got: " << *lambdaMerge->GetTypeAnn())); 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        if (saveLambda->IsCallable("Void") != loadLambda->IsCallable("Void")) { 
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(saveLambda->Pos()), TStringBuilder() << 
+                "Save and load lambdas must be specified at the same time")); 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        if (!saveLambda->IsCallable("Void")) { 
+            auto status = ConvertToLambda(saveLambda, ctx.Expr, 1); 
+            status = status.Combine(ConvertToLambda(loadLambda, ctx.Expr, 1)); 
+            if (status.Level != IGraphTransformer::TStatus::Ok) { 
+                return status; 
+            } 
+ 
+            if (!UpdateLambdaAllArgumentsTypes(saveLambda, {stateType}, ctx.Expr)) { 
+                return IGraphTransformer::TStatus::Error; 
+            } 
+            if (!saveLambda->GetTypeAnn()) { 
+                return IGraphTransformer::TStatus::Repeat; 
+            } 
+ 
+            auto savedStateType = saveLambda->GetTypeAnn(); 
+            if (!EnsurePersistableType(saveLambda->Pos(), *savedStateType, ctx.Expr)) { 
+                return IGraphTransformer::TStatus::Error; 
+            } 
+ 
+            if (!UpdateLambdaAllArgumentsTypes(loadLambda, {savedStateType}, ctx.Expr)) { 
+                return IGraphTransformer::TStatus::Error; 
+            } 
+            if (!loadLambda->GetTypeAnn()) { 
+                return IGraphTransformer::TStatus::Repeat; 
+            } 
+ 
+            if (!IsSameAnnotation(*loadLambda->GetTypeAnn(), *stateType)) { 
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(loadLambda->Pos()), TStringBuilder() << "Mismatch of load lambda return type and state type, " 
+                    << *loadLambda->GetTypeAnn() << " != " << *stateType)); 
+                return IGraphTransformer::TStatus::Error; 
+            } 
+        } 
+ 
+        input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(lambdaFinish->GetTypeAnn())); 
+        return IGraphTransformer::TStatus::Ok; 
+    } 
+ 
     IGraphTransformer::TStatus CombineCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureMinMaxArgsCount(*input, 5U, 6U, ctx.Expr)) {

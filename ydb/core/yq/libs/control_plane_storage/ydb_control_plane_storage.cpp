@@ -3,7 +3,7 @@
 #include "ydb_control_plane_storage_impl.h"
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
-
+ 
 namespace NYq {
 
 namespace {
@@ -670,12 +670,12 @@ TAsyncStatus TYdbControlPlaneStorageActor::ReadModifyWrite(
     return promise.GetFuture();
 }
 
-NActors::IActor* CreateYdbControlPlaneStorageServiceActor(
+NActors::IActor* CreateYdbControlPlaneStorageServiceActor( 
     const NConfig::TControlPlaneStorageConfig& config,
     const NConfig::TCommonConfig& common,
-    const NMonitoring::TDynamicCounterPtr& counters,
-    const ::NYq::TYqSharedResources::TPtr& yqSharedResources,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory) {
+    const NMonitoring::TDynamicCounterPtr& counters, 
+    const ::NYq::TYqSharedResources::TPtr& yqSharedResources, 
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory) { 
     return new TYdbControlPlaneStorageActor(config, common, counters, yqSharedResources, credentialsProviderFactory);
 }
 

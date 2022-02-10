@@ -9,8 +9,8 @@ namespace NYq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TStateStoragePtr NewYdbStateStorage(
-    const NConfig::TYdbStorageConfig& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory);
+TStateStoragePtr NewYdbStateStorage( 
+    const NConfig::TYdbStorageConfig& config, 
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory); 
 
 } // namespace NYq

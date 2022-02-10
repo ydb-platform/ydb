@@ -574,16 +574,16 @@ static void GetToken(const TString& string, TString& out, const TTypeAnnotationC
                             }
                         }
                     }
-                    for (auto& x : type.DataSinks) {
-                        auto tokens = x->GetClusterTokens();
-                        if (tokens) {
-                            auto token = tokens->FindPtr(clusterName);
-                            if (token) {
-                                out = *token;
-                                return;
-                            }
-                        }
-                    }
+                    for (auto& x : type.DataSinks) { 
+                        auto tokens = x->GetClusterTokens(); 
+                        if (tokens) { 
+                            auto token = tokens->FindPtr(clusterName); 
+                            if (token) { 
+                                out = *token; 
+                                return; 
+                            } 
+                        } 
+                    } 
                 }
             }
 

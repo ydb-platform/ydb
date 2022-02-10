@@ -103,7 +103,7 @@ void Init(
     const TString& tenant,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const IYqSharedResources::TPtr& iyqSharedResources,
-    const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory,
+    const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory, 
     const std::function<IActor*(const NYq::NConfig::TAuditConfig& auditConfig)>& auditServiceFactory,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ui32& icPort
@@ -124,7 +124,7 @@ void Init(
                 credentialsProviderFactory);
         actorRegistrator(NYq::ControlPlaneStorageServiceActorId(), controlPlaneStorage);
     }
-
+ 
     if (protoConfig.GetTestConnection().GetEnabled()) {
         auto testConnection = NYq::CreateTestConnectionActor(
                 protoConfig.GetTestConnection(),
@@ -270,11 +270,11 @@ void Init(
     }
 }
 
-IYqSharedResources::TPtr CreateYqSharedResources(
+IYqSharedResources::TPtr CreateYqSharedResources( 
     const NYq::NConfig::TConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const NMonitoring::TDynamicCounterPtr& counters)
-{
+{ 
     return CreateYqSharedResourcesImpl(config, credentialsProviderFactory, counters);
 }
 

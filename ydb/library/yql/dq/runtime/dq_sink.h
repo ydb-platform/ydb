@@ -7,13 +7,13 @@
 
 namespace NYql::NDq {
 
-struct TDqSinkStats : TDqOutputStats {
+struct TDqSinkStats : TDqOutputStats { 
     const ui64 OutputIndex;
-
-    explicit TDqSinkStats(ui64 outputIndex)
-        : OutputIndex(outputIndex) {}
-};
-
+ 
+    explicit TDqSinkStats(ui64 outputIndex) 
+        : OutputIndex(outputIndex) {} 
+}; 
+ 
 class IDqSink : public IDqOutput {
 public:
     using TPtr = TIntrusivePtr<IDqSink>;
@@ -26,8 +26,8 @@ public:
     // Pop chechpoint. Checkpoints may be taken from sink even after it is finished.
     [[nodiscard]]
     virtual bool Pop(NDqProto::TCheckpoint& checkpoint) = 0;
-
-    virtual const TDqSinkStats* GetStats() const = 0;
+ 
+    virtual const TDqSinkStats* GetStats() const = 0; 
 };
 
 IDqSink::TPtr CreateDqSink(ui64 outputIndex, NKikimr::NMiniKQL::TType* outputType, ui64 maxStoredBytes,

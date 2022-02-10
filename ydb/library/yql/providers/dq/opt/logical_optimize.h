@@ -8,6 +8,6 @@
 
 namespace NYql::NDqs {
 
-THolder<IGraphTransformer> CreateDqsLogOptTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config);
+THolder<IGraphTransformer> CreateDqsLogOptTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config); 
 
 } // namespace NYql::NDqs

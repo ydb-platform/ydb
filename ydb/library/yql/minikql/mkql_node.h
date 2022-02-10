@@ -462,8 +462,8 @@ public:
         return Guard(Alloc);
     }
 
-    TScopedAlloc& GetAllocator() const { return Alloc; }
-
+    TScopedAlloc& GetAllocator() const { return Alloc; } 
+ 
     const NUdf::TStringValue& NewString(ui32 size) const {
         Strings.emplace(size);
         return Strings.top();

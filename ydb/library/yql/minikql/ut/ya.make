@@ -28,7 +28,7 @@ SRCS(
     mkql_type_ops_ut.cpp
     mkql_string_util_ut.cpp
     pack_num_ut.cpp
-    watermark_tracker_ut.cpp
+    watermark_tracker_ut.cpp 
 )
 
 PEERDIR(

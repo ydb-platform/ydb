@@ -12,7 +12,7 @@ PEERDIR(
 
 SRCS(
     util.cpp
-    ydb_credentials_provider_factory.cpp
+    ydb_credentials_provider_factory.cpp 
 )
 
 END()

@@ -477,284 +477,284 @@
         },
         "eductl": {
             "description": "eductl is a toolchain of Yandex Education"
-        },
-        "bigb_request": {
-            "description": "utility to get user info"
-        },
-        "bigb_hitlog_analyser": {
-            "description": "bigb utility"
-        },
-        "bigb_bsyeti_experiments": {
-            "description": "bigb utility"
-        },
-        "bigb_bb_cluster_analyzer": {
-            "description": "bigb utility"
-        },
-        "bigb_yt_profiles_dumper": {
-            "description": "bigb utility"
-        },
-        "bigb_ab": {
-            "description": "bigb utility"
-        },
-        "bigrt_cli": {
-            "description": "bigrt utility"
-        },
-        "caesar_yt_sync": {
-            "description": "caesar utility"
-        },
-        "caesar_lookup_profile": {
-            "description": "caesar utility"
-        },
-        "caesar_profile_size_analyzer": {
-            "description": "caesar utility"
-        },
+        }, 
+        "bigb_request": { 
+            "description": "utility to get user info" 
+        }, 
+        "bigb_hitlog_analyser": { 
+            "description": "bigb utility" 
+        }, 
+        "bigb_bsyeti_experiments": { 
+            "description": "bigb utility" 
+        }, 
+        "bigb_bb_cluster_analyzer": { 
+            "description": "bigb utility" 
+        }, 
+        "bigb_yt_profiles_dumper": { 
+            "description": "bigb utility" 
+        }, 
+        "bigb_ab": { 
+            "description": "bigb utility" 
+        }, 
+        "bigrt_cli": { 
+            "description": "bigrt utility" 
+        }, 
+        "caesar_yt_sync": { 
+            "description": "caesar utility" 
+        }, 
+        "caesar_lookup_profile": { 
+            "description": "caesar utility" 
+        }, 
+        "caesar_profile_size_analyzer": { 
+            "description": "caesar utility" 
+        }, 
         "exp_stats": {
-            "description": "bsyeti tool"
+            "description": "bsyeti tool" 
         }
     },
     "toolchain": {
-        "bigb_request": {
-            "tools": {
-                "bigb_request": {
-                    "bottle": "bigb_request",
-                    "executable": "bb_requester"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
-            ]
-        },
-        "bigb_hitlog_analyser": {
-            "tools": {
-                "bigb_hitlog_analyser": {
-                    "bottle": "bigb_hitlog_analyser",
-                    "executable": "hitlog_analyser"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
-            ]
-        },
-        "bigb_bsyeti_experiments": {
-            "tools": {
-                "bigb_bsyeti_experiments": {
-                    "bottle": "bigb_bsyeti_experiments",
-                    "executable": "bsyeti_experiments"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
-            ]
-        },
-        "bigb_bb_cluster_analyzer": {
-            "tools": {
-                "bigb_bb_cluster_analyzer": {
-                    "bottle": "bigb_bb_cluster_analyzer",
-                    "executable": "bb_cluster_analyzer"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
-            ]
-        },
-        "bigb_yt_profiles_dumper": {
-            "tools": {
-                "bigb_yt_profiles_dumper": {
-                    "bottle": "bigb_yt_profiles_dumper",
-                    "executable": "yt_profiles_dumper"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
-            ]
-        },
-        "bigb_ab": {
-            "tools": {
-                "bigb_ab": {
-                    "bottle": "bigb_ab",
-                    "executable": "ab"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
-            ]
-        },
-        "bigrt_cli": {
-            "tools": {
-                "bigrt_cli": {
-                    "bottle": "bigrt_cli",
-                    "executable": "big_rt_cli"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
-            ]
-        },
-        "caesar_lookup_profile": {
-            "tools": {
-                "caesar_lookup_profile": {
-                    "bottle": "caesar_lookup_profile",
-                    "executable": "lookup_profile"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
-            ]
-        },
-        "exp_stats": {
-            "tools": {
+        "bigb_request": { 
+            "tools": { 
+                "bigb_request": { 
+                    "bottle": "bigb_request", 
+                    "executable": "bb_requester" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
+        "bigb_hitlog_analyser": { 
+            "tools": { 
+                "bigb_hitlog_analyser": { 
+                    "bottle": "bigb_hitlog_analyser", 
+                    "executable": "hitlog_analyser" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
+        "bigb_bsyeti_experiments": { 
+            "tools": { 
+                "bigb_bsyeti_experiments": { 
+                    "bottle": "bigb_bsyeti_experiments", 
+                    "executable": "bsyeti_experiments" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
+        "bigb_bb_cluster_analyzer": { 
+            "tools": { 
+                "bigb_bb_cluster_analyzer": { 
+                    "bottle": "bigb_bb_cluster_analyzer", 
+                    "executable": "bb_cluster_analyzer" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
+        "bigb_yt_profiles_dumper": { 
+            "tools": { 
+                "bigb_yt_profiles_dumper": { 
+                    "bottle": "bigb_yt_profiles_dumper", 
+                    "executable": "yt_profiles_dumper" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
+        "bigb_ab": { 
+            "tools": { 
+                "bigb_ab": { 
+                    "bottle": "bigb_ab", 
+                    "executable": "ab" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
+        "bigrt_cli": { 
+            "tools": { 
+                "bigrt_cli": { 
+                    "bottle": "bigrt_cli", 
+                    "executable": "big_rt_cli" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
+        "caesar_lookup_profile": { 
+            "tools": { 
+                "caesar_lookup_profile": { 
+                    "bottle": "caesar_lookup_profile", 
+                    "executable": "lookup_profile" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
+        "exp_stats": { 
+            "tools": { 
                 "exp_stats": {
-                    "bottle": "exp_stats",
-                    "executable": "exp_stats"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
-            ]
-        },
-        "caesar_profile_size_analyzer": {
-            "tools": {
-                "caesar_profile_size_analyzer": {
-                    "bottle": "caesar_profile_size_analyzer",
-                    "executable": "profile_size_analyzer"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
-            ]
-        },
-        "caesar_yt_sync": {
-            "tools": {
-                "caesar_yt_sync": {
-                    "bottle": "caesar_yt_sync",
-                    "executable": "yt_sync"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
-            ]
-        },
+                    "bottle": "exp_stats", 
+                    "executable": "exp_stats" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
+        "caesar_profile_size_analyzer": { 
+            "tools": { 
+                "caesar_profile_size_analyzer": { 
+                    "bottle": "caesar_profile_size_analyzer", 
+                    "executable": "profile_size_analyzer" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
+        "caesar_yt_sync": { 
+            "tools": { 
+                "caesar_yt_sync": { 
+                    "bottle": "caesar_yt_sync", 
+                    "executable": "yt_sync" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
         "msvc2019-i686": {
             "name": "msvc2019",
             "tools": {
@@ -7966,129 +7966,129 @@
                     "eductl"
                 ]
             }
-        },
-        "bigb_request": {
-            "formula": {
+        }, 
+        "bigb_request": { 
+            "formula": { 
                 "sandbox_id": 1210600359,
-                "match": "bb_requester"
-            },
-            "executable": {
-                "bb_requester": [
-                    "bb_requester"
-                ]
-            }
-        },
-        "bigb_hitlog_analyser": {
-            "formula": {
+                "match": "bb_requester" 
+            }, 
+            "executable": { 
+                "bb_requester": [ 
+                    "bb_requester" 
+                ] 
+            } 
+        }, 
+        "bigb_hitlog_analyser": { 
+            "formula": { 
                 "sandbox_id": 1210600978,
-                "match": "hitlog_analyser"
-            },
-            "executable": {
-                "hitlog_analyser": [
-                    "hitlog_analyser"
-                ]
-            }
-        },
-        "bigb_bsyeti_experiments": {
-            "formula": {
+                "match": "hitlog_analyser" 
+            }, 
+            "executable": { 
+                "hitlog_analyser": [ 
+                    "hitlog_analyser" 
+                ] 
+            } 
+        }, 
+        "bigb_bsyeti_experiments": { 
+            "formula": { 
                 "sandbox_id": 1117529876,
-                "match": "bsyeti_experiments"
-            },
-            "executable": {
-                "bsyeti_experiments": [
-                    "bsyeti_experiments"
-                ]
-            }
-        },
-        "bigb_bb_cluster_analyzer": {
-            "formula": {
+                "match": "bsyeti_experiments" 
+            }, 
+            "executable": { 
+                "bsyeti_experiments": [ 
+                    "bsyeti_experiments" 
+                ] 
+            } 
+        }, 
+        "bigb_bb_cluster_analyzer": { 
+            "formula": { 
                 "sandbox_id": 1210601087,
-                "match": "bb_cluster_analyzer"
-            },
-            "executable": {
-                "bb_cluster_analyzer": [
-                    "bb_cluster_analyzer"
-                ]
-            }
-        },
-        "bigb_yt_profiles_dumper": {
-            "formula": {
+                "match": "bb_cluster_analyzer" 
+            }, 
+            "executable": { 
+                "bb_cluster_analyzer": [ 
+                    "bb_cluster_analyzer" 
+                ] 
+            } 
+        }, 
+        "bigb_yt_profiles_dumper": { 
+            "formula": { 
                 "sandbox_id": 1210600801,
-                "match": "yt_profiles_dumper"
-            },
-            "executable": {
-                "yt_profiles_dumper": [
-                    "yt_profiles_dumper"
-                ]
-            }
-        },
-        "bigb_ab": {
-            "formula": {
+                "match": "yt_profiles_dumper" 
+            }, 
+            "executable": { 
+                "yt_profiles_dumper": [ 
+                    "yt_profiles_dumper" 
+                ] 
+            } 
+        }, 
+        "bigb_ab": { 
+            "formula": { 
                 "sandbox_id": 1210600399,
-                "match": "ab"
-            },
-            "executable": {
-                "ab": [
-                    "ab"
-                ]
-            }
-        },
-        "bigrt_cli": {
-            "formula": {
-                "sandbox_id": [
-                    1063136697
-                ],
-                "match": "big_rt_cli"
-            },
-            "executable": {
-                "big_rt_cli": [
-                    "big_rt_cli"
-                ]
-            }
-        },
-        "caesar_yt_sync": {
-            "formula": {
+                "match": "ab" 
+            }, 
+            "executable": { 
+                "ab": [ 
+                    "ab" 
+                ] 
+            } 
+        }, 
+        "bigrt_cli": { 
+            "formula": { 
+                "sandbox_id": [ 
+                    1063136697 
+                ], 
+                "match": "big_rt_cli" 
+            }, 
+            "executable": { 
+                "big_rt_cli": [ 
+                    "big_rt_cli" 
+                ] 
+            } 
+        }, 
+        "caesar_yt_sync": { 
+            "formula": { 
                 "sandbox_id": 1210599778,
-                "match": "yt_sync"
-            },
-            "executable": {
-                "yt_sync": [
-                    "yt_sync"
-                ]
-            }
-        },
-        "caesar_lookup_profile": {
-            "formula": {
+                "match": "yt_sync" 
+            }, 
+            "executable": { 
+                "yt_sync": [ 
+                    "yt_sync" 
+                ] 
+            } 
+        }, 
+        "caesar_lookup_profile": { 
+            "formula": { 
                 "sandbox_id": 1210600873,
-                "match": "lookup_profile"
-            },
-            "executable": {
-                "lookup_profile": [
-                    "lookup_profile"
-                ]
-            }
-        },
-        "exp_stats": {
-            "formula": {
+                "match": "lookup_profile" 
+            }, 
+            "executable": { 
+                "lookup_profile": [ 
+                    "lookup_profile" 
+                ] 
+            } 
+        }, 
+        "exp_stats": { 
+            "formula": { 
                 "sandbox_id": 1210601509,
-                "match": "exp_stats"
-            },
-            "executable": {
-                "exp_stats": [
-                    "exp_stats"
-                ]
-            }
-        },
-        "caesar_profile_size_analyzer": {
-            "formula": {
+                "match": "exp_stats" 
+            }, 
+            "executable": { 
+                "exp_stats": [ 
+                    "exp_stats" 
+                ] 
+            } 
+        }, 
+        "caesar_profile_size_analyzer": { 
+            "formula": { 
                 "sandbox_id": 1210601119,
-                "match": "profile_size_analyzer"
-            },
-            "executable": {
-                "profile_size_analyzer": [
-                    "profile_size_analyzer"
-                ]
-            }
+                "match": "profile_size_analyzer" 
+            }, 
+            "executable": { 
+                "profile_size_analyzer": [ 
+                    "profile_size_analyzer" 
+                ] 
+            } 
         }
     },
     "toolchain_aliases": {

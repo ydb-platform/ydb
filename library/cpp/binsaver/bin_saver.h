@@ -273,14 +273,14 @@ private:
     TBufferedStream<> File;
     // maps objects addresses during save(first) to addresses during load(second) - during loading
     // or serves as a sign that some object has been already stored - during storing
-    bool StableOutput; 
- 
+    bool StableOutput;
+
     typedef THashMap<void*, ui32> PtrIdHash;
-    TAutoPtr<PtrIdHash> PtrIds; 
- 
+    TAutoPtr<PtrIdHash> PtrIds;
+
     typedef THashMap<ui64, TPtr<IObjectBase>> CObjectsHash;
     TAutoPtr<CObjectsHash> Objects;
- 
+
     TVector<IObjectBase*> ObjectQueue;
 
 public:

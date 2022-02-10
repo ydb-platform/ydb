@@ -42,5 +42,5 @@ Y_UNIT_TEST_SUITE(TBase64DecodeUneven) {
         const TString dp = "ADP GmbH\nAnalyse Design & Programmierung\nGesellschaft mit beschränkter Haftung";
         UNIT_ASSERT_VALUES_EQUAL(dp, Base64DecodeUneven(Base64Encode(dp)));
         UNIT_ASSERT_VALUES_EQUAL(dp, Base64DecodeUneven(Base64EncodeUrl(dp)));
-    }
+    } 
 }

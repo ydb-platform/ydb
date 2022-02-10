@@ -195,7 +195,7 @@ RECURSE(
     dask
     daphne
     databases
-    dataclasses-json
+    dataclasses-json 
     datadiff
     dateparser
     dateutil
@@ -261,7 +261,7 @@ RECURSE(
     django-introspection
     django-jinja
     django-js-asset
-    django-json-widget
+    django-json-widget 
     django-markwhat
     django-model-choices
     django-model-utils
@@ -685,7 +685,7 @@ RECURSE(
     opencv-python
     openpyxl
     opensfm
-    opentok
+    opentok 
     opentracing
     opentracing-async-instrumentation
     opentracing-instrumentation
@@ -843,7 +843,7 @@ RECURSE(
     pyparsing
     PyPDF2
     pyperclip
-    PyPika
+    PyPika 
     pyproj
     pyre2
     pyrepl

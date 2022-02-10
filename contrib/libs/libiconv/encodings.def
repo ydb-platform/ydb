@@ -725,7 +725,7 @@ DEFENCODING(( "TCVN",
 
 /* CJK character sets (not documented) */
 
-#ifndef ARCADIA_ICONV_NOCJK 
+#ifndef ARCADIA_ICONV_NOCJK
 DEFENCODING(( "JIS_C6220-1969-RO",      /* IANA */
               "ISO646-JP",              /* IANA */
               "ISO-IR-14",              /* IANA */

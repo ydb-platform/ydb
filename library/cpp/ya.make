@@ -368,7 +368,7 @@ RECURSE(
     tld
     tld/ut
     token
-    token/lite 
+    token/lite
     token/serialization
     token/serialization/ut
     token/ut

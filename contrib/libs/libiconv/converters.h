@@ -199,7 +199,7 @@ struct conv_struct {
 
 /* CJK character sets [CCS = coded character set] [CJKV.INF chapter 3] */
 
-#ifndef ARCADIA_ICONV_NOCJK 
+#ifndef ARCADIA_ICONV_NOCJK
 typedef struct {
   unsigned short indx; /* index into big table */
   unsigned short used; /* bitmask of used entries */
@@ -225,7 +225,7 @@ typedef struct {
 
 /* CJK encodings [CES = character encoding scheme] [CJKV.INF chapter 4] */
 
-#ifndef ARCADIA_ICONV_NOCJK 
+#ifndef ARCADIA_ICONV_NOCJK
 #include "euc_jp.h"
 #include "sjis.h"
 #include "cp932.h"

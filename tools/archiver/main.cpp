@@ -609,7 +609,7 @@ int main(int argc, char** argv) {
         StringSplitter(forceKeys).Split(':').SkipEmpty().Collect(&keys);
 
     if (keys.size() && keys.size() != files.size()) {
-        Cerr << "Invalid number of keys=" << keys.size() << " (!= number of files=" << files.size() << ")" << Endl; 
+        Cerr << "Invalid number of keys=" << keys.size() << " (!= number of files=" << files.size() << ")" << Endl;
         return 1;
     }
 

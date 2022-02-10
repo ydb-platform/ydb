@@ -2,7 +2,7 @@
 #include "wide.h"
 
 #include <util/stream/file.h>
-#include <util/ysaveload.h> 
+#include <util/ysaveload.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/env.h>
@@ -98,16 +98,16 @@ Y_UNIT_TEST_SUITE(TUtfUtilTest) {
         TString text = in.ReadAll();
         UNIT_ASSERT(WideToUTF8(UTF8ToWide(text)) == text);
     }
- 
+
     Y_UNIT_TEST(TestInvalidUTF8) {
         TVector<TString> testData;
         TFileInput input(ArcadiaSourceRoot() + TStringBuf("/util/charset/ut/utf8/invalid_UTF8.bin"));
-        Load(&input, testData); 
- 
-        for (const auto& text : testData) { 
-            UNIT_ASSERT_EXCEPTION(UTF8ToWide(text), yexception); 
-        } 
-    } 
+        Load(&input, testData);
+
+        for (const auto& text : testData) {
+            UNIT_ASSERT_EXCEPTION(UTF8ToWide(text), yexception);
+        }
+    }
 
     Y_UNIT_TEST(TestUTF8ToWideScalar) {
         TFileInput in(ArcadiaSourceRoot() + TStringBuf("/util/charset/ut/utf8/test1.txt"));

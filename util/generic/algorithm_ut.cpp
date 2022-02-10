@@ -265,7 +265,7 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
             UNIT_ASSERT_EQUAL(v, suV);
         }
     }
- 
+
     Y_UNIT_TEST(EraseTest) {
         TVector<int> data = {5, 4, 3, 2, 1, 0};
         TVector<int> expected = {5, 4, 2, 1, 0};
@@ -313,40 +313,40 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
     }
 
     Y_UNIT_TEST(NthElementTest) {
-        { 
+        {
             TVector<TString> v;
-            NthElement(v.begin(), v.begin(), v.end()); 
+            NthElement(v.begin(), v.begin(), v.end());
             UNIT_ASSERT_EQUAL(v, TVector<TString>());
-        } 
- 
-        { 
-            int data[] = {3, 2, 1, 4, 6, 5, 7, 9, 8}; 
+        }
+
+        {
+            int data[] = {3, 2, 1, 4, 6, 5, 7, 9, 8};
             TVector<int> testVector(data, data + Y_ARRAY_SIZE(data));
- 
+
             size_t medianInd = testVector.size() / 2;
- 
-            NthElement(testVector.begin(), testVector.begin() + medianInd, testVector.end()); 
-            UNIT_ASSERT_EQUAL(testVector[medianInd], 5); 
- 
+
+            NthElement(testVector.begin(), testVector.begin() + medianInd, testVector.end());
+            UNIT_ASSERT_EQUAL(testVector[medianInd], 5);
+
             NthElement(testVector.begin(), testVector.begin() + medianInd, testVector.end(), [](int lhs, int rhs) { return lhs > rhs; });
-            UNIT_ASSERT_EQUAL(testVector[medianInd], 5); 
-        } 
- 
-        { 
-            const char* data[] = {"3", "234", "1231", "333", "545345", "11", "111", "55", "66"}; 
+            UNIT_ASSERT_EQUAL(testVector[medianInd], 5);
+        }
+
+        {
+            const char* data[] = {"3", "234", "1231", "333", "545345", "11", "111", "55", "66"};
             TVector<TString> testVector(data, data + Y_ARRAY_SIZE(data));
- 
+
             size_t medianInd = testVector.size() / 2;
-            NthElement(testVector.begin(), testVector.begin() + medianInd, testVector.end()); 
- 
-            auto median = testVector.begin() + medianInd; 
+            NthElement(testVector.begin(), testVector.begin() + medianInd, testVector.end());
+
+            auto median = testVector.begin() + medianInd;
             for (auto it0 = testVector.begin(); it0 != median; ++it0) {
                 for (auto it1 = median; it1 != testVector.end(); ++it1) {
-                    UNIT_ASSERT(*it0 <= *it1); 
-                } 
-            } 
-        } 
-    } 
+                    UNIT_ASSERT(*it0 <= *it1);
+                }
+            }
+        }
+    }
 
     Y_UNIT_TEST(BinarySearchTest) {
         {

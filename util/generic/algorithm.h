@@ -665,16 +665,16 @@ static inline std::pair<I1, I2> Mismatch(I1 b1, I1 e1, I2 b2, P p) {
     return std::mismatch(b1, e1, b2, p);
 }
 
-template <class RandomIterator> 
-static inline void NthElement(RandomIterator begin, RandomIterator nth, RandomIterator end) { 
+template <class RandomIterator>
+static inline void NthElement(RandomIterator begin, RandomIterator nth, RandomIterator end) {
     std::nth_element(begin, nth, end);
-} 
- 
-template <class RandomIterator, class Compare> 
-static inline void NthElement(RandomIterator begin, RandomIterator nth, RandomIterator end, Compare compare) { 
+}
+
+template <class RandomIterator, class Compare>
+static inline void NthElement(RandomIterator begin, RandomIterator nth, RandomIterator end, Compare compare) {
     std::nth_element(begin, nth, end, compare);
-} 
- 
+}
+
 // no standard implementation until C++14
 template <class I1, class I2>
 static inline std::pair<I1, I2> Mismatch(I1 b1, I1 e1, I2 b2, I2 e2) {

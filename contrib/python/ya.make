@@ -380,7 +380,7 @@ RECURSE(
     flake8-polyfill
     flake8-quotes
     flake8-string-format
-    flaky
+    flaky 
     Flask
     Flask-Admin
     flask-appconfig
@@ -397,9 +397,9 @@ RECURSE(
     flask-marshmallow
     Flask-Menu
     flask_migrate
-    flask-mongoengine
+    flask-mongoengine 
     Flask-OpenTracing
-    Flask-Principal
+    Flask-Principal 
     Flask-Pydantic
     Flask-PyMongo
     Flask-RESTful
@@ -409,7 +409,7 @@ RECURSE(
     flask-shell-ipython
     Flask-Shelve
     Flask-SQLAlchemy
-    Flask-SSLify
+    Flask-SSLify 
     flask-swagger
     flask-swagger-ui
     Flask-Table
@@ -453,8 +453,8 @@ RECURSE(
     google-pasta
     googleads
     gpxpy
-    GPy
-    GPyOpt
+    GPy 
+    GPyOpt 
     grafanalib
     graphene
     graphene-django
@@ -492,7 +492,7 @@ RECURSE(
     httptools
     httpx
     humanfriendly
-    humanize
+    humanize 
     humongous
     hurry.filesize
     Hydra
@@ -554,7 +554,7 @@ RECURSE(
     jsondiff
     jsonfield
     jsonobject
-    jsonpath-rw
+    jsonpath-rw 
     jsonpickle
     jsonpointer
     jsonref
@@ -708,7 +708,7 @@ RECURSE(
     papermill
     parameterized
     paramiko
-    paramz
+    paramz 
     parse
     parse-type
     parsedatetime
@@ -816,7 +816,7 @@ RECURSE(
     pyflakes
     pyfst
     pygit2
-    PyGithub
+    PyGithub 
     Pygments
     pygrib
     pygtrie
@@ -912,7 +912,7 @@ RECURSE(
     python-prctl
     python-rapidjson
     python-saml
-    python-slugify
+    python-slugify 
     python-telegram-bot
     python-utils
     python3-saml
@@ -1100,7 +1100,7 @@ RECURSE(
     typing
     typing-extensions
     typing-inspect
-    tzlocal
+    tzlocal 
     ua-parser
     udatetime
     uhashring

@@ -10,7 +10,7 @@
 #ifdef _win32_
     #include "winint.h"
     #include <io.h>
-#else 
+#else
     #include <unistd.h>
     #include <stdlib.h>
 #endif

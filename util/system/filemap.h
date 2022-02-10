@@ -52,7 +52,7 @@ struct TMemoryMapCommon {
         oRdOnly = 1,
         oRdWr = 2,
         oCopyOnWr = 4,
- 
+
         oAccessMask = 7,
         oNotGreedy = 8,
         oPrecharge = 16,
@@ -77,12 +77,12 @@ public:
     TMemoryMap(FILE* f, EOpenMode om, TString dbgName = UnknownFileName());
     TMemoryMap(const TFile& file, TString dbgName = UnknownFileName());
     TMemoryMap(const TFile& file, EOpenMode om, TString dbgName = UnknownFileName());
- 
+
     ~TMemoryMap();
- 
+
     TMapResult Map(i64 offset, size_t size);
     bool Unmap(TMapResult region);
- 
+
     void ResizeAndReset(i64 size);
     TMapResult ResizeAndRemap(i64 offset, size_t size);
 
@@ -91,7 +91,7 @@ public:
     bool IsWritable() const noexcept;
     EOpenMode GetMode() const noexcept;
     TFile GetFile() const noexcept;
- 
+
     void SetSequential();
     void Evict(void* ptr, size_t len);
     void Evict();
@@ -100,7 +100,7 @@ public:
      * deprecated
      */
     bool Unmap(void* ptr, size_t size);
- 
+
 private:
     class TImpl;
     TSimpleIntrusivePtr<TImpl> Impl_;
@@ -165,7 +165,7 @@ public:
     TFile GetFile() const noexcept {
         return Map_.GetFile();
     }
- 
+
     void Precharge(size_t pos = 0, size_t size = (size_t)-1) const;
 
     void SetSequential() {
@@ -203,11 +203,11 @@ public:
     ~TFileMappedArray() {
         Ptr_ = nullptr;
         End_ = nullptr;
-    } 
+    }
     void Init(const char* name) {
         DataHolder_.Reset(new TFileMap(name));
         DoInit(name);
-    } 
+    }
     void Init(const TFileMap& fileMap) {
         DataHolder_.Reset(new TFileMap(fileMap));
         DoInit(fileMap.GetFile().GetName());
@@ -217,18 +217,18 @@ public:
         Ptr_ = nullptr;
         Size_ = 0;
         End_ = nullptr;
-    } 
+    }
     void Precharge() {
         DataHolder_->Precharge();
     }
     const T& operator[](size_t pos) const {
         Y_ASSERT(pos < size());
         return Ptr_[pos];
-    } 
+    }
     /// for STL compatibility only, Size() usage is recommended
-    size_t size() const { 
+    size_t size() const {
         return Size_;
-    } 
+    }
     size_t Size() const {
         return Size_;
     }
@@ -236,11 +236,11 @@ public:
         if (pos < Size_)
             return Ptr_[pos];
         return Dummy();
-    } 
+    }
     void SetDummy(const T& n_Dummy) {
         Dummy_.Destroy();
         Dummy_.Reset(new (DummyData()) T(n_Dummy));
-    } 
+    }
     inline char* DummyData() const noexcept {
         return AlignUp((char*)DummyData_);
     }
@@ -285,8 +285,8 @@ private:
         Size_ = DataHolder_->Length() / sizeof(T);
         End_ = Ptr_ + Size_;
     }
-}; 
- 
+};
+
 class TMappedAllocation: TMoveOnly {
 public:
     TMappedAllocation(size_t size = 0, bool shared = false, void* addr = nullptr);
@@ -343,12 +343,12 @@ public:
     T* Create(size_t siz) {
         Y_ASSERT(MappedSize() == 0 && Ptr() == nullptr);
         T* arr = (T*)Alloc((sizeof(T) * siz));
-        if (!arr) 
+        if (!arr)
             return nullptr;
         Y_ASSERT(MappedSize() == sizeof(T) * siz);
         for (size_t n = 0; n < siz; n++)
             new (&arr[n]) T();
-        return arr; 
+        return arr;
     }
     void Destroy() {
         T* arr = (T*)Ptr();

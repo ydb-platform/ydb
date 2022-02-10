@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include <util/generic/noncopyable.h>
 
 template <class T>

@@ -60,7 +60,7 @@ namespace {
             return sysInfo.dwAllocationGranularity;
 #else
             return NSystemInfo::GetPageSize();
-#endif 
+#endif
         }
 
         const size_t GRANULARITY_;
@@ -188,7 +188,7 @@ public:
         , Mode_(om)
     {
         CheckFile();
- 
+
         if (File_.GetLength() < Length_) {
             File_.Resize(Length_);
         }
@@ -220,15 +220,15 @@ public:
 
     inline TMapResult Map(i64 offset, size_t size) {
         assert(File_.IsOpen());
- 
+
         if (offset > Length_) {
             ythrow yexception() << "Can't map something at offset " << offset << " of '" << DbgName_ << "' with length " << Length_;
         }
- 
+
         if (offset + (i64)size > Length_) {
             ythrow yexception() << "Can't map " << (unsigned long)size << " bytes at offset " << offset << " of '" << DbgName_ << "' with length " << Length_;
         }
- 
+
         TMapResult result;
 
         i64 base = DownToGranularity(offset);

@@ -53,24 +53,24 @@ inline void addIfAbsent(TString& s, char lastCh1, char lastCh2) {
  *
  * ------------------------------------------------------------------
  */
-struct ui8_256 { 
+struct ui8_256 {
     // forward chars table
-    ui8 chars_table[256]; 
+    ui8 chars_table[256];
     // reverse (for c* functions) chars table
     ui8 c_chars_table[256];
-}; 
- 
+};
+
 class str_spn: public ui8_256 {
 public:
     explicit str_spn(const char* charset, bool extended = false) {
-        // exteneded: if true, treat charset string more like 
-        // interior of brackets [ ], e.g. "a-z0-9" 
-        init(charset, extended); 
-    } 
+        // exteneded: if true, treat charset string more like
+        // interior of brackets [ ], e.g. "a-z0-9"
+        init(charset, extended);
+    }
 
-    /// Return first character in table, like strpbrk() 
-    /// That is, skip all characters not in table 
-    /// [DIFFERENCE FOR NOT_FOUND CASE: Returns end of string, not NULL] 
+    /// Return first character in table, like strpbrk()
+    /// That is, skip all characters not in table
+    /// [DIFFERENCE FOR NOT_FOUND CASE: Returns end of string, not NULL]
     const char* brk(const char* s) const {
         while (c_chars_table[(ui8)*s])
             ++s;
@@ -83,13 +83,13 @@ public:
         return s;
     }
 
-    /// Return first character not in table, like strpbrk() for inverted table. 
-    /// That is, skip all characters in table 
+    /// Return first character not in table, like strpbrk() for inverted table.
+    /// That is, skip all characters in table
     const char* cbrk(const char* s) const {
         while (chars_table[(ui8)*s])
             ++s;
-        return s; 
-    } 
+        return s;
+    }
 
     const char* cbrk(const char* s, const char* e) const {
         while (s < e && chars_table[(ui8)*s])
@@ -97,7 +97,7 @@ public:
         return s;
     }
 
-    /// Offset of the first character not in table, like strspn(). 
+    /// Offset of the first character not in table, like strspn().
     size_t spn(const char* s) const {
         return cbrk(s) - s;
     }
@@ -106,7 +106,7 @@ public:
         return cbrk(s, e) - s;
     }
 
-    /// Offset of the first character in table, like strcspn(). 
+    /// Offset of the first character in table, like strcspn().
     size_t cspn(const char* s) const {
         return brk(s) - s;
     }
@@ -123,35 +123,35 @@ public:
         return const_cast<char*>(cbrk((const char*)s));
     }
 
-    /// See strsep [BUT argument is *&, not **] 
+    /// See strsep [BUT argument is *&, not **]
     char* sep(char*& s) const {
-        char sep_char; // unused; 
-        return sep(s, sep_char); 
-    } 
- 
-    /// strsep + remember character that was destroyed 
+        char sep_char; // unused;
+        return sep(s, sep_char);
+    }
+
+    /// strsep + remember character that was destroyed
     char* sep(char*& s, char& sep_char) const {
-        if (!s) 
+        if (!s)
             return nullptr;
         char* ret = s;
         char* next = brk(ret);
-        if (*next) { 
-            sep_char = *next; 
-            *next = 0; 
-            s = next + 1; 
-        } else { 
-            sep_char = 0; 
+        if (*next) {
+            sep_char = *next;
+            *next = 0;
+            s = next + 1;
+        } else {
+            sep_char = 0;
             s = nullptr;
-        } 
-        return ret; 
-    } 
- 
+        }
+        return ret;
+    }
+
 protected:
     void init(const char* charset, bool extended);
     str_spn() = default;
-}; 
- 
-// an analogue of tr/$from/$to/ 
+};
+
+// an analogue of tr/$from/$to/
 class Tr {
 public:
     Tr(const char* from, const char* to);
@@ -161,14 +161,14 @@ public:
     }
 
     void Do(char* s) const {
-        for (; *s; s++) 
+        for (; *s; s++)
             *s = ConvertChar(*s);
-    } 
+    }
     void Do(const char* src, char* dst) const {
-        for (; *src; src++) 
+        for (; *src; src++)
             *dst++ = ConvertChar(*src);
-        *dst = 0; 
-    } 
+        *dst = 0;
+    }
     void Do(char* s, size_t l) const {
         for (size_t i = 0; i < l && s[i]; i++)
             s[i] = ConvertChar(s[i]);
@@ -179,7 +179,7 @@ private:
     char Map[256];
 
     size_t FindFirstChangePosition(const TString& str) const;
-}; 
+};
 
 // Removes all occurrences of given character from string
 template <typename TStringType>

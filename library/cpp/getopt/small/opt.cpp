@@ -116,4 +116,4 @@ int opt_get_number(int& argc, char* argv[]) {
         }
     }
     return num;
-} 
+}

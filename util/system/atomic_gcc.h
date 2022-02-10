@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #define ATOMIC_COMPILER_BARRIER() __asm__ __volatile__("" \
                                                        :  \
                                                        :  \
@@ -61,7 +61,7 @@ static inline intptr_t AtomicSwap(TAtomic* p, intptr_t v) {
     __atomic_exchange(p, &v, &ret, __ATOMIC_SEQ_CST);
     return ret;
 }
- 
+
 static inline bool AtomicCas(TAtomic* a, intptr_t exchange, intptr_t compare) {
     (void)a; // disable strange 'parameter set but not used' warning on gcc
     return __atomic_compare_exchange(a, &compare, &exchange, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);

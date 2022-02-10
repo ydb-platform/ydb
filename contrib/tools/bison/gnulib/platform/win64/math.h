@@ -33,7 +33,7 @@
 #ifndef _GL_M4_MATH_H
 #define _GL_M4_MATH_H
 
-#if _MSC_VER >= 1800 // [ 
+#if _MSC_VER >= 1800 // [
 #else // ] _MSC_VER >= 1600 [
 
 #ifndef _GL_INLINE_HEADER_BEGIN

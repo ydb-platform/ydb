@@ -25,11 +25,11 @@ public:
     TMappedFile() {
         Map_ = nullptr;
     }
- 
+
     ~TMappedFile() {
         term();
     }
- 
+
     explicit TMappedFile(const TString& name) {
         Map_ = nullptr;
         init(name, TFileMap::oRdOnly);
@@ -54,16 +54,16 @@ public:
             Map_ = nullptr;
         }
     }
- 
+
     size_t getSize() const {
         return (Map_ ? Map_->MappedSize() : 0);
     }
- 
+
     void* getData(size_t pos = 0) const {
         Y_ASSERT(!Map_ || (pos <= getSize()));
         return (Map_ ? (void*)((unsigned char*)Map_->Ptr() + pos) : nullptr);
     }
- 
+
     void precharge(size_t pos = 0, size_t size = (size_t)-1) const;
 
     void swap(TMappedFile& file) noexcept {

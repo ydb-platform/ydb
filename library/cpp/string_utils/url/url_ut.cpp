@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(TUtilUrlTest) {
         UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetDomain("a.b.ya.ru"));
         UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetDomain("ya.ru"));
         UNIT_ASSERT_VALUES_EQUAL("ya", GetDomain("ya"));
-        UNIT_ASSERT_VALUES_EQUAL("", GetDomain("")); 
+        UNIT_ASSERT_VALUES_EQUAL("", GetDomain(""));
     }
 
     Y_UNIT_TEST(TestGetParentDomain) {
@@ -88,27 +88,27 @@ Y_UNIT_TEST_SUITE(TUtilUrlTest) {
     }
 
     Y_UNIT_TEST(TestSchemeCut) {
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru/bebe", CutSchemePrefix("http://ya.ru/bebe")); 
-        UNIT_ASSERT_VALUES_EQUAL("yaru", CutSchemePrefix("yaru")); 
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru://zzz", CutSchemePrefix("yaru://ya.ru://zzz")); 
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru://zzz", CutSchemePrefix("ya.ru://zzz")); 
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru://zzz", CutSchemePrefix("ftp://ya.ru://zzz")); 
-        UNIT_ASSERT_VALUES_EQUAL("", CutSchemePrefix("https://")); // is that right? 
- 
-        UNIT_ASSERT_VALUES_EQUAL("ftp://ya.ru", CutHttpPrefix("ftp://ya.ru")); 
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru/zzz", CutHttpPrefix("http://ya.ru/zzz")); 
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru/bebe", CutSchemePrefix("http://ya.ru/bebe"));
+        UNIT_ASSERT_VALUES_EQUAL("yaru", CutSchemePrefix("yaru"));
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru://zzz", CutSchemePrefix("yaru://ya.ru://zzz"));
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru://zzz", CutSchemePrefix("ya.ru://zzz"));
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru://zzz", CutSchemePrefix("ftp://ya.ru://zzz"));
+        UNIT_ASSERT_VALUES_EQUAL("", CutSchemePrefix("https://")); // is that right?
+
+        UNIT_ASSERT_VALUES_EQUAL("ftp://ya.ru", CutHttpPrefix("ftp://ya.ru"));
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru/zzz", CutHttpPrefix("http://ya.ru/zzz"));
         UNIT_ASSERT_VALUES_EQUAL("ya.ru/zzz", CutHttpPrefix("http://ya.ru/zzz", true));
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru/zzz", CutHttpPrefix("https://ya.ru/zzz")); 
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru/zzz", CutHttpPrefix("https://ya.ru/zzz"));
         UNIT_ASSERT_VALUES_EQUAL("https://ya.ru/zzz", CutHttpPrefix("https://ya.ru/zzz", true));
         UNIT_ASSERT_VALUES_EQUAL("", CutHttpPrefix("https://"));               // is that right?
         UNIT_ASSERT_VALUES_EQUAL("https://", CutHttpPrefix("https://", true)); // is that right?
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestMisc) {
-        UNIT_ASSERT_VALUES_EQUAL("", CutWWWPrefix("www.")); 
-        UNIT_ASSERT_VALUES_EQUAL("", CutWWWPrefix("WwW.")); 
-        UNIT_ASSERT_VALUES_EQUAL("www", CutWWWPrefix("www")); 
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru", CutWWWPrefix("www.ya.ru")); 
+        UNIT_ASSERT_VALUES_EQUAL("", CutWWWPrefix("www."));
+        UNIT_ASSERT_VALUES_EQUAL("", CutWWWPrefix("WwW."));
+        UNIT_ASSERT_VALUES_EQUAL("www", CutWWWPrefix("www"));
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru", CutWWWPrefix("www.ya.ru"));
 
         UNIT_ASSERT_VALUES_EQUAL("", CutWWWNumberedPrefix("www."));
         UNIT_ASSERT_VALUES_EQUAL("www", CutWWWNumberedPrefix("www"));
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(TUtilUrlTest) {
         UNIT_ASSERT_VALUES_EQUAL("", CutMPrefix("M."));
         UNIT_ASSERT_VALUES_EQUAL("m", CutMPrefix("m"));
         UNIT_ASSERT_VALUES_EQUAL("ya.ru", CutMPrefix("m.ya.ru"));
-    } 
+    }
 
     Y_UNIT_TEST(TestSplitUrlToHostAndPath) {
         TStringBuf host, path;

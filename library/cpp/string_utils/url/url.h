@@ -35,10 +35,10 @@ Y_PURE_FUNCTION
 size_t GetHttpPrefixSize(const TWtringBuf url, bool ignorehttps = false) noexcept;
 
 /** BEWARE of TStringBuf! You can not use operator ~ or c_str() like in TString
-    !!!!!!!!!!!! */ 
+    !!!!!!!!!!!! */
 Y_PURE_FUNCTION
 size_t GetSchemePrefixSize(const TStringBuf url) noexcept;
- 
+
 Y_PURE_FUNCTION
 TStringBuf GetSchemePrefix(const TStringBuf url) noexcept;
 

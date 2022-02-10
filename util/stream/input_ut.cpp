@@ -6,10 +6,10 @@
 #include <util/system/file.h>
 #include <util/system/yassert.h>
 
-#ifdef _win_ 
+#ifdef _win_
     #include <io.h>
-#endif 
- 
+#endif
+
 class TMockStdIn {
 public:
     TMockStdIn()
@@ -28,7 +28,7 @@ public:
         tempFile.Seek(0, sSet);
 
         TFileHandle tempFh(tempFile.GetHandle());
-        tempFh.Duplicate2Posix(0); 
+        tempFh.Duplicate2Posix(0);
         tempFh.Release();
 
         func();

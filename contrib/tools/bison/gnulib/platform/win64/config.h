@@ -964,7 +964,7 @@
 
 /* Define to 1 if you have the `strsignal' function. */
 /* #undef HAVE_STRSIGNAL */
-char *strsignal (int signum); 
+char *strsignal (int signum);
 
 /* Define to 1 if `decimal_point' is a member of `struct lconv'. */
 #define HAVE_STRUCT_LCONV_DECIMAL_POINT 1

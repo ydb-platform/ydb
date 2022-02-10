@@ -24,7 +24,7 @@ int gettimeofday(struct timeval* tp, void*);
 tm* localtime_r(const time_t* clock, tm* result);
 tm* gmtime_r(const time_t* clock, tm* result);
 char* ctime_r(const time_t* clock, char* buf);
- 
+
 inline time_t timegm(struct tm* t) {
     return TimeGM(t);
 }

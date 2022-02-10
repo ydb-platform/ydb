@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include "defaults.h"
 
 using TAtomicBase = intptr_t;
@@ -11,8 +11,8 @@ using TAtomic = volatile TAtomicBase;
     #include "atomic_win.h"
 #else
     #error unsupported platform
-#endif 
- 
+#endif
+
 #if !defined(ATOMIC_COMPILER_BARRIER)
     #define ATOMIC_COMPILER_BARRIER()
 #endif

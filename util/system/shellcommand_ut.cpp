@@ -62,14 +62,14 @@ private:
 Y_UNIT_TEST_SUITE(TShellQuoteTest) {
     Y_UNIT_TEST(TestQuoteArg) {
         TString cmd;
-        ShellQuoteArg(cmd, "/pr f/krev/prev.exe"); 
-        ShellQuoteArgSp(cmd, "-DVal=\"W Quotes\""); 
-        ShellQuoteArgSp(cmd, "-DVal=W Space"); 
-        ShellQuoteArgSp(cmd, "-DVal=Blah"); 
-        UNIT_ASSERT_STRINGS_EQUAL(cmd, "\"/pr f/krev/prev.exe\" \"-DVal=\\\"W Quotes\\\"\" \"-DVal=W Space\" \"-DVal=Blah\""); 
-    } 
-} 
- 
+        ShellQuoteArg(cmd, "/pr f/krev/prev.exe");
+        ShellQuoteArgSp(cmd, "-DVal=\"W Quotes\"");
+        ShellQuoteArgSp(cmd, "-DVal=W Space");
+        ShellQuoteArgSp(cmd, "-DVal=Blah");
+        UNIT_ASSERT_STRINGS_EQUAL(cmd, "\"/pr f/krev/prev.exe\" \"-DVal=\\\"W Quotes\\\"\" \"-DVal=W Space\" \"-DVal=Blah\"");
+    }
+}
+
 Y_UNIT_TEST_SUITE(TShellCommandTest) {
     Y_UNIT_TEST(TestNoQuotes) {
         TShellCommandOptions options;

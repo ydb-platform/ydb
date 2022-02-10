@@ -628,22 +628,22 @@ void TShellCommand::TImpl::StartProcess(TShellCommand::TImpl::TPipes& pipes) {
 #endif
 
 void ShellQuoteArg(TString& dst, TStringBuf argument) {
-    dst.append("\""); 
-    TStringBuf l, r; 
+    dst.append("\"");
+    TStringBuf l, r;
     while (argument.TrySplit('"', l, r)) {
-        dst.append(l); 
-        dst.append("\\\""); 
+        dst.append(l);
+        dst.append("\\\"");
         argument = r;
-    } 
+    }
     dst.append(argument);
-    dst.append("\""); 
-} 
- 
+    dst.append("\"");
+}
+
 void ShellQuoteArgSp(TString& dst, TStringBuf argument) {
-    dst.append(' '); 
+    dst.append(' ');
     ShellQuoteArg(dst, argument);
-} 
- 
+}
+
 bool ArgNeedsQuotes(TStringBuf arg) noexcept {
     if (arg.empty()) {
         return true;

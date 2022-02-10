@@ -23,7 +23,7 @@
 #endif
 
 #include <util/digest/numeric.h>
- 
+
 static inline size_t SystemCurrentThreadIdImpl() noexcept {
     #if defined(_unix_)
         return (size_t)pthread_self();

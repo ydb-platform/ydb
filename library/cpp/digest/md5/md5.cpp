@@ -192,15 +192,15 @@ char* MD5::End(char* buf) {
 char* MD5::End_b64(char* buf) {
     ui8 digest[16];
     if (!buf)
-        buf = (char*)malloc(25); 
+        buf = (char*)malloc(25);
     if (!buf)
         return nullptr;
-    Final(digest); 
+    Final(digest);
     Base64Encode(buf, digest, 16);
     buf[24] = '\0';
-    return buf; 
-} 
- 
+    return buf;
+}
+
 ui64 MD5::EndHalfMix() {
     ui8 digest[16];
     Final(digest);

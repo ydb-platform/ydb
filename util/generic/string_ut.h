@@ -794,16 +794,16 @@ public:
 
     void TestOperatorsCI() {
         TStringType s(Data.ABCD());
-        UNIT_ASSERT(s > Data.abc0123456xyz()); 
-        UNIT_ASSERT(s == Data.abcd()); 
- 
+        UNIT_ASSERT(s > Data.abc0123456xyz());
+        UNIT_ASSERT(s == Data.abcd());
+
         using TCIStringBuf = TBasicStringBuf<char_type, traits_type>;
 
         UNIT_ASSERT(s > TCIStringBuf(Data.abc0123456xyz()));
         UNIT_ASSERT(TCIStringBuf(Data.abc0123456xyz()) < s);
         UNIT_ASSERT(s == TCIStringBuf(Data.abcd()));
-    } 
- 
+    }
+
     void TestMulOperators() {
         {
             TStringType s(Data._0());

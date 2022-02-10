@@ -84,7 +84,7 @@ extern void initpyexpat(void);
 extern void initselect(void);
 extern void initmsvcrt(void);
 extern void init_subprocess(void);
-extern void init_winreg(void); 
+extern void init_winreg(void);
 #endif
 
 #if !defined(_CYGWIN_)

@@ -6,7 +6,7 @@
 #include <util/charset/wide.h>
 #include "file.h"
 
-#include <winioctl.h> 
+#include <winioctl.h>
 
 namespace NFsPrivate {
     static LPCWSTR UTF8ToWCHAR(const TStringBuf str, TUtf16String& wstr) {

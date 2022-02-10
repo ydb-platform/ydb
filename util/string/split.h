@@ -408,21 +408,21 @@ static inline void Split(char* buf, char ch, T* res) {
 }
 
 /// Split string into res vector. Res vector is cleared before split.
-/// Old good slow split function. 
-/// Field delimter is any number of symbols specified in delim (no empty strings in res vector) 
+/// Old good slow split function.
+/// Field delimter is any number of symbols specified in delim (no empty strings in res vector)
 /// @return number of elements created
 size_t Split(const char* in, const char* delim, TVector<TString>& res);
 size_t Split(const TString& in, const TString& delim, TVector<TString>& res);
- 
-/// Old split reimplemented for TStringBuf using the new code 
-/// Note that delim can be constructed from char* automatically (it is not cheap though) 
+
+/// Old split reimplemented for TStringBuf using the new code
+/// Note that delim can be constructed from char* automatically (it is not cheap though)
 inline size_t Split(const TStringBuf s, const TSetDelimiter<const char>& delim, TVector<TStringBuf>& res) {
-    res.clear(); 
+    res.clear();
     TContainerConsumer<TVector<TStringBuf>> res1(&res);
     TSkipEmptyTokens<TContainerConsumer<TVector<TStringBuf>>> consumer(&res1);
     SplitString(s.data(), s.data() + s.size(), delim, consumer);
-    return res.size(); 
-} 
+    return res.size();
+}
 
 template <class P, class D>
 void GetNext(TStringBuf& s, D delim, P& param) {

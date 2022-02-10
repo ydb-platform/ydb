@@ -84,7 +84,7 @@
 {"select", initselect},
 {"msvcrt", initmsvcrt},
 {"_subprocess", init_subprocess},
-{"_winreg", init_winreg}, 
+{"_winreg", init_winreg},
 #endif
 
 #if defined(_x86_) && !defined(_CYGWIN_) || defined(__powerpc__) || defined(__aarch64__)

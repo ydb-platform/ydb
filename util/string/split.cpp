@@ -8,7 +8,7 @@ inline size_t Split(const char* ptr, const char* delim, TVector<TValue>& values)
         if (ptr && *ptr) {
             size_t epos = strcspn(ptr, delim);
             assert(epos);
-            values.push_back(TValue(ptr, epos)); 
+            values.push_back(TValue(ptr, epos));
             ptr += epos;
         }
     }
@@ -17,8 +17,8 @@ inline size_t Split(const char* ptr, const char* delim, TVector<TValue>& values)
 
 size_t Split(const char* ptr, const char* delim, TVector<TString>& values) {
     return Split<TString>(ptr, delim, values);
-} 
- 
+}
+
 size_t Split(const TString& in, const TString& delim, TVector<TString>& res) {
     return Split(in.data(), delim.data(), res);
 }

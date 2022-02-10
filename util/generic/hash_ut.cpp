@@ -346,13 +346,13 @@ void THashTest::TestHMMap1() {
     hmap.insert(HMapType::value_type(23, 0));
 
     UNIT_ASSERT(hmap.count(12325) == 2);
- 
-    UNIT_ASSERT(hmap.bucket_count() > 3000); 
-    for (size_t n = 0; n < 10; n++) { 
-        hmap.clear(); 
-        hmap.insert(HMapType::value_type(1, 2)); 
-    } 
-    UNIT_ASSERT(hmap.bucket_count() < 30); 
+
+    UNIT_ASSERT(hmap.bucket_count() > 3000);
+    for (size_t n = 0; n < 10; n++) {
+        hmap.clear();
+        hmap.insert(HMapType::value_type(1, 2));
+    }
+    UNIT_ASSERT(hmap.bucket_count() < 30);
 }
 
 void THashTest::TestHMMapHas() {

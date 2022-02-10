@@ -20,7 +20,7 @@ private:
 public:
     using char_type = TCharType; // TODO: DROP
     using traits_type = TTraits;
- 
+
     //Resolving some ambiguity between TStringBase and std::basic_string_view
     //for typenames
     using typename TStringView::const_iterator;
@@ -116,7 +116,7 @@ public:
     {
     }
 
-    template <typename D, typename T> 
+    template <typename D, typename T>
     inline TBasicStringBuf(const TStringBase<D, TCharType, T>& str) noexcept
         : TStringView(str.data(), str.size())
     {
@@ -147,10 +147,10 @@ public:
 
     inline TBasicStringBuf(const TBasicStringBuf& src, size_t pos, size_t n) noexcept
         : TBasicStringBuf(src)
-    { 
+    {
         Skip(pos).Trunc(n);
-    } 
- 
+    }
+
     inline TBasicStringBuf(const TBasicStringBuf& src, size_t pos) noexcept
         : TBasicStringBuf(src, pos, TBase::npos)
     {

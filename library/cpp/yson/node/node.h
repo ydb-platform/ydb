@@ -131,9 +131,9 @@ public:
     template<typename T>
     bool IsOfType() const noexcept;
 
-    // Int64, Uint64, Double, or Bool 
-    bool IsArithmetic() const; 
- 
+    // Int64, Uint64, Double, or Bool
+    bool IsArithmetic() const;
+
     bool Empty() const;
     size_t Size() const;
 
@@ -290,10 +290,10 @@ bool operator!=(const TNode& lhs, const TNode& rhs);
 
 bool GetBool(const TNode& node);
 
-inline bool TNode::IsArithmetic() const { 
-    return IsInt64() || IsUint64() || IsDouble() || IsBool(); 
-} 
- 
+inline bool TNode::IsArithmetic() const {
+    return IsInt64() || IsUint64() || IsDouble() || IsBool();
+}
+
 template<typename T>
 inline T TNode::IntCast() const {
     if constexpr (std::is_integral<T>::value) {

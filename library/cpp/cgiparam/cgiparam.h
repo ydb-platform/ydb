@@ -155,30 +155,30 @@ void TCgiParameters::ReplaceUnescaped(const TStringBuf key, TIter valuesBegin, c
         }
     }
 }
- 
-/** TQuickCgiParam is a faster non-editable version of TCgiParameters. 
- * Care should be taken when replacing: 
- *  - note that the result of Get() is invalidated when TQuickCgiParam object is destroyed. 
- */ 
- 
-class TQuickCgiParam: public TMultiMap<TStringBuf, TStringBuf> { 
-public: 
+
+/** TQuickCgiParam is a faster non-editable version of TCgiParameters.
+ * Care should be taken when replacing:
+ *  - note that the result of Get() is invalidated when TQuickCgiParam object is destroyed.
+ */
+
+class TQuickCgiParam: public TMultiMap<TStringBuf, TStringBuf> {
+public:
     TQuickCgiParam() = default;
- 
-    explicit TQuickCgiParam(const TStringBuf cgiParamStr); 
- 
+
+    explicit TQuickCgiParam(const TStringBuf cgiParamStr);
+
     Y_PURE_FUNCTION
     bool Has(const TStringBuf name, const TStringBuf value) const noexcept;
 
     Y_PURE_FUNCTION
     bool Has(const TStringBuf name) const noexcept {
-        const auto pair = equal_range(name); 
-        return pair.first != pair.second; 
-    } 
- 
+        const auto pair = equal_range(name);
+        return pair.first != pair.second;
+    }
+
     Y_PURE_FUNCTION
     const TStringBuf& Get(const TStringBuf name, size_t numOfValue = 0) const noexcept;
- 
-private: 
-    TString UnescapeBuf; 
-}; 
+
+private:
+    TString UnescapeBuf;
+};

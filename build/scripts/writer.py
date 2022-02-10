@@ -17,12 +17,12 @@ def parse_args():
     return parser.parse_args(args)
 
 
-def smart_shell_quote(v): 
-    if v is None: 
-        return None 
-    if ' ' in v or '"' in v or "'" in v: 
-        return "\"{0}\"".format(v.replace('"', '\\"')) 
-    return v 
+def smart_shell_quote(v):
+    if v is None:
+        return None
+    if ' ' in v or '"' in v or "'" in v:
+        return "\"{0}\"".format(v.replace('"', '\\"'))
+    return v
 
 if __name__ == '__main__':
     args = parse_args()
@@ -32,9 +32,9 @@ if __name__ == '__main__':
     if args.quote:
         content = [smart_shell_quote(ln) for ln in content] if content is not None else None
     content = '\n'.join(content)
- 
+
     with open(args.file_path, open_type) as f:
         if args.addspace:
-            f.write(' ') 
-        if content is not None: 
-            f.write(content) 
+            f.write(' ')
+        if content is not None:
+            f.write(content)

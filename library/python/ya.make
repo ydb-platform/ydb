@@ -120,7 +120,7 @@ RECURSE(
     mime_types
     monitoring
     monlib
-    monlib/examples
+    monlib/examples 
     monlib/so
     murmurhash
     nirvana

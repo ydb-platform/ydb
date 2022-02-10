@@ -311,12 +311,12 @@ void TFsPath::Touch() const {
 // XXX: move implementation to util/somewhere.
 TFsPath TFsPath::RealPath() const {
     CheckDefined();
-    return ::RealPath(*this); 
+    return ::RealPath(*this);
 }
 
 TFsPath TFsPath::RealLocation() const {
     CheckDefined();
-    return ::RealLocation(*this); 
+    return ::RealLocation(*this);
 }
 
 TFsPath TFsPath::ReadLink() const {

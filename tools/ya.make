@@ -46,7 +46,7 @@ RECURSE(
     geo
     geodb_ops
     geodb_ops/tests
-    geograph_compiler 
+    geograph_compiler
     go_test_miner
     go_fake_xcrun
     groupgen

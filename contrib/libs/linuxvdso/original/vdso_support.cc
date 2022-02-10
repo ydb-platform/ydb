@@ -51,12 +51,12 @@
 
 namespace base {
 
-const void *VDSOSupport::vdso_base_ = NULL; 
+const void *VDSOSupport::vdso_base_ = NULL;
 
 VDSOSupport::VDSOSupport()
-    // If vdso_base_ is still set to NULL, we got here 
+    // If vdso_base_ is still set to NULL, we got here
     // before VDSOSupport::Init has been called. Call it now.
-    : image_(Init()) { 
+    : image_(Init()) {
 }
 
 // NOTE: we can't use GoogleOnceInit() below, because we can be
@@ -69,20 +69,20 @@ VDSOSupport::VDSOSupport()
 // Finally, even if there is a race here, it is harmless, because
 // the operation should be idempotent.
 const void *VDSOSupport::Init() {
-  if (vdso_base_ == NULL) { 
+  if (vdso_base_ == NULL) {
     // Valgrind zaps AT_SYSINFO_EHDR and friends from the auxv[]
     // on stack, and so glibc works as if VDSO was not present.
     // But going directly to kernel via /proc/self/auxv below bypasses
     // Valgrind zapping. So we check for Valgrind separately.
     if (RunningOnValgrind()) {
-      vdso_base_ = ElfMemImage::kInvalidBase; 
-      return vdso_base_; 
+      vdso_base_ = ElfMemImage::kInvalidBase;
+      return vdso_base_;
     }
     int fd = open("/proc/self/auxv", O_RDONLY);
     if (fd == -1) {
       // Kernel too old to have a VDSO.
-      vdso_base_ = ElfMemImage::kInvalidBase; 
-      return vdso_base_; 
+      vdso_base_ = ElfMemImage::kInvalidBase;
+      return vdso_base_;
     }
     ElfW(auxv_t) aux;
     while (read(fd, &aux, sizeof(aux)) == sizeof(aux)) {
@@ -94,16 +94,16 @@ const void *VDSOSupport::Init() {
       }
     }
     close(fd);
-    if (vdso_base_ == NULL) { 
+    if (vdso_base_ == NULL) {
       // Didn't find AT_SYSINFO_EHDR in auxv[].
-      vdso_base_ = ElfMemImage::kInvalidBase; 
+      vdso_base_ = ElfMemImage::kInvalidBase;
     }
   }
   return vdso_base_;
 }
 
 const void *VDSOSupport::SetBase(const void *base) {
-  CHECK(base != NULL); 
+  CHECK(base != NULL);
   const void *old_base = vdso_base_;
   vdso_base_ = base;
   image_.Init(base);

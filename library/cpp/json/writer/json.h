@@ -130,7 +130,7 @@ namespace NJsonWriter {
         void BeginKey();
         void RawWriteChar(char c);
         bool EscapedWriteChar(const char* b, const char* c, EHtmlEscapeMode hem);
-        void WriteBareString(const TStringBuf s, EHtmlEscapeMode hem); 
+        void WriteBareString(const TStringBuf s, EHtmlEscapeMode hem);
         void WriteComma();
         void PrintIndentation(bool closing);
         void PrintWhitespaces(size_t count, bool prependWithNewLine);

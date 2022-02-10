@@ -18,11 +18,11 @@ ELSE()
         malloc-info.cpp
     )
 
-    PEERDIR( 
+    PEERDIR(
         library/cpp/balloc/lib
-    ) 
+    )
 ENDIF()
- 
+
 END()
 
 NEED_CHECK()

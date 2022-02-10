@@ -114,8 +114,8 @@ class VDSOSupport {
 
   // Cached value of auxv AT_SYSINFO_EHDR, computed once.
   // This is a tri-state:
-  //              0   => value hasn't been determined yet. 
-  //   kInvalidBase   => there is no VDSO. 
+  //              0   => value hasn't been determined yet.
+  //   kInvalidBase   => there is no VDSO.
   //           else   => vma of VDSO Elf{32,64}_Ehdr.
   //
   // When testing with mock VDSO, low bit is set.

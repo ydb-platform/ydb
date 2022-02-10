@@ -110,10 +110,10 @@ namespace {
         return JmpBufReg(buf, PROGR_CNT);
     }
 
-    static inline void*& JmpBufFrameReg(__myjmp_buf& buf) noexcept { 
-        return JmpBufReg(buf, FRAME_CNT); 
-    } 
- 
+    static inline void*& JmpBufFrameReg(__myjmp_buf& buf) noexcept {
+        return JmpBufReg(buf, FRAME_CNT);
+    }
+
     #if defined(_x86_64_)
     // not sure if Y_NO_SANITIZE is needed
     Y_NO_SANITIZE("address")
@@ -191,7 +191,7 @@ TContMachineContext::TContMachineContext(const TContClosure& c)
 
     JmpBufProgrReg(Buf_) = reinterpret_cast<void*>(ContextTrampoLine);
     JmpBufStackReg(Buf_) = stack.StackPtr();
-    JmpBufFrameReg(Buf_) = nullptr; 
+    JmpBufFrameReg(Buf_) = nullptr;
 }
 
 void TContMachineContext::SwitchTo(TContMachineContext* next) noexcept {

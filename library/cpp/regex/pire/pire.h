@@ -41,9 +41,9 @@ namespace NPire {
     using TError = Pire::Error;
 
     // Helper functions
-    using Pire::LongestPrefix;
-    using Pire::LongestSuffix;
-    using Pire::Matches;
+    using Pire::LongestPrefix; 
+    using Pire::LongestSuffix; 
+    using Pire::Matches; 
     using Pire::MmappedScanner;
     using Pire::Run;
     using Pire::Runner;
@@ -55,8 +55,8 @@ namespace NPire {
     using namespace Pire::Consts;
 
     namespace NFeatures {
-        using Pire::Features::AndNotSupport;
-        using Pire::Features::Capture;
+        using Pire::Features::AndNotSupport; 
+        using Pire::Features::Capture; 
         using Pire::Features::CaseInsensitive;
         using Pire::Features::GlueSimilarGlyphs;
     }
@@ -65,8 +65,8 @@ namespace NPire {
         using Pire::Encodings::Latin1;
         using Pire::Encodings::Utf8;
 
-        const NPire::TEncoding& Koi8r();
-        const NPire::TEncoding& Cp1251();
+        const NPire::TEncoding& Koi8r(); 
+        const NPire::TEncoding& Cp1251(); 
         const NPire::TEncoding& Get(ECharset encoding);
     }
 

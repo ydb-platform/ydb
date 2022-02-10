@@ -1,26 +1,26 @@
-LIBRARY()
+LIBRARY() 
 
 LICENSE(Public-Domain)
-
+ 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 OWNER(
     g:contrib
     g:cpp-contrib
 )
-
+ 
 # https://www.7-zip.org/sdk.html
 VERSION(19.00)
 
-CFLAGS(-D_7ZIP_ST=1)
-
+CFLAGS(-D_7ZIP_ST=1) 
+ 
 NO_UTIL()
-
-SRCS(
-    7zStream.c
+ 
+SRCS( 
+    7zStream.c 
     Aes.c
     AesOpt.c
-    Alloc.c
+    Alloc.c 
     Bra.c
     Bra86.c
     BraIA64.c
@@ -28,10 +28,10 @@ SRCS(
     LzFind.c
     Lzma2Dec.c
     Lzma2Enc.c
-    LzmaDec.c
-    LzmaEnc.c
-    LzmaLib.c
+    LzmaDec.c 
+    LzmaEnc.c 
+    LzmaLib.c 
     Sha256.c
-)
-
-END()
+) 
+ 
+END() 

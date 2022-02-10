@@ -5,8 +5,8 @@ OWNER(
     myltsev
     pg
 )
-
-PEERDIR(
+ 
+PEERDIR( 
     library/cpp/json/common
 )
 

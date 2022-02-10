@@ -15,15 +15,15 @@ namespace NCodecs {
         }
     };
 
-    template <class TItem, class TCleaner = TClear<TItem>>
+    template <class TItem, class TCleaner = TClear<TItem>> 
     class TTlsCache {
         using TSelf = TTlsCache<TItem, TCleaner>;
 
-        struct TItemHolder: public TIntrusiveListItem<TItemHolder> {
+        struct TItemHolder: public TIntrusiveListItem<TItemHolder> { 
             TItemHolder(TSelf& factory)
                 : Factory(factory)
-            {
-            }
+            { 
+            } 
 
             void Release() {
                 Factory.Release(*this);
@@ -37,14 +37,14 @@ namespace NCodecs {
         public:
             explicit TItemGuard(TSelf& fact)
                 : Holder(fact.Acquire())
-            {
-            }
+            { 
+            } 
 
-            TItemGuard(TItemGuard&& other) noexcept {
+            TItemGuard(TItemGuard&& other) noexcept { 
                 *this = std::move(other);
             }
 
-            TItemGuard& operator=(TItemGuard&& other) noexcept {
+            TItemGuard& operator=(TItemGuard&& other) noexcept { 
                 if (&other != this) {
                     std::swap(Holder, other.Holder);
                 }

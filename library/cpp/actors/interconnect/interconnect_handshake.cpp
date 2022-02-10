@@ -62,15 +62,15 @@ namespace NActors {
             ui32 Checksum;
             ui32 Size;
 
-            ui32 CalculateChecksum(const void* data, size_t len) const {
+            ui32 CalculateChecksum(const void* data, size_t len) const { 
                 return Crc32cExtendMSanCompatible(Crc32cExtendMSanCompatible(0, &Size, sizeof(Size)), data, len);
             }
 
-            void Sign(const void* data, size_t len) {
+            void Sign(const void* data, size_t len) { 
                 Checksum = CalculateChecksum(data, len);
             }
 
-            bool Check(const void* data, size_t len) const {
+            bool Check(const void* data, size_t len) const { 
                 return Checksum == CalculateChecksum(data, len);
             }
         };
@@ -474,7 +474,7 @@ namespace NActors {
 
                 if (const ui32 size = Common->HandshakeBallastSize) {
                     TString ballast(size, 0);
-                    char* data = ballast.Detach();
+                    char* data = ballast.Detach(); 
                     for (ui32 i = 0; i < size; ++i) {
                         data[i] = i;
                     }
@@ -721,7 +721,7 @@ namespace NActors {
             }
         }
 
-        template <typename T>
+        template <typename T> 
         void SendExBlock(const T& proto, const char* what) {
             TString data;
             Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&data);
@@ -760,7 +760,7 @@ namespace NActors {
             Send(GetActorSystem()->InterconnectProxy(PeerNodeId), ev.Release());
         }
 
-        template <typename TEvent>
+        template <typename TEvent> 
         THolder<typename TEvent::THandle> WaitForSpecificEvent(TString state, TInstant deadline = TInstant::Max()) {
             State = std::move(state);
             return TActorCoroImpl::WaitForSpecificEvent<TEvent>(deadline);
@@ -778,7 +778,7 @@ namespace NActors {
             return WaitForSpecificEvent<TEvent>(std::move(state));
         }
 
-        template <typename T1, typename T2, typename... TOther>
+        template <typename T1, typename T2, typename... TOther> 
         THolder<IEventHandle> AskProxy(THolder<IEventBase> ev, TString state) {
             SendToProxy(std::move(ev));
             return WaitForSpecificEvent<T1, T2, TOther...>(std::move(state));
@@ -930,7 +930,7 @@ namespace NActors {
         template <typename TDataPtr, typename TSendRecvFunc>
         void Process(TDataPtr buffer, size_t len, TSendRecvFunc&& sendRecv, bool read, bool write, TString state) {
             Y_VERIFY(Socket);
-            NInterconnect::TStreamSocket* sock = Socket.Get();
+            NInterconnect::TStreamSocket* sock = Socket.Get(); 
             ssize_t (NInterconnect::TStreamSocket::*pfn)(TDataPtr, size_t, TString*) const = sendRecv;
             size_t processed = 0;
 
@@ -971,7 +971,7 @@ namespace NActors {
             return std::move(response->Get()->Node);
         }
 
-        template <typename T>
+        template <typename T> 
         static THolder<TProgramInfo> GetProgramInfo(const T& proto) {
             auto programInfo = MakeHolder<TProgramInfo>();
             programInfo->PID = proto.GetProgramPID();

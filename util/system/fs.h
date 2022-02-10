@@ -1,9 +1,9 @@
 #pragma once
-
+ 
 #include <util/generic/flags.h>
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
-
+ 
 namespace NFs {
     enum EFilePermission {
         FP_ALL_EXEC = 01,
@@ -151,6 +151,6 @@ namespace NFs {
         Y_ENSURE_EX(Exists(path), TFileError{} << "Path " << path << " does not exists (checked from cwd:" << NFs::CurrentWorkingDirectory() << ")");
         return path;
     }
-}
+} 
 
 Y_DECLARE_OPERATORS_FOR_FLAGS(NFs::EFilePermissions)

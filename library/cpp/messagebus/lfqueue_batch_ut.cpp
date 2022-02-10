@@ -6,7 +6,7 @@ Y_UNIT_TEST_SUITE(TLockFreeQueueBatch) {
     Y_UNIT_TEST(Order1) {
         TLockFreeQueueBatch<unsigned> q;
         {
-            TAutoPtr<TVector<unsigned>> v(new TVector<unsigned>);
+            TAutoPtr<TVector<unsigned>> v(new TVector<unsigned>); 
             v->push_back(0);
             v->push_back(1);
             q.EnqueueAll(v);
@@ -28,13 +28,13 @@ Y_UNIT_TEST_SUITE(TLockFreeQueueBatch) {
     Y_UNIT_TEST(Order2) {
         TLockFreeQueueBatch<unsigned> q;
         {
-            TAutoPtr<TVector<unsigned>> v(new TVector<unsigned>);
+            TAutoPtr<TVector<unsigned>> v(new TVector<unsigned>); 
             v->push_back(0);
             v->push_back(1);
             q.EnqueueAll(v);
         }
         {
-            TAutoPtr<TVector<unsigned>> v(new TVector<unsigned>);
+            TAutoPtr<TVector<unsigned>> v(new TVector<unsigned>); 
             v->push_back(2);
             v->push_back(3);
             v->push_back(4);

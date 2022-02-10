@@ -4,28 +4,28 @@
 #include <libxml/xpathInternals.h>
 
 #include <library/cpp/xml/init/init.h>
-
-#include <util/generic/yexception.h>
-#include <util/folder/dirut.h>
-
-namespace {
+ 
+#include <util/generic/yexception.h> 
+#include <util/folder/dirut.h> 
+ 
+namespace { 
     struct TInit {
-        inline TInit() {
-            NXml::InitEngine();
-        }
-    } initer;
-}
-
+        inline TInit() { 
+            NXml::InitEngine(); 
+        } 
+    } initer; 
+} 
+ 
 namespace NXml {
-    TDocument::TDocument(const TString& xml, Source type) {
-        switch (type) {
-            case File:
-                ParseFile(xml);
-                break;
-            case String:
-                ParseString(xml);
-                break;
-            case RootName: {
+    TDocument::TDocument(const TString& xml, Source type) { 
+        switch (type) { 
+            case File: 
+                ParseFile(xml); 
+                break; 
+            case String: 
+                ParseString(xml); 
+                break; 
+            case RootName: { 
                 TDocHolder doc(xmlNewDoc(XMLCHAR("1.0")));
                 if (!doc)
                     THROW(XmlException, "Can't create xml document.");
@@ -37,16 +37,16 @@ namespace NXml {
                 xmlDocSetRootElement(doc.Get(), node.Get());
                 Y_UNUSED(node.Release());
                 Doc = std::move(doc);
-            } break;
-            default:
-                THROW(InvalidArgument, "Wrong source type");
+            } break; 
+            default: 
+                THROW(InvalidArgument, "Wrong source type"); 
         }
     }
 
     TDocument::TDocument(TDocument&& doc)
         : Doc(std::move(doc.Doc))
-    {
-    }
+    { 
+    } 
 
     TDocument& TDocument::operator=(TDocument&& doc) {
         if (this != &doc)
@@ -55,7 +55,7 @@ namespace NXml {
         return *this;
     }
 
-    void TDocument::ParseFile(const TString& file) {
+    void TDocument::ParseFile(const TString& file) { 
         if (!NFs::Exists(file))
             THROW(XmlException, "File " << file << " doesn't exist");
 
@@ -88,7 +88,7 @@ namespace NXml {
         Doc = std::move(doc);
     }
 
-    TNode TDocument::Root() {
+    TNode TDocument::Root() { 
         xmlNode* r = xmlDocGetRootElement(Doc.Get());
         if (r == nullptr)
             THROW(XmlException, "TDocument hasn't root element");
@@ -96,7 +96,7 @@ namespace NXml {
         return TNode(Doc.Get(), r);
     }
 
-    TConstNode TDocument::Root() const {
+    TConstNode TDocument::Root() const { 
         xmlNode* r = xmlDocGetRootElement(Doc.Get());
         if (r == nullptr)
             THROW(XmlException, "TDocument hasn't root element");
@@ -104,15 +104,15 @@ namespace NXml {
         return TConstNode(TNode(Doc.Get(), r));
     }
 
-    bool TNode::IsNull() const {
+    bool TNode::IsNull() const { 
         return NodePointer == nullptr;
     }
 
-    bool TNode::IsElementNode() const {
-        return !IsNull() && (NodePointer->type == XML_ELEMENT_NODE);
-    }
-
-    TXPathContextPtr TNode::CreateXPathContext(const TNamespacesForXPath& nss) const {
+    bool TNode::IsElementNode() const { 
+        return !IsNull() && (NodePointer->type == XML_ELEMENT_NODE); 
+    } 
+ 
+    TXPathContextPtr TNode::CreateXPathContext(const TNamespacesForXPath& nss) const { 
         TXPathContextPtr ctx = xmlXPathNewContext(DocPointer);
         if (!ctx)
             THROW(XmlException, "Can't create empty xpath context");
@@ -196,25 +196,25 @@ namespace NXml {
         return const_cast<TNode*>(this)->FirstChild(name);
     }
 
-    TNode TNode::FirstChild() {
-        if (IsNull())
-            THROW(XmlException, "Node is null");
-
-        return TNode(DocPointer, NodePointer->children);
-    }
-
-    TConstNode TNode::FirstChild() const {
-        return const_cast<TNode*>(this)->FirstChild();
-    }
-
-    TNode TNode::Parent() {
+    TNode TNode::FirstChild() { 
+        if (IsNull()) 
+            THROW(XmlException, "Node is null"); 
+ 
+        return TNode(DocPointer, NodePointer->children); 
+    } 
+ 
+    TConstNode TNode::FirstChild() const { 
+        return const_cast<TNode*>(this)->FirstChild(); 
+    } 
+ 
+    TNode TNode::Parent() { 
         if (nullptr == NodePointer->parent)
             THROW(XmlException, "Parent node not exists");
-
+ 
         return TNode(DocPointer, NodePointer->parent);
     }
 
-    TConstNode TNode::Parent() const {
+    TConstNode TNode::Parent() const { 
         return const_cast<TNode*>(this)->Parent();
     }
 
@@ -229,17 +229,17 @@ namespace NXml {
         return const_cast<TNode*>(this)->NextSibling(name);
     }
 
-    TNode TNode::NextSibling() {
-        if (IsNull())
-            THROW(XmlException, "Node is null");
-
-        return TNode(DocPointer, NodePointer->next);
-    }
-
-    TConstNode TNode::NextSibling() const {
-        return const_cast<TNode*>(this)->NextSibling();
-    }
-
+    TNode TNode::NextSibling() { 
+        if (IsNull()) 
+            THROW(XmlException, "Node is null"); 
+ 
+        return TNode(DocPointer, NodePointer->next); 
+    } 
+ 
+    TConstNode TNode::NextSibling() const { 
+        return const_cast<TNode*>(this)->NextSibling(); 
+    } 
+ 
     /* NOTE: by default child will inherit it's parent ns */
 
     TNode TNode::AddChild(TZtStringBuf name) {
@@ -254,17 +254,17 @@ namespace NXml {
         return TNode(DocPointer, copy);
     }
 
-    void TNode::SetPrivate(void* priv) {
+    void TNode::SetPrivate(void* priv) { 
         NodePointer->_private = priv;
     }
 
-    void* TNode::GetPrivate() const {
+    void* TNode::GetPrivate() const { 
         return NodePointer->_private;
     }
 
     TNode TNode::Find(xmlNode* start, TZtStringBuf name) {
         for (; start; start = start->next)
-            if (start->type == XML_ELEMENT_NODE && (name.empty() || !xmlStrcmp(start->name, XMLCHAR(name.c_str()))))
+            if (start->type == XML_ELEMENT_NODE && (name.empty() || !xmlStrcmp(start->name, XMLCHAR(name.c_str())))) 
                 return TNode(DocPointer, start);
 
         return TNode();
@@ -277,7 +277,7 @@ namespace NXml {
         return CAST2CHAR(NodePointer->name);
     }
 
-    TString TNode::Path() const {
+    TString TNode::Path() const { 
         TCharPtr path(xmlGetNodePath(NodePointer));
         if (!!path)
             return CAST2CHAR(path.Get());
@@ -285,15 +285,15 @@ namespace NXml {
             return "";
     }
 
-    xmlNode* TNode::GetPtr() {
+    xmlNode* TNode::GetPtr() { 
         return NodePointer;
     }
 
-    const xmlNode* TNode::GetPtr() const {
+    const xmlNode* TNode::GetPtr() const { 
         return NodePointer;
     }
 
-    bool TNode::IsText() const {
+    bool TNode::IsText() const { 
         if (IsNull())
             THROW(XmlException, "Node is null");
 
@@ -306,7 +306,7 @@ namespace NXml {
         xmlFreeNode(nodePtr);
     }
 
-    static int XmlWriteToOstream(void* context, const char* buffer, int len) {
+    static int XmlWriteToOstream(void* context, const char* buffer, int len) { 
         // possibly use to save doc as well
         IOutputStream* out = (IOutputStream*)context;
         out->Write(buffer, len);
@@ -339,7 +339,7 @@ namespace NXml {
     }
 
     TConstNodes& TConstNodes::operator=(const TConstNodes& nodes) {
-        if (this != &nodes) {
+        if (this != &nodes) { 
             SizeValue = nodes.Size();
             Doc = nodes.Doc;
             Obj = nodes.Obj;
@@ -355,8 +355,8 @@ namespace NXml {
     {
     }
 
-    TConstNodes& TConstNodes::operator=(TConstNodesRef ref) {
-        if (this != &ref.r_) {
+    TConstNodes& TConstNodes::operator=(TConstNodesRef ref) { 
+        if (this != &ref.r_) { 
             SizeValue = ref.r_.Size();
             Doc = ref.r_.Doc;
             Obj = ref.r_.Obj;
@@ -364,7 +364,7 @@ namespace NXml {
         return *this;
     }
 
-    TConstNodes::operator TConstNodesRef() {
+    TConstNodes::operator TConstNodesRef() { 
         return TConstNodesRef(*this);
     }
 
@@ -375,7 +375,7 @@ namespace NXml {
     {
     }
 
-    TConstNode TConstNodes::operator[](size_t number) const {
+    TConstNode TConstNodes::operator[](size_t number) const { 
         if (number + 1 > Size())
             THROW(XmlException, "index out of range " << number);
 
@@ -386,8 +386,8 @@ namespace NXml {
         return TNode(Doc, node);
     }
 
-    TConstNode TConstNodes::TNodeIter::operator*() const {
+    TConstNode TConstNodes::TNodeIter::operator*() const { 
         return Nodes[Index];
     }
 
-}
+} 

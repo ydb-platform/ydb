@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include <util/system/rwlock.h>
 #include <util/system/sanitizers.h>
 
@@ -34,55 +34,55 @@
 #include <errno.h>
 
 namespace NS_LightRWLock {
-    static int Y_FORCE_INLINE AtomicFetchAdd(volatile int& item, int value) {
-        return __atomic_fetch_add(&item, value, __ATOMIC_SEQ_CST);
-    }
+    static int Y_FORCE_INLINE AtomicFetchAdd(volatile int& item, int value) { 
+        return __atomic_fetch_add(&item, value, __ATOMIC_SEQ_CST); 
+    } 
 
 #if defined(_x86_64_) || defined(_i386_)
 
-    static char Y_FORCE_INLINE AtomicSetBit(volatile int& item, unsigned bit) {
-        char ret;
-        __asm__ __volatile__(
-            "lock bts %2,%0\n"
-            "setc %1\n"
-            : "+m"(item), "=rm"(ret)
-            : "r"(bit)
-            : "cc");
+    static char Y_FORCE_INLINE AtomicSetBit(volatile int& item, unsigned bit) { 
+        char ret; 
+        __asm__ __volatile__( 
+            "lock bts %2,%0\n" 
+            "setc %1\n" 
+            : "+m"(item), "=rm"(ret) 
+            : "r"(bit) 
+            : "cc"); 
 
         // msan doesn't treat ret as initialized
         NSan::Unpoison(&ret, sizeof(ret));
 
-        return ret;
-    }
+        return ret; 
+    } 
 
-    static char Y_FORCE_INLINE AtomicClearBit(volatile int& item, unsigned bit) {
-        char ret;
-        __asm__ __volatile__(
-            "lock btc %2,%0\n"
-            "setc %1\n"
-            : "+m"(item), "=rm"(ret)
-            : "r"(bit)
-            : "cc");
+    static char Y_FORCE_INLINE AtomicClearBit(volatile int& item, unsigned bit) { 
+        char ret; 
+        __asm__ __volatile__( 
+            "lock btc %2,%0\n" 
+            "setc %1\n" 
+            : "+m"(item), "=rm"(ret) 
+            : "r"(bit) 
+            : "cc"); 
 
         // msan doesn't treat ret as initialized
         NSan::Unpoison(&ret, sizeof(ret));
 
-        return ret;
-    }
+        return ret; 
+    } 
 
 
 #else
 
-    static char Y_FORCE_INLINE AtomicSetBit(volatile int& item, unsigned bit) {
-        int prev = __atomic_fetch_or(&item, 1 << bit, __ATOMIC_SEQ_CST);
-        return (prev & (1 << bit)) != 0 ? 1 : 0;
-    }
+    static char Y_FORCE_INLINE AtomicSetBit(volatile int& item, unsigned bit) { 
+        int prev = __atomic_fetch_or(&item, 1 << bit, __ATOMIC_SEQ_CST); 
+        return (prev & (1 << bit)) != 0 ? 1 : 0; 
+    } 
 
-    static char Y_FORCE_INLINE
-    AtomicClearBit(volatile int& item, unsigned bit) {
-        int prev = __atomic_fetch_and(&item, ~(1 << bit), __ATOMIC_SEQ_CST);
-        return (prev & (1 << bit)) != 0 ? 1 : 0;
-    }
+    static char Y_FORCE_INLINE 
+    AtomicClearBit(volatile int& item, unsigned bit) { 
+        int prev = __atomic_fetch_and(&item, ~(1 << bit), __ATOMIC_SEQ_CST); 
+        return (prev & (1 << bit)) != 0 ? 1 : 0; 
+    } 
 #endif
 
 #if defined(_x86_64_) || defined(_i386_) || defined (__aarch64__) || defined (__powerpc64__)
@@ -100,42 +100,42 @@ namespace NS_LightRWLock {
 
 #endif
 
-    template <typename TInt>
-    static void Y_FORCE_INLINE AtomicStore(volatile TInt& var, TInt value) {
-        __atomic_store_n(&var, value, __ATOMIC_RELEASE);
-    }
+    template <typename TInt> 
+    static void Y_FORCE_INLINE AtomicStore(volatile TInt& var, TInt value) { 
+        __atomic_store_n(&var, value, __ATOMIC_RELEASE); 
+    } 
 
-    template <typename TInt>
-    static void Y_FORCE_INLINE SequenceStore(volatile TInt& var, TInt value) {
-        __atomic_store_n(&var, value, __ATOMIC_SEQ_CST);
-    }
+    template <typename TInt> 
+    static void Y_FORCE_INLINE SequenceStore(volatile TInt& var, TInt value) { 
+        __atomic_store_n(&var, value, __ATOMIC_SEQ_CST); 
+    } 
 
-    template <typename TInt>
-    static TInt Y_FORCE_INLINE AtomicLoad(const volatile TInt& var) {
-        return __atomic_load_n(&var, __ATOMIC_ACQUIRE);
-    }
+    template <typename TInt> 
+    static TInt Y_FORCE_INLINE AtomicLoad(const volatile TInt& var) { 
+        return __atomic_load_n(&var, __ATOMIC_ACQUIRE); 
+    } 
 
-    static void Y_FORCE_INLINE FutexWait(volatile int& fvar, int value) {
-        for (;;) {
-            int result =
-                syscall(SYS_futex, &fvar, FUTEX_WAIT_PRIVATE, value, NULL, NULL, 0);
-            if (Y_UNLIKELY(result == -1)) {
-                if (errno == EWOULDBLOCK)
-                    return;
-                if (errno == EINTR)
-                    continue;
-                Y_FAIL("futex error");
-            }
+    static void Y_FORCE_INLINE FutexWait(volatile int& fvar, int value) { 
+        for (;;) { 
+            int result = 
+                syscall(SYS_futex, &fvar, FUTEX_WAIT_PRIVATE, value, NULL, NULL, 0); 
+            if (Y_UNLIKELY(result == -1)) { 
+                if (errno == EWOULDBLOCK) 
+                    return; 
+                if (errno == EINTR) 
+                    continue; 
+                Y_FAIL("futex error"); 
+            } 
         }
     }
 
-    static void Y_FORCE_INLINE FutexWake(volatile int& fvar, int amount) {
-        const int result =
-            syscall(SYS_futex, &fvar, FUTEX_WAKE_PRIVATE, amount, NULL, NULL, 0);
-        if (Y_UNLIKELY(result == -1))
-            Y_FAIL("futex error");
-    }
-
+    static void Y_FORCE_INLINE FutexWake(volatile int& fvar, int amount) { 
+        const int result = 
+            syscall(SYS_futex, &fvar, FUTEX_WAKE_PRIVATE, amount, NULL, NULL, 0); 
+        if (Y_UNLIKELY(result == -1)) 
+            Y_FAIL("futex error"); 
+    } 
+ 
 }
 
 class alignas(64) TLightRWLock {
@@ -145,8 +145,8 @@ public:
         , TrappedFutex_(0)
         , UnshareFutex_(0)
         , SpinCount_(spinCount)
-    {
-    }
+    { 
+    } 
 
     TLightRWLock(const TLightRWLock&) = delete;
     void operator=(const TLightRWLock&) = delete;
@@ -208,10 +208,10 @@ private:
 
 class TLightRWLock: public TRWMutex {
 public:
-    TLightRWLock() {
-    }
-    TLightRWLock(ui32) {
-    }
+    TLightRWLock() { 
+    } 
+    TLightRWLock(ui32) { 
+    } 
 };
 
 #endif

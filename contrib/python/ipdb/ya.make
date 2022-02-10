@@ -1,7 +1,7 @@
 PY23_LIBRARY()
 
-LICENSE(BSD-3-Clause)
-
+LICENSE(BSD-3-Clause) 
+ 
 OWNER(orivej g:python-contrib)
 
 VERSION(0.13.9)

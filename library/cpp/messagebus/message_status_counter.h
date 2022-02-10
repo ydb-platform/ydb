@@ -8,29 +8,29 @@
 
 #include <array>
 
-namespace NBus {
-    namespace NPrivate {
-        struct TMessageStatusCounter {
-            static TMessageStatusRecord::EMessageStatus MessageStatusToProtobuf(EMessageStatus status) {
-                return (TMessageStatusRecord::EMessageStatus)status;
-            }
+namespace NBus { 
+    namespace NPrivate { 
+        struct TMessageStatusCounter { 
+            static TMessageStatusRecord::EMessageStatus MessageStatusToProtobuf(EMessageStatus status) { 
+                return (TMessageStatusRecord::EMessageStatus)status; 
+            } 
 
-            std::array<unsigned, MESSAGE_STATUS_COUNT> Counts;
+            std::array<unsigned, MESSAGE_STATUS_COUNT> Counts; 
 
-            unsigned& operator[](EMessageStatus index) {
-                return Counts[index];
-            }
-            const unsigned& operator[](EMessageStatus index) const {
-                return Counts[index];
-            }
+            unsigned& operator[](EMessageStatus index) { 
+                return Counts[index]; 
+            } 
+            const unsigned& operator[](EMessageStatus index) const { 
+                return Counts[index]; 
+            } 
 
-            TMessageStatusCounter();
+            TMessageStatusCounter(); 
 
-            TMessageStatusCounter& operator+=(const TMessageStatusCounter&);
+            TMessageStatusCounter& operator+=(const TMessageStatusCounter&); 
 
-            TString PrintToString() const;
-            void FillErrorsProtobuf(TConnectionStatusMonRecord*) const;
-        };
+            TString PrintToString() const; 
+            void FillErrorsProtobuf(TConnectionStatusMonRecord*) const; 
+        }; 
 
-    }
-}
+    } 
+} 

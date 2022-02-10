@@ -41,11 +41,11 @@ namespace {
         socklen_t len;
         if (af == AF_INET) {
             len = sizeof(sockaddr_in);
-            ((sockaddr_in*)sa)->sin_port = HostToInet((ui16)port);
-            ((sockaddr_in*)sa)->sin_addr.s_addr = INADDR_ANY;
+            ((sockaddr_in*)sa)->sin_port = HostToInet((ui16)port); 
+            ((sockaddr_in*)sa)->sin_addr.s_addr = INADDR_ANY; 
         } else {
             len = sizeof(sockaddr_in6);
-            ((sockaddr_in6*)sa)->sin6_port = HostToInet((ui16)port);
+            ((sockaddr_in6*)sa)->sin6_port = HostToInet((ui16)port); 
         }
 
         if (af == AF_INET6) {
@@ -75,7 +75,7 @@ namespace {
 
     TMaybe<TBindResult> TryBindOnPortProto(int port, int af, bool reusePort) {
         try {
-            return {BindOnPortProto(port, af, reusePort)};
+            return {BindOnPortProto(port, af, reusePort)}; 
         } catch (const TSystemError&) {
             return {};
         }
@@ -99,7 +99,7 @@ std::pair<unsigned, TVector<TBindResult>> NBus::BindOnPort(int port, bool reuseP
 
     if (port != 0) {
         return AggregateBindResults(BindOnPortProto(port, AF_INET, reusePort),
-                                    BindOnPortProto(port, AF_INET6, reusePort));
+                                    BindOnPortProto(port, AF_INET6, reusePort)); 
     }
 
     // use nothrow versions in cycle
@@ -124,7 +124,7 @@ std::pair<unsigned, TVector<TBindResult>> NBus::BindOnPort(int port, bool reuseP
 
 void NBus::NPrivate::SetSockOptTcpCork(SOCKET s, bool value) {
 #ifdef _linux_
-    CheckedSetSockOpt(s, IPPROTO_TCP, TCP_CORK, (int)value, "TCP_CORK");
+    CheckedSetSockOpt(s, IPPROTO_TCP, TCP_CORK, (int)value, "TCP_CORK"); 
 #else
     Y_UNUSED(s);
     Y_UNUSED(value);

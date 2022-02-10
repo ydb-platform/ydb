@@ -1,13 +1,13 @@
 #pragma once
 
 #include <util/generic/array_ref.h>
-#include <util/memory/blob.h>
-#include <util/memory/tempbuf.h>
+#include <util/memory/blob.h> 
+#include <util/memory/tempbuf.h> 
 #include <util/generic/buffer.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
-#include <util/generic/vector.h>
-#include <util/generic/typetraits.h>
+#include <util/generic/vector.h> 
+#include <util/generic/typetraits.h> 
 
 #include <array>
 #include <string>
@@ -47,14 +47,14 @@ struct TMemoryTraits<std::array<T, n>> {
 };
 
 template <typename A, typename B>
-struct TMemoryTraits<std::pair<A, B>> {
+struct TMemoryTraits<std::pair<A, B>> { 
     enum {
         SimpleMemory = TMemoryTraits<A>::SimpleMemory && TMemoryTraits<B>::SimpleMemory,
         ContinuousMemory = SimpleMemory,
         OwnsMemory = SimpleMemory,
     };
 
-    using TElementType = std::pair<A, B>;
+    using TElementType = std::pair<A, B>; 
 };
 
 template <>
@@ -80,7 +80,7 @@ struct TMemoryTraits<TTempBuf> {
 };
 
 template <>
-struct TMemoryTraits< ::TBlob> {
+struct TMemoryTraits< ::TBlob> { 
     enum {
         SimpleMemory = false,
         ContinuousMemory = true,
@@ -101,7 +101,7 @@ struct TElementDependentMemoryTraits {
 };
 
 template <typename T, typename TAlloc>
-struct TMemoryTraits<std::vector<T, TAlloc>>: public TElementDependentMemoryTraits<T> {
+struct TMemoryTraits<std::vector<T, TAlloc>>: public TElementDependentMemoryTraits<T> { 
     enum {
         OwnsMemory = TMemoryTraits<T>::OwnsMemory
     };
@@ -112,14 +112,14 @@ struct TMemoryTraits<TVector<T, TAlloc>>: public TMemoryTraits<std::vector<T, TA
 };
 
 template <typename T>
-struct TMemoryTraits<TTempArray<T>>: public TElementDependentMemoryTraits<T> {
+struct TMemoryTraits<TTempArray<T>>: public TElementDependentMemoryTraits<T> { 
     enum {
         OwnsMemory = TMemoryTraits<T>::OwnsMemory
     };
 };
 
 template <typename T, typename TCharTraits, typename TAlloc>
-struct TMemoryTraits<std::basic_string<T, TCharTraits, TAlloc>>: public TElementDependentMemoryTraits<T> {
+struct TMemoryTraits<std::basic_string<T, TCharTraits, TAlloc>>: public TElementDependentMemoryTraits<T> { 
     enum {
         OwnsMemory = TMemoryTraits<T>::OwnsMemory
     };
@@ -154,7 +154,7 @@ struct TMemoryTraits<TBasicStringBuf<TCharType, TCharTraits>>: public TElementDe
 };
 
 template <>
-struct TMemoryTraits<TStringBuf>: public TElementDependentMemoryTraits<char> {
+struct TMemoryTraits<TStringBuf>: public TElementDependentMemoryTraits<char> { 
     enum {
         OwnsMemory = false
     };

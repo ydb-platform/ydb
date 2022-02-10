@@ -1,11 +1,11 @@
 #pragma once
-
+ 
 #include "va_args.h"
-
-#include <util/system/defaults.h>
-
+ 
+#include <util/system/defaults.h> 
+ 
 #include <iterator>
-#include <type_traits>
+#include <type_traits> 
 #include <stlfwd>
 
 #if _LIBCPP_STD_VER >= 17
@@ -13,7 +13,7 @@ template <bool B>
 using TBoolConstant = std::bool_constant<B>;
 #else
 template <bool B>
-struct TBoolConstant: std::integral_constant<bool, B> {};
+struct TBoolConstant: std::integral_constant<bool, B> {}; 
 #endif
 
 #if _LIBCPP_STD_VER >= 17
@@ -21,13 +21,13 @@ template <class B>
 using TNegation = std::negation<B>;
 #else
 template <class B>
-struct TNegation: ::TBoolConstant<!bool(B::value)> {};
+struct TNegation: ::TBoolConstant<!bool(B::value)> {}; 
 #endif
 
 namespace NPrivate {
     template <class... Bs>
     constexpr bool ConjunctionImpl() {
-        bool bs[] = {(bool)Bs::value...};
+        bool bs[] = {(bool)Bs::value...}; 
         for (auto b : bs) {
             if (!b) {
                 return false;
@@ -38,7 +38,7 @@ namespace NPrivate {
 
     template <class... Bs>
     constexpr bool DisjunctionImpl() {
-        bool bs[] = {(bool)Bs::value...};
+        bool bs[] = {(bool)Bs::value...}; 
         for (auto b : bs) {
             if (b) {
                 return true;
@@ -54,7 +54,7 @@ template <class... Bs>
 using TConjunction = std::conjunction<Bs...>;
 #else
 template <class... Bs>
-struct TConjunction: ::TBoolConstant<::NPrivate::ConjunctionImpl<Bs...>()> {};
+struct TConjunction: ::TBoolConstant<::NPrivate::ConjunctionImpl<Bs...>()> {}; 
 #endif
 
 #if _LIBCPP_STD_VER >= 17 && !defined(_MSC_VER)
@@ -65,7 +65,7 @@ template <class... Bs>
 using TDisjunction = std::disjunction<Bs...>;
 #else
 template <class... Bs>
-struct TDisjunction: ::TBoolConstant<::NPrivate::DisjunctionImpl<Bs...>()> {};
+struct TDisjunction: ::TBoolConstant<::NPrivate::DisjunctionImpl<Bs...>()> {}; 
 #endif
 
 #if _LIBCPP_STD_VER >= 17
@@ -77,89 +77,89 @@ using TVoidT = void;
 #endif
 
 template <class T>
-struct TPodTraits {
-    enum {
-        IsPod = false
-    };
-};
-
-template <class T>
-class TTypeTraitsBase {
-public:
-    static constexpr bool IsPod = (TPodTraits<std::remove_cv_t<T>>::IsPod || std::is_scalar<std::remove_all_extents_t<T>>::value ||
-                                   TPodTraits<std::remove_cv_t<std::remove_all_extents_t<T>>>::IsPod);
-};
-
+struct TPodTraits { 
+    enum { 
+        IsPod = false 
+    }; 
+}; 
+ 
+template <class T> 
+class TTypeTraitsBase { 
+public: 
+    static constexpr bool IsPod = (TPodTraits<std::remove_cv_t<T>>::IsPod || std::is_scalar<std::remove_all_extents_t<T>>::value || 
+                                   TPodTraits<std::remove_cv_t<std::remove_all_extents_t<T>>>::IsPod); 
+}; 
+ 
 namespace NPrivate {
     template <class T>
-    struct TIsSmall: std::integral_constant<bool, (sizeof(T) <= sizeof(void*))> {};
+    struct TIsSmall: std::integral_constant<bool, (sizeof(T) <= sizeof(void*))> {}; 
 }
 
-template <class T>
-class TTypeTraits: public TTypeTraitsBase<T> {
+template <class T> 
+class TTypeTraits: public TTypeTraitsBase<T> { 
     using TBase = TTypeTraitsBase<T>;
-
-    /*
-     * can be effectively passed to function as value
-     */
+ 
+    /* 
+     * can be effectively passed to function as value 
+     */ 
     static constexpr bool IsValueType = std::is_scalar<T>::value ||
                                         std::is_array<T>::value ||
                                         std::is_reference<T>::value ||
                                         (TBase::IsPod &&
-                                         std::conditional_t<
-                                             std::is_function<T>::value,
-                                             std::false_type,
-                                             ::NPrivate::TIsSmall<T>>::value);
-
+                                         std::conditional_t< 
+                                             std::is_function<T>::value, 
+                                             std::false_type, 
+                                             ::NPrivate::TIsSmall<T>>::value); 
+ 
 public:
-    /*
-     * can be used in function templates for effective parameters passing
-     */
+    /* 
+     * can be used in function templates for effective parameters passing 
+     */ 
     using TFuncParam = std::conditional_t<IsValueType, T, const std::remove_reference_t<T>&>;
-};
-
-template <>
-class TTypeTraits<void>: public TTypeTraitsBase<void> {};
-
-#define Y_DECLARE_PODTYPE(type) \
-    template <>                 \
-    struct TPodTraits<type> {   \
-        enum { IsPod = true };  \
-    }
-
-#define Y_HAS_MEMBER_IMPL_2(method, name)                                                 \
-    template <class T>                                                                    \
-    struct TClassHas##name {                                                              \
-        struct TBase {                                                                    \
-            void method();                                                                \
-        };                                                                                \
-        class THelper: public T, public TBase {                                           \
-        public:                                                                           \
-            template <class T1>                                                           \
-            inline THelper(const T1& = T1()) {                                            \
-            }                                                                             \
-        };                                                                                \
-        template <class T1, T1 val>                                                       \
-        class TChecker {};                                                                \
-        struct TNo {                                                                      \
-            char ch;                                                                      \
-        };                                                                                \
-        struct TYes {                                                                     \
-            char arr[2];                                                                  \
-        };                                                                                \
-        template <class T1>                                                               \
-        static TNo CheckMember(T1*, TChecker<void (TBase::*)(), &T1::method>* = nullptr); \
-        static TYes CheckMember(...);                                                     \
-        static constexpr bool value =                                                     \
-            (sizeof(TYes) == sizeof(CheckMember((THelper*)nullptr)));                     \
-    };                                                                                    \
-    template <class T, bool isClassType>                                                  \
-    struct TBaseHas##name: std::false_type {};                                            \
-    template <class T>                                                                    \
-    struct TBaseHas##name<T, true>                                                        \
-        : std::integral_constant<bool, TClassHas##name<T>::value> {};                     \
-    template <class T>                                                                    \
-    struct THas##name                                                                     \
+}; 
+ 
+template <> 
+class TTypeTraits<void>: public TTypeTraitsBase<void> {}; 
+ 
+#define Y_DECLARE_PODTYPE(type) \ 
+    template <>                 \ 
+    struct TPodTraits<type> {   \ 
+        enum { IsPod = true };  \ 
+    } 
+ 
+#define Y_HAS_MEMBER_IMPL_2(method, name)                                                 \ 
+    template <class T>                                                                    \ 
+    struct TClassHas##name {                                                              \ 
+        struct TBase {                                                                    \ 
+            void method();                                                                \ 
+        };                                                                                \ 
+        class THelper: public T, public TBase {                                           \ 
+        public:                                                                           \ 
+            template <class T1>                                                           \ 
+            inline THelper(const T1& = T1()) {                                            \ 
+            }                                                                             \ 
+        };                                                                                \ 
+        template <class T1, T1 val>                                                       \ 
+        class TChecker {};                                                                \ 
+        struct TNo {                                                                      \ 
+            char ch;                                                                      \ 
+        };                                                                                \ 
+        struct TYes {                                                                     \ 
+            char arr[2];                                                                  \ 
+        };                                                                                \ 
+        template <class T1>                                                               \ 
+        static TNo CheckMember(T1*, TChecker<void (TBase::*)(), &T1::method>* = nullptr); \ 
+        static TYes CheckMember(...);                                                     \ 
+        static constexpr bool value =                                                     \ 
+            (sizeof(TYes) == sizeof(CheckMember((THelper*)nullptr)));                     \ 
+    };                                                                                    \ 
+    template <class T, bool isClassType>                                                  \ 
+    struct TBaseHas##name: std::false_type {};                                            \ 
+    template <class T>                                                                    \ 
+    struct TBaseHas##name<T, true>                                                        \ 
+        : std::integral_constant<bool, TClassHas##name<T>::value> {};                     \ 
+    template <class T>                                                                    \ 
+    struct THas##name                                                                     \ 
         : TBaseHas##name<T, std::is_class<T>::value || std::is_union<T>::value> {}
 
 #define Y_HAS_MEMBER_IMPL_1(name) Y_HAS_MEMBER_IMPL_2(name, name)
@@ -193,11 +193,11 @@ class TTypeTraits<void>: public TTypeTraitsBase<void> {};
  */
 #define Y_HAS_MEMBER(...) Y_PASS_VA_ARGS(Y_MACRO_IMPL_DISPATCHER_2(__VA_ARGS__, Y_HAS_MEMBER_IMPL_2, Y_HAS_MEMBER_IMPL_1)(__VA_ARGS__))
 
-#define Y_HAS_SUBTYPE_IMPL_2(subtype, name) \
-    template <class T, class = void>        \
-    struct THas##name: std::false_type {};  \
-    template <class T>                      \
-    struct THas##name<T, ::TVoidT<typename T::subtype>>: std::true_type {};
+#define Y_HAS_SUBTYPE_IMPL_2(subtype, name) \ 
+    template <class T, class = void>        \ 
+    struct THas##name: std::false_type {};  \ 
+    template <class T>                      \ 
+    struct THas##name<T, ::TVoidT<typename T::subtype>>: std::true_type {}; 
 
 #define Y_HAS_SUBTYPE_IMPL_1(name) Y_HAS_SUBTYPE_IMPL_2(name, name)
 
@@ -236,38 +236,38 @@ struct TPodTraits<std::pair<T1, T2>> {
 };
 
 template <class T>
-struct TIsPointerToConstMemberFunction: std::false_type {
-};
+struct TIsPointerToConstMemberFunction: std::false_type { 
+}; 
 
-template <class R, class T, class... Args>
-struct TIsPointerToConstMemberFunction<R (T::*)(Args...) const>: std::true_type {
-};
+template <class R, class T, class... Args> 
+struct TIsPointerToConstMemberFunction<R (T::*)(Args...) const>: std::true_type { 
+}; 
 
-template <class R, class T, class... Args>
-struct TIsPointerToConstMemberFunction<R (T::*)(Args...) const&>: std::true_type {
-};
+template <class R, class T, class... Args> 
+struct TIsPointerToConstMemberFunction<R (T::*)(Args...) const&>: std::true_type { 
+}; 
 
-template <class R, class T, class... Args>
-struct TIsPointerToConstMemberFunction<R (T::*)(Args...) const&&>: std::true_type {
-};
+template <class R, class T, class... Args> 
+struct TIsPointerToConstMemberFunction<R (T::*)(Args...) const&&>: std::true_type { 
+}; 
 
-template <class R, class T, class... Args>
-struct TIsPointerToConstMemberFunction<R (T::*)(Args..., ...) const>: std::true_type {
-};
+template <class R, class T, class... Args> 
+struct TIsPointerToConstMemberFunction<R (T::*)(Args..., ...) const>: std::true_type { 
+}; 
 
-template <class R, class T, class... Args>
-struct TIsPointerToConstMemberFunction<R (T::*)(Args..., ...) const&>: std::true_type {
-};
+template <class R, class T, class... Args> 
+struct TIsPointerToConstMemberFunction<R (T::*)(Args..., ...) const&>: std::true_type { 
+}; 
 
-template <class R, class T, class... Args>
-struct TIsPointerToConstMemberFunction<R (T::*)(Args..., ...) const&&>: std::true_type {
-};
+template <class R, class T, class... Args> 
+struct TIsPointerToConstMemberFunction<R (T::*)(Args..., ...) const&&>: std::true_type { 
+}; 
 
 template <template <class...> class T, class U>
-struct TIsSpecializationOf: std::false_type {};
+struct TIsSpecializationOf: std::false_type {}; 
 
 template <template <class...> class T, class... Ts>
-struct TIsSpecializationOf<T, T<Ts...>>: std::true_type {};
+struct TIsSpecializationOf<T, T<Ts...>>: std::true_type {}; 
 
 /*
  * TDependentFalse is a constant dependent on a template parameter.
@@ -280,7 +280,7 @@ struct TIsSpecializationOf<T, T<Ts...>>: std::true_type {};
  *     static_assert(TDependentFalse<T>, "unknown type");
  * }
  */
-template <typename... T>
+template <typename... T> 
 constexpr bool TDependentFalse = false;
 
 // FIXME: neither nvcc10 nor nvcc11 support using auto in this context
@@ -288,7 +288,7 @@ constexpr bool TDependentFalse = false;
 template <size_t Value>
 constexpr bool TValueDependentFalse = false;
 #else
-template <auto... Values>
+template <auto... Values> 
 constexpr bool TValueDependentFalse = false;
 #endif
 
@@ -297,8 +297,8 @@ constexpr bool TValueDependentFalse = false;
  */
 template <class T, class R = void>
 using TEnableIfTuple = std::enable_if_t<::TDisjunction<::TIsSpecializationOf<std::tuple, std::decay_t<T>>,
-                                                       ::TIsSpecializationOf<std::pair, std::decay_t<T>>>::value,
-                                        R>;
+                                                       ::TIsSpecializationOf<std::pair, std::decay_t<T>>>::value, 
+                                        R>; 
 
 namespace NPrivate {
     // To allow ADL with custom begin/end
@@ -306,11 +306,11 @@ namespace NPrivate {
     using std::end;
 
     template <typename T>
-    auto IsIterableImpl(int) -> decltype(
-        begin(std::declval<T&>()) != end(std::declval<T&>()),   // begin/end and operator !=
+    auto IsIterableImpl(int) -> decltype( 
+        begin(std::declval<T&>()) != end(std::declval<T&>()),   // begin/end and operator != 
         ++std::declval<decltype(begin(std::declval<T&>()))&>(), // operator ++
-        *begin(std::declval<T&>()),                             // operator*
-        std::true_type{});
+        *begin(std::declval<T&>()),                             // operator* 
+        std::true_type{}); 
 
     template <typename T>
     std::false_type IsIterableImpl(...);

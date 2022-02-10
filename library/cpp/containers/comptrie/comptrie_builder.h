@@ -26,18 +26,18 @@ enum ECompactTrieBuilderFlags {
 
 using TCompactTrieBuilderFlags = ECompactTrieBuilderFlags;
 
-inline TCompactTrieBuilderFlags operator|(TCompactTrieBuilderFlags first, TCompactTrieBuilderFlags second) {
+inline TCompactTrieBuilderFlags operator|(TCompactTrieBuilderFlags first, TCompactTrieBuilderFlags second) { 
     return static_cast<TCompactTrieBuilderFlags>(static_cast<int>(first) | second);
 }
 
-inline TCompactTrieBuilderFlags& operator|=(TCompactTrieBuilderFlags& first, TCompactTrieBuilderFlags second) {
+inline TCompactTrieBuilderFlags& operator|=(TCompactTrieBuilderFlags& first, TCompactTrieBuilderFlags second) { 
     return first = first | second;
 }
 
 template <typename T>
 class TArrayWithSizeHolder;
 
-template <class T = char, class D = ui64, class S = TCompactTriePacker<D>>
+template <class T = char, class D = ui64, class S = TCompactTriePacker<D>> 
 class TCompactTrieBuilder {
 public:
     typedef T TSymbol;
@@ -92,12 +92,12 @@ public:
 
     size_t GetEntryCount() const;
     size_t GetNodeCount() const;
-
+ 
     // Exact output file size in bytes.
     size_t MeasureByteSize() const {
         return Impl->MeasureByteSize();
     }
-
+ 
 protected:
     class TCompactTrieBuilderImpl;
     THolder<TCompactTrieBuilderImpl> Impl;

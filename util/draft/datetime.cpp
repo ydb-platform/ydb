@@ -13,8 +13,8 @@
 
 namespace NDatetime {
     const ui32 MonthDays[2][12] = {
-        {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}, //nleap
-        {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}  //leap
+        {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}, //nleap 
+        {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}  //leap 
     };
 
     const ui32 MonthDaysNewYear[2][13] = {
@@ -60,11 +60,11 @@ namespace NDatetime {
                 default:
                     break;
             }
-#endif
+#endif 
             IsDst = tt.tm_isdst;
-        }
-    };
-
+        } 
+    }; 
+ 
     TSimpleTM TSimpleTM::CurrentUTC() {
         return New((time_t)TInstant::MicroSeconds(InterpolatedMicroSeconds()).Seconds());
     }
@@ -80,30 +80,30 @@ namespace NDatetime {
 #endif
 
         return New(tmSys);
-    }
+    } 
 
     TSimpleTM TSimpleTM::NewLocal(time_t t) {
         TTimeData d(t);
         return New(t, d.GMTOff, d.IsDst);
-    }
+    } 
 
-    TSimpleTM TSimpleTM::New(const struct tm& t) {
-        TSimpleTM res;
+    TSimpleTM TSimpleTM::New(const struct tm& t) { 
+        TSimpleTM res; 
         res.IsDst = t.tm_isdst;
-        res.Sec = t.tm_sec;
-        res.Min = t.tm_min;
-        res.Hour = t.tm_hour;
-        res.WDay = t.tm_wday;
-        res.Mon = t.tm_mon;
-        res.MDay = t.tm_mday;
-        res.Year = t.tm_year;
-        res.YDay = t.tm_yday;
+        res.Sec = t.tm_sec; 
+        res.Min = t.tm_min; 
+        res.Hour = t.tm_hour; 
+        res.WDay = t.tm_wday; 
+        res.Mon = t.tm_mon; 
+        res.MDay = t.tm_mday; 
+        res.Year = t.tm_year; 
+        res.YDay = t.tm_yday; 
         res.IsLeap = LeapYearAD(res.Year + 1900);
 #ifndef _win_
-        res.GMTOff = t.tm_gmtoff;
+        res.GMTOff = t.tm_gmtoff; 
 #endif
-        return res;
-    }
+        return res; 
+    } 
 
     TSimpleTM& TSimpleTM::SetRealDate(ui32 year, ui32 mon, ui32 mday, ui32 hour, ui32 min, ui32 sec, i32 isdst) {
         mday = ::Max<ui32>(mday, 1);
@@ -123,70 +123,70 @@ namespace NDatetime {
     }
 
     TSimpleTM& TSimpleTM::RegenerateFields() {
-        return *this = New(AsTimeT(), GMTOff, IsDst);
+        return *this = New(AsTimeT(), GMTOff, IsDst); 
     }
 
-    TSimpleTM& TSimpleTM::Add(EField f, i32 amount) {
-        if (!amount) {
-            return *this;
-        }
+    TSimpleTM& TSimpleTM::Add(EField f, i32 amount) { 
+        if (!amount) { 
+            return *this; 
+        } 
 
-        switch (f) {
-            default:
-                return *this;
-            case F_DAY:
-                amount *= 24;
+        switch (f) { 
+            default: 
+                return *this; 
+            case F_DAY: 
+                amount *= 24; 
                 [[fallthrough]];
-            case F_HOUR:
-                amount *= 60;
+            case F_HOUR: 
+                amount *= 60; 
                 [[fallthrough]];
-            case F_MIN:
-                amount *= 60;
+            case F_MIN: 
+                amount *= 60; 
                 [[fallthrough]];
             case F_SEC: {
-                return *this = New(AsTimeT() + amount, GMTOff, IsDst);
+                return *this = New(AsTimeT() + amount, GMTOff, IsDst); 
             }
-            case F_YEAR: {
-                i32 y = amount + (i32)Year;
-                y = ::Min<i32>(Max<i32>(y, 0), 255 /*max year*/);
+            case F_YEAR: { 
+                i32 y = amount + (i32)Year; 
+                y = ::Min<i32>(Max<i32>(y, 0), 255 /*max year*/); 
 
-                // YDay may correspond to different MDay if it's March or greater and the years have different leap status
-                if (Mon > 1) {
+                // YDay may correspond to different MDay if it's March or greater and the years have different leap status 
+                if (Mon > 1) { 
                     YDay += (i32)LeapYearAD(RealYear()) - (i32)LeapYearAD(RealYear());
-                }
+                } 
 
-                Year = y;
+                Year = y; 
                 IsLeap = LeapYearAD(RealYear());
                 return RegenerateFields();
-            }
-            case F_MON: {
-                i32 m = amount + Mon;
-                i32 y = (m < 0 ? (-12 + m) : m) / 12;
-                m = m - y * 12;
+            } 
+            case F_MON: { 
+                i32 m = amount + Mon; 
+                i32 y = (m < 0 ? (-12 + m) : m) / 12; 
+                m = m - y * 12; 
 
                 if (y) {
-                    Add(F_YEAR, y);
+                    Add(F_YEAR, y); 
                 }
 
-                if (m >= 0 && m < 12) {
-                    MDay = ::Min<ui32>(MonthDays[IsLeap][m], MDay);
+                if (m >= 0 && m < 12) { 
+                    MDay = ::Min<ui32>(MonthDays[IsLeap][m], MDay); 
                     Mon = m;
-                }
-
+                } 
+ 
                 return RegenerateFields();
-            }
+            } 
         }
     }
-
+ 
     TString TSimpleTM::ToString(const char* fmt) const {
-        struct tm t = *this;
+        struct tm t = *this; 
         return Strftime(fmt, &t);
     }
 
     time_t TSimpleTM::AsTimeT() const {
         struct tm t = AsStructTmLocal();
         return TimeGM(&t) - GMTOff - IsDst * 3600;
-    }
+    } 
 
     struct tm TSimpleTM::AsStructTmUTC() const {
         struct tm res;
@@ -196,42 +196,42 @@ namespace NDatetime {
     }
 
     struct tm TSimpleTM::AsStructTmLocal() const {
-        struct tm t;
-        Zero(t);
-        t.tm_isdst = IsDst;
-        t.tm_sec = Sec;
-        t.tm_min = Min;
-        t.tm_hour = Hour;
-        t.tm_wday = WDay;
-        t.tm_mon = Mon;
-        t.tm_mday = MDay;
-        t.tm_year = Year;
-        t.tm_yday = YDay;
+        struct tm t; 
+        Zero(t); 
+        t.tm_isdst = IsDst; 
+        t.tm_sec = Sec; 
+        t.tm_min = Min; 
+        t.tm_hour = Hour; 
+        t.tm_wday = WDay; 
+        t.tm_mon = Mon; 
+        t.tm_mday = MDay; 
+        t.tm_year = Year; 
+        t.tm_yday = YDay; 
 #ifndef _win_
-        t.tm_gmtoff = GMTOff;
+        t.tm_gmtoff = GMTOff; 
 #endif
-        return t;
-    }
+        return t; 
+    } 
 }
 
-template <>
+template <> 
 void In<TMonth>(IInputStream& in, TMonth& t) {
     char buf[4];
     LoadPodArray(&in, buf, 4);
-    t.Year = FromString<ui16>(buf, 4);
+    t.Year = FromString<ui16>(buf, 4); 
     LoadPodArray(&in, buf, 2);
-    t.Month = ui8(FromString<ui16>(buf, 2)) - 1;
+    t.Month = ui8(FromString<ui16>(buf, 2)) - 1; 
 }
 
-template <>
+template <> 
 void Out<TMonth>(IOutputStream& o, const TMonth& t) {
     o << t.Year << Sprintf("%.2hu", (ui16)(t.Month + 1));
 }
 
-template <>
-TMonth FromStringImpl<TMonth, char>(const char* s, size_t len) {
+template <> 
+TMonth FromStringImpl<TMonth, char>(const char* s, size_t len) { 
     TMonth res;
-    TMemoryInput in(s, len);
+    TMemoryInput in(s, len); 
     in >> res;
     return res;
 }

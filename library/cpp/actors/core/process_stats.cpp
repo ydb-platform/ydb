@@ -300,4 +300,4 @@ namespace {
     IActor* CreateProcStatCollector(TDuration interval, NMonitoring::TMetricRegistry& registry) {
         return new TRegistryCollector(interval, registry);
     }
-}
+} 

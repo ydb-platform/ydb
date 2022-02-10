@@ -1,8 +1,8 @@
-import sys
-import subprocess
-import argparse
-import os
-
+import sys 
+import subprocess 
+import argparse 
+import os 
+ 
 
 header = '''\
 #ifdef __GNUC__
@@ -30,11 +30,11 @@ def mkdir_p(directory):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-
+ 
     parser.add_argument('-t', '--tool')
     parser.add_argument('-c', '--input')
     parser.add_argument('-o', '--output')
-
+ 
     args = parser.parse_args()
     tmpdir = args.output + '.f2c'
     mkdir_p(tmpdir)
@@ -44,14 +44,14 @@ if __name__ == '__main__':
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
     stdout, stderr = p.communicate(input=open(args.input).read())
     ret = p.wait()
-
+ 
     if ret:
         print >>sys.stderr, 'f2c failed: %s, %s' % (stderr, ret)
         sys.exit(ret)
-
+ 
     if 'Error' in stderr:
         print >>sys.stderr, stderr
-
+ 
     with open(args.output, 'w') as f:
         f.write(header)
         f.write(stdout)

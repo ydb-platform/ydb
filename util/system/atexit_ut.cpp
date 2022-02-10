@@ -1,20 +1,20 @@
 #include <library/cpp/testing/unittest/registar.h>
+ 
+#include "atexit.h" 
 
-#include "atexit.h"
-
-#include <errno.h>
-
+#include <errno.h> 
+ 
 #ifdef _win_
-// not implemented
+// not implemented 
 #else
-    #include <sys/types.h>
-    #include <sys/wait.h>
+    #include <sys/types.h> 
+    #include <sys/wait.h> 
 #endif //_win_
 
 #include <stdio.h>
 
 #ifdef _win_
-// not implemented
+// not implemented 
 #else
 struct TAtExitParams {
     TAtExitParams(int fd_, const char* str_)
@@ -27,26 +27,26 @@ struct TAtExitParams {
     const char* str;
 };
 
-void MyAtExitFunc(void* ptr) {
+void MyAtExitFunc(void* ptr) { 
     THolder<TAtExitParams> params{static_cast<TAtExitParams*>(ptr)};
-    if (write(params->fd, params->str, strlen(params->str)) < 0) {
-        abort();
-    }
+    if (write(params->fd, params->str, strlen(params->str)) < 0) { 
+        abort(); 
+    } 
 }
 #endif
 
-class TAtExitTest: public TTestBase {
-    UNIT_TEST_SUITE(TAtExitTest);
-    UNIT_TEST(TestAtExit)
+class TAtExitTest: public TTestBase { 
+    UNIT_TEST_SUITE(TAtExitTest); 
+    UNIT_TEST(TestAtExit) 
     UNIT_TEST_SUITE_END();
 
     void TestAtExit() {
 #ifdef _win_
-// not implemented
+// not implemented 
 #else
         int ret;
         int pipefd[2];
-
+ 
         ret = pipe(pipefd);
         UNIT_ASSERT(ret == 0);
 
@@ -65,7 +65,7 @@ class TAtExitTest: public TTestBase {
             while (read(pipefd[0], data + last++, 1) > 0 && last < 1024) {
             }
             data[--last] = 0;
-
+ 
             UNIT_ASSERT(strcmp(data, "High prio\nMiddle prio\nLow-middle prio\nLow prio\nVery low prio\n") == 0);
         } else {
             close(pipefd[0]);

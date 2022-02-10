@@ -13,66 +13,66 @@
 class THttpHeaders;
 
 namespace NNeh {
-    class IProtocol;
-    struct TResponse;
-}
+    class IProtocol; 
+    struct TResponse; 
+} 
 
 namespace NRainCheck {
-    class THttpCallback;
-    class THttpClientService;
+    class THttpCallback; 
+    class THttpClientService; 
 
-    class THttpFuture: public TSubtaskCompletion {
-    public:
-        enum EError {
-            NoError = 0,
+    class THttpFuture: public TSubtaskCompletion { 
+    public: 
+        enum EError { 
+            NoError = 0, 
 
-            CantResolveNameError = 1,
-            BadHttpCodeError = 2,
+            CantResolveNameError = 1, 
+            BadHttpCodeError = 2, 
 
-            OtherError = 100
-        };
+            OtherError = 100 
+        }; 
 
-    private:
-        friend class THttpCallback;
-        friend class THttpClientService;
+    private: 
+        friend class THttpCallback; 
+        friend class THttpClientService; 
 
-    public:
-        THttpFuture();
-        ~THttpFuture() override;
+    public: 
+        THttpFuture(); 
+        ~THttpFuture() override; 
 
-        bool HasHttpCode() const;
-        bool HasResponseBody() const;
+        bool HasHttpCode() const; 
+        bool HasResponseBody() const; 
 
-        ui32 GetHttpCode() const;
-        TString GetResponseBody() const;
+        ui32 GetHttpCode() const; 
+        TString GetResponseBody() const; 
 
-        bool HasError() const;
-        EError GetErrorCode() const;
-        TString GetErrorDescription() const;
+        bool HasError() const; 
+        EError GetErrorCode() const; 
+        TString GetErrorDescription() const; 
 
-    private:
-        void SetDoneAndSchedule(TAutoPtr<NNeh::TResponse> response);
-        void SetFail(EError errorCode, const TStringBuf& errorDescription);
+    private: 
+        void SetDoneAndSchedule(TAutoPtr<NNeh::TResponse> response); 
+        void SetFail(EError errorCode, const TStringBuf& errorDescription); 
 
-    private:
-        TTaskRunnerBase* Task;
-        TMaybe<HttpCodes> HttpCode;
-        THolder<NNeh::TResponse> Response;
-        EError ErrorCode;
-        TString ErrorDescription;
-    };
+    private: 
+        TTaskRunnerBase* Task; 
+        TMaybe<HttpCodes> HttpCode; 
+        THolder<NNeh::TResponse> Response; 
+        EError ErrorCode; 
+        TString ErrorDescription; 
+    }; 
 
-    class THttpClientService {
-    public:
-        THttpClientService();
-        virtual ~THttpClientService();
+    class THttpClientService { 
+    public: 
+        THttpClientService(); 
+        virtual ~THttpClientService(); 
 
-        void Send(const TString& request, THttpFuture* future);
-        void SendPost(TString addr, const TString& data, const THttpHeaders& headers, THttpFuture* future);
+        void Send(const TString& request, THttpFuture* future); 
+        void SendPost(TString addr, const TString& data, const THttpHeaders& headers, THttpFuture* future); 
 
-    private:
-        NNeh::IProtocol* const GetProtocol;
-        NNeh::IProtocol* const FullProtocol;
-    };
+    private: 
+        NNeh::IProtocol* const GetProtocol; 
+        NNeh::IProtocol* const FullProtocol; 
+    }; 
 
-}
+} 

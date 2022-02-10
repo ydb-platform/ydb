@@ -1,34 +1,34 @@
-#pragma once
-
-#include <util/network/socket.h>
-#include <util/generic/strbuf.h>
+#pragma once 
+ 
+#include <util/network/socket.h> 
+#include <util/generic/strbuf.h> 
 #include <util/generic/string.h>
-
+ 
 namespace NDns {
-    struct TResolveInfo {
-        inline TResolveInfo(const TStringBuf& host, ui16 port)
-            : Host(host)
-            , Port(port)
-        {
-        }
-
-        TStringBuf Host;
-        ui16 Port;
-    };
-
-    struct TResolvedHost {
+    struct TResolveInfo { 
+        inline TResolveInfo(const TStringBuf& host, ui16 port) 
+            : Host(host) 
+            , Port(port) 
+        { 
+        } 
+ 
+        TStringBuf Host; 
+        ui16 Port; 
+    }; 
+ 
+    struct TResolvedHost { 
         inline TResolvedHost(const TString& host, const TNetworkAddress& addr) noexcept
             : Host(host)
             , Addr(addr)
             , Id(0)
-        {
-        }
-
+        { 
+        } 
+ 
         TString Host; //resolved hostname (from TResolveInfo, - before aliasing)
-        TNetworkAddress Addr;
+        TNetworkAddress Addr; 
         size_t Id; //cache record id
-    };
-
+    }; 
+ 
     // Resolving order:
     //   1. check local thread cache, return if found
     //   2. check global cache, return if found
@@ -42,4 +42,4 @@ namespace NDns {
 
     //create alias for host, which can be used for static resolving (when alias is ip address)
     void AddHostAlias(const TString& host, const TString& alias);
-}
+} 

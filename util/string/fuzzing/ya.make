@@ -4,8 +4,8 @@ OWNER(
 )
 SUBSCRIBER(g:util-subscribers)
 
-RECURSE(
+RECURSE( 
     collapse
     escape_c
-    strtod
-)
+    strtod 
+) 

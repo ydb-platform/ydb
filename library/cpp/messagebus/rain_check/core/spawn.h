@@ -38,7 +38,7 @@ namespace NRainCheck {
     template <typename TTask, typename TEnv, typename TParam>
     TIntrusivePtr<typename TTask::TTaskRunner> SpawnTask(TEnv* env, TParam param1, ISubtaskListener* subtaskListener = &TNopSubtaskListener::Instance) {
         return NPrivate::SpawnTaskWithRunner<
-            TTask, typename TTask::ITask, typename TTask::TTaskRunner, TEnv, TParam>(env, param1, subtaskListener);
+            TTask, typename TTask::ITask, typename TTask::TTaskRunner, TEnv, TParam>(env, param1, subtaskListener); 
     }
 
     // Instantiate and start subtask of given task.

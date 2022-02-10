@@ -1,8 +1,8 @@
-#include "unaligned_mem.h"
-
+#include "unaligned_mem.h" 
+ 
 #include <library/cpp/testing/benchmark/bench.h>
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <util/system/compiler.h>
 
 #ifdef Y_HAVE_INT128
@@ -21,7 +21,7 @@ namespace {
         }
 
         static TUInt128 Max() {
-            return {~(__uint128_t)0};
+            return {~(__uint128_t)0}; 
         }
 
         __uint128_t x;
@@ -32,15 +32,15 @@ namespace {
 Y_UNIT_TEST_SUITE(UnalignedMem) {
     Y_UNIT_TEST(TestReadWrite) {
         alignas(ui64) char buf[100];
-
+ 
         WriteUnaligned<ui16>(buf + 1, (ui16)1);
         WriteUnaligned<ui32>(buf + 1 + 2, (ui32)2);
         WriteUnaligned<ui64>(buf + 1 + 2 + 4, (ui64)3);
-
+ 
         UNIT_ASSERT_VALUES_EQUAL(ReadUnaligned<ui16>(buf + 1), 1);
         UNIT_ASSERT_VALUES_EQUAL(ReadUnaligned<ui32>(buf + 1 + 2), 2);
         UNIT_ASSERT_VALUES_EQUAL(ReadUnaligned<ui64>(buf + 1 + 2 + 4), 3);
-    }
+    } 
 
     Y_UNIT_TEST(TestReadWriteRuntime) {
         // Unlike the test above, this test avoids compile-time execution by a smart compiler.
@@ -93,4 +93,4 @@ Y_UNIT_TEST_SUITE(UnalignedMem) {
         UNIT_ASSERT(val == TUInt128::Max());
     }
 #endif
-}
+} 

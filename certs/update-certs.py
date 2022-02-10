@@ -11,7 +11,7 @@ def get_text(url):
 
 common_root_cas = get_text(COMMON_ROOT_CAS_URL)
 yandex_internal_cas = get_text(YANDEX_INTERNAL_CAS_URL)
-
+ 
 with open("cacert.pem", "wt") as target:
     target.write(common_root_cas)
     target.write(yandex_internal_cas)

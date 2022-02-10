@@ -1,17 +1,17 @@
-#pragma once
-
-#include <util/generic/yexception.h>
-#include <util/generic/ptr.h>
-
+#pragma once 
+ 
+#include <util/generic/yexception.h> 
+#include <util/generic/ptr.h> 
+ 
 namespace NDns {
-    class IError {
-    public:
+    class IError { 
+    public: 
         virtual ~IError() = default;
-
-        virtual void Raise() = 0;
-    };
-
-    typedef TAutoPtr<IError> IErrorRef;
-
-    IErrorRef SaveError();
-}
+ 
+        virtual void Raise() = 0; 
+    }; 
+ 
+    typedef TAutoPtr<IError> IErrorRef; 
+ 
+    IErrorRef SaveError(); 
+} 

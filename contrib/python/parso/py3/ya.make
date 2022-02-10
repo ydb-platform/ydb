@@ -6,8 +6,8 @@ OWNER(g:python-contrib)
 
 VERSION(0.8.3)
 
-LICENSE(PSF-2.0)
-
+LICENSE(PSF-2.0) 
+ 
 NO_LINT()
 
 PY_SRCS(

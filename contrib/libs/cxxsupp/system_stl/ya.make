@@ -3,7 +3,7 @@ LIBRARY()
 WITHOUT_LICENSE_TEXTS()
 
 LICENSE(YandexOpen)
-
+ 
 OWNER(
     g:contrib
     g:cpp-contrib

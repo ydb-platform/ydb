@@ -18,8 +18,8 @@ namespace NSc {
             : Pool(p)
             , Dict(Pool->Get())
             , Array(Pool->Get())
-        {
-        }
+        { 
+        } 
 
         bool IsNull() const {
             return TValue::EType::Null == ValueType;
@@ -101,17 +101,17 @@ namespace NSc {
 
         double& GetNumberMutable(double defaultnum) {
             switch (ValueType) {
-                case TValue::EType::Bool:
-                    SetNumber(bool(IntNumber));
-                    break;
-                case TValue::EType::IntNumber:
-                    SetNumber(IntNumber);
-                    break;
-                case TValue::EType::FloatNumber:
-                    break;
-                default:
-                    SetNumber(defaultnum);
-                    break;
+                case TValue::EType::Bool: 
+                    SetNumber(bool(IntNumber)); 
+                    break; 
+                case TValue::EType::IntNumber: 
+                    SetNumber(IntNumber); 
+                    break; 
+                case TValue::EType::FloatNumber: 
+                    break; 
+                default: 
+                    SetNumber(defaultnum); 
+                    break; 
             }
 
             return FloatNumber;
@@ -119,17 +119,17 @@ namespace NSc {
 
         i64& GetIntNumberMutable(i64 defaultnum) {
             switch (ValueType) {
-                case TValue::EType::Bool:
-                    SetIntNumber(bool(IntNumber));
-                    break;
-                case TValue::EType::IntNumber:
-                    break;
-                case TValue::EType::FloatNumber:
-                    SetIntNumber(FloatNumber);
-                    break;
-                default:
-                    SetIntNumber(defaultnum);
-                    break;
+                case TValue::EType::Bool: 
+                    SetIntNumber(bool(IntNumber)); 
+                    break; 
+                case TValue::EType::IntNumber: 
+                    break; 
+                case TValue::EType::FloatNumber: 
+                    SetIntNumber(FloatNumber); 
+                    break; 
+                default: 
+                    SetIntNumber(defaultnum); 
+                    break; 
             }
 
             return IntNumber;
@@ -153,27 +153,27 @@ namespace NSc {
 
         double GetNumber(double d = 0) const {
             switch (ValueType) {
-                case TValue::EType::Bool:
-                    return (bool)IntNumber;
-                case TValue::EType::IntNumber:
-                    return IntNumber;
-                case TValue::EType::FloatNumber:
-                    return FloatNumber;
-                default:
-                    return d;
+                case TValue::EType::Bool: 
+                    return (bool)IntNumber; 
+                case TValue::EType::IntNumber: 
+                    return IntNumber; 
+                case TValue::EType::FloatNumber: 
+                    return FloatNumber; 
+                default: 
+                    return d; 
             }
         }
 
         i64 GetIntNumber(i64 n = 0) const {
             switch (ValueType) {
-                case TValue::EType::Bool:
-                    return (bool)IntNumber;
-                case TValue::EType::IntNumber:
-                    return IntNumber;
-                case TValue::EType::FloatNumber:
-                    return FloatNumber;
-                default:
-                    return n;
+                case TValue::EType::Bool: 
+                    return (bool)IntNumber; 
+                case TValue::EType::IntNumber: 
+                    return IntNumber; 
+                case TValue::EType::FloatNumber: 
+                    return FloatNumber; 
+                default: 
+                    return n; 
             }
         }
 
@@ -399,14 +399,14 @@ namespace NSc {
     TValue::TValue(TValue& v)
         : TheCore(v.TheCore)
         , CopyOnWrite(v.CopyOnWrite)
-    {
-    }
+    { 
+    } 
 
     TValue::TValue(const TValue& v)
         : TheCore(v.TheCore)
         , CopyOnWrite(true)
-    {
-    }
+    { 
+    } 
 
     TValue::TValue(TValue&& v) noexcept
         : TheCore(std::move(v.TheCore))
@@ -609,13 +609,13 @@ namespace NSc {
 
     template <class TIt>
     TValue& TValue::AppendAll(TIt begin, TIt end) {
-        GetArrayMutable().AppendAll(begin, end);
-        return *this;
+        GetArrayMutable().AppendAll(begin, end); 
+        return *this; 
     }
 
     template <class TColl>
     TValue& TValue::AppendAll(TColl&& coll) {
-        return AppendAll(std::begin(coll), std::end(coll));
+        return AppendAll(std::begin(coll), std::end(coll)); 
     }
 
     TValue& TValue::AppendAll(std::initializer_list<TValue> coll) {
@@ -810,30 +810,30 @@ namespace NSc {
         int CompareFloat(const NSc::TValue& a, double r);
     }
 
-    bool operator==(const TValue& a, const TValue& b);
+    bool operator==(const TValue& a, const TValue& b); 
 
-    bool operator!=(const TValue& a, const TValue& b);
+    bool operator!=(const TValue& a, const TValue& b); 
 
-    bool operator<=(const TValue&, const TValue&) = delete;
-    bool operator>=(const TValue&, const TValue&) = delete;
-    bool operator<(const TValue&, const TValue&) = delete;
-    bool operator>(const TValue&, const TValue&) = delete;
+    bool operator<=(const TValue&, const TValue&) = delete; 
+    bool operator>=(const TValue&, const TValue&) = delete; 
+    bool operator<(const TValue&, const TValue&) = delete; 
+    bool operator>(const TValue&, const TValue&) = delete; 
 
 #define LIBRARY_SCHEME_DECLARE_TVALUE_OPS(T, Impl) \
-    bool operator==(const NSc::TValue& a, T b);    \
-    bool operator==(T b, const NSc::TValue& a);    \
-    bool operator!=(const NSc::TValue& a, T b);    \
-    bool operator!=(T b, const NSc::TValue& a);    \
-    bool operator<=(const NSc::TValue& a, T b);    \
-    bool operator<=(T b, const NSc::TValue& a);    \
-    bool operator>=(const NSc::TValue& a, T b);    \
-    bool operator>=(T b, const NSc::TValue& a);    \
-    bool operator<(const NSc::TValue& a, T b);     \
-    bool operator<(T b, const NSc::TValue& a);     \
-    bool operator>(const NSc::TValue& a, T b);     \
-    bool operator>(T b, const NSc::TValue& a);
+    bool operator==(const NSc::TValue& a, T b);    \ 
+    bool operator==(T b, const NSc::TValue& a);    \ 
+    bool operator!=(const NSc::TValue& a, T b);    \ 
+    bool operator!=(T b, const NSc::TValue& a);    \ 
+    bool operator<=(const NSc::TValue& a, T b);    \ 
+    bool operator<=(T b, const NSc::TValue& a);    \ 
+    bool operator>=(const NSc::TValue& a, T b);    \ 
+    bool operator>=(T b, const NSc::TValue& a);    \ 
+    bool operator<(const NSc::TValue& a, T b);     \ 
+    bool operator<(T b, const NSc::TValue& a);     \ 
+    bool operator>(const NSc::TValue& a, T b);     \ 
+    bool operator>(T b, const NSc::TValue& a); 
 
-#define LIBRARY_SCHEME_DECLARE_TVALUE_INT_OPS(T)            \
+#define LIBRARY_SCHEME_DECLARE_TVALUE_INT_OPS(T)            \ 
     LIBRARY_SCHEME_DECLARE_TVALUE_OPS(signed T, CompareInt) \
     LIBRARY_SCHEME_DECLARE_TVALUE_OPS(unsigned T, CompareInt)
 

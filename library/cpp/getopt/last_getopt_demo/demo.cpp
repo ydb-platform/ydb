@@ -47,7 +47,7 @@ protected:
     void RegisterOptions(NLastGetopt::TOpts& opts) override {
         // Brief description for the whole program, will appear in the beginning of a help message.
         opts.SetTitle("last_getopt_demo -- like wget, but doesn't actually do anything");
-
+ 
         // Built-in options.
         opts.AddHelpOption('h');
         opts.AddCompletionOption("last_getopt_demo");

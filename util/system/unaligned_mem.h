@@ -1,28 +1,28 @@
-#pragma once
-
-#include "defaults.h"
+#pragma once 
+ 
+#include "defaults.h" 
 #include "yassert.h"
-
-#include <string.h>
+ 
+#include <string.h> 
 #include <type_traits>
-
+ 
 // The following code used to have smart tricks assuming that unaligned reads and writes are OK on x86. This assumption
 // is wrong because compiler may emit alignment-sensitive x86 instructions e.g. movaps. See IGNIETFERRO-735.
 
-template <class T>
+template <class T> 
 inline T ReadUnaligned(const void* from) noexcept {
-    T ret;
-    memcpy(&ret, from, sizeof(T));
-    return ret;
-}
-
+    T ret; 
+    memcpy(&ret, from, sizeof(T)); 
+    return ret; 
+} 
+ 
 // std::remove_reference_t for non-deduced context to prevent such code to blow below:
 // ui8 first = f(); ui8 second = g();
 // WriteUnaligned(to, first - second) (int will be deduced)
-template <class T>
+template <class T> 
 inline void WriteUnaligned(void* to, const std::remove_reference_t<T>& t) noexcept {
-    memcpy(to, &t, sizeof(T));
-}
+    memcpy(to, &t, sizeof(T)); 
+} 
 
 template <class T, unsigned Align = sizeof(T)>
 class TUnalignedMemoryIterator {

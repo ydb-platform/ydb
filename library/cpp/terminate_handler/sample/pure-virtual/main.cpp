@@ -12,8 +12,8 @@ struct TFoo {
 };
 
 struct TQux: public TFoo {
-    void Bar() override {
-    }
+    void Bar() override { 
+    } 
 };
 
 int main() {

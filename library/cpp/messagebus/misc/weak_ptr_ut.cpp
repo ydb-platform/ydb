@@ -6,13 +6,13 @@ Y_UNIT_TEST_SUITE(TWeakPtrTest) {
     struct TWeakPtrTester: public TWeakRefCounted<TWeakPtrTester> {
         int* const CounterPtr;
 
-        TWeakPtrTester(int* counterPtr)
-            : CounterPtr(counterPtr)
-        {
-        }
-        ~TWeakPtrTester() {
-            ++*CounterPtr;
-        }
+        TWeakPtrTester(int* counterPtr) 
+            : CounterPtr(counterPtr) 
+        { 
+        } 
+        ~TWeakPtrTester() { 
+            ++*CounterPtr; 
+        } 
     };
 
     Y_UNIT_TEST(Simple) {

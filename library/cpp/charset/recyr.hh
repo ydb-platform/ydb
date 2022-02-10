@@ -14,39 +14,39 @@
 ///////////////////////////////////////////////////////////////////////////////////////
 //     input buf -> output buf                                                       //
 ///////////////////////////////////////////////////////////////////////////////////////
-template <class TCharType>
-inline RECODE_RESULT RecodeToUnicode(ECharset from, const char* in, TCharType* out, size_t inSize, size_t outSize, size_t& inRead, size_t& outWritten) {
-    static_assert(sizeof(TCharType) > 1, "expect wide character type");
-
+template <class TCharType> 
+inline RECODE_RESULT RecodeToUnicode(ECharset from, const char* in, TCharType* out, size_t inSize, size_t outSize, size_t& inRead, size_t& outWritten) { 
+    static_assert(sizeof(TCharType) > 1, "expect wide character type"); 
+ 
     return NCodepagePrivate::_recodeToUnicode(from, in, out, inSize, outSize, inRead, outWritten);
 }
 
-template <class TCharType>
-inline RECODE_RESULT RecodeFromUnicode(ECharset to, const TCharType* in, char* out, size_t inSize, size_t outSize, size_t& inRead, size_t& outWritten) {
-    static_assert(sizeof(TCharType) > 1, "expect wide character type");
-
+template <class TCharType> 
+inline RECODE_RESULT RecodeFromUnicode(ECharset to, const TCharType* in, char* out, size_t inSize, size_t outSize, size_t& inRead, size_t& outWritten) { 
+    static_assert(sizeof(TCharType) > 1, "expect wide character type"); 
+ 
     return NCodepagePrivate::_recodeFromUnicode(to, in, out, inSize, outSize, inRead, outWritten);
 }
 
-inline RECODE_RESULT RecodeFromUnicode(ECharset to, wchar32 rune, char* out, size_t outSize, size_t& outWritten) {
+inline RECODE_RESULT RecodeFromUnicode(ECharset to, wchar32 rune, char* out, size_t outSize, size_t& outWritten) { 
     return NCodepagePrivate::_recodeFromUnicode(to, rune, out, outSize, outWritten);
 }
 
-template <class TCharType>
+template <class TCharType> 
 inline RECODE_RESULT RecodeToUnicode(ECharset from, const char* in, TCharType* out, size_t inSize, size_t outSize) {
     size_t inRead = 0;
     size_t outWritten = 0;
     return RecodeToUnicode(from, in, out, inSize, outSize, inRead, outWritten);
 }
 
-template <class TCharType>
+template <class TCharType> 
 inline RECODE_RESULT RecodeFromUnicode(ECharset to, const TCharType* in, char* out, size_t inSize, size_t outSize) {
     size_t inRead = 0;
     size_t outWritten = 0;
     return RecodeFromUnicode(to, in, out, inSize, outSize, inRead, outWritten);
 }
 
-inline RECODE_RESULT RecodeFromUnicode(ECharset theEncoding, const wchar16* chars, size_t length,
+inline RECODE_RESULT RecodeFromUnicode(ECharset theEncoding, const wchar16* chars, size_t length, 
                                        char* bytes, size_t size, size_t* read = nullptr, size_t* written = nullptr) {
     size_t w = 0, r = 0;
     RECODE_RESULT rc = ::RecodeFromUnicode(theEncoding, chars, bytes, length, size, r, w);
@@ -57,7 +57,7 @@ inline RECODE_RESULT RecodeFromUnicode(ECharset theEncoding, const wchar16* char
     return rc;
 }
 
-inline RECODE_RESULT Recode(ECharset from, ECharset to, const char* in, char* out, size_t inSize, size_t outSize, size_t& inRead, size_t& outWritten) {
+inline RECODE_RESULT Recode(ECharset from, ECharset to, const char* in, char* out, size_t inSize, size_t outSize, size_t& inRead, size_t& outWritten) { 
     inRead = 0;
     outWritten = 0;
 
@@ -125,7 +125,7 @@ inline bool Recode(ECharset from, ECharset to, const TStringBuf& in, TString& ou
     Y_ENSURE(RECODE_OK == res, "Recode failed. ");
     if (outWritten > outSize)
         ythrow yexception() << "Recode overrun the buffer: size="
-                            << outSize << " need=" << outWritten;
+                            << outSize << " need=" << outWritten; 
 
     out.remove(outWritten);
     return true;
@@ -149,10 +149,10 @@ inline TString RecodeToHTMLEntities(ECharset from, const TString& in) {
     RECODE_RESULT res;
     size_t outWritten, inRead;
     TString out;
-    out.resize(in.length() * (4 + 4));
+    out.resize(in.length() * (4 + 4)); 
     res = NCodepagePrivate::_recodeToHTMLEntities(from, in.c_str(), out.begin(), in.length(), out.length(), inRead, outWritten);
-    if (res == RECODE_EOOUTPUT) { //input contains many 8-byte characters?
-        out.resize(in.length() * (4 + 8));
+    if (res == RECODE_EOOUTPUT) { //input contains many 8-byte characters? 
+        out.resize(in.length() * (4 + 8)); 
         res = NCodepagePrivate::_recodeToHTMLEntities(from, in.c_str(), out.begin(), in.length(), out.length(), inRead, outWritten);
     }
     if (res != RECODE_OK) {

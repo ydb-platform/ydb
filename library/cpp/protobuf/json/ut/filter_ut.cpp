@@ -22,72 +22,72 @@ static NProtobufJsonUt::TFilterTest GetTestMsg() {
 Y_UNIT_TEST_SUITE(TProto2JsonFilterTest){
     Y_UNIT_TEST(TestFilterPrinter){
         NProtobufJsonUt::TFilterTest msg = GetTestMsg();
-{
-    TString expected = R"({"OptFiltered":"1","NotFiltered":"23","RepFiltered":[45,67],)"
-                       R"("Inner":{"Number":[100,200],"InnerFiltered":235}})";
-    TString my = Proto2Json(msg);
-    UNIT_ASSERT_STRINGS_EQUAL(my, expected);
-}
+{ 
+    TString expected = R"({"OptFiltered":"1","NotFiltered":"23","RepFiltered":[45,67],)" 
+                       R"("Inner":{"Number":[100,200],"InnerFiltered":235}})"; 
+    TString my = Proto2Json(msg); 
+    UNIT_ASSERT_STRINGS_EQUAL(my, expected); 
+} 
 
-{
-    TString expected = R"({"NotFiltered":"23",)"
-                       R"("Inner":{"Number":[100,200]}})";
-    TString my = PrintWithFilter(msg, MakeFieldOptionFunctor(NProtobufJsonUt::filter_test, false));
-    UNIT_ASSERT_STRINGS_EQUAL(my, expected);
-}
+{ 
+    TString expected = R"({"NotFiltered":"23",)" 
+                       R"("Inner":{"Number":[100,200]}})"; 
+    TString my = PrintWithFilter(msg, MakeFieldOptionFunctor(NProtobufJsonUt::filter_test, false)); 
+    UNIT_ASSERT_STRINGS_EQUAL(my, expected); 
+} 
 
-{
-    TString expected = R"({"OptFiltered":"1","RepFiltered":[45,67]})";
-    TString my = PrintWithFilter(msg, MakeFieldOptionFunctor(NProtobufJsonUt::filter_test));
-    UNIT_ASSERT_STRINGS_EQUAL(my, expected);
-}
+{ 
+    TString expected = R"({"OptFiltered":"1","RepFiltered":[45,67]})"; 
+    TString my = PrintWithFilter(msg, MakeFieldOptionFunctor(NProtobufJsonUt::filter_test)); 
+    UNIT_ASSERT_STRINGS_EQUAL(my, expected); 
+} 
 
-{
-    TString expected = R"({"OptFiltered":"1","NotFiltered":"23",)"
-                       R"("Inner":{"Number":[100,200]}})";
-    TString my;
-    PrintWithFilter(msg, MakeFieldOptionFunctor(NProtobufJsonUt::export_test), *CreateJsonMapOutput(my));
-    UNIT_ASSERT_STRINGS_EQUAL(my, expected);
-}
-
-{
-    TString expected = R"({"NotFiltered":"23",)"
-                       R"("Inner":{"Number":[100,200]}})";
-    auto functor = [](const NProtoBuf::Message&, const NProtoBuf::FieldDescriptor* field) {
-        return field->name() == "NotFiltered" || field->name() == "Number" || field->name() == "Inner";
-    };
-    TString my = PrintWithFilter(msg, functor);
-    UNIT_ASSERT_STRINGS_EQUAL(my, expected);
-}
-}
-
+{ 
+    TString expected = R"({"OptFiltered":"1","NotFiltered":"23",)" 
+                       R"("Inner":{"Number":[100,200]}})"; 
+    TString my; 
+    PrintWithFilter(msg, MakeFieldOptionFunctor(NProtobufJsonUt::export_test), *CreateJsonMapOutput(my)); 
+    UNIT_ASSERT_STRINGS_EQUAL(my, expected); 
+} 
+ 
+{ 
+    TString expected = R"({"NotFiltered":"23",)" 
+                       R"("Inner":{"Number":[100,200]}})"; 
+    auto functor = [](const NProtoBuf::Message&, const NProtoBuf::FieldDescriptor* field) { 
+        return field->name() == "NotFiltered" || field->name() == "Number" || field->name() == "Inner"; 
+    }; 
+    TString my = PrintWithFilter(msg, functor); 
+    UNIT_ASSERT_STRINGS_EQUAL(my, expected); 
+} 
+} 
+ 
 Y_UNIT_TEST(NoUnnecessaryCopyFunctor) {
-    size_t CopyCount = 0;
-    struct TFunctorMock {
-        TFunctorMock(size_t* copyCount)
-            : CopyCount(copyCount)
+    size_t CopyCount = 0; 
+    struct TFunctorMock { 
+        TFunctorMock(size_t* copyCount) 
+            : CopyCount(copyCount) 
         {
-            UNIT_ASSERT(*CopyCount <= 1);
+            UNIT_ASSERT(*CopyCount <= 1); 
         }
 
-        TFunctorMock(const TFunctorMock& f)
-            : CopyCount(f.CopyCount)
+        TFunctorMock(const TFunctorMock& f) 
+            : CopyCount(f.CopyCount) 
         {
-            ++*CopyCount;
+            ++*CopyCount; 
         }
 
-        TFunctorMock(TFunctorMock&& f) = default;
+        TFunctorMock(TFunctorMock&& f) = default; 
 
-        bool operator()(const NProtoBuf::Message&, const NProtoBuf::FieldDescriptor*) const {
-            return false;
-        }
+        bool operator()(const NProtoBuf::Message&, const NProtoBuf::FieldDescriptor*) const { 
+            return false; 
+        } 
 
-        size_t* CopyCount;
-    };
+        size_t* CopyCount; 
+    }; 
 
-    TProto2JsonConfig cfg;
-    TFilteringPrinter<> printer(TFunctorMock(&CopyCount), cfg);
-    UNIT_ASSERT(CopyCount <= 1);
-}
-}
-;
+    TProto2JsonConfig cfg; 
+    TFilteringPrinter<> printer(TFunctorMock(&CopyCount), cfg); 
+    UNIT_ASSERT(CopyCount <= 1); 
+} 
+} 
+; 

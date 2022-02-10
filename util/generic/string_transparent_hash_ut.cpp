@@ -1,7 +1,7 @@
 #include "string.h"
-#include "vector.h"
+#include "vector.h" 
 #include "strbuf.h"
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 
@@ -16,4 +16,4 @@ Y_UNIT_TEST_SUITE(StringHashFunctorTests) {
         UNIT_ASSERT_UNEQUAL(s.find(TStringBuf("foo")), s.end());
         UNIT_ASSERT_EQUAL(s.find(TStringBuf("bar")), s.end());
     }
-}
+} 

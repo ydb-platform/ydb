@@ -1,15 +1,15 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(pg)
-
+ 
 PEERDIR(
     library/cpp/colorizer
 )
 
-SRCS(
-    dump.cpp
-    dumpers.cpp
-    engine.cpp
-)
-
-END()
+SRCS( 
+    dump.cpp 
+    dumpers.cpp 
+    engine.cpp 
+) 
+ 
+END() 

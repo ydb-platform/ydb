@@ -1,5 +1,5 @@
-#pragma once
-
+#pragma once 
+ 
 #include <library/cpp/charset/codepage.h>
 #include <util/charset/unidata.h>
 
@@ -11,7 +11,7 @@ inline wchar32 to_upper(wchar32 c) {
 }
 
 inline bool is_digit(wchar32 c) {
-    return IsDigit(c);
+    return IsDigit(c); 
 }
 
 inline bool is_upper(wchar32 c) {

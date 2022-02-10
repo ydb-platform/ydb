@@ -9,11 +9,11 @@ namespace NCompactTrie {
         virtual ~ILeafSkipper() = default;
     };
 
-    template <class TPacker>
-    class TPackerLeafSkipper: public ILeafSkipper {
+    template <class TPacker> 
+    class TPackerLeafSkipper: public ILeafSkipper { 
     private:
         const TPacker* Packer;
-
+ 
     public:
         TPackerLeafSkipper(const TPacker* packer)
             : Packer(packer)
@@ -25,9 +25,9 @@ namespace NCompactTrie {
         }
 
         // For test purposes.
-        const TPacker* GetPacker() const {
-            return Packer;
-        }
+        const TPacker* GetPacker() const { 
+            return Packer; 
+        } 
     };
 
     // The data you need to traverse the trie without unpacking the values.
@@ -40,13 +40,13 @@ namespace NCompactTrie {
             : Data(data)
             , Length(dataLength)
             , SkipFunction(skipFunction)
-        {
-        }
+        { 
+        } 
 
         bool operator==(const TOpaqueTrie& other) const {
             return Data == other.Data &&
-                   Length == other.Length &&
-                   &SkipFunction == &other.SkipFunction;
+                   Length == other.Length && 
+                   &SkipFunction == &other.SkipFunction; 
         }
 
         bool operator!=(const TOpaqueTrie& other) const {

@@ -62,7 +62,7 @@ TRemoteConnectionStatusBase::TRemoteConnectionStatusBase()
 {
 }
 
-TRemoteConnectionStatusBase& TRemoteConnectionStatusBase ::operator+=(const TRemoteConnectionStatusBase& that) {
+TRemoteConnectionStatusBase& TRemoteConnectionStatusBase ::operator+=(const TRemoteConnectionStatusBase& that) { 
     REMOTE_CONNECTION_STATUS_BASE_MAP(STRUCT_FIELD_ADD, )
     return *this;
 }
@@ -72,8 +72,8 @@ TRemoteConnectionIncrementalStatusBase::TRemoteConnectionIncrementalStatusBase()
 {
 }
 
-TRemoteConnectionIncrementalStatusBase& TRemoteConnectionIncrementalStatusBase::operator+=(
-    const TRemoteConnectionIncrementalStatusBase& that) {
+TRemoteConnectionIncrementalStatusBase& TRemoteConnectionIncrementalStatusBase::operator+=( 
+    const TRemoteConnectionIncrementalStatusBase& that) { 
     REMOTE_CONNECTION_INCREMENTAL_STATUS_BASE_MAP(STRUCT_FIELD_ADD, )
     return *this;
 }
@@ -84,8 +84,8 @@ TRemoteConnectionReaderIncrementalStatus::TRemoteConnectionReaderIncrementalStat
 }
 
 TRemoteConnectionReaderIncrementalStatus& TRemoteConnectionReaderIncrementalStatus::operator+=(
-    const TRemoteConnectionReaderIncrementalStatus& that) {
-    TRemoteConnectionIncrementalStatusBase::operator+=(that);
+    const TRemoteConnectionReaderIncrementalStatus& that) { 
+    TRemoteConnectionIncrementalStatusBase::operator+=(that); 
     REMOTE_CONNECTION_READER_INCREMENTAL_STATUS_MAP(STRUCT_FIELD_ADD, )
     return *this;
 }
@@ -96,7 +96,7 @@ TRemoteConnectionReaderStatus::TRemoteConnectionReaderStatus()
 }
 
 TRemoteConnectionReaderStatus& TRemoteConnectionReaderStatus::operator+=(const TRemoteConnectionReaderStatus& that) {
-    TRemoteConnectionStatusBase::operator+=(that);
+    TRemoteConnectionStatusBase::operator+=(that); 
     REMOTE_CONNECTION_READER_STATUS_MAP(STRUCT_FIELD_ADD, )
     return *this;
 }
@@ -107,8 +107,8 @@ TRemoteConnectionWriterIncrementalStatus::TRemoteConnectionWriterIncrementalStat
 }
 
 TRemoteConnectionWriterIncrementalStatus& TRemoteConnectionWriterIncrementalStatus::operator+=(
-    const TRemoteConnectionWriterIncrementalStatus& that) {
-    TRemoteConnectionIncrementalStatusBase::operator+=(that);
+    const TRemoteConnectionWriterIncrementalStatus& that) { 
+    TRemoteConnectionIncrementalStatusBase::operator+=(that); 
     REMOTE_CONNECTION_WRITER_INCREMENTAL_STATUS(STRUCT_FIELD_ADD, )
     return *this;
 }
@@ -119,7 +119,7 @@ TRemoteConnectionWriterStatus::TRemoteConnectionWriterStatus()
 }
 
 TRemoteConnectionWriterStatus& TRemoteConnectionWriterStatus::operator+=(const TRemoteConnectionWriterStatus& that) {
-    TRemoteConnectionStatusBase::operator+=(that);
+    TRemoteConnectionStatusBase::operator+=(that); 
     REMOTE_CONNECTION_WRITER_STATUS(STRUCT_FIELD_ADD, )
     return *this;
 }
@@ -162,9 +162,9 @@ TString TRemoteConnectionStatus::PrintToString() const {
     if (!Summary) {
         // TODO: print MyAddr too, but only if it is set
         ss << WriterStatus.PeerAddr << " (" << WriterStatus.ConnectionId << ")"
-           << ", writefd=" << WriterStatus.Fd
-           << ", readfd=" << ReaderStatus.Fd
-           << Endl;
+           << ", writefd=" << WriterStatus.Fd 
+           << ", readfd=" << ReaderStatus.Fd 
+           << Endl; 
         if (WriterStatus.Connected) {
             p.AddRow("connect time", WriterStatus.ConnectTime.ToString());
             p.AddRow("writer state", ToCString(WriterStatus.State));
@@ -182,7 +182,7 @@ TString TRemoteConnectionStatus::PrintToString() const {
 
     p.AddRow("send queue", LeftPad(WriterStatus.SendQueueSize, 6));
 
-    if (Server) {
+    if (Server) { 
         p.AddRow("quota msg", LeftPad(ReaderStatus.QuotaMsg, 6));
         p.AddRow("quota bytes", LeftPad(ReaderStatus.QuotaBytes, 6));
         p.AddRow("quota exhausted", LeftPad(ReaderStatus.QuotaExhausted, 6));
@@ -254,7 +254,7 @@ TString TSessionDumpStatus::PrintToString() const {
     return ss.Str();
 }
 
-TString TBusMessageQueueStatus::PrintToString() const {
+TString TBusMessageQueueStatus::PrintToString() const { 
     TStringStream ss;
     ss << "work queue:\n";
     ss << ExecutorStatus.Status;

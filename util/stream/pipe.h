@@ -1,12 +1,12 @@
 #pragma once
-
+ 
 #include "input.h"
 #include "output.h"
-
-#include <util/system/pipe.h>
+ 
+#include <util/system/pipe.h> 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
-
+ 
 /**
  * @addtogroup Streams_Pipes
  * @{
@@ -16,7 +16,7 @@
  * Base class for starting a process and communicating with it via pipes.
  */
 class TPipeBase {
-protected:
+protected: 
     /**
      * Starts a new process and opens a pipe.
      *
@@ -27,9 +27,9 @@ protected:
     TPipeBase(const TString& command, const char* mode);
     virtual ~TPipeBase();
 
-protected:
-    class TImpl;
-    THolder<TImpl> Impl_;
+protected: 
+    class TImpl; 
+    THolder<TImpl> Impl_; 
 };
 
 /**
@@ -38,8 +38,8 @@ protected:
  * Note that if the process ends with non-zero exit status, `Read` function will
  * throw an exception.
  */
-class TPipeInput: protected TPipeBase, public IInputStream {
-public:
+class TPipeInput: protected TPipeBase, public IInputStream { 
+public: 
     /**
      * Starts a new process and opens a pipe.
      *
@@ -47,7 +47,7 @@ public:
      */
     TPipeInput(const TString& command);
 
-private:
+private: 
     size_t DoRead(void* buf, size_t len) override;
 };
 
@@ -57,8 +57,8 @@ private:
  * Note that if the process ends with non-zero exit status, `Close` function will
  * throw an exception.
  */
-class TPipeOutput: protected TPipeBase, public IOutputStream {
-public:
+class TPipeOutput: protected TPipeBase, public IOutputStream { 
+public: 
     /**
      * Starts a new process and opens a pipe.
      *
@@ -70,30 +70,30 @@ public:
      * Waits for the process to terminate and throws an exception if it ended
      * with a non-zero exit status.
      */
-    void Close();
+    void Close(); 
 
-private:
+private: 
     void DoWrite(const void* buf, size_t len) override;
 };
 
 class TPipedBase {
-protected:
-    TPipedBase(PIPEHANDLE fd);
+protected: 
+    TPipedBase(PIPEHANDLE fd); 
     virtual ~TPipedBase();
 
-protected:
-    TPipeHandle Handle_;
+protected: 
+    TPipeHandle Handle_; 
 };
 
 /**
  * Input stream that binds to a standard output stream of an existing process.
  */
 class TPipedInput: public TPipedBase, public IInputStream {
-public:
-    TPipedInput(PIPEHANDLE fd);
+public: 
+    TPipedInput(PIPEHANDLE fd); 
     ~TPipedInput() override;
 
-private:
+private: 
     size_t DoRead(void* buf, size_t len) override;
 };
 
@@ -101,11 +101,11 @@ private:
  * Output stream that binds to a standard input stream of an existing process.
  */
 class TPipedOutput: public TPipedBase, public IOutputStream {
-public:
-    TPipedOutput(PIPEHANDLE fd);
+public: 
+    TPipedOutput(PIPEHANDLE fd); 
     ~TPipedOutput() override;
 
-private:
+private: 
     void DoWrite(const void* buf, size_t len) override;
 };
 

@@ -3,25 +3,25 @@
 #include "bt_exception.h"
 #include "strbuf.h"
 #include "string.h"
-#include "utility.h"
+#include "utility.h" 
 #include "va_args.h"
 #include <utility>
-
+ 
 #include <util/stream/tempbuf.h>
 #include <util/system/compat.h>
 #include <util/system/compiler.h>
 #include <util/system/defaults.h>
-#include <util/system/error.h>
-#include <util/system/src_location.h>
+#include <util/system/error.h> 
+#include <util/system/src_location.h> 
 #include <util/system/platform.h>
+ 
+#include <exception> 
+ 
+#include <cstdio> 
 
-#include <exception>
-
-#include <cstdio>
-
-class TBackTrace;
-
-namespace NPrivateException {
+class TBackTrace; 
+ 
+namespace NPrivateException { 
     class TTempBufCuttingWrapperOutput: public IOutputStream {
     public:
         TTempBufCuttingWrapperOutput(TTempBuf& tempbuf)
@@ -37,8 +37,8 @@ namespace NPrivateException {
         TTempBuf& TempBuf_;
     };
 
-    class yexception: public std::exception {
-    public:
+    class yexception: public std::exception { 
+    public: 
         yexception();
         yexception(const yexception&) = default;
         yexception(yexception&&) = default;
@@ -49,76 +49,76 @@ namespace NPrivateException {
         const char* what() const noexcept override;
         virtual const TBackTrace* BackTrace() const noexcept;
 
-        template <class T>
-        inline void Append(const T& t) {
+        template <class T> 
+        inline void Append(const T& t) { 
             TTempBufCuttingWrapperOutput tempBuf(Buf_);
             static_cast<IOutputStream&>(tempBuf) << t;
             ZeroTerminate();
-        }
-
+        } 
+ 
         TStringBuf AsStrBuf() const;
 
-    private:
+    private: 
         void ZeroTerminate() noexcept;
 
     private:
         TTempBuf Buf_;
-    };
-
-    template <class E, class T>
+    }; 
+ 
+    template <class E, class T> 
     static inline std::enable_if_t<std::is_base_of<yexception, std::decay_t<E>>::value, E&&>
     operator<<(E&& e, const T& t) {
-        e.Append(t);
-
+        e.Append(t); 
+ 
         return std::forward<E>(e);
-    }
-
-    template <class T>
-    static inline T&& operator+(const TSourceLocation& sl, T&& t) {
+    } 
+ 
+    template <class T> 
+    static inline T&& operator+(const TSourceLocation& sl, T&& t) { 
         return std::forward<T>(t << sl << TStringBuf(": "));
-    }
-}
-
-class yexception: public NPrivateException::yexception {
-};
-
+    } 
+} 
+ 
+class yexception: public NPrivateException::yexception { 
+}; 
+ 
 Y_DECLARE_OUT_SPEC(inline, yexception, stream, value) {
     stream << value.AsStrBuf();
 }
 
 class TSystemError: public yexception {
-public:
+public: 
     TSystemError(int status)
         : Status_(status)
-    {
-        Init();
-    }
-
+    { 
+        Init(); 
+    } 
+ 
     TSystemError()
         : TSystemError(LastSystemError())
-    {
-    }
+    { 
+    } 
 
     int Status() const noexcept {
         return Status_;
-    }
-
-private:
-    void Init();
+    } 
+ 
+private: 
+    void Init(); 
 
 private:
     int Status_;
-};
-
+}; 
+ 
 class TIoException: public TSystemError {
-};
-
+}; 
+ 
 class TIoSystemError: public TIoException {
-};
-
-class TFileError: public TIoSystemError {
-};
-
+}; 
+ 
+class TFileError: public TIoSystemError { 
+}; 
+ 
 /**
  * TBadArgumentException should be thrown when an argument supplied to some function (or constructor)
  * is invalid or incorrect.
@@ -138,8 +138,8 @@ struct TBadArgumentException: public virtual yexception {
 struct TBadCastException: public virtual TBadArgumentException {
 };
 
-#define ythrow throw __LOCATION__ +
-
+#define ythrow throw __LOCATION__ + 
+ 
 namespace NPrivate {
     /// Encapsulates data for one of the most common case in which
     /// exception message contists of single constant string
@@ -152,7 +152,7 @@ namespace NPrivate {
     [[noreturn]] void ThrowYExceptionWithBacktrace(const TSimpleExceptionMessage& sm);
 }
 
-void fputs(const std::exception& e, FILE* f = stderr);
+void fputs(const std::exception& e, FILE* f = stderr); 
 
 TString CurrentExceptionMessage();
 
@@ -172,7 +172,7 @@ TString CurrentExceptionMessage();
 bool UncaughtException() noexcept;
 
 std::string CurrentExceptionTypeName();
-
+ 
 TString FormatExc(const std::exception& exception);
 
 #define Y_ENSURE_EX(CONDITION, THROW_EXPRESSION) \

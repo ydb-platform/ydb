@@ -51,7 +51,7 @@ bool TPool::TCVIterator::IsValid() const {
     return Current != InstanceFoldNumbers.end();
 }
 
-const TInstance& TPool::TCVIterator::operator*() const {
+const TInstance& TPool::TCVIterator::operator*() const { 
     return ParentPool[Current - InstanceFoldNumbers.begin()];
 }
 
@@ -75,10 +75,10 @@ void TPool::TCVIterator::Advance() {
 
 bool TPool::TCVIterator::TakeCurrent() const {
     switch (IteratorType) {
-        case LearnIterator:
-            return *Current != TestFoldNumber;
-        case TestIterator:
-            return *Current == TestFoldNumber;
+        case LearnIterator: 
+            return *Current != TestFoldNumber; 
+        case TestIterator: 
+            return *Current == TestFoldNumber; 
     }
     return false;
 }

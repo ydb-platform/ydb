@@ -11,11 +11,11 @@
 LWTRACE_USING(ACTORLIB_PROVIDER);
 
 namespace NActors {
-    DECLARE_WILSON_EVENT(EventSentToSocket);
-    DECLARE_WILSON_EVENT(EventReceivedFromSocket);
+    DECLARE_WILSON_EVENT(EventSentToSocket); 
+    DECLARE_WILSON_EVENT(EventReceivedFromSocket); 
 
     bool TEventOutputChannel::FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed) {
-        const size_t amount = sizeof(TChannelPart) + sizeof(TEventDescr);
+        const size_t amount = sizeof(TChannelPart) + sizeof(TEventDescr); 
         if (task.GetVirtualFreeAmount() < amount) {
             return false;
         }
@@ -32,8 +32,8 @@ namespace NActors {
             (ExtendedFormat ? IEventHandle::FlagExtendedFormat : 0);
 
         TChannelPart *part = static_cast<TChannelPart*>(task.GetFreeArea());
-        part->Channel = ChannelId | TChannelPart::LastPartFlag;
-        part->Size = sizeof(TEventDescr);
+        part->Channel = ChannelId | TChannelPart::LastPartFlag; 
+        part->Size = sizeof(TEventDescr); 
         memcpy(part + 1, &event.Descr, sizeof(TEventDescr));
         task.AppendBuf(part, amount);
         *weightConsumed += amount;
@@ -41,13 +41,13 @@ namespace NActors {
         Metrics->UpdateOutputChannelEvents(ChannelId);
 
         return true;
-    }
+    } 
 
     void TEventOutputChannel::DropConfirmed(ui64 confirm) {
         LOG_DEBUG_IC_SESSION("ICOCH98", "Dropping confirmed messages");
         for (auto it = NotYetConfirmed.begin(); it != NotYetConfirmed.end() && it->Serial <= confirm; ) {
             Pool.Release(NotYetConfirmed, it++);
-        }
+        } 
     }
 
     bool TEventOutputChannel::FeedBuf(TTcpPacketOutTask& task, ui64 serial, ui64 *weightConsumed) {
@@ -147,7 +147,7 @@ namespace NActors {
                     NotYetConfirmed.splice(NotYetConfirmed.end(), Queue, Queue.begin()); // move event to not-yet-confirmed queue
                     State = EState::INITIAL;
                     return true; // we have processed whole event, signal to the caller
-            }
+            } 
         }
     }
 
@@ -169,7 +169,7 @@ namespace NActors {
         Pool.Release(NotYetConfirmed);
         for (auto& item : Queue) {
             item.ForwardOnNondelivery(false);
-        }
+        } 
         Pool.Release(Queue);
     }
 

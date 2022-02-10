@@ -1,7 +1,7 @@
 #include "join.h"
-#include "subst.h"
+#include "subst.h" 
 #include <string>
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
 
 Y_UNIT_TEST_SUITE(TStringSubst) {
@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(TStringSubst) {
         }
     }
 
-    static void DoTestSubstGlobal(TVector<TString>& parts, const size_t minBeg, const size_t sz,
+    static void DoTestSubstGlobal(TVector<TString>& parts, const size_t minBeg, const size_t sz, 
                                   const TString& from, const size_t fromPos, const size_t numSubst) {
         const size_t numLeft = numSubst - parts.size();
         for (size_t fromBeg = minBeg; fromBeg <= sz - numLeft * from.size(); ++fromBeg) {
@@ -122,13 +122,13 @@ Y_UNIT_TEST_SUITE(TStringSubst) {
     Y_UNIT_TEST(TestSubstGlobalOld) {
         TString s;
         s = "aaa";
-        SubstGlobal(s, "a", "bb");
+        SubstGlobal(s, "a", "bb"); 
         UNIT_ASSERT_EQUAL(s, TString("bbbbbb"));
         s = "aaa";
-        SubstGlobal(s, "a", "b");
+        SubstGlobal(s, "a", "b"); 
         UNIT_ASSERT_EQUAL(s, TString("bbb"));
         s = "aaa";
-        SubstGlobal(s, "a", "");
+        SubstGlobal(s, "a", ""); 
         UNIT_ASSERT_EQUAL(s, TString(""));
         s = "abcdefbcbcdfb";
         SubstGlobal(s, "bc", "bbc", 2);
@@ -250,4 +250,4 @@ Y_UNIT_TEST_SUITE(TStringSubst) {
             UNIT_ASSERT_VALUES_EQUAL(st, ss);
         }
     }
-}
+} 

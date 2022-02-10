@@ -759,7 +759,7 @@ extern int fdatasync(int);
   BeOS and cygwin are the only other autoconf platform requiring special
   linkage handling and both of these use __declspec().
 */
-#if defined(__BEOS__)
+#if defined(__BEOS__) 
 #       define HAVE_DECLSPEC_DLL
 #endif
 
@@ -774,7 +774,7 @@ extern int fdatasync(int);
 #endif
 
 /* only get special linkage if built as shared or platform is Cygwin */
-#if defined(Py_ENABLE_SHARED)
+#if defined(Py_ENABLE_SHARED) 
 #       if defined(HAVE_DECLSPEC_DLL)
 #               ifdef Py_BUILD_CORE
 #                       define PyAPI_FUNC(RTYPE) __declspec(dllexport) RTYPE

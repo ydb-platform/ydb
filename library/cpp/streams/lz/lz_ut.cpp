@@ -1,19 +1,19 @@
-#include "lz.h"
-
+#include "lz.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/resource/resource.h>
-
+ 
 #include <util/stream/file.h>
 #include <util/generic/vector.h>
-#include <util/system/tempfile.h>
-#include <util/generic/singleton.h>
-
-#define LDATA "./ldata"
+#include <util/system/tempfile.h> 
+#include <util/generic/singleton.h> 
+ 
+#define LDATA "./ldata" 
 #define LDATA_RANDOM "./ldata.random"
-
+ 
 static const TString data = "aa aaa aa aaa aa aaa bb bbb bb bbb bb bbb";
-
-namespace {
+ 
+namespace { 
     /**
      * Produces well-formed random crap
      **/
@@ -51,7 +51,7 @@ namespace {
         for (auto size : sizes) {
             result.push_back(RandomString(size));
         }
-        result.push_back(NResource::Find("/request.data"));
+        result.push_back(NResource::Find("/request.data")); 
         return result;
     }
 
@@ -60,11 +60,11 @@ namespace {
     }
 
     struct TRandomData: public TVector<TString> {
-        inline TRandomData() {
-            InitRandomData().swap(*this);
-        }
-    };
-}
+        inline TRandomData() { 
+            InitRandomData().swap(*this); 
+        } 
+    }; 
+} 
 
 static const TVector<size_t> bufferSizes = {
     127,
@@ -73,32 +73,32 @@ static const TVector<size_t> bufferSizes = {
 };
 
 namespace {
-    template <TLzqCompress::EVersion Ver, int Level, TLzqCompress::EMode Mode>
-    struct TLzqCompressX: public TLzqCompress {
+    template <TLzqCompress::EVersion Ver, int Level, TLzqCompress::EMode Mode> 
+    struct TLzqCompressX: public TLzqCompress { 
         inline TLzqCompressX(IOutputStream* out, size_t bufLen)
-            : TLzqCompress(out, bufLen, Ver, Level, Mode)
-        {
-        }
-    };
-}
-
-template <class C>
+            : TLzqCompress(out, bufLen, Ver, Level, Mode) 
+        { 
+        } 
+    }; 
+} 
+ 
+template <class C> 
 static inline void TestGoodDataCompress() {
     TFixedBufferFileOutput o(LDATA);
-    C c(&o, 1024);
-
+    C c(&o, 1024); 
+ 
     TString d = data;
-
-    for (size_t i = 0; i < 10; ++i) {
+ 
+    for (size_t i = 0; i < 10; ++i) { 
         c.Write(d.data(), d.size());
-        c << Endl;
-        d = d + d;
-    }
-
-    c.Finish();
-    o.Finish();
-}
-
+        c << Endl; 
+        d = d + d; 
+    } 
+ 
+    c.Finish(); 
+    o.Finish(); 
+} 
+ 
 template <class C>
 static inline void TestIncompressibleDataCompress(const TString& d, size_t bufferSize) {
     TString testFileName = TestFileName(d, bufferSize);
@@ -113,30 +113,30 @@ template <class C>
 static inline void TestCompress() {
     TestGoodDataCompress<C>();
     for (auto bufferSize : bufferSizes) {
-        for (auto rd : *Singleton<TRandomData>()) {
+        for (auto rd : *Singleton<TRandomData>()) { 
             TestIncompressibleDataCompress<C>(rd, bufferSize);
         }
     }
 }
 
-template <class D>
+template <class D> 
 static inline void TestGoodDataDecompress() {
-    TTempFile tmpFile(LDATA);
-
-    {
+    TTempFile tmpFile(LDATA); 
+ 
+    { 
         TFileInput i1(LDATA);
         D ld(&i1);
-
+ 
         TString d = data;
-
+ 
         for (size_t i2 = 0; i2 < 10; ++i2) {
-            UNIT_ASSERT_EQUAL(ld.ReadLine(), d);
-
-            d = d + d;
-        }
-    }
-}
-
+            UNIT_ASSERT_EQUAL(ld.ReadLine(), d); 
+ 
+            d = d + d; 
+        } 
+    } 
+} 
+ 
 template <class D>
 static inline void TestIncompressibleDataDecompress(const TString& d, size_t bufferSize) {
     TString testFileName = TestFileName(d, bufferSize);
@@ -154,25 +154,25 @@ template <class D>
 static inline void TestDecompress() {
     TestGoodDataDecompress<D>();
     for (auto bufferSize : bufferSizes) {
-        for (auto rd : *Singleton<TRandomData>()) {
+        for (auto rd : *Singleton<TRandomData>()) { 
             TestIncompressibleDataDecompress<D>(rd, bufferSize);
         }
     }
 }
 
 class TMixedDecompress: public IInputStream {
-public:
+public: 
     TMixedDecompress(IInputStream* input)
-        : Slave_(OpenLzDecompressor(input).Release())
-    {
-    }
+        : Slave_(OpenLzDecompressor(input).Release()) 
+    { 
+    } 
 
-private:
+private: 
     size_t DoRead(void* buf, size_t len) override {
-        return Slave_->Read(buf, len);
-    }
+        return Slave_->Read(buf, len); 
+    } 
 
-private:
+private: 
     THolder<IInputStream> Slave_;
 };
 
@@ -190,50 +190,50 @@ static inline void TestDecompressError() {
 
 Y_UNIT_TEST_SUITE(TLzTest) {
     Y_UNIT_TEST(TestLzo) {
-        TestCompress<TLzoCompress>();
-        TestDecompress<TLzoDecompress>();
-    }
-
+        TestCompress<TLzoCompress>(); 
+        TestDecompress<TLzoDecompress>(); 
+    } 
+ 
     Y_UNIT_TEST(TestLzf) {
-        TestCompress<TLzfCompress>();
-        TestDecompress<TLzfDecompress>();
-    }
-
+        TestCompress<TLzfCompress>(); 
+        TestDecompress<TLzfDecompress>(); 
+    } 
+ 
     Y_UNIT_TEST(TestLzq) {
-        TestCompress<TLzqCompress>();
-        TestDecompress<TLzqDecompress>();
-    }
+        TestCompress<TLzqCompress>(); 
+        TestDecompress<TLzqDecompress>(); 
+    } 
 
     Y_UNIT_TEST(TestLzq151_1) {
-        TestCompress<TLzqCompressX<TLzqCompress::V_1_51, 1, TLzqCompress::M_0>>();
-        TestDecompress<TLzqDecompress>();
-    }
-
+        TestCompress<TLzqCompressX<TLzqCompress::V_1_51, 1, TLzqCompress::M_0>>(); 
+        TestDecompress<TLzqDecompress>(); 
+    } 
+ 
     Y_UNIT_TEST(TestLzq151_2) {
-        TestCompress<TLzqCompressX<TLzqCompress::V_1_51, 2, TLzqCompress::M_100000>>();
-        TestDecompress<TLzqDecompress>();
-    }
-
+        TestCompress<TLzqCompressX<TLzqCompress::V_1_51, 2, TLzqCompress::M_100000>>(); 
+        TestDecompress<TLzqDecompress>(); 
+    } 
+ 
     Y_UNIT_TEST(TestLzq151_3) {
-        TestCompress<TLzqCompressX<TLzqCompress::V_1_51, 3, TLzqCompress::M_1000000>>();
-        TestDecompress<TLzqDecompress>();
-    }
-
+        TestCompress<TLzqCompressX<TLzqCompress::V_1_51, 3, TLzqCompress::M_1000000>>(); 
+        TestDecompress<TLzqDecompress>(); 
+    } 
+ 
     Y_UNIT_TEST(TestLzq140_1) {
-        TestCompress<TLzqCompressX<TLzqCompress::V_1_40, 1, TLzqCompress::M_0>>();
-        TestDecompress<TLzqDecompress>();
-    }
-
+        TestCompress<TLzqCompressX<TLzqCompress::V_1_40, 1, TLzqCompress::M_0>>(); 
+        TestDecompress<TLzqDecompress>(); 
+    } 
+ 
     Y_UNIT_TEST(TestLzq140_2) {
-        TestCompress<TLzqCompressX<TLzqCompress::V_1_40, 2, TLzqCompress::M_100000>>();
-        TestDecompress<TLzqDecompress>();
-    }
-
+        TestCompress<TLzqCompressX<TLzqCompress::V_1_40, 2, TLzqCompress::M_100000>>(); 
+        TestDecompress<TLzqDecompress>(); 
+    } 
+ 
     Y_UNIT_TEST(TestLzq140_3) {
-        TestCompress<TLzqCompressX<TLzqCompress::V_1_40, 3, TLzqCompress::M_1000000>>();
-        TestDecompress<TLzqDecompress>();
-    }
-
+        TestCompress<TLzqCompressX<TLzqCompress::V_1_40, 3, TLzqCompress::M_1000000>>(); 
+        TestDecompress<TLzqDecompress>(); 
+    } 
+ 
     Y_UNIT_TEST(TestLz4) {
         TestCompress<TLz4Compress>();
         TestDecompress<TLz4Decompress>();
@@ -260,21 +260,21 @@ Y_UNIT_TEST_SUITE(TLzTest) {
         TestDecompressError<TSnappyDecompress, TBufferedOutput>();
         TestDecompressError<TMixedDecompress, TBufferedOutput>();
     }
-
+ 
     Y_UNIT_TEST(TestFactory) {
-        TStringStream ss;
-
-        {
-            TLz4Compress c(&ss);
-
-            c.Write("123456789", 9);
-            c.Finish();
-        }
-
+        TStringStream ss; 
+ 
+        { 
+            TLz4Compress c(&ss); 
+ 
+            c.Write("123456789", 9); 
+            c.Finish(); 
+        } 
+ 
         TAutoPtr<IInputStream> is(OpenOwnedLzDecompressor(new TStringInput(ss.Str())));
-
-        UNIT_ASSERT_EQUAL(is->ReadAll(), "123456789");
-    }
+ 
+        UNIT_ASSERT_EQUAL(is->ReadAll(), "123456789"); 
+    } 
 
     Y_UNIT_TEST(TestYQ609) {
         auto data = NResource::Find("/yq_609.data");
@@ -284,4 +284,4 @@ Y_UNIT_TEST_SUITE(TLzTest) {
         TLz4Decompress d(&input);
         UNIT_ASSERT_EXCEPTION(d.ReadAll(), TDecompressorError);
     }
-}
+} 

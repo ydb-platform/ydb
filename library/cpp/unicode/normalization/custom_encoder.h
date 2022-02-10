@@ -2,8 +2,8 @@
 
 #include <library/cpp/charset/codepage.h>
 
-struct TCustomEncoder: public Encoder {
-    void Create(const CodePage* target, bool extended = false);
+struct TCustomEncoder: public Encoder { 
+    void Create(const CodePage* target, bool extended = false); 
     ~TCustomEncoder();
 
 private:

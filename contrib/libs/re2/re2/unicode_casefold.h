@@ -59,8 +59,8 @@ struct CaseFold {
   int32_t delta;
 };
 
-extern const CaseFold unicode_casefold[];
-extern const int num_unicode_casefold;
+extern const CaseFold unicode_casefold[]; 
+extern const int num_unicode_casefold; 
 
 extern const CaseFold unicode_tolower[];
 extern const int num_unicode_tolower;

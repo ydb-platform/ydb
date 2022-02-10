@@ -1,13 +1,13 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(pg)
 
-PEERDIR(
+PEERDIR( 
     library/cpp/malloc/api
-)
-
-SRCS(
-    io.cpp
-)
-
-END()
+) 
+ 
+SRCS( 
+    io.cpp 
+) 
+ 
+END() 

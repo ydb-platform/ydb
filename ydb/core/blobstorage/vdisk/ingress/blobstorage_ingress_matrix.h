@@ -1,9 +1,9 @@
 #pragma once
 
 #include <ydb/core/util/bits.h>
-
+ 
 #include <library/cpp/pop_count/popcount.h>
-
+ 
 #include <util/stream/str.h>
 #include <util/string/cast.h>
 
@@ -81,7 +81,7 @@ namespace NKikimr {
                 ui8 shift = 8 - i;
                 ui8 mask = 0xFF >> shift << shift;
                 unsigned v = Vec & mask;
-                return ::PopCount(v);
+                return ::PopCount(v); 
             }
 
             ui8 FirstPosition() const {
@@ -98,7 +98,7 @@ namespace NKikimr {
 
             ui8 CountBits() const {
                 unsigned v = Vec;
-                return ::PopCount(v);
+                return ::PopCount(v); 
             }
 
             ui8 Raw() const {

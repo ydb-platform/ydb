@@ -16,22 +16,22 @@
 namespace NActors {
 
 
-    /* WARNING: all proxy actors should be alive during actorsystem activity */
+    /* WARNING: all proxy actors should be alive during actorsystem activity */ 
     class TInterconnectProxyTCP
         : public TActor<TInterconnectProxyTCP>
         , public TInterconnectLoggingBase
         , public TProfiled
     {
-        enum {
-            EvCleanupEventQueue = EventSpaceBegin(TEvents::ES_PRIVATE),
+        enum { 
+            EvCleanupEventQueue = EventSpaceBegin(TEvents::ES_PRIVATE), 
             EvQueryStats,
             EvStats,
             EvPassAwayIfNeeded,
-        };
+        }; 
 
-        struct TEvCleanupEventQueue : TEventLocal<TEvCleanupEventQueue, EvCleanupEventQueue> {};
+        struct TEvCleanupEventQueue : TEventLocal<TEvCleanupEventQueue, EvCleanupEventQueue> {}; 
 
-    public:
+    public: 
         struct TEvQueryStats : TEventLocal<TEvQueryStats, EvQueryStats> {};
 
         struct TProxyStats {
@@ -56,9 +56,9 @@ namespace NActors {
             TProxyStats ProxyStats;
         };
 
-        static constexpr EActivityType ActorActivityType() {
-            return INTERCONNECT_PROXY_TCP;
-        }
+        static constexpr EActivityType ActorActivityType() { 
+            return INTERCONNECT_PROXY_TCP; 
+        } 
 
         TInterconnectProxyTCP(const ui32 node, TInterconnectProxyCommon::TPtr common, IActor **dynamicPtr = nullptr);
 
@@ -72,11 +72,11 @@ namespace NActors {
         void Bootstrap();
         void Registered(TActorSystem* sys, const TActorId& owner) override;
 
-    private:
-        friend class TInterconnectSessionTCP;
-        friend class TInterconnectSessionTCPv0;
-        friend class THandshake;
-        friend class TInputSessionTCP;
+    private: 
+        friend class TInterconnectSessionTCP; 
+        friend class TInterconnectSessionTCPv0; 
+        friend class THandshake; 
+        friend class TInputSessionTCP; 
 
         void UnregisterSession(TInterconnectSessionTCP* session);
 
@@ -138,46 +138,46 @@ namespace NActors {
         }                                                                                       \
     }
 
-        template <typename T>
+        template <typename T> 
         void Ignore(T& /*ev*/) {
             ICPROXY_PROFILED;
-        }
+        } 
 
         void Ignore() {
             ICPROXY_PROFILED;
-        }
+        } 
 
         void Ignore(TEvHandshakeDone::TPtr& ev) {
             ICPROXY_PROFILED;
 
-            Y_VERIFY(ev->Sender != IncomingHandshakeActor);
-            Y_VERIFY(ev->Sender != OutgoingHandshakeActor);
-        }
+            Y_VERIFY(ev->Sender != IncomingHandshakeActor); 
+            Y_VERIFY(ev->Sender != OutgoingHandshakeActor); 
+        } 
 
         void Ignore(TEvHandshakeFail::TPtr& ev) {
             ICPROXY_PROFILED;
 
-            Y_VERIFY(ev->Sender != IncomingHandshakeActor);
-            Y_VERIFY(ev->Sender != OutgoingHandshakeActor);
+            Y_VERIFY(ev->Sender != IncomingHandshakeActor); 
+            Y_VERIFY(ev->Sender != OutgoingHandshakeActor); 
             LogHandshakeFail(ev, true);
-        }
+        } 
 
-        const char* State = nullptr;
-        TInstant StateSwitchTime;
+        const char* State = nullptr; 
+        TInstant StateSwitchTime; 
 
-        template <typename... TArgs>
+        template <typename... TArgs> 
         void SwitchToState(int line, const char* name, TArgs&&... args) {
             ICPROXY_PROFILED;
 
             LOG_DEBUG_IC("ICP77", "@%d %s -> %s", line, State, name);
-            State = name;
+            State = name; 
             StateSwitchTime = TActivationContext::Now();
-            Become(std::forward<TArgs>(args)...);
+            Become(std::forward<TArgs>(args)...); 
             Y_VERIFY(!Terminated || CurrentStateFunc() == &TThis::HoldByError); // ensure we never escape this state
             if (CurrentStateFunc() != &TThis::PendingActivation) {
                 PassAwayTimestamp = TInstant::Max();
             }
-        }
+        } 
 
         TInstant PassAwayTimestamp;
         bool PassAwayScheduled = false;
@@ -194,7 +194,7 @@ namespace NActors {
                     {}, nullptr, 0));
                 PassAwayScheduled = true;
             }
-        }
+        } 
 
         void HandlePassAwayIfNeeded() {
             Y_VERIFY(PassAwayScheduled);
@@ -203,92 +203,92 @@ namespace NActors {
             }
         }
 
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // PendingActivation
-        //
-        // In this state we are just waiting for some activities, which may include:
-        // * an external Session event
-        // * incoming handshake request
-        //
-        // Upon receiving such event, we put it to corresponding queue and initiate start up by calling IssueGetNodeRequest,
-        // which, as the name says, issued TEvGetNode to the nameservice and arms timer to handle timeout (which should not
-        // occur, but we want to be sure we don't hang on this), and then switches to PendingNodeInfo state.
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+        // PendingActivation 
+        // 
+        // In this state we are just waiting for some activities, which may include: 
+        // * an external Session event 
+        // * incoming handshake request 
+        // 
+        // Upon receiving such event, we put it to corresponding queue and initiate start up by calling IssueGetNodeRequest, 
+        // which, as the name says, issued TEvGetNode to the nameservice and arms timer to handle timeout (which should not 
+        // occur, but we want to be sure we don't hang on this), and then switches to PendingNodeInfo state. 
 
-        PROXY_STFUNC(PendingActivation,
-                     RequestNodeInfo,                     // Session events
-                     RequestNodeInfoForIncomingHandshake, // Incoming handshake requests
-                     Ignore,                              // Handshake status
-                     Ignore,                              // Disconnect request
-                     Ignore,                              // Wakeup
-                     Ignore                               // Node info
+        PROXY_STFUNC(PendingActivation, 
+                     RequestNodeInfo,                     // Session events 
+                     RequestNodeInfoForIncomingHandshake, // Incoming handshake requests 
+                     Ignore,                              // Handshake status 
+                     Ignore,                              // Disconnect request 
+                     Ignore,                              // Wakeup 
+                     Ignore                               // Node info 
         )
 
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // PendingNodeInfo
-        //
-        // This state is entered when we asked nameserver to provide description for peer node we are working with. All
-        // external Session events and incoming handshake requests are enqueued into their respective queues, TEvNodeInfo
-        // is main event that triggers processing. On success, we try to initiate outgoing handshake if needed, or process
-        // incoming handshakes. On error, we enter HoldByError state.
-        //
-        // NOTE: handshake status events are also enqueued as the handshake actor may have generated failure event due to
-        //       timeout or some other reason without waiting for acknowledge, and it must be processed correctly to prevent
-        //       session hang
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+        // PendingNodeInfo 
+        // 
+        // This state is entered when we asked nameserver to provide description for peer node we are working with. All 
+        // external Session events and incoming handshake requests are enqueued into their respective queues, TEvNodeInfo 
+        // is main event that triggers processing. On success, we try to initiate outgoing handshake if needed, or process 
+        // incoming handshakes. On error, we enter HoldByError state. 
+        // 
+        // NOTE: handshake status events are also enqueued as the handshake actor may have generated failure event due to 
+        //       timeout or some other reason without waiting for acknowledge, and it must be processed correctly to prevent 
+        //       session hang 
 
-        PROXY_STFUNC(PendingNodeInfo,
-                     EnqueueSessionEvent,           // Session events
-                     EnqueueIncomingHandshakeEvent, // Incoming handshake requests
-                     EnqueueIncomingHandshakeEvent, // Handshake status
-                     Disconnect,                    // Disconnect request
-                     ConfigureTimeout,              // Wakeup
-                     Configure                      // Node info
+        PROXY_STFUNC(PendingNodeInfo, 
+                     EnqueueSessionEvent,           // Session events 
+                     EnqueueIncomingHandshakeEvent, // Incoming handshake requests 
+                     EnqueueIncomingHandshakeEvent, // Handshake status 
+                     Disconnect,                    // Disconnect request 
+                     ConfigureTimeout,              // Wakeup 
+                     Configure                      // Node info 
         )
 
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // PendingConnection
-        //
-        // Here we have issued outgoing handshake or have accepted (or may be both) incoming handshake and we are waiting for
-        // the status of the handshake. When one if handshakes finishes, we use this status to establish connection (or to
-        // go to error state). When one handshake terminates with error while other is running, we will still wait for the
-        // second one to finish.
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+        // PendingConnection 
+        // 
+        // Here we have issued outgoing handshake or have accepted (or may be both) incoming handshake and we are waiting for 
+        // the status of the handshake. When one if handshakes finishes, we use this status to establish connection (or to 
+        // go to error state). When one handshake terminates with error while other is running, we will still wait for the 
+        // second one to finish. 
 
-        PROXY_STFUNC(PendingConnection,
-                     EnqueueSessionEvent,   // Session events
-                     IncomingHandshake,     // Incoming handshake requests
-                     HandleHandshakeStatus, // Handshake status
-                     Disconnect,            // Disconnect request
-                     Ignore,                // Wakeup
-                     Ignore                 // Node info
+        PROXY_STFUNC(PendingConnection, 
+                     EnqueueSessionEvent,   // Session events 
+                     IncomingHandshake,     // Incoming handshake requests 
+                     HandleHandshakeStatus, // Handshake status 
+                     Disconnect,            // Disconnect request 
+                     Ignore,                // Wakeup 
+                     Ignore                 // Node info 
         )
 
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // StateWork
-        //
-        // We have accepted session and process any incoming messages with the session. Incoming handshakes are accepted
-        // concurrently and applied when finished.
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+        // StateWork 
+        // 
+        // We have accepted session and process any incoming messages with the session. Incoming handshakes are accepted 
+        // concurrently and applied when finished. 
 
-        PROXY_STFUNC(StateWork,
-                     ForwardSessionEventToSession, // Session events
-                     IncomingHandshake,            // Incoming handshake requests
-                     HandleHandshakeStatus,        // Handshake status
-                     Disconnect,                   // Disconnect request
-                     Ignore,                       // Wakeup
-                     Ignore                        // Node info
+        PROXY_STFUNC(StateWork, 
+                     ForwardSessionEventToSession, // Session events 
+                     IncomingHandshake,            // Incoming handshake requests 
+                     HandleHandshakeStatus,        // Handshake status 
+                     Disconnect,                   // Disconnect request 
+                     Ignore,                       // Wakeup 
+                     Ignore                        // Node info 
         )
 
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // HoldByError
-        //
-        // When something bad happens with the connection, we sleep in this state. After wake up we go back to
-        // PendingActivation.
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+        // HoldByError 
+        // 
+        // When something bad happens with the connection, we sleep in this state. After wake up we go back to 
+        // PendingActivation. 
 
-        PROXY_STFUNC(HoldByError,
-                     DropSessionEvent,                    // Session events
-                     RequestNodeInfoForIncomingHandshake, // Incoming handshake requests
-                     Ignore,                              // Handshake status
-                     Ignore,                              // Disconnect request
-                     WakeupFromErrorState,                // Wakeup
-                     Ignore                               // Node info
+        PROXY_STFUNC(HoldByError, 
+                     DropSessionEvent,                    // Session events 
+                     RequestNodeInfoForIncomingHandshake, // Incoming handshake requests 
+                     Ignore,                              // Handshake status 
+                     Ignore,                              // Disconnect request 
+                     WakeupFromErrorState,                // Wakeup 
+                     Ignore                               // Node info 
         )
 
 #undef SESSION_EVENTS
@@ -317,19 +317,19 @@ namespace NActors {
         void StartInitialHandshake();
         void StartResumeHandshake(ui64 inputCounter);
 
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // Incoming handshake event queue processing
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+        // Incoming handshake event queue processing 
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
 
         void EnqueueIncomingHandshakeEvent(STATEFN_SIG);
         void EnqueueIncomingHandshakeEvent(TEvHandshakeDone::TPtr& ev);
         void EnqueueIncomingHandshakeEvent(TEvHandshakeFail::TPtr& ev);
 
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // PendingNodeInfo
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+        // PendingNodeInfo 
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
 
-        IEventBase* ConfigureTimeoutCookie; // pointer to the scheduled event used to match sent and received events
+        IEventBase* ConfigureTimeoutCookie; // pointer to the scheduled event used to match sent and received events 
 
         void StartConfiguring();
         void Configure(TEvInterconnect::TEvNodeInfo::TPtr& ev);
@@ -343,7 +343,7 @@ namespace NActors {
         void WakeupFromErrorState(TEvents::TEvWakeup::TPtr& ev);
         void Disconnect();
 
-        const ui32 PeerNodeId;
+        const ui32 PeerNodeId; 
         IActor **DynamicPtr;
 
         void ValidateEvent(TAutoPtr<IEventHandle>& ev, const char* func) {
@@ -362,15 +362,15 @@ namespace NActors {
         }
 
         // Common with helpers
-        // All proxy actors share the same information in the object
-        // read only
+        // All proxy actors share the same information in the object 
+        // read only 
         TInterconnectProxyCommon::TPtr const Common;
 
         const TActorId& GetNameserviceId() const {
             return Common->NameserviceId;
-        }
+        } 
 
-        TString TechnicalPeerHostName;
+        TString TechnicalPeerHostName; 
 
         std::shared_ptr<IInterconnectMetrics> Metrics;
 
@@ -380,12 +380,12 @@ namespace NActors {
 
         void HandleSessionBufferSizeRequest(TEvSessionBufferSizeRequest::TPtr& ev);
 
-        bool CleanupEventQueueScheduled = false;
+        bool CleanupEventQueueScheduled = false; 
         void ScheduleCleanupEventQueue();
         void HandleCleanupEventQueue();
         void CleanupEventQueue();
 
-        // hold all events before connection is established
+        // hold all events before connection is established 
         struct TPendingSessionEvent {
             TInstant Deadline;
             ui32 Size;
@@ -402,12 +402,12 @@ namespace NActors {
         void ProcessPendingSessionEvents();
         void DropSessionEvent(STATEFN_SIG);
 
-        TInterconnectSessionTCP* Session = nullptr;
+        TInterconnectSessionTCP* Session = nullptr; 
         TActorId SessionID;
 
-        // virtual ids used during handshake to check if it is the connection
-        // for the same session or to find out the latest shandshake
-        // it's virtual because session actor apears after successfull handshake
+        // virtual ids used during handshake to check if it is the connection 
+        // for the same session or to find out the latest shandshake 
+        // it's virtual because session actor apears after successfull handshake 
         TActorId SessionVirtualId;
         TActorId RemoteSessionVirtualId;
 
@@ -416,27 +416,27 @@ namespace NActors {
 
             const ui64 localId = TlsActivationContext->ExecutorThread.ActorSystem->AllocateIDSpace(1);
             return NActors::TActorId(SelfId().NodeId(), 0, localId, 0);
-        }
+        } 
 
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
 
         TActorId IncomingHandshakeActor;
-        TInstant IncomingHandshakeActorFilledIn;
-        TInstant IncomingHandshakeActorReset;
+        TInstant IncomingHandshakeActorFilledIn; 
+        TInstant IncomingHandshakeActorReset; 
         TMaybe<ui64> LastSerialFromIncomingHandshake;
-        THolder<IEventBase> HeldHandshakeReply;
+        THolder<IEventBase> HeldHandshakeReply; 
 
         void DropIncomingHandshake(bool poison = true) {
             ICPROXY_PROFILED;
 
             if (const TActorId& actorId = std::exchange(IncomingHandshakeActor, TActorId())) {
                 LOG_DEBUG_IC("ICP111", "dropped incoming handshake: %s poison: %s", actorId.ToString().data(),
-                             poison ? "true" : "false");
-                if (poison) {
+                             poison ? "true" : "false"); 
+                if (poison) { 
                     Send(actorId, new TEvents::TEvPoisonPill);
-                }
+                } 
                 LastSerialFromIncomingHandshake.Clear();
-                HeldHandshakeReply.Reset();
+                HeldHandshakeReply.Reset(); 
                 IncomingHandshakeActorReset = TActivationContext::Now();
             }
         }
@@ -446,10 +446,10 @@ namespace NActors {
 
             if (const TActorId& actorId = std::exchange(OutgoingHandshakeActor, TActorId())) {
                 LOG_DEBUG_IC("ICP112", "dropped outgoing handshake: %s poison: %s", actorId.ToString().data(),
-                             poison ? "true" : "false");
-                if (poison) {
+                             poison ? "true" : "false"); 
+                if (poison) { 
                     Send(actorId, new TEvents::TEvPoisonPill);
-                }
+                } 
                 OutgoingHandshakeActorReset = TActivationContext::Now();
             }
         }
@@ -464,38 +464,38 @@ namespace NActors {
         void PrepareNewSessionHandshake() {
             ICPROXY_PROFILED;
 
-            // drop existing session if we have one
-            if (Session) {
-                LOG_INFO_IC("ICP04", "terminating current session as we are negotiating a new one");
+            // drop existing session if we have one 
+            if (Session) { 
+                LOG_INFO_IC("ICP04", "terminating current session as we are negotiating a new one"); 
                 IActor::InvokeOtherActor(*Session, &TInterconnectSessionTCP::Terminate, TDisconnectReason::NewSession());
-            }
+            } 
 
-            // ensure we have no current session
-            Y_VERIFY(!Session);
+            // ensure we have no current session 
+            Y_VERIFY(!Session); 
 
-            // switch to pending connection state -- we wait for handshakes, we want more handshakes!
+            // switch to pending connection state -- we wait for handshakes, we want more handshakes! 
             SwitchToState(__LINE__, "PendingConnection", &TThis::PendingConnection);
-        }
+        } 
 
         void IssueIncomingHandshakeReply(const TActorId& handshakeId, ui64 peerLocalId,
-                                         THolder<IEventBase> event);
+                                         THolder<IEventBase> event); 
 
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
 
         TActorId OutgoingHandshakeActor;
-        TInstant OutgoingHandshakeActorCreated;
-        TInstant OutgoingHandshakeActorReset;
+        TInstant OutgoingHandshakeActorCreated; 
+        TInstant OutgoingHandshakeActorReset; 
 
-        TInstant LastSessionDieTime;
+        TInstant LastSessionDieTime; 
 
         void GenerateHttpInfo(NMon::TEvHttpInfo::TPtr& ev);
 
         void Handle(TEvQueryStats::TPtr& ev);
 
-        TDuration HoldByErrorWakeupDuration = TDuration::Zero();
-        TEvents::TEvWakeup* HoldByErrorWakeupCookie;
+        TDuration HoldByErrorWakeupDuration = TDuration::Zero(); 
+        TEvents::TEvWakeup* HoldByErrorWakeupCookie; 
 
-        THolder<TProgramInfo> RemoteProgramInfo;
+        THolder<TProgramInfo> RemoteProgramInfo; 
         NInterconnect::TSecureSocketContext::TPtr SecureContext;
 
         void Handle(TEvGetSecureSocket::TPtr ev) {
@@ -503,11 +503,11 @@ namespace NActors {
             Send(ev->Sender, new TEvSecureSocket(std::move(socket)));
         }
 
-        TDeque<THolder<IEventHandle>> PendingIncomingHandshakeEvents;
+        TDeque<THolder<IEventHandle>> PendingIncomingHandshakeEvents; 
 
         TDeque<std::tuple<TInstant, TString, TString, ui32>> ErrorStateLog;
-
-        void UpdateErrorStateLog(TInstant now, TString kind, TString explanation) {
+ 
+        void UpdateErrorStateLog(TInstant now, TString kind, TString explanation) { 
             ICPROXY_PROFILED;
 
             if (ErrorStateLog) {
@@ -521,9 +521,9 @@ namespace NActors {
             }
 
             ErrorStateLog.emplace_back(now, std::move(kind), std::move(explanation), 1);
-            if (ErrorStateLog.size() > 20) {
-                ErrorStateLog.pop_front();
-            }
+            if (ErrorStateLog.size() > 20) { 
+                ErrorStateLog.pop_front(); 
+            } 
         }
 
         void LogHandshakeFail(TEvHandshakeFail::TPtr& ev, bool inconclusive);
@@ -532,6 +532,6 @@ namespace NActors {
         void HandleTerminate();
 
         void PassAway() override;
-    };
+    }; 
 
 }

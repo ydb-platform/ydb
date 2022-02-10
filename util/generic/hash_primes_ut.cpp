@@ -1,18 +1,18 @@
-#include "hash_primes.h"
-
+#include "hash_primes.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <util/generic/vector.h>
 #include <util/string/builder.h>
 #include <util/random/fast.h>
 
 Y_UNIT_TEST_SUITE(TestHashPrimes) {
     Y_UNIT_TEST(Test1) {
-        UNIT_ASSERT_VALUES_EQUAL(HashBucketCount(1), 7);
-        UNIT_ASSERT_VALUES_EQUAL(HashBucketCount(6), 7);
-        UNIT_ASSERT_VALUES_EQUAL(HashBucketCount(7), 7);
-        UNIT_ASSERT_VALUES_EQUAL(HashBucketCount(8), 17);
-    }
+        UNIT_ASSERT_VALUES_EQUAL(HashBucketCount(1), 7); 
+        UNIT_ASSERT_VALUES_EQUAL(HashBucketCount(6), 7); 
+        UNIT_ASSERT_VALUES_EQUAL(HashBucketCount(7), 7); 
+        UNIT_ASSERT_VALUES_EQUAL(HashBucketCount(8), 17); 
+    } 
 
     static TVector<size_t> Numbers() {
         TVector<size_t> numbers;
@@ -77,4 +77,4 @@ Y_UNIT_TEST_SUITE(TestHashPrimes) {
             }
         }
     }
-}
+} 

@@ -28,7 +28,7 @@ static int Y_FORCE_INLINE AtomicFetchAdd(volatile int& item, int value) {
 }
 #elif defined(__GNUC__)
 #else
-#error unsupported platform
+#error unsupported platform 
 #endif
 
 class TPosixRWLock {

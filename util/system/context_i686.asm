@@ -12,13 +12,13 @@
         %define LINKAGE  4
         %define PCOFF    0
         %define PTR_SIZE 4
-
+ 
         %define PARMS  LINKAGE
         %define JMPBUF PARMS
         %define JBUF   PARMS
         %define VAL    JBUF + PTR_SIZE
 
-EXPORT __mylongjmp
+EXPORT __mylongjmp 
         mov ecx, [esp + JBUF]
         mov eax, [esp + VAL]
         mov edx, [ecx + MJB_PC*4]
@@ -29,7 +29,7 @@ EXPORT __mylongjmp
         mov esp, [ecx + MJB_SP*4]
         jmp edx
 
-EXPORT __mysetjmp
+EXPORT __mysetjmp 
         mov eax, [esp + JMPBUF]
         mov [eax + MJB_BX*4], ebx
         mov [eax + MJB_SI*4], esi

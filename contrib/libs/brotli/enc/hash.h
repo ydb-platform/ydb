@@ -1,5 +1,5 @@
 /* Copyright 2010 Google Inc. All Rights Reserved.
-
+ 
    Distributed under MIT license.
    See file LICENSE for detail or copy at https://opensource.org/licenses/MIT
 */
@@ -7,26 +7,26 @@
 /* A (forgetful) hash table to the data seen by the compressor, to
    help create backward references to previous data. */
 
-#ifndef BROTLI_ENC_HASH_H_
-#define BROTLI_ENC_HASH_H_
-
+#ifndef BROTLI_ENC_HASH_H_ 
+#define BROTLI_ENC_HASH_H_ 
+ 
 #include <string.h>  /* memcmp, memset */
-
+ 
 #include "../common/constants.h"
 #include "../common/dictionary.h"
 #include "../common/platform.h"
 #include <brotli/types.h>
 #include "./encoder_dict.h"
-#include "./fast_log.h"
-#include "./find_match_length.h"
+#include "./fast_log.h" 
+#include "./find_match_length.h" 
 #include "./memory.h"
 #include "./quality.h"
-#include "./static_dict.h"
-
+#include "./static_dict.h" 
+ 
 #if defined(__cplusplus) || defined(c_plusplus)
 extern "C" {
 #endif
-
+ 
 /* Pointer to hasher data.
  *
  * Excluding initialization and destruction, hasher can be passed as
@@ -40,10 +40,10 @@ extern "C" {
  * Using "define" instead of "typedef", because on MSVC __restrict does not work
  * on typedef pointer types. */
 #define HasherHandle uint8_t*
-
+ 
 typedef struct {
   BrotliHasherParams params;
-
+ 
   /* False if hasher needs to be "prepared" before use. */
   BROTLI_BOOL is_prepared_;
 
@@ -80,14 +80,14 @@ static const uint32_t kHashMul32 = 0x1E35A7BD;
 static const uint64_t kHashMul64 = BROTLI_MAKE_UINT64_T(0x1E35A7BD, 0x1E35A7BD);
 static const uint64_t kHashMul64Long =
     BROTLI_MAKE_UINT64_T(0x1FE35A7Bu, 0xD3579BD3u);
-
+ 
 static BROTLI_INLINE uint32_t Hash14(const uint8_t* data) {
   uint32_t h = BROTLI_UNALIGNED_LOAD32LE(data) * kHashMul32;
   /* The higher bits contain more mixture from the multiplication,
      so we take our results from there. */
   return h >> (32 - 14);
-}
-
+} 
+ 
 static BROTLI_INLINE void PrepareDistanceCache(
     int* BROTLI_RESTRICT distance_cache, const int num_distances) {
   if (num_distances > 4) {
@@ -108,8 +108,8 @@ static BROTLI_INLINE void PrepareDistanceCache(
       distance_cache[15] = next_last_distance + 3;
     }
   }
-}
-
+} 
+ 
 #define BROTLI_LITERAL_BYTE_SCORE 135
 #define BROTLI_DISTANCE_BIT_PENALTY 30
 /* Score must be positive after applying maximal penalty. */
@@ -135,19 +135,19 @@ static BROTLI_INLINE score_t BackwardReferenceScore(
     size_t copy_length, size_t backward_reference_offset) {
   return BROTLI_SCORE_BASE + BROTLI_LITERAL_BYTE_SCORE * (score_t)copy_length -
       BROTLI_DISTANCE_BIT_PENALTY * Log2FloorNonZero(backward_reference_offset);
-}
-
+} 
+ 
 static BROTLI_INLINE score_t BackwardReferenceScoreUsingLastDistance(
     size_t copy_length) {
   return BROTLI_LITERAL_BYTE_SCORE * (score_t)copy_length +
       BROTLI_SCORE_BASE + 15;
 }
-
+ 
 static BROTLI_INLINE score_t BackwardReferencePenaltyUsingLastDistance(
     size_t distance_short_code) {
   return (score_t)39 + ((0x1CA10 >> (distance_short_code & 0xE)) & 0xE);
 }
-
+ 
 static BROTLI_INLINE BROTLI_BOOL TestStaticDictionaryItem(
     const BrotliEncoderDictionary* dictionary, size_t item,
     const uint8_t* data, size_t max_length, size_t max_backward,
@@ -164,33 +164,33 @@ static BROTLI_INLINE BROTLI_BOOL TestStaticDictionaryItem(
   if (len > max_length) {
     return BROTLI_FALSE;
   }
-
+ 
   matchlen =
       FindMatchLengthWithLimit(data, &dictionary->words->data[offset], len);
   if (matchlen + dictionary->cutoffTransformsCount <= len || matchlen == 0) {
     return BROTLI_FALSE;
-  }
+  } 
   {
     size_t cut = len - matchlen;
     size_t transform_id = (cut << 2) +
         (size_t)((dictionary->cutoffTransforms >> (cut * 6)) & 0x3F);
     backward = max_backward + 1 + word_idx +
         (transform_id << dictionary->words->size_bits_by_length[len]);
-  }
+  } 
   if (backward > max_distance) {
     return BROTLI_FALSE;
-  }
+  } 
   score = BackwardReferenceScore(matchlen, backward);
   if (score < out->score) {
     return BROTLI_FALSE;
-  }
+  } 
   out->len = matchlen;
   out->len_code_delta = (int)len - (int)matchlen;
   out->distance = backward;
   out->score = score;
   return BROTLI_TRUE;
 }
-
+ 
 static BROTLI_INLINE void SearchInStaticDictionary(
     const BrotliEncoderDictionary* dictionary,
     HasherHandle handle, const uint8_t* data, size_t max_length,
@@ -201,7 +201,7 @@ static BROTLI_INLINE void SearchInStaticDictionary(
   HasherCommon* self = GetHasherCommon(handle);
   if (self->dict_num_matches < (self->dict_num_lookups >> 7)) {
     return;
-  }
+  } 
   key = Hash14(data) << 1;
   for (i = 0; i < (shallow ? 1u : 2u); ++i, ++key) {
     size_t item = dictionary->hash_table[key];
@@ -212,42 +212,42 @@ static BROTLI_INLINE void SearchInStaticDictionary(
           max_length, max_backward, max_distance, out);
       if (item_matches) {
         self->dict_num_matches++;
-      }
-    }
-  }
+      } 
+    } 
+  } 
 }
-
+ 
 typedef struct BackwardMatch {
   uint32_t distance;
   uint32_t length_and_code;
 } BackwardMatch;
-
+ 
 static BROTLI_INLINE void InitBackwardMatch(BackwardMatch* self,
     size_t dist, size_t len) {
   self->distance = (uint32_t)dist;
   self->length_and_code = (uint32_t)(len << 5);
 }
-
+ 
 static BROTLI_INLINE void InitDictionaryBackwardMatch(BackwardMatch* self,
     size_t dist, size_t len, size_t len_code) {
   self->distance = (uint32_t)dist;
   self->length_and_code =
       (uint32_t)((len << 5) | (len == len_code ? 0 : len_code));
 }
-
+ 
 static BROTLI_INLINE size_t BackwardMatchLength(const BackwardMatch* self) {
   return self->length_and_code >> 5;
 }
-
+ 
 static BROTLI_INLINE size_t BackwardMatchLengthCode(const BackwardMatch* self) {
   size_t code = self->length_and_code & 31;
   return code ? code : BackwardMatchLength(self);
 }
-
+ 
 #define EXPAND_CAT(a, b) CAT(a, b)
 #define CAT(a, b) a ## b
 #define FN(X) EXPAND_CAT(X, HASHER())
-
+ 
 #define HASHER() H10
 #define BUCKET_BITS 17
 #define MAX_TREE_SEARCH_DEPTH 64
@@ -259,11 +259,11 @@ static BROTLI_INLINE size_t BackwardMatchLengthCode(const BackwardMatch* self) {
 #undef HASHER
 /* MAX_NUM_MATCHES == 64 + MAX_TREE_SEARCH_DEPTH */
 #define MAX_NUM_MATCHES_H10 128
-
+ 
 /* For BUCKET_SWEEP == 1, enabling the dictionary lookup makes compression
    a little faster (0.5% - 1%) and it compresses 0.15% better on small text
    and HTML inputs. */
-
+ 
 #define HASHER() H2
 #define BUCKET_BITS 16
 #define BUCKET_SWEEP 1
@@ -273,7 +273,7 @@ static BROTLI_INLINE size_t BackwardMatchLengthCode(const BackwardMatch* self) {
 #undef BUCKET_SWEEP
 #undef USE_DICTIONARY
 #undef HASHER
-
+ 
 #define HASHER() H3
 #define BUCKET_SWEEP 2
 #define USE_DICTIONARY 0
@@ -282,7 +282,7 @@ static BROTLI_INLINE size_t BackwardMatchLengthCode(const BackwardMatch* self) {
 #undef BUCKET_SWEEP
 #undef BUCKET_BITS
 #undef HASHER
-
+ 
 #define HASHER() H4
 #define BUCKET_BITS 17
 #define BUCKET_SWEEP 4
@@ -293,17 +293,17 @@ static BROTLI_INLINE size_t BackwardMatchLengthCode(const BackwardMatch* self) {
 #undef BUCKET_SWEEP
 #undef BUCKET_BITS
 #undef HASHER
-
+ 
 #define HASHER() H5
 #include "./hash_longest_match_inc.h"  /* NOLINT(build/include) */
 #undef HASHER
-
+ 
 #define HASHER() H6
 #include "./hash_longest_match64_inc.h"  /* NOLINT(build/include) */
 #undef HASHER
-
+ 
 #define BUCKET_BITS 15
-
+ 
 #define NUM_LAST_DISTANCES_TO_CHECK 4
 #define NUM_BANKS 1
 #define BANK_BITS 16
@@ -311,7 +311,7 @@ static BROTLI_INLINE size_t BackwardMatchLengthCode(const BackwardMatch* self) {
 #include "./hash_forgetful_chain_inc.h"  /* NOLINT(build/include) */
 #undef HASHER
 #undef NUM_LAST_DISTANCES_TO_CHECK
-
+ 
 #define NUM_LAST_DISTANCES_TO_CHECK 10
 #define HASHER() H41
 #include "./hash_forgetful_chain_inc.h"  /* NOLINT(build/include) */
@@ -319,7 +319,7 @@ static BROTLI_INLINE size_t BackwardMatchLengthCode(const BackwardMatch* self) {
 #undef NUM_LAST_DISTANCES_TO_CHECK
 #undef NUM_BANKS
 #undef BANK_BITS
-
+ 
 #define NUM_LAST_DISTANCES_TO_CHECK 16
 #define NUM_BANKS 512
 #define BANK_BITS 9
@@ -329,9 +329,9 @@ static BROTLI_INLINE size_t BackwardMatchLengthCode(const BackwardMatch* self) {
 #undef NUM_LAST_DISTANCES_TO_CHECK
 #undef NUM_BANKS
 #undef BANK_BITS
-
+ 
 #undef BUCKET_BITS
-
+ 
 #define HASHER() H54
 #define BUCKET_BITS 20
 #define BUCKET_SWEEP 4
@@ -343,7 +343,7 @@ static BROTLI_INLINE size_t BackwardMatchLengthCode(const BackwardMatch* self) {
 #undef BUCKET_SWEEP
 #undef BUCKET_BITS
 #undef HASHER
-
+ 
 /* fast large window hashers */
 
 #define HASHER() HROLLING_FAST
@@ -420,10 +420,10 @@ static BROTLI_INLINE size_t HasherSize(const BrotliEncoderParams* params,
 #undef SIZE_
     default:
       break;
-  }
+  } 
   return result;
 }
-
+ 
 static BROTLI_INLINE void HasherSetup(MemoryManager* m, HasherHandle* handle,
     BrotliEncoderParams* params, const uint8_t* data, size_t position,
     size_t input_size, BROTLI_BOOL is_last) {
@@ -448,10 +448,10 @@ static BROTLI_INLINE void HasherSetup(MemoryManager* m, HasherHandle* handle,
 #undef INITIALIZE_
       default:
         break;
-    }
+    } 
     HasherReset(*handle);
-  }
-
+  } 
+ 
   self = *handle;
   common = GetHasherCommon(self);
   if (!common->is_prepared_) {
@@ -462,16 +462,16 @@ static BROTLI_INLINE void HasherSetup(MemoryManager* m, HasherHandle* handle,
         break;
       FOR_ALL_HASHERS(PREPARE_)
 #undef PREPARE_
-      default: break;
-    }
+      default: break; 
+    } 
     if (position == 0) {
         common->dict_num_lookups = 0;
         common->dict_num_matches = 0;
     }
     common->is_prepared_ = BROTLI_TRUE;
-  }
+  } 
 }
-
+ 
 static BROTLI_INLINE void InitOrStitchToPreviousBlock(
     MemoryManager* m, HasherHandle* handle, const uint8_t* data, size_t mask,
     BrotliEncoderParams* params, size_t position, size_t input_size,
@@ -490,9 +490,9 @@ static BROTLI_INLINE void InitOrStitchToPreviousBlock(
     default: break;
   }
 }
-
+ 
 #if defined(__cplusplus) || defined(c_plusplus)
 }  /* extern "C" */
 #endif
-
+ 
 #endif  /* BROTLI_ENC_HASH_H_ */

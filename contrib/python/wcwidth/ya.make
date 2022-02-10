@@ -1,7 +1,7 @@
 PY23_LIBRARY()
 
-LICENSE(MIT)
-
+LICENSE(MIT) 
+ 
 OWNER(g:python-contrib blinkov)
 
 VERSION(0.2.5)

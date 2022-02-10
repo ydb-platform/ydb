@@ -6,7 +6,7 @@
 class TUseAfterFreeChecker {
 private:
     ui64 Magic;
-
+ 
 public:
     TUseAfterFreeChecker();
     ~TUseAfterFreeChecker();
@@ -17,7 +17,7 @@ public:
 class TUseAfterFreeCheckerGuard {
 private:
     const TUseAfterFreeChecker& Check;
-
+ 
 public:
     TUseAfterFreeCheckerGuard(const TUseAfterFreeChecker& check)
         : Check(check)

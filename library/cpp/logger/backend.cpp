@@ -1,15 +1,15 @@
-#include "backend.h"
+#include "backend.h" 
 #include <util/generic/vector.h>
 #include <util/system/mutex.h>
 #include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
-
+ 
 namespace {
     class TGlobalLogsStorage {
     private:
         TVector<TLogBackend*> Backends;
         TMutex Mutex;
-
+ 
     public:
         void Register(TLogBackend* backend) {
             TGuard<TMutex> g(Mutex);
@@ -40,7 +40,7 @@ namespace {
     };
 }
 
-template <>
+template <> 
 class TSingletonTraits<TGlobalLogsStorage> {
 public:
     static const size_t Priority = 50;
@@ -52,11 +52,11 @@ ELogPriority TLogBackend::FiltrationLevel() const {
 
 TLogBackend::TLogBackend() noexcept {
     Singleton<TGlobalLogsStorage>()->Register(this);
-}
-
+} 
+ 
 TLogBackend::~TLogBackend() {
     Singleton<TGlobalLogsStorage>()->UnRegister(this);
-}
+} 
 
 void TLogBackend::ReopenLogNoFlush() {
     ReopenLog();

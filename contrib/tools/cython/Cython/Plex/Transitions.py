@@ -1,48 +1,48 @@
-#
+# 
 # Plex - Transition Maps
-#
+# 
 # This version represents state sets directly as dicts for speed.
-#
-
-from __future__ import absolute_import
-
+# 
+ 
+from __future__ import absolute_import 
+ 
 try:
     from sys import maxsize as maxint
 except ImportError:
     from sys import maxint
-
-
-class TransitionMap(object):
+ 
+ 
+class TransitionMap(object): 
     """
     A TransitionMap maps an input event to a set of states.
     An input event is one of: a range of character codes,
     the empty string (representing an epsilon move), or one
     of the special symbols BOL, EOL, EOF.
-
+ 
     For characters, this implementation compactly represents
     the map by means of a list:
-
+ 
       [code_0, states_0, code_1, states_1, code_2, states_2,
         ..., code_n-1, states_n-1, code_n]
-
+ 
     where |code_i| is a character code, and |states_i| is a
     set of states corresponding to characters with codes |c|
     in the range |code_i| <= |c| <= |code_i+1|.
-
+ 
     The following invariants hold:
       n >= 1
       code_0 == -maxint
       code_n == maxint
       code_i < code_i+1 for i in 0..n-1
       states_0 == states_n-1
-
+ 
     Mappings for the special events '', BOL, EOL, EOF are
     kept separately in a dictionary.
     """
-
+ 
     map = None      # The list of codes and states
     special = None  # Mapping for special events
-
+ 
     def __init__(self, map=None, special=None):
         if not map:
             map = [-maxint, {}, maxint]
@@ -51,7 +51,7 @@ class TransitionMap(object):
         self.map = map
         self.special = special
         #self.check() ###
-
+ 
     def add(self, event, new_state,
             TupleType=tuple):
         """
@@ -67,7 +67,7 @@ class TransitionMap(object):
                 i += 2
         else:
             self.get_special(event)[new_state] = 1
-
+ 
     def add_set(self, event, new_set,
                 TupleType=tuple):
         """
@@ -83,14 +83,14 @@ class TransitionMap(object):
                 i += 2
         else:
             self.get_special(event).update(new_set)
-
+ 
     def get_epsilon(self,
                     none=None):
         """
         Return the mapping for epsilon, or None.
         """
         return self.special.get('', none)
-
+ 
     def iteritems(self,
                   len=len):
         """
@@ -114,11 +114,11 @@ class TransitionMap(object):
             if set:
                 result.append((event, set))
         return iter(result)
-
+ 
     items = iteritems
-
+ 
     # ------------------- Private methods --------------------
-
+ 
     def split(self, code,
               len=len, maxint=maxint):
         """
@@ -149,7 +149,7 @@ class TransitionMap(object):
             map[hi:hi] = [code, map[hi - 1].copy()]
             #self.check() ###
             return hi
-
+ 
     def get_special(self, event):
         """
         Get state set for special event, adding a new entry if necessary.
@@ -160,9 +160,9 @@ class TransitionMap(object):
             set = {}
             special[event] = set
         return set
-
+ 
     # --------------------- Conversion methods -----------------------
-
+ 
     def __str__(self):
         map_strs = []
         map = self.map
@@ -188,15 +188,15 @@ class TransitionMap(object):
             ','.join(map_strs),
             special_strs
         )
-
+ 
     # --------------------- Debugging methods -----------------------
-
+ 
     def check(self):
         """Check data structure integrity."""
         if not self.map[-3] < self.map[-1]:
             print(self)
             assert 0
-
+ 
     def dump(self, file):
         map = self.map
         i = 0
@@ -229,23 +229,23 @@ class TransitionMap(object):
     def dump_char(self, code):
         if 0 <= code <= 255:
             return repr(chr(code))
-        else:
+        else: 
             return "chr(%d)" % code
-
+ 
     def dump_trans(self, key, set, file):
         file.write("      %s --> %s\n" % (key, self.dump_set(set)))
-
+ 
     def dump_set(self, set):
         return state_set_str(set)
-
-
-#
-#   State set manipulation functions
-#
-
-#def merge_state_sets(set1, set2):
-#        for state in set2.keys():
-#            set1[state] = 1
-
-def state_set_str(set):
+ 
+ 
+# 
+#   State set manipulation functions 
+# 
+ 
+#def merge_state_sets(set1, set2): 
+#        for state in set2.keys(): 
+#            set1[state] = 1 
+ 
+def state_set_str(set): 
     return "[%s]" % ','.join(["S%d" % state.number for state in set])

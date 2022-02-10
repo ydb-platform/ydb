@@ -1,66 +1,66 @@
-#include "file.h"
-#include "flock.h"
-#include "fstat.h"
-#include "sysstat.h"
+#include "file.h" 
+#include "flock.h" 
+#include "fstat.h" 
+#include "sysstat.h" 
 #include "align.h"
 #include "info.h"
-
+ 
 #include <array>
 
-#include <util/string/util.h>
-#include <util/string/cast.h>
-#include <util/string/builder.h>
-
-#include <util/stream/hex.h>
-#include <util/stream/format.h>
-
-#include <util/random/random.h>
-
+#include <util/string/util.h> 
+#include <util/string/cast.h> 
+#include <util/string/builder.h> 
+ 
+#include <util/stream/hex.h> 
+#include <util/stream/format.h> 
+ 
+#include <util/random/random.h> 
+ 
 #include <util/generic/size_literals.h>
 #include <util/generic/string.h>
 #include <util/generic/ylimits.h>
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
+ 
+#include <util/datetime/base.h> 
 
-#include <util/datetime/base.h>
-
-#include <errno.h>
-
+#include <errno.h> 
+ 
 #if defined(_unix_)
-    #include <fcntl.h>
+    #include <fcntl.h> 
 
-    #if defined(_linux_) && (!defined(_android_) || __ANDROID_API__ >= 21) && !defined(FALLOC_FL_KEEP_SIZE)
-        #include <linux/falloc.h>
-    #endif
+    #if defined(_linux_) && (!defined(_android_) || __ANDROID_API__ >= 21) && !defined(FALLOC_FL_KEEP_SIZE) 
+        #include <linux/falloc.h> 
+    #endif 
 
-    #include <stdlib.h>
-    #include <unistd.h>
-    #include <sys/mman.h>
+    #include <stdlib.h> 
+    #include <unistd.h> 
+    #include <sys/mman.h> 
 #elif defined(_win_)
-    #include "winint.h"
-    #include "fs_win.h"
-    #include <io.h>
+    #include "winint.h" 
+    #include "fs_win.h" 
+    #include <io.h> 
 #endif
 
-#if defined(_bionic_)
-    #include <sys/sendfile.h>
-    #define HAVE_POSIX_FADVISE 0
-    #define HAVE_SYNC_FILE_RANGE 0
-#elif defined(_linux_)
-    #include <sys/sendfile.h>
-    #define HAVE_POSIX_FADVISE 1
-    #define HAVE_SYNC_FILE_RANGE 1
+#if defined(_bionic_) 
+    #include <sys/sendfile.h> 
+    #define HAVE_POSIX_FADVISE 0 
+    #define HAVE_SYNC_FILE_RANGE 0 
+#elif defined(_linux_) 
+    #include <sys/sendfile.h> 
+    #define HAVE_POSIX_FADVISE 1 
+    #define HAVE_SYNC_FILE_RANGE 1 
 #elif defined(__FreeBSD__) && !defined(WITH_VALGRIND)
-    #include <sys/param.h>
-    #define HAVE_POSIX_FADVISE (__FreeBSD_version >= 900501)
-    #define HAVE_SYNC_FILE_RANGE 0
+    #include <sys/param.h> 
+    #define HAVE_POSIX_FADVISE (__FreeBSD_version >= 900501) 
+    #define HAVE_SYNC_FILE_RANGE 0 
 #else
-    #define HAVE_POSIX_FADVISE 0
-    #define HAVE_SYNC_FILE_RANGE 0
+    #define HAVE_POSIX_FADVISE 0 
+    #define HAVE_SYNC_FILE_RANGE 0 
 #endif
 
 static bool IsStupidFlagCombination(EOpenMode oMode) {
     // ForAppend will actually not be applied in the following combinations:
-    return (oMode & (CreateAlways | ForAppend)) == (CreateAlways | ForAppend) || (oMode & (TruncExisting | ForAppend)) == (TruncExisting | ForAppend) || (oMode & (CreateNew | ForAppend)) == (CreateNew | ForAppend);
+    return (oMode & (CreateAlways | ForAppend)) == (CreateAlways | ForAppend) || (oMode & (TruncExisting | ForAppend)) == (TruncExisting | ForAppend) || (oMode & (CreateNew | ForAppend)) == (CreateNew | ForAppend); 
 }
 
 TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
@@ -107,7 +107,7 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
     }
     if (oMode & ::ForAppend) {
         faMode |= GENERIC_WRITE;
-        faMode |= FILE_APPEND_DATA;
+        faMode |= FILE_APPEND_DATA; 
         faMode &= ~FILE_WRITE_DATA;
     }
 
@@ -127,7 +127,7 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
         attrMode |= FILE_ATTRIBUTE_TEMPORARY;
     }
     if (oMode & Transient) {
-        attrMode |= FILE_FLAG_DELETE_ON_CLOSE;
+        attrMode |= FILE_FLAG_DELETE_ON_CLOSE; 
     }
     if ((oMode & (Direct | DirectAligned)) && (oMode & WrOnly)) {
         // WrOnly or RdWr
@@ -137,7 +137,7 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
     Fd_ = NFsPrivate::CreateFileWithUtf8Name(fName, faMode, shMode, fcMode, attrMode, inheritHandle);
 
     if ((oMode & ::ForAppend) && (Fd_ != INVALID_FHANDLE)) {
-        ::SetFilePointer(Fd_, 0, 0, FILE_END);
+        ::SetFilePointer(Fd_, 0, 0, FILE_END); 
     }
 
 #elif defined(_unix_)
@@ -172,18 +172,18 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
     }
 
     if (oMode & ::ForAppend) {
-        fcMode |= O_APPEND;
-    }
-
+        fcMode |= O_APPEND; 
+    } 
+ 
     if (oMode & CloseOnExec) {
         fcMode |= O_CLOEXEC;
     }
 
-    /* I don't now about this for unix...
+    /* I don't now about this for unix... 
     if (oMode & Temp) {
     }
     */
-    #if defined(_freebsd_)
+    #if defined(_freebsd_) 
     if (oMode & (Direct | DirectAligned)) {
         fcMode |= O_DIRECT;
     }
@@ -191,7 +191,7 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
     if (oMode & Sync) {
         fcMode |= O_SYNC;
     }
-    #elif defined(_linux_)
+    #elif defined(_linux_) 
     if (oMode & DirectAligned) {
         /*
          * O_DIRECT in Linux requires aligning request size and buffer address
@@ -203,12 +203,12 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
     if (oMode & Sync) {
         fcMode |= O_SYNC;
     }
-    #endif
+    #endif 
 
-    #if defined(_linux_)
-    fcMode |= O_LARGEFILE;
-    #endif
-
+    #if defined(_linux_) 
+    fcMode |= O_LARGEFILE; 
+    #endif 
+ 
     ui32 permMode = 0;
     if (oMode & AXOther) {
         permMode |= S_IXOTH;
@@ -241,14 +241,14 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
     do {
         Fd_ = ::open(fName.data(), fcMode, permMode);
     } while (Fd_ == -1 && errno == EINTR);
-
-    #if HAVE_POSIX_FADVISE
-    if (Fd_ >= 0) {
-        if (oMode & NoReuse) {
+ 
+    #if HAVE_POSIX_FADVISE 
+    if (Fd_ >= 0) { 
+        if (oMode & NoReuse) { 
             ::posix_fadvise(Fd_, 0, 0, POSIX_FADV_NOREUSE);
         }
-
-        if (oMode & Seq) {
+ 
+        if (oMode & Seq) { 
             ::posix_fadvise(Fd_, 0, 0, POSIX_FADV_SEQUENTIAL);
         }
 
@@ -256,14 +256,14 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
             ::posix_fadvise(Fd_, 0, 0, POSIX_FADV_RANDOM);
         }
     }
-    #endif
+    #endif 
 
-    //temp file
+    //temp file 
     if (Fd_ >= 0 && (oMode & Transient)) {
         unlink(fName.data());
-    }
+    } 
 #else
-    #error unsupported platform
+    #error unsupported platform 
 #endif
 }
 
@@ -271,26 +271,26 @@ bool TFileHandle::Close() noexcept {
     bool isOk = true;
 #ifdef _win_
     if (Fd_ != INVALID_FHANDLE) {
-        isOk = (::CloseHandle(Fd_) != 0);
+        isOk = (::CloseHandle(Fd_) != 0); 
     }
-    if (!isOk) {
+    if (!isOk) { 
         Y_VERIFY(GetLastError() != ERROR_INVALID_HANDLE,
                  "must not quietly close invalid handle");
-    }
+    } 
 #elif defined(_unix_)
     if (Fd_ != INVALID_FHANDLE) {
         isOk = (::close(Fd_) == 0 || errno == EINTR);
     }
-    if (!isOk) {
-        // Do not quietly close bad descriptor,
-        // because often it means double close
-        // that is disasterous
+    if (!isOk) { 
+        // Do not quietly close bad descriptor, 
+        // because often it means double close 
+        // that is disasterous 
         Y_VERIFY(errno != EBADF, "must not quietly close bad descriptor: fd=%d", int(Fd_));
-    }
+    } 
 #else
-    #error unsupported platform
+    #error unsupported platform 
 #endif
-    Fd_ = INVALID_FHANDLE;
+    Fd_ = INVALID_FHANDLE; 
     return isOk;
 }
 
@@ -298,7 +298,7 @@ static inline i64 DoSeek(FHANDLE h, i64 offset, SeekDir origin) noexcept {
     if (h == INVALID_FHANDLE) {
         return -1L;
     }
-#if defined(_win_)
+#if defined(_win_) 
     static ui32 dir[] = {FILE_BEGIN, FILE_CURRENT, FILE_END};
     LARGE_INTEGER pos;
     pos.QuadPart = offset;
@@ -309,22 +309,22 @@ static inline i64 DoSeek(FHANDLE h, i64 offset, SeekDir origin) noexcept {
     return pos.QuadPart;
 #elif defined(_unix_)
     static int dir[] = {SEEK_SET, SEEK_CUR, SEEK_END};
-    #if defined(_sun_)
-    return ::llseek(h, (offset_t)offset, dir[origin]);
-    #else
-    return ::lseek(h, (off_t)offset, dir[origin]);
-    #endif
-#else
-    #error unsupported platform
-#endif
+    #if defined(_sun_) 
+    return ::llseek(h, (offset_t)offset, dir[origin]); 
+    #else 
+    return ::lseek(h, (off_t)offset, dir[origin]); 
+    #endif 
+#else 
+    #error unsupported platform 
+#endif 
 }
 
 i64 TFileHandle::GetPosition() const noexcept {
-    return DoSeek(Fd_, 0, sCur);
+    return DoSeek(Fd_, 0, sCur); 
 }
 
 i64 TFileHandle::Seek(i64 offset, SeekDir origin) noexcept {
-    return DoSeek(Fd_, offset, origin);
+    return DoSeek(Fd_, offset, origin); 
 }
 
 i64 TFileHandle::GetLength() const noexcept {
@@ -343,7 +343,7 @@ bool TFileHandle::Resize(i64 length) noexcept {
     if (length == currentLength) {
         return true;
     }
-#if defined(_win_)
+#if defined(_win_) 
     i64 currentPosition = GetPosition();
     if (currentPosition == -1L) {
         return false;
@@ -356,10 +356,10 @@ bool TFileHandle::Resize(i64 length) noexcept {
         Seek(currentPosition, sSet);
     }
     return true;
-#elif defined(_unix_)
+#elif defined(_unix_) 
     return (0 == ftruncate(Fd_, (off_t)length));
 #else
-    #error unsupported platform
+    #error unsupported platform 
 #endif
 }
 
@@ -375,15 +375,15 @@ bool TFileHandle::Reserve(i64 length) noexcept {
     if (!Resize(length)) {
         return false;
     }
-#if defined(_win_)
+#if defined(_win_) 
     if (!::SetFileValidData(Fd_, length)) {
         Resize(currentLength);
         return false;
     }
-#elif defined(_unix_)
-// No way to implement this under FreeBSD. Just do nothing
+#elif defined(_unix_) 
+// No way to implement this under FreeBSD. Just do nothing 
 #else
-    #error unsupported platform
+    #error unsupported platform 
 #endif
     return true;
 }
@@ -406,9 +406,9 @@ bool TFileHandle::ShrinkToFit() noexcept {
         return false;
     }
 #if defined(_linux_) && (!defined(_android_) || __ANDROID_API__ >= 21)
-    return !ftruncate(Fd_, (off_t)GetLength());
+    return !ftruncate(Fd_, (off_t)GetLength()); 
 #else
-    return true;
+    return true; 
 #endif
 }
 
@@ -433,31 +433,31 @@ bool TFileHandle::Flush() noexcept {
      * Fail in case of EIO, ENOSPC, EDQUOT - data might be lost.
      */
     return ret == 0 || errno == EROFS || errno == EINVAL
-    #if defined(_darwin_)
+    #if defined(_darwin_) 
            // ENOTSUP fd does not refer to a vnode
            || errno == ENOTSUP
-    #endif
+    #endif 
         ;
 #else
-    #error unsupported platform
+    #error unsupported platform 
 #endif
-}
+} 
 
 bool TFileHandle::FlushData() noexcept {
-#if defined(_linux_)
-    if (!IsOpen()) {
-        return false;
-    }
-
+#if defined(_linux_) 
+    if (!IsOpen()) { 
+        return false; 
+    } 
+ 
     int ret = ::fdatasync(Fd_);
 
     // Same loginc in error handling as for fsync above.
     return ret == 0 || errno == EROFS || errno == EINVAL;
-#else
-    return Flush();
-#endif
-}
-
+#else 
+    return Flush(); 
+#endif 
+} 
+ 
 i32 TFileHandle::Read(void* buffer, ui32 byteCount) noexcept {
     // FIXME size and return must be 64-bit
     if (!IsOpen()) {
@@ -476,7 +476,7 @@ i32 TFileHandle::Read(void* buffer, ui32 byteCount) noexcept {
     } while (ret == -1 && errno == EINTR);
     return ret;
 #else
-    #error unsupported platform
+    #error unsupported platform 
 #endif
 }
 
@@ -497,14 +497,14 @@ i32 TFileHandle::Write(const void* buffer, ui32 byteCount) noexcept {
     } while (ret == -1 && errno == EINTR);
     return ret;
 #else
-    #error unsupported platform
+    #error unsupported platform 
 #endif
 }
 
 i32 TFileHandle::Pread(void* buffer, ui32 byteCount, i64 offset) const noexcept {
 #if defined(_win_)
-    OVERLAPPED io;
-    Zero(io);
+    OVERLAPPED io; 
+    Zero(io); 
     DWORD bytesRead = 0;
     io.Offset = (ui32)offset;
     io.OffsetHigh = (ui32)(offset >> 32);
@@ -522,14 +522,14 @@ i32 TFileHandle::Pread(void* buffer, ui32 byteCount, i64 offset) const noexcept 
     } while (ret == -1 && errno == EINTR);
     return ret;
 #else
-    #error unsupported platform
+    #error unsupported platform 
 #endif
 }
 
 i32 TFileHandle::Pwrite(const void* buffer, ui32 byteCount, i64 offset) const noexcept {
 #if defined(_win_)
-    OVERLAPPED io;
-    Zero(io);
+    OVERLAPPED io; 
+    Zero(io); 
     DWORD bytesWritten = 0;
     io.Offset = (ui32)offset;
     io.OffsetHigh = (ui32)(offset >> 32);
@@ -544,7 +544,7 @@ i32 TFileHandle::Pwrite(const void* buffer, ui32 byteCount, i64 offset) const no
     } while (ret == -1 && errno == EINTR);
     return ret;
 #else
-    #error unsupported platform
+    #error unsupported platform 
 #endif
 }
 
@@ -559,9 +559,9 @@ FHANDLE TFileHandle::Duplicate() const noexcept {
     }
     return dupHandle;
 #elif defined(_unix_)
-    return ::dup(Fd_);
+    return ::dup(Fd_); 
 #else
-    #error unsupported platform
+    #error unsupported platform 
 #endif
 }
 
@@ -593,47 +593,47 @@ int TFileHandle::Duplicate2Posix(int dstHandle) const noexcept {
     }
     return dstHandle;
 #else
-    #error unsupported platform
+    #error unsupported platform 
 #endif
 }
 
 bool TFileHandle::LinkTo(const TFileHandle& fh) const noexcept {
-#if defined(_unix_)
+#if defined(_unix_) 
     while (dup2(fh.Fd_, Fd_) == -1) {
         if (errno != EINTR) {
             return false;
         }
     }
     return true;
-#elif defined(_win_)
-    TFileHandle nh(fh.Duplicate());
-
-    if (!nh.IsOpen()) {
-        return false;
-    }
-
-    //not thread-safe
-    nh.Swap(*const_cast<TFileHandle*>(this));
-
-    return true;
-#else
-    #error unsupported
-#endif
-}
-
+#elif defined(_win_) 
+    TFileHandle nh(fh.Duplicate()); 
+ 
+    if (!nh.IsOpen()) { 
+        return false; 
+    } 
+ 
+    //not thread-safe 
+    nh.Swap(*const_cast<TFileHandle*>(this)); 
+ 
+    return true; 
+#else 
+    #error unsupported 
+#endif 
+} 
+ 
 int TFileHandle::Flock(int op) noexcept {
-    return ::Flock(Fd_, op);
+    return ::Flock(Fd_, op); 
 }
 
-bool TFileHandle::SetDirect() {
+bool TFileHandle::SetDirect() { 
 #ifdef _linux_
-    const long flags = fcntl(Fd_, F_GETFL);
-    const int r = fcntl(Fd_, F_SETFL, flags | O_DIRECT);
-
-    return !r;
-#endif
-
-    return false;
+    const long flags = fcntl(Fd_, F_GETFL); 
+    const int r = fcntl(Fd_, F_SETFL, flags | O_DIRECT); 
+ 
+    return !r; 
+#endif 
+ 
+    return false; 
 }
 
 void TFileHandle::ResetDirect() {
@@ -646,7 +646,7 @@ void TFileHandle::ResetDirect() {
 i64 TFileHandle::CountCache(i64 offset, i64 length) const noexcept {
 #ifdef _linux_
     const i64 pageSize = NSystemInfo::GetPageSize();
-    constexpr size_t vecSize = 512; // Fetch up to 2MiB at once
+    constexpr size_t vecSize = 512; // Fetch up to 2MiB at once 
     const i64 batchSize = vecSize * pageSize;
     std::array<ui8, vecSize> vec;
     void* ptr = nullptr;
@@ -723,10 +723,10 @@ i64 TFileHandle::CountCache(i64 offset, i64 length) const noexcept {
 
 void TFileHandle::PrefetchCache(i64 offset, i64 length, bool wait) const noexcept {
 #ifdef _linux_
-    #if HAVE_POSIX_FADVISE
+    #if HAVE_POSIX_FADVISE 
     // POSIX_FADV_WILLNEED starts reading upto read_ahead_kb in background
     ::posix_fadvise(Fd_, offset, length, POSIX_FADV_WILLNEED);
-    #endif
+    #endif 
 
     if (wait) {
         TFileHandle devnull("/dev/null", OpenExisting | WrOnly | CloseOnExec);
@@ -778,14 +778,14 @@ bool TFileHandle::FlushCache(i64 offset, i64 length, bool wait) noexcept {
 TString DecodeOpenMode(ui32 mode0) {
     ui32 mode = mode0;
 
-    TStringBuilder r;
+    TStringBuilder r; 
 
-#define F(flag)                   \
-    if ((mode & flag) == flag) {  \
-        mode &= ~flag;            \
-        if (r) {                  \
+#define F(flag)                   \ 
+    if ((mode & flag) == flag) {  \ 
+        mode &= ~flag;            \ 
+        if (r) {                  \ 
             r << TStringBuf("|"); \
-        }                         \
+        }                         \ 
         r << TStringBuf(#flag);   \
     }
 
@@ -827,76 +827,76 @@ TString DecodeOpenMode(ui32 mode0) {
 #undef F
 
     if (mode != 0) {
-        if (r) {
+        if (r) { 
             r << TStringBuf("|");
-        }
-
-        r << Hex(mode);
+        } 
+ 
+        r << Hex(mode); 
     }
 
-    if (!r) {
-        return "0";
-    }
+    if (!r) { 
+        return "0"; 
+    } 
 
     return r;
-}
+} 
 
-class TFile::TImpl: public TAtomicRefCount<TImpl> {
-public:
+class TFile::TImpl: public TAtomicRefCount<TImpl> { 
+public: 
     inline TImpl(FHANDLE fd, const TString& fname = TString())
-        : Handle_(fd)
-        , FileName_(fname)
-    {
-    }
+        : Handle_(fd) 
+        , FileName_(fname) 
+    { 
+    } 
 
     inline TImpl(const TString& fName, EOpenMode oMode)
-        : Handle_(fName, oMode)
-        , FileName_(fName)
-    {
-        if (!Handle_.IsOpen()) {
+        : Handle_(fName, oMode) 
+        , FileName_(fName) 
+    { 
+        if (!Handle_.IsOpen()) { 
             ythrow TFileError() << "can't open " << fName.Quote() << " with mode " << DecodeOpenMode(oMode) << " (" << Hex(oMode.ToBaseType()) << ")";
         }
-    }
+    } 
 
     inline ~TImpl() = default;
 
-    inline void Close() {
+    inline void Close() { 
         if (!Handle_.Close()) {
-            ythrow TFileError() << "can't close " << FileName_.Quote();
+            ythrow TFileError() << "can't close " << FileName_.Quote(); 
         }
-    }
+    } 
 
     const TString& GetName() const noexcept {
-        return FileName_;
-    }
+        return FileName_; 
+    } 
 
     void SetName(const TString& newName) {
-        FileName_ = newName;
-    }
+        FileName_ = newName; 
+    } 
 
     const TFileHandle& GetHandle() const noexcept {
-        return Handle_;
-    }
+        return Handle_; 
+    } 
 
-    i64 Seek(i64 offset, SeekDir origin) {
-        i64 pos = Handle_.Seek(offset, origin);
+    i64 Seek(i64 offset, SeekDir origin) { 
+        i64 pos = Handle_.Seek(offset, origin); 
         if (pos == -1L) {
-            ythrow TFileError() << "can't seek " << offset << " bytes in " << FileName_.Quote();
+            ythrow TFileError() << "can't seek " << offset << " bytes in " << FileName_.Quote(); 
         }
-        return pos;
-    }
+        return pos; 
+    } 
 
-    void Resize(i64 length) {
+    void Resize(i64 length) { 
         if (!Handle_.Resize(length)) {
-            ythrow TFileError() << "can't resize " << FileName_.Quote() << " to size " << length;
+            ythrow TFileError() << "can't resize " << FileName_.Quote() << " to size " << length; 
         }
-    }
+    } 
 
-    void Reserve(i64 length) {
+    void Reserve(i64 length) { 
         if (!Handle_.Reserve(length)) {
-            ythrow TFileError() << "can't reserve " << length << " for file " << FileName_.Quote();
+            ythrow TFileError() << "can't reserve " << length << " for file " << FileName_.Quote(); 
         }
-    }
+    } 
 
     void FallocateNoResize(i64 length) {
         if (!Handle_.FallocateNoResize(length)) {
@@ -910,27 +910,27 @@ public:
         }
     }
 
-    void Flush() {
+    void Flush() { 
         if (!Handle_.Flush()) {
-            ythrow TFileError() << "can't flush " << FileName_.Quote();
+            ythrow TFileError() << "can't flush " << FileName_.Quote(); 
         }
-    }
+    } 
 
-    void FlushData() {
+    void FlushData() { 
         if (!Handle_.FlushData()) {
-            ythrow TFileError() << "can't flush data " << FileName_.Quote();
+            ythrow TFileError() << "can't flush data " << FileName_.Quote(); 
         }
-    }
-
-    TFile Duplicate() const {
-        TFileHandle dupH(Handle_.Duplicate());
+    } 
+ 
+    TFile Duplicate() const { 
+        TFileHandle dupH(Handle_.Duplicate()); 
         if (!dupH.IsOpen()) {
-            ythrow TFileError() << "can't duplicate the handle of " << FileName_.Quote();
+            ythrow TFileError() << "can't duplicate the handle of " << FileName_.Quote(); 
         }
-        TFile res(dupH);
-        dupH.Release();
-        return res;
-    }
+        TFile res(dupH); 
+        dupH.Release(); 
+        return res; 
+    } 
 
     // Maximum amount of bytes to be read via single system call.
     // Some libraries fail when it is greater than max int.
@@ -952,112 +952,112 @@ public:
         return reallyRead;
     }
 
-    size_t Read(void* bufferIn, size_t numBytes) {
-        ui8* buf = (ui8*)bufferIn;
+    size_t Read(void* bufferIn, size_t numBytes) { 
+        ui8* buf = (ui8*)bufferIn; 
 
-        while (numBytes) {
+        while (numBytes) { 
             const size_t reallyRead = ReadOrFail(buf, numBytes);
 
             if (reallyRead == 0) {
                 // file exhausted
-                break;
+                break; 
             }
 
-            buf += reallyRead;
-            numBytes -= reallyRead;
+            buf += reallyRead; 
+            numBytes -= reallyRead; 
         }
 
-        return buf - (ui8*)bufferIn;
-    }
+        return buf - (ui8*)bufferIn; 
+    } 
 
-    void Load(void* buf, size_t len) {
+    void Load(void* buf, size_t len) { 
         if (Read(buf, len) != len) {
-            ythrow TFileError() << "can't read " << len << " bytes from " << FileName_.Quote();
+            ythrow TFileError() << "can't read " << len << " bytes from " << FileName_.Quote(); 
         }
-    }
+    } 
 
     // Maximum amount of bytes to be written via single system call.
     // Some libraries fail when it is greater than max int.
     // Syscalls can cause contention if they operate on very large data blocks.
     static constexpr size_t MaxWritePortion = 1_GB;
 
-    void Write(const void* buffer, size_t numBytes) {
-        const ui8* buf = (const ui8*)buffer;
+    void Write(const void* buffer, size_t numBytes) { 
+        const ui8* buf = (const ui8*)buffer; 
 
-        while (numBytes) {
+        while (numBytes) { 
             const i32 toWrite = (i32)Min(MaxWritePortion, numBytes);
-            const i32 reallyWritten = Handle_.Write(buf, toWrite);
+            const i32 reallyWritten = Handle_.Write(buf, toWrite); 
 
             if (reallyWritten < 0) {
-                ythrow TFileError() << "can't write " << toWrite << " bytes to " << FileName_.Quote();
+                ythrow TFileError() << "can't write " << toWrite << " bytes to " << FileName_.Quote(); 
             }
-
-            buf += reallyWritten;
-            numBytes -= reallyWritten;
+ 
+            buf += reallyWritten; 
+            numBytes -= reallyWritten; 
         }
-    }
+    } 
 
-    size_t Pread(void* bufferIn, size_t numBytes, i64 offset) const {
-        ui8* buf = (ui8*)bufferIn;
+    size_t Pread(void* bufferIn, size_t numBytes, i64 offset) const { 
+        ui8* buf = (ui8*)bufferIn; 
 
-        while (numBytes) {
+        while (numBytes) { 
             const i32 toRead = (i32)Min(MaxReadPortion, numBytes);
             const i32 reallyRead = RawPread(buf, toRead, offset);
 
             if (reallyRead < 0) {
-                ythrow TFileError() << "can not read data from " << FileName_.Quote();
+                ythrow TFileError() << "can not read data from " << FileName_.Quote(); 
             }
 
             if (reallyRead == 0) {
                 // file exausted
-                break;
+                break; 
             }
 
-            buf += reallyRead;
-            offset += reallyRead;
-            numBytes -= reallyRead;
+            buf += reallyRead; 
+            offset += reallyRead; 
+            numBytes -= reallyRead; 
         }
 
-        return buf - (ui8*)bufferIn;
-    }
+        return buf - (ui8*)bufferIn; 
+    } 
 
     i32 RawPread(void* buf, ui32 len, i64 offset) const {
         return Handle_.Pread(buf, len, offset);
     }
 
-    void Pload(void* buf, size_t len, i64 offset) const {
+    void Pload(void* buf, size_t len, i64 offset) const { 
         if (Pread(buf, len, offset) != len) {
-            ythrow TFileError() << "can't read " << len << " bytes at offset " << offset << " from " << FileName_.Quote();
+            ythrow TFileError() << "can't read " << len << " bytes at offset " << offset << " from " << FileName_.Quote(); 
         }
-    }
+    } 
 
-    void Pwrite(const void* buffer, size_t numBytes, i64 offset) const {
-        const ui8* buf = (const ui8*)buffer;
+    void Pwrite(const void* buffer, size_t numBytes, i64 offset) const { 
+        const ui8* buf = (const ui8*)buffer; 
 
-        while (numBytes) {
+        while (numBytes) { 
             const i32 toWrite = (i32)Min(MaxWritePortion, numBytes);
-            const i32 reallyWritten = Handle_.Pwrite(buf, toWrite, offset);
+            const i32 reallyWritten = Handle_.Pwrite(buf, toWrite, offset); 
 
             if (reallyWritten < 0) {
-                ythrow TFileError() << "can't write " << toWrite << " bytes to " << FileName_.Quote();
+                ythrow TFileError() << "can't write " << toWrite << " bytes to " << FileName_.Quote(); 
             }
 
-            buf += reallyWritten;
-            offset += reallyWritten;
-            numBytes -= reallyWritten;
+            buf += reallyWritten; 
+            offset += reallyWritten; 
+            numBytes -= reallyWritten; 
         }
-    }
+    } 
 
-    void Flock(int op) {
-        if (0 != Handle_.Flock(op)) {
-            ythrow TFileError() << "can't flock " << FileName_.Quote();
-        }
-    }
-
+    void Flock(int op) { 
+        if (0 != Handle_.Flock(op)) { 
+            ythrow TFileError() << "can't flock " << FileName_.Quote(); 
+        } 
+    } 
+ 
     void SetDirect() {
-        if (!Handle_.SetDirect()) {
-            ythrow TFileError() << "can't set direct mode for " << FileName_.Quote();
-        }
+        if (!Handle_.SetDirect()) { 
+            ythrow TFileError() << "can't set direct mode for " << FileName_.Quote(); 
+        } 
     }
 
     void ResetDirect() {
@@ -1082,18 +1082,18 @@ public:
         }
     }
 
-private:
-    TFileHandle Handle_;
+private: 
+    TFileHandle Handle_; 
     TString FileName_;
 };
 
 TFile::TFile()
-    : Impl_(new TImpl(INVALID_FHANDLE))
+    : Impl_(new TImpl(INVALID_FHANDLE)) 
 {
 }
 
 TFile::TFile(FHANDLE fd)
-    : Impl_(new TImpl(fd))
+    : Impl_(new TImpl(fd)) 
 {
 }
 
@@ -1103,38 +1103,38 @@ TFile::TFile(FHANDLE fd, const TString& name)
 }
 
 TFile::TFile(const TString& fName, EOpenMode oMode)
-    : Impl_(new TImpl(fName, oMode))
+    : Impl_(new TImpl(fName, oMode)) 
 {
 }
 
 TFile::~TFile() = default;
 
 void TFile::Close() {
-    Impl_->Close();
+    Impl_->Close(); 
 }
 
 const TString& TFile::GetName() const noexcept {
-    return Impl_->GetName();
+    return Impl_->GetName(); 
 }
 
 i64 TFile::GetPosition() const noexcept {
-    return Impl_->GetHandle().GetPosition();
+    return Impl_->GetHandle().GetPosition(); 
 }
 
 i64 TFile::GetLength() const noexcept {
-    return Impl_->GetHandle().GetLength();
+    return Impl_->GetHandle().GetLength(); 
 }
 
 bool TFile::IsOpen() const noexcept {
-    return Impl_->GetHandle().IsOpen();
+    return Impl_->GetHandle().IsOpen(); 
 }
 
 FHANDLE TFile::GetHandle() const noexcept {
-    return Impl_->GetHandle();
+    return Impl_->GetHandle(); 
 }
 
 i64 TFile::Seek(i64 offset, SeekDir origin) {
-    return Impl_->Seek(offset, origin);
+    return Impl_->Seek(offset, origin); 
 }
 
 void TFile::Resize(i64 length) {
@@ -1154,21 +1154,21 @@ void TFile::ShrinkToFit() {
 }
 
 void TFile::Flush() {
-    Impl_->Flush();
+    Impl_->Flush(); 
 }
 
-void TFile::FlushData() {
-    Impl_->FlushData();
-}
-
-TFile TFile::Duplicate() const {
-    TFile res = Impl_->Duplicate();
-    res.Impl_->SetName(Impl_->GetName());
+void TFile::FlushData() { 
+    Impl_->FlushData(); 
+} 
+ 
+TFile TFile::Duplicate() const { 
+    TFile res = Impl_->Duplicate(); 
+    res.Impl_->SetName(Impl_->GetName()); 
     return res;
 }
 
 size_t TFile::Read(void* buf, size_t len) {
-    return Impl_->Read(buf, len);
+    return Impl_->Read(buf, len); 
 }
 
 i32 TFile::RawRead(void* buf, size_t len) {
@@ -1180,15 +1180,15 @@ size_t TFile::ReadOrFail(void* buf, size_t len) {
 }
 
 void TFile::Load(void* buf, size_t len) {
-    Impl_->Load(buf, len);
+    Impl_->Load(buf, len); 
 }
 
 void TFile::Write(const void* buf, size_t len) {
-    Impl_->Write(buf, len);
+    Impl_->Write(buf, len); 
 }
 
 size_t TFile::Pread(void* buf, size_t len, i64 offset) const {
-    return Impl_->Pread(buf, len, offset);
+    return Impl_->Pread(buf, len, offset); 
 }
 
 i32 TFile::RawPread(void* buf, ui32 len, i64 offset) const {
@@ -1196,15 +1196,15 @@ i32 TFile::RawPread(void* buf, ui32 len, i64 offset) const {
 }
 
 void TFile::Pload(void* buf, size_t len, i64 offset) const {
-    Impl_->Pload(buf, len, offset);
+    Impl_->Pload(buf, len, offset); 
 }
 
 void TFile::Pwrite(const void* buf, size_t len, i64 offset) const {
-    Impl_->Pwrite(buf, len, offset);
+    Impl_->Pwrite(buf, len, offset); 
 }
 
 void TFile::Flock(int op) {
-    Impl_->Flock(op);
+    Impl_->Flock(op); 
 }
 
 void TFile::SetDirect() {
@@ -1231,17 +1231,17 @@ void TFile::FlushCache(i64 offset, i64 length, bool wait) {
     Impl_->FlushCache(offset, length, wait);
 }
 
-void TFile::LinkTo(const TFile& f) const {
-    if (!Impl_->GetHandle().LinkTo(f.Impl_->GetHandle())) {
-        ythrow TFileError() << "can not link fd(" << GetName() << " -> " << f.GetName() << ")";
-    }
-}
-
+void TFile::LinkTo(const TFile& f) const { 
+    if (!Impl_->GetHandle().LinkTo(f.Impl_->GetHandle())) { 
+        ythrow TFileError() << "can not link fd(" << GetName() << " -> " << f.GetName() << ")"; 
+    } 
+} 
+ 
 TFile TFile::Temporary(const TString& prefix) {
-    //TODO - handle impossible case of name collision
-    return TFile(prefix + ToString(MicroSeconds()) + "-" + ToString(RandomNumber<ui64>()), CreateNew | RdWr | Seq | Temp | Transient);
-}
-
+    //TODO - handle impossible case of name collision 
+    return TFile(prefix + ToString(MicroSeconds()) + "-" + ToString(RandomNumber<ui64>()), CreateNew | RdWr | Seq | Temp | Transient); 
+} 
+ 
 TFile TFile::ForAppend(const TString& path) {
     return TFile(path, OpenAlways | WrOnly | Seq | ::ForAppend);
 }
@@ -1251,7 +1251,7 @@ TFile Duplicate(FILE* f) {
 }
 
 TFile Duplicate(int fd) {
-#if defined(_win_)
+#if defined(_win_) 
     /* There are two options of how to duplicate a file descriptor on Windows:
      *
      * 1:
@@ -1276,10 +1276,10 @@ TFile Duplicate(int fd) {
     }
 
     return TFile(dupHandle);
-#elif defined(_unix_)
+#elif defined(_unix_) 
     return TFile(::dup(fd));
 #else
-    #error unsupported platform
+    #error unsupported platform 
 #endif
 }
 
@@ -1287,13 +1287,13 @@ bool PosixDisableReadAhead(FHANDLE fileHandle, void* addr) noexcept {
     int ret = -1;
 
 #if HAVE_POSIX_FADVISE
-    #if defined(_linux_)
+    #if defined(_linux_) 
     Y_UNUSED(fileHandle);
     ret = madvise(addr, 0, MADV_RANDOM); // according to klamm@ posix_fadvise does not work under linux, madvise does work
-    #else
+    #else 
     Y_UNUSED(addr);
     ret = ::posix_fadvise(fileHandle, 0, 0, POSIX_FADV_RANDOM);
-    #endif
+    #endif 
 #else
     Y_UNUSED(fileHandle);
     Y_UNUSED(addr);

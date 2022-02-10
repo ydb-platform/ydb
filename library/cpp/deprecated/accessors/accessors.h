@@ -3,7 +3,7 @@
 #include "accessors_impl.h"
 
 namespace NAccessors {
-    /*
+    /* 
  * Adds API compatibility between different types representing memory regions.
  *
  * i.e. this will work:
@@ -23,26 +23,26 @@ namespace NAccessors {
  * Both will give you begin, end and size of the underlying memory region.
  */
 
-    template <typename T>
-    inline const typename TMemoryTraits<T>::TElementType* Begin(const T& t) {
-        return NPrivate::TBegin<T>::Get(t);
-    }
+    template <typename T> 
+    inline const typename TMemoryTraits<T>::TElementType* Begin(const T& t) { 
+        return NPrivate::TBegin<T>::Get(t); 
+    } 
 
-    template <typename T>
-    inline const typename TMemoryTraits<T>::TElementType* End(const T& t) {
-        return NPrivate::TEnd<T>::Get(t);
-    }
+    template <typename T> 
+    inline const typename TMemoryTraits<T>::TElementType* End(const T& t) { 
+        return NPrivate::TEnd<T>::Get(t); 
+    } 
 
-    template <typename T>
-    inline size_t Size(const T& t) {
-        return End(t) - Begin(t);
-    }
+    template <typename T> 
+    inline size_t Size(const T& t) { 
+        return End(t) - Begin(t); 
+    } 
 
     /**
  * This gives some unification in terms of memory manipulation.
  */
 
-    template <typename T>
+    template <typename T> 
     inline void Reserve(T& t, size_t sz) {
         NPrivate::TReserve<T>::Do(t, sz);
     }
@@ -75,9 +75,9 @@ namespace NAccessors {
     }
 
     template <typename T>
-    inline void Assign(T& t,
-                       const typename TMemoryTraits<T>::TElementType* beg,
-                       const typename TMemoryTraits<T>::TElementType* end) {
-        NPrivate::TAssign<T>::Do(t, beg, end);
-    }
+    inline void Assign(T& t, 
+                       const typename TMemoryTraits<T>::TElementType* beg, 
+                       const typename TMemoryTraits<T>::TElementType* end) { 
+        NPrivate::TAssign<T>::Do(t, beg, end); 
+    } 
 }

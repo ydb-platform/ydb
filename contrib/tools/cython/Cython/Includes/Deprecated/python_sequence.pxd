@@ -1,2 +1,2 @@
 # Present for backwards compatibility
-from cpython.sequence cimport *
+from cpython.sequence cimport * 

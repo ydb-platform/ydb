@@ -6,11 +6,11 @@
 #include <util/stream/output.h>
 #include <util/system/sysstat.h>
 
-#if defined(_win_) || defined(_cygwin_)
-    #include <util/system/file.h>
+#if defined(_win_) || defined(_cygwin_) 
+    #include <util/system/file.h> 
 #else
-    #include <sys/un.h>
-    #include <sys/stat.h>
+    #include <sys/un.h> 
+    #include <sys/stat.h> 
 #endif //_win_
 
 #include "init.h"
@@ -45,8 +45,8 @@ protected:
     virtual int Bind(SOCKET s, ui16 mode) const = 0;
 };
 
-#if defined(_win_) || defined(_cygwin_)
-    #define YAF_LOCAL AF_INET
+#if defined(_win_) || defined(_cygwin_) 
+    #define YAF_LOCAL AF_INET 
 struct TSockAddrLocal: public ISockAddr {
     TSockAddrLocal() {
         Clear();
@@ -112,29 +112,29 @@ struct TSockAddrLocal: public ISockAddr {
 
     int Bind(SOCKET s, ui16 mode) const {
         Y_UNUSED(mode);
-        int ret = 0;
-        // 1. open file
-        TFileHandle f(Path, CreateAlways | WrOnly);
-        if (!f.IsOpen())
-            return -errno;
+        int ret = 0; 
+        // 1. open file 
+        TFileHandle f(Path, CreateAlways | WrOnly); 
+        if (!f.IsOpen()) 
+            return -errno; 
 
-        // 2. find port and bind to it
-        in.sin_port = 0;
-        ret = bind(s, SockAddr(), Len());
-        if (ret != 0)
-            return -WSAGetLastError();
+        // 2. find port and bind to it 
+        in.sin_port = 0; 
+        ret = bind(s, SockAddr(), Len()); 
+        if (ret != 0) 
+            return -WSAGetLastError(); 
 
-        int size = Size();
-        ret = getsockname(s, (struct sockaddr*)(&in), &size);
-        if (ret != 0)
-            return -WSAGetLastError();
+        int size = Size(); 
+        ret = getsockname(s, (struct sockaddr*)(&in), &size); 
+        if (ret != 0) 
+            return -WSAGetLastError(); 
 
-        // 3. write port to file
-        ret = f.Write(&(in.sin_port), sizeof(in.sin_port));
-        if (ret != sizeof(in.sin_port))
-            return -errno;
+        // 3. write port to file 
+        ret = f.Write(&(in.sin_port), sizeof(in.sin_port)); 
+        if (ret != sizeof(in.sin_port)) 
+            return -errno; 
 
-        return 0;
+        return 0; 
     }
 
     static constexpr size_t PathSize = 128;
@@ -142,7 +142,7 @@ struct TSockAddrLocal: public ISockAddr {
     char Path[PathSize];
 };
 #else
-    #define YAF_LOCAL AF_LOCAL
+    #define YAF_LOCAL AF_LOCAL 
 struct TSockAddrLocal: public sockaddr_un, public ISockAddr {
     TSockAddrLocal() {
         Clear();
@@ -171,11 +171,11 @@ struct TSockAddrLocal: public sockaddr_un, public ISockAddr {
     }
 
     sockaddr* SockAddr() override {
-        return (struct sockaddr*)(struct sockaddr_un*)this;
+        return (struct sockaddr*)(struct sockaddr_un*)this; 
     }
 
     const sockaddr* SockAddr() const override {
-        return (const struct sockaddr*)(const struct sockaddr_un*)this;
+        return (const struct sockaddr*)(const struct sockaddr_un*)this; 
     }
 
     TString ToString() const override {
@@ -234,11 +234,11 @@ struct TSockAddrInet: public sockaddr_in, public ISockAddr {
     }
 
     sockaddr* SockAddr() override {
-        return (struct sockaddr*)(struct sockaddr_in*)this;
+        return (struct sockaddr*)(struct sockaddr_in*)this; 
     }
 
     const sockaddr* SockAddr() const override {
-        return (const struct sockaddr*)(const struct sockaddr_in*)this;
+        return (const struct sockaddr*)(const struct sockaddr_in*)this; 
     }
 
     TString ToString() const override {
@@ -300,11 +300,11 @@ struct TSockAddrInet6: public sockaddr_in6, public ISockAddr {
     }
 
     sockaddr* SockAddr() override {
-        return (struct sockaddr*)(struct sockaddr_in6*)this;
+        return (struct sockaddr*)(struct sockaddr_in6*)this; 
     }
 
     const sockaddr* SockAddr() const override {
-        return (const struct sockaddr*)(const struct sockaddr_in6*)this;
+        return (const struct sockaddr*)(const struct sockaddr_in6*)this; 
     }
 
     TString ToString() const override {
@@ -346,7 +346,7 @@ using TSockAddrInetDgram = TSockAddrInet;
 using TSockAddrInet6Stream = TSockAddrInet6;
 using TSockAddrInet6Dgram = TSockAddrInet6;
 
-class TBaseSocket: public TSocketHolder {
+class TBaseSocket: public TSocketHolder { 
 protected:
     TBaseSocket(SOCKET fd)
         : TSocketHolder(fd)
@@ -355,11 +355,11 @@ protected:
 
 public:
     int Bind(const ISockAddr* addr, ui16 mode = DEF_LOCAL_SOCK_MODE) {
-        return addr->Bind((SOCKET) * this, mode);
+        return addr->Bind((SOCKET) * this, mode); 
     }
 
     void CheckSock() {
-        if ((SOCKET) * this == INVALID_SOCKET)
+        if ((SOCKET) * this == INVALID_SOCKET) 
             ythrow TSystemError() << "no socket";
     }
 
@@ -370,7 +370,7 @@ public:
     }
 };
 
-class TDgramSocket: public TBaseSocket {
+class TDgramSocket: public TBaseSocket { 
 protected:
     TDgramSocket(SOCKET fd)
         : TBaseSocket(fd)
@@ -384,7 +384,7 @@ public:
             return -LastSystemError();
         }
 
-        ret = sendto((SOCKET) * this, (const char*)msg, (int)len, 0, toAddr->SockAddr(), toAddr->Len());
+        ret = sendto((SOCKET) * this, (const char*)msg, (int)len, 0, toAddr->SockAddr(), toAddr->Len()); 
         if (ret < 0) {
             return -LastSystemError();
         }
@@ -394,7 +394,7 @@ public:
 
     ssize_t RecvFrom(void* buf, size_t len, ISockAddr* fromAddr) {
         socklen_t fromSize = fromAddr->Size();
-        const ssize_t ret = recvfrom((SOCKET) * this, (char*)buf, (int)len, 0, fromAddr->SockAddr(), &fromSize);
+        const ssize_t ret = recvfrom((SOCKET) * this, (char*)buf, (int)len, 0, fromAddr->SockAddr(), &fromSize); 
         if (ret < 0) {
             return -LastSystemError();
         }
@@ -403,7 +403,7 @@ public:
     }
 };
 
-class TStreamSocket: public TBaseSocket {
+class TStreamSocket: public TBaseSocket { 
 protected:
     explicit TStreamSocket(SOCKET fd)
         : TBaseSocket(fd)
@@ -411,13 +411,13 @@ protected:
     }
 
 public:
-    TStreamSocket()
-        : TBaseSocket(INVALID_SOCKET)
+    TStreamSocket() 
+        : TBaseSocket(INVALID_SOCKET) 
     {
     }
 
     ssize_t Send(const void* msg, size_t len, int flags = 0) {
-        const ssize_t ret = send((SOCKET) * this, (const char*)msg, (int)len, flags);
+        const ssize_t ret = send((SOCKET) * this, (const char*)msg, (int)len, flags); 
         if (ret < 0)
             return -errno;
 
@@ -425,7 +425,7 @@ public:
     }
 
     ssize_t Recv(void* buf, size_t len, int flags = 0) {
-        const ssize_t ret = recv((SOCKET) * this, (char*)buf, (int)len, flags);
+        const ssize_t ret = recv((SOCKET) * this, (char*)buf, (int)len, flags); 
         if (ret < 0)
             return -errno;
 
@@ -437,7 +437,7 @@ public:
         if (ret < 0)
             return -errno;
 
-        ret = connect((SOCKET) * this, addr->SockAddr(), addr->Len());
+        ret = connect((SOCKET) * this, addr->SockAddr(), addr->Len()); 
         if (ret < 0)
             return -errno;
 
@@ -445,7 +445,7 @@ public:
     }
 
     int Listen(int backlog) {
-        int ret = listen((SOCKET) * this, backlog);
+        int ret = listen((SOCKET) * this, backlog); 
         if (ret < 0)
             return -errno;
 
@@ -470,7 +470,7 @@ public:
     }
 };
 
-class TLocalDgramSocket: public TDgramSocket {
+class TLocalDgramSocket: public TDgramSocket { 
 public:
     TLocalDgramSocket(SOCKET fd)
         : TDgramSocket(fd)
@@ -483,7 +483,7 @@ public:
     }
 };
 
-class TInetDgramSocket: public TDgramSocket {
+class TInetDgramSocket: public TDgramSocket { 
 public:
     TInetDgramSocket(SOCKET fd)
         : TDgramSocket(fd)
@@ -509,7 +509,7 @@ public:
     }
 };
 
-class TLocalStreamSocket: public TStreamSocket {
+class TLocalStreamSocket: public TStreamSocket { 
 public:
     TLocalStreamSocket(SOCKET fd)
         : TStreamSocket(fd)
@@ -522,7 +522,7 @@ public:
     }
 };
 
-class TInetStreamSocket: public TStreamSocket {
+class TInetStreamSocket: public TStreamSocket { 
 public:
     TInetStreamSocket(SOCKET fd)
         : TStreamSocket(fd)
@@ -550,16 +550,16 @@ public:
 
 class TStreamSocketInput: public IInputStream {
 public:
-    TStreamSocketInput(TStreamSocket* socket)
+    TStreamSocketInput(TStreamSocket* socket) 
         : Socket(socket)
     {
     }
-    void SetSocket(TStreamSocket* socket) {
+    void SetSocket(TStreamSocket* socket) { 
         Socket = socket;
     }
 
 protected:
-    TStreamSocket* Socket;
+    TStreamSocket* Socket; 
 
     size_t DoRead(void* buf, size_t len) override {
         Y_VERIFY(Socket, "TStreamSocketInput: socket isn't set");
@@ -575,11 +575,11 @@ protected:
 
 class TStreamSocketOutput: public IOutputStream {
 public:
-    TStreamSocketOutput(TStreamSocket* socket)
+    TStreamSocketOutput(TStreamSocket* socket) 
         : Socket(socket)
     {
     }
-    void SetSocket(TStreamSocket* socket) {
+    void SetSocket(TStreamSocket* socket) { 
         Socket = socket;
     }
 
@@ -587,12 +587,12 @@ public:
     TStreamSocketOutput& operator=(TStreamSocketOutput&&) noexcept = default;
 
 protected:
-    TStreamSocket* Socket;
+    TStreamSocket* Socket; 
 
     void DoWrite(const void* buf, size_t len) override {
         Y_VERIFY(Socket, "TStreamSocketOutput: socket isn't set");
 
-        const char* ptr = (const char*)buf;
+        const char* ptr = (const char*)buf; 
         while (len) {
             const ssize_t ret = Socket->Send(ptr, len);
 

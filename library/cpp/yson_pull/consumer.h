@@ -6,9 +6,9 @@
 #include <util/system/types.h>
 
 namespace NYsonPull {
-    class IConsumer {
-    public:
-        virtual ~IConsumer() = default;
+    class IConsumer { 
+    public: 
+        virtual ~IConsumer() = default; 
 
         virtual void OnBeginStream() = 0;
         virtual void OnEndStream() = 0;
@@ -33,5 +33,5 @@ namespace NYsonPull {
 
         virtual void OnScalar(const TScalar& value);
         virtual void OnEvent(const TEvent& value);
-    };
-}
+    }; 
+} 

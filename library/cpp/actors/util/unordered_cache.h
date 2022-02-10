@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defs.h"
-#include "queue_chunk.h"
+#include "queue_chunk.h" 
 
 template <typename T, ui32 Size = 512, ui32 ConcurrencyFactor = 1, typename TChunk = TQueueChunk<T, Size>>
 class TUnorderedCache : TNonCopyable {
@@ -30,7 +30,7 @@ private:
     TReadSlot ReadSlots[Concurrency];
     TWriteSlot WriteSlots[Concurrency];
 
-    static_assert(sizeof(TChunk*) == sizeof(TAtomic), "expect sizeof(TChunk*) == sizeof(TAtomic)");
+    static_assert(sizeof(TChunk*) == sizeof(TAtomic), "expect sizeof(TChunk*) == sizeof(TAtomic)"); 
 
 private:
     struct TLockedWriter {

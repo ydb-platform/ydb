@@ -11,7 +11,7 @@ namespace NRainCheck {
     private:
         THolder< ::NBus::NPrivate::TScheduler> SchedulerHolder;
         ::NBus::NPrivate::TScheduler* const Scheduler;
-
+ 
     public:
         TSleepService(::NBus::NPrivate::TScheduler*);
         TSleepService();

@@ -9,9 +9,9 @@ TBusTaskStarter::TBusTaskStarter(TAutoPtr<ITaskFactory> taskFactory)
 {
 }
 
-void TBusTaskStarter::OnMessage(NBus::TOnMessageContext& onMessage) {
+void TBusTaskStarter::OnMessage(NBus::TOnMessageContext& onMessage) { 
     TaskFactory->NewTask(onMessage);
 }
 
-TBusTaskStarter::~TBusTaskStarter() {
+TBusTaskStarter::~TBusTaskStarter() { 
 }

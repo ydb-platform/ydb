@@ -6,19 +6,19 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include "lfstack.h"
+#include "lfstack.h" 
 
 Y_UNIT_TEST_SUITE(TLockFreeStackTests) {
     class TCountDownLatch {
     private:
         TAtomic Current_;
         TSystemEvent EventObject_;
-
+ 
     public:
         TCountDownLatch(unsigned initial)
             : Current_(initial)
-        {
-        }
+        { 
+        } 
 
         void CountDown() {
             if (AtomicDecrement(Current_) == 0) {
@@ -175,11 +175,11 @@ Y_UNIT_TEST_SUITE(TLockFreeStackTests) {
     }
 
     Y_UNIT_TEST(CleanInDestructor) {
-        TSimpleSharedPtr<bool> p(new bool);
+        TSimpleSharedPtr<bool> p(new bool); 
         UNIT_ASSERT_VALUES_EQUAL(1u, p.RefCount());
 
         {
-            TLockFreeStack<TSimpleSharedPtr<bool>> stack;
+            TLockFreeStack<TSimpleSharedPtr<bool>> stack; 
 
             stack.Enqueue(p);
             stack.Enqueue(p);
@@ -193,14 +193,14 @@ Y_UNIT_TEST_SUITE(TLockFreeStackTests) {
     Y_UNIT_TEST(NoCopyTest) {
         static unsigned copied = 0;
         struct TCopyCount {
-            TCopyCount(int) {
-            }
-            TCopyCount(const TCopyCount&) {
-                ++copied;
-            }
+            TCopyCount(int) { 
+            } 
+            TCopyCount(const TCopyCount&) { 
+                ++copied; 
+            } 
 
-            TCopyCount(TCopyCount&&) {
-            }
+            TCopyCount(TCopyCount&&) { 
+            } 
 
             TCopyCount& operator=(const TCopyCount&) {
                 ++copied;

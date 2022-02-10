@@ -28,12 +28,12 @@
 
 #else
 
-#if defined(_musl_)
-    #define HAVE_SYS_TIMES_H 1
-    #define HAVE_STRUCT_TMS 1
-    #define HAVE_CLOCK_T 1
-#endif
-
+#if defined(_musl_) 
+    #define HAVE_SYS_TIMES_H 1 
+    #define HAVE_STRUCT_TMS 1 
+    #define HAVE_CLOCK_T 1 
+#endif 
+ 
 /* This source file is taken from the GCC source code, with slight
    modifications that are under control of the IN_GCC preprocessor
    variable.  The !IN_GCC part of this file is specific to Bison.  */

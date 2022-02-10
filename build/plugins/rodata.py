@@ -1,15 +1,15 @@
 import argparse
-import os
-
-import _common as common
-import _import_wrapper as iw
-
-
+import os 
+ 
+import _common as common 
+import _import_wrapper as iw 
+ 
+ 
 class ROData(iw.CustomCommand):
     def __init__(self, path, unit):
         self._path = path
         self._flags = []
-
+ 
         prefix = unit.get('ASM_PREFIX')
 
         if prefix:
@@ -118,51 +118,51 @@ class ROData(iw.CustomCommand):
         self.call(cmd)
 
 
-class RODataCXX(iw.CustomCommand):
-    def __init__(self, path, unit):
-        self._path = path
-        self._base = os.path.basename(common.stripext(self._path))
-
-    def descr(self):
-        return 'RD', self._path, 'light-green'
-
-    def input(self):
+class RODataCXX(iw.CustomCommand): 
+    def __init__(self, path, unit): 
+        self._path = path 
+        self._base = os.path.basename(common.stripext(self._path)) 
+ 
+    def descr(self): 
+        return 'RD', self._path, 'light-green' 
+ 
+    def input(self): 
         return common.make_tuples([self._path])
-
-    def main_out(self):
-        return common.tobuilddir(common.stripext(self._path)) + '.cpp'
-
-    def output(self):
+ 
+    def main_out(self): 
+        return common.tobuilddir(common.stripext(self._path)) + '.cpp' 
+ 
+    def output(self): 
         return common.make_tuples([self.main_out()])
-
+ 
     def run(self, extra_args, binary):
-        with open(self.resolve_path(self.main_out()), 'w') as f:
-            f.write('static_assert(sizeof(unsigned int) == 4, "ups, something gone wrong");\n\n')
-            f.write('extern "C" {\n')
-            f.write('    extern const unsigned char ' + self._base + '[] = {\n')
-
-            cnt = 0
-
-            with open(self.resolve_path(self._path), 'r') as input:
-                for ch in input.read():
-                    f.write('0x%02x, ' % ord(ch))
-
-                    cnt += 1
-
-                    if cnt % 50 == 1:
-                        f.write('\n')
-
-            f.write('    };\n')
-            f.write('    extern const unsigned int ' + self._base + 'Size = sizeof(' + self._base + ');\n')
-            f.write('}\n')
-
-
-def ro_data(path, unit):
+        with open(self.resolve_path(self.main_out()), 'w') as f: 
+            f.write('static_assert(sizeof(unsigned int) == 4, "ups, something gone wrong");\n\n') 
+            f.write('extern "C" {\n') 
+            f.write('    extern const unsigned char ' + self._base + '[] = {\n') 
+ 
+            cnt = 0 
+ 
+            with open(self.resolve_path(self._path), 'r') as input: 
+                for ch in input.read(): 
+                    f.write('0x%02x, ' % ord(ch)) 
+ 
+                    cnt += 1 
+ 
+                    if cnt % 50 == 1: 
+                        f.write('\n') 
+ 
+            f.write('    };\n') 
+            f.write('    extern const unsigned int ' + self._base + 'Size = sizeof(' + self._base + ');\n') 
+            f.write('}\n') 
+ 
+ 
+def ro_data(path, unit): 
     if unit.enabled('ARCH_AARCH64') or unit.enabled('ARCH_ARM') or unit.enabled('ARCH_PPC64LE'):
-        return RODataCXX(path, unit)
-
-    return ROData(path, unit)
-
-
+        return RODataCXX(path, unit) 
+ 
+    return ROData(path, unit) 
+ 
+ 
 def init():
     iw.addrule('rodata', ro_data)

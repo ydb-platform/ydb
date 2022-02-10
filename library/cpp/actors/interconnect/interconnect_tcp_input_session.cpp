@@ -339,7 +339,7 @@ namespace NActors {
         PreallocateBuffers();
 
         TStackVec<TIoVec, NumPreallocatedBuffers> buffs;
-        for (const auto& item : Buffers) {
+        for (const auto& item : Buffers) { 
             TIoVec iov{item->GetBuffer(), item->GetCapacity()};
             buffs.push_back(iov);
             if (Params.Encryption) {
@@ -347,7 +347,7 @@ namespace NActors {
             }
         }
 
-        const struct iovec* iovec = reinterpret_cast<const struct iovec*>(buffs.data());
+        const struct iovec* iovec = reinterpret_cast<const struct iovec*>(buffs.data()); 
         int iovcnt = buffs.size();
 
         ssize_t recvres = 0;
@@ -473,4 +473,4 @@ namespace NActors {
     }
 
 
-}
+} 

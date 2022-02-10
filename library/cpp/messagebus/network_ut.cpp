@@ -15,14 +15,14 @@ namespace {
 
         socklen_t len = sizeof(addr);
 
-        int r = ::getsockname(socket, (sockaddr*)&addr, &len);
+        int r = ::getsockname(socket, (sockaddr*)&addr, &len); 
         UNIT_ASSERT(r >= 0);
 
         if (addr.ss_family == AF_INET) {
-            sockaddr_in* addr_in = (sockaddr_in*)&addr;
+            sockaddr_in* addr_in = (sockaddr_in*)&addr; 
             return InetToHost(addr_in->sin_port);
         } else if (addr.ss_family == AF_INET6) {
-            sockaddr_in6* addr_in6 = (sockaddr_in6*)&addr;
+            sockaddr_in6* addr_in6 = (sockaddr_in6*)&addr; 
             return InetToHost(addr_in6->sin6_port);
         } else {
             UNIT_FAIL("unknown AF");

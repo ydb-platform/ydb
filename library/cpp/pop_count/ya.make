@@ -1,9 +1,9 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:util)
-
-SRCS(
-    popcount.cpp
-)
-
-END()
+ 
+SRCS( 
+    popcount.cpp 
+) 
+ 
+END() 

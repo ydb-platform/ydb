@@ -11,8 +11,8 @@ namespace {
     template <typename T, size_t N>
     struct TExamplesHolder {
         TExamplesHolder()
-            : Examples(N)
-        {
+            : Examples(N) 
+        { 
             TFastRng<ui64> prng{42u * sizeof(T) * N};
             for (auto& x : Examples) {
                 x = prng();
@@ -23,7 +23,7 @@ namespace {
     };
 }
 
-#define DEFINE_BENCHMARK(type, count)                                            \
+#define DEFINE_BENCHMARK(type, count)                                            \ 
     Y_CPU_BENCHMARK(FastClp2_##type##_##count, iface) {                          \
         const auto& examples = Default<TExamplesHolder<type, count>>().Examples; \
         for (const auto i : xrange(iface.Iterations())) {                        \

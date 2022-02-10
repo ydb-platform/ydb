@@ -15,15 +15,15 @@
 #include <sys/uio.h>
 
 namespace NInterconnect {
-    class TSocket: public NActors::TSharedDescriptor, public TNonCopyable {
-    protected:
-        TSocket(SOCKET fd);
+    class TSocket: public NActors::TSharedDescriptor, public TNonCopyable { 
+    protected: 
+        TSocket(SOCKET fd); 
 
-        virtual ~TSocket() override;
+        virtual ~TSocket() override; 
 
         SOCKET Descriptor;
 
-        virtual int GetDescriptor() override;
+        virtual int GetDescriptor() override; 
 
     private:
         friend class TSecureSocket;
@@ -32,21 +32,21 @@ namespace NInterconnect {
             return std::exchange(Descriptor, INVALID_SOCKET);
         }
 
-    public:
-        operator SOCKET() const {
-            return Descriptor;
-        }
+    public: 
+        operator SOCKET() const { 
+            return Descriptor; 
+        } 
 
-        int Bind(const TAddress& addr) const;
-        int Shutdown(int how) const;
-        int GetConnectStatus() const;
-    };
+        int Bind(const TAddress& addr) const; 
+        int Shutdown(int how) const; 
+        int GetConnectStatus() const; 
+    }; 
 
-    class TStreamSocket: public TSocket {
-    public:
-        TStreamSocket(SOCKET fd);
+    class TStreamSocket: public TSocket { 
+    public: 
+        TStreamSocket(SOCKET fd); 
 
-        static TIntrusivePtr<TStreamSocket> Make(int domain);
+        static TIntrusivePtr<TStreamSocket> Make(int domain); 
 
         virtual ssize_t Send(const void* msg, size_t len, TString *err = nullptr) const;
         virtual ssize_t Recv(void* buf, size_t len, TString *err = nullptr) const;
@@ -54,16 +54,16 @@ namespace NInterconnect {
         virtual ssize_t WriteV(const struct iovec* iov, int iovcnt) const;
         virtual ssize_t ReadV(const struct iovec* iov, int iovcnt) const;
 
-        int Connect(const TAddress& addr) const;
-        int Connect(const NAddr::IRemoteAddr* addr) const;
-        int Listen(int backlog) const;
-        int Accept(TAddress& acceptedAddr) const;
+        int Connect(const TAddress& addr) const; 
+        int Connect(const NAddr::IRemoteAddr* addr) const; 
+        int Listen(int backlog) const; 
+        int Accept(TAddress& acceptedAddr) const; 
 
-        ssize_t GetUnsentQueueSize() const;
+        ssize_t GetUnsentQueueSize() const; 
 
-        void SetSendBufferSize(i32 len) const;
+        void SetSendBufferSize(i32 len) const; 
         ui32 GetSendBufferSize() const;
-    };
+    }; 
 
     class TSecureSocketContext {
         class TImpl;
@@ -116,16 +116,16 @@ namespace NInterconnect {
         bool WantWrite() const;
     };
 
-    class TDatagramSocket: public TSocket {
-    public:
-        typedef std::shared_ptr<TDatagramSocket> TPtr;
+    class TDatagramSocket: public TSocket { 
+    public: 
+        typedef std::shared_ptr<TDatagramSocket> TPtr; 
 
-        TDatagramSocket(SOCKET fd);
+        TDatagramSocket(SOCKET fd); 
 
-        static TPtr Make(int domain);
+        static TPtr Make(int domain); 
 
-        ssize_t SendTo(const void* msg, size_t len, const TAddress& toAddr) const;
-        ssize_t RecvFrom(void* buf, size_t len, TAddress& fromAddr) const;
-    };
+        ssize_t SendTo(const void* msg, size_t len, const TAddress& toAddr) const; 
+        ssize_t RecvFrom(void* buf, size_t len, TAddress& fromAddr) const; 
+    }; 
 
 }

@@ -20,7 +20,7 @@ namespace NMonitoring {
     struct ICountableConsumer;
 
 
-    struct TCountableBase: public TAtomicRefCount<TCountableBase> {
+    struct TCountableBase: public TAtomicRefCount<TCountableBase> { 
         // Private means that the object must not be serialized unless the consumer
         // has explicitly specified this by setting its Visibility to Private.
         //

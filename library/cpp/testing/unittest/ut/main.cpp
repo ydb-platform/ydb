@@ -7,27 +7,27 @@
 #include <util/system/env.h>
 #include <util/system/fs.h>
 
-TEST(GTest, Test1) {
-    UNIT_ASSERT_EQUAL(1, 1);
-}
-
-TEST(GTest, Test2) {
-    UNIT_ASSERT_EQUAL(2, 2);
-}
-
-namespace {
-    struct TFixture : ::testing::Test {
-        TFixture()
-            : I(0)
-        {
-        }
-
+TEST(GTest, Test1) { 
+    UNIT_ASSERT_EQUAL(1, 1); 
+} 
+ 
+TEST(GTest, Test2) { 
+    UNIT_ASSERT_EQUAL(2, 2); 
+} 
+ 
+namespace { 
+    struct TFixture : ::testing::Test { 
+        TFixture() 
+            : I(0) 
+        { 
+        } 
+ 
         void SetUp() override {
-            I = 5;
-        }
-
-        int I;
-    };
+            I = 5; 
+        } 
+ 
+        int I; 
+    }; 
 
     struct TSimpleFixture : public NUnitTest::TBaseFixture {
         size_t Value = 24;
@@ -50,11 +50,11 @@ namespace {
             Magic = 100;
         }
     };
-}
-
-TEST_F(TFixture, Test1) {
-    ASSERT_EQ(I, 5);
-}
+} 
+ 
+TEST_F(TFixture, Test1) { 
+    ASSERT_EQ(I, 5); 
+} 
 
 TEST(ETest, Test1) {
     UNIT_CHECK_GENERATED_EXCEPTION(ythrow yexception(), yexception);

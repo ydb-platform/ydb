@@ -5,20 +5,20 @@
 #include "compat.h"
 
 #if defined _unix_
-    #include <pthread.h>
+    #include <pthread.h> 
 #elif defined _win_
-    // Flags for sigprocmask:
-    #define SIG_BLOCK 1
-    #define SIG_UNBLOCK 2
-    #define SIG_SETMASK 3
+    // Flags for sigprocmask: 
+    #define SIG_BLOCK 1 
+    #define SIG_UNBLOCK 2 
+    #define SIG_SETMASK 3 
 
 using sigset_t = ui32;
 
 #else
-    #error not supported yet
+    #error not supported yet 
 #endif
 
-inline int SigEmptySet(sigset_t* set) {
+inline int SigEmptySet(sigset_t* set) { 
 #if defined _unix_
     return sigemptyset(set);
 #else
@@ -27,7 +27,7 @@ inline int SigEmptySet(sigset_t* set) {
 #endif
 }
 
-inline int SigFillSet(sigset_t* set) {
+inline int SigFillSet(sigset_t* set) { 
 #if defined _unix_
     return sigfillset(set);
 #else
@@ -36,7 +36,7 @@ inline int SigFillSet(sigset_t* set) {
 #endif
 }
 
-inline int SigAddSet(sigset_t* set, int signo) {
+inline int SigAddSet(sigset_t* set, int signo) { 
 #if defined _unix_
     return sigaddset(set, signo);
 #else
@@ -46,7 +46,7 @@ inline int SigAddSet(sigset_t* set, int signo) {
 #endif
 }
 
-inline int SigDelSet(sigset_t* set, int signo) {
+inline int SigDelSet(sigset_t* set, int signo) { 
 #if defined _unix_
     return sigdelset(set, signo);
 #else
@@ -56,9 +56,9 @@ inline int SigDelSet(sigset_t* set, int signo) {
 #endif
 }
 
-inline int SigIsMember(const sigset_t* set, int signo) {
+inline int SigIsMember(const sigset_t* set, int signo) { 
 #if defined _unix_
-    return sigismember(const_cast<sigset_t*>(set), signo);
+    return sigismember(const_cast<sigset_t*>(set), signo); 
 #else
     Y_UNUSED(set);
     Y_UNUSED(signo);
@@ -66,7 +66,7 @@ inline int SigIsMember(const sigset_t* set, int signo) {
 #endif
 }
 
-inline int SigProcMask(int how, const sigset_t* set, sigset_t* oset) {
+inline int SigProcMask(int how, const sigset_t* set, sigset_t* oset) { 
 #if defined _unix_
     return pthread_sigmask(how, set, oset);
 #else

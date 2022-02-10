@@ -33,7 +33,7 @@ TBusMessage* TRemoteClientConnection::PopAck(TBusKey id) {
     return AckMessages.Pop(id);
 }
 
-SOCKET TRemoteClientConnection::CreateSocket(const TNetAddr& addr) {
+SOCKET TRemoteClientConnection::CreateSocket(const TNetAddr& addr) { 
     SOCKET handle = socket(addr.Addr()->sa_family, SOCK_STREAM, 0);
     Y_VERIFY(handle != INVALID_SOCKET, "failed to create socket: %s", LastSystemErrorText());
 
@@ -138,33 +138,33 @@ void TRemoteClientConnection::BeforeTryWrite() {
     TimeoutMessages();
 }
 
-namespace NBus {
-    namespace NPrivate {
-        class TInvokeOnReply: public IWorkItem {
-        private:
-            TRemoteClientSession* RemoteClientSession;
-            TNonDestroyingHolder<TBusMessage> Request;
-            TBusMessagePtrAndHeader Response;
+namespace NBus { 
+    namespace NPrivate { 
+        class TInvokeOnReply: public IWorkItem { 
+        private: 
+            TRemoteClientSession* RemoteClientSession; 
+            TNonDestroyingHolder<TBusMessage> Request; 
+            TBusMessagePtrAndHeader Response; 
 
-        public:
-            TInvokeOnReply(TRemoteClientSession* session,
-                           TNonDestroyingAutoPtr<TBusMessage> request, TBusMessagePtrAndHeader& response)
-                : RemoteClientSession(session)
-                , Request(request)
-            {
-                Response.Swap(response);
-            }
+        public: 
+            TInvokeOnReply(TRemoteClientSession* session, 
+                           TNonDestroyingAutoPtr<TBusMessage> request, TBusMessagePtrAndHeader& response) 
+                : RemoteClientSession(session) 
+                , Request(request) 
+            { 
+                Response.Swap(response); 
+            } 
 
-            void DoWork() override {
-                THolder<TInvokeOnReply> holder(this);
-                RemoteClientSession->ReleaseInFlightAndCallOnReply(Request.Release(), Response);
-                // TODO: TRemoteClientSessionSemaphore should be enough
-                RemoteClientSession->JobCount.Decrement();
-            }
-        };
+            void DoWork() override { 
+                THolder<TInvokeOnReply> holder(this); 
+                RemoteClientSession->ReleaseInFlightAndCallOnReply(Request.Release(), Response); 
+                // TODO: TRemoteClientSessionSemaphore should be enough 
+                RemoteClientSession->JobCount.Decrement(); 
+            } 
+        }; 
 
-    }
-}
+    } 
+} 
 
 void TRemoteClientConnection::ProcessReplyQueue() {
     if (AtomicGet(WriterData.Down)) {

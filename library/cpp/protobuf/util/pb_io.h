@@ -40,9 +40,9 @@ namespace NProtoBuf {
 
     bool MergePartialFromString(NProtoBuf::Message& m, const TStringBuf serializedProtoMessage);
     bool MergeFromString(NProtoBuf::Message& m, const TStringBuf serializedProtoMessage);
-}
+} 
 
-int operator&(NProtoBuf::Message& m, IBinSaver& f);
+int operator&(NProtoBuf::Message& m, IBinSaver& f); 
 
 // Write a textual representation of the given message to the given file.
 void SerializeToTextFormat(const NProtoBuf::Message& m, const TString& fileName);

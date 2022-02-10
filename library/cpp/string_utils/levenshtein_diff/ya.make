@@ -1,13 +1,13 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:mt)
-
-SRCS(
+ 
+SRCS( 
     levenshtein_diff.cpp
-)
-
-PEERDIR(
-    util/draft
-)
-
-END()
+) 
+ 
+PEERDIR( 
+    util/draft 
+) 
+ 
+END() 

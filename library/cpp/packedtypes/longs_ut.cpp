@@ -1,9 +1,9 @@
-#include "longs.h"
-
+#include "longs.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <library/cpp/digest/old_crc/crc.h>
-#include <util/string/util.h>
+#include <util/string/util.h> 
 #include <util/stream/output.h>
 #include <util/system/hi_lo.h>
 
@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(TLongsTest) {
 
         char buf[100];
         memset(buf, 0, 100);
-        char* p = buf;
+        char* p = buf; 
         int l = out_long(x64, buf);
         s += Sprintf("x64=0x%" PRIi64 "\n", x64);
         s += Sprintf("LO_32(x64)=0x%" PRIu32 " HI_32(x64)=0x%" PRIu32 "\n", (ui32)Lo32(x64), (ui32)Hi32(x64));
@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(TLongsTest) {
             s += Sprintf("0x%02x ", buf[i]);
         }
         s += Sprintf("\n");
-
+ 
         p = buf;
         in_long(y64, p);
         s += Sprintf("x=0x%" PRIi64 " y=0x%" PRIi64 "\n", x64, y64);
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TLongsTest) {
         } else {
             s += Sprintf("OK\n");
         }
-
+ 
         UNIT_ASSERT_EQUAL(Crc<ui64>(s.data(), s.size()), 7251624297500315779ULL); // WTF?
     }
 
@@ -58,9 +58,9 @@ Y_UNIT_TEST_SUITE(TLongsTest) {
             TestOneValue<TSignedInt>((TSignedInt)(1ull << i));
             TestOneValue<TSignedInt>((TSignedInt)((1ull << i) - 1));
             TestOneValue<TSignedInt>((TSignedInt)((1ull << i) + 1));
-        }
+        } 
     }
-
+ 
     Y_UNIT_TEST(TestCornerCases) {
         TestCornerCasesImpl<i32>(31);
         TestCornerCasesImpl<i64>(63);

@@ -1,32 +1,32 @@
 #pragma once
-
-#include "fs.h"
-#include "file.h"
-
+ 
+#include "fs.h" 
+#include "file.h" 
+ 
 #include <util/folder/path.h>
 #include <util/generic/string.h>
-
-class TTempFile {
-public:
+ 
+class TTempFile { 
+public: 
     inline TTempFile(const TString& fname)
-        : Name_(fname)
-    {
-    }
-
+        : Name_(fname) 
+    { 
+    } 
+ 
     inline ~TTempFile() {
         NFs::Remove(Name());
-    }
-
+    } 
+ 
     inline const TString& Name() const noexcept {
-        return Name_;
-    }
-
-private:
+        return Name_; 
+    } 
+ 
+private: 
     const TString Name_;
-};
-
-class TTempFileHandle: public TTempFile, public TFile {
-public:
+}; 
+ 
+class TTempFileHandle: public TTempFile, public TFile { 
+public: 
     TTempFileHandle();
     TTempFileHandle(const TString& fname);
 
@@ -35,7 +35,7 @@ public:
 
 private:
     TFile CreateFile() const;
-};
+}; 
 
 /*
  * Creates a unique temporary filename in specified directory.

@@ -3,10 +3,10 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/yexception.h>
-#include <util/string/cast.h>
-#include <util/system/yassert.h>
+#include <util/string/cast.h> 
+#include <util/system/yassert.h> 
 
-#include <iterator>
+#include <iterator> 
 
 class TDelimStringIter {
 public:
@@ -18,8 +18,8 @@ public:
 
     inline TDelimStringIter(const char* begin, const char* strEnd, TStringBuf delim)
         : TDelimStringIter(TStringBuf(begin, strEnd), delim)
-    {
-    }
+    { 
+    } 
 
     inline TDelimStringIter(TStringBuf str, TStringBuf delim)
         : IsValid(true)
@@ -31,10 +31,10 @@ public:
 
     inline TDelimStringIter()
         : IsValid(false)
-    {
-    }
+    { 
+    } 
 
-    inline explicit operator bool() const {
+    inline explicit operator bool() const { 
         return IsValid;
     }
 
@@ -52,7 +52,7 @@ public:
     }
 
     inline void operator+=(size_t n) {
-        for (; n > 0; --n) {
+        for (; n > 0; --n) { 
             ++(*this);
         }
     }
@@ -74,7 +74,7 @@ public:
     }
 
     // Get & advance
-    template <class T>
+    template <class T> 
     inline bool TryNext(T& t) {
         if (IsValid) {
             t = FromString<T>(Current);
@@ -85,7 +85,7 @@ public:
         }
     }
 
-    template <class T>
+    template <class T> 
     inline TDelimStringIter& Next(T& t) // Get & advance
     {
         if (!TryNext(t))
@@ -93,7 +93,7 @@ public:
         return *this;
     }
 
-    template <class T>
+    template <class T> 
     inline T GetNext() {
         T res;
         Next(res);
@@ -124,7 +124,7 @@ public:
 private:
     inline void UpdateCurrent() {
         // it is much faster than TStringBuf::find
-        size_t pos = std::search(Str.begin(), Str.end(), Delim.begin(), Delim.end()) - Str.begin();
+        size_t pos = std::search(Str.begin(), Str.end(), Delim.begin(), Delim.end()) - Str.begin(); 
         Current = Str.Head(pos);
     }
 
@@ -137,15 +137,15 @@ private:
 };
 
 //example: for (TStringBuf field: TDelimStroka(line, "@@")) { ... }
-struct TDelimStroka {
+struct TDelimStroka { 
     TStringBuf S;
     TStringBuf Delim;
 
     inline TDelimStroka(TStringBuf s, TStringBuf delim)
         : S(s)
         , Delim(delim)
-    {
-    }
+    { 
+    } 
 
     inline TDelimStringIter begin() const {
         return TDelimStringIter(S, Delim);

@@ -30,13 +30,13 @@ Y_UNIT_TEST_SUITE(SchedulerActor) {
         {
         }
 
-        void Bootstrap(const TActorContext& ctx) {
+        void Bootstrap(const TActorContext& ctx) { 
             LastWakeup = ctx.Now();
             Become(&TThis::StateFunc);
             ctx.Schedule(ScheduleDelta, new TEvents::TEvWakeup());
         }
 
-        void Handle(TEvents::TEvWakeup::TPtr& /*ev*/, const TActorContext& ctx) {
+        void Handle(TEvents::TEvWakeup::TPtr& /*ev*/, const TActorContext& ctx) { 
             const TInstant now = ctx.Now();
             UNIT_ASSERT(now - LastWakeup >= ScheduleDelta);
             LastWakeup = now;
@@ -48,25 +48,25 @@ Y_UNIT_TEST_SUITE(SchedulerActor) {
             }
         }
 
-        STRICT_STFUNC(StateFunc, {HFunc(TEvents::TEvWakeup, Handle)})
+        STRICT_STFUNC(StateFunc, {HFunc(TEvents::TEvWakeup, Handle)}) 
     };
 
     void Test(TAtomicBase eventsTotalCount, ui32 scheduleDeltaMs) {
         THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>();
         setup->NodeId = 0;
         setup->ExecutorsCount = 1;
-        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
+        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]); 
         for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
             setup->Executors[i] = new TBasicExecutorPool(i, 5, 10, "basic");
         }
         // create poller actor (whether platform supports it)
         TActorId pollerActorId;
-        if (IActor* poller = CreatePollerActor()) {
+        if (IActor* poller = CreatePollerActor()) { 
             pollerActorId = MakePollerActorId();
             setup->LocalServices.emplace_back(pollerActorId, TActorSetupCmd(poller, TMailboxType::ReadAsFilled, 0));
         }
         TActorId schedulerActorId;
-        if (IActor* schedulerActor = CreateSchedulerActor(TSchedulerConfig())) {
+        if (IActor* schedulerActor = CreateSchedulerActor(TSchedulerConfig())) { 
             schedulerActorId = MakeSchedulerActorId();
             setup->LocalServices.emplace_back(schedulerActorId, TActorSetupCmd(schedulerActor, TMailboxType::ReadAsFilled, 0));
         }

@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
         0.517876, 0.145833, 0.372549, 0, 0.991667, 0.602125, 0.161979, 0, 0, 0, 0, 0.0255146,
         0.947855, 0, 0, 0, 0, 0, 0, 0, 0, 0.847059, 0.679841, 0, 0.156863, 0, 0, 1, 0, 0,
         0, 0, 0.969697, 0, 0, 0.564706, 0, 0, 0, 0, 0, 1, 0.0367282, 0.0395228, 0, 0, 0,
-        0, 0, 0.0470588, 0.141176, 0.054902, 0, 0, 0, 0};
+        0, 0, 0.0470588, 0.141176, 0.054902, 0, 0, 0, 0}; 
     static const size_t FactorCount = Y_ARRAY_SIZE(Factors);
 
     static const ui8 CodedFactors[] = {
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
         0x7F, 0x20, 0x1A, 0x81, 0x9A, 0xCA, 0xBF, 0xC8, 0x8D, 0x8D, 0xC2, 0x83, 0x82, 0xA7, 0x2C, 0x28,
         0xC8, 0xFE, 0x08, 0xC2, 0x07, 0xC7, 0x27, 0x21, 0xE1, 0xBB, 0x3E, 0xC1, 0x59, 0x68, 0xAA, 0x78,
         0xC8, 0x57, 0x5D, 0x60, 0x20, 0xC6, 0x41, 0x42, 0xE8, 0x3A, 0x38, 0xD8, 0x9B, 0xFF, 0xFF, 0xFF,
-        0xC4, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+        0xC4, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; 
     static const size_t CodedSize = Y_ARRAY_SIZE(CodedFactors);
     static const TStringBuf CodedFactorsBuf(reinterpret_cast<const char*>(CodedFactors), CodedSize);
 
@@ -228,7 +228,7 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
             "MBD693f07+9+DQQEkIGAgIgPetzN5yEbAGxWpbCNxXK/0JGTKRz2KkIoR7aM";
         UNIT_ASSERT_EXCEPTION(
             fh::Decode(Base64Decode(brokenBase64Encoded)),
-            yexception);
+            yexception); 
     }
 
     Y_UNIT_TEST(TestDecompressEmpty) {

@@ -1,144 +1,144 @@
-#include "ysaveload.h"
-
+#include "ysaveload.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
-#include <util/memory/pool.h>
-#include <util/stream/buffer.h>
-#include <util/memory/blob.h>
+ 
+#include <util/memory/pool.h> 
+#include <util/stream/buffer.h> 
+#include <util/memory/blob.h> 
 #include <util/generic/list.h>
 #include <util/generic/map.h>
-#include <util/generic/set.h>
-#include <util/generic/hash.h>
-#include <util/generic/deque.h>
+#include <util/generic/set.h> 
+#include <util/generic/hash.h> 
+#include <util/generic/deque.h> 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
-#include <util/generic/buffer.h>
-#include <util/generic/hash_set.h>
+#include <util/generic/buffer.h> 
+#include <util/generic/hash_set.h> 
 #include <util/generic/maybe.h>
 #include <util/generic/variant.h>
-
-static inline char* AllocateFromPool(TMemoryPool& pool, size_t len) {
-    return (char*)pool.Allocate(len);
-}
-
-class TSaveLoadTest: public TTestBase {
-    UNIT_TEST_SUITE(TSaveLoadTest);
-    UNIT_TEST(TestSaveLoad)
-    UNIT_TEST(TestNewStyle)
-    UNIT_TEST(TestNewNewStyle)
+ 
+static inline char* AllocateFromPool(TMemoryPool& pool, size_t len) { 
+    return (char*)pool.Allocate(len); 
+} 
+ 
+class TSaveLoadTest: public TTestBase { 
+    UNIT_TEST_SUITE(TSaveLoadTest); 
+    UNIT_TEST(TestSaveLoad) 
+    UNIT_TEST(TestNewStyle) 
+    UNIT_TEST(TestNewNewStyle) 
     UNIT_TEST(TestList)
     UNIT_TEST(TestTuple)
     UNIT_TEST(TestVariant)
     UNIT_TEST(TestInheritNonVirtualClass)
     UNIT_TEST(TestInheritVirtualClass)
-    UNIT_TEST_SUITE_END();
-
-    struct TSaveHelper {
+    UNIT_TEST_SUITE_END(); 
+ 
+    struct TSaveHelper { 
         inline void Save(IOutputStream* o) const {
-            o->Write("qwerty", 7);
-        }
-
+            o->Write("qwerty", 7); 
+        } 
+ 
         inline void Load(IInputStream* i) {
-            char buf[7];
-
-            UNIT_ASSERT_EQUAL(i->Load(buf, 7), 7);
-            UNIT_ASSERT_EQUAL(strcmp(buf, "qwerty"), 0);
-        }
-    };
-
-    struct TNewStyleSaveHelper {
-        template <class S>
-        inline void SaveLoad(S* s) {
-            ::SaveLoad(s, Str);
-        }
-
+            char buf[7]; 
+ 
+            UNIT_ASSERT_EQUAL(i->Load(buf, 7), 7); 
+            UNIT_ASSERT_EQUAL(strcmp(buf, "qwerty"), 0); 
+        } 
+    }; 
+ 
+    struct TNewStyleSaveHelper { 
+        template <class S> 
+        inline void SaveLoad(S* s) { 
+            ::SaveLoad(s, Str); 
+        } 
+ 
         TString Str;
-    };
-
-    struct TNewNewStyleHelper {
+    }; 
+ 
+    struct TNewNewStyleHelper { 
         TString Str;
-        ui32 Int;
-
+        ui32 Int; 
+ 
         Y_SAVELOAD_DEFINE(Str, Int)
-    };
-
-private:
-    inline void TestNewNewStyle() {
+    }; 
+ 
+private: 
+    inline void TestNewNewStyle() { 
         TString ss;
-
-        {
-            TNewNewStyleHelper h;
-
-            h.Str = "qw";
-            h.Int = 42;
-
-            TStringOutput so(ss);
-
-            ::Save(&so, h);
-        }
-
-        {
-            TNewNewStyleHelper h;
-
-            TStringInput si(ss);
-            ::Load(&si, h);
-
-            UNIT_ASSERT_EQUAL(h.Str, "qw");
-            UNIT_ASSERT_EQUAL(h.Int, 42);
-        }
-    }
-
-    inline void TestNewStyle() {
+ 
+        { 
+            TNewNewStyleHelper h; 
+ 
+            h.Str = "qw"; 
+            h.Int = 42; 
+ 
+            TStringOutput so(ss); 
+ 
+            ::Save(&so, h); 
+        } 
+ 
+        { 
+            TNewNewStyleHelper h; 
+ 
+            TStringInput si(ss); 
+            ::Load(&si, h); 
+ 
+            UNIT_ASSERT_EQUAL(h.Str, "qw"); 
+            UNIT_ASSERT_EQUAL(h.Int, 42); 
+        } 
+    } 
+ 
+    inline void TestNewStyle() { 
         TString ss;
-
-        {
-            TNewStyleSaveHelper sh;
-            sh.Str = "qwerty";
-            TStringOutput so(ss);
-            SaveLoad(&so, sh);
-        }
-
-        {
-            TNewStyleSaveHelper sh;
-            TStringInput si(ss);
-            SaveLoad(&si, sh);
-
-            UNIT_ASSERT_EQUAL(sh.Str, "qwerty");
-        }
-    }
-
-    inline void TestSaveLoad() {
-        TBufferStream S_;
-
-        //save part
-        {
-            Save(&S_, (ui8)1);
-            Save(&S_, (ui16)2);
-            Save(&S_, (ui32)3);
-            Save(&S_, (ui64)4);
-        }
-
-        {
+ 
+        { 
+            TNewStyleSaveHelper sh; 
+            sh.Str = "qwerty"; 
+            TStringOutput so(ss); 
+            SaveLoad(&so, sh); 
+        } 
+ 
+        { 
+            TNewStyleSaveHelper sh; 
+            TStringInput si(ss); 
+            SaveLoad(&si, sh); 
+ 
+            UNIT_ASSERT_EQUAL(sh.Str, "qwerty"); 
+        } 
+    } 
+ 
+    inline void TestSaveLoad() { 
+        TBufferStream S_; 
+ 
+        //save part 
+        { 
+            Save(&S_, (ui8)1); 
+            Save(&S_, (ui16)2); 
+            Save(&S_, (ui32)3); 
+            Save(&S_, (ui64)4); 
+        } 
+ 
+        { 
             TVector<ui16> vec;
-
-            vec.push_back((ui16)1);
-            vec.push_back((ui16)2);
-            vec.push_back((ui16)4);
-
-            Save(&S_, vec);
-        }
-
-        {
+ 
+            vec.push_back((ui16)1); 
+            vec.push_back((ui16)2); 
+            vec.push_back((ui16)4); 
+ 
+            Save(&S_, vec); 
+        } 
+ 
+        { 
             TMap<ui16, ui32> map;
-
-            map[(ui16)1] = 2;
-            map[(ui16)2] = 3;
-            map[(ui16)3] = 4;
-
-            Save(&S_, map);
-        }
-
-        {
+ 
+            map[(ui16)1] = 2; 
+            map[(ui16)2] = 3; 
+            map[(ui16)3] = 4; 
+ 
+            Save(&S_, map); 
+        } 
+ 
+        { 
             TMultiMap<ui16, ui32> multimap;
 
             multimap.emplace((ui16)1, 2);
@@ -151,45 +151,45 @@ private:
         }
 
         {
-            TSaveHelper helper;
-
-            Save(&S_, helper);
-        }
-
-        {
+            TSaveHelper helper; 
+ 
+            Save(&S_, helper); 
+        } 
+ 
+        { 
             TString val("123456");
-
-            Save(&S_, val);
-        }
-
-        {
-            TBuffer buf;
-
-            buf.Append("asdf", 4);
-            Save(&S_, buf);
-        }
-
-        {
+ 
+            Save(&S_, val); 
+        } 
+ 
+        { 
+            TBuffer buf; 
+ 
+            buf.Append("asdf", 4); 
+            Save(&S_, buf); 
+        } 
+ 
+        { 
             TVector<const char*> vec;
-
-            vec.push_back("1");
-            vec.push_back("123");
-            vec.push_back("4567");
-
-            Save(&S_, vec);
-        }
-
-        {
+ 
+            vec.push_back("1"); 
+            vec.push_back("123"); 
+            vec.push_back("4567"); 
+ 
+            Save(&S_, vec); 
+        } 
+ 
+        { 
             TDeque<ui16> deq;
-
-            deq.push_back(1);
-            deq.push_back(2);
-            deq.push_back(4);
-            deq.push_back(5);
-
-            Save(&S_, deq);
-        }
-
+ 
+            deq.push_back(1); 
+            deq.push_back(2); 
+            deq.push_back(4); 
+            deq.push_back(5); 
+ 
+            Save(&S_, deq); 
+        } 
+ 
         {
             TMaybe<size_t> h(10);
             Save(&S_, h);
@@ -220,56 +220,56 @@ private:
             Save(&S_, mm);
         }
 
-        //load part
-        {
-            ui8 val;
-
-            Load(&S_, val);
-            UNIT_ASSERT_EQUAL(val, 1);
-        }
-
-        {
-            ui16 val;
-
-            Load(&S_, val);
-            UNIT_ASSERT_EQUAL(val, 2);
-        }
-
-        {
-            ui32 val;
-
-            Load(&S_, val);
-            UNIT_ASSERT_EQUAL(val, 3);
-        }
-
-        {
-            ui64 val;
-
-            Load(&S_, val);
-            UNIT_ASSERT_EQUAL(val, 4);
-        }
-
-        {
+        //load part 
+        { 
+            ui8 val; 
+ 
+            Load(&S_, val); 
+            UNIT_ASSERT_EQUAL(val, 1); 
+        } 
+ 
+        { 
+            ui16 val; 
+ 
+            Load(&S_, val); 
+            UNIT_ASSERT_EQUAL(val, 2); 
+        } 
+ 
+        { 
+            ui32 val; 
+ 
+            Load(&S_, val); 
+            UNIT_ASSERT_EQUAL(val, 3); 
+        } 
+ 
+        { 
+            ui64 val; 
+ 
+            Load(&S_, val); 
+            UNIT_ASSERT_EQUAL(val, 4); 
+        } 
+ 
+        { 
             TVector<ui16> vec;
-
-            Load(&S_, vec);
+ 
+            Load(&S_, vec); 
             UNIT_ASSERT_EQUAL(vec.size(), 3);
-            UNIT_ASSERT_EQUAL(vec[0], 1);
-            UNIT_ASSERT_EQUAL(vec[1], 2);
-            UNIT_ASSERT_EQUAL(vec[2], 4);
-        }
-
-        {
+            UNIT_ASSERT_EQUAL(vec[0], 1); 
+            UNIT_ASSERT_EQUAL(vec[1], 2); 
+            UNIT_ASSERT_EQUAL(vec[2], 4); 
+        } 
+ 
+        { 
             TMap<ui16, ui32> map;
-
-            Load(&S_, map);
-            UNIT_ASSERT_EQUAL(map.size(), 3);
-            UNIT_ASSERT_EQUAL(map[(ui16)1], 2);
-            UNIT_ASSERT_EQUAL(map[(ui16)2], 3);
-            UNIT_ASSERT_EQUAL(map[(ui16)3], 4);
-        }
-
-        {
+ 
+            Load(&S_, map); 
+            UNIT_ASSERT_EQUAL(map.size(), 3); 
+            UNIT_ASSERT_EQUAL(map[(ui16)1], 2); 
+            UNIT_ASSERT_EQUAL(map[(ui16)2], 3); 
+            UNIT_ASSERT_EQUAL(map[(ui16)3], 4); 
+        } 
+ 
+        { 
             TMultiMap<ui16, ui32> multimap;
 
             Load(&S_, multimap);
@@ -290,49 +290,49 @@ private:
         }
 
         {
-            TSaveHelper helper;
-
-            Load(&S_, helper);
-        }
-
-        {
+            TSaveHelper helper; 
+ 
+            Load(&S_, helper); 
+        } 
+ 
+        { 
             TString val;
-
-            Load(&S_, val);
-            UNIT_ASSERT_EQUAL(val, "123456");
-        }
-
-        {
-            TBuffer buf;
-
-            Load(&S_, buf);
+ 
+            Load(&S_, val); 
+            UNIT_ASSERT_EQUAL(val, "123456"); 
+        } 
+ 
+        { 
+            TBuffer buf; 
+ 
+            Load(&S_, buf); 
             UNIT_ASSERT_EQUAL(buf.size(), 4);
             UNIT_ASSERT_EQUAL(memcmp(buf.data(), "asdf", 4), 0);
-        }
-
-        {
+        } 
+ 
+        { 
             TVector<const char*> vec;
-            TMemoryPool pool(1024);
-
-            Load(&S_, vec, pool);
-
+            TMemoryPool pool(1024); 
+ 
+            Load(&S_, vec, pool); 
+ 
             UNIT_ASSERT_EQUAL(vec.size(), 3);
             UNIT_ASSERT_EQUAL(vec[0], TString("1"));
             UNIT_ASSERT_EQUAL(vec[1], TString("123"));
             UNIT_ASSERT_EQUAL(vec[2], TString("4567"));
-        }
-
-        {
+        } 
+ 
+        { 
             TDeque<ui16> deq;
-
-            Load(&S_, deq);
-
+ 
+            Load(&S_, deq); 
+ 
             UNIT_ASSERT_EQUAL(deq.size(), 4);
-            UNIT_ASSERT_EQUAL(deq[0], 1);
-            UNIT_ASSERT_EQUAL(deq[1], 2);
-            UNIT_ASSERT_EQUAL(deq[2], 4);
-            UNIT_ASSERT_EQUAL(deq[3], 5);
-        }
+            UNIT_ASSERT_EQUAL(deq[0], 1); 
+            UNIT_ASSERT_EQUAL(deq[1], 2); 
+            UNIT_ASSERT_EQUAL(deq[2], 4); 
+            UNIT_ASSERT_EQUAL(deq[3], 5); 
+        } 
 
         {
             TMaybe<size_t> h(5);
@@ -374,7 +374,7 @@ private:
             UNIT_ASSERT_EQUAL(twoIter->second, 2);
             UNIT_ASSERT_EQUAL((++twoIter)->second, 22);
         }
-    }
+    } 
 
     void TestList() {
         TBufferStream s;
@@ -482,6 +482,6 @@ private:
         TestInheritClassImpl<TDerivedVirtual, TBaseVirtual>();
         TestInheritClassImpl<TDerivedVirtual, IInterface>();
     }
-};
-
-UNIT_TEST_SUITE_REGISTRATION(TSaveLoadTest);
+}; 
+ 
+UNIT_TEST_SUITE_REGISTRATION(TSaveLoadTest); 

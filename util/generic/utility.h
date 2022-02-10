@@ -1,35 +1,35 @@
 #pragma once
-
-#include "typetraits.h"
-
-#include <cstring>
-
-template <class T>
+ 
+#include "typetraits.h" 
+ 
+#include <cstring> 
+ 
+template <class T> 
 static constexpr const T& Min(const T& l, const T& r) {
     return r < l ? r : l;
-}
-
-template <typename T, typename... Args>
+} 
+ 
+template <typename T, typename... Args> 
 static constexpr const T& Min(const T& a, const T& b, const Args&... args) {
     return Min(a, Min(b, args...));
 }
 
-template <class T>
+template <class T> 
 static constexpr const T& Max(const T& l, const T& r) {
     return l < r ? r : l;
-}
-
-template <typename T, typename... Args>
+} 
+ 
+template <typename T, typename... Args> 
 static constexpr const T& Max(const T& a, const T& b, const Args&... args) {
     return Max(a, Max(b, args...));
 }
 
 // replace with http://en.cppreference.com/w/cpp/algorithm/clamp in c++17
-template <class T>
+template <class T> 
 constexpr const T& ClampVal(const T& val, const T& min, const T& max) {
     return val < min ? min : (max < val ? max : val);
-}
-
+} 
+ 
 template <typename T = double, typename... Args>
 static T Mean(const Args&... other) noexcept {
     const auto numArgs = sizeof...(other);
@@ -42,11 +42,11 @@ static T Mean(const Args&... other) noexcept {
     return sum / numArgs;
 }
 
-template <class T>
+template <class T> 
 static inline void Zero(T& t) noexcept {
     memset((void*)&t, 0, sizeof(t));
-}
-
+} 
+ 
 /**
  * Securely zero memory (compiler does not optimize this out)
  *
@@ -65,10 +65,10 @@ static inline void SecureZero(T& t) noexcept {
     SecureZero((void*)&t, sizeof(t));
 }
 
-namespace NSwapCheck {
+namespace NSwapCheck { 
     Y_HAS_MEMBER(swap);
     Y_HAS_MEMBER(Swap);
-
+ 
     template <class T, class = void>
     struct TSwapSelector {
         static inline void Swap(T& l, T& r) noexcept(std::is_nothrow_move_constructible<T>::value&&
@@ -76,40 +76,40 @@ namespace NSwapCheck {
             T tmp(std::move(l));
             l = std::move(r);
             r = std::move(tmp);
-        }
-    };
-
+        } 
+    }; 
+ 
     template <class T>
     struct TSwapSelector<T, std::enable_if_t<THasSwap<T>::value>> {
         static inline void Swap(T& l, T& r) noexcept(noexcept(l.Swap(r))) {
             l.Swap(r);
-        }
-    };
-
+        } 
+    }; 
+ 
     template <class T>
     struct TSwapSelector<T, std::enable_if_t<THasswap<T>::value && !THasSwap<T>::value>> {
         static inline void Swap(T& l, T& r) noexcept(noexcept(l.swap(r))) {
             l.swap(r);
-        }
-    };
-}
-
-/*
- * DoSwap better than ::Swap in member functions...
- */
-template <class T>
+        } 
+    }; 
+} 
+ 
+/* 
+ * DoSwap better than ::Swap in member functions... 
+ */ 
+template <class T> 
 static inline void DoSwap(T& l, T& r) noexcept(noexcept(NSwapCheck::TSwapSelector<T>::Swap(l, r))) {
-    NSwapCheck::TSwapSelector<T>::Swap(l, r);
-}
+    NSwapCheck::TSwapSelector<T>::Swap(l, r); 
+} 
 
 template <bool b>
 struct TNullTmpl {
-    template <class T>
+    template <class T> 
     operator T() const {
         return (T)0;
     }
 };
-
+ 
 using TNull = TNullTmpl<0>;
 
 /*

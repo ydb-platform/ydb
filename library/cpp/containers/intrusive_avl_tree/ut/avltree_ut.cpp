@@ -3,29 +3,29 @@
 #include <library/cpp/containers/intrusive_avl_tree/avltree.h>
 
 class TAvlTreeTest: public TTestBase {
-    UNIT_TEST_SUITE(TAvlTreeTest);
-    UNIT_TEST(TestLowerBound);
+    UNIT_TEST_SUITE(TAvlTreeTest); 
+    UNIT_TEST(TestLowerBound); 
     UNIT_TEST(TestIterator);
-    UNIT_TEST_SUITE_END();
+    UNIT_TEST_SUITE_END(); 
 
-private:
-    void TestLowerBound();
+private: 
+    void TestLowerBound(); 
     void TestIterator();
 
-    class TIt;
-    struct TItCompare {
+    class TIt; 
+    struct TItCompare { 
         static inline bool Compare(const TIt& l, const TIt& r) noexcept;
-    };
+    }; 
 
-    class TIt: public TAvlTreeItem<TIt, TItCompare> {
-    public:
-        TIt(int val = 0)
-            : Val(val)
-        {
-        }
+    class TIt: public TAvlTreeItem<TIt, TItCompare> { 
+    public: 
+        TIt(int val = 0) 
+            : Val(val) 
+        { 
+        } 
 
-        int Val;
-    };
+        int Val; 
+    }; 
 
     using TIts = TAvlTree<TIt, TItCompare>;
 };

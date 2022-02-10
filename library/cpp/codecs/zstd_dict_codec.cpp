@@ -28,8 +28,8 @@ namespace NCodecs {
 
             TPtrHolder(T* dict)
                 : Ptr(dict)
-            {
-            }
+            { 
+            } 
 
             T* Get() {
                 return Ptr;
@@ -99,7 +99,7 @@ namespace NCodecs {
             TCCtx ctx{CheckPtr(ZSTD_createCCtx(), __LOCATION__)};
             const size_t resSz = CheckSize(ZSTD_compress_usingCDict(
                                                ctx.Get(), outbuf.data() + szSz, maxDatSz, rawBeg, rawSz, CDict.Get()),
-                                           __LOCATION__);
+                                           __LOCATION__); 
 
             if (resSz < rawSz) {
                 outbuf.Resize(resSz + szSz);
@@ -134,13 +134,13 @@ namespace NCodecs {
                 outbuf.Resize(rawSz);
                 memcpy(outbuf.data(), rawBeg, rawSz);
             } else {
-                //                size_t zSz = ZSTD_getDecompressedSize(rawBeg, rawSz);
-                //                Y_ENSURE_EX(datSz == zSz, TCodecException() << datSz << " != " << zSz);
+                //                size_t zSz = ZSTD_getDecompressedSize(rawBeg, rawSz); 
+                //                Y_ENSURE_EX(datSz == zSz, TCodecException() << datSz << " != " << zSz); 
                 outbuf.Resize(datSz);
                 TDCtx ctx{CheckPtr(ZSTD_createDCtx(), __LOCATION__)};
                 CheckSize(ZSTD_decompress_usingDDict(
                               ctx.Get(), outbuf.data(), outbuf.size(), rawBeg, rawSz, DDict.Get()),
-                          __LOCATION__);
+                          __LOCATION__); 
                 outbuf.Resize(datSz);
             }
         }
@@ -206,8 +206,8 @@ namespace NCodecs {
 
         template <class T>
         static T* CheckPtr(T* t, TSourceLocation loc) {
-            Y_ENSURE_EX(t, TCodecException() << loc << " "
-                                             << "unexpected nullptr");
+            Y_ENSURE_EX(t, TCodecException() << loc << " " 
+                                             << "unexpected nullptr"); 
             return t;
         }
 
@@ -230,8 +230,8 @@ namespace NCodecs {
         MyTraits.RecommendedSampleSize = TImpl::SampleSize; // same as for solar
     }
 
-    TZStdDictCodec::~TZStdDictCodec() {
-    }
+    TZStdDictCodec::~TZStdDictCodec() { 
+    } 
 
     TString TZStdDictCodec::GetName() const {
         return TStringBuilder() << MyName() << "-" << Impl->GetCompressionLevel();

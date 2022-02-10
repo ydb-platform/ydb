@@ -1,10 +1,10 @@
 #pragma once
 
-struct TSpinWait {
-    TSpinWait() noexcept;
+struct TSpinWait { 
+    TSpinWait() noexcept; 
+ 
+    void Sleep() noexcept; 
 
-    void Sleep() noexcept;
-
-    unsigned T;
-    unsigned C;
+    unsigned T; 
+    unsigned C; 
 };

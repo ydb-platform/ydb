@@ -1,16 +1,16 @@
 G_BENCHMARK()
-
+ 
 OWNER(
     pg
     g:util
 )
-
-PEERDIR(
+ 
+PEERDIR( 
     library/cpp/digest/md5
-)
-
-SRCS(
-    main.cpp
-)
-
-END()
+) 
+ 
+SRCS( 
+    main.cpp 
+) 
+ 
+END() 

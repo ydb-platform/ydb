@@ -1,13 +1,13 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:util)
-
-PEERDIR(
+ 
+PEERDIR( 
     library/cpp/containers/str_map
-)
-
-SRCS(
-    atomizer.cpp
-)
-
-END()
+) 
+ 
+SRCS( 
+    atomizer.cpp 
+) 
+ 
+END() 

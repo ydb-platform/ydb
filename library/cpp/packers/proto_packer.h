@@ -47,4 +47,4 @@ namespace NPackers {
             return result;
         }
     };
-}
+} 

@@ -19,7 +19,7 @@ namespace NCodecs {
         time_t Timestamp = TInstant::Now().TimeT();
         TString RevisionInfo = (TStringBuilder() << "r" << ToString(GetProgramSvnRevision()));
         TString TrainingSetComment; // a human comment on the training data
-        TString TrainingSetResId;   // sandbox resid of the training set
+        TString TrainingSetResId;   // sandbox resid of the training set 
     };
 
     TStaticCodecInfo BuildStaticCodec(const TVector<TString>& trainingData, const TCodecBuildInfo&);

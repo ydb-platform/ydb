@@ -9,14 +9,14 @@
 
 #include <util/generic/noncopyable.h>
 
-class TTestICCluster: public TNonCopyable {
+class TTestICCluster: public TNonCopyable { 
 public:
     struct TTrafficInterrupterSettings {
         TDuration RejectingTrafficTimeout;
         double BandWidth;
         bool Disconnect;
     };
-
+ 
 private:
     const ui32 NumNodes;
     const TString Address = "::1";
@@ -29,7 +29,7 @@ private:
 
 public:
     TTestICCluster(ui32 numNodes = 1, NActors::TChannelsConfig channelsConfig = NActors::TChannelsConfig(),
-                   TTrafficInterrupterSettings* tiSettings = nullptr)
+                   TTrafficInterrupterSettings* tiSettings = nullptr) 
         : NumNodes(numNodes)
         , Counters(new NMonitoring::TDynamicCounters)
         , ChannelsConfig(channelsConfig)
@@ -67,7 +67,7 @@ public:
         return Nodes[id].Get();
     }
 
-    ~TTestICCluster() {
+    ~TTestICCluster() { 
     }
 
     TActorId RegisterActor(NActors::IActor* actor, ui32 nodeId) {

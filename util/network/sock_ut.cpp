@@ -1,5 +1,5 @@
-#include "sock.h"
-
+#include "sock.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/legacy_future.h>
 
@@ -7,109 +7,109 @@
 
 Y_UNIT_TEST_SUITE(TSocketTest) {
     Y_UNIT_TEST(InetDgramTest) {
-        char buf[256];
-        TSockAddrInetDgram servAddr(IpFromString("127.0.0.1"), 0);
-        TSockAddrInetDgram cliAddr(IpFromString("127.0.0.1"), 0);
-        TSockAddrInetDgram servFromAddr;
-        TSockAddrInetDgram cliFromAddr;
-        TInetDgramSocket cliSock;
-        TInetDgramSocket servSock;
-        cliSock.CheckSock();
-        servSock.CheckSock();
+        char buf[256]; 
+        TSockAddrInetDgram servAddr(IpFromString("127.0.0.1"), 0); 
+        TSockAddrInetDgram cliAddr(IpFromString("127.0.0.1"), 0); 
+        TSockAddrInetDgram servFromAddr; 
+        TSockAddrInetDgram cliFromAddr; 
+        TInetDgramSocket cliSock; 
+        TInetDgramSocket servSock; 
+        cliSock.CheckSock(); 
+        servSock.CheckSock(); 
 
-        TBaseSocket::Check(cliSock.Bind(&cliAddr));
-        TBaseSocket::Check(servSock.Bind(&servAddr));
+        TBaseSocket::Check(cliSock.Bind(&cliAddr)); 
+        TBaseSocket::Check(servSock.Bind(&servAddr)); 
 
-        // client
-        const char reqStr[] = "Hello, world!!!";
-        TBaseSocket::Check(cliSock.SendTo(reqStr, sizeof(reqStr), &servAddr));
+        // client 
+        const char reqStr[] = "Hello, world!!!"; 
+        TBaseSocket::Check(cliSock.SendTo(reqStr, sizeof(reqStr), &servAddr)); 
 
-        // server
-        TBaseSocket::Check(servSock.RecvFrom(buf, 256, &servFromAddr));
-        UNIT_ASSERT(strcmp(reqStr, buf) == 0);
-        const char repStr[] = "The World's greatings to you";
-        TBaseSocket::Check(servSock.SendTo(repStr, sizeof(repStr), &servFromAddr));
+        // server 
+        TBaseSocket::Check(servSock.RecvFrom(buf, 256, &servFromAddr)); 
+        UNIT_ASSERT(strcmp(reqStr, buf) == 0); 
+        const char repStr[] = "The World's greatings to you"; 
+        TBaseSocket::Check(servSock.SendTo(repStr, sizeof(repStr), &servFromAddr)); 
 
-        // client
-        TBaseSocket::Check(cliSock.RecvFrom(buf, 256, &cliFromAddr));
-        UNIT_ASSERT(strcmp(repStr, buf) == 0);
-    }
+        // client 
+        TBaseSocket::Check(cliSock.RecvFrom(buf, 256, &cliFromAddr)); 
+        UNIT_ASSERT(strcmp(repStr, buf) == 0); 
+    } 
 
-    void RunLocalDgramTest(const char* localServerSockName, const char* localClientSockName) {
-        char buf[256];
-        TSockAddrLocalDgram servAddr(localServerSockName);
-        TSockAddrLocalDgram cliAddr(localClientSockName);
-        TSockAddrLocalDgram servFromAddr;
-        TSockAddrLocalDgram cliFromAddr;
-        TLocalDgramSocket cliSock;
-        TLocalDgramSocket servSock;
-        cliSock.CheckSock();
-        servSock.CheckSock();
+    void RunLocalDgramTest(const char* localServerSockName, const char* localClientSockName) { 
+        char buf[256]; 
+        TSockAddrLocalDgram servAddr(localServerSockName); 
+        TSockAddrLocalDgram cliAddr(localClientSockName); 
+        TSockAddrLocalDgram servFromAddr; 
+        TSockAddrLocalDgram cliFromAddr; 
+        TLocalDgramSocket cliSock; 
+        TLocalDgramSocket servSock; 
+        cliSock.CheckSock(); 
+        servSock.CheckSock(); 
 
-        TBaseSocket::Check(cliSock.Bind(&cliAddr), "bind client");
-        TBaseSocket::Check(servSock.Bind(&servAddr), "bind server");
+        TBaseSocket::Check(cliSock.Bind(&cliAddr), "bind client"); 
+        TBaseSocket::Check(servSock.Bind(&servAddr), "bind server"); 
 
-        // client
-        const char reqStr[] = "Hello, world!!!";
-        TBaseSocket::Check(cliSock.SendTo(reqStr, sizeof(reqStr), &servAddr), "send from client");
+        // client 
+        const char reqStr[] = "Hello, world!!!"; 
+        TBaseSocket::Check(cliSock.SendTo(reqStr, sizeof(reqStr), &servAddr), "send from client"); 
 
-        // server
-        TBaseSocket::Check(servSock.RecvFrom(buf, 256, &servFromAddr), "receive from client");
-        UNIT_ASSERT(strcmp(reqStr, buf) == 0);
-        const char repStr[] = "The World's greatings to you";
-        TBaseSocket::Check(servSock.SendTo(repStr, sizeof(repStr), &servFromAddr), "send to client");
+        // server 
+        TBaseSocket::Check(servSock.RecvFrom(buf, 256, &servFromAddr), "receive from client"); 
+        UNIT_ASSERT(strcmp(reqStr, buf) == 0); 
+        const char repStr[] = "The World's greatings to you"; 
+        TBaseSocket::Check(servSock.SendTo(repStr, sizeof(repStr), &servFromAddr), "send to client"); 
 
-        // client
-        TBaseSocket::Check(cliSock.RecvFrom(buf, 256, &cliFromAddr), "receive from server");
-        UNIT_ASSERT(strcmp(repStr, buf) == 0);
-    }
+        // client 
+        TBaseSocket::Check(cliSock.RecvFrom(buf, 256, &cliFromAddr), "receive from server"); 
+        UNIT_ASSERT(strcmp(repStr, buf) == 0); 
+    } 
 
     Y_UNIT_TEST(LocalDgramTest) {
-        const char* localServerSockName = "./serv_sock";
-        const char* localClientSockName = "./cli_sock";
-        RunLocalDgramTest(localServerSockName, localClientSockName);
+        const char* localServerSockName = "./serv_sock"; 
+        const char* localClientSockName = "./cli_sock"; 
+        RunLocalDgramTest(localServerSockName, localClientSockName); 
         NFs::Remove(localServerSockName);
         NFs::Remove(localClientSockName);
-    }
+    } 
 
-    template <class A, class S>
+    template <class A, class S> 
     void RunInetStreamTest(const char* ip) {
-        char buf[256];
+        char buf[256]; 
         A servAddr(ip, 0);
         A newAddr;
         S cliSock;
         S servSock;
         S newSock;
-        cliSock.CheckSock();
-        servSock.CheckSock();
-        newSock.CheckSock();
+        cliSock.CheckSock(); 
+        servSock.CheckSock(); 
+        newSock.CheckSock(); 
 
-        // server
-        int yes = 1;
-        CheckedSetSockOpt(servSock, SOL_SOCKET, SO_REUSEADDR, yes, "servSock, SO_REUSEADDR");
-        TBaseSocket::Check(servSock.Bind(&servAddr), "bind");
-        TBaseSocket::Check(servSock.Listen(10), "listen");
+        // server 
+        int yes = 1; 
+        CheckedSetSockOpt(servSock, SOL_SOCKET, SO_REUSEADDR, yes, "servSock, SO_REUSEADDR"); 
+        TBaseSocket::Check(servSock.Bind(&servAddr), "bind"); 
+        TBaseSocket::Check(servSock.Listen(10), "listen"); 
 
-        // client
-        TBaseSocket::Check(cliSock.Connect(&servAddr), "connect");
+        // client 
+        TBaseSocket::Check(cliSock.Connect(&servAddr), "connect"); 
 
-        // server
-        TBaseSocket::Check(servSock.Accept(&newSock, &newAddr), "accept");
+        // server 
+        TBaseSocket::Check(servSock.Accept(&newSock, &newAddr), "accept"); 
 
-        // client
-        const char reqStr[] = "Hello, world!!!";
-        TBaseSocket::Check(cliSock.Send(reqStr, sizeof(reqStr)), "send");
+        // client 
+        const char reqStr[] = "Hello, world!!!"; 
+        TBaseSocket::Check(cliSock.Send(reqStr, sizeof(reqStr)), "send"); 
 
-        // server - new
-        TBaseSocket::Check(newSock.Recv(buf, 256), "recv");
-        UNIT_ASSERT(strcmp(reqStr, buf) == 0);
-        const char repStr[] = "The World's greatings to you";
-        TBaseSocket::Check(newSock.Send(repStr, sizeof(repStr)), "send");
+        // server - new 
+        TBaseSocket::Check(newSock.Recv(buf, 256), "recv"); 
+        UNIT_ASSERT(strcmp(reqStr, buf) == 0); 
+        const char repStr[] = "The World's greatings to you"; 
+        TBaseSocket::Check(newSock.Send(repStr, sizeof(repStr)), "send"); 
 
-        // client
-        TBaseSocket::Check(cliSock.Recv(buf, 256), "recv");
-        UNIT_ASSERT(strcmp(repStr, buf) == 0);
-    }
+        // client 
+        TBaseSocket::Check(cliSock.Recv(buf, 256), "recv"); 
+        UNIT_ASSERT(strcmp(repStr, buf) == 0); 
+    } 
 
     Y_UNIT_TEST(InetStreamTest) {
         RunInetStreamTest<TSockAddrInetStream, TInetStreamSocket>("127.0.0.1");
@@ -119,50 +119,50 @@ Y_UNIT_TEST_SUITE(TSocketTest) {
         RunInetStreamTest<TSockAddrInet6Stream, TInet6StreamSocket>("::1");
     }
 
-    void RunLocalStreamTest(const char* localServerSockName) {
-        char buf[256];
-        TSockAddrLocalStream servAddr(localServerSockName);
-        TSockAddrLocalStream newAddr;
-        TLocalStreamSocket cliSock;
-        TLocalStreamSocket servSock;
-        TLocalStreamSocket newSock;
-        cliSock.CheckSock();
-        servSock.CheckSock();
-        newSock.CheckSock();
+    void RunLocalStreamTest(const char* localServerSockName) { 
+        char buf[256]; 
+        TSockAddrLocalStream servAddr(localServerSockName); 
+        TSockAddrLocalStream newAddr; 
+        TLocalStreamSocket cliSock; 
+        TLocalStreamSocket servSock; 
+        TLocalStreamSocket newSock; 
+        cliSock.CheckSock(); 
+        servSock.CheckSock(); 
+        newSock.CheckSock(); 
 
-        // server
-        TBaseSocket::Check(servSock.Bind(&servAddr), "bind");
-        TBaseSocket::Check(servSock.Listen(10), "listen");
+        // server 
+        TBaseSocket::Check(servSock.Bind(&servAddr), "bind"); 
+        TBaseSocket::Check(servSock.Listen(10), "listen"); 
 
-        NThreading::TLegacyFuture<void> f([&]() {
-            // server
-            TBaseSocket::Check(servSock.Accept(&newSock, &newAddr), "accept");
-        });
+        NThreading::TLegacyFuture<void> f([&]() { 
+            // server 
+            TBaseSocket::Check(servSock.Accept(&newSock, &newAddr), "accept"); 
+        }); 
+ 
+        // client 
+        TBaseSocket::Check(cliSock.Connect(&servAddr), "connect"); 
 
-        // client
-        TBaseSocket::Check(cliSock.Connect(&servAddr), "connect");
+        f.Get(); 
 
-        f.Get();
+        // client 
+        const char reqStr[] = "Hello, world!!!"; 
+        TBaseSocket::Check(cliSock.Send(reqStr, sizeof(reqStr)), "send"); 
 
-        // client
-        const char reqStr[] = "Hello, world!!!";
-        TBaseSocket::Check(cliSock.Send(reqStr, sizeof(reqStr)), "send");
+        // server - new 
+        TBaseSocket::Check(newSock.Recv(buf, 256), "recv"); 
+        UNIT_ASSERT(strcmp(reqStr, buf) == 0); 
+        const char repStr[] = "The World's greatings to you"; 
+        TBaseSocket::Check(newSock.Send(repStr, sizeof(repStr)), "send"); 
 
-        // server - new
-        TBaseSocket::Check(newSock.Recv(buf, 256), "recv");
-        UNIT_ASSERT(strcmp(reqStr, buf) == 0);
-        const char repStr[] = "The World's greatings to you";
-        TBaseSocket::Check(newSock.Send(repStr, sizeof(repStr)), "send");
-
-        // client
-        TBaseSocket::Check(cliSock.Recv(buf, 256), "recv");
-        UNIT_ASSERT(strcmp(repStr, buf) == 0);
-    }
+        // client 
+        TBaseSocket::Check(cliSock.Recv(buf, 256), "recv"); 
+        UNIT_ASSERT(strcmp(repStr, buf) == 0); 
+    } 
 
     Y_UNIT_TEST(LocalStreamTest) {
-        const char* localServerSockName = "./serv_sock2";
-        RunLocalStreamTest(localServerSockName);
+        const char* localServerSockName = "./serv_sock2"; 
+        RunLocalStreamTest(localServerSockName); 
         NFs::Remove(localServerSockName);
-    }
+    } 
 
-}
+} 

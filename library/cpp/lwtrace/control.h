@@ -25,12 +25,12 @@ namespace NLWTrace {
     class IBox: public virtual TThrRefBase {
     private:
         bool Owns;
-
+ 
     public:
         explicit IBox(bool ownsProbe = false)
             : Owns(ownsProbe)
-        {
-        }
+        { 
+        } 
 
         bool OwnsProbe() {
             return Owns;
@@ -45,13 +45,13 @@ namespace NLWTrace {
     class TStaticBox: public IBox {
     private:
         TProbe* Probe;
-
+ 
     public:
         explicit TStaticBox(TProbe* probe)
             : IBox(false)
             , Probe(probe)
-        {
-        }
+        { 
+        } 
 
         TProbe* GetProbe() override {
             return Probe;

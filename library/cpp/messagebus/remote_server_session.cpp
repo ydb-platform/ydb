@@ -16,47 +16,47 @@ using namespace NBus;
 using namespace NBus::NPrivate;
 
 TRemoteServerSession::TRemoteServerSession(TBusMessageQueue* queue,
-                                           TBusProtocol* proto, IBusServerHandler* handler,
-                                           const TBusServerSessionConfig& config, const TString& name)
+                                           TBusProtocol* proto, IBusServerHandler* handler, 
+                                           const TBusServerSessionConfig& config, const TString& name) 
     : TBusSessionImpl(false, queue, proto, handler, config, name)
     , ServerOwnedMessages(config.MaxInFlight, config.MaxInFlightBySize, "ServerOwnedMessages")
     , ServerHandler(handler)
 {
-    if (config.PerConnectionMaxInFlightBySize > 0) {
-        if (config.PerConnectionMaxInFlightBySize < config.MaxMessageSize)
+    if (config.PerConnectionMaxInFlightBySize > 0) { 
+        if (config.PerConnectionMaxInFlightBySize < config.MaxMessageSize) 
             ythrow yexception()
                 << "too low PerConnectionMaxInFlightBySize value";
     }
 }
 
-namespace NBus {
-    namespace NPrivate {
-        class TInvokeOnMessage: public IWorkItem {
-        private:
-            TRemoteServerSession* RemoteServerSession;
-            TBusMessagePtrAndHeader Request;
-            TIntrusivePtr<TRemoteServerConnection> Connection;
+namespace NBus { 
+    namespace NPrivate { 
+        class TInvokeOnMessage: public IWorkItem { 
+        private: 
+            TRemoteServerSession* RemoteServerSession; 
+            TBusMessagePtrAndHeader Request; 
+            TIntrusivePtr<TRemoteServerConnection> Connection; 
 
-        public:
-            TInvokeOnMessage(TRemoteServerSession* session, TBusMessagePtrAndHeader& request, TIntrusivePtr<TRemoteServerConnection>& connection)
-                : RemoteServerSession(session)
-            {
-                Y_ASSERT(!!connection);
-                Connection.Swap(connection);
+        public: 
+            TInvokeOnMessage(TRemoteServerSession* session, TBusMessagePtrAndHeader& request, TIntrusivePtr<TRemoteServerConnection>& connection) 
+                : RemoteServerSession(session) 
+            { 
+                Y_ASSERT(!!connection); 
+                Connection.Swap(connection); 
 
-                Request.Swap(request);
-            }
+                Request.Swap(request); 
+            } 
 
-            void DoWork() override {
-                THolder<TInvokeOnMessage> holder(this);
-                RemoteServerSession->InvokeOnMessage(Request, Connection);
-                // TODO: TRemoteServerSessionSemaphore should be enough
-                RemoteServerSession->JobCount.Decrement();
-            }
-        };
+            void DoWork() override { 
+                THolder<TInvokeOnMessage> holder(this); 
+                RemoteServerSession->InvokeOnMessage(Request, Connection); 
+                // TODO: TRemoteServerSessionSemaphore should be enough 
+                RemoteServerSession->JobCount.Decrement(); 
+            } 
+        }; 
 
-    }
-}
+    } 
+} 
 
 void TRemoteServerSession::OnMessageReceived(TRemoteConnection* c, TVectorSwaps<TBusMessagePtrAndHeader>& messages) {
     AcquireInWorkRequests(messages);
@@ -165,7 +165,7 @@ void TRemoteServerSession::ReleaseInWorkResponses(TArrayRef<const TBusMessagePtr
     ServerOwnedMessages.ReleaseMultiple(responses.size(), size);
 }
 
-void TRemoteServerSession::ReleaseInWorkRequests(TRemoteConnection& con, TBusMessage* request) {
+void TRemoteServerSession::ReleaseInWorkRequests(TRemoteConnection& con, TBusMessage* request) { 
     Y_ASSERT((request->LocalFlags & MESSAGE_IN_WORK));
     request->LocalFlags &= ~MESSAGE_IN_WORK;
 
@@ -175,7 +175,7 @@ void TRemoteServerSession::ReleaseInWorkRequests(TRemoteConnection& con, TBusMes
     ServerOwnedMessages.ReleaseMultiple(1, size);
 }
 
-void TRemoteServerSession::ReleaseInWork(TBusIdentity& ident) {
+void TRemoteServerSession::ReleaseInWork(TBusIdentity& ident) { 
     ident.SetInWork(false);
     ident.Connection->QuotaReturnAside(1, ident.Size);
 

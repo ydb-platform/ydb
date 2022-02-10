@@ -4,7 +4,7 @@
 #include <util/system/types.h>
 
 #if defined(_MSC_VER) && defined(_M_X64)
-    #include <intrin.h>
+    #include <intrin.h> 
 #endif
 
 /**
@@ -16,7 +16,7 @@
  *                                      greater or equal to `elementCount`.
  */
 Y_CONST_FUNCTION
-unsigned long HashBucketCount(unsigned long elementCount);
+unsigned long HashBucketCount(unsigned long elementCount); 
 
 namespace NPrivate {
 
@@ -25,7 +25,7 @@ namespace NPrivate {
     template <typename TDivisor, typename TDividend, typename MulUnsignedUpper>
     class TReciprocalDivisor {
         static_assert(sizeof(TDivisor) <= sizeof(TDividend), "TDivisor and TDividend should have the same size");
-
+ 
     public:
         constexpr TReciprocalDivisor() noexcept = default;
 
@@ -80,9 +80,9 @@ namespace NPrivate {
 #if defined(_32_)
     using THashDivisor = ::NPrivate::TReciprocalDivisor<ui32, ui32, TMulUnsignedUpper<ui32, ui64, 32>>;
 #else
-    #if defined(Y_HAVE_INT128)
+    #if defined(Y_HAVE_INT128) 
     using THashDivisor = ::NPrivate::TReciprocalDivisor<ui32, ui64, TMulUnsignedUpper<ui64, unsigned __int128, 64>>;
-    #elif defined(_MSC_VER) && defined(_M_X64)
+    #elif defined(_MSC_VER) && defined(_M_X64) 
     struct TMulUnsignedUpperVCIntrin {
         /// Return the high 64 bits of the product of two 64-bit unsigned integers.
         Y_FORCE_INLINE ui64 operator()(ui64 a, ui64 b) const noexcept {
@@ -90,7 +90,7 @@ namespace NPrivate {
         }
     };
     using THashDivisor = ::NPrivate::TReciprocalDivisor<ui32, ui64, TMulUnsignedUpperVCIntrin>;
-    #else
+    #else 
     template <typename TDivisor, typename TDividend>
     class TNaiveDivisor {
     public:
@@ -127,7 +127,7 @@ namespace NPrivate {
     };
 
     using THashDivisor = ::NPrivate::TNaiveDivisor<ui32, ui64>;
-    #endif
+    #endif 
 #endif
 }
 

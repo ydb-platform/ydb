@@ -12,23 +12,23 @@ private:
         T ValueForDebugger;
     };
 
-    static_assert(sizeof(T) <= sizeof(TAtomic), "expect sizeof(T) <= sizeof(TAtomic)");
-
+    static_assert(sizeof(T) <= sizeof(TAtomic), "expect sizeof(T) <= sizeof(TAtomic)"); 
+ 
 public:
-    TAtomicBox(T value = T())
-        : Value(value)
-    {
-    }
+    TAtomicBox(T value = T()) 
+        : Value(value) 
+    { 
+    } 
 
     void Set(T value) {
-        AtomicSet(Value, (TAtomic)value);
+        AtomicSet(Value, (TAtomic)value); 
     }
 
     T Get() const {
-        return (T)AtomicGet(Value);
+        return (T)AtomicGet(Value); 
     }
 
     bool CompareAndSet(T expected, T set) {
-        return AtomicCas(&Value, (TAtomicBase)set, (TAtomicBase)expected);
+        return AtomicCas(&Value, (TAtomicBase)set, (TAtomicBase)expected); 
     }
 };

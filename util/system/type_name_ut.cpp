@@ -1,5 +1,5 @@
 #include "type_name.h"
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/yexception.h>
@@ -28,19 +28,19 @@ namespace NUtil::NTypeNameTest {
         virtual ~TRombicHead() = default;
     };
 
-    class TRombicLeftArc: public virtual TRombicHead {
+    class TRombicLeftArc: public virtual TRombicHead { 
     public:
         int x;
         virtual ~TRombicLeftArc() = default;
     };
 
-    class TRombicRightArc: public virtual TRombicHead {
+    class TRombicRightArc: public virtual TRombicHead { 
     public:
         int y;
         virtual ~TRombicRightArc() = default;
     };
 
-    class TRombicTail: public virtual TRombicRightArc, TRombicLeftArc {
+    class TRombicTail: public virtual TRombicRightArc, TRombicLeftArc { 
     public:
         virtual ~TRombicTail() = default;
     };
@@ -164,10 +164,10 @@ Y_UNIT_TEST_SUITE(TypeName) {
     }
 
     Y_UNIT_TEST(DistinguishPointerQualifiers) {
-        char* simplePtr = nullptr;
-        const char* constPtr = nullptr;
-        volatile char* volatilePtr = nullptr;
-        const volatile char* cvPtr = nullptr;
+        char* simplePtr = nullptr; 
+        const char* constPtr = nullptr; 
+        volatile char* volatilePtr = nullptr; 
+        const volatile char* cvPtr = nullptr; 
 
 #ifdef _MSC_VER
         UNIT_ASSERT_VALUES_EQUAL(TypeName(simplePtr), "char * __ptr64");

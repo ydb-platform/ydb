@@ -28,8 +28,8 @@ namespace NThreading {
     namespace NHTSwapPrivate {
         template <typename T, typename TTuneup>
         struct TNode
-           : public TTuneup::TNodeBase,
-              public TTuneup::template TNodeLayout<TNode<T, TTuneup>, T> {
+           : public TTuneup::TNodeBase, 
+              public TTuneup::template TNodeLayout<TNode<T, TTuneup>, T> { 
             TNode(const T& item) {
                 this->Next = nullptr;
                 this->Item = item;
@@ -60,7 +60,7 @@ namespace NThreading {
 
         template <typename T, typename TTuneup>
         class THTSwapQueueImpl
-           : protected  TTuneup::template TQueueLayout<TNode<T, TTuneup>> {
+           : protected  TTuneup::template TQueueLayout<TNode<T, TTuneup>> { 
         protected:
             using TTunedNode = TNode<T, TTuneup>;
 
@@ -124,9 +124,9 @@ namespace NThreading {
     DeclareTuneTypeParam(THTSwapNodeLayout, TNodeLayout);
     DeclareTuneTypeParam(THTSwapQueueLayout, TQueueLayout);
 
-    template <typename T = void*, typename... TParams>
+    template <typename T = void*, typename... TParams> 
     class THTSwapQueue
-       : public NHTSwapPrivate::THTSwapQueueImpl<T,
-                                                  TTune<NHTSwapPrivate::TDefaultTuneup, TParams...>> {
+       : public NHTSwapPrivate::THTSwapQueueImpl<T, 
+                                                  TTune<NHTSwapPrivate::TDefaultTuneup, TParams...>> { 
     };
 }

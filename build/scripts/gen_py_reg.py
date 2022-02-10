@@ -1,19 +1,19 @@
 import sys
 
-template = '''
+template = ''' 
 extern "C" void PyImport_AppendInittab(const char* name, void (*fn)(void));
 extern "C" void {1}();
-
-namespace {
-    struct TRegistrar {
-        inline TRegistrar() {
+ 
+namespace { 
+    struct TRegistrar { 
+        inline TRegistrar() { 
             PyImport_AppendInittab("{0}", {1});
-        }
-    } REG;
-}
-'''
-
-
+        } 
+    } REG; 
+} 
+''' 
+ 
+ 
 def mangle(name):
     if '.' not in name:
         return name

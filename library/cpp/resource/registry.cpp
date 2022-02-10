@@ -1,25 +1,25 @@
-#include "registry.h"
-
+#include "registry.h" 
+ 
 #include <library/cpp/blockcodecs/codecs.h>
-
-#include <util/system/yassert.h>
-#include <util/generic/hash.h>
-#include <util/generic/deque.h>
-#include <util/generic/singleton.h>
+ 
+#include <util/system/yassert.h> 
+#include <util/generic/hash.h> 
+#include <util/generic/deque.h> 
+#include <util/generic/singleton.h> 
 #include <util/system/env.h>
-
-using namespace NResource;
-using namespace NBlockCodecs;
-
-namespace {
+ 
+using namespace NResource; 
+using namespace NBlockCodecs; 
+ 
+namespace { 
     inline const ICodec* GetCodec() noexcept {
-        static const ICodec* ret = Codec("zstd08_5");
-
-        return ret;
-    }
-
+        static const ICodec* ret = Codec("zstd08_5"); 
+ 
+        return ret; 
+    } 
+ 
     typedef std::pair<TStringBuf, TStringBuf> TDescriptor;
-
+ 
     struct TStore: public IStore, public THashMap<TStringBuf, TDescriptor*> {
         void Store(const TStringBuf key, const TStringBuf data) override {
             if (contains(key)) {
@@ -41,16 +41,16 @@ namespace {
                                  TString{key}.Quote().c_str(), vsize, dsize);
                     }
                 }
-            } else {
-                D_.push_back(TDescriptor(key, data));
-                (*this)[key] = &D_.back();
-            }
-
+            } else { 
+                D_.push_back(TDescriptor(key, data)); 
+                (*this)[key] = &D_.back(); 
+            } 
+ 
             Y_VERIFY(size() == Count(), "size mismatch");
-        }
-
+        } 
+ 
         bool FindExact(const TStringBuf key, TString* out) const override {
-            if (TDescriptor* const* res = FindPtr(key)) {
+            if (TDescriptor* const* res = FindPtr(key)) { 
                 // temporary
                 // https://st.yandex-team.ru/DEVTOOLS-3985
                 try {
@@ -61,13 +61,13 @@ namespace {
                     }
                     throw e;
                 }
-
-                return true;
-            }
-
-            return false;
-        }
-
+ 
+                return true; 
+            } 
+ 
+            return false; 
+        } 
+ 
         void FindMatch(const TStringBuf subkey, IMatch& cb) const override {
             for (const auto& it : *this) {
                 if (it.first.StartsWith(subkey)) {
@@ -83,31 +83,31 @@ namespace {
                         }
                         throw e;
                     }
-                }
-            }
-        }
-
+                } 
+            } 
+        } 
+ 
         size_t Count() const noexcept override {
-            return D_.size();
-        }
-
+            return D_.size(); 
+        } 
+ 
         TStringBuf KeyByIndex(size_t idx) const override {
-            return D_.at(idx).first;
-        }
-
+            return D_.at(idx).first; 
+        } 
+ 
         typedef TDeque<TDescriptor> TDescriptors;
-        TDescriptors D_;
-    };
-}
-
+        TDescriptors D_; 
+    }; 
+} 
+ 
 TString NResource::Compress(const TStringBuf data) {
-    return GetCodec()->Encode(data);
-}
-
+    return GetCodec()->Encode(data); 
+} 
+ 
 TString NResource::Decompress(const TStringBuf data) {
-    return GetCodec()->Decode(data);
-}
-
-IStore* NResource::CommonStore() {
-    return SingletonWithPriority<TStore, 0>();
-}
+    return GetCodec()->Decode(data); 
+} 
+ 
+IStore* NResource::CommonStore() { 
+    return SingletonWithPriority<TStore, 0>(); 
+} 

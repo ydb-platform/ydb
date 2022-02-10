@@ -9,22 +9,22 @@
 #include <util/generic/variant.h>
 
 #ifdef _unix_
-    #include <sys/types.h>
-    #include <sys/socket.h>
-    #include <arpa/inet.h>
+    #include <sys/types.h> 
+    #include <sys/socket.h> 
+    #include <arpa/inet.h> 
 #endif // _unix_
 
 #include <string.h>
 
 #ifndef INET6_ADDRSTRLEN
-    #define INET6_ADDRSTRLEN 46
+    #define INET6_ADDRSTRLEN 46 
 #endif
 
 // Network (big-endian) byte order
 using TIp4 = TIpHost;
 
 // Network (big-endian) byte order
-struct TIp6 {
+struct TIp6 { 
     char Data[16];
 
     bool operator==(const TIp6& rhs) const {
@@ -56,7 +56,7 @@ static inline TIp6 Ip6FromString(const char* ipStr) {
     TIp6 res;
 
     if (inet_pton(AF_INET6, ipStr, &res.Data) == 0) {
-        ythrow TSystemError() << "Failed to convert (" << ipStr << ") to ipv6 address";
+        ythrow TSystemError() << "Failed to convert (" << ipStr << ") to ipv6 address"; 
     }
 
     return res;
@@ -103,7 +103,7 @@ static inline TIp4Or6 Ip4Or6FromString(const char* ipStr) {
             return Ip6FromString(ipStr);
         }
     }
-    ythrow TSystemError() << "Failed to convert (" << ipStr << ") to ipv4 or ipv6 address";
+    ythrow TSystemError() << "Failed to convert (" << ipStr << ") to ipv4 or ipv6 address"; 
 }
 
 static inline TString Ip4Or6ToString(const TIp4Or6& ip) {
@@ -115,8 +115,8 @@ static inline TString Ip4Or6ToString(const TIp4Or6& ip) {
 }
 
 // for TIp4 or TIp6, not TIp4Or6
-template <class TIp>
-struct TIpCompare {
+template <class TIp> 
+struct TIpCompare { 
     bool Less(const TIp& l, const TIp& r) const {
         return memcmp(&l, &r, sizeof(TIp)) < 0;
     }

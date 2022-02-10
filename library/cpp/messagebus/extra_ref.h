@@ -6,10 +6,10 @@ class TExtraRef {
     TAtomic Holds;
 
 public:
-    TExtraRef()
-        : Holds(false)
-    {
-    }
+    TExtraRef() 
+        : Holds(false) 
+    { 
+    } 
     ~TExtraRef() {
         Y_VERIFY(!Holds);
     }

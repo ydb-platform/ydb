@@ -1,21 +1,21 @@
-#include "tls.h"
-#include "error.h"
-
+#include "tls.h" 
+#include "error.h" 
+ 
 #include <util/string/strip.h>
-#include <util/generic/strfcpy.h>
-
-#include <cerrno>
-#include <cstdio>
-#include <cstring>
-
-#if defined(_win_)
-    #include <util/network/socket.h>
-    #include <util/generic/singleton.h>
-    #include "winint.h"
-#elif defined(_unix_)
-    #include <unistd.h>
-#endif
-
+#include <util/generic/strfcpy.h> 
+ 
+#include <cerrno> 
+#include <cstdio> 
+#include <cstring> 
+ 
+#if defined(_win_) 
+    #include <util/network/socket.h> 
+    #include <util/generic/singleton.h> 
+    #include "winint.h" 
+#elif defined(_unix_) 
+    #include <unistd.h> 
+#endif 
+ 
 void ClearLastSystemError() {
 #if defined(_win_)
     SetLastError(0);
@@ -24,13 +24,13 @@ void ClearLastSystemError() {
 #endif
 }
 
-int LastSystemError() {
-#if defined(_win_)
+int LastSystemError() { 
+#if defined(_win_) 
     int ret = GetLastError();
-
+ 
     if (ret)
-        return ret;
-
+        return ret; 
+ 
     ret = WSAGetLastError();
 
     if (ret)
@@ -39,34 +39,34 @@ int LastSystemError() {
     ret = *(_errno());
     return ret;
 
-#else
-    return errno;
-#endif
-}
-
-#if defined(_win_)
-namespace {
-    struct TErrString {
+#else 
+    return errno; 
+#endif 
+} 
+ 
+#if defined(_win_) 
+namespace { 
+    struct TErrString { 
         inline TErrString() noexcept {
-            data[0] = 0;
-        }
-
-        char data[1024];
-    };
-}
-#endif
-
-const char* LastSystemErrorText(int code) {
-#if defined(_win_)
+            data[0] = 0; 
+        } 
+ 
+        char data[1024]; 
+    }; 
+} 
+#endif 
+ 
+const char* LastSystemErrorText(int code) { 
+#if defined(_win_) 
     TErrString& text(*Singleton<TErrString>());
-    LastSystemErrorText(text.data, sizeof(text.data), code);
-
-    return text.data;
-#else
-    return strerror(code);
-#endif
-}
-
+    LastSystemErrorText(text.data, sizeof(text.data), code); 
+ 
+    return text.data; 
+#else 
+    return strerror(code); 
+#endif 
+} 
+ 
 #ifdef _win_
 static char* Strip(char* s) {
     size_t len = strlen(s);
@@ -79,18 +79,18 @@ static char* Strip(char* s) {
 }
 #endif // _win_
 
-void LastSystemErrorText(char* str, size_t size, int code) {
-#if defined(_win_)
-    FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, code, 0, str, DWORD(size), 0);
+void LastSystemErrorText(char* str, size_t size, int code) { 
+#if defined(_win_) 
+    FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, code, 0, str, DWORD(size), 0); 
     Strip(str);
-#elif defined(_sun_)
+#elif defined(_sun_) 
     strfcpy(str, strerror(code), size);
-#elif defined(_freebsd_) || defined(_darwin_) || defined(_musl_) || defined(_bionic_)
+#elif defined(_freebsd_) || defined(_darwin_) || defined(_musl_) || defined(_bionic_) 
     strerror_r(code, str, size);
-#elif defined(_linux_) | defined(_cygwin_)
+#elif defined(_linux_) | defined(_cygwin_) 
     char* msg = strerror_r(code, str, size);
     strncpy(str, msg, size);
-#else
-    #error port me gently!
-#endif
-}
+#else 
+    #error port me gently! 
+#endif 
+} 

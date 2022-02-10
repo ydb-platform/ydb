@@ -14,8 +14,8 @@ Y_UNIT_TEST_SUITE(TSchedulerTests) {
         TSimpleScheduleItem(TTestSync* testSync)
             : IScheduleItem((TInstant::Now() + TDuration::MilliSeconds(1)))
             , TestSync(testSync)
-        {
-        }
+        { 
+        } 
 
         void Do() override {
             TestSync->WaitForAndIncrement(0);

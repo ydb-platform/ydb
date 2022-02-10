@@ -1,9 +1,9 @@
-#pragma once
-
-#include <util/system/defaults.h>
+#pragma once 
+ 
+#include <util/system/defaults.h> 
 #include <util/system/compat.h>
 #include <util/generic/string.h>
-
+ 
 // ctype.h-like functions, locale-independent:
 //      IsAscii{Upper,Lower,Digit,Alpha,Alnum,Space} and
 //      AsciiTo{Upper,Lower}
@@ -11,149 +11,149 @@
 // standard functions from <ctype.h> are locale dependent,
 // and cause undefined behavior when called on chars outside [0..127] range
 
-namespace NPrivate {
-    enum ECharClass {
-        CC_SPACE = 1,
-        CC_UPPER = 2,
-        CC_LOWER = 4,
-        CC_DIGIT = 8,
-        CC_ALPHA = 16,
-        CC_ALNUM = 32,
+namespace NPrivate { 
+    enum ECharClass { 
+        CC_SPACE = 1, 
+        CC_UPPER = 2, 
+        CC_LOWER = 4, 
+        CC_DIGIT = 8, 
+        CC_ALPHA = 16, 
+        CC_ALNUM = 32, 
         CC_ISHEX = 64,
         CC_PUNCT = 128,
-    };
-
-    extern const unsigned char ASCII_CLASS[256];
-    extern const unsigned char ASCII_LOWER[256];
-
-    template <class T>
+    }; 
+ 
+    extern const unsigned char ASCII_CLASS[256]; 
+    extern const unsigned char ASCII_LOWER[256]; 
+ 
+    template <class T> 
     struct TDereference {
         using type = T;
-    };
-
+    }; 
+ 
 #ifndef TSTRING_IS_STD_STRING
-    template <class String>
+    template <class String> 
     struct TDereference<TBasicCharRef<String>> {
         using type = typename String::value_type;
-    };
+    }; 
 #endif
-
-    template <class T>
+ 
+    template <class T> 
     using TDereferenced = typename TDereference<T>::type;
 
-    template <class T>
+    template <class T> 
     bool RangeOk(T c) noexcept {
         static_assert(std::is_integral<T>::value, "Integral type character expected");
 
-        if (sizeof(T) == 1) {
+        if (sizeof(T) == 1) { 
             return true;
-        }
+        } 
 
         return c >= static_cast<T>(0) && c <= static_cast<T>(127);
-    }
+    } 
 
 #ifndef TSTRING_IS_STD_STRING
-    template <class String>
+    template <class String> 
     bool RangeOk(const TBasicCharRef<String>& c) {
         return RangeOk(static_cast<typename String::value_type>(c));
     }
 #endif
-}
-
+} 
+ 
 constexpr bool IsAscii(const int c) noexcept {
     return !(c & ~0x7f);
 }
 
-inline bool IsAsciiSpace(unsigned char c) {
-    return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_SPACE;
+inline bool IsAsciiSpace(unsigned char c) { 
+    return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_SPACE; 
+} 
+ 
+inline bool IsAsciiUpper(unsigned char c) { 
+    return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_UPPER; 
+} 
+
+inline bool IsAsciiLower(unsigned char c) { 
+    return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_LOWER; 
 }
 
-inline bool IsAsciiUpper(unsigned char c) {
-    return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_UPPER;
+inline bool IsAsciiDigit(unsigned char c) { 
+    return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_DIGIT; 
 }
 
-inline bool IsAsciiLower(unsigned char c) {
-    return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_LOWER;
+inline bool IsAsciiAlpha(unsigned char c) { 
+    return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_ALPHA; 
 }
 
-inline bool IsAsciiDigit(unsigned char c) {
-    return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_DIGIT;
+inline bool IsAsciiAlnum(unsigned char c) { 
+    return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_ALNUM; 
 }
 
-inline bool IsAsciiAlpha(unsigned char c) {
-    return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_ALPHA;
-}
-
-inline bool IsAsciiAlnum(unsigned char c) {
-    return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_ALNUM;
-}
-
-inline bool IsAsciiHex(unsigned char c) {
-    return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_ISHEX;
+inline bool IsAsciiHex(unsigned char c) { 
+    return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_ISHEX; 
 }
 
 inline bool IsAsciiPunct(unsigned char c) {
     return ::NPrivate::ASCII_CLASS[c] & ::NPrivate::CC_PUNCT;
 }
 
-// some overloads
-
-template <class T>
-inline bool IsAsciiSpace(T c) {
+// some overloads 
+ 
+template <class T> 
+inline bool IsAsciiSpace(T c) { 
     return ::NPrivate::RangeOk(c) && IsAsciiSpace(static_cast<unsigned char>(c));
 }
 
 template <class T>
-inline bool IsAsciiUpper(T c) {
+inline bool IsAsciiUpper(T c) { 
     return ::NPrivate::RangeOk(c) && IsAsciiUpper(static_cast<unsigned char>(c));
-}
-
-template <class T>
-inline bool IsAsciiLower(T c) {
+} 
+ 
+template <class T> 
+inline bool IsAsciiLower(T c) { 
     return ::NPrivate::RangeOk(c) && IsAsciiLower(static_cast<unsigned char>(c));
-}
-
-template <class T>
-inline bool IsAsciiDigit(T c) {
+} 
+ 
+template <class T> 
+inline bool IsAsciiDigit(T c) { 
     return ::NPrivate::RangeOk(c) && IsAsciiDigit(static_cast<unsigned char>(c));
-}
-
-template <class T>
-inline bool IsAsciiAlpha(T c) {
+} 
+ 
+template <class T> 
+inline bool IsAsciiAlpha(T c) { 
     return ::NPrivate::RangeOk(c) && IsAsciiAlpha(static_cast<unsigned char>(c));
-}
-
-template <class T>
-inline bool IsAsciiAlnum(T c) {
+} 
+ 
+template <class T> 
+inline bool IsAsciiAlnum(T c) { 
     return ::NPrivate::RangeOk(c) && IsAsciiAlnum(static_cast<unsigned char>(c));
-}
-
-template <class T>
-inline bool IsAsciiHex(T c) {
+} 
+ 
+template <class T> 
+inline bool IsAsciiHex(T c) { 
     return ::NPrivate::RangeOk(c) && IsAsciiHex(static_cast<unsigned char>(c));
-}
-
+} 
+ 
 template <class T>
 inline bool IsAsciiPunct(T c) {
     return ::NPrivate::RangeOk(c) && IsAsciiPunct(static_cast<unsigned char>(c));
 }
 
-// some extra helpers
-inline ui8 AsciiToLower(ui8 c) noexcept {
-    return ::NPrivate::ASCII_LOWER[c];
-}
-
-inline char AsciiToLower(char c) noexcept {
-    return (char)AsciiToLower((ui8)c);
+// some extra helpers 
+inline ui8 AsciiToLower(ui8 c) noexcept { 
+    return ::NPrivate::ASCII_LOWER[c]; 
+} 
+ 
+inline char AsciiToLower(char c) noexcept { 
+    return (char)AsciiToLower((ui8)c); 
+} 
+ 
+template <class T> 
+inline ::NPrivate::TDereferenced<T> AsciiToLower(T c) noexcept { 
+    return (c >= 0 && c <= 127) ? (::NPrivate::TDereferenced<T>)AsciiToLower((ui8)c) : c; 
 }
 
 template <class T>
-inline ::NPrivate::TDereferenced<T> AsciiToLower(T c) noexcept {
-    return (c >= 0 && c <= 127) ? (::NPrivate::TDereferenced<T>)AsciiToLower((ui8)c) : c;
-}
-
-template <class T>
-inline ::NPrivate::TDereferenced<T> AsciiToUpper(T c) noexcept {
+inline ::NPrivate::TDereferenced<T> AsciiToUpper(T c) noexcept { 
     return IsAsciiLower(c) ? (c + ('A' - 'a')) : c;
 }
 
@@ -211,7 +211,7 @@ static inline int AsciiCompareIgnoreCase(const char* s1, const char* s2) noexcep
  * - positive otherwise,
  * similar to stricmp.
  */
-Y_PURE_FUNCTION int AsciiCompareIgnoreCase(const TStringBuf s1, const TStringBuf s2) noexcept;
+Y_PURE_FUNCTION int AsciiCompareIgnoreCase(const TStringBuf s1, const TStringBuf s2) noexcept; 
 
 /**
  * ASCII case-sensitive string comparison (for proper UTF8 strings

@@ -40,12 +40,12 @@ namespace NYsonPull {
                 }
             };
 
-            template <typename TBuffered>
+            template <typename TBuffered> 
             class TOwned: public TStreamBase {
                 TBuffered Input;
 
             public:
-                template <typename... Args>
+                template <typename... Args> 
                 explicit TOwned(Args&&... args)
                     : Input(std::forward<Args>(args)...)
                 {
@@ -65,5 +65,5 @@ namespace NYsonPull {
                 }
             };
         }
-    }     // namespace NDetail
-}
+    }     // namespace NDetail 
+} 

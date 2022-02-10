@@ -50,38 +50,38 @@ namespace NSc {
         const Reflection* r = msg.GetReflection();
 
         switch (field->cpp_type()) {
-            case FieldDescriptor::CPPTYPE_INT32:
-                v = r->GetInt32(msg, field);
-                break;
-            case FieldDescriptor::CPPTYPE_INT64:
-                v = r->GetInt64(msg, field);
-                break;
-            case FieldDescriptor::CPPTYPE_UINT32:
-                v = r->GetUInt32(msg, field);
-                break;
-            case FieldDescriptor::CPPTYPE_UINT64:
-                v = r->GetUInt64(msg, field);
-                break;
-            case FieldDescriptor::CPPTYPE_DOUBLE:
-                v = r->GetDouble(msg, field);
-                break;
-            case FieldDescriptor::CPPTYPE_FLOAT:
-                v = r->GetFloat(msg, field);
-                break;
-            case FieldDescriptor::CPPTYPE_BOOL:
-                v.SetBool(r->GetBool(msg, field));
-                break;
-            case FieldDescriptor::CPPTYPE_ENUM:
-                v = r->GetEnum(msg, field)->name();
-                break;
-            case FieldDescriptor::CPPTYPE_STRING:
-                v = r->GetString(msg, field);
-                break;
-            case FieldDescriptor::CPPTYPE_MESSAGE:
-                v = From(r->GetMessage(msg, field));
-                break;
-            default:
-                ythrow TSchemeException() << "field " << field->full_name() << " unexpected type " << (int)field->cpp_type();
+            case FieldDescriptor::CPPTYPE_INT32: 
+                v = r->GetInt32(msg, field); 
+                break; 
+            case FieldDescriptor::CPPTYPE_INT64: 
+                v = r->GetInt64(msg, field); 
+                break; 
+            case FieldDescriptor::CPPTYPE_UINT32: 
+                v = r->GetUInt32(msg, field); 
+                break; 
+            case FieldDescriptor::CPPTYPE_UINT64: 
+                v = r->GetUInt64(msg, field); 
+                break; 
+            case FieldDescriptor::CPPTYPE_DOUBLE: 
+                v = r->GetDouble(msg, field); 
+                break; 
+            case FieldDescriptor::CPPTYPE_FLOAT: 
+                v = r->GetFloat(msg, field); 
+                break; 
+            case FieldDescriptor::CPPTYPE_BOOL: 
+                v.SetBool(r->GetBool(msg, field)); 
+                break; 
+            case FieldDescriptor::CPPTYPE_ENUM: 
+                v = r->GetEnum(msg, field)->name(); 
+                break; 
+            case FieldDescriptor::CPPTYPE_STRING: 
+                v = r->GetString(msg, field); 
+                break; 
+            case FieldDescriptor::CPPTYPE_MESSAGE: 
+                v = From(r->GetMessage(msg, field)); 
+                break; 
+            default: 
+                ythrow TSchemeException() << "field " << field->full_name() << " unexpected type " << (int)field->cpp_type(); 
         }
 
         return v;
@@ -92,38 +92,38 @@ namespace NSc {
         const Reflection* r = msg.GetReflection();
 
         switch (field->cpp_type()) {
-            case FieldDescriptor::CPPTYPE_INT32:
-                v = r->GetRepeatedInt32(msg, field, index);
-                break;
-            case FieldDescriptor::CPPTYPE_INT64:
-                v = r->GetRepeatedInt64(msg, field, index);
-                break;
-            case FieldDescriptor::CPPTYPE_UINT32:
-                v = r->GetRepeatedUInt32(msg, field, index);
-                break;
-            case FieldDescriptor::CPPTYPE_UINT64:
-                v = r->GetRepeatedUInt64(msg, field, index);
-                break;
-            case FieldDescriptor::CPPTYPE_DOUBLE:
-                v = r->GetRepeatedDouble(msg, field, index);
-                break;
-            case FieldDescriptor::CPPTYPE_FLOAT:
-                v = r->GetRepeatedFloat(msg, field, index);
-                break;
-            case FieldDescriptor::CPPTYPE_BOOL:
-                v.SetBool(r->GetRepeatedBool(msg, field, index));
-                break;
-            case FieldDescriptor::CPPTYPE_ENUM:
-                v = r->GetRepeatedEnum(msg, field, index)->name();
-                break;
-            case FieldDescriptor::CPPTYPE_STRING:
-                v = r->GetRepeatedString(msg, field, index);
-                break;
-            case FieldDescriptor::CPPTYPE_MESSAGE:
-                v = From(r->GetRepeatedMessage(msg, field, index));
-                break;
-            default:
-                ythrow TSchemeException() << "field " << field->full_name() << " unexpected type " << (int)field->cpp_type();
+            case FieldDescriptor::CPPTYPE_INT32: 
+                v = r->GetRepeatedInt32(msg, field, index); 
+                break; 
+            case FieldDescriptor::CPPTYPE_INT64: 
+                v = r->GetRepeatedInt64(msg, field, index); 
+                break; 
+            case FieldDescriptor::CPPTYPE_UINT32: 
+                v = r->GetRepeatedUInt32(msg, field, index); 
+                break; 
+            case FieldDescriptor::CPPTYPE_UINT64: 
+                v = r->GetRepeatedUInt64(msg, field, index); 
+                break; 
+            case FieldDescriptor::CPPTYPE_DOUBLE: 
+                v = r->GetRepeatedDouble(msg, field, index); 
+                break; 
+            case FieldDescriptor::CPPTYPE_FLOAT: 
+                v = r->GetRepeatedFloat(msg, field, index); 
+                break; 
+            case FieldDescriptor::CPPTYPE_BOOL: 
+                v.SetBool(r->GetRepeatedBool(msg, field, index)); 
+                break; 
+            case FieldDescriptor::CPPTYPE_ENUM: 
+                v = r->GetRepeatedEnum(msg, field, index)->name(); 
+                break; 
+            case FieldDescriptor::CPPTYPE_STRING: 
+                v = r->GetRepeatedString(msg, field, index); 
+                break; 
+            case FieldDescriptor::CPPTYPE_MESSAGE: 
+                v = From(r->GetRepeatedMessage(msg, field, index)); 
+                break; 
+            default: 
+                ythrow TSchemeException() << "field " << field->full_name() << " unexpected type " << (int)field->cpp_type(); 
         }
 
         return v;
@@ -165,40 +165,40 @@ namespace NSc {
         const Reflection* reflection = msg.GetReflection();
 
         switch (field->cpp_type()) {
-            case FieldDescriptor::CPPTYPE_INT32:
-                reflection->SetInt32(&msg, field, value.ForceIntNumber());
-                break;
-            case FieldDescriptor::CPPTYPE_INT64:
-                reflection->SetInt64(&msg, field, value.ForceIntNumber());
-                break;
-            case FieldDescriptor::CPPTYPE_UINT32:
-                reflection->SetUInt32(&msg, field, value.ForceIntNumber());
-                break;
-            case FieldDescriptor::CPPTYPE_UINT64:
-                reflection->SetUInt64(&msg, field, value.ForceIntNumber());
-                break;
-            case FieldDescriptor::CPPTYPE_DOUBLE:
-                reflection->SetDouble(&msg, field, value.ForceNumber());
-                break;
-            case FieldDescriptor::CPPTYPE_FLOAT:
-                reflection->SetFloat(&msg, field, value.ForceNumber());
-                break;
-            case FieldDescriptor::CPPTYPE_BOOL:
-                reflection->SetBool(&msg, field, value.IsTrue());
-                break;
-            case FieldDescriptor::CPPTYPE_STRING:
-                reflection->SetString(&msg, field, value.ForceString());
-                break;
-            case FieldDescriptor::CPPTYPE_ENUM:
+            case FieldDescriptor::CPPTYPE_INT32: 
+                reflection->SetInt32(&msg, field, value.ForceIntNumber()); 
+                break; 
+            case FieldDescriptor::CPPTYPE_INT64: 
+                reflection->SetInt64(&msg, field, value.ForceIntNumber()); 
+                break; 
+            case FieldDescriptor::CPPTYPE_UINT32: 
+                reflection->SetUInt32(&msg, field, value.ForceIntNumber()); 
+                break; 
+            case FieldDescriptor::CPPTYPE_UINT64: 
+                reflection->SetUInt64(&msg, field, value.ForceIntNumber()); 
+                break; 
+            case FieldDescriptor::CPPTYPE_DOUBLE: 
+                reflection->SetDouble(&msg, field, value.ForceNumber()); 
+                break; 
+            case FieldDescriptor::CPPTYPE_FLOAT: 
+                reflection->SetFloat(&msg, field, value.ForceNumber()); 
+                break; 
+            case FieldDescriptor::CPPTYPE_BOOL: 
+                reflection->SetBool(&msg, field, value.IsTrue()); 
+                break; 
+            case FieldDescriptor::CPPTYPE_STRING: 
+                reflection->SetString(&msg, field, value.ForceString()); 
+                break; 
+            case FieldDescriptor::CPPTYPE_ENUM: 
                 value.ToEnumField(msg, field, opts);
-                break;
-            case FieldDescriptor::CPPTYPE_MESSAGE:
+                break; 
+            case FieldDescriptor::CPPTYPE_MESSAGE: 
                 value.To(*reflection->MutableMessage(&msg, field), opts);
-                break;
-            default:
-                ythrow TSchemeException()
-                    << "field " << field->full_name()
-                    << " unexpected type " << (int)field->cpp_type();
+                break; 
+            default: 
+                ythrow TSchemeException() 
+                    << "field " << field->full_name() 
+                    << " unexpected type " << (int)field->cpp_type(); 
         }
     }
 
@@ -212,8 +212,8 @@ namespace NSc {
         const EnumDescriptor* enumField = field->enum_type();
 
         const EnumValueDescriptor* enumFieldValue = IsString()
-                                                        ? enumField->FindValueByName(ForceString())
-                                                        : enumField->FindValueByNumber(ForceIntNumber());
+                                                        ? enumField->FindValueByName(ForceString()) 
+                                                        : enumField->FindValueByNumber(ForceIntNumber()); 
 
         if (!enumFieldValue) {
             if (opts.UnknownEnumValueIsDefault) {
@@ -250,42 +250,42 @@ namespace NSc {
 
         const Reflection* reflection = msg.GetReflection();
 
-        for (const TValue& value : fieldValue.GetArray()) {
+        for (const TValue& value : fieldValue.GetArray()) { 
             switch (field->cpp_type()) {
-                case FieldDescriptor::CPPTYPE_INT32:
-                    reflection->AddInt32(&msg, field, value.ForceIntNumber());
-                    break;
-                case FieldDescriptor::CPPTYPE_INT64:
-                    reflection->AddInt64(&msg, field, value.ForceIntNumber());
-                    break;
-                case FieldDescriptor::CPPTYPE_UINT32:
-                    reflection->AddUInt32(&msg, field, value.ForceIntNumber());
-                    break;
-                case FieldDescriptor::CPPTYPE_UINT64:
-                    reflection->AddUInt64(&msg, field, value.ForceIntNumber());
-                    break;
-                case FieldDescriptor::CPPTYPE_DOUBLE:
-                    reflection->AddDouble(&msg, field, value.ForceNumber());
-                    break;
-                case FieldDescriptor::CPPTYPE_FLOAT:
-                    reflection->AddFloat(&msg, field, value.ForceNumber());
-                    break;
-                case FieldDescriptor::CPPTYPE_BOOL:
-                    reflection->AddBool(&msg, field, value.IsTrue());
-                    break;
-                case FieldDescriptor::CPPTYPE_STRING:
-                    reflection->AddString(&msg, field, value.ForceString());
-                    break;
-                case FieldDescriptor::CPPTYPE_ENUM:
+                case FieldDescriptor::CPPTYPE_INT32: 
+                    reflection->AddInt32(&msg, field, value.ForceIntNumber()); 
+                    break; 
+                case FieldDescriptor::CPPTYPE_INT64: 
+                    reflection->AddInt64(&msg, field, value.ForceIntNumber()); 
+                    break; 
+                case FieldDescriptor::CPPTYPE_UINT32: 
+                    reflection->AddUInt32(&msg, field, value.ForceIntNumber()); 
+                    break; 
+                case FieldDescriptor::CPPTYPE_UINT64: 
+                    reflection->AddUInt64(&msg, field, value.ForceIntNumber()); 
+                    break; 
+                case FieldDescriptor::CPPTYPE_DOUBLE: 
+                    reflection->AddDouble(&msg, field, value.ForceNumber()); 
+                    break; 
+                case FieldDescriptor::CPPTYPE_FLOAT: 
+                    reflection->AddFloat(&msg, field, value.ForceNumber()); 
+                    break; 
+                case FieldDescriptor::CPPTYPE_BOOL: 
+                    reflection->AddBool(&msg, field, value.IsTrue()); 
+                    break; 
+                case FieldDescriptor::CPPTYPE_STRING: 
+                    reflection->AddString(&msg, field, value.ForceString()); 
+                    break; 
+                case FieldDescriptor::CPPTYPE_ENUM: 
                     value.ToEnumField(msg, field, opts);
-                    break;
-                case FieldDescriptor::CPPTYPE_MESSAGE:
-                    value.To(*reflection->AddMessage(&msg, field));
-                    break;
-                default:
-                    ythrow TSchemeException()
-                        << "field " << field->full_name()
-                        << " unexpected type " << (int)field->cpp_type();
+                    break; 
+                case FieldDescriptor::CPPTYPE_MESSAGE: 
+                    value.To(*reflection->AddMessage(&msg, field)); 
+                    break; 
+                default: 
+                    ythrow TSchemeException() 
+                        << "field " << field->full_name() 
+                        << " unexpected type " << (int)field->cpp_type(); 
             }
         }
     }

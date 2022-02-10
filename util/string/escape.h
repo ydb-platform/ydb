@@ -9,9 +9,9 @@ TBasicString<TChar>& EscapeCImpl(const TChar* str, size_t len, TBasicString<TCha
 template <class TChar>
 TBasicString<TChar>& UnescapeCImpl(const TChar* str, size_t len, TBasicString<TChar>&);
 
-template <class TChar>
-TChar* UnescapeC(const TChar* str, size_t len, TChar* buf);
-
+template <class TChar> 
+TChar* UnescapeC(const TChar* str, size_t len, TChar* buf); 
+ 
 template <typename TChar>
 static inline TBasicString<TChar>& EscapeC(const TChar* str, size_t len, TBasicString<TChar>& s) {
     return EscapeCImpl(str, len, s);
@@ -21,8 +21,8 @@ template <typename TChar>
 static inline TBasicString<TChar> EscapeC(const TChar* str, size_t len) {
     TBasicString<TChar> s;
     return EscapeC(str, len, s);
-}
-
+} 
+ 
 template <typename TChar>
 static inline TBasicString<TChar> EscapeC(const TBasicStringBuf<TChar>& str) {
     return EscapeC(str.data(), str.size());
@@ -41,14 +41,14 @@ static inline TBasicString<TChar> UnescapeC(const TChar* str, size_t len) {
 
 template <typename TChar>
 static inline TBasicString<TChar> EscapeC(TChar ch) {
-    return EscapeC(&ch, 1);
-}
-
-template <typename TChar>
+    return EscapeC(&ch, 1); 
+} 
+ 
+template <typename TChar> 
 static inline TBasicString<TChar> EscapeC(const TChar* str) {
     return EscapeC(str, std::char_traits<TChar>::length(str));
-}
-
+} 
+ 
 TString& EscapeC(const TStringBuf str, TString& res);
 TUtf16String& EscapeC(const TWtringBuf str, TUtf16String& res);
 

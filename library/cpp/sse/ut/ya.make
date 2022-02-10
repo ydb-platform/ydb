@@ -3,7 +3,7 @@ UNITTEST_FOR(library/cpp/sse)
 OWNER(danlark)
 
 SRCS(
-    test.cpp
+    test.cpp 
 )
 
 IF (ARCH_X86_64)

@@ -8,15 +8,15 @@ using namespace NBus::NPrivate;
 using namespace NActor;
 
 Y_UNIT_TEST_SUITE(TSchedulerActorTests) {
-    struct TMyActor: public TAtomicRefCount<TMyActor>, public TActor<TMyActor>, public TScheduleActor<TMyActor> {
+    struct TMyActor: public TAtomicRefCount<TMyActor>, public TActor<TMyActor>, public TScheduleActor<TMyActor> { 
         TTestSync TestSync;
 
         TMyActor(TExecutor* executor, TScheduler* scheduler)
             : TActor<TMyActor>(executor)
             , TScheduleActor<TMyActor>(scheduler)
             , Iteration(0)
-        {
-        }
+        { 
+        } 
 
         unsigned Iteration;
 

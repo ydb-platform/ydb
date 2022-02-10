@@ -18,7 +18,7 @@
 namespace NLastGetopt {
     /// Handler to split option value by delimiter into a target container and allow ranges.
     template <class Container>
-    struct TOptRangeSplitHandler: public IOptHandler {
+    struct TOptRangeSplitHandler: public IOptHandler { 
     public:
         using TContainer = Container;
         using TValue = typename TContainer::value_type;
@@ -57,7 +57,7 @@ namespace NLastGetopt {
     };
 
     template <class Container>
-    struct TOptSplitHandler: public IOptHandler {
+    struct TOptSplitHandler: public IOptHandler { 
     public:
         using TContainer = Container;
         using TValue = typename TContainer::value_type;
@@ -83,7 +83,7 @@ namespace NLastGetopt {
     };
 
     template <class TpFunc>
-    struct TOptKVHandler: public IOptHandler {
+    struct TOptKVHandler: public IOptHandler { 
     public:
         using TKey = typename TFunctionArgs<TpFunc>::template TGet<0>;
         using TValue = typename TFunctionArgs<TpFunc>::template TGet<1>;
@@ -101,7 +101,7 @@ namespace NLastGetopt {
                 TStringBuf key, value;
                 if (!curval.TrySplit(KVDelim, key, value)) {
                     throw TUsageException() << "failed to parse opt " << NPrivate::OptToString(curOpt)
-                                             << " value " << TString(curval).Quote() << ": expected key" << KVDelim << "value format";
+                                             << " value " << TString(curval).Quote() << ": expected key" << KVDelim << "value format"; 
                 }
                 Func(NPrivate::OptFromString<TKey>(key, curOpt), NPrivate::OptFromString<TValue>(value, curOpt));
             }
@@ -112,21 +112,21 @@ namespace NLastGetopt {
         char KVDelim;
     };
 
-    namespace NPrivate {
-        template <typename TpFunc, typename TpArg>
-        void THandlerFunctor1<TpFunc, TpArg>::HandleOpt(const TOptsParser* parser) {
-            const TStringBuf curval = parser->CurValOrDef(!HasDef_);
-            const TpArg& arg = curval.IsInited() ? OptFromString<TpArg>(curval, parser->CurOpt()) : Def_;
-            try {
-                Func_(arg);
+    namespace NPrivate { 
+        template <typename TpFunc, typename TpArg> 
+        void THandlerFunctor1<TpFunc, TpArg>::HandleOpt(const TOptsParser* parser) { 
+            const TStringBuf curval = parser->CurValOrDef(!HasDef_); 
+            const TpArg& arg = curval.IsInited() ? OptFromString<TpArg>(curval, parser->CurOpt()) : Def_; 
+            try { 
+                Func_(arg); 
             } catch (const TUsageException&) {
                 throw;
-            } catch (...) {
+            } catch (...) { 
                 throw TUsageException() << "failed to handle opt " << OptToString(parser->CurOpt())
-                                         << " value " << TString(curval).Quote() << ": " << CurrentExceptionMessage();
-            }
-        }
+                                         << " value " << TString(curval).Quote() << ": " << CurrentExceptionMessage(); 
+            } 
+        } 
 
     }
-
+ 
 }

@@ -1,7 +1,7 @@
 LIBRARY()
 
-OWNER(gulin)
-
+OWNER(gulin) 
+ 
 SRCS(
     class_factory.h
     bin_saver.cpp

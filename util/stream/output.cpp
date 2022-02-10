@@ -1,53 +1,53 @@
-#include "output.h"
-
-#include <util/string/cast.h>
-#include "format.h"
-#include <util/memory/tempbuf.h>
-#include <util/generic/singleton.h>
-#include <util/generic/yexception.h>
+#include "output.h" 
+ 
+#include <util/string/cast.h> 
+#include "format.h" 
+#include <util/memory/tempbuf.h> 
+#include <util/generic/singleton.h> 
+#include <util/generic/yexception.h> 
 #include <util/charset/utf8.h>
-#include <util/charset/wide.h>
-
+#include <util/charset/wide.h> 
+ 
 #if defined(_android_)
-    #include <util/system/dynlib.h>
-    #include <util/system/guard.h>
-    #include <util/system/mutex.h>
-    #include <android/log.h>
+    #include <util/system/dynlib.h> 
+    #include <util/system/guard.h> 
+    #include <util/system/mutex.h> 
+    #include <android/log.h> 
 #endif
 
-#include <cerrno>
-#include <string>
+#include <cerrno> 
+#include <string> 
 #include <string_view>
-#include <cstdio>
-
+#include <cstdio> 
+ 
 #if defined(_win_)
-    #include <io.h>
+    #include <io.h> 
 #endif
 
 constexpr size_t MAX_UTF8_BYTES = 4; // UTF-8-encoded code point takes between 1 and 4 bytes
 
 IOutputStream::IOutputStream() noexcept = default;
-
+ 
 IOutputStream::~IOutputStream() = default;
-
+ 
 void IOutputStream::DoFlush() {
-    /*
-     * do nothing
-     */
-}
-
+    /* 
+     * do nothing 
+     */ 
+} 
+ 
 void IOutputStream::DoFinish() {
-    Flush();
-}
-
+    Flush(); 
+} 
+ 
 void IOutputStream::DoWriteV(const TPart* parts, size_t count) {
-    for (size_t i = 0; i < count; ++i) {
-        const TPart& part = parts[i];
-
-        DoWrite(part.buf, part.len);
-    }
-}
-
+    for (size_t i = 0; i < count; ++i) { 
+        const TPart& part = parts[i]; 
+ 
+        DoWrite(part.buf, part.len); 
+    } 
+} 
+ 
 void IOutputStream::DoWriteC(char ch) {
     DoWrite(&ch, 1);
 }
@@ -89,16 +89,16 @@ static void WriteString(IOutputStream& o, const wchar32* w, size_t n) {
     o.Write(data, written);
 }
 
-template <>
+template <> 
 void Out<TString>(IOutputStream& o, const TString& p) {
     o.Write(p.data(), p.size());
-}
-
-template <>
+} 
+ 
+template <> 
 void Out<std::string>(IOutputStream& o, const std::string& p) {
-    o.Write(p.data(), p.length());
-}
-
+    o.Write(p.data(), p.length()); 
+} 
+ 
 template <>
 void Out<std::string_view>(IOutputStream& o, const std::string_view& p) {
     o.Write(p.data(), p.length());
@@ -157,50 +157,50 @@ void Out<TUtf32String>(IOutputStream& o, const TUtf32String& w) {
     WriteString(o, w.c_str(), w.size());
 }
 
-#define DEF_CONV_DEFAULT(type)                  \
-    template <>                                 \
+#define DEF_CONV_DEFAULT(type)                  \ 
+    template <>                                 \ 
     void Out<type>(IOutputStream & o, type p) { \
-        o << ToString(p);                       \
-    }
-
-#define DEF_CONV_CHR(type)                      \
-    template <>                                 \
+        o << ToString(p);                       \ 
+    } 
+ 
+#define DEF_CONV_CHR(type)                      \ 
+    template <>                                 \ 
     void Out<type>(IOutputStream & o, type p) { \
-        o.Write((char)p);                       \
-    }
-
-#define DEF_CONV_NUM(type, len)                                   \
-    template <>                                                   \
+        o.Write((char)p);                       \ 
+    } 
+ 
+#define DEF_CONV_NUM(type, len)                                   \ 
+    template <>                                                   \ 
     void Out<type>(IOutputStream & o, type p) {                   \
-        char buf[len];                                            \
-        o.Write(buf, ToString(p, buf, sizeof(buf)));              \
+        char buf[len];                                            \ 
+        o.Write(buf, ToString(p, buf, sizeof(buf)));              \ 
     }                                                             \
                                                                   \
     template <>                                                   \
     void Out<volatile type>(IOutputStream & o, volatile type p) { \
         Out<type>(o, p);                                          \
-    }
-
-DEF_CONV_NUM(bool, 64)
-
-DEF_CONV_CHR(char)
-DEF_CONV_CHR(signed char)
-DEF_CONV_CHR(unsigned char)
-
-DEF_CONV_NUM(signed short, 64)
-DEF_CONV_NUM(signed int, 64)
-DEF_CONV_NUM(signed long int, 64)
-DEF_CONV_NUM(signed long long int, 64)
-
-DEF_CONV_NUM(unsigned short, 64)
-DEF_CONV_NUM(unsigned int, 64)
-DEF_CONV_NUM(unsigned long int, 64)
-DEF_CONV_NUM(unsigned long long int, 64)
-
-DEF_CONV_NUM(float, 512)
-DEF_CONV_NUM(double, 512)
-DEF_CONV_NUM(long double, 512)
-
+    } 
+ 
+DEF_CONV_NUM(bool, 64) 
+ 
+DEF_CONV_CHR(char) 
+DEF_CONV_CHR(signed char) 
+DEF_CONV_CHR(unsigned char) 
+ 
+DEF_CONV_NUM(signed short, 64) 
+DEF_CONV_NUM(signed int, 64) 
+DEF_CONV_NUM(signed long int, 64) 
+DEF_CONV_NUM(signed long long int, 64) 
+ 
+DEF_CONV_NUM(unsigned short, 64) 
+DEF_CONV_NUM(unsigned int, 64) 
+DEF_CONV_NUM(unsigned long int, 64) 
+DEF_CONV_NUM(unsigned long long int, 64) 
+ 
+DEF_CONV_NUM(float, 512) 
+DEF_CONV_NUM(double, 512) 
+DEF_CONV_NUM(long double, 512) 
+ 
 #if !defined(_YNDX_LIBCXX_ENABLE_VECTOR_BOOL_COMPRESSION) || (_YNDX_LIBCXX_ENABLE_VECTOR_BOOL_COMPRESSION == 1)
 // TODO: acknowledge std::bitset::reference for both libc++ and libstdc++
 template <>
@@ -237,14 +237,14 @@ void Out<void*>(IOutputStream& o, void* t) {
 }
 
 using TNullPtr = decltype(nullptr);
-
-template <>
+ 
+template <> 
 void Out<TNullPtr>(IOutputStream& o, TTypeTraits<TNullPtr>::TFuncParam) {
     o << TStringBuf("nullptr");
-}
-
+} 
+ 
 #if defined(_android_)
-namespace {
+namespace { 
     class TAndroidStdIOStreams {
     public:
         TAndroidStdIOStreams()
@@ -252,32 +252,32 @@ namespace {
             , LogFuncPtr((TLogFuncPtr)LogLibrary.Sym("__android_log_write"))
             , Out(LogFuncPtr)
             , Err(LogFuncPtr)
-        {
-        }
+        { 
+        } 
 
     public:
-        using TLogFuncPtr = void (*)(int, const char*, const char*);
+        using TLogFuncPtr = void (*)(int, const char*, const char*); 
 
         class TAndroidStdOutput: public IOutputStream {
         public:
             inline TAndroidStdOutput(TLogFuncPtr logFuncPtr) noexcept
-                : Buffer()
-                , LogFuncPtr(logFuncPtr)
-            {
-            }
+                : Buffer() 
+                , LogFuncPtr(logFuncPtr) 
+            { 
+            } 
 
             virtual ~TAndroidStdOutput() {
-            }
+            } 
 
         private:
             virtual void DoWrite(const void* buf, size_t len) override {
-                with_lock (BufferMutex) {
+                with_lock (BufferMutex) { 
                     Buffer.Write(buf, len);
                 }
             }
 
             virtual void DoFlush() override {
-                with_lock (BufferMutex) {
+                with_lock (BufferMutex) { 
                     LogFuncPtr(ANDROID_LOG_DEBUG, GetTag(), Buffer.Data());
                     Buffer.Clear();
                 }
@@ -291,15 +291,15 @@ namespace {
             TLogFuncPtr LogFuncPtr;
         };
 
-        class TStdErr: public TAndroidStdOutput {
+        class TStdErr: public TAndroidStdOutput { 
         public:
             TStdErr(TLogFuncPtr logFuncPtr)
                 : TAndroidStdOutput(logFuncPtr)
-            {
-            }
+            { 
+            } 
 
             virtual ~TStdErr() {
-            }
+            } 
 
         private:
             virtual const char* GetTag() const override {
@@ -307,15 +307,15 @@ namespace {
             }
         };
 
-        class TStdOut: public TAndroidStdOutput {
+        class TStdOut: public TAndroidStdOutput { 
         public:
             TStdOut(TLogFuncPtr logFuncPtr)
                 : TAndroidStdOutput(logFuncPtr)
-            {
-            }
+            { 
+            } 
 
             virtual ~TStdOut() {
-            }
+            } 
 
         private:
             virtual const char* GetTag() const override {
@@ -340,84 +340,84 @@ namespace {
 
 namespace {
     class TStdOutput: public IOutputStream {
-    public:
+    public: 
         inline TStdOutput(FILE* f) noexcept
-            : F_(f)
-        {
-        }
-
+            : F_(f) 
+        { 
+        } 
+ 
         ~TStdOutput() override = default;
-
-    private:
+ 
+    private: 
         void DoWrite(const void* buf, size_t len) override {
-            if (len != fwrite(buf, 1, len, F_)) {
-#if defined(_win_)
+            if (len != fwrite(buf, 1, len, F_)) { 
+#if defined(_win_) 
                 // On Windows, if 'F_' is console -- 'fwrite' returns count of written characters.
                 // If, for example, console output codepage is UTF-8, then returned value is
                 // not equal to 'len'. So, we ignore some 'errno' values...
                 if ((errno == 0 || errno == EINVAL || errno == EILSEQ) && _isatty(fileno(F_))) {
                     return;
-                }
-#endif
-                ythrow TSystemError() << "write failed";
-            }
-        }
-
+                } 
+#endif 
+                ythrow TSystemError() << "write failed"; 
+            } 
+        } 
+ 
         void DoFlush() override {
-            if (fflush(F_) != 0) {
+            if (fflush(F_) != 0) { 
                 ythrow TSystemError() << "fflush failed";
             }
-        }
-
-    private:
-        FILE* F_;
-    };
-
-    struct TStdIOStreams {
-        struct TStdErr: public TStdOutput {
-            inline TStdErr()
-                : TStdOutput(stderr)
-            {
-            }
-
+        } 
+ 
+    private: 
+        FILE* F_; 
+    }; 
+ 
+    struct TStdIOStreams { 
+        struct TStdErr: public TStdOutput { 
+            inline TStdErr() 
+                : TStdOutput(stderr) 
+            { 
+            } 
+ 
             ~TStdErr() override = default;
-        };
-
-        struct TStdOut: public TStdOutput {
-            inline TStdOut()
-                : TStdOutput(stdout)
-            {
-            }
-
+        }; 
+ 
+        struct TStdOut: public TStdOutput { 
+            inline TStdOut() 
+                : TStdOutput(stdout) 
+            { 
+            } 
+ 
             ~TStdOut() override = default;
-        };
-
-        TStdOut Out;
-        TStdErr Err;
-
-        static inline TStdIOStreams& Instance() {
-            return *SingletonWithPriority<TStdIOStreams, 4>();
-        }
-    };
-}
-
+        }; 
+ 
+        TStdOut Out; 
+        TStdErr Err; 
+ 
+        static inline TStdIOStreams& Instance() { 
+            return *SingletonWithPriority<TStdIOStreams, 4>(); 
+        } 
+    }; 
+} 
+ 
 IOutputStream& NPrivate::StdErrStream() noexcept {
 #if defined(_android_)
     if (TAndroidStdIOStreams::Enabled) {
         return TAndroidStdIOStreams::Instance().Err;
     }
 #endif
-    return TStdIOStreams::Instance().Err;
-}
-
+    return TStdIOStreams::Instance().Err; 
+} 
+ 
 IOutputStream& NPrivate::StdOutStream() noexcept {
 #if defined(_android_)
     if (TAndroidStdIOStreams::Enabled) {
         return TAndroidStdIOStreams::Instance().Out;
     }
 #endif
-    return TStdIOStreams::Instance().Out;
-}
+    return TStdIOStreams::Instance().Out; 
+} 
 
 void RedirectStdioToAndroidLog(bool redirect) {
 #if defined(_android_)

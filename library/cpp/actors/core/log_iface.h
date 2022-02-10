@@ -4,55 +4,55 @@
 #include "event_local.h"
 
 namespace NActors {
-    namespace NLog {
-        using EComponent = int;
+    namespace NLog { 
+        using EComponent = int; 
 
-        enum EPriority : ui16 { // migrate it to EPrio whenever possible
-            PRI_EMERG,
-            PRI_ALERT,
-            PRI_CRIT,
-            PRI_ERROR,
-            PRI_WARN,
-            PRI_NOTICE,
-            PRI_INFO,
-            PRI_DEBUG,
-            PRI_TRACE
-        };
+        enum EPriority : ui16 { // migrate it to EPrio whenever possible 
+            PRI_EMERG, 
+            PRI_ALERT, 
+            PRI_CRIT, 
+            PRI_ERROR, 
+            PRI_WARN, 
+            PRI_NOTICE, 
+            PRI_INFO, 
+            PRI_DEBUG, 
+            PRI_TRACE 
+        }; 
 
-        enum class EPrio : ui16 {
-            Emerg = 0,
-            Alert = 1,
-            Crit = 2,
-            Error = 3,
-            Warn = 4,
-            Notice = 5,
-            Info = 6,
-            Debug = 7,
-            Trace = 8,
-        };
+        enum class EPrio : ui16 { 
+            Emerg = 0, 
+            Alert = 1, 
+            Crit = 2, 
+            Error = 3, 
+            Warn = 4, 
+            Notice = 5, 
+            Info = 6, 
+            Debug = 7, 
+            Trace = 8, 
+        }; 
 
-        struct TLevel {
-            TLevel(ui32 raw)
-                : Raw(raw)
-            {
-            }
+        struct TLevel { 
+            TLevel(ui32 raw) 
+                : Raw(raw) 
+            { 
+            } 
 
-            TLevel(EPrio prio)
-                : Raw((ui16(prio) + 1) << 8)
-            {
-            }
+            TLevel(EPrio prio) 
+                : Raw((ui16(prio) + 1) << 8) 
+            { 
+            } 
 
-            EPrio ToPrio() const noexcept {
-                const auto major = Raw >> 8;
+            EPrio ToPrio() const noexcept { 
+                const auto major = Raw >> 8; 
 
-                return major > 0 ? EPrio(major - 1) : EPrio::Emerg;
-            }
+                return major > 0 ? EPrio(major - 1) : EPrio::Emerg; 
+            } 
 
-            bool IsUrgentAbortion() const noexcept {
-                return (Raw >> 8) == 0;
-            }
+            bool IsUrgentAbortion() const noexcept { 
+                return (Raw >> 8) == 0; 
+            } 
 
-            /* Generalized monotonic level value composed with major and minor
+            /* Generalized monotonic level value composed with major and minor 
             levels. Minor is used for verbosity within major, basic EPrio
             mapped to (EPrio + 1, 0) and Major = 0 is reserved as special
             space with meaning like EPrio::Emerg but with extened actions.
@@ -60,25 +60,25 @@ namespace NActors {
             idea how to handle special emergency actions.
          */
 
-            ui32 Raw = 0; // ((ui16(EPrio) + 1) << 8) | ui8(minor)
-        };
+            ui32 Raw = 0; // ((ui16(EPrio) + 1) << 8) | ui8(minor) 
+        }; 
 
-        enum class EEv {
-            Log = EventSpaceBegin(TEvents::ES_LOGGER),
-            LevelReq,
-            LevelResp,
-            Ignored,
-            End
-        };
+        enum class EEv { 
+            Log = EventSpaceBegin(TEvents::ES_LOGGER), 
+            LevelReq, 
+            LevelResp, 
+            Ignored, 
+            End 
+        }; 
 
-        static_assert(int(EEv::End) < EventSpaceEnd(TEvents::ES_LOGGER), "");
+        static_assert(int(EEv::End) < EventSpaceEnd(TEvents::ES_LOGGER), ""); 
 
-        class TEvLog: public TEventLocal<TEvLog, int(EEv::Log)> {
-        public:
+        class TEvLog: public TEventLocal<TEvLog, int(EEv::Log)> { 
+        public: 
             TEvLog(TInstant stamp, TLevel level, EComponent comp, const TString &line)
-                : Stamp(stamp)
-                , Level(level)
-                , Component(comp)
+                : Stamp(stamp) 
+                , Level(level) 
+                , Component(comp) 
                 , Line(line)
             {
             }
@@ -87,23 +87,23 @@ namespace NActors {
                 : Stamp(stamp)
                 , Level(level)
                 , Component(comp)
-                , Line(std::move(line))
-            {
-            }
+                , Line(std::move(line)) 
+            { 
+            } 
 
-            TEvLog(EPriority prio, EComponent comp, TString line, TInstant time = TInstant::Now())
-                : Stamp(time)
-                , Level(EPrio(prio))
-                , Component(comp)
-                , Line(std::move(line))
-            {
-            }
+            TEvLog(EPriority prio, EComponent comp, TString line, TInstant time = TInstant::Now()) 
+                : Stamp(time) 
+                , Level(EPrio(prio)) 
+                , Component(comp) 
+                , Line(std::move(line)) 
+            { 
+            } 
 
-            const TInstant Stamp = TInstant::Max();
-            const TLevel Level;
-            const EComponent Component = 0;
-            TString Line;
-        };
+            const TInstant Stamp = TInstant::Max(); 
+            const TLevel Level; 
+            const EComponent Component = 0; 
+            TString Line; 
+        }; 
 
-    }
+    } 
 }

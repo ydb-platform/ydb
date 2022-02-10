@@ -1,7 +1,7 @@
-LIBRARY()
-
-LICENSE(MIT)
-
+LIBRARY() 
+ 
+LICENSE(MIT) 
+ 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 VERSION(2016)
@@ -13,8 +13,8 @@ OWNER(
     g:contrib
     g:cpp-contrib
 )
-
-IF (OS_LINUX AND ARCH_X86_64)
+ 
+IF (OS_LINUX AND ARCH_X86_64) 
     SRCS(
         md5-fast-x8664.S
     )
@@ -23,5 +23,5 @@ ELSE()
         md5.c
     )
 ENDIF()
-
-END()
+ 
+END() 

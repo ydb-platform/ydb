@@ -1,68 +1,68 @@
 #pragma once
 
-#include "atomic.h"
-#include "spin_wait.h"
-
+#include "atomic.h" 
+#include "spin_wait.h" 
+ 
 class TSpinLockBase {
-protected:
+protected: 
     inline TSpinLockBase() noexcept {
         AtomicSet(Val_, 0);
-    }
+    } 
 
-public:
+public: 
     inline bool IsLocked() const noexcept {
-        return AtomicGet(Val_);
-    }
+        return AtomicGet(Val_); 
+    } 
 
     inline bool TryAcquire() noexcept {
-        return AtomicTryLock(&Val_);
-    }
+        return AtomicTryLock(&Val_); 
+    } 
 
     inline bool try_lock() noexcept {
         return TryAcquire();
     }
 
-protected:
-    TAtomic Val_;
+protected: 
+    TAtomic Val_; 
 };
 
-static inline void SpinLockPause() {
+static inline void SpinLockPause() { 
 #if defined(__GNUC__)
     #if defined(_i386_) || defined(_x86_64_)
-    __asm __volatile("pause");
+    __asm __volatile("pause"); 
     #elif defined(_arm64_)
     __asm __volatile("yield" ::
                          : "memory");
     #endif
-#endif
-}
+#endif 
+} 
+ 
+static inline void AcquireSpinLock(TAtomic* l) { 
+    if (!AtomicTryLock(l)) { 
+        do { 
+            SpinLockPause(); 
+        } while (!AtomicTryAndTryLock(l)); 
+    } 
+} 
 
-static inline void AcquireSpinLock(TAtomic* l) {
-    if (!AtomicTryLock(l)) {
-        do {
-            SpinLockPause();
-        } while (!AtomicTryAndTryLock(l));
-    }
-}
-
-static inline void ReleaseSpinLock(TAtomic* l) {
-    AtomicUnlock(l);
-}
-
-/*
- * You should almost always use TAdaptiveLock instead of TSpinLock
- */
-class TSpinLock: public TSpinLockBase {
-public:
+static inline void ReleaseSpinLock(TAtomic* l) { 
+    AtomicUnlock(l); 
+} 
+ 
+/* 
+ * You should almost always use TAdaptiveLock instead of TSpinLock 
+ */ 
+class TSpinLock: public TSpinLockBase { 
+public: 
     using TSpinLockBase::TSpinLockBase;
 
     inline void Release() noexcept {
-        ReleaseSpinLock(&Val_);
-    }
-
+        ReleaseSpinLock(&Val_); 
+    } 
+ 
     inline void Acquire() noexcept {
-        AcquireSpinLock(&Val_);
-    }
+        AcquireSpinLock(&Val_); 
+    } 
 
     inline void unlock() noexcept {
         Release();
@@ -71,33 +71,33 @@ public:
     inline void lock() noexcept {
         Acquire();
     }
-};
-
-static inline void AcquireAdaptiveLock(TAtomic* l) {
-    if (!AtomicTryLock(l)) {
-        TSpinWait sw;
-
-        while (!AtomicTryAndTryLock(l)) {
-            sw.Sleep();
-        }
-    }
-}
-
-static inline void ReleaseAdaptiveLock(TAtomic* l) {
-    AtomicUnlock(l);
-}
-
-class TAdaptiveLock: public TSpinLockBase {
-public:
+}; 
+ 
+static inline void AcquireAdaptiveLock(TAtomic* l) { 
+    if (!AtomicTryLock(l)) { 
+        TSpinWait sw; 
+ 
+        while (!AtomicTryAndTryLock(l)) { 
+            sw.Sleep(); 
+        } 
+    } 
+} 
+ 
+static inline void ReleaseAdaptiveLock(TAtomic* l) { 
+    AtomicUnlock(l); 
+} 
+ 
+class TAdaptiveLock: public TSpinLockBase { 
+public: 
     using TSpinLockBase::TSpinLockBase;
 
     inline void Release() noexcept {
-        ReleaseAdaptiveLock(&Val_);
-    }
-
+        ReleaseAdaptiveLock(&Val_); 
+    } 
+ 
     inline void Acquire() noexcept {
-        AcquireAdaptiveLock(&Val_);
-    }
+        AcquireAdaptiveLock(&Val_); 
+    } 
 
     inline void unlock() noexcept {
         Release();
@@ -106,21 +106,21 @@ public:
     inline void lock() noexcept {
         Acquire();
     }
-};
-
-#include "guard.h"
-
-template <>
-struct TCommonLockOps<TAtomic> {
+}; 
+ 
+#include "guard.h" 
+ 
+template <> 
+struct TCommonLockOps<TAtomic> { 
     static inline void Acquire(TAtomic* v) noexcept {
-        AcquireAdaptiveLock(v);
-    }
-
+        AcquireAdaptiveLock(v); 
+    } 
+ 
     static inline bool TryAcquire(TAtomic* v) noexcept {
         return AtomicTryLock(v);
     }
 
     static inline void Release(TAtomic* v) noexcept {
-        ReleaseAdaptiveLock(v);
-    }
-};
+        ReleaseAdaptiveLock(v); 
+    } 
+}; 

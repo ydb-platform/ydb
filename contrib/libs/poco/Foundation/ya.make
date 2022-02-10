@@ -15,7 +15,7 @@ LICENSE(
     RSA-MD AND
     RSA-MD4
 )
-
+ 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(

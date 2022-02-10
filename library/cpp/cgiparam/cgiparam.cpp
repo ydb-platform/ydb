@@ -1,8 +1,8 @@
-#include "cgiparam.h"
-
+#include "cgiparam.h" 
+ 
 #include <library/cpp/string_utils/scan/scan.h>
 #include <library/cpp/string_utils/quote/quote.h>
-
+ 
 #include <util/generic/singleton.h>
 
 TCgiParameters::TCgiParameters(std::initializer_list<std::pair<TString, TString>> il) {
@@ -12,21 +12,21 @@ TCgiParameters::TCgiParameters(std::initializer_list<std::pair<TString, TString>
 }
 
 const TString& TCgiParameters::Get(const TStringBuf name, size_t numOfValue) const noexcept {
-    const auto it = Find(name, numOfValue);
-
+    const auto it = Find(name, numOfValue); 
+ 
     return end() == it ? Default<TString>() : it->second;
-}
-
+} 
+ 
 bool TCgiParameters::Erase(const TStringBuf name, size_t pos) {
-    const auto pair = equal_range(name);
-
-    for (auto it = pair.first; it != pair.second; ++it, --pos) {
+    const auto pair = equal_range(name); 
+ 
+    for (auto it = pair.first; it != pair.second; ++it, --pos) { 
         if (0 == pos) {
             erase(it);
             return true;
         }
-    }
-
+    } 
+ 
     return false;
 }
 
@@ -48,31 +48,31 @@ bool TCgiParameters::Erase(const TStringBuf name, const TStringBuf val) {
 
 size_t TCgiParameters::EraseAll(const TStringBuf name) {
     size_t num = 0;
-
-    const auto pair = equal_range(name);
-
-    for (auto it = pair.first; it != pair.second; erase(it++), ++num)
+ 
+    const auto pair = equal_range(name); 
+ 
+    for (auto it = pair.first; it != pair.second; erase(it++), ++num) 
         ;
-
+ 
     return num;
 }
 
 void TCgiParameters::JoinUnescaped(const TStringBuf key, char sep, TStringBuf val) {
-    const auto pair = equal_range(key);
-    auto it = pair.first;
-
+    const auto pair = equal_range(key); 
+    auto it = pair.first; 
+ 
     if (it == pair.second) { // not found
-        if (val.IsInited()) {
+        if (val.IsInited()) { 
             emplace_hint(it, TString(key), TString(val));
-        }
-    } else {
+        } 
+    } else { 
         TString& dst = it->second;
-
-        for (++it; it != pair.second; erase(it++)) {
+ 
+        for (++it; it != pair.second; erase(it++)) { 
             dst += sep;
             dst.AppendNoAlias(it->second.data(), it->second.size());
         }
-
+ 
         if (val.IsInited()) {
             dst += sep;
             dst += val;
@@ -85,44 +85,44 @@ static inline TString DoUnescape(const TStringBuf s) {
 
     res.reserve(CgiUnescapeBufLen(s.size()));
     res.ReserveAndResize(CgiUnescape(res.begin(), s).size());
-
-    return res;
-}
+ 
+    return res; 
+} 
 
 void TCgiParameters::InsertEscaped(const TStringBuf name, const TStringBuf value) {
     InsertUnescaped(DoUnescape(name), DoUnescape(value));
 }
 
-template <bool addAll, class F>
+template <bool addAll, class F> 
 static inline void DoScan(const TStringBuf s, F& f) {
-    ScanKeyValue<addAll, '&', '='>(s, f);
-}
-
-struct TAddEscaped {
-    TCgiParameters* C;
-
+    ScanKeyValue<addAll, '&', '='>(s, f); 
+} 
+ 
+struct TAddEscaped { 
+    TCgiParameters* C; 
+ 
     inline void operator()(const TStringBuf key, const TStringBuf val) {
         C->InsertEscaped(key, val);
-    }
-};
-
+    } 
+}; 
+ 
 void TCgiParameters::Scan(const TStringBuf query, bool form) {
-    Flush();
+    Flush(); 
     form ? ScanAdd(query) : ScanAddAll(query);
 }
 
 void TCgiParameters::ScanAdd(const TStringBuf query) {
     TAddEscaped f = {this};
-
-    DoScan<false>(query, f);
+ 
+    DoScan<false>(query, f); 
 }
 
 void TCgiParameters::ScanAddUnescaped(const TStringBuf query) {
     auto f = [this](const TStringBuf key, const TStringBuf val) {
         this->InsertUnescaped(key, val);
-    };
+    }; 
 
-    DoScan<false>(query, f);
+    DoScan<false>(query, f); 
 }
 
 void TCgiParameters::ScanAddAllUnescaped(const TStringBuf query) {
@@ -135,48 +135,48 @@ void TCgiParameters::ScanAddAllUnescaped(const TStringBuf query) {
 
 void TCgiParameters::ScanAddAll(const TStringBuf query) {
     TAddEscaped f = {this};
-
-    DoScan<true>(query, f);
+ 
+    DoScan<true>(query, f); 
 }
 
 TString TCgiParameters::Print() const {
     TString res;
-
-    res.reserve(PrintSize());
-    const char* end = Print(res.begin());
+ 
+    res.reserve(PrintSize()); 
+    const char* end = Print(res.begin()); 
     res.ReserveAndResize(end - res.data());
-
-    return res;
+ 
+    return res; 
 }
 
-char* TCgiParameters::Print(char* res) const {
-    if (empty()) {
-        return res;
-    }
-
-    for (auto i = begin();;) {
+char* TCgiParameters::Print(char* res) const { 
+    if (empty()) { 
+        return res; 
+    } 
+ 
+    for (auto i = begin();;) { 
         res = CGIEscape(res, i->first);
-        *res++ = '=';
+        *res++ = '='; 
         res = CGIEscape(res, i->second);
-
-        if (++i == end()) {
+ 
+        if (++i == end()) { 
             break;
-        }
-
-        *res++ = '&';
-    }
-
+        } 
+ 
+        *res++ = '&'; 
+    } 
+ 
     return res;
 }
 
 size_t TCgiParameters::PrintSize() const noexcept {
-    size_t res = size(); // for '&'
-
+    size_t res = size(); // for '&' 
+ 
     for (const auto& i : *this) {
         res += CgiEscapeBufLen(i.first.size() + i.second.size()); // extra zero will be used for '='
-    }
-
-    return res;
+    } 
+ 
+    return res; 
 }
 
 TString TCgiParameters::QuotedPrint(const char* safe) const {
@@ -205,27 +205,27 @@ TString TCgiParameters::QuotedPrint(const char* safe) const {
 }
 
 TCgiParameters::const_iterator TCgiParameters::Find(const TStringBuf name, size_t pos) const noexcept {
-    const auto pair = equal_range(name);
-
-    for (auto it = pair.first; it != pair.second; ++it, --pos) {
-        if (0 == pos) {
+    const auto pair = equal_range(name); 
+ 
+    for (auto it = pair.first; it != pair.second; ++it, --pos) { 
+        if (0 == pos) { 
             return it;
-        }
-    }
-
+        } 
+    } 
+ 
     return end();
 }
 
 bool TCgiParameters::Has(const TStringBuf name, const TStringBuf value) const noexcept {
-    const auto pair = equal_range(name);
-
-    for (auto it = pair.first; it != pair.second; ++it) {
-        if (value == it->second) {
-            return true;
-        }
-    }
-
-    return false;
+    const auto pair = equal_range(name); 
+ 
+    for (auto it = pair.first; it != pair.second; ++it) { 
+        if (value == it->second) { 
+            return true; 
+        } 
+    } 
+ 
+    return false; 
 }
 
 TQuickCgiParam::TQuickCgiParam(const TStringBuf cgiParamStr) {

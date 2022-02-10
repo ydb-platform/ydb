@@ -5,28 +5,28 @@
 #include "json_value_output.h"
 
 namespace NProtobufJson {
-    TJsonMapOutputPtr CreateJsonMapOutput(IOutputStream& out, const NJson::TJsonWriterConfig& config) {
+    TJsonMapOutputPtr CreateJsonMapOutput(IOutputStream& out, const NJson::TJsonWriterConfig& config) { 
         return MakeHolder<TJsonWriterOutput>(&out, config);
-    }
+    } 
 
-    TJsonMapOutputPtr CreateJsonMapOutput(NJson::TJsonWriter& writer) {
+    TJsonMapOutputPtr CreateJsonMapOutput(NJson::TJsonWriter& writer) { 
         return MakeHolder<TBaseJsonWriterOutput>(writer);
-    }
+    } 
 
-    TJsonMapOutputPtr CreateJsonMapOutput(TString& str, const TProto2JsonConfig& config) {
+    TJsonMapOutputPtr CreateJsonMapOutput(TString& str, const TProto2JsonConfig& config) { 
         return MakeHolder<TJsonStringWriterOutput>(&str, config);
-    }
+    } 
 
-    TJsonMapOutputPtr CreateJsonMapOutput(TStringStream& out, const TProto2JsonConfig& config) {
+    TJsonMapOutputPtr CreateJsonMapOutput(TStringStream& out, const TProto2JsonConfig& config) { 
         return MakeHolder<TJsonWriterOutput>(&out, config);
-    }
+    } 
 
-    TJsonMapOutputPtr CreateJsonMapOutput(IOutputStream& out, const TProto2JsonConfig& config) {
+    TJsonMapOutputPtr CreateJsonMapOutput(IOutputStream& out, const TProto2JsonConfig& config) { 
         return MakeHolder<TJsonWriterOutput>(&out, config);
-    }
+    } 
 
-    TJsonMapOutputPtr CreateJsonMapOutput(NJson::TJsonValue& json) {
+    TJsonMapOutputPtr CreateJsonMapOutput(NJson::TJsonValue& json) { 
         return MakeHolder<TJsonValueOutput>(json);
-    }
+    } 
 
 }

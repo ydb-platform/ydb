@@ -95,11 +95,11 @@ public:
         }
 
         for (size_t i = 0; i < firstSize; ++i) {
-            Data[WritePos + i] = value[i];
+            Data[WritePos + i] = value[i]; 
         }
 
         for (size_t i = 0; i < secondSize; ++i) {
-            Data[i] = value[firstSize + i];
+            Data[i] = value[firstSize + i]; 
         }
 
         WritePos = (WritePos + value.size()) & CapacityMask;

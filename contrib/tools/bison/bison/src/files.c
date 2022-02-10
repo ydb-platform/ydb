@@ -28,8 +28,8 @@
 #include <quotearg.h>
 #include <stdio-safer.h>
 #include <xstrndup.h>
-#include <stdlib.h>
-#include <string.h>
+#include <stdlib.h> 
+#include <string.h> 
 
 #include "complain.h"
 #include "files.h"
@@ -90,9 +90,9 @@ static char *header_extension = NULL;
 `-----------------------------------------------------------------*/
 
 #if defined _win_ || defined _WIN64 || defined _WIN32 || defined __WIN32__
-char *stpcpy(char *dst, const char *src);
+char *stpcpy(char *dst, const char *src); 
 #endif
-
+ 
 static char *
 concat2 (char const *str1, char const *str2)
 {

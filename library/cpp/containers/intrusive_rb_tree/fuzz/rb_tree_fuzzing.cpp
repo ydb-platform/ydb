@@ -11,31 +11,31 @@ struct TCmp {
     }
 
     template <class T>
-    static inline bool Compare(const T& l, ui8 r) {
+    static inline bool Compare(const T& l, ui8 r) { 
         return l.N < r;
     }
 
     template <class T>
-    static inline bool Compare(ui8 l, const T& r) {
+    static inline bool Compare(ui8 l, const T& r) { 
         return l < r.N;
     }
 };
 
 class TNode: public TRbTreeItem<TNode, TCmp> {
 public:
-    inline TNode(ui8 n) noexcept
+    inline TNode(ui8 n) noexcept 
         : N(n)
     {
     }
 
-    ui8 N;
+    ui8 N; 
 };
 
 using TTree = TRbTree<TNode, TCmp>;
 
-extern "C" int LLVMFuzzerTestOneInput(const ui8* data, size_t size) {
+extern "C" int LLVMFuzzerTestOneInput(const ui8* data, size_t size) { 
     TDeque<TNode> records;
-    const ui8 half = 128u;
+    const ui8 half = 128u; 
     TTree tree;
     for (size_t i = 0; i < size; ++i) {
         if (data[i] / half == 0) {

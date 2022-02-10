@@ -1,12 +1,12 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(
     pg
     yazevnul
 )
 
 SRCS(
-    bench.cpp
+    bench.cpp 
     dummy.cpp
 )
 

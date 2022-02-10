@@ -1,10 +1,10 @@
-LIBRARY()
+LIBRARY() 
 
 OWNER(alzobnin)
 
 SRCS(
-    generated/cp_data.cpp
-    generated/encrec_data.cpp
+    generated/cp_data.cpp 
+    generated/encrec_data.cpp 
     codepage.cpp
     cp_encrec.cpp
     doccodes.cpp

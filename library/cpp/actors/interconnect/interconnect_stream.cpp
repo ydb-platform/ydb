@@ -23,74 +23,74 @@
 #include <cerrno>
 
 namespace NInterconnect {
-    namespace {
-        inline int
-        LastSocketError() {
+    namespace { 
+        inline int 
+        LastSocketError() { 
 #if defined(_win_)
-            return WSAGetLastError();
+            return WSAGetLastError(); 
 #else
-            return errno;
+            return errno; 
 #endif
-        }
+        } 
+    } 
+
+    TSocket::TSocket(SOCKET fd) 
+        : Descriptor(fd) 
+    { 
+    } 
+
+    TSocket::~TSocket() { 
+        if (Descriptor == INVALID_SOCKET) { 
+            return; 
+        } 
+ 
+        auto const result = ::closesocket(Descriptor); 
+        if (result == 0) 
+            return; 
+        switch (LastSocketError()) { 
+            case EBADF: 
+                Y_FAIL("Close bad descriptor"); 
+            case EINTR: 
+                break; 
+            case EIO: 
+                Y_FAIL("EIO"); 
+            default: 
+                Y_FAIL("It's something unexpected"); 
+        } 
     }
 
-    TSocket::TSocket(SOCKET fd)
-        : Descriptor(fd)
-    {
+    int TSocket::GetDescriptor() { 
+        return Descriptor; 
     }
 
-    TSocket::~TSocket() {
-        if (Descriptor == INVALID_SOCKET) {
-            return;
-        }
+    int 
+    TSocket::Bind(const TAddress& addr) const { 
+        const auto ret = ::bind(Descriptor, addr.SockAddr(), addr.Size()); 
+        if (ret < 0) 
+            return -LastSocketError(); 
 
-        auto const result = ::closesocket(Descriptor);
-        if (result == 0)
-            return;
-        switch (LastSocketError()) {
-            case EBADF:
-                Y_FAIL("Close bad descriptor");
-            case EINTR:
-                break;
-            case EIO:
-                Y_FAIL("EIO");
-            default:
-                Y_FAIL("It's something unexpected");
-        }
+        return 0; 
+    } 
+
+    int 
+    TSocket::Shutdown(int how) const { 
+        const auto ret = ::shutdown(Descriptor, how); 
+        if (ret < 0) 
+            return -LastSocketError(); 
+
+        return 0; 
+    } 
+
+    int TSocket::GetConnectStatus() const { 
+        int err = 0; 
+        socklen_t len = sizeof(err); 
+        if (getsockopt(Descriptor, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&err), &len) == -1) { 
+            err = LastSocketError(); 
+        } 
+        return err; 
     }
 
-    int TSocket::GetDescriptor() {
-        return Descriptor;
-    }
-
-    int
-    TSocket::Bind(const TAddress& addr) const {
-        const auto ret = ::bind(Descriptor, addr.SockAddr(), addr.Size());
-        if (ret < 0)
-            return -LastSocketError();
-
-        return 0;
-    }
-
-    int
-    TSocket::Shutdown(int how) const {
-        const auto ret = ::shutdown(Descriptor, how);
-        if (ret < 0)
-            return -LastSocketError();
-
-        return 0;
-    }
-
-    int TSocket::GetConnectStatus() const {
-        int err = 0;
-        socklen_t len = sizeof(err);
-        if (getsockopt(Descriptor, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&err), &len) == -1) {
-            err = LastSocketError();
-        }
-        return err;
-    }
-
-    /////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////// 
 
     TIntrusivePtr<TStreamSocket> TStreamSocket::Make(int domain) {
         const SOCKET res = ::socket(domain, SOCK_STREAM | SOCK_NONBLOCK, 0);
@@ -99,106 +99,106 @@ namespace NInterconnect {
             Y_VERIFY(err != EMFILE && err != ENFILE);
         }
         return MakeIntrusive<TStreamSocket>(res);
-    }
+    } 
 
-    TStreamSocket::TStreamSocket(SOCKET fd)
-        : TSocket(fd)
-    {
-    }
+    TStreamSocket::TStreamSocket(SOCKET fd) 
+        : TSocket(fd) 
+    { 
+    } 
 
-    ssize_t
+    ssize_t 
     TStreamSocket::Send(const void* msg, size_t len, TString* /*err*/) const {
         const auto ret = ::send(Descriptor, static_cast<const char*>(msg), int(len), 0);
-        if (ret < 0)
-            return -LastSocketError();
+        if (ret < 0) 
+            return -LastSocketError(); 
 
-        return ret;
-    }
+        return ret; 
+    } 
 
-    ssize_t
+    ssize_t 
     TStreamSocket::Recv(void* buf, size_t len, TString* /*err*/) const {
         const auto ret = ::recv(Descriptor, static_cast<char*>(buf), int(len), 0);
-        if (ret < 0)
-            return -LastSocketError();
+        if (ret < 0) 
+            return -LastSocketError(); 
 
-        return ret;
-    }
+        return ret; 
+    } 
 
-    ssize_t
-    TStreamSocket::WriteV(const struct iovec* iov, int iovcnt) const {
+    ssize_t 
+    TStreamSocket::WriteV(const struct iovec* iov, int iovcnt) const { 
 #ifndef _win_
-        const auto ret = ::writev(Descriptor, iov, iovcnt);
-        if (ret < 0)
-            return -LastSocketError();
-        return ret;
+        const auto ret = ::writev(Descriptor, iov, iovcnt); 
+        if (ret < 0) 
+            return -LastSocketError(); 
+        return ret; 
 #else
         Y_FAIL("WriteV() unsupported on Windows");
 #endif
-    }
+    } 
 
-    ssize_t
-    TStreamSocket::ReadV(const struct iovec* iov, int iovcnt) const {
+    ssize_t 
+    TStreamSocket::ReadV(const struct iovec* iov, int iovcnt) const { 
 #ifndef _win_
-        const auto ret = ::readv(Descriptor, iov, iovcnt);
-        if (ret < 0)
-            return -LastSocketError();
-        return ret;
+        const auto ret = ::readv(Descriptor, iov, iovcnt); 
+        if (ret < 0) 
+            return -LastSocketError(); 
+        return ret; 
 #else
         Y_FAIL("ReadV() unsupported on Windows");
 #endif
-    }
+    } 
 
-    ssize_t TStreamSocket::GetUnsentQueueSize() const {
-        int num = -1;
+    ssize_t TStreamSocket::GetUnsentQueueSize() const { 
+        int num = -1; 
 #ifndef _win_ // we have no means to determine output queue size on Windows
-        if (ioctl(Descriptor, TIOCOUTQ, &num) == -1) {
-            num = -1;
-        }
-#endif
-        return num;
+        if (ioctl(Descriptor, TIOCOUTQ, &num) == -1) { 
+            num = -1; 
+        } 
+#endif 
+        return num; 
     }
 
-    int
-    TStreamSocket::Connect(const TAddress& addr) const {
-        const auto ret = ::connect(Descriptor, addr.SockAddr(), addr.Size());
-        if (ret < 0)
-            return -LastSocketError();
+    int 
+    TStreamSocket::Connect(const TAddress& addr) const { 
+        const auto ret = ::connect(Descriptor, addr.SockAddr(), addr.Size()); 
+        if (ret < 0) 
+            return -LastSocketError(); 
 
-        return ret;
-    }
+        return ret; 
+    } 
 
-    int
-    TStreamSocket::Connect(const NAddr::IRemoteAddr* addr) const {
-        const auto ret = ::connect(Descriptor, addr->Addr(), addr->Len());
-        if (ret < 0)
-            return -LastSocketError();
+    int 
+    TStreamSocket::Connect(const NAddr::IRemoteAddr* addr) const { 
+        const auto ret = ::connect(Descriptor, addr->Addr(), addr->Len()); 
+        if (ret < 0) 
+            return -LastSocketError(); 
 
-        return ret;
-    }
+        return ret; 
+    } 
 
-    int
-    TStreamSocket::Listen(int backlog) const {
-        const auto ret = ::listen(Descriptor, backlog);
-        if (ret < 0)
-            return -LastSocketError();
+    int 
+    TStreamSocket::Listen(int backlog) const { 
+        const auto ret = ::listen(Descriptor, backlog); 
+        if (ret < 0) 
+            return -LastSocketError(); 
 
-        return ret;
-    }
+        return ret; 
+    } 
 
-    int
-    TStreamSocket::Accept(TAddress& acceptedAddr) const {
-        socklen_t acceptedSize = sizeof(::sockaddr_in6);
-        const auto ret = ::accept(Descriptor, acceptedAddr.SockAddr(), &acceptedSize);
-        if (ret == INVALID_SOCKET)
-            return -LastSocketError();
+    int 
+    TStreamSocket::Accept(TAddress& acceptedAddr) const { 
+        socklen_t acceptedSize = sizeof(::sockaddr_in6); 
+        const auto ret = ::accept(Descriptor, acceptedAddr.SockAddr(), &acceptedSize); 
+        if (ret == INVALID_SOCKET) 
+            return -LastSocketError(); 
 
-        return ret;
-    }
+        return ret; 
+    } 
 
-    void
-    TStreamSocket::SetSendBufferSize(i32 len) const {
-        (void)SetSockOpt(Descriptor, SOL_SOCKET, SO_SNDBUF, len);
-    }
+    void 
+    TStreamSocket::SetSendBufferSize(i32 len) const { 
+        (void)SetSockOpt(Descriptor, SOL_SOCKET, SO_SNDBUF, len); 
+    } 
 
     ui32 TStreamSocket::GetSendBufferSize() const {
         ui32 res = 0;
@@ -206,7 +206,7 @@ namespace NInterconnect {
         return res;
     }
 
-    //////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////// 
 
     TDatagramSocket::TPtr TDatagramSocket::Make(int domain) {
         const SOCKET res = ::socket(domain, SOCK_DGRAM, 0);
@@ -215,31 +215,31 @@ namespace NInterconnect {
             Y_VERIFY(err != EMFILE && err != ENFILE);
         }
         return std::make_shared<TDatagramSocket>(res);
-    }
+    } 
 
-    TDatagramSocket::TDatagramSocket(SOCKET fd)
-        : TSocket(fd)
-    {
-    }
+    TDatagramSocket::TDatagramSocket(SOCKET fd) 
+        : TSocket(fd) 
+    { 
+    } 
 
-    ssize_t
-    TDatagramSocket::SendTo(const void* msg, size_t len, const TAddress& toAddr) const {
-        const auto ret = ::sendto(Descriptor, static_cast<const char*>(msg), int(len), 0, toAddr.SockAddr(), toAddr.Size());
-        if (ret < 0)
-            return -LastSocketError();
+    ssize_t 
+    TDatagramSocket::SendTo(const void* msg, size_t len, const TAddress& toAddr) const { 
+        const auto ret = ::sendto(Descriptor, static_cast<const char*>(msg), int(len), 0, toAddr.SockAddr(), toAddr.Size()); 
+        if (ret < 0) 
+            return -LastSocketError(); 
 
-        return ret;
-    }
+        return ret; 
+    } 
 
-    ssize_t
-    TDatagramSocket::RecvFrom(void* buf, size_t len, TAddress& fromAddr) const {
-        socklen_t fromSize = sizeof(::sockaddr_in6);
-        const auto ret = ::recvfrom(Descriptor, static_cast<char*>(buf), int(len), 0, fromAddr.SockAddr(), &fromSize);
-        if (ret < 0)
-            return -LastSocketError();
+    ssize_t 
+    TDatagramSocket::RecvFrom(void* buf, size_t len, TAddress& fromAddr) const { 
+        socklen_t fromSize = sizeof(::sockaddr_in6); 
+        const auto ret = ::recvfrom(Descriptor, static_cast<char*>(buf), int(len), 0, fromAddr.SockAddr(), &fromSize); 
+        if (ret < 0) 
+            return -LastSocketError(); 
 
-        return ret;
-    }
+        return ret; 
+    } 
 
 
     // deleter for SSL objects

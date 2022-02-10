@@ -19,8 +19,8 @@ namespace NSc {
             TContainer(TValue& v)
                 : Container(&v)
                 , ExpectKey(v.IsDict())
-            {
-            }
+            { 
+            } 
 
             bool Add(TStringBuf v, bool allowDuplicated) {
                 if (!ExpectKey || Y_UNLIKELY(!Container->IsDict()))

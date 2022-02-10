@@ -1,14 +1,14 @@
-#include "wide.h"
-#include "codepage.h"
+#include "wide.h" 
+#include "codepage.h" 
 #include "recyr.hh"
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <util/charset/utf8.h>
-#include <util/digest/numeric.h>
+#include <util/digest/numeric.h> 
 #include <util/generic/hash_set.h>
 
-#include <algorithm>
+#include <algorithm> 
 
 namespace {
     //! three UTF8 encoded russian letters (A, B, V)
@@ -21,7 +21,7 @@ namespace {
         0x0410, 0x0411, 0x0412, 0x0413, 0x0414, 0x0415, 0x0416, 0x0417, 0x0418, 0x0419, 0x041A, 0x041B, 0x041C, 0x041D, 0x041E, 0x041F,
         0x0420, 0x0421, 0x0422, 0x0423, 0x0424, 0x0425, 0x0426, 0x0427, 0x0428, 0x0429, 0x042A, 0x042B, 0x042C, 0x042D, 0x042E, 0x042F,
         0x0430, 0x0431, 0x0432, 0x0433, 0x0434, 0x0435, 0x0436, 0x0437, 0x0438, 0x0439, 0x043A, 0x043B, 0x043C, 0x043D, 0x043E, 0x043F,
-        0x0440, 0x0441, 0x0442, 0x0443, 0x0444, 0x0445, 0x0446, 0x0447, 0x0448, 0x0449, 0x044A, 0x044B, 0x044C, 0x044D, 0x044E, 0x044F, 0x00};
+        0x0440, 0x0441, 0x0442, 0x0443, 0x0444, 0x0445, 0x0446, 0x0447, 0x0448, 0x0449, 0x044A, 0x044B, 0x044C, 0x044D, 0x044E, 0x044F, 0x00}; 
     const char utf8CyrillicAlphabet[] =
         "\xd0\x90\xd0\x91\xd0\x92\xd0\x93\xd0\x94\xd0\x95\xd0\x96\xd0\x97"
         "\xd0\x98\xd0\x99\xd0\x9a\xd0\x9b\xd0\x9c\xd0\x9d\xd0\x9e\xd0\x9f"
@@ -34,7 +34,7 @@ namespace {
 
     TString CreateYandexText() {
         const int len = 256;
-        char text[len] = {0};
+        char text[len] = {0}; 
         for (int i = 0; i < len; ++i) {
             text[i] = static_cast<char>(i);
         }
@@ -61,7 +61,7 @@ namespace {
         for (int i = 0; i < len; ++i) {
             if (i <= 0x7F) { // ASCII characters without 0x7 and 0x1B
                 text[i] = static_cast<wchar16>(i);
-            } else if (i >= 0xC0 && i <= 0xFF) {            // russian characters (without YO and yo)
+            } else if (i >= 0xC0 && i <= 0xFF) {            // russian characters (without YO and yo) 
                 text[i] = static_cast<wchar16>(i + 0x0350); // 0x0410 - 0x044F
             }
         }
@@ -94,27 +94,27 @@ namespace {
             '\xd0', '\xb7', '\xd0', '\xb8', '\xd0', '\xb9', '\xd0', '\xba', '\xd0', '\xbb', '\xd0', '\xbc', '\xd0', '\xbd', '\xd0', '\xbe',
             '\xd0', '\xbf', '\xd1', '\x80', '\xd1', '\x81', '\xd1', '\x82', '\xd1', '\x83', '\xd1', '\x84', '\xd1', '\x85', '\xd1', '\x86',
             '\xd1', '\x87', '\xd1', '\x88', '\xd1', '\x89', '\xd1', '\x8a', '\xd1', '\x8b', '\xd1', '\x8c', '\xd1', '\x8d', '\xd1', '\x8e',
-            '\xd1', '\x8f'};
+            '\xd1', '\x8f'}; 
         return TString(text, Y_ARRAY_SIZE(text));
     }
 
     //! use this function to dump UTF8 text into a file in case of any changes
-    //    void DumpUTF8Text() {
+    //    void DumpUTF8Text() { 
     //        TString s = WideToUTF8(UnicodeText);
-    //        std::ofstream f("utf8.txt");
-    //        f << std::hex;
-    //        for (int i = 0; i < (int)s.size(); ++i) {
-    //            f << "0x" << std::setw(2) << std::setfill('0') << (int)(ui8)s[i] << ", ";
-    //            if ((i + 1) % 16 == 0)
-    //                f << std::endl;
-    //        }
-    //    }
+    //        std::ofstream f("utf8.txt"); 
+    //        f << std::hex; 
+    //        for (int i = 0; i < (int)s.size(); ++i) { 
+    //            f << "0x" << std::setw(2) << std::setfill('0') << (int)(ui8)s[i] << ", "; 
+    //            if ((i + 1) % 16 == 0) 
+    //                f << std::endl; 
+    //        } 
+    //    } 
 
 }
 
 //! this unit tests ensure validity of Yandex-Unicode and UTF8-Unicode conversions
 //! @note only those conversions are verified because they are used in index
-class TConversionTest: public TTestBase {
+class TConversionTest: public TTestBase { 
 private:
     //! @note every of the text can have zeros in the middle
     const TString YandexText;
@@ -123,13 +123,13 @@ private:
 
 private:
     UNIT_TEST_SUITE(TConversionTest);
-    UNIT_TEST(TestCharToWide);
-    UNIT_TEST(TestWideToChar);
+    UNIT_TEST(TestCharToWide); 
+    UNIT_TEST(TestWideToChar); 
     UNIT_TEST(TestYandexEncoding);
-    UNIT_TEST(TestRecodeIntoString);
-    UNIT_TEST(TestRecodeAppend);
-    UNIT_TEST(TestRecode);
-    UNIT_TEST(TestUnicodeLimit);
+    UNIT_TEST(TestRecodeIntoString); 
+    UNIT_TEST(TestRecodeAppend); 
+    UNIT_TEST(TestRecode); 
+    UNIT_TEST(TestUnicodeLimit); 
     UNIT_TEST_SUITE_END();
 
 public:
@@ -152,23 +152,23 @@ public:
 UNIT_TEST_SUITE_REGISTRATION(TConversionTest);
 
 // test conversions (char -> wchar32), (wchar32 -> char) and (wchar32 -> wchar16)
-#define TEST_WCHAR32(sbuf, wbuf, enc)                                                                                                 \
-    do {                                                                                                                              \
-        /* convert char to wchar32 */                                                                                                 \
-        TTempBuf tmpbuf1(sbuf.length() * sizeof(wchar32));                                                                            \
+#define TEST_WCHAR32(sbuf, wbuf, enc)                                                                                                 \ 
+    do {                                                                                                                              \ 
+        /* convert char to wchar32 */                                                                                                 \ 
+        TTempBuf tmpbuf1(sbuf.length() * sizeof(wchar32));                                                                            \ 
         const TBasicStringBuf<wchar32> s4buf = NDetail::NBaseOps::Recode<char>(sbuf, reinterpret_cast<wchar32*>(tmpbuf1.Data()), enc); \
-                                                                                                                                      \
-        /* convert wchar32 to char */                                                                                                 \
-        TTempBuf tmpbuf2(s4buf.length() * 4);                                                                                         \
-        const TStringBuf s1buf = NDetail::NBaseOps::Recode(s4buf, tmpbuf2.Data(), enc);                                               \
-                                                                                                                                      \
-        /* convert wchar32 to wchar16 */                                                                                              \
-        const TUtf16String wstr2 = UTF32ToWide(s4buf.data(), s4buf.length());                                                         \
-                                                                                                                                      \
-        /* test conversions */                                                                                                        \
-        UNIT_ASSERT_VALUES_EQUAL(sbuf, s1buf);                                                                                        \
-        UNIT_ASSERT_VALUES_EQUAL(wbuf, wstr2);                                                                                        \
-    } while (false)
+                                                                                                                                      \ 
+        /* convert wchar32 to char */                                                                                                 \ 
+        TTempBuf tmpbuf2(s4buf.length() * 4);                                                                                         \ 
+        const TStringBuf s1buf = NDetail::NBaseOps::Recode(s4buf, tmpbuf2.Data(), enc);                                               \ 
+                                                                                                                                      \ 
+        /* convert wchar32 to wchar16 */                                                                                              \ 
+        const TUtf16String wstr2 = UTF32ToWide(s4buf.data(), s4buf.length());                                                         \ 
+                                                                                                                                      \ 
+        /* test conversions */                                                                                                        \ 
+        UNIT_ASSERT_VALUES_EQUAL(sbuf, s1buf);                                                                                        \ 
+        UNIT_ASSERT_VALUES_EQUAL(wbuf, wstr2);                                                                                        \ 
+    } while (false) 
 
 void TConversionTest::TestCharToWide() {
     TUtf16String w = CharToWide(YandexText, CODES_YANDEX);
@@ -210,7 +210,7 @@ void TConversionTest::TestYandexEncoding() {
     UNIT_ASSERT(w == wideCyrillicAlphabet);
 
     const char* utf8NonBMP2 = "ab\xf4\x80\x89\x87n";
-    wchar16 wNonBMPDummy2[] = {'a', 'b', 0xDBC0, 0xDE47, 'n'};
+    wchar16 wNonBMPDummy2[] = {'a', 'b', 0xDBC0, 0xDE47, 'n'}; 
     TestSurrogates(utf8NonBMP2, wNonBMPDummy2, Y_ARRAY_SIZE(wNonBMPDummy2), CODES_UTF8);
 
     {
@@ -232,7 +232,7 @@ void TConversionTest::TestRecodeIntoString() {
     TString sYandex(UnicodeText.size() * 4, 'x');
     const char* sdata = sYandex.data();
     TStringBuf sres = NDetail::Recode<wchar16>(UnicodeText, sYandex, CODES_YANDEX);
-    UNIT_ASSERT(sYandex == YandexText); // same content
+    UNIT_ASSERT(sYandex == YandexText); // same content 
     UNIT_ASSERT(sYandex.data() == sdata);     // reserved buffer reused
     UNIT_ASSERT(sYandex.data() == sres.data());     // same buffer
     UNIT_ASSERT(sYandex.size() == sres.size());     // same size
@@ -242,7 +242,7 @@ void TConversionTest::TestRecodeIntoString() {
     sUnicode.reserve(YandexText.size() * 4);
     const wchar16* wdata = sUnicode.data();
     TWtringBuf wres = NDetail::Recode<char>(YandexText, sUnicode, CODES_YANDEX);
-    UNIT_ASSERT(sUnicode == UnicodeText); // same content
+    UNIT_ASSERT(sUnicode == UnicodeText); // same content 
     UNIT_ASSERT(sUnicode.data() == wdata);      // reserved buffer reused
     UNIT_ASSERT(sUnicode.data() == wres.data());      // same buffer
     UNIT_ASSERT(sUnicode.size() == wres.size());      // same size
@@ -250,8 +250,8 @@ void TConversionTest::TestRecodeIntoString() {
     TString sUtf8 = " ";
     size_t scap = sUtf8.capacity();
     sres = NDetail::Recode<wchar16>(UnicodeText, sUtf8, CODES_UTF8);
-    UNIT_ASSERT(sUtf8 == UTF8Text);       // same content
-    UNIT_ASSERT(sUtf8.capacity() > scap); // increased buffer capacity (supplied was too small)
+    UNIT_ASSERT(sUtf8 == UTF8Text);       // same content 
+    UNIT_ASSERT(sUtf8.capacity() > scap); // increased buffer capacity (supplied was too small) 
     UNIT_ASSERT(sUtf8.data() == sres.data());         // same buffer
     UNIT_ASSERT(sUtf8.size() == sres.size());         // same size
     TEST_WCHAR32(sUtf8, UnicodeText, CODES_UTF8);
@@ -260,7 +260,7 @@ void TConversionTest::TestRecodeIntoString() {
     wdata = sUnicode.data();
     TUtf16String copy = sUnicode; // increase ref-counter
     wres = NDetail::Recode<char>(UTF8Text, sUnicode, CODES_UTF8);
-    UNIT_ASSERT(sUnicode == UnicodeText); // same content
+    UNIT_ASSERT(sUnicode == UnicodeText); // same content 
 #ifndef TSTRING_IS_STD_STRING
     UNIT_ASSERT(sUnicode.data() != wdata);      // re-allocated (shared buffer supplied)
     UNIT_ASSERT(sUnicode.data() == wres.data());      // same buffer

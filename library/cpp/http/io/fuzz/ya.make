@@ -1,18 +1,18 @@
 FUZZ()
-
+ 
 OWNER(
     pg
     g:util
 )
-
-PEERDIR(
+ 
+PEERDIR( 
     library/cpp/http/io
-)
-
+) 
+ 
 SIZE(MEDIUM)
 
-SRCS(
-    main.cpp
-)
-
-END()
+SRCS( 
+    main.cpp 
+) 
+ 
+END() 

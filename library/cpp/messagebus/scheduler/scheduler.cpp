@@ -11,14 +11,14 @@ using namespace NBus::NPrivate;
 
 class TScheduleDeadlineCompare {
 public:
-    bool operator()(const IScheduleItemAutoPtr& i1, const IScheduleItemAutoPtr& i2) const noexcept {
+    bool operator()(const IScheduleItemAutoPtr& i1, const IScheduleItemAutoPtr& i2) const noexcept { 
         return i1->GetScheduleTime() > i2->GetScheduleTime();
     }
 };
 
 TScheduler::TScheduler()
     : StopThread(false)
-    , Thread([&] { this->SchedulerThread(); })
+    , Thread([&] { this->SchedulerThread(); }) 
 {
 }
 

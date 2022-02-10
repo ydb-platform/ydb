@@ -1,4 +1,4 @@
-#include "aligned.h"
+#include "aligned.h" 
 
 size_t TAlignedInput::DoRead(void* ptr, size_t len) {
     size_t ret = Stream_->Read(ptr, len);

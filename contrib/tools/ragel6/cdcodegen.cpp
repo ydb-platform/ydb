@@ -654,20 +654,20 @@ string FsmCodeGen::WIDE_ALPH_TYPE()
 void FsmCodeGen::STATE_IDS()
 {
 	if ( redFsm->startState != 0 )
-		STATIC_VAR( "int", START() ) << " = " << START_STATE_ID() << "};\n";
+		STATIC_VAR( "int", START() ) << " = " << START_STATE_ID() << "};\n"; 
 
 	if ( !noFinal )
-		STATIC_VAR( "int" , FIRST_FINAL() ) << " = " << FIRST_FINAL_STATE() << "};\n";
+		STATIC_VAR( "int" , FIRST_FINAL() ) << " = " << FIRST_FINAL_STATE() << "};\n"; 
 
 	if ( !noError )
-		STATIC_VAR( "int", ERROR() ) << " = " << ERROR_STATE() << "};\n";
+		STATIC_VAR( "int", ERROR() ) << " = " << ERROR_STATE() << "};\n"; 
 
 	out << "\n";
 
 	if ( !noEntry && entryPointNames.length() > 0 ) {
 		for ( EntryNameVect::Iter en = entryPointNames; en.lte(); en++ ) {
 			STATIC_VAR( "int", DATA_PREFIX() + "en_" + *en ) << 
-					" = " << entryPointIds[en.pos()] << "};\n";
+					" = " << entryPointIds[en.pos()] << "};\n"; 
 		}
 		out << "\n";
 	}
@@ -719,7 +719,7 @@ std::ostream &CCodeGen::CLOSE_ARRAY()
 
 std::ostream &CCodeGen::STATIC_VAR( string type, string name )
 {
-	out << "enum {" << name;
+	out << "enum {" << name; 
 	return out;
 }
 

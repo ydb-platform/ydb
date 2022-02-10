@@ -4,11 +4,11 @@
 #include <util/generic/noncopyable.h>
 #include <util/system/file.h>
 
-enum class EFileLockType {
+enum class EFileLockType { 
     Exclusive,
     Shared
 };
-
+ 
 class TFileLock: public TFile {
 public:
     TFileLock(const TString& filename, const EFileLockType type = EFileLockType::Exclusive);

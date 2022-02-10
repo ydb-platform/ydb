@@ -3,7 +3,7 @@
 
 #include <util/generic/vector.h>
 #include <util/generic/ymath.h>
-#include <util/random/random.h>
+#include <util/random/random.h> 
 
 #include <util/system/defaults.h>
 
@@ -200,14 +200,14 @@ Y_UNIT_TEST_SUITE(TLinearRegressionTest) {
         }
         const double intercept = 10;
 
-        TVector<TVector<double>> featuresMatrix;
+        TVector<TVector<double>> featuresMatrix; 
         TVector<double> goals;
         TVector<double> weights;
 
         for (size_t instanceNumber = 0; instanceNumber < instancesCount; ++instanceNumber) {
             TVector<double> features;
             for (size_t featureNumber = 0; featureNumber < featuresCount; ++featureNumber) {
-                features.push_back(RandomNumber<double>());
+                features.push_back(RandomNumber<double>()); 
             }
             featuresMatrix.push_back(features);
 

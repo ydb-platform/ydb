@@ -6,7 +6,7 @@
 using namespace NProtoBuf;
 
 Y_UNIT_TEST_SUITE(ProtobufMerge) {
-    static void InitProto(NProtobufUtilUt::TMergeTest & p, bool isSrc) {
+    static void InitProto(NProtobufUtilUt::TMergeTest & p, bool isSrc) { 
         size_t start = isSrc ? 0 : 100;
 
         p.AddMergeInt(start + 1);
@@ -40,10 +40,10 @@ Y_UNIT_TEST_SUITE(ProtobufMerge) {
         InitProto(src, true);
         InitProto(dst, false);
 
-        //        Cerr << "\nsrc: " << src.ShortDebugString() << Endl;
-        //        Cerr << "dst: " << dst.ShortDebugString() << Endl;
+        //        Cerr << "\nsrc: " << src.ShortDebugString() << Endl; 
+        //        Cerr << "dst: " << dst.ShortDebugString() << Endl; 
         NProtoBuf::CustomMerge(src, dst);
-        //        Cerr << "dst2:" << dst.ShortDebugString() << Endl;
+        //        Cerr << "dst2:" << dst.ShortDebugString() << Endl; 
 
         // repeated uint32 MergeInt   = 1;
         UNIT_ASSERT_EQUAL(dst.MergeIntSize(), 4);

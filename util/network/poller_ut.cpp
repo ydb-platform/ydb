@@ -14,16 +14,16 @@ Y_UNIT_TEST_SUITE(TSocketPollerTest) {
         TSocketHolder s2(sockets[1]);
 
         TSocketPoller poller;
-        poller.WaitRead(sockets[1], (void*)17);
+        poller.WaitRead(sockets[1], (void*)17); 
 
         UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero()));
         UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero()));
 
         for (ui32 i = 0; i < 3; ++i) {
-            char buf[] = {18};
+            char buf[] = {18}; 
             UNIT_ASSERT_VALUES_EQUAL(1, send(sockets[0], buf, 1, 0));
 
-            UNIT_ASSERT_VALUES_EQUAL((void*)17, poller.WaitT(TDuration::Zero()));
+            UNIT_ASSERT_VALUES_EQUAL((void*)17, poller.WaitT(TDuration::Zero())); 
 
             UNIT_ASSERT_VALUES_EQUAL(1, recv(sockets[1], buf, 1, 0));
             UNIT_ASSERT_VALUES_EQUAL(18, buf[0]);
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TSocketPollerTest) {
         UNIT_ASSERT_VALUES_EQUAL(nullptr, poller.WaitT(TDuration::Zero()));
 
         for (ui32 i = 0; i < 3; ++i) {
-            poller.WaitReadOneShot(sockets[1], (void*)17);
+            poller.WaitReadOneShot(sockets[1], (void*)17); 
 
             char buf[1];
 
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TSocketPollerTest) {
 
             UNIT_ASSERT_VALUES_EQUAL(1, send(sockets[0], buf, 1, 0));
 
-            UNIT_ASSERT_VALUES_EQUAL((void*)17, poller.WaitT(TDuration::Zero()));
+            UNIT_ASSERT_VALUES_EQUAL((void*)17, poller.WaitT(TDuration::Zero())); 
 
             UNIT_ASSERT_VALUES_EQUAL(1, recv(sockets[1], buf, 1, 0));
             UNIT_ASSERT_VALUES_EQUAL(char(i + 20), buf[0]);
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(TSocketPollerTest) {
 
             // after restart read and write might generate separate events
             {
-                void* events[3];
+                void* events[3]; 
                 size_t count = poller.WaitT(events, 3, TDuration::Zero());
                 UNIT_ASSERT_GE(count, 1);
                 UNIT_ASSERT_LE(count, 2);
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(TSocketPollerTest) {
         UNIT_ASSERT_VALUES_EQUAL(1, send(s1, buf, 1, 0));
         shutdown(s1, SHUT_WR);
 
-        using TPoller = TGenericPoller<TEpollPoller<TWithoutLocking>>;
+        using TPoller = TGenericPoller<TEpollPoller<TWithoutLocking>>; 
         TPoller poller;
         poller.Set((void*)17, s2, CONT_POLL_RDHUP);
 

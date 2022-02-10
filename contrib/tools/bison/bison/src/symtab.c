@@ -173,7 +173,7 @@ symbol_print (symbol const *s, FILE *f)
 static bool
 is_identifier (uniqstr s)
 {
-  static char const alphanum[26 + 26 + 1 + 10 + 1] =
+  static char const alphanum[26 + 26 + 1 + 10 + 1] = 
     "abcdefghijklmnopqrstuvwxyz"
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "_"

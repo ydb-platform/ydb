@@ -117,7 +117,7 @@ namespace NActors {
         }
 
     private:
-        TEvFreeItems* GetPendingEvent() {
+        TEvFreeItems* GetPendingEvent() { 
             if (!PendingFreeEvent) {
                 PendingFreeEvent.Reset(new TEvFreeItems);
             }
@@ -125,4 +125,4 @@ namespace NActors {
         }
     };
 
-}
+} 

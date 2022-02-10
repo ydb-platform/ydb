@@ -1,35 +1,35 @@
 #pragma once
-
+ 
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
 #include <util/system/yassert.h>
+ 
+inline static char DigitToChar(unsigned char digit) { 
+    if (digit < 10) { 
+        return (char)digit + '0'; 
+    } 
+ 
+    return (char)(digit - 10) + 'A'; 
+} 
+ 
+extern const char* const Char2DigitTable; 
 
-inline static char DigitToChar(unsigned char digit) {
-    if (digit < 10) {
-        return (char)digit + '0';
-    }
-
-    return (char)(digit - 10) + 'A';
-}
-
-extern const char* const Char2DigitTable;
-
-inline static int Char2Digit(char ch) {
+inline static int Char2Digit(char ch) { 
     char result = Char2DigitTable[(unsigned char)ch];
     Y_ENSURE(result != '\xff', "invalid hex character " << (int)ch);
     return result;
-}
-
+} 
+ 
 //! Convert a hex string of exactly 2 chars to int
 /*! @example String2Byte("10") => 16 */
 inline static int String2Byte(const char* s) {
-    return Char2Digit(*s) * 16 + Char2Digit(*(s + 1));
-}
-
+    return Char2Digit(*s) * 16 + Char2Digit(*(s + 1)); 
+} 
+ 
 char* HexEncode(const void* in, size_t len, char* out);
-
+ 
 TString HexEncode(const void* in, size_t len);
-
+ 
 inline TString HexEncode(const TStringBuf h) {
     return HexEncode(h.data(), h.size());
 }

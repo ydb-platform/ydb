@@ -99,10 +99,10 @@ public:
     const TDateTimeFields& GetDateTimeFields() const {
         return DateTimeFields;
     }
-
+ 
 protected:
     TDateTimeFields DateTimeFields;
-    int cs; //for ragel
+    int cs; //for ragel 
     int Sign;
     int I;
     int Dc;
@@ -111,8 +111,8 @@ protected:
     TDateTimeParserBase()
         : DateTimeFields()
         , cs(0)
-        , Sign(0)
-        , I(0xDEADBEEF) // to guarantee unittest break if ragel code is incorrect
+        , Sign(0) 
+        , I(0xDEADBEEF) // to guarantee unittest break if ragel code is incorrect 
         , Dc(0xDEADBEEF)
     {
     }
@@ -124,10 +124,10 @@ protected:
     }
 };
 
-#define DECLARE_PARSER(CLASS)                            \
-    struct CLASS: public TDateTimeParserBase {           \
-        CLASS();                                         \
-        bool ParsePart(const char* input, size_t len);   \
+#define DECLARE_PARSER(CLASS)                            \ 
+    struct CLASS: public TDateTimeParserBase {           \ 
+        CLASS();                                         \ 
+        bool ParsePart(const char* input, size_t len);   \ 
         TInstant GetResult(TInstant defaultValue) const; \
     };
 
@@ -278,11 +278,11 @@ protected:
     }
 };
 
-#define DECLARE_PARSER(CLASS)                            \
-    struct CLASS: public TDateTimeParserBaseDeprecated { \
-        CLASS();                                         \
-        bool ParsePart(const char* input, size_t len);   \
-        TInstant GetResult(TInstant defaultValue) const; \
+#define DECLARE_PARSER(CLASS)                            \ 
+    struct CLASS: public TDateTimeParserBaseDeprecated { \ 
+        CLASS();                                         \ 
+        bool ParsePart(const char* input, size_t len);   \ 
+        TInstant GetResult(TInstant defaultValue) const; \ 
     };
 
 DECLARE_PARSER(TIso8601DateTimeParserDeprecated)

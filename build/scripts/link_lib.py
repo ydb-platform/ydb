@@ -49,18 +49,18 @@ if __name__ == "__main__":
         os.environ['SYM64_THRESHOLD'] = '31'
 
     def call():
-        try:
-            p = subprocess.Popen(cmd, stdin=stdin, cwd=opts.build_root)
-            rc = p.wait()
-            return rc
-        except OSError as e:
-            raise Exception('while running %s: %s' % (' '.join(cmd), e))
+        try: 
+            p = subprocess.Popen(cmd, stdin=stdin, cwd=opts.build_root) 
+            rc = p.wait() 
+            return rc 
+        except OSError as e: 
+            raise Exception('while running %s: %s' % (' '.join(cmd), e)) 
 
-    try:
-        os.unlink(opts.output)
-    except OSError:
-        pass
-
+    try: 
+        os.unlink(opts.output) 
+    except OSError: 
+        pass 
+ 
     if not opts.libs:
         cmd = [opts.archiver] + opts.create_flags + opts.plugin_flags + [opts.output] + opts.objs
         stdin = None

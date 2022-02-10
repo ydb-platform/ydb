@@ -27,7 +27,7 @@
 template <class T, class D, class S>
 class TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl {
 protected:
-    TMemoryPool Pool;
+    TMemoryPool Pool; 
     size_t PayloadSize;
     THolder<TFixedSizeAllocator> NodeAllocator;
     class TNode;
@@ -138,7 +138,7 @@ public:
             Y_ASSERT(reinterpret_cast<ISubtree*>(this) == static_cast<void*>(this)); // This assumption is used in TNode::Subtree()
         }
 
-        iterator Find(char ch);
+        iterator Find(char ch); 
         const_iterator Find(char ch) const;
         void Add(const TBlob& s, TNode* node);
 
@@ -422,8 +422,8 @@ public:
 template <class T, class D, class S>
 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilder(TCompactTrieBuilderFlags flags, TPacker packer, IAllocator* alloc)
     : Impl(new TCompactTrieBuilderImpl(flags, packer, alloc))
-{
-}
+{ 
+} 
 
 template <class T, class D, class S>
 bool TCompactTrieBuilder<T, D, S>::Add(const TSymbol* key, size_t keylen, const TData& value) {
@@ -742,7 +742,7 @@ bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindLongestPrefixImp
 template <class T, class D, class S>
 void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::Clear() {
     DestroyNode(Root);
-    Pool.Clear();
+    Pool.Clear(); 
     NodeAllocator.Reset(new TFixedSizeAllocator(sizeof(TNode) + PayloadSize, TDefaultAllocator::Instance()));
     Root = new (*NodeAllocator) TNode;
     EntryCount = 0;
@@ -980,11 +980,11 @@ ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSaveAndDestroy(co
 template <class T, class D, class S>
 typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::iterator
                     TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::Find(char ch) {
-    using namespace NCompTriePrivate;
-    iterator it = LowerBound(this->begin(), this->end(), ch, TCmp());
-
+    using namespace NCompTriePrivate; 
+    iterator it = LowerBound(this->begin(), this->end(), ch, TCmp()); 
+ 
     if (it != this->end() && it->Label[0] == (unsigned char)ch) {
-        return it;
+        return it; 
     }
 
     return this->end();
@@ -1005,7 +1005,7 @@ typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::
 
 template <class T, class D, class S>
 void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::Add(const TBlob& s, TNode* node) {
-    using namespace NCompTriePrivate;
+    using namespace NCompTriePrivate; 
     this->insert(LowerBound(this->begin(), this->end(), s[0], TCmp()), TArc(s, node));
 }
 

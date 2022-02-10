@@ -7,8 +7,8 @@ namespace {
         int i;
         TFoo()
             : i(0)
-        {
-        }
+        { 
+        } 
     };
 }
 

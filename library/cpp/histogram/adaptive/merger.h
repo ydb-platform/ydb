@@ -6,7 +6,7 @@ namespace NKiwiAggr {
     class IMerger {
     private:
         bool IsMerged;
-        ui32 AutoMergeInterval; // Call Merge() after each AutoMergeInterval calls of Add(); zero means no autoMerge
+        ui32 AutoMergeInterval; // Call Merge() after each AutoMergeInterval calls of Add(); zero means no autoMerge 
         ui32 NotMergedCount;
 
     public:
@@ -17,7 +17,7 @@ namespace NKiwiAggr {
         {
         }
 
-        virtual ~IMerger() {
+        virtual ~IMerger() { 
         }
 
         // returns true if something is added
@@ -65,4 +65,4 @@ namespace NKiwiAggr {
         virtual void ResetImpl() = 0;
     };
 
-}
+} 

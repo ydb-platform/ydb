@@ -52,14 +52,14 @@ public:
     TIteratorRange()
         : Begin_()
         , End_()
-    {
-    }
+    { 
+    } 
 
     TIteratorRange(TIterator begin, TIterator end)
         : Begin_(begin)
         , End_(end)
-    {
-    }
+    { 
+    } 
 
     TIterator begin() const {
         return Begin_;
@@ -69,7 +69,7 @@ public:
         return End_;
     }
 
-    Y_PURE_FUNCTION bool empty() const {
+    Y_PURE_FUNCTION bool empty() const { 
         return Begin_ == End_;
     }
 

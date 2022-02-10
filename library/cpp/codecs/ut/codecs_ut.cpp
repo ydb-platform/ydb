@@ -13,107 +13,107 @@
 #include <library/cpp/string_utils/relaxed_escaper/relaxed_escaper.h>
 
 namespace {
-    const char* TextValues[] = {
-        "! сентября газета",
-        "!(возмездие это)!",
-        "!(материнский капитал)",
-        "!(пермь березники)",
-        "!биография | !жизнь / + розинг | зворыгин & изобретение | телевидение | электронно лучевая трубка",
-        "!овсиенко николай павлович",
-        "!путин",
-        "\"i'm on you\" p. diddy тимати клип",
-        "\"билайн\" представит собственный планшет",
-        "\"в особо крупном размере\"",
-        "\"викиликс\" джулиан ассанж",
-        "\"вимм билль данн",
-        "\"газэнергосеть астрахань",
-        "\"газэнергосеть астрахань\"",
-        "\"домодедово\" ту-154",
-        "\"жилина\" \"спартак\" видео",
-        "\"зелёнsq шершнm\"",
-        "\"зелёного шершня\"",
-        "\"золотой граммофон\" марины яблоковой",
-        "\"золотой граммофон-2010\"",
-        "\"калинниковы\"",
-        "\"манчестер юнайтед\" (англия) \"валенсия\" (испания) 1:1 (0:1)",
-        "\"маркер\"",
-        "\"моника\" засыпает москву снегом",
-        "\"моника\" снегопад",
-        "\"о безопасности\",",
-        "\"памятку\" для пассажиров воздушных международных рейсов",
-        "\"петровский парк\" и \"ходынское поле\"",
-        "\"путинская\" трава",
-        "\"пятерочка\"купила \"копейку\"",
-        "\"пятёрочка\" и \"копейка\" объединились",
-        "\"реал\" \"осер\" 4:0",
-        "\"речь мутко\"",
-        "\"российский лес 2010\"",
-        "\"ростехинвентаризация федеральное бти\" рубцов",
-        "\"саня останется с нами\",",
-        "\"следопыт\" реалити шоу",
-        "\"слышишь\" молодые авторы",
-        "\"стадион\"",
-        "\"ходынское поле\" метро",
-        "\"хроники нарнии\"",
-        "\"чистая вода\"",
-        "\"школа деда мороза\"",
-        "# asus -1394",
-        "# сторонники wikileaks",
-        "#106#",
-        "#11",
-        "#8 какой цвет",
-        "#если клиент",
-        "$ 13,79",
-        "$ xnj ,s dct ,skb ljdjkmys !!!",
-        "$ в день",
-        "$ диск компьютера",
-        "$.ajax",
-        "$125 000",
-        "$курс",
-        "% в си",
-        "% влады",
-        "% годовых",
-        "% женщин и % мужчин в россии",
-        "% занятости персонала",
-        "% инфляции 2010",
-        "% инфляции в 2010 г.",
-        "% налога",
-        "% налогов в 2010г.",
-        "% общего количества",
-        "% от числа",
-        "% по налогу на прибыль организации",
-        "%24",
-        "%академия%",
-        "%комарова%татьяна",
-        "& в 1с",
-        "&& (+не существует | !такой проблемы)",
-        "&gt;&gt;&gt;скачать | download c cs strikez.clan.su&lt;&lt;&lt;",
-        "&gt;hbq nbityrjd",
-        "&lt; какой знак",
-        "&lt; лицей | &lt; техническая школа# &lt; история#&lt; лицей сегодня#&lt; перечень профессий#&lt; руководство лицея#&lt; прием учащихся#&lt; контакты#&lt; схема проезда#&lt; фотогалереяистория создания лицея и основные этапы путиулица купчинская дом 28",
-        "&lt;&lt;link&gt;&gt;",
-        "&lt;/storage&gt;",
-        "&lt;bfnkjy",
-        "&lt;bktntd",
-        "&lt;cr",
-        "&lt;ddr3&gt;",
-        "&lt;e[ufknthcrbq abyfycjdsq",
-        "&lt;fcctqys",
-        "&lt;fhcf",
-        "&lt;fhctkjyf he,by",
-        "&lt;firbhbz",
-        "&lt;fyr djphj;ltybt",
-        "&lt;fyr vjcrds",
-        "&lt;fyr резерв",
-        "&lt;fyufkjh",
-        "&lt;index&gt;",
-        "&lt;jkmifz jrhe;yfz rbtd",
-        "&lt;kbpytws",
-        "&lt;megafon&gt; интернет",
-        "&lt;thtpybrb gthvcrbq rhfq",
-        "&lt;tkjxrf",
-        "&lt;беларусь это мы",
-        "&lt;бокс, версия ibf",
+    const char* TextValues[] = { 
+        "! сентября газета", 
+        "!(возмездие это)!", 
+        "!(материнский капитал)", 
+        "!(пермь березники)", 
+        "!биография | !жизнь / + розинг | зворыгин & изобретение | телевидение | электронно лучевая трубка", 
+        "!овсиенко николай павлович", 
+        "!путин", 
+        "\"i'm on you\" p. diddy тимати клип", 
+        "\"билайн\" представит собственный планшет", 
+        "\"в особо крупном размере\"", 
+        "\"викиликс\" джулиан ассанж", 
+        "\"вимм билль данн", 
+        "\"газэнергосеть астрахань", 
+        "\"газэнергосеть астрахань\"", 
+        "\"домодедово\" ту-154", 
+        "\"жилина\" \"спартак\" видео", 
+        "\"зелёнsq шершнm\"", 
+        "\"зелёного шершня\"", 
+        "\"золотой граммофон\" марины яблоковой", 
+        "\"золотой граммофон-2010\"", 
+        "\"калинниковы\"", 
+        "\"манчестер юнайтед\" (англия) \"валенсия\" (испания) 1:1 (0:1)", 
+        "\"маркер\"", 
+        "\"моника\" засыпает москву снегом", 
+        "\"моника\" снегопад", 
+        "\"о безопасности\",", 
+        "\"памятку\" для пассажиров воздушных международных рейсов", 
+        "\"петровский парк\" и \"ходынское поле\"", 
+        "\"путинская\" трава", 
+        "\"пятерочка\"купила \"копейку\"", 
+        "\"пятёрочка\" и \"копейка\" объединились", 
+        "\"реал\" \"осер\" 4:0", 
+        "\"речь мутко\"", 
+        "\"российский лес 2010\"", 
+        "\"ростехинвентаризация федеральное бти\" рубцов", 
+        "\"саня останется с нами\",", 
+        "\"следопыт\" реалити шоу", 
+        "\"слышишь\" молодые авторы", 
+        "\"стадион\"", 
+        "\"ходынское поле\" метро", 
+        "\"хроники нарнии\"", 
+        "\"чистая вода\"", 
+        "\"школа деда мороза\"", 
+        "# asus -1394", 
+        "# сторонники wikileaks", 
+        "#106#", 
+        "#11", 
+        "#8 какой цвет", 
+        "#если клиент", 
+        "$ 13,79", 
+        "$ xnj ,s dct ,skb ljdjkmys !!!", 
+        "$ в день", 
+        "$ диск компьютера", 
+        "$.ajax", 
+        "$125 000", 
+        "$курс", 
+        "% в си", 
+        "% влады", 
+        "% годовых", 
+        "% женщин и % мужчин в россии", 
+        "% занятости персонала", 
+        "% инфляции 2010", 
+        "% инфляции в 2010 г.", 
+        "% налога", 
+        "% налогов в 2010г.", 
+        "% общего количества", 
+        "% от числа", 
+        "% по налогу на прибыль организации", 
+        "%24", 
+        "%академия%", 
+        "%комарова%татьяна", 
+        "& в 1с", 
+        "&& (+не существует | !такой проблемы)", 
+        "&gt;&gt;&gt;скачать | download c cs strikez.clan.su&lt;&lt;&lt;", 
+        "&gt;hbq nbityrjd", 
+        "&lt; какой знак", 
+        "&lt; лицей | &lt; техническая школа# &lt; история#&lt; лицей сегодня#&lt; перечень профессий#&lt; руководство лицея#&lt; прием учащихся#&lt; контакты#&lt; схема проезда#&lt; фотогалереяистория создания лицея и основные этапы путиулица купчинская дом 28", 
+        "&lt;&lt;link&gt;&gt;", 
+        "&lt;/storage&gt;", 
+        "&lt;bfnkjy", 
+        "&lt;bktntd", 
+        "&lt;cr", 
+        "&lt;ddr3&gt;", 
+        "&lt;e[ufknthcrbq abyfycjdsq", 
+        "&lt;fcctqys", 
+        "&lt;fhcf", 
+        "&lt;fhctkjyf he,by", 
+        "&lt;firbhbz", 
+        "&lt;fyr djphj;ltybt", 
+        "&lt;fyr vjcrds", 
+        "&lt;fyr резерв", 
+        "&lt;fyufkjh", 
+        "&lt;index&gt;", 
+        "&lt;jkmifz jrhe;yfz rbtd", 
+        "&lt;kbpytws", 
+        "&lt;megafon&gt; интернет", 
+        "&lt;thtpybrb gthvcrbq rhfq", 
+        "&lt;tkjxrf", 
+        "&lt;беларусь это мы", 
+        "&lt;бокс, версия ibf", 
         "designer tree svc",
         "seriesg810",
         "doll makers",
@@ -854,11 +854,11 @@ namespace {
         "resume maker",
         "lymphomatoid papulosis",
         "sez.com",
-    };
+    }; 
 }
 
 class TCodecsTest: public TTestBase {
-    UNIT_TEST_SUITE(TCodecsTest);
+    UNIT_TEST_SUITE(TCodecsTest); 
     UNIT_TEST(TestPipeline)
     UNIT_TEST(TestDelta)
     UNIT_TEST(TestHuffman)
@@ -869,14 +869,14 @@ class TCodecsTest: public TTestBase {
     UNIT_TEST(TestPFor)
     UNIT_TEST(TestRegistry)
 
-    UNIT_TEST_SUITE_END();
+    UNIT_TEST_SUITE_END(); 
 
 private:
     TString PrintError(TStringBuf learn, TStringBuf test, TStringBuf codec, ui32 i) {
         TString s;
         TStringOutput sout(s);
-        sout << codec << ": " << i << ", "
-             << "\n";
+        sout << codec << ": " << i << ", " 
+             << "\n"; 
         sout << HexEncode(learn.data(), learn.size()); //NEscJ::EscapeJ<true>(learn, sout);
         sout << " != \n";
         sout << HexEncode(test.data(), test.size()); //NEscJ::EscapeJ<true>(test, sout);
@@ -1009,8 +1009,8 @@ private:
         AppendTo(d.back(), -1LL);
         AppendTo(d.back(), -1LL);
 
-        TestCodec<TDeltaCodec<ui64, true>, false>(d);
-        TestCodec<TDeltaCodec<ui64, false>, false>(d);
+        TestCodec<TDeltaCodec<ui64, true>, false>(d); 
+        TestCodec<TDeltaCodec<ui64, false>, false>(d); 
     }
 
     void TestPFor() {
@@ -1050,7 +1050,7 @@ private:
             AppendTo(d.back(), -1LL);
             AppendTo(d.back(), -2LL);
 
-            TestCodec<TPForCodec<ui64>, false>(d);
+            TestCodec<TPForCodec<ui64>, false>(d); 
             TestCodec<TPForCodec<ui64, true>, true>(d);
         }
         {
@@ -1080,7 +1080,7 @@ private:
             AppendTo(d.back(), -1);
             AppendTo(d.back(), -2);
 
-            TestCodec<TPForCodec<ui32>, false>(d);
+            TestCodec<TPForCodec<ui32>, false>(d); 
             TestCodec<TPForCodec<ui32, true>, false>(d);
         }
         {
@@ -1326,7 +1326,7 @@ private:
             }
 
             TestCodec<TPipelineCodec, true>(learn, test,
-                                            new TPipelineCodec(new TSolarCodec(512, 8), new TSolarCodec(512, 8), new THuffmanCodec));
+                                            new TPipelineCodec(new TSolarCodec(512, 8), new TSolarCodec(512, 8), new THuffmanCodec)); 
         }
         {
             TVector<TBuffer> d;
@@ -1338,7 +1338,7 @@ private:
             }
 
             TestCodec<TPipelineCodec, false>(d, TVector<TBuffer>(),
-                                             new TPipelineCodec(new TDeltaCodec<ui32, false>, new TPForCodec<ui32>));
+                                             new TPipelineCodec(new TDeltaCodec<ui32, false>, new TPForCodec<ui32>)); 
         }
     }
 

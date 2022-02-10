@@ -1,10 +1,10 @@
-#include "src_location.h"
-
-#include <util/stream/output.h>
-
+#include "src_location.h" 
+ 
+#include <util/stream/output.h> 
+ 
 #include <algorithm>
 
-template <>
+template <> 
 void Out<TSourceLocation>(IOutputStream& o, const TSourceLocation& t) {
 #if defined(_win_)
     TString file(t.File);
@@ -14,4 +14,4 @@ void Out<TSourceLocation>(IOutputStream& o, const TSourceLocation& t) {
     o << t.File;
 #endif
     o << ':' << t.Line;
-}
+} 

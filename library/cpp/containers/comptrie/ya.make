@@ -1,4 +1,4 @@
-LIBRARY()
+LIBRARY() 
 
 OWNER(velavokr)
 
@@ -12,9 +12,9 @@ SRCS(
     key_selector.h
     leaf_skipper.h
     set.h
-    comptrie.cpp
+    comptrie.cpp 
     comptrie_builder.cpp
-    comptrie_impl.cpp
+    comptrie_impl.cpp 
     make_fast_layout.cpp
     minimize.cpp
     node.cpp

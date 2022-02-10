@@ -1,45 +1,45 @@
-#include "cast.h"
-
+#include "cast.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
-class TGenericCastsTest: public TTestBase {
-    UNIT_TEST_SUITE(TGenericCastsTest);
-    UNIT_TEST(TestVerifyDynamicCast)
-    UNIT_TEST(TestIntegralCast)
+ 
+class TGenericCastsTest: public TTestBase { 
+    UNIT_TEST_SUITE(TGenericCastsTest); 
+    UNIT_TEST(TestVerifyDynamicCast) 
+    UNIT_TEST(TestIntegralCast) 
     UNIT_TEST(TestEnumCast)
     UNIT_TEST(TestToUnderlying)
     UNIT_TEST(TestBitCast)
-    UNIT_TEST_SUITE_END();
-
-private:
-    struct TAaa {
+    UNIT_TEST_SUITE_END(); 
+ 
+private: 
+    struct TAaa { 
         virtual ~TAaa() = default;
-    };
-    struct TBbb: public TAaa {};
+    }; 
+    struct TBbb: public TAaa {}; 
 
-    inline void TestVerifyDynamicCast() {
-        TBbb bbb;
-        TAaa* aaa = &bbb;
-        TAaa* aaa2 = VerifyDynamicCast<TBbb*>(aaa);
-        UNIT_ASSERT(aaa == aaa2);
-    }
-
-    void TestIntegralCast() {
-        UNIT_ASSERT_EXCEPTION(SafeIntegerCast<ui32>(-5), TBadCastException);
-        UNIT_ASSERT_EXCEPTION(SafeIntegerCast<ui16>(static_cast<i32>(Max<ui16>() + 10)), TBadCastException);
-        UNIT_ASSERT_EXCEPTION(SafeIntegerCast<ui16>(static_cast<ui32>(Max<ui16>() + 10)), TBadCastException);
-    }
+    inline void TestVerifyDynamicCast() { 
+        TBbb bbb; 
+        TAaa* aaa = &bbb; 
+        TAaa* aaa2 = VerifyDynamicCast<TBbb*>(aaa); 
+        UNIT_ASSERT(aaa == aaa2); 
+    } 
+ 
+    void TestIntegralCast() { 
+        UNIT_ASSERT_EXCEPTION(SafeIntegerCast<ui32>(-5), TBadCastException); 
+        UNIT_ASSERT_EXCEPTION(SafeIntegerCast<ui16>(static_cast<i32>(Max<ui16>() + 10)), TBadCastException); 
+        UNIT_ASSERT_EXCEPTION(SafeIntegerCast<ui16>(static_cast<ui32>(Max<ui16>() + 10)), TBadCastException); 
+    } 
 
     inline void TestEnumCast() {
         enum A {
             AM1 = -1
         };
 
-        enum B: int {
+        enum B: int { 
             BM1 = -1
         };
 
-        enum class C: unsigned short {
+        enum class C: unsigned short { 
             CM1 = 1
         };
 
@@ -61,11 +61,11 @@ private:
             AM1 = -1
         };
 
-        enum B: int {
+        enum B: int { 
             BM1 = -1
         };
 
-        enum class C: unsigned short {
+        enum class C: unsigned short { 
             CM1 = 1
         };
 
@@ -107,6 +107,6 @@ private:
             UNIT_ASSERT_VALUES_EQUAL(structValue.d, 0x11);
         }
     }
-};
-
-UNIT_TEST_SUITE_REGISTRATION(TGenericCastsTest);
+}; 
+ 
+UNIT_TEST_SUITE_REGISTRATION(TGenericCastsTest); 

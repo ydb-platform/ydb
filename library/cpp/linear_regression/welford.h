@@ -9,7 +9,7 @@ class TMeanCalculator {
 private:
     double Mean = 0.;
     TKahanAccumulator<double> SumWeights;
-
+ 
 public:
     Y_SAVELOAD_DEFINE(Mean, SumWeights);
 
@@ -20,11 +20,11 @@ public:
     double GetSumWeights() const;
     void Reset();
 
-    bool operator<(const TMeanCalculator& other) const {
+    bool operator<(const TMeanCalculator& other) const { 
         return Mean < other.Mean;
     }
 
-    bool operator>(const TMeanCalculator& other) const {
+    bool operator>(const TMeanCalculator& other) const { 
         return Mean > other.Mean;
     }
 };
@@ -38,7 +38,7 @@ private:
     double SecondValueMean = 0.;
 
     TKahanAccumulator<double> SumWeights;
-
+ 
 public:
     Y_SAVELOAD_DEFINE(Covariation, FirstValueMean, SecondValueMean, SumWeights);
 
@@ -60,7 +60,7 @@ class TDeviationCalculator {
 private:
     double Deviation = 0.;
     TMeanCalculator MeanCalculator;
-
+ 
 public:
     Y_SAVELOAD_DEFINE(Deviation, MeanCalculator);
 

@@ -1,6 +1,6 @@
-#pragma once
+#pragma once 
 
-#include "defaults.h"
+#include "defaults.h" 
 #include <util/generic/utility.h>
 #include <util/datetime/base.h>
 
@@ -15,7 +15,7 @@ struct TRusage {
     TDuration Stime;
 
     void Fill();
-
+ 
     static size_t GetCurrentRSS();
 
     static TRusage Get() {

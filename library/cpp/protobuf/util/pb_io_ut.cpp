@@ -24,7 +24,7 @@ static NProtobufUtilUt::TTextEnumTest GetCorrectEnumMessage() {
 }
 
 static const TString CORRECT_MESSAGE =
-    R"(Foo: 42
+    R"(Foo: 42 
 )";
 static const TString CORRECT_ENUM_NAME_MESSAGE =
     R"(Slot: EET_SLOT_1
@@ -34,7 +34,7 @@ static const TString CORRECT_ENUM_ID_MESSAGE =
 )";
 
 static const TString INCORRECT_MESSAGE =
-    R"(Bar: 1
+    R"(Bar: 1 
 )";
 static const TString INCORRECT_ENUM_NAME_MESSAGE =
     R"(Slot: EET_SLOT_3
@@ -177,8 +177,8 @@ Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
             NProtobufUtilUt::TTextTest m;
             const auto f = [&correctFileName](NProtobufUtilUt::TTextTest& mm) {
                 mm = ParseFromTextFormat<NProtobufUtilUt::TTextTest>(
-                    correctFileName,
-                    EParseFromTextFormatOption::AllowUnknownField);
+                    correctFileName, 
+                    EParseFromTextFormatOption::AllowUnknownField); 
             };
             UNIT_ASSERT_NO_EXCEPTION(f(m));
             UNIT_ASSERT(NProtoBuf::IsEqual(GetCorrectMessage(), m));
@@ -188,8 +188,8 @@ Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
             NProtobufUtilUt::TTextTest m;
             const auto f = [&incorrectFileName](NProtobufUtilUt::TTextTest& mm) {
                 mm = ParseFromTextFormat<NProtobufUtilUt::TTextTest>(
-                    incorrectFileName,
-                    EParseFromTextFormatOption::AllowUnknownField);
+                    incorrectFileName, 
+                    EParseFromTextFormatOption::AllowUnknownField); 
             };
             UNIT_ASSERT_NO_EXCEPTION(f(m));
             UNIT_ASSERT(NProtoBuf::IsEqual(empty, m));
@@ -354,8 +354,8 @@ Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
             NProtobufUtilUt::TTextTest m;
             const auto f = [&correctFileName](NProtobufUtilUt::TTextTest& mm) {
                 mm = MergeFromTextFormat<NProtobufUtilUt::TTextTest>(
-                    correctFileName,
-                    EParseFromTextFormatOption::AllowUnknownField);
+                    correctFileName, 
+                    EParseFromTextFormatOption::AllowUnknownField); 
             };
             UNIT_ASSERT_NO_EXCEPTION(f(m));
             UNIT_ASSERT(NProtoBuf::IsEqual(GetCorrectMessage(), m));
@@ -365,8 +365,8 @@ Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
             NProtobufUtilUt::TTextTest m;
             const auto f = [&incorrectFileName](NProtobufUtilUt::TTextTest& mm) {
                 mm = MergeFromTextFormat<NProtobufUtilUt::TTextTest>(
-                    incorrectFileName,
-                    EParseFromTextFormatOption::AllowUnknownField);
+                    incorrectFileName, 
+                    EParseFromTextFormatOption::AllowUnknownField); 
             };
             UNIT_ASSERT_NO_EXCEPTION(f(m));
             UNIT_ASSERT(NProtoBuf::IsEqual(empty, m));

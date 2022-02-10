@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TOverloadedTest) {
         auto f = TOverloaded{
             [](const TType1&) {},
             [](const TType2&) {},
-            [](const TType3&) {}};
+            [](const TType3&) {}}; 
         using F = decltype(f);
         static_assert(std::is_invocable_v<F, TType1>);
         static_assert(std::is_invocable_v<F, TType2>);
@@ -39,14 +39,14 @@ Y_UNIT_TEST_SUITE(TOverloadedTest) {
     }
 
     Y_UNIT_TEST(TupleTest) {
-        std::tuple<int, double, bool, int> t{5, 3.14, true, 20};
+        std::tuple<int, double, bool, int> t{5, 3.14, true, 20}; 
         TString res;
 
         ForEach(t, TOverloaded{
-                       [&](int val) { res += "(int) " + ToString(val) + ' '; },
-                       [&](double val) { res += "(double) " + ToString(val) + ' '; },
-                       [&](bool val) { res += "(bool) " + ToString(val) + ' '; },
-                   });
+                       [&](int val) { res += "(int) " + ToString(val) + ' '; }, 
+                       [&](double val) { res += "(double) " + ToString(val) + ' '; }, 
+                       [&](bool val) { res += "(bool) " + ToString(val) + ' '; }, 
+                   }); 
 
         UNIT_ASSERT_VALUES_EQUAL(res, "(int) 5 (double) 3.14 (bool) 1 (int) 20 ");
     }

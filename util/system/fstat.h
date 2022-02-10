@@ -11,9 +11,9 @@ struct TFileStat {
     ui32 Uid = 0;  /* user ID of owner */
     ui32 Gid = 0;  /* group ID of owner */
 
-    ui64 NLinks = 0;         /* number of hard links */
-    ui64 Size = 0;           /* total size, in bytes */
-    ui64 INode = 0;          /* inode number */
+    ui64 NLinks = 0;         /* number of hard links */ 
+    ui64 Size = 0;           /* total size, in bytes */ 
+    ui64 INode = 0;          /* inode number */ 
     ui64 AllocationSize = 0; /* number of bytes allocated on the disk */
 
     time_t ATime = 0; /* time of last access */
@@ -22,7 +22,7 @@ struct TFileStat {
 
 public:
     TFileStat();
-
+ 
     bool IsNull() const noexcept;
 
     bool IsFile() const noexcept;
@@ -34,7 +34,7 @@ public:
     TFileStat(const TFsPath& fileName, bool nofollow = false);
     TFileStat(const TString& fileName, bool nofollow = false);
     TFileStat(const char* fileName, bool nofollow = false);
-
+ 
     friend bool operator==(const TFileStat& l, const TFileStat& r) noexcept;
     friend bool operator!=(const TFileStat& l, const TFileStat& r) noexcept;
 

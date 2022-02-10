@@ -43,9 +43,9 @@ Y_UNIT_TEST_SUITE(TTldTest) {
         UNIT_ASSERT(!IsVeryGoodTld("BMW"));
         UNIT_ASSERT(!IsVeryGoodTld("TiReS"));
         UNIT_ASSERT(IsVeryGoodTld("рф"));
-        UNIT_ASSERT(!IsVeryGoodTld("РФ"));       // note that uppercase non-ascii tlds cannot be found
-        UNIT_ASSERT(IsVeryGoodTld("xn--p1ai"));  // "рф"
-        UNIT_ASSERT(!IsVeryGoodTld("xn--p1ag")); // "ру"
+        UNIT_ASSERT(!IsVeryGoodTld("РФ"));       // note that uppercase non-ascii tlds cannot be found 
+        UNIT_ASSERT(IsVeryGoodTld("xn--p1ai"));  // "рф" 
+        UNIT_ASSERT(!IsVeryGoodTld("xn--p1ag")); // "ру" 
         UNIT_ASSERT(!IsVeryGoodTld("YaHOO"));
         UNIT_ASSERT(!IsVeryGoodTld("xn"));
 

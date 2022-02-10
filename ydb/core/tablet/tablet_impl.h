@@ -34,7 +34,7 @@ struct TEvTabletBase {
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLETBASE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLETBASE)");
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLETBASE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLETBASE)"); 
 
     struct TEvBlockBlobStorageResult : public TEventLocal<TEvBlockBlobStorageResult, EvBlockBlobStorageResult> {
         const NKikimrProto::EReplyStatus Status;

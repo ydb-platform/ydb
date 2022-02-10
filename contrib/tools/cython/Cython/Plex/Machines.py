@@ -1,45 +1,45 @@
-#=======================================================================
-#
-#   Python Lexical Analyser
-#
-#   Classes for building NFAs and DFAs
-#
-#=======================================================================
-
-from __future__ import absolute_import
-
-import sys
-
-from .Transitions import TransitionMap
-
+#======================================================================= 
+# 
+#   Python Lexical Analyser 
+# 
+#   Classes for building NFAs and DFAs 
+# 
+#======================================================================= 
+ 
+from __future__ import absolute_import 
+ 
+import sys 
+ 
+from .Transitions import TransitionMap 
+ 
 try:
     from sys import maxsize as maxint
 except ImportError:
     from sys import maxint
-
+ 
 try:
     unichr
 except NameError:
     unichr = chr
-
+ 
 LOWEST_PRIORITY = -maxint
 
 
-class Machine(object):
+class Machine(object): 
     """A collection of Nodes representing an NFA or DFA."""
     states = None          # [Node]
     next_state_number = 1
     initial_states = None  # {(name, bol): Node}
-
+ 
     def __init__(self):
         self.states = []
         self.initial_states = {}
-
+ 
     def __del__(self):
         #print "Destroying", self ###
         for state in self.states:
             state.destroy()
-
+ 
     def new_state(self):
         """Add a new state to the machine and return it."""
         s = Node()
@@ -48,18 +48,18 @@ class Machine(object):
         s.number = n
         self.states.append(s)
         return s
-
+ 
     def new_initial_state(self, name):
         state = self.new_state()
         self.make_initial_state(name, state)
         return state
-
+ 
     def make_initial_state(self, name, state):
         self.initial_states[name] = state
-
+ 
     def get_initial_state(self, name):
         return self.initial_states[name]
-
+ 
     def dump(self, file):
         file.write("Plex.Machine:\n")
         if self.initial_states is not None:
@@ -68,36 +68,36 @@ class Machine(object):
                 file.write("      '%s': %d\n" % (name, state.number))
         for s in self.states:
             s.dump(file)
+ 
 
-
-class Node(object):
+class Node(object): 
     """A state of an NFA or DFA."""
     transitions = None      # TransitionMap
     action = None           # Action
     action_priority = None  # integer
     number = 0              # for debug output
     epsilon_closure = None  # used by nfa_to_dfa()
-
+ 
     def __init__(self):
         # Preinitialise the list of empty transitions, because
         # the nfa-to-dfa algorithm needs it
         #self.transitions = {'':[]}
         self.transitions = TransitionMap()
         self.action_priority = LOWEST_PRIORITY
-
+ 
     def destroy(self):
         #print "Destroying", self ###
         self.transitions = None
         self.action = None
         self.epsilon_closure = None
-
+ 
     def add_transition(self, event, new_state):
         self.transitions.add(event, new_state)
-
+ 
     def link_to(self, state):
         """Add an epsilon-move from this state to another state."""
         self.add_transition('', state)
-
+ 
     def set_action(self, action, priority):
         """Make this an accepting state with the given action. If
         there is already an action, choose the action with highest
@@ -105,19 +105,19 @@ class Node(object):
         if priority > self.action_priority:
             self.action = action
             self.action_priority = priority
-
+ 
     def get_action(self):
         return self.action
-
+ 
     def get_action_priority(self):
         return self.action_priority
-
+ 
     def is_accepting(self):
         return self.action is not None
-
+ 
     def __str__(self):
         return "State %d" % self.number
-
+ 
     def dump(self, file):
         # Header
         file.write("   State %d:\n" % self.number)
@@ -129,12 +129,12 @@ class Node(object):
         priority = self.action_priority
         if action is not None:
             file.write("      %s [priority %d]\n" % (action, priority))
-
+ 
     def __lt__(self, other):
         return self.number < other.number
+ 
 
-
-class FastMachine(object):
+class FastMachine(object): 
     """
     FastMachine is a deterministic machine represented in a way that
     allows fast scanning.
@@ -142,19 +142,19 @@ class FastMachine(object):
     initial_states = None  # {state_name:state}
     states = None          # [state]  where state = {event:state, 'else':state, 'action':Action}
     next_number = 1        # for debugging
-
+ 
     new_state_template = {
         '': None, 'bol': None, 'eol': None, 'eof': None, 'else': None
     }
-
+ 
     def __init__(self):
         self.initial_states = {}
         self.states = []
-
+ 
     def __del__(self):
         for state in self.states:
             state.clear()
-
+ 
     def new_state(self, action=None):
         number = self.next_number
         self.next_number = number + 1
@@ -163,10 +163,10 @@ class FastMachine(object):
         result['action'] = action
         self.states.append(result)
         return result
-
+ 
     def make_initial_state(self, name, state):
         self.initial_states[name] = state
-
+ 
     def add_transitions(self, state, event, new_state, maxint=maxint):
         if type(event) is tuple:
             code0, code1 = event
@@ -178,10 +178,10 @@ class FastMachine(object):
                     code0 += 1
         else:
             state[event] = new_state
-
+ 
     def get_initial_state(self, name):
         return self.initial_states[name]
-
+ 
     def dump(self, file):
         file.write("Plex.FastMachine:\n")
         file.write("   Initial states:\n")
@@ -189,7 +189,7 @@ class FastMachine(object):
             file.write("      %s: %s\n" % (repr(name), state['number']))
         for state in self.states:
             self.dump_state(state, file)
-
+ 
     def dump_state(self, state, file):
         # Header
         file.write("   State %d:\n" % state['number'])
@@ -199,7 +199,7 @@ class FastMachine(object):
         action = state['action']
         if action is not None:
             file.write("      %s\n" % action)
-
+ 
     def dump_transitions(self, state, file):
         chars_leading_to_state = {}
         special_to_state = {}
@@ -228,7 +228,7 @@ class FastMachine(object):
             state = special_to_state.get(key, None)
             if state:
                 file.write("      %s --> State %d\n" % (key, state['number']))
-
+ 
     def chars_to_ranges(self, char_list):
         char_list.sort()
         i = 0
@@ -243,10 +243,10 @@ class FastMachine(object):
                 c2 += 1
             result.append((chr(c1), chr(c2)))
         return tuple(result)
-
+ 
     def ranges_to_string(self, range_list):
         return ','.join(map(self.range_to_string, range_list))
-
+ 
     def range_to_string(self, range_tuple):
         (c1, c2) = range_tuple
         if c1 == c2:

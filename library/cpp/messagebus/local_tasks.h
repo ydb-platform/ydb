@@ -9,8 +9,8 @@ private:
 public:
     TLocalTasks()
         : GotTasks(0)
-    {
-    }
+    { 
+    } 
 
     void AddTask() {
         AtomicSet(GotTasks, 1);

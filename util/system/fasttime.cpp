@@ -1,29 +1,29 @@
-#include "dynlib.h"
-#include "fasttime.h"
+#include "dynlib.h" 
+#include "fasttime.h" 
 
 #include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
 #include <utility>
-
+ 
 #include <util/thread/singleton.h>
 
-#if defined(_win_) || defined(_arm32_) || defined(_cygwin_)
+#if defined(_win_) || defined(_arm32_) || defined(_cygwin_) 
 ui64 InterpolatedMicroSeconds() {
     return MicroSeconds();
 }
 #else
 
-    #include <dlfcn.h>
-    #include <sys/time.h>
+    #include <dlfcn.h> 
+    #include <sys/time.h> 
 
-    #if defined(_musl_)
-        #include <util/generic/hash.h>
-        #include <util/generic/vector.h>
-        #include <util/generic/string.h>
-
-        #include <contrib/libs/linuxvdso/interface.h>
-    #endif
-
+    #if defined(_musl_) 
+        #include <util/generic/hash.h> 
+        #include <util/generic/vector.h> 
+        #include <util/generic/string.h> 
+ 
+        #include <contrib/libs/linuxvdso/interface.h> 
+    #endif 
+ 
 namespace {
     using TTime = ui64;
 
@@ -36,13 +36,13 @@ namespace {
             // not DEFAULT, cause library/cpp/gettimeofday
             Func = reinterpret_cast<TFunc>(dlsym(RTLD_NEXT, "gettimeofday"));
 
-    #if defined(_musl_)
+    #if defined(_musl_) 
             if (!Func) {
                 Func = reinterpret_cast<TFunc>(NVdso::Function("__vdso_gettimeofday", "LINUX_2.6"));
-            }
-    #endif
-
-            if (!Func) {
+            } 
+    #endif 
+ 
+            if (!Func) { 
                 Func = reinterpret_cast<TFunc>(Libc()->Sym("gettimeofday"));
             }
         }
@@ -59,16 +59,16 @@ namespace {
 
         static inline THolder<TDynamicLibrary> OpenLibc() {
             const char* libs[] = {
-                "/lib/libc.so.8",
-                "/lib/libc.so.7",
-                "/lib/libc.so.6",
-            };
+                "/lib/libc.so.8", 
+                "/lib/libc.so.7", 
+                "/lib/libc.so.6", 
+            }; 
 
             for (auto& lib : libs) {
                 try {
                     return MakeHolder<TDynamicLibrary>(lib);
                 } catch (...) {
-                    // ¯\_(ツ)_/¯
+                    // ¯\_(ツ)_/¯ 
                 }
             }
 
@@ -179,7 +179,7 @@ namespace {
             }
 
             B_ = (n * sxy - sx * sy) / (n * sxx - sx * sx);
-            A_ = (sy - B_ * sx) / n;
+            A_ = (sy - B_ * sx) / n; 
         }
 
     private:

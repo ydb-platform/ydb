@@ -1,5 +1,5 @@
-OWNER(yazevnul g:util)
-
+OWNER(yazevnul g:util) 
+ 
 SUBSCRIBER(g:util-subscribers)
 
 RECURSE(
@@ -10,10 +10,10 @@ RECURSE(
     rotate_bits
     rotate_bits/metrics
     singleton
-    smart_pointers
-    sort
+    smart_pointers 
+    sort 
     string
     vector_count_ctor
-    vector_count_ctor/metrics
-    cont_speed
+    vector_count_ctor/metrics 
+    cont_speed 
 )

@@ -4,7 +4,7 @@ OWNER(
     g:util
     g:base
 )
-
+ 
 LIBRARY()
 
 GENERATE_ENUM_SERIALIZATION(priority.h)
@@ -13,7 +13,7 @@ PEERDIR (
     library/cpp/json
 )
 
-SRCS(
+SRCS( 
     all.h
     backend.cpp
     backend_creator.cpp
@@ -24,14 +24,14 @@ SRCS(
     GLOBAL file_creator.cpp
     filter.cpp
     filter_creator.cpp
-    log.cpp
+    log.cpp 
     null.cpp
     GLOBAL null_creator.cpp
     priority.h
     record.h
     rotating_file.cpp
     GLOBAL rotating_file_creator.cpp
-    stream.cpp
+    stream.cpp 
     GLOBAL stream_creator.cpp
     sync_page_cache_file.cpp
     GLOBAL sync_page_cache_file_creator.cpp
@@ -40,8 +40,8 @@ SRCS(
     thread.cpp
     thread_creator.cpp
     GLOBAL uninitialized_creator.cpp
-)
-
-END()
+) 
+ 
+END() 
 
 RECURSE_FOR_TESTS(ut)

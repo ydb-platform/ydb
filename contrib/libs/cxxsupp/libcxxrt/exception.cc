@@ -208,7 +208,7 @@ namespace std
 			virtual ~exception();
 			virtual const char* what() const noexcept;
 	};
-
+ 
 }
 
 /**
@@ -273,69 +273,69 @@ namespace std
 
 using namespace ABI_NAMESPACE;
 
-/**
- * Callback function used with _Unwind_Backtrace().
- *
- * Prints a stack trace.  Used only for debugging help.
- *
- * Note: As of FreeBSD 8.1, dladd() still doesn't work properly, so this only
- * correctly prints function names from public, relocatable, symbols.
- */
-static _Unwind_Reason_Code trace(struct _Unwind_Context *context, void *c)
-{
-	Dl_info myinfo;
-	int mylookup =
-		dladdr(reinterpret_cast<void *>(__cxa_current_exception_type), &myinfo);
-	void *ip = reinterpret_cast<void*>(_Unwind_GetIP(context));
-	Dl_info info;
-	if (dladdr(ip, &info) != 0)
-	{
-		if (mylookup == 0 || strcmp(info.dli_fname, myinfo.dli_fname) != 0)
-		{
-			printf("%p:%s() in %s\n", ip, info.dli_sname, info.dli_fname);
-		}
-	}
-	return _URC_CONTINUE_UNWIND;
-}
+/** 
+ * Callback function used with _Unwind_Backtrace(). 
+ * 
+ * Prints a stack trace.  Used only for debugging help. 
+ * 
+ * Note: As of FreeBSD 8.1, dladd() still doesn't work properly, so this only 
+ * correctly prints function names from public, relocatable, symbols. 
+ */ 
+static _Unwind_Reason_Code trace(struct _Unwind_Context *context, void *c) 
+{ 
+	Dl_info myinfo; 
+	int mylookup = 
+		dladdr(reinterpret_cast<void *>(__cxa_current_exception_type), &myinfo); 
+	void *ip = reinterpret_cast<void*>(_Unwind_GetIP(context)); 
+	Dl_info info; 
+	if (dladdr(ip, &info) != 0) 
+	{ 
+		if (mylookup == 0 || strcmp(info.dli_fname, myinfo.dli_fname) != 0) 
+		{ 
+			printf("%p:%s() in %s\n", ip, info.dli_sname, info.dli_fname); 
+		} 
+	} 
+	return _URC_CONTINUE_UNWIND; 
+} 
 
-static void bt_terminate_handler() {
-    __cxa_eh_globals* globals = __cxa_get_globals();
-    __cxa_exception* thrown_exception = globals->caughtExceptions;
+static void bt_terminate_handler() { 
+    __cxa_eh_globals* globals = __cxa_get_globals(); 
+    __cxa_exception* thrown_exception = globals->caughtExceptions; 
 
-    if (!thrown_exception) {
-        abort();
-    }
-
-    fprintf(stderr, "uncaught exception:\n    address -> %p\n", (void*)thrown_exception);
-    thrown_exception = realExceptionFromException(thrown_exception);
-
-    const __class_type_info *e_ti = static_cast<const __class_type_info*>(&typeid(std::exception));
-    const __class_type_info *throw_ti = dynamic_cast<const __class_type_info*>(thrown_exception->exceptionType);
-
-    if (throw_ti) {
-        void* ptr = thrown_exception + 1;
-
-        if (throw_ti->__do_upcast(e_ti, &ptr)) {
-            std::exception* e = static_cast<std::exception*>(ptr);
-
-            if (e) {
-                fprintf(stderr, "    what() -> \"%s\"\n", e->what());
-            }
-        }
-    }
-
-    size_t bufferSize = 128;
-    char *demangled = static_cast<char*>(malloc(bufferSize));
-    const char *mangled = thrown_exception->exceptionType->name();
-    int status;
-    demangled = __cxa_demangle(mangled, demangled, &bufferSize, &status);
-    fprintf(stderr, "    type -> %s\n", status == 0 ? demangled : mangled);
-    if (status == 0) { free(demangled); }
-    abort();
-}
-
+    if (!thrown_exception) { 
+        abort(); 
+    } 
+ 
+    fprintf(stderr, "uncaught exception:\n    address -> %p\n", (void*)thrown_exception); 
+    thrown_exception = realExceptionFromException(thrown_exception); 
+ 
+    const __class_type_info *e_ti = static_cast<const __class_type_info*>(&typeid(std::exception)); 
+    const __class_type_info *throw_ti = dynamic_cast<const __class_type_info*>(thrown_exception->exceptionType); 
+ 
+    if (throw_ti) { 
+        void* ptr = thrown_exception + 1; 
+ 
+        if (throw_ti->__do_upcast(e_ti, &ptr)) { 
+            std::exception* e = static_cast<std::exception*>(ptr); 
+ 
+            if (e) { 
+                fprintf(stderr, "    what() -> \"%s\"\n", e->what()); 
+            } 
+        } 
+    } 
+ 
+    size_t bufferSize = 128; 
+    char *demangled = static_cast<char*>(malloc(bufferSize)); 
+    const char *mangled = thrown_exception->exceptionType->name(); 
+    int status; 
+    demangled = __cxa_demangle(mangled, demangled, &bufferSize, &status); 
+    fprintf(stderr, "    type -> %s\n", status == 0 ? demangled : mangled); 
+    if (status == 0) { free(demangled); } 
+    abort(); 
+} 
+ 
 /** The global termination handler. */
-static terminate_handler terminateHandler = bt_terminate_handler;
+static terminate_handler terminateHandler = bt_terminate_handler; 
 /** The global unexpected exception handler. */
 static unexpected_handler unexpectedHandler = std::terminate;
 
@@ -377,44 +377,44 @@ static void free_exception_list(__cxa_exception *ex)
 	__cxa_free_exception(ex+1);
 }
 
-#define fast_ti_size 100
-
-static long fast_ti_index;
-static __cxa_thread_info fast_ti[fast_ti_size];
-
-static inline __cxa_thread_info* alloc_thread_info() {
-    {
-        long cur_index;
-
-        __atomic_load(&fast_ti_index, &cur_index, __ATOMIC_SEQ_CST);
-
-        // exausted long time ago
-        if (cur_index >= fast_ti_size) {
-            return static_cast<__cxa_thread_info*>(calloc(1, sizeof(__cxa_thread_info)));
-        }
-    }
-
-    auto my_index = __sync_fetch_and_add(&fast_ti_index, 1);
-
-    // exausted
-    if (my_index >= fast_ti_size) {
-        return static_cast<__cxa_thread_info*>(calloc(1, sizeof(__cxa_thread_info)));
-    }
-
-    // fast path
-    auto& ret = fast_ti[my_index];
-
-    memset(&ret, 0, sizeof(ret));
-
-    return &ret;
-}
-
-static inline void free_thread_info(__cxa_thread_info* ti) {
-    if ((ti < fast_ti) || (ti >= (fast_ti + fast_ti_size))) {
-        free(ti);
-    }
-}
-
+#define fast_ti_size 100 
+ 
+static long fast_ti_index; 
+static __cxa_thread_info fast_ti[fast_ti_size]; 
+ 
+static inline __cxa_thread_info* alloc_thread_info() { 
+    { 
+        long cur_index; 
+ 
+        __atomic_load(&fast_ti_index, &cur_index, __ATOMIC_SEQ_CST); 
+ 
+        // exausted long time ago 
+        if (cur_index >= fast_ti_size) { 
+            return static_cast<__cxa_thread_info*>(calloc(1, sizeof(__cxa_thread_info))); 
+        } 
+    } 
+ 
+    auto my_index = __sync_fetch_and_add(&fast_ti_index, 1); 
+ 
+    // exausted 
+    if (my_index >= fast_ti_size) { 
+        return static_cast<__cxa_thread_info*>(calloc(1, sizeof(__cxa_thread_info))); 
+    } 
+ 
+    // fast path 
+    auto& ret = fast_ti[my_index]; 
+ 
+    memset(&ret, 0, sizeof(ret)); 
+ 
+    return &ret; 
+} 
+ 
+static inline void free_thread_info(__cxa_thread_info* ti) { 
+    if ((ti < fast_ti) || (ti >= (fast_ti + fast_ti_size))) { 
+        free(ti); 
+    } 
+} 
+ 
 /**
  * Cleanup function called when a thread exists to make certain that all of the
  * per-thread data is deleted.
@@ -436,7 +436,7 @@ static void thread_cleanup(void* thread_info)
 			free_exception_list(info->globals.caughtExceptions);
 		}
 	}
-	free_thread_info(info);
+	free_thread_info(info); 
 }
 
 /**
@@ -457,8 +457,8 @@ static void init_key(void)
 	pthread_setspecific(eh_key, 0);
 }
 
-static __thread __cxa_thread_info* THR_INFO = nullptr;
-
+static __thread __cxa_thread_info* THR_INFO = nullptr; 
+ 
 /**
  * Returns the thread info structure, creating it if it is not already created.
  */
@@ -477,14 +477,14 @@ static __cxa_thread_info *thread_info()
    THR_INFO = info;
 	return info;
 }
-
-// ensure main thread will allocate preallocated tls
-static struct InitMainTls {
-    inline InitMainTls() {
-        thread_info();
-    }
-} init_main_tls;
-
+ 
+// ensure main thread will allocate preallocated tls 
+static struct InitMainTls { 
+    inline InitMainTls() { 
+        thread_info(); 
+    } 
+} init_main_tls; 
+ 
 /**
  * Fast version of thread_info().  May fail if thread_info() is not called on
  * this thread at least once already.

@@ -4,9 +4,9 @@ OWNER(
 )
 
 Y_BENCHMARK()
-
-SRCS(
-    main.cpp
-)
-
-END()
+ 
+SRCS( 
+    main.cpp 
+) 
+ 
+END() 

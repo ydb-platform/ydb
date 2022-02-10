@@ -488,10 +488,10 @@ class Build(object):
 
     def print_build(self):
         self._print_build_settings()
-
+ 
         host_os = System(self.host)
         host_os.print_host_settings()
-
+ 
         target_os = System(self.target)
         target_os.print_target_settings()
 
@@ -522,21 +522,21 @@ class Build(object):
             emit('DISTBUILD', 'yes')
         elif self.build_system != 'ymake':
             raise ConfigureError()
-
+ 
         python_bin = preset('BUILD_PYTHON_BIN', '$(PYTHON)/python')
 
         emit('YMAKE_PYTHON', python_bin)
         emit('YMAKE_UNPICKLER', python_bin, '$ARCADIA_ROOT/build/plugins/_unpickler.py')
-
+ 
     @property
     def is_release(self):
         # TODO(somov): Проверить, бывают ли тут суффиксы на самом деле
         return self.build_type in ('release', 'relwithdebinfo', 'minsizerel', 'profile', 'gprof') or self.build_type.endswith('-release')
-
+ 
     @property
     def is_debug(self):
         return self.build_type in ('debug', 'debugnoasserts', 'fastdebug') or self.build_type.endswith('-debug')
-
+ 
     @property
     def is_fast_debug(self):
         return self.build_type == 'fastdebug'
@@ -548,7 +548,7 @@ class Build(object):
     @property
     def is_coverage(self):
         return self.build_type == 'coverage'
-
+ 
     @property
     def is_sanitized(self):
         sanitizer = preset('SANITIZER_TYPE')
@@ -684,7 +684,7 @@ class Build(object):
 
         return un_unicode(json.loads(base64.b64decode(base64str)))
 
-
+ 
 class YMake(object):
     def __init__(self, arcadia):
         self.arcadia = arcadia
@@ -1415,11 +1415,11 @@ class GnuCompiler(Compiler):
             self.debug_info_flags.append('-ggnu-pubnames')
 
         self.cross_suffix = '' if is_positive('FORCE_NO_PIC') else '.pic'
-
+ 
         self.optimize = None
-
+ 
         self.configure_build_type()
-
+ 
         if self.tc.is_clang:
             self.sfdl_flags.append('-Qunused-arguments')
 
@@ -1456,7 +1456,7 @@ class GnuCompiler(Compiler):
     def configure_build_type(self):
         if self.build.is_valgrind:
             self.c_defines.append('-DWITH_VALGRIND=1')
-
+ 
         if self.build.is_debug:
             self.c_foptions.append('$FSTACK')
 
@@ -1516,7 +1516,7 @@ class GnuCompiler(Compiler):
                 CFLAGS+=-fPIE
                 LDFLAGS+=-fPIE -pie
             }''')
-
+ 
         append('CFLAGS', self.c_flags, '$DEBUG_INFO_FLAGS', self.c_foptions, '$C_WARNING_OPTS', '$GCC_PREPROCESSOR_OPTS', '$USER_CFLAGS', '$USER_CFLAGS_GLOBAL')
         append('CXXFLAGS', '$CFLAGS', '-std=' + self.tc.cxx_std, '$CXX_WARNING_OPTS', '$USER_CXXFLAGS', '$USER_CXXFLAGS_GLOBAL')
         append('CONLYFLAGS', '$USER_CONLYFLAGS', '$USER_CONLYFLAGS_GLOBAL')
@@ -1528,7 +1528,7 @@ class GnuCompiler(Compiler):
         # TODO(somov): Убрать чтение настройки из os.environ
         emit('USE_ARC_PROFILE', 'yes' if preset('USE_ARC_PROFILE') or os.environ.get('USE_ARC_PROFILE') else 'no')
         emit('DEBUG_INFO_FLAGS', self.debug_info_flags)
-
+ 
         emit_big('''
             when ($NO_WSHADOW == "yes") {
                 C_WARNING_OPTS += -Wno-shadow
@@ -1663,7 +1663,7 @@ class GnuCompiler(Compiler):
             emit('COMPILER_TIME_TRACE_POSTPROCESS')
 
         append('EXTRA_OUTPUT')
-
+ 
         style = ['${requirements;hide:CC_REQUIREMENTS} ${hide;kv:"p CC"} ${hide;kv:"pc green"}']
         cxx_args = [
             '$CLANG_TIDY_ARGS',
@@ -1683,7 +1683,7 @@ class GnuCompiler(Compiler):
             '$YNDEXER_OUTPUT',
             '&& $COMPILER_TIME_TRACE_POSTPROCESS',
         ] + style
-
+ 
         c_args = [
             '$CLANG_TIDY_ARGS',
             '$YNDEXER_ARGS',
@@ -1722,7 +1722,7 @@ class GnuCompiler(Compiler):
         emit('_SRC_C_CMD', ' '.join(c_args))
         emit('_SRC_M_CMD', '$SRC_c($SRC $SRCFLAGS)')
         emit('_SRC_MASM_CMD', '$_EMPTY_CMD')
-
+ 
         # fuzzing configuration
         if self.tc.is_clang:
             if self.tc.version_at_least(12):
@@ -1823,7 +1823,7 @@ class LD(Linker):
                     self.ar = '{}/gcc/bin/gcc-ar'.format(self.tc.name_marker)
             else:
                 self.ar = 'ar'
-
+ 
         self.ar_type = 'GNU_AR'
         self.llvm_ar_format = 'None'
 
@@ -1887,7 +1887,7 @@ class LD(Linker):
             self.ld_flags.append('-Wl,-no_deduplicate')
             if not self.tc.is_clang:
                 self.ld_flags.append('-Wl,-no_compact_unwind')
-
+ 
         self.thread_library = select([
             (target.is_linux or target.is_macos, '-lpthread'),
         ])
@@ -1906,7 +1906,7 @@ class LD(Linker):
         if target.is_linux or target.is_android:
             self.ld_export_dynamic_flag = '-rdynamic'
             self.use_stdlib = '-nodefaultlibs'
-
+ 
         if target.is_linux or target.is_android or target.is_cygwin or target.is_none:
             self.start_group = '-Wl,--start-group'
             self.end_group = '-Wl,--end-group'
@@ -1914,13 +1914,13 @@ class LD(Linker):
             self.no_whole_archive = '-Wl,--no-whole-archive'
             self.ld_stripflag = '-s'
             self.soname_option = '-soname'
-
+ 
         if target.is_macos or target.is_ios:
             self.use_stdlib = '-nodefaultlibs'
             self.soname_option = '-install_name'
             if not preset('NO_DEBUGINFO'):
                 self.dwarf_command = '$DWARF_TOOL $TARGET -o ${output;pre=$MODULE_PREFIX$REALPRJNAME.dSYM/Contents/Resources/DWARF/$MODULE_PREFIX:REALPRJNAME}'
-
+ 
         if self.target.is_ios and preset('MAPSMOBI_BUILD_TARGET') and self.target.is_arm:
             self.ld_flags.extend(('-fembed-bitcode', '-Wl,-bitcode_verify'))
 

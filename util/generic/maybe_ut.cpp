@@ -1,6 +1,6 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
-#include <util/stream/str.h>
+#include <util/stream/str.h> 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include "maybe.h"
@@ -40,19 +40,19 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
     }
 
     Y_UNIT_TEST(TestWarning) {
-        TMaybe<size_t> x;
-        TStringStream ss;
+        TMaybe<size_t> x; 
+        TStringStream ss; 
         TString line;
-
-        while (ss.ReadLine(line)) {
-            x = line.size();
-        }
-
+ 
+        while (ss.ReadLine(line)) { 
+            x = line.size(); 
+        } 
+ 
         if (x == 5u) {
-            ss << "5\n";
-        }
-    }
-
+            ss << "5\n"; 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TTestConstructorDestructor) {
         int a = 0;
         int b = 0;
@@ -140,22 +140,22 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
         m5 = {};
         UNIT_ASSERT(m5.Empty());
     }
-
+ 
     Y_UNIT_TEST(TestInPlace) {
-        TMaybe<int> m;
-
-        UNIT_ASSERT(!m);
-
-        m.ConstructInPlace(1);
-
-        UNIT_ASSERT(m == 1);
-
+        TMaybe<int> m; 
+ 
+        UNIT_ASSERT(!m); 
+ 
+        m.ConstructInPlace(1); 
+ 
+        UNIT_ASSERT(m == 1); 
+ 
         auto& x = m.ConstructInPlace(2);
-
-        UNIT_ASSERT(m == 2);
+ 
+        UNIT_ASSERT(m == 2); 
         x = 7;
         UNIT_ASSERT(m == 7);
-    }
+    } 
 
     Y_UNIT_TEST(TestMove) {
         struct TMovable {
@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
         }
     }
 
-    /*
+    /* 
   ==
   !=
   <
@@ -261,8 +261,8 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
     }
 
     Y_UNIT_TEST(TestCompareEqualNonEmpty) {
-        TMaybe<int> m1{1};
-        TMaybe<int> m2{1};
+        TMaybe<int> m1{1}; 
+        TMaybe<int> m2{1}; 
 
         UNIT_ASSERT(m1 == m2);
         UNIT_ASSERT(!(m1 != m2));
@@ -273,8 +273,8 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
     }
 
     Y_UNIT_TEST(TestCompareOneLessThanOther) {
-        TMaybe<int> m1{1};
-        TMaybe<int> m2{2};
+        TMaybe<int> m1{1}; 
+        TMaybe<int> m2{2}; 
 
         UNIT_ASSERT(!(m1 == m2));
         UNIT_ASSERT(m1 != m2);
@@ -285,8 +285,8 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
     }
 
     Y_UNIT_TEST(TestCompareTMaybeAndT_Equal) {
-        TMaybe<int> m{1};
-        int v{1};
+        TMaybe<int> m{1}; 
+        int v{1}; 
 
         UNIT_ASSERT(m == v);
         UNIT_ASSERT(!(m != v));
@@ -304,8 +304,8 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
     }
 
     Y_UNIT_TEST(TestCompareTMaybeAndT_TMaybeLessThanT) {
-        TMaybe<int> m{1};
-        int v{2};
+        TMaybe<int> m{1}; 
+        int v{2}; 
 
         UNIT_ASSERT(!(m == v));
         UNIT_ASSERT(m != v);
@@ -323,8 +323,8 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
     }
 
     Y_UNIT_TEST(TestCompareTMaybeAndT_TMaybeGreaterThanT) {
-        TMaybe<int> m{2};
-        int v{1};
+        TMaybe<int> m{2}; 
+        int v{1}; 
 
         UNIT_ASSERT(!(m == v));
         UNIT_ASSERT(m != v);
@@ -343,7 +343,7 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
 
     Y_UNIT_TEST(TestCompareEmptyTMaybeAndT) {
         TMaybe<int> m;
-        int v{1};
+        int v{1}; 
 
         UNIT_ASSERT(!(m == v));
         UNIT_ASSERT(m != v);
@@ -380,7 +380,7 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
     }
 
     Y_UNIT_TEST(TestCompareNonEmptyTMaybeAndNothing) {
-        TMaybe<int> m{1};
+        TMaybe<int> m{1}; 
         auto n = Nothing();
 
         UNIT_ASSERT(!(m == n));
@@ -399,8 +399,8 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
     }
 
     Y_UNIT_TEST(TestCompareTMaybeAndConvertibleT_Equal) {
-        TMaybe<size_t> m{1};
-        unsigned int v{1};
+        TMaybe<size_t> m{1}; 
+        unsigned int v{1}; 
 
         UNIT_ASSERT(m == v);
         UNIT_ASSERT(!(m != v));
@@ -418,8 +418,8 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
     }
 
     Y_UNIT_TEST(TestCompareTMaybeAndConvertibleT_TMaybeLessThanT) {
-        TMaybe<size_t> m{1};
-        unsigned int v{2};
+        TMaybe<size_t> m{1}; 
+        unsigned int v{2}; 
 
         UNIT_ASSERT(!(m == v));
         UNIT_ASSERT(m != v);
@@ -437,8 +437,8 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
     }
 
     Y_UNIT_TEST(TestCompareTMaybeAndConvertibleT_TMaybeGreaterThanT) {
-        TMaybe<size_t> m{2};
-        unsigned int v{1};
+        TMaybe<size_t> m{2}; 
+        unsigned int v{1}; 
 
         UNIT_ASSERT(!(m == v));
         UNIT_ASSERT(m != v);
@@ -457,7 +457,7 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
 
     Y_UNIT_TEST(TestCompareEmptyTMaybeAndConvertibleT) {
         TMaybe<size_t> m;
-        unsigned int v{1};
+        unsigned int v{1}; 
 
         UNIT_ASSERT(!(m == v));
         UNIT_ASSERT(m != v);
@@ -518,10 +518,10 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
                 }
 
                 int I_;
-                bool IsCopyConstructorCalled_{false};
-                bool IsMoveConstructorCalled_{false};
-                bool IsCopyAssignmentOperatorCalled_{false};
-                bool IsMoveAssignmentOperatorCalled_{false};
+                bool IsCopyConstructorCalled_{false}; 
+                bool IsMoveConstructorCalled_{false}; 
+                bool IsCopyAssignmentOperatorCalled_{false}; 
+                bool IsMoveAssignmentOperatorCalled_{false}; 
             };
 
             auto m2 = MakeMaybe<TMockClass>(1);
@@ -574,7 +574,7 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
                 bool SomeFlag_;
             };
 
-            auto m5 = MakeMaybe<TMockStruct5>({1, 2, 3}, true);
+            auto m5 = MakeMaybe<TMockStruct5>({1, 2, 3}, true); 
             UNIT_ASSERT(m5->Vec_.size() == 3);
             UNIT_ASSERT(m5->Vec_[0] == 1);
             UNIT_ASSERT(m5->Vec_[1] == 2);
@@ -813,8 +813,8 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
         struct TestStruct {
             TestStruct(int value)
                 : Value_(value)
-            {
-            }
+            { 
+            } 
 
             operator int() const {
                 return Value_;
@@ -839,8 +839,8 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
         struct TestStruct {
             explicit TestStruct(int value)
                 : Value_(value)
-            {
-            }
+            { 
+            } 
             int Value_;
         };
 
@@ -857,8 +857,8 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
         struct TestStruct {
             explicit TestStruct(int value)
                 : Value_(value)
-            {
-            }
+            { 
+            } 
             TestStruct& operator=(int value) {
                 Value_ = value;
                 return *this;
@@ -890,13 +890,13 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
             TestStruct(int value)
                 : Value_(value)
                 , From_(FromValue)
-            {
-            }
+            { 
+            } 
             TestStruct(TMaybe<int> value)
                 : Value_(value.Defined() ? value.GetRef() : 0)
                 , From_(FromMaybe)
-            {
-            }
+            { 
+            } 
             int Value_;
             int From_;
         };
@@ -927,13 +927,13 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
             TestStruct(int value)
                 : Value_(value)
                 , From_(FromValue)
-            {
-            }
+            { 
+            } 
             TestStruct(TMaybe<int> value)
                 : Value_(value.Defined() ? value.GetRef() : 0)
                 , From_(FromMaybe)
-            {
-            }
+            { 
+            } 
             TestStruct& operator=(int value) {
                 Value_ = value;
                 From_ = FromValue;
@@ -971,14 +971,14 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
             bool FromMaybeConstructorApplied;
 
             explicit TDst(TSrc)
-                : FromMaybeConstructorApplied(false)
-            {
-            }
+                : FromMaybeConstructorApplied(false) 
+            { 
+            } 
 
             explicit TDst(TMaybe<TSrc>)
-                : FromMaybeConstructorApplied(true)
-            {
-            }
+                : FromMaybeConstructorApplied(true) 
+            { 
+            } 
 
             TDst& operator=(TSrc) {
                 FromMaybeConstructorApplied = false;

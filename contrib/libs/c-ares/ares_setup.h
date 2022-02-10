@@ -28,7 +28,7 @@
  * configuration file for platforms which lack config tool.
  */
 
-#if defined(HAVE_CONFIG_H) && !defined(_MSC_VER)
+#if defined(HAVE_CONFIG_H) && !defined(_MSC_VER) 
 #include "ares_config.h"
 #else
 

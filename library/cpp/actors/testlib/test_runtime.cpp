@@ -1860,7 +1860,7 @@ namespace NActors {
         const TActorId Delegatee;
         const bool IsSync;
         const TVector<TActorId> AdditionalActors;
-        TSimpleSharedPtr<TStrandingActorDecoratorContext> Context;
+        TSimpleSharedPtr<TStrandingActorDecoratorContext> Context; 
         TActorId ReplyId;
         bool HasReply;
         TDispatchOptions DelegateeOptions;
@@ -1888,7 +1888,7 @@ namespace NActors {
         }
 
     private:
-        TSimpleSharedPtr<TStrandingActorDecoratorContext> Context;
+        TSimpleSharedPtr<TStrandingActorDecoratorContext> Context; 
         TTestActorRuntimeBase* Runtime;
         TReplyCheckerCreator CreateReplyChecker;
     };

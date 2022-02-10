@@ -18,7 +18,7 @@
 #define LOG_LOG_IC(component, marker, priority, ...)                                                                                   \
     do {                                                                                                                               \
         LOG_LOG(::NActors::TActivationContext::AsActorContext(), (priority), (component), "%s " marker " %s", LogPrefix.data(), Sprintf(__VA_ARGS__).data()); \
-    } while (false)
+    } while (false) 
 
 #define LOG_LOG_NET(priority, NODE_ID, FMT, ...) \
     do { \
@@ -58,8 +58,8 @@ namespace NActors {
 
         TInterconnectLoggingBase(const TString& prefix)
             : LogPrefix(prefix)
-        {
-        }
+        { 
+        } 
 
         void SetPrefix(TString logPrefix) const {
             logPrefix.swap(const_cast<TString&>(LogPrefix));

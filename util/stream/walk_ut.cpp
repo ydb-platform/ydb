@@ -5,10 +5,10 @@
 class TStringListInput: public IWalkInput {
 public:
     TStringListInput(const TVector<TString>& data)
-        : Data_(data)
-        , Index_(0)
-    {
-    }
+        : Data_(data) 
+        , Index_(0) 
+    { 
+    } 
 
 protected:
     size_t DoUnboundedNext(const void** ptr) override {

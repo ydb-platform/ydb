@@ -2,7 +2,7 @@
 #include <library/cpp/json/fast_sax/parser.h>
 
 #include <util/string/cast.h>
-#include <util/generic/buffer.h>
+#include <util/generic/buffer.h> 
 #include <util/generic/strbuf.h>
 #include <util/generic/ymath.h>
 
@@ -15,7 +15,7 @@ enum EStoredStr {
 struct TParserCtx {
     TJsonCallbacks& Hndl;
 
-    TBuffer Buffer;
+    TBuffer Buffer; 
     TStringBuf String;
     EStoredStr Stored = SS_NONE;
     bool ExpectValue = true;
@@ -142,9 +142,9 @@ struct TParserCtx {
     }
 
     bool OnStrE() {
-        Buffer.Clear();
-        Buffer.Reserve(2 * (te - ts));
-
+        Buffer.Clear(); 
+        Buffer.Reserve(2 * (te - ts)); 
+ 
         return OnString(UnescapeJsonUnicode(TStringBuf(ts + 1, te - ts - 2), Buffer.data()), SS_MUSTCOPY);
     }
 
@@ -170,8 +170,8 @@ struct TParserCtx {
         Stored = SS_NONE;
 
         switch (stored) {
-        default:
-            return false;
+        default: 
+            return false; 
         case SS_NOCOPY:
             return Hndl.OnMapKeyNoCopy(String);
         case SS_MUSTCOPY:

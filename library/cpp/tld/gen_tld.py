@@ -27,7 +27,7 @@ def main():
                     break
 
     print '// actual list can be found at http://data.iana.org/TLD/tlds-alpha-by-domain.txt'
-    print 'static const char* const TopLevelDomains[] = {'
+    print 'static const char* const TopLevelDomains[] = {' 
 
     for label, value in sorted(tlds.iteritems()):
         if label == 'xn--':

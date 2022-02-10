@@ -1,54 +1,54 @@
 #pragma once
 
-#include "base.h"
-
+#include "base.h" 
+ 
 #include <util/system/rusage.h>
 #include <util/generic/string.h>
 #include <util/stream/str.h>
-
+ 
 class TTimer {
 private:
     TInstant Start_;
     TStringStream Message_;
-
+ 
 public:
     TTimer(const TStringBuf message = TStringBuf(" took: "));
     ~TTimer();
 };
 
-class TSimpleTimer {
+class TSimpleTimer { 
     TInstant T;
-
+ 
 public:
-    TSimpleTimer() {
+    TSimpleTimer() { 
         Reset();
     }
     TDuration Get() const {
         return TInstant::Now() - T;
     }
-    void Reset() {
+    void Reset() { 
         T = TInstant::Now();
     }
 };
 
-class TProfileTimer {
+class TProfileTimer { 
     TDuration T;
-
+ 
 public:
-    TProfileTimer() {
+    TProfileTimer() { 
         Reset();
     }
     TDuration Get() const {
         return TRusage::Get().Utime - T;
     }
-    TDuration Step() {
+    TDuration Step() { 
         TRusage r;
         r.Fill();
         TDuration d = r.Utime - T;
         T = r.Utime;
         return d;
     }
-    void Reset() {
+    void Reset() { 
         T = TRusage::Get().Utime;
     }
 };
@@ -62,7 +62,7 @@ void SetCyclesPerSecond(ui64 cycles);
 TDuration CyclesToDuration(ui64 cycles);
 ui64 DurationToCycles(TDuration duration);
 
-class TPrecisionTimer {
+class TPrecisionTimer { 
 private:
     ui64 Start = 0;
 
@@ -74,7 +74,7 @@ public:
 
 TString FormatCycles(ui64 cycles);
 
-class TFormattedPrecisionTimer {
+class TFormattedPrecisionTimer { 
 private:
     ui64 Start;
     const char* Message;
@@ -85,29 +85,29 @@ public:
     ~TFormattedPrecisionTimer();
 };
 
-class TFuncTimer {
-public:
+class TFuncTimer { 
+public: 
     TFuncTimer(const char* func);
     ~TFuncTimer();
-
-private:
+ 
+private: 
     const TInstant Start_;
-    const char* Func_;
-};
-
-class TFakeTimer {
-public:
+    const char* Func_; 
+}; 
+ 
+class TFakeTimer { 
+public: 
     inline TFakeTimer(const char* = nullptr) noexcept {
-    }
-};
-
-#if defined(WITH_DEBUG)
-    #define TDebugTimer TFuncTimer
-#else
-    #define TDebugTimer TFakeTimer
+    } 
+}; 
+ 
+#if defined(WITH_DEBUG) 
+    #define TDebugTimer TFuncTimer 
+#else 
+    #define TDebugTimer TFakeTimer 
 #endif
-
-class TTimeLogger {
+ 
+class TTimeLogger { 
 private:
     TString Message;
     bool Verbose;

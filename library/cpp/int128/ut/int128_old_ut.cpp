@@ -5,19 +5,19 @@
 
 class TUInt128Test: public TTestBase {
     UNIT_TEST_SUITE(TUInt128Test);
-    UNIT_TEST(Create);
-    UNIT_TEST(Minus);
-    UNIT_TEST(Plus);
-    UNIT_TEST(Shift)
-    UNIT_TEST(Overflow);
-    UNIT_TEST(Underflow);
-    UNIT_TEST(ToStringTest);
-    UNIT_TEST(FromStringTest);
+    UNIT_TEST(Create); 
+    UNIT_TEST(Minus); 
+    UNIT_TEST(Plus); 
+    UNIT_TEST(Shift) 
+    UNIT_TEST(Overflow); 
+    UNIT_TEST(Underflow); 
+    UNIT_TEST(ToStringTest); 
+    UNIT_TEST(FromStringTest); 
 #if defined(Y_HAVE_INT128)
-    UNIT_TEST(FromSystemUint128);
+    UNIT_TEST(FromSystemUint128); 
 #endif
     UNIT_TEST_SUITE_END();
-
+ 
 private:
     void Create();
     void Minus();

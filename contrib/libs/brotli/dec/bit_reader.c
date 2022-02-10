@@ -1,25 +1,25 @@
-/* Copyright 2013 Google Inc. All Rights Reserved.
-
+/* Copyright 2013 Google Inc. All Rights Reserved. 
+ 
    Distributed under MIT license.
    See file LICENSE for detail or copy at https://opensource.org/licenses/MIT
-*/
-
-/* Bit reading helpers */
-
+*/ 
+ 
+/* Bit reading helpers */ 
+ 
 #include "./bit_reader.h"
-
+ 
 #include "../common/platform.h"
 #include <brotli/types.h>
-
-#if defined(__cplusplus) || defined(c_plusplus)
-extern "C" {
-#endif
-
+ 
+#if defined(__cplusplus) || defined(c_plusplus) 
+extern "C" { 
+#endif 
+ 
 void BrotliInitBitReader(BrotliBitReader* const br) {
-  br->val_ = 0;
-  br->bit_pos_ = sizeof(br->val_) << 3;
-}
-
+  br->val_ = 0; 
+  br->bit_pos_ = sizeof(br->val_) << 3; 
+} 
+ 
 BROTLI_BOOL BrotliWarmupBitReader(BrotliBitReader* const br) {
   size_t aligned_read_mask = (sizeof(br->val_) >> 1) - 1;
   /* Fixing alignment after unaligned BrotliFillWindow would result accumulator
@@ -31,8 +31,8 @@ BROTLI_BOOL BrotliWarmupBitReader(BrotliBitReader* const br) {
   if (BrotliGetAvailableBits(br) == 0) {
     if (!BrotliPullByte(br)) {
       return BROTLI_FALSE;
-    }
-  }
+    } 
+  } 
 
   while ((((size_t)br->next_in) & aligned_read_mask) != 0) {
     if (!BrotliPullByte(br)) {
@@ -41,8 +41,8 @@ BROTLI_BOOL BrotliWarmupBitReader(BrotliBitReader* const br) {
     }
   }
   return BROTLI_TRUE;
-}
-
-#if defined(__cplusplus) || defined(c_plusplus)
+} 
+ 
+#if defined(__cplusplus) || defined(c_plusplus) 
 }  /* extern "C" */
-#endif
+#endif 

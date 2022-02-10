@@ -1,3 +1,3 @@
-#pragma once
-
-void RNGInitAtForkHandlers();
+#pragma once 
+ 
+void RNGInitAtForkHandlers(); 

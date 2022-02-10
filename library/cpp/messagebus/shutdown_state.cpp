@@ -2,19 +2,19 @@
 
 #include <util/system/yassert.h>
 
-void TAtomicShutdownState::ShutdownCommand() {
+void TAtomicShutdownState::ShutdownCommand() { 
     Y_VERIFY(State.CompareAndSet(SS_RUNNING, SS_SHUTDOWN_COMMAND));
 }
 
-void TAtomicShutdownState::CompleteShutdown() {
+void TAtomicShutdownState::CompleteShutdown() { 
     Y_VERIFY(State.CompareAndSet(SS_SHUTDOWN_COMMAND, SS_SHUTDOWN_COMPLETE));
     ShutdownComplete.Signal();
 }
 
-bool TAtomicShutdownState::IsRunning() {
+bool TAtomicShutdownState::IsRunning() { 
     return State.Get() == SS_RUNNING;
 }
 
-TAtomicShutdownState::~TAtomicShutdownState() {
+TAtomicShutdownState::~TAtomicShutdownState() { 
     Y_VERIFY(SS_SHUTDOWN_COMPLETE == State.Get());
 }

@@ -1,7 +1,7 @@
-#include "typetraits.h"
-
+#include "typetraits.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <vector>
 #include <tuple>
 
@@ -14,46 +14,46 @@ namespace {
 
     class TNonPodClass {
         TNonPodClass() {
-        }
+        } 
     };
 
     class TEmptyClass {
-        void operator()() const {
-        }
+        void operator()() const { 
+        } 
     };
 
     class TAnotherEmptyClass {
     };
 
-    class TEmptyDerivedClass: public TEmptyClass {
+    class TEmptyDerivedClass: public TEmptyClass { 
     };
 
-    class TEmptyMultiDerivedClass: public TEmptyDerivedClass, public TAnotherEmptyClass {
+    class TEmptyMultiDerivedClass: public TEmptyDerivedClass, public TAnotherEmptyClass { 
         /* Not empty under MSVC.
          * MSVC's EBCO implementation can handle only one empty base class. */
     };
 
-    struct TNonEmptyClass {
+    struct TNonEmptyClass { 
         TEmptyClass member;
     };
 
-    class TNonEmptyDerivedClass: public TNonEmptyClass {
+    class TNonEmptyDerivedClass: public TNonEmptyClass { 
     };
 
-    class TStdLayoutClass1: public TEmptyClass {
+    class TStdLayoutClass1: public TEmptyClass { 
     public:
         int Value1;
         int Value2;
     };
 
-    class TStdLayoutClass2: public TNonEmptyClass {
+    class TStdLayoutClass2: public TNonEmptyClass { 
     };
 
     class TNonStdLayoutClass1 {
     public:
         int Value1;
-
-    protected:
+ 
+    protected: 
         int Value2;
     };
 
@@ -63,10 +63,10 @@ namespace {
         }
     };
 
-    class TNonStdLayoutClass3: public TNonStdLayoutClass2 {
+    class TNonStdLayoutClass3: public TNonStdLayoutClass2 { 
     };
 
-    class TNonStdLayoutClass4: public TEmptyClass {
+    class TNonStdLayoutClass4: public TEmptyClass { 
     public:
         TEmptyClass Base;
     };
@@ -76,8 +76,8 @@ namespace {
     {                                              \
         const bool x_ = std::is_same<x, y>::value; \
         UNIT_ASSERT_C(x_, #x " != " #y);           \
-    }
-
+    } 
+ 
 Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
     Y_UNIT_TEST(TestIsSame) {
         UNIT_ASSERT((std::is_same<int, int>::value));
@@ -91,52 +91,52 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
         ASSERT_SAME_TYPE(std::remove_reference_t<const int&>, const int);
         ASSERT_SAME_TYPE(std::remove_reference_t<int&&>, int);
         ASSERT_SAME_TYPE(std::remove_reference_t<const int&&>, const int);
-
-        class TIncompleteType;
+ 
+        class TIncompleteType; 
         ASSERT_SAME_TYPE(std::remove_reference_t<TIncompleteType&>, TIncompleteType);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestRemoveConst) {
         ASSERT_SAME_TYPE(std::remove_const_t<const int>, int);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestRemoveVolatile) {
         ASSERT_SAME_TYPE(std::remove_volatile_t<volatile int>, int);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestRemoveCV) {
         ASSERT_SAME_TYPE(std::remove_cv_t<const volatile int>, int);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestAddCV) {
         ASSERT_SAME_TYPE(std::add_cv_t<int>, const volatile int);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestClass) {
         UNIT_ASSERT(std::is_class<TString>::value);
         UNIT_ASSERT(!std::is_class<ETestEnum>::value);
         UNIT_ASSERT(!std::is_class<int>::value);
         UNIT_ASSERT(!std::is_class<void*>::value);
-    }
-
-    template <class T>
-    inline void TestArithmeticType() {
+    } 
+ 
+    template <class T> 
+    inline void TestArithmeticType() { 
         UNIT_ASSERT(std::is_arithmetic<T>::value);
         UNIT_ASSERT(std::is_arithmetic<const T>::value);
         UNIT_ASSERT(std::is_arithmetic<volatile T>::value);
         UNIT_ASSERT(std::is_arithmetic<const volatile T>::value);
-
+ 
         UNIT_ASSERT(!std::is_arithmetic<T&>::value);
         UNIT_ASSERT(!std::is_arithmetic<T&&>::value);
         UNIT_ASSERT(!std::is_arithmetic<T*>::value);
 
-        bool a;
+        bool a; 
 
         a = std::is_same<typename TTypeTraits<T>::TFuncParam, T>::value;
-        UNIT_ASSERT(a);
+        UNIT_ASSERT(a); 
         a = std::is_same<typename TTypeTraits<const volatile T>::TFuncParam, const volatile T>::value;
-        UNIT_ASSERT(a);
-    }
+        UNIT_ASSERT(a); 
+    } 
 
     template <class T>
     inline void TestUnsignedIntType() {
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
         UNIT_ASSERT(!std::is_unsigned<T&&>::value);
         UNIT_ASSERT(!std::is_unsigned<T*>::value);
 
-        enum ETypedEnum: T {};
+        enum ETypedEnum: T {}; 
         UNIT_ASSERT(!std::is_unsigned<ETypedEnum>::value);
     }
 
@@ -164,7 +164,7 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
         UNIT_ASSERT(!std::is_signed<T&&>::value);
         UNIT_ASSERT(!std::is_signed<T*>::value);
 
-        enum ETypedEnum: T {};
+        enum ETypedEnum: T {}; 
         UNIT_ASSERT(!std::is_signed<ETypedEnum>::value);
     }
 
@@ -203,8 +203,8 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
         ASSERT_SAME_TYPE(std::add_rvalue_reference_t<int*&>, int*&);
         ASSERT_SAME_TYPE(std::add_rvalue_reference_t<int&&>, int&&);
         ASSERT_SAME_TYPE(std::add_rvalue_reference_t<void>, void);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestIsEmpty) {
         UNIT_ASSERT(std::is_empty<TEmptyClass>::value);
         UNIT_ASSERT(std::is_empty<TEmptyDerivedClass>::value);
@@ -216,7 +216,7 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
 #endif
         UNIT_ASSERT(!std::is_empty<TNonEmptyClass>::value);
         UNIT_ASSERT(!std::is_empty<TNonEmptyDerivedClass>::value);
-    }
+    } 
 
     Y_UNIT_TEST(TestIsStandardLayout) {
         UNIT_ASSERT(std::is_standard_layout<TStdLayoutClass1>::value);
@@ -257,8 +257,8 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
         UNIT_ASSERT(!std::is_trivially_copyable<TNonTriviallyCopyConstructible>::value);
         UNIT_ASSERT(!std::is_trivially_copyable<TNonTriviallyDestructible>::value);
     }
-};
-
+}; 
+ 
 namespace {
     template <typename T>
     struct TTypeTraitsExpected;
@@ -288,30 +288,30 @@ namespace {
     };
 
     template <>
-    struct TTypeTraitsExpected<size_t>: public TTypeTraitsExpected<int> {
+    struct TTypeTraitsExpected<size_t>: public TTypeTraitsExpected<int> { 
     };
 
     template <>
-    struct TTypeTraitsExpected<float>: public TTypeTraitsExpected<int> {
+    struct TTypeTraitsExpected<float>: public TTypeTraitsExpected<int> { 
         enum { IsIntegral = false };
     };
 
     template <>
-    struct TTypeTraitsExpected<long double>: public TTypeTraitsExpected<float> {
+    struct TTypeTraitsExpected<long double>: public TTypeTraitsExpected<float> { 
     };
 
     template <>
-    struct TTypeTraitsExpected<const int>: public TTypeTraitsExpected<int> {
+    struct TTypeTraitsExpected<const int>: public TTypeTraitsExpected<int> { 
         enum { IsConstant = true };
     };
 
     template <>
-    struct TTypeTraitsExpected<volatile int>: public TTypeTraitsExpected<int> {
+    struct TTypeTraitsExpected<volatile int>: public TTypeTraitsExpected<int> { 
         enum { IsVolatile = true };
     };
 
     template <>
-    struct TTypeTraitsExpected<ETestEnum>: public TTypeTraitsExpected<int> {
+    struct TTypeTraitsExpected<ETestEnum>: public TTypeTraitsExpected<int> { 
         enum { IsIntegral = false };
         enum { IsArithmetic = false };
         enum { IsEnum = true };
@@ -335,7 +335,7 @@ namespace {
         enum { IsLvalueReference = true };
     };
 
-    template <>
+    template <> 
     struct TTypeTraitsExpected<TNonPodClass&&>: public TTypeTraitsExpected<TNonPodClass> {
         enum { IsClassType = false };
         enum { IsReference = true };
@@ -347,39 +347,39 @@ namespace {
     };
 
     template <>
-    struct TTypeTraitsExpected<float*>: public TTypeTraitsExpected<int> {
+    struct TTypeTraitsExpected<float*>: public TTypeTraitsExpected<int> { 
         enum { IsIntegral = false };
         enum { IsArithmetic = false };
         enum { IsPointer = true };
     };
 
     template <>
-    struct TTypeTraitsExpected<float&>: public TTypeTraitsExpected<float*> {
+    struct TTypeTraitsExpected<float&>: public TTypeTraitsExpected<float*> { 
         enum { IsPointer = false };
         enum { IsReference = true };
         enum { IsLvalueReference = true };
     };
 
     template <>
-    struct TTypeTraitsExpected<float&&>: public TTypeTraitsExpected<float*> {
+    struct TTypeTraitsExpected<float&&>: public TTypeTraitsExpected<float*> { 
         enum { IsPointer = false };
         enum { IsReference = true };
         enum { IsRvalueReference = true };
     };
 
     template <>
-    struct TTypeTraitsExpected<const float&>: public TTypeTraitsExpected<float&> {
+    struct TTypeTraitsExpected<const float&>: public TTypeTraitsExpected<float&> { 
     };
 
     template <>
-    struct TTypeTraitsExpected<float[17]>: public TTypeTraitsExpected<int> {
+    struct TTypeTraitsExpected<float[17]>: public TTypeTraitsExpected<int> { 
         enum { IsIntegral = false };
         enum { IsArithmetic = false };
         enum { IsArray = true };
     };
 }
 
-#define UNIT_ASSERT_EQUAL_ENUM(expected, actual) UNIT_ASSERT_VALUES_EQUAL((bool)(expected), (bool)(actual))
+#define UNIT_ASSERT_EQUAL_ENUM(expected, actual) UNIT_ASSERT_VALUES_EQUAL((bool)(expected), (bool)(actual)) 
 
 Y_UNIT_TEST_SUITE(TTypeTraitsTestNg) {
     template <typename T>
@@ -399,10 +399,10 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTestNg) {
         UNIT_ASSERT_EQUAL_ENUM(TTypeTraitsExpected<T>::IsClassType, std::is_class<T>::value);
     }
 
-#define TYPE_TEST(name, type) \
-    Y_UNIT_TEST(name) {       \
-        TestImpl<type>();     \
-    }
+#define TYPE_TEST(name, type) \ 
+    Y_UNIT_TEST(name) {       \ 
+        TestImpl<type>();     \ 
+    } 
 
     TYPE_TEST(Void, void)
     TYPE_TEST(Int, int)
@@ -426,11 +426,11 @@ enum E4 {
     X
 };
 
-enum class E64: ui64 {
+enum class E64: ui64 { 
     X
 };
 
-enum class E8: ui8 {
+enum class E8: ui8 { 
     X
 };
 

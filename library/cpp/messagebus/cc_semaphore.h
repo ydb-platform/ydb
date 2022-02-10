@@ -25,9 +25,9 @@ public:
         }
     }
 
-    bool IsLocked() {
-        return Latch.IsLocked();
-    }
+    bool IsLocked() { 
+        return Latch.IsLocked(); 
+    } 
 
 private:
     TThis* GetThis() {

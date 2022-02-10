@@ -1,11 +1,11 @@
 #include "utf8.h"
-#include "wide.h"
-
+#include "wide.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <util/string/reverse.h>
 
-#include <algorithm>
+#include <algorithm> 
 
 namespace {
     //! three UTF8 encoded russian letters (A, B, V)
@@ -14,12 +14,12 @@ namespace {
     const char asciiLatinAlphabet[] = "ABCDEFGHIGKLMNOPQRSTUVWXYZabcdefghigklmnopqrstuvwxyz";
     const wchar16 wideLatinAlphabet[] = {
         'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'G', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-        'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'g', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 0};
+        'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'g', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 0}; 
     const wchar16 wideCyrillicAlphabet[] = {
         0x0410, 0x0411, 0x0412, 0x0413, 0x0414, 0x0415, 0x0416, 0x0417, 0x0418, 0x0419, 0x041A, 0x041B, 0x041C, 0x041D, 0x041E, 0x041F,
         0x0420, 0x0421, 0x0422, 0x0423, 0x0424, 0x0425, 0x0426, 0x0427, 0x0428, 0x0429, 0x042A, 0x042B, 0x042C, 0x042D, 0x042E, 0x042F,
         0x0430, 0x0431, 0x0432, 0x0433, 0x0434, 0x0435, 0x0436, 0x0437, 0x0438, 0x0439, 0x043A, 0x043B, 0x043C, 0x043D, 0x043E, 0x043F,
-        0x0440, 0x0441, 0x0442, 0x0443, 0x0444, 0x0445, 0x0446, 0x0447, 0x0448, 0x0449, 0x044A, 0x044B, 0x044C, 0x044D, 0x044E, 0x044F, 0x00};
+        0x0440, 0x0441, 0x0442, 0x0443, 0x0444, 0x0445, 0x0446, 0x0447, 0x0448, 0x0449, 0x044A, 0x044B, 0x044C, 0x044D, 0x044E, 0x044F, 0x00}; 
     const char utf8CyrillicAlphabet[] =
         "\xd0\x90\xd0\x91\xd0\x92\xd0\x93\xd0\x94\xd0\x95\xd0\x96\xd0\x97"
         "\xd0\x98\xd0\x99\xd0\x9a\xd0\x9b\xd0\x9c\xd0\x9d\xd0\x9e\xd0\x9f"
@@ -35,22 +35,22 @@ namespace {
     const wchar32 LEAD_BITS_MASK_4_BYTES = 0x07;
 
     wchar16 ws[] = {
-        0x0009,
-        0x000A, 0x2028, 0x2029,
-        0x000B,
-        0x000C,
-        0x000D,
-        0x0020, 0x1680,
+        0x0009, 
+        0x000A, 0x2028, 0x2029, 
+        0x000B, 
+        0x000C, 
+        0x000D, 
+        0x0020, 0x1680, 
         0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200A, 0x200B,
         0x202F, 0x205F, 0x3000,
-        0x00A0};
+        0x00A0}; 
 
     const size_t CaseTestDataSize = 10;
     wchar32 WideStringTestData[][CaseTestDataSize] = {
-        {0x01C4, 0x10428, 0x10429, 0x10447, 0x10441, 0x1C03, 0x00A0, 0x10400, 0x10415, 0x10437}, // original
-        {0x01C6, 0x10428, 0x10429, 0x10447, 0x10441, 0x1C03, 0x00A0, 0x10428, 0x1043D, 0x10437}, // lower
-        {0x01C4, 0x10400, 0x10401, 0x1041F, 0x10419, 0x1C03, 0x00A0, 0x10400, 0x10415, 0x1040F}, // upper
-        {0x01C5, 0x10428, 0x10429, 0x10447, 0x10441, 0x1C03, 0x00A0, 0x10428, 0x1043D, 0x10437}, // title
+        {0x01C4, 0x10428, 0x10429, 0x10447, 0x10441, 0x1C03, 0x00A0, 0x10400, 0x10415, 0x10437}, // original 
+        {0x01C6, 0x10428, 0x10429, 0x10447, 0x10441, 0x1C03, 0x00A0, 0x10428, 0x1043D, 0x10437}, // lower 
+        {0x01C4, 0x10400, 0x10401, 0x1041F, 0x10419, 0x1C03, 0x00A0, 0x10400, 0x10415, 0x1040F}, // upper 
+        {0x01C5, 0x10428, 0x10429, 0x10447, 0x10441, 0x1C03, 0x00A0, 0x10428, 0x1043D, 0x10437}, // title 
     };
 
     TUtf16String CreateUnicodeText() {
@@ -73,7 +73,7 @@ namespace {
         for (int i = 0; i < len; ++i) {
             if (i <= 0x7F) { // ASCII characters without 0x7 and 0x1B
                 text[i] = static_cast<wchar16>(i);
-            } else if (i >= 0xC0 && i <= 0xFF) {            // russian characters (without YO and yo)
+            } else if (i >= 0xC0 && i <= 0xFF) {            // russian characters (without YO and yo) 
                 text[i] = static_cast<wchar16>(i + 0x0350); // 0x0410 - 0x044F
             }
         }
@@ -106,21 +106,21 @@ namespace {
             '\xd0', '\xb7', '\xd0', '\xb8', '\xd0', '\xb9', '\xd0', '\xba', '\xd0', '\xbb', '\xd0', '\xbc', '\xd0', '\xbd', '\xd0', '\xbe',
             '\xd0', '\xbf', '\xd1', '\x80', '\xd1', '\x81', '\xd1', '\x82', '\xd1', '\x83', '\xd1', '\x84', '\xd1', '\x85', '\xd1', '\x86',
             '\xd1', '\x87', '\xd1', '\x88', '\xd1', '\x89', '\xd1', '\x8a', '\xd1', '\x8b', '\xd1', '\x8c', '\xd1', '\x8d', '\xd1', '\x8e',
-            '\xd1', '\x8f'};
+            '\xd1', '\x8f'}; 
         return TString(text, Y_ARRAY_SIZE(text));
     }
 
     //! use this function to dump UTF8 text into a file in case of any changes
-    //    void DumpUTF8Text() {
+    //    void DumpUTF8Text() { 
     //        TString s = WideToUTF8(UnicodeText);
-    //        std::ofstream f("utf8.txt");
-    //        f << std::hex;
-    //        for (int i = 0; i < (int)s.size(); ++i) {
-    //            f << "0x" << std::setw(2) << std::setfill('0') << (int)(ui8)s[i] << ", ";
-    //            if ((i + 1) % 16 == 0)
-    //                f << std::endl;
-    //        }
-    //    }
+    //        std::ofstream f("utf8.txt"); 
+    //        f << std::hex; 
+    //        for (int i = 0; i < (int)s.size(); ++i) { 
+    //            f << "0x" << std::setw(2) << std::setfill('0') << (int)(ui8)s[i] << ", "; 
+    //            if ((i + 1) % 16 == 0) 
+    //                f << std::endl; 
+    //        } 
+    //    } 
 
     void CheckRecodeOK(wchar32 expected, unsigned char* first, size_t n) {
         wchar32 w = 0;
@@ -160,7 +160,7 @@ namespace {
     }
 }
 
-class TConversionTest: public TTestBase {
+class TConversionTest: public TTestBase { 
 private:
     //! @note every of the text can have zeros in the middle
     const TUtf16String UnicodeText_;
@@ -168,15 +168,15 @@ private:
 
 private:
     UNIT_TEST_SUITE(TConversionTest);
-    UNIT_TEST(TestReadUTF8Char);
-    UNIT_TEST(TestGetUTF8CharLen);
-    UNIT_TEST(TestWriteUTF8Char);
-    UNIT_TEST(TestUTF8ToWide);
-    UNIT_TEST(TestWideToUTF8);
-    UNIT_TEST(TestGetNumOfUTF8Chars);
-    UNIT_TEST(TestSubstrUTF8);
-    UNIT_TEST(TestUnicodeCase);
-    UNIT_TEST(TestUnicodeDetails);
+    UNIT_TEST(TestReadUTF8Char); 
+    UNIT_TEST(TestGetUTF8CharLen); 
+    UNIT_TEST(TestWriteUTF8Char); 
+    UNIT_TEST(TestUTF8ToWide); 
+    UNIT_TEST(TestWideToUTF8); 
+    UNIT_TEST(TestGetNumOfUTF8Chars); 
+    UNIT_TEST(TestSubstrUTF8); 
+    UNIT_TEST(TestUnicodeCase); 
+    UNIT_TEST(TestUnicodeDetails); 
     UNIT_TEST(TestHexConversion);
     UNIT_TEST_SUITE_END();
 
@@ -475,7 +475,7 @@ void TConversionTest::TestUTF8ToWide() {
         UNIT_ASSERT_VALUES_EQUAL(w[i], UnicodeText_[i]);
     }
 
-    wchar16 buffer[4] = {0};
+    wchar16 buffer[4] = {0}; 
     size_t written = 0;
     // the function must extract 2 symbols only
     bool result = UTF8ToWide(utext, 5, buffer, written);
@@ -495,24 +495,24 @@ void TConversionTest::TestUTF8ToWide() {
     UNIT_ASSERT(buffer[2] == 0x0000);
     UNIT_ASSERT(buffer[3] == 0x0000);
     UNIT_ASSERT(written == 0);
-
+ 
     w = UTF8ToWide(asciiLatinAlphabet, strlen(asciiLatinAlphabet));
     UNIT_ASSERT(w == wideLatinAlphabet);
     w = UTF8ToWide(utf8CyrillicAlphabet, strlen(utf8CyrillicAlphabet));
     UNIT_ASSERT(w == wideCyrillicAlphabet);
 
     const char* utf8NonBMP = "\xf4\x80\x89\x84\xf4\x80\x89\x87\xf4\x80\x88\xba";
-    wchar16 wNonBMPDummy[] = {0xDBC0, 0xDE44, 0xDBC0, 0xDE47, 0xDBC0, 0xDE3A};
+    wchar16 wNonBMPDummy[] = {0xDBC0, 0xDE44, 0xDBC0, 0xDE47, 0xDBC0, 0xDE3A}; 
     TestSurrogates(utf8NonBMP, wNonBMPDummy, Y_ARRAY_SIZE(wNonBMPDummy));
 
     const char* utf8NonBMP2 = "ab\xf4\x80\x89\x87n";
-    wchar16 wNonBMPDummy2[] = {'a', 'b', 0xDBC0, 0xDE47, 'n'};
+    wchar16 wNonBMPDummy2[] = {'a', 'b', 0xDBC0, 0xDE47, 'n'}; 
     TestSurrogates(utf8NonBMP2, wNonBMPDummy2, Y_ARRAY_SIZE(wNonBMPDummy2));
 
     UNIT_ASSERT_VALUES_EQUAL(WideToUTF8(UTF8ToWide(WideToUTF8(UTF8ToWide<true>(
-                                 "m\xFB\xB2\xA5\xAA\xAFyeuse.sexwebcamz.com")))),
+                                 "m\xFB\xB2\xA5\xAA\xAFyeuse.sexwebcamz.com")))), 
                              TString(
-                                 "m\xEF\xBF\xBD\xEF\xBF\xBD\xEF\xBF\xBD\xEF\xBF\xBD\xEF\xBF\xBDyeuse.sexwebcamz.com"));
+                                 "m\xEF\xBF\xBD\xEF\xBF\xBD\xEF\xBF\xBD\xEF\xBF\xBD\xEF\xBF\xBDyeuse.sexwebcamz.com")); 
 }
 
 void TConversionTest::TestWideToUTF8() {
@@ -520,7 +520,7 @@ void TConversionTest::TestWideToUTF8() {
     size_t len = 0;
     for (TUtf16String::const_iterator i = UnicodeText_.begin(), ie = UnicodeText_.end(); i != ie; ++i) {
         len += UTF8RuneLenByUCS(*i);
-    }
+    } 
 
     UNIT_ASSERT(s.size() == Utf8Text_.size());
     UNIT_ASSERT(s.size() == len);
@@ -579,16 +579,16 @@ void TConversionTest::TestUnicodeDetails() {
     }
 }
 
-class TWideUtilTest: public TTestBase {
+class TWideUtilTest: public TTestBase { 
     UNIT_TEST_SUITE(TWideUtilTest);
-    UNIT_TEST(TestCollapse);
-    UNIT_TEST(TestCollapseBuffer);
-    UNIT_TEST(TestStrip);
-    UNIT_TEST(TestIsSpace);
-    UNIT_TEST(TestEscapeHtmlChars);
-    UNIT_TEST(TestToLower);
-    UNIT_TEST(TestToUpper);
-    UNIT_TEST(TestWideString);
+    UNIT_TEST(TestCollapse); 
+    UNIT_TEST(TestCollapseBuffer); 
+    UNIT_TEST(TestStrip); 
+    UNIT_TEST(TestIsSpace); 
+    UNIT_TEST(TestEscapeHtmlChars); 
+    UNIT_TEST(TestToLower); 
+    UNIT_TEST(TestToUpper); 
+    UNIT_TEST(TestWideString); 
     UNIT_TEST(TestCountWideChars);
     UNIT_TEST(TestIsValidUTF16);
     UNIT_TEST(TestIsStringASCII);
@@ -814,21 +814,21 @@ public:
             EscapeHtmlChars<false>(w);
 
             switch (c) {
-                case '<':
+                case '<': 
                     UNIT_ASSERT(w == ASCIIToWide("&lt;"));
-                    break;
-                case '>':
+                    break; 
+                case '>': 
                     UNIT_ASSERT(w == ASCIIToWide("&gt;"));
-                    break;
-                case '&':
+                    break; 
+                case '&': 
                     UNIT_ASSERT(w == ASCIIToWide("&amp;"));
-                    break;
-                case '"':
+                    break; 
+                case '"': 
                     UNIT_ASSERT(w == ASCIIToWide("&quot;"));
-                    break;
-                default:
+                    break; 
+                default: 
                     UNIT_ASSERT(w == TUtf16String(1, c));
-                    break;
+                    break; 
             }
         }
 
@@ -837,25 +837,25 @@ public:
             EscapeHtmlChars<true>(w);
 
             switch (c) {
-                case '<':
+                case '<': 
                     UNIT_ASSERT(w == ASCIIToWide("&lt;"));
-                    break;
-                case '>':
+                    break; 
+                case '>': 
                     UNIT_ASSERT(w == ASCIIToWide("&gt;"));
-                    break;
-                case '&':
+                    break; 
+                case '&': 
                     UNIT_ASSERT(w == ASCIIToWide("&amp;"));
-                    break;
-                case '"':
+                    break; 
+                case '"': 
                     UNIT_ASSERT(w == ASCIIToWide("&quot;"));
-                    break;
-                case '\r':
-                case '\n':
+                    break; 
+                case '\r': 
+                case '\n': 
                     UNIT_ASSERT(w == ASCIIToWide("<BR>"));
-                    break;
-                default:
+                    break; 
+                default: 
                     UNIT_ASSERT(w == TUtf16String(1, c));
-                    break;
+                    break; 
             }
         }
     }
@@ -863,7 +863,7 @@ public:
     void TestToLower() {
         const size_t n = 32;
         wchar16 upperCase[n];
-        std::copy(wideCyrillicAlphabet, wideCyrillicAlphabet + n, upperCase);
+        std::copy(wideCyrillicAlphabet, wideCyrillicAlphabet + n, upperCase); 
         ToLower(upperCase, n);
         UNIT_ASSERT(TWtringBuf(upperCase, n) == TWtringBuf(wideCyrillicAlphabet + n, n));
     }
@@ -871,7 +871,7 @@ public:
     void TestToUpper() {
         const size_t n = 32;
         wchar16 lowerCase[n];
-        std::copy(wideCyrillicAlphabet + n, wideCyrillicAlphabet + n * 2, lowerCase);
+        std::copy(wideCyrillicAlphabet + n, wideCyrillicAlphabet + n * 2, lowerCase); 
         ToUpper(lowerCase, n);
         UNIT_ASSERT(TWtringBuf(lowerCase, n) == TWtringBuf(wideCyrillicAlphabet, n));
     }
@@ -908,7 +908,7 @@ public:
         UNIT_ASSERT(temp == title);
 
         TVector<wchar32> buffer(WideStringTestData[0], WideStringTestData[0] + CaseTestDataSize);
-        std::reverse(buffer.begin(), buffer.end());
+        std::reverse(buffer.begin(), buffer.end()); 
         const TUtf16String reversed = UTF32ToWide(buffer.data(), buffer.size());
 
         temp = original;
@@ -988,7 +988,7 @@ public:
         UNIT_ASSERT(IsLowerWord(TWtringBuf()));
         UNIT_ASSERT(IsLowerWord(UTF8ToWide("")));
         UNIT_ASSERT(IsLowerWord(UTF8ToWide("test")));
-        UNIT_ASSERT(IsLowerWord(UTF8ToWide("тест"))); // "тест" is "test" in russian (cyrrilic)
+        UNIT_ASSERT(IsLowerWord(UTF8ToWide("тест"))); // "тест" is "test" in russian (cyrrilic) 
         UNIT_ASSERT(!IsLowerWord(UTF8ToWide("тест тест")));
         UNIT_ASSERT(!IsLowerWord(UTF8ToWide("тест100500")));
 
@@ -1043,7 +1043,7 @@ public:
         UNIT_ASSERT(IsLower(TWtringBuf()));
         UNIT_ASSERT(IsLower(UTF8ToWide("")));
         UNIT_ASSERT(IsLower(UTF8ToWide("test")));
-        UNIT_ASSERT(IsLower(UTF8ToWide("тест"))); // "тест" is "test" in russian (cyrrilic)
+        UNIT_ASSERT(IsLower(UTF8ToWide("тест"))); // "тест" is "test" in russian (cyrrilic) 
         UNIT_ASSERT(IsLower(UTF8ToWide("тест тест")));
         UNIT_ASSERT(IsLower(UTF8ToWide("тест100500")));
 
@@ -1728,7 +1728,7 @@ public:
         {
             auto s = UTF8ToWide("теСт");
             const auto copy = s;
-            const auto title = UTF8ToWide("теСТ");
+            const auto title = UTF8ToWide("теСТ"); 
 
             UNIT_ASSERT(ToTitle(s, 3, 100500));
             UNIT_ASSERT(s == title);

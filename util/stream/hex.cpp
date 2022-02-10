@@ -1,6 +1,6 @@
 #include "hex.h"
 
-#include "output.h"
+#include "output.h" 
 #include <util/string/hex.h>
 
 void HexEncode(const void* in, size_t len, IOutputStream& out) {

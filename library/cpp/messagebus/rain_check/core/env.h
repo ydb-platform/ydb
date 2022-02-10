@@ -10,15 +10,15 @@
 namespace NRainCheck {
     struct IEnv {
         virtual ::NActor::TExecutor* GetExecutor() = 0;
-        virtual ~IEnv() {
-        }
+        virtual ~IEnv() { 
+        } 
     };
 
     template <typename TSelf>
     struct TEnvTemplate: public IEnv {
         template <typename TTask, typename TParam>
         TIntrusivePtr<typename TTask::TTaskRunner> SpawnTask(TParam param) {
-            return ::NRainCheck::SpawnTask<TTask, TSelf>((TSelf*)this, param);
+            return ::NRainCheck::SpawnTask<TTask, TSelf>((TSelf*)this, param); 
         }
     };
 
@@ -29,19 +29,19 @@ namespace NRainCheck {
 
         TSimpleEnvTemplate(unsigned threadCount = 0)
             : Executor(new ::NActor::TExecutor(threadCount != 0 ? threadCount : 4))
-        {
-        }
+        { 
+        } 
 
-        ::NActor::TExecutor* GetExecutor() override {
-            return Executor.Get();
-        }
+        ::NActor::TExecutor* GetExecutor() override { 
+            return Executor.Get(); 
+        } 
     };
 
     struct TSimpleEnv: public TSimpleEnvTemplate<TSimpleEnv> {
-        TSimpleEnv(unsigned threadCount = 0)
-            : TSimpleEnvTemplate<TSimpleEnv>(threadCount)
-        {
-        }
+        TSimpleEnv(unsigned threadCount = 0) 
+            : TSimpleEnvTemplate<TSimpleEnv>(threadCount) 
+        { 
+        } 
     };
 
 }

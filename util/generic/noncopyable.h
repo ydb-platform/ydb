@@ -4,7 +4,7 @@
  * @class TNonCopyable
  *
  * Inherit your class from `TNonCopyable` if you want to make it noncopyable.
- *
+ * 
  * Example usage:
  * @code
  * class Foo: private TNonCopyable {
@@ -13,11 +13,11 @@
  * @endcode
  */
 
-namespace NNonCopyable { // protection from unintended ADL
+namespace NNonCopyable { // protection from unintended ADL 
     struct TNonCopyable {
         TNonCopyable(const TNonCopyable&) = delete;
         TNonCopyable& operator=(const TNonCopyable&) = delete;
-
+ 
         TNonCopyable() = default;
         ~TNonCopyable() = default;
     };

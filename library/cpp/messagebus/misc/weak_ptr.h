@@ -8,18 +8,18 @@ struct TWeakPtr;
 
 template <typename TSelf>
 struct TWeakRefCounted {
-    template <typename>
-    friend struct TWeakPtr;
-
+    template <typename> 
+    friend struct TWeakPtr; 
+ 
 private:
-    struct TRef: public TAtomicRefCount<TRef> {
+    struct TRef: public TAtomicRefCount<TRef> { 
         TMutex Mutex;
         TSelf* Outer;
 
-        TRef(TSelf* outer)
-            : Outer(outer)
-        {
-        }
+        TRef(TSelf* outer) 
+            : Outer(outer) 
+        { 
+        } 
 
         void Release() {
             TGuard<TMutex> g(Mutex);
@@ -40,8 +40,8 @@ private:
 public:
     TWeakRefCounted()
         : RefPtr(new TRef(static_cast<TSelf*>(this)))
-    {
-    }
+    { 
+    } 
 
     void Ref() {
         Counter.Inc();
@@ -72,10 +72,10 @@ struct TWeakPtr {
 private:
     typedef TIntrusivePtr<typename T::TRef> TRefPtr;
     TRefPtr RefPtr;
-
+ 
 public:
-    TWeakPtr() {
-    }
+    TWeakPtr() { 
+    } 
 
     TWeakPtr(T* t) {
         if (!!t) {

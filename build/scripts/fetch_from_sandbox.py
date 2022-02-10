@@ -6,12 +6,12 @@ import os
 import random
 import subprocess
 import sys
-import time
+import time 
 import urllib2
 import uuid
-
+ 
 import fetch_from
-
+ 
 
 ORIGIN_SUFFIX = '?origin=fetch-from-sandbox'
 MDS_PREFIX = 'http://storage-int.mds.yandex.net/get-sandbox/'

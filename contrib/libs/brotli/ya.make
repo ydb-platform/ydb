@@ -1,10 +1,10 @@
 VERSION(1.0.1)
 
-RECURSE(
+RECURSE( 
     common
-    dec
-    enc
-    tools
+    dec 
+    enc 
+    tools 
     python
     java
-)
+) 

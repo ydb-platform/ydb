@@ -248,7 +248,7 @@ namespace NActors {
         MainCycle.Destroy();
     }
 
-}
+} 
 
 #ifdef __linux__
 
@@ -261,12 +261,12 @@ namespace NActors {
         }
     }
 
-}
+} 
 
 #else //  __linux__
 
 namespace NActors {
-    ISchedulerThread* CreateSchedulerThread(const TSchedulerConfig& config) {
+    ISchedulerThread* CreateSchedulerThread(const TSchedulerConfig& config) { 
         return new TBasicSchedulerThread(config);
     }
 }

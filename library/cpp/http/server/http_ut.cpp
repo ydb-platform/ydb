@@ -1,58 +1,58 @@
-#include "http.h"
-#include "http_ex.h"
-
+#include "http.h" 
+#include "http_ex.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
-
+ 
 #include <util/generic/cast.h>
 #include <util/stream/output.h>
 #include <util/stream/zlib.h>
 #include <util/system/datetime.h>
 #include <util/system/sem.h>
-
+ 
 Y_UNIT_TEST_SUITE(THttpServerTest) {
-    class TEchoServer: public THttpServer::ICallBack {
+    class TEchoServer: public THttpServer::ICallBack { 
         class TRequest: public THttpClientRequestEx {
-        public:
-            inline TRequest(TEchoServer* parent)
-                : Parent_(parent)
-            {
-            }
-
+        public: 
+            inline TRequest(TEchoServer* parent) 
+                : Parent_(parent) 
+            { 
+            } 
+ 
             bool Reply(void* /*tsr*/) override {
-                if (!ProcessHeaders()) {
+                if (!ProcessHeaders()) { 
                     return true;
-                }
-
-                Output() << "HTTP/1.1 200 Ok\r\n\r\n";
+                } 
+ 
+                Output() << "HTTP/1.1 200 Ok\r\n\r\n"; 
                 if (Buf.Size()) {
                     Output().Write(Buf.AsCharPtr(), Buf.Size());
-                } else {
-                    Output() << Parent_->Res_;
-                }
-                Output().Finish();
+                } else { 
+                    Output() << Parent_->Res_; 
+                } 
+                Output().Finish(); 
 
-                return true;
-            }
-
-        private:
+                return true; 
+            } 
+ 
+        private: 
             TEchoServer* Parent_ = nullptr;
-        };
-
-    public:
+        }; 
+ 
+    public: 
         inline TEchoServer(const TString& res)
-            : Res_(res)
-        {
-        }
-
+            : Res_(res) 
+        { 
+        } 
+ 
         TClientRequest* CreateClient() override {
-            return new TRequest(this);
-        }
-
-    private:
+            return new TRequest(this); 
+        } 
+ 
+    private: 
         TString Res_;
-    };
-
+    }; 
+ 
     class TSleepingServer: public THttpServer::ICallBack {
         class TReplier: public TRequestReplier {
         public:
@@ -269,7 +269,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                 TStringStream ss;
                 ss << (KeepAliveConnection ? "keep-alive " : "") << Type;
                 if (ContentEncoding.size()) {
-                    ss << " with encoding=" << ContentEncoding;
+                    ss << " with encoding=" << ContentEncoding; 
                 }
                 return ss.Str();
             } else {
@@ -292,7 +292,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
     class TFailingMtpQueue: public TSimpleThreadPool {
     private:
         bool FailOnAdd_ = false;
-
+ 
     public:
         void SetFailOnAdd(bool fail = true) {
             FailOnAdd_ = fail;
@@ -313,47 +313,47 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
 
     TString TestData(size_t size = 5 * 4096) {
         TString res;
-
+ 
         for (size_t i = 0; i < size; ++i) {
-            res += (char)i;
-        }
+            res += (char)i; 
+        } 
         return res;
     }
-
+ 
     Y_UNIT_TEST(TestEchoServer) {
         TString res = TestData();
         TPortManager pm;
         const ui16 port = pm.GetPort();
         const bool trueFalse[] = {true, false};
-
-        TEchoServer serverImpl(res);
-        THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).EnableCompression(true));
-
+ 
+        TEchoServer serverImpl(res); 
+        THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).EnableCompression(true)); 
+ 
         for (int i = 0; i < 2; ++i) {
             UNIT_ASSERT(server.Start());
-
+ 
             TTestRequest r(port);
             r.Content = res;
-
-            for (bool keepAlive : trueFalse) {
+ 
+            for (bool keepAlive : trueFalse) { 
                 r.KeepAliveConnection = keepAlive;
-
+ 
                 // THttpOutput use chunked stream, else use Content-Length
-                for (bool useHttpOutput : trueFalse) {
+                for (bool useHttpOutput : trueFalse) { 
                     r.UseHttpOutput = useHttpOutput;
-
-                    for (bool enableResponseEncoding : trueFalse) {
+ 
+                    for (bool enableResponseEncoding : trueFalse) { 
                         r.EnableResponseEncoding = enableResponseEncoding;
-
+ 
                         const TString reqTypes[] = {"GET", "POST"};
                         for (const TString& reqType : reqTypes) {
                             r.Type = reqType;
-
+ 
                             const TString encoders[] = {"", "deflate"};
                             for (const TString& encoder : encoders) {
                                 r.ContentEncoding = encoder;
-
-                                for (bool expect100Continue : trueFalse) {
+ 
+                                for (bool expect100Continue : trueFalse) { 
                                     r.Expect100Continue = expect100Continue;
                                     TString resp = r.Execute();
                                     UNIT_ASSERT_C(resp == res, "diff echo response for request:\n" + r.GetDescription());
@@ -365,12 +365,12 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             }
 
             server.Stop();
-        }
-    }
+        } 
+    } 
 
     Y_UNIT_TEST(TestReusePortEnabled) {
         if (!IsReusePortAvailable()) {
-            return; // skip test
+            return; // skip test 
         }
         TString res = TestData();
         TPortManager pm;
@@ -383,7 +383,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         }
 
         for (ui32 testRun = 0; testRun < 3; testRun++) {
-            for (auto& server : servers) {
+            for (auto& server : servers) { 
                 // start servers one at a time and check at least one of them is replying
                 UNIT_ASSERT(server->Start());
 
@@ -391,7 +391,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                 UNIT_ASSERT_C(r.Execute() == res, "diff echo response for request:\n" + r.GetDescription());
             }
 
-            for (auto& server : servers) {
+            for (auto& server : servers) { 
                 // ping servers and stop them one at a time
                 // at the last iteration only one server is still working and then gets stopped as well
 
@@ -471,7 +471,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                 return true;
             }
         };
-
+ 
     public:
         TClientRequest* CreateClient() override {
             return new TRequest();
@@ -684,7 +684,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         server.Stop();
     };
 
-#if 0
+#if 0 
     Y_UNIT_TEST(TestSocketsLeak) {
         const bool trueFalse[] = {true, false};
         TPortManager portManager;
@@ -709,7 +709,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             server.BusyThread();
 
             for (size_t i = 0; i < 3; ++i) {
-                auto func = [&server, port, keepAlive]() {
+                auto func = [&server, port, keepAlive]() { 
                     server.BusyThread();
                     THolder<TTestRequest> r = MakeHolder<TTestRequest>(port);
                     r->KeepAliveConnection = keepAlive;
@@ -722,7 +722,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             Sleep(TDuration::MilliSeconds(100));
             server.BusyThread(); // we wait while connections are established by the
                                  // system and accepted by the server
-            server.Free(3);      // we release all connections processing
+            server.Free(3);      // we release all connections processing 
 
             for (auto&& thread : threads) {
                 thread->Join();
@@ -735,5 +735,5 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             UNIT_ASSERT_EQUAL_C(server.RepliesCount(), 1, "only one request should have been processed, got " + ToString(server.RepliesCount()));
         }
     }
-#endif
-}
+#endif 
+} 

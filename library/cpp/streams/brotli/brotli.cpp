@@ -122,7 +122,7 @@ void TBrotliCompress::DoFinish() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBrotliDecompress::TImpl: public TAdditionalStorage<TImpl> {
+class TBrotliDecompress::TImpl: public TAdditionalStorage<TImpl> { 
 public:
     TImpl(IInputStream* slave)
         : Slave_(slave)
@@ -190,7 +190,7 @@ private:
 
     bool SubstreamFinished_ = false;
     bool InputExhausted_ = false;
-    const ui8* InputBuffer_ = nullptr;
+    const ui8* InputBuffer_ = nullptr; 
     size_t InputAvailable_ = 0;
 
     unsigned char* TmpBuf() noexcept {
@@ -220,7 +220,7 @@ private:
 };
 
 TBrotliDecompress::TBrotliDecompress(IInputStream* slave, size_t bufferSize)
-    : Impl_(new (bufferSize) TImpl(slave))
+    : Impl_(new (bufferSize) TImpl(slave)) 
 {
 }
 

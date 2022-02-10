@@ -956,7 +956,7 @@ bool RE2::CheckRewriteString(const StringPiece& rewrite,
     if (c == '\\') {
       continue;
     }
-    if (!isdigit(c)) {
+    if (!isdigit(c)) { 
       *error = "Rewrite schema error: "
                "'\\' must be followed by a digit or '\\'.";
       return false;

@@ -5,10 +5,10 @@
 #include <util/generic/yexception.h>
 
 extern "C" {
-extern const ui8 codec_info_huff_20160707[];
-extern const ui32 codec_info_huff_20160707Size;
-extern const ui8 codec_info_sa_huff_20160707[];
-extern const ui32 codec_info_sa_huff_20160707Size;
+extern const ui8 codec_info_huff_20160707[]; 
+extern const ui32 codec_info_huff_20160707Size; 
+extern const ui8 codec_info_sa_huff_20160707[]; 
+extern const ui32 codec_info_sa_huff_20160707Size; 
 };
 
 namespace NStaticCodecExample {

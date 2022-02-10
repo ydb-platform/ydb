@@ -658,7 +658,7 @@ void RbxGotoCodeGen::BREAK( ostream &ret, int targState )
 	out <<
 		"	begin\n"
 		"		" << P() << " += 1\n"
-		"		"; rbxGoto(ret, "_out") << "\n" 
+		"		"; rbxGoto(ret, "_out") << "\n"  
 		"	end\n";
 }
 

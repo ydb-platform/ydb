@@ -1,7 +1,7 @@
 PY23_LIBRARY()
 
 OWNER(g:python-contrib)
-
+ 
 VERSION(1.17.112)
 
 LICENSE(Apache-2.0)

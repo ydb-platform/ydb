@@ -6,22 +6,22 @@
 #include <library/cpp/mime/types/mime.h>
 #include <util/system/yassert.h>
 #include <library/cpp/http/misc/httpcodes.h>
-
-template <size_t headermax = 100 << 10, size_t bodymax = 1 << 20>
+ 
+template <size_t headermax = 100 << 10, size_t bodymax = 1 << 20> 
 struct TFakeCheck {
-    bool Check(THttpHeader* /*header*/) {
-        return false;
-    }
-    void CheckDocPart(void* /*buf*/, size_t /*len*/, THttpHeader* /*header*/) {
-    } //for every part of DocumentBody will be called
-    void CheckEndDoc(THttpHeader* /*header*/) {
-    }
-    size_t GetMaxHeaderSize() {
-        return headermax;
-    }
-    size_t GetMaxBodySize(THttpHeader*) {
-        return bodymax;
-    }
+    bool Check(THttpHeader* /*header*/) { 
+        return false; 
+    } 
+    void CheckDocPart(void* /*buf*/, size_t /*len*/, THttpHeader* /*header*/) { 
+    } //for every part of DocumentBody will be called 
+    void CheckEndDoc(THttpHeader* /*header*/) { 
+    } 
+    size_t GetMaxHeaderSize() { 
+        return headermax; 
+    } 
+    size_t GetMaxBodySize(THttpHeader*) { 
+        return bodymax; 
+    } 
 };
 
 class THttpParserBase {
@@ -37,17 +37,17 @@ public:
         hp_read_chunk
     };
 
-    States GetState() {
-        return State;
-    }
+    States GetState() { 
+        return State; 
+    } 
 
-    void setAssumeConnectionClosed(int value) {
+    void setAssumeConnectionClosed(int value) { 
         AssumeConnectionClosed = value;
     }
 
-    THttpHeader* GetHttpHeader() const {
-        return Header;
-    }
+    THttpHeader* GetHttpHeader() const { 
+        return Header; 
+    } 
 
 protected:
     int CheckHeaders() {
@@ -69,8 +69,8 @@ protected:
             if (Header->compression_method != HTTP_COMPRESSION_UNSET &&
                 Header->compression_method != HTTP_COMPRESSION_IDENTITY &&
                 Header->compression_method != HTTP_COMPRESSION_GZIP &&
-                Header->compression_method != HTTP_COMPRESSION_DEFLATE)
-            {
+                Header->compression_method != HTTP_COMPRESSION_DEFLATE) 
+            { 
                 Header->error = HTTP_BAD_CONTENT_ENCODING;
                 return 1;
             }
@@ -78,7 +78,7 @@ protected:
         if (Header->connection_closed == -1)
             Header->connection_closed = (Header->http_minor == 0 ||
                                          AssumeConnectionClosed);
-        if (!Header->transfer_chunked && !Header->connection_closed && Header->content_length < 0 && !HeadRequest) {
+        if (!Header->transfer_chunked && !Header->connection_closed && Header->content_length < 0 && !HeadRequest) { 
             Header->error = HTTP_LENGTH_UNKNOWN;
             return 1;
         }
@@ -93,15 +93,15 @@ protected:
     THttpChunkParser ChunkParser;
     States State;
     long ChunkSize;
-    THttpHeader* Header;
+    THttpHeader* Header; 
     int AssumeConnectionClosed;
     bool HeadRequest;
 };
 
-template <int isReader, typename TCheck = TFakeCheck<>>
+template <int isReader, typename TCheck = TFakeCheck<>> 
 class THttpParserGeneric: public THttpParserBase, public TCheck {
 protected:
-    long ParseGeneric(void*& buf, long& size) {
+    long ParseGeneric(void*& buf, long& size) { 
         if (!size) {
             switch (State) {
                 case hp_error:
@@ -155,10 +155,10 @@ protected:
                         size -= long(HeaderParser.lastchar - (char*)buf + 1);
                         buf = HeaderParser.lastchar + 1;
                         State = CheckHeaders() ? hp_error
-                                               : Header->transfer_chunked ? hp_begin_chunk_header
-                                                                          : Header->content_length == 0 ? hp_eof
-                                                                                                        : Header->content_length > 0 ? hp_read_alive
-                                                                                                                                     : hp_read_closed;
+                                               : Header->transfer_chunked ? hp_begin_chunk_header 
+                                                                          : Header->content_length == 0 ? hp_eof 
+                                                                                                        : Header->content_length > 0 ? hp_read_alive 
+                                                                                                                                     : hp_read_closed; 
                         if (State == hp_begin_chunk_header) {
                             // unget \n for chunk reader
                             buf = (char*)buf - 1;
@@ -239,11 +239,11 @@ protected:
     }
 };
 
-template <class TCheck = TFakeCheck<>>
+template <class TCheck = TFakeCheck<>> 
 class THttpParser: public THttpParserGeneric<0, TCheck> {
     typedef THttpParserGeneric<0, TCheck> TBaseT; //sorry avoiding gcc 3.4.6 BUG!
 public:
-    void Init(THttpHeader* H, bool head_request = false) {
+    void Init(THttpHeader* H, bool head_request = false) { 
         TBaseT::Header = H;
         TBaseT::HeaderParser.Init(TBaseT::Header);
         TBaseT::State = TBaseT::hp_in_header;
@@ -251,19 +251,19 @@ public:
         TBaseT::HeadRequest = head_request;
     }
 
-    void Parse(void* buf, long size) {
+    void Parse(void* buf, long size) { 
         TBaseT::ParseGeneric(buf, size);
     }
 };
 
 class TMemoReader {
 public:
-    int Init(void* buf, long bufsize) {
+    int Init(void* buf, long bufsize) { 
         Buf = buf;
         Bufsize = bufsize;
         return 0;
     }
-    long Read(void*& buf) {
+    long Read(void*& buf) { 
         Y_ASSERT(Bufsize >= 0);
         if (!Bufsize) {
             Bufsize = -1;
@@ -277,15 +277,15 @@ public:
 
 protected:
     long Bufsize;
-    void* Buf;
+    void* Buf; 
 };
 
 template <class Reader>
 class THttpReader: public THttpParserGeneric<1>, public Reader {
     typedef THttpParserGeneric<1> TBaseT;
-
+ 
 public:
-    using TBaseT::AssumeConnectionClosed;
+    using TBaseT::AssumeConnectionClosed; 
     using TBaseT::Header;
     using TBaseT::ParseGeneric;
     using TBaseT::State;
@@ -299,7 +299,7 @@ public:
         return parsHeader ? ParseHeader() : SkipHeader();
     }
 
-    long Read(void*& buf) {
+    long Read(void*& buf) { 
         long Chunk;
         do {
             if (!Size) {
@@ -317,7 +317,7 @@ public:
             if (State == hp_eof) {
                 Size = 0;
                 Eoferr = 0;
-            } else if (State == hp_error)
+            } else if (State == hp_error) 
                 return Eoferr = -1;
         } while (!Chunk);
         return Chunk;
@@ -352,9 +352,9 @@ protected:
             hdrsize -= Size;
         }
         State = Header->transfer_chunked ? hp_begin_chunk_header
-                                         : Header->content_length == 0 ? hp_eof
-                                                                       : Header->content_length > 0 ? hp_read_alive
-                                                                                                    : hp_read_closed;
+                                         : Header->content_length == 0 ? hp_eof 
+                                                                       : Header->content_length > 0 ? hp_read_alive 
+                                                                                                    : hp_read_closed; 
         Header->entity_size = 0;
         if (State == hp_eof)
             Eoferr = 0;
@@ -366,7 +366,7 @@ protected:
         return 0;
     }
 
-    void* Ptr;
+    void* Ptr; 
     long Size;
-    int Eoferr;
+    int Eoferr; 
 };

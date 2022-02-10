@@ -16,7 +16,7 @@ namespace NSc {
             using TElement = typename TContext::TElement;
             using TTarget = typename TContext::TTarget;
             using TVectorType = TVector<TElement>;
-
+ 
         public:
             TContextGuard(TContext& ctx, TTarget& target)
                 : Ctx(ctx)
@@ -64,14 +64,14 @@ namespace NSc {
             using TElement = TElem;
             using TTarget = TTgt;
 
-            TBasicContext() {
+            TBasicContext() { 
                 Vector.reserve(64);
             }
 
             TVector<TElement> Vector;
         };
 
-        class TKeySortContext: public TBasicContext<TStringBuf, const TDict> {
+        class TKeySortContext: public TBasicContext<TStringBuf, const TDict> { 
         public:
             using TGuard = TContextGuard<TKeySortContext>;
 
@@ -82,7 +82,7 @@ namespace NSc {
             }
         };
 
-        class TSelfOverrideContext: public TBasicContext<TValue, TValue::TScCore> {
+        class TSelfOverrideContext: public TBasicContext<TValue, TValue::TScCore> { 
         public:
             using TGuard = TContextGuard<TSelfOverrideContext>;
 
@@ -93,7 +93,7 @@ namespace NSc {
             }
         };
 
-        class TSelfLoopContext: public TBasicContext<const void*, const TValue::TScCore> {
+        class TSelfLoopContext: public TBasicContext<const void*, const TValue::TScCore> { 
         public:
             enum class EMode {
                 Assert, Throw, Abort, Stderr

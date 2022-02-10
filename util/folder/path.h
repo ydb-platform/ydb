@@ -1,18 +1,18 @@
 #pragma once
 
 #include "fwd.h"
-#include "pathsplit.h"
-
+#include "pathsplit.h" 
+ 
 #include <util/generic/ptr.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/string/cast.h>
-#include <util/system/fstat.h>
+#include <util/system/fstat.h> 
 #include <util/system/platform.h>
 #include <util/system/sysstat.h>
 #include <util/system/yassert.h>
-
+ 
 #include <utility>
 
 /**
@@ -20,7 +20,7 @@
  * It uses platform-dependent separators for path-reconstructing operations.
  */
 class TFsPath {
-private:
+private: 
     struct TSplit;
 
 public:
@@ -29,15 +29,15 @@ public:
     TFsPath(const TStringBuf path);
     TFsPath(const char* path);
 
-    TFsPath(const std::string& path)
-        : TFsPath(TStringBuf(path))
-    {
-    }
-
-    void CheckDefined() const;
+    TFsPath(const std::string& path) 
+        : TFsPath(TStringBuf(path)) 
+    { 
+    } 
+ 
+    void CheckDefined() const; 
 
     inline bool IsDefined() const {
-        return Path_.length() > 0;
+        return Path_.length() > 0; 
     }
 
     inline explicit operator bool() const {
@@ -47,32 +47,32 @@ public:
     inline const char* c_str() const {
         return Path_.c_str();
     }
-
+ 
     inline operator const TString&() const {
-        return Path_;
+        return Path_; 
     }
-
+ 
     inline bool operator==(const TFsPath& that) const {
-        return Path_ == that.Path_;
+        return Path_ == that.Path_; 
     }
-
+ 
     inline bool operator!=(const TFsPath& that) const {
         return Path_ != that.Path_;
     }
 
     TFsPath& operator/=(const TFsPath& that);
-
+ 
     friend TFsPath operator/(const TFsPath& s, const TFsPath& p) {
         TFsPath ret(s);
         return ret /= p;
     }
 
-    const TPathSplit& PathSplit() const;
-
+    const TPathSplit& PathSplit() const; 
+ 
     TFsPath& Fix();
 
     inline const TString& GetPath() const {
-        return Path_;
+        return Path_; 
     }
 
     /// last component of path, or "/" if root
@@ -109,12 +109,12 @@ public:
      * @return True if this is a subpath of that or they are equivalent and false otherwise.
      */
     bool IsNonStrictSubpathOf(const TFsPath& that) const;
-
+ 
     bool IsContainerOf(const TFsPath& that) const {
         return that.IsSubpathOf(*this);
     }
 
-    TFsPath RelativeTo(const TFsPath& root) const; //must be subpath of root
+    TFsPath RelativeTo(const TFsPath& root) const; //must be subpath of root 
 
     /**
      * @returns relative path or empty path if root equals to this.
@@ -165,12 +165,12 @@ public:
 
     // XXX: ino
 
-    inline bool Stat(TFileStat& stat) const {
+    inline bool Stat(TFileStat& stat) const { 
         stat = TFileStat(Path_.data());
-
+ 
         return stat.Mode;
     }
-
+ 
     bool Exists() const;
     /// false if not exists
     bool IsDirectory() const;
@@ -198,18 +198,18 @@ public:
     static TFsPath Cwd();
 
     inline void Swap(TFsPath& p) noexcept {
-        DoSwap(Path_, p.Path_);
-        Split_.Swap(p.Split_);
-    }
-
+        DoSwap(Path_, p.Path_); 
+        Split_.Swap(p.Split_); 
+    } 
+ 
 private:
     void InitSplit() const;
     TSplit& GetSplit() const;
-
-private:
+ 
+private: 
     TString Path_;
     /// cache
-    mutable TSimpleIntrusivePtr<TSplit> Split_;
+    mutable TSimpleIntrusivePtr<TSplit> Split_; 
 };
 
 namespace NPrivate {

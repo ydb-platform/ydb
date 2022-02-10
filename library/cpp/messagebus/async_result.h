@@ -42,7 +42,7 @@ public:
     }
 
     template <typename TFunc>
-    void AndThen(const TFunc& onResult) {
+    void AndThen(const TFunc& onResult) { 
         TGuard<TMutex> guard(Mutex);
         if (!!Result) {
             onResult(*Result);

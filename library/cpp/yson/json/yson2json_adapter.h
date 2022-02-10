@@ -50,4 +50,4 @@ namespace NYT {
         ::NYson::TYsonConsumerBase* Impl_;
         TState State_;
     };
-}
+} 

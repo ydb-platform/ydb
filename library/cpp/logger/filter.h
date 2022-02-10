@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include "priority.h"
 #include "record.h"
 #include "backend.h"
@@ -8,7 +8,7 @@
 class TFilteredLogBackend: public TLogBackend {
     THolder<TLogBackend> Backend;
     ELogPriority Level;
-
+ 
 public:
     TFilteredLogBackend(THolder<TLogBackend>&& t, ELogPriority level = LOG_MAX_PRIORITY) noexcept
         : Backend(std::move(t))

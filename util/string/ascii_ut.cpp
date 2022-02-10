@@ -37,30 +37,30 @@ Y_UNIT_TEST_SUITE(TAsciiTest) {
             UNIT_ASSERT_VALUES_EQUAL((bool)ispunct(i), IsAsciiPunct((char)i));
         }
     }
-
+ 
     Y_UNIT_TEST(Test1) {
-        for (int i = 128; i < 1000; ++i) {
-            UNIT_ASSERT(!IsAsciiHex(i));
-            UNIT_ASSERT(!IsAsciiSpace(i));
-            UNIT_ASSERT(!IsAsciiAlnum(i));
-            UNIT_ASSERT(!IsAsciiAlpha(i));
-            UNIT_ASSERT(!IsAsciiUpper(i));
-            UNIT_ASSERT(!IsAsciiLower(i));
-            UNIT_ASSERT(!IsAsciiDigit(i));
+        for (int i = 128; i < 1000; ++i) { 
+            UNIT_ASSERT(!IsAsciiHex(i)); 
+            UNIT_ASSERT(!IsAsciiSpace(i)); 
+            UNIT_ASSERT(!IsAsciiAlnum(i)); 
+            UNIT_ASSERT(!IsAsciiAlpha(i)); 
+            UNIT_ASSERT(!IsAsciiUpper(i)); 
+            UNIT_ASSERT(!IsAsciiLower(i)); 
+            UNIT_ASSERT(!IsAsciiDigit(i)); 
             UNIT_ASSERT(!IsAsciiPunct(i));
-        }
-
-        for (int i = -1000; i < 0; ++i) {
-            UNIT_ASSERT(!IsAsciiHex(i));
-            UNIT_ASSERT(!IsAsciiSpace(i));
-            UNIT_ASSERT(!IsAsciiAlnum(i));
-            UNIT_ASSERT(!IsAsciiAlpha(i));
-            UNIT_ASSERT(!IsAsciiUpper(i));
-            UNIT_ASSERT(!IsAsciiLower(i));
-            UNIT_ASSERT(!IsAsciiDigit(i));
+        } 
+ 
+        for (int i = -1000; i < 0; ++i) { 
+            UNIT_ASSERT(!IsAsciiHex(i)); 
+            UNIT_ASSERT(!IsAsciiSpace(i)); 
+            UNIT_ASSERT(!IsAsciiAlnum(i)); 
+            UNIT_ASSERT(!IsAsciiAlpha(i)); 
+            UNIT_ASSERT(!IsAsciiUpper(i)); 
+            UNIT_ASSERT(!IsAsciiLower(i)); 
+            UNIT_ASSERT(!IsAsciiDigit(i)); 
             UNIT_ASSERT(!IsAsciiPunct(i));
-        }
-    }
+        } 
+    } 
 
     Y_UNIT_TEST(CompareTest) {
         UNIT_ASSERT(AsciiEqualsIgnoreCase("qqq", "qQq"));

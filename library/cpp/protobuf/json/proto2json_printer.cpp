@@ -192,15 +192,15 @@ namespace NProtobufJson {
         break;                                                         \
     }
 
-#define INT_FIELD_TO_JSON(EProtoCppType, ProtoGet)              \
-    case FieldDescriptor::EProtoCppType: {                      \
-        const auto value = reflection->ProtoGet(proto, &field); \
-        if (NeedStringifyNumber(value)) {                       \
-            json.WriteKey(key).Write(ToString(value));          \
-        } else {                                                \
-            json.WriteKey(key).Write(value);                    \
-        }                                                       \
-        break;                                                  \
+#define INT_FIELD_TO_JSON(EProtoCppType, ProtoGet)              \ 
+    case FieldDescriptor::EProtoCppType: {                      \ 
+        const auto value = reflection->ProtoGet(proto, &field); \ 
+        if (NeedStringifyNumber(value)) {                       \ 
+            json.WriteKey(key).Write(ToString(value));          \ 
+        } else {                                                \ 
+            json.WriteKey(key).Write(value);                    \ 
+        }                                                       \ 
+        break;                                                  \ 
     }
 
         const Reflection* reflection = proto.GetReflection();

@@ -34,4 +34,4 @@ namespace NActors {
             : TActor<TDerived>(&TDerived::StateBootstrap)
         {}
     };
-}
+} 

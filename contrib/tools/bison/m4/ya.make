@@ -6,16 +6,16 @@ LICENSE(GPL-3.0-or-later)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-NO_RUNTIME()
+NO_RUNTIME() 
 
 NO_COMPILER_WARNINGS()
 
-IF (MUSL)
+IF (MUSL) 
     CFLAGS(
         -DO_BINARY=0
     )
-ENDIF()
-
+ENDIF() 
+ 
 SRCS(
     src/builtin.c
     src/debug.c
@@ -31,8 +31,8 @@ SRCS(
     src/cpp.cpp
 )
 
-PEERDIR(
-    contrib/tools/bison/gnulib
-)
+PEERDIR( 
+    contrib/tools/bison/gnulib 
+) 
 
 END()

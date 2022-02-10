@@ -105,8 +105,8 @@ def resolve_common_const(path):
     if path.startswith('${ARCADIA_BUILD_ROOT}'):
         return path.replace('${ARCADIA_BUILD_ROOT}', '$B', 1)
     return path
-
-
+ 
+ 
 def resolve_to_abs_path(path, source_root, build_root):
     if path.startswith('$S') and source_root is not None:
         return path.replace('$S', source_root, 1)

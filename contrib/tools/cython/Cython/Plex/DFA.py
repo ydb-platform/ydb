@@ -1,18 +1,18 @@
-#=======================================================================
-#
-#   Python Lexical Analyser
-#
-#   Converting NFA to DFA
-#
-#=======================================================================
-
-from __future__ import absolute_import
-
-from . import Machines
-from .Machines import LOWEST_PRIORITY
-from .Transitions import TransitionMap
-
-
+#======================================================================= 
+# 
+#   Python Lexical Analyser 
+# 
+#   Converting NFA to DFA 
+# 
+#======================================================================= 
+ 
+from __future__ import absolute_import 
+ 
+from . import Machines 
+from .Machines import LOWEST_PRIORITY 
+from .Transitions import TransitionMap 
+ 
+ 
 def nfa_to_dfa(old_machine, debug=None):
     """
     Given a nondeterministic Machine, return a new equivalent
@@ -49,9 +49,9 @@ def nfa_to_dfa(old_machine, debug=None):
         debug.write("\n===== State Mapping =====\n")
         state_map.dump(debug)
     return new_machine
+ 
 
-
-def set_epsilon_closure(state_set):
+def set_epsilon_closure(state_set): 
     """
     Given a set of states, return the union of the epsilon
     closures of its member states.
@@ -61,9 +61,9 @@ def set_epsilon_closure(state_set):
         for state2 in epsilon_closure(state1):
             result[state2] = 1
     return result
+ 
 
-
-def epsilon_closure(state):
+def epsilon_closure(state): 
     """
     Return the set of states reachable from the given state
     by epsilon moves.
@@ -75,9 +75,9 @@ def epsilon_closure(state):
         state.epsilon_closure = result
         add_to_epsilon_closure(result, state)
     return result
+ 
 
-
-def add_to_epsilon_closure(state_set, state):
+def add_to_epsilon_closure(state_set, state): 
     """
     Recursively add to |state_set| states reachable from the given state
     by epsilon moves.
@@ -88,22 +88,22 @@ def add_to_epsilon_closure(state_set, state):
         if state_set_2:
             for state2 in state_set_2:
                 add_to_epsilon_closure(state_set, state2)
+ 
 
-
-class StateMap(object):
-    """
+class StateMap(object): 
+    """ 
     Helper class used by nfa_to_dfa() to map back and forth between
     sets of states from the old machine and states of the new machine.
-    """
+    """ 
     new_machine = None      # Machine
     old_to_new_dict = None  # {(old_state,...) : new_state}
     new_to_old_dict = None  # {id(new_state) : old_state_set}
-
+ 
     def __init__(self, new_machine):
         self.new_machine = new_machine
         self.old_to_new_dict = {}
         self.new_to_old_dict = {}
-
+ 
     def old_to_new(self, old_state_set):
         """
         Return the state of the new machine corresponding to the
@@ -122,7 +122,7 @@ class StateMap(object):
             #for old_state in old_state_set.keys():
             #new_state.merge_actions(old_state)
         return new_state
-
+ 
     def highest_priority_action(self, state_set):
         best_action = None
         best_priority = LOWEST_PRIORITY
@@ -132,18 +132,18 @@ class StateMap(object):
                 best_action = state.action
                 best_priority = priority
         return best_action
-
+ 
     #    def old_to_new_set(self, old_state_set):
     #        """
     #        Return the new state corresponding to a set of old states as
     #        a singleton set.
     #        """
     #        return {self.old_to_new(old_state_set):1}
-
+ 
     def new_to_old(self, new_state):
         """Given a new state, return a set of corresponding old states."""
         return self.new_to_old_dict[id(new_state)]
-
+ 
     def make_key(self, state_set):
         """
         Convert a set of states into a uniquified
@@ -152,7 +152,7 @@ class StateMap(object):
         lst = list(state_set)
         lst.sort()
         return tuple(lst)
-
+ 
     def dump(self, file):
         from .Transitions import state_set_str
 

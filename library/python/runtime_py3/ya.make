@@ -1,19 +1,19 @@
 PY3_LIBRARY()
-
+ 
 OWNER(
     borman
     orivej
     pg
 )
-
+ 
 NO_WSHADOW()
 
-PEERDIR(
+PEERDIR( 
     contrib/tools/python3/src
     contrib/tools/python3/lib/py
     library/cpp/resource
-)
-
+) 
+ 
 CFLAGS(-DCYTHON_REGISTER_ABCS=0)
 
 NO_PYTHON_INCLUDES()
@@ -30,7 +30,7 @@ PY_SRCS(
     __res.pyx
     sitecustomize.pyx
 )
-
+ 
 IF (CYTHON_COVERAGE)
     # Let covarage support add all needed files to resources
 ELSE()
@@ -42,7 +42,7 @@ ELSE()
     )
 ENDIF()
 
-END()
+END() 
 
 RECURSE_FOR_TESTS(
     test

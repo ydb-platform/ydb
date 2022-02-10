@@ -18,7 +18,7 @@
 #ifndef UTIL_UTF_H_
 #define UTIL_UTF_H_
 
-#include <stdint.h>
+#include <stdint.h> 
 
 namespace re2 {
 

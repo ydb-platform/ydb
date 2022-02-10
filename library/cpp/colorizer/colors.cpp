@@ -1,16 +1,16 @@
-#include "colors.h"
+#include "colors.h" 
 
 #include <util/stream/output.h>
-#include <util/generic/singleton.h>
-#include <util/system/env.h>
+#include <util/generic/singleton.h> 
+#include <util/system/env.h> 
 
-#include <cstdlib>
-
-#if defined(_unix_)
-#include <unistd.h>
-#endif
-
-using namespace NColorizer;
+#include <cstdlib> 
+ 
+#if defined(_unix_) 
+#include <unistd.h> 
+#endif 
+ 
+using namespace NColorizer; 
 
 namespace {
     constexpr TStringBuf ToStringBufC(NColorizer::EAnsiCode x) {
@@ -167,15 +167,15 @@ bool TColors::CalcIsTTY(FILE* file) {
 }
 
 TColors::TColors(FILE* f)
-    : IsTTY_(true)
-{
+    : IsTTY_(true) 
+{ 
     SetIsTTY(CalcIsTTY(f));
-}
+} 
 
-TColors::TColors(bool ontty)
-    : IsTTY_(true)
-{
-    SetIsTTY(ontty);
+TColors::TColors(bool ontty) 
+    : IsTTY_(true) 
+{ 
+    SetIsTTY(ontty); 
 }
 
 TStringBuf TColors::Reset() const noexcept {
@@ -388,19 +388,19 @@ TStringBuf TColors::LightGrayColor() const noexcept {
 TStringBuf TColors::DarkGrayColor() const noexcept {
     return IsTTY() ? "\033[1;30m" : "";
 }
-
+ 
 TStringBuf TColors::LightBlueColor() const noexcept {
     return IsTTY() ? "\033[1;34m" : "";
 }
-
+ 
 TStringBuf TColors::LightGreenColor() const noexcept {
     return IsTTY() ? "\033[1;32m" : "";
 }
-
+ 
 TStringBuf TColors::LightCyanColor() const noexcept {
     return IsTTY() ? "\033[1;36m" : "";
-}
-
+} 
+ 
 TStringBuf TColors::LightRedColor() const noexcept {
     return IsTTY() ? "\033[1;31m" : "";
 }
@@ -415,8 +415,8 @@ TStringBuf TColors::YellowColor() const noexcept {
 
 TStringBuf TColors::WhiteColor() const noexcept {
     return IsTTY() ? "\033[1;37m" : "";
-}
-
+} 
+ 
 
 namespace {
     class TStdErrColors: public TColors {
@@ -460,7 +460,7 @@ TColors& NColorizer::AutoColors(IOutputStream& os) {
         return StdOut();
     }
     return *Singleton<TDisabledColors>();
-}
+} 
 
 size_t NColorizer::TotalAnsiEscapeCodeLen(TStringBuf text) {
     enum {

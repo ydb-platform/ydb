@@ -1,58 +1,58 @@
 #pragma once
 
-#include "defaults.h"
-
+#include "defaults.h" 
+ 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
-
+ 
 #define Y_GET_FUNC(dll, name) FUNC_##name((dll).Sym(#name))
 #define Y_GET_FUNC_OPTIONAL(dll, name) FUNC_##name((dll).SymOptional(#name))
 
 #ifdef _win32_
-    #define DEFAULT_DLLOPEN_FLAGS 0
+    #define DEFAULT_DLLOPEN_FLAGS 0 
 #else
-    #include <dlfcn.h>
+    #include <dlfcn.h> 
 
-    #ifndef RTLD_GLOBAL
-        #define RTLD_GLOBAL (0)
-    #endif
+    #ifndef RTLD_GLOBAL 
+        #define RTLD_GLOBAL (0) 
+    #endif 
 
-    #define DEFAULT_DLLOPEN_FLAGS (RTLD_NOW | RTLD_GLOBAL)
+    #define DEFAULT_DLLOPEN_FLAGS (RTLD_NOW | RTLD_GLOBAL) 
 #endif
 
-class TDynamicLibrary {
-public:
+class TDynamicLibrary { 
+public: 
     TDynamicLibrary() noexcept;
     TDynamicLibrary(const TString& path, int flags = DEFAULT_DLLOPEN_FLAGS);
     ~TDynamicLibrary();
 
-    void Open(const char* path, int flags = DEFAULT_DLLOPEN_FLAGS);
+    void Open(const char* path, int flags = DEFAULT_DLLOPEN_FLAGS); 
     void Close() noexcept;
     void* SymOptional(const char* name) noexcept;
-    void* Sym(const char* name);
+    void* Sym(const char* name); 
     bool IsLoaded() const noexcept;
-    void SetUnloadable(bool unloadable); // Set to false to avoid unloading on destructor
+    void SetUnloadable(bool unloadable); // Set to false to avoid unloading on destructor 
 
-private:
-    class TImpl;
-    THolder<TImpl> Impl_;
+private: 
+    class TImpl; 
+    THolder<TImpl> Impl_; 
 };
 
 // a wrapper for a symbol
 template <class TLib>
-class TExternalSymbol {
+class TExternalSymbol { 
 private:
-    TLib* PLib;
-    TDynamicLibrary* DLib;
+    TLib* PLib; 
+    TDynamicLibrary* DLib; 
     TString lname;
     TString vname;
-
+ 
 public:
     TExternalSymbol() noexcept {
         PLib = nullptr;
         DLib = nullptr;
     }
-    TExternalSymbol(const TExternalSymbol& es) {
+    TExternalSymbol(const TExternalSymbol& es) { 
         PLib = nullptr;
         DLib = nullptr;
         if (es.IsDynamic())
@@ -60,7 +60,7 @@ public:
         else if (es.IsStatic())
             SetSym(es.Symbol());
     }
-    TExternalSymbol& operator=(const TExternalSymbol& es) {
+    TExternalSymbol& operator=(const TExternalSymbol& es) { 
         if (this != &es) {
             Close();
             if (es.IsDynamic())
@@ -74,14 +74,14 @@ public:
         delete DLib;
     }
     // set the symbol from dynamic source
-    void Open(const char* lib_name, const char* vtbl_name) {
+    void Open(const char* lib_name, const char* vtbl_name) { 
         if (DLib != nullptr || PLib != nullptr)
             return;
         try {
             DLib = new TDynamicLibrary();
             DLib->Open(lib_name);
-            PLib = (TLib*)DLib->Sym(vtbl_name);
-        } catch (...) {
+            PLib = (TLib*)DLib->Sym(vtbl_name); 
+        } catch (...) { 
             delete DLib;
             DLib = nullptr;
             throw;

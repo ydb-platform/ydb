@@ -10,7 +10,7 @@
 using namespace NBus;
 using namespace NBus::NPrivate;
 
-TMessageStatusCounter::TMessageStatusCounter() {
+TMessageStatusCounter::TMessageStatusCounter() { 
     Zero(Counts);
 }
 

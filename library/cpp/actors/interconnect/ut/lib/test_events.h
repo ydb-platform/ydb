@@ -2,7 +2,7 @@
 
 #include <library/cpp/actors/interconnect/ut/protos/interconnect_test.pb.h>
 
-namespace NActors {
+namespace NActors { 
     enum {
         EvTest = EventSpaceBegin(TEvents::ES_PRIVATE),
         EvTestChan,

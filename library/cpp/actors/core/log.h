@@ -366,4 +366,4 @@ namespace NActors {
         MemLogWrite(str.data(), str.size(), true);
         DeliverLogMessage(actorCtxOrSystem, mPriority, mComponent, std::move(str));
     }
-}
+} 

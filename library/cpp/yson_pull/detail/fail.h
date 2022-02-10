@@ -6,15 +6,15 @@
 #include <library/cpp/yson_pull/exceptions.h>
 #include <library/cpp/yson_pull/position_info.h>
 
-namespace NYsonPull {
-    namespace NDetail {
-        template <typename... Args>
-        ATTRIBUTE(noreturn, noinline, cold)
-        void fail(
-            const TPositionInfo& info,
-            Args&&... args) {
-            auto formatted_message = format_string(std::forward<Args>(args)...);
-            throw NException::TBadInput(formatted_message, info);
-        }
-    }
-}
+namespace NYsonPull { 
+    namespace NDetail { 
+        template <typename... Args> 
+        ATTRIBUTE(noreturn, noinline, cold) 
+        void fail( 
+            const TPositionInfo& info, 
+            Args&&... args) { 
+            auto formatted_message = format_string(std::forward<Args>(args)...); 
+            throw NException::TBadInput(formatted_message, info); 
+        } 
+    } 
+} 

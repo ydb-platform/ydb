@@ -36,9 +36,9 @@ const char* TBadStream::what() const noexcept {
     return FormattedMessage_.c_str();
 }
 
-NYsonPull::NException::TSystemError::TSystemError()
+NYsonPull::NException::TSystemError::TSystemError() 
     : SavedErrno_{errno} {
-}
+} 
 
 const char* NYsonPull::NException::TSystemError::what() const noexcept {
     return ::strerror(SavedErrno_);

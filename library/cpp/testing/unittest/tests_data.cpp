@@ -11,7 +11,7 @@ public:
     TPortManagerImpl(bool reservePortsForCurrentTest)
         : EnableReservePortsForCurrentTest(reservePortsForCurrentTest)
         , DisableRandomPorts(!GetEnv("NO_RANDOM_PORTS").empty())
-    {
+    { 
     }
 
     ui16 GetPort(ui16 port) {

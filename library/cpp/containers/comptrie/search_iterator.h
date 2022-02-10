@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include "comptrie_trie.h"
 #include "first_symbol_iterator.h"
 
@@ -74,7 +74,7 @@ private:
     const char* ValuePos = nullptr;
 };
 
-template <class TTrie>
+template <class TTrie> 
 inline TSearchIterator<TTrie> MakeSearchIterator(const TTrie& trie) {
     return TSearchIterator<TTrie>(trie);
 }

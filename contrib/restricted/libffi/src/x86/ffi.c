@@ -1,41 +1,41 @@
-/* -----------------------------------------------------------------------
+/* ----------------------------------------------------------------------- 
    ffi.c - Copyright (c) 2017  Anthony Green
            Copyright (c) 1996, 1998, 1999, 2001, 2007, 2008  Red Hat, Inc.
-           Copyright (c) 2002  Ranjit Mathew
-           Copyright (c) 2002  Bo Thorsen
-           Copyright (c) 2002  Roger Sayle
-           Copyright (C) 2008, 2010  Free Software Foundation, Inc.
-
-   x86 Foreign Function Interface
-
-   Permission is hereby granted, free of charge, to any person obtaining
-   a copy of this software and associated documentation files (the
-   ``Software''), to deal in the Software without restriction, including
-   without limitation the rights to use, copy, modify, merge, publish,
-   distribute, sublicense, and/or sell copies of the Software, and to
-   permit persons to whom the Software is furnished to do so, subject to
-   the following conditions:
-
-   The above copyright notice and this permission notice shall be included
-   in all copies or substantial portions of the Software.
-
-   THE SOFTWARE IS PROVIDED ``AS IS'', WITHOUT WARRANTY OF ANY KIND,
-   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-   NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-   HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-   WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-   DEALINGS IN THE SOFTWARE.
-   ----------------------------------------------------------------------- */
-
+           Copyright (c) 2002  Ranjit Mathew 
+           Copyright (c) 2002  Bo Thorsen 
+           Copyright (c) 2002  Roger Sayle 
+           Copyright (C) 2008, 2010  Free Software Foundation, Inc. 
+ 
+   x86 Foreign Function Interface 
+ 
+   Permission is hereby granted, free of charge, to any person obtaining 
+   a copy of this software and associated documentation files (the 
+   ``Software''), to deal in the Software without restriction, including 
+   without limitation the rights to use, copy, modify, merge, publish, 
+   distribute, sublicense, and/or sell copies of the Software, and to 
+   permit persons to whom the Software is furnished to do so, subject to 
+   the following conditions: 
+ 
+   The above copyright notice and this permission notice shall be included 
+   in all copies or substantial portions of the Software. 
+ 
+   THE SOFTWARE IS PROVIDED ``AS IS'', WITHOUT WARRANTY OF ANY KIND, 
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND 
+   NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT 
+   HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, 
+   WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+   DEALINGS IN THE SOFTWARE. 
+   ----------------------------------------------------------------------- */ 
+ 
 #if defined(__i386__) || defined(_M_IX86)
-#include <ffi.h>
-#include <ffi_common.h>
+#include <ffi.h> 
+#include <ffi_common.h> 
 #include <stdint.h>
-#include <stdlib.h>
+#include <stdlib.h> 
 #include "internal.h"
-
+ 
 /* Force FFI_TYPE_LONGDOUBLE to be different than FFI_TYPE_DOUBLE;
    all further uses in this file will refer to the 80-bit type.  */
 #if FFI_TYPE_LONGDOUBLE != FFI_TYPE_DOUBLE
@@ -45,28 +45,28 @@
 #else
 # undef FFI_TYPE_LONGDOUBLE
 # define FFI_TYPE_LONGDOUBLE 4
-#endif
-
+#endif 
+ 
 #if defined(__GNUC__) && !defined(__declspec)
 # define __declspec(x)  __attribute__((x))
-#endif
-
+#endif 
+ 
 #if defined(_MSC_VER) && defined(_M_IX86)
 /* Stack is not 16-byte aligned on Windows.  */
 #define STACK_ALIGN(bytes) (bytes)
 #else
 #define STACK_ALIGN(bytes) FFI_ALIGN (bytes, 16)
-#endif
-
+#endif 
+ 
 /* Perform machine dependent cif processing.  */
 ffi_status FFI_HIDDEN
 ffi_prep_cif_machdep(ffi_cif *cif)
 {
   size_t bytes = 0;
   int i, n, flags, cabi = cif->abi;
-
+ 
   switch (cabi)
-    {
+    { 
     case FFI_SYSV:
     case FFI_STDCALL:
     case FFI_THISCALL:
@@ -77,11 +77,11 @@ ffi_prep_cif_machdep(ffi_cif *cif)
       break;
     default:
       return FFI_BAD_ABI;
-    }
-
-  switch (cif->rtype->type)
-    {
-    case FFI_TYPE_VOID:
+    } 
+ 
+  switch (cif->rtype->type) 
+    { 
+    case FFI_TYPE_VOID: 
       flags = X86_RET_VOID;
       break;
     case FFI_TYPE_FLOAT:
@@ -93,41 +93,41 @@ ffi_prep_cif_machdep(ffi_cif *cif)
     case FFI_TYPE_LONGDOUBLE:
       flags = X86_RET_LDOUBLE;
       break;
-    case FFI_TYPE_UINT8:
+    case FFI_TYPE_UINT8: 
       flags = X86_RET_UINT8;
       break;
-    case FFI_TYPE_UINT16:
+    case FFI_TYPE_UINT16: 
       flags = X86_RET_UINT16;
       break;
-    case FFI_TYPE_SINT8:
+    case FFI_TYPE_SINT8: 
       flags = X86_RET_SINT8;
       break;
-    case FFI_TYPE_SINT16:
+    case FFI_TYPE_SINT16: 
       flags = X86_RET_SINT16;
       break;
     case FFI_TYPE_INT:
     case FFI_TYPE_SINT32:
-    case FFI_TYPE_UINT32:
+    case FFI_TYPE_UINT32: 
     case FFI_TYPE_POINTER:
       flags = X86_RET_INT32;
       break;
-    case FFI_TYPE_SINT64:
-    case FFI_TYPE_UINT64:
+    case FFI_TYPE_SINT64: 
+    case FFI_TYPE_UINT64: 
       flags = X86_RET_INT64;
-      break;
-    case FFI_TYPE_STRUCT:
-#ifndef X86
+      break; 
+    case FFI_TYPE_STRUCT: 
+#ifndef X86 
       /* ??? This should be a different ABI rather than an ifdef.  */
-      if (cif->rtype->size == 1)
+      if (cif->rtype->size == 1) 
 	flags = X86_RET_STRUCT_1B;
-      else if (cif->rtype->size == 2)
+      else if (cif->rtype->size == 2) 
 	flags = X86_RET_STRUCT_2B;
-      else if (cif->rtype->size == 4)
+      else if (cif->rtype->size == 4) 
 	flags = X86_RET_INT32;
-      else if (cif->rtype->size == 8)
+      else if (cif->rtype->size == 8) 
 	flags = X86_RET_INT64;
-      else
-#endif
+      else 
+#endif 
 	{
 	do_struct:
 	  switch (cabi)
@@ -145,7 +145,7 @@ ffi_prep_cif_machdep(ffi_cif *cif)
 	  /* Allocate space for return value pointer.  */
 	  bytes += FFI_ALIGN (sizeof(void*), FFI_SIZEOF_ARG);
 	}
-      break;
+      break; 
     case FFI_TYPE_COMPLEX:
       switch (cif->rtype->elements[0]->type)
 	{
@@ -172,23 +172,23 @@ ffi_prep_cif_machdep(ffi_cif *cif)
 	  return FFI_BAD_TYPEDEF;
 	}
       break;
-    default:
+    default: 
       return FFI_BAD_TYPEDEF;
-    }
+    } 
   cif->flags = flags;
-
+ 
   for (i = 0, n = cif->nargs; i < n; i++)
-    {
+    { 
       ffi_type *t = cif->arg_types[i];
 
       bytes = FFI_ALIGN (bytes, t->alignment);
       bytes += FFI_ALIGN (t->size, FFI_SIZEOF_ARG);
-    }
+    } 
   cif->bytes = bytes;
-
+ 
   return FFI_OK;
 }
-
+ 
 static ffi_arg
 extend_basic_type(void *arg, int type)
 {
@@ -202,7 +202,7 @@ extend_basic_type(void *arg, int type)
       return *(SINT16 *)arg;
     case FFI_TYPE_UINT16:
       return *(UINT16 *)arg;
-
+ 
     case FFI_TYPE_SINT32:
     case FFI_TYPE_UINT32:
     case FFI_TYPE_POINTER:
@@ -212,8 +212,8 @@ extend_basic_type(void *arg, int type)
     default:
       abort();
     }
-}
-
+} 
+ 
 struct call_frame
 {
   void *ebp;		/* 0 */
@@ -249,31 +249,31 @@ static const struct abi_params abi_params[FFI_LAST_ABI] = {
   #else
     #define FFI_DECLARE_FASTCALL __declspec(fastcall)
   #endif
-#else
+#else 
   #define FFI_DECLARE_FASTCALL
-#endif
-
+#endif 
+ 
 extern void FFI_DECLARE_FASTCALL ffi_call_i386(struct call_frame *, char *) FFI_HIDDEN;
 
 static void
 ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 	      void **avalue, void *closure)
-{
+{ 
   size_t rsize, bytes;
   struct call_frame *frame;
   char *stack, *argp;
   ffi_type **arg_types;
   int flags, cabi, i, n, dir, narg_reg;
   const struct abi_params *pabi;
-
+ 
   flags = cif->flags;
   cabi = cif->abi;
   pabi = &abi_params[cabi];
   dir = pabi->dir;
-
+ 
   rsize = 0;
   if (rvalue == NULL)
-    {
+    { 
       switch (flags)
 	{
 	case X86_RET_FLOAT:
@@ -290,20 +290,20 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 	  flags = X86_RET_VOID;
 	  break;
 	}
-    }
-
+    } 
+ 
   bytes = STACK_ALIGN (cif->bytes);
   stack = alloca(bytes + sizeof(*frame) + rsize);
   argp = (dir < 0 ? stack + bytes : stack);
   frame = (struct call_frame *)(stack + bytes);
   if (rsize)
     rvalue = frame + 1;
-
+ 
   frame->fn = fn;
   frame->flags = flags;
   frame->rvalue = rvalue;
   frame->regs[pabi->static_chain] = (unsigned)closure;
-
+ 
   narg_reg = 0;
   switch (flags)
     {
@@ -319,9 +319,9 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
     case X86_RET_STRUCTPOP:
       *(void **)argp = rvalue;
       argp += sizeof(void *);
-      break;
-    }
-
+      break; 
+    } 
+ 
   arg_types = cif->arg_types;
   for (i = 0, n = cif->nargs; i < n; i++)
     {
@@ -329,11 +329,11 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
       void *valp = avalue[i];
       size_t z = ty->size;
       int t = ty->type;
-
+ 
       if (z <= FFI_SIZEOF_ARG && t != FFI_TYPE_STRUCT)
         {
 	  ffi_arg val = extend_basic_type (valp, t);
-
+ 
 	  if (t != FFI_TYPE_FLOAT && narg_reg < pabi->nregs)
 	    frame->regs[pabi->regs[narg_reg++]] = val;
 	  else if (dir < 0)
@@ -351,7 +351,7 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 	{
 	  size_t za = FFI_ALIGN (z, FFI_SIZEOF_ARG);
 	  size_t align = FFI_SIZEOF_ARG;
-
+ 
 	  /* Issue 434: For thiscall and fastcall, if the paramter passed
 	     as 64-bit integer or struct, all following integer paramters
 	     will be passed on stack.  */
@@ -360,7 +360,7 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 		  || t == FFI_TYPE_UINT64
 		  || t == FFI_TYPE_STRUCT))
 	    narg_reg = 2;
-
+ 
 	  /* Alignment rules for arguments are quite complex.  Vectors and
 	     structures with 16 byte alignment get it.  Note that long double
 	     on Darwin does have 16 byte alignment, and does not get this
@@ -387,29 +387,29 @@ ffi_call_int (ffi_cif *cif, void (*fn)(void), void *rvalue,
 	}
     }
   FFI_ASSERT (dir > 0 || argp == stack);
-
+ 
   ffi_call_i386 (frame, stack);
 }
-
+ 
 void
 ffi_call (ffi_cif *cif, void (*fn)(void), void *rvalue, void **avalue)
 {
   ffi_call_int (cif, fn, rvalue, avalue, NULL);
-}
-
+} 
+ 
 void
 ffi_call_go (ffi_cif *cif, void (*fn)(void), void *rvalue,
 	     void **avalue, void *closure)
-{
+{ 
   ffi_call_int (cif, fn, rvalue, avalue, closure);
 }
-
+ 
 /** private members **/
-
+ 
 void FFI_HIDDEN ffi_closure_i386(void);
 void FFI_HIDDEN ffi_closure_STDCALL(void);
 void FFI_HIDDEN ffi_closure_REGISTER(void);
-
+ 
 struct closure_frame
 {
   unsigned rettemp[4];				/* 0 */
@@ -418,10 +418,10 @@ struct closure_frame
   void (*fun)(ffi_cif*,void*,void**,void*);	/* 32 */
   void *user_data;				/* 36 */
 };
-
+ 
 int FFI_HIDDEN FFI_DECLARE_FASTCALL
 ffi_closure_inner (struct closure_frame *frame, char *stack)
-{
+{ 
   ffi_cif *cif = frame->cif;
   int cabi, i, n, flags, dir, narg_reg;
   const struct abi_params *pabi;
@@ -429,7 +429,7 @@ ffi_closure_inner (struct closure_frame *frame, char *stack)
   char *argp;
   void *rvalue;
   void **avalue;
-
+ 
   cabi = cif->abi;
   flags = cif->flags;
   narg_reg = 0;
@@ -437,7 +437,7 @@ ffi_closure_inner (struct closure_frame *frame, char *stack)
   pabi = &abi_params[cabi];
   dir = pabi->dir;
   argp = (dir < 0 ? stack + STACK_ALIGN (cif->bytes) : stack);
-
+ 
   switch (flags)
     {
     case X86_RET_STRUCTARG:
@@ -455,18 +455,18 @@ ffi_closure_inner (struct closure_frame *frame, char *stack)
       frame->rettemp[0] = (unsigned)rvalue;
       break;
     }
-
+ 
   n = cif->nargs;
   avalue = alloca(sizeof(void *) * n);
-
+ 
   arg_types = cif->arg_types;
   for (i = 0; i < n; ++i)
-    {
+    { 
       ffi_type *ty = arg_types[i];
       size_t z = ty->size;
       int t = ty->type;
       void *valp;
-
+ 
       if (z <= FFI_SIZEOF_ARG && t != FFI_TYPE_STRUCT)
 	{
 	  if (t != FFI_TYPE_FLOAT && narg_reg < pabi->nregs)
@@ -482,15 +482,15 @@ ffi_closure_inner (struct closure_frame *frame, char *stack)
 	      argp += 4;
 	    }
 	}
-      else
+      else 
 	{
 	  size_t za = FFI_ALIGN (z, FFI_SIZEOF_ARG);
 	  size_t align = FFI_SIZEOF_ARG;
-
+ 
 	  /* See the comment in ffi_call_int.  */
 	  if (t == FFI_TYPE_STRUCT && ty->alignment >= 16)
 	    align = 16;
-
+ 
 	  /* Issue 434: For thiscall and fastcall, if the paramter passed
 	     as 64-bit integer or struct, all following integer paramters
 	     will be passed on stack.  */
@@ -499,7 +499,7 @@ ffi_closure_inner (struct closure_frame *frame, char *stack)
 		  || t == FFI_TYPE_UINT64
 		  || t == FFI_TYPE_STRUCT))
 	    narg_reg = 2;
-
+ 
 	  if (dir < 0)
 	    {
 	      /* ??? These reverse argument ABIs are probably too old
@@ -514,31 +514,31 @@ ffi_closure_inner (struct closure_frame *frame, char *stack)
 	      argp += za;
 	    }
 	}
-
+ 
       avalue[i] = valp;
     }
-
+ 
   frame->fun (cif, rvalue, avalue, frame->user_data);
-
+ 
   if (cabi == FFI_STDCALL)
     return flags + (cif->bytes << X86_RET_POP_SHIFT);
   else
     return flags;
 }
-
-ffi_status
-ffi_prep_closure_loc (ffi_closure* closure,
-                      ffi_cif* cif,
-                      void (*fun)(ffi_cif*,void*,void**,void*),
-                      void *user_data,
-                      void *codeloc)
-{
+ 
+ffi_status 
+ffi_prep_closure_loc (ffi_closure* closure, 
+                      ffi_cif* cif, 
+                      void (*fun)(ffi_cif*,void*,void**,void*), 
+                      void *user_data, 
+                      void *codeloc) 
+{ 
   char *tramp = closure->tramp;
   void (*dest)(void);
   int op = 0xb8;  /* movl imm, %eax */
 
   switch (cif->abi)
-    {
+    { 
     case FFI_SYSV:
     case FFI_THISCALL:
     case FFI_FASTCALL:
@@ -555,7 +555,7 @@ ffi_prep_closure_loc (ffi_closure* closure,
       break;
     default:
       return FFI_BAD_ABI;
-    }
+    } 
 
   /* movl or pushl immediate.  */
   tramp[0] = op;
@@ -583,7 +583,7 @@ ffi_prep_go_closure (ffi_go_closure* closure, ffi_cif* cif,
   void (*dest)(void);
 
   switch (cif->abi)
-    {
+    { 
     case FFI_SYSV:
     case FFI_MS_CDECL:
       dest = ffi_go_closure_ECX;
@@ -598,38 +598,38 @@ ffi_prep_go_closure (ffi_go_closure* closure, ffi_cif* cif,
       break;
     case FFI_REGISTER:
     default:
-      return FFI_BAD_ABI;
-    }
-
+      return FFI_BAD_ABI; 
+    } 
+ 
   closure->tramp = dest;
   closure->cif = cif;
   closure->fun = fun;
 
-  return FFI_OK;
-}
-
-/* ------- Native raw API support -------------------------------- */
-
-#if !FFI_NO_RAW_API
-
+  return FFI_OK; 
+} 
+ 
+/* ------- Native raw API support -------------------------------- */ 
+ 
+#if !FFI_NO_RAW_API 
+ 
 void FFI_HIDDEN ffi_closure_raw_SYSV(void);
 void FFI_HIDDEN ffi_closure_raw_THISCALL(void);
 
-ffi_status
+ffi_status 
 ffi_prep_raw_closure_loc (ffi_raw_closure *closure,
                           ffi_cif *cif,
-                          void (*fun)(ffi_cif*,void*,ffi_raw*,void*),
-                          void *user_data,
-                          void *codeloc)
-{
+                          void (*fun)(ffi_cif*,void*,ffi_raw*,void*), 
+                          void *user_data, 
+                          void *codeloc) 
+{ 
   char *tramp = closure->tramp;
   void (*dest)(void);
-  int i;
-
+  int i; 
+ 
   /* We currently don't support certain kinds of arguments for raw
-     closures.  This should be implemented by a separate assembly
-     language routine, since it would require argument processing,
-     something we don't do now for performance.  */
+     closures.  This should be implemented by a separate assembly 
+     language routine, since it would require argument processing, 
+     something we don't do now for performance.  */ 
   for (i = cif->nargs-1; i >= 0; i--)
     switch (cif->arg_types[i]->type)
       {
@@ -637,9 +637,9 @@ ffi_prep_raw_closure_loc (ffi_raw_closure *closure,
       case FFI_TYPE_LONGDOUBLE:
 	return FFI_BAD_TYPEDEF;
       }
-
+ 
   switch (cif->abi)
-    {
+    { 
     case FFI_THISCALL:
       dest = ffi_closure_raw_THISCALL;
       break;
@@ -648,7 +648,7 @@ ffi_prep_raw_closure_loc (ffi_raw_closure *closure,
       break;
     default:
       return FFI_BAD_ABI;
-    }
+    } 
 
   /* movl imm, %eax.  */
   tramp[0] = 0xb8;
@@ -660,28 +660,28 @@ ffi_prep_raw_closure_loc (ffi_raw_closure *closure,
 
   closure->cif = cif;
   closure->fun = fun;
-  closure->user_data = user_data;
-
-  return FFI_OK;
-}
-
-void
+  closure->user_data = user_data; 
+ 
+  return FFI_OK; 
+} 
+ 
+void 
 ffi_raw_call(ffi_cif *cif, void (*fn)(void), void *rvalue, ffi_raw *avalue)
-{
+{ 
   size_t rsize, bytes;
   struct call_frame *frame;
   char *stack, *argp;
   ffi_type **arg_types;
   int flags, cabi, i, n, narg_reg;
   const struct abi_params *pabi;
-
+ 
   flags = cif->flags;
   cabi = cif->abi;
   pabi = &abi_params[cabi];
-
+ 
   rsize = 0;
   if (rvalue == NULL)
-    {
+    { 
       switch (flags)
 	{
 	case X86_RET_FLOAT:
@@ -698,19 +698,19 @@ ffi_raw_call(ffi_cif *cif, void (*fn)(void), void *rvalue, ffi_raw *avalue)
 	  flags = X86_RET_VOID;
 	  break;
 	}
-    }
-
+    } 
+ 
   bytes = STACK_ALIGN (cif->bytes);
   argp = stack =
       (void *)((uintptr_t)alloca(bytes + sizeof(*frame) + rsize + 15) & ~16);
   frame = (struct call_frame *)(stack + bytes);
   if (rsize)
     rvalue = frame + 1;
-
+ 
   frame->fn = fn;
   frame->flags = flags;
   frame->rvalue = rvalue;
-
+ 
   narg_reg = 0;
   switch (flags)
     {
@@ -727,16 +727,16 @@ ffi_raw_call(ffi_cif *cif, void (*fn)(void), void *rvalue, ffi_raw *avalue)
       *(void **)argp = rvalue;
       argp += sizeof(void *);
       bytes -= sizeof(void *);
-      break;
-    }
-
+      break; 
+    } 
+ 
   arg_types = cif->arg_types;
   for (i = 0, n = cif->nargs; narg_reg < pabi->nregs && i < n; i++)
     {
       ffi_type *ty = arg_types[i];
       size_t z = ty->size;
       int t = ty->type;
-
+ 
       if (z <= FFI_SIZEOF_ARG && t != FFI_TYPE_STRUCT && t != FFI_TYPE_FLOAT)
 	{
 	  ffi_arg val = extend_basic_type (avalue, t);
@@ -754,7 +754,7 @@ ffi_raw_call(ffi_cif *cif, void (*fn)(void), void *rvalue, ffi_raw *avalue)
     }
   if (i < n)
     memcpy (argp, avalue, bytes);
-
+ 
   ffi_call_i386 (frame, stack);
 }
 #endif /* !FFI_NO_RAW_API */

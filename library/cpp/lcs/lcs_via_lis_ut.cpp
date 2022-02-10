@@ -4,10 +4,10 @@
 #include "lcs_via_lis.h"
 
 class TLCSTest: public TTestBase {
-    UNIT_TEST_SUITE(TLCSTest);
-    UNIT_TEST(LCSTest);
-    UNIT_TEST_SUITE_END();
-
+    UNIT_TEST_SUITE(TLCSTest); 
+    UNIT_TEST(LCSTest); 
+    UNIT_TEST_SUITE_END(); 
+ 
 private:
     size_t Length(TStringBuf s1, TStringBuf s2) {
         TVector<TVector<size_t>> c;
@@ -49,9 +49,9 @@ private:
 
     void LCSTest() {
         CheckLCSString("abacx", "baabca", "bac");
-        const char* m = "mama_myla_ramu";
-        const char* n = "papa_lubil_mamu";
-        const char* s = "aa_l_amu";
+        const char* m = "mama_myla_ramu"; 
+        const char* n = "papa_lubil_mamu"; 
+        const char* s = "aa_l_amu"; 
         CheckLCSString(m, n, s);
         CheckLCSString(n, m, s);
         CheckLCSString(m, m, m);
@@ -59,60 +59,60 @@ private:
         CheckLCSString("", m, "");
         CheckLCSString("", "", "");
         {
-            const char* s1 =
-                "atmwuaoccmgirveexxtbkkmioclarskvicyesddirlrgflnietcagkswbvsdnxksipfndmusnuee"
-                "tojygyjyobdfiutsbruuspvibmywhokxsarwbyirsqqnxxnbtkmucmdafaogwmobuuhejspgurpe"
-                "ceokhgdubqewnyqtwwqfibydbcbxhofvcjsftamhvnbdwxdqnphcdiowplcmguxmnpcufrahjagv"
-                "cpjqsyqurrhyghkasnodqqktldyfomgabrxdxpubenfscamoodgpocilewqtbsncggwvkkpuasdl"
-                "cltxywovqjligwhjxnmmtgeuujphgtdjrnxcnmwwbgxnpiotgnhyrxuvxkxdlgmpfeyocaviuhec"
-                "ydecqmttjictnpptoblxqgcrsojrymakgdjvcnppinymdrlgdfpyuykwpmdeifqwupojsgmruyxs"
-                "qijwnxngaxnppxgusyfnaelccytxwrkhxxirhnsastdlyejslrivkrpovnhbwxcdmpqbnjthjtlj"
-                "wnoayakfnpcwdnlgnrghjhiianhsncbjehlsoldjykymduytyiygrdreicjvghdibyjsmxnwvrqb"
-                "jjkjfrtlonfarbwhovladadlbyeygvuxcutxjqhosuxbemtwsqjlvvyegsfgeladiovecfxfymct"
-                "ulofkcogguantmicfrhpnauetejktkhamfuwirjvlyfgjrobywbbitbnckiegbiwbtmapqrbbqws"
-                "wviuplyprwwqoekiuxsmwgwyuwgeurvxempguwmgtadvrkxykffjxfdyxmsibmdlqhldlfbiaegt"
-                "kswcmfidnrhaibuscoyukwhdtoqwlpwnfgamvfqjpfklgurcwvgsluyoyiuumrwwsqgxatxnxhil"
-                "ywpkeaugfaahmchjruavepvnygcmcjdnvulwcuhlolsfxcsrjciwajbhdahpldcfggubcxalqxrl"
-                "coaiyeawxyxujtynodhnxbhs";
-            const char* s2 =
-                "yjufxfeiifhrmydpmsqqgjwtpcxbhqmfpnvsvsapqvsmqmugpqehbdsiiqhcrasxuhcvswcwanwb"
-                "knesbuhtbaitcwebsdbbxwyubjoroekjxweeqnqmydbdbgbnfymcermhpbikocpsfccwjemxjpmc"
-                "hkhtfaoqgvvtpipujsxesiglgnpsdwfjhcawkfpffuyltqqhdkeqwkfpqjhnjdsnxlevyvydikbr"
-                "hnicihnevsofgouxjcnjjknxwwgaaaikdcxmhxfowadqudrapvwlcuwatrmiweijljdehxiwqrnq"
-                "tnhgukbwmadcjpfnxtswhmwnvvnwsllkyshfobrdmukswpgwunysxpnnlmccolvqyjsvagulpcda"
-                "ctsnyjleqgttcgpnhlnagxenuknpxiramgeshhjyoesupkcfcvvpwyweuvcwrawsgvfshppijuug"
-                "hdnujdqjtcdissmlnjgibdljjxntxrgytxlbgvsrrusatqelspeoyvndjifjqxqrpduwbyojjbhi"
-                "tmondbbnuuhpkglmfykeheddwkxjyapfniqoic";
+            const char* s1 = 
+                "atmwuaoccmgirveexxtbkkmioclarskvicyesddirlrgflnietcagkswbvsdnxksipfndmusnuee" 
+                "tojygyjyobdfiutsbruuspvibmywhokxsarwbyirsqqnxxnbtkmucmdafaogwmobuuhejspgurpe" 
+                "ceokhgdubqewnyqtwwqfibydbcbxhofvcjsftamhvnbdwxdqnphcdiowplcmguxmnpcufrahjagv" 
+                "cpjqsyqurrhyghkasnodqqktldyfomgabrxdxpubenfscamoodgpocilewqtbsncggwvkkpuasdl" 
+                "cltxywovqjligwhjxnmmtgeuujphgtdjrnxcnmwwbgxnpiotgnhyrxuvxkxdlgmpfeyocaviuhec" 
+                "ydecqmttjictnpptoblxqgcrsojrymakgdjvcnppinymdrlgdfpyuykwpmdeifqwupojsgmruyxs" 
+                "qijwnxngaxnppxgusyfnaelccytxwrkhxxirhnsastdlyejslrivkrpovnhbwxcdmpqbnjthjtlj" 
+                "wnoayakfnpcwdnlgnrghjhiianhsncbjehlsoldjykymduytyiygrdreicjvghdibyjsmxnwvrqb" 
+                "jjkjfrtlonfarbwhovladadlbyeygvuxcutxjqhosuxbemtwsqjlvvyegsfgeladiovecfxfymct" 
+                "ulofkcogguantmicfrhpnauetejktkhamfuwirjvlyfgjrobywbbitbnckiegbiwbtmapqrbbqws" 
+                "wviuplyprwwqoekiuxsmwgwyuwgeurvxempguwmgtadvrkxykffjxfdyxmsibmdlqhldlfbiaegt" 
+                "kswcmfidnrhaibuscoyukwhdtoqwlpwnfgamvfqjpfklgurcwvgsluyoyiuumrwwsqgxatxnxhil" 
+                "ywpkeaugfaahmchjruavepvnygcmcjdnvulwcuhlolsfxcsrjciwajbhdahpldcfggubcxalqxrl" 
+                "coaiyeawxyxujtynodhnxbhs"; 
+            const char* s2 = 
+                "yjufxfeiifhrmydpmsqqgjwtpcxbhqmfpnvsvsapqvsmqmugpqehbdsiiqhcrasxuhcvswcwanwb" 
+                "knesbuhtbaitcwebsdbbxwyubjoroekjxweeqnqmydbdbgbnfymcermhpbikocpsfccwjemxjpmc" 
+                "hkhtfaoqgvvtpipujsxesiglgnpsdwfjhcawkfpffuyltqqhdkeqwkfpqjhnjdsnxlevyvydikbr" 
+                "hnicihnevsofgouxjcnjjknxwwgaaaikdcxmhxfowadqudrapvwlcuwatrmiweijljdehxiwqrnq" 
+                "tnhgukbwmadcjpfnxtswhmwnvvnwsllkyshfobrdmukswpgwunysxpnnlmccolvqyjsvagulpcda" 
+                "ctsnyjleqgttcgpnhlnagxenuknpxiramgeshhjyoesupkcfcvvpwyweuvcwrawsgvfshppijuug" 
+                "hdnujdqjtcdissmlnjgibdljjxntxrgytxlbgvsrrusatqelspeoyvndjifjqxqrpduwbyojjbhi" 
+                "tmondbbnuuhpkglmfykeheddwkxjyapfniqoic"; 
             CheckLCSLength(s1, s2, 247);
         }
         {
-            const char* s1 =
-                "ssyrtvllktbhijkyckviokukaodexiykxcvlvninoasblpuujnqnilnhmacsulaulskphkccnfop"
-                "jlhejqhemdpnihasouinuceugkfkaifdepvffntbkfivsddtxyslnlwiyfbbpnrwlkryetncahih"
-                "vqcrdvvehvrxgnitghbomkprdngrqdswypwfvpdrvqnavxnprakkgoibsxybngvenlbfcghcyldn"
-                "kssfuxvpvfhaawqiandxpsrkyqtiltmojmmwygevhodvsuvdojvwpvvbwpbbnerriufrwgwcjlgx"
-                "jcjchsfiomtkowihdtcyewknlvdeankladmdhwqxokmunttgaqdsbuyhekkxatpydfgquyxuucda"
-                "dllepofxoirmaablfyyibcnqkdbnsaygkqkbvupdhajfshouofnokwlbdtglrbklpgknyuiedppl"
-                "chxbnnmbumdtrsgwitjlmkkdxysvmsvcdulmanmsdeqkmwgfthmntdbthdthdodnubqajpfyssea"
-                "hwxymiyubkhhxlbmjptujiemrdljqkskdkuokvimencavihwqdaqtcljrgwvxpuegnoecobfllwu"
-                "upsfhjrrpiqtjlwigjkpltwfpoqxsdrojtawpaximslojqtadsactemuhpnshkgyoyouldanktcg"
-                "dhxdpwawabxwjhnjdmewrwtciquuiqnwdsbdvnuvjyewmjppkwvcotptmyrsqaovmaysjuvtenuy"
-                "orvdsssgjgcgksdwaaladocotgveuscwauawdhqlkqsjtmltvkkcfkgwpdtormkefkigkppwpvsy"
-                "fpblccsbyboouahotiifixsjuxlvqpqmpmkcgbvsefkqasearilhlxuqdfqqxxohhbdyiudqsree"
-                "btwfxdtxlaynrusgbffhltthkejitseuqyeqvhqgyobijwmspwbsisghsarji";
-            const char* s2 =
-                "lcnygawhsrprxafwnwxnrxurpnqwwtwuciuexxvswckwopnmhhmhvdwmxtgceitqofivvavnqlmo"
-                "hbieyaxcysagyqcvijxyowiognsntxcdlmueoafqvqwafyhgyoewhwxvqswvwfkqohtutawwnmhr"
-                "pjmhyiygdekonlxhkbeaheqvnqbwhambhrrhkyfcehjfblgriumapavbcxxdqytiuylxmhtjjloa"
-                "fvnyhqsgalacknksxxxilgfcankxreaburvmxukmfprfpmfqgqhmirlnltkjxslumhtamtndaffh"
-                "ybfywiwjlafnsgsvywflsfkeeidwptigidvhnqdjiwvgkfynncyujodsjiglubptsdofftfxayno"
-                "txoykiivbvvipdpcgjadvbanaeljdbxxynlqqpdphirrbjqfqtnxabitncafatbosjnlimxfxlrh"
-                "thlfsdyfbhtwywewqubjcvskmwxwjyhesqbviflihnjfejcgjtkgicgmmcurynmdaoifojmedcqb"
-                "aeqalxnljvglnvyverrtosfeeuajyxkmmpjgcioqxnnqpjokxaenfoudondtahjduymwsyxpbvrf"
-                "kpgiavuihdliphwojgjobafhjshjnmhufciepexevtfwcybtripqmnekkirxmljumyxjpqbvmftt"
-                "xmfwokjskummmkaksbeoowfgjwiumpbkdujexectnghqjjuotofwuwvcgtluephymdkrscbfiaeg"
-                "aaypnclkstfqimisanikjxocmhcrotkntprwjbuudswuyuujfawjucwgifhqgepxeidmvcwqsqrv"
-                "karuvpnxhmrvdcocidgtuxasdqkwsdvijmnpmayhfiva";
+            const char* s1 = 
+                "ssyrtvllktbhijkyckviokukaodexiykxcvlvninoasblpuujnqnilnhmacsulaulskphkccnfop" 
+                "jlhejqhemdpnihasouinuceugkfkaifdepvffntbkfivsddtxyslnlwiyfbbpnrwlkryetncahih" 
+                "vqcrdvvehvrxgnitghbomkprdngrqdswypwfvpdrvqnavxnprakkgoibsxybngvenlbfcghcyldn" 
+                "kssfuxvpvfhaawqiandxpsrkyqtiltmojmmwygevhodvsuvdojvwpvvbwpbbnerriufrwgwcjlgx" 
+                "jcjchsfiomtkowihdtcyewknlvdeankladmdhwqxokmunttgaqdsbuyhekkxatpydfgquyxuucda" 
+                "dllepofxoirmaablfyyibcnqkdbnsaygkqkbvupdhajfshouofnokwlbdtglrbklpgknyuiedppl" 
+                "chxbnnmbumdtrsgwitjlmkkdxysvmsvcdulmanmsdeqkmwgfthmntdbthdthdodnubqajpfyssea" 
+                "hwxymiyubkhhxlbmjptujiemrdljqkskdkuokvimencavihwqdaqtcljrgwvxpuegnoecobfllwu" 
+                "upsfhjrrpiqtjlwigjkpltwfpoqxsdrojtawpaximslojqtadsactemuhpnshkgyoyouldanktcg" 
+                "dhxdpwawabxwjhnjdmewrwtciquuiqnwdsbdvnuvjyewmjppkwvcotptmyrsqaovmaysjuvtenuy" 
+                "orvdsssgjgcgksdwaaladocotgveuscwauawdhqlkqsjtmltvkkcfkgwpdtormkefkigkppwpvsy" 
+                "fpblccsbyboouahotiifixsjuxlvqpqmpmkcgbvsefkqasearilhlxuqdfqqxxohhbdyiudqsree" 
+                "btwfxdtxlaynrusgbffhltthkejitseuqyeqvhqgyobijwmspwbsisghsarji"; 
+            const char* s2 = 
+                "lcnygawhsrprxafwnwxnrxurpnqwwtwuciuexxvswckwopnmhhmhvdwmxtgceitqofivvavnqlmo" 
+                "hbieyaxcysagyqcvijxyowiognsntxcdlmueoafqvqwafyhgyoewhwxvqswvwfkqohtutawwnmhr" 
+                "pjmhyiygdekonlxhkbeaheqvnqbwhambhrrhkyfcehjfblgriumapavbcxxdqytiuylxmhtjjloa" 
+                "fvnyhqsgalacknksxxxilgfcankxreaburvmxukmfprfpmfqgqhmirlnltkjxslumhtamtndaffh" 
+                "ybfywiwjlafnsgsvywflsfkeeidwptigidvhnqdjiwvgkfynncyujodsjiglubptsdofftfxayno" 
+                "txoykiivbvvipdpcgjadvbanaeljdbxxynlqqpdphirrbjqfqtnxabitncafatbosjnlimxfxlrh" 
+                "thlfsdyfbhtwywewqubjcvskmwxwjyhesqbviflihnjfejcgjtkgicgmmcurynmdaoifojmedcqb" 
+                "aeqalxnljvglnvyverrtosfeeuajyxkmmpjgcioqxnnqpjokxaenfoudondtahjduymwsyxpbvrf" 
+                "kpgiavuihdliphwojgjobafhjshjnmhufciepexevtfwcybtripqmnekkirxmljumyxjpqbvmftt" 
+                "xmfwokjskummmkaksbeoowfgjwiumpbkdujexectnghqjjuotofwuwvcgtluephymdkrscbfiaeg" 
+                "aaypnclkstfqimisanikjxocmhcrotkntprwjbuudswuyuujfawjucwgifhqgepxeidmvcwqsqrv" 
+                "karuvpnxhmrvdcocidgtuxasdqkwsdvijmnpmayhfiva"; 
             CheckLCSLength(s1, s2, 288);
         }
     }

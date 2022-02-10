@@ -1,7 +1,7 @@
-LIBRARY()
+LIBRARY() 
 
-OWNER(finder)
-
+OWNER(finder) 
+ 
 SRCS(
     xml-document.cpp
     xml-textreader.cpp

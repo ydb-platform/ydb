@@ -9,9 +9,9 @@
 #endif
 
 namespace NInterconnect {
-    TAddress::TAddress() {
+    TAddress::TAddress() { 
         memset(&Addr, 0, sizeof(Addr));
-    }
+    } 
 
     TAddress::TAddress(NAddr::IRemoteAddr& addr) {
         socklen_t len = addr.Len();
@@ -19,42 +19,42 @@ namespace NInterconnect {
         memcpy(&Addr.Generic, addr.Addr(), len);
     }
 
-    int TAddress::GetFamily() const {
+    int TAddress::GetFamily() const { 
         return Addr.Generic.sa_family;
-    }
+    } 
 
-    socklen_t TAddress::Size() const {
+    socklen_t TAddress::Size() const { 
         switch (Addr.Generic.sa_family) {
-            case AF_INET6:
+            case AF_INET6: 
                 return sizeof(sockaddr_in6);
-            case AF_INET:
+            case AF_INET: 
                 return sizeof(sockaddr_in);
-            default:
-                return 0;
-        }
-    }
+            default: 
+                return 0; 
+        } 
+    } 
 
-    sockaddr* TAddress::SockAddr() {
+    sockaddr* TAddress::SockAddr() { 
         return &Addr.Generic;
     }
 
-    const sockaddr* TAddress::SockAddr() const {
+    const sockaddr* TAddress::SockAddr() const { 
         return &Addr.Generic;
-    }
+    } 
 
-    ui16 TAddress::GetPort() const {
+    ui16 TAddress::GetPort() const { 
         switch (Addr.Generic.sa_family) {
-            case AF_INET6:
+            case AF_INET6: 
                 return ntohs(Addr.Ipv6.sin6_port);
-            case AF_INET:
+            case AF_INET: 
                 return ntohs(Addr.Ipv4.sin_port);
-            default:
-                return 0;
-        }
-    }
+            default: 
+                return 0; 
+        } 
+    } 
 
-    TString TAddress::ToString() const {
-        return GetAddress() + ":" + ::ToString(GetPort());
+    TString TAddress::ToString() const { 
+        return GetAddress() + ":" + ::ToString(GetPort()); 
     }
 
     TAddress::TAddress(const char* addr, ui16 port) {
@@ -63,8 +63,8 @@ namespace NInterconnect {
             Addr.Ipv6.sin6_port = htons(port);
         } else if (inet_pton(Addr.Ipv4.sin_family = AF_INET, addr, &Addr.Ipv4.sin_addr)) {
             Addr.Ipv4.sin_port = htons(port);
-        }
-    }
+        } 
+    } 
 
     TAddress::TAddress(const TString& addr, ui16 port)
         : TAddress(addr.data(), port)
@@ -75,17 +75,17 @@ namespace NInterconnect {
         socklen_t size;
 
         switch (Addr.Generic.sa_family) {
-            case AF_INET6:
+            case AF_INET6: 
                 std::tie(src, size) = std::make_tuple(&Addr.Ipv6.sin6_addr, INET6_ADDRSTRLEN);
                 break;
 
-            case AF_INET:
+            case AF_INET: 
                 std::tie(src, size) = std::make_tuple(&Addr.Ipv4.sin_addr, INET_ADDRSTRLEN);
                 break;
 
-            default:
-                return TString();
-        }
+            default: 
+                return TString(); 
+        } 
 
         char *buffer = static_cast<char*>(alloca(size));
         const char *p = inet_ntop(Addr.Generic.sa_family, const_cast<void*>(src), buffer, size);

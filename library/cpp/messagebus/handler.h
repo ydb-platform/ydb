@@ -9,127 +9,127 @@
 #include <util/generic/noncopyable.h>
 
 namespace NBus {
-    /////////////////////////////////////////////////////////////////
-    /// \brief Interface to message bus handler
+    ///////////////////////////////////////////////////////////////// 
+    /// \brief Interface to message bus handler 
 
-    struct IBusErrorHandler {
-        friend struct ::NBus::NPrivate::TBusSessionImpl;
+    struct IBusErrorHandler { 
+        friend struct ::NBus::NPrivate::TBusSessionImpl; 
 
-    private:
-        TUseAfterFreeChecker UseAfterFreeChecker;
-        TUseCountChecker UseCountChecker;
+    private: 
+        TUseAfterFreeChecker UseAfterFreeChecker; 
+        TUseCountChecker UseCountChecker; 
 
-    public:
-        /// called when message or reply can't be delivered
-        virtual void OnError(TAutoPtr<TBusMessage> pMessage, EMessageStatus status);
+    public: 
+        /// called when message or reply can't be delivered 
+        virtual void OnError(TAutoPtr<TBusMessage> pMessage, EMessageStatus status); 
 
-        virtual ~IBusErrorHandler() {
-        }
+        virtual ~IBusErrorHandler() { 
+        } 
+    }; 
+
+    class TClientConnectionEvent { 
+    public: 
+        enum EType { 
+            CONNECTED, 
+            DISCONNECTED, 
+        }; 
+
+    private: 
+        EType Type; 
+        ui64 Id; 
+        TNetAddr Addr; 
+
+    public: 
+        TClientConnectionEvent(EType type, ui64 id, TNetAddr addr) 
+            : Type(type) 
+            , Id(id) 
+            , Addr(addr) 
+        { 
+        } 
+ 
+        EType GetType() const { 
+            return Type; 
+        } 
+        ui64 GetId() const { 
+            return Id; 
+        } 
+        TNetAddr GetAddr() const { 
+            return Addr; 
+        } 
     };
 
-    class TClientConnectionEvent {
-    public:
-        enum EType {
-            CONNECTED,
-            DISCONNECTED,
-        };
+    class TOnMessageContext : TNonCopyable { 
+    private: 
+        THolder<TBusMessage> Message; 
+        TBusIdentity Ident; 
+        // TODO: we don't need to store session, we have connection in ident 
+        TBusServerSession* Session; 
 
-    private:
-        EType Type;
-        ui64 Id;
-        TNetAddr Addr;
+    public: 
+        TOnMessageContext() 
+            : Session() 
+        { 
+        } 
+        TOnMessageContext(TAutoPtr<TBusMessage> message, TBusIdentity& ident, TBusServerSession* session) 
+            : Message(message) 
+            , Session(session) 
+        { 
+            Ident.Swap(ident); 
+        } 
 
-    public:
-        TClientConnectionEvent(EType type, ui64 id, TNetAddr addr)
-            : Type(type)
-            , Id(id)
-            , Addr(addr)
-        {
-        }
+        bool IsInWork() const { 
+            return Ident.IsInWork(); 
+        } 
 
-        EType GetType() const {
-            return Type;
-        }
-        ui64 GetId() const {
-            return Id;
-        }
-        TNetAddr GetAddr() const {
-            return Addr;
-        }
-    };
+        bool operator!() const { 
+            return !IsInWork(); 
+        } 
 
-    class TOnMessageContext : TNonCopyable {
-    private:
-        THolder<TBusMessage> Message;
-        TBusIdentity Ident;
-        // TODO: we don't need to store session, we have connection in ident
-        TBusServerSession* Session;
+        TBusMessage* GetMessage() { 
+            return Message.Get(); 
+        } 
 
-    public:
-        TOnMessageContext()
-            : Session()
-        {
-        }
-        TOnMessageContext(TAutoPtr<TBusMessage> message, TBusIdentity& ident, TBusServerSession* session)
-            : Message(message)
-            , Session(session)
-        {
-            Ident.Swap(ident);
-        }
+        TBusMessage* ReleaseMessage() { 
+            return Message.Release(); 
+        } 
 
-        bool IsInWork() const {
-            return Ident.IsInWork();
-        }
+        TBusServerSession* GetSession() { 
+            return Session; 
+        } 
 
-        bool operator!() const {
-            return !IsInWork();
-        }
+        template <typename U /* <: TBusMessage */> 
+        EMessageStatus SendReplyAutoPtr(TAutoPtr<U>& rep); 
 
-        TBusMessage* GetMessage() {
-            return Message.Get();
-        }
+        EMessageStatus SendReplyMove(TBusMessageAutoPtr response); 
 
-        TBusMessage* ReleaseMessage() {
-            return Message.Release();
-        }
+        void AckMessage(TBusIdentity& ident); 
 
-        TBusServerSession* GetSession() {
-            return Session;
-        }
+        void ForgetRequest(); 
 
-        template <typename U /* <: TBusMessage */>
-        EMessageStatus SendReplyAutoPtr(TAutoPtr<U>& rep);
+        void Swap(TOnMessageContext& that) { 
+            DoSwap(Message, that.Message); 
+            Ident.Swap(that.Ident); 
+            DoSwap(Session, that.Session); 
+        } 
 
-        EMessageStatus SendReplyMove(TBusMessageAutoPtr response);
+        TNetAddr GetPeerAddrNetAddr() const; 
 
-        void AckMessage(TBusIdentity& ident);
+        bool IsConnectionAlive() const; 
+    }; 
 
-        void ForgetRequest();
+    struct IBusServerHandler: public IBusErrorHandler { 
+        virtual void OnMessage(TOnMessageContext& onMessage) = 0; 
+        /// called when reply has been sent from destination 
+        virtual void OnSent(TAutoPtr<TBusMessage> pMessage); 
+    }; 
 
-        void Swap(TOnMessageContext& that) {
-            DoSwap(Message, that.Message);
-            Ident.Swap(that.Ident);
-            DoSwap(Session, that.Session);
-        }
+    struct IBusClientHandler: public IBusErrorHandler { 
+        /// called on source when reply arrives from destination 
+        virtual void OnReply(TAutoPtr<TBusMessage> pMessage, TAutoPtr<TBusMessage> pReply) = 0; 
+        /// called when client side message has gone into wire, place to call AckMessage() 
+        virtual void OnMessageSent(TBusMessage* pMessage); 
+        virtual void OnMessageSentOneWay(TAutoPtr<TBusMessage> pMessage); 
+        virtual void OnClientConnectionEvent(const TClientConnectionEvent&); 
+    }; 
 
-        TNetAddr GetPeerAddrNetAddr() const;
-
-        bool IsConnectionAlive() const;
-    };
-
-    struct IBusServerHandler: public IBusErrorHandler {
-        virtual void OnMessage(TOnMessageContext& onMessage) = 0;
-        /// called when reply has been sent from destination
-        virtual void OnSent(TAutoPtr<TBusMessage> pMessage);
-    };
-
-    struct IBusClientHandler: public IBusErrorHandler {
-        /// called on source when reply arrives from destination
-        virtual void OnReply(TAutoPtr<TBusMessage> pMessage, TAutoPtr<TBusMessage> pReply) = 0;
-        /// called when client side message has gone into wire, place to call AckMessage()
-        virtual void OnMessageSent(TBusMessage* pMessage);
-        virtual void OnMessageSentOneWay(TAutoPtr<TBusMessage> pMessage);
-        virtual void OnClientConnectionEvent(const TClientConnectionEvent&);
-    };
-
-}
+} 

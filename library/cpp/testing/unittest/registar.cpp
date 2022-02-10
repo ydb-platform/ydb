@@ -11,27 +11,27 @@
 #include <util/system/tls.h>
 #include <util/system/error.h>
 #include <util/string/cast.h>
-
+ 
 bool NUnitTest::ShouldColorizeDiff = true;
 bool NUnitTest::ContinueOnFail = false;
 
 TString NUnitTest::RandomString(size_t len, ui32 seed) {
-    TReallyFastRng32 rand(seed);
+    TReallyFastRng32 rand(seed); 
     TString ret;
+ 
+    ret.reserve(len); 
+ 
+    for (size_t i = 0; i < len; ++i) { 
+        ret.push_back(char(rand.Uniform(1, 128))); 
+    } 
+ 
+    return ret; 
+} 
 
-    ret.reserve(len);
-
-    for (size_t i = 0; i < len; ++i) {
-        ret.push_back(char(rand.Uniform(1, 128)));
-    }
-
-    return ret;
-}
-
-Y_POD_STATIC_THREAD(bool)
-UnittestThread;
-Y_POD_STATIC_THREAD(NUnitTest::TTestBase*)
-currentTest;
+Y_POD_STATIC_THREAD(bool) 
+UnittestThread; 
+Y_POD_STATIC_THREAD(NUnitTest::TTestBase*) 
+currentTest; 
 ::NUnitTest::TRaiseErrorHandler RaiseErrorHandler;
 
 void ::NUnitTest::NPrivate::RaiseError(const char* what, const TString& msg, bool fatalFailure) {
@@ -78,8 +78,8 @@ struct TDiffColorizer {
 
     explicit TDiffColorizer(bool reverse = false)
         : Reverse(reverse)
-    {
-    }
+    { 
+    } 
 
     TString Special(TStringBuf str) const {
         return ToString(Colors.YellowColor()) + str;
@@ -111,8 +111,8 @@ struct TTraceDiffFormatter {
 
     explicit TTraceDiffFormatter(bool reverse = false)
         : Reverse(reverse)
-    {
-    }
+    { 
+    } 
 
     TString Special(TStringBuf str) const {
         return ToString(str);
@@ -124,14 +124,14 @@ struct TTraceDiffFormatter {
 
     TString Left(TArrayRef<const char> str) const {
         return NUnitTest::GetFormatTag("good") +
-               TString(str.begin(), str.end()) +
-               NUnitTest::GetResetTag();
+               TString(str.begin(), str.end()) + 
+               NUnitTest::GetResetTag(); 
     }
 
     TString Right(TArrayRef<const char> str) const {
         return NUnitTest::GetFormatTag("bad") +
-               TString(str.begin(), str.end()) +
-               NUnitTest::GetResetTag();
+               TString(str.begin(), str.end()) + 
+               NUnitTest::GetResetTag(); 
     }
 };
 
@@ -149,7 +149,7 @@ TString NUnitTest::ColoredDiff(TStringBuf s1, TStringBuf s2, const TString& deli
     NDiff::InlineDiff(chunks, s1, s2, delims);
     if (NUnitTest::ShouldColorizeDiff) {
         NDiff::PrintChunks(res, TDiffColorizer(reverse), chunks);
-    } else {
+    } else { 
         res << NUnitTest::GetResetTag();
         NDiff::PrintChunks(res, TTraceDiffFormatter(reverse), chunks);
     }
@@ -290,10 +290,10 @@ void NUnitTest::ITestBaseFactory::Register() noexcept {
 }
 
 NUnitTest::TTestBase::TTestBase() noexcept
-    : Parent_(nullptr)
-    , TestErrors_()
-    , CurrentSubtest_()
-{
+    : Parent_(nullptr) 
+    , TestErrors_() 
+    , CurrentSubtest_() 
+{ 
 }
 
 NUnitTest::TTestBase::~TTestBase() = default;

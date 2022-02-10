@@ -132,12 +132,12 @@ namespace NWilson {
         return GetNodeId(*ac.ExecutorThread.ActorSystem);
     }
 
-    constexpr ui32 WilsonComponentId = 430; // kikimrservices: wilson
+    constexpr ui32 WilsonComponentId = 430; // kikimrservices: wilson 
 
     template <typename TActorSystem>
     bool TraceEnabled(const TActorSystem& ctx) {
         const auto* loggerSettings = ctx.LoggerSettings();
-        return loggerSettings && loggerSettings->Satisfies(NActors::NLog::PRI_DEBUG, WilsonComponentId);
+        return loggerSettings && loggerSettings->Satisfies(NActors::NLog::PRI_DEBUG, WilsonComponentId); 
     }
 
     template <typename TActorSystem, typename TEvent>

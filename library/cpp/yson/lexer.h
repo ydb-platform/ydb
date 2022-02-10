@@ -6,21 +6,21 @@
 #include <util/generic/ptr.h>
 
 namespace NYson {
-    ////////////////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////////////// 
 
-    class TStatelessLexer {
-    public:
-        TStatelessLexer();
+    class TStatelessLexer { 
+    public: 
+        TStatelessLexer(); 
 
-        ~TStatelessLexer();
+        ~TStatelessLexer(); 
 
-        size_t GetToken(const TStringBuf& data, TToken* token);
+        size_t GetToken(const TStringBuf& data, TToken* token); 
 
-    private:
-        class TImpl;
-        THolder<TImpl> Impl;
-    };
+    private: 
+        class TImpl; 
+        THolder<TImpl> Impl; 
+    }; 
 
-    ////////////////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////////////// 
 
 } // namespace NYson

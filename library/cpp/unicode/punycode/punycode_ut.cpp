@@ -39,13 +39,13 @@ Y_UNIT_TEST_SUITE(TPunycodeTest) {
         UNIT_ASSERT(TestRaw("пример", "e1afmkfd"));
 
         {
-            const wchar16 tmp[] = {0x82, 0x81, 0x80, 0};
-            UNIT_ASSERT(PunycodeToWide("abc") == tmp); // "abc" is still valid punycode
+            const wchar16 tmp[] = {0x82, 0x81, 0x80, 0}; 
+            UNIT_ASSERT(PunycodeToWide("abc") == tmp); // "abc" is still valid punycode 
         }
 
         UNIT_ASSERT_EXCEPTION(PunycodeToWide("     "), TPunycodeError);
         UNIT_ASSERT_EXCEPTION(PunycodeToWide("абвгд"), TPunycodeError);
-        UNIT_ASSERT_EXCEPTION(PunycodeToWide("-"), TPunycodeError);
+        UNIT_ASSERT_EXCEPTION(PunycodeToWide("-"), TPunycodeError); 
 
         {
             TString longIn;
@@ -62,23 +62,23 @@ Y_UNIT_TEST_SUITE(TPunycodeTest) {
         TString buf1;
         TUtf16String buf2;
         //Cerr << "Testing " << utf8 << Endl;
-        return HostNameToPunycode(unicode) == punycode && HostNameToPunycode(UTF8ToWide(punycode)) == punycode // repeated encoding should give same result
-               && PunycodeToHostName(punycode) == unicode && CanBePunycodeHostName(punycode) == canBePunycode;
+        return HostNameToPunycode(unicode) == punycode && HostNameToPunycode(UTF8ToWide(punycode)) == punycode // repeated encoding should give same result 
+               && PunycodeToHostName(punycode) == unicode && CanBePunycodeHostName(punycode) == canBePunycode; 
     }
 
     static bool TestForced(const TString& bad) {
-        return ForceHostNameToPunycode(UTF8ToWide(bad)) == bad && ForcePunycodeToHostName(bad) == UTF8ToWide(bad);
+        return ForceHostNameToPunycode(UTF8ToWide(bad)) == bad && ForcePunycodeToHostName(bad) == UTF8ToWide(bad); 
     }
 
     Y_UNIT_TEST(HostNameEncodeDecode) {
         UNIT_ASSERT(TestHostName("президент.рф", "xn--d1abbgf6aiiy.xn--p1ai", true));
-        UNIT_ASSERT(TestHostName("яндекс.ru", "xn--d1acpjx3f.ru", true));
-        UNIT_ASSERT(TestHostName("пример", "xn--e1afmkfd", true));
-        UNIT_ASSERT(TestHostName("ascii.test", "ascii.test"));
+        UNIT_ASSERT(TestHostName("яндекс.ru", "xn--d1acpjx3f.ru", true)); 
+        UNIT_ASSERT(TestHostName("пример", "xn--e1afmkfd", true)); 
+        UNIT_ASSERT(TestHostName("ascii.test", "ascii.test")); 
 
         UNIT_ASSERT(TestHostName("", ""));
         UNIT_ASSERT(TestHostName(".", "."));
-        UNIT_ASSERT(TestHostName("a.", "a.")); // empty root domain is ok
+        UNIT_ASSERT(TestHostName("a.", "a.")); // empty root domain is ok 
         UNIT_ASSERT(TestHostName("a.b.c.д.e.f", "a.b.c.xn--d1a.e.f", true));
         UNIT_ASSERT(TestHostName("а.б.в.г.д", "xn--80a.xn--90a.xn--b1a.xn--c1a.xn--d1a", true));
 
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(TPunycodeTest) {
             // too long domain label
             TString bad(500, 'a');
             UNIT_ASSERT_EXCEPTION(HostNameToPunycode(UTF8ToWide(bad)), TPunycodeError);
-            UNIT_ASSERT(TestForced(bad)); // but can decode it
+            UNIT_ASSERT(TestForced(bad)); // but can decode it 
         }
         {
             // already has ACE prefix
@@ -121,6 +121,6 @@ Y_UNIT_TEST_SUITE(TPunycodeTest) {
         UNIT_ASSERT(!CanBePunycodeHostName("яндекс.рф"));       // non-ascii
         UNIT_ASSERT(!CanBePunycodeHostName("яндекс.xn--p1ai")); // non-ascii
         UNIT_ASSERT(!CanBePunycodeHostName(""));
-        UNIT_ASSERT(!CanBePunycodeHostName("http://xn--a.b")); // scheme prefix is not detected here
+        UNIT_ASSERT(!CanBePunycodeHostName("http://xn--a.b")); // scheme prefix is not detected here 
     }
 }

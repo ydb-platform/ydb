@@ -1,10 +1,10 @@
-#include "backtrace.h"
-
+#include "backtrace.h" 
+ 
 #include <util/generic/array_ref.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/output.h>
-
+ 
 using PFunc = int (*)(void**, size_t);
 
 int Dbg1(void** buf, size_t len) {
@@ -17,35 +17,35 @@ int Dbg2(void** buf, size_t len) {
     return ret;
 }
 
-void FormatBackTraceReplacement(IOutputStream* out, void* const*, size_t) {
+void FormatBackTraceReplacement(IOutputStream* out, void* const*, size_t) { 
     *out << "WorksLikeACharm" << Endl;
 }
 
-void SomeMethod() {
-    TStringStream out;
-
-    FormatBackTrace(&out);
-
-#if defined(_musl_)
-    // musl dladdr broken for us now
-    return;
-#endif
-
+void SomeMethod() { 
+    TStringStream out; 
+ 
+    FormatBackTrace(&out); 
+ 
+#if defined(_musl_) 
+    // musl dladdr broken for us now 
+    return; 
+#endif 
+ 
     UNIT_ASSERT(out.Empty() || out.Str().find("SomeMethod") != TString::npos);
-}
-
-class TBackTraceTest: public TTestBase {
+} 
+ 
+class TBackTraceTest: public TTestBase { 
     UNIT_TEST_SUITE(TBackTraceTest);
-    UNIT_TEST(TestBackTrace)
+    UNIT_TEST(TestBackTrace) 
     UNIT_TEST(TestBackTraceView)
-    UNIT_TEST(TestPrintBackTrace)
+    UNIT_TEST(TestPrintBackTrace) 
     UNIT_TEST(TestSetFormatBackTraceFn)
     UNIT_TEST_SUITE_END();
 
-    void TestPrintBackTrace() {
-        SomeMethod();
-    }
-
+    void TestPrintBackTrace() { 
+        SomeMethod(); 
+    } 
+ 
     void TestSetFormatBackTraceFn() {
         TFormatBackTraceFn prevFn = SetFormatBackTraceFn(FormatBackTraceReplacement);
         TStringStream out;
@@ -56,7 +56,7 @@ class TBackTraceTest: public TTestBase {
     }
 
     void TestBackTrace() {
-        //PrintBackTrace();
+        //PrintBackTrace(); 
         void* buf1[100];
         size_t ret1;
 

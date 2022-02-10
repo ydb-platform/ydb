@@ -1,10 +1,10 @@
-LIBRARY()
-
-OWNER(pg)
-
-SRCS(
-    colors.cpp
-    output.cpp
-)
-
-END()
+LIBRARY() 
+ 
+OWNER(pg) 
+ 
+SRCS( 
+    colors.cpp 
+    output.cpp 
+) 
+ 
+END() 

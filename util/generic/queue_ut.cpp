@@ -1,9 +1,9 @@
-#include "queue.h"
-#include "list.h"
-#include "vector.h"
-
+#include "queue.h" 
+#include "list.h" 
+#include "vector.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <utility>
 
 Y_UNIT_TEST_SUITE(TYQueueTest) {
@@ -75,59 +75,59 @@ Y_UNIT_TEST_SUITE(TYQueueTest) {
 
     Y_UNIT_TEST(pqueue1) {
         TPriorityQueue<int, TDeque<int>, TLess<int>> q;
-
-        q.push(42);
-        q.push(101);
-        q.push(69);
-        UNIT_ASSERT(q.top() == 101);
-
-        q.pop();
-        UNIT_ASSERT(q.top() == 69);
-
-        q.pop();
-        UNIT_ASSERT(q.top() == 42);
-
-        q.pop();
-        UNIT_ASSERT(q.empty());
-    }
-
+ 
+        q.push(42); 
+        q.push(101); 
+        q.push(69); 
+        UNIT_ASSERT(q.top() == 101); 
+ 
+        q.pop(); 
+        UNIT_ASSERT(q.top() == 69); 
+ 
+        q.pop(); 
+        UNIT_ASSERT(q.top() == 42); 
+ 
+        q.pop(); 
+        UNIT_ASSERT(q.empty()); 
+    } 
+ 
     Y_UNIT_TEST(pqueue2) {
         using TPQueue = TPriorityQueue<int, TDeque<int>, TLess<int>>;
-        TPQueue q;
-
-        {
-            TPQueue qq;
-
-            qq.push(42);
-            qq.push(101);
-            qq.push(69);
-
-            qq.swap(q);
-        }
-
-        UNIT_ASSERT(q.top() == 101);
-
-        q.pop();
-        UNIT_ASSERT(q.top() == 69);
-
-        q.pop();
-        UNIT_ASSERT(q.top() == 42);
-
-        q.pop();
-        UNIT_ASSERT(q.empty());
-    }
-
+        TPQueue q; 
+ 
+        { 
+            TPQueue qq; 
+ 
+            qq.push(42); 
+            qq.push(101); 
+            qq.push(69); 
+ 
+            qq.swap(q); 
+        } 
+ 
+        UNIT_ASSERT(q.top() == 101); 
+ 
+        q.pop(); 
+        UNIT_ASSERT(q.top() == 69); 
+ 
+        q.pop(); 
+        UNIT_ASSERT(q.top() == 42); 
+ 
+        q.pop(); 
+        UNIT_ASSERT(q.empty()); 
+    } 
+ 
     Y_UNIT_TEST(pqueue3) {
         TPriorityQueue<int, TDeque<int>, TLess<int>> q;
-
-        q.push(42);
-        q.push(101);
-        q.push(69);
-        q.clear();
-
-        UNIT_ASSERT(q.empty());
-    }
-
+ 
+        q.push(42); 
+        q.push(101); 
+        q.push(69); 
+        q.clear(); 
+ 
+        UNIT_ASSERT(q.empty()); 
+    } 
+ 
     Y_UNIT_TEST(pqueue4) {
         TDeque<int> c;
         c.push_back(42);
@@ -154,57 +154,57 @@ Y_UNIT_TEST_SUITE(TYQueueTest) {
 
     Y_UNIT_TEST(queue1) {
         TQueue<int, TList<int>> q;
-
-        q.push(42);
-        q.push(101);
-        q.push(69);
-        UNIT_ASSERT(q.front() == 42);
-
-        q.pop();
-        UNIT_ASSERT(q.front() == 101);
-
-        q.pop();
-        UNIT_ASSERT(q.front() == 69);
-
-        q.pop();
-        UNIT_ASSERT(q.empty());
-    }
-
+ 
+        q.push(42); 
+        q.push(101); 
+        q.push(69); 
+        UNIT_ASSERT(q.front() == 42); 
+ 
+        q.pop(); 
+        UNIT_ASSERT(q.front() == 101); 
+ 
+        q.pop(); 
+        UNIT_ASSERT(q.front() == 69); 
+ 
+        q.pop(); 
+        UNIT_ASSERT(q.empty()); 
+    } 
+ 
     Y_UNIT_TEST(queue2) {
         using TQueueType = TQueue<int>;
         TQueueType q;
-
-        {
+ 
+        { 
             TQueueType qq;
-
-            qq.push(42);
-            qq.push(101);
-            qq.push(69);
-
-            qq.swap(q);
-        }
-
-        UNIT_ASSERT(q.front() == 42);
-
-        q.pop();
-        UNIT_ASSERT(q.front() == 101);
-
-        q.pop();
-        UNIT_ASSERT(q.front() == 69);
-
-        q.pop();
-        UNIT_ASSERT(q.empty());
-    }
-
+ 
+            qq.push(42); 
+            qq.push(101); 
+            qq.push(69); 
+ 
+            qq.swap(q); 
+        } 
+ 
+        UNIT_ASSERT(q.front() == 42); 
+ 
+        q.pop(); 
+        UNIT_ASSERT(q.front() == 101); 
+ 
+        q.pop(); 
+        UNIT_ASSERT(q.front() == 69); 
+ 
+        q.pop(); 
+        UNIT_ASSERT(q.empty()); 
+    } 
+ 
     Y_UNIT_TEST(queue3) {
         using TQueueType = TQueue<int>;
         TQueueType q;
-
-        q.push(42);
-        q.push(101);
-        q.push(69);
-        q.clear();
-
-        UNIT_ASSERT(q.empty());
-    }
-}
+ 
+        q.push(42); 
+        q.push(101); 
+        q.push(69); 
+        q.clear(); 
+ 
+        UNIT_ASSERT(q.empty()); 
+    } 
+} 

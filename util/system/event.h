@@ -4,17 +4,17 @@
 #include <util/datetime/base.h>
 
 struct TEventResetType {
-    enum ResetMode {
-        rAuto,   // the state will be nonsignaled after Wait() returns
-        rManual, // we need call Reset() to set the state to nonsignaled.
-    };
+    enum ResetMode { 
+        rAuto,   // the state will be nonsignaled after Wait() returns 
+        rManual, // we need call Reset() to set the state to nonsignaled. 
+    }; 
 };
 
 /**
  * DEPRECATED!
  *
  * Use TAutoEvent, TManualEvent for the direct replacement.
- * Use TManualEvent to prevent SEGFAULT (http://nga.at.yandex-team.ru/5772).
+ * Use TManualEvent to prevent SEGFAULT (http://nga.at.yandex-team.ru/5772). 
  */
 class TSystemEvent: public TEventResetType {
 public:
@@ -27,40 +27,40 @@ public:
     void Reset() noexcept;
     void Signal() noexcept;
 
-    /*
-     * return true if signaled, false if timed out.
-     */
+    /* 
+     * return true if signaled, false if timed out. 
+     */ 
     bool WaitD(TInstant deadLine) noexcept;
-
-    /*
-     * return true if signaled, false if timed out.
-     */
+ 
+    /* 
+     * return true if signaled, false if timed out. 
+     */ 
     inline bool WaitT(TDuration timeOut) noexcept {
-        return WaitD(timeOut.ToDeadLine());
-    }
-
-    /*
-     * wait infinite time
-     */
+        return WaitD(timeOut.ToDeadLine()); 
+    } 
+ 
+    /* 
+     * wait infinite time 
+     */ 
     inline void WaitI() noexcept {
-        WaitD(TInstant::Max());
-    }
-
-    //return true if signaled, false if timed out.
+        WaitD(TInstant::Max()); 
+    } 
+ 
+    //return true if signaled, false if timed out. 
     inline bool Wait(ui32 timer) noexcept {
-        return WaitT(TDuration::MilliSeconds(timer));
-    }
-
+        return WaitT(TDuration::MilliSeconds(timer)); 
+    } 
+ 
     inline bool Wait() noexcept {
-        WaitI();
-
-        return true;
-    }
-
-private:
-    class TEvImpl;
+        WaitI(); 
+ 
+        return true; 
+    } 
+ 
+private: 
+    class TEvImpl; 
     TIntrusivePtr<TEvImpl> EvImpl_;
-};
+}; 
 
 class TAutoEvent: public TSystemEvent {
 public:

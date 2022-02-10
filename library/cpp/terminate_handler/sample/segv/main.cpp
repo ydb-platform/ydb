@@ -10,6 +10,6 @@ void Foo(int* x) {
 
 int main() {
     InstallSegvHandler();
-    Foo((int*)1);
+    Foo((int*)1); 
     return 0;
 }

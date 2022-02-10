@@ -58,10 +58,10 @@ extern void init_scproxy(void);
 #endif
 #endif
 
-#ifdef _CYGWIN_
-extern void init_multiprocessing(void);
-#endif
-
+#ifdef _CYGWIN_ 
+extern void init_multiprocessing(void); 
+#endif 
+ 
 #ifdef _UNIX_
 extern void init_socket(void);
 extern void initcrypt(void);
@@ -82,8 +82,8 @@ extern void init_socket(void);
 extern void initnt(void);
 extern void initpyexpat(void);
 extern void initselect(void);
-extern void initmsvcrt(void);
-extern void init_subprocess(void);
+extern void initmsvcrt(void); 
+extern void init_subprocess(void); 
 extern void init_winreg(void);
 #endif
 

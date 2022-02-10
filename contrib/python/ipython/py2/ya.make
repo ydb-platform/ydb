@@ -1,6 +1,6 @@
 PY2_LIBRARY()
 
-LICENSE(BSD-3-Clause)
+LICENSE(BSD-3-Clause) 
 
 VERSION(5.9.0)
 

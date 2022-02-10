@@ -1,5 +1,5 @@
-#include "url.h"
-
+#include "url.h" 
+ 
 #include <util/string/cast.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(TUtilUrlTest) {
         UNIT_ASSERT_VALUES_EQUAL("ya.ru/zzz", CutHttpPrefix("http://ya.ru/zzz", true));
         UNIT_ASSERT_VALUES_EQUAL("ya.ru/zzz", CutHttpPrefix("https://ya.ru/zzz"));
         UNIT_ASSERT_VALUES_EQUAL("https://ya.ru/zzz", CutHttpPrefix("https://ya.ru/zzz", true));
-        UNIT_ASSERT_VALUES_EQUAL("", CutHttpPrefix("https://"));               // is that right?
+        UNIT_ASSERT_VALUES_EQUAL("", CutHttpPrefix("https://"));               // is that right? 
         UNIT_ASSERT_VALUES_EQUAL("https://", CutHttpPrefix("https://", true)); // is that right?
     }
 

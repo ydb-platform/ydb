@@ -15,7 +15,7 @@ ELSE()
 ENDIF()
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+ 
 OWNER(
     vskipin
     g:contrib

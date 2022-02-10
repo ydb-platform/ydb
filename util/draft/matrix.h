@@ -5,42 +5,42 @@
 #include <util/system/defaults.h>
 #include <string.h>
 
-template <typename T>
-class TMatrix: TNonCopyable {
-    // Constructor/Destructor
+template <typename T> 
+class TMatrix: TNonCopyable { 
+    // Constructor/Destructor 
 public:
     TMatrix()
         : Buf(nullptr)
         , Arr(nullptr)
-        , M(0)
-        , N(0)
-        , BufSize(0)
-    {
-    }
+        , M(0) 
+        , N(0) 
+        , BufSize(0) 
+    { 
+    } 
 
     TMatrix(size_t m, size_t n)
-        : Buf(new T[m * n])
-        , Arr(Buf)
-        , M(m)
-        , N(n)
-        , BufSize(m * n)
-    {
-    }
+        : Buf(new T[m * n]) 
+        , Arr(Buf) 
+        , M(m) 
+        , N(n) 
+        , BufSize(m * n) 
+    { 
+    } 
 
     TMatrix(size_t m, size_t n, T* buf)
         : Buf(nullptr)
-        , Arr(buf)
-        , M(m)
-        , N(n)
-        , BufSize(m * n)
-    {
-    }
+        , Arr(buf) 
+        , M(m) 
+        , N(n) 
+        , BufSize(m * n) 
+    { 
+    } 
 
     ~TMatrix() {
         delete[] Buf;
     }
 
-    // Properties/Methods
+    // Properties/Methods 
 public:
     void Clear() {
         M = N = 0;
@@ -51,12 +51,12 @@ public:
         size_t newSize = m * n;
         if (newSize > BufSize) {
             T* newBuf = new T[newSize];
-            delete[] Buf;
+            delete[] Buf; 
             Arr = Buf = newBuf;
             BufSize = newSize;
         }
-        M = m;
-        N = n;
+        M = m; 
+        N = n; 
     }
 
     size_t Width() const {
@@ -96,7 +96,7 @@ public:
     }
 
     void Fill(T value) {
-        for (T *p = Arr, *end = Arr + M * N; p < end; ++p)
+        for (T *p = Arr, *end = Arr + M * N; p < end; ++p) 
             *p = value;
     }
 

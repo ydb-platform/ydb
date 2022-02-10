@@ -9,7 +9,7 @@
 
 /* Define to 1 if translation of program messages to the user's native
    language is requested. */
-//#define ENABLE_NLS 1
+//#define ENABLE_NLS 1 
 
 /* Define to 1 if you have the MacOS X function CFLocaleCopyCurrent in the
    CoreFoundation framework. */
@@ -21,7 +21,7 @@
 
 /* Define if the GNU dcgettext() function is already present or preinstalled.
    */
-//#define HAVE_DCGETTEXT 1
+//#define HAVE_DCGETTEXT 1 
 
 /* Define to 1 if you have the declaration of `getenv', and to 0 if you don't.
    */
@@ -192,11 +192,11 @@
 
 /* Define to l, ll, u, ul, ull, etc., as suitable for constants of type
    'wchar_t'. */
-#define WCHAR_T_SUFFIX
+#define WCHAR_T_SUFFIX 
 
 /* Define to l, ll, u, ul, ull, etc., as suitable for constants of type
    'wint_t'. */
-#define WINT_T_SUFFIX
+#define WINT_T_SUFFIX 
 
 /* Define to 1 if you want TLD code. */
 #define WITH_TLD 1

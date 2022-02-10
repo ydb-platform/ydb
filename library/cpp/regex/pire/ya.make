@@ -6,7 +6,7 @@ OWNER(
     davenger
     pg
 )
-
+ 
 CFLAGS(-DPIRE_NO_CONFIG)
 
 SRCDIR(contrib/libs/pire/pire)

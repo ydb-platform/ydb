@@ -1,25 +1,25 @@
 #pragma once
 
 #include "fhandle.h"
-#include "flock.h"
-
+#include "flock.h" 
+ 
 #include <util/generic/flags.h>
 #include <util/generic/ptr.h>
-#include <util/generic/noncopyable.h>
+#include <util/generic/noncopyable.h> 
 
-#include <cstdio>
-
+#include <cstdio> 
+ 
 enum EOpenModeFlag {
-    OpenExisting = 0,  // Opens a file. It fails if the file does not exist.
+    OpenExisting = 0,  // Opens a file. It fails if the file does not exist. 
     TruncExisting = 1, // Opens a file and truncates it to zero size. It fails if the file does not exist.
-    OpenAlways = 2,    // Opens a file, always. If a file does not exist, it creates a file.
-    CreateNew = 3,     // Creates a new file. It fails if a specified file exists.
-    CreateAlways = 4,  // Creates a new file, always. If a file exists, it overwrites the file.
-    MaskCreation = 7,
+    OpenAlways = 2,    // Opens a file, always. If a file does not exist, it creates a file. 
+    CreateNew = 3,     // Creates a new file. It fails if a specified file exists. 
+    CreateAlways = 4,  // Creates a new file, always. If a file exists, it overwrites the file. 
+    MaskCreation = 7, 
 
     RdOnly = 8,  // open for reading only
     WrOnly = 16, // open for writing only
-    RdWr = 24,   // open for reading and writing
+    RdWr = 24,   // open for reading and writing 
     MaskRW = 24,
 
     Seq = 0x20,             // file access is primarily sequential (POSIX_FADV_SEQUENTIAL)
@@ -39,12 +39,12 @@ enum EOpenModeFlag {
     AXGroup = 0x00100000,
     AWGroup = 0x00200000,
     ARGroup = 0x00400000,
-    AXUser = 0x01000000,
-    AWUser = 0x02000000,
-    ARUser = 0x04000000,
-    AX = AXUser | AXGroup | AXOther,
-    AW = AWUser | AWGroup,
-    AR = ARUser | ARGroup | AROther,
+    AXUser = 0x01000000, 
+    AWUser = 0x02000000, 
+    ARUser = 0x04000000, 
+    AX = AXUser | AXGroup | AXOther, 
+    AW = AWUser | AWGroup, 
+    AR = ARUser | ARGroup | AROther, 
     ARW = AR | AW,
     AMask = 0x0FFF0000,
 };
@@ -60,13 +60,13 @@ enum SeekDir {
     sEnd = 2,
 };
 
-class TFileHandle: public TNonCopyable {
+class TFileHandle: public TNonCopyable { 
 public:
     constexpr TFileHandle() = default;
 
     /// Warning: takes ownership of fd, so closes it in destructor.
     inline TFileHandle(FHANDLE fd) noexcept
-        : Fd_(fd)
+        : Fd_(fd) 
     {
     }
 
@@ -85,21 +85,21 @@ public:
     bool Close() noexcept;
 
     inline FHANDLE Release() noexcept {
-        FHANDLE ret = Fd_;
-        Fd_ = INVALID_FHANDLE;
+        FHANDLE ret = Fd_; 
+        Fd_ = INVALID_FHANDLE; 
         return ret;
     }
 
     inline void Swap(TFileHandle& r) noexcept {
-        DoSwap(Fd_, r.Fd_);
+        DoSwap(Fd_, r.Fd_); 
     }
 
     inline operator FHANDLE() const noexcept {
-        return Fd_;
+        return Fd_; 
     }
 
     inline bool IsOpen() const noexcept {
-        return Fd_ != INVALID_FHANDLE;
+        return Fd_ != INVALID_FHANDLE; 
     }
 
     i64 GetPosition() const noexcept;
@@ -111,7 +111,7 @@ public:
     bool FallocateNoResize(i64 length) noexcept;
     bool ShrinkToFit() noexcept;
     bool Flush() noexcept;
-    //flush data only, without file metadata
+    //flush data only, without file metadata 
     bool FlushData() noexcept;
     i32 Read(void* buffer, ui32 byteCount) noexcept;
     i32 Write(const void* buffer, ui32 byteCount) noexcept;
@@ -122,11 +122,11 @@ public:
     FHANDLE Duplicate() const noexcept;
     int Duplicate2Posix(int dstHandle) const noexcept;
 
-    //dup2 - like semantics, return true on success
+    //dup2 - like semantics, return true on success 
     bool LinkTo(const TFileHandle& fh) const noexcept;
-
-    //very low-level methods
-    bool SetDirect();
+ 
+    //very low-level methods 
+    bool SetDirect(); 
     void ResetDirect();
 
     /* Manual file cache management, length = 0 means "as much as possible" */
@@ -167,10 +167,10 @@ public:
     void FallocateNoResize(i64 length);
     void ShrinkToFit();
     void Flush();
-    void FlushData();
+    void FlushData(); 
 
-    void LinkTo(const TFile& f) const;
-    TFile Duplicate() const;
+    void LinkTo(const TFile& f) const; 
+    TFile Duplicate() const; 
 
     // Reads up to 1 GB without retrying, returns -1 on error
     i32 RawRead(void* buf, size_t len);
@@ -195,8 +195,8 @@ public:
     void Pwrite(const void* buf, size_t len, i64 offset) const;
 
     void Flock(int op);
-
-    //do not use, their meaning very platform-dependant
+ 
+    //do not use, their meaning very platform-dependant 
     void SetDirect();
     void ResetDirect();
 
@@ -213,10 +213,10 @@ public:
 
     static TFile Temporary(const TString& prefix);
     static TFile ForAppend(const TString& path);
-
+ 
 private:
     class TImpl;
-    TSimpleIntrusivePtr<TImpl> Impl_;
+    TSimpleIntrusivePtr<TImpl> Impl_; 
 };
 
 TFile Duplicate(FILE*);

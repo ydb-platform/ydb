@@ -1,7 +1,7 @@
-#pragma once
-
+#pragma once 
+ 
 #include <util/system/atomic.h>
-
+ 
 namespace NAtomic {
     class TBool {
     public:
@@ -20,12 +20,12 @@ namespace NAtomic {
             return AtomicGet(Val_);
         }
 
-        const TBool& operator=(bool val) noexcept {
+        const TBool& operator=(bool val) noexcept { 
             AtomicSet(Val_, val);
             return *this;
         }
 
-        const TBool& operator=(const TBool& src) noexcept {
+        const TBool& operator=(const TBool& src) noexcept { 
             AtomicSet(Val_, AtomicGet(src.Val_));
             return *this;
         }
@@ -33,4 +33,4 @@ namespace NAtomic {
     private:
         TAtomic Val_ = 0;
     };
-}
+} 

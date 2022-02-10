@@ -1,20 +1,20 @@
 #pragma once
-
-#include "zerocopy.h"
-
+ 
+#include "zerocopy.h" 
+ 
 /**
  * Zero-copy stream that simplifies implementation of derived classes.
  *
  * Derived classes must implement `DoUnboundedNext` method.
  */
 class IWalkInput: public IZeroCopyInputFastReadTo {
-public:
+public: 
     IWalkInput()
         : Buf_(nullptr)
         , Len_(0)
-    {
-    }
-
+    { 
+    } 
+ 
 protected:
     void DoUndo(size_t len) override;
     size_t DoNext(const void** ptr, size_t len) override;
@@ -29,7 +29,7 @@ protected:
      */
     virtual size_t DoUnboundedNext(const void** ptr) = 0;
 
-private:
+private: 
     const void* Buf_;
     size_t Len_;
-};
+}; 

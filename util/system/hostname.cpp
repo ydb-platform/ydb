@@ -1,36 +1,36 @@
-#include <util/memory/tempbuf.h>
-#include <util/generic/singleton.h>
+#include <util/memory/tempbuf.h> 
+#include <util/generic/singleton.h> 
 #include <util/generic/yexception.h>
 #include <util/network/ip.h>
-
+ 
 #if defined(_unix_)
-    #include <unistd.h>
-    #include <ifaddrs.h>
-    #include <netdb.h>
+    #include <unistd.h> 
+    #include <ifaddrs.h> 
+    #include <netdb.h> 
 #endif
-
-#if defined(_win_)
-    #include <WinSock2.h>
+ 
+#if defined(_win_) 
+    #include <WinSock2.h> 
 #endif
 
 #include "defaults.h"
 #include "yassert.h"
-#include "hostname.h"
-
-namespace {
-    struct THostNameHolder {
-        inline THostNameHolder() {
-            TTempBuf hostNameBuf;
-
-            if (gethostname(hostNameBuf.Data(), hostNameBuf.Size() - 1)) {
-                ythrow TSystemError() << "can not get host name";
-            }
-
-            HostName = hostNameBuf.Data();
+#include "hostname.h" 
+ 
+namespace { 
+    struct THostNameHolder { 
+        inline THostNameHolder() { 
+            TTempBuf hostNameBuf; 
+ 
+            if (gethostname(hostNameBuf.Data(), hostNameBuf.Size() - 1)) { 
+                ythrow TSystemError() << "can not get host name"; 
+            } 
+ 
+            HostName = hostNameBuf.Data(); 
         }
-
+ 
         TString HostName;
-    };
+    }; 
 
     struct TFQDNHostNameHolder {
         inline TFQDNHostNameHolder() {
@@ -62,15 +62,15 @@ namespace {
 
         TString FQDNHostName;
     };
-}
-
+} 
+ 
 const TString& HostName() {
-    return (Singleton<THostNameHolder>())->HostName;
-}
-
-const char* GetHostName() {
+    return (Singleton<THostNameHolder>())->HostName; 
+} 
+ 
+const char* GetHostName() { 
     return HostName().data();
-}
+} 
 
 const TString& FQDNHostName() {
     return (Singleton<TFQDNHostNameHolder>())->FQDNHostName;

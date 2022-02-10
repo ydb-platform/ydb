@@ -4,8 +4,8 @@
 #include <util/generic/ymath.h>
 
 #ifdef _sse2_
-#include <emmintrin.h>
-#include <xmmintrin.h>
+#include <emmintrin.h> 
+#include <xmmintrin.h> 
 #endif
 
 #include <algorithm>
@@ -68,8 +68,8 @@ bool TLinearRegressionSolver::Add(const TVector<double>& features, const double 
 
         LastMeans[featureNumber] = weight * (feature - featureMean);
         featureMean += weight * (feature - featureMean) / SumWeights.Get();
-        NewMeans[featureNumber] = feature - featureMean;
-        ;
+        NewMeans[featureNumber] = feature - featureMean; 
+        ; 
     }
 
     double* olsMatrixElement = LinearizedOLSMatrix.data();
@@ -169,7 +169,7 @@ bool TSLRSolver::Add(const double feature, const double goal, const double weigh
 
 bool TSLRSolver::Add(const double* featuresBegin,
                      const double* featuresEnd,
-                     const double* goalsBegin) {
+                     const double* goalsBegin) { 
     for (; featuresBegin != featuresEnd; ++featuresBegin, ++goalsBegin) {
         Add(*featuresBegin, *goalsBegin);
     }
@@ -178,7 +178,7 @@ bool TSLRSolver::Add(const double* featuresBegin,
 bool TSLRSolver::Add(const double* featuresBegin,
                      const double* featuresEnd,
                      const double* goalsBegin,
-                     const double* weightsBegin) {
+                     const double* weightsBegin) { 
     for (; featuresBegin != featuresEnd; ++featuresBegin, ++goalsBegin, ++weightsBegin) {
         Add(*featuresBegin, *goalsBegin, *weightsBegin);
     }
@@ -198,7 +198,7 @@ namespace {
                           const double regularizationThreshold,
                           const double regularizationParameter,
                           TVector<double>& decompositionTrace,
-                          TVector<TVector<double>>& decompositionMatrix) {
+                          TVector<TVector<double>>& decompositionMatrix) { 
         const size_t featuresCount = decompositionTrace.size();
 
         size_t olsMatrixElementIdx = 0;
@@ -239,7 +239,7 @@ namespace {
 
     void LDLDecomposition(const TVector<double>& linearizedOLSMatrix,
                           TVector<double>& decompositionTrace,
-                          TVector<TVector<double>>& decompositionMatrix) {
+                          TVector<TVector<double>>& decompositionMatrix) { 
         const double regularizationThreshold = 1e-5;
         double regularizationParameter = 0.;
 
@@ -247,14 +247,14 @@ namespace {
                                  regularizationThreshold,
                                  regularizationParameter,
                                  decompositionTrace,
-                                 decompositionMatrix)) {
+                                 decompositionMatrix)) { 
             regularizationParameter = regularizationParameter ? 2 * regularizationParameter : 1e-5;
         }
     }
 
-    TVector<double> SolveLower(const TVector<TVector<double>>& decompositionMatrix,
+    TVector<double> SolveLower(const TVector<TVector<double>>& decompositionMatrix, 
                                const TVector<double>& decompositionTrace,
-                               const TVector<double>& olsVector) {
+                               const TVector<double>& olsVector) { 
         const size_t featuresCount = olsVector.size();
 
         TVector<double> solution(featuresCount);
@@ -275,8 +275,8 @@ namespace {
         return solution;
     }
 
-    TVector<double> SolveUpper(const TVector<TVector<double>>& decompositionMatrix,
-                               const TVector<double>& lowerSolution) {
+    TVector<double> SolveUpper(const TVector<TVector<double>>& decompositionMatrix, 
+                               const TVector<double>& lowerSolution) { 
         const size_t featuresCount = lowerSolution.size();
 
         TVector<double> solution(featuresCount);
@@ -297,7 +297,7 @@ namespace {
         const size_t featuresCount = olsVector.size();
 
         TVector<double> decompositionTrace(featuresCount);
-        TVector<TVector<double>> decompositionMatrix(featuresCount, TVector<double>(featuresCount));
+        TVector<TVector<double>> decompositionMatrix(featuresCount, TVector<double>(featuresCount)); 
 
         LDLDecomposition(olsMatrix, decompositionTrace, decompositionMatrix);
 
@@ -307,7 +307,7 @@ namespace {
     double SumSquaredErrors(const TVector<double>& olsMatrix,
                             const TVector<double>& olsVector,
                             const TVector<double>& solution,
-                            const double goalsDeviation) {
+                            const double goalsDeviation) { 
         const size_t featuresCount = olsVector.size();
 
         double sumSquaredErrors = goalsDeviation;
@@ -335,7 +335,7 @@ namespace {
         for (; leftFeature != featuresEnd; ++leftFeature, ++matrixElement) {
             const double weightedFeature = weight * *leftFeature;
             const double* rightFeature = leftFeature;
-            __m128d wf = {weightedFeature, weightedFeature};
+            __m128d wf = {weightedFeature, weightedFeature}; 
             for (size_t i = 0; i < unaligned; ++i, ++rightFeature, ++matrixElement) {
                 *matrixElement += weightedFeature * *rightFeature;
             }
@@ -397,10 +397,10 @@ namespace {
 TFeaturesTransformer TFeaturesTransformerLearner::Solve(const size_t iterationsCount /* = 100 */) {
     TTransformationParameters transformationParameters;
 
-    auto updateParameter = [this, &transformationParameters](double TTransformationParameters::*parameter,
+    auto updateParameter = [this, &transformationParameters](double TTransformationParameters::*parameter, 
                                                              const double left,
-                                                             const double right) {
-        auto evalParameter = [this, &transformationParameters, parameter](double parameterValue) {
+                                                             const double right) { 
+        auto evalParameter = [this, &transformationParameters, parameter](double parameterValue) { 
             transformationParameters.*parameter = parameterValue;
             TFeaturesTransformer transformer(TransformationType, transformationParameters);
 

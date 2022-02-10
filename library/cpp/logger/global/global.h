@@ -30,7 +30,7 @@ public:
     }
 };
 
-template <>
+template <> 
 TGlobalLog* CreateDefaultLogger<TGlobalLog>();
 
 class TNullLog: public TLog {
@@ -46,7 +46,7 @@ public:
     }
 };
 
-template <>
+template <> 
 TNullLog* CreateDefaultLogger<TNullLog>();
 
 template <>
@@ -79,9 +79,9 @@ public:
 
 #define VERIFY_WITH_LOG(expr, msg, ...)                       \
     do {                                                      \
-        if (Y_UNLIKELY(!(expr))) {                            \
+        if (Y_UNLIKELY(!(expr))) {                            \ 
             FATAL_LOG << Sprintf(msg, ##__VA_ARGS__) << Endl; \
-            Y_VERIFY(false, msg, ##__VA_ARGS__);              \
+            Y_VERIFY(false, msg, ##__VA_ARGS__);              \ 
         };                                                    \
     } while (0);
 
@@ -90,7 +90,7 @@ namespace NPrivateGlobalLogger {
     public:
         ~TVerifyEvent();
         template <class T>
-        inline TVerifyEvent& operator<<(const T& t) {
+        inline TVerifyEvent& operator<<(const T& t) { 
             static_cast<IOutputStream&>(*this) << t;
 
             return *this;

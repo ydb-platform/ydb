@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(kirillovs)
+OWNER(kirillovs) 
 
 SRCS(
     2d_array.cpp

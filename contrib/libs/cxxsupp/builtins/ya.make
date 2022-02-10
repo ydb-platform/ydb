@@ -1,5 +1,5 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 # Part of compiler-rt LLVM subproject
 
 # git repository: https://github.com/llvm/llvm-project.git
@@ -28,7 +28,7 @@ OWNER(
     g:contrib
     g:cpp-contrib
 )
-
+ 
 # Check MUSL before NO_PLATFORM() disables it.
 IF (MUSL)
     # We use C headers despite NO_PLATFORM, but we do not propagate
@@ -43,14 +43,14 @@ IF (MUSL)
     )
 ENDIF()
 
-NO_UTIL()
+NO_UTIL() 
 
-NO_RUNTIME()
+NO_RUNTIME() 
 
-NO_PLATFORM()
+NO_PLATFORM() 
 
-NO_COMPILER_WARNINGS()
-
+NO_COMPILER_WARNINGS() 
+ 
 IF (GCC OR CLANG)
     # Clang (maybe GCC too) LTO code generator leaves the builtin calls unresolved
     # even if they are available. After the code generation pass is done
@@ -61,7 +61,7 @@ IF (GCC OR CLANG)
     # Just generate native code from the beginning.
     DISABLE(USE_LTO)
 ENDIF()
-
+ 
 SRCS(
     addtf3.c
     ashlti3.c
@@ -109,7 +109,7 @@ SRCS(
     udivti3.c
     umodti3.c
 )
-
+ 
 IF (OS_DARWIN OR OS_IOS)
     SRCS(
         os_version_check.c
@@ -123,4 +123,4 @@ IF (ARCH_ARM)
     )
 ENDIF()
 
-END()
+END() 

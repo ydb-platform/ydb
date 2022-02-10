@@ -1,6 +1,6 @@
 #pragma once
 
-#include "scheme.h"
+#include "scheme.h" 
 #include <util/string/cast.h>
 
 struct TSchemeTraits {
@@ -135,28 +135,28 @@ struct TSchemeTraits {
         return v->IsTrue() || v->IsExplicitFalse();
     }
 
-#define INTEGER_OPS_EX(type, min, max, isUnsigned)                                 \
-    static inline void Get(TConstValueRef v, type def, type& i) {                  \
-        if (isUnsigned) {                                                          \
-            i = v->IsNumber() && v->GetIntNumber() >= 0 ? v->GetIntNumber() : def; \
-        } else {                                                                   \
-            i = v->IsNumber() ? v->GetIntNumber() : def;                           \
-        }                                                                          \
-    }                                                                              \
-    static inline void Get(TConstValueRef v, type& i) {                            \
-        if (isUnsigned) {                                                          \
-            i = Max<i64>(0, v->GetIntNumber());                                    \
-        } else {                                                                   \
-            i = v->GetIntNumber();                                                 \
-        }                                                                          \
-    }                                                                              \
-    static inline bool IsValidPrimitive(const type&, TConstValueRef v) {           \
-        return v->IsIntNumber() &&                                                 \
-               v->GetIntNumber() >= min &&                                         \
-               v->GetIntNumber() <= max;                                           \
-    }                                                                              \
-    static inline void Set(TValueRef v, type i) {                                  \
-        v->SetIntNumber(i);                                                        \
+#define INTEGER_OPS_EX(type, min, max, isUnsigned)                                 \ 
+    static inline void Get(TConstValueRef v, type def, type& i) {                  \ 
+        if (isUnsigned) {                                                          \ 
+            i = v->IsNumber() && v->GetIntNumber() >= 0 ? v->GetIntNumber() : def; \ 
+        } else {                                                                   \ 
+            i = v->IsNumber() ? v->GetIntNumber() : def;                           \ 
+        }                                                                          \ 
+    }                                                                              \ 
+    static inline void Get(TConstValueRef v, type& i) {                            \ 
+        if (isUnsigned) {                                                          \ 
+            i = Max<i64>(0, v->GetIntNumber());                                    \ 
+        } else {                                                                   \ 
+            i = v->GetIntNumber();                                                 \ 
+        }                                                                          \ 
+    }                                                                              \ 
+    static inline bool IsValidPrimitive(const type&, TConstValueRef v) {           \ 
+        return v->IsIntNumber() &&                                                 \ 
+               v->GetIntNumber() >= min &&                                         \ 
+               v->GetIntNumber() <= max;                                           \ 
+    }                                                                              \ 
+    static inline void Set(TValueRef v, type i) {                                  \ 
+        v->SetIntNumber(i);                                                        \ 
     }
 
 #define INTEGER_OPS(type, isUnsigned) INTEGER_OPS_EX(type, Min<type>(), Max<type>(), isUnsigned)

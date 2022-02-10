@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include <library/cpp/xml/init/ptr.h>
 #include <util/generic/ptr.h>
 #include <libxml/xmlstring.h>
@@ -47,4 +47,4 @@ namespace NXml {
     typedef TxmlParserCtxtPtr TParserCtxtPtr;
     typedef TAutoPtr<xmlSaveCtxt, NDetail::TSaveCtxtPtrTraits> TSaveCtxtPtr;
 
-}
+} 

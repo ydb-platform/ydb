@@ -131,7 +131,7 @@ TEventLoop::TEventLoop(const char* name)
 {
 }
 
-TEventLoop::~TEventLoop() {
+TEventLoop::~TEventLoop() { 
 }
 
 void TEventLoop::Run() {
@@ -273,7 +273,7 @@ TEventLoop::TImpl::TImpl(const char* name)
     SetNonBlock(WakeupReadSocket, true);
 
     Poller.WaitRead(WakeupReadSocket,
-                    reinterpret_cast<void*>(this));
+                    reinterpret_cast<void*>(this)); 
 }
 
 void TEventLoop::TImpl::Run() {
@@ -303,8 +303,8 @@ void TEventLoop::TImpl::Run() {
             s->CallHandler();
         }
 
-        SOCKET socket = -1;
-        while (SocketsToRemove.Dequeue(&socket)) {
+        SOCKET socket = -1; 
+        while (SocketsToRemove.Dequeue(&socket)) { 
             TGuard<TMutex> guard(Mutex);
             Y_VERIFY(Data.erase(socket) == 1, "must be removed once");
         }

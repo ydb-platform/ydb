@@ -9,10 +9,10 @@
 // NCompactTrie
 
 namespace NCompactTrie {
-    const char MT_FINAL = '\x80';
-    const char MT_NEXT = '\x40';
+    const char MT_FINAL = '\x80'; 
+    const char MT_NEXT = '\x40'; 
     const char MT_SIZEMASK = '\x07';
-    const size_t MT_LEFTSHIFT = 3;
+    const size_t MT_LEFTSHIFT = 3; 
     const size_t MT_RIGHTSHIFT = 0;
 
     Y_FORCE_INLINE size_t UnpackOffset(const char* p, size_t len);
@@ -72,22 +72,22 @@ namespace NCompTriePrivate {
         typedef TUtf32String TResult;
     };
 
-}
+} 
 
-namespace NCompTriePrivate {
-    struct TCmp {
-        template <class T>
-        inline bool operator()(const T& l, const T& r) {
+namespace NCompTriePrivate { 
+    struct TCmp { 
+        template <class T> 
+        inline bool operator()(const T& l, const T& r) { 
             return (unsigned char)(l.Label[0]) < (unsigned char)(r.Label[0]);
-        }
-
-        template <class T>
-        inline bool operator()(const T& l, char r) {
+        } 
+ 
+        template <class T> 
+        inline bool operator()(const T& l, char r) { 
             return (unsigned char)(l.Label[0]) < (unsigned char)r;
-        }
-    };
-}
-
+        } 
+    }; 
+} 
+ 
 namespace NCompactTrie {
     static inline ui64 ArcSaveOffset(size_t offset, IOutputStream& os) {
         using namespace NCompactTrie;
@@ -184,7 +184,7 @@ namespace NCompactTrie {
     // Returns true if the symbol was succesfully found in the trie, false otherwise.
     template <typename TSymbol, class TPacker>
     Y_FORCE_INLINE bool Advance(const char*& datapos, const char* const dataend, const char*& value,
-                                TSymbol label, TPacker packer) {
+                                TSymbol label, TPacker packer) { 
         Y_ASSERT(datapos < dataend);
         char flags = MT_NEXT;
         for (int i = (int)ExtraBits<TSymbol>(); i >= 0; i -= 8) {

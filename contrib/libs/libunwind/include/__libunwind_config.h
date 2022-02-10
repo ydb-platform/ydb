@@ -1,19 +1,19 @@
 //===----------------------------------------------------------------------===//
-//
+// 
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-
-#ifndef ____LIBUNWIND_CONFIG_H__
-#define ____LIBUNWIND_CONFIG_H__
-
-#if defined(__arm__) && !defined(__USING_SJLJ_EXCEPTIONS__) && \
-    !defined(__ARM_DWARF_EH__)
+// 
+//===----------------------------------------------------------------------===// 
+ 
+#ifndef ____LIBUNWIND_CONFIG_H__ 
+#define ____LIBUNWIND_CONFIG_H__ 
+ 
+#if defined(__arm__) && !defined(__USING_SJLJ_EXCEPTIONS__) && \ 
+    !defined(__ARM_DWARF_EH__) 
 #define _LIBUNWIND_ARM_EHABI
-#endif
-
+#endif 
+ 
 #define _LIBUNWIND_HIGHEST_DWARF_REGISTER_X86       8
 #define _LIBUNWIND_HIGHEST_DWARF_REGISTER_X86_64    32
 #define _LIBUNWIND_HIGHEST_DWARF_REGISTER_PPC       112
@@ -181,4 +181,4 @@
 # define _LIBUNWIND_HIGHEST_DWARF_REGISTER 287
 #endif // _LIBUNWIND_IS_NATIVE_ONLY
 
-#endif // ____LIBUNWIND_CONFIG_H__
+#endif // ____LIBUNWIND_CONFIG_H__ 

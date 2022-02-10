@@ -1,22 +1,22 @@
 PY2TEST()
-
+ 
 OWNER(
     pg
     g:util
-)
+) 
 SUBSCRIBER(g:util-subscribers)
-
+ 
 TEST_SRCS(test_glibc.py)
 
-PEERDIR(
-    library/python/resource
-)
-
-RESOURCE(
-    ya.make /test_binaries
-)
-
-DEPENDS(
+PEERDIR( 
+    library/python/resource 
+) 
+ 
+RESOURCE( 
+    ya.make /test_binaries 
+) 
+ 
+DEPENDS( 
     # start binaries
     util/generic/ut
     util/charset/ut
@@ -33,10 +33,10 @@ DEPENDS(
     util/thread/ut
     # end binaries
     contrib/python/pyelftools/readelf
-)
+) 
+ 
+FORK_SUBTESTS() 
 
-FORK_SUBTESTS()
-
-SPLIT_FACTOR(10)
-
-END()
+SPLIT_FACTOR(10) 
+ 
+END() 

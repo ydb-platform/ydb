@@ -2646,14 +2646,14 @@
                 "android_ndk_version": 24
             }
         },
-        "bloat": {
-            "tools": {
+        "bloat": { 
+            "tools": { 
                 "bloat": {
                     "bottle": "bloat",
                     "executable": "bloat"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -2666,8 +2666,8 @@
                     },
                     "default": true
                 }
-            ]
-        },
+            ] 
+        }, 
         "pprof": {
             "tools": {
                 "pprof": {
@@ -2925,13 +2925,13 @@
                 }
             ]
         },
-        "deploy": {
-            "tools": {
+        "deploy": { 
+            "tools": { 
                 "deploy": {
                     "bottle": "deploy",
                     "executable": "deploy"
                 }
-            },
+            }, 
             "platforms": [
                 {
                     "host": {
@@ -2940,15 +2940,15 @@
                     "default": true
                 }
             ]
-        },
-        "yt": {
-            "tools": {
+        }, 
+        "yt": { 
+            "tools": { 
                 "yt": {
                     "bottle": "yt",
                     "executable": "yt"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -2961,8 +2961,8 @@
                     },
                     "default": true
                 }
-            ]
-        },
+            ] 
+        }, 
         "yndexer": {
             "tools": {
                 "yndexer": {
@@ -3079,13 +3079,13 @@
                 }
             ]
         },
-        "uc": {
-            "tools": {
+        "uc": { 
+            "tools": { 
                 "uc": {
                     "bottle": "uc",
                     "executable": "uc"
                 }
-            },
+            }, 
             "platforms": [
                 {
                     "host": {
@@ -3094,14 +3094,14 @@
                     "default": true
                 }
             ]
-        },
-        "perf": {
-            "tools": {
+        }, 
+        "perf": { 
+            "tools": { 
                 "perf": {
                     "bottle": "perf",
                     "executable": "perf"
                 }
-            },
+            }, 
             "platforms": [
                 {
                     "host": {
@@ -3110,7 +3110,7 @@
                     "default": true
                 }
             ]
-        },
+        }, 
         "cuda-check": {
             "tools": {
                 "cuda-check": {
@@ -3143,14 +3143,14 @@
                 }
             ]
         },
-        "samogonctl": {
-            "tools": {
+        "samogonctl": { 
+            "tools": { 
                 "samogonctl": {
                     "bottle": "samogonctl",
                     "executable": "samogonctl"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -3163,8 +3163,8 @@
                     },
                     "default": true
                 }
-            ]
-        },
+            ] 
+        }, 
         "jdk": {
             "tools": {
                 "javac": {
@@ -5944,19 +5944,19 @@
                 ]
             }
         },
-        "bloat": {
-            "formula": {
+        "bloat": { 
+            "formula": { 
                 "sandbox_id": [
                     801218211
                 ],
-                "match": "Bloat"
-            },
-            "executable": {
+                "match": "Bloat" 
+            }, 
+            "executable": { 
                 "bloat": [
                     "bloat"
                 ]
-            }
-        },
+            } 
+        }, 
         "jdk": {
             "formula": {
                 "sandbox_id": [
@@ -6507,31 +6507,31 @@
                 ]
             }
         },
-        "deploy": {
-            "formula": {
+        "deploy": { 
+            "formula": { 
                 "sandbox_id": 243231127,
-                "match": "DEPLOY"
-            },
-            "executable": {
+                "match": "DEPLOY" 
+            }, 
+            "executable": { 
                 "deploy": [
                     "samogon",
                     "deploy"
                 ]
-            }
-        },
-        "yt": {
-            "formula": {
+            } 
+        }, 
+        "yt": { 
+            "formula": { 
                 "sandbox_id": [
                     1195249182
                 ],
-                "match": "YT"
-            },
-            "executable": {
+                "match": "YT" 
+            }, 
+            "executable": { 
                 "yt": [
                     "yt"
                 ]
-            }
-        },
+            } 
+        }, 
         "yndexer": {
             "formula": {
                 "sandbox_id": 992600186,
@@ -6587,28 +6587,28 @@
                 ]
             }
         },
-        "uc": {
-            "formula": {
+        "uc": { 
+            "formula": { 
                 "sandbox_id": 505682252,
-                "match": "UC"
-            },
-            "executable": {
+                "match": "UC" 
+            }, 
+            "executable": { 
                 "uc": [
                     "uc"
                 ]
-            }
-        },
-        "perf": {
-            "formula": {
+            } 
+        }, 
+        "perf": { 
+            "formula": { 
                 "sandbox_id": 1130176134,
                 "match": "infra/kernel/tools/perf/build/perf-static.tar.gz"
-            },
-            "executable": {
+            }, 
+            "executable": { 
                 "perf": [
                     "perf"
                 ]
-            }
-        },
+            } 
+        }, 
         "cuda-check": {
             "formula": {
                 "sandbox_id": "1128218000",
@@ -6635,17 +6635,17 @@
                 ]
             }
         },
-        "samogonctl": {
-            "formula": {
+        "samogonctl": { 
+            "formula": { 
                 "sandbox_id": 438053038,
-                "match": "SAMOGONCTL"
-            },
-            "executable": {
+                "match": "SAMOGONCTL" 
+            }, 
+            "executable": { 
                 "samogonctl": [
                     "samogonctl"
                 ]
-            }
-        },
+            } 
+        }, 
         "gcc61": {
             "formula": {
                 "sandbox_id": 63189766,

@@ -1,5 +1,5 @@
-#include "type.h"
-
+#include "type.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/charset/wide.h>
@@ -11,7 +11,7 @@ Y_UNIT_TEST_SUITE(TStringClassify) {
         UNIT_ASSERT_EQUAL(IsSpace(""), false);
         UNIT_ASSERT_EQUAL(IsSpace("   a"), false);
     }
-
+ 
     Y_UNIT_TEST(TestIsTrue) {
         UNIT_ASSERT(IsTrue("1"));
         UNIT_ASSERT(IsTrue("yes"));
@@ -73,4 +73,4 @@ Y_UNIT_TEST_SUITE(TStringClassify) {
         UNIT_ASSERT(!IsHexNumber(u"foobar"));
         UNIT_ASSERT(!IsHexNumber(TUtf16String()));
     }
-}
+} 

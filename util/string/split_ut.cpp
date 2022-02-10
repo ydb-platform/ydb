@@ -1,27 +1,27 @@
-#include "split.h"
-
+#include "split.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <util/stream/output.h>
-#include <util/charset/wide.h>
-#include <util/datetime/cputimer.h>
+#include <util/charset/wide.h> 
+#include <util/datetime/cputimer.h> 
 #include <util/generic/maybe.h>
-
+ 
 #include <string>
 #include <string_view>
 
-template <typename T>
-static inline void OldSplit(char* pszBuf, T* pRes) {
-    pRes->resize(0);
-    pRes->push_back(pszBuf);
-    for (char* pszData = pszBuf; *pszData; ++pszData) {
-        if (*pszData == '\t') {
-            *pszData = 0;
-            pRes->push_back(pszData + 1);
-        }
-    }
-}
-
+template <typename T> 
+static inline void OldSplit(char* pszBuf, T* pRes) { 
+    pRes->resize(0); 
+    pRes->push_back(pszBuf); 
+    for (char* pszData = pszBuf; *pszData; ++pszData) { 
+        if (*pszData == '\t') { 
+            *pszData = 0; 
+            pRes->push_back(pszData + 1); 
+        } 
+    } 
+} 
+ 
 template <class T1, class T2>
 inline void Cmp(const T1& t1, const T2& t2) {
     try {
@@ -34,10 +34,10 @@ inline void Cmp(const T1& t1, const T2& t2) {
         throw;
     }
 
-    auto i = t1.begin();
-    auto j = t2.begin();
-
-    for (; i != t1.end() && j != t2.end(); ++i, ++j) {
+    auto i = t1.begin(); 
+    auto j = t2.begin(); 
+ 
+    for (; i != t1.end() && j != t2.end(); ++i, ++j) { 
         try {
             UNIT_ASSERT_EQUAL(*i, *j);
         } catch (...) {
@@ -72,7 +72,7 @@ void TestDelimiterOnRange(TResult& good, I* b, I* e, const TDelimiter& delim) {
     Cmp(good, test);
     UNIT_ASSERT_EQUAL(good, test);
 }
-
+ 
 template <typename TConsumer, typename TResult, typename I>
 void TestConsumerOnString(TResult& good, I* str, I* d) {
     TResult test;
@@ -83,7 +83,7 @@ void TestConsumerOnString(TResult& good, I* str, I* d) {
     Cmp(good, test);
     UNIT_ASSERT_EQUAL(good, test);
 }
-
+ 
 template <typename TConsumer, typename TResult, typename I>
 void TestConsumerOnRange(TResult& good, I* b, I* e, I* d) {
     TResult test;
@@ -94,9 +94,9 @@ void TestConsumerOnRange(TResult& good, I* b, I* e, I* d) {
     Cmp(good, test);
     UNIT_ASSERT_EQUAL(good, test);
 }
-
+ 
 using TStrokaConsumer = TContainerConsumer<TVector<TString>>;
-
+ 
 void TestLimitingConsumerOnString(TVector<TString>& good, const char* str, const char* d, size_t n, const char* last) {
     TVector<TString> test;
     TStrokaConsumer consumer(&test);
@@ -107,7 +107,7 @@ void TestLimitingConsumerOnString(TVector<TString>& good, const char* str, const
     UNIT_ASSERT_EQUAL(good, test);
     UNIT_ASSERT_EQUAL(TString(limits.Last), TString(last)); // Quite unobvious behaviour. Why the last token is not added to slave consumer?
 }
-
+ 
 void TestLimitingConsumerOnRange(TVector<TString>& good, const char* b, const char* e, const char* d, size_t n, const char* last) {
     TVector<TString> test;
     TStrokaConsumer consumer(&test);
@@ -118,28 +118,28 @@ void TestLimitingConsumerOnRange(TVector<TString>& good, const char* b, const ch
     UNIT_ASSERT_EQUAL(good, test);
     UNIT_ASSERT_EQUAL(TString(limits.Last), TString(last));
 }
-
+ 
 Y_UNIT_TEST_SUITE(SplitStringTest) {
     Y_UNIT_TEST(TestCharSingleDelimiter) {
         TString data("qw ab  qwabcab");
         TString canonic[] = {"qw", "ab", "", "qwabcab"};
         TVector<TString> good(canonic, canonic + 4);
         TCharDelimiter<const char> delim(' ');
-
+ 
         TestDelimiterOnString<TContainerConsumer>(good, data.data(), delim);
         TestDelimiterOnRange<TContainerConsumer>(good, data.data(), data.end(), delim);
     }
-
+ 
     Y_UNIT_TEST(TestWideSingleDelimiter) {
         TUtf16String data(u"qw ab  qwabcab");
         TUtf16String canonic[] = {u"qw", u"ab", TUtf16String(), u"qwabcab"};
         TVector<TUtf16String> good(canonic, canonic + 4);
         TCharDelimiter<const wchar16> delim(' ');
-
+ 
         TestDelimiterOnString<TContainerConsumer>(good, data.data(), delim);
         TestDelimiterOnRange<TContainerConsumer>(good, data.data(), data.end(), delim);
     }
-
+ 
     Y_UNIT_TEST(TestConvertToIntCharSingleDelimiter) {
         TString data("42 4242 -12345 0");
         i32 canonic[] = {42, 4242, -12345, 0};
@@ -154,70 +154,70 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         TString data("qw ab  qwabcab ");
         TString canonic[] = {"qw", "ab", "qwabcab"};
         TVector<TString> good(canonic, canonic + 3);
-
+ 
         TestConsumerOnString<TSkipEmptyTokens<TStrokaConsumer>>(good, data.data(), " ");
         TestConsumerOnRange<TSkipEmptyTokens<TStrokaConsumer>>(good, data.data(), data.end(), " ");
     }
-
+ 
     Y_UNIT_TEST(TestCharKeepDelimiters) {
         TString data("qw ab  qwabcab ");
         TString canonic[] = {"qw", " ", "ab", " ", "", " ", "qwabcab", " ", ""};
         TVector<TString> good(canonic, canonic + 9);
-
+ 
         TestConsumerOnString<TKeepDelimiters<TStrokaConsumer>>(good, data.data(), " ");
         TestConsumerOnRange<TKeepDelimiters<TStrokaConsumer>>(good, data.data(), data.end(), " ");
     }
-
+ 
     Y_UNIT_TEST(TestCharLimit) {
         TString data("qw ab  qwabcab ");
         TString canonic[] = {"qw", "ab"};
         TVector<TString> good(canonic, canonic + 2);
-
+ 
         TestLimitingConsumerOnString(good, data.data(), " ", 3, " qwabcab ");
         TestLimitingConsumerOnRange(good, data.data(), data.end(), " ", 3, " qwabcab ");
     }
-
+ 
     Y_UNIT_TEST(TestCharStringDelimiter) {
         TString data("qw ab qwababcab");
         TString canonic[] = {"qw ", " qw", "", "c", ""};
         TVector<TString> good(canonic, canonic + 5);
         TStringDelimiter<const char> delim("ab");
-
+ 
         TestDelimiterOnString<TContainerConsumer>(good, data.data(), delim);
         TestDelimiterOnRange<TContainerConsumer>(good, data.data(), data.end(), delim);
     }
-
+ 
     Y_UNIT_TEST(TestWideStringDelimiter) {
         TUtf16String data(u"qw ab qwababcab");
         TUtf16String canonic[] = {u"qw ", u" qw", TUtf16String(), u"c", TUtf16String()};
         TVector<TUtf16String> good(canonic, canonic + 5);
         TUtf16String wideDelim(u"ab");
         TStringDelimiter<const wchar16> delim(wideDelim.data());
-
+ 
         TestDelimiterOnString<TContainerConsumer>(good, data.data(), delim);
         TestDelimiterOnRange<TContainerConsumer>(good, data.data(), data.end(), delim);
     }
-
+ 
     Y_UNIT_TEST(TestCharSetDelimiter) {
         TString data("qw ab qwababccab");
         TString canonic[] = {"q", " ab q", "abab", "", "ab"};
         TVector<TString> good(canonic, canonic + 5);
         TSetDelimiter<const char> delim("wc");
-
+ 
         TestDelimiterOnString<TContainerConsumer>(good, data.data(), delim);
         TestDelimiterOnRange<TContainerConsumer>(good, data.data(), data.end(), delim);
     }
-
+ 
     Y_UNIT_TEST(TestWideSetDelimiter) {
         TUtf16String data(u"qw ab qwababccab");
         TUtf16String canonic[] = {u"q", u" ab q", u"abab", TUtf16String(), u"ab"};
         TVector<TUtf16String> good(canonic, canonic + 5);
         TUtf16String wideDelim(u"wc");
         TSetDelimiter<const wchar16> delim(wideDelim.data());
-
+ 
         TestDelimiterOnString<TContainerConsumer>(good, data.data(), delim);
     }
-
+ 
     Y_UNIT_TEST(TestWideSetDelimiterRange) {
         TUtf16String data(u"qw ab qwababccab");
         TUtf16String canonic[] = {u"q", u" ab q", u"abab", TUtf16String(), u"ab"};
@@ -403,9 +403,9 @@ Y_UNIT_TEST_SUITE(StringSplitter) {
         TVector<TString> tokens;
         auto f = [](char a) { return a == ' ' || a == '\t' || a == '\n'; };
         for (auto v : StringSplitter(s).SplitByFunc(f)) {
-            if (v) {
+            if (v) { 
                 tokens.emplace_back(v);
-            }
+            } 
         }
 
         UNIT_ASSERT(tokens == pattern);
@@ -461,9 +461,9 @@ Y_UNIT_TEST_SUITE(StringSplitter) {
     }
 
     Y_UNIT_TEST(TestCompile) {
-        (void)StringSplitter(TString());
-        (void)StringSplitter(TStringBuf());
-        (void)StringSplitter("", 0);
+        (void)StringSplitter(TString()); 
+        (void)StringSplitter(TStringBuf()); 
+        (void)StringSplitter("", 0); 
     }
 
     Y_UNIT_TEST(TestStringSplitterCountEmpty) {
@@ -497,12 +497,12 @@ Y_UNIT_TEST_SUITE(StringSplitter) {
     }
 
     Y_UNIT_TEST(TestStringSplitterConsumeConditional) {
-        TVector<TString> expected = {"1", "2"};
+        TVector<TString> expected = {"1", "2"}; 
         TVector<TString> actual;
         auto func = [&actual](const TBasicStringBuf<char>& token) {
-            if (token == "3") {
+            if (token == "3") { 
                 return false;
-            }
+            } 
             actual.push_back(TString(token));
             return true;
         };
@@ -622,37 +622,37 @@ Y_UNIT_TEST_SUITE(StringSplitter) {
     }
 
     Y_UNIT_TEST(TestAssigment) {
-        TVector<TString> expected0 = {"1", "2", "3", "4"};
+        TVector<TString> expected0 = {"1", "2", "3", "4"}; 
         TVector<TString> actual0 = StringSplitter("1 2 3 4").Split(' ');
         UNIT_ASSERT_VALUES_EQUAL(expected0, actual0);
 
-        TSet<TString> expected1 = {"11", "22", "33", "44"};
+        TSet<TString> expected1 = {"11", "22", "33", "44"}; 
         TSet<TString> actual1 = StringSplitter("11 22 33 44").Split(' ');
         UNIT_ASSERT_VALUES_EQUAL(expected1, actual1);
 
-        TSet<TString> expected2 = {"11", "aa"};
+        TSet<TString> expected2 = {"11", "aa"}; 
         auto actual2 = static_cast<TSet<TString>>(StringSplitter("11 aa 11 11 aa").Split(' '));
         UNIT_ASSERT_VALUES_EQUAL(expected2, actual2);
 
-        TVector<TString> expected3 = {"dd", "bb"};
+        TVector<TString> expected3 = {"dd", "bb"}; 
         auto actual3 = TVector<TString>(StringSplitter("dd\tbb").Split('\t'));
         UNIT_ASSERT_VALUES_EQUAL(expected3, actual3);
     }
 
     Y_UNIT_TEST(TestRangeBasedFor) {
-        TVector<TString> actual0 = {"11", "22", "33", "44"};
+        TVector<TString> actual0 = {"11", "22", "33", "44"}; 
         size_t num = 0;
         for (TStringBuf elem : StringSplitter("11 22 33 44").Split(' ')) {
             UNIT_ASSERT_VALUES_EQUAL(elem, actual0[num++]);
         }
 
-        TVector<TString> actual1 = {"another", "one,", "and", "another", "one"};
+        TVector<TString> actual1 = {"another", "one,", "and", "another", "one"}; 
         num = 0;
         for (TStringBuf elem : StringSplitter(TStringBuf("another one, and \n\n     another    one")).SplitBySet(" \n").SkipEmpty()) {
             UNIT_ASSERT_VALUES_EQUAL(elem, actual1[num++]);
         }
 
-        TVector<TUtf16String> actual2 = {u"привет,", u"как", u"дела"};
+        TVector<TUtf16String> actual2 = {u"привет,", u"как", u"дела"}; 
         num = 0;
         for (TWtringBuf elem : StringSplitter(u"привет, как дела").Split(wchar16(' '))) {
             UNIT_ASSERT_VALUES_EQUAL(elem, actual2[num++]);
@@ -665,21 +665,21 @@ Y_UNIT_TEST_SUITE(StringSplitter) {
     }
 
     Y_UNIT_TEST(TestParseInto) {
-        TVector<int> actual0 = {1, 2, 3, 4};
+        TVector<int> actual0 = {1, 2, 3, 4}; 
         TVector<int> answer0;
 
         StringSplitter("1 2 3 4").Split(' ').ParseInto(&answer0);
         UNIT_ASSERT_VALUES_EQUAL(actual0, answer0);
 
-        TVector<int> actual1 = {42, 1, 2, 3, 4};
-        TVector<int> answer1 = {42};
+        TVector<int> actual1 = {42, 1, 2, 3, 4}; 
+        TVector<int> answer1 = {42}; 
         StringSplitter("1 2 3 4").Split(' ').ParseInto(&answer1);
         UNIT_ASSERT_VALUES_EQUAL(actual1, answer1);
 
         answer1.clear();
         UNIT_ASSERT_EXCEPTION(StringSplitter("1 2    3 4").Split(' ').ParseInto(&answer1), yexception);
 
-        answer1 = {42};
+        answer1 = {42}; 
         StringSplitter("   1    2     3 4").Split(' ').SkipEmpty().ParseInto(&answer1);
         UNIT_ASSERT_VALUES_EQUAL(actual1, answer1);
 
@@ -709,7 +709,7 @@ Y_UNIT_TEST_SUITE(StringSplitter) {
 
     Y_UNIT_TEST(TestStdSplitAfterSplit) {
         std::string_view input = "a*b+a*b";
-        for (std::string_view summand : StringSplitter(input).Split('+')) {
+        for (std::string_view summand : StringSplitter(input).Split('+')) { 
             //FIXME: std::string is used to workaround MSVC ICE
             UNIT_ASSERT_VALUES_EQUAL(std::string(summand), "a*b");
             std::string_view multiplier1, multiplier2;
@@ -729,8 +729,8 @@ Y_UNIT_TEST_SUITE(StringSplitter) {
     }
 
     Y_UNIT_TEST(TestArcadiaStdInterop) {
-        TVector<TString> expected0 = {"a", "b"};
-        TVector<TStringBuf> expected1 = {"a", "b"};
+        TVector<TString> expected0 = {"a", "b"}; 
+        TVector<TStringBuf> expected1 = {"a", "b"}; 
         std::string src1("a  b");
         std::string_view src2("a  b");
         TVector<TString> actual0 = StringSplitter(src1).Split(' ').SkipEmpty();
@@ -750,7 +750,7 @@ Y_UNIT_TEST_SUITE(StringSplitter) {
         std::vector<TStringBuf> v;
         StringSplitter(b, e).Split(';').AddTo(&v);
 
-        std::vector<TStringBuf> expected = {"a", "b"};
+        std::vector<TStringBuf> expected = {"a", "b"}; 
         UNIT_ASSERT_VALUES_EQUAL(v, expected);
     }
 
@@ -759,16 +759,16 @@ Y_UNIT_TEST_SUITE(StringSplitter) {
         char* str = s.Detach();
 
         std::vector<TStringBuf> v = StringSplitter(str).Split('o');
-        std::vector<TStringBuf> expected = {"l", "l"};
+        std::vector<TStringBuf> expected = {"l", "l"}; 
         UNIT_ASSERT_VALUES_EQUAL(v, expected);
     }
 
     Y_UNIT_TEST(TestSplitVector) {
-        std::vector<char> buffer = {'a', ';', 'b'};
+        std::vector<char> buffer = {'a', ';', 'b'}; 
 
         std::vector<TStringBuf> v = StringSplitter(buffer).Split(';');
 
-        std::vector<TStringBuf> expected = {"a", "b"};
+        std::vector<TStringBuf> expected = {"a", "b"}; 
         UNIT_ASSERT_VALUES_EQUAL(v, expected);
     }
 
@@ -783,10 +783,10 @@ Y_UNIT_TEST_SUITE(StringSplitter) {
 
         TDoubleIterator() = default;
 
-        TDoubleIterator(const char* ptr)
-            : Ptr_(ptr)
-        {
-        }
+        TDoubleIterator(const char* ptr) 
+            : Ptr_(ptr) 
+        { 
+        } 
 
         TDoubleIterator operator++() {
             Ptr_ += 2;
@@ -819,7 +819,7 @@ Y_UNIT_TEST_SUITE(StringSplitter) {
         const char* beg = "1213002233000011";
         const char* end = beg + strlen(beg);
 
-        std::vector<std::vector<int>> expected = {{12, 13}, {22, 33}, {}, {11}};
+        std::vector<std::vector<int>> expected = {{12, 13}, {22, 33}, {}, {11}}; 
         int i = 0;
 
         for (TIteratorRange<TDoubleIterator> part : StringSplitter(TDoubleIterator(beg), TDoubleIterator(end)).SplitByFunc([](int value) { return value == 0; })) {

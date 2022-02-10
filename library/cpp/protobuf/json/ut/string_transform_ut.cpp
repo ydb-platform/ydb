@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(TDoubleEscapeTransform) {
 
 Y_UNIT_TEST_SUITE(TDoubleUnescapeTransform) {
     Y_UNIT_TEST(TestEmptyString) {
-        const NProtobufJson::IStringTransform& transform = NProtobufJson::TDoubleUnescapeTransform();
+        const NProtobufJson::IStringTransform& transform = NProtobufJson::TDoubleUnescapeTransform(); 
         TString s;
         s = "";
         transform.Transform(s);
@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(TDoubleUnescapeTransform) {
     }
 
     Y_UNIT_TEST(TestAlphabeticString) {
-        const NProtobufJson::IStringTransform& transform = NProtobufJson::TDoubleUnescapeTransform();
+        const NProtobufJson::IStringTransform& transform = NProtobufJson::TDoubleUnescapeTransform(); 
         TString s;
         s = "abacaba";
         transform.Transform(s);
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(TDoubleUnescapeTransform) {
     }
 
     Y_UNIT_TEST(TestRussianSymbols) {
-        const NProtobufJson::IStringTransform& transform = NProtobufJson::TDoubleUnescapeTransform();
+        const NProtobufJson::IStringTransform& transform = NProtobufJson::TDoubleUnescapeTransform(); 
         TString s;
         s = "\\\\321\\\\202\\\\320\\\\265\\\\321\\\\201\\\\321\\\\202";
         transform.Transform(s);
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TDoubleUnescapeTransform) {
     }
 
     Y_UNIT_TEST(TestEscapeSpecialSymbols) {
-        const NProtobufJson::IStringTransform& transform = NProtobufJson::TDoubleUnescapeTransform();
+        const NProtobufJson::IStringTransform& transform = NProtobufJson::TDoubleUnescapeTransform(); 
         TString s;
         s = "aba\\\\\\\\ca\\\\\\\"ba";
         transform.Transform(s);
@@ -73,7 +73,7 @@ Y_UNIT_TEST_SUITE(TDoubleUnescapeTransform) {
     }
 
     Y_UNIT_TEST(TestEscapeSpecialSymbolsDifficultCases) {
-        const NProtobufJson::IStringTransform& transform = NProtobufJson::TDoubleUnescapeTransform();
+        const NProtobufJson::IStringTransform& transform = NProtobufJson::TDoubleUnescapeTransform(); 
         TString s;
         s = "\\\\\\\\\\\\\\\\";
         transform.Transform(s);

@@ -64,7 +64,7 @@ struct TEvTxUserProxy {
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_USERPROXY), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_USERPROXY)");
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_USERPROXY), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_USERPROXY)"); 
 
     struct TEvProposeTransaction : public TEventPB<TEvProposeTransaction, NKikimrTxUserProxy::TEvProposeTransaction, EvProposeTransaction> {
         enum EProxyFlags {
@@ -230,7 +230,7 @@ struct TEvTxProxyReq {
         EvEnd,
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY_REQ), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY_REQ)");
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY_REQ), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY_REQ)"); 
 
     struct TEvMakeRequest : public TEventLocal<TEvMakeRequest, EvMakeRequest> {
         TEvTxUserProxy::TEvProposeTransaction::TPtr Ev;

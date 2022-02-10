@@ -1,28 +1,28 @@
 #pragma once
-
-#include <util/generic/fwd.h>
+ 
+#include <util/generic/fwd.h> 
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
-#include <util/generic/typetraits.h>
+#include <util/generic/typetraits.h> 
 #include <util/generic/algorithm.h>
 #include <util/stream/output.h>
 #include <util/stream/input.h>
-
+ 
 #ifndef __NVCC__
     // cuda is compiled in C++14 mode at the time
     #include <variant>
 #endif
 
-template <typename T>
-class TSerializeTypeTraits {
-public:
-    /*
-     *  pointer types cannot be serialized as POD-type
-     */
-    enum {
+template <typename T> 
+class TSerializeTypeTraits { 
+public: 
+    /* 
+     *  pointer types cannot be serialized as POD-type 
+     */ 
+    enum { 
         IsSerializablePod = TTypeTraits<T>::IsPod && !std::is_pointer<T>::value
-    };
+    }; 
 };
 
 struct TSerializeException: public yexception {
@@ -31,103 +31,103 @@ struct TSerializeException: public yexception {
 struct TLoadEOF: public TSerializeException {
 };
 
-template <class T>
+template <class T> 
 static inline void Save(IOutputStream* out, const T& t);
-
-template <class T>
+ 
+template <class T> 
 static inline void SaveArray(IOutputStream* out, const T* t, size_t len);
-
-template <class T>
+ 
+template <class T> 
 static inline void Load(IInputStream* in, T& t);
-
-template <class T>
+ 
+template <class T> 
 static inline void LoadArray(IInputStream* in, T* t, size_t len);
-
-template <class T, class TStorage>
+ 
+template <class T, class TStorage> 
 static inline void Load(IInputStream* in, T& t, TStorage& pool);
-
-template <class T, class TStorage>
+ 
+template <class T, class TStorage> 
 static inline void LoadArray(IInputStream* in, T* t, size_t len, TStorage& pool);
-
-template <class T>
+ 
+template <class T> 
 static inline void SavePodType(IOutputStream* rh, const T& t) {
-    rh->Write(&t, sizeof(T));
-}
-
+    rh->Write(&t, sizeof(T)); 
+} 
+ 
 namespace NPrivate {
     [[noreturn]] void ThrowLoadEOFException(size_t typeSize, size_t realSize, TStringBuf structName);
     [[noreturn]] void ThrowUnexpectedVariantTagException(ui8 tagIndex);
 }
 
-template <class T>
+template <class T> 
 static inline void LoadPodType(IInputStream* rh, T& t) {
-    const size_t res = rh->Load(&t, sizeof(T));
-
+    const size_t res = rh->Load(&t, sizeof(T)); 
+ 
     if (Y_UNLIKELY(res != sizeof(T))) {
         ::NPrivate::ThrowLoadEOFException(sizeof(T), res, TStringBuf("pod type"));
-    }
-}
-
-template <class T>
+    } 
+} 
+ 
+template <class T> 
 static inline void SavePodArray(IOutputStream* rh, const T* arr, size_t count) {
-    rh->Write(arr, sizeof(T) * count);
-}
-
-template <class T>
+    rh->Write(arr, sizeof(T) * count); 
+} 
+ 
+template <class T> 
 static inline void LoadPodArray(IInputStream* rh, T* arr, size_t count) {
-    const size_t len = sizeof(T) * count;
-    const size_t res = rh->Load(arr, len);
-
+    const size_t len = sizeof(T) * count; 
+    const size_t res = rh->Load(arr, len); 
+ 
     if (Y_UNLIKELY(res != len)) {
         ::NPrivate::ThrowLoadEOFException(len, res, TStringBuf("pod array"));
-    }
-}
-
-template <class It>
+    } 
+} 
+ 
+template <class It> 
 static inline void SaveIterRange(IOutputStream* rh, It b, It e) {
-    while (b != e) {
-        ::Save(rh, *b++);
-    }
-}
-
-template <class It>
+    while (b != e) { 
+        ::Save(rh, *b++); 
+    } 
+} 
+ 
+template <class It> 
 static inline void LoadIterRange(IInputStream* rh, It b, It e) {
-    while (b != e) {
-        ::Load(rh, *b++);
-    }
-}
-
-template <class It, class TStorage>
+    while (b != e) { 
+        ::Load(rh, *b++); 
+    } 
+} 
+ 
+template <class It, class TStorage> 
 static inline void LoadIterRange(IInputStream* rh, It b, It e, TStorage& pool) {
-    while (b != e) {
-        ::Load(rh, *b++, pool);
-    }
-}
-
-template <class T, bool isPod>
-struct TSerializerTakingIntoAccountThePodType {
+    while (b != e) { 
+        ::Load(rh, *b++, pool); 
+    } 
+} 
+ 
+template <class T, bool isPod> 
+struct TSerializerTakingIntoAccountThePodType { 
     static inline void Save(IOutputStream* out, const T& t) {
-        ::SavePodType(out, t);
-    }
-
+        ::SavePodType(out, t); 
+    } 
+ 
     static inline void Load(IInputStream* in, T& t) {
-        ::LoadPodType(in, t);
-    }
-
-    template <class TStorage>
+        ::LoadPodType(in, t); 
+    } 
+ 
+    template <class TStorage> 
     static inline void Load(IInputStream* in, T& t, TStorage& /*pool*/) {
-        ::LoadPodType(in, t);
-    }
-
+        ::LoadPodType(in, t); 
+    } 
+ 
     static inline void SaveArray(IOutputStream* out, const T* t, size_t len) {
-        ::SavePodArray(out, t, len);
-    }
-
+        ::SavePodArray(out, t, len); 
+    } 
+ 
     static inline void LoadArray(IInputStream* in, T* t, size_t len) {
-        ::LoadPodArray(in, t, len);
-    }
-};
-
+        ::LoadPodArray(in, t, len); 
+    } 
+}; 
+ 
 namespace NHasSaveLoad {
     Y_HAS_MEMBER(SaveLoad);
 }
@@ -138,137 +138,137 @@ struct TSerializerMethodSelector;
 template <class T>
 struct TSerializerMethodSelector<T, std::enable_if_t<NHasSaveLoad::THasSaveLoad<T>::value>> {
     static inline void Save(IOutputStream* out, const T& t) {
-        //assume Save clause do not change t
-        (const_cast<T&>(t)).SaveLoad(out);
-    }
-
+        //assume Save clause do not change t 
+        (const_cast<T&>(t)).SaveLoad(out); 
+    } 
+ 
     static inline void Load(IInputStream* in, T& t) {
-        t.SaveLoad(in);
-    }
-
-    template <class TStorage>
+        t.SaveLoad(in); 
+    } 
+ 
+    template <class TStorage> 
     static inline void Load(IInputStream* in, T& t, TStorage& pool) {
-        t.SaveLoad(in, pool);
-    }
-};
-
-template <class T>
+        t.SaveLoad(in, pool); 
+    } 
+}; 
+ 
+template <class T> 
 struct TSerializerMethodSelector<T, std::enable_if_t<!NHasSaveLoad::THasSaveLoad<T>::value>> {
     static inline void Save(IOutputStream* out, const T& t) {
-        t.Save(out);
-    }
-
+        t.Save(out); 
+    } 
+ 
     static inline void Load(IInputStream* in, T& t) {
-        t.Load(in);
-    }
-
-    template <class TStorage>
+        t.Load(in); 
+    } 
+ 
+    template <class TStorage> 
     static inline void Load(IInputStream* in, T& t, TStorage& pool) {
-        t.Load(in, pool);
-    }
-};
-
-template <class T>
-struct TSerializerTakingIntoAccountThePodType<T, false>: public TSerializerMethodSelector<T> {
+        t.Load(in, pool); 
+    } 
+}; 
+ 
+template <class T> 
+struct TSerializerTakingIntoAccountThePodType<T, false>: public TSerializerMethodSelector<T> { 
     static inline void SaveArray(IOutputStream* out, const T* t, size_t len) {
-        ::SaveIterRange(out, t, t + len);
-    }
-
+        ::SaveIterRange(out, t, t + len); 
+    } 
+ 
     static inline void LoadArray(IInputStream* in, T* t, size_t len) {
-        ::LoadIterRange(in, t, t + len);
-    }
-
-    template <class TStorage>
+        ::LoadIterRange(in, t, t + len); 
+    } 
+ 
+    template <class TStorage> 
     static inline void LoadArray(IInputStream* in, T* t, size_t len, TStorage& pool) {
-        ::LoadIterRange(in, t, t + len, pool);
-    }
-};
-
-template <class It, bool isPtr>
-struct TRangeSerialize {
+        ::LoadIterRange(in, t, t + len, pool); 
+    } 
+}; 
+ 
+template <class It, bool isPtr> 
+struct TRangeSerialize { 
     static inline void Save(IOutputStream* rh, It b, It e) {
-        SaveArray(rh, b, e - b);
-    }
-
+        SaveArray(rh, b, e - b); 
+    } 
+ 
     static inline void Load(IInputStream* rh, It b, It e) {
-        LoadArray(rh, b, e - b);
-    }
-
-    template <class TStorage>
+        LoadArray(rh, b, e - b); 
+    } 
+ 
+    template <class TStorage> 
     static inline void Load(IInputStream* rh, It b, It e, TStorage& pool) {
-        LoadArray(rh, b, e - b, pool);
-    }
-};
-
-template <class It>
-struct TRangeSerialize<It, false> {
+        LoadArray(rh, b, e - b, pool); 
+    } 
+}; 
+ 
+template <class It> 
+struct TRangeSerialize<It, false> { 
     static inline void Save(IOutputStream* rh, It b, It e) {
-        SaveIterRange(rh, b, e);
-    }
-
+        SaveIterRange(rh, b, e); 
+    } 
+ 
     static inline void Load(IInputStream* rh, It b, It e) {
-        LoadIterRange(rh, b, e);
-    }
-
-    template <class TStorage>
+        LoadIterRange(rh, b, e); 
+    } 
+ 
+    template <class TStorage> 
     static inline void Load(IInputStream* rh, It b, It e, TStorage& pool) {
-        LoadIterRange(rh, b, e, pool);
-    }
-};
-
-template <class It>
+        LoadIterRange(rh, b, e, pool); 
+    } 
+}; 
+ 
+template <class It> 
 static inline void SaveRange(IOutputStream* rh, It b, It e) {
     TRangeSerialize<It, std::is_pointer<It>::value>::Save(rh, b, e);
-}
-
-template <class It>
+} 
+ 
+template <class It> 
 static inline void LoadRange(IInputStream* rh, It b, It e) {
     TRangeSerialize<It, std::is_pointer<It>::value>::Load(rh, b, e);
-}
-
-template <class It, class TStorage>
+} 
+ 
+template <class It, class TStorage> 
 static inline void LoadRange(IInputStream* rh, It b, It e, TStorage& pool) {
     TRangeSerialize<It, std::is_pointer<It>::value>::Load(rh, b, e, pool);
-}
-
-template <class T>
-class TSerializer: public TSerializerTakingIntoAccountThePodType<T, TSerializeTypeTraits<T>::IsSerializablePod> {
-};
-
-template <class T>
-class TArraySerializer: public TSerializerTakingIntoAccountThePodType<T, TSerializeTypeTraits<T>::IsSerializablePod> {
-};
-
-template <class T>
+} 
+ 
+template <class T> 
+class TSerializer: public TSerializerTakingIntoAccountThePodType<T, TSerializeTypeTraits<T>::IsSerializablePod> { 
+}; 
+ 
+template <class T> 
+class TArraySerializer: public TSerializerTakingIntoAccountThePodType<T, TSerializeTypeTraits<T>::IsSerializablePod> { 
+}; 
+ 
+template <class T> 
 static inline void Save(IOutputStream* out, const T& t) {
-    TSerializer<T>::Save(out, t);
-}
-
-template <class T>
+    TSerializer<T>::Save(out, t); 
+} 
+ 
+template <class T> 
 static inline void SaveArray(IOutputStream* out, const T* t, size_t len) {
-    TArraySerializer<T>::SaveArray(out, t, len);
-}
-
-template <class T>
+    TArraySerializer<T>::SaveArray(out, t, len); 
+} 
+ 
+template <class T> 
 static inline void Load(IInputStream* in, T& t) {
-    TSerializer<T>::Load(in, t);
-}
-
-template <class T>
+    TSerializer<T>::Load(in, t); 
+} 
+ 
+template <class T> 
 static inline void LoadArray(IInputStream* in, T* t, size_t len) {
-    TArraySerializer<T>::LoadArray(in, t, len);
-}
-
-template <class T, class TStorage>
+    TArraySerializer<T>::LoadArray(in, t, len); 
+} 
+ 
+template <class T, class TStorage> 
 static inline void Load(IInputStream* in, T& t, TStorage& pool) {
-    TSerializer<T>::Load(in, t, pool);
-}
-
-template <class T, class TStorage>
+    TSerializer<T>::Load(in, t, pool); 
+} 
+ 
+template <class T, class TStorage> 
 static inline void LoadArray(IInputStream* in, T* t, size_t len, TStorage& pool) {
-    TArraySerializer<T>::LoadArray(in, t, len, pool);
-}
-
+    TArraySerializer<T>::LoadArray(in, t, len, pool); 
+} 
+ 
 static inline void SaveSize(IOutputStream* rh, size_t len) {
     if ((ui64)len < 0xffffffff) {
         ::Save(rh, (ui32)len);
@@ -276,8 +276,8 @@ static inline void SaveSize(IOutputStream* rh, size_t len) {
         ::Save(rh, (ui32)0xffffffff);
         ::Save(rh, (ui64)len);
     }
-}
-
+} 
+ 
 static inline size_t LoadSize(IInputStream* rh) {
     ui32 oldVerSize;
     ui64 newVerSize;
@@ -288,70 +288,70 @@ static inline size_t LoadSize(IInputStream* rh) {
         ::Load(rh, newVerSize);
         return newVerSize;
     }
-}
-
-template <class C>
+} 
+ 
+template <class C> 
 static inline void LoadSizeAndResize(IInputStream* rh, C& c) {
-    c.resize(LoadSize(rh));
-}
-
-template <class TStorage>
-static inline char* AllocateFromPool(TStorage& pool, size_t len) {
+    c.resize(LoadSize(rh)); 
+} 
+ 
+template <class TStorage> 
+static inline char* AllocateFromPool(TStorage& pool, size_t len) { 
     return static_cast<char*>(pool.Allocate(len));
-}
-
-template <>
-class TSerializer<const char*> {
-public:
+} 
+ 
+template <> 
+class TSerializer<const char*> { 
+public: 
     static inline void Save(IOutputStream* rh, const char* s) {
         size_t length = strlen(s);
         ::SaveSize(rh, length);
         ::SavePodArray(rh, s, length);
-    }
-
+    } 
+ 
     template <class Char, class TStorage>
     static inline void Load(IInputStream* rh, Char*& s, TStorage& pool) {
-        const size_t len = LoadSize(rh);
-
-        char* res = AllocateFromPool(pool, len + 1);
-        ::LoadPodArray(rh, res, len);
-        res[len] = 0;
-        s = res;
-    }
-};
-
-template <class TVec>
-class TVectorSerializer {
+        const size_t len = LoadSize(rh); 
+ 
+        char* res = AllocateFromPool(pool, len + 1); 
+        ::LoadPodArray(rh, res, len); 
+        res[len] = 0; 
+        s = res; 
+    } 
+}; 
+ 
+template <class TVec> 
+class TVectorSerializer { 
     using TIter = typename TVec::iterator;
-
-public:
+ 
+public: 
     static inline void Save(IOutputStream* rh, const TVec& v) {
         ::SaveSize(rh, v.size());
-        ::SaveRange(rh, v.begin(), v.end());
-    }
-
+        ::SaveRange(rh, v.begin(), v.end()); 
+    } 
+ 
     static inline void Load(IInputStream* rh, TVec& v) {
-        ::LoadSizeAndResize(rh, v);
-        TIter b = v.begin();
-        TIter e = (TIter)v.end();
-        ::LoadRange(rh, b, e);
-    }
-
-    template <class TStorage>
+        ::LoadSizeAndResize(rh, v); 
+        TIter b = v.begin(); 
+        TIter e = (TIter)v.end(); 
+        ::LoadRange(rh, b, e); 
+    } 
+ 
+    template <class TStorage> 
     static inline void Load(IInputStream* rh, TVec& v, TStorage& pool) {
-        ::LoadSizeAndResize(rh, v);
-        TIter b = v.begin();
-        TIter e = (TIter)v.end();
-        ::LoadRange(rh, b, e, pool);
-    }
-};
-
-template <class T, class A>
+        ::LoadSizeAndResize(rh, v); 
+        TIter b = v.begin(); 
+        TIter e = (TIter)v.end(); 
+        ::LoadRange(rh, b, e, pool); 
+    } 
+}; 
+ 
+template <class T, class A> 
 class TSerializer<TVector<T, A>>: public TVectorSerializer<TVector<T, A>> {
-};
-
+}; 
+ 
 template <class T, class A>
-class TSerializer<std::vector<T, A>>: public TVectorSerializer<std::vector<T, A>> {
+class TSerializer<std::vector<T, A>>: public TVectorSerializer<std::vector<T, A>> { 
 };
 
 template <class T, class A>
@@ -359,39 +359,39 @@ class TSerializer<TList<T, A>>: public TVectorSerializer<TList<T, A>> {
 };
 
 template <class T, class A>
-class TSerializer<std::list<T, A>>: public TVectorSerializer<std::list<T, A>> {
+class TSerializer<std::list<T, A>>: public TVectorSerializer<std::list<T, A>> { 
 };
 
-template <>
+template <> 
 class TSerializer<TString>: public TVectorSerializer<TString> {
-};
-
-template <>
+}; 
+ 
+template <> 
 class TSerializer<TUtf16String>: public TVectorSerializer<TUtf16String> {
-};
-
+}; 
+ 
 template <class TChar>
 class TSerializer<std::basic_string<TChar>>: public TVectorSerializer<std::basic_string<TChar>> {
 };
 
-template <class T, class A>
+template <class T, class A> 
 class TSerializer<TDeque<T, A>>: public TVectorSerializer<TDeque<T, A>> {
-};
-
+}; 
+ 
 template <class T, class A>
-class TSerializer<std::deque<T, A>>: public TVectorSerializer<std::deque<T, A>> {
+class TSerializer<std::deque<T, A>>: public TVectorSerializer<std::deque<T, A>> { 
 };
 
 template <class TArray>
 class TStdArraySerializer {
-public:
+public: 
     static inline void Save(IOutputStream* rh, const TArray& a) {
         ::SaveArray(rh, a.data(), a.size());
-    }
+    } 
 
     static inline void Load(IInputStream* rh, TArray& a) {
         ::LoadArray(rh, a.data(), a.size());
-    }
+    } 
 };
 
 template <class T, size_t N>
@@ -399,25 +399,25 @@ class TSerializer<std::array<T, N>>: public TStdArraySerializer<std::array<T, N>
 };
 
 template <class A, class B>
-class TSerializer<std::pair<A, B>> {
-    using TPair = std::pair<A, B>;
+class TSerializer<std::pair<A, B>> { 
+    using TPair = std::pair<A, B>; 
 
-public:
+public: 
     static inline void Save(IOutputStream* rh, const TPair& p) {
-        ::Save(rh, p.first);
-        ::Save(rh, p.second);
-    }
+        ::Save(rh, p.first); 
+        ::Save(rh, p.second); 
+    } 
 
     static inline void Load(IInputStream* rh, TPair& p) {
-        ::Load(rh, p.first);
-        ::Load(rh, p.second);
-    }
-
-    template <class TStorage>
+        ::Load(rh, p.first); 
+        ::Load(rh, p.second); 
+    } 
+ 
+    template <class TStorage> 
     static inline void Load(IInputStream* rh, TPair& p, TStorage& pool) {
-        ::Load(rh, p.first, pool);
-        ::Load(rh, p.second, pool);
-    }
+        ::Load(rh, p.first, pool); 
+        ::Load(rh, p.second, pool); 
+    } 
 };
 
 template <class T>
@@ -433,26 +433,26 @@ struct TTupleSerializer {
 
     static inline void Save(IOutputStream* stream, const T& t) {
         ReverseUseless([&](const auto& v) { ::Save(stream, v); }, t,
-                       std::make_index_sequence<std::tuple_size<T>::value>{});
+                       std::make_index_sequence<std::tuple_size<T>::value>{}); 
     }
 
     static inline void Load(IInputStream* stream, T& t) {
         ReverseUseless([&](auto& v) { ::Load(stream, v); }, t,
-                       std::make_index_sequence<std::tuple_size<T>::value>{});
+                       std::make_index_sequence<std::tuple_size<T>::value>{}); 
     }
 };
 
 template <typename... TArgs>
-struct TSerializer<std::tuple<TArgs...>>: TTupleSerializer<std::tuple<TArgs...>> {
+struct TSerializer<std::tuple<TArgs...>>: TTupleSerializer<std::tuple<TArgs...>> { 
 };
 
-template <>
-class TSerializer<TBuffer> {
-public:
+template <> 
+class TSerializer<TBuffer> { 
+public: 
     static void Save(IOutputStream* rh, const TBuffer& buf);
     static void Load(IInputStream* rh, TBuffer& buf);
-};
-
+}; 
+ 
 template <class TSetOrMap, class TValue>
 class TSetSerializerInserterBase {
 public:
@@ -542,51 +542,51 @@ public:
 };
 
 template <class TSetType, class TValue, bool sorted>
-class TSetSerializerBase {
-public:
+class TSetSerializerBase { 
+public: 
     static inline void Save(IOutputStream* rh, const TSetType& s) {
-        ::SaveSize(rh, s.size());
-        ::SaveRange(rh, s.begin(), s.end());
-    }
-
+        ::SaveSize(rh, s.size()); 
+        ::SaveRange(rh, s.begin(), s.end()); 
+    } 
+ 
     static inline void Load(IInputStream* rh, TSetType& s) {
-        const size_t cnt = ::LoadSize(rh);
+        const size_t cnt = ::LoadSize(rh); 
         TSetSerializerInserter<TSetType, TValue, sorted> ins(s, cnt);
-
-        TValue v;
-        for (size_t i = 0; i != cnt; ++i) {
-            ::Load(rh, v);
-            ins.Insert(v);
-        }
-    }
-
-    template <class TStorage>
+ 
+        TValue v; 
+        for (size_t i = 0; i != cnt; ++i) { 
+            ::Load(rh, v); 
+            ins.Insert(v); 
+        } 
+    } 
+ 
+    template <class TStorage> 
     static inline void Load(IInputStream* rh, TSetType& s, TStorage& pool) {
-        const size_t cnt = ::LoadSize(rh);
+        const size_t cnt = ::LoadSize(rh); 
         TSetSerializerInserter<TSetType, TValue, sorted> ins(s, cnt);
-
-        TValue v;
-        for (size_t i = 0; i != cnt; ++i) {
-            ::Load(rh, v, pool);
-            ins.Insert(v);
-        }
-    }
-};
-
+ 
+        TValue v; 
+        for (size_t i = 0; i != cnt; ++i) { 
+            ::Load(rh, v, pool); 
+            ins.Insert(v); 
+        } 
+    } 
+}; 
+ 
 template <class TMapType, bool sorted = false>
 struct TMapSerializer: public TSetSerializerBase<TMapType, std::pair<typename TMapType::key_type, typename TMapType::mapped_type>, sorted> {
-};
-
+}; 
+ 
 template <class TSetType, bool sorted = false>
 struct TSetSerializer: public TSetSerializerBase<TSetType, typename TSetType::value_type, sorted> {
-};
-
-template <class T1, class T2, class T3, class T4>
+}; 
+ 
+template <class T1, class T2, class T3, class T4> 
 class TSerializer<TMap<T1, T2, T3, T4>>: public TMapSerializer<TMap<T1, T2, T3, T4>, true> {
-};
-
+}; 
+ 
 template <class K, class T, class C, class A>
-class TSerializer<std::map<K, T, C, A>>: public TMapSerializer<std::map<K, T, C, A>, true> {
+class TSerializer<std::map<K, T, C, A>>: public TMapSerializer<std::map<K, T, C, A>, true> { 
 };
 
 template <class T1, class T2, class T3, class T4>
@@ -597,26 +597,26 @@ template <class K, class T, class C, class A>
 class TSerializer<std::multimap<K, T, C, A>>: public TMapSerializer<std::multimap<K, T, C, A>, true> {
 };
 
-template <class T1, class T2, class T3, class T4, class T5>
+template <class T1, class T2, class T3, class T4, class T5> 
 class TSerializer<THashMap<T1, T2, T3, T4, T5>>: public TMapSerializer<THashMap<T1, T2, T3, T4, T5>, false> {
-};
-
+}; 
+ 
 template <class T1, class T2, class T3, class T4, class T5>
 class TSerializer<THashMultiMap<T1, T2, T3, T4, T5>>: public TMapSerializer<THashMultiMap<T1, T2, T3, T4, T5>, false> {
 };
 
 template <class K, class C, class A>
 class TSerializer<TSet<K, C, A>>: public TSetSerializer<TSet<K, C, A>, true> {
-};
+}; 
 
 template <class K, class C, class A>
-class TSerializer<std::set<K, C, A>>: public TSetSerializer<std::set<K, C, A>, true> {
+class TSerializer<std::set<K, C, A>>: public TSetSerializer<std::set<K, C, A>, true> { 
 };
 
-template <class T1, class T2, class T3, class T4>
+template <class T1, class T2, class T3, class T4> 
 class TSerializer<THashSet<T1, T2, T3, T4>>: public TSetSerializer<THashSet<T1, T2, T3, T4>, false> {
 };
-
+ 
 template <class T1, class T2>
 class TSerializer<TQueue<T1, T2>> {
 public:
@@ -660,7 +660,7 @@ struct TSerializer<std::variant<Args...>> {
         ::Save<ui8>(os, v.index());
         std::visit([os](const auto& data) {
             ::Save(os, data);
-        }, v);
+        }, v); 
     }
 
     static void Load(IInputStream* is, TVar& v) {
@@ -675,7 +675,7 @@ struct TSerializer<std::variant<Args...>> {
 private:
     template <size_t... Is>
     static void LoadImpl(IInputStream* is, TVar& v, ui8 index, std::index_sequence<Is...>) {
-        using TLoader = void (*)(IInputStream*, TVar & v);
+        using TLoader = void (*)(IInputStream*, TVar & v); 
         constexpr TLoader loaders[] = {::NPrivate::LoadVariantAlternative<TVar, Args, Is>...};
         loaders[index](is, v);
     }
@@ -683,34 +683,34 @@ private:
 
 #endif
 
-template <class T>
+template <class T> 
 static inline void SaveLoad(IOutputStream* out, const T& t) {
     Save(out, t);
-}
-
-template <class T>
+} 
+ 
+template <class T> 
 static inline void SaveLoad(IInputStream* in, T& t) {
     Load(in, t);
-}
-
+} 
+ 
 template <class S, class... Ts>
 static inline void SaveMany(S* s, const Ts&... t) {
     ApplyToMany([&](const auto& v) { Save(s, v); }, t...);
-}
-
+} 
+ 
 template <class S, class... Ts>
 static inline void LoadMany(S* s, Ts&... t) {
     ApplyToMany([&](auto& v) { Load(s, v); }, t...);
-}
-
+} 
+ 
 #define Y_SAVELOAD_DEFINE(...)                 \
     inline void Save(IOutputStream* s) const { \
-        ::SaveMany(s, __VA_ARGS__);            \
-    }                                          \
-                                               \
+        ::SaveMany(s, __VA_ARGS__);            \ 
+    }                                          \ 
+                                               \ 
     inline void Load(IInputStream* s) {        \
-        ::LoadMany(s, __VA_ARGS__);            \
-    }
+        ::LoadMany(s, __VA_ARGS__);            \ 
+    } 
 
 #define Y_SAVELOAD_DEFINE_OVERRIDE(...)          \
     void Save(IOutputStream* s) const override { \

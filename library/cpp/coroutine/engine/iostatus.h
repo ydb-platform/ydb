@@ -1,91 +1,91 @@
 #pragma once
-
+ 
 #include <util/generic/yexception.h>
 
-class TIOStatus {
-public:
+class TIOStatus { 
+public: 
     TIOStatus(int status) noexcept
-        : Status_(status)
-    {
-    }
-
+        : Status_(status) 
+    { 
+    } 
+ 
     static TIOStatus Error(int status) noexcept {
-        return TIOStatus(status);
-    }
-
+        return TIOStatus(status); 
+    } 
+ 
     static TIOStatus Error() noexcept {
-        return TIOStatus(LastSystemError());
-    }
-
+        return TIOStatus(LastSystemError()); 
+    } 
+ 
     static TIOStatus Success() noexcept {
-        return TIOStatus(0);
-    }
-
+        return TIOStatus(0); 
+    } 
+ 
     void Check() const {
-        if (Status_) {
-            ythrow TSystemError(Status_) << "io error";
-        }
-    }
-
+        if (Status_) { 
+            ythrow TSystemError(Status_) << "io error"; 
+        } 
+    } 
+ 
     bool Failed() const noexcept {
-        return (bool)Status_;
-    }
-
+        return (bool)Status_; 
+    } 
+ 
     bool Succeed() const noexcept {
-        return !Failed();
-    }
-
+        return !Failed(); 
+    } 
+ 
     int Status() const noexcept {
-        return Status_;
-    }
+        return Status_; 
+    } 
+ 
+private: 
+    int Status_; 
+}; 
+ 
 
-private:
-    int Status_;
-};
-
-
-class TContIOStatus {
-public:
+class TContIOStatus { 
+public: 
     TContIOStatus(size_t processed, TIOStatus status) noexcept
-        : Processed_(processed)
-        , Status_(status)
-    {
-    }
-
+        : Processed_(processed) 
+        , Status_(status) 
+    { 
+    } 
+ 
     static TContIOStatus Error(TIOStatus status) noexcept {
-        return TContIOStatus(0, status);
-    }
-
+        return TContIOStatus(0, status); 
+    } 
+ 
     static TContIOStatus Error() noexcept {
-        return TContIOStatus(0, TIOStatus::Error());
-    }
-
+        return TContIOStatus(0, TIOStatus::Error()); 
+    } 
+ 
     static TContIOStatus Success(size_t processed) noexcept {
-        return TContIOStatus(processed, TIOStatus::Success());
-    }
-
+        return TContIOStatus(processed, TIOStatus::Success()); 
+    } 
+ 
     static TContIOStatus Eof() noexcept {
-        return Success(0);
-    }
-
+        return Success(0); 
+    } 
+ 
     ~TContIOStatus() {
-    }
-
+    } 
+ 
     size_t Processed() const noexcept {
-        return Processed_;
-    }
-
+        return Processed_; 
+    } 
+ 
     int Status() const noexcept {
-        return Status_.Status();
-    }
-
+        return Status_.Status(); 
+    } 
+ 
     size_t Checked() const {
-        Status_.Check();
-
-        return Processed_;
-    }
-
-private:
-    size_t Processed_;
-    TIOStatus Status_;
-};
+        Status_.Check(); 
+ 
+        return Processed_; 
+    } 
+ 
+private: 
+    size_t Processed_; 
+    TIOStatus Status_; 
+}; 

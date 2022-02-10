@@ -1,2 +1,2 @@
 # Present for backwards compatibility
-from cpython.number cimport *
+from cpython.number cimport * 

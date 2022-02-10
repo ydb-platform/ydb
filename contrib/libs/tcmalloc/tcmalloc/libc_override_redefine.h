@@ -57,9 +57,9 @@ int posix_memalign(void** r, size_t a, size_t s) {
 size_t malloc_usable_size(void* p) { return TCMallocInternalMallocSize(p); }
 
 // tcmalloc extension
-void sdallocx(void* p, size_t s, int flags) noexcept {
-  TCMallocInternalSdallocx(p, s, flags);
-}
+void sdallocx(void* p, size_t s, int flags) noexcept { 
+  TCMallocInternalSdallocx(p, s, flags); 
+} 
 
 #if defined(__GLIBC__) || defined(__NEWLIB__)
 // SunOS extension

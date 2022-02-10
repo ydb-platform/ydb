@@ -42,7 +42,7 @@ namespace NCodecs {
             } else {
                 TPipelineCodec* pipe = new TPipelineCodec;
 
-                do {
+                do { 
                     TStringBuf v = name.NextTok(':');
                     pipe->AddCodec(GetCodec(v));
                 } while (name);
@@ -64,7 +64,7 @@ namespace NCodecs {
             return vs;
         }
 
-        struct TSolarCodecFactory : ICodecFactory {
+        struct TSolarCodecFactory : ICodecFactory { 
             TCodecPtr MakeCodec(TStringBuf name) const override {
                 if (TSolarCodec::MyNameShortInt() == name) {
                     return new TSolarCodecShortInt();
@@ -79,7 +79,7 @@ namespace NCodecs {
                 }
             }
 
-            template <class TCodecCls>
+            template <class TCodecCls> 
             TCodecPtr MakeCodecImpl(const TStringBuf& name, const TStringBuf& type) const {
                 if (TStringBuf("-8k") == type) {
                     return new TCodecCls(1 << 13);
@@ -117,7 +117,7 @@ namespace NCodecs {
             }
         };
 
-        struct TZStdDictCodecFactory : ICodecFactory {
+        struct TZStdDictCodecFactory : ICodecFactory { 
             TCodecPtr MakeCodec(TStringBuf name) const override {
                 return new TZStdDictCodec(TZStdDictCodec::ParseCompressionName(name));
             }
@@ -127,7 +127,7 @@ namespace NCodecs {
             }
         };
 
-        struct TCompTableCodecFactory : ICodecFactory {
+        struct TCompTableCodecFactory : ICodecFactory { 
             TCodecPtr MakeCodec(TStringBuf name) const override {
                 if (TCompTableCodec::MyNameHQ() == name) {
                     return new TCompTableCodec(TCompTableCodec::Q_HIGH);
@@ -147,11 +147,11 @@ namespace NCodecs {
             }
         };
 
-        struct TBlockCodec : ICodec {
+        struct TBlockCodec : ICodec { 
             const NBlockCodecs::ICodec* Codec;
 
             TBlockCodec(TStringBuf name)
-                : Codec(NBlockCodecs::Codec(name))
+                : Codec(NBlockCodecs::Codec(name)) 
             {
             }
 
@@ -174,11 +174,11 @@ namespace NCodecs {
             }
         };
 
-        struct TBlockCodecsFactory : ICodecFactory {
+        struct TBlockCodecsFactory : ICodecFactory { 
             using TRegistry = THashMap<TString, TCodecPtr>;
             TRegistry Registry;
 
-            TBlockCodecsFactory() {
+            TBlockCodecsFactory() { 
                 for (TStringBuf codec : NBlockCodecs::ListAllCodecs()) {
                     Register(codec);
                 }
@@ -205,12 +205,12 @@ namespace NCodecs {
             }
         };
 
-        TCodecRegistry::TCodecRegistry() {
+        TCodecRegistry::TCodecRegistry() { 
             RegisterFactory(new TInstanceFactory<TTrivialCodec>);
             RegisterFactory(new TInstanceFactory<TTrivialTrainableCodec>);
             RegisterFactory(new TInstanceFactory<THuffmanCodec>);
-            RegisterFactory(new TInstanceFactory<TPForCodec<ui64, true>>);
-            RegisterFactory(new TInstanceFactory<TPForCodec<ui32, true>>);
+            RegisterFactory(new TInstanceFactory<TPForCodec<ui64, true>>); 
+            RegisterFactory(new TInstanceFactory<TPForCodec<ui32, true>>); 
             RegisterFactory(new TSolarCodecFactory);
             RegisterFactory(new TZStdDictCodecFactory);
             RegisterFactory(new TCompTableCodecFactory);

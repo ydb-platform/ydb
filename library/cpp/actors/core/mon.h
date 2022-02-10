@@ -17,7 +17,7 @@ namespace NActors {
             End
         };
 
-        static_assert(End < EventSpaceEnd(NActors::TEvents::ES_MON), "expect End < EventSpaceEnd(NActors::TEvents::ES_MON)");
+        static_assert(End < EventSpaceEnd(NActors::TEvents::ES_MON), "expect End < EventSpaceEnd(NActors::TEvents::ES_MON)"); 
 
         // request info from an actor in HTML format
         struct TEvHttpInfo: public NActors::TEventLocal<TEvHttpInfo, HttpInfo> {
@@ -229,6 +229,6 @@ namespace NActors {
             }
         };
 
-    }
+    } 
 
-}
+} 

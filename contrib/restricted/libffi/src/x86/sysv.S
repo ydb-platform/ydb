@@ -1,39 +1,39 @@
-/* -----------------------------------------------------------------------
+/* ----------------------------------------------------------------------- 
    sysv.S - Copyright (c) 2017  Anthony Green
           - Copyright (c) 2013  The Written Word, Inc.
           - Copyright (c) 1996,1998,2001-2003,2005,2008,2010  Red Hat, Inc.
-   
-   X86 Foreign Function Interface 
-
-   Permission is hereby granted, free of charge, to any person obtaining
-   a copy of this software and associated documentation files (the
-   ``Software''), to deal in the Software without restriction, including
-   without limitation the rights to use, copy, modify, merge, publish,
-   distribute, sublicense, and/or sell copies of the Software, and to
-   permit persons to whom the Software is furnished to do so, subject to
-   the following conditions:
-
-   The above copyright notice and this permission notice shall be included
-   in all copies or substantial portions of the Software.
-
-   THE SOFTWARE IS PROVIDED ``AS IS'', WITHOUT WARRANTY OF ANY KIND,
-   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-   NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-   HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-   WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-   DEALINGS IN THE SOFTWARE.
-   ----------------------------------------------------------------------- */
-
+    
+   X86 Foreign Function Interface  
+ 
+   Permission is hereby granted, free of charge, to any person obtaining 
+   a copy of this software and associated documentation files (the 
+   ``Software''), to deal in the Software without restriction, including 
+   without limitation the rights to use, copy, modify, merge, publish, 
+   distribute, sublicense, and/or sell copies of the Software, and to 
+   permit persons to whom the Software is furnished to do so, subject to 
+   the following conditions: 
+ 
+   The above copyright notice and this permission notice shall be included 
+   in all copies or substantial portions of the Software. 
+ 
+   THE SOFTWARE IS PROVIDED ``AS IS'', WITHOUT WARRANTY OF ANY KIND, 
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND 
+   NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT 
+   HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, 
+   WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+   DEALINGS IN THE SOFTWARE. 
+   ----------------------------------------------------------------------- */ 
+ 
 #ifdef __i386__
 #ifndef _MSC_VER
-
-#define LIBFFI_ASM	
-#include <fficonfig.h>
-#include <ffi.h>
+ 
+#define LIBFFI_ASM	 
+#include <fficonfig.h> 
+#include <ffi.h> 
 #include "internal.h"
-
+ 
 #define C2(X, Y)  X ## Y
 #define C1(X, Y)  C2(X, Y)
 #ifdef __USER_LABEL_PREFIX__
@@ -41,19 +41,19 @@
 #else
 # define C(X)     X
 #endif
-
+ 
 #ifdef X86_DARWIN
 # define L(X)     C1(L, X)
 #else
 # define L(X)     C1(.L, X)
 #endif
-
+ 
 #ifdef __ELF__
 # define ENDF(X)  .type	X,@function; .size X, . - X
 #else
 # define ENDF(X)
 #endif
-
+ 
 /* Handle win32 fastcall name mangling.  */
 #ifdef X86_WIN32
 # define ffi_call_i386		@ffi_call_i386@8
@@ -62,7 +62,7 @@
 # define ffi_call_i386		C(ffi_call_i386)
 # define ffi_closure_inner	C(ffi_closure_inner)
 #endif
-
+ 
 /* This macro allows the safe creation of jump tables without an
    actual table.  The entry points into the table are all 8 bytes.
    The use of ORG asserts that we're at the correct location.  */
@@ -72,23 +72,23 @@
 #else
 # define E(BASE, X)	.balign 8; .org BASE + X * 8
 #endif
-
+ 
 	.text
 	.balign	16
 	.globl	ffi_call_i386
 	FFI_HIDDEN(ffi_call_i386)
-
+ 
 /* This is declared as
-
+ 
    void ffi_call_i386(struct call_frame *frame, char *argp)
         __attribute__((fastcall));
-
+ 
    Thus the arguments are present in
-
+ 
         ecx: frame
         edx: argp
 */
-
+ 
 ffi_call_i386:
 L(UW0):
 	# cfi_startproc
@@ -99,7 +99,7 @@ L(UW0):
 	movl	(%esp), %eax		/* move the return address */
 	movl	%ebp, (%ecx)		/* store %ebp into local frame */
 	movl	%eax, 4(%ecx)		/* store retaddr into local frame */
-
+ 
 	/* New stack frame based off ebp.  This is a itty bit of unwind
 	   trickery in that the CFA *has* changed.  There is no easy way
 	   to describe it correctly on entry to the function.  Fortunately,
@@ -111,19 +111,19 @@ L(UW0):
 L(UW1):
 	# cfi_def_cfa(%ebp, 8)
 	# cfi_rel_offset(%ebp, 0)
-
+ 
 	movl	%edx, %esp		/* set outgoing argument stack */
 	movl	20+R_EAX*4(%ebp), %eax	/* set register arguments */
 	movl	20+R_EDX*4(%ebp), %edx
 	movl	20+R_ECX*4(%ebp), %ecx
-
+ 
 	call	*8(%ebp)
-
+ 
 	movl	12(%ebp), %ecx		/* load return type code */
 	movl	%ebx, 8(%ebp)		/* preserve %ebx */
 L(UW2):
 	# cfi_rel_offset(%ebx, 8)
-
+ 
 	andl	$X86_RET_TYPE_MASK, %ecx
 #ifdef __PIC__
 	call	C(__x86.get_pc_thunk.bx)
@@ -134,7 +134,7 @@ L(pc1):
 #endif
 	movl	16(%ebp), %ecx		/* load result address */
 	jmp	*%ebx
-
+ 
 	.balign	8
 L(store_table):
 E(L(store_table), X86_RET_FLOAT)
@@ -181,7 +181,7 @@ L(UW3):
 	ret
 L(UW4):
 	# cfi_restore_state
-
+ 
 E(L(store_table), X86_RET_STRUCTPOP)
 	jmp	L(e1)
 E(L(store_table), X86_RET_STRUCTARG)
@@ -192,30 +192,30 @@ E(L(store_table), X86_RET_STRUCT_1B)
 E(L(store_table), X86_RET_STRUCT_2B)
 	movw	%ax, (%ecx)
 	jmp	L(e1)
-
+ 
 	/* Fill out the table so that bad values are predictable.  */
 E(L(store_table), X86_RET_UNUSED14)
 	ud2
 E(L(store_table), X86_RET_UNUSED15)
 	ud2
-
+ 
 L(UW5):
 	# cfi_endproc
 ENDF(ffi_call_i386)
-
+ 
 /* The inner helper is declared as
-
+ 
    void ffi_closure_inner(struct closure_frame *frame, char *argp)
 	__attribute_((fastcall))
-
+ 
    Thus the arguments are placed in
-
+ 
 	ecx:	frame
 	edx:	argp
 */
-
+ 
 /* Macros to help setting up the closure_data structure.  */
-
+ 
 #if HAVE_FASTCALL
 # define closure_FS	(40 + 4)
 # define closure_CF	0
@@ -223,12 +223,12 @@ ENDF(ffi_call_i386)
 # define closure_FS	(8 + 40 + 12)
 # define closure_CF	8
 #endif
-
+ 
 #define FFI_CLOSURE_SAVE_REGS		\
 	movl	%eax, closure_CF+16+R_EAX*4(%esp);	\
 	movl	%edx, closure_CF+16+R_EDX*4(%esp);	\
 	movl	%ecx, closure_CF+16+R_ECX*4(%esp)
-
+ 
 #define FFI_CLOSURE_COPY_TRAMP_DATA					\
 	movl	FFI_TRAMPOLINE_SIZE(%eax), %edx;	/* copy cif */	\
 	movl	FFI_TRAMPOLINE_SIZE+4(%eax), %ecx;	/* copy fun */	\
@@ -241,14 +241,14 @@ ENDF(ffi_call_i386)
 # define FFI_CLOSURE_PREP_CALL						\
 	movl	%esp, %ecx;			/* load closure_data */	\
 	leal	closure_FS+4(%esp), %edx;	/* load incoming stack */
-#else
+#else 
 # define FFI_CLOSURE_PREP_CALL						\
 	leal	closure_CF(%esp), %ecx;		/* load closure_data */	\
 	leal	closure_FS+4(%esp), %edx;	/* load incoming stack */ \
 	movl	%ecx, (%esp);						\
 	movl	%edx, 4(%esp)
-#endif
-
+#endif 
+ 
 #define FFI_CLOSURE_CALL_INNER(UWN) \
 	call	ffi_closure_inner
 
@@ -388,14 +388,14 @@ L(e2):
 	addl	$closure_FS, %esp
 L(UW16):
 	# cfi_adjust_cfa_offset(-closure_FS)
-	ret
+	ret 
 L(UW17):
 	# cfi_adjust_cfa_offset(closure_FS)
 E(L(load_table2), X86_RET_STRUCTPOP)
 	addl	$closure_FS, %esp
 L(UW18):
 	# cfi_adjust_cfa_offset(-closure_FS)
-	ret	$4
+	ret	$4 
 L(UW19):
 	# cfi_adjust_cfa_offset(closure_FS)
 E(L(load_table2), X86_RET_STRUCTARG)
@@ -406,7 +406,7 @@ E(L(load_table2), X86_RET_STRUCT_1B)
 E(L(load_table2), X86_RET_STRUCT_2B)
 	movzwl	%ax, %eax
 	jmp	L(e2)
-
+ 
 	/* Fill out the table so that bad values are predictable.  */
 E(L(load_table2), X86_RET_UNUSED14)
 	ud2
@@ -566,8 +566,8 @@ L(UW31):
 	# cfi_endproc
 ENDF(C(ffi_closure_STDCALL))
 
-#if !FFI_NO_RAW_API
-
+#if !FFI_NO_RAW_API 
+ 
 #define raw_closure_S_FS	(16+16+12)
 
 	.balign	16
@@ -599,15 +599,15 @@ L(UW34):
 	call	C(__x86.get_pc_thunk.bx)
 L(pc4):
 	leal	L(load_table4)-L(pc4)(%ebx, %eax, 8), %ecx
-#else
+#else 
 	leal	L(load_table4)(,%eax, 8), %ecx
-#endif
+#endif 
 	movl	raw_closure_S_FS-4(%esp), %ebx
 L(UW35):
 	# cfi_restore(%ebx)
 	movl	16(%esp), %eax				/* Optimistic load */
 	jmp	*%ecx
-
+ 
 	.balign	8
 L(load_table4):
 E(L(load_table4), X86_RET_FLOAT)
@@ -660,13 +660,13 @@ E(L(load_table4), X86_RET_STRUCT_1B)
 E(L(load_table4), X86_RET_STRUCT_2B)
 	movzwl	%ax, %eax
 	jmp	L(e4)
-
+ 
 	/* Fill out the table so that bad values are predictable.  */
 E(L(load_table4), X86_RET_UNUSED14)
 	ud2
 E(L(load_table4), X86_RET_UNUSED15)
 	ud2
-
+ 
 L(UW40):
 	# cfi_endproc
 ENDF(C(ffi_closure_raw_SYSV))
@@ -717,13 +717,13 @@ L(pc5):
 	leal	L(load_table5)-L(pc5)(%ebx, %eax, 8), %ecx
 #else
 	leal	L(load_table5)(,%eax, 8), %ecx
-#endif
+#endif 
 	movl	raw_closure_T_FS-4(%esp), %ebx
 L(UW47):
 	# cfi_restore(%ebx)
 	movl	16(%esp), %eax				/* Optimistic load */
 	jmp	*%ecx
-
+ 
 	.balign	8
 L(load_table5):
 E(L(load_table5), X86_RET_FLOAT)
@@ -777,7 +777,7 @@ E(L(load_table5), X86_RET_STRUCT_1B)
 E(L(load_table5), X86_RET_STRUCT_2B)
 	movzwl	%ax, %eax
 	jmp	L(e5)
-
+ 
 	/* Fill out the table so that bad values are predictable.  */
 E(L(load_table5), X86_RET_UNUSED14)
 	ud2
@@ -800,10 +800,10 @@ ENDF(C(ffi_closure_raw_THISCALL))
 	.section .text.X,"axG",@progbits,X,comdat;			\
 	.globl	X;							\
 	FFI_HIDDEN(X)
-#else
+#else 
 # define COMDAT(X)
-#endif
-
+#endif 
+ 
 #if defined(__PIC__)
 	COMDAT(C(__x86.get_pc_thunk.bx))
 C(__x86.get_pc_thunk.bx):
@@ -828,15 +828,15 @@ EHFrame0:
 .section .eh_frame,"r"
 #elif defined(HAVE_AS_X86_64_UNWIND_SECTION_TYPE)
 .section .eh_frame,EH_FRAME_FLAGS,@unwind
-#else
+#else 
 .section .eh_frame,EH_FRAME_FLAGS,@progbits
-#endif
+#endif 
 
 #ifdef HAVE_AS_X86_PCREL
 # define PCREL(X)	X - .
-#else
+#else 
 # define PCREL(X)	X@rel
-#endif
+#endif 
 
 /* Simplify advancing between labels.  Assume DW_CFA_advance_loc1 fits.  */
 #define ADV(N, P)	.byte 2, L(N)-L(P)
@@ -920,9 +920,9 @@ L(SFDE4):
 	ADV(UW15, UW14)
 	.byte	0xc0+3			/* DW_CFA_restore %ebx */
 	ADV(UW16, UW15)
-#else
+#else 
 	ADV(UW16, UW13)
-#endif
+#endif 
 	.byte	0xe, 4			/* DW_CFA_def_cfa_offset */
 	ADV(UW17, UW16)
 	.byte	0xe, closure_FS+4	/* DW_CFA_def_cfa_offset */
@@ -973,11 +973,11 @@ L(SFDE7):
 	.byte	0x80+3, (40-(closure_FS+4))/-4  /* DW_CFA_offset %ebx */
 	ADV(UW30, UW29)
 	.byte	0xc0+3			/* DW_CFA_restore %ebx */
-#endif
+#endif 
 	.balign	4
 L(EFDE7):
-
-#if !FFI_NO_RAW_API
+ 
+#if !FFI_NO_RAW_API 
 	.set	L(set8),L(EFDE8)-L(SFDE8)
 	.long	L(set8)			/* FDE Length */
 L(SFDE8):
@@ -1001,7 +1001,7 @@ L(SFDE8):
 	.byte	0xe, raw_closure_S_FS+4	/* DW_CFA_def_cfa_offset */
 	.balign	4
 L(EFDE8):
-
+ 
 	.set	L(set9),L(EFDE9)-L(SFDE9)
 	.long	L(set9)			/* FDE Length */
 L(SFDE9):
@@ -1034,7 +1034,7 @@ L(SFDE9):
 	.balign	4
 L(EFDE9):
 #endif /* !FFI_NO_RAW_API */
-
+ 
 #ifdef _WIN32
 	.def	 @feat.00;
 	.scl	3;
@@ -1042,12 +1042,12 @@ L(EFDE9):
 	.endef
 	.globl	@feat.00
 @feat.00 = 1
-#endif
-
+#endif 
+ 
 #ifdef __APPLE__
     .subsections_via_symbols
     .section __LD,__compact_unwind,regular,debug
-
+ 
     /* compact unwind for ffi_call_i386 */
     .long    C(ffi_call_i386)
     .set     L1,L(UW5)-L(UW0)
@@ -1124,6 +1124,6 @@ L(EFDE9):
 #endif /* ifndef _MSC_VER */
 #endif /* ifdef __i386__ */
 
-#if defined __ELF__ && defined __linux__
-	.section	.note.GNU-stack,"",@progbits
-#endif
+#if defined __ELF__ && defined __linux__ 
+	.section	.note.GNU-stack,"",@progbits 
+#endif 

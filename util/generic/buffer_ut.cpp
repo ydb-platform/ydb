@@ -1,28 +1,28 @@
 #include <library/cpp/testing/unittest/registar.h>
-
-#include <util/system/datetime.h>
+ 
+#include <util/system/datetime.h> 
 #include "string.h"
-#include "vector.h"
-#include "buffer.h"
-
+#include "vector.h" 
+#include "buffer.h" 
+ 
 Y_UNIT_TEST_SUITE(TBufferTest) {
     Y_UNIT_TEST(TestEraseBack) {
-        TBuffer buf;
-
-        buf.Append("1234567", 7);
-        buf.Reserve(1000);
-        buf.Resize(6);
-        buf.EraseBack(2);
-
+        TBuffer buf; 
+ 
+        buf.Append("1234567", 7); 
+        buf.Reserve(1000); 
+        buf.Resize(6); 
+        buf.EraseBack(2); 
+ 
         UNIT_ASSERT_EQUAL(TString(buf.data(), buf.size()), "1234");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestAppend) {
         const char data[] = "1234567890qwertyuiop";
-
+ 
         TBuffer buf(13);
         TString str;
-
+ 
         for (size_t i = 0; i < 10; ++i) {
             for (size_t j = 0; j < sizeof(data) - 1; ++j) {
                 buf.Append(data, j);
@@ -31,14 +31,14 @@ Y_UNIT_TEST_SUITE(TBufferTest) {
                 str.append('q');
             }
         }
-
+ 
         UNIT_ASSERT_EQUAL(TString(buf.data(), buf.size()), str);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestReset) {
         char content[] = "some text";
         TBuffer buf;
-
+ 
         buf.Append(content, sizeof(content));
         buf.Clear();
 
@@ -146,37 +146,37 @@ Y_UNIT_TEST(TestAlignUp) {
 
 #if 0
 Y_UNIT_TEST(TestSpeed) {
-    const char data[] = "1234567890qwertyuiop";
-    const size_t c = 100000;
-    ui64 t1 = 0;
-    ui64 t2 = 0;
-
-    {
-        TBuffer buf;
-
-        t1 = MicroSeconds();
-
-        for (size_t i = 0; i < c; ++i) {
-            buf.Append(data, sizeof(data));
-        }
-
-        t1 = MicroSeconds() - t1;
-    }
-
-    {
+    const char data[] = "1234567890qwertyuiop"; 
+    const size_t c = 100000; 
+    ui64 t1 = 0; 
+    ui64 t2 = 0; 
+ 
+    { 
+        TBuffer buf; 
+ 
+        t1 = MicroSeconds(); 
+ 
+        for (size_t i = 0; i < c; ++i) { 
+            buf.Append(data, sizeof(data)); 
+        } 
+ 
+        t1 = MicroSeconds() - t1; 
+    } 
+ 
+    { 
         TVector<char> buf;
-
-        t2 = MicroSeconds();
-
-        for (size_t i = 0; i < c; ++i) {
-            buf.insert(buf.end(), data, data + sizeof(data));
-        }
-
-        t2 = MicroSeconds() - t2;
-    }
-
-    UNIT_ASSERT(t1 < t2);
-}
+ 
+        t2 = MicroSeconds(); 
+ 
+        for (size_t i = 0; i < c; ++i) { 
+            buf.insert(buf.end(), data, data + sizeof(data)); 
+        } 
+ 
+        t2 = MicroSeconds() - t2; 
+    } 
+ 
+    UNIT_ASSERT(t1 < t2); 
+} 
 #endif
 
     Y_UNIT_TEST(TestFillAndChop) {
@@ -202,4 +202,4 @@ Y_UNIT_TEST(TestSpeed) {
         UNIT_ASSERT(buf2 == buf1);
     }
 
-}
+} 

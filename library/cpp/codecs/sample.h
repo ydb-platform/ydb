@@ -24,20 +24,20 @@ namespace NCodecs {
     }
 
     template <class TIter>
-    TStringBuf IterToStringBuf(TIter iter) {
+    TStringBuf IterToStringBuf(TIter iter) { 
         return ValueToStringBuf(*iter);
     }
 
     template <class TItem>
-    class TSimpleSequenceReader: public ISequenceReader {
+    class TSimpleSequenceReader: public ISequenceReader { 
         const TVector<TItem>& Items;
         size_t Idx = 0;
 
     public:
         TSimpleSequenceReader(const TVector<TItem>& items)
             : Items(items)
-        {
-        }
+        { 
+        } 
 
         bool NextRegion(TStringBuf& s) override {
             if (Idx >= Items.size()) {

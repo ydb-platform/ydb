@@ -1,21 +1,21 @@
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <library/cpp/regex/pire/regexp.h>
 #include <library/cpp/regex/pire/pcre2pire.h>
-
+ 
 Y_UNIT_TEST_SUITE(TRegExp) {
-    using namespace NRegExp;
-
+    using namespace NRegExp; 
+ 
     Y_UNIT_TEST(False) {
-        UNIT_ASSERT(!TMatcher(TFsm::False()).Match("").Final());
+        UNIT_ASSERT(!TMatcher(TFsm::False()).Match("").Final()); 
         UNIT_ASSERT(!TMatcher(TFsm::False()).Match(TStringBuf{}).Final());
-    }
-
+    } 
+ 
     Y_UNIT_TEST(Surround) {
-        UNIT_ASSERT(TMatcher(TFsm("qw", TFsm::TOptions().SetSurround(true))).Match("aqwb").Final());
-        UNIT_ASSERT(!TMatcher(TFsm("qw", TFsm::TOptions().SetSurround(false))).Match("aqwb").Final());
-    }
-
+        UNIT_ASSERT(TMatcher(TFsm("qw", TFsm::TOptions().SetSurround(true))).Match("aqwb").Final()); 
+        UNIT_ASSERT(!TMatcher(TFsm("qw", TFsm::TOptions().SetSurround(false))).Match("aqwb").Final()); 
+    } 
+ 
     Y_UNIT_TEST(Boundaries) {
         UNIT_ASSERT(!TMatcher(TFsm("qwb$", TFsm::TOptions().SetSurround(true))).Match("aqwb").Final());
         UNIT_ASSERT(!TMatcher(TFsm("^aqw", TFsm::TOptions().SetSurround(true))).Match("aqwb").Final());
@@ -29,13 +29,13 @@ Y_UNIT_TEST_SUITE(TRegExp) {
                         .Match(TStringBuf("q"), false, false)
                         .Match(TStringBuf("w"), false, false)
                         .Match(TStringBuf("b"), false, true)
-                        .Final());
+                        .Final()); 
     }
 
     Y_UNIT_TEST(Case) {
-        UNIT_ASSERT(TMatcher(TFsm("qw", TFsm::TOptions().SetCaseInsensitive(true))).Match("Qw").Final());
-        UNIT_ASSERT(!TMatcher(TFsm("qw", TFsm::TOptions().SetCaseInsensitive(false))).Match("Qw").Final());
-    }
+        UNIT_ASSERT(TMatcher(TFsm("qw", TFsm::TOptions().SetCaseInsensitive(true))).Match("Qw").Final()); 
+        UNIT_ASSERT(!TMatcher(TFsm("qw", TFsm::TOptions().SetCaseInsensitive(false))).Match("Qw").Final()); 
+    } 
 
     Y_UNIT_TEST(UnicodeCase) {
         UNIT_ASSERT(TMatcher(TFsm("\\x{61}\\x{62}", TFsm::TOptions().SetCaseInsensitive(true))).Match("Ab").Final());
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
 
     Y_UNIT_TEST(Capture3) {
         TCapturingFsm fsm("http://vk(ontakte[.]ru|[.]com)/id(\\d+)([^0-9]|$)",
-                          TFsm::TOptions().SetCapture(2));
+                          TFsm::TOptions().SetCapture(2)); 
 
         TSearcher searcher(fsm);
         searcher.Search("http://vkontakte.ru/id100500");
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
 
     Y_UNIT_TEST(Capture4) {
         TCapturingFsm fsm("Здравствуйте, ((\\s|\\w|[()]|-)+)!",
-                          TFsm::TOptions().SetCharset(CODES_UTF8));
+                          TFsm::TOptions().SetCharset(CODES_UTF8)); 
 
         TSearcher searcher(fsm);
         searcher.Search("   Здравствуйте, Уважаемый (-ая)!   ");
@@ -315,4 +315,4 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?:(?P<field1>)(?P<field2>))"), "");
         UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?:(?:fake))"), "((fake))");
     }
-}
+} 

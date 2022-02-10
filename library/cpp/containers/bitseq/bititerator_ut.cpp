@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(TBitIteratorTest) {
     }
 
     template <typename TWord>
-    void AssertPeekRead(TBitIterator<TWord> & iter, ui8 count, TWord expected) {
+    void AssertPeekRead(TBitIterator<TWord> & iter, ui8 count, TWord expected) { 
         auto peek = iter.Peek(count);
         auto read = iter.Read(count);
         UNIT_ASSERT_EQUAL(peek, read);

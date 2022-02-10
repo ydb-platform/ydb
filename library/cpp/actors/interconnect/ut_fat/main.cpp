@@ -61,13 +61,13 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
             const NInterconnectTest::TEvTestResponse& record = ev->Get()->Record;
             Y_VERIFY(record.HasConfirmedSequenceNumber());
             if (!(SendFlags & IEventHandle::FlagGenerateUnsureUndelivered)) {
-                while (record.GetConfirmedSequenceNumber() != InFly.front()) {
+                while (record.GetConfirmedSequenceNumber() != InFly.front()) { 
                     InFly.pop_front();
                     --InFlySize;
                 }
             }
             Y_VERIFY(record.GetConfirmedSequenceNumber() == InFly.front(), "got# %" PRIu64 " expected# %" PRIu64,
-                     record.GetConfirmedSequenceNumber(), InFly.front());
+                     record.GetConfirmedSequenceNumber(), InFly.front()); 
             InFly.pop_front();
             --InFlySize;
             SendMessagesIfPossible(ctx);

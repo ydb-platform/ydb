@@ -142,10 +142,10 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
 
     Y_UNIT_TEST(TestEqualityOperator) {
         static constexpr size_t size = 5;
-        int a[size]{1, 2, 3, 4, 5};
-        int b[size]{5, 4, 3, 2, 1};
-        int c[size - 1]{5, 4, 3, 2};
-        float d[size]{1.f, 2.f, 3.f, 4.f, 5.f};
+        int a[size]{1, 2, 3, 4, 5}; 
+        int b[size]{5, 4, 3, 2, 1}; 
+        int c[size - 1]{5, 4, 3, 2}; 
+        float d[size]{1.f, 2.f, 3.f, 4.f, 5.f}; 
 
         TArrayRef<int> aRef(a);
         TConstArrayRef<int> aConstRef(a, size);
@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
 
         //FIXME: size checks are implemented via Y_ASSERT, hence there is no way to test them
     }
-
+ 
     Y_UNIT_TEST(SubRegion) {
         TVector<char> x;
         for (size_t i = 0; i < 42; ++i) {
@@ -238,7 +238,7 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
         UNIT_ASSERT_VALUES_EQUAL(bytesRef.size(), sizeof(int16_t) * constRef.size());
         UNIT_ASSERT_EQUAL(
             bytesRef,
-            MakeArrayRef(std::vector<char>{0x01, 0x00, 0x02, 0x00, 0x03, 0x00}));
+            MakeArrayRef(std::vector<char>{0x01, 0x00, 0x02, 0x00, 0x03, 0x00})); 
 
         //should not compile
         //as_writable_bytes(constRef);
@@ -252,7 +252,7 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
         UNIT_ASSERT_VALUES_EQUAL(writableBytesRef.size(), sizeof(uint32_t));
         UNIT_ASSERT_EQUAL(
             writableBytesRef,
-            MakeArrayRef(std::vector<char>{0x0e, 0x0d, 0x00, 0x0c}));
+            MakeArrayRef(std::vector<char>{0x0e, 0x0d, 0x00, 0x0c})); 
 
         uint32_t newVal = 0xde'ad'be'ef;
         std::memcpy(writableBytesRef.data(), &newVal, writableBytesRef.size());
@@ -274,15 +274,15 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
         UNIT_ASSERT_VALUES_EQUAL(23, constRefFromNonConst[1]);
     }
 
-    static void Do(const TArrayRef<int> a) {
-        a[0] = 8;
-    }
-
+    static void Do(const TArrayRef<int> a) { 
+        a[0] = 8; 
+    } 
+ 
     Y_UNIT_TEST(TestConst) {
-        int a[] = {1, 2};
-        Do(a);
-        UNIT_ASSERT_VALUES_EQUAL(a[0], 8);
-    }
+        int a[] = {1, 2}; 
+        Do(a); 
+        UNIT_ASSERT_VALUES_EQUAL(a[0], 8); 
+    } 
 
     Y_UNIT_TEST(TestConstexpr) {
         static constexpr const int a[] = {1, 2, -3, -4};
@@ -290,11 +290,11 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
         static_assert(r0.size() == 1, "r0.size() is not equal 1");
         static_assert(r0.data()[0] == 1, "r0.data()[0] is not equal to 1");
 
-        static constexpr const TArrayRef<const int> r1{a};
+        static constexpr const TArrayRef<const int> r1{a}; 
         static_assert(r1.size() == 4, "r1.size() is not equal to 4");
         static_assert(r1.data()[3] == -4, "r1.data()[3] is not equal to -4");
 
-        static constexpr const TArrayRef<const int> r2 = r1;
+        static constexpr const TArrayRef<const int> r2 = r1; 
         static_assert(r2.size() == 4, "r2.size() is not equal to 4");
         static_assert(r2.data()[2] == -3, "r2.data()[2] is not equal to -3");
     }

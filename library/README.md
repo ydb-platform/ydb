@@ -12,7 +12,7 @@ library
     If you are not sure if you should put some library in `library/`, please contact `<language>` committee or arcadia-wg@yandex-team.ru.
 
 4. The library **SHOULD** be portable.
-
+ 
     Please contact `<language>` committee if you cannot provide usage on all platforms: `linux`, `darwin`, `windows`.
 
 5. The library **MUST** depend only on a limited list of external components
@@ -32,7 +32,7 @@ library
     * etc.
 
 11. All OSS (OpenSource Software) ready code **MUST** be accompanied by macro [LICENCE](https://docs.yandex-team.ru/ya-make/manual/common/macros#licence(license...)) in `ya.make`.
-
+ 
 12. All language specific aspects are defined by `<language>` committee: see `library/<language>/README.md`.
 
 13. The library **MUST** satisfy `<language>` style-guide.

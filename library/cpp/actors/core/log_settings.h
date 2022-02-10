@@ -41,8 +41,8 @@ namespace NActors {
         static const int InvalidComponent = -1;
 
         // Functions converts EComponent id to string
-        using EComponentToStringFunc = std::function<const TString&(EComponent)>;
-        ;
+        using EComponentToStringFunc = std::function<const TString&(EComponent)>; 
+        ; 
 
         // Log settings
         struct TComponentSettings {
@@ -109,7 +109,7 @@ namespace NActors {
 
             void Append(EComponent minVal, EComponent maxVal, EComponentToStringFunc func);
 
-            template <typename T>
+            template <typename T> 
             void Append(T minVal, T maxVal, const TString& (*func)(T)) {
                 Append(
                     static_cast<EComponent>(minVal),
@@ -171,6 +171,6 @@ namespace NActors {
                 EPriority priority, EComponent component, TString& explanation);
         };
 
-    }
+    } 
 
-}
+} 

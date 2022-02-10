@@ -1,17 +1,17 @@
 #include "accessors.h"
 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <util/generic/buffer.h>
 #include <util/generic/vector.h>
 
 #include <array>
 
 class TAccessorsTest: public TTestBase {
-    UNIT_TEST_SUITE(TAccessorsTest);
-    UNIT_TEST(TestAccessors);
-    UNIT_TEST_SUITE_END();
-
+    UNIT_TEST_SUITE(TAccessorsTest); 
+    UNIT_TEST(TestAccessors); 
+    UNIT_TEST_SUITE_END(); 
+ 
 private:
     template <typename T>
     void TestRead(const T& t, const char* comm) {
@@ -50,7 +50,7 @@ private:
         TestRead('a', "char");
         TestRead(1, "int");
 
-        int t[4] = {0, 1, 2, 3};
+        int t[4] = {0, 1, 2, 3}; 
 
         TestRead(t, "int[4]");
 

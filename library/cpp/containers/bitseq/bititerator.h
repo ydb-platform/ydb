@@ -3,7 +3,7 @@
 #include "traits.h"
 
 #include <library/cpp/pop_count/popcount.h>
-
+ 
 template <typename T>
 class TBitIterator {
 public:
@@ -15,8 +15,8 @@ public:
         : Current(0)
         , Mask(0)
         , Data(data)
-    {
-    }
+    { 
+    } 
 
     /// Get the word next to the one we are currenlty iterating over.
     const TWord* NextWord() const {
@@ -49,7 +49,7 @@ public:
         if (!Mask)
             return *Data & TTraits::ElemMask(count);
 
-        auto usedBits = (size_t)PopCount(Mask - 1);
+        auto usedBits = (size_t)PopCount(Mask - 1); 
         TWord result = Current >> usedBits;
         auto leftInCurrent = TTraits::NumBits - usedBits;
         if (count <= leftInCurrent)
@@ -72,7 +72,7 @@ public:
             return Current & TTraits::ElemMask(count);
         }
 
-        auto usedBits = (size_t)PopCount(Mask - 1);
+        auto usedBits = (size_t)PopCount(Mask - 1); 
         TWord result = Current >> usedBits;
         auto leftInCurrent = TTraits::NumBits - usedBits;
         if (count < leftInCurrent) {
@@ -97,7 +97,7 @@ public:
         if (!count)
             return;
 
-        int leftInCurrent = (size_t)PopCount(~(Mask - 1));
+        int leftInCurrent = (size_t)PopCount(~(Mask - 1)); 
         if (count < leftInCurrent) {
             Mask <<= count;
             return;

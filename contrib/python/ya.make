@@ -811,7 +811,7 @@ RECURSE(
     pydot
     pydub
     pyelftools
-    pyelftools/readelf
+    pyelftools/readelf 
     pyfakefs
     pyflakes
     pyfst
@@ -970,7 +970,7 @@ RECURSE(
     scales
     scancode-toolkit
     scandir
-    schedule
+    schedule 
     schema
     schematics
     schwifty

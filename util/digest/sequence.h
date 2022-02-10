@@ -11,7 +11,7 @@ private:
     using TBase = std::conditional_t<
         !std::is_void<ElementHash>::value,
         ElementHash,
-        THash<ElementType>>;
+        THash<ElementType>>; 
 
 public:
     template <typename Range>
@@ -33,7 +33,7 @@ private:
     using TBase = std::conditional_t<
         !std::is_void<RegionHash>::value,
         RegionHash,
-        TRangeHash<ElementType>>;
+        TRangeHash<ElementType>>; 
 
 public:
     template <typename ContainerType>

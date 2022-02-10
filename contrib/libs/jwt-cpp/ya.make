@@ -6,7 +6,7 @@ OWNER(
     pbludov
     g:cpp-contrib
 )
-
+ 
 VERSION(0.2.0)
 
 ORIGINAL_SOURCE(https://github.com/Thalhammer/jwt-cpp/archive/2b3ddae668f5b0dac92f57207312dc50b5bdb2f8.tar.gz)

@@ -17,7 +17,7 @@ struct TPodStruct {
     }
 };
 /// And its serialization
-template <>
+template <> 
 struct TSaveLoadVectorNonPodElement<TPodStruct> {
     typedef TPodStruct TItem;
     static inline void Save(IOutputStream* out, const TItem& item) {
@@ -32,14 +32,14 @@ struct TSaveLoadVectorNonPodElement<TPodStruct> {
     }
 };
 
-class TChunkedHelpersTest: public TTestBase {
+class TChunkedHelpersTest: public TTestBase { 
     UNIT_TEST_SUITE(TChunkedHelpersTest);
-    UNIT_TEST(TestHash)
-    UNIT_TEST(TestGeneralVector)
-    UNIT_TEST(TestStrings);
-    UNIT_TEST(TestNamedChunkedData);
+    UNIT_TEST(TestHash) 
+    UNIT_TEST(TestGeneralVector) 
+    UNIT_TEST(TestStrings); 
+    UNIT_TEST(TestNamedChunkedData); 
     UNIT_TEST_SUITE_END();
-
+ 
 public:
     void TestHash() {
         {
@@ -54,7 +54,7 @@ public:
                 TBlob temp = TBlob::FromStreamSingleThreaded(stream);
                 TPlainHash<ui64, ui16> reader(temp);
                 ui16 value = 0;
-                UNIT_ASSERT(reader.Find(5, &value));
+                UNIT_ASSERT(reader.Find(5, &value)); 
                 UNIT_ASSERT_EQUAL(7, value);
                 UNIT_ASSERT(!reader.Find(6, &value));
             }
@@ -99,7 +99,7 @@ public:
                     UNIT_ASSERT_EQUAL(value, i);
                     UNIT_ASSERT_EQUAL(reader.At(i), i);
                 }
-                UNIT_ASSERT_EQUAL(reader.RealSize(), sizeof(ui64) + N * sizeof(ui32));
+                UNIT_ASSERT_EQUAL(reader.RealSize(), sizeof(ui64) + N * sizeof(ui32)); 
             }
         }
         { /// TString
@@ -121,7 +121,7 @@ public:
                     UNIT_ASSERT_EQUAL(value, ToString(i));
                     UNIT_ASSERT_EQUAL(reader.Get(i), ToString(i));
                 }
-                UNIT_ASSERT_EQUAL(reader.RealSize(), sizeof(ui64) * (N + 2) + N * 2);
+                UNIT_ASSERT_EQUAL(reader.RealSize(), sizeof(ui64) * (N + 2) + N * 2); 
             }
         }
         { /// some other struct
@@ -146,7 +146,7 @@ public:
                 reader.Get(1, value);
                 UNIT_ASSERT(value.x == 3 && value.y == 4.0);
 
-                UNIT_ASSERT_EQUAL(reader.RealSize(), sizeof(ui64) * (N + 2) + N * sizeof(TItem));
+                UNIT_ASSERT_EQUAL(reader.RealSize(), sizeof(ui64) * (N + 2) + N * sizeof(TItem)); 
             }
         }
         { /// pointer
@@ -172,7 +172,7 @@ public:
                     UNIT_ASSERT_EQUAL(value, a + i);
                     UNIT_ASSERT_EQUAL(reader.At(i), a + i);
                 }
-                UNIT_ASSERT_EQUAL(reader.RealSize(), sizeof(ui64) + N * sizeof(int*));
+                UNIT_ASSERT_EQUAL(reader.RealSize(), sizeof(ui64) + N * sizeof(int*)); 
             }
         }
         { /// std::pair<int, int>
@@ -194,7 +194,7 @@ public:
                     reader.Get(i, value);
                     UNIT_ASSERT_EQUAL(value, TItem(i, i));
                 }
-                UNIT_ASSERT_EQUAL(reader.RealSize(), sizeof(ui64) + N * sizeof(TItem));
+                UNIT_ASSERT_EQUAL(reader.RealSize(), sizeof(ui64) + N * sizeof(TItem)); 
             }
         }
     }
@@ -262,7 +262,7 @@ public:
             UNIT_ASSERT_STRINGS_EQUAL(reader.GetBlockName(1), "");
             UNIT_ASSERT_STRINGS_EQUAL(reader.GetBlockName(2), "omega");
 
-            UNIT_ASSERT_EQUAL(reader.GetBlockLenByName("alpha"), 6); // padding not included
+            UNIT_ASSERT_EQUAL(reader.GetBlockLenByName("alpha"), 6); // padding not included 
             UNIT_ASSERT_EQUAL(reader.GetBlockLenByName("omega"), 17);
 
             UNIT_ASSERT(memcmp(reader.GetBlockByName("alpha"), "123456", 6) == 0);
@@ -277,8 +277,8 @@ UNIT_TEST_SUITE_REGISTRATION(TChunkedHelpersTest);
 class TChunkedDataTest: public TTestBase {
 private:
     UNIT_TEST_SUITE(TChunkedDataTest);
-    UNIT_TEST(Test)
-    UNIT_TEST(TestEmpty)
+    UNIT_TEST(Test) 
+    UNIT_TEST(TestEmpty) 
     UNIT_TEST_SUITE_END();
 
     void Test() {

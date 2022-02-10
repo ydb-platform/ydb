@@ -4,17 +4,17 @@
 #include <util/generic/xrange.h>
 #include <util/stream/output.h>
 
-#define BENCHMARK_POOL_ALLOC(chunkSize, allocSize, allocAlign)                               \
+#define BENCHMARK_POOL_ALLOC(chunkSize, allocSize, allocAlign)                               \ 
     Y_CPU_BENCHMARK(MemroyPool_chunk##chunkSize##_alloc##allocSize##_align##allocAlign, p) { \
-        TMemoryPool pool(chunkSize);                                                         \
-        for (auto i : xrange<size_t>(0, p.Iterations())) {                                   \
-            (void)i;                                                                         \
-            Y_DO_NOT_OPTIMIZE_AWAY(pool.Allocate(allocSize, allocAlign));                    \
-        }                                                                                    \
-        /*                                                                                   \
-                Cerr << "Allocated: " << pool.MemoryAllocated() << Endl;                     \
-                Cerr << "Waste:     " << pool.MemoryWaste() << Endl;                         \
-        */                                                                                   \
+        TMemoryPool pool(chunkSize);                                                         \ 
+        for (auto i : xrange<size_t>(0, p.Iterations())) {                                   \ 
+            (void)i;                                                                         \ 
+            Y_DO_NOT_OPTIMIZE_AWAY(pool.Allocate(allocSize, allocAlign));                    \ 
+        }                                                                                    \ 
+        /*                                                                                   \ 
+                Cerr << "Allocated: " << pool.MemoryAllocated() << Endl;                     \ 
+                Cerr << "Waste:     " << pool.MemoryWaste() << Endl;                         \ 
+        */                                                                                   \ 
     }
 
 BENCHMARK_POOL_ALLOC(4096, 1, 1)

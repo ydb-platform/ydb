@@ -3,28 +3,28 @@
 #include "fwd.h"
 #include "reserve.h"
 
-#include <util/memory/alloc.h>
-
-#include <vector>
+#include <util/memory/alloc.h> 
+ 
+#include <vector> 
 #include <initializer_list>
-
+ 
 template <class T, class A>
 class TVector: public std::vector<T, TReboundAllocator<A, T>> {
-public:
+public: 
     using TBase = std::vector<T, TReboundAllocator<A, T>>;
     using TSelf = TVector<T, A>;
     using size_type = typename TBase::size_type;
-
+ 
     inline TVector()
-        : TBase()
-    {
-    }
-
+        : TBase() 
+    { 
+    } 
+ 
     inline TVector(const typename TBase::allocator_type& a)
-        : TBase(a)
-    {
-    }
-
+        : TBase(a) 
+    { 
+    } 
+ 
     inline explicit TVector(::NDetail::TReserveTag rt)
         : TBase()
     {
@@ -38,20 +38,20 @@ public:
     }
 
     inline explicit TVector(size_type count)
-        : TBase(count)
-    {
-    }
-
+        : TBase(count) 
+    { 
+    } 
+ 
     inline explicit TVector(size_type count, const typename TBase::allocator_type& a)
         : TBase(count, a)
     {
     }
 
     inline TVector(size_type count, const T& val)
-        : TBase(count, val)
-    {
-    }
-
+        : TBase(count, val) 
+    { 
+    } 
+ 
     inline TVector(size_type count, const T& val, const typename TBase::allocator_type& a)
         : TBase(count, val, a)
     {
@@ -69,20 +69,20 @@ public:
 
     inline TVector(const TSelf& src)
         : TBase(src)
-    {
-    }
+    { 
+    } 
 
     inline TVector(TSelf&& src) noexcept
         : TBase(std::forward<TSelf>(src))
     {
     }
 
-    template <class TIter>
+    template <class TIter> 
     inline TVector(TIter first, TIter last)
-        : TBase(first, last)
-    {
-    }
-
+        : TBase(first, last) 
+    { 
+    } 
+ 
     inline TSelf& operator=(const TSelf& src) {
         TBase::operator=(src);
         return *this;
@@ -98,17 +98,17 @@ public:
         return *this;
     }
 
-    inline explicit operator bool() const noexcept {
+    inline explicit operator bool() const noexcept { 
         return !this->empty();
     }
 
-    Y_PURE_FUNCTION inline bool empty() const noexcept {
+    Y_PURE_FUNCTION inline bool empty() const noexcept { 
         return TBase::empty();
     }
 
     inline yssize_t ysize() const noexcept {
         return (yssize_t)TBase::size();
-    }
+    } 
 
 #ifdef _YNDX_LIBCXX_ENABLE_VECTOR_POD_RESIZE_UNINITIALIZED
     void yresize(size_type newSize) {

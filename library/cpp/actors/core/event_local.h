@@ -47,7 +47,7 @@ namespace NActors {
     };
 
     template <typename TEv, ui32 TEventType>
-    class TEventSimple: public TEventBase<TEv, TEventType> {
+    class TEventSimple: public TEventBase<TEv, TEventType> { 
     public:
         TString ToStringHeader() const override {
             static TString header(TypeName<TEv>());

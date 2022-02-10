@@ -1,19 +1,19 @@
-#include "stream.h"
+#include "stream.h" 
 #include "chunk.h"
-
+ 
 #include <library/cpp/http/server/http_ex.h>
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
-
-#include <util/string/printf.h>
-#include <util/network/socket.h>
+ 
+#include <util/string/printf.h> 
+#include <util/network/socket.h> 
 #include <util/stream/file.h>
 #include <util/stream/output.h>
 #include <util/stream/tee.h>
-#include <util/stream/zlib.h>
+#include <util/stream/zlib.h> 
 #include <util/stream/null.h>
-
+ 
 Y_UNIT_TEST_SUITE(THttpStreamTest) {
     class TTestHttpServer: public THttpServer::ICallBack {
         class TRequest: public THttpClientRequestEx {
@@ -34,12 +34,12 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
                 // "lo" is for "local"
                 if (RD.ServerName() == "yandex.lo") {
                     // do redirect
-                    Output() << "HTTP/1.1 301 Moved permanently\r\n"
-                                "Location: http://www.yandex.lo\r\n"
-                                "\r\n";
+                    Output() << "HTTP/1.1 301 Moved permanently\r\n" 
+                                "Location: http://www.yandex.lo\r\n" 
+                                "\r\n"; 
                 } else if (RD.ServerName() == "www.yandex.lo") {
-                    Output() << "HTTP/1.1 200 Ok\r\n"
-                                "\r\n";
+                    Output() << "HTTP/1.1 200 Ok\r\n" 
+                                "\r\n"; 
                 } else {
                     Output() << "HTTP/1.1 200 Ok\r\n\r\n";
                     if (Buf.Size()) {
@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
 
     Y_UNIT_TEST(TestCodings1) {
         UNIT_ASSERT(SupportedCodings().size() > 0);
-    }
+    } 
 
     Y_UNIT_TEST(TestHttpInput) {
         TString res = "I'm a teapot";
@@ -93,41 +93,41 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         UNIT_ASSERT(server.Start());
 
         TNetworkAddress addr("localhost", port);
-        TSocket s(addr);
-
-        //TDebugOutput dbg;
-        TNullOutput dbg;
-
-        {
-            TSocketOutput so(s);
-            TTeeOutput out(&so, &dbg);
-            THttpOutput output(&out);
-
-            output.EnableKeepAlive(true);
-            output.EnableCompression(true);
-
+        TSocket s(addr); 
+ 
+        //TDebugOutput dbg; 
+        TNullOutput dbg; 
+ 
+        { 
+            TSocketOutput so(s); 
+            TTeeOutput out(&so, &dbg); 
+            THttpOutput output(&out); 
+ 
+            output.EnableKeepAlive(true); 
+            output.EnableCompression(true); 
+ 
             TString r;
-            r += "GET / HTTP/1.1";
-            r += "\r\n";
+            r += "GET / HTTP/1.1"; 
+            r += "\r\n"; 
             r += "Host: yandex.lo";
-            r += "\r\n";
-            r += "\r\n";
-
+            r += "\r\n"; 
+            r += "\r\n"; 
+ 
             output.Write(r.data(), r.size());
-            output.Finish();
-        }
+            output.Finish(); 
+        } 
 
-        {
-            TSocketInput si(s);
-            THttpInput input(&si);
-            unsigned httpCode = ParseHttpRetCode(input.FirstLine());
-            UNIT_ASSERT_VALUES_EQUAL(httpCode / 10, 30u);
-
-            TransferData(&input, &dbg);
-        }
+        { 
+            TSocketInput si(s); 
+            THttpInput input(&si); 
+            unsigned httpCode = ParseHttpRetCode(input.FirstLine()); 
+            UNIT_ASSERT_VALUES_EQUAL(httpCode / 10, 30u); 
+ 
+            TransferData(&input, &dbg); 
+        } 
         server.Stop();
     }
-
+ 
     Y_UNIT_TEST(TestHttpInputDelete) {
         TString res = "I'm a teapot";
         TPortManager pm;
@@ -175,9 +175,9 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
     }
 
     Y_UNIT_TEST(TestParseHttpRetCode) {
-        UNIT_ASSERT_VALUES_EQUAL(ParseHttpRetCode("HTTP/1.1 301"), 301u);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(ParseHttpRetCode("HTTP/1.1 301"), 301u); 
+    } 
+ 
     Y_UNIT_TEST(TestKeepAlive) {
         {
             TString s = "GET / HTTP/1.0\r\n\r\n";
@@ -248,19 +248,19 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
 
         TNetworkAddress addr("localhost", port);
 
-        TSocket s(addr);
-        TNullOutput dbg;
-
+        TSocket s(addr); 
+        TNullOutput dbg; 
+ 
         SendMinimalHttpRequest(s, "www.yandex.lo", "/");
-
+ 
         TSocketInput si(s);
-        THttpInput input(&si);
+        THttpInput input(&si); 
         unsigned httpCode = ParseHttpRetCode(input.FirstLine());
-        UNIT_ASSERT_VALUES_EQUAL(httpCode, 200u);
-
-        TransferData(&input, &dbg);
+        UNIT_ASSERT_VALUES_EQUAL(httpCode, 200u); 
+ 
+        TransferData(&input, &dbg); 
         server.Stop();
-    }
+    } 
 
     Y_UNIT_TEST(TestResponseWithBlanks) {
         TString res = "qqqqqq\r\n\r\nsdasdsad\r\n";
@@ -276,7 +276,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
 
         TSocket s(addr);
 
-        SendMinimalHttpRequest(s, "www.yandex.ru", "/");
+        SendMinimalHttpRequest(s, "www.yandex.ru", "/"); 
 
         TSocketInput si(s);
         THttpInput input(&si);
@@ -289,70 +289,70 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
 
     Y_UNIT_TEST(TestOutputFlush) {
         TString str;
-        TStringOutput strOut(str);
-        TBufferedOutput bufOut(&strOut, 8192);
-        THttpOutput httpOut(&bufOut);
+        TStringOutput strOut(str); 
+        TBufferedOutput bufOut(&strOut, 8192); 
+        THttpOutput httpOut(&bufOut); 
 
-        httpOut.EnableKeepAlive(true);
-        httpOut.EnableCompression(true);
-
-        const char* header = "GET / HTTP/1.1\r\nHost: yandex.ru\r\n\r\n";
-        httpOut << header;
+        httpOut.EnableKeepAlive(true); 
+        httpOut.EnableCompression(true); 
+ 
+        const char* header = "GET / HTTP/1.1\r\nHost: yandex.ru\r\n\r\n"; 
+        httpOut << header; 
 
         unsigned curLen = str.size();
-        const char* body = "<html>Hello</html>";
-        httpOut << body;
+        const char* body = "<html>Hello</html>"; 
+        httpOut << body; 
         UNIT_ASSERT_VALUES_EQUAL(curLen, str.size());
-        httpOut.Flush();
+        httpOut.Flush(); 
         UNIT_ASSERT_VALUES_EQUAL(curLen + strlen(body), str.size());
-    }
+    } 
 
     Y_UNIT_TEST(TestOutputPostFlush) {
         TString str;
         TString checkStr;
-        TStringOutput strOut(str);
-        TStringOutput checkOut(checkStr);
-        TBufferedOutput bufOut(&strOut, 8192);
-        TTeeOutput teeOut(&bufOut, &checkOut);
-        THttpOutput httpOut(&teeOut);
+        TStringOutput strOut(str); 
+        TStringOutput checkOut(checkStr); 
+        TBufferedOutput bufOut(&strOut, 8192); 
+        TTeeOutput teeOut(&bufOut, &checkOut); 
+        THttpOutput httpOut(&teeOut); 
 
-        httpOut.EnableKeepAlive(true);
-        httpOut.EnableCompression(true);
+        httpOut.EnableKeepAlive(true); 
+        httpOut.EnableCompression(true); 
 
-        const char* header = "POST / HTTP/1.1\r\nHost: yandex.ru\r\n\r\n";
-        httpOut << header;
+        const char* header = "POST / HTTP/1.1\r\nHost: yandex.ru\r\n\r\n"; 
+        httpOut << header; 
 
         UNIT_ASSERT_VALUES_EQUAL(str.size(), 0u);
 
-        const char* body = "<html>Hello</html>";
-        httpOut << body;
+        const char* body = "<html>Hello</html>"; 
+        httpOut << body; 
         UNIT_ASSERT_VALUES_EQUAL(str.size(), 0u);
 
-        httpOut.Flush();
+        httpOut.Flush(); 
         UNIT_ASSERT_VALUES_EQUAL(checkStr.size(), str.size());
-    }
+    } 
 
     TString MakeHttpOutputBody(const char* body, bool encodingEnabled) {
         TString str;
-        TStringOutput strOut(str);
-        {
-            TBufferedOutput bufOut(&strOut, 8192);
-            THttpOutput httpOut(&bufOut);
+        TStringOutput strOut(str); 
+        { 
+            TBufferedOutput bufOut(&strOut, 8192); 
+            THttpOutput httpOut(&bufOut); 
 
-            httpOut.EnableKeepAlive(true);
-            httpOut.EnableCompression(true);
+            httpOut.EnableKeepAlive(true); 
+            httpOut.EnableCompression(true); 
             httpOut.EnableBodyEncoding(encodingEnabled);
 
-            httpOut << "POST / HTTP/1.1\r\n";
-            httpOut << "Host: yandex.ru\r\n";
-            httpOut << "Content-Encoding: gzip\r\n";
-            httpOut << "\r\n";
+            httpOut << "POST / HTTP/1.1\r\n"; 
+            httpOut << "Host: yandex.ru\r\n"; 
+            httpOut << "Content-Encoding: gzip\r\n"; 
+            httpOut << "\r\n"; 
 
             UNIT_ASSERT_VALUES_EQUAL(str.size(), 0u);
-            httpOut << body;
-        }
-        const char* bodyDelimiter = "\r\n\r\n";
-        size_t bodyPos = str.find(bodyDelimiter);
+            httpOut << body; 
+        } 
+        const char* bodyDelimiter = "\r\n\r\n"; 
+        size_t bodyPos = str.find(bodyDelimiter); 
         UNIT_ASSERT(bodyPos != TString::npos);
         return str.substr(bodyPos + strlen(bodyDelimiter));
     };
@@ -370,54 +370,54 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         const char* body = "<html>Hello</html>";
         UNIT_ASSERT(MakeHttpOutputBody(body, false) == body);
         UNIT_ASSERT(MakeHttpOutputBody(body, true) == SimulateBodyEncoding(body));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestOutputFinish) {
         TString str;
-        TStringOutput strOut(str);
-        TBufferedOutput bufOut(&strOut, 8192);
+        TStringOutput strOut(str); 
+        TBufferedOutput bufOut(&strOut, 8192); 
         THttpOutput httpOut(&bufOut);
 
         httpOut.EnableKeepAlive(true);
         httpOut.EnableCompression(true);
 
-        const char* header = "GET / HTTP/1.1\r\nHost: yandex.ru\r\n\r\n";
-        httpOut << header;
+        const char* header = "GET / HTTP/1.1\r\nHost: yandex.ru\r\n\r\n"; 
+        httpOut << header; 
 
         unsigned curLen = str.size();
-        const char* body = "<html>Hello</html>";
+        const char* body = "<html>Hello</html>"; 
         httpOut << body;
         UNIT_ASSERT_VALUES_EQUAL(curLen, str.size());
-        httpOut.Finish();
+        httpOut.Finish(); 
         UNIT_ASSERT_VALUES_EQUAL(curLen + strlen(body), str.size());
     }
 
     Y_UNIT_TEST(TestMultilineHeaders) {
-        const char* headerLine0 = "HTTP/1.1 200 OK";
-        const char* headerLine1 = "Content-Language: en";
-        const char* headerLine2 = "Vary: Accept-Encoding, ";
-        const char* headerLine3 = "\tAccept-Language";
-        const char* headerLine4 = "Content-Length: 18";
+        const char* headerLine0 = "HTTP/1.1 200 OK"; 
+        const char* headerLine1 = "Content-Language: en"; 
+        const char* headerLine2 = "Vary: Accept-Encoding, "; 
+        const char* headerLine3 = "\tAccept-Language"; 
+        const char* headerLine4 = "Content-Length: 18"; 
 
         TString endLine("\r\n");
         TString r;
-        r += headerLine0 + endLine;
-        r += headerLine1 + endLine;
-        r += headerLine2 + endLine;
-        r += headerLine3 + endLine;
-        r += headerLine4 + endLine + endLine;
-        r += "<html>Hello</html>";
-        TStringInput stringInput(r);
-        THttpInput input(&stringInput);
+        r += headerLine0 + endLine; 
+        r += headerLine1 + endLine; 
+        r += headerLine2 + endLine; 
+        r += headerLine3 + endLine; 
+        r += headerLine4 + endLine + endLine; 
+        r += "<html>Hello</html>"; 
+        TStringInput stringInput(r); 
+        THttpInput input(&stringInput); 
 
-        const THttpHeaders& httpHeaders = input.Headers();
-        UNIT_ASSERT_VALUES_EQUAL(httpHeaders.Count(), 3u);
+        const THttpHeaders& httpHeaders = input.Headers(); 
+        UNIT_ASSERT_VALUES_EQUAL(httpHeaders.Count(), 3u); 
 
-        THttpHeaders::TConstIterator it = httpHeaders.Begin();
+        THttpHeaders::TConstIterator it = httpHeaders.Begin(); 
         UNIT_ASSERT_VALUES_EQUAL(it->ToString(), TString(headerLine1));
         UNIT_ASSERT_VALUES_EQUAL((++it)->ToString(), TString::Join(headerLine2, headerLine3));
         UNIT_ASSERT_VALUES_EQUAL((++it)->ToString(), TString(headerLine4));
-    }
+    } 
 
     Y_UNIT_TEST(ContentLengthRemoval) {
         TMemoryInput request("GET / HTTP/1.1\r\nAccept-Encoding: gzip\r\n\r\n");
@@ -430,8 +430,8 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         httpOut.EnableCompression(true);
         httpOut << "HTTP/1.1 200 OK\r\n";
         char answer[] = "Mary had a little lamb.";
-        httpOut << "Content-Length: " << strlen(answer) << "\r\n"
-                                                           "\r\n";
+        httpOut << "Content-Length: " << strlen(answer) << "\r\n" 
+                                                           "\r\n"; 
         httpOut << answer;
         httpOut.Finish();
 
@@ -541,9 +541,9 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         TStringStream request;
         {
             THttpOutput httpOutput(&request);
-            httpOutput << "POST / HTTP/1.1\r\n"
-                          "Host: yandex.ru\r\n"
-                          "\r\n";
+            httpOutput << "POST / HTTP/1.1\r\n" 
+                          "Host: yandex.ru\r\n" 
+                          "\r\n"; 
             httpOutput << "GGLOL";
         }
         {
@@ -568,9 +568,9 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
     Y_UNIT_TEST(TestInputHasContent) {
         {
             TStringStream request;
-            request << "POST / HTTP/1.1\r\n"
-                       "Host: yandex.ru\r\n"
-                       "\r\n";
+            request << "POST / HTTP/1.1\r\n" 
+                       "Host: yandex.ru\r\n" 
+                       "\r\n"; 
             request << "HTTPDATA";
 
             TStringInput input(request.Str());
@@ -582,10 +582,10 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
 
         {
             TStringStream request;
-            request << "POST / HTTP/1.1\r\n"
-                       "Host: yandex.ru\r\n"
-                       "Content-Length: 8"
-                       "\r\n\r\n";
+            request << "POST / HTTP/1.1\r\n" 
+                       "Host: yandex.ru\r\n" 
+                       "Content-Length: 8" 
+                       "\r\n\r\n"; 
             request << "HTTPDATA";
 
             TStringInput input(request.Str());
@@ -597,10 +597,10 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
 
         {
             TStringStream request;
-            request << "POST / HTTP/1.1\r\n"
-                       "Host: yandex.ru\r\n"
-                       "Transfer-Encoding: chunked"
-                       "\r\n\r\n";
+            request << "POST / HTTP/1.1\r\n" 
+                       "Host: yandex.ru\r\n" 
+                       "Transfer-Encoding: chunked" 
+                       "\r\n\r\n"; 
             request << "8\r\nHTTPDATA\r\n0\r\n";
 
             TStringInput input(request.Str());
@@ -612,10 +612,10 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
     }
 
     Y_UNIT_TEST(TestHttpInputHeadRequest) {
-        class THeadOnlyInput: public IInputStream {
+        class THeadOnlyInput: public IInputStream { 
         public:
             THeadOnlyInput() = default;
-
+ 
         private:
             size_t DoRead(void* buf, size_t len) override {
                 if (Eof_) {
@@ -635,8 +635,8 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
 
         private:
             TString Data_{TStringBuf("HEAD / HTTP/1.1\r\nHost: yandex.ru\r\n\r\n")};
-            size_t Pos_{0};
-            bool Eof_{false};
+            size_t Pos_{0}; 
+            bool Eof_{false}; 
         };
         THeadOnlyInput input;
         THttpInput httpInput(&input);
@@ -647,10 +647,10 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
 
     Y_UNIT_TEST(TestHttpOutputResponseToHeadRequestNoZeroChunk) {
         TStringStream request;
-        request << "HEAD / HTTP/1.1\r\n"
-                   "Host: yandex.ru\r\n"
-                   "Connection: Keep-Alive\r\n"
-                   "\r\n";
+        request << "HEAD / HTTP/1.1\r\n" 
+                   "Host: yandex.ru\r\n" 
+                   "Connection: Keep-Alive\r\n" 
+                   "\r\n"; 
 
         TStringInput input(request.Str());
         THttpInput httpInput(&input);

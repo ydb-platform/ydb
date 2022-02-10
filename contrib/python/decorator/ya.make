@@ -1,7 +1,7 @@
 PY23_LIBRARY()
 
-LICENSE(BSD-3-Clause)
-
+LICENSE(BSD-3-Clause) 
+ 
 OWNER(g:python-contrib borman)
 
 VERSION(4.4.2)

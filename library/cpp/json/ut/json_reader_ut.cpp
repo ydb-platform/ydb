@@ -7,12 +7,12 @@
 using namespace NJson;
 
 class TReformatCallbacks: public TJsonCallbacks {
-    TJsonWriter& Writer;
-
+    TJsonWriter& Writer; 
+ 
 public:
-    TReformatCallbacks(TJsonWriter& writer)
-        : Writer(writer)
-    {
+    TReformatCallbacks(TJsonWriter& writer) 
+        : Writer(writer) 
+    { 
     }
 
     bool OnBoolean(bool val) override {
@@ -30,7 +30,7 @@ public:
         return true;
     }
 
-    bool OnString(const TStringBuf& val) override {
+    bool OnString(const TStringBuf& val) override { 
         Writer.Write(val);
         return true;
     }
@@ -60,7 +60,7 @@ public:
         return true;
     }
 
-    bool OnMapKey(const TStringBuf& val) override {
+    bool OnMapKey(const TStringBuf& val) override { 
         Writer.Write(val);
         return true;
     }
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
         UNIT_ASSERT_VALUES_EQUAL(value["array"].GetStringRobust(), "[1,2,3,\"TString\"]");
         UNIT_ASSERT_VALUES_EQUAL(value["null value"].GetStringRobust(), "null");
 
-        const TJsonValue::TArray* array;
+        const TJsonValue::TArray* array; 
         UNIT_ASSERT(GetArrayPointer(value, "array", &array));
         UNIT_ASSERT_VALUES_EQUAL(value["array"].GetArray().size(), array->size());
         UNIT_ASSERT_VALUES_EQUAL(value["array"][0].GetInteger(), (*array)[0].GetInteger());
@@ -353,7 +353,7 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
             UNIT_ASSERT_EQUAL(value["test"].GetDouble(), 0.0);
             UNIT_ASSERT_EQUAL(value["test"].GetDoubleRobust(), static_cast<double>(Max<ui64>()));
         } // Max<ui64>()
-    }     // TJsonDoubleTest
+    }     // TJsonDoubleTest 
 
     Y_UNIT_TEST(TJsonInvalidTest) {
         {
@@ -397,34 +397,34 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
         UNIT_ASSERT_VALUES_EQUAL("", v.GetMap().begin()->second.GetString());
     }
 }
-
-
-static const TString YANDEX_STREAMING_JSON("{\"a\":1}//d{\"b\":2}");
-
-
-Y_UNIT_TEST_SUITE(TCompareReadJsonFast) {
-    Y_UNIT_TEST(NoEndl) {
-        NJson::TJsonValue parsed;
-
-        bool success = NJson::ReadJsonTree(YANDEX_STREAMING_JSON, &parsed, false);
-        bool fast_success = NJson::ReadJsonFastTree(YANDEX_STREAMING_JSON, &parsed, false);
-        UNIT_ASSERT(success == fast_success);
-    }
-    Y_UNIT_TEST(WithEndl) {
-        NJson::TJsonValue parsed1;
-        NJson::TJsonValue parsed2;
-
-        bool success = NJson::ReadJsonTree(YANDEX_STREAMING_JSON + "\n", &parsed1, false);
-        bool fast_success = NJson::ReadJsonFastTree(YANDEX_STREAMING_JSON + "\n", &parsed2, false);
-
-        UNIT_ASSERT_VALUES_EQUAL(success, fast_success);
-    }
-    Y_UNIT_TEST(NoQuotes) {
-        TString streamingJson = "{a:1}";
-        NJson::TJsonValue parsed;
-
-        bool success = NJson::ReadJsonTree(streamingJson, &parsed, false);
-        bool fast_success = NJson::ReadJsonFastTree(streamingJson, &parsed, false);
-        UNIT_ASSERT(success != fast_success);
-    }
-}
+ 
+ 
+static const TString YANDEX_STREAMING_JSON("{\"a\":1}//d{\"b\":2}"); 
+ 
+ 
+Y_UNIT_TEST_SUITE(TCompareReadJsonFast) { 
+    Y_UNIT_TEST(NoEndl) { 
+        NJson::TJsonValue parsed; 
+ 
+        bool success = NJson::ReadJsonTree(YANDEX_STREAMING_JSON, &parsed, false); 
+        bool fast_success = NJson::ReadJsonFastTree(YANDEX_STREAMING_JSON, &parsed, false); 
+        UNIT_ASSERT(success == fast_success); 
+    } 
+    Y_UNIT_TEST(WithEndl) { 
+        NJson::TJsonValue parsed1; 
+        NJson::TJsonValue parsed2; 
+ 
+        bool success = NJson::ReadJsonTree(YANDEX_STREAMING_JSON + "\n", &parsed1, false); 
+        bool fast_success = NJson::ReadJsonFastTree(YANDEX_STREAMING_JSON + "\n", &parsed2, false); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(success, fast_success); 
+    } 
+    Y_UNIT_TEST(NoQuotes) { 
+        TString streamingJson = "{a:1}"; 
+        NJson::TJsonValue parsed; 
+ 
+        bool success = NJson::ReadJsonTree(streamingJson, &parsed, false); 
+        bool fast_success = NJson::ReadJsonFastTree(streamingJson, &parsed, false); 
+        UNIT_ASSERT(success != fast_success); 
+    } 
+} 

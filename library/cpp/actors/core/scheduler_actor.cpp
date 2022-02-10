@@ -8,15 +8,15 @@
 #include <util/system/hp_timer.h>
 
 #ifdef __linux__
-#include <sys/timerfd.h>
-#include <errno.h>
+#include <sys/timerfd.h> 
+#include <errno.h> 
 
 LWTRACE_USING(ACTORLIB_PROVIDER);
 
 namespace NActors {
-    class TTimerDescriptor: public TSharedDescriptor {
+    class TTimerDescriptor: public TSharedDescriptor { 
         const int Descriptor;
-
+ 
     public:
         TTimerDescriptor()
             : Descriptor(timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK))
@@ -33,7 +33,7 @@ namespace NActors {
         }
     };
 
-    class TSchedulerActor: public TActor<TSchedulerActor> {
+    class TSchedulerActor: public TActor<TSchedulerActor> { 
         const TSchedulerConfig Cfg;
         TIntrusivePtr<TSharedDescriptor> TimerDescriptor;
 
@@ -47,7 +47,7 @@ namespace NActors {
 
         ui64 ActiveTick;
         typedef TMap<ui64, TAutoPtr<NSchedulerQueue::TQueueType>> TMomentMap; // intrasecond queues
-        typedef THashMap<ui64, TAutoPtr<TMomentMap>> TScheduleMap;            // over-second schedule
+        typedef THashMap<ui64, TAutoPtr<TMomentMap>> TScheduleMap;            // over-second schedule 
 
         TScheduleMap ScheduleMap;
 
@@ -55,7 +55,7 @@ namespace NActors {
 
         static const ui64 IntrasecondThreshold = 1048576; // ~second
         TAutoPtr<TMomentMap> ActiveSec;
-        volatile ui64* CurrentTimestamp = nullptr;
+        volatile ui64* CurrentTimestamp = nullptr; 
         volatile ui64* CurrentMonotonic = nullptr;
         TDeque<TAutoPtr<IEventHandle>> EventsToBeSent;
 
@@ -64,7 +64,7 @@ namespace NActors {
             return IActor::ACTOR_SYSTEM_SCHEDULER_ACTOR;
         }
 
-        TSchedulerActor(const TSchedulerConfig& cfg)
+        TSchedulerActor(const TSchedulerConfig& cfg) 
             : TActor(&TSchedulerActor::StateFunc)
             , Cfg(cfg)
             , TimerDescriptor(new TTimerDescriptor())
@@ -75,8 +75,8 @@ namespace NActors {
             Become(&TSchedulerActor::StateFunc);
         }
 
-        void Handle(TEvSchedulerInitialize::TPtr& ev, const TActorContext& ctx) {
-            const TEvSchedulerInitialize& evInitialize = *ev->Get();
+        void Handle(TEvSchedulerInitialize::TPtr& ev, const TActorContext& ctx) { 
+            const TEvSchedulerInitialize& evInitialize = *ev->Get(); 
             Y_ASSERT(evInitialize.ScheduleReaders.size() != 0);
             Readers.resize(evInitialize.ScheduleReaders.size());
             Copy(evInitialize.ScheduleReaders.begin(), evInitialize.ScheduleReaders.end(), Readers.begin());
@@ -114,7 +114,7 @@ namespace NActors {
             AtomicStore(CurrentMonotonic, MonotonicTime);
         }
 
-        void TryUpdateTime(NHPTimer::STime* lastTimeUpdate) {
+        void TryUpdateTime(NHPTimer::STime* lastTimeUpdate) { 
             NHPTimer::STime hpnow;
             GetTimeFast(&hpnow);
             const ui64 elapsedCycles = hpnow > *lastTimeUpdate ? hpnow - *lastTimeUpdate : 0;
@@ -256,7 +256,7 @@ namespace NActors {
         )
     };
 
-    IActor* CreateSchedulerActor(const TSchedulerConfig& cfg) {
+    IActor* CreateSchedulerActor(const TSchedulerConfig& cfg) { 
         if (cfg.UseSchedulerActor) {
             return new TSchedulerActor(cfg);
         } else {
@@ -264,16 +264,16 @@ namespace NActors {
         }
     }
 
-}
+} 
 
 #else // linux
 
 namespace NActors {
-    IActor* CreateSchedulerActor(const TSchedulerConfig& cfg) {
+    IActor* CreateSchedulerActor(const TSchedulerConfig& cfg) { 
         Y_UNUSED(cfg);
         return nullptr;
     }
 
-}
+} 
 
 #endif // linux

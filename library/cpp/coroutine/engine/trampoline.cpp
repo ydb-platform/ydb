@@ -1,16 +1,16 @@
 #include "impl.h"
 #include "trampoline.h"
-
+ 
 #include "stack/stack_allocator.h"
 
 #include <util/system/info.h>
 #include <util/system/protect.h>
 #include <util/system/valgrind.h>
 #include <util/system/yassert.h>
-
+ 
 #include <cstdlib>
 #include <util/stream/format.h>
-
+ 
 
 namespace NCoro {
 
@@ -30,7 +30,7 @@ TTrampoline::TTrampoline(NStack::IAllocator& allocator, ui32 stackSize, TFunc f,
                 Func_(Cont_);
             } catch (...) {}
         }
-
+ 
         Cont_->Terminate();
     }
 

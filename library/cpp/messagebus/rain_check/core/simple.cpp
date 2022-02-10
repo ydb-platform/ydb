@@ -12,7 +12,7 @@ TSimpleTaskRunner::~TSimpleTaskRunner() {
     Y_ASSERT(!ContinueFunc);
 }
 
-bool TSimpleTaskRunner::ReplyReceived() {
+bool TSimpleTaskRunner::ReplyReceived() { 
     ContinueFunc = (GetImpl()->*(ContinueFunc.Func))();
     return !!ContinueFunc;
 }

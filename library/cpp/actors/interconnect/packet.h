@@ -16,10 +16,10 @@
 #define FORCE_EVENT_CHECKSUM 0
 #endif
 
-using NActors::IEventBase;
-using NActors::IEventHandle;
+using NActors::IEventBase; 
+using NActors::IEventHandle; 
 using NActors::TActorId;
-using NActors::TConstIoVec;
+using NActors::TConstIoVec; 
 using NActors::TEventSerializedData;
 
 Y_FORCE_INLINE ui32 Crc32cExtendMSanCompatible(ui32 checksum, const void *data, size_t len) {
@@ -142,7 +142,7 @@ struct TEventHolder : TNonCopyable {
 
 namespace NActors {
     class TEventOutputChannel;
-}
+} 
 
 struct TTcpPacketOutTask : TNonCopyable {
     const TSessionParams& Params;
@@ -192,9 +192,9 @@ public:
         Orbit.Reset();
     }
 
-    bool IsEmpty() const {
+    bool IsEmpty() const { 
         return !DataSize;
-    }
+    } 
 
     void SetMetadata(ui64 serial, ui64 confirm) {
         ApplyToHeader([&](auto& header) {
@@ -261,7 +261,7 @@ public:
 
     bool DropBufs(size_t& amount) {
         while (BufferIndex != Bufs.size()) {
-            TConstIoVec& item = Bufs[BufferIndex];
+            TConstIoVec& item = Bufs[BufferIndex]; 
             // calculate number of bytes to the end in current buffer
             const size_t remain = item.Size - FirstBufferOffset;
             if (amount >= remain) {
@@ -285,11 +285,11 @@ public:
         TriedWriting = false;
     }
 
-    template <typename TVectorType>
-    void AppendToIoVector(TVectorType& vector, size_t max) {
+    template <typename TVectorType> 
+    void AppendToIoVector(TVectorType& vector, size_t max) { 
         for (size_t k = BufferIndex, offset = FirstBufferOffset; k != Bufs.size() && vector.size() < max; ++k, offset = 0) {
             TConstIoVec v = Bufs[k];
-            v.Data = static_cast<const char*>(v.Data) + offset;
+            v.Data = static_cast<const char*>(v.Data) + offset; 
             v.Size -= offset;
             vector.push_back(v);
         }

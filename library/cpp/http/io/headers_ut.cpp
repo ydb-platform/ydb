@@ -13,8 +13,8 @@ namespace {
 
         THeadersExistence(const THttpHeaders& headers) {
             for (THttpHeaders::TConstIterator it = headers.Begin();
-                 it != headers.End();
-                 ++it) {
+                 it != headers.End(); 
+                 ++it) { 
                 Add(it->Name(), it->Value());
             }
         }
@@ -24,7 +24,7 @@ namespace {
             Impl.emplace(TString(name), TString(value));
         }
 
-        bool operator==(const THeadersExistence& rhs) const {
+        bool operator==(const THeadersExistence& rhs) const { 
             return Impl == rhs.Impl;
         }
 
@@ -34,11 +34,11 @@ namespace {
     };
 }
 
-bool operator==(const THeadersExistence& lhs, const THttpHeaders& rhs) {
+bool operator==(const THeadersExistence& lhs, const THttpHeaders& rhs) { 
     return lhs == THeadersExistence(rhs);
 }
 
-bool operator==(const THttpHeaders& lhs, const THeadersExistence& rhs) {
+bool operator==(const THttpHeaders& lhs, const THeadersExistence& rhs) { 
     return THeadersExistence(lhs) == rhs;
 }
 

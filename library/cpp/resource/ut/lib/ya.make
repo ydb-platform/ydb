@@ -1,9 +1,9 @@
-LIBRARY()
-
-OWNER(pg)
-
-RESOURCE(
-    data /x
-)
-
-END()
+LIBRARY() 
+ 
+OWNER(pg) 
+ 
+RESOURCE( 
+    data /x 
+) 
+ 
+END() 

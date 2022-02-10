@@ -1,22 +1,22 @@
 #include "tempfile.h"
-
+ 
 #include <util/folder/dirut.h>
 #include <util/generic/yexception.h>
-#include <util/stream/file.h>
-
+#include <util/stream/file.h> 
+ 
 #include <cerrno>
 #include <cstring>
 
 #ifdef _win32_
-    #include "winint.h"
-    #include <io.h>
+    #include "winint.h" 
+    #include <io.h> 
 #else
-    #include <unistd.h>
-    #include <stdlib.h>
+    #include <unistd.h> 
+    #include <stdlib.h> 
 #endif
 
-extern "C" int mkstemps(char* path, int slen);
-
+extern "C" int mkstemps(char* path, int slen); 
+ 
 TString MakeTempName(const char* wrkDir, const char* prefix, const char* extension) {
 #ifndef _win32_
     TString filePath;
@@ -29,11 +29,11 @@ TString MakeTempName(const char* wrkDir, const char* prefix, const char* extensi
 
     if (filePath.back() != '/') {
         filePath += '/';
-    }
+    } 
 
     if (prefix) {
         filePath += prefix;
-    }
+    } 
 
     filePath += "XXXXXX"; // mkstemps requirement
 
@@ -45,7 +45,7 @@ TString MakeTempName(const char* wrkDir, const char* prefix, const char* extensi
         }
         filePath += extension;
         extensionPartLength += strlen(extension);
-    }
+    } 
 
     int fd = mkstemps(const_cast<char*>(filePath.data()), extensionPartLength);
     if (fd >= 0) {
@@ -55,7 +55,7 @@ TString MakeTempName(const char* wrkDir, const char* prefix, const char* extensi
 #else
     char tmpDir[MAX_PATH + 1]; // +1 -- for terminating null character
     char filePath[MAX_PATH];
-    const char* pDir = 0;
+    const char* pDir = 0; 
 
     if (wrkDir && *wrkDir) {
         pDir = wrkDir;
@@ -68,6 +68,6 @@ TString MakeTempName(const char* wrkDir, const char* prefix, const char* extensi
         return filePath;
     }
 #endif
-
+ 
     ythrow TSystemError() << "can not create temp name(" << wrkDir << ", " << prefix << ", " << extension << ")";
-}
+} 

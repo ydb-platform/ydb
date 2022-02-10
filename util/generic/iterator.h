@@ -1,35 +1,35 @@
 #pragma once
-
+ 
 #include <iterator>
 #include <utility>
 
-namespace NStlIterator {
-    template <class T>
+namespace NStlIterator { 
+    template <class T> 
     class TProxy {
     public:
         TProxy() = default;
-        TProxy(T&& value)
-            : Value_(std::move(value))
-        {
+        TProxy(T&& value) 
+            : Value_(std::move(value)) 
+        { 
         }
-
+ 
         const T* operator->() const noexcept {
             return &Value_;
         }
-
+ 
         const T& operator*() const noexcept {
             return Value_;
         }
-
+ 
         bool operator==(const TProxy& rhs) const {
             return Value_ == rhs.Value_;
-        }
-
+        } 
+ 
     private:
         T Value_;
-    };
+    }; 
 } // namespace NStlIterator
-
+ 
 /**
  * Range adaptor that turns a derived class with a Java-style iteration
  * interface into an STL range.
@@ -63,11 +63,11 @@ namespace NStlIterator {
  * }
  * \endcode
  */
-template <class TSlave>
+template <class TSlave> 
 class TInputRangeAdaptor {
 public: // TODO: private
-    class TIterator {
-    public:
+    class TIterator { 
+    public: 
         static constexpr bool IsNoexceptNext = noexcept(std::declval<TSlave>().Next());
 
         using difference_type = std::ptrdiff_t;
@@ -77,56 +77,56 @@ public: // TODO: private
         using iterator_category = std::input_iterator_tag;
 
         inline TIterator() noexcept
-            : Slave_(nullptr)
-            , Cur_()
-        {
-        }
-
+            : Slave_(nullptr) 
+            , Cur_() 
+        { 
+        } 
+ 
         inline TIterator(TSlave* slave) noexcept(IsNoexceptNext)
-            : Slave_(slave)
-            , Cur_(Slave_->Next())
-        {
-        }
-
+            : Slave_(slave) 
+            , Cur_(Slave_->Next()) 
+        { 
+        } 
+ 
         inline bool operator==(const TIterator& it) const noexcept {
-            return Cur_ == it.Cur_;
-        }
-
+            return Cur_ == it.Cur_; 
+        } 
+ 
         inline bool operator!=(const TIterator& it) const noexcept {
-            return !(*this == it);
-        }
-
+            return !(*this == it); 
+        } 
+ 
         inline pointer operator->() const noexcept {
             return Cur_;
-        }
-
+        } 
+ 
         inline reference operator*() const noexcept {
             return *Cur_;
-        }
-
+        } 
+ 
         inline TIterator& operator++() noexcept(IsNoexceptNext) {
-            Cur_ = Slave_->Next();
-
-            return *this;
-        }
-
-    private:
-        TSlave* Slave_;
+            Cur_ = Slave_->Next(); 
+ 
+            return *this; 
+        } 
+ 
+    private: 
+        TSlave* Slave_; 
         pointer Cur_;
-    };
-
-public:
+    }; 
+ 
+public: 
     using const_iterator = TIterator;
     using iterator = const_iterator;
 
     inline iterator begin() const noexcept(TIterator::IsNoexceptNext) {
-        return TIterator(const_cast<TSlave*>(static_cast<const TSlave*>(this)));
-    }
-
+        return TIterator(const_cast<TSlave*>(static_cast<const TSlave*>(this))); 
+    } 
+ 
     inline iterator end() const noexcept {
-        return TIterator();
-    }
-};
+        return TIterator(); 
+    } 
+}; 
 
 /**
  * Transform given reverse iterator into forward iterator pointing to the same element.

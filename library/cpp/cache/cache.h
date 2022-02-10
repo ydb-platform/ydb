@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/algorithm.h>
-#include <util/generic/ptr.h>
+#include <util/generic/ptr.h> 
 #include <util/generic/intrlist.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
@@ -28,7 +28,7 @@ public:
     }
 
 public:
-    struct TItem: public TIntrusiveListItem<TItem> {
+    struct TItem: public TIntrusiveListItem<TItem> { 
         typedef TIntrusiveListItem<TItem> TBase;
         TItem(const TKey& key, const TValue& value = TValue())
             : TBase()
@@ -44,11 +44,11 @@ public:
         {
         }
 
-        bool operator<(const TItem& rhs) const {
+        bool operator<(const TItem& rhs) const { 
             return Key < rhs.Key;
         }
 
-        bool operator==(const TItem& rhs) const {
+        bool operator==(const TItem& rhs) const { 
             return Key == rhs.Key;
         }
 
@@ -56,7 +56,7 @@ public:
         TValue Value;
 
         struct THash {
-            size_t operator()(const TItem& item) const {
+            size_t operator()(const TItem& item) const { 
                 return ::THash<TKey>()(item.Key);
             }
         };
@@ -100,7 +100,7 @@ public:
     size_t GetSize() const {
         return ItemsAmount;
     }
-
+ 
     size_t GetTotalSize() const {
         return TotalSize;
     }
@@ -134,7 +134,7 @@ public:
     {
     }
 
-    struct TItem: public TIntrusiveListItem<TItem> {
+    struct TItem: public TIntrusiveListItem<TItem> { 
         typedef TIntrusiveListItem<TItem> TBase;
         TItem(const TKey& key, const TValue& value = TValue())
             : TBase()
@@ -152,11 +152,11 @@ public:
         {
         }
 
-        bool operator<(const TItem& rhs) const {
+        bool operator<(const TItem& rhs) const { 
             return Key < rhs.Key;
         }
 
-        bool operator==(const TItem& rhs) const {
+        bool operator==(const TItem& rhs) const { 
             return Key == rhs.Key;
         }
 
@@ -165,7 +165,7 @@ public:
         size_t Counter;
 
         struct THash {
-            size_t operator()(const TItem& item) const {
+            size_t operator()(const TItem& item) const { 
                 return ::THash<TKey>()(item.Key);
             }
         };
@@ -256,11 +256,11 @@ public:
         {
         }
 
-        bool operator<(const TItem& rhs) const {
+        bool operator<(const TItem& rhs) const { 
             return Key < rhs.Key;
         }
 
-        bool operator==(const TItem& rhs) const {
+        bool operator==(const TItem& rhs) const { 
             return Key == rhs.Key;
         }
 
@@ -269,7 +269,7 @@ public:
         TWeight Weight;
 
         struct THash {
-            size_t operator()(const TItem& item) const {
+            size_t operator()(const TItem& item) const { 
                 return ::THash<TKey>()(item.Key);
             }
         };
@@ -380,7 +380,7 @@ class TCache {
     typedef THashMultiSet<TItem, THash> TIndex;
     typedef typename TIndex::iterator TIndexIterator;
     typedef typename TIndex::const_iterator TIndexConstIterator;
-
+ 
 public:
     class TIterator {
     public:
@@ -389,23 +389,23 @@ public:
         {
         }
 
-        TValue& operator*() {
+        TValue& operator*() { 
             return const_cast<TValue&>(Iter->Value);
         }
 
-        TValue* operator->() {
+        TValue* operator->() { 
             return const_cast<TValue*>(&Iter->Value);
         }
 
-        bool operator==(const TIterator& rhs) const {
+        bool operator==(const TIterator& rhs) const { 
             return Iter == rhs.Iter;
         }
 
-        bool operator!=(const TIterator& rhs) const {
+        bool operator!=(const TIterator& rhs) const { 
             return Iter != rhs.Iter;
         }
 
-        TIterator& operator++() {
+        TIterator& operator++() { 
             ++Iter;
             return *this;
         }
@@ -419,7 +419,7 @@ public:
         }
 
         friend class TCache<TKey, TValue, TListType, TDeleter>;
-
+ 
     private:
         TIndexConstIterator Iter;
     };
@@ -459,7 +459,7 @@ public:
     }
 
     // note: it shouldn't touch 'value' if it returns false.
-    bool PickOut(const TKey& key, TValue* value) {
+    bool PickOut(const TKey& key, TValue* value) { 
         Y_ASSERT(value);
         TIndexIterator it = Index.find(TItem(key));
         if (it == Index.end())
@@ -475,7 +475,7 @@ public:
         return Insert(p.first, p.second);
     }
 
-    bool Insert(const TKey& key, const TValue& value) {
+    bool Insert(const TKey& key, const TValue& value) { 
         TItem tmpItem(key, value);
         if (!MultiValue && Index.find(tmpItem) != Index.end())
             return false;
@@ -550,7 +550,7 @@ protected:
     TListType List;
     bool MultiValue;
 
-    TIterator FindByItem(TItem* item) {
+    TIterator FindByItem(TItem* item) { 
         std::pair<TIndexIterator, TIndexIterator> p = Index.equal_range(*item);
         // we have to delete the exact unlinked item (there may be multiple items for one key)
         TIndexIterator it;
@@ -593,7 +593,7 @@ public:
     }
 
     TIterator FindOldest() {
-        return TBase::Empty() ? TBase::End() : this->FindByItem(TBase::List.GetOldest());
+        return TBase::Empty() ? TBase::End() : this->FindByItem(TBase::List.GetOldest()); 
     }
 
     size_t TotalSize() const {
@@ -602,8 +602,8 @@ public:
 };
 
 template <typename TKey, typename TValue, typename TDeleter = TNoopDelete>
-class TLFUCache: public TCache<TKey, TValue, TLFUList<TKey, TValue>, TDeleter> {
-    typedef TCache<TKey, TValue, TLFUList<TKey, TValue>, TDeleter> TBase;
+class TLFUCache: public TCache<TKey, TValue, TLFUList<TKey, TValue>, TDeleter> { 
+    typedef TCache<TKey, TValue, TLFUList<TKey, TValue>, TDeleter> TBase; 
     using TListType = TLFUList<TKey, TValue>;
 
 public:
@@ -627,7 +627,7 @@ public:
 // discards the least weighted items first
 // doesn't support promotion
 template <typename TKey, typename TValue, typename TWeight, typename TWeighter, typename TDeleter = TNoopDelete>
-class TLWCache: public TCache<TKey, TValue, TLWList<TKey, TValue, TWeight, TWeighter>, TDeleter> {
+class TLWCache: public TCache<TKey, TValue, TLWList<TKey, TValue, TWeight, TWeighter>, TDeleter> { 
     typedef TCache<TKey, TValue, TLWList<TKey, TValue, TWeight, TWeighter>, TDeleter> TBase;
     using TListType = TLWList<TKey, TValue, TWeight, TWeighter>;
 

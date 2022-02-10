@@ -18,22 +18,22 @@
  */
 template <class T>
 class TObjectCounter {
-public:
+public: 
     inline TObjectCounter() noexcept {
-        AtomicIncrement(Count_);
-    }
+        AtomicIncrement(Count_); 
+    } 
 
     inline TObjectCounter(const TObjectCounter& /*item*/) noexcept {
         AtomicIncrement(Count_);
     }
 
     inline ~TObjectCounter() {
-        AtomicDecrement(Count_);
-    }
+        AtomicDecrement(Count_); 
+    } 
 
     static inline long ObjectCount() noexcept {
         return AtomicGet(Count_);
-    }
+    } 
 
     /**
      * Resets object count. Mainly for tests, as you don't want to do this in
@@ -41,12 +41,12 @@ public:
      *
      * \returns                         Current object count.
      */
-    static inline long ResetObjectCount() noexcept {
+    static inline long ResetObjectCount() noexcept { 
         return AtomicSwap(&Count_, 0);
-    }
+    } 
 
-private:
-    static TAtomic Count_;
+private: 
+    static TAtomic Count_; 
 };
 
 template <class T>

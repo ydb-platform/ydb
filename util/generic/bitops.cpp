@@ -1,4 +1,4 @@
-#include "bitops.h"
+#include "bitops.h" 
 
 namespace NBitOps {
     namespace NPrivate {
@@ -137,5 +137,5 @@ namespace NBitOps {
             ~0x7FFFFFFFFFFFFFFFULL,
             ~0xFFFFFFFFFFFFFFFFULL,
         };
-    }
-}
+    } 
+} 

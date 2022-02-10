@@ -11,14 +11,14 @@
 using namespace NActor;
 
 template <typename TThis>
-struct TTestActorBase: public TAtomicRefCount<TThis>, public TActor<TThis> {
+struct TTestActorBase: public TAtomicRefCount<TThis>, public TActor<TThis> { 
     TTestSync Started;
     TTestSync Acted;
 
     TTestActorBase(TExecutor* executor)
         : TActor<TThis>(executor)
-    {
-    }
+    { 
+    } 
 
     void Act(TDefaultTag) {
         Started.Inc();
@@ -27,23 +27,23 @@ struct TTestActorBase: public TAtomicRefCount<TThis>, public TActor<TThis> {
     }
 };
 
-struct TNopActor: public TTestActorBase<TNopActor> {
+struct TNopActor: public TTestActorBase<TNopActor> { 
     TObjectCounter<TNopActor> AllocCounter;
 
     TNopActor(TExecutor* executor)
         : TTestActorBase<TNopActor>(executor)
-    {
-    }
+    { 
+    } 
 
     void Act2() {
     }
 };
 
-struct TWaitForSignalActor: public TTestActorBase<TWaitForSignalActor> {
+struct TWaitForSignalActor: public TTestActorBase<TWaitForSignalActor> { 
     TWaitForSignalActor(TExecutor* executor)
         : TTestActorBase<TWaitForSignalActor>(executor)
-    {
-    }
+    { 
+    } 
 
     TSystemEvent WaitFor;
 
@@ -52,7 +52,7 @@ struct TWaitForSignalActor: public TTestActorBase<TWaitForSignalActor> {
     }
 };
 
-struct TDecrementAndSendActor: public TTestActorBase<TDecrementAndSendActor>, public TQueueInActor<TDecrementAndSendActor, int> {
+struct TDecrementAndSendActor: public TTestActorBase<TDecrementAndSendActor>, public TQueueInActor<TDecrementAndSendActor, int> { 
     TSystemEvent Done;
 
     TDecrementAndSendActor* Next;
@@ -60,8 +60,8 @@ struct TDecrementAndSendActor: public TTestActorBase<TDecrementAndSendActor>, pu
     TDecrementAndSendActor(TExecutor* executor)
         : TTestActorBase<TDecrementAndSendActor>(executor)
         , Next(nullptr)
-    {
-    }
+    { 
+    } 
 
     void ProcessItem(TDefaultTag, TDefaultTag, int n) {
         if (n == 0) {
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(TActor) {
 
         TExecutor executor(queueSize);
 
-        TVector<TIntrusivePtr<TDecrementAndSendActor>> actors;
+        TVector<TIntrusivePtr<TDecrementAndSendActor>> actors; 
         for (int i = 0; i < actorCount; ++i) {
             actors.push_back(new TDecrementAndSendActor(&executor));
         }

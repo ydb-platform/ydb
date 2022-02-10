@@ -1,9 +1,9 @@
 #pragma once
-
-#include <util/system/compat.h>
-
+ 
+#include <util/system/compat.h> 
+ 
 class IOutputStream;
-
+ 
 /**
  * Stream-based `printf` function. Prints formatted data into the provided stream.
  * Works the same way as a standard C `printf`.

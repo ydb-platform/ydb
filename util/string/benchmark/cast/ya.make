@@ -1,9 +1,9 @@
 Y_BENCHMARK()
-
-OWNER(pg)
-
-SRCS(
-    main.cpp
-)
-
-END()
+ 
+OWNER(pg) 
+ 
+SRCS( 
+    main.cpp 
+) 
+ 
+END() 

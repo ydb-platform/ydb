@@ -1,3 +1,3 @@
-#pragma once
-
-void InitOpenSSL();
+#pragma once 
+ 
+void InitOpenSSL(); 

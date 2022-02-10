@@ -14,13 +14,13 @@ private:
         size_t HalfMaxSize;
         TComparator Comparer;
         size_t MinElementIndex;
-
+ 
     private:
         void Reserve() {
             Internal.reserve(2 * HalfMaxSize);
         }
 
-        template <class UT>
+        template <class UT> 
         bool Insert(UT&& value) noexcept {
             if (Y_UNLIKELY(0 == HalfMaxSize)) {
                 return false;
@@ -55,7 +55,7 @@ private:
             Reserve();
         }
 
-        template <class TAllocParam>
+        template <class TAllocParam> 
         TVectorWithMin(const size_t halfMaxSize, const TComparator& comp, TAllocParam&& param)
             : Internal(std::forward<TAllocParam>(param))
             , HalfMaxSize(halfMaxSize)
@@ -89,7 +89,7 @@ private:
             return Insert(std::move(value));
         }
 
-        template <class... TArgs>
+        template <class... TArgs> 
         bool Emplace(TArgs&&... args) {
             return Insert(T(std::forward<TArgs>(args)...)); // TODO: make it "real" emplace, not that fake one
         }
@@ -133,7 +133,7 @@ private:
 
     void CheckNotFinalized() {
         Y_ENSURE(!Finalized, "Cannot insert after finalizing (Pop() / GetNext() / Finalize())! "
-                             "Use TLimitedHeap for this scenario");
+                             "Use TLimitedHeap for this scenario"); 
     }
 
     size_t MaxSize;
@@ -158,7 +158,7 @@ public:
     {
     }
 
-    template <class TAllocParam>
+    template <class TAllocParam> 
     TTopKeeper(size_t maxSize, const TComparator& comp, TAllocParam&& param)
         : MaxSize(maxSize)
         , Comparer(comp)
@@ -219,7 +219,7 @@ public:
         return Internal.Push(std::move(value));
     }
 
-    template <class... TArgs>
+    template <class... TArgs> 
     bool Emplace(TArgs&&... args) {
         CheckNotFinalized();
         return Internal.Emplace(std::forward<TArgs>(args)...);
@@ -244,7 +244,7 @@ public:
 
     void SetMaxSize(size_t newMaxSize) {
         Y_ENSURE(!Finalized, "Cannot resize after finalizing (Pop() / GetNext() / Finalize())! "
-                             "Use TLimitedHeap for this scenario");
+                             "Use TLimitedHeap for this scenario"); 
         MaxSize = newMaxSize;
         Internal.SetMaxSize(newMaxSize);
     }

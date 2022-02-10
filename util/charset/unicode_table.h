@@ -1,7 +1,7 @@
 #pragma once
 
-#include <util/system/yassert.h>
-#include <util/system/defaults.h>
+#include <util/system/yassert.h> 
+#include <util/system/defaults.h> 
 #include <util/generic/typetraits.h>
 
 namespace NUnicodeTable {
@@ -120,4 +120,4 @@ namespace NUnicodeTable {
     };
 
     const size_t UNICODE_TABLE_SHIFT = 5;
-}
+} 

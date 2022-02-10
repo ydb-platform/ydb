@@ -2,11 +2,11 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/string/cast.h>
-
+#include <util/string/cast.h> 
+ 
 Y_UNIT_TEST_SUITE(TestHttpResponse) {
     Y_UNIT_TEST(TestCodeOnly) {
-        UNIT_ASSERT_STRINGS_EQUAL(ToString(THttpResponse()), "HTTP/1.1 200 Ok\r\n\r\n");
+        UNIT_ASSERT_STRINGS_EQUAL(ToString(THttpResponse()), "HTTP/1.1 200 Ok\r\n\r\n"); 
         UNIT_ASSERT_STRINGS_EQUAL(ToString(THttpResponse(HTTP_NOT_FOUND)), "HTTP/1.1 404 Not found\r\n\r\n");
     }
 
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TestHttpResponse) {
                                "Content-Length: 10\r\n"
                                "\r\n"
                                "0123456789";
-        UNIT_ASSERT_STRINGS_EQUAL(ToString(THttpResponse().SetContent("0123456789")),
+        UNIT_ASSERT_STRINGS_EQUAL(ToString(THttpResponse().SetContent("0123456789")), 
                                   EXPECTED);
     }
 
@@ -80,8 +80,8 @@ Y_UNIT_TEST_SUITE(TestHttpResponse) {
                                "Content-Length: 28\r\n"
                                "\r\n"
                                "<xml><tag value=\"1\" /></xml>";
-        THttpResponse resp;
-        resp.SetContent("<xml><tag value=\"1\" /></xml>").SetContentType("text/xml");
+        THttpResponse resp; 
+        resp.SetContent("<xml><tag value=\"1\" /></xml>").SetContentType("text/xml"); 
         UNIT_ASSERT_STRINGS_EQUAL(ToString(resp), EXPECTED);
     }
 
@@ -90,8 +90,8 @@ Y_UNIT_TEST_SUITE(TestHttpResponse) {
         resp.AddHeader(THttpInputHeader("X-Header-1", "ValueOne"))
             .AddHeader("X-Header-2", "ValueTwo")
             .AddHeader(THttpInputHeader("X-Header-3", "ValueThree"))
-            .SetContent("Some stuff")
-            .SetContentType("text/plain");
+            .SetContent("Some stuff") 
+            .SetContentType("text/plain"); 
 
         THttpResponse copy = resp;
         UNIT_ASSERT_STRINGS_EQUAL(ToString(copy), ToString(resp));
@@ -102,19 +102,19 @@ Y_UNIT_TEST_SUITE(TestHttpResponse) {
         resp.AddHeader(THttpInputHeader("X-Header-1", "ValueOne"));
         resp.AddHeader(THttpInputHeader("X-Header-2", "ValueTwo"));
         resp.AddHeader(THttpInputHeader("X-Header-3", "ValueThree"));
-        resp.SetContent("Some stuff").SetContentType("text/plain");
+        resp.SetContent("Some stuff").SetContentType("text/plain"); 
 
-        THttpResponse copy;
+        THttpResponse copy; 
         copy = resp;
         UNIT_ASSERT_STRINGS_EQUAL(ToString(copy), ToString(resp));
     }
 
     Y_UNIT_TEST(TestEmptyContent) {
-        UNIT_ASSERT_STRINGS_EQUAL(ToString(THttpResponse().SetContent("")), "HTTP/1.1 200 Ok\r\n\r\n");
+        UNIT_ASSERT_STRINGS_EQUAL(ToString(THttpResponse().SetContent("")), "HTTP/1.1 200 Ok\r\n\r\n"); 
     }
 
     Y_UNIT_TEST(TestReturnReference) {
-        THttpResponse resp;
+        THttpResponse resp; 
         UNIT_ASSERT_EQUAL(&resp, &resp.AddHeader("Header1", 1));
         UNIT_ASSERT_EQUAL(&resp, &resp.AddHeader(THttpInputHeader("Header2", "2")));
 
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(TestHttpResponse) {
         UNIT_ASSERT_EQUAL(&resp, &resp.AddMultipleHeaders(headers));
 
         UNIT_ASSERT_EQUAL(&resp, &resp.SetContent("some stuff"));
-        UNIT_ASSERT_EQUAL(&resp, &resp.SetContent("some other stuff").SetContentType("text/plain"));
+        UNIT_ASSERT_EQUAL(&resp, &resp.SetContent("some other stuff").SetContentType("text/plain")); 
     }
 
     Y_UNIT_TEST(TestSetContentType) {

@@ -14,9 +14,9 @@ class TTaskSchedulerTest: public TTestBase {
 
         class TCheckTask: public TTaskScheduler::IRepeatedTask {
             public:
-                TCheckTask(const TDuration& delay)
-                    : Start_(Now())
-                    , Delay_(delay)
+                TCheckTask(const TDuration& delay) 
+                    : Start_(Now()) 
+                    , Delay_(delay) 
                 {
                     AtomicIncrement(ScheduledTaskCounter_);
                 }
@@ -25,15 +25,15 @@ class TTaskSchedulerTest: public TTestBase {
                 }
 
                 bool Process() override {
-                    const TDuration delay = Now() - Start_;
+                    const TDuration delay = Now() - Start_; 
 
-                    if (delay < Delay_) {
+                    if (delay < Delay_) { 
                         AtomicIncrement(BadTimeoutCounter_);
                     }
 
                     AtomicIncrement(ExecutedTaskCounter_);
-
-                    return false;
+ 
+                    return false; 
                 }
 
                 static bool AllTaskExecuted() {
@@ -45,8 +45,8 @@ class TTaskSchedulerTest: public TTestBase {
                 }
 
             private:
-                TInstant Start_;
-                TDuration Delay_;
+                TInstant Start_; 
+                TDuration Delay_; 
                 static TAtomic BadTimeoutCounter_;
                 static TAtomic ScheduledTaskCounter_;
                 static TAtomic ExecutedTaskCounter_;
@@ -60,7 +60,7 @@ class TTaskSchedulerTest: public TTestBase {
             ScheduleCheckTask(10000);
             ScheduleCheckTask(5000);
 
-            Scheduler_.Start();
+            Scheduler_.Start(); 
 
             usleep(1000000);
 
@@ -70,8 +70,8 @@ class TTaskSchedulerTest: public TTestBase {
 
     private:
         void ScheduleCheckTask(size_t delay) {
-            TDuration d = TDuration::MicroSeconds(delay);
-
+            TDuration d = TDuration::MicroSeconds(delay); 
+ 
             Scheduler_.Add(new TCheckTask(d), d);
         }
 

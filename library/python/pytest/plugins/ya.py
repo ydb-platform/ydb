@@ -246,7 +246,7 @@ def pytest_configure(config):
                 os.environ.pop(envvar)
             if envvar + '_ORIGINAL' in os.environ:
                 os.environ[envvar] = os.environ[envvar + '_ORIGINAL']
-
+ 
     if config.option.root_dir:
         config.rootdir = py.path.local(config.option.root_dir)
         config.invocation_params = attr.evolve(config.invocation_params, dir=config.rootdir)

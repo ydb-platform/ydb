@@ -10,7 +10,7 @@
 #include <util/generic/yexception.h>
 
 namespace NKiwiAggr {
-    class TAutoHistogram: private TNonCopyable, public IHistogram {
+    class TAutoHistogram: private TNonCopyable, public IHistogram { 
     private:
         static const size_t DEFAULT_INTERVALS = 100;
 
@@ -39,7 +39,7 @@ namespace NKiwiAggr {
             ythrow yexception() << "IHistogram constructor is not defined for TAutoHistogram";
         }
 
-        virtual ~TAutoHistogram() {
+        virtual ~TAutoHistogram() { 
         }
 
         virtual void Clear() {
@@ -145,4 +145,4 @@ namespace NKiwiAggr {
         }
     };
 
-}
+} 

@@ -322,4 +322,4 @@ namespace NXml {
         THolder<xmlTextReader, TDeleter> Impl;
     };
 
-}
+} 

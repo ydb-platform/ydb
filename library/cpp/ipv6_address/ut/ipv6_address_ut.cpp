@@ -2,7 +2,7 @@
 #include <library/cpp/ipv6_address/ipv6_address.h>
 #include <unordered_set>
 
-class TIpv6AddressTest: public TTestBase {
+class TIpv6AddressTest: public TTestBase { 
     UNIT_TEST_SUITE(TIpv6AddressTest);
     UNIT_TEST(ParseHostAndMayBePortFromString_data);
     UNIT_TEST(CheckAddressValidity)
@@ -19,7 +19,7 @@ UNIT_TEST_SUITE_REGISTRATION(TIpv6AddressTest);
 using TResult = std::tuple<THostAddressAndPort, TString, TIpPort>;
 
 TResult IpRes(TString Ip, TIpPort Port) {
-    bool Ok;
+    bool Ok; 
     THostAddressAndPort HostAddressAndPort;
     HostAddressAndPort.Ip = TIpv6Address::FromString(Ip, Ok);
     Y_VERIFY(Ok);
@@ -30,24 +30,24 @@ TResult HostRes(TString HostName, TIpPort Port) {
     return TResult({}, HostName, Port);
 }
 
-void ParseHostAndMayBePortFromString(TString RawStr,
-                                     TIpPort DefaultPort,
+void ParseHostAndMayBePortFromString(TString RawStr, 
+                                     TIpPort DefaultPort, 
                                      const TResult ExpectedResult,
-                                     const bool ExpectedOk) {
-    bool Ok = false;
+                                     const bool ExpectedOk) { 
+    bool Ok = false; 
     const TResult ActualResult = ParseHostAndMayBePortFromString(RawStr, DefaultPort, Ok);
 
     UNIT_ASSERT(Ok == ExpectedOk);
-    if (Ok == false)
+    if (Ok == false) 
         return;
 
     UNIT_ASSERT(ActualResult == ExpectedResult);
 }
 
-void CheckIpDefPortAgainstIpPortDefPort_v4OrHost(TString Ip,
-                                                 TIpPort Port,
+void CheckIpDefPortAgainstIpPortDefPort_v4OrHost(TString Ip, 
+                                                 TIpPort Port, 
                                                  const TResult ExpectedResult,
-                                                 const bool ExpectedOk) {
+                                                 const bool ExpectedOk) { 
     ParseHostAndMayBePortFromString(Ip, Port, ExpectedResult, ExpectedOk);
 
     TString New = Ip + ":" + ToString(Port);
@@ -62,7 +62,7 @@ void CheckIpDefPortAgainstIpPortDefPort_v6(TString Ip, TIpPort Port, const TResu
 }
 
 void CheckIpDefPortAgainstIpPortDefPort(TString Ip, TIpPort Port, const TResult ExpectedResult, const bool ExpectedOk) {
-    if (Ip.find(':') == TString::npos) {
+    if (Ip.find(':') == TString::npos) { 
         CheckIpDefPortAgainstIpPortDefPort_v4OrHost(Ip, Port, ExpectedResult, ExpectedOk);
     } else {
         CheckIpDefPortAgainstIpPortDefPort_v6(Ip, Port, ExpectedResult, ExpectedOk);

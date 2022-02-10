@@ -14,7 +14,7 @@ namespace NRainCheck {
 
     class TCoroTaskRunner: public TTaskRunnerBase, private ITrampoLine {
         friend class ICoroTask;
-
+ 
     private:
         NPrivate::TCoroStack Stack;
         TContMachineContext ContMachineContext;
@@ -31,9 +31,9 @@ namespace NRainCheck {
 
         void DoRun() override /* override */;
 
-        ICoroTask* GetImpl() {
-            return (ICoroTask*)GetImplBase();
-        }
+        ICoroTask* GetImpl() { 
+            return (ICoroTask*)GetImplBase(); 
+        } 
     };
 
     class ICoroTask: public ITaskBase {
@@ -46,10 +46,10 @@ namespace NRainCheck {
         typedef TCoroTaskRunner TTaskRunner;
         typedef ICoroTask ITask;
 
-        ICoroTask(size_t stackSize = 0x2000)
-            : StackSize(stackSize)
-        {
-        }
+        ICoroTask(size_t stackSize = 0x2000) 
+            : StackSize(stackSize) 
+        { 
+        } 
 
         virtual void Run() = 0;
         static void WaitForSubtasks();

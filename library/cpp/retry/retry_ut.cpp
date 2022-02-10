@@ -11,7 +11,7 @@ namespace {
             }
             return 42;
         }
-
+ 
     private:
         ui32 attempt = 0;
     };
@@ -21,7 +21,7 @@ namespace {
         bool operator()() {
             return (attempt++ == 1);
         }
-
+ 
     private:
         ui32 attempt = 0;
     };

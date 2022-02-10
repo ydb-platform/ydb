@@ -5,13 +5,13 @@
 #include <util/system/atomic.h>
 
 namespace {
-    struct TTestSemaphore: public TComplexConditionSemaphore<TTestSemaphore> {
+    struct TTestSemaphore: public TComplexConditionSemaphore<TTestSemaphore> { 
         TAtomic Current;
 
-        TTestSemaphore()
-            : Current(0)
-        {
-        }
+        TTestSemaphore() 
+            : Current(0) 
+        { 
+        } 
 
         bool TryWait() {
             return AtomicGet(Current) > 0;

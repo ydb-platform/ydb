@@ -1,8 +1,8 @@
 #pragma once
 
-#include "last_getopt.h"
-
-#include <util/generic/ptr.h>
+#include "last_getopt.h" 
+ 
+#include <util/generic/ptr.h> 
 #include <util/generic/noncopyable.h>
 
 // implementation of Opt class using last getopt
@@ -54,20 +54,20 @@
 */
 
 #define OPT_RETURN_IN_ORDER "-"
-#define OPT_REQUIRE_ORDER "+"
-#define OPT_DONT_STORE_ARG ((void*)0)
+#define OPT_REQUIRE_ORDER "+" 
+#define OPT_DONT_STORE_ARG ((void*)0) 
 
-class Opt : TNonCopyable {
+class Opt : TNonCopyable { 
 public:
-    enum HasArg { WithoutArg,
-                  WithArg,
-                  PossibleArg };
+    enum HasArg { WithoutArg, 
+                  WithArg, 
+                  PossibleArg }; 
 
     struct Ion {
-        const char* name;
-        HasArg has_arg;
-        int* flag;
-        int val;
+        const char* name; 
+        HasArg has_arg; 
+        int* flag; 
+        int val; 
     };
 
 private:
@@ -75,7 +75,7 @@ private:
     THolder<NLastGetopt::TOptsParser> OptsParser_;
     const Ion* Ions_;
     bool GotError_;
-
+ 
     void Init(int argc, char* argv[], const char* optString, const Ion* longOptions = nullptr, bool longOnly = false, bool isOpen = false);
 
 public:
@@ -89,19 +89,19 @@ public:
         return Get();
     }
 
-    const char* GetArg() const {
-        return Arg;
-    }
+    const char* GetArg() const { 
+        return Arg; 
+    } 
 
     TVector<TString> GetFreeArgs() const {
         return NLastGetopt::TOptsParseResult(&*Opts_, GetArgC(), GetArgV()).GetFreeArgs();
     }
 
     // obsolete, use GetArg() instead
-    char* Arg; /* option argument if any or NULL */
+    char* Arg; /* option argument if any or NULL */ 
 
-    int Ind;  /* command line index */
-    bool Err; /* flag to print error messages */
+    int Ind;  /* command line index */ 
+    bool Err; /* flag to print error messages */ 
 
     int GetArgC() const;
     const char** GetArgV() const;
@@ -111,32 +111,32 @@ public:
 
 // call before getopt. returns non-negative int, removing it from arguments (not found: -1)
 // Example: returns 11 for "progname -11abc", -1 for "progname -a11"
-int opt_get_number(int& argc, char* argv[]);
+int opt_get_number(int& argc, char* argv[]); 
 
-#define OPTION_HANDLING_PROLOG                \
-    {                                         \
-        int optlet;                           \
-        while (EOF != (optlet = opt.Get())) { \
-            switch (optlet) {
-#define OPTION_HANDLING_PROLOG_ANON(S)        \
-    {                                         \
-        Opt opt(argc, argv, (S));             \
-        int optlet;                           \
-        while (EOF != (optlet = opt.Get())) { \
-            switch (optlet) {
-#define OPTION_HANDLE_BEGIN(opt) case opt: {
-#define OPTION_HANDLE_END \
-    }                     \
-    break;
+#define OPTION_HANDLING_PROLOG                \ 
+    {                                         \ 
+        int optlet;                           \ 
+        while (EOF != (optlet = opt.Get())) { \ 
+            switch (optlet) { 
+#define OPTION_HANDLING_PROLOG_ANON(S)        \ 
+    {                                         \ 
+        Opt opt(argc, argv, (S));             \ 
+        int optlet;                           \ 
+        while (EOF != (optlet = opt.Get())) { \ 
+            switch (optlet) { 
+#define OPTION_HANDLE_BEGIN(opt) case opt: { 
+#define OPTION_HANDLE_END \ 
+    }                     \ 
+    break; 
 
 #define OPTION_HANDLE(opt, handle) \
-    OPTION_HANDLE_BEGIN(opt)       \
-    handle;                        \
-    OPTION_HANDLE_END
+    OPTION_HANDLE_BEGIN(opt)       \ 
+    handle;                        \ 
+    OPTION_HANDLE_END 
 
-#define OPTION_HANDLING_EPILOG                   \
-    default:                                     \
-        ythrow yexception() << "unknown optlet"; \
-        }                                        \
-        }                                        \
-        }
+#define OPTION_HANDLING_EPILOG                   \ 
+    default:                                     \ 
+        ythrow yexception() << "unknown optlet"; \ 
+        }                                        \ 
+        }                                        \ 
+        } 

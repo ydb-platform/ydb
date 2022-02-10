@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include "algorithm.h"
-#include "strbuf.h"
+#include "algorithm.h" 
+#include "strbuf.h" 
 #include "string.h"
 
 static auto isOne = [](char c) { return c == '1'; };
@@ -56,16 +56,16 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         UNIT_ASSERT(3 == Count(array, '1'));
     }
 
-    struct TStrokaNoCopy: TString {
-    public:
-        TStrokaNoCopy(const char* p)
+    struct TStrokaNoCopy: TString { 
+    public: 
+        TStrokaNoCopy(const char* p) 
             : TString(p)
-        {
-        }
-
-    private:
-        TStrokaNoCopy(const TStrokaNoCopy&);
-        void operator=(const TStrokaNoCopy&);
+        { 
+        } 
+ 
+    private: 
+        TStrokaNoCopy(const TStrokaNoCopy&); 
+        void operator=(const TStrokaNoCopy&); 
     };
 
     Y_UNIT_TEST(CountOfTest) {
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         UNIT_ASSERT_VALUES_EQUAL(CountOf(TString("xyz"), TStringBuf("123"), TStringBuf("poi")), 0);
         UNIT_ASSERT_VALUES_EQUAL(CountOf(TString("xyz"), TStringBuf("123"), TStringBuf("poi"),
                                          TStringBuf("xyz")),
-                                 1);
+                                 1); 
 
         // TStringBuf and const char *
         UNIT_ASSERT_VALUES_EQUAL(CountOf(TStringBuf("xyz"), "123", "poi"), 0);
@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         UNIT_ASSERT_VALUES_EQUAL(CountOf(TStringBuf("xyz"), TString("123"), TString("poi")), 0);
         UNIT_ASSERT_VALUES_EQUAL(CountOf(TStringBuf("xyz"), TString("123"), TString("poi"),
                                          TString("xyz")),
-                                 1);
+                                 1); 
     }
 
     Y_UNIT_TEST(EqualToOneOfTest) {
@@ -113,9 +113,9 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         TStrokaNoCopy x("x");
         TStrokaNoCopy y("y");
         TStrokaNoCopy z("z");
-        const char* px = "x";
-        const char* py = "y";
-        const char* pz = "z";
+        const char* px = "x"; 
+        const char* py = "y"; 
+        const char* pz = "z"; 
 
         UNIT_ASSERT(1 == EqualToOneOf(x, px, py));
         UNIT_ASSERT(1 == EqualToOneOf(y, px, py));
@@ -149,10 +149,10 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         }
     }
 
-    struct TVectorNoCopy: std::vector<int> {
+    struct TVectorNoCopy: std::vector<int> { 
     public:
         TVectorNoCopy() = default;
-
+ 
     private:
         TVectorNoCopy(const TVectorNoCopy&);
         void operator=(const TVectorNoCopy&);
@@ -164,8 +164,8 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         v.push_back(2);
         v.push_back(3);
 
-        int array[3] = {1, 2, 3};
-        const int array_const[3] = {1, 2, 3};
+        int array[3] = {1, 2, 3}; 
+        const int array_const[3] = {1, 2, 3}; 
 
         //test (const, non-const) * (iterator, vector, array) * (found, not found) variants.
         // value '3' is in container, value '4' is not
@@ -186,20 +186,20 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         v.push_back(2);
         v.push_back(3);
 
-        int array[3] = {1, 2, 3};
-        const int array_const[3] = {1, 2, 3};
+        int array[3] = {1, 2, 3}; 
+        const int array_const[3] = {1, 2, 3}; 
 
         //test (const, non-const) * (iterator, vector, array) * (found, not found) variants.
         // search, that 2*2 == 4, but there is no value 'x' in array that (x*x == 3)
         for (int j = 3; j <= 4; ++j) {
-            TestFindIfPtrFoundValue<int*>(j, FindIfPtr(v, [j](int i) { return i * i == j; }));
-            TestFindIfPtrFoundValue<int*>(j, FindIfPtr(v.begin(), v.end(), [j](int i) { return i * i == j; }));
-            const TVectorNoCopy& q = v;
-            TestFindIfPtrFoundValue<const int*>(j, FindIfPtr(q, [j](int i) { return i * i == j; }));
+            TestFindIfPtrFoundValue<int*>(j, FindIfPtr(v, [j](int i) { return i * i == j; })); 
+            TestFindIfPtrFoundValue<int*>(j, FindIfPtr(v.begin(), v.end(), [j](int i) { return i * i == j; })); 
+            const TVectorNoCopy& q = v; 
+            TestFindIfPtrFoundValue<const int*>(j, FindIfPtr(q, [j](int i) { return i * i == j; })); 
 
-            TestFindIfPtrFoundValue<const int*>(j, FindIfPtr(q.begin(), q.end(), [j](int i) { return i * i == j; }));
-            TestFindIfPtrFoundValue<int*>(j, FindIfPtr(array, [j](int i) { return i * i == j; }));
-            TestFindIfPtrFoundValue<const int*>(j, FindIfPtr(array_const, [j](int i) { return i * i == j; }));
+            TestFindIfPtrFoundValue<const int*>(j, FindIfPtr(q.begin(), q.end(), [j](int i) { return i * i == j; })); 
+            TestFindIfPtrFoundValue<int*>(j, FindIfPtr(array, [j](int i) { return i * i == j; })); 
+            TestFindIfPtrFoundValue<const int*>(j, FindIfPtr(array_const, [j](int i) { return i * i == j; })); 
         }
     }
 
@@ -214,7 +214,7 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         UNIT_ASSERT_EQUAL(2, FindIndex(v, 3));
         UNIT_ASSERT_EQUAL(NPOS, FindIndex(v, 42));
 
-        int array[3] = {1, 2, 3};
+        int array[3] = {1, 2, 3}; 
 
         UNIT_ASSERT_EQUAL(0, FindIndex(array, 1));
         UNIT_ASSERT_EQUAL(1, FindIndex(array, 2));
@@ -323,12 +323,12 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
             int data[] = {3, 2, 1, 4, 6, 5, 7, 9, 8};
             TVector<int> testVector(data, data + Y_ARRAY_SIZE(data));
 
-            size_t medianInd = testVector.size() / 2;
+            size_t medianInd = testVector.size() / 2; 
 
             NthElement(testVector.begin(), testVector.begin() + medianInd, testVector.end());
             UNIT_ASSERT_EQUAL(testVector[medianInd], 5);
 
-            NthElement(testVector.begin(), testVector.begin() + medianInd, testVector.end(), [](int lhs, int rhs) { return lhs > rhs; });
+            NthElement(testVector.begin(), testVector.begin() + medianInd, testVector.end(), [](int lhs, int rhs) { return lhs > rhs; }); 
             UNIT_ASSERT_EQUAL(testVector[medianInd], 5);
         }
 
@@ -336,12 +336,12 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
             const char* data[] = {"3", "234", "1231", "333", "545345", "11", "111", "55", "66"};
             TVector<TString> testVector(data, data + Y_ARRAY_SIZE(data));
 
-            size_t medianInd = testVector.size() / 2;
+            size_t medianInd = testVector.size() / 2; 
             NthElement(testVector.begin(), testVector.begin() + medianInd, testVector.end());
 
             auto median = testVector.begin() + medianInd;
-            for (auto it0 = testVector.begin(); it0 != median; ++it0) {
-                for (auto it1 = median; it1 != testVector.end(); ++it1) {
+            for (auto it0 = testVector.begin(); it0 != median; ++it0) { 
+                for (auto it1 = median; it1 != testVector.end(); ++it1) { 
                     UNIT_ASSERT(*it0 <= *it1);
                 }
             }
@@ -368,13 +368,13 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         {
             TVector<size_t> data = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
 
-            bool test = BinarySearch(data.begin(), data.end(), (size_t)9, TGreater<size_t>());
+            bool test = BinarySearch(data.begin(), data.end(), (size_t)9, TGreater<size_t>()); 
             UNIT_ASSERT_EQUAL(test, true);
 
-            test = BinarySearch(data.begin(), data.end(), (size_t)11, TGreater<size_t>());
+            test = BinarySearch(data.begin(), data.end(), (size_t)11, TGreater<size_t>()); 
             UNIT_ASSERT_EQUAL(test, false);
 
-            test = BinarySearch(data.rbegin(), data.rend(), (size_t)1);
+            test = BinarySearch(data.rbegin(), data.rend(), (size_t)1); 
             UNIT_ASSERT_EQUAL(test, true);
         }
     }
@@ -409,7 +409,7 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
             UNIT_ASSERT_EQUAL(tmp.second - tmp.first, 3);
 
             using PairOfVectorReverse = std::pair<TVector<size_t>::reverse_iterator, TVector<size_t>::reverse_iterator>;
-            PairOfVectorReverse tmpR = EqualRange(data.rbegin(), data.rend(), (size_t)0);
+            PairOfVectorReverse tmpR = EqualRange(data.rbegin(), data.rend(), (size_t)0); 
 
             UNIT_ASSERT_EQUAL(tmpR.first, data.rbegin());
             UNIT_ASSERT_EQUAL(tmpR.second - tmpR.first, 2);
@@ -503,7 +503,7 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
 
     Y_UNIT_TEST(SortByTest) {
         TVector<int> collection = {10, 2, 7};
-        SortBy(collection, [](int x) { return -x; });
+        SortBy(collection, [](int x) { return -x; }); 
         TVector<int> expected = {10, 7, 2};
         UNIT_ASSERT_VALUES_EQUAL(collection, expected);
     }
@@ -544,7 +544,7 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
     }
 
     Y_UNIT_TEST(CopyNTest) {
-        int data[] = {1, 2, 3, 4, 8, 7, 6, 5};
+        int data[] = {1, 2, 3, 4, 8, 7, 6, 5}; 
         const size_t vSize = 10;
         TVector<int> result(10, 0);
         size_t toCopy = 5;
@@ -616,12 +616,12 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         const int array[] = {1, 2, 5, 3, 4, 5};
         UNIT_ASSERT_VALUES_EQUAL(*MaxElementBy(array, [](int x) {
             return x * x;
-        }), 5);
+        }), 5); 
 
         const TVector<int> vec(array, array + Y_ARRAY_SIZE(array));
         UNIT_ASSERT_VALUES_EQUAL(*MaxElementBy(vec, [](int x) {
             return -1.0 * x;
-        }), 1);
+        }), 1); 
 
         int arrayMutable[] = {1, 2, 5, 3, 4, 5};
         auto maxPtr = MaxElementBy(arrayMutable, [](int x) { return x; });
@@ -642,12 +642,12 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         const int array[] = {2, 3, 4, 1, 5};
         UNIT_ASSERT_VALUES_EQUAL(*MinElementBy(array, [](int x) -> char {
             return 'a' + x;
-        }), 1);
+        }), 1); 
 
         const TVector<int> vec(std::begin(array), std::end(array));
         UNIT_ASSERT_VALUES_EQUAL(*MinElementBy(vec, [](int x) {
             return -x;
-        }), 5);
+        }), 5); 
 
         int arrayMutable[] = {1, 2, 5, 3, 4, 5};
         auto minPtr = MinElementBy(arrayMutable, [](int x) { return x; });
@@ -702,20 +702,20 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         UNIT_ASSERT_EQUAL(res, 15);
 
         struct TVisitor {
-            TVisitor(int& acc)
-                : Acc(acc)
-            {
-            }
-            void operator()(const TString& s) {
-                Acc += s.size();
-            };
-            void operator()(int v) {
-                Acc += v * 2;
-            };
+            TVisitor(int& acc) 
+                : Acc(acc) 
+            { 
+            } 
+            void operator()(const TString& s) { 
+                Acc += s.size(); 
+            }; 
+            void operator()(int v) { 
+                Acc += v * 2; 
+            }; 
             int& Acc;
         };
-        TString s{"8-800-555-35-35"};
-        ApplyToMany(TVisitor{res = 0}, 1, s, 5, s);
+        TString s{"8-800-555-35-35"}; 
+        ApplyToMany(TVisitor{res = 0}, 1, s, 5, s); 
         UNIT_ASSERT_EQUAL(res, 12 + 2 * static_cast<int>(s.size()));
     }
 
@@ -740,7 +740,7 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
             auto pred = [](auto s) { return s.size() == 3; };
             UNIT_ASSERT_VALUES_EQUAL(AllOf(ts, pred), AllOf(ts, pred));
         }
-    }
+    } 
 
     Y_UNIT_TEST(TestTupleAnyOf) {
         UNIT_ASSERT(!AnyOf(std::tuple<>{}, [](auto) { return true; }));

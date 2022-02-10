@@ -11,7 +11,7 @@
  * it under the terms of the GNU Lesser Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- *
+ * 
  * Pire is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -31,11 +31,11 @@
 
 namespace Pire {
 class Fsm;
-
+ 
 namespace Impl {
 	template<class T>
 	class ScannerGlueCommon;
-
+ 
 	template<class T>
 	class CountingScannerGlueTask;
 
@@ -121,7 +121,7 @@ public:
 	enum {
 		IncrementAction = 1,
 		ResetAction = 2,
-
+ 
 		FinalFlag = 0,
 		DeadFlag = 1,
 	};
@@ -170,7 +170,7 @@ public:
 	bool Dead(const State&) const { return false; }
 
 	using LoadedScanner::Swap;
-
+ 
 	size_t StateIndex(const State& s) const { return StateIdx(s.m_state); }
 
 protected:
@@ -192,7 +192,7 @@ protected:
 		mask &= s.m_updatedMask;
 		if (mask) {
 			ResetPerformer<ActualReCount>::Do(s, mask);
-			s.m_updatedMask &= (Action)~mask;
+			s.m_updatedMask &= (Action)~mask; 
 		}
 	}
 
@@ -267,7 +267,7 @@ private:
 		else
 			return 0;
 	}
-
+ 
 	friend void BuildScanner<CountingScanner>(const Fsm&, CountingScanner&);
 	friend class Impl::ScannerGlueCommon<CountingScanner>;
 	friend class Impl::CountingScannerGlueTask<CountingScanner>;

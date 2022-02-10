@@ -15,7 +15,7 @@ namespace NKiwiAggr {
         static const size_t DEFAULT_INTERVALS = 100;
 
         typedef std::pair<double, double> TWeightedValue; // value, weight
-        THolder<TVector<TWeightedValue>> TrainingSet;
+        THolder<TVector<TWeightedValue>> TrainingSet; 
         size_t TrainingSetSize;
 
         bool IsInitialized;
@@ -40,7 +40,7 @@ namespace NKiwiAggr {
         TFixedBinHistogram(const THistogram& histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0, size_t trainingSetSize = DEFAULT_TRAINING_SET_SIZE);
         TFixedBinHistogram(IHistogram* histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0, size_t trainingSetSize = DEFAULT_TRAINING_SET_SIZE);
 
-        virtual ~TFixedBinHistogram() {
+        virtual ~TFixedBinHistogram() { 
         }
 
         virtual void Clear();
@@ -88,4 +88,4 @@ namespace NKiwiAggr {
         }
     };
 
-}
+} 

@@ -11,14 +11,14 @@
 #define CACHE_LINE_PADDING char UNIQUE_NAME[CACHE_LINE_SIZE];
 
 static inline void* MallocAligned(size_t size, size_t alignment) {
-    void** ptr = (void**)malloc(size + alignment + sizeof(size_t*));
+    void** ptr = (void**)malloc(size + alignment + sizeof(size_t*)); 
     if (!ptr) {
         return nullptr;
     }
 
     size_t mask = ~(alignment - 1);
     intptr_t roundedDown = intptr_t(ptr) & mask;
-    void** alignedPtr = (void**)(roundedDown + alignment);
+    void** alignedPtr = (void**)(roundedDown + alignment); 
     alignedPtr[-1] = ptr;
     return alignedPtr;
 }
@@ -28,8 +28,8 @@ static inline void FreeAligned(void* ptr) {
         return;
     }
 
-    void** typedPtr = (void**)ptr;
-    void* originalPtr = typedPtr[-1];
+    void** typedPtr = (void**)ptr; 
+    void* originalPtr = typedPtr[-1]; 
     free(originalPtr);
 }
 

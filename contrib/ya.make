@@ -1,4 +1,4 @@
-RECURSE(
+RECURSE( 
     clickhouse
     deprecated
     go
@@ -6,9 +6,9 @@ RECURSE(
     libs
     nginx
     node_modules
-    phantom/pd/ssl
+    phantom/pd/ssl 
     python
     restricted
     tests
     tools
-)
+) 

@@ -1,76 +1,76 @@
 #pragma once
-
-#include <util/system/atexit.h>
-#include <util/system/atomic.h>
-
-#include <new>
+ 
+#include <util/system/atexit.h> 
+#include <util/system/atomic.h> 
+ 
+#include <new> 
 #include <utility>
-
-template <class T>
-struct TSingletonTraits {
+ 
+template <class T> 
+struct TSingletonTraits { 
     static constexpr size_t Priority = 65536;
-};
-
-namespace NPrivate {
-    void FillWithTrash(void* ptr, size_t len);
-
+}; 
+ 
+namespace NPrivate { 
+    void FillWithTrash(void* ptr, size_t len); 
+ 
     void LockRecursive(TAtomic& lock) noexcept;
     void UnlockRecursive(TAtomic& lock) noexcept;
-
-    template <class T>
-    void Destroyer(void* ptr) {
-        ((T*)ptr)->~T();
-        FillWithTrash(ptr, sizeof(T));
-    }
-
+ 
+    template <class T> 
+    void Destroyer(void* ptr) { 
+        ((T*)ptr)->~T(); 
+        FillWithTrash(ptr, sizeof(T)); 
+    } 
+ 
     template <class T, size_t P, class... TArgs>
     Y_NO_INLINE T* SingletonBase(T*& ptr, TArgs&&... args) {
-        alignas(T) static char buf[sizeof(T)];
-        static TAtomic lock;
-
-        LockRecursive(lock);
-
-        auto ret = AtomicGet(ptr);
-
-        try {
-            if (!ret) {
+        alignas(T) static char buf[sizeof(T)]; 
+        static TAtomic lock; 
+ 
+        LockRecursive(lock); 
+ 
+        auto ret = AtomicGet(ptr); 
+ 
+        try { 
+            if (!ret) { 
                 ret = ::new (buf) T(std::forward<TArgs>(args)...);
-
-                try {
-                    AtExit(Destroyer<T>, ret, P);
-                } catch (...) {
-                    Destroyer<T>(ret);
-
-                    throw;
-                }
-
-                AtomicSet(ptr, ret);
-            }
-        } catch (...) {
-            UnlockRecursive(lock);
-
-            throw;
-        }
-
-        UnlockRecursive(lock);
-
+ 
+                try { 
+                    AtExit(Destroyer<T>, ret, P); 
+                } catch (...) { 
+                    Destroyer<T>(ret); 
+ 
+                    throw; 
+                } 
+ 
+                AtomicSet(ptr, ret); 
+            } 
+        } catch (...) { 
+            UnlockRecursive(lock); 
+ 
+            throw; 
+        } 
+ 
+        UnlockRecursive(lock); 
+ 
         return ret;
-    }
+    } 
 
     template <class T, size_t P, class... TArgs>
     T* SingletonInt(TArgs&&... args) {
-        static_assert(sizeof(T) < 32000, "use HugeSingleton instead");
-
-        static T* ptr;
-        auto ret = AtomicGet(ptr);
-
-        if (Y_UNLIKELY(!ret)) {
+        static_assert(sizeof(T) < 32000, "use HugeSingleton instead"); 
+ 
+        static T* ptr; 
+        auto ret = AtomicGet(ptr); 
+ 
+        if (Y_UNLIKELY(!ret)) { 
             ret = SingletonBase<T, P>(ptr, std::forward<TArgs>(args)...);
-        }
-
-        return ret;
-    }
-
+        } 
+ 
+        return ret; 
+    } 
+ 
     template <class T>
     class TDefault {
     public:
@@ -87,29 +87,29 @@ namespace NPrivate {
     private:
         T T_;
     };
-
-    template <class T>
-    struct THeapStore {
+ 
+    template <class T> 
+    struct THeapStore { 
         template <class... TArgs>
         inline THeapStore(TArgs&&... args)
             : D(new T(std::forward<TArgs>(args)...))
-        {
-        }
-
+        { 
+        } 
+ 
         inline ~THeapStore() {
-            delete D;
-        }
-
-        T* D;
-    };
-}
-
-#define Y_DECLARE_SINGLETON_FRIEND()                \
-    template <class T, size_t P, class... TArgs>    \
-    friend T* ::NPrivate::SingletonInt(TArgs&&...); \
-    template <class T, size_t P, class... TArgs>    \
-    friend T* ::NPrivate::SingletonBase(T*&, TArgs&&...);
-
+            delete D; 
+        } 
+ 
+        T* D; 
+    }; 
+} 
+ 
+#define Y_DECLARE_SINGLETON_FRIEND()                \ 
+    template <class T, size_t P, class... TArgs>    \ 
+    friend T* ::NPrivate::SingletonInt(TArgs&&...); \ 
+    template <class T, size_t P, class... TArgs>    \ 
+    friend T* ::NPrivate::SingletonBase(T*&, TArgs&&...); 
+ 
 template <class T, class... TArgs>
 T* Singleton(TArgs&&... args) {
     return ::NPrivate::SingletonInt<T, TSingletonTraits<T>::Priority>(std::forward<TArgs>(args)...);
@@ -117,20 +117,20 @@ T* Singleton(TArgs&&... args) {
 
 template <class T, class... TArgs>
 T* HugeSingleton(TArgs&&... args) {
-    return Singleton<::NPrivate::THeapStore<T>>(std::forward<TArgs>(args)...)->D;
-}
-
+    return Singleton<::NPrivate::THeapStore<T>>(std::forward<TArgs>(args)...)->D; 
+} 
+ 
 template <class T, size_t P, class... TArgs>
 T* SingletonWithPriority(TArgs&&... args) {
     return ::NPrivate::SingletonInt<T, P>(std::forward<TArgs>(args)...);
-}
-
+} 
+ 
 template <class T, size_t P, class... TArgs>
 T* HugeSingletonWithPriority(TArgs&&... args) {
-    return SingletonWithPriority<::NPrivate::THeapStore<T>, P>(std::forward<TArgs>(args)...)->D;
-}
-
+    return SingletonWithPriority<::NPrivate::THeapStore<T>, P>(std::forward<TArgs>(args)...)->D; 
+} 
+ 
 template <class T>
 const T& Default() {
-    return *(::NPrivate::SingletonInt<typename ::NPrivate::TDefault<T>, TSingletonTraits<T>::Priority>()->Get());
-}
+    return *(::NPrivate::SingletonInt<typename ::NPrivate::TDefault<T>, TSingletonTraits<T>::Priority>()->Get()); 
+} 

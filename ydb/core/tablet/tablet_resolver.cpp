@@ -63,7 +63,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         struct TEvRefreshNodes : public TEventLocal<TEvRefreshNodes, EvRefreshNodes> {
         };
 
-        static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+        static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)"); 
     };
 
     struct TEntry {

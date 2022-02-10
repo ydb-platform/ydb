@@ -32,8 +32,8 @@ struct TTestParams {
     ui32 ValueArraySize;
 };
 
-template <typename X>
-void TestSaveLoadMeta(NCompProto::TMetaInfo<X>& src) {
+template <typename X> 
+void TestSaveLoadMeta(NCompProto::TMetaInfo<X>& src) { 
     TStringStream ss;
     src.Save(ss);
     TString data = ss.Str();
@@ -50,7 +50,7 @@ void TestWithParams(const TString& metainfo, const ECompMode mode, const TTestPa
 
     TStringInput stream(metainfo);
 
-    THolder<TMetaInfo<THuff>> meta;
+    THolder<TMetaInfo<THuff>> meta; 
     if (mode == CM_TWOPASS) {
         TMetaInfo<THist> hist(stream);
         TEmpty empty;
@@ -70,19 +70,19 @@ void TestWithParams(const TString& metainfo, const ECompMode mode, const TTestPa
 
     // verify that no memory read beyond buffer occurs
     const size_t byteSize = buffer.ByteLength();
-    const size_t PAGESIZEX = 4096;
-    const size_t busyPages = (byteSize + (PAGESIZEX - 1)) / PAGESIZEX;
+    const size_t PAGESIZEX = 4096; 
+    const size_t busyPages = (byteSize + (PAGESIZEX - 1)) / PAGESIZEX; 
     const size_t allPages = busyPages + 1;
-    const size_t allocSize = (allPages + 1) * PAGESIZEX;
+    const size_t allocSize = (allPages + 1) * PAGESIZEX; 
     TVector<ui8> readBuffer(allocSize);
     ui8* start = &readBuffer[0];
-    ui8* pageStart = reinterpret_cast<ui8*>((size_t(start) + PAGESIZEX) & ~(PAGESIZEX - 1));
+    ui8* pageStart = reinterpret_cast<ui8*>((size_t(start) + PAGESIZEX) & ~(PAGESIZEX - 1)); 
     // XX DATA  DATA  DATA DATA PROT
     //      |     |     |     |     | pages
     // calculate dataStart so that data ends exactly at the page end
-    ui8* dataStart = pageStart + busyPages * PAGESIZEX - byteSize;
-    ui8* dataEnd = pageStart + busyPages * PAGESIZEX;
-    ProtectMemory(dataEnd, PAGESIZEX, PM_NONE);
+    ui8* dataStart = pageStart + busyPages * PAGESIZEX - byteSize; 
+    ui8* dataEnd = pageStart + busyPages * PAGESIZEX; 
+    ProtectMemory(dataEnd, PAGESIZEX, PM_NONE); 
     // memory copying should be performed without any problems
     memcpy(dataStart, buffer.Out.data(), byteSize);
 
@@ -93,7 +93,7 @@ void TestWithParams(const TString& metainfo, const ECompMode mode, const TTestPa
     const ui64 decodedSize = position;
     UNIT_ASSERT_EQUAL(codedSize, decodedSize);
     // unprotect memory
-    ProtectMemory(dataEnd, PAGESIZEX, PM_READ | PM_WRITE | PM_EXEC);
+    ProtectMemory(dataEnd, PAGESIZEX, PM_READ | PM_WRITE | PM_EXEC); 
 }
 
 template <typename TDecompressor, template <typename, typename> class TSerialize>
@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
     using namespace NCompProto;
 
     const TString metainfo =
-        "\n\
+        "\n\ 
     repeated data id 0\n\
         scalar clicks id 0 default const 0\n\
         scalar shows id 1 default const 0\n\
@@ -137,9 +137,9 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
 
     TVector<TData> data;
 
-    template <class TMeta, class TFunctor>
+    template <class TMeta, class TFunctor> 
     struct TSerialize {
-        static void Serialize(TMetaInfo<TMeta>& meta, TFunctor& functor, const TTestParams& params) {
+        static void Serialize(TMetaInfo<TMeta>& meta, TFunctor& functor, const TTestParams& params) { 
             FlushPseudoRandom();
             meta.BeginSelf(functor);
             data.clear();
@@ -153,7 +153,7 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
                 meta.SetScalar(0, data[i].Clicks, functor);
                 meta.SetScalar(1, data[i].Shows, functor);
 
-                TMetaInfo<TMeta>& regClicks = meta.BeginRepeated(2, functor);
+                TMetaInfo<TMeta>& regClicks = meta.BeginRepeated(2, functor); 
                 for (ui32 j = 0; j < PseudoRandom(200); j += 1 + PseudoRandom(10)) {
                     regClicks.BeginElement(j, functor);
                     TRegInfo& r = data[i].RegClicks[j];
@@ -173,10 +173,10 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
         }
     };
 
-    struct TMultiDecompressor: public TParentHold<TMultiDecompressor> {
-        struct TRegClicks: public TParentHold<TRegClicks> {
-            const TData* Data;
-            const TRegInfo* Elem;
+    struct TMultiDecompressor: public TParentHold<TMultiDecompressor> { 
+        struct TRegClicks: public TParentHold<TRegClicks> { 
+            const TData* Data; 
+            const TRegInfo* Elem; 
             TRegClicks()
                 : Data(nullptr)
                 , Elem(nullptr)
@@ -201,13 +201,13 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
                 if (index == 1)
                     UNIT_ASSERT_EQUAL(val, Elem->Shows);
             }
-            IDecompressor& GetDecompressor(size_t) {
+            IDecompressor& GetDecompressor(size_t) { 
                 UNIT_ASSERT(0);
                 return GetEmptyDecompressor();
             }
         };
 
-        const TData* Elem;
+        const TData* Elem; 
         TMetaIterator<TRegClicks> RegClicks;
         void BeginSelf(ui32 /*count*/, ui32 /*id*/) {
         }
@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
             if (index == 31)
                 UNIT_ASSERT_EQUAL(val, Elem->Extra);
         }
-        IDecompressor& GetDecompressor(size_t index) {
+        IDecompressor& GetDecompressor(size_t index) { 
             if (index == 2) {
                 RegClicks.Self.Data = Elem;
                 return RegClicks;
@@ -241,19 +241,19 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
         }
     };
 
-    struct TVerifyingDecompressor: public TParentHold<TVerifyingDecompressor> {
+    struct TVerifyingDecompressor: public TParentHold<TVerifyingDecompressor> { 
         enum EState {
-            Startstop,
-            OutDataElem,
-            InDataElem,
-            InRegClicks,
+            Startstop, 
+            OutDataElem, 
+            InDataElem, 
+            InRegClicks, 
         };
         EState State;
 
         ui32 DataInd;
         TMap<ui32, TRegInfo>::iterator RegIter;
 
-        TMetaIterator<TVerifyingDecompressor>& GetDecompressor(size_t index) {
+        TMetaIterator<TVerifyingDecompressor>& GetDecompressor(size_t index) { 
             Y_UNUSED(index);
             return *Parent;
         }
@@ -374,7 +374,7 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
 Y_UNIT_TEST_SUITE(CompProtoTestExtended) {
     using namespace NCompProto;
     const TString metainfo =
-        "\n\
+        "\n\ 
     repeated data id 0\n\
         repeated second id 3\n\
             scalar inner2 id 0 default const 0\n\
@@ -385,21 +385,21 @@ Y_UNIT_TEST_SUITE(CompProtoTestExtended) {
     end\n";
     TVector<std::pair<TVector<ui32>, TVector<ui32>>> data;
 
-    template <class TMeta, class TFunctor>
+    template <class TMeta, class TFunctor> 
     struct TSerialize {
-        static void Serialize(TMetaInfo<TMeta>& meta, TFunctor& functor, const TTestParams& params) {
+        static void Serialize(TMetaInfo<TMeta>& meta, TFunctor& functor, const TTestParams& params) { 
             FlushPseudoRandom();
             meta.BeginSelf(functor);
             data.clear();
             data.resize(params.DataSize);
             for (size_t i = 0; i < params.DataSize; ++i) {
                 meta.BeginElement(i, functor);
-                TMetaInfo<TMeta>& first = meta.BeginRepeated(2, functor);
+                TMetaInfo<TMeta>& first = meta.BeginRepeated(2, functor); 
                 data[i].first.resize(params.ValueArraySize);
                 for (ui32 j = 0; j < params.ValueArraySize; j++) {
                     first.BeginElement(j, functor);
 
-                    ui32 val = PseudoRandom(42 * 42 * 42);
+                    ui32 val = PseudoRandom(42 * 42 * 42); 
                     first.SetScalar(0, val, functor);
                     data[i].first[j] = val;
 
@@ -407,12 +407,12 @@ Y_UNIT_TEST_SUITE(CompProtoTestExtended) {
                 }
                 first.EndRepeated(functor);
 
-                TMetaInfo<TMeta>& second = meta.BeginRepeated(3, functor);
+                TMetaInfo<TMeta>& second = meta.BeginRepeated(3, functor); 
                 data[i].second.resize(params.ValueArraySize);
                 for (ui32 j = 0; j < params.ValueArraySize; j++) {
                     second.BeginElement(j, functor);
 
-                    ui32 val = PseudoRandom(42 * 42 * 42);
+                    ui32 val = PseudoRandom(42 * 42 * 42); 
                     second.SetScalar(0, val, functor);
                     data[i].second[j] = val;
 
@@ -425,14 +425,14 @@ Y_UNIT_TEST_SUITE(CompProtoTestExtended) {
         }
     };
 
-    struct TVerifyingDecompressor: public TParentHold<TVerifyingDecompressor> {
+    struct TVerifyingDecompressor: public TParentHold<TVerifyingDecompressor> { 
         enum EState {
-            Startstop,
-            OutDataElem,
-            InDataElemBeforeSecond,
-            InDataElemSecond,
-            InFirst,
-            InSecond,
+            Startstop, 
+            OutDataElem, 
+            InDataElemBeforeSecond, 
+            InDataElemSecond, 
+            InFirst, 
+            InSecond, 
         };
         EState State;
 
@@ -446,7 +446,7 @@ Y_UNIT_TEST_SUITE(CompProtoTestExtended) {
         {
         }
 
-        TMetaIterator<TVerifyingDecompressor>& GetDecompressor(size_t index) {
+        TMetaIterator<TVerifyingDecompressor>& GetDecompressor(size_t index) { 
             Y_UNUSED(index);
             return *Parent;
         }

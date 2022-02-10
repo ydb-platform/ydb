@@ -41,26 +41,26 @@ struct UGroup
 {
   const char *name;
   int sign;  // +1 for [abc], -1 for [^abc]
-  const URange16 *r16;
+  const URange16 *r16; 
   int nr16;
-  const URange32 *r32;
+  const URange32 *r32; 
   int nr32;
 };
 
 // Named by property or script name (e.g., "Nd", "N", "Han").
 // Negated groups are not included.
-extern const UGroup unicode_groups[];
-extern const int num_unicode_groups;
+extern const UGroup unicode_groups[]; 
+extern const int num_unicode_groups; 
 
 // Named by POSIX name (e.g., "[:alpha:]", "[:^lower:]").
 // Negated groups are included.
-extern const UGroup posix_groups[];
-extern const int num_posix_groups;
+extern const UGroup posix_groups[]; 
+extern const int num_posix_groups; 
 
 // Named by Perl name (e.g., "\\d", "\\D").
 // Negated groups are included.
-extern const UGroup perl_groups[];
-extern const int num_perl_groups;
+extern const UGroup perl_groups[]; 
+extern const int num_perl_groups; 
 
 }  // namespace re2
 

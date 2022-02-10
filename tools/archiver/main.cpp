@@ -7,18 +7,18 @@
 #include <util/folder/filelist.h>
 #include <util/folder/path.h>
 #include <util/generic/vector.h>
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
 #include <util/memory/blob.h>
 #include <util/stream/file.h>
 #include <util/string/cast.h>
 #include <util/string/escape.h>
-#include <util/string/hex.h>
+#include <util/string/hex.h> 
 #include <util/string/subst.h>
 #include <util/system/filemap.h>
-
+ 
 #include <cstring>
 
-namespace {
+namespace { 
     class TStringArrayOutput: public IOutputStream {
     public:
         TStringArrayOutput(IOutputStream* slave, size_t stride)
@@ -38,7 +38,7 @@ namespace {
                     WriteBuf();
             }
         }
-
+ 
     private:
         void WriteBuf() {
             Slave << '"' << Buf << "\",\n"sv;
@@ -52,82 +52,82 @@ namespace {
     };
 
     class THexOutput: public IOutputStream {
-    public:
+    public: 
         inline THexOutput(IOutputStream* slave)
             : Slave_(slave)
-        {
-        }
-
+        { 
+        } 
+ 
         ~THexOutput() override {
-        }
-
+        } 
+ 
         inline IOutputStream* Slave() const noexcept {
             return Slave_;
-        }
-
-    private:
+        } 
+ 
+    private: 
         void DoFinish() override {
             Slave_->Write('\n');
             Slave_->Flush();
-        }
-
+        } 
+ 
         void DoWrite(const void* data, size_t len) override {
-            const char* b = (const char*)data;
-
-            while (len) {
-                const unsigned char c = *b;
-                char buf[12];
-                char* tmp = buf;
-
+            const char* b = (const char*)data; 
+ 
+            while (len) { 
+                const unsigned char c = *b; 
+                char buf[12]; 
+                char* tmp = buf; 
+ 
                 if (Count_ % Columns == 0) {
-                    *tmp++ = ' ';
-                    *tmp++ = ' ';
-                    *tmp++ = ' ';
-                    *tmp++ = ' ';
-                }
-
+                    *tmp++ = ' '; 
+                    *tmp++ = ' '; 
+                    *tmp++ = ' '; 
+                    *tmp++ = ' '; 
+                } 
+ 
                 if (Count_ && Count_ % Columns != 0) {
-                    *tmp++ = ',';
-                    *tmp++ = ' ';
-                }
-
-                *tmp++ = '0';
-                *tmp++ = 'x';
-                tmp = HexEncode(&c, 1, tmp);
-
+                    *tmp++ = ','; 
+                    *tmp++ = ' '; 
+                } 
+ 
+                *tmp++ = '0'; 
+                *tmp++ = 'x'; 
+                tmp = HexEncode(&c, 1, tmp); 
+ 
                 if ((Count_ % Columns) == (Columns - 1)) {
-                    *tmp++ = ',';
-                    *tmp++ = '\n';
-                }
-
+                    *tmp++ = ','; 
+                    *tmp++ = '\n'; 
+                } 
+ 
                 Slave_->Write(buf, tmp - buf);
-
-                --len;
-                ++b;
+ 
+                --len; 
+                ++b; 
                 ++Count_;
-            }
-        }
-
-    private:
+            } 
+        } 
+ 
+    private: 
         // width in source chars
         static const size_t Columns = 10;
         ui64 Count_ = 0;
         IOutputStream* Slave_ = nullptr;
-    };
-
+    }; 
+ 
     struct TYasmOutput: public IOutputStream {
         inline TYasmOutput(IOutputStream* out, const TString& base)
             : Out_(out)
             , Base_(base)
-        {
+        { 
             *Out_ << "global " << Base_ << "\n";
             *Out_ << "global " << Base_ << "Size\n\nSECTION .rodata\n\n";
             *Out_ << Base_ << ":\n";
-        }
-
+        } 
+ 
         ~TYasmOutput() override {
-        }
-
+        } 
+ 
         void DoFinish() override {
             *Out_ << Base_ << "Size:\ndd " << Count_ << '\n';
 
@@ -135,74 +135,74 @@ namespace {
             *Out_ << "size " << Base_ << " " << Count_ << "\n";
             *Out_ << "size " << Base_ << "Size 4\n";
             *Out_ << "%endif\n";
-        }
-
+        } 
+ 
         void DoWrite(const void* data, size_t len) override {
             Count_ += len;
-
-            const unsigned char* p = (const unsigned char*)data;
-
-            while (len) {
-                const size_t step = Min<size_t>(len, 100);
-
+ 
+            const unsigned char* p = (const unsigned char*)data; 
+ 
+            while (len) { 
+                const size_t step = Min<size_t>(len, 100); 
+ 
                 *Out_ << "db " << (int)*p++;
-
-                for (size_t i = 1; i < step; ++i) {
+ 
+                for (size_t i = 1; i < step; ++i) { 
                     *Out_ << ',' << (int)*p++;
-                }
-
+                } 
+ 
                 *Out_ << '\n';
-
-                len -= step;
-            }
-        }
-
+ 
+                len -= step; 
+            } 
+        } 
+ 
         IOutputStream* Out_ = nullptr;
         const TString Base_;
         ui64 Count_ = 0;
-    };
-
-    struct TCOutput: public THexOutput {
+    }; 
+ 
+    struct TCOutput: public THexOutput { 
         inline TCOutput(IOutputStream* out, const TString& base)
-            : THexOutput(out)
-            , B(base)
-        {
-            *Slave() << "static_assert(sizeof(unsigned int) == 4, \"ups, unsupported platform\");\n\nextern \"C\" {\nextern const unsigned char " << B << "[] = {\n";
-        }
-
+            : THexOutput(out) 
+            , B(base) 
+        { 
+            *Slave() << "static_assert(sizeof(unsigned int) == 4, \"ups, unsupported platform\");\n\nextern \"C\" {\nextern const unsigned char " << B << "[] = {\n"; 
+        } 
+ 
         ~TCOutput() override {
-        }
-
+        } 
+ 
         void DoFinish() override {
-            *Slave() << "\n};\nextern const unsigned int " << B << "Size = sizeof(" << B << ") / sizeof(" << B << "[0]);\n}\n";
-        }
-
+            *Slave() << "\n};\nextern const unsigned int " << B << "Size = sizeof(" << B << ") / sizeof(" << B << "[0]);\n}\n"; 
+        } 
+ 
         const TString B;
-    };
-
+    }; 
+ 
     struct TCStringOutput: public IOutputStream {
         inline TCStringOutput(IOutputStream* out, const TString& base)
-            : O(out)
-            , B(base)
-        {
-            *O << "static_assert(sizeof(unsigned int) == 4, \"ups, unsupported platform\");\n\nextern \"C\" {\nextern const unsigned char " << B << "[] = \n";
-        }
-
+            : O(out) 
+            , B(base) 
+        { 
+            *O << "static_assert(sizeof(unsigned int) == 4, \"ups, unsupported platform\");\n\nextern \"C\" {\nextern const unsigned char " << B << "[] = \n"; 
+        } 
+ 
         ~TCStringOutput() override {
-        }
-
+        } 
+ 
         void DoWrite(const void* data, size_t len) override {
             *O << TString((const char*)data, len).Quote() << '\n';
-        }
-
+        } 
+ 
         void DoFinish() override {
-            //*O << ";\nextern const unsigned char* " << B << " = (const unsigned char*)" << B << "Array;\n";
-            *O << ";\nextern const unsigned int " << B << "Size = sizeof(" << B << ") / sizeof(" << B << "[0]) - 1;\n}\n";
-        }
-
+            //*O << ";\nextern const unsigned char* " << B << " = (const unsigned char*)" << B << "Array;\n"; 
+            *O << ";\nextern const unsigned int " << B << "Size = sizeof(" << B << ") / sizeof(" << B << "[0]) - 1;\n}\n"; 
+        } 
+ 
         IOutputStream* O = nullptr;
         const TString B;
-    };
+    }; 
 
     struct TMyFileComparator {
         bool operator()(const TString& fname1, const TString& fname2) const {
@@ -288,56 +288,56 @@ namespace {
         const TDuplicatesMap& DuplicatesMap;
         TArchiveWriter Writer;
     };
-}
-
+} 
+ 
 static inline TAutoPtr<IOutputStream> OpenOutput(const TString& url) {
-    if (url.empty()) {
+    if (url.empty()) { 
         return new TBuffered<TUnbufferedFileOutput>(8192, Duplicate(1));
-    } else {
+    } else { 
         return new TBuffered<TUnbufferedFileOutput>(8192, url);
-    }
-}
-
+    } 
+} 
+ 
 static inline bool IsDelim(char ch) noexcept {
-    return ch == '/' || ch == '\\';
-}
-
+    return ch == '/' || ch == '\\'; 
+} 
+ 
 static inline TString GetFile(const TString& s) {
-    const char* e = s.end();
-    const char* b = s.begin();
-    const char* c = e - 1;
-
-    while (c != b && !IsDelim(*c)) {
-        --c;
-    }
-
-    if (c != e && IsDelim(*c)) {
-        ++c;
-    }
-
+    const char* e = s.end(); 
+    const char* b = s.begin(); 
+    const char* c = e - 1; 
+ 
+    while (c != b && !IsDelim(*c)) { 
+        --c; 
+    } 
+ 
+    if (c != e && IsDelim(*c)) { 
+        ++c; 
+    } 
+ 
     return TString(c, e - c);
-}
-
+} 
+ 
 static inline TString Fix(TString f) {
     if (!f.empty() && IsDelim(f[f.size() - 1])) {
-        f.pop_back();
-    }
-
-    return f;
-}
-
+        f.pop_back(); 
+    } 
+ 
+    return f; 
+} 
+ 
 static bool Quiet = false;
 
 static inline void Append(IOutputStream& w, const TString& fname, const TString& rname) {
-    TMappedFileInput in(fname);
-
+    TMappedFileInput in(fname); 
+ 
     if (!Quiet) {
         Cerr << "--> " << rname << Endl;
     }
-
+ 
     TransferData((IInputStream*)&in, &w);
-}
-
+} 
+ 
 static inline void Append(TDuplicatesMap& w, const TString& fname, const TString& rname) {
     w.Add(fname, rname);
 }
@@ -355,65 +355,65 @@ static inline void Append(TDeduplicationArchiveWriter& w, const TString& fname, 
     }
 }
 
-namespace {
-    struct TRec {
+namespace { 
+    struct TRec { 
         bool Recursive = false;
         TString Key;
         TString Path;
         TString Prefix;
-
+ 
         TRec() = default;
-
-        inline void Fix() {
-            ::Fix(Path);
-            ::Fix(Prefix);
-        }
-
-        template <typename T>
-        inline void Recurse(T& w) const {
-            if (IsDir(Path)) {
-                DoRecurse(w, "/");
-            } else {
+ 
+        inline void Fix() { 
+            ::Fix(Path); 
+            ::Fix(Prefix); 
+        } 
+ 
+        template <typename T> 
+        inline void Recurse(T& w) const { 
+            if (IsDir(Path)) { 
+                DoRecurse(w, "/"); 
+            } else { 
                 Append(w, Path, Key.size() ? Key : Prefix + "/" + GetFile(Path));
-            }
+            } 
         }
-
-        template <typename T>
+ 
+        template <typename T> 
         inline void DoRecurse(T& w, const TString& off) const {
-            {
-                TFileList fl;
-
-                const char* name;
+            { 
+                TFileList fl; 
+ 
+                const char* name; 
                 const TString p = Path + off;
-
+ 
                 fl.Fill(p, true);
-
-                while ((name = fl.Next())) {
+ 
+                while ((name = fl.Next())) { 
                     const TString fname = p + name;
                     const TString rname = Prefix + off + name;
-
-                    Append(w, fname, rname);
-                }
-            }
-
-            if (Recursive) {
-                TDirsList dl;
-
-                const char* name;
+ 
+                    Append(w, fname, rname); 
+                } 
+            } 
+ 
+            if (Recursive) { 
+                TDirsList dl; 
+ 
+                const char* name; 
                 const TString p = Path + off;
-
+ 
                 dl.Fill(p, true);
-
-                while ((name = dl.Next())) {
-                    if (strcmp(name, ".") && strcmp(name, "..")) {
-                        DoRecurse(w, off + name + "/");
-                    }
-                }
-            }
-        }
-    };
-}
-
+ 
+                while ((name = dl.Next())) { 
+                    if (strcmp(name, ".") && strcmp(name, "..")) { 
+                        DoRecurse(w, off + name + "/"); 
+                    } 
+                } 
+            } 
+        } 
+    }; 
+} 
+ 
 static TString CutFirstSlash(const TString& fileName) {
     if (fileName[0] == '/') {
         return fileName.substr(1);
@@ -445,7 +445,7 @@ static void UnpackArchive(const TString& archive, const TFsPath& dir = TFsPath()
         if (!Quiet) {
             Cerr << archive << " --> " << fileName << Endl;
         }
-        const TFsPath path(dir / fileName);
+        const TFsPath path(dir / fileName); 
         path.Parent().MkDirs();
         TAutoPtr<IInputStream> in = reader.ObjectByKey(key);
         TFixedBufferFileOutput out(path);
@@ -619,7 +619,7 @@ int main(int argc, char** argv) {
 #ifdef _win_
         if (path[0] > 0 && isalpha(path[0]) && path[1] == ':')
             off = 2; // skip drive letter ("d:")
-#endif               // _win_
+#endif               // _win_ 
         const size_t pos = path.find(':', off);
         TRec cur;
         cur.Path = path.substr(0, pos);
@@ -631,7 +631,7 @@ int main(int argc, char** argv) {
         cur.Fix();
         recs.push_back(cur);
     }
-
+ 
     try {
         if (listMd5) {
             for (const auto& rec: recs) {
@@ -650,23 +650,23 @@ int main(int argc, char** argv) {
             TAutoPtr<IOutputStream> outf(OpenOutput(outputf));
             IOutputStream* out = outf.Get();
             THolder<IOutputStream> hexout;
-
+ 
             if (hexdump) {
                 hexout.Reset(new THexOutput(out));
                 out = hexout.Get();
             } else if (stride) {
                 hexout.Reset(new TStringArrayOutput(out, stride));
                 out = hexout.Get();
-            } else if (yasmBase) {
-                hexout.Reset(new TYasmOutput(out, yasmBase));
-                out = hexout.Get();
-            } else if (cppBase) {
-                hexout.Reset(new TCStringOutput(out, cppBase));
-                out = hexout.Get();
+            } else if (yasmBase) { 
+                hexout.Reset(new TYasmOutput(out, yasmBase)); 
+                out = hexout.Get(); 
+            } else if (cppBase) { 
+                hexout.Reset(new TCStringOutput(out, cppBase)); 
+                out = hexout.Get(); 
             }
-
+ 
             outf->Write(prepend.data(), prepend.size());
-
+ 
             if (cat) {
                 for (const auto& rec: recs) {
                     rec.Recurse(*out);
@@ -686,17 +686,17 @@ int main(int argc, char** argv) {
                 w.Finish();
             }
 
-            try {
-                out->Finish();
-            } catch (...) {
-            }
+            try { 
+                out->Finish(); 
+            } catch (...) { 
+            } 
 
             outf->Write(append.data(), append.size());
-        }
-    } catch (...) {
-        Cerr << CurrentExceptionMessage() << Endl;
-        return 1;
-    }
-
-    return 0;
-}
+        } 
+    } catch (...) { 
+        Cerr << CurrentExceptionMessage() << Endl; 
+        return 1; 
+    } 
+ 
+    return 0; 
+} 

@@ -12,7 +12,7 @@
 /* Author: Vitaliy Manushkin <agri@yandex-team.ru> */
 
 #include <util/system/platform.h>
-#include <util/system/compiler.h>
+#include <util/system/compiler.h> 
 #include <util/system/types.h>
 
 #if !defined(_arm64_)
@@ -200,7 +200,7 @@ inline __m128i _mm_srl_epi16(__m128i a, __m128i count) {
     return res;
 }
 
-
+ 
 inline __m128i _mm_srl_epi32(__m128i a, __m128i count) {
     __m128i res;
     res.AsUi32x4 = vshlq_u32(a.AsUi32x4, vdupq_n_s32(-count.AsUi32x4[0]));
@@ -235,14 +235,14 @@ using _mm_srli_epi64 =
     TWrapperSingleNegDup<uint64x2_t, decltype(vshlq_u64), vshlq_u64,
                          decltype(vdupq_n_s64), vdupq_n_s64>;
 
-
+ 
 inline __m128i _mm_sll_epi16(__m128i a, __m128i count) {
     __m128i res;
     res.AsUi16x8 = vshlq_u16(a.AsUi16x8, vdupq_n_s16(count.AsUi16x8[0]));
     return res;
 }
 
-
+ 
 inline __m128i _mm_sll_epi32(__m128i a, __m128i count) {
     __m128i res;
     res.AsUi32x4 = vshlq_u32(a.AsUi32x4, vdupq_n_s32(count.AsUi32x4[0]));
@@ -291,7 +291,7 @@ template <typename TOp, typename TFunc, TFunc* func, typename TArgument = __m128
 struct TWrapperDualF : TBaseWrapper<TArgument> {
     Y_FORCE_INLINE
     TWrapperDualF(const TArgument& op1, const TArgument& op2) {
-        TQType<TOp>::As(TBaseWrapper<TArgument>::Value) = (TOp) func(TQType<TOp>::As(op1), TQType<TOp>::As(op2));
+        TQType<TOp>::As(TBaseWrapper<TArgument>::Value) = (TOp) func(TQType<TOp>::As(op1), TQType<TOp>::As(op2)); 
     }
 };
 
@@ -311,29 +311,29 @@ inline __m128i _mm_madd_epi16(__m128i a, __m128i b) {
     int32x4_t aHigh;
     int32x4_t bLow;
     int32x4_t bHigh;
-    #ifdef __LITTLE_ENDIAN__
-        aLow[0] = a.AsSi16x8[0]; //!< I couldn't find vector instructions to do that. Feel free to fix this code.
-        aLow[1] = a.AsSi16x8[2];
-        aLow[2] = a.AsSi16x8[4];
-        aLow[3] = a.AsSi16x8[6];
+    #ifdef __LITTLE_ENDIAN__ 
+        aLow[0] = a.AsSi16x8[0]; //!< I couldn't find vector instructions to do that. Feel free to fix this code. 
+        aLow[1] = a.AsSi16x8[2]; 
+        aLow[2] = a.AsSi16x8[4]; 
+        aLow[3] = a.AsSi16x8[6]; 
 
-        aHigh[0] = a.AsSi16x8[1];
-        aHigh[1] = a.AsSi16x8[3];
-        aHigh[2] = a.AsSi16x8[5];
-        aHigh[3] = a.AsSi16x8[7];
+        aHigh[0] = a.AsSi16x8[1]; 
+        aHigh[1] = a.AsSi16x8[3]; 
+        aHigh[2] = a.AsSi16x8[5]; 
+        aHigh[3] = a.AsSi16x8[7]; 
 
-        bLow[0] = b.AsSi16x8[0];
-        bLow[1] = b.AsSi16x8[2];
-        bLow[2] = b.AsSi16x8[4];
-        bLow[3] = b.AsSi16x8[6];
+        bLow[0] = b.AsSi16x8[0]; 
+        bLow[1] = b.AsSi16x8[2]; 
+        bLow[2] = b.AsSi16x8[4]; 
+        bLow[3] = b.AsSi16x8[6]; 
 
-        bHigh[0] = b.AsSi16x8[1];
-        bHigh[1] = b.AsSi16x8[3];
-        bHigh[2] = b.AsSi16x8[5];
-        bHigh[3] = b.AsSi16x8[7];
-    #else
-        #error Not implemented yet. Do it yourself.
-    #endif
+        bHigh[0] = b.AsSi16x8[1]; 
+        bHigh[1] = b.AsSi16x8[3]; 
+        bHigh[2] = b.AsSi16x8[5]; 
+        bHigh[3] = b.AsSi16x8[7]; 
+    #else 
+        #error Not implemented yet. Do it yourself. 
+    #endif 
 
     const int32x4_t lowMul = vmulq_u32(aLow, bLow);
     const int32x4_t highMul = vmulq_u32(aHigh, bHigh);
@@ -387,13 +387,13 @@ using _mm_cmplt_epi32 =
 
 Y_FORCE_INLINE __m128i _mm_load_si128(const __m128i* ptr) {
     __m128i result;
-    result.AsUi64x2 = vld1q_u64((const uint64_t*)ptr);
+    result.AsUi64x2 = vld1q_u64((const uint64_t*)ptr); 
     return result;
 }
 
 Y_FORCE_INLINE __m128i _mm_loadu_si128(const __m128i* ptr) {
     __m128i result;
-    result.AsUi64x2 = vld1q_u64((const uint64_t*)ptr);
+    result.AsUi64x2 = vld1q_u64((const uint64_t*)ptr); 
     return result;
 }
 
@@ -402,12 +402,12 @@ Y_FORCE_INLINE __m128i _mm_lddqu_si128(const __m128i* ptr) {
 }
 
 Y_FORCE_INLINE void _mm_storeu_si128(__m128i* ptr, const __m128i& op) {
-    vst1q_u64((uint64_t*)ptr, op.AsUi64x2);
+    vst1q_u64((uint64_t*)ptr, op.AsUi64x2); 
 }
 
 Y_FORCE_INLINE void
 _mm_store_si128(__m128i* ptr, const __m128i& op) {
-    vst1q_u64((uint64_t*)ptr, op.AsUi64x2);
+    vst1q_u64((uint64_t*)ptr, op.AsUi64x2); 
 }
 
 template <typename TOp, typename TFunc, TFunc* func, typename... TParams>
@@ -443,7 +443,7 @@ struct _mm_setzero_si128 : TBaseWrapper<__m128i> {
 struct _mm_loadl_epi64 : TBaseWrapper<__m128i> {
     Y_FORCE_INLINE
     _mm_loadl_epi64(const __m128i* p) {
-        uint64x1_t im = vld1_u64((const uint64_t*)p);
+        uint64x1_t im = vld1_u64((const uint64_t*)p); 
         TQType<uint64x2_t>::As(Value) = vcombine_u64(im, vdup_n_u64(0));
     }
 };
@@ -451,7 +451,7 @@ struct _mm_loadl_epi64 : TBaseWrapper<__m128i> {
 struct _mm_storel_epi64 : TBaseWrapper<__m128i> {
     Y_FORCE_INLINE
     _mm_storel_epi64(__m128i* a, __m128i op) {
-        vst1_u64((uint64_t*)a, vget_low_u64(op.AsUi64x2));
+        vst1_u64((uint64_t*)a, vget_low_u64(op.AsUi64x2)); 
     }
 };
 
@@ -474,14 +474,14 @@ _mm_shuffle_epi32(const __m128i& op1, const ShuffleStruct4& op2) {
     __m128i result;
     const ui8 xi[4] = {
         ui8(op2.x[0] * 4), ui8(op2.x[1] * 4),
-        ui8(op2.x[2] * 4), ui8(op2.x[3] * 4)
-    };
+        ui8(op2.x[2] * 4), ui8(op2.x[3] * 4) 
+    }; 
     const uint8x16_t transform = {
         ui8(xi[0]), ui8(xi[0] + 1), ui8(xi[0] + 2), ui8(xi[0] + 3),
         ui8(xi[1]), ui8(xi[1] + 1), ui8(xi[1] + 2), ui8(xi[1] + 3),
         ui8(xi[2]), ui8(xi[2] + 1), ui8(xi[2] + 2), ui8(xi[2] + 3),
-        ui8(xi[3]), ui8(xi[3] + 1), ui8(xi[3] + 2), ui8(xi[3] + 3)
-    };
+        ui8(xi[3]), ui8(xi[3] + 1), ui8(xi[3] + 2), ui8(xi[3] + 3) 
+    }; 
     result.AsUi8x16 = vqtbl1q_u8(op1.AsUi8x16, transform);
     return result;
 }
@@ -503,7 +503,7 @@ _mm_movemask_epi8(const __m128i& op) {
 template <int imm>
 struct THelper_mm_srli_si128 : TBaseWrapper<__m128i> {
     Y_FORCE_INLINE
-    THelper_mm_srli_si128(const __m128i a) {
+    THelper_mm_srli_si128(const __m128i a) { 
         const auto zero = vdupq_n_u8(0);
         TQType<uint8x16_t>::As(Value) = vextq_u8(a.AsUi8x16, zero, imm);
     }
@@ -520,21 +520,21 @@ struct THelper_mm_srli_si128<16> : TBaseWrapper<__m128i> {
 
 #define _mm_srli_si128(a, imm) THelper_mm_srli_si128<imm>(a)
 
-template<int imm>
+template<int imm> 
 inline uint8x16_t vextq_u8_function(uint8x16_t a, uint8x16_t b) {
     return vextq_u8(a, b, imm);
 }
 
-template<>
+template<> 
 inline uint8x16_t vextq_u8_function<16>(uint8x16_t /* a */, uint8x16_t b) {
     return b;
 }
 
-
+ 
 template <int imm>
 struct THelper_mm_slli_si128 : TBaseWrapper<__m128i> {
     Y_FORCE_INLINE
-    THelper_mm_slli_si128(const __m128i a) {
+    THelper_mm_slli_si128(const __m128i a) { 
         auto zero = vdupq_n_u8(0);
         TQType<uint8x16_t>::As(Value) = vextq_u8_function<16 - imm>(zero, a.AsUi8x16);
     }
@@ -641,7 +641,7 @@ struct TScalarOutWrapper : TBaseWrapper<TOpOut> {
     }
 };
 
-template<int imm>
+template<int imm> 
 int extract_epi8_arm(__m128i arg) {
     return vgetq_lane_u8(arg.AsUi8x16, imm);
 }
@@ -668,7 +668,7 @@ long long extract_epi64_arm(__m128i arg) {
 #define _mm_extract_ps(op, imm) _mm_extract_epi32(op, imm)
 
 static Y_FORCE_INLINE
-__m128i _mm_mul_epu32(__m128i op1, __m128i op2) {
+__m128i _mm_mul_epu32(__m128i op1, __m128i op2) { 
     __m128i result;
     uint32x4_t r1 = vuzp1q_u32(op1.AsUi32x4, op2.AsUi32x4);
     uint32x4_t r2 = vuzp1q_u32(op2.AsUi32x4, op1.AsUi32x4);
@@ -886,13 +886,13 @@ _mm_movemask_ps(const __m128& op) {
     bits = vshlq_u32(bits, shifts);
     return vaddvq_u32(bits);
 }
-
+ 
 Y_FORCE_INLINE i64 _mm_cvtsi128_si64(__m128i a) {
-    return vgetq_lane_s64(a.AsSi64x2, 0);
-}
+    return vgetq_lane_s64(a.AsSi64x2, 0); 
+} 
 
 static inline void _mm_pause() {
-    __asm__ ("YIELD");
+    __asm__ ("YIELD"); 
 }
 
 static inline __m128 _mm_rsqrt_ps(__m128 a) {
@@ -909,7 +909,7 @@ inline __m128 _mm_cmpunord_ps(__m128 a, __m128 b) {
     __m128 res;
     res.AsUi32x4 = vorrq_u32(
         vmvnq_u32(vceqq_f32(a.AsFloat32x4, a.AsFloat32x4)), //!< 0xffffffff for all nans in a.
-        vmvnq_u32(vceqq_f32(b.AsFloat32x4, b.AsFloat32x4)) //!< 0xffffffff all nans in b.
+        vmvnq_u32(vceqq_f32(b.AsFloat32x4, b.AsFloat32x4)) //!< 0xffffffff all nans in b. 
     );
     return res;
 }

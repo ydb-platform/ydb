@@ -1,20 +1,20 @@
 #pragma once
-
+ 
 #include "stack/stack_common.h"
 #include "stack/stack.h"
 
 #include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
-#include <util/system/context.h>
-#include <util/system/defaults.h>
-
+#include <util/system/context.h> 
+#include <util/system/defaults.h> 
+ 
 #if !defined(STACK_GROW_DOWN)
 #   error "unsupported"
 #endif
 
-class TCont;
+class TCont; 
 typedef void (*TContFunc)(TCont*, void*);
-
+ 
 namespace NCoro {
 
     namespace NStack {
@@ -31,9 +31,9 @@ namespace NCoro {
             TFunc f,
             TCont* cont
         ) noexcept;
-
+ 
         TArrayRef<char> Stack() noexcept;
-
+ 
         TExceptionSafeContext* Context() noexcept {
             return &Ctx_;
         }
@@ -56,5 +56,5 @@ namespace NCoro {
         TExceptionSafeContext Ctx_;
         TFunc Func_;
         TCont* const Cont_;
-    };
-}
+    }; 
+} 

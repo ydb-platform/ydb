@@ -25,7 +25,7 @@ namespace NThreading {
         void Push(void* node) noexcept {
             Push(reinterpret_cast<TIntrusiveNode*>(node));
         }
-
+ 
     private:
         TIntrusiveNode* HeadForCaS = nullptr;
         TIntrusiveNode* HeadForSwap = nullptr;

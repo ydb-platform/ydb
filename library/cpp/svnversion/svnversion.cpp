@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#define FROM_IMPL
-#include "svnversion.h"
+#define FROM_IMPL 
+#include "svnversion.h" 
 
 #include <util/generic/strbuf.h>
 
@@ -16,18 +16,18 @@ extern "C" void PrintSvnVersionAndExit0() {
     exit(0);
 }
 
-extern "C" void PrintSvnVersionAndExitEx(int argc, char* argv[], const char* opts) {
+extern "C" void PrintSvnVersionAndExitEx(int argc, char* argv[], const char* opts) { 
     if (2 == argc) {
-        for (TStringBuf all = opts, versionOpt; all.NextTok(';', versionOpt);) {
+        for (TStringBuf all = opts, versionOpt; all.NextTok(';', versionOpt);) { 
             if (versionOpt == argv[1]) {
                 PrintSvnVersionAndExit0();
             }
         }
     }
 }
-
-extern "C" void PrintSvnVersionAndExit(int argc, char* argv[]) {
+ 
+extern "C" void PrintSvnVersionAndExit(int argc, char* argv[]) { 
     PrintSvnVersionAndExitEx(argc, argv, "--version");
 }
 
-#undef FROM_IMPL
+#undef FROM_IMPL 

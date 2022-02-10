@@ -14,12 +14,12 @@ using namespace std::string_view_literals;
 Y_UNIT_TEST_SUITE(TSchemeJsonTest) {
     Y_UNIT_TEST(TestJson) {
         const char* json = "[\n"
-                           "    {\n"
-                           "        \"url\":\"foo\",\n"
-                           "        \"title\":\"bar\",\n"
-                           "        \"passages\":[\"foo\", \"bar\"],\n"
-                           "    }\n"
-                           "]";
+                           "    {\n" 
+                           "        \"url\":\"foo\",\n" 
+                           "        \"title\":\"bar\",\n" 
+                           "        \"passages\":[\"foo\", \"bar\"],\n" 
+                           "    }\n" 
+                           "]"; 
 
         {
             const NSc::TValue& v = NSc::TValue::FromJson(json);
@@ -84,32 +84,32 @@ Y_UNIT_TEST_SUITE(TSchemeJsonTest) {
         UNIT_ASSERT_VALUES_EQUAL("{\"xxx\":null}", v.ToJson(NSc::TValue::JO_SAFE));
 
         UNIT_ASSERT_VALUES_EQUAL("{"
-                                 "\"\\u0000\\u0001\\u0002\\u0003\\u0004\\u0005\\u0006\\u0007\\b\\t\\n\\u000B\\f\\r"
-                                 "\\u000E\\u000F\\u0010\\u0011\\u0012\\u0013\\u0014\\u0015\\u0016\\u0017\\u0018"
-                                 "\\u0019\\u001A\\u001B\\u001C\\u001D\\u001E\\u001F !\\\"#$%&'()*+,-./0123456789"
-                                 ":;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\\u007F"
-                                 "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93"
-                                 "\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\xA1\xA2\xA3\xA4\xA5\xA6\xA7"
-                                 "\xA8\xA9\xAA\xAB\xAC\xAD\xAE\xAF\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xBB"
-                                 "\xBC\xBD\xBE\xBF\\xC0\\xC1\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE"
-                                 "\xCF\xD0\xD1\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xDB\xDC\xDD\xDE\xDF\xE0\xE1"
-                                 "\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF0\xF1\xF2\xF3\xF4"
-                                 "\\xF5\\xF6\\xF7\\xF8\\xF9\\xFA\\xFB\\xFC\\xFD\\xFE\\xFF\":"
-                                 "\"xxx\","
-                                 "\"xxx\":"
-                                 "\"\\u0000\\u0001\\u0002\\u0003\\u0004\\u0005\\u0006\\u0007\\b\\t\\n\\u000B\\f\\r"
-                                 "\\u000E\\u000F\\u0010\\u0011\\u0012\\u0013\\u0014\\u0015\\u0016\\u0017\\u0018"
-                                 "\\u0019\\u001A\\u001B\\u001C\\u001D\\u001E\\u001F !\\\"#$%&'()*+,-./0123456789"
-                                 ":;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\\u007F"
-                                 "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93"
-                                 "\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\xA1\xA2\xA3\xA4\xA5\xA6\xA7"
-                                 "\xA8\xA9\xAA\xAB\xAC\xAD\xAE\xAF\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xBB"
-                                 "\xBC\xBD\xBE\xBF\\xC0\\xC1\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE"
-                                 "\xCF\xD0\xD1\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xDB\xDC\xDD\xDE\xDF\xE0\xE1"
-                                 "\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF0\xF1\xF2\xF3\xF4"
-                                 "\\xF5\\xF6\\xF7\\xF8\\xF9\\xFA\\xFB\\xFC\\xFD\\xFE\\xFF\""
-                                 "}",
-                                 v.ToJson(NSc::TValue::JO_SORT_KEYS));
+                                 "\"\\u0000\\u0001\\u0002\\u0003\\u0004\\u0005\\u0006\\u0007\\b\\t\\n\\u000B\\f\\r" 
+                                 "\\u000E\\u000F\\u0010\\u0011\\u0012\\u0013\\u0014\\u0015\\u0016\\u0017\\u0018" 
+                                 "\\u0019\\u001A\\u001B\\u001C\\u001D\\u001E\\u001F !\\\"#$%&'()*+,-./0123456789" 
+                                 ":;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\\u007F" 
+                                 "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93" 
+                                 "\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\xA1\xA2\xA3\xA4\xA5\xA6\xA7" 
+                                 "\xA8\xA9\xAA\xAB\xAC\xAD\xAE\xAF\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xBB" 
+                                 "\xBC\xBD\xBE\xBF\\xC0\\xC1\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE" 
+                                 "\xCF\xD0\xD1\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xDB\xDC\xDD\xDE\xDF\xE0\xE1" 
+                                 "\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF0\xF1\xF2\xF3\xF4" 
+                                 "\\xF5\\xF6\\xF7\\xF8\\xF9\\xFA\\xFB\\xFC\\xFD\\xFE\\xFF\":" 
+                                 "\"xxx\"," 
+                                 "\"xxx\":" 
+                                 "\"\\u0000\\u0001\\u0002\\u0003\\u0004\\u0005\\u0006\\u0007\\b\\t\\n\\u000B\\f\\r" 
+                                 "\\u000E\\u000F\\u0010\\u0011\\u0012\\u0013\\u0014\\u0015\\u0016\\u0017\\u0018" 
+                                 "\\u0019\\u001A\\u001B\\u001C\\u001D\\u001E\\u001F !\\\"#$%&'()*+,-./0123456789" 
+                                 ":;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\\u007F" 
+                                 "\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93" 
+                                 "\x94\x95\x96\x97\x98\x99\x9A\x9B\x9C\x9D\x9E\x9F\xA0\xA1\xA2\xA3\xA4\xA5\xA6\xA7" 
+                                 "\xA8\xA9\xAA\xAB\xAC\xAD\xAE\xAF\xB0\xB1\xB2\xB3\xB4\xB5\xB6\xB7\xB8\xB9\xBA\xBB" 
+                                 "\xBC\xBD\xBE\xBF\\xC0\\xC1\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE" 
+                                 "\xCF\xD0\xD1\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xDB\xDC\xDD\xDE\xDF\xE0\xE1" 
+                                 "\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF\xF0\xF1\xF2\xF3\xF4" 
+                                 "\\xF5\\xF6\\xF7\\xF8\\xF9\\xFA\\xFB\\xFC\\xFD\\xFE\\xFF\"" 
+                                 "}", 
+                                 v.ToJson(NSc::TValue::JO_SORT_KEYS)); 
         UNIT_ASSERT(NSc::TValue::Equal(v, NSc::TValue::FromJson(v.ToJson())));
 
         {
@@ -152,7 +152,7 @@ Y_UNIT_TEST_SUITE(TSchemeJsonTest) {
     }
 
     Y_UNIT_TEST(TestDuplicateKeys) {
-        const TStringBuf duplicatedKeys = "{\"a\":[{\"b\":1, \"b\":42}]}";
+        const TStringBuf duplicatedKeys = "{\"a\":[{\"b\":1, \"b\":42}]}"; 
         UNIT_ASSERT_NO_EXCEPTION(NSc::TValue::FromJsonThrow(duplicatedKeys));
         UNIT_ASSERT_EXCEPTION(NSc::TValue::FromJsonThrow(duplicatedKeys, NSc::TValue::JO_PARSER_DISALLOW_DUPLICATE_KEYS), yexception);
         UNIT_ASSERT(NSc::TValue::FromJson(duplicatedKeys).IsDict());

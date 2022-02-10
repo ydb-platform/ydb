@@ -75,10 +75,10 @@ xstrcat (size_t argcount, va_list args)
   return result;
 }
 
-#if defined(_MSC_VER)
-int vasprintf(char **resultp, const char *format, va_list args);
-#endif
-
+#if defined(_MSC_VER) 
+int vasprintf(char **resultp, const char *format, va_list args); 
+#endif 
+ 
 char *
 xvasprintf (const char *format, va_list args)
 {

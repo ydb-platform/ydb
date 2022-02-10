@@ -4,12 +4,12 @@
 #include <util/string/cast.h>
 
 namespace NCodecs {
-    class TCompTableCodec::TImpl: public TAtomicRefCount<TImpl> {
+    class TCompTableCodec::TImpl: public TAtomicRefCount<TImpl> { 
     public:
         TImpl(EQuality q)
             : Quality(q)
-        {
-        }
+        { 
+        } 
 
         void Init() {
             Compressor.Reset(new NCompTable::TChunkCompressor{(bool)Quality, Table});

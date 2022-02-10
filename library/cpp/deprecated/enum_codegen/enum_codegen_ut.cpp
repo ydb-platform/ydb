@@ -2,11 +2,11 @@
 
 #include "enum_codegen.h"
 
-#include <util/string/builder.h>
-
+#include <util/string/builder.h> 
+ 
 #define COLOR_MAP(XX) \
-    XX(RED)           \
-    XX(GREEN)         \
+    XX(RED)           \ 
+    XX(GREEN)         \ 
     XX(BLUE)
 
 enum EColor {
@@ -16,8 +16,8 @@ enum EColor {
 ENUM_TO_STRING(EColor, COLOR_MAP)
 
 #define MULTIPLIER_MAP(XX) \
-    XX(GB, 9)              \
-    XX(MB, 6)              \
+    XX(GB, 9)              \ 
+    XX(MB, 6)              \ 
     XX(KB, 3)
 
 enum EMultiplier {
@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(EnumCodegen) {
     Y_UNIT_TEST(ToCString) {
         UNIT_ASSERT_VALUES_EQUAL("RED", ToCString(RED));
         UNIT_ASSERT_VALUES_EQUAL("BLUE", ToCString(BLUE));
-        UNIT_ASSERT_VALUES_EQUAL("GREEN", (TStringBuilder() << GREEN));
-        UNIT_ASSERT_VALUES_EQUAL("GB", ToCString(GB));
+        UNIT_ASSERT_VALUES_EQUAL("GREEN", (TStringBuilder() << GREEN)); 
+        UNIT_ASSERT_VALUES_EQUAL("GB", ToCString(GB)); 
     }
 }

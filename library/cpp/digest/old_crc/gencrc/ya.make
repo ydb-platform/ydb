@@ -1,9 +1,9 @@
-PROGRAM()
-
-OWNER(pg)
-
-SRCS(
-    main.cpp
-)
-
-END()
+PROGRAM() 
+ 
+OWNER(pg) 
+ 
+SRCS( 
+    main.cpp 
+) 
+ 
+END() 

@@ -11,7 +11,7 @@ ENDIF()
 IF (NOT PREBUILT)
     INCLUDE(${ARCADIA_ROOT}/contrib/tools/protoc/bin/ya.make)
 ENDIF()
-
+ 
 RECURSE(
     bin
     plugins

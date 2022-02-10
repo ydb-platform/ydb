@@ -1,16 +1,16 @@
-#include "datetime.h"
-
+#include "datetime.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/string/builder.h>
-
+#include <util/string/builder.h> 
+ 
 Y_UNIT_TEST_SUITE(TSimpleTMTest) {
     TString PrintMarker(const TString& test, int line) {
-        return TStringBuilder() << "test " << test << " at line " << line;
+        return TStringBuilder() << "test " << test << " at line " << line; 
     }
 
     TString JoinMarker(const TString& marker, time_t t) {
-        return TStringBuilder() << marker << " (tstamp=" << t << ")";
+        return TStringBuilder() << marker << " (tstamp=" << t << ")"; 
     }
 
     TString PrintMarker(const TString& test, int line, time_t t) {
@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(TSimpleTMTest) {
     }
 
     Y_UNIT_TEST(SimpleTMTest) {
-        using namespace NDatetime;
+        using namespace NDatetime; 
 
         tzset();
 
@@ -90,11 +90,11 @@ Y_UNIT_TEST_SUITE(TSimpleTMTest) {
         UNIT_ASSERT((ui32)TSimpleTM::New(0).IsUTC());
         time_t t = time(nullptr);
 
-        {
+        { 
             struct tm tmt;
             Zero(tmt);
             gmtime_r(&t, &tmt);
-            UNIT_ASSERT_VALUES_EQUAL_C((i64)t, (i64)TSimpleTM::New(t).AsTimeT(), ToString(t));   // time_t ->   gmt tm -> time_t
+            UNIT_ASSERT_VALUES_EQUAL_C((i64)t, (i64)TSimpleTM::New(t).AsTimeT(), ToString(t));   // time_t ->   gmt tm -> time_t 
             UNIT_ASSERT_VALUES_EQUAL_C((i64)t, (i64)TSimpleTM::New(tmt).AsTimeT(), ToString(t)); //   gmt tm -> time_t
             AssertStructTmEqual(PrintMarker("UTC:time_t", __LINE__, t),
                                 tmt, TSimpleTM::New(t));
@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(TSimpleTMTest) {
                                 tmt, TSimpleTM::New(tmt));
             UNIT_ASSERT(TSimpleTM::New(t).IsUTC());
             UNIT_ASSERT(TSimpleTM::New(tmt).IsUTC());
-        }
+        } 
 
         {
             struct tm tmt;
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(TSimpleTMTest) {
             AssertStructTmEqual(PrintMarker("local:tm:RegenerateFields", __LINE__, t),
                                 tmt, TSimpleTM::New(tmt).RegenerateFields());
             AssertStructTmEqual(PrintMarker("local:time_t:SetRealDate", __LINE__, t),
-                                tmt, TSimpleTM::NewLocal(t).SetRealDate(tmt.tm_year + 1900, tmt.tm_mon + 1, tmt.tm_mday, tmt.tm_hour, tmt.tm_min, tmt.tm_sec, tmt.tm_isdst));
+                                tmt, TSimpleTM::NewLocal(t).SetRealDate(tmt.tm_year + 1900, tmt.tm_mon + 1, tmt.tm_mday, tmt.tm_hour, tmt.tm_min, tmt.tm_sec, tmt.tm_isdst)); 
         }
 
         {
@@ -148,9 +148,9 @@ Y_UNIT_TEST_SUITE(TSimpleTMTest) {
             AssertSimpleTM(PrintMarker("UTC:AddYear", __LINE__),
                            tt, 1320469567, 2011, 11, 5, 5, 6, 7);
 
-            for (ui32 i = 0; i < 365; ++i) {
+            for (ui32 i = 0; i < 365; ++i) { 
                 tt.Add(TSimpleTM::F_DAY);
-            }
+            } 
 
             AssertSimpleTM(PrintMarker("UTC:365*AddDay", __LINE__),
                            tt, 1352005567, 2012, 11, 4, 5, 6, 7);

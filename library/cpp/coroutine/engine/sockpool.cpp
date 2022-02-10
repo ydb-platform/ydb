@@ -13,7 +13,7 @@ void SetCommonSockOpts(SOCKET sock, const struct sockaddr* sa) {
             warn("bind");
         }
     } else if (sa->sa_family == AF_INET6) {
-        sockaddr_in6 s_in6(*(const sockaddr_in6*)sa);
+        sockaddr_in6 s_in6(*(const sockaddr_in6*)sa); 
         Zero(s_in6.sin6_addr);
         s_in6.sin6_port = 0;
 

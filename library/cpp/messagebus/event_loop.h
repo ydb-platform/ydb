@@ -7,10 +7,10 @@
 
 namespace NEventLoop {
     struct IEventHandler
-       : public TAtomicRefCount<IEventHandler> {
+       : public TAtomicRefCount<IEventHandler> { 
         virtual void HandleEvent(SOCKET socket, void* cookie) = 0;
-        virtual ~IEventHandler() {
-        }
+        virtual ~IEventHandler() { 
+        } 
     };
 
     typedef TIntrusivePtr<IEventHandler> TEventHandlerPtr;
@@ -20,7 +20,7 @@ namespace NEventLoop {
     // TODO: make TChannel itself a pointer
     // to avoid confusion with Drop and Unregister
     class TChannel
-       : public TAtomicRefCount<TChannel> {
+       : public TAtomicRefCount<TChannel> { 
     public:
         ~TChannel();
 

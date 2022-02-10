@@ -1,28 +1,28 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/type_name.h>
 
-#include "typelist.h"
-#include "vector.h"
-#include "map.h"
+#include "typelist.h" 
+#include "vector.h" 
+#include "map.h" 
 
 class TTypeListTest: public TTestBase {
     UNIT_TEST_SUITE(TTypeListTest);
     UNIT_TEST(TestSimple);
     UNIT_TEST(TestHave);
-    UNIT_TEST(TestGet);
+    UNIT_TEST(TestGet); 
     UNIT_TEST(TestFloatList);
     UNIT_TEST(TestSelectBy);
     UNIT_TEST_SUITE_END();
 
 public:
-    void TestGet() {
+    void TestGet() { 
         using TListType = TTypeList<int, char, float>;
-
+ 
         UNIT_ASSERT_TYPES_EQUAL(TListType::TGet<0>, int);
         UNIT_ASSERT_TYPES_EQUAL(TListType::TGet<1>, char);
         UNIT_ASSERT_TYPES_EQUAL(TListType::TGet<2>, float);
-    }
-
+    } 
+ 
     void TestSimple() {
         using TListType = TTypeList<int, char, float>;
         UNIT_ASSERT_EQUAL(TListType::Length, 3);
@@ -41,28 +41,28 @@ public:
         UNIT_ASSERT(!TListType::THave<TC&>::value);
     }
 
-    template <class T>
-    class TT {};
+    template <class T> 
+    class TT {}; 
 
-    template <class T>
-    struct TIs1ArgTemplate: std::false_type {};
+    template <class T> 
+    struct TIs1ArgTemplate: std::false_type {}; 
 
-    template <class T, template <class> class TT>
-    struct TIs1ArgTemplate<TT<T>>: std::true_type {};
+    template <class T, template <class> class TT> 
+    struct TIs1ArgTemplate<TT<T>>: std::true_type {}; 
 
-    template <class T>
-    struct TIsNArgTemplate: std::false_type {};
+    template <class T> 
+    struct TIsNArgTemplate: std::false_type {}; 
 
-    template <template <class...> class TT, class... R>
-    struct TIsNArgTemplate<TT<R...>>: std::true_type {};
+    template <template <class...> class TT, class... R> 
+    struct TIsNArgTemplate<TT<R...>>: std::true_type {}; 
 
-    template <class>
-    struct TAnyType: std::true_type {};
+    template <class> 
+    struct TAnyType: std::true_type {}; 
 
-    template <class T>
+    template <class T> 
     struct TMyVector {};
 
-    template <class T1, class T2>
+    template <class T1, class T2> 
     struct TMyMap {};
 
     void TestSelectBy() {

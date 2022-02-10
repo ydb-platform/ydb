@@ -3,7 +3,7 @@
 PY2_LIBRARY()
 
 OWNER(gebetix g:python-contrib)
-
+ 
 VERSION(0.4.2)
 
 LICENSE(Apache-2.0)

@@ -1,21 +1,21 @@
-#include "packedfloat.h"
-
+#include "packedfloat.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/ylimits.h>
-
+#include <util/generic/ylimits.h> 
+ 
 class TPackedFloatTest: public TTestBase {
-    UNIT_TEST_SUITE(TPackedFloatTest);
-    UNIT_TEST(F16Test);
-    UNIT_TEST(Uf16Test);
-    UNIT_TEST(F8dTest);
-    UNIT_TEST(F8Test);
-    UNIT_TEST(Uf8dTest);
-    UNIT_TEST(Uf8Test);
-    UNIT_TEST_SUITE_END();
-
+    UNIT_TEST_SUITE(TPackedFloatTest); 
+    UNIT_TEST(F16Test); 
+    UNIT_TEST(Uf16Test); 
+    UNIT_TEST(F8dTest); 
+    UNIT_TEST(F8Test); 
+    UNIT_TEST(Uf8dTest); 
+    UNIT_TEST(Uf8Test); 
+    UNIT_TEST_SUITE_END(); 
+ 
 private:
-    template <typename F>
+    template <typename F> 
     void TestF(float f, float rf) {
         UNIT_ASSERT(F::New(f) == rf);
     }
@@ -34,7 +34,7 @@ private:
         TestF16(2.0f * f16::max(), std::numeric_limits<float>::infinity());
         TestF16(0.5 * f16::min(), 0.5 * f16::min());
         TestF16(0.5 * f16::denorm_min(), 0);
-        TestF16(-0.5 * f16::denorm_min(), 0);
+        TestF16(-0.5 * f16::denorm_min(), 0); 
         TestF16(FLT_MIN, FLT_MIN);
         TestF16(FLT_MAX, f16::max());
         TestF16(f16::min(), FLT_MIN);
@@ -125,6 +125,6 @@ private:
         TestUf8(uf8::min(), uf8::min());
         TestUf8(2.0 * uf8::max(), uf8::max());
         TestUf8(0.5 * uf8::min(), 0);
-    }
-};
-UNIT_TEST_SUITE_REGISTRATION(TPackedFloatTest);
+    } 
+}; 
+UNIT_TEST_SUITE_REGISTRATION(TPackedFloatTest); 

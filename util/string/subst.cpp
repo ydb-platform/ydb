@@ -1,4 +1,4 @@
-#include "subst.h"
+#include "subst.h" 
 
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
@@ -175,9 +175,9 @@ size_t SubstGlobal(TUtf32String& text, const TUtf32StringBuf what, const TUtf32S
 
 size_t SubstGlobal(std::u16string& text, const TWtringBuf what, const TWtringBuf with, size_t from) {
     return SubstGlobalImpl(text,
-                           std::u16string_view(reinterpret_cast<const char16_t*>(what.data()), what.size()),
-                           std::u16string_view(reinterpret_cast<const char16_t*>(with.data()), with.size()),
-                           from);
+                           std::u16string_view(reinterpret_cast<const char16_t*>(what.data()), what.size()), 
+                           std::u16string_view(reinterpret_cast<const char16_t*>(with.data()), with.size()), 
+                           from); 
 }
 
 size_t SubstGlobal(TString& text, char what, char with, size_t from) {
@@ -197,5 +197,5 @@ size_t SubstGlobal(std::u16string& text, wchar16 what, wchar16 with, size_t from
 }
 
 size_t SubstGlobal(TUtf32String& text, wchar32 what, wchar32 with, size_t from) {
-    return SubstCharGlobalImpl(text, (char32_t)what, (char32_t)with, from);
+    return SubstCharGlobalImpl(text, (char32_t)what, (char32_t)with, from); 
 }

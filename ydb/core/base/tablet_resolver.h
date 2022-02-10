@@ -20,7 +20,7 @@ struct TEvTabletResolver {
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLETRESOLVER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLETRESOLVER)");
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLETRESOLVER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLETRESOLVER)"); 
 
     struct TEvForward : public TEventLocal<TEvForward, EvForward> {
         ///

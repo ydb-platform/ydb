@@ -58,10 +58,10 @@
 #endif
 #endif
 
-#ifdef _CYGWIN_
-{"_multiprocessing", init_multiprocessing},
-#endif
-
+#ifdef _CYGWIN_ 
+{"_multiprocessing", init_multiprocessing}, 
+#endif 
+ 
 #ifdef _UNIX_
 {"_socket", init_socket},
 {"crypt", initcrypt},
@@ -82,8 +82,8 @@
 {"nt", initnt},
 {"pyexpat", initpyexpat},
 {"select", initselect},
-{"msvcrt", initmsvcrt},
-{"_subprocess", init_subprocess},
+{"msvcrt", initmsvcrt}, 
+{"_subprocess", init_subprocess}, 
 {"_winreg", init_winreg},
 #endif
 

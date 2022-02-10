@@ -53,17 +53,17 @@ Y_UNIT_TEST_SUITE(TestMemIO) {
     Y_UNIT_TEST(Write) {
         char buffer[20];
         TMemoryOutput output(buffer, sizeof(buffer));
-        output << "1"
-               << "22"
-               << "333"
-               << "4444"
-               << "55555";
+        output << "1" 
+               << "22" 
+               << "333" 
+               << "4444" 
+               << "55555"; 
 
-        const char* const result = "1"
-                                   "22"
-                                   "333"
-                                   "4444"
-                                   "55555";
+        const char* const result = "1" 
+                                   "22" 
+                                   "333" 
+                                   "4444" 
+                                   "55555"; 
         UNIT_ASSERT(0 == memcmp(buffer, result, strlen(result)));
     }
 

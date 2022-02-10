@@ -1,8 +1,8 @@
 #pragma once
-
-#include "zerocopy.h"
+ 
+#include "zerocopy.h" 
 #include "zerocopy_output.h"
-
+ 
 #include <util/generic/strbuf.h>
 
 /**
@@ -28,7 +28,7 @@ public:
     TMemoryInput(const void* buf, size_t len) noexcept;
     explicit TMemoryInput(const TStringBuf buf) noexcept;
     ~TMemoryInput() override;
-
+ 
     TMemoryInput(const TMemoryInput& other) noexcept
         : IZeroCopyInputFastReadTo()
         , Buf_(other.Buf_)
@@ -60,21 +60,21 @@ public:
         Buf_ = (const char*)buf;
         Len_ = len;
     }
-
+ 
     /**
      * @returns                         Whether there is more data in the stream.
      */
     bool Exhausted() const noexcept {
         return !Avail();
     }
-
+ 
     /**
      * @returns                         Number of bytes available in the stream.
      */
     size_t Avail() const noexcept {
         return Len_;
     }
-
+ 
     /**
      * @returns                         Current read position in the memory block
      *                                  used by this stream.
@@ -93,18 +93,18 @@ public:
         Len_ = stream->Next(&Buf_);
         if (!Len_) {
             Reset(nullptr, 0);
-        }
+        } 
     }
-
+ 
 private:
     size_t DoNext(const void** ptr, size_t len) override;
     void DoUndo(size_t len) override;
-
+ 
 private:
     const char* Buf_;
     size_t Len_;
-};
-
+}; 
+ 
 /**
  * Output stream that writes data to a memory block.
  */
@@ -119,12 +119,12 @@ public:
      * @param len                       Size of the memory block.
      */
     TMemoryOutput(void* buf, size_t len) noexcept
-        : Buf_(static_cast<char*>(buf))
-        , End_(Buf_ + len)
-    {
-    }
+        : Buf_(static_cast<char*>(buf)) 
+        , End_(Buf_ + len) 
+    { 
+    } 
     ~TMemoryOutput() override;
-
+ 
     TMemoryOutput(TMemoryOutput&&) noexcept = default;
     TMemoryOutput& operator=(TMemoryOutput&&) noexcept = default;
 
@@ -137,10 +137,10 @@ public:
      * @param len                       Size of the new memory block.
      */
     inline void Reset(void* buf, size_t len) noexcept {
-        Buf_ = static_cast<char*>(buf);
+        Buf_ = static_cast<char*>(buf); 
         End_ = Buf_ + len;
     }
-
+ 
     /**
      * @returns                         Whether there is more space in the
      *                                  stream for writing.
@@ -148,7 +148,7 @@ public:
     inline bool Exhausted() const noexcept {
         return !Avail();
     }
-
+ 
     /**
      * @returns                         Number of bytes available for writing
      *                                  in the stream.
@@ -156,7 +156,7 @@ public:
     inline size_t Avail() const noexcept {
         return End_ - Buf_;
     }
-
+ 
     /**
      * @returns                         Current write position in the memory block
      *                                  used by this stream.
@@ -164,7 +164,7 @@ public:
     inline char* Buf() const noexcept {
         return Buf_;
     }
-
+ 
     /**
      * @returns                         Pointer to the end of the memory block
      *                                  used by this stream.
@@ -178,25 +178,25 @@ private:
     void DoUndo(size_t len) override;
     void DoWrite(const void* buf, size_t len) override;
     void DoWriteC(char c) override;
-
+ 
 protected:
     char* Buf_;
     char* End_;
-};
-
+}; 
+ 
 /**
  * Memory output stream that supports changing the position of the
  * write pointer.
  *
  * @see TMemoryOutput
  */
-class TMemoryWriteBuffer: public TMemoryOutput {
+class TMemoryWriteBuffer: public TMemoryOutput { 
 public:
     TMemoryWriteBuffer(void* buf, size_t len)
         : TMemoryOutput(buf, len)
         , Beg_(Buf_)
-    {
-    }
+    { 
+    } 
 
     void Reset(void* buf, size_t len) {
         TMemoryOutput::Reset(buf, len);

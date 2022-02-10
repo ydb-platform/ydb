@@ -1,12 +1,12 @@
 #include "guid.h"
-#include "ylimits.h"
+#include "ylimits.h" 
 #include "string.h"
-
-#include <util/string/ascii.h>
+ 
+#include <util/string/ascii.h> 
 #include <util/string/builder.h>
-#include <util/stream/format.h>
-#include <util/system/unaligned_mem.h>
-#include <util/random/easy.h>
+#include <util/stream/format.h> 
+#include <util/system/unaligned_mem.h> 
+#include <util/random/easy.h> 
 
 namespace {
     inline void LowerCaseHex(TString& s) {
@@ -41,9 +41,9 @@ TGUID TGUID::Create() {
     return result;
 }
 
-void CreateGuid(TGUID* res) {
+void CreateGuid(TGUID* res) { 
     ui64* dw = reinterpret_cast<ui64*>(res->dw);
-
+ 
     WriteUnaligned<ui64>(&dw[0], RandomNumber<ui64>());
     WriteUnaligned<ui64>(&dw[1], RandomNumber<ui64>());
 }
@@ -91,13 +91,13 @@ bool GetGuid(const TStringBuf s, TGUID& result) {
     size_t partId = 0;
     ui64 partValue = 0;
     bool isEmptyPart = true;
-
+ 
     for (size_t i = 0; i != s.size(); ++i) {
         const char c = s[i];
 
         if (c == '-') {
-            if (isEmptyPart || partId == 3) { // x-y--z, -x-y-z or x-y-z-m-...
-                return false;
+            if (isEmptyPart || partId == 3) { // x-y--z, -x-y-z or x-y-z-m-... 
+                return false; 
             }
             result.dw[partId] = static_cast<ui32>(partValue);
             ++partId;
@@ -115,29 +115,29 @@ bool GetGuid(const TStringBuf s, TGUID& result) {
         isEmptyPart = false;
 
         // overflow check
-        if (partValue > Max<ui32>()) {
-            return false;
+        if (partValue > Max<ui32>()) { 
+            return false; 
         }
     }
 
-    if (partId != 3 || isEmptyPart) { // x-y or x-y-z-
-        return false;
+    if (partId != 3 || isEmptyPart) { // x-y or x-y-z- 
+        return false; 
     }
     result.dw[partId] = static_cast<ui32>(partValue);
-    return true;
+    return true; 
 }
-
-// Parses GUID from s and checks that it's valid.
-// In case of error returns TGUID().
+ 
+// Parses GUID from s and checks that it's valid. 
+// In case of error returns TGUID(). 
 TGUID GetGuid(const TStringBuf s) {
-    TGUID result;
-
-    if (GetGuid(s, result)) {
-        return result;
-    }
-
-    return TGUID();
-}
+    TGUID result; 
+ 
+    if (GetGuid(s, result)) { 
+        return result; 
+    } 
+ 
+    return TGUID(); 
+} 
 
 bool GetUuid(const TStringBuf s, TGUID& result) {
     if (s.size() != 36) {

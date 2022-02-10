@@ -16,7 +16,7 @@ namespace NActors {
 
     namespace NLog {
         struct TSettings;
-    }
+    } 
 
     struct TActorContext;
 
@@ -434,7 +434,7 @@ namespace NActors {
     };
 
 
-#define STFUNC_SIG TAutoPtr< ::NActors::IEventHandle>&ev, const ::NActors::TActorContext &ctx
+#define STFUNC_SIG TAutoPtr< ::NActors::IEventHandle>&ev, const ::NActors::TActorContext &ctx 
 #define STATEFN_SIG TAutoPtr<::NActors::IEventHandle>& ev
 #define STFUNC(funcName) void funcName(TAutoPtr< ::NActors::IEventHandle>& ev, const ::NActors::TActorContext& ctx)
 #define STATEFN(funcName) void funcName(TAutoPtr< ::NActors::IEventHandle>& ev, const ::NActors::TActorContext& )

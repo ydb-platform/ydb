@@ -19,8 +19,8 @@ Y_UNIT_TEST_SUITE(Spawn) {
         TTestTask(TSimpleEnv*, TTestSync* testSync)
             : TestSync(testSync)
             , I(0)
-        {
-        }
+        { 
+        } 
 
         TSystemEvent Started;
 
@@ -60,8 +60,8 @@ Y_UNIT_TEST_SUITE(Spawn) {
         TSubtask(TTestEnv* env, TTestSync* testSync)
             : Env(env)
             , TestSync(testSync)
-        {
-        }
+        { 
+        } 
 
         TContinueFunc Start() override {
             Sleep(TDuration::MilliSeconds(1));
@@ -77,8 +77,8 @@ Y_UNIT_TEST_SUITE(Spawn) {
         TSpawnTask(TTestEnv* env, TTestSync* testSync)
             : Env(env)
             , TestSync(testSync)
-        {
-        }
+        { 
+        } 
 
         TSubtaskCompletion SubtaskCompletion;
 
@@ -109,12 +109,12 @@ Y_UNIT_TEST_SUITE(Spawn) {
         TTestSync* const TestSync;
         unsigned I;
 
-        TSpawnLongTask(TTestEnv* env, TTestSync* testSync)
-            : Env(env)
-            , TestSync(testSync)
-            , I(0)
-        {
-        }
+        TSpawnLongTask(TTestEnv* env, TTestSync* testSync) 
+            : Env(env) 
+            , TestSync(testSync) 
+            , I(0) 
+        { 
+        } 
 
         std::array<TSubtaskCompletion, 3> Subtasks;
 

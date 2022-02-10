@@ -7,53 +7,53 @@ namespace {
     bool TrySkipValueUntil(EEventType end, TReader& reader) {
         const auto& event = reader.NextEvent();
         if (event.Type() == end) {
-            return false;
-        }
-        SkipCurrentValue(event, reader);
-        return true;
-    }
+            return false; 
+        } 
+        SkipCurrentValue(event, reader); 
+        return true; 
+    } 
 
     bool TrySkipKeyValueUntil(EEventType end, TReader& reader) {
         const auto& event = reader.NextEvent();
         if (event.Type() == end) {
-            return false;
-        }
+            return false; 
+        } 
         Expect(event, EEventType::Key);
-        SkipValue(reader);
-        return true;
-    }
+        SkipValue(reader); 
+        return true; 
+    } 
 }
 
 void NYsonPull::NReadOps::SkipCurrentValue(const TEvent& event, TReader& reader) {
     switch (event.Type()) {
         case EEventType::BeginList:
             while (TrySkipValueUntil(EEventType::EndList, reader)) {
-            }
-            return;
+            } 
+            return; 
 
         case EEventType::BeginMap:
             while (TrySkipKeyValueUntil(EEventType::EndMap, reader)) {
-            }
-            return;
+            } 
+            return; 
 
         case EEventType::BeginAttributes:
             while (TrySkipKeyValueUntil(EEventType::EndAttributes, reader)) {
-            }
-            // attributes after attributes are disallowed in TReader
-            SkipValue(reader);
-            return;
+            } 
+            // attributes after attributes are disallowed in TReader 
+            SkipValue(reader); 
+            return; 
 
         case EEventType::Scalar:
-            return;
+            return; 
 
-        default:
-            throw yexception() << "Unexpected event: " << event;
-    }
+        default: 
+            throw yexception() << "Unexpected event: " << event; 
+    } 
 }
 
 void NYsonPull::NReadOps::SkipValue(TReader& reader) {
     const auto& event = reader.NextEvent();
-    SkipCurrentValue(event, reader);
+    SkipCurrentValue(event, reader); 
 }
 
 void NYsonPull::NReadOps::SkipControlRecords(TReader& reader) {

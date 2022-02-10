@@ -17,7 +17,7 @@ namespace NKikimr {
             EvEnd
         };
 
-        static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
+        static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)"); 
 
         struct TEvConnect : public TEventLocal<TEvConnect, EvConnect> {
             TEvConnect(bool useBadTabletId = false, bool connectToUserTablet = true, bool withRetryPolicy = false)
@@ -49,7 +49,7 @@ namespace NKikimr {
             EvEnd
         };
 
-        static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
+        static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)"); 
 
         struct TEvReject : public TEventLocal<TEvReject, EvReject> {};
     };

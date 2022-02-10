@@ -1,16 +1,16 @@
-#include "chunk.h"
-
+#include "chunk.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <util/stream/file.h>
-#include <util/system/tempfile.h>
+#include <util/system/tempfile.h> 
 #include <util/stream/null.h>
-
-#define CDATA "./chunkedio"
-
+ 
+#define CDATA "./chunkedio" 
+ 
 Y_UNIT_TEST_SUITE(TestChunkedIO) {
-    static const char test_data[] = "87s6cfbsudg cuisg s igasidftasiy tfrcua6s";
-
+    static const char test_data[] = "87s6cfbsudg cuisg s igasidftasiy tfrcua6s"; 
+ 
     TString CombString(const TString& s, size_t chunkSize) {
         TString result;
         for (size_t pos = 0; pos < s.size(); pos += 2 * chunkSize)
@@ -58,48 +58,48 @@ Y_UNIT_TEST_SUITE(TestChunkedIO) {
     }
 
     Y_UNIT_TEST(TestChunkedIo) {
-        TTempFile tmpFile(CDATA);
+        TTempFile tmpFile(CDATA); 
         TString tmp;
-
-        {
+ 
+        { 
             TUnbufferedFileOutput fo(CDATA);
-            TChunkedOutput co(&fo);
+            TChunkedOutput co(&fo); 
             WriteTestData(&co, &tmp);
         }
-
+ 
         {
             TUnbufferedFileInput fi(CDATA);
             TChunkedInput ci(&fi);
             TString r;
-
+ 
             ReadInSmallChunks(&ci, &r);
 
             UNIT_ASSERT_EQUAL(r, tmp);
-        }
-
-        {
+        } 
+ 
+        { 
             TUnbufferedFileInput fi(CDATA);
-            TChunkedInput ci(&fi);
+            TChunkedInput ci(&fi); 
             TString r;
-
+ 
             ReadCombed(&ci, &r, 11);
-
+ 
             UNIT_ASSERT_EQUAL(r, CombString(tmp, 11));
-        }
-    }
-
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestBadChunk) {
-        bool hasError = false;
-
-        try {
+        bool hasError = false; 
+ 
+        try { 
             TString badChunk = "10\r\nqwerty";
             TMemoryInput mi(badChunk.data(), badChunk.size());
-            TChunkedInput ci(&mi);
-            TransferData(&ci, &Cnull);
-        } catch (...) {
-            hasError = true;
-        }
-
-        UNIT_ASSERT(hasError);
-    }
-}
+            TChunkedInput ci(&mi); 
+            TransferData(&ci, &Cnull); 
+        } catch (...) { 
+            hasError = true; 
+        } 
+ 
+        UNIT_ASSERT(hasError); 
+    } 
+} 

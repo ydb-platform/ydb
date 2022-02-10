@@ -1,14 +1,14 @@
 #pragma once
 
-#include "defaults.h"
+#include "defaults.h" 
 
 #include <util/generic/flags.h>
 
 enum EProtectMemoryMode {
-    PM_NONE = 0x00,  // no access allowed
-    PM_READ = 0x01,  // read access allowed
+    PM_NONE = 0x00,  // no access allowed 
+    PM_READ = 0x01,  // read access allowed 
     PM_WRITE = 0x02, // write access allowed
-    PM_EXEC = 0x04   // execute access allowed
+    PM_EXEC = 0x04   // execute access allowed 
 };
 
 Y_DECLARE_FLAGS(EProtectMemory, EProtectMemoryMode)

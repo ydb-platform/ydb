@@ -3,7 +3,7 @@
 using namespace NRainCheck;
 using namespace NRainCheck::NPrivate;
 
-void TTaskTrackerReceipt::SetDone() {
+void TTaskTrackerReceipt::SetDone() { 
     TaskTracker->GetQueue<TTaskTrackerReceipt*>()->EnqueueAndSchedule(this);
 }
 
@@ -11,12 +11,12 @@ TString TTaskTrackerReceipt::GetStatusSingleLine() {
     return Task->GetStatusSingleLine();
 }
 
-TTaskTracker::TTaskTracker(NActor::TExecutor* executor)
-    : NActor::TActor<TTaskTracker>(executor)
+TTaskTracker::TTaskTracker(NActor::TExecutor* executor) 
+    : NActor::TActor<TTaskTracker>(executor) 
 {
 }
 
-TTaskTracker::~TTaskTracker() {
+TTaskTracker::~TTaskTracker() { 
     Y_ASSERT(Tasks.Empty());
 }
 
@@ -47,7 +47,7 @@ void TTaskTracker::ProcessItem(NActor::TDefaultTag, NActor::TDefaultTag, TAsyncR
     status->SetResult(s);
 }
 
-void TTaskTracker::Act(NActor::TDefaultTag) {
+void TTaskTracker::Act(NActor::TDefaultTag) { 
     GetQueue<TAsyncResult<TTaskTrackerStatus>*>()->DequeueAll();
     GetQueue<ITaskFactory*>()->DequeueAll();
     GetQueue<TTaskTrackerReceipt*>()->DequeueAll();

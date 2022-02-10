@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include <library/cpp/string_utils/ztstrbuf/ztstrbuf.h>
 
 #include <util/generic/string.h>
@@ -17,9 +17,9 @@ namespace NXml {
 
     using TXPathContext = xmlXPathContext;
 
-    class TDocument {
+    class TDocument { 
     public:
-        enum Source {
+        enum Source { 
             File,
             String,
             RootName,
@@ -62,11 +62,11 @@ namespace NXml {
             return s.Str();
         }
 
-        void Swap(TDocument& that) {
+        void Swap(TDocument& that) { 
             std::swap(this->Doc, that.Doc);
         }
 
-        xmlDocPtr GetImpl() {
+        xmlDocPtr GetImpl() { 
             return Doc.Get();
         }
 
@@ -76,8 +76,8 @@ namespace NXml {
 
         TDocument(TDocHolder doc)
             : Doc(std::move(doc))
-        {
-        }
+        { 
+        } 
 
         TDocHolder Doc;
     };
@@ -88,22 +88,22 @@ namespace NXml {
     };
     typedef TVector<TNamespaceForXPath> TNamespacesForXPath;
 
-    class TConstNodes {
+    class TConstNodes { 
     private:
-        struct TConstNodesRef {
-            explicit TConstNodesRef(TConstNodes& n)
-                : r_(n)
-            {
-            }
+        struct TConstNodesRef { 
+            explicit TConstNodesRef(TConstNodes& n) 
+                : r_(n) 
+            { 
+            } 
             TConstNodes& r_;
         };
-
+ 
     public:
         TConstNodes(const TConstNodes& nodes);
         TConstNodes& operator=(const TConstNodes& nodes);
 
         TConstNodes(TConstNodesRef ref);
-        TConstNodes& operator=(TConstNodesRef ref);
+        TConstNodes& operator=(TConstNodesRef ref); 
 
         operator TConstNodesRef();
 
@@ -116,17 +116,17 @@ namespace NXml {
         /**
         * get number of nodes
         */
-        size_t Size() const {
-            return SizeValue;
-        }
-        size_t size() const {
-            return SizeValue;
-        }
+        size_t Size() const { 
+            return SizeValue; 
+        } 
+        size_t size() const { 
+            return SizeValue; 
+        } 
 
         struct TNodeIter {
             const TConstNodes& Nodes;
             size_t Index;
-            TConstNode operator*() const;
+            TConstNode operator*() const; 
             bool operator==(const TNodeIter& other) const {
                 return Index == other.Index;
             }
@@ -138,12 +138,12 @@ namespace NXml {
                 return *this;
             }
         };
-        TNodeIter begin() const {
-            return TNodeIter{*this, 0};
-        }
-        TNodeIter end() const {
-            return TNodeIter{*this, size()};
-        }
+        TNodeIter begin() const { 
+            return TNodeIter{*this, 0}; 
+        } 
+        TNodeIter end() const { 
+            return TNodeIter{*this, size()}; 
+        } 
 
     private:
         friend class TDocument;
@@ -157,7 +157,7 @@ namespace NXml {
         TXPathObjectPtr Obj;
     };
 
-    class TNode {
+    class TNode { 
     public:
         friend class TDocument;
         friend class TConstNode;
@@ -169,11 +169,11 @@ namespace NXml {
         bool IsNull() const;
 
         /**
-        * check if node is element node
-        */
-        bool IsElementNode() const;
-
-        /**
+        * check if node is element node 
+        */ 
+        bool IsElementNode() const; 
+ 
+        /** 
         * Create xpath context to be used later for fast xpath evaluation.
         * @param nss: explicitly specify XML namespaces to use and their prefixes
         *
@@ -259,9 +259,9 @@ namespace NXml {
         TNode FirstChild(TZtStringBuf name);
         TConstNode FirstChild(TZtStringBuf name) const;
 
-        TNode FirstChild();
-        TConstNode FirstChild() const;
-
+        TNode FirstChild(); 
+        TConstNode FirstChild() const; 
+ 
         /**
         * get parent node
         * throws exception if has no parent
@@ -278,9 +278,9 @@ namespace NXml {
         TNode NextSibling(TZtStringBuf name);
         TConstNode NextSibling(TZtStringBuf name) const;
 
-        TNode NextSibling();
-        TConstNode NextSibling() const;
-
+        TNode NextSibling(); 
+        TConstNode NextSibling() const; 
+ 
         /**
         * create child node
         * @param name: child name
@@ -371,7 +371,7 @@ namespace NXml {
         * set node value
         * @param value: new text value
         */
-        template <class T>
+        template <class T> 
         typename std::enable_if<!std::is_convertible_v<T, TStringBuf>, void>::type
         SetValue(const T& value);
 
@@ -451,8 +451,8 @@ namespace NXml {
         TNode()
             : NodePointer(nullptr)
             , DocPointer(nullptr)
-        {
-        }
+        { 
+        } 
 
     private:
         friend class TConstNodes;
@@ -460,12 +460,12 @@ namespace NXml {
         TNode(xmlDoc* doc, xmlNode* node)
             : NodePointer(node)
             , DocPointer(doc)
-        {
-        }
+        { 
+        } 
 
         TNode Find(xmlNode* start, TZtStringBuf name);
 
-        template <class T>
+        template <class T> 
         void AttrInternal(TCharPtr& value, T& res, TStringBuf errContext) const;
 
         void SaveInternal(IOutputStream& stream, TZtStringBuf enc, int options) const;
@@ -474,7 +474,7 @@ namespace NXml {
         xmlDoc* DocPointer;
     };
 
-    class TConstNode {
+    class TConstNode { 
     public:
         friend class TDocument;
         friend class TConstNodes;
@@ -482,15 +482,15 @@ namespace NXml {
         /**
         * check if node is null
         */
-        bool IsNull() const {
+        bool IsNull() const { 
             return ActualNode.IsNull();
         }
 
-        bool IsElementNode() const {
-            return ActualNode.IsElementNode();
-        }
-
-        TConstNode Parent() const {
+        bool IsElementNode() const { 
+            return ActualNode.IsElementNode(); 
+        } 
+ 
+        TConstNode Parent() const { 
             return ActualNode.Parent();
         }
 
@@ -498,7 +498,7 @@ namespace NXml {
         * Create xpath context to be used later for fast xpath evaluation.
         * @param nss: explicitly specify XML namespaces to use and their prefixes
         */
-        TXPathContextPtr CreateXPathContext(const TNamespacesForXPath& nss = TNamespacesForXPath()) const {
+        TXPathContextPtr CreateXPathContext(const TNamespacesForXPath& nss = TNamespacesForXPath()) const { 
             return ActualNode.CreateXPathContext(nss);
         }
 
@@ -580,10 +580,10 @@ namespace NXml {
             return ActualNode.FirstChild(name);
         }
 
-        TConstNode FirstChild() const {
-            return ActualNode.FirstChild();
-        }
-
+        TConstNode FirstChild() const { 
+            return ActualNode.FirstChild(); 
+        } 
+ 
         /**
         * get node neighbour
         * @param name: neighbour name
@@ -593,10 +593,10 @@ namespace NXml {
             return ActualNode.NextSibling(name);
         }
 
-        TConstNode NextSibling() const {
-            return ActualNode.NextSibling();
-        }
-
+        TConstNode NextSibling() const { 
+            return ActualNode.NextSibling(); 
+        } 
+ 
         /**
         * get node attribute
         * @param name: attribute name
@@ -645,7 +645,7 @@ namespace NXml {
         * @throws exception if node is blank
         */
         template <class T>
-        T Value() const {
+        T Value() const { 
             return ActualNode.Value<T>();
         }
 
@@ -655,7 +655,7 @@ namespace NXml {
         * returns default value if node is blank
         */
         template <class T>
-        T Value(const T& defvalue) const {
+        T Value(const T& defvalue) const { 
             return ActualNode.Value(defvalue);
         }
 
@@ -669,28 +669,28 @@ namespace NXml {
         /**
         * @return application data pointer, passed by SetPrivate
         */
-        void* GetPrivate() const {
+        void* GetPrivate() const { 
             return ActualNode.GetPrivate();
         }
 
         /**
         * get pointer to internal node
         */
-        const xmlNode* GetPtr() const {
+        const xmlNode* GetPtr() const { 
             return ActualNode.GetPtr();
         }
 
         /**
         * check if node is text-only node
         */
-        bool IsText() const {
+        bool IsText() const { 
             return ActualNode.IsText();
         }
 
         /**
         * get node xpath
         */
-        TString Path() const {
+        TString Path() const { 
             return ActualNode.Path();
         }
 
@@ -704,10 +704,10 @@ namespace NXml {
         TConstNode() = default;
         TConstNode(TNode node)
             : ActualNode(node)
-        {
-        }
+        { 
+        } 
 
-        TNode ConstCast() const {
+        TNode ConstCast() const { 
             return ActualNode;
         }
 
@@ -715,4 +715,4 @@ namespace NXml {
         TNode ActualNode;
     };
 
-}
+} 

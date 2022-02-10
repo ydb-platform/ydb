@@ -16,8 +16,8 @@ Y_UNIT_TEST_SUITE(RainCheckSimple) {
         TTaskWithCompletionCallback(TTestEnv* env, TTestSync* testSync)
             : Env(env)
             , TestSync(testSync)
-        {
-        }
+        { 
+        } 
 
         TSubtaskCompletion SleepCompletion;
 
@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(RainCheckSimple) {
             SleepCompletion.SetCompletionCallback(&TTaskWithCompletionCallback::NextSleepCompletionCallback);
         }
 
-        void NextSleepCompletionCallback(TSubtaskCompletion*) {
+        void NextSleepCompletionCallback(TSubtaskCompletion*) { 
             TestSync->CheckAndIncrement(2);
         }
 

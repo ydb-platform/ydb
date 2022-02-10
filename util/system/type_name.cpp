@@ -1,9 +1,9 @@
-#include "platform.h"
+#include "platform.h" 
 #include "demangle_impl.h"
 
 #ifdef __GNUC__
-    #include <stdexcept>
-    #include <cxxabi.h>
+    #include <stdexcept> 
+    #include <cxxabi.h> 
 #endif
 
 #include "type_name.h"
@@ -30,12 +30,12 @@ const char* NPrivate::TCppDemangler::Demangle(const char* name) {
 #else
     int status;
     TmpBuf_.Reset(__cxxabiv1::__cxa_demangle(name, nullptr, nullptr, &status));
-
-    if (!TmpBuf_) {
+ 
+    if (!TmpBuf_) { 
         return name;
-    }
-
-    return TmpBuf_.Get();
+    } 
+ 
+    return TmpBuf_.Get(); 
 #endif
 }
 

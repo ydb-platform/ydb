@@ -1,18 +1,18 @@
 #pragma once
-
-/*
- * thread-safe random number generator.
- *
- * specialized for:
- *  all unsigned types (return value in range [0, MAX_VALUE_FOR_TYPE])
+ 
+/* 
+ * thread-safe random number generator. 
+ * 
+ * specialized for: 
+ *  all unsigned types (return value in range [0, MAX_VALUE_FOR_TYPE]) 
  *  bool
- *  long double (return value in range [0, 1))
- *  double (return value in range [0, 1))
- *  float (return value in range [0, 1))
- */
-template <class T>
-T RandomNumber();
-
+ *  long double (return value in range [0, 1)) 
+ *  double (return value in range [0, 1)) 
+ *  float (return value in range [0, 1)) 
+ */ 
+template <class T> 
+T RandomNumber(); 
+ 
 /*
  * returns value in range [0, max)
  */

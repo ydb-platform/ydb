@@ -1329,7 +1329,7 @@ static bool ParseInteger(StringPiece* s, int* np) {
   if (s->empty() || !isdigit((*s)[0] & 0xFF))
     return false;
   // Disallow leading zeros.
-  if (s->size() >= 2 && (*s)[0] == '0' && isdigit((*s)[1] & 0xFF))
+  if (s->size() >= 2 && (*s)[0] == '0' && isdigit((*s)[1] & 0xFF)) 
     return false;
   int n = 0;
   int c;
@@ -1471,7 +1471,7 @@ static bool ParseEscape(StringPiece* s, Rune* rp,
   int code;
   switch (c) {
     default:
-      if (c < Runeself && !isalpha(c) && !isdigit(c)) {
+      if (c < Runeself && !isalpha(c) && !isdigit(c)) { 
         // Escaped non-word characters are always themselves.
         // PCRE is not quite so rigorous: it accepts things like
         // \q, but we don't.  We once rejected \_, but too many
@@ -1633,11 +1633,11 @@ static const UGroup* LookupGroup(const StringPiece& name,
 }
 
 // Look for a POSIX group with the given name (e.g., "[:^alpha:]")
-static const UGroup* LookupPosixGroup(const StringPiece& name) {
+static const UGroup* LookupPosixGroup(const StringPiece& name) { 
   return LookupGroup(name, posix_groups, num_posix_groups);
 }
 
-static const UGroup* LookupPerlGroup(const StringPiece& name) {
+static const UGroup* LookupPerlGroup(const StringPiece& name) { 
   return LookupGroup(name, perl_groups, num_perl_groups);
 }
 
@@ -1648,7 +1648,7 @@ static URange32 any32[] = { { 65536, Runemax } };
 static UGroup anygroup = { "Any", +1, any16, 1, any32, 1 };
 
 // Look for a Unicode group with the given name (e.g., "Han")
-static const UGroup* LookupUnicodeGroup(const StringPiece& name) {
+static const UGroup* LookupUnicodeGroup(const StringPiece& name) { 
   // Special case: "Any" means any.
   if (name == StringPiece("Any"))
     return &anygroup;
@@ -1708,7 +1708,7 @@ static void AddUGroup(CharClassBuilder *cc, const UGroup *g, int sign,
 // On success, sets *s to span the remainder of the string
 // and returns the corresponding UGroup.
 // The StringPiece must *NOT* be edited unless the call succeeds.
-const UGroup* MaybeParsePerlCCEscape(StringPiece* s, Regexp::ParseFlags parse_flags) {
+const UGroup* MaybeParsePerlCCEscape(StringPiece* s, Regexp::ParseFlags parse_flags) { 
   if (!(parse_flags & Regexp::PerlClasses))
     return NULL;
   if (s->size() < 2 || (*s)[0] != '\\')
@@ -1716,7 +1716,7 @@ const UGroup* MaybeParsePerlCCEscape(StringPiece* s, Regexp::ParseFlags parse_fl
   // Could use StringPieceToRune, but there aren't
   // any non-ASCII Perl group names.
   StringPiece name(s->data(), 2);
-  const UGroup *g = LookupPerlGroup(name);
+  const UGroup *g = LookupPerlGroup(name); 
   if (g == NULL)
     return NULL;
   s->remove_prefix(name.size());
@@ -1783,7 +1783,7 @@ ParseStatus ParseUnicodeGroup(StringPiece* s, Regexp::ParseFlags parse_flags,
 
 #if !defined(RE2_USE_ICU)
   // Look up the group in the RE2 Unicode data.
-  const UGroup *g = LookupUnicodeGroup(name);
+  const UGroup *g = LookupUnicodeGroup(name); 
   if (g == NULL) {
     status->set_code(kRegexpBadCharRange);
     status->set_error_arg(seq);
@@ -1843,7 +1843,7 @@ static ParseStatus ParseCCName(StringPiece* s, Regexp::ParseFlags parse_flags,
   q += 2;
   StringPiece name(p, static_cast<size_t>(q - p));
 
-  const UGroup *g = LookupPosixGroup(name);
+  const UGroup *g = LookupPosixGroup(name); 
   if (g == NULL) {
     status->set_code(kRegexpBadCharRange);
     status->set_error_arg(name);
@@ -1981,7 +1981,7 @@ bool Regexp::ParseState::ParseCharClass(StringPiece* s,
     }
 
     // Look for Perl character class symbols (extension).
-    const UGroup *g = MaybeParsePerlCCEscape(s, flags_);
+    const UGroup *g = MaybeParsePerlCCEscape(s, flags_); 
     if (g != NULL) {
       AddUGroup(re->ccb_, g, g->sign, flags_);
       continue;
@@ -2456,7 +2456,7 @@ Regexp* Regexp::Parse(const StringPiece& s, ParseFlags global_flags,
           }
         }
 
-        const UGroup *g = MaybeParsePerlCCEscape(&t, ps.flags());
+        const UGroup *g = MaybeParsePerlCCEscape(&t, ps.flags()); 
         if (g != NULL) {
           Regexp* re = new Regexp(kRegexpCharClass, ps.flags() & ~FoldCase);
           re->ccb_ = new CharClassBuilder;

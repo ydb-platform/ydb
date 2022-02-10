@@ -140,7 +140,7 @@ struct TEvTxMediator {
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_MEDIATOR), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_MEDIATOR)");
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_MEDIATOR), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_MEDIATOR)"); 
 
     struct TEvCommitStep : public TEventLocal<TEvCommitStep, EvCommitStep> {
         TAutoPtr<NTxMediator::TMediateStep> MediateStep;

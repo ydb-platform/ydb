@@ -27,7 +27,7 @@ namespace NActors {
         volatile bool StopFlag;
 
         typedef TMap<ui64, TAutoPtr<NSchedulerQueue::TQueueType>> TMomentMap; // intrasecond queues
-        typedef THashMap<ui64, TAutoPtr<TMomentMap>> TScheduleMap;            // over-second schedule
+        typedef THashMap<ui64, TAutoPtr<TMomentMap>> TScheduleMap;            // over-second schedule 
 
         TScheduleMap ScheduleMap;
 
@@ -50,7 +50,7 @@ namespace NActors {
         void Stop() override;
     };
 
-    class TMockSchedulerThread: public ISchedulerThread {
+    class TMockSchedulerThread: public ISchedulerThread { 
     public:
         virtual ~TMockSchedulerThread() override {
         }
@@ -76,6 +76,6 @@ namespace NActors {
         }
     };
 
-    ISchedulerThread* CreateSchedulerThread(const TSchedulerConfig& cfg);
+    ISchedulerThread* CreateSchedulerThread(const TSchedulerConfig& cfg); 
 
 }

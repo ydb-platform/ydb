@@ -3,7 +3,7 @@
 #include <util/generic/buffer.h>
 #include <util/generic/cast.h>
 #include <util/generic/ptr.h>
-#include <util/generic/scope.h>
+#include <util/generic/scope.h> 
 #include <util/generic/size_literals.h>
 #include <util/stream/format.h>
 #include <util/stream/output.h>
@@ -285,15 +285,15 @@ namespace NMonitoring {
 
             void FinishAndWriteEmptyFrame() override {
                 if (Out_) {
-                    Y_DEFER {
+                    Y_DEFER { 
                         Out_ = nullptr;
-                    };
-
-                    if (!Uncompressed_.Empty()) {
-                        WriteCompressedFrame();
+                    }; 
+ 
+                    if (!Uncompressed_.Empty()) { 
+                        WriteCompressedFrame(); 
                     }
-
-                    WriteEmptyFrame();
+ 
+                    WriteEmptyFrame(); 
                 }
             }
 

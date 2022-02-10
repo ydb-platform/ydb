@@ -2,7 +2,7 @@
 
 #include "last_getopt_opts.h"
 
-#include <util/generic/map.h>
+#include <util/generic/map.h> 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
@@ -19,7 +19,7 @@ using TMainFunctionRawPtr = int (*)(const int argc, const char** argv);
 //! Mode class with vector of cli arguments.
 class TMainClassV {
 public:
-    virtual int operator()(const TVector<TString>& argv) = 0;
+    virtual int operator()(const TVector<TString>& argv) = 0; 
     virtual ~TMainClassV() = default;
 };
 
@@ -45,7 +45,7 @@ class TModChooser {
 public:
     TModChooser();
     ~TModChooser();
-
+ 
 public:
     void AddMode(const TString& mode, TMainFunctionRawPtr func, const TString& description, bool hidden = false, bool noCompletion = false);
     void AddMode(const TString& mode, TMainFunctionRawPtrV func, const TString& description, bool hidden = false, bool noCompletion = false);
@@ -98,7 +98,7 @@ public:
     int Run(int argc, const char** argv) const;
 
     //! Run appropriate mode. Same as Run(const int, const char**)
-    int Run(const TVector<TString>& argv) const;
+    int Run(const TVector<TString>& argv) const; 
 
     void PrintHelp(const TString& progName) const;
 

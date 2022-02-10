@@ -1,22 +1,22 @@
-#include "cgiparam.h"
-
+#include "cgiparam.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 Y_UNIT_TEST_SUITE(TCgiParametersTest) {
     Y_UNIT_TEST(TestScan1) {
-        TCgiParameters C;
-        C.Scan("aaa=b%62b&ccc=ddd&ag0=");
-        UNIT_ASSERT_EQUAL(C.Get("aaa") == "bbb", true);
-        UNIT_ASSERT_EQUAL(C.NumOfValues("ag0") == 1, true);
-        UNIT_ASSERT(C.Has("ccc", "ddd"));
-        UNIT_ASSERT(C.Has("ag0", ""));
-        UNIT_ASSERT(!C.Has("a", "bbb"));
-        UNIT_ASSERT(!C.Has("aaa", "bb"));
+        TCgiParameters C; 
+        C.Scan("aaa=b%62b&ccc=ddd&ag0="); 
+        UNIT_ASSERT_EQUAL(C.Get("aaa") == "bbb", true); 
+        UNIT_ASSERT_EQUAL(C.NumOfValues("ag0") == 1, true); 
+        UNIT_ASSERT(C.Has("ccc", "ddd")); 
+        UNIT_ASSERT(C.Has("ag0", "")); 
+        UNIT_ASSERT(!C.Has("a", "bbb")); 
+        UNIT_ASSERT(!C.Has("aaa", "bb")); 
 
         UNIT_ASSERT(C.Has("ccc"));
         UNIT_ASSERT(!C.Has("zzzzzz"));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestQuick) {
         TQuickCgiParam C("aaa=b%62b&ccc=ddd&ag0=");
         UNIT_ASSERT_EQUAL(C.Get("aaa") == "bbb", true);
@@ -40,47 +40,47 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
 
     Y_UNIT_TEST(TestScan2) {
         const TString parsee("=000&aaa=bbb&ag0=&ccc=ddd");
-        TCgiParameters c;
-        c.Scan(parsee);
-
-        UNIT_ASSERT_VALUES_EQUAL(c.Print(), parsee);
-    }
-
+        TCgiParameters c; 
+        c.Scan(parsee); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(c.Print(), parsee); 
+    } 
+ 
     Y_UNIT_TEST(TestScan3) {
         const TString parsee("aaa=bbb&ag0=&ccc=ddd");
-        TCgiParameters c;
-        c.Scan(parsee);
-
+        TCgiParameters c; 
+        c.Scan(parsee); 
+ 
         c.InsertUnescaped("d", "xxx");
-
-        UNIT_ASSERT_VALUES_EQUAL(c.Print(), parsee + "&d=xxx");
-    }
-
+ 
+        UNIT_ASSERT_VALUES_EQUAL(c.Print(), parsee + "&d=xxx"); 
+    } 
+ 
     Y_UNIT_TEST(TestScanAddAll1) {
-        TCgiParameters c;
-        c.ScanAddAll("qw");
-
+        TCgiParameters c; 
+        c.ScanAddAll("qw"); 
+ 
         UNIT_ASSERT_VALUES_EQUAL(c.size(), 1u);
-        UNIT_ASSERT(c.Get("qw").empty());
-    }
-
+        UNIT_ASSERT(c.Get("qw").empty()); 
+    } 
+ 
     Y_UNIT_TEST(TestScanAddAll2) {
-        TCgiParameters c;
-        c.ScanAddAll("qw&");
-
+        TCgiParameters c; 
+        c.ScanAddAll("qw&"); 
+ 
         UNIT_ASSERT_VALUES_EQUAL(c.size(), 1u);
-        UNIT_ASSERT(c.Get("qw").empty());
-    }
-
+        UNIT_ASSERT(c.Get("qw").empty()); 
+    } 
+ 
     Y_UNIT_TEST(TestScanAddAll3) {
-        TCgiParameters c;
-        c.ScanAddAll("qw=1&x");
-
+        TCgiParameters c; 
+        c.ScanAddAll("qw=1&x"); 
+ 
         UNIT_ASSERT_VALUES_EQUAL(c.size(), 2u);
-        UNIT_ASSERT_VALUES_EQUAL(c.Get("qw"), "1");
-        UNIT_ASSERT(c.Get("x").empty());
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(c.Get("qw"), "1"); 
+        UNIT_ASSERT(c.Get("x").empty()); 
+    } 
+ 
     Y_UNIT_TEST(TestScanAddAll4) {
         TCgiParameters c;
         c.ScanAddAll("ccc=1&aaa=1&ccc=3&bbb&ccc=2");
@@ -191,8 +191,8 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
     }
 
     Y_UNIT_TEST(TestEmpty) {
-        UNIT_ASSERT(TCgiParameters().Print().empty());
-    }
+        UNIT_ASSERT(TCgiParameters().Print().empty()); 
+    } 
 
     Y_UNIT_TEST(TestJoinUnescaped) {
         TCgiParameters c;
@@ -218,23 +218,23 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
 
     Y_UNIT_TEST(TestPrintAsQuote) {
         TCgiParameters c = {
-            std::make_pair("aaa", "value/with/slashes"),
+            std::make_pair("aaa", "value/with/slashes"), 
             std::make_pair("b/b/b", "value_without_slashes"),
-            std::make_pair("ccc", "value")};
+            std::make_pair("ccc", "value")}; 
 
         UNIT_ASSERT_VALUES_EQUAL(c.Print(), "aaa=value/with/slashes&b/b/b=value_without_slashes&ccc=value");
         UNIT_ASSERT_VALUES_EQUAL(c.QuotedPrint(""), "aaa=value%2Fwith%2Fslashes&b%2Fb%2Fb=value_without_slashes&ccc=value");
     }
 
     Y_UNIT_TEST(TestPrintAsQuoteEmpty) {
-        TCgiParameters c = {};
+        TCgiParameters c = {}; 
         UNIT_ASSERT_VALUES_EQUAL(c.QuotedPrint(""), "");
     }
 
     Y_UNIT_TEST(TestPrintAsQuoteEmptyKeyOrValue) {
         TCgiParameters c = {
             std::make_pair("", "value/of/empty"),
-            std::make_pair("key/for/empty", "")};
+            std::make_pair("key/for/empty", "")}; 
 
         UNIT_ASSERT_VALUES_EQUAL(c.Print(), "=value/of/empty&key/for/empty=");
         UNIT_ASSERT_VALUES_EQUAL(c.QuotedPrint(""), "=value%2Fof%2Fempty&key%2Ffor%2Fempty=");

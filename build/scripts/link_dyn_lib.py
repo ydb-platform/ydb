@@ -1,13 +1,13 @@
-import sys
-import os
+import sys 
+import os 
 import subprocess
-import tempfile
-import collections
+import tempfile 
+import collections 
 import optparse
 import pipes
-
+ 
 from process_whole_archive_option import ProcessWholeArchiveOption
-
+ 
 
 def shlex_join(cmd):
     # equivalent to shlex.join() in python 3
@@ -17,12 +17,12 @@ def shlex_join(cmd):
     )
 
 
-def parse_export_file(p):
-    with open(p, 'r') as f:
+def parse_export_file(p): 
+    with open(p, 'r') as f: 
         for l in f:
-            l = l.strip()
-
-            if l and '#' not in l:
+            l = l.strip() 
+ 
+            if l and '#' not in l: 
                 words = l.split()
                 if len(words) == 2 and words[0] == 'linux_version':
                     yield {'linux_version': words[1]}
@@ -32,8 +32,8 @@ def parse_export_file(p):
                     yield {'lang': 'C', 'sym': words[0]}
                 else:
                     raise Exception('unsupported exports line: ' + l)
-
-
+ 
+ 
 def to_c(sym):
     symbols = collections.deque(sym.split('::'))
     c_prefixes = [  # demangle prefixes for c++ symbols
@@ -60,24 +60,24 @@ def to_c(sym):
     return ['{prefix}{sym}'.format(prefix=prefix, sym=c_sym) for prefix in c_prefixes]
 
 
-def fix_darwin_param(ex):
-    for item in ex:
+def fix_darwin_param(ex): 
+    for item in ex: 
         if item.get('linux_version'):
             continue
 
-        if item['lang'] == 'C':
-            yield '-Wl,-exported_symbol,_' + item['sym']
+        if item['lang'] == 'C': 
+            yield '-Wl,-exported_symbol,_' + item['sym'] 
         elif item['lang'] == 'C++':
             for sym in to_c(item['sym']):
                 yield '-Wl,-exported_symbol,_' + sym
-        else:
-            raise Exception('unsupported lang: ' + item['lang'])
-
-
-def fix_gnu_param(arch, ex):
-    d = collections.defaultdict(list)
+        else: 
+            raise Exception('unsupported lang: ' + item['lang']) 
+ 
+ 
+def fix_gnu_param(arch, ex): 
+    d = collections.defaultdict(list) 
     version = None
-    for item in ex:
+    for item in ex: 
         if item.get('linux_version'):
             if not version:
                 version = item.get('linux_version')
@@ -87,31 +87,31 @@ def fix_gnu_param(arch, ex):
             d['C'].extend(to_c(item['sym']))
         else:
             d[item['lang']].append(item['sym'])
-
+ 
     with tempfile.NamedTemporaryFile(mode='wt', delete=False) as f:
         if version:
             f.write('{} {{\nglobal:\n'.format(version))
         else:
             f.write('{\nglobal:\n')
-
-        for k, v in d.items():
-            f.write('    extern "' + k + '" {\n')
-
-            for x in v:
+ 
+        for k, v in d.items(): 
+            f.write('    extern "' + k + '" {\n') 
+ 
+            for x in v: 
                 f.write('        ' + x + ';\n')
-
-            f.write('    };\n')
-
-        f.write('local: *;\n};\n')
-
-        ret = ['-Wl,--version-script=' + f.name]
-
-        if arch == 'ANDROID':
-            ret += ['-Wl,--export-dynamic']
-
-        return ret
-
-
+ 
+            f.write('    };\n') 
+ 
+        f.write('local: *;\n};\n') 
+ 
+        ret = ['-Wl,--version-script=' + f.name] 
+ 
+        if arch == 'ANDROID': 
+            ret += ['-Wl,--export-dynamic'] 
+ 
+        return ret 
+ 
+ 
 def fix_windows_param(ex):
     with tempfile.NamedTemporaryFile(delete=False) as def_file:
         exports = []
@@ -131,33 +131,33 @@ def fix_cmd(arch, musl, c):
     if arch == 'WINDOWS':
         prefix = '/DEF:'
         f = fix_windows_param
-    else:
+    else: 
         prefix = '-Wl,--version-script='
         if arch in ('DARWIN', 'IOS'):
             f = fix_darwin_param
         else:
             f = lambda x: fix_gnu_param(arch, x)
-
-    def do_fix(p):
+ 
+    def do_fix(p): 
         if musl and p in musl_libs:
             return []
 
-        if p.startswith(prefix) and p.endswith('.exports'):
-            fname = p[len(prefix):]
-
-            return list(f(list(parse_export_file(fname))))
-
+        if p.startswith(prefix) and p.endswith('.exports'): 
+            fname = p[len(prefix):] 
+ 
+            return list(f(list(parse_export_file(fname)))) 
+ 
         if p.endswith('.supp'):
             return []
 
         if p.endswith('.pkg.fake'):
             return []
 
-        return [p]
-
-    return sum((do_fix(x) for x in c), [])
-
-
+        return [p] 
+ 
+    return sum((do_fix(x) for x in c), []) 
+ 
+ 
 def parse_args():
     parser = optparse.OptionParser()
     parser.disable_interspersed_args()

@@ -1,9 +1,9 @@
 import six  # noqa
 
-import library.python.resource as rs
-
+import library.python.resource as rs 
+ 
 text = b'na gorshke sidel korol\n'
-
+ 
 
 def test_find():
     assert rs.find('/qw.txt') == text

@@ -13,7 +13,7 @@ public:
         : Trie(blob)
     {
     }
-
+ 
     bool Has(const char* key) const {
         return Trie.Find(key, strlen(key));
     }
@@ -23,7 +23,7 @@ public:
     }
 };
 
-template <bool sorted = false>
+template <bool sorted = false> 
 class TTrieSetWriter {
 private:
     TCompactTrieBuilder<char> Builder;
@@ -57,24 +57,24 @@ public:
     }
 };
 
-template <bool isWriter, bool sorted = false>
+template <bool isWriter, bool sorted = false> 
 struct TTrieSetG;
 
-template <bool sorted>
+template <bool sorted> 
 struct TTrieSetG<false, sorted> {
     typedef TTrieSet T;
 };
 
-template <bool sorted>
+template <bool sorted> 
 struct TTrieSetG<true, sorted> {
     typedef TTrieSetWriter<sorted> T;
 };
 
-template <typename T>
+template <typename T> 
 class TTrieMap {
 private:
     TCompactTrie<char> Trie;
-    static_assert(sizeof(T) <= sizeof(ui64), "expect sizeof(T) <= sizeof(ui64)");
+    static_assert(sizeof(T) <= sizeof(ui64), "expect sizeof(T) <= sizeof(ui64)"); 
 
 public:
     TTrieMap(const TBlob& blob)
@@ -101,17 +101,17 @@ public:
         }
     }
 
-    const TCompactTrie<char>& GetTrie() const {
+    const TCompactTrie<char>& GetTrie() const { 
         return Trie;
     }
 };
 
-template <typename T, bool sorted = false>
+template <typename T, bool sorted = false> 
 class TTrieMapWriter {
 private:
     typedef TCompactTrieBuilder<char> TBuilder;
     TBuilder Builder;
-    static_assert(sizeof(T) <= sizeof(ui64), "expect sizeof(T) <= sizeof(ui64)");
+    static_assert(sizeof(T) <= sizeof(ui64), "expect sizeof(T) <= sizeof(ui64)"); 
 #ifndef NDEBUG
     bool IsSorted;
 #endif
@@ -130,12 +130,12 @@ public:
         memcpy(&intValue, &value, sizeof(T));
         Builder.Add(key, strlen(key), intValue);
 #ifndef NDEBUG
-        /*
+        /* 
         if (!IsSorted) {
             T test;
             assert(Get(key, &test) && value == test);
         }
-        */
+        */ 
 #endif
     }
 
@@ -177,7 +177,7 @@ public:
     }
 };
 
-template <typename T>
+template <typename T> 
 class TTrieSortedMapWriter {
 private:
     typedef std::pair<TString, T> TValue;
@@ -204,15 +204,15 @@ public:
     }
 };
 
-template <typename X, bool isWriter, bool sorted = false>
+template <typename X, bool isWriter, bool sorted = false> 
 struct TTrieMapG;
 
-template <typename X, bool sorted>
+template <typename X, bool sorted> 
 struct TTrieMapG<X, false, sorted> {
     typedef TTrieMap<X> T;
 };
 
-template <typename X, bool sorted>
+template <typename X, bool sorted> 
 struct TTrieMapG<X, true, sorted> {
     typedef TTrieMapWriter<X, sorted> T;
 };

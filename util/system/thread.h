@@ -6,80 +6,80 @@
 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
-
+ 
 #include "defaults.h"
 #include "progname.h"
 
 bool SetHighestThreadPriority();
 
-class TThread {
+class TThread { 
     template <typename Callable>
     struct TCallableParams;
     struct TPrivateCtor {};
 
-public:
+public: 
     using TThreadProc = void* (*)(void*);
     using TId = size_t;
-
-    struct TParams {
-        TThreadProc Proc;
-        void* Data;
-        size_t StackSize;
-        void* StackPointer;
+ 
+    struct TParams { 
+        TThreadProc Proc; 
+        void* Data; 
+        size_t StackSize; 
+        void* StackPointer; 
         // See comments for `SetCurrentThreadName`
         TString Name = GetProgramName();
 
-        inline TParams()
+        inline TParams() 
             : Proc(nullptr)
             , Data(nullptr)
-            , StackSize(0)
-            , StackPointer(nullptr)
-        {
-        }
+            , StackSize(0) 
+            , StackPointer(nullptr) 
+        { 
+        } 
 
-        inline TParams(TThreadProc proc, void* data)
-            : Proc(proc)
-            , Data(data)
-            , StackSize(0)
-            , StackPointer(nullptr)
-        {
-        }
-
-        inline TParams(TThreadProc proc, void* data, size_t stackSize)
-            : Proc(proc)
-            , Data(data)
-            , StackSize(stackSize)
-            , StackPointer(nullptr)
-        {
-        }
-
+        inline TParams(TThreadProc proc, void* data) 
+            : Proc(proc) 
+            , Data(data) 
+            , StackSize(0) 
+            , StackPointer(nullptr) 
+        { 
+        } 
+ 
+        inline TParams(TThreadProc proc, void* data, size_t stackSize) 
+            : Proc(proc) 
+            , Data(data) 
+            , StackSize(stackSize) 
+            , StackPointer(nullptr) 
+        { 
+        } 
+ 
         inline TParams& SetName(const TString& name) noexcept {
-            Name = name;
-
-            return *this;
-        }
-
+            Name = name; 
+ 
+            return *this; 
+        } 
+ 
         inline TParams& SetStackSize(size_t size) noexcept {
-            StackSize = size;
-
-            return *this;
-        }
-
+            StackSize = size; 
+ 
+            return *this; 
+        } 
+ 
         inline TParams& SetStackPointer(void* ptr) noexcept {
-            StackPointer = ptr;
+            StackPointer = ptr; 
+ 
+            return *this; 
+        } 
+    }; 
 
-            return *this;
-        }
-    };
-
-    TThread(const TParams& params);
-    TThread(TThreadProc threadProc, void* param);
-
+    TThread(const TParams& params); 
+    TThread(TThreadProc threadProc, void* param); 
+ 
     template <typename Callable>
     TThread(Callable&& callable)
         : TThread(TPrivateCtor{},
-                  MakeHolder<TCallableParams<Callable>>(std::forward<Callable>(callable)))
-    {
+                  MakeHolder<TCallableParams<Callable>>(std::forward<Callable>(callable))) 
+    { 
     }
 
     TThread(TParams&& params)
@@ -93,14 +93,14 @@ public:
     }
 
     ~TThread();
-
-    void Start();
-
-    void* Join();
-    void Detach();
+ 
+    void Start(); 
+ 
+    void* Join(); 
+    void Detach(); 
     bool Running() const noexcept;
     TId Id() const noexcept;
-
+ 
     static TId ImpossibleThreadId() noexcept;
     static TId CurrentThreadId() noexcept;
 
@@ -117,7 +117,7 @@ public:
     // `CurrentThreadName` to return the same name as `name` make sure it's not longer than 15
     // symbols.
     static void SetCurrentThreadName(const char* name);
-
+ 
     // NOTE: Will return empty string where CanGetCurrentThreadName() returns false.
     static TString CurrentThreadName();
 
@@ -125,7 +125,7 @@ public:
     // Will return true for Darwin, Linux or fresh Windows 10.
     static bool CanGetCurrentThreadName();
 
-private:
+private: 
     struct TCallableBase {
         virtual ~TCallableBase() = default;
         virtual void run() = 0;
@@ -154,21 +154,21 @@ private:
 
 private:
     class TImpl;
-    THolder<TImpl> Impl_;
+    THolder<TImpl> Impl_; 
 };
 
 class ISimpleThread: public TThread {
-public:
+public: 
     ISimpleThread(size_t stackSize = 0);
 
     virtual ~ISimpleThread() = default;
 
     virtual void* ThreadProc() = 0;
 };
-
-struct TCurrentThreadLimits {
-    TCurrentThreadLimits() noexcept;
-
-    const void* StackBegin;
-    size_t StackLength;
-};
+ 
+struct TCurrentThreadLimits { 
+    TCurrentThreadLimits() noexcept; 
+ 
+    const void* StackBegin; 
+    size_t StackLength; 
+}; 

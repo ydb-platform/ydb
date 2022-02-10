@@ -18,8 +18,8 @@ public:
         t = T();
     }
 
-    void PackLeaf(char*, const T&, size_t) const {
-    }
+    void PackLeaf(char*, const T&, size_t) const { 
+    } 
 
     size_t MeasureLeaf(const T&) const {
         return 0;
@@ -30,7 +30,7 @@ public:
     }
 };
 
-template <typename T>
+template <typename T> 
 class TAsIsPacker { // this packer is not really a packer...
 public:
     void UnpackLeaf(const char* p, T& t) const {
@@ -44,7 +44,7 @@ public:
         Y_UNUSED(data);
         return sizeof(T);
     }
-    size_t SkipLeaf(const char*) const {
+    size_t SkipLeaf(const char*) const { 
         return sizeof(T);
     }
 };
@@ -111,7 +111,7 @@ namespace NPackers {
         size_t len = 1;
 
         value >>= 7;
-        for (; value && len < MAX_SIZE; value >>= 7)
+        for (; value && len < MAX_SIZE; value >>= 7) 
             ++len;
 
         return len;
@@ -122,7 +122,7 @@ namespace NPackers {
         ui64 value = val;
         int lenmask = 0;
 
-        for (size_t i = len - 1; i; --i) {
+        for (size_t i = len - 1; i; --i) { 
             buffer[i] = (char)(value & 0xFF);
             value >>= 8;
             lenmask = ((lenmask >> 1) | (1 << 7));
@@ -220,7 +220,7 @@ namespace NPackers {
                 h.F = f;
                 return ReverseBytes(h.U);
             }
-
+ 
         public:
             void UnpackLeaf(const char* c, TFloat& t) const {
                 TUInt u = 0;
@@ -242,10 +242,10 @@ namespace NPackers {
         };
     }
 
-    class TFloatPacker: public NImpl::TFPPackerBase<float, ui32> {
+    class TFloatPacker: public NImpl::TFPPackerBase<float, ui32> { 
     };
 
-    class TDoublePacker: public NImpl::TFPPackerBase<double, ui64> {
+    class TDoublePacker: public NImpl::TFPPackerBase<double, ui64> { 
     };
 
     //-------------------------------------------
@@ -260,7 +260,7 @@ namespace NPackers {
         size_t SkipLeaf(const char* p) const;
     };
 
-    template <class TStringType>
+    template <class TStringType> 
     inline void TStringPacker<TStringType>::UnpackLeaf(const char* buf, TStringType& t) const {
         size_t len;
         TIntegralPacker<size_t>().UnpackLeaf(buf, len);
@@ -268,7 +268,7 @@ namespace NPackers {
         t = TStringType((const typename TStringType::char_type*)(buf + start), len);
     }
 
-    template <class TStringType>
+    template <class TStringType> 
     inline void TStringPacker<TStringType>::PackLeaf(char* buf, const TStringType& str, size_t size) const {
         size_t len = str.size();
         size_t lenChar = len * sizeof(typename TStringType::char_type);
@@ -277,13 +277,13 @@ namespace NPackers {
         memcpy(buf + start, str.data(), lenChar);
     }
 
-    template <class TStringType>
+    template <class TStringType> 
     inline size_t TStringPacker<TStringType>::MeasureLeaf(const TStringType& str) const {
         size_t len = str.size();
         return TIntegralPacker<size_t>().MeasureLeaf(len) + len * sizeof(typename TStringType::char_type);
     }
 
-    template <class TStringType>
+    template <class TStringType> 
     inline size_t TStringPacker<TStringType>::SkipLeaf(const char* buf) const {
         size_t result = TIntegralPacker<size_t>().SkipLeaf(buf);
         {
@@ -294,7 +294,7 @@ namespace NPackers {
         return result;
     }
 
-    template <class T>
+    template <class T> 
     class TPacker;
 
     // TContainerPacker --- for any container
@@ -308,50 +308,50 @@ namespace NPackers {
     //  Requirements to class EP: has methods as in any packer (UnpackLeaf, PackLeaf, MeasureLeaf, SkipLeaf) that
     //    are applicable to C::value_type
 
-    template <typename T>
+    template <typename T> 
     struct TContainerInfo {
         enum {
             IsVector = 0
         };
     };
 
-    template <typename T>
-    struct TContainerInfo<std::vector<T>> {
+    template <typename T> 
+    struct TContainerInfo<std::vector<T>> { 
         enum {
             IsVector = 1
         };
     };
 
-    template <typename T>
-    struct TContainerInfo<TVector<T>> {
+    template <typename T> 
+    struct TContainerInfo<TVector<T>> { 
         enum {
             IsVector = 1
         };
     };
 
-    template <bool IsVector>
+    template <bool IsVector> 
     class TContainerPackerHelper {
     };
 
-    template <>
+    template <> 
     class TContainerPackerHelper<false> {
     public:
-        template <class Packer, class Container>
-        static void UnpackLeaf(Packer& p, const char* buffer, Container& c) {
-            p.UnpackLeafSimple(buffer, c);
+        template <class Packer, class Container> 
+        static void UnpackLeaf(Packer& p, const char* buffer, Container& c) { 
+            p.UnpackLeafSimple(buffer, c); 
         }
     };
 
-    template <>
+    template <> 
     class TContainerPackerHelper<true> {
     public:
-        template <class Packer, class Container>
-        static void UnpackLeaf(Packer& p, const char* buffer, Container& c) {
-            p.UnpackLeafVector(buffer, c);
+        template <class Packer, class Container> 
+        static void UnpackLeaf(Packer& p, const char* buffer, Container& c) { 
+            p.UnpackLeafVector(buffer, c); 
         }
     };
 
-    template <class C, class EP = TPacker<typename C::value_type>>
+    template <class C, class EP = TPacker<typename C::value_type>> 
     class TContainerPacker {
     private:
         typedef C TContainer;
@@ -362,7 +362,7 @@ namespace NPackers {
         void UnpackLeafVector(const char* buffer, TContainer& c) const;
 
         friend class TContainerPackerHelper<TContainerInfo<C>::IsVector>;
-
+ 
     public:
         void UnpackLeaf(const char* buffer, TContainer& c) const {
             TContainerPackerHelper<TContainerInfo<C>::IsVector>::UnpackLeaf(*this, buffer, c);
@@ -372,8 +372,8 @@ namespace NPackers {
         size_t SkipLeaf(const char* buffer) const;
     };
 
-    template <class C, class EP>
-    inline void TContainerPacker<C, EP>::UnpackLeafSimple(const char* buffer, C& result) const {
+    template <class C, class EP> 
+    inline void TContainerPacker<C, EP>::UnpackLeafSimple(const char* buffer, C& result) const { 
         size_t offset = TIntegralPacker<size_t>().SkipLeaf(buffer); // first value is the total size (not needed here)
         size_t len;
         TIntegralPacker<size_t>().UnpackLeaf(buffer + offset, len);
@@ -389,8 +389,8 @@ namespace NPackers {
         }
     }
 
-    template <class C, class EP>
-    inline void TContainerPacker<C, EP>::UnpackLeafVector(const char* buffer, C& result) const {
+    template <class C, class EP> 
+    inline void TContainerPacker<C, EP>::UnpackLeafVector(const char* buffer, C& result) const { 
         size_t offset = TIntegralPacker<size_t>().SkipLeaf(buffer); // first value is the total size (not needed here)
         size_t len;
         TIntegralPacker<size_t>().UnpackLeaf(buffer + offset, len);
@@ -403,7 +403,7 @@ namespace NPackers {
         }
     }
 
-    template <class C, class EP>
+    template <class C, class EP> 
     inline void TContainerPacker<C, EP>::PackLeaf(char* buffer, const C& data, size_t size) const {
         size_t sizeOfSize = TIntegralPacker<size_t>().MeasureLeaf(size);
         TIntegralPacker<size_t>().PackLeaf(buffer, size, sizeOfSize);
@@ -419,7 +419,7 @@ namespace NPackers {
         Y_ASSERT(curSize == size);
     }
 
-    template <class C, class EP>
+    template <class C, class EP> 
     inline size_t TContainerPacker<C, EP>::MeasureLeaf(const C& data) const {
         size_t curSize = TIntegralPacker<size_t>().MeasureLeaf(data.size());
         for (TElementIterator p = data.begin(); p != data.end(); p++)
@@ -434,7 +434,7 @@ namespace NPackers {
         return curSize + extraSize;
     }
 
-    template <class C, class EP>
+    template <class C, class EP> 
     inline size_t TContainerPacker<C, EP>::SkipLeaf(const char* buffer) const {
         size_t value;
         TIntegralPacker<size_t>().UnpackLeaf(buffer, value);
@@ -444,11 +444,11 @@ namespace NPackers {
     // TPairPacker --- for std::pair<T1, T2> (any two types; can be nested)
     // TPacker<T1> and TPacker<T2> should be valid classes
 
-    template <class T1, class T2, class TPacker1 = TPacker<T1>, class TPacker2 = TPacker<T2>>
+    template <class T1, class T2, class TPacker1 = TPacker<T1>, class TPacker2 = TPacker<T2>> 
     class TPairPacker {
     private:
         typedef std::pair<T1, T2> TMyPair;
-
+ 
     public:
         void UnpackLeaf(const char* buffer, TMyPair& pair) const;
         void PackLeaf(char* buffer, const TMyPair& data, size_t size) const;
@@ -456,14 +456,14 @@ namespace NPackers {
         size_t SkipLeaf(const char* buffer) const;
     };
 
-    template <class T1, class T2, class TPacker1, class TPacker2>
+    template <class T1, class T2, class TPacker1, class TPacker2> 
     inline void TPairPacker<T1, T2, TPacker1, TPacker2>::UnpackLeaf(const char* buffer, std::pair<T1, T2>& pair) const {
         TPacker1().UnpackLeaf(buffer, pair.first);
         size_t size = TPacker1().SkipLeaf(buffer);
         TPacker2().UnpackLeaf(buffer + size, pair.second);
     }
 
-    template <class T1, class T2, class TPacker1, class TPacker2>
+    template <class T1, class T2, class TPacker1, class TPacker2> 
     inline void TPairPacker<T1, T2, TPacker1, TPacker2>::PackLeaf(char* buffer, const std::pair<T1, T2>& data, size_t size) const {
         size_t size1 = TPacker1().MeasureLeaf(data.first);
         TPacker1().PackLeaf(buffer, data.first, size1);
@@ -472,14 +472,14 @@ namespace NPackers {
         Y_ASSERT(size == size1 + size2);
     }
 
-    template <class T1, class T2, class TPacker1, class TPacker2>
+    template <class T1, class T2, class TPacker1, class TPacker2> 
     inline size_t TPairPacker<T1, T2, TPacker1, TPacker2>::MeasureLeaf(const std::pair<T1, T2>& data) const {
         size_t size1 = TPacker1().MeasureLeaf(data.first);
         size_t size2 = TPacker2().MeasureLeaf(data.second);
         return size1 + size2;
     }
 
-    template <class T1, class T2, class TPacker1, class TPacker2>
+    template <class T1, class T2, class TPacker1, class TPacker2> 
     inline size_t TPairPacker<T1, T2, TPacker1, TPacker2>::SkipLeaf(const char* buffer) const {
         size_t size1 = TPacker1().SkipLeaf(buffer);
         size_t size2 = TPacker2().SkipLeaf(buffer + size1);
@@ -544,68 +544,68 @@ namespace NPackers {
     class TPackerImpl;
 
     template <class T>
-    class TPackerImpl<T, true>: public TIntegralPacker<T> {
+    class TPackerImpl<T, true>: public TIntegralPacker<T> { 
     };
     // No implementation for non-integral types.
 
     template <class T>
-    class TPacker: public TPackerImpl<T, std::is_integral<T>::value> {
+    class TPacker: public TPackerImpl<T, std::is_integral<T>::value> { 
+    };
+
+    template <> 
+    class TPacker<float>: public TAsIsPacker<float> { 
+    };
+
+    template <> 
+    class TPacker<double>: public TAsIsPacker<double> { 
     };
 
     template <>
-    class TPacker<float>: public TAsIsPacker<float> {
+    class TPacker<TString>: public TStringPacker<TString> { 
     };
 
     template <>
-    class TPacker<double>: public TAsIsPacker<double> {
+    class TPacker<TUtf16String>: public TStringPacker<TUtf16String> { 
     };
 
     template <>
-    class TPacker<TString>: public TStringPacker<TString> {
+    class TPacker<TStringBuf>: public TStringPacker<TStringBuf> { 
     };
 
     template <>
-    class TPacker<TUtf16String>: public TStringPacker<TUtf16String> {
-    };
-
-    template <>
-    class TPacker<TStringBuf>: public TStringPacker<TStringBuf> {
-    };
-
-    template <>
-    class TPacker<TWtringBuf>: public TStringPacker<TWtringBuf> {
+    class TPacker<TWtringBuf>: public TStringPacker<TWtringBuf> { 
     };
 
     template <class T>
-    class TPacker<std::vector<T>>: public TContainerPacker<std::vector<T>> {
+    class TPacker<std::vector<T>>: public TContainerPacker<std::vector<T>> { 
     };
 
     template <class T>
-    class TPacker<TVector<T>>: public TContainerPacker<TVector<T>> {
+    class TPacker<TVector<T>>: public TContainerPacker<TVector<T>> { 
     };
 
     template <class T>
-    class TPacker<std::list<T>>: public TContainerPacker<std::list<T>> {
+    class TPacker<std::list<T>>: public TContainerPacker<std::list<T>> { 
     };
 
     template <class T>
-    class TPacker<TList<T>>: public TContainerPacker<TList<T>> {
+    class TPacker<TList<T>>: public TContainerPacker<TList<T>> { 
     };
 
     template <class T>
-    class TPacker<std::set<T>>: public TContainerPacker<std::set<T>> {
+    class TPacker<std::set<T>>: public TContainerPacker<std::set<T>> { 
     };
 
     template <class T>
-    class TPacker<TSet<T>>: public TContainerPacker<TSet<T>> {
+    class TPacker<TSet<T>>: public TContainerPacker<TSet<T>> { 
     };
 
     template <class T1, class T2>
-    class TPacker<std::pair<T1, T2>>: public TPairPacker<T1, T2> {
+    class TPacker<std::pair<T1, T2>>: public TPairPacker<T1, T2> { 
     };
 
     template <class T, size_t N>
-    class TPacker<std::array<T, N>>: public TArrayPacker<std::array<T, N>> {
+    class TPacker<std::array<T, N>>: public TArrayPacker<std::array<T, N>> { 
     };
 
-}
+} 

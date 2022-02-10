@@ -7,8 +7,8 @@ using namespace NBus::NPrivate;
 
 TBusSessionJobCount::TBusSessionJobCount()
     : JobCount(0)
-{
-}
+{ 
+} 
 
 TBusSessionJobCount::~TBusSessionJobCount() {
     Y_VERIFY(JobCount == 0, "must be 0 job count to destroy job");

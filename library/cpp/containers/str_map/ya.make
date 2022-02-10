@@ -1,9 +1,9 @@
-LIBRARY()
-
-OWNER(pg)
-
-SRCS(
-    str_map.cpp
-)
-
-END()
+LIBRARY() 
+ 
+OWNER(pg) 
+ 
+SRCS( 
+    str_map.cpp 
+) 
+ 
+END() 

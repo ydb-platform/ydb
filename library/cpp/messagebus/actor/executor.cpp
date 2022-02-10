@@ -20,10 +20,10 @@ namespace {
         struct TRecord {
             TAtomic MaxQueueSize;
 
-            TRecord()
-                : MaxQueueSize()
-            {
-            }
+            TRecord() 
+                : MaxQueueSize() 
+            { 
+            } 
 
             TExecutorHistory::THistoryRecord Capture() {
                 TExecutorHistory::THistoryRecord r;
@@ -70,8 +70,8 @@ namespace {
 
 }
 
-Y_POD_STATIC_THREAD(TExecutor*)
-ThreadCurrentExecutor;
+Y_POD_STATIC_THREAD(TExecutor*) 
+ThreadCurrentExecutor; 
 
 static const char* NoLocation = "nowhere";
 
@@ -80,80 +80,80 @@ struct TExecutorWorkerThreadLocalData {
 };
 
 static TExecutorWorkerThreadLocalData WorkerNoThreadLocalData;
-Y_POD_STATIC_THREAD(TExecutorWorkerThreadLocalData)
-WorkerThreadLocalData;
+Y_POD_STATIC_THREAD(TExecutorWorkerThreadLocalData) 
+WorkerThreadLocalData; 
 
 namespace NActor {
-    struct TExecutorWorker {
-        TExecutor* const Executor;
-        TThread Thread;
-        const char** WhatThreadDoesLocation;
-        TExecutorWorkerThreadLocalData* ThreadLocalData;
+    struct TExecutorWorker { 
+        TExecutor* const Executor; 
+        TThread Thread; 
+        const char** WhatThreadDoesLocation; 
+        TExecutorWorkerThreadLocalData* ThreadLocalData; 
 
-        TExecutorWorker(TExecutor* executor)
-            : Executor(executor)
-            , Thread(RunThreadProc, this)
-            , WhatThreadDoesLocation(&NoLocation)
-            , ThreadLocalData(&::WorkerNoThreadLocalData)
-        {
-            Thread.Start();
-        }
+        TExecutorWorker(TExecutor* executor) 
+            : Executor(executor) 
+            , Thread(RunThreadProc, this) 
+            , WhatThreadDoesLocation(&NoLocation) 
+            , ThreadLocalData(&::WorkerNoThreadLocalData) 
+        { 
+            Thread.Start(); 
+        } 
 
-        void Run() {
-            WhatThreadDoesLocation = ::WhatThreadDoesLocation();
-            AtomicSet(ThreadLocalData, &::WorkerThreadLocalData);
-            WHAT_THREAD_DOES_PUSH_POP_CURRENT_FUNC();
-            Executor->RunWorker();
-        }
+        void Run() { 
+            WhatThreadDoesLocation = ::WhatThreadDoesLocation(); 
+            AtomicSet(ThreadLocalData, &::WorkerThreadLocalData); 
+            WHAT_THREAD_DOES_PUSH_POP_CURRENT_FUNC(); 
+            Executor->RunWorker(); 
+        } 
 
-        static void* RunThreadProc(void* thiz0) {
-            TExecutorWorker* thiz = (TExecutorWorker*)thiz0;
-            thiz->Run();
-            return nullptr;
-        }
-    };
+        static void* RunThreadProc(void* thiz0) { 
+            TExecutorWorker* thiz = (TExecutorWorker*)thiz0; 
+            thiz->Run(); 
+            return nullptr; 
+        } 
+    }; 
 
-    struct TExecutor::TImpl {
-        TExecutor* const Executor;
-        THistoryInternal History;
+    struct TExecutor::TImpl { 
+        TExecutor* const Executor; 
+        THistoryInternal History; 
 
         TSystemEvent HelperStopSignal;
-        TThread HelperThread;
+        TThread HelperThread; 
 
-        TImpl(TExecutor* executor)
-            : Executor(executor)
-            , HelperThread(HelperThreadProc, this)
-        {
-        }
+        TImpl(TExecutor* executor) 
+            : Executor(executor) 
+            , HelperThread(HelperThreadProc, this) 
+        { 
+        } 
 
-        void RunHelper() {
-            ui64 nowSeconds = TInstant::Now().Seconds();
-            for (;;) {
-                TInstant nextStop = TInstant::Seconds(nowSeconds + 1) + TDuration::MilliSeconds(RandomNumber<ui32>(1000));
+        void RunHelper() { 
+            ui64 nowSeconds = TInstant::Now().Seconds(); 
+            for (;;) { 
+                TInstant nextStop = TInstant::Seconds(nowSeconds + 1) + TDuration::MilliSeconds(RandomNumber<ui32>(1000)); 
 
-                if (HelperStopSignal.WaitD(nextStop)) {
-                    return;
-                }
+                if (HelperStopSignal.WaitD(nextStop)) { 
+                    return; 
+                } 
 
-                nowSeconds = nextStop.Seconds();
+                nowSeconds = nextStop.Seconds(); 
 
-                THistoryInternal::TRecord& record = History.GetNowRecord(nowSeconds);
+                THistoryInternal::TRecord& record = History.GetNowRecord(nowSeconds); 
 
-                ui32 maxQueueSize = Executor->GetMaxQueueSizeAndClear();
-                if (maxQueueSize > record.MaxQueueSize) {
-                    AtomicSet(record.MaxQueueSize, maxQueueSize);
-                }
+                ui32 maxQueueSize = Executor->GetMaxQueueSizeAndClear(); 
+                if (maxQueueSize > record.MaxQueueSize) { 
+                    AtomicSet(record.MaxQueueSize, maxQueueSize); 
+                } 
             }
         }
 
-        static void* HelperThreadProc(void* impl0) {
-            TImpl* impl = (TImpl*)impl0;
-            impl->RunHelper();
-            return nullptr;
-        }
-    };
+        static void* HelperThreadProc(void* impl0) { 
+            TImpl* impl = (TImpl*)impl0; 
+            impl->RunHelper(); 
+            return nullptr; 
+        } 
+    }; 
 
-}
+} 
 
 static TExecutor::TConfig MakeConfig(unsigned workerCount) {
     TExecutor::TConfig config;
@@ -296,9 +296,9 @@ TAutoPtr<IWorkItem> TExecutor::DequeueWork() {
             WorkAvailable.Wait(WorkMutex);
         }
     }
-
-    auto& wtls = TlsRef(WorkerThreadLocalData);
-
+ 
+    auto& wtls = TlsRef(WorkerThreadLocalData); 
+ 
     if (queueSize > RelaxedLoad(&wtls.MaxQueueSize)) {
         RelaxedStore<ui32>(&wtls.MaxQueueSize, queueSize);
     }
@@ -334,5 +334,5 @@ void TExecutor::RunWorker() {
         RunWorkItem(wi);
     }
 
-    ThreadCurrentExecutor = (TExecutor*)nullptr;
+    ThreadCurrentExecutor = (TExecutor*)nullptr; 
 }

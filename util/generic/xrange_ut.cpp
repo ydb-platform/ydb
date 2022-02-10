@@ -1,8 +1,8 @@
 #include "xrange.h"
 
-#include "algorithm.h"
+#include "algorithm.h" 
 #include "maybe.h"
-#include "vector.h"
+#include "vector.h" 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/builder.h>
 
@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(XRange) {
         bool firstInited = false;
         size_t last = 0;
 
-        for (auto i : xrange(begin, end)) {
+        for (auto i : xrange(begin, end)) { 
             ++count;
             sum += i;
             last = i;
@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(XRange) {
 
     void TestSteppedXRangeImpl(int begin, int end, int step, const TVector<int>& expected) {
         size_t expInd = 0;
-        for (auto i : xrange(begin, end, step)) {
+        for (auto i : xrange(begin, end, step)) { 
             UNIT_ASSERT(expInd < expected.size());
             UNIT_ASSERT_VALUES_EQUAL(i, expected[expInd]);
             ++expInd;
@@ -68,12 +68,12 @@ Y_UNIT_TEST_SUITE(XRange) {
         TVector<size_t> data = {3, 1, 4, 1, 5, 9, 2, 6};
         const size_t digSumExpected = Accumulate(data.begin(), data.end(), static_cast<size_t>(0));
         size_t digSumByIt = 0;
-        for (auto ptr : xrange(data.begin(), data.end())) {
+        for (auto ptr : xrange(data.begin(), data.end())) { 
             digSumByIt += *ptr;
         }
         UNIT_ASSERT_VALUES_EQUAL(digSumByIt, digSumExpected);
         size_t digSumByPtr = 0;
-        for (auto ptr : xrange(&data[0], &data[0] + data.size())) {
+        for (auto ptr : xrange(&data[0], &data[0] + data.size())) { 
             digSumByPtr += *ptr;
         }
         UNIT_ASSERT_VALUES_EQUAL(digSumByPtr, digSumExpected);
@@ -87,26 +87,26 @@ Y_UNIT_TEST_SUITE(XRange) {
 
     class TVectorChild: public TVector<size_t> {
     public:
-        template <typename TIterator>
-        TVectorChild(TIterator a, TIterator b)
+        template <typename TIterator> 
+        TVectorChild(TIterator a, TIterator b) 
             : TVector<size_t>(a, b)
-        {
-        }
+        { 
+        } 
     };
 
     Y_UNIT_TEST(ConvertionWorks) {
         TVector<size_t> data = {0, 1, 2, 3, 4, 5, 6, 7, 8};
 
         TVector<size_t> convertionResults[] = {xrange<size_t>(9),
-                                               xrange<ui32>(0, 9),
-                                               xrange(0, 9, 1)};
+                                               xrange<ui32>(0, 9), 
+                                               xrange(0, 9, 1)}; 
 
         for (const auto& arr : convertionResults) {
             UNIT_ASSERT(arr == data);
         }
 
         TVectorChild sons[] = {xrange(0, 9),
-                               xrange(0, 9, 1)};
+                               xrange(0, 9, 1)}; 
 
         for (const auto& arr : sons) {
             UNIT_ASSERT(arr == data);
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(XRange) {
             xrange(5, 5, 1),
             xrange(5, 0, 5),
             xrange(0, -1, 5),
-            xrange(0, 1, -1),
+            xrange(0, 1, -1), 
             xrange(0, -10, 10),
         };
 

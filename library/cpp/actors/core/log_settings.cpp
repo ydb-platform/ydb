@@ -225,6 +225,6 @@ namespace NActors {
             return InvalidComponent;
         }
 
-    }
+    } 
 
-}
+} 

@@ -11,7 +11,7 @@
  * it under the terms of the GNU Lesser Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- *
+ * 
  * Pire is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -33,7 +33,7 @@
 #include <tuple>
 
 namespace Pire {
-
+ 
 namespace Impl {
 
 typedef LoadedScanner::Action Action;
@@ -886,28 +886,28 @@ public:
 	using TAction = typename Scanner::Action;
 	using InternalState = typename Scanner::InternalState;
 	typedef TMap<State, size_t> InvStates;
-
+ 
 	CountingScannerGlueTask(const Scanner& lhs, const Scanner& rhs)
 		: ScannerGlueCommon<Scanner>(lhs, rhs, LettersEquality<Scanner>(lhs.m_letters, rhs.m_letters))
 	{
 	}
-
+ 
 	void AcceptStates(const TVector<State>& states)
 	{
 		States = states;
 		this->SetSc(THolder<Scanner>(new Scanner));
 		this->Sc().Init(states.size(), this->Letters(), 0, this->Lhs().RegexpsCount() + this->Rhs().RegexpsCount());
-
+ 
 		for (size_t i = 0; i < states.size(); ++i)
 			this->Sc().SetTag(i, this->Lhs().m_tags[this->Lhs().StateIdx(states[i].first)] | (this->Rhs().m_tags[this->Rhs().StateIdx(states[i].second)] << 3));
 	}
-
+ 
 	void Connect(size_t from, size_t to, Char letter)
 	{
 		this->Sc().SetJump(from, letter, to,
 			Action(this->Lhs(), States[from].first, letter) | (Action(this->Rhs(), States[from].second, letter) << this->Lhs().RegexpsCount()));
 	}
-
+ 
 protected:
 	TVector<State> States;
 	TAction Action(const Scanner& sc, InternalState state, Char letter) const
@@ -981,7 +981,7 @@ private:
 
 
 }
-
+ 
 CountingScanner CountingScanner::Glue(const CountingScanner& lhs, const CountingScanner& rhs, size_t maxSize /* = 0 */)
 {
 	if (lhs.RegexpsCount() + rhs.RegexpsCount() > MAX_RE_COUNT) {

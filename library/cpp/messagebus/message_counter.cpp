@@ -11,8 +11,8 @@ TMessageCounter::TMessageCounter()
     , Count(0)
     , CountCompressed(0)
     , CountCompressionRequests(0)
-{
-}
+{ 
+} 
 
 TMessageCounter& TMessageCounter::operator+=(const TMessageCounter& that) {
     BytesData += that.BytesData;

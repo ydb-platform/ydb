@@ -1,7 +1,7 @@
-#pragma once
-
+#pragma once 
+ 
 #include <util/generic/yexception.h>
-
+ 
 #include <algorithm>
 #include <initializer_list>
 #include <iterator>
@@ -40,19 +40,19 @@ public:
         , S_(0)
     {
     }
-
+ 
     constexpr inline TArrayRef(T* data, size_t len) noexcept
         : T_(data)
         , S_(len)
     {
     }
-
+ 
     constexpr inline TArrayRef(T* begin, T* end) noexcept
         : T_(begin)
         , S_(end - begin)
     {
     }
-
+ 
     constexpr inline TArrayRef(std::initializer_list<T> list) noexcept
         : T_(list.begin())
         , S_(list.size())
@@ -65,7 +65,7 @@ public:
         , S_(container.size())
     {
     }
-
+ 
     template <size_t N>
     constexpr inline TArrayRef(T (&array)[N]) noexcept
         : T_(array)
@@ -81,11 +81,11 @@ public:
     constexpr inline T* data() const noexcept {
         return T_;
     }
-
+ 
     constexpr inline size_t size() const noexcept {
         return S_;
     }
-
+ 
     constexpr size_t size_bytes() const noexcept {
         return (size() * sizeof(T));
     }
@@ -230,11 +230,11 @@ private:
  *
  * Named as its std counterparts, std::as_bytes.
  */
-template <typename T>
+template <typename T> 
 TArrayRef<const char> as_bytes(TArrayRef<T> arrayRef) noexcept {
     return TArrayRef<const char>(
         reinterpret_cast<const char*>(arrayRef.data()),
-        arrayRef.size_bytes());
+        arrayRef.size_bytes()); 
 }
 
 /**
@@ -242,19 +242,19 @@ TArrayRef<const char> as_bytes(TArrayRef<T> arrayRef) noexcept {
  *
  * Named as its std counterparts, std::as_writable_bytes.
  */
-template <typename T>
+template <typename T> 
 TArrayRef<char> as_writable_bytes(TArrayRef<T> arrayRef) noexcept {
     return TArrayRef<char>(
         reinterpret_cast<char*>(arrayRef.data()),
-        arrayRef.size_bytes());
+        arrayRef.size_bytes()); 
 }
 
-template <class Range>
+template <class Range> 
 constexpr TArrayRef<const typename Range::value_type> MakeArrayRef(const Range& range) {
     return TArrayRef<const typename Range::value_type>(range);
 }
 
-template <class Range>
+template <class Range> 
 constexpr TArrayRef<typename Range::value_type> MakeArrayRef(Range& range) {
     return TArrayRef<typename Range::value_type>(range);
 }

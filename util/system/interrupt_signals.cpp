@@ -11,7 +11,7 @@ static void (*InterruptSignalsHandler)(int signum) = nullptr;
 
 #ifdef _win_
 
-    #include <windows.h>
+    #include <windows.h> 
 
 static BOOL WINAPI WindowsSignalsHandler(_In_ DWORD dwCtrlType) {
     if (!InterruptSignalsHandler) {

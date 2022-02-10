@@ -12,14 +12,14 @@ namespace NRainCheck {
     private:
         struct ITaskFactory {
             virtual void NewTask(NBus::TOnMessageContext&) = 0;
-            virtual ~ITaskFactory() {
-            }
+            virtual ~ITaskFactory() { 
+            } 
         };
 
         THolder<ITaskFactory> TaskFactory;
 
         void OnMessage(NBus::TOnMessageContext&) override;
-
+ 
     public:
         TBusTaskStarter(TAutoPtr<ITaskFactory>);
         ~TBusTaskStarter() override;
@@ -30,10 +30,10 @@ namespace NRainCheck {
             struct TTaskFactory: public ITaskFactory {
                 TEnv* const Env;
 
-                TTaskFactory(TEnv* env)
-                    : Env(env)
-                {
-                }
+                TTaskFactory(TEnv* env) 
+                    : Env(env) 
+                { 
+                } 
 
                 void NewTask(NBus::TOnMessageContext& context) override {
                     SpawnTask<TTask, TEnv, NBus::TOnMessageContext&>(Env, context);

@@ -80,10 +80,10 @@ static int pymain(int argc, char** argv) {
     }
 
     int i, sts = 1;
-    char* oldloc = NULL;
-    wchar_t** argv_copy = NULL;
+    char* oldloc = NULL; 
+    wchar_t** argv_copy = NULL; 
     /* We need a second copies, as Python might modify the first one. */
-    wchar_t** argv_copy2 = NULL;
+    wchar_t** argv_copy2 = NULL; 
     char* entry_point_copy = NULL;
 
     if (argc > 0) {
@@ -195,7 +195,7 @@ static int pymain(int argc, char** argv) {
         if (module == NULL) {
             PyErr_Print();
         } else {
-            PyObject* value = PyObject_CallMethod(module, func_name, NULL);
+            PyObject* value = PyObject_CallMethod(module, func_name, NULL); 
 
             if (value == NULL) {
                 PyErr_Print();

@@ -1,29 +1,29 @@
 #include "fs.h"
 #include "defaults.h"
-
+ 
 #if defined(_win_)
-    #include "fs_win.h"
+    #include "fs_win.h" 
 #else
-    #include <unistd.h>
-    #include <errno.h>
+    #include <unistd.h> 
+    #include <errno.h> 
 #endif
-
+ 
 #include <util/generic/yexception.h>
 #include <util/memory/tempbuf.h>
-#include <util/stream/file.h>
+#include <util/stream/file.h> 
 #include <util/charset/wide.h>
 #include <util/folder/iterator.h>
 #include <util/system/fstat.h>
 #include <util/folder/path.h>
-
+ 
 bool NFs::Remove(const TString& path) {
 #if defined(_win_)
     return NFsPrivate::WinRemove(path);
 #else
     return ::remove(path.data()) == 0;
 #endif
-}
-
+} 
+ 
 void NFs::RemoveRecursive(const TString& path) {
     static const TStringBuf errStr = "error while removing ";
 
@@ -32,9 +32,9 @@ void NFs::RemoveRecursive(const TString& path) {
     }
 
     if (!TFileStat(path).IsDir()) {
-        if (!NFs::Remove(path)) {
+        if (!NFs::Remove(path)) { 
             ythrow TSystemError() << errStr << path << " with cwd (" << NFs::CurrentWorkingDirectory() << ")";
-        }
+        } 
     }
 
     TDirIterator dir(path);
@@ -45,9 +45,9 @@ void NFs::RemoveRecursive(const TString& path) {
             case FTS_D:
                 break;
             default:
-                if (!NFs::Remove(it->fts_path)) {
+                if (!NFs::Remove(it->fts_path)) { 
                     ythrow TSystemError() << errStr << it->fts_path << " with cwd (" << NFs::CurrentWorkingDirectory() << ")";
-                }
+                } 
                 break;
         }
     }
@@ -85,12 +85,12 @@ bool NFs::MakeDirectoryRecursive(const TString& path, EFilePermissions mode, boo
 }
 
 bool NFs::Rename(const TString& oldPath, const TString& newPath) {
-#if defined(_win_)
+#if defined(_win_) 
     return NFsPrivate::WinRename(oldPath, newPath);
-#else
+#else 
     return ::rename(oldPath.data(), newPath.data()) == 0;
-#endif
-}
+#endif 
+} 
 
 void NFs::HardLinkOrCopy(const TString& existingPath, const TString& newPath) {
     if (!NFs::HardLink(existingPath, newPath)) {
@@ -99,13 +99,13 @@ void NFs::HardLinkOrCopy(const TString& existingPath, const TString& newPath) {
 }
 
 bool NFs::HardLink(const TString& existingPath, const TString& newPath) {
-#if defined(_win_)
+#if defined(_win_) 
     return NFsPrivate::WinHardLink(existingPath, newPath);
 #elif defined(_unix_)
     return (0 == link(existingPath.data(), newPath.data()));
 #endif
 }
-
+ 
 bool NFs::SymLink(const TString& targetPath, const TString& linkPath) {
 #if defined(_win_)
     return NFsPrivate::WinSymLink(targetPath, linkPath);
@@ -121,12 +121,12 @@ TString NFs::ReadLink(const TString& path) {
     TTempBuf buf;
     while (true) {
         ssize_t r = readlink(path.data(), buf.Data(), buf.Size());
-        if (r < 0) {
+        if (r < 0) { 
             ythrow yexception() << "can't read link " << path << ", errno = " << errno;
-        }
-        if (r < (ssize_t)buf.Size()) {
+        } 
+        if (r < (ssize_t)buf.Size()) { 
             return TString(buf.Data(), r);
-        }
+        } 
         buf = TTempBuf(buf.Size() * 2);
     }
 #endif
@@ -135,16 +135,16 @@ TString NFs::ReadLink(const TString& path) {
 void NFs::Cat(const TString& dstPath, const TString& srcPath) {
     TUnbufferedFileInput src(srcPath);
     TUnbufferedFileOutput dst(TFile(dstPath, ForAppend | WrOnly | Seq));
-
-    TransferData(&src, &dst);
-}
-
+ 
+    TransferData(&src, &dst); 
+} 
+ 
 void NFs::Copy(const TString& existingPath, const TString& newPath) {
     TUnbufferedFileInput src(existingPath);
     TUnbufferedFileOutput dst(TFile(newPath, CreateAlways | WrOnly | Seq));
-
-    TransferData(&src, &dst);
-}
+ 
+    TransferData(&src, &dst); 
+} 
 
 bool NFs::Exists(const TString& path) {
 #if defined(_win_)
@@ -160,9 +160,9 @@ TString NFs::CurrentWorkingDirectory() {
 #elif defined(_unix_)
     TTempBuf result;
     char* r = getcwd(result.Data(), result.Size());
-    if (r == nullptr) {
+    if (r == nullptr) { 
         throw TIoSystemError() << "failed to getcwd";
-    }
+    } 
     return result.Data();
 #endif
 }
@@ -173,7 +173,7 @@ void NFs::SetCurrentWorkingDirectory(TString path) {
 #else
     bool ok = !chdir(path.data());
 #endif
-    if (!ok) {
+    if (!ok) { 
         ythrow TSystemError() << "failed to change directory to " << path.Quote();
-    }
+    } 
 }

@@ -1,6 +1,6 @@
-LIBRARY()
-
-LICENSE(MIT)
+LIBRARY() 
+ 
+LICENSE(MIT) 
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
@@ -9,19 +9,19 @@ OWNER(
     g:contrib
     g:cpp-contrib
 )
+ 
+NO_UTIL() 
 
-NO_UTIL()
-
-NO_COMPILER_WARNINGS()
-
+NO_COMPILER_WARNINGS() 
+ 
 ADDINCL(GLOBAL contrib/libs/brotli/include)
 
-PEERDIR(
+PEERDIR( 
     contrib/libs/brotli/common
-    contrib/libs/brotli/dec
-)
-
-SRCS(
+    contrib/libs/brotli/dec 
+) 
+ 
+SRCS( 
     backward_references.c
     backward_references_hq.c
     bit_cost.c
@@ -40,8 +40,8 @@ SRCS(
     metablock.c
     static_dict.c
     utf8_util.c
-)
-
+) 
+ 
 CFLAGS(-DBROTLI_BUILD_PORTABLE)
 
-END()
+END() 

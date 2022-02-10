@@ -29,7 +29,7 @@ PEERDIR(
     ydb/core/blobstorage/vdisk
 )
 
-IF (MSVC)
+IF (MSVC) 
     CFLAGS(
         /wd4503
     )

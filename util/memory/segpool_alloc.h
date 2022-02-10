@@ -42,28 +42,28 @@ struct segpool_alloc {
 #ifndef NDEBUG
     ui64 pool_count, malloc_count, pool_free_count, malloc_free_count;
 #endif
-    segpool_alloc()
+    segpool_alloc() 
         : pool(nullptr)
-    {
+    { 
         Y_IF_DEBUG(pool_count = malloc_count = pool_free_count = malloc_free_count = 0);
     }
     segpool_alloc(pool_type* p)
-        : pool(p)
-    {
+        : pool(p) 
+    { 
         Y_IF_DEBUG(pool_count = malloc_count = pool_free_count = malloc_free_count = 0);
     }
     segpool_alloc(const segpool_alloc& a)
-        : pool(a.pool)
-    {
+        : pool(a.pool) 
+    { 
         Y_IF_DEBUG(pool_count = malloc_count = pool_free_count = malloc_free_count = 0);
     }
     template <class _Tp1>
     segpool_alloc(const segpool_alloc<_Tp1>& a)
-        : pool(a.pool)
-    {
+        : pool(a.pool) 
+    { 
         Y_IF_DEBUG(pool_count = malloc_count = pool_free_count = malloc_free_count = 0);
-    }
-    _Tp* allocate(size_t __n) {
+    } 
+    _Tp* allocate(size_t __n) { 
         if (!pool) {
             _Tp* data = (_Tp*)malloc(__n * sizeof(_Tp));
             Y_IF_DEBUG(if (data) malloc_count++);
@@ -83,35 +83,35 @@ struct segpool_alloc {
         }
     }
     ~segpool_alloc() {
-        //assert(pool_count == pool_free_count && malloc_count == malloc_free_count); <- uncomment when swap() problem is solved
+        //assert(pool_count == pool_free_count && malloc_count == malloc_free_count); <- uncomment when swap() problem is solved 
         //printf("in ~segpool_alloc: size = %u, pool_count = %" PRId64 ", malloc_count = %" PRId64 ", pool_free_count = %" PRId64 ", malloc_free_count = %" PRId64 "\n",
         //        sizeof(_Tp), pool_count, malloc_count, pool_free_count, malloc_free_count);
-        //fflush(stdout);
+        //fflush(stdout); 
     }
-    template <class _Tp1>
-    struct rebind {
+    template <class _Tp1> 
+    struct rebind { 
         using other = segpool_alloc<_Tp1>;
     };
     size_type max_size() const {
         return size_type(-1) / sizeof(_Tp);
     }
-    void construct(pointer __p, const _Tp& __val) {
-        new (__p) _Tp(__val);
-    }
-    void destroy(pointer __p) {
-        (void)__p; /* Make MSVC happy. */
-        __p->~_Tp();
-    }
+    void construct(pointer __p, const _Tp& __val) { 
+        new (__p) _Tp(__val); 
+    } 
+    void destroy(pointer __p) { 
+        (void)__p; /* Make MSVC happy. */ 
+        __p->~_Tp(); 
+    } 
 };
-
+ 
 template <class _Tp>
-inline bool operator==(const segpool_alloc<_Tp>& a1, const segpool_alloc<_Tp>& a2) {
-    return a1.pool == a2.pool;
+inline bool operator==(const segpool_alloc<_Tp>& a1, const segpool_alloc<_Tp>& a2) { 
+    return a1.pool == a2.pool; 
 }
 
 template <class _Tp>
-inline bool operator!=(const segpool_alloc<_Tp>& a1, const segpool_alloc<_Tp>& a2) {
-    return a1.pool != a2.pool;
+inline bool operator!=(const segpool_alloc<_Tp>& a1, const segpool_alloc<_Tp>& a2) { 
+    return a1.pool != a2.pool; 
 }
 
 // Any type since it is supposed to be rebound anyway.

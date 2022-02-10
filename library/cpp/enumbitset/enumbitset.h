@@ -22,20 +22,20 @@ public:
     typedef TEnumBitSet<TEnum, mbegin, mend> TThis;
 
     TEnumBitSet()
-        : TParent(0)
-    {
-    }
+        : TParent(0) 
+    { 
+    } 
 
-    explicit TEnumBitSet(const TParent& p)
-        : TParent(p)
-    {
-    }
+    explicit TEnumBitSet(const TParent& p) 
+        : TParent(p) 
+    { 
+    } 
 
     void Init(TEnum c) {
         Set(c);
     }
 
-    template <class... R>
+    template <class... R> 
     void Init(TEnum c1, TEnum c2, R... r) {
         Set(c1);
         Init(c2, r...);
@@ -45,7 +45,7 @@ public:
         Init(c);
     }
 
-    template <class... R>
+    template <class... R> 
     TEnumBitSet(TEnum c1, TEnum c2, R... r) {
         Init(c1, c2, r...);
     }
@@ -133,7 +133,7 @@ public:
         return ret;
     }
 
-    bool operator<(const TThis& right) const {
+    bool operator<(const TThis& right) const { 
         Y_ASSERT(this->GetChunkCount() == right.GetChunkCount());
         for (size_t i = 0; i < this->GetChunkCount(); ++i) {
             if (this->GetChunks()[i] < right.GetChunks()[i])
@@ -144,48 +144,48 @@ public:
         return false;
     }
 
-    bool operator!=(const TThis& right) const {
-        return !(TParent::operator==(right));
+    bool operator!=(const TThis& right) const { 
+        return !(TParent::operator==(right)); 
     }
 
-    bool operator==(const TThis& right) const {
-        return TParent::operator==(right);
+    bool operator==(const TThis& right) const { 
+        return TParent::operator==(right); 
     }
 
-    TThis& operator&=(const TThis& right) {
-        TParent::operator&=(right);
+    TThis& operator&=(const TThis& right) { 
+        TParent::operator&=(right); 
         return *this;
     }
 
-    TThis& operator|=(const TThis& right) {
-        TParent::operator|=(right);
+    TThis& operator|=(const TThis& right) { 
+        TParent::operator|=(right); 
         return *this;
     }
 
-    TThis& operator^=(const TThis& right) {
-        TParent::operator^=(right);
+    TThis& operator^=(const TThis& right) { 
+        TParent::operator^=(right); 
         return *this;
     }
 
-    TThis operator~() const {
+    TThis operator~() const { 
         TThis r = *this;
         r.Flip();
         return r;
     }
 
-    TThis operator|(const TThis& right) const {
+    TThis operator|(const TThis& right) const { 
         TThis ret = *this;
         ret |= right;
         return ret;
     }
 
-    TThis operator&(const TThis& right) const {
+    TThis operator&(const TThis& right) const { 
         TThis ret = *this;
         ret &= right;
         return ret;
     }
 
-    TThis operator^(const TThis& right) const {
+    TThis operator^(const TThis& right) const { 
         TThis ret = *this;
         ret ^= right;
         return ret;
@@ -224,7 +224,7 @@ public:
         return TParent::operator[](this->Pos(e));
     }
 
-    using TParent::Count;
+    using TParent::Count; 
     using TParent::Empty;
 
     explicit operator bool() const {
@@ -243,7 +243,7 @@ public:
         return TParent::HasAny(mask);
     }
 
-    template <class... R>
+    template <class... R> 
     bool HasAny(TEnum c1, R... r) const {
         return Test(c1) || HasAny(r...);
     }
@@ -252,7 +252,7 @@ public:
         return TParent::HasAll(mask);
     }
 
-    template <class... R>
+    template <class... R> 
     bool HasAll(TEnum c1, R... r) const {
         return Test(c1) && HasAll(r...);
     }
@@ -265,7 +265,7 @@ public:
         }
     }
 
-    void Load(IInputStream* buffer) {
+    void Load(IInputStream* buffer) { 
         Reset();
 
         ui32 sz = 0;
@@ -336,15 +336,15 @@ public:
         return true;
     }
 
-    bool any() const { // obsolete
+    bool any() const { // obsolete 
         return !Empty();
     }
 
-    bool none() const { // obsolete
+    bool none() const { // obsolete 
         return Empty();
     }
 
-    size_t count() const { // obsolete
+    size_t count() const { // obsolete 
         return Count();
     }
 
@@ -362,12 +362,12 @@ public:
         {
         }
 
-        TEnum operator*() const noexcept {
+        TEnum operator*() const noexcept { 
             Y_ASSERT(Value < EndIndex);
             return static_cast<TEnum>(Value);
         }
 
-        bool operator!=(const TIterator& other) const noexcept {
+        bool operator!=(const TIterator& other) const noexcept { 
             return Value != other.Value;
         }
 
@@ -400,7 +400,7 @@ public:
 private:
     static size_t Pos(TEnum c) {
         Y_ASSERT(IsValid(c));
-        return static_cast<size_t>(int(c) - BeginIndex);
+        return static_cast<size_t>(int(c) - BeginIndex); 
     }
 
     bool HasAny(TEnum c) const {
@@ -433,19 +433,19 @@ private:
 };
 
 template <typename TEnum, TEnum mbegin, int mend>
-class TSfEnumBitSet: public TEnumBitSet<TEnum, mbegin, mend> {
+class TSfEnumBitSet: public TEnumBitSet<TEnum, mbegin, mend> { 
 public:
     typedef TEnumBitSet<TEnum, mbegin, mend> TParent;
 
     TSfEnumBitSet()
-        : TParent()
-    {
-    }
+        : TParent() 
+    { 
+    } 
 
-    TSfEnumBitSet(const TParent& p)
-        : TParent(p)
-    {
-    }
+    TSfEnumBitSet(const TParent& p) 
+        : TParent(p) 
+    { 
+    } 
 
     //! unsafe initialization from ui64, value must be shifted according to TParent::Begin
     explicit TSfEnumBitSet(ui64 val)
@@ -458,7 +458,7 @@ public:
         this->SafeSet(c);
     }
 
-    template <class... R>
+    template <class... R> 
     void Init(TEnum c1, TEnum c2, R... r) {
         this->SafeSet(c1);
         Init(c2, r...);
@@ -468,7 +468,7 @@ public:
         Init(c);
     }
 
-    template <class... R>
+    template <class... R> 
     TSfEnumBitSet(TEnum c1, TEnum c2, R... r) {
         Init(c1, c2, r...);
     }

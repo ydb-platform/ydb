@@ -1,9 +1,9 @@
 PY2TEST()
-
-OWNER(pg)
-
-PEERDIR(
+ 
+OWNER(pg) 
+ 
+PEERDIR( 
     library/python/resource/ut/lib
-)
-
-END()
+) 
+ 
+END() 

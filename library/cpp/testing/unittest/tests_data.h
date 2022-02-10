@@ -27,7 +27,7 @@ void SetReuseAddressAndPort(const TSocketType& sock) {
 #endif
 }
 
-class TPortManager: public TNonCopyable {
+class TPortManager: public TNonCopyable { 
 public:
     TPortManager(bool reservePortsForCurrentTest = true);
     ~TPortManager();

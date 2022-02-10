@@ -17,4 +17,4 @@ namespace {
 
     NUnitTest::NPlugin::TPluginRegistrator registerGMock(new TGMockUnittestPlugin());
 
-}
+} 

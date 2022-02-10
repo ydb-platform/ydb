@@ -41,10 +41,10 @@ TArrayRef<TBusBufferBase* const> TBusBufferProtocol::GetTypes() const {
     return Types;
 }
 
-void TBusBufferProtocol::Serialize(const TBusMessage* mess, TBuffer& data) {
+void TBusBufferProtocol::Serialize(const TBusMessage* mess, TBuffer& data) { 
     TWhatThreadDoesPushPop pp("serialize protobuf message");
 
-    const TBusHeader* header = mess->GetHeader();
+    const TBusHeader* header = mess->GetHeader(); 
 
     if (!IsRegisteredType(header->Type)) {
         Y_FAIL("unknown message type: %d", int(header->Type));
@@ -57,7 +57,7 @@ void TBusBufferProtocol::Serialize(const TBusMessage* mess, TBuffer& data) {
     unsigned size = bmess->GetRecord()->ByteSize();
     data.Reserve(data.Size() + size);
 
-    char* after = (char*)bmess->GetRecord()->SerializeWithCachedSizesToArray((ui8*)data.Pos());
+    char* after = (char*)bmess->GetRecord()->SerializeWithCachedSizesToArray((ui8*)data.Pos()); 
     Y_VERIFY(after - data.Pos() == size);
 
     data.Advance(size);
@@ -66,7 +66,7 @@ void TBusBufferProtocol::Serialize(const TBusMessage* mess, TBuffer& data) {
 TAutoPtr<TBusMessage> TBusBufferProtocol::Deserialize(ui16 messageType, TArrayRef<const char> payload) {
     TWhatThreadDoesPushPop pp("deserialize protobuf message");
 
-    TBusBufferBase* messageTemplate = FindType(messageType);
+    TBusBufferBase* messageTemplate = FindType(messageType); 
     if (messageTemplate == nullptr) {
         return nullptr;
         //Y_FAIL("unknown message type: %d", unsigned(messageType));

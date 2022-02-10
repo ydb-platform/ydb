@@ -1,7 +1,7 @@
 #pragma once
-
+ 
 #include "iface.h"
-
+ 
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -14,6 +14,6 @@ namespace LZ4_NAMESPACE {
 
 struct TLZ4Methods ytbl = {
     LZ4_compress_default,
-};
-
+}; 
+ 
 }

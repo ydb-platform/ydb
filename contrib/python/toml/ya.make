@@ -2,8 +2,8 @@ OWNER(g:python-contrib)
 
 PY23_LIBRARY()
 
-LICENSE(MIT)
-
+LICENSE(MIT) 
+ 
 VERSION(0.10.2)
 
 PY_SRCS(

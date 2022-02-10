@@ -1,7 +1,7 @@
 #pragma once
 
 #include "string.h"
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/reverse.h>
@@ -34,7 +34,7 @@ struct TCharBuffer<char, 0> {
         return Data;
     }
 };
-
+ 
 #define DECLARE_AND_RETURN_BUFFER(s)             \
     static TCharBuffer<CharT, sizeof(s)> buf(s); \
     return buf.GetData();
@@ -509,13 +509,13 @@ size_t TTestData<wchar16>::HashOf_0123456() {
 }
 
 template <class TStringType, typename TTestData>
-class TStringTestImpl {
+class TStringTestImpl { 
 protected:
     using char_type = typename TStringType::char_type;
     using traits_type = typename TStringType::traits_type;
-
+ 
     TTestData Data;
-
+ 
 public:
     void TestMaxSize() {
         const size_t badMaxVal = TStringType{}.max_size() + 1;
@@ -524,7 +524,7 @@ public:
         UNIT_CHECK_GENERATED_EXCEPTION(s.reserve(badMaxVal), std::length_error);
     }
 
-    void TestConstructors() {
+    void TestConstructors() { 
         TStringType s0(nullptr);
         UNIT_ASSERT(s0.size() == 0);
         UNIT_ASSERT_EQUAL(s0, TStringType());
@@ -533,7 +533,7 @@ public:
         TStringType s1(*Data._0());
         TStringType s2(Data._0());
         UNIT_ASSERT(s1 == s2);
-
+ 
         TStringType fromZero(0);
         UNIT_ASSERT_VALUES_EQUAL(fromZero.size(), 0u);
 
@@ -545,13 +545,13 @@ public:
         TStringType s3 = TStringType::Uninitialized(10);
         UNIT_ASSERT(s3.size() == 10);
 #endif
-
+ 
         TStringType s4(Data._0123456(), 1, 3);
         UNIT_ASSERT(s4 == Data._123());
-
+ 
         TStringType s5(5, *Data._0());
         UNIT_ASSERT(s5 == Data._00000());
-
+ 
         TStringType s6(Data._0123456());
         UNIT_ASSERT(s6 == Data._0123456());
         TStringType s7(s6);
@@ -559,7 +559,7 @@ public:
 #ifndef TSTRING_IS_STD_STRING
         UNIT_ASSERT(s7.c_str() == s6.c_str());
 #endif
-
+ 
         TStringType s8(s7, 1, 3);
         UNIT_ASSERT(s8 == Data._123());
 
@@ -570,11 +570,11 @@ public:
         UNIT_ASSERT(s10.empty());
         UNIT_ASSERT(s10.capacity() >= 100);
     }
-
-    void TestReplace() {
+ 
+    void TestReplace() { 
         TStringType s(Data._0123456());
         UNIT_ASSERT(s.copy() == Data._0123456());
-
+ 
         // append family
         s.append(Data.x());
         UNIT_ASSERT(s == Data._0123456x());
@@ -651,13 +651,13 @@ public:
     }
 
 #ifndef TSTRING_IS_STD_STRING
-    void TestRefCount() {
-        using TStr = TStringType;
-
-        struct TestStroka: public TStr {
-            using TStr::TStr;
-            // un-protect
-            using TStr::RefCount;
+    void TestRefCount() { 
+        using TStr = TStringType; 
+ 
+        struct TestStroka: public TStr { 
+            using TStr::TStr; 
+            // un-protect 
+            using TStr::RefCount; 
         };
 
         TestStroka s1(Data.orig());
@@ -675,8 +675,8 @@ public:
 #endif
 
     //  Find family
-
-    void TestFind() {
+ 
+    void TestFind() { 
         const TStringType s(Data._0123456_12345());
         const TStringType s2(Data._0123());
 
@@ -722,7 +722,7 @@ public:
         UNIT_ASSERT(s.rfind(TStringType(Data._345()), 2) == TStringType::npos);
     }
 
-    void TestContains() {
+    void TestContains() { 
         const TStringType s(Data._0123456_12345());
         const TStringType s2(Data._0123());
 
@@ -740,8 +740,8 @@ public:
     }
 
     // Operators
-
-    void TestOperators() {
+ 
+    void TestOperators() { 
         TStringType s(Data._0123456());
 
         // operator +=
@@ -792,7 +792,7 @@ public:
         UNIT_ASSERT_EQUAL(Data.xyz() >= s, true);
     }
 
-    void TestOperatorsCI() {
+    void TestOperatorsCI() { 
         TStringType s(Data.ABCD());
         UNIT_ASSERT(s > Data.abc0123456xyz());
         UNIT_ASSERT(s == Data.abcd());
@@ -804,7 +804,7 @@ public:
         UNIT_ASSERT(s == TCIStringBuf(Data.abcd()));
     }
 
-    void TestMulOperators() {
+    void TestMulOperators() { 
         {
             TStringType s(Data._0());
             s *= 10;
@@ -817,8 +817,8 @@ public:
     }
 
     // Test any other functions
-
-    void TestFuncs() {
+ 
+    void TestFuncs() { 
         TStringType s(Data._0123456());
         UNIT_ASSERT(s.c_str() == s.data());
 
@@ -897,7 +897,7 @@ public:
         ComputeHash(sS); /*size_t hash_val = sS.hash();
 
         try {
-            //UNIT_ASSERT(hash_val == Data.HashOf_0123456());
+            //UNIT_ASSERT(hash_val == Data.HashOf_0123456()); 
         } catch (...) {
             Cerr << hash_val << Endl;
             throw;
@@ -907,13 +907,13 @@ public:
         UNIT_ASSERT(s2 == Data._23());
 
         //s2.reserve();
-
+ 
         TStringType s5(Data.abcde());
         s5.clear();
         UNIT_ASSERT(s5 == Data.Empty());
     }
 
-    void TestUtils() {
+    void TestUtils() { 
         TStringType s;
         s = Data._01230123();
         TStringType from = Data._0();
@@ -923,13 +923,13 @@ public:
         UNIT_ASSERT(s == Data.z123z123());
     }
 
-    void TestEmpty() {
+    void TestEmpty() { 
         TStringType s;
         s = Data._2();
         s = TStringType(Data.fdfdsfds(), (size_t)0, (size_t)0);
         UNIT_ASSERT(s.empty());
     }
-
+ 
     void TestJoin() {
         UNIT_ASSERT_EQUAL(TStringType::Join(Data._12(), Data._3456()), Data._123456());
         UNIT_ASSERT_EQUAL(TStringType::Join(Data._12(), TStringType(Data._3456())), Data._123456());
@@ -939,8 +939,8 @@ public:
         UNIT_ASSERT_EQUAL(TStringType::Join(TStringType(Data._12()), TStringType(Data._345()), Data._6()), Data._123456());
         UNIT_ASSERT_EQUAL(TStringType::Join(TStringType(Data.a()), Data.b(), TStringType(Data.cd()), TStringType(Data.e()), Data.fg(), TStringType(Data.h())), Data.abcdefgh());
         UNIT_ASSERT_EQUAL(TStringType::Join(TStringType(Data.a()), static_cast<typename TStringType::char_type>('b'), TStringType(Data.cd()), TStringType(Data.e()), Data.fg(), TStringType(Data.h())), Data.abcdefgh());
-    }
-
+    } 
+ 
     void TestCopy() {
         TStringType s(Data.abcd());
         TStringType c = s.copy();
@@ -948,12 +948,12 @@ public:
         UNIT_ASSERT_EQUAL(s, c);
         UNIT_ASSERT(s.end() != c.end());
     }
-
+ 
     void TestStrCpy() {
         {
             TStringType s(Data.abcd());
             char_type data[5];
-
+ 
             data[4] = 1;
 
             s.strcpy(data, 4);
@@ -988,7 +988,7 @@ public:
         UNIT_ASSERT_EQUAL(emptyStr.StartsWith(emptyStr), true);
         UNIT_ASSERT_EQUAL(emptyStr.EndsWith(emptyStr), true);
 
-        const char_type chars[] = {'h', 'e', 'l', 'l', 'o', 0};
+        const char_type chars[] = {'h', 'e', 'l', 'l', 'o', 0}; 
         const TStringType str(chars);
         UNIT_ASSERT_EQUAL(str.StartsWith('h'), true);
         UNIT_ASSERT_EQUAL(str.StartsWith('o'), false);
@@ -1000,9 +1000,9 @@ public:
 
 #ifndef TSTRING_IS_STD_STRING
     void TestCharRef() {
-        const char_type abc[] = {'a', 'b', 'c', 0};
-        const char_type bbc[] = {'b', 'b', 'c', 0};
-        const char_type cbc[] = {'c', 'b', 'c', 0};
+        const char_type abc[] = {'a', 'b', 'c', 0}; 
+        const char_type bbc[] = {'b', 'b', 'c', 0}; 
+        const char_type cbc[] = {'c', 'b', 'c', 0}; 
 
         TStringType s0 = abc;
         TStringType s1 = s0;

@@ -132,7 +132,7 @@ namespace NThreading {
             TMsgBunch* volatile NextToken;
 
             /* this push can return PUSH_RESULT_BLOCKED */
-            inline TPushResult Push(TMsgLink msg, ui64 slot, TAux auxiliary) {
+            inline TPushResult Push(TMsgLink msg, ui64 slot, TAux auxiliary) { 
                 if (Y_UNLIKELY(slot < FirstSlot)) {
                     return PUSH_RESULT_BACKWARD;
                 }
@@ -194,7 +194,7 @@ namespace NThreading {
             // the object could be destroyed after this method
             inline void SetNextToken(TMsgBunch* next) {
                 AtomicSet(NextToken, next);
-                if (Y_UNLIKELY(AtomicAdd(Token, RELEASE_SIZE) == RELEASE_SIZE)) {
+                if (Y_UNLIKELY(AtomicAdd(Token, RELEASE_SIZE) == RELEASE_SIZE)) { 
                     Release(this);
                     next->DecrementToken();
                 }
@@ -317,8 +317,8 @@ namespace NThreading {
             }
         };
 
-        template <typename TWBucket = TWriteBucket<>,
-                  template <typename, typename...> class TContainer = TDeque>
+        template <typename TWBucket = TWriteBucket<>, 
+                  template <typename, typename...> class TContainer = TDeque> 
         class TReadBucket {
         public:
             using TAux = typename TWBucket::TUsingAux;
@@ -543,7 +543,7 @@ namespace NThreading {
             static constexpr ui32 BUNCH_SIZE = DEFAULT_BUNCH_SIZE;
             using TBunchBase = TEmpty;
 
-            template <typename TElem, typename... TRest>
+            template <typename TElem, typename... TRest> 
             using TContainer = TDeque<TElem, TRest...>;
 
             static constexpr bool DeleteItems = true;
@@ -556,7 +556,7 @@ namespace NThreading {
     DeclareTuneContainer(TRaFQueueSkipContainer, TContainer);
     DeclareTuneValueParam(TRaFQueueDeleteItems, bool, DeleteItems);
 
-    template <typename TItem = void, typename... TParams>
+    template <typename TItem = void, typename... TParams> 
     class TReadAsFilledQueue {
     private:
         using TTuned = TTune<NReadAsFilledPrivate::TDefaultParams, TParams...>;
@@ -565,7 +565,7 @@ namespace NThreading {
 
         using TBunchBase = typename TTuned::TBunchBase;
 
-        template <typename TElem, typename... TRest>
+        template <typename TElem, typename... TRest> 
         using TContainer =
             typename TTuned::template TContainer<TElem, TRest...>;
 

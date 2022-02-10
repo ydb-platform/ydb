@@ -4,29 +4,29 @@
 
 #include <util/generic/object_counter.h>
 
-namespace NBus {
-    namespace NPrivate {
-        class TRemoteServerConnection: public TRemoteConnection {
-            friend struct TBusSessionImpl;
-            friend class TRemoteServerSession;
+namespace NBus { 
+    namespace NPrivate { 
+        class TRemoteServerConnection: public TRemoteConnection { 
+            friend struct TBusSessionImpl; 
+            friend class TRemoteServerSession; 
 
-            TObjectCounter<TRemoteServerConnection> ObjectCounter;
+            TObjectCounter<TRemoteServerConnection> ObjectCounter; 
 
-        public:
-            TRemoteServerConnection(TRemoteServerSessionPtr session, ui64 id, TNetAddr addr);
+        public: 
+            TRemoteServerConnection(TRemoteServerSessionPtr session, ui64 id, TNetAddr addr); 
 
-            void Init(SOCKET socket, TInstant now);
+            void Init(SOCKET socket, TInstant now); 
 
-            inline TRemoteServerSession* GetSession();
+            inline TRemoteServerSession* GetSession(); 
 
-            void HandleEvent(SOCKET socket, void* cookie) override;
+            void HandleEvent(SOCKET socket, void* cookie) override; 
 
-            bool NeedInterruptRead() override;
+            bool NeedInterruptRead() override; 
 
-            void MessageSent(TArrayRef<TBusMessagePtrAndHeader> messages) override;
+            void MessageSent(TArrayRef<TBusMessagePtrAndHeader> messages) override; 
 
-            void ReaderProcessMessageUnknownVersion(TArrayRef<const char> dataRef) override;
-        };
+            void ReaderProcessMessageUnknownVersion(TArrayRef<const char> dataRef) override; 
+        }; 
 
-    }
-}
+    } 
+} 

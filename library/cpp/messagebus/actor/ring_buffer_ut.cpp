@@ -11,11 +11,11 @@ Y_UNIT_TEST_SUITE(RingBuffer) {
         unsigned NextPush;
         unsigned NextPop;
 
-        TRingBufferTester()
-            : NextPush()
-            , NextPop()
-        {
-        }
+        TRingBufferTester() 
+            : NextPush() 
+            , NextPop() 
+        { 
+        } 
 
         void Push() {
             //Cerr << "push " << NextPush << "\n";

@@ -1,5 +1,5 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 VERSION(0.6.2)
 
 LICENSE(
@@ -14,10 +14,10 @@ OWNER(
     g:contrib
     g:cpp-contrib
 )
-
-NO_UTIL()
-
-SRCS(
+ 
+NO_UTIL() 
+ 
+SRCS( 
     common/entropy_common.c
     common/fse_decompress.c
     common/xxhash.c
@@ -31,28 +31,28 @@ SRCS(
     decompress/zstd_decompress.c
     dictBuilder/divsufsort.c
     dictBuilder/zdict.c
-    legacy/zstd_v01.c
-    legacy/zstd_v02.c
-    legacy/zstd_v03.c
-    legacy/zstd_v04.c
+    legacy/zstd_v01.c 
+    legacy/zstd_v02.c 
+    legacy/zstd_v03.c 
+    legacy/zstd_v04.c 
     legacy/zstd_v05.c
     legacy/zstd_v07.c
     legacy/zstd_v08.c
-)
-
+) 
+ 
 NO_COMPILER_WARNINGS()
 
 CFLAGS(
     -DZSTD_LEGACY_SUPPORT=1
 )
-
-ADDINCL(
-    contrib/libs/zstd06
+ 
+ADDINCL( 
+    contrib/libs/zstd06 
     contrib/libs/zstd06/common
     contrib/libs/zstd06/compress
     contrib/libs/zstd06/decompress
     contrib/libs/zstd06/dictBuilder
-    contrib/libs/zstd06/legacy
-)
-
-END()
+    contrib/libs/zstd06/legacy 
+) 
+ 
+END() 

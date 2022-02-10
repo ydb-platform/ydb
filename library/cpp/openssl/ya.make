@@ -1,13 +1,13 @@
-RECURSE(
-    big_integer
-    big_integer/ut
+RECURSE( 
+    big_integer 
+    big_integer/ut 
     crypto
     crypto/ut
     holders
     holders/ut
-    io
+    io 
     io/ut
     method
     method/ut
-    init
-)
+    init 
+) 

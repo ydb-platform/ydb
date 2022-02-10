@@ -16,8 +16,8 @@ namespace {
     template <typename T, size_t N>
     struct TExamplesHolder {
         TExamplesHolder()
-            : Examples(N)
-        {
+            : Examples(N) 
+        { 
             TFastRng<ui64> prng{42u * sizeof(T) * N};
             for (auto& e : Examples) {
                 e.Value = prng();

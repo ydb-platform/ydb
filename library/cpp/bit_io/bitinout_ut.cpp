@@ -3,16 +3,16 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/stream/buffer.h>
+#include <util/stream/buffer.h> 
 #include <util/generic/buffer.h>
 
 namespace NBitIO {
     static const char BITS_REF[] =
-        "00100010 01000000 00000000 00100111 11011111 01100111 11010101 00010100 "
-        "00100010 01100011 11100011 00110000 11011011 11011111 01001100 00110101 "
-        "10011110 01011111 01010000 00000110 00011011 00100110 00010100 01110011 "
-        "00001010 10101010 10101010 10101010 10101010 10101010 10101010 10101010 "
-        "10110101 01010101 01010101 01010101 01010101 01010101 01010101 01010101 "
+        "00100010 01000000 00000000 00100111 11011111 01100111 11010101 00010100 " 
+        "00100010 01100011 11100011 00110000 11011011 11011111 01001100 00110101 " 
+        "10011110 01011111 01010000 00000110 00011011 00100110 00010100 01110011 " 
+        "00001010 10101010 10101010 10101010 10101010 10101010 10101010 10101010 " 
+        "10110101 01010101 01010101 01010101 01010101 01010101 01010101 01010101 " 
         "01000000";
 
     inline ui64 Bits(ui64 bytes) {
@@ -47,7 +47,7 @@ namespace NBitIO {
 
 class TBitIOTest: public TTestBase {
     UNIT_TEST_SUITE(TBitIOTest);
-    UNIT_TEST(TestBitIO)
+    UNIT_TEST(TestBitIO) 
     UNIT_TEST_SUITE_END();
 
 private:
@@ -59,13 +59,13 @@ private:
     }
 
     void DoRead(TBi& b, ui32& t) {
-        b.Read(t, 1, 0);   // 1
+        b.Read(t, 1, 0);   // 1 
         b.ReadK<3>(t, 1);  // 4
-        b.Read(t, 5, 4);   // 9
+        b.Read(t, 5, 4);   // 9 
         b.ReadK<14>(t, 9); // 23
-        b.Read(t, 1, 23);  // 24
+        b.Read(t, 1, 23);  // 24 
         b.ReadK<5>(t, 24); // 29
-        b.Read(t, 3, 29);  // 32
+        b.Read(t, 3, 29);  // 32 
     }
 
     template <typename TBo>
@@ -76,7 +76,7 @@ private:
         b.Write(t, 14, 9); //23
         b.Write(t, 1, 23); //24
         b.Write(t, 5, 24); //29
-        b.Write(t, 3, 29); //32
+        b.Write(t, 3, 29); //32 
     }
 
     template <typename TBo>
@@ -213,7 +213,7 @@ private:
             DoRead(in, v);
             UNIT_ASSERT_VALUES_EQUAL_C(v, 1637415112ul, (rem + ": " + NBitIO::PrintBits(v)));
             DoRead(in, v);
-            UNIT_ASSERT_VALUES_EQUAL_C(v, 897998715u, (rem + ": " + NBitIO::PrintBits(v)));
+            UNIT_ASSERT_VALUES_EQUAL_C(v, 897998715u, (rem + ": " + NBitIO::PrintBits(v))); 
             DoRead(in, v);
             UNIT_ASSERT_VALUES_EQUAL_C(v, 201416527u, (rem + ": " + NBitIO::PrintBits(v)));
             DoRead(in, v);

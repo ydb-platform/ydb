@@ -127,12 +127,12 @@ public:
     }
 
     TFlags& operator&=(TFlags mask) {
-        *this = *this & mask;
+        *this = *this & mask; 
         return *this;
     }
 
     TFlags& operator&=(Enum mask) {
-        *this = *this & mask;
+        *this = *this & mask; 
         return *this;
     }
 
@@ -184,12 +184,12 @@ public:
 
 private:
     struct TFlag {
-        constexpr TFlag() {
-        }
-        constexpr explicit TFlag(TInt value)
-            : Value(value)
-        {
-        }
+        constexpr TFlag() { 
+        } 
+        constexpr explicit TFlag(TInt value) 
+            : Value(value) 
+        { 
+        } 
 
         TInt Value = 0;
     };

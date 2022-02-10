@@ -7,11 +7,11 @@ TDebugReceiverProtocol::TDebugReceiverProtocol()
 {
 }
 
-void TDebugReceiverProtocol::Serialize(const NBus::TBusMessage*, TBuffer&) {
+void TDebugReceiverProtocol::Serialize(const NBus::TBusMessage*, TBuffer&) { 
     Y_FAIL("it is receiver only");
 }
 
-TAutoPtr<NBus::TBusMessage> TDebugReceiverProtocol::Deserialize(ui16, TArrayRef<const char> payload) {
+TAutoPtr<NBus::TBusMessage> TDebugReceiverProtocol::Deserialize(ui16, TArrayRef<const char> payload) { 
     THolder<TDebugReceiverMessage> r(new TDebugReceiverMessage(ECreateUninitialized()));
 
     r->Payload.Append(payload.data(), payload.size());

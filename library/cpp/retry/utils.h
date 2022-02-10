@@ -7,4 +7,4 @@ namespace NRetryPrivate {
     TDuration AddIncrement(ui32 attempt, TDuration increment);
     TDuration AddExponentialMultiplier(ui32 attempt, TDuration exponentialMultiplier);
 
-}
+} 

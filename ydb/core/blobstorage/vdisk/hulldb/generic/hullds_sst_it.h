@@ -18,7 +18,7 @@ namespace NKikimr {
         typedef const TRec * pointer;
         typedef const TRec & reference;
 
-        typedef std::bidirectional_iterator_tag iterator_category;
+        typedef std::bidirectional_iterator_tag iterator_category; 
 
 
         const TLevelSegment *Segment;

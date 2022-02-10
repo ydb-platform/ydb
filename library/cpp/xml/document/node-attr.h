@@ -10,18 +10,18 @@ namespace NXml {
 
     // libxml defines unsigned char -> xmlChar,
     // and all functions use xmlChar.
-    inline static const char* CAST2CHAR(const xmlChar* x) {
-        return reinterpret_cast<const char*>(x);
-    }
-    inline static const xmlChar* XMLCHAR(const char* x) {
-        return reinterpret_cast<const xmlChar*>(x);
-    }
+    inline static const char* CAST2CHAR(const xmlChar* x) { 
+        return reinterpret_cast<const char*>(x); 
+    } 
+    inline static const xmlChar* XMLCHAR(const char* x) { 
+        return reinterpret_cast<const xmlChar*>(x); 
+    } 
 
     template <class T>
     void TNode::AttrInternal(TCharPtr& value, T& res, TStringBuf errContext) const {
         try {
             res = FromString<T>(CAST2CHAR(value.Get()));
-        } catch (TFromStringException&) {
+        } catch (TFromStringException&) { 
             THROW(XmlException, "Failed to convert string " << TString{TStringBuf(CAST2CHAR(value.Get())).substr(0, 50)}.Quote() << " from '" << errContext << "' to requested type");
         }
     }
@@ -35,7 +35,7 @@ namespace NXml {
     template <class T>
     T TNode::Attr(TZtStringBuf name) const {
         TCharPtr value(xmlGetProp(NodePointer, XMLCHAR(name.c_str())));
-        if (!value) {
+        if (!value) { 
             THROW(AttributeNotFound, Path() << "@" << name);
         }
 
@@ -47,7 +47,7 @@ namespace NXml {
     template <class T>
     T TNode::Attr(TZtStringBuf name, const T& defvalue) const {
         TCharPtr attr(xmlGetProp(NodePointer, XMLCHAR(name.c_str())));
-        if (!attr) {
+        if (!attr) { 
             return defvalue;
         }
 
@@ -59,7 +59,7 @@ namespace NXml {
     template <class T>
     void TNode::Attr(TZtStringBuf name, T& value) const {
         TCharPtr attr(xmlGetProp(NodePointer, XMLCHAR(name.c_str())));
-        if (!attr) {
+        if (!attr) { 
             THROW(AttributeNotFound, Path() << name);
         }
 
@@ -70,16 +70,16 @@ namespace NXml {
     void TNode::Attr(TZtStringBuf name, T& value, const T& defvalue) const {
         TCharPtr attr(xmlGetProp(NodePointer, XMLCHAR(name.c_str())));
 
-        if (!attr) {
+        if (!attr) { 
             value = defvalue;
-        } else {
+        } else { 
             AttrInternal(attr, value, name);
         }
     }
 
     template <class T>
-    T TNode::Value() const {
-        if (!NodePointer || xmlIsBlankNode(NodePointer)) {
+    T TNode::Value() const { 
+        if (!NodePointer || xmlIsBlankNode(NodePointer)) { 
             THROW(NodeIsBlank, Path());
         }
 
@@ -90,8 +90,8 @@ namespace NXml {
     }
 
     template <class T>
-    T TNode::Value(const T& defvalue) const {
-        if (!NodePointer || xmlIsBlankNode(NodePointer)) {
+    T TNode::Value(const T& defvalue) const { 
+        if (!NodePointer || xmlIsBlankNode(NodePointer)) { 
             return defvalue;
         }
 
@@ -115,14 +115,14 @@ namespace NXml {
     }
 
     inline void TNode::SetAttr(TZtStringBuf name, TZtStringBuf value) {
-        xmlAttr* attr = xmlSetProp(NodePointer, XMLCHAR(name.c_str()), XMLCHAR(value.c_str()));
+        xmlAttr* attr = xmlSetProp(NodePointer, XMLCHAR(name.c_str()), XMLCHAR(value.c_str())); 
 
-        if (!attr) {
-            THROW(XmlException, "Can't set node attribute <"
-                                    << name
-                                    << "> to <"
-                                    << value
-                                    << ">");
+        if (!attr) { 
+            THROW(XmlException, "Can't set node attribute <" 
+                                    << name 
+                                    << "> to <" 
+                                    << value 
+                                    << ">"); 
         }
     }
 
@@ -135,20 +135,20 @@ namespace NXml {
     }
 
     inline void TNode::SetAttr(TZtStringBuf name) {
-        xmlAttr* attr = xmlSetProp(NodePointer, XMLCHAR(name.c_str()), nullptr);
+        xmlAttr* attr = xmlSetProp(NodePointer, XMLCHAR(name.c_str()), nullptr); 
 
-        if (!attr) {
-            THROW(XmlException, "Can't set node empty attribute <"
-                                    << name
-                                    << ">");
+        if (!attr) { 
+            THROW(XmlException, "Can't set node empty attribute <" 
+                                    << name 
+                                    << ">"); 
         }
     }
 
     inline void TNode::DelAttr(TZtStringBuf name) {
         if (xmlUnsetProp(NodePointer, XMLCHAR(name.c_str())) < 0)
-            THROW(XmlException, "Can't delete node attribute <"
-                                    << name
-                                    << ">");
+            THROW(XmlException, "Can't delete node attribute <" 
+                                    << name 
+                                    << ">"); 
     }
 
     template <class T>
@@ -160,23 +160,23 @@ namespace NXml {
     }
 
     inline TNode TNode::AddChild(TZtStringBuf name, TZtStringBuf value) {
-        if (IsNull()) {
-            THROW(XmlException, "addChild [name=" << name << ", value=" << value
-                                                  << "]: can't add child to null node");
+        if (IsNull()) { 
+            THROW(XmlException, "addChild [name=" << name << ", value=" << value 
+                                                  << "]: can't add child to null node"); 
         }
 
-        xmlNode* child = nullptr;
+        xmlNode* child = nullptr; 
 
-        if (value.empty()) {
+        if (value.empty()) { 
             child = xmlNewTextChild(NodePointer, nullptr, XMLCHAR(name.c_str()), nullptr);
-        } else {
+        } else { 
             child = xmlNewTextChild(
                 NodePointer, nullptr, XMLCHAR(name.c_str()), XMLCHAR(value.c_str()));
         }
 
-        if (!child) {
-            THROW(XmlException, "addChild [name=" << name << ", value=" << value
-                                                  << "]: xmlNewTextChild returned NULL");
+        if (!child) { 
+            THROW(XmlException, "addChild [name=" << name << ", value=" << value 
+                                                  << "]: xmlNewTextChild returned NULL"); 
         }
 
         return TNode(DocPointer, child);
@@ -191,19 +191,19 @@ namespace NXml {
     }
 
     inline TNode TNode::AddText(TStringBuf value) {
-        if (IsNull()) {
-            THROW(XmlException, "addChild [value=" << value
-                                                   << "]: can't add child to null node");
+        if (IsNull()) { 
+            THROW(XmlException, "addChild [value=" << value 
+                                                   << "]: can't add child to null node"); 
         }
 
         xmlNode* child = xmlNewTextLen((xmlChar*)value.data(), value.size());
         child = xmlAddChild(NodePointer, child);
 
-        if (!child) {
-            THROW(XmlException, "addChild [value=" << value
-                                                   << "]: xmlNewTextChild returned NULL");
+        if (!child) { 
+            THROW(XmlException, "addChild [value=" << value 
+                                                   << "]: xmlNewTextChild returned NULL"); 
         }
 
         return TNode(DocPointer, child);
     }
-}
+} 

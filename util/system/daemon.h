@@ -1,17 +1,17 @@
 #pragma once
 
-namespace NDaemonMaker {
-    enum ECloseDescriptors {
-        closeAll = 0,
-        closeStdIoOnly
-    };
+namespace NDaemonMaker { 
+    enum ECloseDescriptors { 
+        closeAll = 0, 
+        closeStdIoOnly 
+    }; 
 
-    enum EStdIoDescriptors {
-        openNone = 0,
-        openDevNull,
-        openYandexStd
-    };
-
+    enum EStdIoDescriptors { 
+        openNone = 0, 
+        openDevNull, 
+        openYandexStd 
+    }; 
+ 
     enum EChDir {
         chdirNone = 0,
         chdirRoot
@@ -24,4 +24,4 @@ namespace NDaemonMaker {
 
     bool MakeMeDaemon(ECloseDescriptors cd = closeAll, EStdIoDescriptors iod = openDevNull, EChDir chd = chdirRoot, EParent parent = callExitFromParent);
     void CloseFrom(int fd);
-}
+} 

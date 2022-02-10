@@ -2,7 +2,7 @@
 
 #include "profile.h"
 
-#if defined(_unix_) && !defined(_bionic_) && !defined(_cygwin_)
+#if defined(_unix_) && !defined(_bionic_) && !defined(_cygwin_) 
 
 #include <signal.h>
 #include <sys/time.h>
@@ -12,22 +12,22 @@
 #else
 #include <ucontext.h>
 #endif
-#include <dlfcn.h>
-
+#include <dlfcn.h> 
+ 
 #include <util/system/platform.h>
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
-#include <util/generic/noncopyable.h>
-#include <util/generic/algorithm.h>
+#include <util/generic/noncopyable.h> 
+#include <util/generic/algorithm.h> 
 #include <util/generic/vector.h>
 #include <util/stream/file.h>
 #include <util/string/util.h>
 #include <util/system/datetime.h>
 
 // This class sets SIGPROF handler and captures instruction pointer in it.
-class TExecutionSampler : TNonCopyable {
+class TExecutionSampler : TNonCopyable { 
 public:
-    typedef TVector<std::pair<void*, size_t>> TSampleVector;
+    typedef TVector<std::pair<void*, size_t>> TSampleVector; 
 
     struct TStats {
         ui64 SavedSamples;
@@ -37,7 +37,7 @@ public:
 
     // NOTE: There is no synchronization here as the instance is supposed to be
     // created on the main thread.
-    static TExecutionSampler* Instance() {
+    static TExecutionSampler* Instance() { 
         if (SInstance == nullptr) {
             SInstance = new TExecutionSampler();
         }
@@ -45,7 +45,7 @@ public:
         return SInstance;
     }
 
-    void Start() {
+    void Start() { 
         // Set signal handler
         struct sigaction sa;
         sa.sa_sigaction = ProfilerSignalHandler;
@@ -63,7 +63,7 @@ public:
         Started = true;
     }
 
-    void Stop(TSampleVector& sampleVector, TStats& stats) {
+    void Stop(TSampleVector& sampleVector, TStats& stats) { 
         // Reset signal handler and timer
         if (Started) {
             setitimer(ITIMER_PROF, &OldTimerValue, nullptr);
@@ -94,19 +94,19 @@ public:
         sampleVector.swap(hits);
     }
 
-    void ResetStats() {
+    void ResetStats() { 
         WaitForWriteFlag();
         Clear();
         AtomicUnlock(&WriteFlag);
     }
 
 private:
-    static const size_t SZ = 2 * 1024 * 1024; // size of the hash table
-                                              // inserts work faster if it's a power of 2
-    static const int SAMPLE_INTERVAL = 1000;  // in microseconds
+    static const size_t SZ = 2 * 1024 * 1024; // size of the hash table 
+                                              // inserts work faster if it's a power of 2 
+    static const int SAMPLE_INTERVAL = 1000;  // in microseconds 
 
     struct TCompareFirst {
-        bool operator()(const std::pair<void*, size_t>& a, const std::pair<void*, size_t>& b) const {
+        bool operator()(const std::pair<void*, size_t>& a, const std::pair<void*, size_t>& b) const { 
             return a.first < b.first;
         }
     };
@@ -129,7 +129,7 @@ private:
     // were in process of update.
     // One such thing is memory allocation. That's why a fixed size vector is
     // preallocated at start.
-    static void ProfilerSignalHandler(int signal, siginfo_t* info, void* context) {
+    static void ProfilerSignalHandler(int signal, siginfo_t* info, void* context) { 
         (void)info;
         if (signal != SIGPROF) {
             return;
@@ -141,17 +141,17 @@ private:
         SInstance->CaptureIP(GetIp(&ucontext->uc_mcontext));
     }
 
-    void WaitForWriteFlag() {
+    void WaitForWriteFlag() { 
         // Wait for write flag to be reset
         ui32 delay = 100;
         while (!AtomicTryLock(&WriteFlag)) {
             usleep(delay);
             delay += delay;
-            delay = Min(delay, (ui32)5000);
+            delay = Min(delay, (ui32)5000); 
         }
     }
 
-    void CaptureIP(void* rip) {
+    void CaptureIP(void* rip) { 
         // Check if the handler on another thread is in the process of adding a sample
         // If this is the case, we just drop the current sample as this should happen
         // rarely.
@@ -159,51 +159,51 @@ private:
             AddSample(rip);
             AtomicUnlock(&WriteFlag);
         } else {
-            AtomicIncrement(DroppedSamples);
+            AtomicIncrement(DroppedSamples); 
         }
     }
 
     // Hash function applied to the addresses
-    static inline ui32 Hash(void* key) {
+    static inline ui32 Hash(void* key) { 
         return ((size_t)key + (size_t)key / SZ) % SZ;
     }
 
     // Get instruction pointer from the context
-    static inline void* GetIp(const mcontext_t* mctx) {
+    static inline void* GetIp(const mcontext_t* mctx) { 
 #if defined _freebsd_
-#if defined _64_
+#if defined _64_ 
         return (void*)mctx->mc_rip;
-#else
+#else 
         return (void*)mctx->mc_eip;
-#endif
+#endif 
 #elif defined _linux_
-#if defined _64_
-#if defined(_arm_)
-        return (void*)mctx->pc;
-#else
+#if defined _64_ 
+#if defined(_arm_) 
+        return (void*)mctx->pc; 
+#else 
         return (void*)mctx->gregs[REG_RIP];
-#endif
-#else
+#endif 
+#else 
         return (void*)mctx->gregs[REG_EIP];
-#endif
+#endif 
 #elif defined _darwin_
-#if defined _64_
+#if defined _64_ 
 #if defined(_arm_)
         return (void*)(*mctx)->__ss.__pc;
 #else
         return (void*)(*mctx)->__ss.__rip;
 #endif
-#else
-#if defined(__IOS__)
-        return (void*)(*mctx)->__ss.__pc;
-#else
+#else 
+#if defined(__IOS__) 
+        return (void*)(*mctx)->__ss.__pc; 
+#else 
         return (void*)(*mctx)->__ss.__eip;
+#endif 
 #endif
-#endif
-#endif
+#endif 
     }
 
-    inline bool AddSample(void* key) {
+    inline bool AddSample(void* key) { 
         ui32 slot = Hash(key);
         ui32 prevSlot = (slot - 1) % SZ;
 
@@ -224,23 +224,23 @@ private:
             ++Samples;
         } else {
             // don't insert new sample if the search is becoming too slow
-            AtomicIncrement(DroppedSamples);
+            AtomicIncrement(DroppedSamples); 
             return false;
         }
 
         return true;
     }
 
-    inline bool IsSlotEmpty(ui32 slot) const {
+    inline bool IsSlotEmpty(ui32 slot) const { 
         return Ips[slot].first == nullptr;
     }
 
-    inline bool InsertsAllowed() const {
+    inline bool InsertsAllowed() const { 
         return UniqueSamples < SZ / 2;
     }
 
     void
-    Clear() {
+    Clear() { 
         Y_ASSERT(WriteFlag == 1);
 
         for (size_t i = 0; i < SZ; ++i) {
@@ -252,21 +252,21 @@ private:
         SearchSkipCount = 0;
     }
 
-    bool Started;
-    struct sigaction OldSignalHandler;
-    itimerval OldTimerValue;
+    bool Started; 
+    struct sigaction OldSignalHandler; 
+    itimerval OldTimerValue; 
 
-    TVector<std::pair<void*, size_t>>
-        Ips; // The hash table storing addresses and their hitcounts
+    TVector<std::pair<void*, size_t>> 
+        Ips; // The hash table storing addresses and their hitcounts 
 
     // TODO: on a big multiproc cache line false sharing by the flag and count might become an issue
-    TAtomic WriteFlag;      // Is used to syncronize access to the hash table
-    TAtomic DroppedSamples; // "dropped sample" count will show how many times
-                            // a sample was dropped either because of write conflict
-                            // or because of the hash table had become too filled up
-    ui64 Samples;           // Saved samples count
-    ui64 UniqueSamples;     // Number of unique addresses
-    ui64 SearchSkipCount;   // Total number of linear hash table probes due to collisions
+    TAtomic WriteFlag;      // Is used to syncronize access to the hash table 
+    TAtomic DroppedSamples; // "dropped sample" count will show how many times 
+                            // a sample was dropped either because of write conflict 
+                            // or because of the hash table had become too filled up 
+    ui64 Samples;           // Saved samples count 
+    ui64 UniqueSamples;     // Number of unique addresses 
+    ui64 SearchSkipCount;   // Total number of linear hash table probes due to collisions 
 
     static TExecutionSampler* SInstance;
 };
@@ -288,14 +288,14 @@ public:
 
 private:
     TExecutionSampler::TSampleVector Samples;
-    TExecutionSampler::TStats Stats;
+    TExecutionSampler::TStats Stats; 
     bool PutTimestamps;
 };
 
-void TSampleAnalyser::Analyze(FILE* out) const {
+void TSampleAnalyser::Analyze(FILE* out) const { 
     fprintf(out, "samples: %" PRIu64 "    unique: %" PRIu64 "   dropped:  %" PRIu64 "   searchskips:   %" PRIu64 "\n",
-            (ui64)Stats.SavedSamples, (ui64)Samples.size(),
-            (ui64)Stats.DroppedSamples, (ui64)Stats.SearchSkipCount);
+            (ui64)Stats.SavedSamples, (ui64)Samples.size(), 
+            (ui64)Stats.DroppedSamples, (ui64)Stats.SearchSkipCount); 
 
     fprintf(out, "\nSamples:\n");
     size_t funcCnt = 0;
@@ -313,11 +313,11 @@ void TSampleAnalyser::Analyze(FILE* out) const {
         if (dladdr(Samples[i].first, &addrInfo)) {
             if (addrInfo.dli_fbase != prevModBase || addrInfo.dli_saddr != prevFunc) {
                 fprintf(out, "Func\t%" PRISZT "\t%p\t%p\t%s\t%s\n",
-                        funcCnt,
-                        addrInfo.dli_fbase,
-                        addrInfo.dli_saddr,
-                        addrInfo.dli_fname,
-                        addrInfo.dli_sname);
+                        funcCnt, 
+                        addrInfo.dli_fbase, 
+                        addrInfo.dli_saddr, 
+                        addrInfo.dli_fname, 
+                        addrInfo.dli_sname); 
                 prevModBase = addrInfo.dli_fbase;
                 prevFunc = addrInfo.dli_saddr;
                 ++funcCnt;
@@ -348,30 +348,30 @@ void DumpRUsage(FILE* out) {
         return;
 
     fprintf(out,
-            "user time:                       %lf\n"
-            "system time:                     %lf\n"
-            "max RSS:                         %ld\n"
-            "shared text:                     %ld\n"
-            "unshared data:                   %ld\n"
-            "unshared stack:                  %ld\n"
-            "page reclaims:                   %ld\n"
-            "page faults:                     %ld\n"
-            "swaps:                           %ld\n"
-            "block input ops:                 %ld\n"
-            "block output ops:                %ld\n"
-            "msg sent:                        %ld\n"
-            "msg received:                    %ld\n"
-            "signals:                         %ld\n"
-            "voluntary ctx switches:          %ld\n"
-            "involuntary ctx switches:        %ld\n\n",
-            ru.ru_utime.tv_sec + (ru.ru_utime.tv_usec * 0.000001),
-            ru.ru_stime.tv_sec + (ru.ru_stime.tv_usec * 0.000001),
-            ru.ru_maxrss, ru.ru_ixrss, ru.ru_idrss, ru.ru_isrss,
-            ru.ru_minflt, ru.ru_majflt, ru.ru_nswap,
-            ru.ru_inblock, ru.ru_oublock,
-            ru.ru_msgsnd, ru.ru_msgrcv,
-            ru.ru_nsignals,
-            ru.ru_nvcsw, ru.ru_nivcsw);
+            "user time:                       %lf\n" 
+            "system time:                     %lf\n" 
+            "max RSS:                         %ld\n" 
+            "shared text:                     %ld\n" 
+            "unshared data:                   %ld\n" 
+            "unshared stack:                  %ld\n" 
+            "page reclaims:                   %ld\n" 
+            "page faults:                     %ld\n" 
+            "swaps:                           %ld\n" 
+            "block input ops:                 %ld\n" 
+            "block output ops:                %ld\n" 
+            "msg sent:                        %ld\n" 
+            "msg received:                    %ld\n" 
+            "signals:                         %ld\n" 
+            "voluntary ctx switches:          %ld\n" 
+            "involuntary ctx switches:        %ld\n\n", 
+            ru.ru_utime.tv_sec + (ru.ru_utime.tv_usec * 0.000001), 
+            ru.ru_stime.tv_sec + (ru.ru_stime.tv_usec * 0.000001), 
+            ru.ru_maxrss, ru.ru_ixrss, ru.ru_idrss, ru.ru_isrss, 
+            ru.ru_minflt, ru.ru_majflt, ru.ru_nswap, 
+            ru.ru_inblock, ru.ru_oublock, 
+            ru.ru_msgsnd, ru.ru_msgrcv, 
+            ru.ru_nsignals, 
+            ru.ru_nvcsw, ru.ru_nivcsw); 
 }
 
 // Pauses capturing execution samples and dumps them to the file
@@ -398,7 +398,7 @@ void EndProfiling() {
     ++cnt;
 }
 
-#else
+#else 
 
 // NOTE: not supported on Windows
 
@@ -408,10 +408,10 @@ void BeginProfiling() {
 void ResetProfile() {
 }
 
-void EndProfiling(FILE*) {
+void EndProfiling(FILE*) { 
 }
 
 void EndProfiling() {
 }
 
-#endif
+#endif 

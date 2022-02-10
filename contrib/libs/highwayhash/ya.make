@@ -10,7 +10,7 @@ OWNER(somov)
 
 NO_COMPILER_WARNINGS()
 
-ADDINCL(GLOBAL contrib/libs/highwayhash)
+ADDINCL(GLOBAL contrib/libs/highwayhash) 
 
 SRCDIR(contrib/libs/highwayhash/highwayhash)
 

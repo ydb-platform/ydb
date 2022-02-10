@@ -41,7 +41,7 @@ public:
 
     void Reset() noexcept;
     void SetPos(size_t off);
-    char* Proceed(size_t off);
+    char* Proceed(size_t off); 
     void Append(const void* data, size_t len);
 
     Y_PURE_FUNCTION bool IsNull() const noexcept;
@@ -97,7 +97,7 @@ public:
         return TypedSize(TTempBuf::Filled());
     }
 
-    T* Proceed(size_t off) {
-        return (T*)TTempBuf::Proceed(RawSize(off));
+    T* Proceed(size_t off) { 
+        return (T*)TTempBuf::Proceed(RawSize(off)); 
     }
 };

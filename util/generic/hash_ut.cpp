@@ -37,7 +37,7 @@ class THashTest: public TTestBase {
     UNIT_TEST(TestInvariants);
     UNIT_TEST(TestAllocation);
     UNIT_TEST(TestInsertCopy);
-    UNIT_TEST(TestEmplace);
+    UNIT_TEST(TestEmplace); 
     UNIT_TEST(TestEmplaceNoresize);
     UNIT_TEST(TestEmplaceDirect);
     UNIT_TEST(TestTryEmplace);
@@ -48,7 +48,7 @@ class THashTest: public TTestBase {
     UNIT_TEST(TestHSetEmplace);
     UNIT_TEST(TestHSetEmplaceNoresize);
     UNIT_TEST(TestHSetEmplaceDirect);
-    UNIT_TEST(TestNonCopyable);
+    UNIT_TEST(TestNonCopyable); 
     UNIT_TEST(TestValueInitialization);
     UNIT_TEST(TestAssignmentClear);
     UNIT_TEST(TestReleaseNodes);
@@ -88,7 +88,7 @@ protected:
     void TestInvariants();
     void TestAllocation();
     void TestInsertCopy();
-    void TestEmplace();
+    void TestEmplace(); 
     void TestEmplaceNoresize();
     void TestEmplaceDirect();
     void TestTryEmplace();
@@ -99,7 +99,7 @@ protected:
     void TestHMMapEmplace();
     void TestHMMapEmplaceNoresize();
     void TestHMMapEmplaceDirect();
-    void TestNonCopyable();
+    void TestNonCopyable(); 
     void TestValueInitialization();
     void TestAssignmentClear();
     void TestReleaseNodes();
@@ -887,14 +887,14 @@ void THashTest::TestInsertCopy() {
     hash[TNonCopyableInt<0>(0)] = 0;
 }
 
-void THashTest::TestEmplace() {
+void THashTest::TestEmplace() { 
     using hash_t = THashMap<int, TNonCopyableInt<0>>;
     hash_t hash;
-    hash.emplace(std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(0));
-    auto it = hash.find(1);
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(it->second), 0);
-}
-
+    hash.emplace(std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(0)); 
+    auto it = hash.find(1); 
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(it->second), 0); 
+} 
+ 
 void THashTest::TestEmplaceNoresize() {
     using hash_t = THashMap<int, TNonCopyableInt<0>>;
     hash_t hash;
@@ -1037,9 +1037,9 @@ void THashTest::TestHSetEmplaceDirect() {
     UNIT_ASSERT(!hash.contains(1));
 }
 
-void THashTest::TestNonCopyable() {
-    struct TValue: public TNonCopyable {
-        int value;
+void THashTest::TestNonCopyable() { 
+    struct TValue: public TNonCopyable { 
+        int value; 
         TValue(int _value = 0)
             : value(_value)
         {
@@ -1047,16 +1047,16 @@ void THashTest::TestNonCopyable() {
         operator int() {
             return value;
         }
-    };
-
+    }; 
+ 
     THashMap<int, TValue> hash;
-    hash.emplace(std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(5));
+    hash.emplace(std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(5)); 
     auto&& value = hash[1];
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(value), 5);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(value), 5); 
     auto&& not_inserted = hash[2];
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(not_inserted), 0);
-}
-
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(not_inserted), 0); 
+} 
+ 
 void THashTest::TestValueInitialization() {
     THashMap<int, int> hash;
 

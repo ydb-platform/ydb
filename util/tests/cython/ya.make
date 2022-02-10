@@ -24,7 +24,7 @@ PY_SRCS(
     stream/str_ut.pyx
     string/cast_ut.pyx
     system/types_ut.pyx
-    digest/multi_ut.pyx
+    digest/multi_ut.pyx 
 )
 
 TEST_SRCS(

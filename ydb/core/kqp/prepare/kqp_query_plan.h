@@ -26,7 +26,7 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const NYql::NNodes:
  * Fill stages in given txPlan with ExecutionStats fields. Each plan stage stores StageGuid which is
  * used to find corresponding TKqpStatsExecution object.
  */
-TString AddExecStatsToTxPlan(const TString& txPlan, const NYql::NDqProto::TDqExecutionStats& stats); 
+TString AddExecStatsToTxPlan(const TString& txPlan, const NYql::NDqProto::TDqExecutionStats& stats);
 
 TString SerializeExplainPlan(const NKqpProto::TKqpPhyQuery& phyQuery);
 

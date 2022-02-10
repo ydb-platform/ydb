@@ -1103,7 +1103,7 @@ void TResourceBrokerInitializer::InitializeServices(
     }
 
     auto counters = GetServiceCounters(appData->Counters, "tablets");
-    TActorSetupCmd actorSetup = { NResourceBroker::CreateResourceBrokerActor(config, counters), 
+    TActorSetupCmd actorSetup = { NResourceBroker::CreateResourceBrokerActor(config, counters),
                                   TMailboxType::ReadAsFilled, appData->UserPoolId };
     setup->LocalServices.push_back(std::make_pair(NResourceBroker::MakeResourceBrokerID(), actorSetup));
 }
@@ -1507,7 +1507,7 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
     }
 
     if (!IsServiceInitialized(setup, NGRpcService::CreateGRpcRequestProxyId())) {
-        auto grpcReqProxy = NGRpcService::CreateGRpcRequestProxy(Config); 
+        auto grpcReqProxy = NGRpcService::CreateGRpcRequestProxy(Config);
         setup->LocalServices.push_back(std::pair<TActorId,
                                        TActorSetupCmd>(NGRpcService::CreateGRpcRequestProxyId(),
                                                        TActorSetupCmd(grpcReqProxy, TMailboxType::ReadAsFilled,
@@ -1949,22 +1949,22 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
     }
 
     if (enableKqp) {
-        NKikimrKqp::TKqpSetting enableSpilling; 
-        enableSpilling.SetName("_KqpEnableSpilling"); 
-        enableSpilling.SetValue(appData->EnableKqpSpilling ? "true" : "false"); 
-        settings.emplace_back(std::move(enableSpilling)); 
- 
-        // Crate resource manager 
-        auto rm = NKqp::CreateKqpResourceManagerActor(Config.GetTableServiceConfig().GetResourceManager(), nullptr); 
-        setup->LocalServices.push_back(std::make_pair( 
-            NKqp::MakeKqpRmServiceID(NodeId), 
-            TActorSetupCmd(rm, TMailboxType::HTSwap, appData->UserPoolId))); 
- 
+        NKikimrKqp::TKqpSetting enableSpilling;
+        enableSpilling.SetName("_KqpEnableSpilling");
+        enableSpilling.SetValue(appData->EnableKqpSpilling ? "true" : "false");
+        settings.emplace_back(std::move(enableSpilling));
+
+        // Crate resource manager
+        auto rm = NKqp::CreateKqpResourceManagerActor(Config.GetTableServiceConfig().GetResourceManager(), nullptr);
+        setup->LocalServices.push_back(std::make_pair(
+            NKqp::MakeKqpRmServiceID(NodeId),
+            TActorSetupCmd(rm, TMailboxType::HTSwap, appData->UserPoolId)));
+
         auto proxy = NKqp::CreateKqpProxyService(Config.GetLogConfig(), Config.GetTableServiceConfig(),
             std::move(settings), Factories->QueryReplayBackendFactory);
-        setup->LocalServices.push_back(std::make_pair( 
-            NKqp::MakeKqpProxyID(NodeId), 
-            TActorSetupCmd(proxy, TMailboxType::HTSwap, appData->UserPoolId))); 
+        setup->LocalServices.push_back(std::make_pair(
+            NKqp::MakeKqpProxyID(NodeId),
+            TActorSetupCmd(proxy, TMailboxType::HTSwap, appData->UserPoolId)));
     }
 }
 

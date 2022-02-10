@@ -108,7 +108,7 @@ public:
         : MemoryLimit(memoryLimit)
         , TaskId(taskId)
         , RequestedMemory(0)
-        , NotEnoughMemoryCount(0) 
+        , NotEnoughMemoryCount(0)
     {}
 
     ~TTxMemoryProviderBase() {}
@@ -135,13 +135,13 @@ public:
 
     ui64 GetRequestedMemory() const { return RequestedMemory; }
 
-    void NotEnoughMemory(ui32 add = 1) 
-    { 
-        NotEnoughMemoryCount += add; 
-    } 
- 
-    ui32 GetNotEnoughMemoryCount() const { return NotEnoughMemoryCount; } 
- 
+    void NotEnoughMemory(ui32 add = 1)
+    {
+        NotEnoughMemoryCount += add;
+    }
+
+    ui32 GetNotEnoughMemoryCount() const { return NotEnoughMemoryCount; }
+
     /**
      * Memory token should be captured only when tx is finished
      * or within ReleaseTxData method.
@@ -177,7 +177,7 @@ private:
     const ui64 MemoryLimit;
     const ui64 TaskId;
     ui64 RequestedMemory;
-    ui32 NotEnoughMemoryCount; 
+    ui32 NotEnoughMemoryCount;
     TIntrusivePtr<TMemoryGCToken> MemoryGCToken;
     TAutoPtr<TMemoryToken> MemoryToken;
 };

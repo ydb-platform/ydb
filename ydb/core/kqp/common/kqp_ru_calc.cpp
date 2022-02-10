@@ -26,9 +26,9 @@ ui64 CalcReadIORu(const TTableStat& stat) {
 
 class TIoReadStat: public TTableStat {
 public:
-    void Add(const NYql::NDqProto::TDqTableStats& tableAggr) { 
-        Rows += tableAggr.GetReadRows(); 
-        Bytes += tableAggr.GetReadBytes(); 
+    void Add(const NYql::NDqProto::TDqTableStats& tableAggr) {
+        Rows += tableAggr.GetReadRows();
+        Bytes += tableAggr.GetReadBytes();
     }
 
     ui64 CalcRu() const {
@@ -38,10 +38,10 @@ public:
 
 class TIoWriteStat: public TTableStat {
 public:
-    void Add(const NYql::NDqProto::TDqTableStats& tableAggr) { 
-        Rows += tableAggr.GetWriteRows(); 
-        Rows += tableAggr.GetEraseRows(); 
-        Bytes += tableAggr.GetWriteBytes(); 
+    void Add(const NYql::NDqProto::TDqTableStats& tableAggr) {
+        Rows += tableAggr.GetWriteRows();
+        Rows += tableAggr.GetEraseRows();
+        Bytes += tableAggr.GetWriteBytes();
     }
 
     ui64 CalcRu() const {
@@ -65,9 +65,9 @@ ui64 CalcRequestUnit(const NKqpProto::TKqpStatsQuery& stats) {
     TIoWriteStat totalWriteStat;
 
     for (const auto& exec : stats.GetExecutions()) {
-        totalCpuTime += TDuration::MicroSeconds(exec.GetCpuTimeUs()); 
+        totalCpuTime += TDuration::MicroSeconds(exec.GetCpuTimeUs());
 
-        for (auto& table : exec.GetTables()) { 
+        for (auto& table : exec.GetTables()) {
             totalReadStat.Add(table);
         }
     }
@@ -84,9 +84,9 @@ ui64 CalcRequestUnit(const NKqpProto::TKqpStatsQuery& stats) {
 }
 
 ui64 CalcRequestUnit(const TProgressStatEntry& stats) {
-    auto ioRu = CalcReadIORu(stats.ReadIOStat); 
+    auto ioRu = CalcReadIORu(stats.ReadIOStat);
 
-    return std::max(std::max(CpuTimeToUnit(stats.ComputeTime), ioRu), (ui64)1); 
+    return std::max(std::max(CpuTimeToUnit(stats.ComputeTime), ioRu), (ui64)1);
 }
 
 } // namespace NRuCalc

@@ -2315,12 +2315,12 @@ struct TExprContext : private TNonCopyable {
     [[nodiscard]]
     TExprNode::TPtr FuseLambdas(const TExprNode& outer, const TExprNode& inner);
 
-    using TCustomDeepCopier = std::function<bool(const TExprNode& node, TExprNode::TListType& newChildren)>; 
+    using TCustomDeepCopier = std::function<bool(const TExprNode& node, TExprNode::TListType& newChildren)>;
 
     [[nodiscard]]
-    TExprNode::TPtr DeepCopy(const TExprNode& node, TExprContext& nodeContext, TNodeOnNodeOwnedMap& deepClones, 
+    TExprNode::TPtr DeepCopy(const TExprNode& node, TExprContext& nodeContext, TNodeOnNodeOwnedMap& deepClones,
         bool internStrings, bool copyTypes, bool copyResult = false, TCustomDeepCopier customCopier = {});
- 
+
     [[nodiscard]]
     TExprNode::TPtr SwapWithHead(const TExprNode& node);
     TExprNode::TPtr ReplaceNode(TExprNode::TPtr&& start, const TExprNode& src, TExprNode::TPtr dst);

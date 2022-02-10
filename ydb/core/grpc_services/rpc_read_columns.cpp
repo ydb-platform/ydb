@@ -317,7 +317,7 @@ private:
 
             SysViewScanActor = ctx.Register(tableScanActor.Release());
 
-            auto ackEv = MakeHolder<NKqp::TEvKqpCompute::TEvScanDataAck>(0); 
+            auto ackEv = MakeHolder<NKqp::TEvKqpCompute::TEvScanDataAck>(0);
             ctx.Send(SysViewScanActor, ackEv.Release());
         }
 
@@ -374,22 +374,22 @@ private:
             return ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, "Arrow format not supported yet", ctx);
         }
 
-        for (auto&& row : ev->Get()->Rows) { 
+        for (auto&& row : ev->Get()->Rows) {
             ++rowsExtracted;
-            if (row.size() != keyColumnCount + ValueColumnTypes.size()) { 
+            if (row.size() != keyColumnCount + ValueColumnTypes.size()) {
                 return ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR,
                                       "System view row format doesn't match the schema",
                                       ctx);
             }
 
-            TDbTupleRef rowKey(KeyColumnTypes.data(), row.data(), keyColumnCount); 
+            TDbTupleRef rowKey(KeyColumnTypes.data(), row.data(), keyColumnCount);
 
             if (!skippedBeforeMinKey) {
                 int cmp = CompareTypedCellVectors(MinKey.GetCells().data(), rowKey.Cells().data(),
                                                   KeyColumnTypes.data(),
                                                   MinKey.GetCells().size(), rowKey.Cells().size());
 
-                // Skip rows before MinKey just in case (because currently sys view scan ignores key range) 
+                // Skip rows before MinKey just in case (because currently sys view scan ignores key range)
                 if (cmp > 0 || (cmp == 0 && !MinKeyInclusive)) {
                     LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Skipped rows by sys view scan");
                     continue;
@@ -398,7 +398,7 @@ private:
                 }
             }
 
-            TDbTupleRef rowValues(ValueColumnTypes.data(), row.data() + keyColumnCount, row.size() - keyColumnCount); 
+            TDbTupleRef rowValues(ValueColumnTypes.data(), row.data() + keyColumnCount, row.size() - keyColumnCount);
             BlockBuilder->AddRow(rowKey, rowValues);
             ++SysViewRowsReceived;
 
@@ -408,7 +408,7 @@ private:
             }
         }
 
-        auto ackEv = MakeHolder<NKqp::TEvKqpCompute::TEvScanDataAck>(0); 
+        auto ackEv = MakeHolder<NKqp::TEvKqpCompute::TEvScanDataAck>(0);
         ctx.Send(ev->Sender, ackEv.Release());
 
         bool done =

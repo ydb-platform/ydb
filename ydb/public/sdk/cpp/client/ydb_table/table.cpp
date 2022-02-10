@@ -3581,14 +3581,14 @@ static void ConvertCreateTableSettingsToProto(const TCreateTableSettings& settin
         if (policy.UniformPartitions_) {
             proto->mutable_partitioning_policy()->set_uniform_partitions(policy.UniformPartitions_.GetRef());
         }
-        if (policy.ExplicitPartitions_) { 
-            auto* borders = proto->mutable_partitioning_policy()->mutable_explicit_partitions(); 
-            for (const auto& splitPoint : policy.ExplicitPartitions_->SplitPoints_) { 
-                auto* border = borders->Addsplit_points(); 
-                border->mutable_type()->CopyFrom(TProtoAccessor::GetProto(splitPoint.GetType())); 
-                border->mutable_value()->CopyFrom(TProtoAccessor::GetProto(splitPoint)); 
-            } 
-        } 
+        if (policy.ExplicitPartitions_) {
+            auto* borders = proto->mutable_partitioning_policy()->mutable_explicit_partitions();
+            for (const auto& splitPoint : policy.ExplicitPartitions_->SplitPoints_) {
+                auto* border = borders->Addsplit_points();
+                border->mutable_type()->CopyFrom(TProtoAccessor::GetProto(splitPoint.GetType()));
+                border->mutable_value()->CopyFrom(TProtoAccessor::GetProto(splitPoint));
+            }
+        }
     }
     if (settings.StoragePolicy_) {
         const auto& policy = settings.StoragePolicy_.GetRef();

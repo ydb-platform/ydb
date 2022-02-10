@@ -189,27 +189,27 @@ protected:
 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> PushSkipNullMembersToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
-        return DqPushSkipNullMembersToStage(node, ctx, optCtx, *getParents(), IsGlobal); 
+        return DqPushSkipNullMembersToStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> PushExtractMembersToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
-        return DqPushExtractMembersToStage(node, ctx, optCtx, *getParents(), IsGlobal); 
+        return DqPushExtractMembersToStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
-        return DqBuildFlatmapStage(node, ctx, optCtx, *getParents(), IsGlobal); 
+        return DqBuildFlatmapStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> PushOrderedLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
-        return DqPushOrderedLMapToStage(node, ctx, optCtx, *getParents(), IsGlobal); 
+        return DqPushOrderedLMapToStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> PushLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
-        return DqPushLMapToStage(node, ctx, optCtx, *getParents(), IsGlobal); 
+        return DqPushLMapToStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
     template <bool IsGlobal>
@@ -219,7 +219,7 @@ protected:
 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> PushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
-        return DqPushCombineToStage(node, ctx, optCtx, *getParents(), IsGlobal); 
+        return DqPushCombineToStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
     TMaybeNode<TExprBase> BuildPartitionsStage(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
@@ -236,20 +236,20 @@ protected:
 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildTopSortStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
-        return DqBuildTopSortStage(node, ctx, optCtx, *getParents(), IsGlobal); 
+        return DqBuildTopSortStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildSortStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
-        return DqBuildSortStage(node, ctx, optCtx, *getParents(), IsGlobal); 
+        return DqBuildSortStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildTakeOrTakeSkipStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         if (node.Maybe<TCoTake>().Input().Maybe<TCoSkip>()) {
-            return DqBuildTakeSkipStage(node, ctx, optCtx, *getParents(), IsGlobal); 
+            return DqBuildTakeSkipStage(node, ctx, optCtx, *getParents(), IsGlobal);
         } else {
-            return DqBuildTakeStage(node, ctx, optCtx, *getParents(), IsGlobal); 
+            return DqBuildTakeStage(node, ctx, optCtx, *getParents(), IsGlobal);
         }
     }
 
@@ -267,7 +267,7 @@ protected:
 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> PushJoinToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
-        return DqPushJoinToStage(node, ctx, optCtx, *getParents(), IsGlobal); 
+        return DqPushJoinToStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
     template <bool IsGlobal>
@@ -278,7 +278,7 @@ protected:
             return node;
         }
 
-        return DqBuildPhyJoin(join, false /* TODO */, ctx, optCtx); 
+        return DqBuildPhyJoin(join, false /* TODO */, ctx, optCtx);
     }
 
     template <bool IsGlobal>
@@ -291,15 +291,15 @@ protected:
             return node;
         }
 
-        return DqBuildJoinDict(join, ctx); // , optCtx); 
+        return DqBuildJoinDict(join, ctx); // , optCtx);
     }
 
-    TMaybeNode<TExprBase> BuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) { 
-        return DqBuildHasItems(node, ctx, optCtx); 
+    TMaybeNode<TExprBase> BuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
+        return DqBuildHasItems(node, ctx, optCtx);
     }
 
-    TMaybeNode<TExprBase> BuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) { 
-        return DqBuildScalarPrecompute(node, ctx, optCtx); 
+    TMaybeNode<TExprBase> BuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
+        return DqBuildScalarPrecompute(node, ctx, optCtx);
     }
 
 private:

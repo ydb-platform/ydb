@@ -57,7 +57,7 @@ private:
     void HandleWhileWaiting(TEvClusterTracker::TEvSubscribe::TPtr& ev) {
         AddSubscriber(ev->Sender);
 
-        Become(&TThis::Working); 
+        Become(&TThis::Working);
 
         Send(Ctx().SelfID, new TEvents::TEvWakeup);
     }
@@ -116,15 +116,15 @@ private:
     void HandleWhileWorking(TEvents::TEvWakeup::TPtr&) {
         auto req = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
 
-        req->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE); 
-        req->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML); 
+        req->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        req->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
         req->Record.MutableRequest()->SetKeepSession(false);
-        req->Record.MutableRequest()->SetQuery(MakeListClustersQuery()); 
+        req->Record.MutableRequest()->SetQuery(MakeListClustersQuery());
         req->Record.MutableRequest()->SetDatabase(GetDatabase());
-        // useless without explicit session 
-        // req->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true); 
-        req->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write(); 
-        req->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true); 
+        // useless without explicit session
+        // req->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
+        req->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+        req->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
 
         Send(NKqp::MakeKqpProxyID(Ctx().SelfID.NodeId()), req.Release());
     }
@@ -144,9 +144,9 @@ private:
         } else {
             LOG_ERROR_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "failed to list clusters: " << record);
 
-            ClustersList = nullptr; 
- 
-            Schedule(TDuration::Seconds(Cfg().GetClustersUpdateTimeoutOnErrorSec()), new TEvents::TEvWakeup); 
+            ClustersList = nullptr;
+
+            Schedule(TDuration::Seconds(Cfg().GetClustersUpdateTimeoutOnErrorSec()), new TEvents::TEvWakeup);
         }
     }
 
@@ -154,9 +154,9 @@ private:
         const auto& record = ev->Get()->Record;
         LOG_ERROR_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "failed to list clusters: " << record);
 
-        ClustersList = nullptr; 
- 
-        Schedule(TDuration::Seconds(Cfg().GetClustersUpdateTimeoutOnErrorSec()), new TEvents::TEvWakeup); 
+        ClustersList = nullptr;
+
+        Schedule(TDuration::Seconds(Cfg().GetClustersUpdateTimeoutOnErrorSec()), new TEvents::TEvWakeup);
     }
 
     template<typename TProtoRecord>

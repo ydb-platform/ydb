@@ -1,5 +1,5 @@
 #include "yql_co.h"
-#include "yql_co_sqlin.h" 
+#include "yql_co_sqlin.h"
 
 #include <ydb/library/yql/core/yql_atom_enums.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
@@ -1431,68 +1431,68 @@ TExprNode::TPtr FuseToListWithFlatmap(const TExprNode::TPtr& node, TExprContext&
     return result;
 }
 
-bool ShouldConvertSqlInToJoin(const TCoSqlIn& sqlIn, bool /* negated */) { 
-    bool tableSource = false; 
+bool ShouldConvertSqlInToJoin(const TCoSqlIn& sqlIn, bool /* negated */) {
+    bool tableSource = false;
 
-    for (const auto& hint : sqlIn.Options()) { 
+    for (const auto& hint : sqlIn.Options()) {
         if (hint.Name().Value() == TStringBuf("isCompact")) {
-            return false; 
+            return false;
         }
         if (hint.Name().Value() == TStringBuf("tableSource")) {
-            tableSource = true; 
-        } 
+            tableSource = true;
+        }
     }
 
-    return tableSource; 
+    return tableSource;
 }
 
-bool CanConvertSqlInToJoin(const TCoSqlIn& sqlIn) { 
-    auto leftArg = sqlIn.Lookup(); 
-    auto leftColumnType = leftArg.Ref().GetTypeAnn(); 
+bool CanConvertSqlInToJoin(const TCoSqlIn& sqlIn) {
+    auto leftArg = sqlIn.Lookup();
+    auto leftColumnType = leftArg.Ref().GetTypeAnn();
 
-    auto rightArg = sqlIn.Collection(); 
-    auto rightArgType = rightArg.Ref().GetTypeAnn(); 
+    auto rightArg = sqlIn.Collection();
+    auto rightArgType = rightArg.Ref().GetTypeAnn();
 
-    if (rightArgType->GetKind() == ETypeAnnotationKind::List) { 
-        auto rightListItemType = rightArgType->Cast<TListExprType>()->GetItemType(); 
+    if (rightArgType->GetKind() == ETypeAnnotationKind::List) {
+        auto rightListItemType = rightArgType->Cast<TListExprType>()->GetItemType();
 
-        auto isDataOrTupleOfData = [](const TTypeAnnotationNode* type) { 
-            if (IsDataOrOptionalOfData(type)) { 
-                return true; 
-            } 
-            if (type->GetKind() == ETypeAnnotationKind::Tuple) { 
-                return AllOf(type->Cast<TTupleExprType>()->GetItems(), [](const auto& item) { 
-                    return IsDataOrOptionalOfData(item); 
-                }); 
-            } 
-            return false; 
-        }; 
- 
-        if (rightListItemType->GetKind() == ETypeAnnotationKind::Struct) { 
-            auto rightStructType = rightListItemType->Cast<TStructExprType>(); 
-            YQL_ENSURE(rightStructType->GetSize() == 1); 
-            auto rightColumnType = rightStructType->GetItems()[0]->GetItemType(); 
-            return isDataOrTupleOfData(rightColumnType); 
-        } 
- 
-        return isDataOrTupleOfData(rightListItemType); 
-    } 
- 
-    /** 
-     * todo: support tuple of equal tuples 
-     * 
-     * sql expression \code{.sql} ... where (k1, k2) in ((1, 2), (2, 3), (3, 4)) \endcode 
-     * is equivalent to the \code{.sql} ... where (k1, k2) in AsTuple((1, 2), (2, 3), (3, 4)) \endcode 
-     * but not to the \code{.sql} ... where (k1, k2) in AsList((1, 2), (2, 3), (3, 4)) \endcode 
-     * so, it's not supported now 
-     */ 
- 
-    if (rightArgType->GetKind() == ETypeAnnotationKind::Dict) { 
-        auto rightDictType = rightArgType->Cast<TDictExprType>()->GetKeyType(); 
-        return IsDataOrOptionalOfData(leftColumnType) && IsDataOrOptionalOfData(rightDictType); 
-    } 
- 
-    return false; 
+        auto isDataOrTupleOfData = [](const TTypeAnnotationNode* type) {
+            if (IsDataOrOptionalOfData(type)) {
+                return true;
+            }
+            if (type->GetKind() == ETypeAnnotationKind::Tuple) {
+                return AllOf(type->Cast<TTupleExprType>()->GetItems(), [](const auto& item) {
+                    return IsDataOrOptionalOfData(item);
+                });
+            }
+            return false;
+        };
+
+        if (rightListItemType->GetKind() == ETypeAnnotationKind::Struct) {
+            auto rightStructType = rightListItemType->Cast<TStructExprType>();
+            YQL_ENSURE(rightStructType->GetSize() == 1);
+            auto rightColumnType = rightStructType->GetItems()[0]->GetItemType();
+            return isDataOrTupleOfData(rightColumnType);
+        }
+
+        return isDataOrTupleOfData(rightListItemType);
+    }
+
+    /**
+     * todo: support tuple of equal tuples
+     *
+     * sql expression \code{.sql} ... where (k1, k2) in ((1, 2), (2, 3), (3, 4)) \endcode
+     * is equivalent to the \code{.sql} ... where (k1, k2) in AsTuple((1, 2), (2, 3), (3, 4)) \endcode
+     * but not to the \code{.sql} ... where (k1, k2) in AsList((1, 2), (2, 3), (3, 4)) \endcode
+     * so, it's not supported now
+     */
+
+    if (rightArgType->GetKind() == ETypeAnnotationKind::Dict) {
+        auto rightDictType = rightArgType->Cast<TDictExprType>()->GetKeyType();
+        return IsDataOrOptionalOfData(leftColumnType) && IsDataOrOptionalOfData(rightDictType);
+    }
+
+    return false;
 }
 
 struct TPredicateChainNode {
@@ -1507,10 +1507,10 @@ struct TPredicateChainNode {
 
     // SqlIn params
     TPositionHandle SqlInPos;
-    TExprNode::TPtr Left; // used only if LeftArgColumns is empty 
+    TExprNode::TPtr Left; // used only if LeftArgColumns is empty
     TExprNode::TPtr Right;
 
-    TVector<TStringBuf> LeftArgColumns;  // set if left side of IN is input column reference or tuple of columns references 
+    TVector<TStringBuf> LeftArgColumns;  // set if left side of IN is input column reference or tuple of columns references
     TVector<TString> RightArgColumns; // always set
 };
 
@@ -1624,14 +1624,14 @@ TExprNode::TPtr BuildSqlInCollectionEmptyPred(const TCoSqlIn& sqlIn, TExprContex
     return collectionEmptyPred;
 }
 
-TPredicateChainNode ParsePredicateChainNode(const TExprNode::TPtr& predicate, const TExprNode::TPtr& topLambdaArg, 
-    std::function<bool(const TCoSqlIn&, bool /* negated */)> shouldConvertSqlInToJoin, TExprContext& ctx) 
-{ 
+TPredicateChainNode ParsePredicateChainNode(const TExprNode::TPtr& predicate, const TExprNode::TPtr& topLambdaArg,
+    std::function<bool(const TCoSqlIn&, bool /* negated */)> shouldConvertSqlInToJoin, TExprContext& ctx)
+{
     TPredicateChainNode result;
 
-    result.Pred = predicate; 
+    result.Pred = predicate;
 
-    auto curr = predicate; 
+    auto curr = predicate;
     TExprNode::TPtr pred;
     if (curr->IsCallable("Not")) {
         curr = curr->HeadPtr();
@@ -1653,17 +1653,17 @@ TPredicateChainNode ParsePredicateChainNode(const TExprNode::TPtr& predicate, co
         hasCoalesce = true;
     }
 
-    if (!leftArg) { 
-        // not SqlIn 
+    if (!leftArg) {
+        // not SqlIn
         return result;
     }
 
-    TCoSqlIn sqlIn(curr); 
-    if (!shouldConvertSqlInToJoin(sqlIn, result.Negated) || !CanConvertSqlInToJoin(sqlIn)) { 
-        // not convertible to join 
-        return result; 
-    } 
- 
+    TCoSqlIn sqlIn(curr);
+    if (!shouldConvertSqlInToJoin(sqlIn, result.Negated) || !CanConvertSqlInToJoin(sqlIn)) {
+        // not convertible to join
+        return result;
+    }
+
     result.SqlInPos = sqlIn.Pos();
     result.ConvertibleToJoin = true;
     result.Left = leftArg;
@@ -1722,177 +1722,177 @@ TPredicateChainNode ParsePredicateChainNode(const TExprNode::TPtr& predicate, co
         }
     }
 
-    auto isMemberOf = [](const TExprNode::TPtr& node, const TExprNode::TPtr& arg) { 
+    auto isMemberOf = [](const TExprNode::TPtr& node, const TExprNode::TPtr& arg) {
         return node->IsCallable("Member") && node->HeadPtr() == arg;
-    }; 
- 
-    if (isMemberOf(leftArg, topLambdaArg)) { 
+    };
+
+    if (isMemberOf(leftArg, topLambdaArg)) {
         // left side of IN is column reference
-        result.LeftArgColumns.emplace_back(leftArg->Child(1)->Content()); 
-    } else if (leftArg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) { 
-        // if leftArg is tuple of members then replace tuple with its members 
-        for (const auto& tupleItem : leftArg->Children()) { 
-            if (isMemberOf(tupleItem, topLambdaArg)) { 
-                result.LeftArgColumns.emplace_back(tupleItem->Child(1)->Content()); 
-            } else { 
-                // fallback to join on whole tuple 
-                result.LeftArgColumns.clear(); 
-                break; 
-            } 
-        } 
+        result.LeftArgColumns.emplace_back(leftArg->Child(1)->Content());
+    } else if (leftArg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
+        // if leftArg is tuple of members then replace tuple with its members
+        for (const auto& tupleItem : leftArg->Children()) {
+            if (isMemberOf(tupleItem, topLambdaArg)) {
+                result.LeftArgColumns.emplace_back(tupleItem->Child(1)->Content());
+            } else {
+                // fallback to join on whole tuple
+                result.LeftArgColumns.clear();
+                break;
+            }
+        }
     }
 
-    auto rightArg = sqlIn.Collection().Ptr(); 
-    auto rightArgType = rightArg->GetTypeAnn(); 
+    auto rightArg = sqlIn.Collection().Ptr();
+    auto rightArgType = rightArg->GetTypeAnn();
 
-    if (rightArgType->GetKind() == ETypeAnnotationKind::List) { 
-        auto rightArgItemType = rightArgType->Cast<TListExprType>()->GetItemType(); 
+    if (rightArgType->GetKind() == ETypeAnnotationKind::List) {
+        auto rightArgItemType = rightArgType->Cast<TListExprType>()->GetItemType();
 
-        if (rightArgItemType->GetKind() == ETypeAnnotationKind::Struct) { 
-            auto rightStructType = rightArgItemType->Cast<TStructExprType>(); 
-            YQL_ENSURE(rightStructType->GetSize() == 1); 
- 
-            const TItemExprType* itemType = rightStructType->GetItems()[0]; 
-            if (IsDataOrOptionalOfData(itemType->GetItemType())) { 
-                result.Right = rightArg; 
-                result.RightArgColumns = { ToString(itemType->GetName()) }; 
-                return result; 
-            } 
- 
-            YQL_ENSURE(itemType->GetItemType()->GetKind() == ETypeAnnotationKind::Tuple); 
- 
-            rightArg = Build<TCoFlatMap>(ctx, rightArg->Pos()) 
-                    .Input(rightArg) 
-                    .Lambda() 
-                        .Args({"item"}) 
-                        .Body<TCoJust>() 
-                            .Input<TCoMember>() 
-                                .Struct("item") 
-                                .Name().Build(itemType->GetName()) 
-                                .Build() 
-                            .Build() 
-                        .Build() 
-                    .Done() 
-                    .Ptr(); 
- 
-            if (!result.LeftArgColumns.empty()) { 
-                auto rowArg = Build<TCoArgument>(ctx, sqlIn.Pos()) 
-                        .Name("row") 
-                        .Done(); 
-                auto asStructBuilder = Build<TCoAsStruct>(ctx, sqlIn.Pos()); 
-                for (size_t i = 0; i < itemType->GetItemType()->Cast<TTupleExprType>()->GetItems().size(); ++i) { 
-                    const TString columnName = TStringBuilder() << "_yql_sqlin_tuple_" << i; 
-                    asStructBuilder.Add<TCoNameValueTuple>() 
-                            .Name().Build(columnName) 
-                            .Value<TCoNth>() 
-                                .Tuple(rowArg) 
-                                .Index(ctx.NewAtom(sqlIn.Pos(), ToString(i))) 
-                                .Build() 
-                            .Build(); 
-                    result.RightArgColumns.emplace_back(columnName); 
-                } 
-                result.Right = Build<TCoMap>(ctx, sqlIn.Pos()) 
-                        .Input(rightArg) 
-                        .Lambda() 
-                            .Args(rowArg) 
-                            .Body(asStructBuilder.Done()) 
-                            .Build() 
-                        .Done() 
-                        .Ptr(); 
- 
-                return result; 
-            } 
- 
-            // fallthrough to default join by the whole tuple 
-        } else if (rightArgItemType->GetKind() == ETypeAnnotationKind::Tuple) { 
-            auto tupleItemTypes = rightArgItemType->Cast<TTupleExprType>()->GetItems(); 
- 
-            if (!result.LeftArgColumns.empty()) { 
-                auto rowArg = Build<TCoArgument>(ctx, sqlIn.Pos()) 
-                        .Name("row") 
-                        .Done(); 
-                auto asStructBuilder = Build<TCoAsStruct>(ctx, sqlIn.Pos()); 
-                for (size_t i = 0; i < tupleItemTypes.size(); ++i) { 
-                    const TString columnName = TStringBuilder() << "_yql_sqlin_tuple_" << i; 
-                    asStructBuilder.Add<TCoNameValueTuple>() 
-                            .Name().Build(columnName) 
-                            .Value<TCoNth>() 
-                                .Tuple(rowArg) 
-                                .Index(ctx.NewAtom(sqlIn.Pos(), ToString(i))) 
-                                .Build() 
-                            .Build(); 
-                    result.RightArgColumns.emplace_back(columnName); 
-                } 
-                result.Right = Build<TCoMap>(ctx, sqlIn.Pos()) 
-                        .Input(rightArg) 
-                        .Lambda() 
-                            .Args(rowArg) 
-                            .Body(asStructBuilder.Done()) 
-                            .Build() 
-                        .Done() 
-                        .Ptr(); 
-                return result; 
-            } 
- 
-            // fallthrough to default join by the whole tuple 
-        } else { 
-            YQL_ENSURE(IsDataOrOptionalOfData(rightArgItemType), "" << FormatType(rightArgItemType)); 
-        } 
- 
-        // rewrite List<DataType|Tuple> to List<Struct<key: DataType|Tuple>> 
-        result.Right = Build<TCoMap>(ctx, sqlIn.Pos()) 
-                .Input(rightArg) 
-                .Lambda() 
-                    .Args({"item"}) 
-                    .Body<TCoAsStruct>() 
-                        .Add<TCoNameValueTuple>() 
-                            .Name().Build("key") 
-                            .Value("item") 
-                            .Build() 
-                        .Build() 
-                    .Build() 
-                .Done() 
-                .Ptr(); 
-        result.RightArgColumns = { "key" }; 
- 
-        return result; 
-    } 
- 
-    YQL_ENSURE(rightArgType->GetKind() == ETypeAnnotationKind::Dict, "" << FormatType(rightArgType)); 
- 
-    auto rightDictType = rightArgType->Cast<TDictExprType>()->GetKeyType(); 
-    YQL_ENSURE(IsDataOrOptionalOfData(rightDictType)); 
- 
-    auto dictKeys = ctx.Builder(sqlIn.Pos()) 
-        .Callable("DictKeys") 
-            .Add(0, rightArg) 
-        .Seal() 
-        .Build(); 
- 
-    result.Right = Build<TCoMap>(ctx, sqlIn.Pos()) 
-            .Input(dictKeys) 
-            .Lambda() 
-                .Args({"item"}) 
-                .Body<TCoAsStruct>() 
-                    .Add<TCoNameValueTuple>() 
-                        .Name().Build("key") 
-                        .Value("item") 
-                        .Build() 
-                    .Build() 
-                .Build() 
-            .Done() 
-            .Ptr(); 
-    result.RightArgColumns = { "key" }; 
- 
+        if (rightArgItemType->GetKind() == ETypeAnnotationKind::Struct) {
+            auto rightStructType = rightArgItemType->Cast<TStructExprType>();
+            YQL_ENSURE(rightStructType->GetSize() == 1);
+
+            const TItemExprType* itemType = rightStructType->GetItems()[0];
+            if (IsDataOrOptionalOfData(itemType->GetItemType())) {
+                result.Right = rightArg;
+                result.RightArgColumns = { ToString(itemType->GetName()) };
+                return result;
+            }
+
+            YQL_ENSURE(itemType->GetItemType()->GetKind() == ETypeAnnotationKind::Tuple);
+
+            rightArg = Build<TCoFlatMap>(ctx, rightArg->Pos())
+                    .Input(rightArg)
+                    .Lambda()
+                        .Args({"item"})
+                        .Body<TCoJust>()
+                            .Input<TCoMember>()
+                                .Struct("item")
+                                .Name().Build(itemType->GetName())
+                                .Build()
+                            .Build()
+                        .Build()
+                    .Done()
+                    .Ptr();
+
+            if (!result.LeftArgColumns.empty()) {
+                auto rowArg = Build<TCoArgument>(ctx, sqlIn.Pos())
+                        .Name("row")
+                        .Done();
+                auto asStructBuilder = Build<TCoAsStruct>(ctx, sqlIn.Pos());
+                for (size_t i = 0; i < itemType->GetItemType()->Cast<TTupleExprType>()->GetItems().size(); ++i) {
+                    const TString columnName = TStringBuilder() << "_yql_sqlin_tuple_" << i;
+                    asStructBuilder.Add<TCoNameValueTuple>()
+                            .Name().Build(columnName)
+                            .Value<TCoNth>()
+                                .Tuple(rowArg)
+                                .Index(ctx.NewAtom(sqlIn.Pos(), ToString(i)))
+                                .Build()
+                            .Build();
+                    result.RightArgColumns.emplace_back(columnName);
+                }
+                result.Right = Build<TCoMap>(ctx, sqlIn.Pos())
+                        .Input(rightArg)
+                        .Lambda()
+                            .Args(rowArg)
+                            .Body(asStructBuilder.Done())
+                            .Build()
+                        .Done()
+                        .Ptr();
+
+                return result;
+            }
+
+            // fallthrough to default join by the whole tuple
+        } else if (rightArgItemType->GetKind() == ETypeAnnotationKind::Tuple) {
+            auto tupleItemTypes = rightArgItemType->Cast<TTupleExprType>()->GetItems();
+
+            if (!result.LeftArgColumns.empty()) {
+                auto rowArg = Build<TCoArgument>(ctx, sqlIn.Pos())
+                        .Name("row")
+                        .Done();
+                auto asStructBuilder = Build<TCoAsStruct>(ctx, sqlIn.Pos());
+                for (size_t i = 0; i < tupleItemTypes.size(); ++i) {
+                    const TString columnName = TStringBuilder() << "_yql_sqlin_tuple_" << i;
+                    asStructBuilder.Add<TCoNameValueTuple>()
+                            .Name().Build(columnName)
+                            .Value<TCoNth>()
+                                .Tuple(rowArg)
+                                .Index(ctx.NewAtom(sqlIn.Pos(), ToString(i)))
+                                .Build()
+                            .Build();
+                    result.RightArgColumns.emplace_back(columnName);
+                }
+                result.Right = Build<TCoMap>(ctx, sqlIn.Pos())
+                        .Input(rightArg)
+                        .Lambda()
+                            .Args(rowArg)
+                            .Body(asStructBuilder.Done())
+                            .Build()
+                        .Done()
+                        .Ptr();
+                return result;
+            }
+
+            // fallthrough to default join by the whole tuple
+        } else {
+            YQL_ENSURE(IsDataOrOptionalOfData(rightArgItemType), "" << FormatType(rightArgItemType));
+        }
+
+        // rewrite List<DataType|Tuple> to List<Struct<key: DataType|Tuple>>
+        result.Right = Build<TCoMap>(ctx, sqlIn.Pos())
+                .Input(rightArg)
+                .Lambda()
+                    .Args({"item"})
+                    .Body<TCoAsStruct>()
+                        .Add<TCoNameValueTuple>()
+                            .Name().Build("key")
+                            .Value("item")
+                            .Build()
+                        .Build()
+                    .Build()
+                .Done()
+                .Ptr();
+        result.RightArgColumns = { "key" };
+
+        return result;
+    }
+
+    YQL_ENSURE(rightArgType->GetKind() == ETypeAnnotationKind::Dict, "" << FormatType(rightArgType));
+
+    auto rightDictType = rightArgType->Cast<TDictExprType>()->GetKeyType();
+    YQL_ENSURE(IsDataOrOptionalOfData(rightDictType));
+
+    auto dictKeys = ctx.Builder(sqlIn.Pos())
+        .Callable("DictKeys")
+            .Add(0, rightArg)
+        .Seal()
+        .Build();
+
+    result.Right = Build<TCoMap>(ctx, sqlIn.Pos())
+            .Input(dictKeys)
+            .Lambda()
+                .Args({"item"})
+                .Body<TCoAsStruct>()
+                    .Add<TCoNameValueTuple>()
+                        .Name().Build("key")
+                        .Value("item")
+                        .Build()
+                    .Build()
+                .Build()
+            .Done()
+            .Ptr();
+    result.RightArgColumns = { "key" };
+
     return result;
 }
 
-TExprNode::TPtr SplitPredicateChain(TExprNode::TPtr&& node, const TExprNode::TPtr& topLambdaArg, 
-    std::function<bool(const TCoSqlIn&, bool /* negated */)> shouldConvertSqlInToJoin, TPredicateChain& prefix, 
-    TExprContext& ctx) 
-{ 
+TExprNode::TPtr SplitPredicateChain(TExprNode::TPtr&& node, const TExprNode::TPtr& topLambdaArg,
+    std::function<bool(const TCoSqlIn&, bool /* negated */)> shouldConvertSqlInToJoin, TPredicateChain& prefix,
+    TExprContext& ctx)
+{
     if (!node->IsCallable("And")) {
-        TPredicateChainNode curr = ParsePredicateChainNode(node, topLambdaArg, shouldConvertSqlInToJoin, ctx); 
+        TPredicateChainNode curr = ParsePredicateChainNode(node, topLambdaArg, shouldConvertSqlInToJoin, ctx);
         if (!prefix.empty() && prefix.back().ConvertibleToJoin != curr.ConvertibleToJoin) {
             // stop splitting
             return std::move(node);
@@ -1909,7 +1909,7 @@ TExprNode::TPtr SplitPredicateChain(TExprNode::TPtr&& node, const TExprNode::TPt
         if (child) {
             break;
         }
-    } 
+    }
 
     if (children.front().Get() == &node->Head()) {
         return std::move(node);
@@ -1967,11 +1967,11 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
     auto inputTableAtom = ctx.NewAtom(input->Pos(), inputTable);
 
     for (size_t i = 0; i < chain.size(); ++i) {
-        const TString tableName = TStringBuilder() << "_yql_injoin_" << i; 
-        const TString columnName = TStringBuilder() << "_yql_injoin_column_" << i; 
-        const auto pos = chain[i].SqlInPos; 
+        const TString tableName = TStringBuilder() << "_yql_injoin_" << i;
+        const TString columnName = TStringBuilder() << "_yql_injoin_column_" << i;
+        const auto pos = chain[i].SqlInPos;
 
-        auto equiJoinArg = ctx.Builder(pos) 
+        auto equiJoinArg = ctx.Builder(pos)
             .List()
                 .Add(0, chain[i].Right)
                 .Atom(1, tableName)
@@ -1980,41 +1980,41 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
 
         equiJoinArgs.push_back(equiJoinArg);
 
-        TExprNodeList leftKeys; 
-        if (chain[i].LeftArgColumns.empty()) { 
-            leftKeys.push_back(inputTableAtom); 
-            leftKeys.push_back(ctx.NewAtom(pos, columnName)); 
-        } else { 
-            for (TStringBuf leftKey : chain[i].LeftArgColumns) { 
-                leftKeys.push_back(inputTableAtom); 
-                leftKeys.push_back(ctx.NewAtom(pos, leftKey)); 
-            } 
-        } 
- 
-        TExprNodeList rightKeys; 
-        for (const TString& rightKey : chain[i].RightArgColumns) { 
-            rightKeys.push_back(ctx.NewAtom(pos, tableName)); 
-            rightKeys.push_back(ctx.NewAtom(pos, rightKey)); 
-        } 
- 
-        joinChain = ctx.Builder(pos) 
+        TExprNodeList leftKeys;
+        if (chain[i].LeftArgColumns.empty()) {
+            leftKeys.push_back(inputTableAtom);
+            leftKeys.push_back(ctx.NewAtom(pos, columnName));
+        } else {
+            for (TStringBuf leftKey : chain[i].LeftArgColumns) {
+                leftKeys.push_back(inputTableAtom);
+                leftKeys.push_back(ctx.NewAtom(pos, leftKey));
+            }
+        }
+
+        TExprNodeList rightKeys;
+        for (const TString& rightKey : chain[i].RightArgColumns) {
+            rightKeys.push_back(ctx.NewAtom(pos, tableName));
+            rightKeys.push_back(ctx.NewAtom(pos, rightKey));
+        }
+
+        joinChain = ctx.Builder(pos)
             .List()
                 .Atom(0, chain[i].Negated ? "LeftOnly" : "LeftSemi")
                 .Add(1, joinChain ? joinChain : inputTableAtom)
                 .Atom(2, tableName)
                 .List(3)
-                    .Add(std::move(leftKeys)) 
+                    .Add(std::move(leftKeys))
                 .Seal()
                 .List(4)
-                    .Add(std::move(rightKeys)) 
+                    .Add(std::move(rightKeys))
                 .Seal()
                 .List(5)
                 .Seal()
             .Seal()
             .Build();
 
-        if (chain[i].LeftArgColumns.empty()) { 
-            auto rename = ctx.Builder(pos) 
+        if (chain[i].LeftArgColumns.empty()) {
+            auto rename = ctx.Builder(pos)
                 .List()
                     .Atom(0, "rename")
                     .Atom(1, FullColumnName(inputTable, columnName))
@@ -2222,31 +2222,31 @@ TExprNode::TPtr SimpleFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TO
         }
     }
 
-    // rewrite in 'canonical' way (prefer OptionalIf to ListIf) 
+    // rewrite in 'canonical' way (prefer OptionalIf to ListIf)
     if (self.Input().Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional && self.Lambda().Body().Maybe<TCoListIf>())
-    { 
+    {
         YQL_CLOG(DEBUG, Core) << "Convert " << node->Content() << " lambda ListIf to OptionalIf";
-        auto listIf = self.Lambda().Body().Cast<TCoListIf>(); 
- 
-        auto newLambda = Build<TCoLambda>(ctx, node->Pos()) 
-                .Args({"item"}) 
-                .Body<TCoOptionalIf>() 
-                    .Predicate<TExprApplier>() 
-                        .Apply(listIf.Predicate()) 
-                            .With(self.Lambda().Args().Arg(0), "item") 
-                        .Build() 
-                    .Value<TExprApplier>() 
-                        .Apply(listIf.Value()) 
-                            .With(self.Lambda().Args().Arg(0), "item") 
-                        .Build() 
-                    .Build() 
+        auto listIf = self.Lambda().Body().Cast<TCoListIf>();
+
+        auto newLambda = Build<TCoLambda>(ctx, node->Pos())
+                .Args({"item"})
+                .Body<TCoOptionalIf>()
+                    .Predicate<TExprApplier>()
+                        .Apply(listIf.Predicate())
+                            .With(self.Lambda().Args().Arg(0), "item")
+                        .Build()
+                    .Value<TExprApplier>()
+                        .Apply(listIf.Value())
+                            .With(self.Lambda().Args().Arg(0), "item")
+                        .Build()
+                    .Build()
                 .Done().Ptr();
- 
+
         return ctx.ChangeChild(*node, 1U, std::move(newLambda));
-    } 
- 
+    }
+
     if (auto expr = TryConvertSqlInPredicatesToJoins(self, ShouldConvertSqlInToJoin, ctx)) {
-        return expr; 
+        return expr;
     }
 
     if (auto just = self.Lambda().Body().Maybe<TCoJust>()) {
@@ -2971,11 +2971,11 @@ TExprNode::TPtr PullAssumeColumnOrderOverEquiJoin(const TExprNode::TPtr& node, T
     return node;
 }
 
-} // namespace 
- 
-TExprNode::TPtr TryConvertSqlInPredicatesToJoins(const TCoFlatMapBase& flatMap, 
-    TShouldConvertSqlInToJoinPredicate shouldConvertSqlInToJoin, TExprContext& ctx, bool prefixOnly) 
-{ 
+} // namespace
+
+TExprNode::TPtr TryConvertSqlInPredicatesToJoins(const TCoFlatMapBase& flatMap,
+    TShouldConvertSqlInToJoinPredicate shouldConvertSqlInToJoin, TExprContext& ctx, bool prefixOnly)
+{
     // FlatMap input should be List<Struct<...>> to be accepted as EquiJoin input
     auto inputType = flatMap.Input().Ref().GetTypeAnn();
     if (inputType->GetKind() != ETypeAnnotationKind::List ||
@@ -2984,38 +2984,38 @@ TExprNode::TPtr TryConvertSqlInPredicatesToJoins(const TCoFlatMapBase& flatMap,
         return {};
     }
 
-    TCoLambda lambda = flatMap.Lambda(); 
+    TCoLambda lambda = flatMap.Lambda();
     if (!lambda.Body().Maybe<TCoConditionalValueBase>()) {
-        return {}; 
-    } 
- 
+        return {};
+    }
+
     TCoConditionalValueBase conditional(lambda.Body().Ptr());
     TPredicateChain chain;
     auto lambdaArg = lambda.Ptr()->Head().HeadPtr();
     auto sqlInTail = SplitPredicateChain(conditional.Predicate().Ptr(), lambdaArg, shouldConvertSqlInToJoin, chain, ctx);
- 
-    if (!chain.empty()) { 
-        if (chain.front().ConvertibleToJoin) { 
+
+    if (!chain.empty()) {
+        if (chain.front().ConvertibleToJoin) {
             return ConvertSqlInPredicatesPrefixToJoins(flatMap.Ptr(), chain, sqlInTail, ctx);
-        } 
- 
+        }
+
         if (sqlInTail && !prefixOnly) {
-            YQL_CLOG(DEBUG, Core) << "FlatMapOverNonJoinableSqlInChain of size " << chain.size(); 
-            TExprNode::TListType predicates; 
-            predicates.reserve(chain.size()); 
-            for (auto& it : chain) { 
-                predicates.emplace_back(std::move(it.Pred)); 
-            } 
-            auto prefixPred = ctx.NewCallable(flatMap.Pos(), "And", std::move(predicates)); 
- 
+            YQL_CLOG(DEBUG, Core) << "FlatMapOverNonJoinableSqlInChain of size " << chain.size();
+            TExprNode::TListType predicates;
+            predicates.reserve(chain.size());
+            for (auto& it : chain) {
+                predicates.emplace_back(std::move(it.Pred));
+            }
+            auto prefixPred = ctx.NewCallable(flatMap.Pos(), "And", std::move(predicates));
+
             auto innerFlatMap = RebuildFlatmapOverPartOfPredicate(flatMap.Ptr(), flatMap.Input().Ptr(), prefixPred, false, ctx);
             auto outerFlatMap = RebuildFlatmapOverPartOfPredicate(flatMap.Ptr(), innerFlatMap, sqlInTail, true, ctx);
             return ctx.RenameNode(*outerFlatMap,
                 outerFlatMap->Content() == "OrderedFlatMap" ? "OrderedFlatMapToEquiJoin" : "FlatMapToEquiJoin");
-        } 
-    } 
- 
-    return {}; 
+        }
+    }
+
+    return {};
 }
 
 TExprNode::TPtr FoldParseAfterSerialize(const TExprNode::TPtr& node, const TStringBuf parseUdfName, const THashSet<TStringBuf>& serializeUdfNames) {
@@ -3545,11 +3545,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     };
 
     map["ExtractMembers"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
-        if (IsSameAnnotation(*node->GetTypeAnn(), *node->Head().GetTypeAnn())) { 
-            YQL_CLOG(DEBUG, Core) << "Drop redundant ExtractMembers over " << node->Head().Content(); 
-            return node->HeadPtr(); 
-        } 
- 
+        if (IsSameAnnotation(*node->GetTypeAnn(), *node->Head().GetTypeAnn())) {
+            YQL_CLOG(DEBUG, Core) << "Drop redundant ExtractMembers over " << node->Head().Content();
+            return node->HeadPtr();
+        }
+
         if (node->Head().IsCallable(node->Content())) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             return ctx.ChangeChild(*node, 0U, node->Head().HeadPtr());
@@ -7233,4 +7233,4 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     };
 }
 
-} // namespace NYql 
+} // namespace NYql

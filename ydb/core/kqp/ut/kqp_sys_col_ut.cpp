@@ -33,12 +33,12 @@ TStreamPartIterator ExecuteStreamQuery(TKikimrRunner& kikimr, const TString& que
     return it;
 }
 
-void SelectRowAsteriskCommon(bool useNewEngine) { 
+void SelectRowAsteriskCommon(bool useNewEngine) {
     TStringBuilder query;
     query << R"(
-        PRAGMA kikimr.UseNewEngine = ")" << (useNewEngine ? "true" : "false") << R"("; 
+        PRAGMA kikimr.UseNewEngine = ")" << (useNewEngine ? "true" : "false") << R"(";
         PRAGMA kikimr.EnableSystemColumns = "true";
-        SELECT * FROM `/Root/TwoShard` WHERE Key = 1; 
+        SELECT * FROM `/Root/TwoShard` WHERE Key = 1;
     )";
     auto result = ExecuteDataQuery(query);
     UNIT_ASSERT(result.GetResultSets().size());
@@ -46,12 +46,12 @@ void SelectRowAsteriskCommon(bool useNewEngine) {
         FormatResultSetYson(result.GetResultSet(0)));
 }
 
-void SelectRowByIdCommon(bool useNewEngine) { 
+void SelectRowByIdCommon(bool useNewEngine) {
     TStringBuilder query;
     query << R"(
-        PRAGMA kikimr.UseNewEngine = ")" << (useNewEngine ? "true" : "false") << R"("; 
+        PRAGMA kikimr.UseNewEngine = ")" << (useNewEngine ? "true" : "false") << R"(";
         PRAGMA kikimr.EnableSystemColumns = "true";
-        SELECT * FROM `/Root/TwoShard` WHERE _yql_partition_id = 72075186224037888ul; 
+        SELECT * FROM `/Root/TwoShard` WHERE _yql_partition_id = 72075186224037888ul;
     )";
     auto result = ExecuteDataQuery(query);
     UNIT_ASSERT(result.GetResultSets().size());
@@ -59,12 +59,12 @@ void SelectRowByIdCommon(bool useNewEngine) {
         FormatResultSetYson(result.GetResultSet(0)));
 }
 
-void SelectRangeCommon(bool useNewEngine) { 
+void SelectRangeCommon(bool useNewEngine) {
     TStringBuilder query;
     query << R"(
-        PRAGMA kikimr.UseNewEngine = ")" << (useNewEngine ? "true" : "false") << R"("; 
+        PRAGMA kikimr.UseNewEngine = ")" << (useNewEngine ? "true" : "false") << R"(";
         PRAGMA kikimr.EnableSystemColumns = "true";
-        SELECT _yql_partition_id FROM `/Root/TwoShard` WHERE Key < 3; 
+        SELECT _yql_partition_id FROM `/Root/TwoShard` WHERE Key < 3;
     )";
     auto result = ExecuteDataQuery(query);
     UNIT_ASSERT(result.GetResultSets().size());
@@ -74,27 +74,27 @@ void SelectRangeCommon(bool useNewEngine) {
 
 Y_UNIT_TEST_SUITE(KqpSysColV0) {
     Y_UNIT_TEST(SelectRowAsterisk) {
-        SelectRowAsteriskCommon(false); 
+        SelectRowAsteriskCommon(false);
     }
 
     Y_UNIT_TEST(SelectRowAsteriskNewEngine) {
-        SelectRowAsteriskCommon(true); 
+        SelectRowAsteriskCommon(true);
     }
 
     Y_UNIT_TEST(SelectRowById) {
-        SelectRowByIdCommon(false); 
+        SelectRowByIdCommon(false);
     }
 
     Y_UNIT_TEST(SelectRowByIdNewEngine) {
-        SelectRowByIdCommon(true); 
+        SelectRowByIdCommon(true);
     }
 
     Y_UNIT_TEST(SelectRange) {
-        SelectRangeCommon(false); 
+        SelectRangeCommon(false);
     }
 
     Y_UNIT_TEST(SelectRangeNewEngine) {
-        SelectRangeCommon(true); 
+        SelectRangeCommon(true);
     }
 
     Y_UNIT_TEST(UpdateAndDelete) {
@@ -202,93 +202,93 @@ Y_UNIT_TEST_SUITE(KqpSysColV0) {
 }
 
 Y_UNIT_TEST_SUITE(KqpSysColV1) {
-    Y_UNIT_TEST_NEW_ENGINE(SelectRowAsterisk) { 
-        auto query = Q_(R"( 
+    Y_UNIT_TEST_NEW_ENGINE(SelectRowAsterisk) {
+        auto query = Q_(R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
             SELECT * FROM `/Root/TwoShard` WHERE Key = 1;
-        )"); 
+        )");
         auto result = ExecuteDataQuery(query);
         UNIT_ASSERT(result.GetResultSets().size());
         CompareYson(R"([[[1u];["One"];[-1]]])",
             FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SelectRowById) { 
-        auto query = Q_(R"( 
+    Y_UNIT_TEST_NEW_ENGINE(SelectRowById) {
+        auto query = Q_(R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
             SELECT * FROM `/Root/TwoShard` WHERE _yql_partition_id = 72075186224037888ul;
-        )"); 
+        )");
         auto result = ExecuteDataQuery(query);
         UNIT_ASSERT(result.GetResultSets().size());
         CompareYson(R"([[[1u];["One"];[-1]];[[2u];["Two"];[0]];[[3u];["Three"];[1]]])",
             FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SelectRange) { 
-        auto query = Q_(R"( 
+    Y_UNIT_TEST_NEW_ENGINE(SelectRange) {
+        auto query = Q_(R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
             SELECT _yql_partition_id FROM `/Root/TwoShard` WHERE Key < 3;
-        )"); 
+        )");
         auto result = ExecuteDataQuery(query);
         UNIT_ASSERT(result.GetResultSets().size());
         CompareYson(R"([[[72075186224037888u]];[[72075186224037888u]]])",
             FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(UpdateAndDelete) { 
+    Y_UNIT_TEST_NEW_ENGINE(UpdateAndDelete) {
         TKikimrRunner kikimr;
         {
-            auto query = Q_(R"( 
+            auto query = Q_(R"(
                 PRAGMA kikimr.EnableSystemColumns = "true";
                 REPLACE INTO `/Root/TwoShard` (Key, Value1, Value2)
                 VALUES (4u, "Four", -4);
-            )"); 
+            )");
             auto result = ExecuteDataQuery(kikimr, query);
         }
         {
-            auto query = Q_(R"( 
+            auto query = Q_(R"(
                 PRAGMA kikimr.EnableSystemColumns = "true";
                 SELECT COUNT(*) FROM `/Root/TwoShard`
                 WHERE _yql_partition_id = 72075186224037888ul AND Value2 = -4;
-            )"); 
+            )");
             auto result = ExecuteDataQuery(kikimr, query);
             UNIT_ASSERT(result.GetResultSets().size());
             CompareYson(R"([[1u]])",
                 FormatResultSetYson(result.GetResultSet(0)));
         }
         {
-            auto query = Q_(R"( 
+            auto query = Q_(R"(
                 PRAGMA kikimr.EnableSystemColumns = "true";
                 UPDATE `/Root/TwoShard` SET Value2 = -44
                 WHERE _yql_partition_id = 72075186224037888ul AND Value2 = -4;
-            )"); 
+            )");
             ExecuteDataQuery(kikimr, query);
         }
         {
-            auto query = Q_(R"( 
+            auto query = Q_(R"(
                 PRAGMA kikimr.EnableSystemColumns = "true";
                 SELECT COUNT(*) FROM `/Root/TwoShard`
                 WHERE _yql_partition_id = 72075186224037888ul AND Value2 = -44;
-            )"); 
+            )");
             auto result = ExecuteDataQuery(kikimr, query);
             UNIT_ASSERT(result.GetResultSets().size());
             CompareYson(R"([[1u]])",
                 FormatResultSetYson(result.GetResultSet(0)));
         }
         {
-            auto query = Q_(R"( 
+            auto query = Q_(R"(
                 PRAGMA kikimr.EnableSystemColumns = "true";
                 DELETE FROM `/Root/TwoShard`
                 WHERE _yql_partition_id = 72075186224037888ul AND Value2 = -44;
-            )"); 
+            )");
             auto result = ExecuteDataQuery(kikimr, query);
         }
         {
-            auto query = Q_(R"( 
+            auto query = Q_(R"(
                 PRAGMA kikimr.EnableSystemColumns = "true";
                 SELECT COUNT(*) FROM `/Root/TwoShard`
                 WHERE _yql_partition_id = 72075186224037888ul AND Value2 = -44;
-            )"); 
+            )");
             auto result = ExecuteDataQuery(kikimr, query);
             UNIT_ASSERT(result.GetResultSets().size());
             CompareYson(R"([[0u]])",
@@ -296,42 +296,42 @@ Y_UNIT_TEST_SUITE(KqpSysColV1) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(InnerJoinTables) { 
-        auto query = Q_(R"( 
+    Y_UNIT_TEST_NEW_ENGINE(InnerJoinTables) {
+        auto query = Q_(R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
             SELECT * FROM `/Root/Join1` AS t1
             INNER JOIN `/Root/Join2` AS t2
             ON t1.Fk21 == t2.Key1 AND t1.Fk22 == t2.Key2
             WHERE t1.Value == "Value5" AND t2.Value2 == "Value31";
-        )"); 
+        )");
         auto result = ExecuteDataQuery(query);
         UNIT_ASSERT(result.GetResultSets().size());
         CompareYson(R"([[[108u];["One"];[8];["Value5"];[108u];["One"];#;["Value31"]]])",
             FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(InnerJoinSelect) { 
-        auto query = Q_(R"( 
+    Y_UNIT_TEST_NEW_ENGINE(InnerJoinSelect) {
+        auto query = Q_(R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
             SELECT * FROM `/Root/Join1` AS t1
             INNER JOIN (SELECT Key1, Key2, Value2 FROM `/Root/Join2`) AS t2
             ON t1.Fk21 == t2.Key1 AND t1.Fk22 == t2.Key2
             WHERE t1.Value == "Value5" AND t2.Value2 == "Value31";
-        )"); 
+        )");
         auto result = ExecuteDataQuery(query);
         UNIT_ASSERT(result.GetResultSets().size());
         CompareYson(R"([[[108u];["One"];[8];["Value5"];[108u];["One"];["Value31"]]])",
             FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(InnerJoinSelectAsterisk) { 
-        auto query = Q_(R"( 
+    Y_UNIT_TEST_NEW_ENGINE(InnerJoinSelectAsterisk) {
+        auto query = Q_(R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
             SELECT * FROM `/Root/Join1` AS t1
             INNER JOIN (SELECT * FROM `/Root/Join2`) AS t2
             ON t1.Fk21 == t2.Key1 AND t1.Fk22 == t2.Key2
             WHERE t1.Value == "Value5" AND t2.Value2 == "Value31";
-        )"); 
+        )");
         auto result = ExecuteDataQuery(query);
         UNIT_ASSERT(result.GetResultSets().size());
         CompareYson(R"([[[108u];["One"];[8];["Value5"];[108u];["One"];#;["Value31"]]])",
@@ -408,5 +408,5 @@ Y_UNIT_TEST_SUITE(KqpSysColV1) {
     }
 }
 
-} // namespace NKqp 
+} // namespace NKqp
 } // namespace NKikimr

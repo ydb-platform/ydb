@@ -570,56 +570,56 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, const TMaybe<bool>& useNewEngine, T
     return ret;
 }
 
-TExprNode::TPtr KiBuildResult(TExprBase node,  const TString& cluster, TExprContext& ctx) { 
-    if (!node.Maybe<TResFill>()) { 
+TExprNode::TPtr KiBuildResult(TExprBase node,  const TString& cluster, TExprContext& ctx) {
+    if (!node.Maybe<TResFill>()) {
         return node.Ptr();
     }
 
-    auto resFill = node.Cast<TResFill>(); 
+    auto resFill = node.Cast<TResFill>();
 
-    if (resFill.DelegatedSource().Value() != KikimrProviderName) { 
+    if (resFill.DelegatedSource().Value() != KikimrProviderName) {
         return node.Ptr();
     }
 
-    if (resFill.Data().Maybe<TCoNth>().Tuple().Maybe<TCoRight>().Input().Maybe<TKiExecDataQuery>()) { 
+    if (resFill.Data().Maybe<TCoNth>().Tuple().Maybe<TCoRight>().Input().Maybe<TKiExecDataQuery>()) {
         return node.Ptr();
     }
 
-    auto dataQuery = Build<TKiDataQuery>(ctx, node.Pos()) 
-        .Operations() 
-            .Build() 
-        .Results() 
-            .Add() 
-                .Value(resFill.Data()) 
-                .Columns(GetResultColumns(resFill, ctx)) 
-                .RowsLimit().Build(GetResultRowsLimit(resFill)) 
+    auto dataQuery = Build<TKiDataQuery>(ctx, node.Pos())
+        .Operations()
+            .Build()
+        .Results()
+            .Add()
+                .Value(resFill.Data())
+                .Columns(GetResultColumns(resFill, ctx))
+                .RowsLimit().Build(GetResultRowsLimit(resFill))
                 .Build()
             .Build()
-        .Effects() 
+        .Effects()
             .Build()
-        .Done(); 
- 
-    auto exec = Build<TKiExecDataQuery>(ctx, node.Pos()) 
-        .World(resFill.World()) 
-        .DataSink<TKiDataSink>() 
-            .Category().Build(KikimrProviderName) 
-            .Cluster().Build(cluster) 
+        .Done();
+
+    auto exec = Build<TKiExecDataQuery>(ctx, node.Pos())
+        .World(resFill.World())
+        .DataSink<TKiDataSink>()
+            .Category().Build(KikimrProviderName)
+            .Cluster().Build(cluster)
             .Build()
-        .Query(dataQuery) 
+        .Query(dataQuery)
         .Settings()
             .Build()
-        .Ast<TCoVoid>().Build() 
+        .Ast<TCoVoid>().Build()
         .Done();
 
     auto data = Build<TCoNth>(ctx, node.Pos())
         .Tuple<TCoRight>()
-            .Input(exec) 
+            .Input(exec)
             .Build()
         .Index().Build(0)
         .Done();
 
     auto world = Build<TCoLeft>(ctx, node.Pos())
-        .Input(exec) 
+        .Input(exec)
         .Done();
 
     return ctx.ChangeChild(*ctx.ChangeChild(resFill.Ref(), 0, world.Ptr()), 3, data.Ptr());

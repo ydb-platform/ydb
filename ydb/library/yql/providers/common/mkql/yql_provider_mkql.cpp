@@ -26,37 +26,37 @@ namespace NCommon {
 
 TRuntimeNode CombineByKeyImpl(const TExprNode& node, TMkqlBuildContext& ctx) {
     NNodes::TCoCombineByKey combine(&node);
-    const bool isStreamOrFlow = combine.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream || 
-        combine.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow; 
- 
-    YQL_ENSURE(!isStreamOrFlow); 
- 
+    const bool isStreamOrFlow = combine.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream ||
+        combine.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow;
+
+    YQL_ENSURE(!isStreamOrFlow);
+
     const auto input = MkqlBuildExpr(combine.Input().Ref(), ctx);
 
     TRuntimeNode preMapList = ctx.ProgramBuilder.FlatMap(input, [&](TRuntimeNode item) {
         return MkqlBuildLambda(combine.PreMapLambda().Ref(), ctx, {item});
     });
 
-    const auto dict = ctx.ProgramBuilder.ToHashedDict(preMapList, true, [&](TRuntimeNode item) { 
-        return MkqlBuildLambda(combine.KeySelectorLambda().Ref(), ctx, {item}); 
-    }, [&](TRuntimeNode item) { 
-        return item; 
-    }); 
+    const auto dict = ctx.ProgramBuilder.ToHashedDict(preMapList, true, [&](TRuntimeNode item) {
+        return MkqlBuildLambda(combine.KeySelectorLambda().Ref(), ctx, {item});
+    }, [&](TRuntimeNode item) {
+        return item;
+    });
 
-    const auto values = ctx.ProgramBuilder.DictItems(dict); 
-    return ctx.ProgramBuilder.FlatMap(values, [&](TRuntimeNode item) { 
-        auto key = ctx.ProgramBuilder.Nth(item, 0); 
-        auto payloadList = ctx.ProgramBuilder.Nth(item, 1); 
-        auto fold1 = ctx.ProgramBuilder.Fold1(payloadList, [&](TRuntimeNode item2) { 
-            return MkqlBuildLambda(combine.InitHandlerLambda().Ref(), ctx, {key, item2}); 
-        }, [&](TRuntimeNode item2, TRuntimeNode state) { 
-            return MkqlBuildLambda(combine.UpdateHandlerLambda().Ref(), ctx, {key, item2, state}); 
+    const auto values = ctx.ProgramBuilder.DictItems(dict);
+    return ctx.ProgramBuilder.FlatMap(values, [&](TRuntimeNode item) {
+        auto key = ctx.ProgramBuilder.Nth(item, 0);
+        auto payloadList = ctx.ProgramBuilder.Nth(item, 1);
+        auto fold1 = ctx.ProgramBuilder.Fold1(payloadList, [&](TRuntimeNode item2) {
+            return MkqlBuildLambda(combine.InitHandlerLambda().Ref(), ctx, {key, item2});
+        }, [&](TRuntimeNode item2, TRuntimeNode state) {
+            return MkqlBuildLambda(combine.UpdateHandlerLambda().Ref(), ctx, {key, item2, state});
         });
-        auto res = ctx.ProgramBuilder.FlatMap(fold1, [&](TRuntimeNode state) { 
-            return MkqlBuildLambda(combine.FinishHandlerLambda().Ref(), ctx, {key, state}); 
+        auto res = ctx.ProgramBuilder.FlatMap(fold1, [&](TRuntimeNode state) {
+            return MkqlBuildLambda(combine.FinishHandlerLambda().Ref(), ctx, {key, state});
         });
-        return res; 
-    }); 
+        return res;
+    });
 }
 
 namespace {
@@ -1656,24 +1656,24 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         }, isCompact, itemsCount.GetOrElse(0));
     });
 
-    AddCallable("SqueezeToDict", [](const TExprNode& node, TMkqlBuildContext& ctx) { 
-        const auto stream = MkqlBuildExpr(node.Head(), ctx); 
-        TMaybe<bool> isMany; 
-        TMaybe<bool> isHashed; 
-        TMaybe<ui64> itemsCount; 
-        bool isCompact; 
-        if (const auto error = ParseToDictSettings(node, ctx.ExprCtx, isMany, isHashed, itemsCount, isCompact)) { 
-            ythrow TNodeException(node) << error->Message; 
-        } 
- 
-        const auto factory = *isHashed ? &TProgramBuilder::SqueezeToHashedDict : &TProgramBuilder::SqueezeToSortedDict; 
-        return (ctx.ProgramBuilder.*factory)(stream, *isMany, [&](TRuntimeNode item) { 
-            return MkqlBuildLambda(*node.Child(1), ctx, {item}); 
-        }, [&](TRuntimeNode item) { 
-            return MkqlBuildLambda(*node.Child(2), ctx, {item}); 
-        }, isCompact, itemsCount.GetOrElse(0)); 
-    }); 
- 
+    AddCallable("SqueezeToDict", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto stream = MkqlBuildExpr(node.Head(), ctx);
+        TMaybe<bool> isMany;
+        TMaybe<bool> isHashed;
+        TMaybe<ui64> itemsCount;
+        bool isCompact;
+        if (const auto error = ParseToDictSettings(node, ctx.ExprCtx, isMany, isHashed, itemsCount, isCompact)) {
+            ythrow TNodeException(node) << error->Message;
+        }
+
+        const auto factory = *isHashed ? &TProgramBuilder::SqueezeToHashedDict : &TProgramBuilder::SqueezeToSortedDict;
+        return (ctx.ProgramBuilder.*factory)(stream, *isMany, [&](TRuntimeNode item) {
+            return MkqlBuildLambda(*node.Child(1), ctx, {item});
+        }, [&](TRuntimeNode item) {
+            return MkqlBuildLambda(*node.Child(2), ctx, {item});
+        }, isCompact, itemsCount.GetOrElse(0));
+    });
+
     AddCallable("NarrowSqueezeToDict", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto stream = MkqlBuildExpr(node.Head(), ctx);
         TMaybe<bool> isMany;

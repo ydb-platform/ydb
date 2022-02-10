@@ -541,7 +541,7 @@ TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActor
             << ": " << message);
     };
 
-    ComputeCtx = MakeHolder<TKqpDatashardComputeContext>(self, EngineHostCounters, now); 
+    ComputeCtx = MakeHolder<TKqpDatashardComputeContext>(self, EngineHostCounters, now);
     ComputeCtx->Database = &txc.DB;
 
     auto kqpApplyCtx = MakeHolder<TKqpDatashardApplyContext>();
@@ -549,64 +549,64 @@ TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActor
 
     KqpApplyCtx.Reset(kqpApplyCtx.Release());
 
-    KqpAlloc = MakeHolder<TScopedAlloc>(TAlignedPagePoolCounters(), AppData(ctx)->FunctionRegistry->SupportsSizedAllocators()); 
-    KqpTypeEnv = MakeHolder<TTypeEnvironment>(*KqpAlloc); 
-    KqpAlloc->Release(); 
- 
+    KqpAlloc = MakeHolder<TScopedAlloc>(TAlignedPagePoolCounters(), AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
+    KqpTypeEnv = MakeHolder<TTypeEnvironment>(*KqpAlloc);
+    KqpAlloc->Release();
+
     KqpExecCtx.FuncRegistry = AppData(ctx)->FunctionRegistry;
     KqpExecCtx.ComputeCtx = ComputeCtx.Get();
     KqpExecCtx.ComputationFactory = GetKqpDatashardComputeFactory(ComputeCtx.Get());
     KqpExecCtx.RandomProvider = TAppData::RandomProvider.Get();
     KqpExecCtx.TimeProvider = TAppData::TimeProvider.Get();
     KqpExecCtx.ApplyCtx = KqpApplyCtx.Get();
-    KqpExecCtx.Alloc = KqpAlloc.Get(); 
-    KqpExecCtx.TypeEnv = KqpTypeEnv.Get(); 
+    KqpExecCtx.Alloc = KqpAlloc.Get();
+    KqpExecCtx.TypeEnv = KqpTypeEnv.Get();
 }
 
-TEngineBay::~TEngineBay() { 
-    if (KqpTasksRunner) { 
-        KqpTasksRunner.Reset(); 
-        auto guard = TGuard(*KqpAlloc); 
-        KqpTypeEnv.Reset(); 
-    } 
-} 
- 
-void TEngineBay::AddReadRange(const TTableId& tableId, const TVector<ui32>& columns, const TTableRange& range, 
-                              const TVector<NScheme::TTypeId>& keyTypes, ui64 itemsLimit, bool reverse) 
+TEngineBay::~TEngineBay() {
+    if (KqpTasksRunner) {
+        KqpTasksRunner.Reset();
+        auto guard = TGuard(*KqpAlloc);
+        KqpTypeEnv.Reset();
+    }
+}
+
+void TEngineBay::AddReadRange(const TTableId& tableId, const TVector<ui32>& columns, const TTableRange& range,
+                              const TVector<NScheme::TTypeId>& keyTypes, ui64 itemsLimit, bool reverse)
 {
-    TVector<TKeyDesc::TColumnOp> columnOps; 
-    columnOps.reserve(columns.size()); 
-    for (ui32 column : columns) { 
-        TKeyDesc::TColumnOp op; 
-        op.Column = column; 
-        op.Operation = TKeyDesc::EColumnOperation::Read; 
-        columnOps.emplace_back(std::move(op)); 
-    } 
- 
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, 
-        "-- AddReadRange: " << DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry)); 
- 
-    auto desc = MakeHolder<TKeyDesc>(tableId, range, TKeyDesc::ERowOperation::Read, keyTypes, columnOps, itemsLimit, 
-                                     0 /* bytesLimit */, reverse); 
-    Info.Keys.emplace_back(TValidatedKey(std::move(desc), /* isWrite */ false)); 
-    // Info.Keys.back().IsResultPart = not a lock key? // TODO: KIKIMR-11134 
+    TVector<TKeyDesc::TColumnOp> columnOps;
+    columnOps.reserve(columns.size());
+    for (ui32 column : columns) {
+        TKeyDesc::TColumnOp op;
+        op.Column = column;
+        op.Operation = TKeyDesc::EColumnOperation::Read;
+        columnOps.emplace_back(std::move(op));
+    }
+
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+        "-- AddReadRange: " << DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry));
+
+    auto desc = MakeHolder<TKeyDesc>(tableId, range, TKeyDesc::ERowOperation::Read, keyTypes, columnOps, itemsLimit,
+                                     0 /* bytesLimit */, reverse);
+    Info.Keys.emplace_back(TValidatedKey(std::move(desc), /* isWrite */ false));
+    // Info.Keys.back().IsResultPart = not a lock key? // TODO: KIKIMR-11134
     ++Info.ReadsCount;
     Info.Loaded = true;
 }
 
-void TEngineBay::AddWriteRange(const TTableId& tableId, const TTableRange& range, 
-                               const TVector<NScheme::TTypeId>& keyTypes) 
-{ 
-    auto desc = MakeHolder<TKeyDesc>(tableId, range, TKeyDesc::ERowOperation::Update, 
-                                     keyTypes, TVector<TKeyDesc::TColumnOp>()); 
-    Info.Keys.emplace_back(TValidatedKey(std::move(desc), /* isWrite */ true)); 
-    ++Info.WritesCount; 
-    if (!range.Point) { 
-        ++Info.DynKeysCount; 
-    } 
-    Info.Loaded = true; 
-} 
- 
+void TEngineBay::AddWriteRange(const TTableId& tableId, const TTableRange& range,
+                               const TVector<NScheme::TTypeId>& keyTypes)
+{
+    auto desc = MakeHolder<TKeyDesc>(tableId, range, TKeyDesc::ERowOperation::Update,
+                                     keyTypes, TVector<TKeyDesc::TColumnOp>());
+    Info.Keys.emplace_back(TValidatedKey(std::move(desc), /* isWrite */ true));
+    ++Info.WritesCount;
+    if (!range.Point) {
+        ++Info.DynKeysCount;
+    }
+    Info.Loaded = true;
+}
+
 TEngineBay::TSizes TEngineBay::CalcSizes(bool needsTotalKeysSize) const {
     Y_VERIFY(EngineHost);
 
@@ -686,25 +686,25 @@ void TEngineBay::SetLockTxId(ui64 lockTxId) {
     }
 }
 
-NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(const NKikimrTxDataShard::TKqpTransaction& tx) { 
+NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(const NKikimrTxDataShard::TKqpTransaction& tx) {
     if (!KqpTasksRunner) {
-        NYql::NDq::TDqTaskRunnerSettings settings; 
- 
-        if (tx.HasRuntimeSettings() && tx.GetRuntimeSettings().HasStatsMode()) { 
-            auto statsMode = tx.GetRuntimeSettings().GetStatsMode(); 
-            settings.CollectBasicStats = statsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC; 
-            settings.CollectProfileStats = statsMode >= NYql::NDqProto::DQ_STATS_MODE_PROFILE; 
-        } else { 
-            settings.CollectBasicStats = false; 
-            settings.CollectProfileStats = false; 
-        } 
- 
+        NYql::NDq::TDqTaskRunnerSettings settings;
+
+        if (tx.HasRuntimeSettings() && tx.GetRuntimeSettings().HasStatsMode()) {
+            auto statsMode = tx.GetRuntimeSettings().GetStatsMode();
+            settings.CollectBasicStats = statsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC;
+            settings.CollectProfileStats = statsMode >= NYql::NDqProto::DQ_STATS_MODE_PROFILE;
+        } else {
+            settings.CollectBasicStats = false;
+            settings.CollectProfileStats = false;
+        }
+
         settings.OptLLVM = "OFF";
-        settings.TerminateOnError = false; 
-        settings.AllowGeneratorsInUnboxedValues = false; 
- 
-        KqpAlloc->SetLimit(10_MB); 
-        KqpTasksRunner = NKqp::CreateKqpTasksRunner(tx.GetTasks(), KqpExecCtx, settings, KqpLogFunc); 
+        settings.TerminateOnError = false;
+        settings.AllowGeneratorsInUnboxedValues = false;
+
+        KqpAlloc->SetLimit(10_MB);
+        KqpTasksRunner = NKqp::CreateKqpTasksRunner(tx.GetTasks(), KqpExecCtx, settings, KqpLogFunc);
     }
 
     return *KqpTasksRunner;

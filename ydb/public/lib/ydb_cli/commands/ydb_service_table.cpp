@@ -519,7 +519,7 @@ void TCommandExecuteQuery::PrintScanQueryResponse(NTable::TScanQueryPartIterator
             if (streamPart.HasResultSet()) {
                 printer.Print(streamPart.GetResultSet());
             }
- 
+
             if (streamPart.HasQueryStats()) {
                 const auto& queryStats = streamPart.GetQueryStats();
                 statsStr << Endl << queryStats.ToString(false) << Endl;
@@ -529,7 +529,7 @@ void TCommandExecuteQuery::PrintScanQueryResponse(NTable::TScanQueryPartIterator
                     statsStr << "Full statistics:" << Endl << *plan << Endl;
                 }
             }
-        } 
+        }
     } // TResultSetPrinter destructor should be called before printing stats
 
     if (statsStr.Size()) {

@@ -450,10 +450,10 @@ public:
         const TUnaryLambda& payloadSelector, bool isCompact = false, ui64 itemsCountHint = 0);
     TRuntimeNode ToHashedDict(TRuntimeNode list, bool all, const TUnaryLambda& keySelector,
         const TUnaryLambda& payloadSelector, bool isCompact = false, ui64 itemsCountHint = 0);
-    TRuntimeNode SqueezeToSortedDict(TRuntimeNode stream, bool all, const TUnaryLambda& keySelector, 
-        const TUnaryLambda& payloadSelector, bool isCompact = false, ui64 itemsCountHint = 0); 
-    TRuntimeNode SqueezeToHashedDict(TRuntimeNode stream, bool all, const TUnaryLambda& keySelector, 
-        const TUnaryLambda& payloadSelector, bool isCompact = false, ui64 itemsCountHint = 0); 
+    TRuntimeNode SqueezeToSortedDict(TRuntimeNode stream, bool all, const TUnaryLambda& keySelector,
+        const TUnaryLambda& payloadSelector, bool isCompact = false, ui64 itemsCountHint = 0);
+    TRuntimeNode SqueezeToHashedDict(TRuntimeNode stream, bool all, const TUnaryLambda& keySelector,
+        const TUnaryLambda& payloadSelector, bool isCompact = false, ui64 itemsCountHint = 0);
     TRuntimeNode NarrowSqueezeToSortedDict(TRuntimeNode stream, bool all, const TNarrowLambda& keySelector,
         const TNarrowLambda& payloadSelector, bool isCompact = false, ui64 itemsCountHint = 0);
     TRuntimeNode NarrowSqueezeToHashedDict(TRuntimeNode stream, bool all, const TNarrowLambda& keySelector,
@@ -656,7 +656,7 @@ private:
 
     TRuntimeNode ToDict(TRuntimeNode list, bool multi, const TUnaryLambda& keySelector,
         const TUnaryLambda& payloadSelector, std::string_view callableName, bool isCompact, ui64 itemsCountHint);
-    TRuntimeNode SqueezeToDict(TRuntimeNode stream, bool multi, const TUnaryLambda& keySelector, 
+    TRuntimeNode SqueezeToDict(TRuntimeNode stream, bool multi, const TUnaryLambda& keySelector,
         const TUnaryLambda& payloadSelector, std::string_view callableName, bool isCompact, ui64 itemsCountHint);
     TRuntimeNode NarrowSqueezeToDict(TRuntimeNode stream, bool multi, const TNarrowLambda& keySelector,
         const TNarrowLambda& payloadSelector, std::string_view callableName, bool isCompact, ui64 itemsCountHint);

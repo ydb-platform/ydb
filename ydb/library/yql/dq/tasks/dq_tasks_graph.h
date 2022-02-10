@@ -57,7 +57,7 @@ struct TStageInfo : private TMoveOnly {
                 OutputsCount = 1;
             }
         } else {
-            YQL_ENSURE(resultType->GetKind() == ETypeAnnotationKind::Void, "got " << *resultType); 
+            YQL_ENSURE(resultType->GetKind() == ETypeAnnotationKind::Void, "got " << *resultType);
             OutputsCount = 0;
         }
     }
@@ -86,7 +86,7 @@ struct TChannel {
     ui32 SrcOutputIndex = 0;
     ui64 DstTask = 0;
     ui32 DstInputIndex = 0;
-    bool InMemory = true; 
+    bool InMemory = true;
     NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
 };
 
@@ -226,11 +226,11 @@ public:
         return GetStageInfo(TStageId(txId, stage.Ref().UniqueId()));
     }
 
-    const TStageInfoType& GetStageInfo(const NNodes::TDqStageBase& stage) const { 
+    const TStageInfoType& GetStageInfo(const NNodes::TDqStageBase& stage) const {
         return GetStageInfo(0, stage);
     }
 
-    TStageInfoType& GetStageInfo(const NNodes::TDqStageBase& stage) { 
+    TStageInfoType& GetStageInfo(const NNodes::TDqStageBase& stage) {
         return GetStageInfo(0, stage);
     }
 

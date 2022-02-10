@@ -83,22 +83,22 @@ void CollectQueryStats(const TActorContext& ctx, const NKqpProto::TKqpStatsQuery
     shardsCpuTime.SetMin(Max<ui64>());
     computeCpuTime.SetMin(Max<ui64>());
 
-    auto aggregate = [] (NKikimrSysView::TStatsAggr& to, const NYql::NDqProto::TDqStatsAggr& from) { 
+    auto aggregate = [] (NKikimrSysView::TStatsAggr& to, const NYql::NDqProto::TDqStatsAggr& from) {
         to.SetMin(std::min(to.GetMin(), from.GetMin()));
         to.SetMax(std::max(to.GetMax(), from.GetMax()));
         to.SetSum(to.GetSum() + from.GetSum());
         to.SetCnt(to.GetCnt() + from.GetCnt());
     };
 
-    for (const NYql::NDqProto::TDqExecutionStats& exec : queryStats->GetExecutions()) { 
-        NKqpProto::TKqpExecutionExtraStats execExtra; 
-        if (exec.HasExtra()) { 
-            bool ok = exec.GetExtra().UnpackTo(&execExtra); 
-            Y_UNUSED(ok); 
-        } 
+    for (const NYql::NDqProto::TDqExecutionStats& exec : queryStats->GetExecutions()) {
+        NKqpProto::TKqpExecutionExtraStats execExtra;
+        if (exec.HasExtra()) {
+            bool ok = exec.GetExtra().UnpackTo(&execExtra);
+            Y_UNUSED(ok);
+        }
 
-        dataStats.SetPartitionCount(dataStats.GetPartitionCount() + execExtra.GetAffectedShards()); 
- 
+        dataStats.SetPartitionCount(dataStats.GetPartitionCount() + execExtra.GetAffectedShards());
+
         for (auto& table : exec.GetTables()) {
             dataStats.SetReadRows(dataStats.GetReadRows() + table.GetReadRows());
             dataStats.SetReadBytes(dataStats.GetReadBytes() + table.GetReadBytes());
@@ -107,8 +107,8 @@ void CollectQueryStats(const TActorContext& ctx, const NKqpProto::TKqpStatsQuery
             dataStats.SetDeleteRows(dataStats.GetDeleteRows() + table.GetEraseRows());
         }
 
-        aggregate(shardsCpuTime, execExtra.GetShardsCpuTimeUs()); 
-        aggregate(computeCpuTime, execExtra.GetComputeCpuTimeUs()); 
+        aggregate(shardsCpuTime, execExtra.GetShardsCpuTimeUs());
+        aggregate(computeCpuTime, execExtra.GetComputeCpuTimeUs());
     }
 
     if (queryStats->HasCompilation()) {

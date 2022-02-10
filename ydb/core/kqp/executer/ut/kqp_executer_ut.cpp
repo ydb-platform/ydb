@@ -19,7 +19,7 @@ using namespace NYdb::NTable;
 
 namespace {
 
-[[maybe_unused]] 
+[[maybe_unused]]
 NKqpProto::TKqpPhyTx BuildTxPlan(const TString& sql, TIntrusivePtr<IKqpGateway> gateway,
     const TKikimrConfiguration::TPtr& config)
 {
@@ -39,14 +39,14 @@ NKqpProto::TKqpPhyTx BuildTxPlan(const TString& sql, TIntrusivePtr<IKqpGateway> 
     return phyQuery.GetTransactions(0);
 }
 
-[[maybe_unused]] 
+[[maybe_unused]]
 TIntrusivePtr<IKqpGateway> MakeIcGateway(const TKikimrRunner& kikimr) {
     auto actorSystem = kikimr.GetTestServer().GetRuntime()->GetAnyNodeActorSystem();
-    return CreateKikimrIcGateway(TString(DefaultKikimrClusterName), "/Root", TKqpGatewaySettings(), 
-        actorSystem, kikimr.GetTestServer().GetRuntime()->GetNodeId(0), TAlignedPagePoolCounters()); 
+    return CreateKikimrIcGateway(TString(DefaultKikimrClusterName), "/Root", TKqpGatewaySettings(),
+        actorSystem, kikimr.GetTestServer().GetRuntime()->GetNodeId(0), TAlignedPagePoolCounters());
 }
 
-[[maybe_unused]] 
+[[maybe_unused]]
 TKikimrParamsMap GetParamsMap(const NYdb::TParams& params) {
     TKikimrParamsMap paramsMap;
 
@@ -66,7 +66,7 @@ TKikimrParamsMap GetParamsMap(const NYdb::TParams& params) {
     return paramsMap;
 }
 
-[[maybe_unused]] 
+[[maybe_unused]]
 TKqpParamsRefMap GetParamRefsMap(const TKikimrParamsMap& paramsMap) {
     TKqpParamsRefMap refsMap;
 

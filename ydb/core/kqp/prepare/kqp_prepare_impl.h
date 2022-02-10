@@ -32,5 +32,5 @@ TMkqlExecuteResult ExecuteMkql(NYql::NNodes::TKiProgram program, TIntrusivePtr<I
 
 void LogMkqlResult(const NKikimrMiniKQL::TResult& result, NYql::TExprContext& ctx);
 
-} // namespace NKqp 
+} // namespace NKqp
 } // namespace NKikimr

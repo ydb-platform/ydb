@@ -104,63 +104,63 @@ Y_UNIT_TEST_SUITE(TMiniKQLToDictTest) {
         auto res = graph->GetValue().template Get<bool>();
         UNIT_ASSERT_VALUES_EQUAL(res, true);
     }
- 
-    Y_UNIT_TEST_LLVM(TestSqueezeToDict) { 
-        auto test = [](bool stream, bool hashed, bool multi, bool compact, bool withPayload) { 
-            Cerr << "TestSqueezeToDict [on: " << (stream ? "stream" : "flow") 
-                 << "type: " << (hashed ? "hashed" : "sorted") << ", multi: " << multi 
-                 << ", compact: " << compact << ", payload: " << withPayload << "]" << Endl; 
- 
-            TSetup<LLVM> setup; 
-            TProgramBuilder& pb = *setup.PgmBuilder; 
- 
-            TVector<TRuntimeNode> items; 
-            for (auto s : data) { 
-                items.push_back(pb.NewDataLiteral<NUdf::EDataSlot::Utf8>(s)); 
-            } 
-            Shuffle(items.begin(), items.end()); 
- 
-            auto dataType = pb.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id); 
-            auto list = pb.NewList(dataType, items); 
-            auto input = stream ? pb.Iterator(list, items) : pb.ToFlow(list); 
-            auto pgmReturn = hashed 
-                ? pb.SqueezeToHashedDict(input, multi, [](TRuntimeNode n) { return n; }, 
-                    [&pb, withPayload](TRuntimeNode n) { return withPayload ? n : pb.NewVoid(); }, compact) 
-                : pb.SqueezeToSortedDict(input, multi, [](TRuntimeNode n) { return n; }, 
-                    [&pb, withPayload](TRuntimeNode n) { return withPayload ? n : pb.NewVoid(); }, compact); 
-            if (!stream) { 
-                pgmReturn = pb.FromFlow(pgmReturn); 
-            } 
- 
-            auto graph = setup.BuildGraph(pgmReturn); 
-            NUdf::TUnboxedValue res = graph->GetValue(); 
-            UNIT_ASSERT(!res.IsSpecial()); 
- 
-            NUdf::TUnboxedValue v; 
-            auto status = res.Fetch(v); 
-            UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, status); 
- 
-            for (auto s : data) { 
-                UNIT_ASSERT_C(v.Contains(NUdf::TUnboxedValue(MakeString(s))), s); 
-            } 
-            UNIT_ASSERT(!v.Contains(NUdf::TUnboxedValue(MakeString("green cucumber")))); 
- 
-            status = res.Fetch(v); 
-            UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, status); 
-        }; 
- 
-        for (auto stream : {true, false}) { 
-            for (auto hashed : {true, false}) { 
-                for (auto multi : {true, false}) { 
-                    for (auto compact : {true, false}) { 
-                        for (auto withPayload : {true, false}) { 
-                            test(stream, hashed, multi, compact, withPayload); 
-                        } 
-                    } 
-                } 
-            } 
-        } 
-    } 
+
+    Y_UNIT_TEST_LLVM(TestSqueezeToDict) {
+        auto test = [](bool stream, bool hashed, bool multi, bool compact, bool withPayload) {
+            Cerr << "TestSqueezeToDict [on: " << (stream ? "stream" : "flow")
+                 << "type: " << (hashed ? "hashed" : "sorted") << ", multi: " << multi
+                 << ", compact: " << compact << ", payload: " << withPayload << "]" << Endl;
+
+            TSetup<LLVM> setup;
+            TProgramBuilder& pb = *setup.PgmBuilder;
+
+            TVector<TRuntimeNode> items;
+            for (auto s : data) {
+                items.push_back(pb.NewDataLiteral<NUdf::EDataSlot::Utf8>(s));
+            }
+            Shuffle(items.begin(), items.end());
+
+            auto dataType = pb.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id);
+            auto list = pb.NewList(dataType, items);
+            auto input = stream ? pb.Iterator(list, items) : pb.ToFlow(list);
+            auto pgmReturn = hashed
+                ? pb.SqueezeToHashedDict(input, multi, [](TRuntimeNode n) { return n; },
+                    [&pb, withPayload](TRuntimeNode n) { return withPayload ? n : pb.NewVoid(); }, compact)
+                : pb.SqueezeToSortedDict(input, multi, [](TRuntimeNode n) { return n; },
+                    [&pb, withPayload](TRuntimeNode n) { return withPayload ? n : pb.NewVoid(); }, compact);
+            if (!stream) {
+                pgmReturn = pb.FromFlow(pgmReturn);
+            }
+
+            auto graph = setup.BuildGraph(pgmReturn);
+            NUdf::TUnboxedValue res = graph->GetValue();
+            UNIT_ASSERT(!res.IsSpecial());
+
+            NUdf::TUnboxedValue v;
+            auto status = res.Fetch(v);
+            UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, status);
+
+            for (auto s : data) {
+                UNIT_ASSERT_C(v.Contains(NUdf::TUnboxedValue(MakeString(s))), s);
+            }
+            UNIT_ASSERT(!v.Contains(NUdf::TUnboxedValue(MakeString("green cucumber"))));
+
+            status = res.Fetch(v);
+            UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, status);
+        };
+
+        for (auto stream : {true, false}) {
+            for (auto hashed : {true, false}) {
+                for (auto multi : {true, false}) {
+                    for (auto compact : {true, false}) {
+                        for (auto withPayload : {true, false}) {
+                            test(stream, hashed, multi, compact, withPayload);
+                        }
+                    }
+                }
+            }
+        }
+    }
 #if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 23u
     Y_UNIT_TEST_LLVM(TestNarrowSqueezeToDict) {
         auto test = [](bool hashed, bool multi, bool compact, bool withPayload) {

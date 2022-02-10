@@ -42,22 +42,22 @@
             ]
         },
         {
-            "Name": "TKqlReadTableBase", 
+            "Name": "TKqlReadTableBase",
             "Base": "TCallable",
-            "Match": {"Type": "CallableBase"}, 
+            "Match": {"Type": "CallableBase"},
             "Children": [
                 {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 1, "Name": "Range", "Type": "TKqlKeyRange"},
-                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"}, 
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"} 
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
-            "Name": "TKqlReadTable", 
-            "Base": "TKqlReadTableBase", 
-            "Match": {"Type": "Callable", "Name": "KqlReadTable"} 
-        }, 
-        { 
+            "Name": "TKqlReadTable",
+            "Base": "TKqlReadTableBase",
+            "Match": {"Type": "Callable", "Name": "KqlReadTable"}
+        },
+        {
             "Name": "TKqlReadTableIndex",
             "Base": "TKqlReadTableBase",
             "Match": {"Type": "Callable", "Name": "KqlReadTableIndex"},
@@ -66,11 +66,11 @@
             ]
         },
         {
-            "Name": "TKqpReadTable", 
-            "Base": "TKqlReadTableBase", 
-            "Match": {"Type": "Callable", "Name": "KqpReadTable"} 
-        }, 
-        { 
+            "Name": "TKqpReadTable",
+            "Base": "TKqlReadTableBase",
+            "Match": {"Type": "Callable", "Name": "KqpReadTable"}
+        },
+        {
             "Name": "TKqpWideReadTable",
             "Base": "TKqlReadTableBase",
             "Match": {"Type": "Callable", "Name": "KqpWideReadTable"}
@@ -160,7 +160,7 @@
         {
             "Name": "TKqlUpsertRowsBase",
             "Base": "TKqlTableEffect",
-            "Match": {"Type": "CallableBase"}, 
+            "Match": {"Type": "CallableBase"},
             "Children": [
                 {"Index": 1, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"}
@@ -170,8 +170,8 @@
             "Name": "TKqlUpsertRows",
             "Base": "TKqlUpsertRowsBase",
             "Match": {"Type": "Callable", "Name": "KqlUpsertRows"}
-        }, 
-        { 
+        },
+        {
             "Name": "TKqlUpsertRowsIndex",
             "Base": "TKqlUpsertRowsBase",
             "Match": {"Type": "Callable", "Name": "KqlUpsertRowsIndex"}
@@ -183,27 +183,27 @@
             "Children": [
                 {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
-        }, 
-        { 
+        },
+        {
             "Name": "TKqlInsertRowsBase",
-            "Base": "TKqlTableEffect", 
+            "Base": "TKqlTableEffect",
             "Match": {"Type": "CallableBase"},
-            "Children": [ 
-                {"Index": 1, "Name": "Input", "Type": "TExprBase"}, 
-                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"}, 
-                {"Index": 3, "Name": "OnConflict", "Type": "TCoAtom", "Description": "'abort or 'revert"} 
-            ] 
-        }, 
-        { 
+            "Children": [
+                {"Index": 1, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "OnConflict", "Type": "TCoAtom", "Description": "'abort or 'revert"}
+            ]
+        },
+        {
             "Name": "TKqlUpdateRowsBase",
-            "Base": "TKqlTableEffect", 
+            "Base": "TKqlTableEffect",
             "Match": {"Type": "CallableBase"},
-            "Children": [ 
-                {"Index": 1, "Name": "Input", "Type": "TExprBase"}, 
-                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"} 
-            ] 
-        }, 
-        { 
+            "Children": [
+                {"Index": 1, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"}
+            ]
+        },
+        {
             "Name": "TKqlUpdateRows",
             "Base": "TKqlUpdateRowsBase",
             "Match": {"Type": "Callable", "Name": "TKqlUpdateRows"}
@@ -260,10 +260,10 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpPhysicalTx"},
             "Children": [
-                {"Index": 0, "Name": "Stages", "Type": "TDqPhyStageList"}, 
+                {"Index": 0, "Name": "Stages", "Type": "TDqPhyStageList"},
                 {"Index": 1, "Name": "Results", "Type": "TExprList"},
                 {"Index": 2, "Name": "ParamBindings", "Type": "TKqpParamBindingList"},
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"} 
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
@@ -276,33 +276,33 @@
             "Match": {"Type": "Callable", "Name": "KqpPhysicalQuery"},
             "Children": [
                 {"Index": 0, "Name": "Transactions", "Type": "TKqpPhysicalTxList"},
-                {"Index": 1, "Name": "Results", "Type": "TExprList"}, 
-                {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"} 
+                {"Index": 1, "Name": "Results", "Type": "TExprList"},
+                {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
-            "Name": "TKqlQueryResult", 
-            "Base": "TExprBase", 
-            "Match": {"Type": "Tuple"}, 
-            "Children": [ 
-                {"Index": 0, "Name": "Value", "Type": "TExprBase"}, 
-                {"Index": 1, "Name": "ColumnHints", "Type": "TCoAtomList"} 
-            ] 
-        }, 
-        { 
-            "Name": "TKqlQueryResultList", 
-            "ListBase": "TKqlQueryResult" 
-        }, 
-        { 
+            "Name": "TKqlQueryResult",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "Value", "Type": "TExprBase"},
+                {"Index": 1, "Name": "ColumnHints", "Type": "TCoAtomList"}
+            ]
+        },
+        {
+            "Name": "TKqlQueryResultList",
+            "ListBase": "TKqlQueryResult"
+        },
+        {
             "Name": "TKqlQuery",
             "Base": "TExprBase",
             "Match": {"Type": "Tuple"},
             "Children": [
-                {"Index": 0, "Name": "Results", "Type": "TKqlQueryResultList"}, 
+                {"Index": 0, "Name": "Results", "Type": "TKqlQueryResultList"},
                 {"Index": 1, "Name": "Effects", "Type": "TExprList"}
             ]
-        }, 
-        { 
+        },
+        {
             "Name": "TKqpEffects",
             "VarArgBase": "TExprBase",
             "Match": {"Type": "Callable", "Name": "KqpEffects"}
@@ -325,15 +325,15 @@
             "Name": "TKqpCnShuffleShard",
             "Base": "TDqConnection",
             "Match": {"Type": "Callable", "Name": "KqpCnShuffleShard"}
-        }, 
-        { 
-            "Name": "TKqpProgram", 
-            "Base": "TCallable", 
-            "Match": {"Type": "Callable", "Name": "KqpProgram"}, 
-            "Children": [ 
-                {"Index": 0, "Name": "Lambda", "Type": "TCoLambda"}, 
-                {"Index": 1, "Name": "ArgsType", "Type": "TExprBase"} 
-            ] 
+        },
+        {
+            "Name": "TKqpProgram",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpProgram"},
+            "Children": [
+                {"Index": 0, "Name": "Lambda", "Type": "TCoLambda"},
+                {"Index": 1, "Name": "ArgsType", "Type": "TExprBase"}
+            ]
         },
         {
             "Name": "TKqlDeleteRowsBase",
@@ -415,17 +415,17 @@
             "Children": [
                 {"Index": 1, "Name": "Column", "Type": "TExprBase"}
             ]
-        }, 
-        { 
-            "Name": "TKqpEnsure", 
-            "Base": "TCallable", 
-            "Match": {"Type": "Callable", "Name": "KqpEnsure"}, 
-            "Children": [ 
-                {"Index": 0, "Name": "Value", "Type": "TExprBase"}, 
-                {"Index": 1, "Name": "Predicate", "Type": "TExprBase"}, 
-                {"Index": 2, "Name": "IssueCode", "Type": "TCoAtom"}, 
-                {"Index": 3, "Name": "Message", "Type": "TExprBase"} 
-            ] 
+        },
+        {
+            "Name": "TKqpEnsure",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpEnsure"},
+            "Children": [
+                {"Index": 0, "Name": "Value", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Predicate", "Type": "TExprBase"},
+                {"Index": 2, "Name": "IssueCode", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Message", "Type": "TExprBase"}
+            ]
         }
     ]
 }

@@ -68,32 +68,32 @@ message TKqpPhyParamElementValue {
     uint32 ElementIndex = 2;
 }
 
-message TKqpPhyLiteralValue { 
-    NKikimrMiniKQL.TType Type = 1; 
-    NKikimrMiniKQL.TValue Value = 2; 
-} 
- 
-message TKqpPhyRowsList { 
-    message TValue { 
-        oneof Kind { 
-            TKqpPhyParamValue ParamValue = 1; 
-            TKqpPhyLiteralValue LiteralValue = 2; 
-        } 
-    } 
- 
-    message TRow { 
-        map<string, TValue> Columns = 1; 
-    } 
- 
-    repeated TRow Rows = 1; 
-} 
- 
+message TKqpPhyLiteralValue {
+    NKikimrMiniKQL.TType Type = 1;
+    NKikimrMiniKQL.TValue Value = 2;
+}
+
+message TKqpPhyRowsList {
+    message TValue {
+        oneof Kind {
+            TKqpPhyParamValue ParamValue = 1;
+            TKqpPhyLiteralValue LiteralValue = 2;
+        }
+    }
+
+    message TRow {
+        map<string, TValue> Columns = 1;
+    }
+
+    repeated TRow Rows = 1;
+}
+
 message TKqpPhyValue {
     oneof Kind {
-        TKqpPhyParamValue ParamValue = 1;               // any type here (value, list of structs, ...) 
-        TKqpPhyParamElementValue ParamElementValue = 2; // any type here (value, list of structs, ...) 
-        TKqpPhyRowsList RowsList = 3;                   // list of structs 
-        TKqpPhyLiteralValue LiteralValue = 4;          // value 
+        TKqpPhyParamValue ParamValue = 1;               // any type here (value, list of structs, ...)
+        TKqpPhyParamElementValue ParamElementValue = 2; // any type here (value, list of structs, ...)
+        TKqpPhyRowsList RowsList = 3;                   // list of structs
+        TKqpPhyLiteralValue LiteralValue = 4;          // value
     }
 }
 
@@ -109,9 +109,9 @@ message TKqpPhyKeyRange {
 
 message TKqpPhyOpReadRange {
     TKqpPhyKeyRange KeyRange = 1;
-    TKqpPhyParamValue ItemsLimit = 2; 
-    bool Reverse = 3; 
-    repeated bool SkipNullKeys = 4; 
+    TKqpPhyParamValue ItemsLimit = 2;
+    bool Reverse = 3;
+    repeated bool SkipNullKeys = 4;
 }
 
 message TKqpPhyOpUpsertRows {
@@ -177,7 +177,7 @@ message TKqpPhyCnUnionAll {
 message TKqpPhyCnMap {
 }
 
-message TKqpPhyCnHashShuffle { 
+message TKqpPhyCnHashShuffle {
     repeated string KeyColumns = 1;
 }
 
@@ -212,7 +212,7 @@ message TKqpPhyConnection {
     oneof Type {
         TKqpPhyCnUnionAll UnionAll = 3;
         TKqpPhyCnMap Map = 4;
-        TKqpPhyCnHashShuffle HashShuffle = 5; 
+        TKqpPhyCnHashShuffle HashShuffle = 5;
         TKqpPhyCnBroadcast Broadcast = 6;
         TKqpPhyCnMapShard MapShard = 7;
         TKqpPhyCnShuffleShard ShuffleShard = 8;
@@ -237,7 +237,7 @@ message TKqpPhyResult {
     TKqpPhyConnection Connection = 1;
     NKikimrMiniKQL.TType ItemType = 2;
     bool IsStream = 3;
-    repeated string ColumnHints = 4; 
+    repeated string ColumnHints = 4;
 }
 
 message TKqpPhyTx {
@@ -253,7 +253,7 @@ message TKqpPhyTx {
     repeated TKqpPhyResult Results = 3;
     repeated TKqpPhyParamBinding ParamBindings = 4;
     string Plan = 5;
-    bool HasEffects = 6; // at least one stage has flag TKqpPhyStage::IsEffectStage set 
+    bool HasEffects = 6; // at least one stage has flag TKqpPhyStage::IsEffectStage set
 }
 
 message TKqpTableInfo {

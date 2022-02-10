@@ -7,11 +7,11 @@ class TDqSource : public TDqInputImpl<TDqSource, IDqSource> {
     using TBaseImpl = TDqInputImpl<TDqSource, IDqSource>;
     friend TBaseImpl;
 public:
-    TDqSource(ui64 inputIndex, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, bool collectProfileStats) 
+    TDqSource(ui64 inputIndex, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, bool collectProfileStats)
         : TBaseImpl(inputType, maxBufferBytes)
         , InputIndex(inputIndex)
-        , BasicStats(InputIndex) 
-        , ProfileStats(collectProfileStats ? &BasicStats : nullptr) {} 
+        , BasicStats(InputIndex)
+        , ProfileStats(collectProfileStats ? &BasicStats : nullptr) {}
 
     ui64 GetInputIndex() const override {
         return InputIndex;
@@ -25,13 +25,13 @@ public:
     }
 
     const TDqSourceStats* GetStats() const override {
-        return &BasicStats; 
+        return &BasicStats;
     }
 
 private:
     const ui64 InputIndex;
-    TDqSourceStats BasicStats; 
-    TDqSourceStats* ProfileStats = nullptr; 
+    TDqSourceStats BasicStats;
+    TDqSourceStats* ProfileStats = nullptr;
 };
 
 IDqSource::TPtr CreateDqSource(

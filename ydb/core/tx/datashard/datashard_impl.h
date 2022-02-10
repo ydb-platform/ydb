@@ -238,7 +238,7 @@ class TDataShard
     friend class TActiveTransaction;
     friend class TValidatedDataTx;
     friend class TEngineBay;
-    friend class NMiniKQL::TKqpScanComputeContext; 
+    friend class NMiniKQL::TKqpScanComputeContext;
     friend class TSnapshotManager;
     friend class TSchemaSnapshotManager;
     friend class TReplicationSourceOffsetsClient;
@@ -1102,15 +1102,15 @@ public:
     }
 
     static NDataShard::ECumulativeCounters NotEnoughMemoryCounter(ui64 count) {
-        if (count == 1) 
-            return COUNTER_TX_NOT_ENOUGH_MEMORY_1; 
-        if (count == 2) 
-            return COUNTER_TX_NOT_ENOUGH_MEMORY_2; 
-        if (count == 3) 
-            return COUNTER_TX_NOT_ENOUGH_MEMORY_3; 
-        return COUNTER_TX_NOT_ENOUGH_MEMORY_4; 
-    } 
- 
+        if (count == 1)
+            return COUNTER_TX_NOT_ENOUGH_MEMORY_1;
+        if (count == 2)
+            return COUNTER_TX_NOT_ENOUGH_MEMORY_2;
+        if (count == 3)
+            return COUNTER_TX_NOT_ENOUGH_MEMORY_3;
+        return COUNTER_TX_NOT_ENOUGH_MEMORY_4;
+    }
+
     bool IsStateActive() const {
         return State == TShardState::Ready ||
                 State == TShardState::Readonly ||

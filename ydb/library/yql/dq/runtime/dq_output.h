@@ -19,14 +19,14 @@ class TUnboxedValue;
 namespace NDq {
 
 struct TDqOutputStats {
-    // basic stats 
+    // basic stats
     ui64 Chunks = 0;
     ui64 Bytes = 0;
     ui64 RowsIn = 0;
     ui64 RowsOut = 0;
-    TInstant FirstRowIn; 
- 
-    // profile stats 
+    TInstant FirstRowIn;
+
+    // profile stats
     ui64 MaxMemoryUsage = 0;
     ui64 MaxRowsInMemory = 0;
 };
@@ -42,7 +42,7 @@ public:
     virtual bool IsFull() const = 0;
     // can throw TDqChannelStorageException
     virtual void Push(NUdf::TUnboxedValue&& value) = 0;
-    // Push checkpoint. Checkpoints may be pushed to channel even after it is finished. 
+    // Push checkpoint. Checkpoints may be pushed to channel even after it is finished.
     virtual void Push(NDqProto::TCheckpoint&& checkpoint) = 0;
     virtual void Finish() = 0;
 

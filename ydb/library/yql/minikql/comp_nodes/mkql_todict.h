@@ -7,8 +7,8 @@ namespace NMiniKQL {
 IComputationNode* WrapToSortedDict(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapToHashedDict(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-IComputationNode* WrapSqueezeToSortedDict(TCallable& callable, const TComputationNodeFactoryContext& ctx); 
-IComputationNode* WrapSqueezeToHashedDict(TCallable& callable, const TComputationNodeFactoryContext& ctx); 
- 
+IComputationNode* WrapSqueezeToSortedDict(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+IComputationNode* WrapSqueezeToHashedDict(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+
 }
 }

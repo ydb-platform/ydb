@@ -1,9 +1,9 @@
 #pragma once
 
-#include "yql_kikimr_gateway.h" 
-#include "yql_kikimr_settings.h" 
-#include "yql_kikimr_query_traits.h" 
- 
+#include "yql_kikimr_gateway.h"
+#include "yql_kikimr_settings.h"
+#include "yql_kikimr_query_traits.h"
+
 #include <ydb/library/yql/ast/yql_gc_nodes.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
@@ -85,7 +85,7 @@ struct TKikimrQueryContext : TThrRefBase {
     /*
      * Defuse DDL-prohibiting checks when PrepareOnly = true. Used in scripting query explain.
      */
-    bool SuppressDdlChecks = false; 
+    bool SuppressDdlChecks = false;
 
     EKikimrStatsMode StatsMode = EKikimrStatsMode::None;
     EKikimrQueryType Type = EKikimrQueryType::Unspecified;
@@ -96,12 +96,12 @@ struct TKikimrQueryContext : TThrRefBase {
     // full mode can be enabled explicitly.
     bool DocumentApiRestricted = true;
 
-    // Force NewEngine stuff 
-    // remove it after enabling NewEngine 
-    std::optional<NKikimr::NKqp::TQueryTraits> QueryTraits; 
- 
-    std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery; 
-    std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery; 
+    // Force NewEngine stuff
+    // remove it after enabling NewEngine
+    std::optional<NKikimr::NKqp::TQueryTraits> QueryTraits;
+
+    std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery;
+    std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
     TKikimrParamsMap Parameters;
 
     THashMap<ui64, IKikimrQueryExecutor::TQueryResult> Results;
@@ -152,21 +152,21 @@ struct TKikimrQueryContext : TThrRefBase {
 
     void Reset() {
         PrepareOnly = false;
-        SuppressDdlChecks = false; 
+        SuppressDdlChecks = false;
         StatsMode = EKikimrStatsMode::None;
         Type = EKikimrQueryType::Unspecified;
         Deadlines = {};
         Limits = {};
 
-        QueryTraits.reset(); 
-        PreparingQuery.reset(); 
-        PreparedQuery.reset(); 
+        QueryTraits.reset();
+        PreparingQuery.reset();
+        PreparedQuery.reset();
         Parameters.clear();
 
         Results.clear();
         InProgress.clear();
         ExecutionOrder.clear();
- 
+
         RlPath.Clear();
 
         CachedNow.reset();

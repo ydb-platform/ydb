@@ -106,19 +106,19 @@ public:
 
     struct TExecPhysicalRequest : private TMoveOnly {
         TVector<TPhysicalTxData> Transactions;
-        TVector<NYql::NDq::TMkqlValueRef> Locks; 
-        bool ValidateLocks = false; 
-        bool EraseLocks = false; 
+        TVector<NYql::NDq::TMkqlValueRef> Locks;
+        bool ValidateLocks = false;
+        bool EraseLocks = false;
         TMaybe<ui64> AcquireLocksTxId;
-        TDuration Timeout; 
-        TMaybe<TDuration> CancelAfter; 
-        ui32 MaxComputeActors = 10'000; 
-        ui32 MaxAffectedShards = 0; 
-        ui64 TotalReadSizeLimitBytes = 0; 
-        ui64 MkqlMemoryLimit = 0; // old engine compatibility 
-        ui64 PerShardKeysSizeLimitBytes = 0; 
-        NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::DQ_STATS_MODE_NONE; 
-        bool DisableLlvmForUdfStages = false; 
+        TDuration Timeout;
+        TMaybe<TDuration> CancelAfter;
+        ui32 MaxComputeActors = 10'000;
+        ui32 MaxAffectedShards = 0;
+        ui64 TotalReadSizeLimitBytes = 0;
+        ui64 MkqlMemoryLimit = 0; // old engine compatibility
+        ui64 PerShardKeysSizeLimitBytes = 0;
+        NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::DQ_STATS_MODE_NONE;
+        bool DisableLlvmForUdfStages = false;
         bool LlvmEnabled = true;
         TKqpSnapshot Snapshot = TKqpSnapshot();
         NKikimrKqp::EIsolationLevel IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
@@ -130,7 +130,7 @@ public:
     };
 
     struct TAstQuerySettings {
-        NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::DQ_STATS_MODE_NONE; 
+        NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::DQ_STATS_MODE_NONE;
     };
 
 public:
@@ -152,7 +152,7 @@ public:
     virtual NThreading::TFuture<TKqpSnapshotHandle> AcquireMvccSnapshot(TDuration queryTimeout) = 0;
 
     /* Physical */
-    virtual NThreading::TFuture<TExecPhysicalResult> ExecutePhysical(TExecPhysicalRequest&& request, 
+    virtual NThreading::TFuture<TExecPhysicalResult> ExecutePhysical(TExecPhysicalRequest&& request,
         const NActors::TActorId& target) = 0;
 
     virtual NThreading::TFuture<TExecPhysicalResult> ExecuteScanQuery(TExecPhysicalRequest&& request,
@@ -180,11 +180,11 @@ public:
     virtual NThreading::TFuture<TQueryResult> StreamExecScanQueryAst(const TString& cluster, const TString& query,
         TKqpParamsMap&& params, const TAstQuerySettings& settings, const NActors::TActorId& target) = 0;
 
-public: 
-    virtual TInstant GetCurrentTime() const = 0; 
+public:
+    virtual TInstant GetCurrentTime() const = 0;
 };
 
-} // namespace NKqp 
+} // namespace NKqp
 } // namespace NKikimr
 
 template<>

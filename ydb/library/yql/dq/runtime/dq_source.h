@@ -23,7 +23,7 @@ public:
     virtual const TDqSourceStats* GetStats() const = 0;
 };
 
-IDqSource::TPtr CreateDqSource(ui64 inputIndex, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, 
-    bool collectProfileStats); 
+IDqSource::TPtr CreateDqSource(ui64 inputIndex, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes,
+    bool collectProfileStats);
 
 } // namespace NYql::NDq

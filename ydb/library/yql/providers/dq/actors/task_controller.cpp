@@ -123,26 +123,26 @@ private:
 
         if (state.HasStats() && state.GetStats().GetTasks().size()) {
             YQL_LOG(DEBUG) << " " << SelfId() << " AddStats " << taskId;
-            AddStats(state.GetStats()); 
+            AddStats(state.GetStats());
             if (ServiceCounters.Counters && !AggrPeriod) {
                 ExportStats(TaskStat, taskId);
             }
         }
 
         switch (ev->Get()->Record.GetState()) {
-            case NDqProto::COMPUTE_STATE_UNKNOWN: { 
+            case NDqProto::COMPUTE_STATE_UNKNOWN: {
                 // TODO: use issues
                 TString message = "unexpected state from " + ToString(computeActor) + ", task: " + ToString(taskId);
                 OnError(message, false, false);
                 break;
             }
-            case NDqProto::COMPUTE_STATE_FAILURE: { 
+            case NDqProto::COMPUTE_STATE_FAILURE: {
                 // TODO: don't convert issues to string
                 NYql::IssuesFromMessage(state.GetIssues(), Issues);
                 OnError(Issues.ToString(), false, false);
                 break;
             }
-            case NDqProto::COMPUTE_STATE_EXECUTING: { 
+            case NDqProto::COMPUTE_STATE_EXECUTING: {
                 YQL_LOG(DEBUG) << " " << SelfId() << " Executing TaskId: " << taskId;
                 if (!FinishedTasks.contains(taskId)) {
                     // may get late/reordered? message
@@ -150,7 +150,7 @@ private:
                 }
                 break;
             }
-            case NDqProto::COMPUTE_STATE_FINISHED: { 
+            case NDqProto::COMPUTE_STATE_FINISHED: {
                 YQL_LOG(DEBUG) << " " << SelfId() << " Finish TaskId: " << taskId;
                 Executing.erase(taskId);
                 FinishedTasks.insert(taskId);
@@ -243,11 +243,11 @@ private:
         }
     }
 
-    void AddStats(const NDqProto::TDqComputeActorStats& x) { 
-        YQL_ENSURE(x.GetTasks().size() == 1); 
-        auto& s = x.GetTasks(0); 
-        ui64 taskId = s.GetTaskId(); 
- 
+    void AddStats(const NDqProto::TDqComputeActorStats& x) {
+        YQL_ENSURE(x.GetTasks().size() == 1);
+        auto& s = x.GetTasks(0);
+        ui64 taskId = s.GetTaskId();
+
 #define ADD_COUNTER(name) \
         if (stats.Get ## name()) { \
             TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, #name), stats.Get ## name ()); \
@@ -259,44 +259,44 @@ private:
 
         auto& stats = s;
         // basic stats
-        ADD_COUNTER(ComputeCpuTimeUs) 
+        ADD_COUNTER(ComputeCpuTimeUs)
         ADD_COUNTER(PendingInputTimeUs)
         ADD_COUNTER(PendingOutputTimeUs)
         ADD_COUNTER(FinishTimeUs)
 
         // profile stats
-        ADD_COUNTER(BuildCpuTimeUs) 
-        ADD_COUNTER(WaitTimeUs) 
-        ADD_COUNTER(WaitOutputTimeUs) 
+        ADD_COUNTER(BuildCpuTimeUs)
+        ADD_COUNTER(WaitTimeUs)
+        ADD_COUNTER(WaitOutputTimeUs)
 
-        if (auto v = x.GetMkqlMaxMemoryUsage()) { 
-            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "MkqlMaxMemoryUsage"), v); 
-        } 
- 
+        if (auto v = x.GetMkqlMaxMemoryUsage()) {
+            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "MkqlMaxMemoryUsage"), v);
+        }
+
         for (const auto& stat : s.GetMkqlStats()) {
             TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, stat.GetName()), stat.GetValue());
         }
 
-        if (stats.ComputeCpuTimeByRunSize()) { 
+        if (stats.ComputeCpuTimeByRunSize()) {
             auto& hist = TaskStat.GetHistogram(TaskStat.GetCounterName("TaskRunner", labels, "ComputeTimeByRunMs"));
-            for (const auto& bucket : s.GetComputeCpuTimeByRun()) { 
+            for (const auto& bucket : s.GetComputeCpuTimeByRun()) {
                 hist[bucket.GetBound()] = bucket.GetValue();
             }
         }
 
         // compilation stats
-//        ADD_COUNTER(MkqlTotalNodes) 
-//        ADD_COUNTER(MkqlCodegenFunctions) 
-//        ADD_COUNTER(CodeGenTotalInstructions) 
-//        ADD_COUNTER(CodeGenTotalFunctions) 
-// 
-//        ADD_COUNTER(CodeGenFullTime) 
-//        ADD_COUNTER(CodeGenFinalizeTime) 
-//        ADD_COUNTER(CodeGenModulePassTime) 
+//        ADD_COUNTER(MkqlTotalNodes)
+//        ADD_COUNTER(MkqlCodegenFunctions)
+//        ADD_COUNTER(CodeGenTotalInstructions)
+//        ADD_COUNTER(CodeGenTotalFunctions)
+//
+//        ADD_COUNTER(CodeGenFullTime)
+//        ADD_COUNTER(CodeGenFinalizeTime)
+//        ADD_COUNTER(CodeGenModulePassTime)
 
-//        if (stats.GetFinishTs() >= stats.GetStartTs()) { 
-//            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Total"), stats.GetFinishTs() - stats.GetStartTs()); 
-//        } 
+//        if (stats.GetFinishTs() >= stats.GetStartTs()) {
+//            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Total"), stats.GetFinishTs() - stats.GetStartTs());
+//        }
 
         for (const auto& stats : s.GetInputChannels()) {
             std::map<TString, TString> labels = {
@@ -309,11 +309,11 @@ private:
             ADD_COUNTER(RowsIn);
             ADD_COUNTER(RowsOut);
             ADD_COUNTER(MaxMemoryUsage);
-            ADD_COUNTER(DeserializationTimeUs); 
+            ADD_COUNTER(DeserializationTimeUs);
 
-//            if (stats.GetFinishTs() >= stats.GetStartTs()) { 
-//                TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Total"), stats.GetFinishTs() - stats.GetStartTs()); 
-//            } 
+//            if (stats.GetFinishTs() >= stats.GetStartTs()) {
+//                TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Total"), stats.GetFinishTs() - stats.GetStartTs());
+//            }
         }
 
         for (const auto& stats : s.GetOutputChannels()) {
@@ -328,22 +328,22 @@ private:
             ADD_COUNTER(RowsOut);
             ADD_COUNTER(MaxMemoryUsage);
 
-            ADD_COUNTER(SerializationTimeUs); 
+            ADD_COUNTER(SerializationTimeUs);
             ADD_COUNTER(BlockedByCapacity);
 
             ADD_COUNTER(SpilledBytes);
             ADD_COUNTER(SpilledRows);
             ADD_COUNTER(SpilledBlobs);
 
-//            if (stats.GetFinishTs() >= stats.GetStartTs()) { 
-//                TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Total"), stats.GetFinishTs() - stats.GetStartTs()); 
-//            } 
+//            if (stats.GetFinishTs() >= stats.GetStartTs()) {
+//                TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Total"), stats.GetFinishTs() - stats.GetStartTs());
+//            }
         }
 
         for (const auto& stats : s.GetSources()) {
             std::map<TString, TString> labels = {
                 {"Task", ToString(taskId)},
-                {"Source", ToString(stats.GetInputIndex())} 
+                {"Source", ToString(stats.GetInputIndex())}
             };
 
             ADD_COUNTER(Chunks);
@@ -354,15 +354,15 @@ private:
 
             ADD_COUNTER(ErrorsCount);
 
-//            if (stats.GetFinishTs() >= stats.GetStartTs()) { 
-//                TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Total"), stats.GetFinishTs() - stats.GetStartTs()); 
-//            } 
+//            if (stats.GetFinishTs() >= stats.GetStartTs()) {
+//                TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Total"), stats.GetFinishTs() - stats.GetStartTs());
+//            }
         }
 
         for (const auto& stats : s.GetSinks()) {
             std::map<TString, TString> labels = {
                 {"Task", ToString(taskId)},
-                {"Sink", ToString(stats.GetOutputIndex())} 
+                {"Sink", ToString(stats.GetOutputIndex())}
             };
 
             ADD_COUNTER(Chunks)
@@ -373,9 +373,9 @@ private:
 
             ADD_COUNTER(ErrorsCount);
 
-//            if (stats.GetFinishTs() >= stats.GetStartTs()) { 
-//                TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Total"), stats.GetFinishTs() - stats.GetStartTs()); 
-//            } 
+//            if (stats.GetFinishTs() >= stats.GetStartTs()) {
+//                TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Total"), stats.GetFinishTs() - stats.GetStartTs());
+//            }
         }
 
 #undef ADD_COUNTER
@@ -440,7 +440,7 @@ private:
 
         YQL_LOG(DEBUG) << "Update channels";
         for (const auto& [task, actorId] : Tasks) {
-            auto ev = MakeHolder<NDq::TEvDqCompute::TEvChannelsInfo>(); 
+            auto ev = MakeHolder<NDq::TEvDqCompute::TEvChannelsInfo>();
 
             for (const auto& input : task.GetInputs()) {
                 for (const auto& channel : input.GetChannels()) {

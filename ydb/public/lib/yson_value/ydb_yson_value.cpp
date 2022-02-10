@@ -94,10 +94,10 @@ static void FormatValueYsonInternal(TValueParser& parser, NYson::TYsonWriter& wr
             PrimitiveValueToYson(parser.GetPrimitiveType(), parser, writer);
             break;
 
-        case TTypeParser::ETypeKind::Decimal: 
-            writer.OnStringScalar(parser.GetDecimal().ToString()); 
-            break; 
- 
+        case TTypeParser::ETypeKind::Decimal:
+            writer.OnStringScalar(parser.GetDecimal().ToString());
+            break;
+
         case TTypeParser::ETypeKind::Optional:
             parser.OpenOptional();
             if (parser.IsNull()) {
@@ -175,10 +175,10 @@ static void FormatValueYsonInternal(TValueParser& parser, NYson::TYsonWriter& wr
             writer.OnStringScalar("Void");
             break;
 
-        case TTypeParser::ETypeKind::Null: 
-            writer.OnEntity(); 
-            break; 
- 
+        case TTypeParser::ETypeKind::Null:
+            writer.OnEntity();
+            break;
+
         default:
             ThrowFatalError(TStringBuilder() << "Unsupported type kind: " << parser.GetKind());
     }

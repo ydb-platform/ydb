@@ -160,7 +160,7 @@ void TAlignedPagePool::ReleaseFreePages() {
 }
 
 void TAlignedPagePool::OffloadAlloc(ui64 size) {
-    if (Limit && TotalAllocated + size > Limit && !TryIncreaseLimit(TotalAllocated + size)) { 
+    if (Limit && TotalAllocated + size > Limit && !TryIncreaseLimit(TotalAllocated + size)) {
         throw TMemoryLimitExceededException();
     }
 
@@ -206,7 +206,7 @@ void* TAlignedPagePool::GetPage() {
         return res;
     }
 
-    if (Limit && TotalAllocated + POOL_PAGE_SIZE > Limit && !TryIncreaseLimit(TotalAllocated + POOL_PAGE_SIZE)) { 
+    if (Limit && TotalAllocated + POOL_PAGE_SIZE > Limit && !TryIncreaseLimit(TotalAllocated + POOL_PAGE_SIZE)) {
         throw TMemoryLimitExceededException();
     }
 
@@ -220,8 +220,8 @@ void* TAlignedPagePool::GetPage() {
         }
         ++PageGlobalHitCount;
         AllPages.emplace(ptr);
- 
-        UpdatePeaks(); 
+
+        UpdatePeaks();
         return ptr;
     }
 
@@ -261,7 +261,7 @@ void* TAlignedPagePool::Alloc(size_t size) {
     void* res = nullptr;
     size = AlignUp(size, SYS_PAGE_SIZE);
 
-    if (Limit && TotalAllocated + size > Limit && !TryIncreaseLimit(TotalAllocated + size)) { 
+    if (Limit && TotalAllocated + size > Limit && !TryIncreaseLimit(TotalAllocated + size)) {
         throw TMemoryLimitExceededException();
     }
 
@@ -393,14 +393,14 @@ void TAlignedPagePool::Free(void* ptr, size_t size) noexcept {
     }
 }
 
-bool TAlignedPagePool::TryIncreaseLimit(ui64 required) { 
+bool TAlignedPagePool::TryIncreaseLimit(ui64 required) {
     if (!IncreaseMemoryLimitCallback) {
-        return false; 
-    } 
+        return false;
+    }
     IncreaseMemoryLimitCallback(Limit, required);
-    return Limit >= required; 
-} 
- 
+    return Limit >= required;
+}
+
 ui64 TAlignedPagePool::GetGlobalPagePoolSize() {
     ui64 size = 0;
     for (size_t level = 0; level <= MidLevels; ++level) {

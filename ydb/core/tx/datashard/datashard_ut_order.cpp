@@ -1229,7 +1229,7 @@ Y_UNIT_TEST_WITH_MVCC(ScanFollowedByUpdate) {
     proxy.ExecQueue();
 }
 
-Y_UNIT_TEST_QUAD(TestDelayedTxWaitsForWriteActiveTxOnly, UseMvcc, UseNewEngine) { 
+Y_UNIT_TEST_QUAD(TestDelayedTxWaitsForWriteActiveTxOnly, UseMvcc, UseNewEngine) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -1242,11 +1242,11 @@ Y_UNIT_TEST_QUAD(TestDelayedTxWaitsForWriteActiveTxOnly, UseMvcc, UseNewEngine) 
     TAutoPtr<IEventHandle> handle;
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-    if (UseNewEngine) { 
-        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG); 
-    } else { 
-        runtime.SetLogPriority(NKikimrServices::KQP_PROXY, NLog::PRI_DEBUG); 
-    } 
+    if (UseNewEngine) {
+        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+    } else {
+        runtime.SetLogPriority(NKikimrServices::KQP_PROXY, NLog::PRI_DEBUG);
+    }
     runtime.SetLogPriority(NKikimrServices::MINIKQL_ENGINE, NActors::NLog::PRI_DEBUG);
 
     InitRoot(server, sender);
@@ -1254,8 +1254,8 @@ Y_UNIT_TEST_QUAD(TestDelayedTxWaitsForWriteActiveTxOnly, UseMvcc, UseNewEngine) 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (3, 3);")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (3, 3);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2);"));
 
     ui64 shard2 = GetTableShards(server, sender, "/Root/table-2")[0];
 
@@ -1287,8 +1287,8 @@ Y_UNIT_TEST_QUAD(TestDelayedTxWaitsForWriteActiveTxOnly, UseMvcc, UseNewEngine) 
     }
 
     // Copy data from table-1 to table-3. Txs should hang due to dropped RS.
-    SendSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) SELECT key, value FROM `/Root/table-1` WHERE key = 1")); 
-    SendSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) SELECT key, value FROM `/Root/table-1` WHERE key = 3")); 
+    SendSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) SELECT key, value FROM `/Root/table-1` WHERE key = 1"));
+    SendSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) SELECT key, value FROM `/Root/table-1` WHERE key = 3"));
     {
         TDispatchOptions options;
         options.FinalEvents.emplace_back(IsTxResultComplete(), 4);
@@ -1299,13 +1299,13 @@ Y_UNIT_TEST_QUAD(TestDelayedTxWaitsForWriteActiveTxOnly, UseMvcc, UseNewEngine) 
     // because transactions above are stuck before performing any writes. Make sure it's
     // forced to wait for above transactions by commiting a write that is guaranteed
     // to "happen" after transactions above.
-    ExecSQL(server, sender, Q_(R"( 
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 4); 
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (5, 5); 
-    )")); 
+    ExecSQL(server, sender, Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 4);
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (5, 5);
+    )"));
 
     // This immediate tx should be delayed due to conflict with upserts.
-    SendSQL(server, sender, Q_("SELECT * FROM `/Root/table-2`")); 
+    SendSQL(server, sender, Q_("SELECT * FROM `/Root/table-2`"));
     {
         TDispatchOptions options;
         options.FinalEvents.emplace_back(TEvDataShard::EvProposeTransaction, 1);
@@ -1325,7 +1325,7 @@ Y_UNIT_TEST_QUAD(TestDelayedTxWaitsForWriteActiveTxOnly, UseMvcc, UseNewEngine) 
     }
 }
 
-Y_UNIT_TEST_QUAD(TestOnlyDataTxLagCausesRejects, UseMvcc, UseNewEngine) { 
+Y_UNIT_TEST_QUAD(TestOnlyDataTxLagCausesRejects, UseMvcc, UseNewEngine) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -1338,7 +1338,7 @@ Y_UNIT_TEST_QUAD(TestOnlyDataTxLagCausesRejects, UseMvcc, UseNewEngine) {
     TAutoPtr<IEventHandle> handle;
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::KQP_PROXY, NLog::PRI_DEBUG); 
+    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::KQP_PROXY, NLog::PRI_DEBUG);
     runtime.SetLogPriority(NKikimrServices::MINIKQL_ENGINE, NActors::NLog::PRI_DEBUG);
 
     InitRoot(server, sender);
@@ -1346,7 +1346,7 @@ Y_UNIT_TEST_QUAD(TestOnlyDataTxLagCausesRejects, UseMvcc, UseNewEngine) {
     CreateShardedTable(server, sender, "/Root", "table-1", 2);
     //auto shards = GetTableShards(server, sender, "/Root/table-1");
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 3000000001), (3000000003, 3)")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 3000000001), (3000000003, 3)"));
 
     // Send ReadTable requests and wait until they hang waiting for quota.
     for (int i = 0; i < 2; ++i) {
@@ -1367,7 +1367,7 @@ Y_UNIT_TEST_QUAD(TestOnlyDataTxLagCausesRejects, UseMvcc, UseNewEngine) {
         runtime.DispatchEvents(options);
     }
 
-    ExecSQL(server, sender, Q_("SELECT COUNT(*) FROM `/Root/table-1`")); 
+    ExecSQL(server, sender, Q_("SELECT COUNT(*) FROM `/Root/table-1`"));
 
     // Send SQL request which should hang due to lost RS.
     auto captureRS = [](TTestActorRuntimeBase&,
@@ -1378,7 +1378,7 @@ Y_UNIT_TEST_QUAD(TestOnlyDataTxLagCausesRejects, UseMvcc, UseNewEngine) {
     };
     runtime.SetObserverFunc(captureRS);
 
-    SendSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) SELECT value, key FROM `/Root/table-1`")); 
+    SendSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) SELECT value, key FROM `/Root/table-1`"));
     {
         TDispatchOptions options;
         options.FinalEvents.emplace_back(IsTxResultComplete(), 2);
@@ -1394,14 +1394,14 @@ Y_UNIT_TEST_QUAD(TestOnlyDataTxLagCausesRejects, UseMvcc, UseNewEngine) {
         runtime.DispatchEvents(options);
     }
 
-    ExecSQL(server, sender, Q_("SELECT COUNT(*) FROM `/Root/table-1`"), true, Ydb::StatusIds::UNAVAILABLE); 
+    ExecSQL(server, sender, Q_("SELECT COUNT(*) FROM `/Root/table-1`"), true, Ydb::StatusIds::UNAVAILABLE);
 }
 
 }
 
 Y_UNIT_TEST_SUITE(DataShardOutOfOrder) {
 
-Y_UNIT_TEST_QUAD(TestOutOfOrderLockLost, UseMvcc, UseNewEngine) { 
+Y_UNIT_TEST_QUAD(TestOutOfOrderLockLost, UseMvcc, UseNewEngine) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -1413,24 +1413,24 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderLockLost, UseMvcc, UseNewEngine) {
     auto sender = runtime.AllocateEdgeActor();
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
+    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
 
     InitRoot(server, sender);
 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
     TString txId;
     {
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"( 
-            SELECT * FROM `/Root/table-1` 
-            UNION ALL 
-            SELECT * FROM `/Root/table-2`)"))); 
+        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"(
+            SELECT * FROM `/Root/table-1`
+            UNION ALL
+            SELECT * FROM `/Root/table-2`)")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         txId = response.GetResponse().GetTxMeta().id();
@@ -1451,9 +1451,9 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderLockLost, UseMvcc, UseNewEngine) {
 
     // Send a commit request, it would block on readset exchange
     auto sender2 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"( 
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2); 
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"))); 
+    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
 
     // Wait until we captured both readsets
     {
@@ -1470,8 +1470,8 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderLockLost, UseMvcc, UseNewEngine) {
     // It would have broken locks if executed before the above commit
     // However the above commit must succeed (readsets are already being exchanged)
     auto sender3 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender3, MakeSimpleRequest(Q_( 
-        "UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3)"))); 
+    SendRequest(runtime, sender3, MakeSimpleRequest(Q_(
+        "UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3)")));
 
     // Schedule a simple timer to simulate some time passing
     {
@@ -1514,13 +1514,13 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderLockLost, UseMvcc, UseNewEngine) {
     // Select keys 3 and 4 from both tables, either both or none should be inserted
     {
         auto sender5 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender5, MakeSimpleRequest(Q_(R"( 
-            $rows = ( 
-                SELECT key, value FROM `/Root/table-1` WHERE key = 3 
-                UNION ALL 
-                SELECT key, value FROM `/Root/table-2` WHERE key = 4 
-            ); 
-            SELECT key, value FROM $rows ORDER BY key)"))); 
+        auto ev = ExecRequest(runtime, sender5, MakeSimpleRequest(Q_(R"(
+            $rows = (
+                SELECT key, value FROM `/Root/table-1` WHERE key = 3
+                UNION ALL
+                SELECT key, value FROM `/Root/table-2` WHERE key = 4
+            );
+            SELECT key, value FROM $rows ORDER BY key)")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
@@ -1534,7 +1534,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderLockLost, UseMvcc, UseNewEngine) {
     }
 }
 
-Y_UNIT_TEST_NEW_ENGINE(TestMvccReadDoesntBlockWrites) { 
+Y_UNIT_TEST_NEW_ENGINE(TestMvccReadDoesntBlockWrites) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -1549,24 +1549,24 @@ Y_UNIT_TEST_NEW_ENGINE(TestMvccReadDoesntBlockWrites) {
     auto sender3 = runtime.AllocateEdgeActor();
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
+    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
 
     InitRoot(server, sender);
 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
     TString txId;
     {
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"( 
-            SELECT * FROM `/Root/table-1` 
-            UNION ALL 
-            SELECT * FROM `/Root/table-2`)"))); 
+        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"(
+            SELECT * FROM `/Root/table-1`
+            UNION ALL
+            SELECT * FROM `/Root/table-2`)")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         txId = response.GetResponse().GetTxMeta().id();
@@ -1586,9 +1586,9 @@ Y_UNIT_TEST_NEW_ENGINE(TestMvccReadDoesntBlockWrites) {
     auto prevObserverFunc = runtime.SetObserverFunc(captureRS);
 
     // Send a commit request, it would block on readset exchange
-    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"( 
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2); 
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2);)"))); 
+    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2);)")));
 
     // Wait until we captured both readsets
     {
@@ -1603,13 +1603,13 @@ Y_UNIT_TEST_NEW_ENGINE(TestMvccReadDoesntBlockWrites) {
     runtime.SetObserverFunc(prevObserverFunc);
 
     // it will be blocked by previous transaction that is waiting for its readsets
-    SendRequest(runtime, sender, MakeSimpleRequest(Q_(R"( 
-        $rows = ( 
-            SELECT * FROM `/Root/table-1` WHERE key = 3 OR key = 5 
-            UNION ALL 
-            SELECT * FROM `/Root/table-2` WHERE key = 4 OR key = 6 
-        ); 
-        SELECT key, value FROM $rows ORDER BY key)"))); 
+    SendRequest(runtime, sender, MakeSimpleRequest(Q_(R"(
+        $rows = (
+            SELECT * FROM `/Root/table-1` WHERE key = 3 OR key = 5
+            UNION ALL
+            SELECT * FROM `/Root/table-2` WHERE key = 4 OR key = 6
+        );
+        SELECT key, value FROM $rows ORDER BY key)")));
 
     // wait for the tx is planned
     TDispatchOptions opts;
@@ -1618,9 +1618,9 @@ Y_UNIT_TEST_NEW_ENGINE(TestMvccReadDoesntBlockWrites) {
 
     {
         // despite it's writing into the key that previous transaction reads this write should finish successfully
-        auto ev = ExecRequest(runtime, sender3, MakeSimpleRequest(Q_(R"( 
-            UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 10); 
-            UPSERT INTO `/Root/table-2` (key, value) VALUES (6, 10))"))); 
+        auto ev = ExecRequest(runtime, sender3, MakeSimpleRequest(Q_(R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 10);
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (6, 10))")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
     }
@@ -1652,13 +1652,13 @@ Y_UNIT_TEST_NEW_ENGINE(TestMvccReadDoesntBlockWrites) {
 
     {
         // Now we see the write
-        auto ev = ExecRequest(runtime, sender, MakeSimpleRequest(Q_(R"( 
-        $rows = ( 
-            SELECT * FROM `/Root/table-1` WHERE key = 3 OR key = 5 
-            UNION ALL 
-            SELECT * FROM `/Root/table-2` WHERE key = 4 OR key = 6 
-        ); 
-        SELECT key, value FROM $rows ORDER BY key)"))); 
+        auto ev = ExecRequest(runtime, sender, MakeSimpleRequest(Q_(R"(
+        $rows = (
+            SELECT * FROM `/Root/table-1` WHERE key = 3 OR key = 5
+            UNION ALL
+            SELECT * FROM `/Root/table-2` WHERE key = 4 OR key = 6
+        );
+        SELECT key, value FROM $rows ORDER BY key)")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
@@ -1672,7 +1672,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestMvccReadDoesntBlockWrites) {
     }
 }
 
-Y_UNIT_TEST_QUAD(TestOutOfOrderReadOnlyAllowed, UseMvcc, UseNewEngine) { 
+Y_UNIT_TEST_QUAD(TestOutOfOrderReadOnlyAllowed, UseMvcc, UseNewEngine) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -1684,24 +1684,24 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderReadOnlyAllowed, UseMvcc, UseNewEngine) {
     auto sender = runtime.AllocateEdgeActor();
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
+    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
 
     InitRoot(server, sender);
 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
     TString txId;
     {
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"( 
-            SELECT * FROM `/Root/table-1` 
-            UNION ALL 
-            SELECT * FROM `/Root/table-2`)"))); 
+        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"(
+            SELECT * FROM `/Root/table-1`
+            UNION ALL
+            SELECT * FROM `/Root/table-2`)")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         txId = response.GetResponse().GetTxMeta().id();
@@ -1722,9 +1722,9 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderReadOnlyAllowed, UseMvcc, UseNewEngine) {
 
     // Send a commit request, it would block on readset exchange
     auto sender2 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"( 
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2); 
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"))); 
+    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
 
     // Wait until we captured both readsets
     {
@@ -1741,8 +1741,8 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderReadOnlyAllowed, UseMvcc, UseNewEngine) {
     // Since it's readonly it cannot affect inflight transaction and shouled be allowed
     {
         auto sender3 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender3, MakeSimpleRequest(Q_( 
-            "SELECT key, value FROM `/Root/table-1` ORDER BY key"))); 
+        auto ev = ExecRequest(runtime, sender3, MakeSimpleRequest(Q_(
+            "SELECT key, value FROM `/Root/table-1` ORDER BY key")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
@@ -1767,13 +1767,13 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderReadOnlyAllowed, UseMvcc, UseNewEngine) {
     // Select keys 3 and 4 from both tables, both should have been be inserted
     {
         auto sender4 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender4, MakeSimpleRequest(Q_(R"( 
-            $rows = ( 
-                SELECT key, value FROM `/Root/table-1` WHERE key = 3 
-                UNION ALL 
-                SELECT key, value FROM `/Root/table-2` WHERE key = 4 
-            ); 
-            SELECT key, value FROM $rows ORDER BY key)"))); 
+        auto ev = ExecRequest(runtime, sender4, MakeSimpleRequest(Q_(R"(
+            $rows = (
+                SELECT key, value FROM `/Root/table-1` WHERE key = 3
+                UNION ALL
+                SELECT key, value FROM `/Root/table-2` WHERE key = 4
+            );
+            SELECT key, value FROM $rows ORDER BY key)")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
@@ -1782,7 +1782,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderReadOnlyAllowed, UseMvcc, UseNewEngine) {
     }
 }
 
-Y_UNIT_TEST_QUAD(TestOutOfOrderNonConflictingWrites, UseMvcc, UseNewEngine) { 
+Y_UNIT_TEST_QUAD(TestOutOfOrderNonConflictingWrites, UseMvcc, UseNewEngine) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -1794,24 +1794,24 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNonConflictingWrites, UseMvcc, UseNewEngine) {
     auto sender = runtime.AllocateEdgeActor();
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
+    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
 
     InitRoot(server, sender);
 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
     TString txId;
     {
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"( 
-            SELECT * FROM `/Root/table-1` WHERE key = 1 
-            UNION ALL 
-            SELECT * FROM `/Root/table-2` WHERE key = 2)"))); 
+        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"(
+            SELECT * FROM `/Root/table-1` WHERE key = 1
+            UNION ALL
+            SELECT * FROM `/Root/table-2` WHERE key = 2)")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         txId = response.GetResponse().GetTxMeta().id();
@@ -1832,9 +1832,9 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNonConflictingWrites, UseMvcc, UseNewEngine) {
 
     // Send a commit request, it would block on readset exchange
     auto sender2 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"( 
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2); 
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"))); 
+    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
 
     // Wait until we captured both readsets
     if (readSets.size() < 2) {
@@ -1850,9 +1850,9 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNonConflictingWrites, UseMvcc, UseNewEngine) {
     // Now send non-conflicting upsert to both tables
     {
         auto sender3 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender3, MakeSimpleRequest(Q_(R"( 
-            UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3); 
-            UPSERT INTO `/Root/table-2` (key, value) VALUES (6, 3))"))); 
+        auto ev = ExecRequest(runtime, sender3, MakeSimpleRequest(Q_(R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3);
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (6, 3))")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
     }
@@ -1860,8 +1860,8 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNonConflictingWrites, UseMvcc, UseNewEngine) {
     // Check that immediate non-conflicting upsert is working too
     {
         auto sender4 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender4, MakeSimpleRequest(Q_( 
-            "UPSERT INTO `/Root/table-1` (key, value) VALUES (7, 4)"))); 
+        auto ev = ExecRequest(runtime, sender4, MakeSimpleRequest(Q_(
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES (7, 4)")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
     }
@@ -1883,13 +1883,13 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNonConflictingWrites, UseMvcc, UseNewEngine) {
     // Select keys 3 and 4 from both tables, both should have been inserted
     {
         auto sender5 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender5, MakeSimpleRequest(Q_(R"( 
-            $rows = ( 
-                SELECT key, value FROM `/Root/table-1` WHERE key = 3 
-                UNION ALL 
-                SELECT key, value FROM `/Root/table-2` WHERE key = 4 
-            ); 
-            SELECT key, value FROM $rows ORDER BY key)"))); 
+        auto ev = ExecRequest(runtime, sender5, MakeSimpleRequest(Q_(R"(
+            $rows = (
+                SELECT key, value FROM `/Root/table-1` WHERE key = 3
+                UNION ALL
+                SELECT key, value FROM `/Root/table-2` WHERE key = 4
+            );
+            SELECT key, value FROM $rows ORDER BY key)")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
@@ -1898,7 +1898,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNonConflictingWrites, UseMvcc, UseNewEngine) {
     }
 }
 
-Y_UNIT_TEST_NEW_ENGINE(TestOutOfOrderRestartLocksSingleWithoutBarrier) { 
+Y_UNIT_TEST_NEW_ENGINE(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -1913,7 +1913,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
     runtime.GetAppData().FeatureFlags.SetDisableDataShardBarrier(true);
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
+    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
 
     InitRoot(server, sender);
 
@@ -1922,18 +1922,18 @@ Y_UNIT_TEST_NEW_ENGINE(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
     auto table1shards = GetTableShards(server, sender, "/Root/table-1");
     auto table2shards = GetTableShards(server, sender, "/Root/table-2");
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
     TString txId;
     {
         auto sender1 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender1, MakeBeginRequest(sessionId, Q_(R"( 
-            SELECT * FROM `/Root/table-1` WHERE key = 1 
-            UNION ALL 
-            SELECT * FROM `/Root/table-2` WHERE key = 2)"))); 
+        auto ev = ExecRequest(runtime, sender1, MakeBeginRequest(sessionId, Q_(R"(
+            SELECT * FROM `/Root/table-1` WHERE key = 1
+            UNION ALL
+            SELECT * FROM `/Root/table-2` WHERE key = 2)")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         txId = response.GetResponse().GetTxMeta().id();
@@ -1954,9 +1954,9 @@ Y_UNIT_TEST_NEW_ENGINE(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
 
     // Send a commit request, it would block on readset exchange
     auto sender2 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"( 
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2); 
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"))); 
+    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
 
     // Wait until we captured both readsets
     if (readSets.size() < 2) {
@@ -1989,8 +1989,8 @@ Y_UNIT_TEST_NEW_ENGINE(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
     // executes before that waiting transaction (no key 3 yet).
     {
         auto sender3 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender3, MakeSimpleRequest(Q_( 
-            "SELECT key, value FROM `/Root/table-1` WHERE key = 1 OR key = 3;"))); 
+        auto ev = ExecRequest(runtime, sender3, MakeSimpleRequest(Q_(
+            "SELECT key, value FROM `/Root/table-1` WHERE key = 1 OR key = 3;")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
@@ -2003,7 +2003,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
     // pretend some other conflicting write happened before that tx completes.
     {
         auto sender4 = runtime.AllocateEdgeActor();
-        auto req = MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 3);")); 
+        auto req = MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 3);"));
         req->Record.MutableRequest()->SetCancelAfterMs(1000);
         req->Record.MutableRequest()->SetTimeoutMs(1000);
         auto ev = ExecRequest(runtime, sender4, std::move(req));
@@ -2016,7 +2016,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
     // barrier.
     {
         auto sender4 = runtime.AllocateEdgeActor();
-        auto req = MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3);")); 
+        auto req = MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3);"));
         req->Record.MutableRequest()->SetCancelAfterMs(1000);
         req->Record.MutableRequest()->SetTimeoutMs(1000);
         auto ev = ExecRequest(runtime, sender4, std::move(req));
@@ -2033,8 +2033,8 @@ Y_UNIT_TEST_NEW_ENGINE(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
     // Select key 3, we expect a success
     {
         auto sender9 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender9, MakeSimpleRequest(Q_( 
-            "SELECT key, value FROM `/Root/table-1` WHERE key = 3;"))); 
+        auto ev = ExecRequest(runtime, sender9, MakeSimpleRequest(Q_(
+            "SELECT key, value FROM `/Root/table-1` WHERE key = 3;")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
@@ -2043,7 +2043,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
     }
 }
 
-Y_UNIT_TEST_NEW_ENGINE(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) { 
+Y_UNIT_TEST_NEW_ENGINE(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -2058,7 +2058,7 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
     runtime.GetAppData().FeatureFlags.SetDisableDataShardBarrier(true);
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
+    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
 
     InitRoot(server, sender);
 
@@ -2067,18 +2067,18 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
     auto table1shards = GetTableShards(server, sender, "/Root/table-1");
     auto table2shards = GetTableShards(server, sender, "/Root/table-2");
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
     TString txId;
     {
         auto sender1 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender1, MakeBeginRequest(sessionId, Q_(R"( 
-             SELECT * FROM `/Root/table-1` WHERE key = 1 
-             UNION ALL 
-             SELECT * FROM `/Root/table-2` WHERE key = 2)"))); 
+        auto ev = ExecRequest(runtime, sender1, MakeBeginRequest(sessionId, Q_(R"(
+             SELECT * FROM `/Root/table-1` WHERE key = 1
+             UNION ALL
+             SELECT * FROM `/Root/table-2` WHERE key = 2)")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         txId = response.GetResponse().GetTxMeta().id();
@@ -2099,9 +2099,9 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
 
     // Send a commit request, it would block on readset exchange
     auto sender2 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"( 
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2); 
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"))); 
+    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
 
     // Wait until we captured both readsets
     if (readSets.size() < 2) {
@@ -2134,8 +2134,8 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
     // executes before that waiting transaction (no key 3 yet).
     {
         auto sender3 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender3, MakeSimpleRequest(Q_( 
-            "SELECT key, value FROM `/Root/table-1` WHERE key = 1 OR key = 3;"))); 
+        auto ev = ExecRequest(runtime, sender3, MakeSimpleRequest(Q_(
+            "SELECT key, value FROM `/Root/table-1` WHERE key = 1 OR key = 3;")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
@@ -2146,7 +2146,7 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
     // Upsert key 1, we expect this immediate tx to be executed successfully because it lies to the right on the global timeline
     {
         auto sender4 = runtime.AllocateEdgeActor();
-        auto req = MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 3);")); 
+        auto req = MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 3);"));
         req->Record.MutableRequest()->SetCancelAfterMs(1000);
         req->Record.MutableRequest()->SetTimeoutMs(1000);
         auto ev = ExecRequest(runtime, sender4, std::move(req));
@@ -2157,7 +2157,7 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
     // Upsert key 5, this immediate tx should be executed successfully too
     {
         auto sender4 = runtime.AllocateEdgeActor();
-        auto req = MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3);")); 
+        auto req = MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3);"));
         req->Record.MutableRequest()->SetCancelAfterMs(1000);
         req->Record.MutableRequest()->SetTimeoutMs(1000);
         auto ev = ExecRequest(runtime, sender4, std::move(req));
@@ -2174,8 +2174,8 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
     // Select key 3, we expect a success
     {
         auto sender9 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender9, MakeSimpleRequest(Q_( 
-            "SELECT key, value FROM `/Root/table-1` WHERE key = 3;"))); 
+        auto ev = ExecRequest(runtime, sender9, MakeSimpleRequest(Q_(
+            "SELECT key, value FROM `/Root/table-1` WHERE key = 3;")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
@@ -2184,7 +2184,7 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
     }
 }
 
-Y_UNIT_TEST_QUAD(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc, UseNewEngine) { 
+Y_UNIT_TEST_QUAD(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc, UseNewEngine) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -2199,7 +2199,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc, Use
     runtime.GetAppData().FeatureFlags.SetDisableDataShardBarrier(true);
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
+    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
 
     InitRoot(server, sender);
 
@@ -2208,18 +2208,18 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc, Use
     auto table1shards = GetTableShards(server, sender, "/Root/table-1");
     auto table2shards = GetTableShards(server, sender, "/Root/table-2");
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
     TString txId;
     {
         auto sender1 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender1, MakeBeginRequest(sessionId, Q_(R"( 
-            SELECT * FROM `/Root/table-1` WHERE key = 1 
-            UNION ALL 
-            SELECT * FROM `/Root/table-2` WHERE key = 2)"))); 
+        auto ev = ExecRequest(runtime, sender1, MakeBeginRequest(sessionId, Q_(R"(
+            SELECT * FROM `/Root/table-1` WHERE key = 1
+            UNION ALL
+            SELECT * FROM `/Root/table-2` WHERE key = 2)")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         txId = response.GetResponse().GetTxMeta().id();
@@ -2240,9 +2240,9 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc, Use
 
     // Send a commit request, it would block on readset exchange
     auto sender2 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"( 
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2); 
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"))); 
+    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
 
     // Wait until we captured both readsets
     if (readSets.size() < 2) {
@@ -2256,15 +2256,15 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc, Use
     UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
 
     // Execute some out-of-order upserts before rebooting
-    ExecSQL(server, sender, Q_(R"( 
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3); 
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (6, 3))")); 
+    ExecSQL(server, sender, Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3);
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (6, 3))"));
 
     // Select key 3, we expect a timeout, because logically writes
     // to 3 and 5 already happened, but physically write to 3 is still waiting.
     {
         auto sender3 = runtime.AllocateEdgeActor();
-        auto req = MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 3;")); 
+        auto req = MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 3;"));
         req->Record.MutableRequest()->SetCancelAfterMs(1000);
         req->Record.MutableRequest()->SetTimeoutMs(1000);
         auto ev = ExecRequest(runtime, sender3, std::move(req));
@@ -2291,7 +2291,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc, Use
     // Select key 3, we still expect a timeout
     {
         auto sender4 = runtime.AllocateEdgeActor();
-        auto req = MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 3;")); 
+        auto req = MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 3;"));
         req->Record.MutableRequest()->SetCancelAfterMs(1000);
         req->Record.MutableRequest()->SetTimeoutMs(1000);
         auto ev = ExecRequest(runtime, sender4, std::move(req));
@@ -2302,8 +2302,8 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc, Use
     // Select key 5, it shouldn't pose any problems
     {
         auto sender5 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender5, MakeSimpleRequest(Q_( 
-            "SELECT key, value FROM `/Root/table-1` WHERE key = 5;"))); 
+        auto ev = ExecRequest(runtime, sender5, MakeSimpleRequest(Q_(
+            "SELECT key, value FROM `/Root/table-1` WHERE key = 5;")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
@@ -2320,8 +2320,8 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc, Use
     // Select key 3, we expect a success
     {
         auto sender6 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender6, MakeSimpleRequest(Q_( 
-            "SELECT key, value FROM `/Root/table-1` WHERE key = 3;"))); 
+        auto ev = ExecRequest(runtime, sender6, MakeSimpleRequest(Q_(
+            "SELECT key, value FROM `/Root/table-1` WHERE key = 3;")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
@@ -2330,7 +2330,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc, Use
     }
 }
 
-Y_UNIT_TEST_QUAD(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc, UseNewEngine) { 
+Y_UNIT_TEST_QUAD(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc, UseNewEngine) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -2345,7 +2345,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc, UseNe
     runtime.GetAppData().FeatureFlags.SetDisableDataShardBarrier(true);
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
+    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
 
     InitRoot(server, sender);
 
@@ -2354,18 +2354,18 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc, UseNe
     auto table1shards = GetTableShards(server, sender, "/Root/table-1");
     auto table2shards = GetTableShards(server, sender, "/Root/table-2");
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
     TString txId;
     {
         auto sender1 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender1, MakeBeginRequest(sessionId, Q_(R"( 
-            SELECT * FROM `/Root/table-1` WHERE key = 1 
-            UNION ALL 
-            SELECT * FROM `/Root/table-2` WHERE key = 2)"))); 
+        auto ev = ExecRequest(runtime, sender1, MakeBeginRequest(sessionId, Q_(R"(
+            SELECT * FROM `/Root/table-1` WHERE key = 1
+            UNION ALL
+            SELECT * FROM `/Root/table-2` WHERE key = 2)")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         txId = response.GetResponse().GetTxMeta().id();
@@ -2413,9 +2413,9 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc, UseNe
 
     // Send a commit request, it would block on readset exchange
     auto sender2 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"( 
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2); 
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"))); 
+    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
 
     // Wait until we captured both readsets
     if (readSets.size() < 2) {
@@ -2430,24 +2430,24 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc, UseNe
 
     // Send some more requests that form a staircase, they would all be blocked as well
     auto sender3 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender3, MakeSimpleRequest(Q_(R"( 
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 3), (5, 3); 
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 3), (6, 3))"))); 
+    SendRequest(runtime, sender3, MakeSimpleRequest(Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 3), (5, 3);
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 3), (6, 3))")));
     SimulateSleep(server, TDuration::Seconds(1));
-    SendRequest(runtime, sender3, MakeSimpleRequest(Q_(R"( 
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 4), (7, 4); 
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (6, 4), (8, 4))"))); 
+    SendRequest(runtime, sender3, MakeSimpleRequest(Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 4), (7, 4);
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (6, 4), (8, 4))")));
     SimulateSleep(server, TDuration::Seconds(1));
 
     // One more request that would be executed out of order
-    ExecSQL(server, sender, Q_(R"( 
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (11, 5); 
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (12, 5))")); 
+    ExecSQL(server, sender, Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (11, 5);
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (12, 5))"));
 
     // Select key 7, we expect a timeout, because logically a write to it already happened
     {
         auto sender4 = runtime.AllocateEdgeActor();
-        auto req = MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 7;")); 
+        auto req = MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 7;"));
         req->Record.MutableRequest()->SetCancelAfterMs(1000);
         req->Record.MutableRequest()->SetTimeoutMs(1000);
         auto ev = ExecRequest(runtime, sender4, std::move(req));
@@ -2489,7 +2489,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc, UseNe
     // Select key 7 again, we still expect a timeout, because logically a write to it already happened
     {
         auto sender5 = runtime.AllocateEdgeActor();
-        auto req = MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 7;")); 
+        auto req = MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 7;"));
         req->Record.MutableRequest()->SetCancelAfterMs(1000);
         req->Record.MutableRequest()->SetTimeoutMs(1000);
         auto ev = ExecRequest(runtime, sender5, std::move(req));
@@ -2509,7 +2509,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc, UseNe
     // Select key 7 again, this time is should succeed
     {
         auto sender6 = runtime.AllocateEdgeActor();
-        auto req = MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 7;")); 
+        auto req = MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 7;"));
         auto ev = ExecRequest(runtime, sender6, std::move(req));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
@@ -2546,7 +2546,7 @@ namespace {
     }
 }
 
-Y_UNIT_TEST_QUAD(TestCopyTableNoDeadlock, UseMvcc, UseNewEngine) { 
+Y_UNIT_TEST_QUAD(TestCopyTableNoDeadlock, UseMvcc, UseNewEngine) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -2558,24 +2558,24 @@ Y_UNIT_TEST_QUAD(TestCopyTableNoDeadlock, UseMvcc, UseNewEngine) {
     auto sender = runtime.AllocateEdgeActor();
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
+    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
 
     InitRoot(server, sender);
 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
     TString txId;
     {
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId,Q_(R"( 
-            SELECT * FROM `/Root/table-1` 
-            UNION ALL 
-            SELECT * FROM `/Root/table-2`)"))); 
+        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId,Q_(R"(
+            SELECT * FROM `/Root/table-1`
+            UNION ALL
+            SELECT * FROM `/Root/table-2`)")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         txId = response.GetResponse().GetTxMeta().id();
@@ -2617,9 +2617,9 @@ Y_UNIT_TEST_QUAD(TestCopyTableNoDeadlock, UseMvcc, UseNewEngine) {
 
     // Send a commit request, it would block on readset exchange
     auto senderCommit = runtime.AllocateEdgeActor();
-    SendRequest(runtime, senderCommit, MakeCommitRequest(sessionId, txId, Q_(R"( 
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2); 
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"))); 
+    SendRequest(runtime, senderCommit, MakeCommitRequest(sessionId, txId, Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
 
     // Wait until we captured both readsets
     if (readSets.size() < 2) {
@@ -2636,10 +2636,10 @@ Y_UNIT_TEST_QUAD(TestCopyTableNoDeadlock, UseMvcc, UseNewEngine) {
 
     // Now we send a distributed read, while stopping coordinator proposals
     auto senderRead = runtime.AllocateEdgeActor();
-    SendRequest(runtime, senderRead, MakeSimpleRequest(Q_(R"( 
-        SELECT * FROM `/Root/table-1` 
-        UNION ALL 
-        SELECT * FROM `/Root/table-2`)"))); 
+    SendRequest(runtime, senderRead, MakeSimpleRequest(Q_(R"(
+        SELECT * FROM `/Root/table-1`
+        UNION ALL
+        SELECT * FROM `/Root/table-2`)")));
 
     // Wait until we capture the propose request
     if (txProposes.size() < 1) {
@@ -2730,7 +2730,7 @@ Y_UNIT_TEST_QUAD(TestCopyTableNoDeadlock, UseMvcc, UseNewEngine) {
     }
 }
 
-Y_UNIT_TEST_NEW_ENGINE(TestPlannedCancelSplit) { 
+Y_UNIT_TEST_NEW_ENGINE(TestPlannedCancelSplit) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -2741,15 +2741,15 @@ Y_UNIT_TEST_NEW_ENGINE(TestPlannedCancelSplit) {
     auto sender = runtime.AllocateEdgeActor();
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
+    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
 
     InitRoot(server, sender);
 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     auto shards1 = GetTableShards(server, sender, "/Root/table-1");
     UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u);
@@ -2799,10 +2799,10 @@ Y_UNIT_TEST_NEW_ENGINE(TestPlannedCancelSplit) {
     // Send a distributed read while capturing propose results
     captureTxProposeResult = true;
     auto senderRead1 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, senderRead1, MakeSimpleRequest(Q_(R"( 
-        SELECT * FROM `/Root/table-1` 
-        UNION ALL 
-        SELECT * FROM `/Root/table-2`)"))); 
+    SendRequest(runtime, senderRead1, MakeSimpleRequest(Q_(R"(
+        SELECT * FROM `/Root/table-1`
+        UNION ALL
+        SELECT * FROM `/Root/table-2`)")));
     if (txProposeResults.size() < 2) {
         TDispatchOptions options;
         options.FinalEvents.emplace_back(
@@ -2839,10 +2839,10 @@ Y_UNIT_TEST_NEW_ENGINE(TestPlannedCancelSplit) {
     // Send a distributed read again, while blocking propose messages
     captureTxPropose = true;
     auto senderRead2 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, senderRead2, MakeSimpleRequest(Q_(R"( 
-        SELECT * FROM `/Root/table-1` 
-        UNION ALL 
-        SELECT * FROM `/Root/table-2`)"))); 
+    SendRequest(runtime, senderRead2, MakeSimpleRequest(Q_(R"(
+        SELECT * FROM `/Root/table-1`
+        UNION ALL
+        SELECT * FROM `/Root/table-2`)")));
     if (txProposes.size() < 2) {
         TDispatchOptions options;
         options.FinalEvents.emplace_back(
@@ -2936,8 +2936,8 @@ Y_UNIT_TEST_QUAD(TestPlannedTimeoutSplit, UseMvcc, UseNewEngine) {
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     auto shards1 = GetTableShards(server, sender, "/Root/table-1");
     UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u);
@@ -3055,8 +3055,8 @@ Y_UNIT_TEST_QUAD(TestPlannedHalfOverloadedSplit, UseMvcc, UseNewEngine) {
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     auto shards1 = GetTableShards(server, sender, "/Root/table-1");
     UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u);
@@ -3203,7 +3203,7 @@ namespace {
 /**
  * Regression test for KIKIMR-7751, designed to crash under asan
  */
-Y_UNIT_TEST_NEW_ENGINE(TestReadTableWriteConflict) { 
+Y_UNIT_TEST_NEW_ENGINE(TestReadTableWriteConflict) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -3222,17 +3222,17 @@ Y_UNIT_TEST_NEW_ENGINE(TestReadTableWriteConflict) {
     CreateShardedTable(server, sender, "/Root", "table-1", 2);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1);")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO [/Root/table-2] (key, value) VALUES (2, 1);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO [/Root/table-2] (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
     TString txId;
     {
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_( 
+        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(
             "SELECT * FROM [/Root/table-1] "
             "UNION ALL "
-            "SELECT * FROM [/Root/table-2]"))); 
+            "SELECT * FROM [/Root/table-2]")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         txId = response.GetResponse().GetTxMeta().id();
@@ -3266,9 +3266,9 @@ Y_UNIT_TEST_NEW_ENGINE(TestReadTableWriteConflict) {
 
     // Send a commit request, it would block on readset exchange
     auto senderCommit = runtime.AllocateEdgeActor();
-    SendRequest(runtime, senderCommit, MakeCommitRequest(sessionId, txId, Q_( 
-        "UPSERT INTO [/Root/table-1] (key, value) VALUES (3, 2); " 
-        "UPSERT INTO [/Root/table-2] (key, value) VALUES (4, 2)"))); 
+    SendRequest(runtime, senderCommit, MakeCommitRequest(sessionId, txId, Q_(
+        "UPSERT INTO [/Root/table-1] (key, value) VALUES (3, 2); "
+        "UPSERT INTO [/Root/table-2] (key, value) VALUES (4, 2)")));
 
     // Wait until we captured all readsets
     if (readSets.size() < 4) {
@@ -3300,14 +3300,14 @@ Y_UNIT_TEST_NEW_ENGINE(TestReadTableWriteConflict) {
     // Start an immediate write to table-1, it won't be able to start
     // because it arrived after the read table and they block each other
     auto senderWriteImm = runtime.AllocateEdgeActor();
-    SendRequest(runtime, senderWriteImm, MakeSimpleRequest(Q_( 
-        "UPSERT INTO [/Root/table-1] (key, value) VALUES (5, 3)"))); 
+    SendRequest(runtime, senderWriteImm, MakeSimpleRequest(Q_(
+        "UPSERT INTO [/Root/table-1] (key, value) VALUES (5, 3)")));
 
     // Start a planned write to both tables, wait for its plan step too
     auto senderWriteDist = runtime.AllocateEdgeActor();
-    SendRequest(runtime, senderWriteDist, MakeSimpleRequest(Q_( 
+    SendRequest(runtime, senderWriteDist, MakeSimpleRequest(Q_(
         "UPSERT INTO [/Root/table-1] (key, value) VALUES (7, 4); "
-        "UPSERT INTO [/Root/table-2] (key, value) VALUES (8, 4)"))); 
+        "UPSERT INTO [/Root/table-2] (key, value) VALUES (8, 4)")));
     if (seenPlanSteps < 2) {
         TDispatchOptions options;
         options.FinalEvents.emplace_back(
@@ -3353,7 +3353,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestReadTableWriteConflict) {
 /**
  * Regression test for KIKIMR-7903
  */
-Y_UNIT_TEST_NEW_ENGINE(TestReadTableImmediateWriteBlock) { 
+Y_UNIT_TEST_NEW_ENGINE(TestReadTableImmediateWriteBlock) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -3365,14 +3365,14 @@ Y_UNIT_TEST_NEW_ENGINE(TestReadTableImmediateWriteBlock) {
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
     runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-    runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG); 
+    runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
 
     InitRoot(server, sender);
 
     // NOTE: table-1 has 2 shards so ReadTable is not immediate
     CreateShardedTable(server, sender, "/Root", "table-1", 2);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
 
     // Capture and block all readset messages
     size_t seenPlanSteps = 0;
@@ -3412,8 +3412,8 @@ Y_UNIT_TEST_NEW_ENGINE(TestReadTableImmediateWriteBlock) {
 
     // Start an immediate write to table-1, it should be able to complete
     auto senderWriteImm = runtime.AllocateEdgeActor();
-    SendRequest(runtime, senderWriteImm, MakeSimpleRequest(Q_( 
-        "UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3)"))); 
+    SendRequest(runtime, senderWriteImm, MakeSimpleRequest(Q_(
+        "UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3)")));
 
     // Wait for immediate write to succeed
     {
@@ -3423,7 +3423,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestReadTableImmediateWriteBlock) {
     }
 }
 
-Y_UNIT_TEST_QUAD(TestReadTableSingleShardImmediate, WithMvcc, UseNewEngine) { 
+Y_UNIT_TEST_QUAD(TestReadTableSingleShardImmediate, WithMvcc, UseNewEngine) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -3442,7 +3442,7 @@ Y_UNIT_TEST_QUAD(TestReadTableSingleShardImmediate, WithMvcc, UseNewEngine) {
 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
 
     // Capture and block all readset messages
     size_t seenPlanSteps = 0;
@@ -3471,7 +3471,7 @@ Y_UNIT_TEST_QUAD(TestReadTableSingleShardImmediate, WithMvcc, UseNewEngine) {
     UNIT_ASSERT_VALUES_EQUAL(seenPlanSteps, 0u);
 }
 
-Y_UNIT_TEST_NEW_ENGINE(TestImmediateQueueThenSplit) { 
+Y_UNIT_TEST_NEW_ENGINE(TestImmediateQueueThenSplit) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -3482,7 +3482,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestImmediateQueueThenSplit) {
     auto sender = runtime.AllocateEdgeActor();
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
+    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
 
     InitRoot(server, sender);
 
@@ -3491,7 +3491,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestImmediateQueueThenSplit) {
     auto tablets = GetTableShards(server, sender, "/Root/table-1");
 
     // We need shard to have some data (otherwise it would die too quickly)
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0);"));
 
     bool captureSplit = true;
     bool captureSplitChanged = true;
@@ -3545,7 +3545,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestImmediateQueueThenSplit) {
     // Send a lot of write requests in parallel (so there's a large propose queue)
     for (int i = 0; i < totalWrites; ++i) {
         auto writeSender = runtime.AllocateEdgeActor();
-        SendSQL(server, writeSender, Q_(Sprintf("UPSERT INTO `/Root/table-1` (key, value) VALUES (%d, %d);", i, i))); 
+        SendSQL(server, writeSender, Q_(Sprintf("UPSERT INTO `/Root/table-1` (key, value) VALUES (%d, %d);", i, i)));
         writeSenders.push_back(writeSender);
     }
 
@@ -3640,52 +3640,52 @@ Y_UNIT_TEST_NEW_ENGINE(TestImmediateQueueThenSplit) {
 }
 
 void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query, bool enableMvcc = false) {
-    TPortManager pm; 
-    TServerSettings serverSettings(pm.GetPort(2134)); 
-    serverSettings.SetDomainName("Root") 
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
         .SetEnableMvcc(enableMvcc)
-        .SetUseRealThreads(false); 
- 
-    if (dataQuery) { 
-        NKikimrKqp::TKqpSetting setting; 
-        setting.SetName("_KqpAllowNewEngine"); 
-        setting.SetValue("true"); 
-        serverSettings.KqpSettings.push_back(setting); 
-    } 
- 
-    Tests::TServer::TPtr server = new TServer(serverSettings); 
-    auto &runtime = *server->GetRuntime(); 
-    auto sender = runtime.AllocateEdgeActor(); 
-    auto streamSender = runtime.AllocateEdgeActor(); 
- 
-    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
-    runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
-    runtime.SetLogPriority(NKikimrServices::KQP_PROXY, NLog::PRI_DEBUG); 
-    runtime.SetLogPriority(NKikimrServices::KQP_WORKER, NLog::PRI_DEBUG); 
-    runtime.SetLogPriority(NKikimrServices::KQP_TASKS_RUNNER, NLog::PRI_DEBUG); 
-    runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_DEBUG); 
-    runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG); 
-    runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_DEBUG); 
-    runtime.SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NLog::PRI_DEBUG); 
- 
-    InitRoot(server, sender); 
- 
-    CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions() 
-            .Columns({ 
+        .SetUseRealThreads(false);
+
+    if (dataQuery) {
+        NKikimrKqp::TKqpSetting setting;
+        setting.SetName("_KqpAllowNewEngine");
+        setting.SetValue("true");
+        serverSettings.KqpSettings.push_back(setting);
+    }
+
+    Tests::TServer::TPtr server = new TServer(serverSettings);
+    auto &runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+    auto streamSender = runtime.AllocateEdgeActor();
+
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+    runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::KQP_PROXY, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::KQP_WORKER, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::KQP_TASKS_RUNNER, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NLog::PRI_DEBUG);
+
+    InitRoot(server, sender);
+
+    CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Columns({
                 {"key", "Uint32", true, false},
                 {"value1", "Uint32", false, false},
                 {"value2", "Uint32", false, false}}));
- 
-    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value1, value2) VALUES (1, 1, 10), (2, 2, 20);"); 
- 
-    bool capturePropose = true; 
-    TVector<THolder<IEventHandle>> eventsPropose; 
-    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto { 
-        // if (ev->GetRecipientRewrite() == streamSender) { 
-        //     Cerr << "Stream sender got " << ev->GetTypeRewrite() << " " << ev->GetBase()->ToStringHeader() << Endl; 
-        // } 
-        switch (ev->GetTypeRewrite()) { 
-            case TEvDataShard::EvProposeTransaction: { 
+
+    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value1, value2) VALUES (1, 1, 10), (2, 2, 20);");
+
+    bool capturePropose = true;
+    TVector<THolder<IEventHandle>> eventsPropose;
+    auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+        // if (ev->GetRecipientRewrite() == streamSender) {
+        //     Cerr << "Stream sender got " << ev->GetTypeRewrite() << " " << ev->GetBase()->ToStringHeader() << Endl;
+        // }
+        switch (ev->GetTypeRewrite()) {
+            case TEvDataShard::EvProposeTransaction: {
                 auto &rec = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
                 if (capturePropose && rec.GetTxKind() != NKikimrTxDataShard::TX_KIND_SNAPSHOT) {
                     Cerr << "---- capture EvProposeTransaction ---- type=" << rec.GetTxKind() << Endl;
@@ -3696,73 +3696,73 @@ void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query, bool 
             }
 
             case TEvDataShard::EvKqpScan: {
-                if (capturePropose) { 
+                if (capturePropose) {
                     Cerr << "---- capture EvKqpScan ----" << Endl;
-                    eventsPropose.emplace_back(ev.Release()); 
-                    return TTestActorRuntime::EEventAction::DROP; 
-                } 
-                break; 
-            } 
-            default: 
-                break; 
-        } 
-        return TTestActorRuntime::EEventAction::PROCESS; 
-    }; 
-    auto prevObserverFunc = runtime.SetObserverFunc(captureEvents); 
- 
-    if (dataQuery) { 
-        Cerr << "--- sending data query request" << Endl; 
-        SendRequest(runtime, streamSender, MakeSimpleRequest(query)); 
-    } else { 
-        Cerr << "--- sending stream request" << Endl; 
-        SendRequest(runtime, streamSender, MakeStreamRequest(streamSender, query, false)); 
-    } 
- 
-    // Wait until there's exactly one propose message at our datashard 
-    if (eventsPropose.size() < 1) { 
-        TDispatchOptions options; 
-        options.CustomFinalCondition = [&]() { 
-            return eventsPropose.size() >= 1; 
-        }; 
-        runtime.DispatchEvents(options); 
-    } 
-    UNIT_ASSERT_VALUES_EQUAL(eventsPropose.size(), 1u); 
-    Cerr << "--- captured scan tx proposal" << Endl; 
-    capturePropose = false; 
- 
-    // Drop column value2 and wait for drop to finish 
-    auto dropTxId = AsyncAlterDropColumn(server, "/Root", "table-1", "value2"); 
-    WaitTxNotification(server, dropTxId); 
- 
-    // Resend delayed propose messages 
-    Cerr << "--- resending captured proposals" << Endl; 
-    for (auto& ev : eventsPropose) { 
-        runtime.Send(ev.Release(), 0, true); 
-    } 
-    eventsPropose.clear(); 
- 
-    Cerr << "--- waiting for result" << Endl; 
-    auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender); 
-    auto& response = ev->Get()->Record.GetRef(); 
-    Cerr << response.DebugString() << Endl; 
-    UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::ABORTED); 
-    auto& issue = response.GetResponse().GetQueryIssues(0).Getissues(0); 
-    UNIT_ASSERT_VALUES_EQUAL(issue.issue_code(), (int) NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH); 
-    UNIT_ASSERT_STRINGS_EQUAL(issue.message(), "Table \'/Root/table-1\' scheme changed."); 
-} 
- 
+                    eventsPropose.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                break;
+            }
+            default:
+                break;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    auto prevObserverFunc = runtime.SetObserverFunc(captureEvents);
+
+    if (dataQuery) {
+        Cerr << "--- sending data query request" << Endl;
+        SendRequest(runtime, streamSender, MakeSimpleRequest(query));
+    } else {
+        Cerr << "--- sending stream request" << Endl;
+        SendRequest(runtime, streamSender, MakeStreamRequest(streamSender, query, false));
+    }
+
+    // Wait until there's exactly one propose message at our datashard
+    if (eventsPropose.size() < 1) {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return eventsPropose.size() >= 1;
+        };
+        runtime.DispatchEvents(options);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(eventsPropose.size(), 1u);
+    Cerr << "--- captured scan tx proposal" << Endl;
+    capturePropose = false;
+
+    // Drop column value2 and wait for drop to finish
+    auto dropTxId = AsyncAlterDropColumn(server, "/Root", "table-1", "value2");
+    WaitTxNotification(server, dropTxId);
+
+    // Resend delayed propose messages
+    Cerr << "--- resending captured proposals" << Endl;
+    for (auto& ev : eventsPropose) {
+        runtime.Send(ev.Release(), 0, true);
+    }
+    eventsPropose.clear();
+
+    Cerr << "--- waiting for result" << Endl;
+    auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
+    auto& response = ev->Get()->Record.GetRef();
+    Cerr << response.DebugString() << Endl;
+    UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::ABORTED);
+    auto& issue = response.GetResponse().GetQueryIssues(0).Getissues(0);
+    UNIT_ASSERT_VALUES_EQUAL(issue.issue_code(), (int) NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH);
+    UNIT_ASSERT_STRINGS_EQUAL(issue.message(), "Table \'/Root/table-1\' scheme changed.");
+}
+
 Y_UNIT_TEST_WITH_MVCC(TestLateKqpScanAfterColumnDrop) {
     TestLateKqpQueryAfterColumnDrop(false, "SELECT SUM(value2) FROM `/Root/table-1`", WithMvcc);
-} 
- 
+}
+
 Y_UNIT_TEST_WITH_MVCC(TestLateKqpDataReadAfterColumnDrop) {
-    TestLateKqpQueryAfterColumnDrop(true, R"( 
-            PRAGMA kikimr.UseNewEngine = "true"; 
-            SELECT SUM(value2) FROM `/Root/table-1` 
+    TestLateKqpQueryAfterColumnDrop(true, R"(
+            PRAGMA kikimr.UseNewEngine = "true";
+            SELECT SUM(value2) FROM `/Root/table-1`
         )", WithMvcc);
-} 
- 
-Y_UNIT_TEST_NEW_ENGINE(MvccTestSnapshotRead) { 
+}
+
+Y_UNIT_TEST_NEW_ENGINE(MvccTestSnapshotRead) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -3774,13 +3774,13 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestSnapshotRead) {
     auto sender = runtime.AllocateEdgeActor();
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
+    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
 
     InitRoot(server, sender);
 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0), (1, 1), (2, 2), (3, 3);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0), (1, 1), (2, 2), (3, 3);"));
 
     auto waitFor = [&](const auto& condition, const TString& description) {
         if (!condition()) {
@@ -3842,7 +3842,7 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestSnapshotRead) {
     // future snapshot
     snapshot = TRowVersion(lastStep + 1000, Max<ui64>());
 
-    SendRequest(runtime, sender, MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 2 ORDER BY key"))); 
+    SendRequest(runtime, sender, MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 2 ORDER BY key")));
 
     waitFor([&]{ return rewritten; }, "EvProposeTransaction rewritten");
 
@@ -3863,10 +3863,10 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestSnapshotRead) {
 
     // check transaction reads from snapshot
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 10);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 10);"));
 
     {
-        auto ev = ExecRequest(runtime, sender, MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 2 ORDER BY key"))); 
+        auto ev = ExecRequest(runtime, sender, MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 2 ORDER BY key")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
@@ -3878,7 +3878,7 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestSnapshotRead) {
     rescheduled = false;
 
     {
-        auto ev = ExecRequest(runtime, sender, MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 2 ORDER BY key"))); 
+        auto ev = ExecRequest(runtime, sender, MakeSimpleRequest(Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 2 ORDER BY key")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
@@ -3889,7 +3889,7 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestSnapshotRead) {
     UNIT_ASSERT(!rescheduled);
 }
 
-Y_UNIT_TEST_NEW_ENGINE(TestSecondaryClearanceAfterShardRestartRace) { 
+Y_UNIT_TEST_NEW_ENGINE(TestSecondaryClearanceAfterShardRestartRace) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -3900,14 +3900,14 @@ Y_UNIT_TEST_NEW_ENGINE(TestSecondaryClearanceAfterShardRestartRace) {
     auto sender = runtime.AllocateEdgeActor();
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_TRACE); 
+    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
 
     InitRoot(server, sender);
 
     CreateShardedTable(server, sender, "/Root", "table-1", 2);
     auto shards = GetTableShards(server, sender, "/Root/table-1");
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);"));
 
     auto waitFor = [&](const auto& condition, const TString& description) {
         if (!condition()) {
@@ -3971,7 +3971,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestSecondaryClearanceAfterShardRestartRace) {
 
     // We expect this upsert to complete successfully
     // When there's a bug it will get stuck due to readtable before barrier
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 4);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 4);"));
 }
 
 Y_UNIT_TEST_QUAD(TestShardRestartNoUndeterminedImmediate, UseMvcc, UseNewEngine) {
@@ -3985,13 +3985,13 @@ Y_UNIT_TEST_QUAD(TestShardRestartNoUndeterminedImmediate, UseMvcc, UseNewEngine)
     auto &runtime = *server->GetRuntime();
     auto sender = runtime.AllocateEdgeActor();
 
-//    runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, NLog::PRI_TRACE); 
-//    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
-//    if (UseNewEngine) { 
-//        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_TRACE); 
-//    } else { 
-//        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE); 
-//    } 
+//    runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, NLog::PRI_TRACE);
+//    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+//    if (UseNewEngine) {
+//        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_TRACE);
+//    } else {
+//        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+//    }
 
     InitRoot(server, sender);
 
@@ -3999,17 +3999,17 @@ Y_UNIT_TEST_QUAD(TestShardRestartNoUndeterminedImmediate, UseMvcc, UseNewEngine)
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
     auto table1shards = GetTableShards(server, sender, "/Root/table-1");
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
     TString txId;
     {
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"( 
-            SELECT * FROM `/Root/table-1` 
-            UNION ALL 
-            SELECT * FROM `/Root/table-2`)"))); 
+        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"(
+            SELECT * FROM `/Root/table-1`
+            UNION ALL
+            SELECT * FROM `/Root/table-2`)")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         txId = response.GetResponse().GetTxMeta().id();
@@ -4048,9 +4048,9 @@ Y_UNIT_TEST_QUAD(TestShardRestartNoUndeterminedImmediate, UseMvcc, UseNewEngine)
 
     // Send a commit request, it would block on readset exchange
     auto sender2 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"( 
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2); 
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"))); 
+    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
 
     // Wait until we captured both readsets
     waitFor([&]{ return readSets.size() >= 2; }, "commit read sets");
@@ -4060,7 +4060,7 @@ Y_UNIT_TEST_QUAD(TestShardRestartNoUndeterminedImmediate, UseMvcc, UseNewEngine)
     delayedProposeCount = 0;
     auto sender3 = runtime.AllocateEdgeActor();
     Cerr << "... sending immediate upsert" << Endl;
-    SendRequest(runtime, sender3, MakeSimpleRequest(Q_(R"( 
+    SendRequest(runtime, sender3, MakeSimpleRequest(Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 42), (3, 51))")));
 
     // Wait unti that propose starts to execute
@@ -4083,8 +4083,8 @@ Y_UNIT_TEST_QUAD(TestShardRestartNoUndeterminedImmediate, UseMvcc, UseNewEngine)
     // Select key 1 and verify its value was not updated
     {
         auto sender4 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender4, MakeSimpleRequest(Q_(R"( 
-            SELECT key, value FROM `/Root/table-1` WHERE key = 1 ORDER BY key)"))); 
+        auto ev = ExecRequest(runtime, sender4, MakeSimpleRequest(Q_(R"(
+            SELECT key, value FROM `/Root/table-1` WHERE key = 1 ORDER BY key)")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
@@ -4093,7 +4093,7 @@ Y_UNIT_TEST_QUAD(TestShardRestartNoUndeterminedImmediate, UseMvcc, UseNewEngine)
     }
 }
 
-Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, UseMvcc, UseNewEngine) { 
+Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, UseMvcc, UseNewEngine) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -4104,13 +4104,13 @@ Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, UseMvcc, UseNewEngi
     auto &runtime = *server->GetRuntime();
     auto sender = runtime.AllocateEdgeActor();
 
-//    runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, NLog::PRI_TRACE); 
-//    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
-//    if (UseNewEngine) { 
-//        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_TRACE); 
-//    } else { 
-//        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE); 
-//    } 
+//    runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, NLog::PRI_TRACE);
+//    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+//    if (UseNewEngine) {
+//        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_TRACE);
+//    } else {
+//        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+//    }
 
     InitRoot(server, sender);
 
@@ -4118,17 +4118,17 @@ Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, UseMvcc, UseNewEngi
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
     auto table1shards = GetTableShards(server, sender, "/Root/table-1");
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1)")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1)"));
 
     TString sessionId = CreateSession(runtime, sender);
 
     TString txId;
     {
-        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"( 
-            SELECT * FROM `/Root/table-1` 
-            UNION ALL 
-            SELECT * FROM `/Root/table-2`)"))); 
+        auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(R"(
+            SELECT * FROM `/Root/table-1`
+            UNION ALL
+            SELECT * FROM `/Root/table-2`)")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         txId = response.GetResponse().GetTxMeta().id();
@@ -4163,9 +4163,9 @@ Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, UseMvcc, UseNewEngi
 
     // Send a commit request, it would block on readset exchange
     auto sender2 = runtime.AllocateEdgeActor();
-    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"( 
-        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2); 
-        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))"))); 
+    SendRequest(runtime, sender2, MakeCommitRequest(sessionId, txId, Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2);
+        UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2))")));
 
     // Wait until we captured both readsets
     waitFor([&]{ return readSets.size() >= 2; }, "commit read sets");
@@ -4186,8 +4186,8 @@ Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, UseMvcc, UseNewEngi
     // Select key 3 and verify its value was updated
     {
         auto sender4 = runtime.AllocateEdgeActor();
-        auto ev = ExecRequest(runtime, sender4, MakeSimpleRequest(Q_(R"( 
-            SELECT key, value FROM `/Root/table-1` WHERE key = 3 ORDER BY key)"))); 
+        auto ev = ExecRequest(runtime, sender4, MakeSimpleRequest(Q_(R"(
+            SELECT key, value FROM `/Root/table-1` WHERE key = 3 ORDER BY key)")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
@@ -4196,7 +4196,7 @@ Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, UseMvcc, UseNewEngi
     }
 }
 
-Y_UNIT_TEST_NEW_ENGINE(TestShardSnapshotReadNoEarlyReply) { 
+Y_UNIT_TEST_NEW_ENGINE(TestShardSnapshotReadNoEarlyReply) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -4213,8 +4213,8 @@ Y_UNIT_TEST_NEW_ENGINE(TestShardSnapshotReadNoEarlyReply) {
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)"));
     auto table1shards = GetTableShards(server, sender, "/Root/table-1");
     auto table2shards = GetTableShards(server, sender, "/Root/table-2");
     auto isTableShard = [&](ui64 tabletId) -> bool {
@@ -4268,16 +4268,16 @@ Y_UNIT_TEST_NEW_ENGINE(TestShardSnapshotReadNoEarlyReply) {
     auto sender2 = runtime.AllocateEdgeActor();
     TString sessionId2 = CreateSession(runtime, sender2, "/Root");
 
-    SendRequest(runtime, sender1, MakeBeginRequest(sessionId1, Q_(R"( 
+    SendRequest(runtime, sender1, MakeBeginRequest(sessionId1, Q_(R"(
         SELECT * FROM `/Root/table-1`
         UNION ALL
         SELECT * FROM `/Root/table-2`
-    )"), "/Root")); 
-    SendRequest(runtime, sender2, MakeBeginRequest(sessionId2, Q_(R"( 
+    )"), "/Root"));
+    SendRequest(runtime, sender2, MakeBeginRequest(sessionId2, Q_(R"(
         SELECT * FROM `/Root/table-1`
         UNION ALL
         SELECT * FROM `/Root/table-2`
-    )"), "/Root")); 
+    )"), "/Root"));
 
     waitFor([&]{ return blockedCommits.size() >= 2; }, "at least 2 blocked commits");
 
@@ -4310,16 +4310,16 @@ Y_UNIT_TEST_NEW_ENGINE(TestShardSnapshotReadNoEarlyReply) {
 
     // Start blocking commits again and try performing new writes
     prevObserver = runtime.SetObserverFunc(blockCommits);
-    SendRequest(runtime, sender, MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 3)"), "/Root")); 
-    SendRequest(runtime, sender, MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 4)"), "/Root")); 
+    SendRequest(runtime, sender, MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 3)"), "/Root"));
+    SendRequest(runtime, sender, MakeSimpleRequest(Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 4)"), "/Root"));
     waitFor([&]{ return blockedCommits.size() >= 2; }, "at least 2 blocked commits");
 
     // Send an additional read request, it must not be blocked
-    SendRequest(runtime, sender1, MakeContinueRequest(sessionId1, txId1, Q_(R"( 
+    SendRequest(runtime, sender1, MakeContinueRequest(sessionId1, txId1, Q_(R"(
         SELECT * FROM `/Root/table-1`
         UNION ALL
         SELECT * FROM `/Root/table-2`
-    )"), "/Root")); 
+    )"), "/Root"));
 
     {
         auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender1);
@@ -4345,8 +4345,8 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadAfterBrokenLock, UseNewEngine) {
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)"));
 
     SimulateSleep(server, TDuration::Seconds(1));
 
@@ -4369,7 +4369,7 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadAfterBrokenLock, UseNewEngine) {
     SimulateSleep(server, TDuration::Seconds(1));
 
     // Perform immediate write, which would not break the above lock
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 3)")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 3)"));
 
     // Perform an additional read, it would mark transaction as write-broken
     {
@@ -4417,8 +4417,8 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadAfterBrokenLockOutOfOrder, UseNewEngine) {
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)"));
 
     SimulateSleep(server, TDuration::Seconds(1));
 
@@ -4494,7 +4494,7 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadAfterBrokenLockOutOfOrder, UseNewEngine) {
 
     // Perform immediate write, which would break the above lock
     Cerr << "... performing an upsert" << Endl;
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 3)")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 3)"));
 
     // Perform an additional read, it would mark transaction as write-broken for the first time
     {
@@ -4547,8 +4547,8 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadAfterStuckRW, UseNewEngine) {
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)")); 
-    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)")); 
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)"));
 
     SimulateSleep(server, TDuration::Seconds(1));
 

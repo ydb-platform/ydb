@@ -16,37 +16,37 @@ public:
         NTable::TTag Tag;
         NScheme::TTypeId Type;
     };
- 
-    // used only at then building of a computation graph, to inject taskId in runtime nodes 
-    void SetCurrentTaskId(ui64 taskId) { CurrentTaskId = taskId; } 
-    ui64 GetCurrentTaskId() const { return CurrentTaskId; } 
- 
-private: 
-    ui64 CurrentTaskId = 0; 
+
+    // used only at then building of a computation graph, to inject taskId in runtime nodes
+    void SetCurrentTaskId(ui64 taskId) { CurrentTaskId = taskId; }
+    ui64 GetCurrentTaskId() const { return CurrentTaskId; }
+
+private:
+    ui64 CurrentTaskId = 0;
 };
 
 TComputationNodeFactory GetKqpBaseComputeFactory(const TKqpComputeContextBase* computeCtx);
 
-class TKqpEnsureFail : public yexception { 
-public: 
-    TKqpEnsureFail(ui32 code, TString&& message) 
-        : Code(code) 
-        , Message(std::move(message)) {} 
- 
-    ui32 GetCode() const { 
-        return Code; 
-    } 
- 
-    const TString& GetMessage() const { 
-        return Message; 
-    } 
- 
-private: 
-    ui32 Code; 
-    TString Message; 
-}; 
- 
-IComputationNode* WrapKqpEnsure(TCallable& callable, const TComputationNodeFactoryContext& ctx); 
- 
-} // namespace NMiniKQL 
+class TKqpEnsureFail : public yexception {
+public:
+    TKqpEnsureFail(ui32 code, TString&& message)
+        : Code(code)
+        , Message(std::move(message)) {}
+
+    ui32 GetCode() const {
+        return Code;
+    }
+
+    const TString& GetMessage() const {
+        return Message;
+    }
+
+private:
+    ui32 Code;
+    TString Message;
+};
+
+IComputationNode* WrapKqpEnsure(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+
+} // namespace NMiniKQL
 } // namespace NKikimr

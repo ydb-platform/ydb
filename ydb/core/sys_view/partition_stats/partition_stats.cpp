@@ -354,7 +354,7 @@ public:
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
             hFunc(TEvSysView::TEvGetPartitionStatsResult, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-            hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution); 
+            hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
@@ -461,7 +461,7 @@ private:
                     return s.GetStats().HasUpdateTime() ? TCell::Make<ui64>(s.GetStats().GetUpdateTime() * 1000) : TCell();
                 }});
                 insert({TSchema::InFlightTxCount::ColumnId, [] (const TPartitionStats& s) {
-                    return TCell::Make<ui32>(s.GetStats().GetInFlightTxCount()); 
+                    return TCell::Make<ui32>(s.GetStats().GetInFlightTxCount());
                 }});
                 insert({TSchema::RowUpdates::ColumnId, [] (const TPartitionStats& s) {
                     return TCell::Make<ui64>(s.GetStats().GetRowUpdates());

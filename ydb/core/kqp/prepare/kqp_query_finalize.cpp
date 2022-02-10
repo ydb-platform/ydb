@@ -23,14 +23,14 @@ const TStringBuf LocksTableVersion = "0";
 const TString LocksTablePathId = TKikimrPathId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks2).ToString();
 const ui64 LocksInvalidatedCount = 1;
 
-TExprBase GetDeferredEffectsList(const TDeferredEffects& effects, TPositionHandle pos, TExprContext& ctx) { 
-    if (effects.Empty()) { 
+TExprBase GetDeferredEffectsList(const TDeferredEffects& effects, TPositionHandle pos, TExprContext& ctx) {
+    if (effects.Empty()) {
         return GetEmptyEffectsList(pos, ctx);
     }
 
     TVector<TExprBase> effectNodes;
-    effectNodes.reserve(effects.Size()); 
-    for (const auto& effect : effects) { 
+    effectNodes.reserve(effects.Size());
+    for (const auto& effect : effects) {
         YQL_ENSURE(effect.Params.empty());
         YQL_ENSURE(effect.Node);
         effectNodes.push_back(effect.Node.Cast());
@@ -128,7 +128,7 @@ public:
             YQL_ENSURE(!settings.GetCommitTx());
 
             YQL_CLOG(INFO, ProviderKqp) << "Rollback Tx"
-                << ", deferred effects count: " << TxState->Tx().DeferredEffects.Size() 
+                << ", deferred effects count: " << TxState->Tx().DeferredEffects.Size()
                 << ", locks count: " << TxState->Tx().Locks.Size();
 
             effectsNode = GetRollbackEffects(input->Pos(), ctx);
@@ -154,7 +154,7 @@ public:
             }
 
             YQL_CLOG(INFO, ProviderKqp) << "Commit Tx"
-                << ", deferred effects count: " << TxState->Tx().DeferredEffects.Size() 
+                << ", deferred effects count: " << TxState->Tx().DeferredEffects.Size()
                 << ", locks count: " << TxState->Tx().Locks.Size();
 
             State = EFinalizeState::CommitInProgress;
@@ -290,7 +290,7 @@ private:
         YQL_ENSURE(State == EFinalizeState::Initial);
 
         YQL_CLOG(INFO, ProviderKqp) << "Rollback Tx On Error"
-            << ", deferred effects count: " << TxState->Tx().DeferredEffects.Size() 
+            << ", deferred effects count: " << TxState->Tx().DeferredEffects.Size()
             << ", locks count: " << TxState->Tx().Locks.Size();
 
         auto program = Build<TKiProgram>(ctx, TPositionHandle())
@@ -399,12 +399,12 @@ private:
         return true;
     }
 
-    void ResetTxState(bool committed) { 
-        if (!committed) { 
+    void ResetTxState(bool committed) {
+        if (!committed) {
             TxState->Tx().Invalidate();
         }
 
-        TxState->Tx().ClearDeferredEffects(); 
+        TxState->Tx().ClearDeferredEffects();
         TxState->Tx().Locks.Clear();
         TxState->Tx().Finish();
     }
@@ -427,7 +427,7 @@ private:
     }
 
     TExprBase GetCommitEffects(TPositionHandle pos, TExprContext& ctx, bool& hasDataEffects) {
-        hasDataEffects = !TxState->Tx().DeferredEffects.Empty(); 
+        hasDataEffects = !TxState->Tx().DeferredEffects.Empty();
 
         Y_VERIFY_DEBUG(!hasDataEffects || !TxState->Tx().Locks.Broken());
 
@@ -634,5 +634,5 @@ TAutoPtr<IGraphTransformer> CreateKqpFinalizeTransformer(TIntrusivePtr<IKqpGatew
     return new TKqpFinalizeTransformer(gateway, cluster, txState, transformCtx);
 }
 
-} // namespace NKqp 
+} // namespace NKqp
 } // namespace NKikimr

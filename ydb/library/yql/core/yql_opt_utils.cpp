@@ -336,11 +336,11 @@ const TTypeAnnotationNode* GetSeqItemType(const TTypeAnnotationNode* type) {
         case ETypeAnnotationKind::Stream: return type->Cast<TStreamExprType>()->GetItemType();
         case ETypeAnnotationKind::Optional: return type->Cast<TOptionalExprType>()->GetItemType();
         default: break;
-    } 
+    }
 
-    THROW yexception() << "Impossible to get item type from " << *type; 
-} 
- 
+    THROW yexception() << "Impossible to get item type from " << *type;
+}
+
 TExprNode::TPtr GetSetting(const TExprNode& settings, const TStringBuf& name) {
     for (auto& setting : settings.Children()) {
         if (setting->ChildrenSize() != 0 && setting->Child(0)->Content() == name) {

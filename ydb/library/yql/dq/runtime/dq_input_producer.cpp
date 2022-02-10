@@ -1,63 +1,63 @@
-#include "dq_input_producer.h" 
- 
+#include "dq_input_producer.h"
+
 #include "dq_columns_resolve.h"
 
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
-namespace NYql::NDq { 
- 
-using namespace NKikimr; 
-using namespace NMiniKQL; 
+namespace NYql::NDq {
+
+using namespace NKikimr;
+using namespace NMiniKQL;
 using namespace NUdf;
- 
-namespace { 
- 
-class TDqInputUnionStreamValue : public TComputationValue<TDqInputUnionStreamValue> { 
-public: 
+
+namespace {
+
+class TDqInputUnionStreamValue : public TComputationValue<TDqInputUnionStreamValue> {
+public:
     TDqInputUnionStreamValue(TMemoryUsageInfo* memInfo, TVector<IDqInput::TPtr>&& inputs)
-        : TComputationValue<TDqInputUnionStreamValue>(memInfo) 
+        : TComputationValue<TDqInputUnionStreamValue>(memInfo)
         , Inputs(std::move(inputs))
-        , CurrentItemIndex(0) {} 
- 
-private: 
-    NUdf::EFetchStatus Fetch(NKikimr::NUdf::TUnboxedValue& result) final { 
-        if (CurrentItemIndex >= CurrentBuffer.size()) { 
-            auto status = FindBuffer(); 
-            switch (status) { 
-                case NUdf::EFetchStatus::Ok: 
-                    break; 
-                case NUdf::EFetchStatus::Finish: 
-                case NUdf::EFetchStatus::Yield: 
-                    return status; 
-            } 
-        } 
- 
-        result = std::move(CurrentBuffer[CurrentItemIndex]); 
-        ++CurrentItemIndex; 
-        return NUdf::EFetchStatus::Ok; 
-    } 
- 
-    NUdf::EFetchStatus FindBuffer() { 
-        bool allFinished = true; 
-        CurrentBuffer.clear(); 
- 
+        , CurrentItemIndex(0) {}
+
+private:
+    NUdf::EFetchStatus Fetch(NKikimr::NUdf::TUnboxedValue& result) final {
+        if (CurrentItemIndex >= CurrentBuffer.size()) {
+            auto status = FindBuffer();
+            switch (status) {
+                case NUdf::EFetchStatus::Ok:
+                    break;
+                case NUdf::EFetchStatus::Finish:
+                case NUdf::EFetchStatus::Yield:
+                    return status;
+            }
+        }
+
+        result = std::move(CurrentBuffer[CurrentItemIndex]);
+        ++CurrentItemIndex;
+        return NUdf::EFetchStatus::Ok;
+    }
+
+    NUdf::EFetchStatus FindBuffer() {
+        bool allFinished = true;
+        CurrentBuffer.clear();
+
         for (auto& input : Inputs) {
             if (input->Pop(CurrentBuffer)) {
-                CurrentItemIndex = 0; 
-                return NUdf::EFetchStatus::Ok; 
-            } 
+                CurrentItemIndex = 0;
+                return NUdf::EFetchStatus::Ok;
+            }
             allFinished &= input->IsFinished();
-        } 
- 
-        return allFinished ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Yield; 
-    } 
- 
-private: 
+        }
+
+        return allFinished ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Yield;
+    }
+
+private:
     TVector<IDqInput::TPtr> Inputs;
-    TUnboxedValueVector CurrentBuffer; 
-    ui64 CurrentItemIndex; 
-}; 
- 
+    TUnboxedValueVector CurrentBuffer;
+    ui64 CurrentItemIndex;
+};
+
 class TDqInputMergeStreamValue : public TComputationValue<TDqInputMergeStreamValue> {
 public:
     TDqInputMergeStreamValue(TMemoryUsageInfo* memInfo, TVector<IDqInput::TPtr>&& inputs,
@@ -169,18 +169,18 @@ private:
     TMap<ui32, EDataSlot> SortColTypes;
 };
 
-} // namespace 
- 
+} // namespace
+
 NUdf::TUnboxedValue CreateInputUnionValue(TVector<IDqInput::TPtr>&& inputs,
-    const NMiniKQL::THolderFactory& factory) 
-{ 
+    const NMiniKQL::THolderFactory& factory)
+{
     return factory.Create<TDqInputUnionStreamValue>(std::move(inputs));
-} 
- 
+}
+
 NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(TVector<IDqInput::TPtr>&& inputs,
     TVector<TSortColumnInfo>&& sortCols, const NKikimr::NMiniKQL::THolderFactory& factory)
 {
     return factory.Create<TDqInputMergeStreamValue>(std::move(inputs), std::move(sortCols));
 }
 
-} // namespace NYql::NDq 
+} // namespace NYql::NDq

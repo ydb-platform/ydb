@@ -27,7 +27,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
     enum class EReplicaState {
         Unknown,
-        NotAvailable, 
+        NotAvailable,
         NoInfo,
         Ready,
     };
@@ -140,7 +140,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         const ui32 nodeId = ev->Get()->NodeId;
         for (auto &replica : Replicas) {
             if (replica.Replica.NodeId() == nodeId && replica.State == EReplicaState::Unknown) {
-                replica.State = EReplicaState::NotAvailable; 
+                replica.State = EReplicaState::NotAvailable;
                 ++Stats.Replied;
                 ++Stats.NoInfo;
             }
@@ -159,7 +159,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         auto &replica = Replicas[idx];
         if (replica.State != EReplicaState::Unknown)
             return;
-        replica.State = EReplicaState::NotAvailable; 
+        replica.State = EReplicaState::NotAvailable;
         ++Stats.Replied;
         ++Stats.NoInfo;
 

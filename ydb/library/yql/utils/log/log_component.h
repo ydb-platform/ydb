@@ -31,7 +31,7 @@ enum class EComponent {
     ProviderYdb,
     ProviderPq,
     ProviderS3,
-    CoreDq, 
+    CoreDq,
     // <--- put other log components here
     MaxValue
 };
@@ -72,7 +72,7 @@ struct EComponentHelpers {
         case EComponent::ProviderYdb: return TStringBuf("YDB");
         case EComponent::ProviderPq: return TStringBuf("PQ");
         case EComponent::ProviderS3: return TStringBuf("S3");
-        case EComponent::CoreDq: return TStringBuf("core dq"); 
+        case EComponent::CoreDq: return TStringBuf("core dq");
         default:
             ythrow yexception() << "invalid log component value: "
                                 << ToInt(component);
@@ -102,7 +102,7 @@ struct EComponentHelpers {
         if (str == TStringBuf("YDB")) return EComponent::ProviderYdb;
         if (str == TStringBuf("PQ")) return EComponent::ProviderPq;
         if (str == TStringBuf("S3")) return EComponent::ProviderS3;
-        if (str == TStringBuf("core dq")) return EComponent::CoreDq; 
+        if (str == TStringBuf("core dq")) return EComponent::CoreDq;
         ythrow yexception() << "unknown log component: '" << str << '\'';
     }
 
@@ -117,5 +117,5 @@ struct EComponentHelpers {
     }
 };
 
-} // namespace NLog 
-} // namespace NYql 
+} // namespace NLog
+} // namespace NYql

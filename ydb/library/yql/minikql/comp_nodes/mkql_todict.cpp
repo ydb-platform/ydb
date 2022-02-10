@@ -630,55 +630,55 @@ public:
     }
 };
 
-template <typename TSetAccumulator, bool IsStream> 
-class TSetWrapper : public TMutableComputationNode<TSetWrapper<TSetAccumulator, IsStream>> { 
-    typedef TMutableComputationNode<TSetWrapper<TSetAccumulator, IsStream>> TBaseComputation; 
+template <typename TSetAccumulator, bool IsStream>
+class TSetWrapper : public TMutableComputationNode<TSetWrapper<TSetAccumulator, IsStream>> {
+    typedef TMutableComputationNode<TSetWrapper<TSetAccumulator, IsStream>> TBaseComputation;
 public:
-    class TStreamValue : public TComputationValue<TStreamValue> { 
-    public: 
-        TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& input, IComputationExternalNode* const item, 
-            IComputationNode* const key, TSetAccumulator&& setAccum, TComputationContext& ctx) 
-            : TComputationValue<TStreamValue>(memInfo) 
-            , Input(std::move(input)) 
-            , Item(item) 
-            , Key(key) 
-            , SetAccum(std::move(setAccum)) 
-            , Ctx(ctx) {} 
- 
-    private: 
-        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override { 
-            if (Finished) { 
-                return NUdf::EFetchStatus::Finish; 
-            } 
- 
-            for (;;) { 
-                NUdf::TUnboxedValue item; 
-                switch (auto status = Input.Fetch(item)) { 
-                    case NUdf::EFetchStatus::Ok: { 
-                        Item->SetValue(Ctx, std::move(item)); 
-                        SetAccum.Add(Key->GetValue(Ctx)); 
-                        break; // and continue 
-                    } 
-                    case NUdf::EFetchStatus::Finish: { 
-                        result = SetAccum.Build(); 
-                        Finished = true; 
-                        return NUdf::EFetchStatus::Ok; 
-                    } 
-                    case NUdf::EFetchStatus::Yield: { 
-                        return NUdf::EFetchStatus::Yield; 
-                    } 
-                } 
-            } 
-        } 
- 
-        NUdf::TUnboxedValue Input; 
-        IComputationExternalNode* const Item; 
-        IComputationNode* const Key; 
-        TSetAccumulator SetAccum; 
-        TComputationContext& Ctx; 
-        bool Finished = false; 
-    }; 
- 
+    class TStreamValue : public TComputationValue<TStreamValue> {
+    public:
+        TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& input, IComputationExternalNode* const item,
+            IComputationNode* const key, TSetAccumulator&& setAccum, TComputationContext& ctx)
+            : TComputationValue<TStreamValue>(memInfo)
+            , Input(std::move(input))
+            , Item(item)
+            , Key(key)
+            , SetAccum(std::move(setAccum))
+            , Ctx(ctx) {}
+
+    private:
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+            if (Finished) {
+                return NUdf::EFetchStatus::Finish;
+            }
+
+            for (;;) {
+                NUdf::TUnboxedValue item;
+                switch (auto status = Input.Fetch(item)) {
+                    case NUdf::EFetchStatus::Ok: {
+                        Item->SetValue(Ctx, std::move(item));
+                        SetAccum.Add(Key->GetValue(Ctx));
+                        break; // and continue
+                    }
+                    case NUdf::EFetchStatus::Finish: {
+                        result = SetAccum.Build();
+                        Finished = true;
+                        return NUdf::EFetchStatus::Ok;
+                    }
+                    case NUdf::EFetchStatus::Yield: {
+                        return NUdf::EFetchStatus::Yield;
+                    }
+                }
+            }
+        }
+
+        NUdf::TUnboxedValue Input;
+        IComputationExternalNode* const Item;
+        IComputationNode* const Key;
+        TSetAccumulator SetAccum;
+        TComputationContext& Ctx;
+        bool Finished = false;
+    };
+
     TSetWrapper(TComputationMutables& mutables, TType* keyType, IComputationNode* list, IComputationExternalNode* item,
         IComputationNode* key, ui64 itemsCountHint)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
@@ -692,11 +692,11 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        if constexpr (IsStream) { 
-            return ctx.HolderFactory.Create<TStreamValue>(List->GetValue(ctx), Item, Key, 
-                TSetAccumulator(KeyType, KeyTypes, IsTuple, Encoded, ctx, ItemsCountHint), ctx); 
-        } 
- 
+        if constexpr (IsStream) {
+            return ctx.HolderFactory.Create<TStreamValue>(List->GetValue(ctx), Item, Key,
+                TSetAccumulator(KeyType, KeyTypes, IsTuple, Encoded, ctx, ItemsCountHint), ctx);
+        }
+
         const auto& list = List->GetValue(ctx);
         auto itemsCountHint = ItemsCountHint;
         if (list.HasFastListLength()) {
@@ -735,47 +735,47 @@ private:
     bool Encoded;
 };
 
-template <typename TSetAccumulator> 
+template <typename TSetAccumulator>
 class TSqueezeSetFlowWrapper : public TStatefulFlowCodegeneratorNode<TSqueezeSetFlowWrapper<TSetAccumulator>> {
     using TBase = TStatefulFlowCodegeneratorNode<TSqueezeSetFlowWrapper<TSetAccumulator>>;
 public:
-    class TState : public TComputationValue<TState> { 
-        using TBase = TComputationValue<TState>; 
-    public: 
-        TState(TMemoryUsageInfo* memInfo, TSetAccumulator&& setAccum) 
-            : TBase(memInfo), SetAccum(std::move(setAccum)) {} 
- 
+    class TState : public TComputationValue<TState> {
+        using TBase = TComputationValue<TState>;
+    public:
+        TState(TMemoryUsageInfo* memInfo, TSetAccumulator&& setAccum)
+            : TBase(memInfo), SetAccum(std::move(setAccum)) {}
+
         NUdf::TUnboxedValuePod Build() {
             return SetAccum.Build().Release();
-        } 
- 
+        }
+
         void Insert(NUdf::TUnboxedValuePod value) {
             SetAccum.Add(value);
-        } 
- 
-    private: 
-        TSetAccumulator SetAccum; 
-    }; 
- 
+        }
+
+    private:
+        TSetAccumulator SetAccum;
+    };
+
     TSqueezeSetFlowWrapper(TComputationMutables& mutables, TType* keyType,
-        IComputationNode* flow, IComputationExternalNode* item, IComputationNode* key, ui64 itemsCountHint) 
+        IComputationNode* flow, IComputationExternalNode* item, IComputationNode* key, ui64 itemsCountHint)
         : TBase(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any)
-        , KeyType(keyType) 
-        , Flow(flow) 
-        , Item(item) 
-        , Key(key) 
-        , ItemsCountHint(itemsCountHint) 
-    { 
-        GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded); 
-    } 
- 
+        , KeyType(keyType)
+        , Flow(flow)
+        , Item(item)
+        , Key(key)
+        , ItemsCountHint(itemsCountHint)
+    {
+        GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded);
+    }
+
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
             return state.Release();
         } else if (!state.HasValue()) {
             MakeState(ctx, state);
-        } 
- 
+        }
+
         while (const auto statePtr = static_cast<TState*>(state.AsBoxed().Get())) {
             if (auto item = Flow->GetValue(ctx); item.IsYield()) {
                 return item.Release();
@@ -787,19 +787,19 @@ public:
                 Item->SetValue(ctx, std::move(item));
                 statePtr->Insert(Key->GetValue(ctx).Release());
             }
-        } 
+        }
         Y_UNREACHABLE();
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
- 
+
         const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(Item);
         MKQL_ENSURE(codegenItemArg, "Item must be codegenerator node.");
- 
+
         const auto valueType = Type::getInt128Ty(context);
         const auto structPtrType = PointerType::getUnqual(StructType::get(context));
- 
+
         const auto stateType = StructType::get(context, {
             structPtrType,              // vtbl
             Type::getInt32Ty(context),  // ref
@@ -884,37 +884,37 @@ public:
             const auto dict = new LoadInst(ptr, "dict", block);
             UnRefBoxed(state, ctx, block);
             result->addIncoming(dict, block);
-        } 
- 
+        }
+
         new StoreInst(item, statePtr, block);
         BranchInst::Create(over, block);
 
         block = over;
         return result;
-    } 
-#endif 
+    }
+#endif
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         state = ctx.HolderFactory.Create<TState>(TSetAccumulator(KeyType, KeyTypes, IsTuple, Encoded, ctx, ItemsCountHint));
     }
- 
-    void RegisterDependencies() const final { 
+
+    void RegisterDependencies() const final {
         if (const auto flow = this->FlowDependsOn(Flow)) {
             this->Own(flow, Item);
             this->DependsOn(flow, Key);
         }
-    } 
- 
-    TType* const KeyType; 
-    IComputationNode* const Flow; 
-    IComputationExternalNode* const Item; 
-    IComputationNode* const Key; 
-    const ui64 ItemsCountHint; 
-    TKeyTypes KeyTypes; 
-    bool IsTuple; 
-    bool Encoded; 
-}; 
- 
+    }
+
+    TType* const KeyType;
+    IComputationNode* const Flow;
+    IComputationExternalNode* const Item;
+    IComputationNode* const Key;
+    const ui64 ItemsCountHint;
+    TKeyTypes KeyTypes;
+    bool IsTuple;
+    bool Encoded;
+};
+
 template <typename TSetAccumulator>
 class TSqueezeSetWideWrapper : public TStatefulFlowCodegeneratorNode<TSqueezeSetWideWrapper<TSetAccumulator>> {
     using TBase = TStatefulFlowCodegeneratorNode<TSqueezeSetWideWrapper<TSetAccumulator>>;
@@ -1110,57 +1110,57 @@ private:
     mutable std::vector<NUdf::TUnboxedValue*> Fields;
 };
 
-template <typename TMapAccumulator, bool IsStream> 
-class TMapWrapper : public TMutableComputationNode<TMapWrapper<TMapAccumulator, IsStream>> { 
-    typedef TMutableComputationNode<TMapWrapper<TMapAccumulator, IsStream>> TBaseComputation; 
-public: 
-    class TStreamValue : public TComputationValue<TStreamValue> { 
-    public: 
-        TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& input, IComputationExternalNode* const item, 
-            IComputationNode* const key, IComputationNode* const payload, TMapAccumulator&& mapAccum, TComputationContext& ctx) 
-            : TComputationValue<TStreamValue>(memInfo) 
-            , Input(std::move(input)) 
-            , Item(item) 
-            , Key(key) 
-            , Payload(payload) 
-            , MapAccum(std::move(mapAccum)) 
-            , Ctx(ctx) {} 
- 
-    private: 
-        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override { 
-            if (Finished) { 
-                return NUdf::EFetchStatus::Finish; 
-            } 
- 
-            for (;;) { 
-                NUdf::TUnboxedValue item; 
-                switch (auto status = Input.Fetch(item)) { 
-                    case NUdf::EFetchStatus::Ok: { 
-                        Item->SetValue(Ctx, std::move(item)); 
-                        MapAccum.Add(Key->GetValue(Ctx), Payload->GetValue(Ctx)); 
-                        break; // and continue 
-                    } 
-                    case NUdf::EFetchStatus::Finish: { 
-                        result = MapAccum.Build(); 
-                        Finished = true; 
-                        return NUdf::EFetchStatus::Ok; 
-                    } 
-                    case NUdf::EFetchStatus::Yield: { 
-                        return NUdf::EFetchStatus::Yield; 
-                    } 
-                } 
-            } 
-        } 
- 
-        NUdf::TUnboxedValue Input; 
-        IComputationExternalNode* const Item; 
-        IComputationNode* const Key; 
-        IComputationNode* const Payload; 
-        TMapAccumulator MapAccum; 
-        TComputationContext& Ctx; 
-        bool Finished = false; 
-    }; 
- 
+template <typename TMapAccumulator, bool IsStream>
+class TMapWrapper : public TMutableComputationNode<TMapWrapper<TMapAccumulator, IsStream>> {
+    typedef TMutableComputationNode<TMapWrapper<TMapAccumulator, IsStream>> TBaseComputation;
+public:
+    class TStreamValue : public TComputationValue<TStreamValue> {
+    public:
+        TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& input, IComputationExternalNode* const item,
+            IComputationNode* const key, IComputationNode* const payload, TMapAccumulator&& mapAccum, TComputationContext& ctx)
+            : TComputationValue<TStreamValue>(memInfo)
+            , Input(std::move(input))
+            , Item(item)
+            , Key(key)
+            , Payload(payload)
+            , MapAccum(std::move(mapAccum))
+            , Ctx(ctx) {}
+
+    private:
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+            if (Finished) {
+                return NUdf::EFetchStatus::Finish;
+            }
+
+            for (;;) {
+                NUdf::TUnboxedValue item;
+                switch (auto status = Input.Fetch(item)) {
+                    case NUdf::EFetchStatus::Ok: {
+                        Item->SetValue(Ctx, std::move(item));
+                        MapAccum.Add(Key->GetValue(Ctx), Payload->GetValue(Ctx));
+                        break; // and continue
+                    }
+                    case NUdf::EFetchStatus::Finish: {
+                        result = MapAccum.Build();
+                        Finished = true;
+                        return NUdf::EFetchStatus::Ok;
+                    }
+                    case NUdf::EFetchStatus::Yield: {
+                        return NUdf::EFetchStatus::Yield;
+                    }
+                }
+            }
+        }
+
+        NUdf::TUnboxedValue Input;
+        IComputationExternalNode* const Item;
+        IComputationNode* const Key;
+        IComputationNode* const Payload;
+        TMapAccumulator MapAccum;
+        TComputationContext& Ctx;
+        bool Finished = false;
+    };
+
     TMapWrapper(TComputationMutables& mutables, TType* keyType, TType* payloadType, IComputationNode* list, IComputationExternalNode* item,
         IComputationNode* key, IComputationNode* payload, ui64 itemsCountHint)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
@@ -1176,11 +1176,11 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        if constexpr (IsStream) { 
-            return ctx.HolderFactory.Create<TStreamValue>(List->GetValue(ctx), Item, Key, Payload, 
-                TMapAccumulator(KeyType, PayloadType, KeyTypes, IsTuple, Encoded, ctx, ItemsCountHint), ctx); 
-        } 
- 
+        if constexpr (IsStream) {
+            return ctx.HolderFactory.Create<TStreamValue>(List->GetValue(ctx), Item, Key, Payload,
+                TMapAccumulator(KeyType, PayloadType, KeyTypes, IsTuple, Encoded, ctx, ItemsCountHint), ctx);
+        }
+
         const auto& list = List->GetValue(ctx);
 
         auto itemsCountHint = ItemsCountHint;
@@ -1223,50 +1223,50 @@ private:
     bool Encoded;
 };
 
-template <typename TMapAccumulator> 
+template <typename TMapAccumulator>
 class TSqueezeMapFlowWrapper : public TStatefulFlowCodegeneratorNode<TSqueezeMapFlowWrapper<TMapAccumulator>> {
     using TBase = TStatefulFlowCodegeneratorNode<TSqueezeMapFlowWrapper<TMapAccumulator>>;
-public: 
-    class TState : public TComputationValue<TState> { 
-        using TBase = TComputationValue<TState>; 
-    public: 
-        TState(TMemoryUsageInfo* memInfo, TMapAccumulator&& mapAccum) 
-            : TBase(memInfo), MapAccum(std::move(mapAccum)) {} 
- 
+public:
+    class TState : public TComputationValue<TState> {
+        using TBase = TComputationValue<TState>;
+    public:
+        TState(TMemoryUsageInfo* memInfo, TMapAccumulator&& mapAccum)
+            : TBase(memInfo), MapAccum(std::move(mapAccum)) {}
+
         NUdf::TUnboxedValuePod Build() {
             return MapAccum.Build().Release();
-        } 
- 
+        }
+
         void Insert(NUdf::TUnboxedValuePod key, NUdf::TUnboxedValuePod value) {
             MapAccum.Add(key, value);
-        } 
- 
-    private: 
-        TMapAccumulator MapAccum; 
-    }; 
- 
+        }
+
+    private:
+        TMapAccumulator MapAccum;
+    };
+
     TSqueezeMapFlowWrapper(TComputationMutables& mutables, TType* keyType, TType* payloadType,
-        IComputationNode* flow, IComputationExternalNode* item, IComputationNode* key, IComputationNode* payload, 
-        ui64 itemsCountHint) 
+        IComputationNode* flow, IComputationExternalNode* item, IComputationNode* key, IComputationNode* payload,
+        ui64 itemsCountHint)
         : TBase(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any)
-        , KeyType(keyType) 
-        , PayloadType(payloadType) 
-        , Flow(flow) 
-        , Item(item) 
-        , Key(key) 
-        , Payload(payload) 
-        , ItemsCountHint(itemsCountHint) 
-    { 
-        GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded); 
-    } 
- 
+        , KeyType(keyType)
+        , PayloadType(payloadType)
+        , Flow(flow)
+        , Item(item)
+        , Key(key)
+        , Payload(payload)
+        , ItemsCountHint(itemsCountHint)
+    {
+        GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded);
+    }
+
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
             return state;
         } else if (!state.HasValue()) {
             MakeState(ctx, state);
-        } 
- 
+        }
+
         while (const auto statePtr = static_cast<TState*>(state.AsBoxed().Get())) {
             if (auto item = Flow->GetValue(ctx); item.IsYield()) {
                 return item.Release();
@@ -1278,19 +1278,19 @@ public:
                 Item->SetValue(ctx, std::move(item));
                 statePtr->Insert(Key->GetValue(ctx).Release(), Payload->GetValue(ctx).Release());
             }
-        } 
+        }
         Y_UNREACHABLE();
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
- 
+
         const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(Item);
         MKQL_ENSURE(codegenItemArg, "Item must be codegenerator node.");
- 
+
         const auto valueType = Type::getInt128Ty(context);
         const auto structPtrType = PointerType::getUnqual(StructType::get(context));
- 
+
         const auto stateType = StructType::get(context, {
             structPtrType,              // vtbl
             Type::getInt32Ty(context),  // ref
@@ -1377,40 +1377,40 @@ public:
             const auto dict = new LoadInst(ptr, "dict", block);
             UnRefBoxed(state, ctx, block);
             result->addIncoming(dict, block);
-        } 
- 
+        }
+
         new StoreInst(item, statePtr, block);
         BranchInst::Create(over, block);
 
         block = over;
         return result;
-    } 
-#endif 
+    }
+#endif
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         state = ctx.HolderFactory.Create<TState>(TMapAccumulator(KeyType, PayloadType, KeyTypes, IsTuple, Encoded, ctx, ItemsCountHint));
     }
- 
-    void RegisterDependencies() const final { 
+
+    void RegisterDependencies() const final {
         if (const auto flow = this->FlowDependsOn(Flow)) {
             this->Own(flow, Item);
             this->DependsOn(flow, Key);
             this->DependsOn(flow, Payload);
         }
-    } 
- 
-    TType* const KeyType; 
-    TType* PayloadType; 
-    IComputationNode* const Flow; 
-    IComputationExternalNode* const Item; 
-    IComputationNode* const Key; 
-    IComputationNode* const Payload; 
-    const ui64 ItemsCountHint; 
-    TKeyTypes KeyTypes; 
-    bool IsTuple; 
-    bool Encoded; 
-}; 
- 
+    }
+
+    TType* const KeyType;
+    TType* PayloadType;
+    IComputationNode* const Flow;
+    IComputationExternalNode* const Item;
+    IComputationNode* const Key;
+    IComputationNode* const Payload;
+    const ui64 ItemsCountHint;
+    TKeyTypes KeyTypes;
+    bool IsTuple;
+    bool Encoded;
+};
+
 template <typename TMapAccumulator>
 class TSqueezeMapWideWrapper : public TStatefulFlowCodegeneratorNode<TSqueezeMapWideWrapper<TMapAccumulator>> {
     using TBase = TStatefulFlowCodegeneratorNode<TSqueezeMapWideWrapper<TMapAccumulator>>;
@@ -1617,7 +1617,7 @@ private:
 };
 
 template <typename TAccumulator>
-IComputationNode* WrapToSet(TCallable& callable, const TNodeLocator& nodeLocator, TComputationMutables& mutables) { 
+IComputationNode* WrapToSet(TCallable& callable, const TNodeLocator& nodeLocator, TComputationMutables& mutables) {
     const auto keyType = callable.GetInput(callable.GetInputsCount() - 5U).GetStaticType();
     const auto itemsCountHint = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 1U))->AsValue().Get<ui64>();
 
@@ -1635,22 +1635,22 @@ IComputationNode* WrapToSet(TCallable& callable, const TNodeLocator& nodeLocator
 
     const auto itemArg = LocateExternalNode(nodeLocator, callable, 1U);
     const auto type = callable.GetInput(0U).GetStaticType();
- 
-    if (type->IsList()) { 
+
+    if (type->IsList()) {
         return new TSetWrapper<TAccumulator, false>(mutables, keyType, flow, itemArg, keySelector, itemsCountHint);
-    } 
-    if (type->IsFlow()) { 
+    }
+    if (type->IsFlow()) {
         return new TSqueezeSetFlowWrapper<TAccumulator>(mutables, keyType, flow, itemArg, keySelector, itemsCountHint);
-    } 
-    if (type->IsStream()) { 
+    }
+    if (type->IsStream()) {
         return new TSetWrapper<TAccumulator, true>(mutables, keyType, flow, itemArg, keySelector, itemsCountHint);
-    } 
- 
-    THROW yexception() << "Expected list, flow or stream."; 
+    }
+
+    THROW yexception() << "Expected list, flow or stream.";
 }
 
 template <typename TAccumulator>
-IComputationNode* WrapToMap(TCallable& callable, const TNodeLocator& nodeLocator, TComputationMutables& mutables) { 
+IComputationNode* WrapToMap(TCallable& callable, const TNodeLocator& nodeLocator, TComputationMutables& mutables) {
     const auto keyType = callable.GetInput(callable.GetInputsCount() - 5U).GetStaticType();
     const auto payloadType = callable.GetInput(callable.GetInputsCount() - 4U).GetStaticType();
 
@@ -1672,30 +1672,30 @@ IComputationNode* WrapToMap(TCallable& callable, const TNodeLocator& nodeLocator
     const auto itemArg = LocateExternalNode(nodeLocator, callable, 1U);
     const auto type = callable.GetInput(0U).GetStaticType();
 
-    if (type->IsList()) { 
+    if (type->IsList()) {
         return new TMapWrapper<TAccumulator, false>(mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint);
-    } 
-    if (type->IsFlow()) { 
+    }
+    if (type->IsFlow()) {
         return new TSqueezeMapFlowWrapper<TAccumulator>(mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint);
-    } 
-    if (type->IsStream()) { 
+    }
+    if (type->IsStream()) {
         return new TMapWrapper<TAccumulator, true>(mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint);
-    } 
- 
-    THROW yexception() << "Expected list, flow or stream."; 
+    }
+
+    THROW yexception() << "Expected list, flow or stream.";
 }
 
-template <bool IsList> 
-IComputationNode* WrapToSortedDictInternal(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+template <bool IsList>
+IComputationNode* WrapToSortedDictInternal(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() >= 6U, "Expected six or more args.");
 
     const auto type = callable.GetInput(0U).GetStaticType();
-    if constexpr (IsList) { 
-        MKQL_ENSURE(type->IsList(), "Expected list."); 
-    } else { 
-        MKQL_ENSURE(type->IsFlow() || type->IsStream(), "Expected flow or stream."); 
-    } 
- 
+    if constexpr (IsList) {
+        MKQL_ENSURE(type->IsList(), "Expected list.");
+    } else {
+        MKQL_ENSURE(type->IsFlow() || type->IsStream(), "Expected flow or stream.");
+    }
+
     const auto keyType = callable.GetInput(callable.GetInputsCount() - 5U).GetStaticType();
     const auto payloadType = callable.GetInput(callable.GetInputsCount() - 4U).GetStaticType();
 
@@ -1706,7 +1706,7 @@ IComputationNode* WrapToSortedDictInternal(TCallable& callable, const TComputati
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0U);
     const auto keySelector = LocateNode(ctx.NodeLocator, callable, callable.GetInputsCount() -5U);
     const auto payloadSelector = LocateNode(ctx.NodeLocator, callable, callable.GetInputsCount() -4U);
- 
+
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
         const auto width = callable.GetInputsCount() - 6U;
         TComputationExternalNodePtrVector args(width, nullptr);
@@ -1724,15 +1724,15 @@ IComputationNode* WrapToSortedDictInternal(TCallable& callable, const TComputati
 
     const auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 1U);
     if (!isMulti && payloadType->IsVoid()) {
-        if (type->IsList()) { 
+        if (type->IsList()) {
             return new TSetWrapper<TSortedSetAccumulator, false>(ctx.Mutables, keyType, flow, itemArg, keySelector, itemsCountHint);
-        } 
-        if (type->IsFlow()) { 
+        }
+        if (type->IsFlow()) {
             return new TSqueezeSetFlowWrapper<TSortedSetAccumulator>(ctx.Mutables, keyType, flow, itemArg, keySelector, itemsCountHint);
-        } 
-        if (type->IsStream()) { 
+        }
+        if (type->IsStream()) {
             return new TSetWrapper<TSortedSetAccumulator, true>(ctx.Mutables, keyType, flow, itemArg, keySelector, itemsCountHint);
-        } 
+        }
     } else if (isMulti) {
         if (type->IsList()) {
             return new TMapWrapper<TSortedMapAccumulator<true>, false>(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint);
@@ -1744,37 +1744,37 @@ IComputationNode* WrapToSortedDictInternal(TCallable& callable, const TComputati
             return new TMapWrapper<TSortedMapAccumulator<true>, true>(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint);
         }
     } else {
-        if (type->IsList()) { 
+        if (type->IsList()) {
             return new TMapWrapper<TSortedMapAccumulator<false>, false>(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint);
-        } 
-        if (type->IsFlow()) { 
+        }
+        if (type->IsFlow()) {
             return new TSqueezeMapFlowWrapper<TSortedMapAccumulator<false>>(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint);
-        } 
-        if (type->IsStream()) { 
+        }
+        if (type->IsStream()) {
             return new TMapWrapper<TSortedMapAccumulator<false>, true>(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint);
-        } 
+        }
     }
- 
-    THROW yexception() << "Expected list, flow or stream."; 
+
+    THROW yexception() << "Expected list, flow or stream.";
 }
 
-template <bool IsList> 
-IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+template <bool IsList>
+IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() >= 6U, "Expected six or more args.");
- 
+
     const auto type = callable.GetInput(0U).GetStaticType();
-    if constexpr (IsList) { 
-        MKQL_ENSURE(type->IsList(), "Expected list."); 
-    } else { 
-        MKQL_ENSURE(type->IsFlow() || type->IsStream(), "Expected flow or stream."); 
-    } 
- 
+    if constexpr (IsList) {
+        MKQL_ENSURE(type->IsList(), "Expected list.");
+    } else {
+        MKQL_ENSURE(type->IsFlow() || type->IsStream(), "Expected flow or stream.");
+    }
+
     const auto keyType = callable.GetInput(callable.GetInputsCount() - 5U).GetStaticType();
     const auto payloadType = callable.GetInput(callable.GetInputsCount() - 4U).GetStaticType();
     const bool multi = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 3U))->AsValue().Get<bool>();
     const bool isCompact = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 2U))->AsValue().Get<bool>();
     const auto payloadSelectorNode = callable.GetInput(callable.GetInputsCount() - 4U);
- 
+
     if (!multi && payloadType->IsVoid()) {
         if (isCompact) {
             if (keyType->IsData()) {
@@ -1856,22 +1856,22 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
 }
 
 }
- 
-IComputationNode* WrapToSortedDict(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    return WrapToSortedDictInternal<true>(callable, ctx); 
+
+IComputationNode* WrapToSortedDict(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    return WrapToSortedDictInternal<true>(callable, ctx);
 }
- 
-IComputationNode* WrapToHashedDict(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    return WrapToHashedDictInternal<true>(callable, ctx); 
-} 
- 
-IComputationNode* WrapSqueezeToSortedDict(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    return WrapToSortedDictInternal<false>(callable, ctx); 
-} 
- 
-IComputationNode* WrapSqueezeToHashedDict(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    return WrapToHashedDictInternal<false>(callable, ctx); 
-} 
- 
-} 
-} 
+
+IComputationNode* WrapToHashedDict(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    return WrapToHashedDictInternal<true>(callable, ctx);
+}
+
+IComputationNode* WrapSqueezeToSortedDict(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    return WrapToSortedDictInternal<false>(callable, ctx);
+}
+
+IComputationNode* WrapSqueezeToHashedDict(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    return WrapToHashedDictInternal<false>(callable, ctx);
+}
+
+}
+}

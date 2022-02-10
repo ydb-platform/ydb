@@ -28,9 +28,9 @@ struct TKqpKeyRange {
     TKqpKeyTuple ToTuple;
     bool FromInclusive = false;
     bool ToInclusive = false;
-    TSmallVec<bool> SkipNullKeys; 
-    TRuntimeNode ItemsLimit; 
-    bool Reverse = false; 
+    TSmallVec<bool> SkipNullKeys;
+    TRuntimeNode ItemsLimit;
+    bool Reverse = false;
 };
 
 struct TKqpKeyRanges {
@@ -44,7 +44,7 @@ class TKqpProgramBuilder: public TProgramBuilder {
 public:
     TKqpProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry);
 
-    TRuntimeNode KqpReadTable(const TTableId& tableId, const TKqpKeyRange& range, 
+    TRuntimeNode KqpReadTable(const TTableId& tableId, const TKqpKeyRange& range,
         const TArrayRef<TKqpTableColumn>& columns);
 
     TRuntimeNode KqpWideReadTable(const TTableId& tableId, const TKqpKeyRange& range,
@@ -62,9 +62,9 @@ public:
     TRuntimeNode KqpDeleteRows(const TTableId& tableId, const TRuntimeNode& rows);
 
     TRuntimeNode KqpEffects(const TArrayRef<const TRuntimeNode>& effects);
- 
-    TRuntimeNode KqpEnsure(TRuntimeNode value, TRuntimeNode predicate, TRuntimeNode issueCode, TRuntimeNode message); 
+
+    TRuntimeNode KqpEnsure(TRuntimeNode value, TRuntimeNode predicate, TRuntimeNode issueCode, TRuntimeNode message);
 };
 
-} // namespace NMiniKQL 
+} // namespace NMiniKQL
 } // namespace NKikimr

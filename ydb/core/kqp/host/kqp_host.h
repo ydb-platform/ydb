@@ -27,11 +27,11 @@ public:
     struct TPrepareSettings {
         TMaybe<bool> UseNewEngine;
         TMaybe<bool> DocumentApiRestricted;
- 
-        TString ToString() const { 
-            return TStringBuilder() << "TPrepareSettings{ UseNewEngine: " << UseNewEngine 
-                << ", DocumentApiRestricted: " << DocumentApiRestricted << " }"; 
-        } 
+
+        TString ToString() const {
+            return TStringBuilder() << "TPrepareSettings{ UseNewEngine: " << UseNewEngine
+                << ", DocumentApiRestricted: " << DocumentApiRestricted << " }";
+        }
     };
 
     struct TExecScriptSettings {
@@ -43,9 +43,9 @@ public:
 
     virtual TMaybe<TKqpTransactionInfo> GetTransactionInfo() = 0;
 
-    virtual void ForceTxOldEngine(const TString& txId) = 0; 
-    virtual void ForceTxNewEngine(const TString& txId, ui32 percent, ui32 level) = 0; 
- 
+    virtual void ForceTxOldEngine(const TString& txId) = 0;
+    virtual void ForceTxNewEngine(const TString& txId, ui32 percent, ui32 level) = 0;
+
     /* Transaction control */
     virtual TBeginTxResult BeginTransaction(NKikimrKqp::EIsolationLevel isolationLevel,
         bool readonly) = 0;
@@ -57,18 +57,18 @@ public:
     virtual TQueryResult SyncCommitTransaction(const TString& txId,
         const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;
 
-    virtual IAsyncQueryResultPtr RollbackTransaction(const TString& txId, 
-        const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0; 
-    virtual TQueryResult SyncRollbackTransaction(const TString& txId, 
-        const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0; 
+    virtual IAsyncQueryResultPtr RollbackTransaction(const TString& txId,
+        const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;
+    virtual TQueryResult SyncRollbackTransaction(const TString& txId,
+        const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;
 
     virtual TMaybe<TKqpTransactionInfo> GetTransactionInfo(const TString& txId) = 0;
 
     virtual bool AbortTransaction(const TString& txId) = 0;
     virtual ui32 AbortAll() = 0;
 
-    virtual IAsyncQueryResultPtr RollbackAborted() = 0; 
-    virtual TQueryResult SyncRollbackAborted() = 0; 
+    virtual IAsyncQueryResultPtr RollbackAborted() = 0;
+    virtual TQueryResult SyncRollbackAborted() = 0;
 
     /* Data queries */
     virtual IAsyncQueryResultPtr ExplainDataQuery(const TString& query, bool isSql) = 0;
@@ -77,10 +77,10 @@ public:
     virtual IAsyncQueryResultPtr PrepareDataQuery(const TString& query, const TPrepareSettings& settings) = 0;
     virtual TQueryResult SyncPrepareDataQuery(const TString& query, const TPrepareSettings& settings) = 0;
 
-    virtual IAsyncQueryResultPtr ExecuteDataQuery(const TString& txId, std::shared_ptr<const NKikimrKqp::TPreparedQuery>& query, 
+    virtual IAsyncQueryResultPtr ExecuteDataQuery(const TString& txId, std::shared_ptr<const NKikimrKqp::TPreparedQuery>& query,
         NKikimrMiniKQL::TParams&& parameters, const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;
 
-    virtual TQueryResult SyncExecuteDataQuery(const TString& txId, std::shared_ptr<const NKikimrKqp::TPreparedQuery>& query, 
+    virtual TQueryResult SyncExecuteDataQuery(const TString& txId, std::shared_ptr<const NKikimrKqp::TPreparedQuery>& query,
         NKikimrMiniKQL::TParams&& parameters, const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;
 
     virtual IAsyncQueryResultPtr ExecuteDataQuery(const TString& txId, const TString& query, bool isSql,
@@ -120,5 +120,5 @@ TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, const TString& database, NYql::TKikimrConfiguration::TPtr config, NYql::IModuleResolver::TPtr moduleResolver,
     const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry = nullptr, bool keepConfigChanges = false);
 
-} // namespace NKqp 
+} // namespace NKqp
 } // namespace NKikimr

@@ -18,7 +18,7 @@ struct TEngineHostCounters {
     ui64 NUpdateRow  = 0;
     ui64 NEraseRow = 0;
 
-    ui64 SelectRowRows = 0; 
+    ui64 SelectRowRows = 0;
     ui64 SelectRowBytes = 0;
     ui64 SelectRangeRows = 0;
     ui64 SelectRangeBytes = 0;
@@ -28,29 +28,29 @@ struct TEngineHostCounters {
 
     ui64 InvisibleRowSkips = 0;
 
-    TEngineHostCounters& operator+=(const TEngineHostCounters& other) { 
-        NSelectRow += other.NSelectRow; 
-        NSelectRange += other.NSelectRange; 
-        NUpdateRow += other.NUpdateRow; 
-        NEraseRow += other.NEraseRow; 
-        SelectRowRows += other.SelectRowRows; 
-        SelectRowBytes += other.SelectRowBytes; 
-        SelectRangeRows += other.SelectRangeRows; 
-        SelectRangeBytes += other.SelectRangeBytes; 
-        SelectRangeDeletedRowSkips += other.SelectRangeDeletedRowSkips; 
-        UpdateRowBytes += other.UpdateRowBytes; 
-        EraseRowBytes += other.EraseRowBytes; 
-        InvisibleRowSkips += other.InvisibleRowSkips; 
-        return *this; 
-    } 
- 
+    TEngineHostCounters& operator+=(const TEngineHostCounters& other) {
+        NSelectRow += other.NSelectRow;
+        NSelectRange += other.NSelectRange;
+        NUpdateRow += other.NUpdateRow;
+        NEraseRow += other.NEraseRow;
+        SelectRowRows += other.SelectRowRows;
+        SelectRowBytes += other.SelectRowBytes;
+        SelectRangeRows += other.SelectRangeRows;
+        SelectRangeBytes += other.SelectRangeBytes;
+        SelectRangeDeletedRowSkips += other.SelectRangeDeletedRowSkips;
+        UpdateRowBytes += other.UpdateRowBytes;
+        EraseRowBytes += other.EraseRowBytes;
+        InvisibleRowSkips += other.InvisibleRowSkips;
+        return *this;
+    }
+
     TString ToString() const {
         return TStringBuilder()
             << "{NSelectRow: " << NSelectRow
             << ", NSelectRange: " << NSelectRange
             << ", NUpdateRow: " << NUpdateRow
             << ", NEraseRow: " << NEraseRow
-            << ", SelectRowRows: " << SelectRowRows 
+            << ", SelectRowRows: " << SelectRowRows
             << ", SelectRowBytes: " << SelectRowBytes
             << ", SelectRangeRows: " << SelectRangeRows
             << ", SelectRangeBytes: " << SelectRangeBytes

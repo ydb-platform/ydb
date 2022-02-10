@@ -63,15 +63,15 @@ static void CreateLargeTable(TKikimrRunner& kikimr, ui32 rowsPerShard, ui32 keyT
 }
 
 Y_UNIT_TEST_SUITE(KqpLimits) {
-    Y_UNIT_TEST_NEW_ENGINE(DatashardProgramSize) { 
-        auto app = NKikimrConfig::TAppConfig(); 
-        app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000); 
- 
-        TKikimrRunner kikimr(app); 
+    Y_UNIT_TEST_NEW_ENGINE(DatashardProgramSize) {
+        auto app = NKikimrConfig::TAppConfig();
+        app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
+
+        TKikimrRunner kikimr(app);
         CreateLargeTable(kikimr, 0, 0, 0);
 
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SLOW_LOG, NActors::NLog::PRI_ERROR); 
- 
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SLOW_LOG, NActors::NLog::PRI_ERROR);
+
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -95,12 +95,12 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         rowsParam.EndList();
         rowsParam.Build();
 
-        auto result = session.ExecuteDataQuery(Q1_(R"( 
-            DECLARE $rows AS List<Struct<Key: Uint64?, KeyText: String?, Data: Int64?, DataText: String?>>; 
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $rows AS List<Struct<Key: Uint64?, KeyText: String?, Data: Int64?, DataText: String?>>;
 
-            UPSERT INTO `/Root/LargeTable` 
+            UPSERT INTO `/Root/LargeTable`
             SELECT * FROM AS_TABLE($rows);
-        )"), TTxControl::BeginTx().CommitTx(), paramsBuilder.Build()).ExtractValueSync(); 
+        )"), TTxControl::BeginTx().CommitTx(), paramsBuilder.Build()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NKikimrIssues::TIssuesIds::SHARD_PROGRAM_SIZE_EXCEEDED));
@@ -143,48 +143,48 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_RESULT_UNAVAILABLE));
     }
 
-    Y_UNIT_TEST(TooBigQuery) { 
-        auto app = NKikimrConfig::TAppConfig(); 
-        app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000); 
-        app.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(5).MilliSeconds()); 
- 
-        TKikimrRunner kikimr(app); 
-        CreateLargeTable(kikimr, 0, 0, 0); 
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SLOW_LOG, NActors::NLog::PRI_ERROR); 
- 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        TStringBuilder query; 
-        query << R"( 
-            --!syntax_v1 
-            PRAGMA Kikimr.UseNewEngine = 'true'; 
- 
-            UPSERT INTO `/Root/LargeTable` 
-            SELECT * FROM AS_TABLE(AsList( 
-        )"; 
- 
-        ui32 count = 5000; 
-        for (ui32 i = 0; i < count; ++i) { 
-            query << "AsStruct(" 
-                 << i << "UL AS Key, " 
-                 << "'" << CreateGuidAsString() << TString(5000, '0' + i % 10) << "' AS KeyText, " 
-                 << count + i << "L AS Data, " 
-                 << "'" << CreateGuidAsString() << "' AS DataText" 
-                 << ")"; 
-            if (i + 1 != count) { 
-                query << ", "; 
-            } 
-        } 
-        query << "))"; 
- 
-        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
-        result.GetIssues().PrintTo(Cerr); 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString()); 
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NKikimrIssues::TIssuesIds::SHARD_PROGRAM_SIZE_EXCEEDED)); 
-    } 
- 
-    Y_UNIT_TEST_NEW_ENGINE(AffectedShardsLimit) { 
+    Y_UNIT_TEST(TooBigQuery) {
+        auto app = NKikimrConfig::TAppConfig();
+        app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
+        app.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(5).MilliSeconds());
+
+        TKikimrRunner kikimr(app);
+        CreateLargeTable(kikimr, 0, 0, 0);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SLOW_LOG, NActors::NLog::PRI_ERROR);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TStringBuilder query;
+        query << R"(
+            --!syntax_v1
+            PRAGMA Kikimr.UseNewEngine = 'true';
+
+            UPSERT INTO `/Root/LargeTable`
+            SELECT * FROM AS_TABLE(AsList(
+        )";
+
+        ui32 count = 5000;
+        for (ui32 i = 0; i < count; ++i) {
+            query << "AsStruct("
+                 << i << "UL AS Key, "
+                 << "'" << CreateGuidAsString() << TString(5000, '0' + i % 10) << "' AS KeyText, "
+                 << count + i << "L AS Data, "
+                 << "'" << CreateGuidAsString() << "' AS DataText"
+                 << ")";
+            if (i + 1 != count) {
+                query << ", ";
+            }
+        }
+        query << "))";
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NKikimrIssues::TIssuesIds::SHARD_PROGRAM_SIZE_EXCEEDED));
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(AffectedShardsLimit) {
         NKikimrConfig::TAppConfig appConfig;
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
         queryLimits.MutablePhaseLimits()->SetAffectedShardsLimit(20);
@@ -212,25 +212,25 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto result = session.ExecuteDataQuery(Q_(R"( 
-            SELECT COUNT(*) FROM `/Root/ManyShard20` 
-        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
+        auto result = session.ExecuteDataQuery(Q_(R"(
+            SELECT COUNT(*) FROM `/Root/ManyShard20`
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        result = session.ExecuteDataQuery(Q_(R"( 
-            SELECT COUNT(*) FROM `/Root/ManyShard21` 
-        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
+        result = session.ExecuteDataQuery(Q_(R"(
+            SELECT COUNT(*) FROM `/Root/ManyShard21`
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
-        if (UseNewEngine) { 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED); 
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED)); 
-        } else { 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST); 
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NKikimrIssues::TIssuesIds::ENGINE_ERROR)); 
-        } 
+        if (UseNewEngine) {
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED));
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NKikimrIssues::TIssuesIds::ENGINE_ERROR));
+        }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ReadsetCountLimit) { 
+    Y_UNIT_TEST_NEW_ENGINE(ReadsetCountLimit) {
         NKikimrConfig::TAppConfig appConfig;
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
         queryLimits.MutablePhaseLimits()->SetReadsetCountLimit(50);
@@ -241,27 +241,27 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto result = session.ExecuteDataQuery(Q_(R"( 
-            UPDATE `/Root/LargeTable` 
+        auto result = session.ExecuteDataQuery(Q_(R"(
+            UPDATE `/Root/LargeTable`
             SET Data = CAST(Key AS Int64) + 10
             WHERE Key < 7000000;
-        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        result = session.ExecuteDataQuery(Q_(R"( 
-            UPDATE `/Root/LargeTable` 
+        result = session.ExecuteDataQuery(Q_(R"(
+            UPDATE `/Root/LargeTable`
             SET Data = CAST(Key AS Int64) + 10;
-        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
-        if (UseNewEngine) { 
-            // TODO: ??? 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
-        } else { 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST); 
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NKikimrIssues::TIssuesIds::ENGINE_ERROR)); 
-        } 
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        if (UseNewEngine) {
+            // TODO: ???
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NKikimrIssues::TIssuesIds::ENGINE_ERROR));
+        }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(TotalReadSizeLimit) { 
+    Y_UNIT_TEST_NEW_ENGINE(TotalReadSizeLimit) {
         NKikimrConfig::TAppConfig appConfig;
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
         queryLimits.MutablePhaseLimits()->SetTotalReadSizeLimitBytes(100'000'000);
@@ -272,37 +272,37 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto result = session.ExecuteDataQuery(Q_(R"( 
+        auto result = session.ExecuteDataQuery(Q_(R"(
             SELECT Key, KeyText, SUBSTRING(DataText, 0, 10) AS DataText
-            FROM `/Root/LargeTable`; 
-        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
+            FROM `/Root/LargeTable`;
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
-        if (UseNewEngine) { 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED); 
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, 
-                [] (const NYql::TIssue& issue) { 
-                    return issue.Message.Contains("Transaction total read size"); 
-                })); 
- 
-        } else { 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR); 
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR, 
-                [] (const NYql::TIssue& issue) { 
-                    return issue.Message.Contains("Transaction total read size"); 
-            }));
-        } 
+        if (UseNewEngine) {
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                [] (const NYql::TIssue& issue) {
+                    return issue.Message.Contains("Transaction total read size");
+                }));
 
-        result = session.ExecuteDataQuery(Q_(R"( 
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
+                [] (const NYql::TIssue& issue) {
+                    return issue.Message.Contains("Transaction total read size");
+            }));
+        }
+
+        result = session.ExecuteDataQuery(Q_(R"(
             SELECT Key, KeyText, SUBSTRING(DataText, 0, 10) AS DataText
-            FROM `/Root/LargeTable` 
+            FROM `/Root/LargeTable`
             WHERE Key < 4000000;
-        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ComputeNodeMemoryLimit) { 
+    Y_UNIT_TEST_NEW_ENGINE(ComputeNodeMemoryLimit) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000); 
+        appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
         queryLimits.MutablePhaseLimits()->SetComputeNodeMemoryLimitBytes(100'000'000);
 
@@ -311,14 +311,14 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto result = session.ExecuteDataQuery(Q_(R"( 
+        auto result = session.ExecuteDataQuery(Q_(R"(
             SELECT ToDict(
                 ListMap(
                     ListFromRange(0ul, 5000000ul),
                     ($x) -> { RETURN AsTuple($x, $x + 1); }
                 )
             );
-        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(),
@@ -331,16 +331,16 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             }));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(QueryExecCancel) { 
+    Y_UNIT_TEST_NEW_ENGINE(QueryExecCancel) {
         TKikimrRunner kikimr;
         CreateLargeTable(kikimr, 500000, 10, 100, 5000, 1);
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto prepareResult = session.PrepareDataQuery(Q_(R"( 
-            SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = "11111"; 
-        )")).GetValueSync(); 
+        auto prepareResult = session.PrepareDataQuery(Q_(R"(
+            SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = "11111";
+        )")).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
         auto dataQuery = prepareResult.GetQuery();
 
@@ -353,23 +353,23 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CANCELLED);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(QueryExecTimeout) { 
+    Y_UNIT_TEST_NEW_ENGINE(QueryExecTimeout) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10'000'000'000); 
+        appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10'000'000'000);
 
         TKikimrRunner kikimr(appConfig);
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto prepareResult = session.PrepareDataQuery(Q_(R"( 
+        auto prepareResult = session.PrepareDataQuery(Q_(R"(
             SELECT ToDict(
                 ListMap(
                     ListFromRange(0ul, 10000000ul),
                     ($x) -> { RETURN AsTuple($x, $x + 1); }
                 )
             );
-        )")).GetValueSync(); 
+        )")).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
         auto dataQuery = prepareResult.GetQuery();
 
@@ -382,5 +382,5 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 }
 
-} // namespace NKqp 
+} // namespace NKqp
 } // namespace NKikimr

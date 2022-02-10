@@ -121,7 +121,7 @@ public:
                     YQL_ENSURE(!future.HasException());
                     const auto& value = future.GetValue();
                     switch (queryType) {
-                        case EKikimrQueryType::Unspecified: { 
+                        case EKikimrQueryType::Unspecified: {
                             if (value.Metadata) {
                                 if (!value.Metadata->Indexes.empty()) {
                                     result->AddIssue(TIssue({}, TStringBuilder()
@@ -220,7 +220,7 @@ protected:
     bool HandleAttr(TPositionHandle pos, const TString& cluster, const TString& name, const TMaybe<TString>& value,
         TExprContext& ctx) final
     {
-        YQL_ENSURE(SessionCtx->Query().Type != EKikimrQueryType::Unspecified); 
+        YQL_ENSURE(SessionCtx->Query().Type != EKikimrQueryType::Unspecified);
 
         bool applied = Dispatcher->Dispatch(cluster, name, value, NCommon::TSettingDispatcher::EStage::STATIC);
 
@@ -252,9 +252,9 @@ protected:
     }
 
     bool HandleAuth(TPositionHandle pos, const TString& cluster, const TString& alias, TExprContext& ctx) final {
-        YQL_ENSURE(SessionCtx->Query().Type != EKikimrQueryType::Unspecified); 
- 
-        if (SessionCtx->Query().Type != EKikimrQueryType::YqlInternal) { 
+        YQL_ENSURE(SessionCtx->Query().Type != EKikimrQueryType::Unspecified);
+
+        if (SessionCtx->Query().Type != EKikimrQueryType::YqlInternal) {
             ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_PRAGMA_NOT_SUPPORTED, TStringBuilder()
                 << "Pragma auth not supported inside Kikimr query."));
             return false;
@@ -419,7 +419,7 @@ public:
         }
 
         if (auto maybeRight = TMaybeNode<TCoNth>(&node).Tuple().Maybe<TCoRight>()) {
-            if (maybeRight.Input().Maybe<TKiExecDataQuery>()) { 
+            if (maybeRight.Input().Maybe<TKiExecDataQuery>()) {
                 return true;
             }
         }
@@ -498,11 +498,11 @@ public:
     TExprNode::TPtr OptimizePull(const TExprNode::TPtr& source, const TFillSettings& fillSettings, TExprContext& ctx,
         IOptimizationContext& optCtx) override
     {
-        auto queryType = SessionCtx->Query().Type; 
+        auto queryType = SessionCtx->Query().Type;
         if (queryType == EKikimrQueryType::Scan) {
-            return source; 
-        } 
- 
+            return source;
+        }
+
         if (auto execQuery = TMaybeNode<TCoNth>(source).Tuple().Maybe<TCoRight>().Input().Maybe<TKiExecDataQuery>()) {
             auto nth = TCoNth(source);
             ui32 index = ::FromString<ui32>(nth.Index());

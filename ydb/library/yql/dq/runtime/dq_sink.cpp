@@ -1,5 +1,5 @@
 #include "dq_sink.h"
-#include "dq_transport.h" 
+#include "dq_transport.h"
 
 #include <ydb/library/yql/utils/yql_panic.h>
 
@@ -31,12 +31,12 @@ class TDqSink : public IDqSink {
     };
 
 public:
-    TDqSink(ui64 outputIndex, NKikimr::NMiniKQL::TType* outputType, ui64 maxStoredBytes, bool collectProfileStats) 
+    TDqSink(ui64 outputIndex, NKikimr::NMiniKQL::TType* outputType, ui64 maxStoredBytes, bool collectProfileStats)
         : OutputIndex(outputIndex)
         , MaxStoredBytes(maxStoredBytes)
         , OutputType(outputType)
-        , BasicStats(OutputIndex) 
-        , ProfileStats(collectProfileStats ? &BasicStats : nullptr) {} 
+        , BasicStats(OutputIndex)
+        , ProfileStats(collectProfileStats ? &BasicStats : nullptr) {}
 
     ui64 GetOutputIndex() const override {
         return OutputIndex;
@@ -47,8 +47,8 @@ public:
     }
 
     void Push(NUdf::TUnboxedValue&& value) override {
-        if (!BasicStats.FirstRowIn) { 
-            BasicStats.FirstRowIn = TInstant::Now(); 
+        if (!BasicStats.FirstRowIn) {
+            BasicStats.FirstRowIn = TInstant::Now();
         }
 
         if (ValuesPushed++ % 1000 == 0) {
@@ -72,8 +72,8 @@ public:
     void Finish() override {
         Finished = true;
 
-        if (!BasicStats.FirstRowIn) { 
-            BasicStats.FirstRowIn = TInstant::Now(); 
+        if (!BasicStats.FirstRowIn) {
+            BasicStats.FirstRowIn = TInstant::Now();
         }
     }
 
@@ -142,12 +142,12 @@ public:
     }
 
     const TDqSinkStats* GetStats() const override {
-        return &BasicStats; 
+        return &BasicStats;
     }
 
 private:
     void ReestimateRowBytes(const NUdf::TUnboxedValue& value) {
-        const ui64 valueSize = TDqDataSerializer::EstimateSize(value, OutputType); 
+        const ui64 valueSize = TDqDataSerializer::EstimateSize(value, OutputType);
         if (EstimatedRowBytes) {
             EstimatedRowBytes = static_cast<ui64>(0.6 * valueSize + 0.4 * EstimatedRowBytes);
         } else {
@@ -159,17 +159,17 @@ private:
     }
 
     void ReportChunkIn() {
-        BasicStats.Bytes += EstimatedRowBytes; 
-        BasicStats.RowsIn++; 
-        if (ProfileStats) { 
-            ProfileStats->MaxMemoryUsage = std::max(ProfileStats->MaxMemoryUsage, EstimatedStoredBytes); 
-            ProfileStats->MaxRowsInMemory = std::max(ProfileStats->MaxRowsInMemory, Values.size()); 
+        BasicStats.Bytes += EstimatedRowBytes;
+        BasicStats.RowsIn++;
+        if (ProfileStats) {
+            ProfileStats->MaxMemoryUsage = std::max(ProfileStats->MaxMemoryUsage, EstimatedStoredBytes);
+            ProfileStats->MaxRowsInMemory = std::max(ProfileStats->MaxRowsInMemory, Values.size());
         }
     }
 
-    void ReportChunkOut(ui64 rowsCount, ui64 /* usedBytes */) { 
-        BasicStats.Chunks++; 
-        BasicStats.RowsOut += rowsCount; 
+    void ReportChunkOut(ui64 rowsCount, ui64 /* usedBytes */) {
+        BasicStats.Chunks++;
+        BasicStats.RowsOut += rowsCount;
     }
 
 private:
@@ -181,16 +181,16 @@ private:
     bool Finished = false;
     std::deque<TValueDesc> Values;
     ui64 EstimatedRowBytes = 0;
-    TDqSinkStats BasicStats; 
-    TDqSinkStats* ProfileStats = nullptr; 
+    TDqSinkStats BasicStats;
+    TDqSinkStats* ProfileStats = nullptr;
 };
 
 } // namespace
 
-IDqSink::TPtr CreateDqSink(ui64 outputIndex, NKikimr::NMiniKQL::TType* outputType, ui64 maxStoredBytes, 
-    bool collectProfileStats) 
+IDqSink::TPtr CreateDqSink(ui64 outputIndex, NKikimr::NMiniKQL::TType* outputType, ui64 maxStoredBytes,
+    bool collectProfileStats)
 {
-    return MakeIntrusive<TDqSink>(outputIndex, outputType, maxStoredBytes, collectProfileStats); 
+    return MakeIntrusive<TDqSink>(outputIndex, outputType, maxStoredBytes, collectProfileStats);
 }
 
 } // namespace NYql::NDq

@@ -3,7 +3,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/public/lib/value/value.h>
- 
+
 #include <ydb/library/yql/ast/yql_ast_escaping.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
@@ -33,9 +33,9 @@ struct TTableRead {
     ETableReadType Type = ETableReadType::Unspecified;
     TVector<TString> LookupBy;
     TVector<TString> ScanBy;
-    TVector<TString> Columns; 
+    TVector<TString> Columns;
     TMaybe<TString> Limit;
-    bool Reverse = false; 
+    bool Reverse = false;
 };
 
 struct TTableWrite {
@@ -195,11 +195,11 @@ void FillTablesInfo(const TExprNode::TPtr& query, TMap<TString, TTableInfo>& tab
                     read.Limit = GetExprStr(TCoNameValueTuple(limitSetting).Value().Cast());
                 }
 
-                auto reverseSettings = GetSetting(selectRange.Settings().Ref(), "Reverse"); 
-                if (reverseSettings) { 
-                    read.Reverse = true; 
-                } 
- 
+                auto reverseSettings = GetSetting(selectRange.Settings().Ref(), "Reverse");
+                if (reverseSettings) {
+                    read.Reverse = true;
+                }
+
                 for (const auto& column : selectRange.Select()) {
                     read.Columns.emplace_back(column);
                 }
@@ -658,15 +658,15 @@ private:
                 planNode.CteRefName = *cteNode.CteName;
 
                 return;
-            } 
- 
+            }
+
             auto& stagePlanNode = AddPlanNode(planNode);
             stagePlanNode.Guid = stageGuid;
             SerializerCtx.StageGuidToId[stageGuid] = SerializerCtx.PlanNodeId;
             VisitedStages.insert(expr.Raw());
             auto node = expr.Cast<TDqStageBase>().Program().Body().Ptr();
             Visit(node, stagePlanNode);
- 
+
             /* is that collect stage? */
             if (stagePlanNode.TypeName.Empty()) {
                 if (expr.Cast<TDqStageBase>().Program().Body().Maybe<TCoArgument>()) {
@@ -683,11 +683,11 @@ private:
                 inputPlanNode.Type = EPlanNodeType::Connection;
 
                 if (inputCn.Maybe<TDqCnUnionAll>()) {
-                    inputPlanNode.TypeName = "UnionAll"; 
+                    inputPlanNode.TypeName = "UnionAll";
                 } else if (inputCn.Maybe<TDqCnBroadcast>()) {
-                    inputPlanNode.TypeName = "Broadcast"; 
+                    inputPlanNode.TypeName = "Broadcast";
                 } else if (auto hashShuffle = inputCn.Maybe<TDqCnHashShuffle>()) {
-                    inputPlanNode.TypeName = "HashShuffle"; 
+                    inputPlanNode.TypeName = "HashShuffle";
                     auto& keyColumns = inputPlanNode.NodeInfo["KeyColumns"];
                     for (const auto& column : hashShuffle.Cast().KeyColumns()) {
                         keyColumns.AppendValue(TString(column.Value()));
@@ -1292,9 +1292,9 @@ void WriteCommonTablesInfo(NJsonWriter::TBuf& writer, TMap<TString, TTableInfo>&
                 if (read.Limit) {
                     writer.WriteKey("limit").WriteString(*read.Limit);
                 }
-                if (read.Reverse) { 
-                    writer.WriteKey("reverse").WriteBool(true); 
-                } 
+                if (read.Reverse) {
+                    writer.WriteKey("reverse").WriteBool(true);
+                }
 
                 if (!read.Columns.empty()) {
                     writer.WriteKey("columns");
@@ -1423,13 +1423,13 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
     queryProto.SetQueryPlan(writer.Str());
 }
 
-TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TDqExecutionStats& stats) { 
+TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TDqExecutionStats& stats) {
     if (txPlanJson.empty()) {
         return {};
     }
 
-    THashMap<TProtoStringType, const NYql::NDqProto::TDqStageStats*> stages; 
-    for (const auto& stage : stats.GetStages()) { 
+    THashMap<TProtoStringType, const NYql::NDqProto::TDqStageStats*> stages;
+    for (const auto& stage : stats.GetStages()) {
         stages[stage.GetStageGuid()] = &stage;
     }
 
@@ -1511,9 +1511,9 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, const TString co
 
 TString SerializeExplainPlan(const NKqpProto::TKqpPhyQuery& phyQuery) {
     TVector<const TString> txPlans;
-    txPlans.reserve(phyQuery.GetTransactions().size()); 
+    txPlans.reserve(phyQuery.GetTransactions().size());
     for (const auto& phyTx: phyQuery.GetTransactions()) {
-        txPlans.emplace_back(phyTx.GetPlan()); 
+        txPlans.emplace_back(phyTx.GetPlan());
     }
     return SerializeTxPlans(txPlans, phyQuery.GetQueryPlan());
 }
@@ -1569,5 +1569,5 @@ TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {
     return writer.Str();
 }
 
-} // namespace NKqp 
+} // namespace NKqp
 } // namespace NKikimr

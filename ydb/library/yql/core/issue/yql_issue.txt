@@ -277,10 +277,10 @@ ids {
   format: "Scheme mismatch found while executing query."
 }
 ids {
-  code: KIKIMR_PRECONDITION_FAILED 
-  severity: S_ERROR 
-} 
-ids { 
+  code: KIKIMR_PRECONDITION_FAILED
+  severity: S_ERROR
+}
+ids {
   code: KIKIMR_UNSUPPORTED
   severity: S_ERROR
 }

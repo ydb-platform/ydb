@@ -805,7 +805,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 Cerr << Endl;
                 Cerr << "Expected result: " << pushdownPresent << Endl;
             }
- 
+
             if (viaSettings.has_value()) {
                 auto setting = NKikimrKqp::TKqpSetting();
                 setting.SetName("_KqpPushOlapProcess");
@@ -1919,5 +1919,5 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 }
 
-} // namespace NKqp 
+} // namespace NKqp
 } // namespace NKikimr

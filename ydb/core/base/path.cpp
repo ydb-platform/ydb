@@ -73,14 +73,14 @@ ui32 CanonizedPathLen(const TVector<TString>& path) {
 TStringBuf ExtractDomain(const TString& path) noexcept {
     auto domain = TStringBuf(path);
 
-    return ExtractDomain(domain); 
-} 
- 
-TStringBuf ExtractDomain(TStringBuf path) noexcept { 
+    return ExtractDomain(domain);
+}
+
+TStringBuf ExtractDomain(TStringBuf path) noexcept {
     //  coherence with SplitPath and JoinPath that allow no / leading path
     path.SkipPrefix(TStringBuf("/"));
 
-    return path.Before('/'); 
+    return path.Before('/');
 }
 
 bool IsEqualPaths(const TString& l, const TString& r) noexcept {

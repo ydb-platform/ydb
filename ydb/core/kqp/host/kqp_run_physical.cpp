@@ -17,53 +17,53 @@ IGraphTransformer::TStatus TKqpExecutePhysicalTransformerBase::DoTransform(TExpr
     YQL_ENSURE(TMaybeNode<TCoWorld>(input));
     YQL_ENSURE(TransformCtx->PhysicalQuery);
 
-    const auto& query = *TransformCtx->PhysicalQuery; 
+    const auto& query = *TransformCtx->PhysicalQuery;
 
     TStatus status = TStatus::Ok;
 
     auto& txState = TxState->Tx();
-    const ui64 txsCount = query.TransactionsSize(); 
+    const ui64 txsCount = query.TransactionsSize();
 
-    if (settings.GetRollbackTx()) { 
-        if (ExecuteFlags.HasFlags(TKqpExecuteFlag::Rollback)) { 
-            ClearTx(); 
-        } else { 
-            status = Rollback(); 
-        } 
-    } else if (ExecuteFlags.HasFlags(TKqpExecuteFlag::Commit)) { 
-        YQL_ENSURE(CurrentTxIndex >= txsCount); 
+    if (settings.GetRollbackTx()) {
+        if (ExecuteFlags.HasFlags(TKqpExecuteFlag::Rollback)) {
+            ClearTx();
+        } else {
+            status = Rollback();
+        }
+    } else if (ExecuteFlags.HasFlags(TKqpExecuteFlag::Commit)) {
+        YQL_ENSURE(CurrentTxIndex >= txsCount);
     } else {
-        if (CurrentTxIndex >= txsCount) { 
-            if (!txState.DeferredEffects.Empty() && TxState->Tx().Locks.Broken()) { 
+        if (CurrentTxIndex >= txsCount) {
+            if (!txState.DeferredEffects.Empty() && TxState->Tx().Locks.Broken()) {
                 TxState->Tx().Locks.ReportIssues(ctx);
                 return TStatus::Error;
             }
- 
-            if (settings.GetCommitTx()) { 
-                status = Execute(nullptr, /* commit */ true, ctx); 
-            } 
-        } else { 
-            const auto& tx = query.GetTransactions(CurrentTxIndex); 
- 
-            if (tx.GetHasEffects()) { 
-                if (!AddDeferredEffect(tx)) { 
-                    ctx.AddError(YqlIssue({}, TIssuesIds::KIKIMR_BAD_REQUEST, 
-                        "Failed to mix queries with old- and new- engines")); 
-                    return TStatus::Error; 
-                } 
- 
-                ++CurrentTxIndex; 
-                return TStatus::Repeat; 
+
+            if (settings.GetCommitTx()) {
+                status = Execute(nullptr, /* commit */ true, ctx);
+            }
+        } else {
+            const auto& tx = query.GetTransactions(CurrentTxIndex);
+
+            if (tx.GetHasEffects()) {
+                if (!AddDeferredEffect(tx)) {
+                    ctx.AddError(YqlIssue({}, TIssuesIds::KIKIMR_BAD_REQUEST,
+                        "Failed to mix queries with old- and new- engines"));
+                    return TStatus::Error;
+                }
+
+                ++CurrentTxIndex;
+                return TStatus::Repeat;
             }
 
-            // tx without effects 
- 
+            // tx without effects
+
             bool commit = false;
-            if (CurrentTxIndex == txsCount - 1 && settings.GetCommitTx() && txState.DeferredEffects.Empty()) { 
-                // last transaction and no effects (RO-query) 
-                commit = true; 
+            if (CurrentTxIndex == txsCount - 1 && settings.GetCommitTx() && txState.DeferredEffects.Empty()) {
+                // last transaction and no effects (RO-query)
+                commit = true;
             }
-            status = Execute(&tx, commit, ctx); 
+            status = Execute(&tx, commit, ctx);
         }
     }
 
@@ -117,10 +117,10 @@ IGraphTransformer::TStatus TKqpExecutePhysicalTransformerBase::DoApplyAsyncChang
         return TStatus::Error;
     }
 
-    if (ExecuteFlags.HasFlags(TKqpExecuteFlag::Rollback)) { 
-        return TStatus::Repeat; 
-    } 
- 
+    if (ExecuteFlags.HasFlags(TKqpExecuteFlag::Rollback)) {
+        return TStatus::Repeat;
+    }
+
     auto& execResult = result.ExecuterResult;
     if (ExecuteFlags.HasFlags(TKqpExecuteFlag::Results)) {
         TVector<NKikimrMiniKQL::TResult> txResults;
@@ -146,9 +146,9 @@ void TKqpExecutePhysicalTransformerBase::Rewind() {
     TransformState->TxResults.clear();
 }
 
-IGraphTransformer::TStatus TKqpExecutePhysicalTransformerBase::Execute(const NKqpProto::TKqpPhyTx* tx, bool commit, 
-    NYql::TExprContext& ctx) 
-{ 
+IGraphTransformer::TStatus TKqpExecutePhysicalTransformerBase::Execute(const NKqpProto::TKqpPhyTx* tx, bool commit,
+    NYql::TExprContext& ctx)
+{
     ExecuteFlags = TKqpExecuteFlags();
 
     if (tx) {
@@ -161,21 +161,21 @@ IGraphTransformer::TStatus TKqpExecutePhysicalTransformerBase::Execute(const NKq
         ExecuteFlags |= TKqpExecuteFlag::Commit;
     }
 
-    return DoExecute(tx, commit, ctx); 
+    return DoExecute(tx, commit, ctx);
 }
 
-IGraphTransformer::TStatus TKqpExecutePhysicalTransformerBase::Rollback() { 
-    ExecuteFlags = TKqpExecuteFlags(); 
-    ExecuteFlags |= TKqpExecuteFlag::Rollback; 
- 
-    return DoRollback(); 
-} 
- 
-bool TKqpExecutePhysicalTransformerBase::AddDeferredEffect(const NKqpProto::TKqpPhyTx& tx) { 
-    TParamValueMap params; 
-    PreserveParams(tx, params); 
+IGraphTransformer::TStatus TKqpExecutePhysicalTransformerBase::Rollback() {
+    ExecuteFlags = TKqpExecuteFlags();
+    ExecuteFlags |= TKqpExecuteFlag::Rollback;
 
-    return TxState->Tx().AddDeferredEffect(tx, std::move(params)); 
+    return DoRollback();
+}
+
+bool TKqpExecutePhysicalTransformerBase::AddDeferredEffect(const NKqpProto::TKqpPhyTx& tx) {
+    TParamValueMap params;
+    PreserveParams(tx, params);
+
+    return TxState->Tx().AddDeferredEffect(tx, std::move(params));
 }
 
 NDq::TMkqlValueRef TKqpExecutePhysicalTransformerBase::GetParamValue(
@@ -260,7 +260,7 @@ TKqpParamsMap TKqpExecutePhysicalTransformerBase::PrepareParameters(const NKqpPr
     TKqpParamsMap paramsMap(TransformState);
     for (const auto& paramBinding : tx.GetParamBindings()) {
         auto it = paramsMap.Values.emplace(paramBinding.GetName(), GetParamValue(paramBinding));
-        YQL_ENSURE(it.second); 
+        YQL_ENSURE(it.second);
     }
 
     return paramsMap;
@@ -274,15 +274,15 @@ void TKqpExecutePhysicalTransformerBase::PreserveParams(const NKqpProto::TKqpPhy
         param.MutableType()->CopyFrom(paramValueRef.GetType());
         param.MutableValue()->CopyFrom(paramValueRef.GetValue());
 
-        YQL_ENSURE(paramsMap.emplace(paramBinding.GetName(), std::move(param)).second); 
+        YQL_ENSURE(paramsMap.emplace(paramBinding.GetName(), std::move(param)).second);
     }
 }
 
-void TKqpExecutePhysicalTransformerBase::ClearTx() { 
-    TxState->Tx().ClearDeferredEffects(); 
-    TxState->Tx().Locks.Clear(); 
-    TxState->Tx().Finish(); 
-} 
- 
-} // namespace NKqp 
+void TKqpExecutePhysicalTransformerBase::ClearTx() {
+    TxState->Tx().ClearDeferredEffects();
+    TxState->Tx().Locks.Clear();
+    TxState->Tx().Finish();
+}
+
+} // namespace NKqp
 } // namespace NKikimr

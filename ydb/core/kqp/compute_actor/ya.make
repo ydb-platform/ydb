@@ -7,8 +7,8 @@ OWNER(
 
 SRCS(
     kqp_compute_actor.cpp
-    kqp_pure_compute_actor.cpp 
-    kqp_scan_compute_actor.cpp 
+    kqp_pure_compute_actor.cpp
+    kqp_scan_compute_actor.cpp
 )
 
 PEERDIR(
@@ -21,6 +21,6 @@ PEERDIR(
     ydb/library/yql/public/issue
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 END()

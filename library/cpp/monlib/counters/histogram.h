@@ -21,7 +21,7 @@ namespace NMonitoring {
         i64 Percentile98;
         i64 Percentile99;
         i64 Percentile999;
-        i64 TotalCount; 
+        i64 TotalCount;
 
         void Print(IOutputStream* out) const;
     };

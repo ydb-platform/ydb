@@ -285,12 +285,12 @@ public:
         // Subscribe for tenant changes
         Send(MakeTenantPoolRootID(), new TEvents::TEvSubscribe());
 
-        if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) { 
+        if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) {
             SpillingService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpLocalFileSpillingService(cfg, Counters));
             TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
                 MakeKqpLocalFileSpillingServiceID(SelfId().NodeId()), SpillingService);
-        } 
- 
+        }
+
         // Create compile service
         CompileService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpCompileService(TableServiceConfig,
             KqpSettings, ModuleResolverState, Counters, std::move(QueryReplayFactory)));
@@ -300,7 +300,7 @@ public:
         KqpNodeService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpNodeService(TableServiceConfig, Counters));
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpNodeServiceID(SelfId().NodeId()), KqpNodeService);
- 
+
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
              NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
@@ -1291,7 +1291,7 @@ private:
     TActorId BoardLookupActor;
     TActorId BoardPublishActor;
     TActorId CompileService;
-    TActorId KqpNodeService; 
+    TActorId KqpNodeService;
     TActorId SpillingService;
     TActorId WhiteBoardService;
     NKikimrKqp::TKqpProxyNodeResources NodeResources;

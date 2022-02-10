@@ -18,13 +18,13 @@ namespace NMiniKQL {
 
 class IEngineFlatHost;
 
-using TKqpTableStats = TEngineHostCounters; 
+using TKqpTableStats = TEngineHostCounters;
 
 class TKqpDatashardComputeContext : public TKqpComputeContextBase {
 public:
     TKqpDatashardComputeContext(NDataShard::TDataShard* shard, TEngineHostCounters& counters, TInstant now)
         : Shard(shard)
-        , DatashardCounters(counters) 
+        , DatashardCounters(counters)
         , Now(now) {}
 
     ui64 GetLocalTableId(const TTableId& tableId) const;
@@ -39,38 +39,38 @@ public:
     TVector<std::pair<NScheme::TTypeId, TString>> GetKeyColumnsInfo(const TTableId &tableId) const;
     THashMap<TString, NScheme::TTypeId> GetKeyColumnsMap(const TTableId &tableId) const;
 
-    void SetHasPersistentChannels(bool value) { PersistentChannels = value; } 
-    bool HasPersistentChannels() const { return PersistentChannels; } 
- 
-    void SetTaskOutputChannel(ui64 taskId, ui64 channelId, TActorId actorId); 
-    TActorId GetTaskOutputChannel(ui64 taskId, ui64 channelId) const; 
- 
+    void SetHasPersistentChannels(bool value) { PersistentChannels = value; }
+    bool HasPersistentChannels() const { return PersistentChannels; }
+
+    void SetTaskOutputChannel(ui64 taskId, ui64 channelId, TActorId actorId);
+    TActorId GetTaskOutputChannel(ui64 taskId, ui64 channelId) const;
+
     bool PinPages(const TVector<IEngineFlat::TValidatedKey>& keys, ui64 pageFaultCount = 0);
- 
+
     void Clear();
 
     void SetReadVersion(TRowVersion readVersion);
     TRowVersion GetReadVersion() const;
 
-    TEngineHostCounters& GetTaskCounters(ui64 taskId) { return TaskCounters[taskId]; } 
-    TEngineHostCounters& GetDatashardCounters() { return DatashardCounters; } 
+    TEngineHostCounters& GetTaskCounters(ui64 taskId) { return TaskCounters[taskId]; }
+    TEngineHostCounters& GetDatashardCounters() { return DatashardCounters; }
 
-    void SetTabletNotReady() { Y_VERIFY_DEBUG(!TabletNotReady); TabletNotReady = true; }; 
-    bool IsTabletNotReady() const { return TabletNotReady; } 
- 
+    void SetTabletNotReady() { Y_VERIFY_DEBUG(!TabletNotReady); TabletNotReady = true; };
+    bool IsTabletNotReady() const { return TabletNotReady; }
+
 public:
     NTable::TDatabase* Database = nullptr;
 
 private:
     NDataShard::TDataShard* Shard;
-    std::unordered_map<ui64, TEngineHostCounters> TaskCounters; 
-    TEngineHostCounters& DatashardCounters; 
+    std::unordered_map<ui64, TEngineHostCounters> TaskCounters;
+    TEngineHostCounters& DatashardCounters;
     TInstant Now;
     ui64 LockTxId = 0;
-    bool PersistentChannels = false; 
-    bool TabletNotReady = false; 
+    bool PersistentChannels = false;
+    bool TabletNotReady = false;
     TRowVersion ReadVersion = TRowVersion::Min();
-    THashMap<std::pair<ui64, ui64>, TActorId> OutputChannels; 
+    THashMap<std::pair<ui64, ui64>, TActorId> OutputChannels;
 };
 
 class TKqpDatashardApplyContext : public NUdf::IApplyContext {
@@ -84,10 +84,10 @@ bool TryFetchRow(NTable::TTableIt& iterator, NYql::NUdf::TUnboxedValue& row, TCo
     TKqpTableStats& tableStats, const TKqpDatashardComputeContext& computeCtx,
     const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys);
 
-bool TryFetchRow(NTable::TTableReverseIt& iterator, NYql::NUdf::TUnboxedValue& row, TComputationContext& ctx, 
-    TKqpTableStats& tableStats, const TKqpDatashardComputeContext& computeCtx, 
-    const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys); 
- 
+bool TryFetchRow(NTable::TTableReverseIt& iterator, NYql::NUdf::TUnboxedValue& row, TComputationContext& ctx,
+    TKqpTableStats& tableStats, const TKqpDatashardComputeContext& computeCtx,
+    const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys);
+
 void FetchRow(const TDbTupleRef& dbTuple, NYql::NUdf::TUnboxedValue& row, TComputationContext& ctx,
     TKqpTableStats& tableStats, const TKqpDatashardComputeContext& computeCtx,
     const TSmallVec<NTable::TTag>& systemColumnTags);

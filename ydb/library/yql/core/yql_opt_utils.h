@@ -39,7 +39,7 @@ bool IsEmptyContainer(const TExprNode& node);
 
 const TTypeAnnotationNode* RemoveOptionalType(const TTypeAnnotationNode* type);
 const TTypeAnnotationNode* RemoveAllOptionals(const TTypeAnnotationNode* type);
-const TTypeAnnotationNode* GetSeqItemType(const TTypeAnnotationNode* seq); 
+const TTypeAnnotationNode* GetSeqItemType(const TTypeAnnotationNode* seq);
 
 TExprNode::TPtr GetSetting(const TExprNode& settings, const TStringBuf& name);
 bool HasSetting(const TExprNode& settings, const TStringBuf& name);

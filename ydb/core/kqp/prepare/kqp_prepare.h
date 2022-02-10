@@ -88,8 +88,8 @@ struct TKqlTransformContext : TThrRefBase {
     NActors::TActorId ReplyTarget;
 
     TKqpAnalyzeResults AnalyzeResults;
-    NKikimrKqp::TPreparedKql* PreparingKql = nullptr; 
-    const NKikimrKqp::TPreparedKql* PreparedKql; 
+    NKikimrKqp::TPreparedKql* PreparingKql = nullptr;
+    const NKikimrKqp::TPreparedKql* PreparedKql;
     NKqpProto::TKqpStatsQuery QueryStats;
     const NKqpProto::TKqpPhyQuery* PhysicalQuery;
 
@@ -109,12 +109,12 @@ struct TKqlTransformContext : TThrRefBase {
         YQL_ENSURE(false, "Unexpected value for CommitSafety.");
     }
 
-    NKikimrKqp::TPreparedKql& GetPreparingKql() { 
-        YQL_ENSURE(PreparingKql); 
-        return *PreparingKql; 
-    } 
- 
-    const NKikimrKqp::TPreparedKql& GetPreparedKql() { 
+    NKikimrKqp::TPreparedKql& GetPreparingKql() {
+        YQL_ENSURE(PreparingKql);
+        return *PreparingKql;
+    }
+
+    const NKikimrKqp::TPreparedKql& GetPreparedKql() {
         YQL_ENSURE(PreparedKql);
         return *PreparedKql;
     }
@@ -128,7 +128,7 @@ struct TKqlTransformContext : TThrRefBase {
         AnalyzeResults = {};
         MkqlResults.clear();
         QueryStats = {};
-        PreparingKql = nullptr; 
+        PreparingKql = nullptr;
         PreparedKql = nullptr;
         PhysicalQuery = nullptr;
         PhysicalQueryResults.clear();
@@ -189,5 +189,5 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TStri
 TAutoPtr<NYql::IGraphTransformer> CreateKqpCheckKiProgramTransformer();
 TAutoPtr<NYql::IGraphTransformer> CreateKqpCheckQueryTransformer();
 
-} // namespace NKqp 
+} // namespace NKqp
 } // namespace NKikimr

@@ -1754,16 +1754,16 @@ TRuntimeNode TProgramBuilder::ToHashedDict(TRuntimeNode list, bool all, const TU
     return ToDict(list, all, keySelector, payloadSelector, __func__, isCompact, itemsCountHint);
 }
 
-TRuntimeNode TProgramBuilder::SqueezeToSortedDict(TRuntimeNode stream, bool all, const TUnaryLambda& keySelector, 
-    const TUnaryLambda& payloadSelector, bool isCompact, ui64 itemsCountHint) { 
-    return SqueezeToDict(stream, all, keySelector, payloadSelector, __func__, isCompact, itemsCountHint); 
-} 
- 
-TRuntimeNode TProgramBuilder::SqueezeToHashedDict(TRuntimeNode stream, bool all, const TUnaryLambda& keySelector, 
-    const TUnaryLambda& payloadSelector, bool isCompact, ui64 itemsCountHint) { 
-    return SqueezeToDict(stream, all, keySelector, payloadSelector, __func__, isCompact, itemsCountHint); 
-} 
- 
+TRuntimeNode TProgramBuilder::SqueezeToSortedDict(TRuntimeNode stream, bool all, const TUnaryLambda& keySelector,
+    const TUnaryLambda& payloadSelector, bool isCompact, ui64 itemsCountHint) {
+    return SqueezeToDict(stream, all, keySelector, payloadSelector, __func__, isCompact, itemsCountHint);
+}
+
+TRuntimeNode TProgramBuilder::SqueezeToHashedDict(TRuntimeNode stream, bool all, const TUnaryLambda& keySelector,
+    const TUnaryLambda& payloadSelector, bool isCompact, ui64 itemsCountHint) {
+    return SqueezeToDict(stream, all, keySelector, payloadSelector, __func__, isCompact, itemsCountHint);
+}
+
 TRuntimeNode TProgramBuilder::NarrowSqueezeToSortedDict(TRuntimeNode stream, bool all, const TNarrowLambda& keySelector,
     const TNarrowLambda& payloadSelector, bool isCompact, ui64 itemsCountHint) {
     return NarrowSqueezeToDict(stream, all, keySelector, payloadSelector, __func__, isCompact, itemsCountHint);
@@ -3073,7 +3073,7 @@ TRuntimeNode TProgramBuilder::UnaryDataFunction(TRuntimeNode data, const std::st
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::ToDict(TRuntimeNode list, bool multi, const TUnaryLambda& keySelector, 
+TRuntimeNode TProgramBuilder::ToDict(TRuntimeNode list, bool multi, const TUnaryLambda& keySelector,
     const TUnaryLambda& payloadSelector, std::string_view callableName, bool isCompact, ui64 itemsCountHint)
 {
     bool isOptional;
@@ -3109,44 +3109,44 @@ TRuntimeNode TProgramBuilder::ToDict(TRuntimeNode list, bool multi, const TUnary
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::SqueezeToDict(TRuntimeNode stream, bool multi, const TUnaryLambda& keySelector, 
+TRuntimeNode TProgramBuilder::SqueezeToDict(TRuntimeNode stream, bool multi, const TUnaryLambda& keySelector,
     const TUnaryLambda& payloadSelector, std::string_view callableName, bool isCompact, ui64 itemsCountHint)
-{ 
-    if constexpr (RuntimeVersion < 21U) { 
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__; 
-    } 
- 
-    const auto type = stream.GetStaticType(); 
-    MKQL_ENSURE(type->IsStream() || type->IsFlow(), "Expected stream or flow."); 
- 
-    const auto itemType = type->IsFlow() ? AS_TYPE(TFlowType, type)->GetItemType() : AS_TYPE(TStreamType, type)->GetItemType(); 
-    ThrowIfListOfVoid(itemType); 
-    const auto itemArg = Arg(itemType); 
- 
-    const auto key = keySelector(itemArg); 
-    const auto keyType = key.GetStaticType(); 
- 
-    auto payload = payloadSelector(itemArg); 
-    auto payloadType = payload.GetStaticType(); 
-    if (multi) { 
-        payloadType = TListType::Create(payloadType, Env); 
-    } 
- 
-    auto dictType = TDictType::Create(keyType, payloadType, Env); 
-    auto returnType = type->IsFlow() 
-        ? (TType*) TFlowType::Create(dictType, Env) 
-        : (TType*) TStreamType::Create(dictType, Env); 
-    TCallableBuilder callableBuilder(Env, callableName, returnType); 
-    callableBuilder.Add(stream); 
-    callableBuilder.Add(itemArg); 
-    callableBuilder.Add(key); 
-    callableBuilder.Add(payload); 
-    callableBuilder.Add(NewDataLiteral(multi)); 
-    callableBuilder.Add(NewDataLiteral(isCompact)); 
-    callableBuilder.Add(NewDataLiteral(itemsCountHint)); 
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
+{
+    if constexpr (RuntimeVersion < 21U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    const auto type = stream.GetStaticType();
+    MKQL_ENSURE(type->IsStream() || type->IsFlow(), "Expected stream or flow.");
+
+    const auto itemType = type->IsFlow() ? AS_TYPE(TFlowType, type)->GetItemType() : AS_TYPE(TStreamType, type)->GetItemType();
+    ThrowIfListOfVoid(itemType);
+    const auto itemArg = Arg(itemType);
+
+    const auto key = keySelector(itemArg);
+    const auto keyType = key.GetStaticType();
+
+    auto payload = payloadSelector(itemArg);
+    auto payloadType = payload.GetStaticType();
+    if (multi) {
+        payloadType = TListType::Create(payloadType, Env);
+    }
+
+    auto dictType = TDictType::Create(keyType, payloadType, Env);
+    auto returnType = type->IsFlow()
+        ? (TType*) TFlowType::Create(dictType, Env)
+        : (TType*) TStreamType::Create(dictType, Env);
+    TCallableBuilder callableBuilder(Env, callableName, returnType);
+    callableBuilder.Add(stream);
+    callableBuilder.Add(itemArg);
+    callableBuilder.Add(key);
+    callableBuilder.Add(payload);
+    callableBuilder.Add(NewDataLiteral(multi));
+    callableBuilder.Add(NewDataLiteral(isCompact));
+    callableBuilder.Add(NewDataLiteral(itemsCountHint));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::NarrowSqueezeToDict(TRuntimeNode flow, bool multi, const TNarrowLambda& keySelector,
     const TNarrowLambda& payloadSelector, std::string_view callableName, bool isCompact, ui64 itemsCountHint)
 {

@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(spuchin)
 
 SRCS(
-    kqp_opt_helpers.cpp 
+    kqp_opt_helpers.cpp
     yql_kikimr_datasink.cpp
     yql_kikimr_datasource.cpp
     yql_kikimr_exec.cpp
@@ -16,12 +16,12 @@ SRCS(
     yql_kikimr_opt_build.cpp
     yql_kikimr_opt_join.cpp
     yql_kikimr_opt_range.cpp
-    yql_kikimr_opt_utils.cpp 
+    yql_kikimr_opt_utils.cpp
     yql_kikimr_opt.cpp
     yql_kikimr_provider.h
     yql_kikimr_provider.cpp
     yql_kikimr_provider_impl.h
-    yql_kikimr_query_traits.cpp 
+    yql_kikimr_query_traits.cpp
     yql_kikimr_results.cpp
     yql_kikimr_results.h
     yql_kikimr_settings.cpp

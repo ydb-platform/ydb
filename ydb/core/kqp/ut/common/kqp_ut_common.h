@@ -17,28 +17,28 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/yson/writer.h>
 
-#define Y_UNIT_TEST_TWIN(N, OPT)                                                                                   \ 
-    template <bool OPT>                                                                                            \ 
-    struct TTestCase##N : public TCurrentTestCase {                                                                \ 
-        TTestCase##N() : TCurrentTestCase() {                                                                      \ 
-            if constexpr (OPT) { Name_ = #N "+" #OPT; } else { Name_ = #N "-" #OPT; }                              \ 
-        }                                                                                                          \ 
-        static THolder<NUnitTest::TBaseTestCase> CreateOn()  { return ::MakeHolder<TTestCase##N<true>>();  }       \ 
-        static THolder<NUnitTest::TBaseTestCase> CreateOff() { return ::MakeHolder<TTestCase##N<false>>(); }       \ 
-        void Execute_(NUnitTest::TTestContext&) override;                                                          \ 
-    };                                                                                                             \ 
-    struct TTestRegistration##N {                                                                                  \ 
-        TTestRegistration##N() {                                                                                   \ 
-            TCurrentTest::AddTest(TTestCase##N<true>::CreateOn);                                                   \ 
-            TCurrentTest::AddTest(TTestCase##N<false>::CreateOff);                                                 \ 
-        }                                                                                                          \ 
-    };                                                                                                             \ 
-    static TTestRegistration##N testRegistration##N;                                                               \ 
-    template <bool OPT>                                                                                            \ 
-    void TTestCase##N<OPT>::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED) 
- 
-#define Y_UNIT_TEST_NEW_ENGINE(N) Y_UNIT_TEST_TWIN(N, UseNewEngine) 
- 
+#define Y_UNIT_TEST_TWIN(N, OPT)                                                                                   \
+    template <bool OPT>                                                                                            \
+    struct TTestCase##N : public TCurrentTestCase {                                                                \
+        TTestCase##N() : TCurrentTestCase() {                                                                      \
+            if constexpr (OPT) { Name_ = #N "+" #OPT; } else { Name_ = #N "-" #OPT; }                              \
+        }                                                                                                          \
+        static THolder<NUnitTest::TBaseTestCase> CreateOn()  { return ::MakeHolder<TTestCase##N<true>>();  }       \
+        static THolder<NUnitTest::TBaseTestCase> CreateOff() { return ::MakeHolder<TTestCase##N<false>>(); }       \
+        void Execute_(NUnitTest::TTestContext&) override;                                                          \
+    };                                                                                                             \
+    struct TTestRegistration##N {                                                                                  \
+        TTestRegistration##N() {                                                                                   \
+            TCurrentTest::AddTest(TTestCase##N<true>::CreateOn);                                                   \
+            TCurrentTest::AddTest(TTestCase##N<false>::CreateOff);                                                 \
+        }                                                                                                          \
+    };                                                                                                             \
+    static TTestRegistration##N testRegistration##N;                                                               \
+    template <bool OPT>                                                                                            \
+    void TTestCase##N<OPT>::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
+
+#define Y_UNIT_TEST_NEW_ENGINE(N) Y_UNIT_TEST_TWIN(N, UseNewEngine)
+
 #define Y_UNIT_TEST_QUAD(N, OPT1, OPT2)                                                                                              \
     template<bool OPT1, bool OPT2> void N(NUnitTest::TTestContext&);                                                                 \
     struct TTestRegistration##N {                                                                                                    \
@@ -53,17 +53,17 @@
     template<bool OPT1, bool OPT2>                                                                                                   \
     void N(NUnitTest::TTestContext&)
 
-template <bool UseNewEngine, bool ForceVersionV1 = false> 
+template <bool UseNewEngine, bool ForceVersionV1 = false>
 TString Query(const TString& tmpl) {
-    return TStringBuilder() 
-        << (ForceVersionV1 ? "--!syntax_v1\n" : "") 
-        << "PRAGMA Kikimr.UseNewEngine = '" << (UseNewEngine ? "true" : "false") << "';" << Endl 
-        //<< (UseNewEngine ? "PRAGMA Kikimr.UseNewEngine = 'true';" : "") 
-        << tmpl; 
+    return TStringBuilder()
+        << (ForceVersionV1 ? "--!syntax_v1\n" : "")
+        << "PRAGMA Kikimr.UseNewEngine = '" << (UseNewEngine ? "true" : "false") << "';" << Endl
+        //<< (UseNewEngine ? "PRAGMA Kikimr.UseNewEngine = 'true';" : "")
+        << tmpl;
 }
 
-#define Q_(expr) Query<UseNewEngine, false>(expr) 
-#define Q1_(expr) Query<UseNewEngine, true>(expr) 
+#define Q_(expr) Query<UseNewEngine, false>(expr)
+#define Q1_(expr) Query<UseNewEngine, true>(expr)
 
 namespace NKikimr {
 namespace NKqp {
@@ -113,12 +113,12 @@ public:
     TKikimrRunner(const TString& authToken = "", const TString& domainRoot = KikimrDefaultUtDomainRoot,
         ui32 nodeCount = 1);
 
-    ~TKikimrRunner() { 
-        Driver->Stop(true); 
-        Server.Reset(); 
-        Client.Reset(); 
-    } 
- 
+    ~TKikimrRunner() {
+        Driver->Stop(true);
+        Server.Reset();
+        Client.Reset();
+    }
+
     const TString& GetEndpoint() const { return Endpoint; }
     const NYdb::TDriver& GetDriver() const { return *Driver; }
     NYdb::NScheme::TSchemeClient GetSchemeClient() const { return NYdb::NScheme::TSchemeClient(*Driver); }
@@ -194,43 +194,43 @@ void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual)
 bool HasIssue(const NYql::TIssues& issues, ui32 code,
     std::function<bool(const NYql::TIssue& issue)> predicate = {});
 
-void PrintQueryStats(const NYdb::NTable::TDataQueryResult& result); 
- 
+void PrintQueryStats(const NYdb::NTable::TDataQueryResult& result);
+
 struct TExpectedTableStats {
     TMaybe<ui64> ExpectedReads;
     TMaybe<ui64> ExpectedUpdates;
     TMaybe<ui64> ExpectedDeletes;
 };
- 
+
 void AssertTableStats(const NYdb::NTable::TDataQueryResult& result, TStringBuf table,
     const TExpectedTableStats& expectedStats);
 
 inline void AssertTableReads(const NYdb::NTable::TDataQueryResult& result, TStringBuf table, ui64 expectedReads) {
     AssertTableStats(result, table, { .ExpectedReads = expectedReads });
-} 
- 
-NYdb::NTable::TDataQueryResult ExecQueryAndTestResult(NYdb::NTable::TSession& session, const TString& query, 
-    const NYdb::TParams& params, const TString& expectedYson); 
- 
-inline NYdb::NTable::TDataQueryResult ExecQueryAndTestResult(NYdb::NTable::TSession& session, const TString& query, 
-    const TString& expectedYson) 
-{ 
-    return ExecQueryAndTestResult(session, query, NYdb::TParamsBuilder().Build(), expectedYson); 
-} 
- 
-TString StreamResultToYson(NYdb::NExperimental::TStreamPartIterator& it, TVector<TString>* profiles = nullptr); 
+}
+
+NYdb::NTable::TDataQueryResult ExecQueryAndTestResult(NYdb::NTable::TSession& session, const TString& query,
+    const NYdb::TParams& params, const TString& expectedYson);
+
+inline NYdb::NTable::TDataQueryResult ExecQueryAndTestResult(NYdb::NTable::TSession& session, const TString& query,
+    const TString& expectedYson)
+{
+    return ExecQueryAndTestResult(session, query, NYdb::TParamsBuilder().Build(), expectedYson);
+}
+
+TString StreamResultToYson(NYdb::NExperimental::TStreamPartIterator& it, TVector<TString>* profiles = nullptr);
 TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it);
 TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it);
- 
-ui32 CountPlanNodesByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value); 
+
+ui32 CountPlanNodesByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value);
 NJson::TJsonValue FindPlanNodeByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value);
 
 TString ReadTablePartToYson(NYdb::NTable::TSession session, const TString& table);
 
 inline void AssertSuccessResult(const NYdb::TStatus& result) {
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
-} 
- 
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
 void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session);
 
 // KQP proxy needs to asynchronously receive tenants info before it is able to serve requests that have
@@ -238,5 +238,5 @@ void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session);
 // This method retries a simple query until it succeeds.
 void WaitForKqpProxyInit(const NYdb::TDriver& driver);
 
-} // namespace NKqp 
+} // namespace NKqp
 } // namespace NKikimr

@@ -11,7 +11,7 @@ SRCS(
     dq_compute_actor_channels.cpp
     dq_compute_actor_checkpoints.cpp
     dq_compute_actor_io_actors_factory.cpp
-    dq_compute_actor_stats.cpp 
+    dq_compute_actor_stats.cpp
     dq_compute_issues_buffer.cpp
     retry_queue.cpp
 )

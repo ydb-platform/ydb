@@ -27,7 +27,7 @@ const TStructExprType* CollectParameters(NNodes::TCoLambda program, TExprContext
 
 TString BuildProgram(NNodes::TCoLambda program, const TStructExprType& paramsType,
                      const NCommon::IMkqlCallableCompiler& compiler, const TTypeEnvironment& typeEnv,
-                     const IFunctionRegistry& funcRegistry, TExprContext& exprCtx, const TVector<TExprBase>& reads) 
+                     const IFunctionRegistry& funcRegistry, TExprContext& exprCtx, const TVector<TExprBase>& reads)
 {
     TProgramBuilder pgmBuilder(typeEnv, funcRegistry);
 
@@ -37,7 +37,7 @@ TString BuildProgram(NNodes::TCoLambda program, const TStructExprType& paramsTyp
     auto paramsNode = pgmBuilder.Arg(NCommon::BuildType(program.Ref(), paramsType, pgmBuilder));
 
     for (const auto& arg : program.Args()) {
-        YQL_ENSURE(arg.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream, "program: " << program.Ref().Dump()); 
+        YQL_ENSURE(arg.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream, "program: " << program.Ref().Dump());
         auto itemType = NCommon::BuildType(arg.Ref(), *arg.Ref().GetTypeAnn(), pgmBuilder);
         TRuntimeNode inputNode = pgmBuilder.Arg(itemType);
         arguments[arg.Raw()] = inputNode;
@@ -53,15 +53,15 @@ TString BuildProgram(NNodes::TCoLambda program, const TStructExprType& paramsTyp
     structBuilder.Add("Program", rootNode);
     structBuilder.Add("Inputs", pgmBuilder.NewTuple(inputNodes));
     structBuilder.Add("Parameters", paramsNode);
- 
-    if (!reads.empty()) { 
-        auto readsExpr = Build<TExprList>(exprCtx, program.Pos()) 
-            .Add(reads) 
-            .Done(); 
-        TRuntimeNode readsNode = MkqlBuildExpr(readsExpr.Ref(), ctx); 
-        structBuilder.Add("Reads", readsNode); 
-    } 
- 
+
+    if (!reads.empty()) {
+        auto readsExpr = Build<TExprList>(exprCtx, program.Pos())
+            .Add(reads)
+            .Done();
+        TRuntimeNode readsNode = MkqlBuildExpr(readsExpr.Ref(), ctx);
+        structBuilder.Add("Reads", readsNode);
+    }
+
     auto programNode = structBuilder.Build();
 
     TExploringNodeVisitor explorer;

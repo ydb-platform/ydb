@@ -249,7 +249,7 @@ std::pair<ui64, ui64> GetUnboxedValueSizeForTests(const NUdf::TUnboxedValue& val
 }
 
 TKqpScanComputeContext::TScanData::TScanData(const TTableId& tableId, const TTableRange& range,
-    const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys) 
+    const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys)
     : TableId(tableId)
     , Range(range)
     , SkipNullKeys(skipNullKeys)
@@ -257,37 +257,37 @@ TKqpScanComputeContext::TScanData::TScanData(const TTableId& tableId, const TTab
     , SystemColumns(systemColumns)
 {}
 
-TKqpScanComputeContext::TScanData::TScanData(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, 
-    NYql::NDqProto::EDqStatsMode statsMode) 
-{ 
-    const auto& tableMeta = meta.GetTable(); 
-    TableId = TTableId(tableMeta.GetTableId().GetOwnerId(), tableMeta.GetTableId().GetTableId(), 
-                       tableMeta.GetSysViewInfo(), tableMeta.GetSchemaVersion()); 
-    TablePath = meta.GetTable().GetTablePath(); 
- 
-    std::copy(meta.GetSkipNullKeys().begin(), meta.GetSkipNullKeys().end(), std::back_inserter(SkipNullKeys)); 
- 
-    Columns.reserve(meta.GetColumns().size()); 
-    for (const auto& column : meta.GetColumns()) { 
-        NMiniKQL::TKqpScanComputeContext::TColumn c; 
-        c.Tag = column.GetId(); 
-        c.Type = column.GetType(); 
- 
-        if (!IsSystemColumn(c.Tag)) { 
-            Columns.emplace_back(std::move(c)); 
-        } else { 
-            SystemColumns.emplace_back(std::move(c)); 
-        } 
-    } 
- 
-    if (statsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC) { 
-        BasicStats = std::make_unique<TBasicStats>(); 
-    } 
-    if (Y_UNLIKELY(statsMode >= NYql::NDqProto::DQ_STATS_MODE_PROFILE)) { 
-        ProfileStats = std::make_unique<TProfileStats>(); 
-    } 
-} 
- 
+TKqpScanComputeContext::TScanData::TScanData(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
+    NYql::NDqProto::EDqStatsMode statsMode)
+{
+    const auto& tableMeta = meta.GetTable();
+    TableId = TTableId(tableMeta.GetTableId().GetOwnerId(), tableMeta.GetTableId().GetTableId(),
+                       tableMeta.GetSysViewInfo(), tableMeta.GetSchemaVersion());
+    TablePath = meta.GetTable().GetTablePath();
+
+    std::copy(meta.GetSkipNullKeys().begin(), meta.GetSkipNullKeys().end(), std::back_inserter(SkipNullKeys));
+
+    Columns.reserve(meta.GetColumns().size());
+    for (const auto& column : meta.GetColumns()) {
+        NMiniKQL::TKqpScanComputeContext::TColumn c;
+        c.Tag = column.GetId();
+        c.Type = column.GetType();
+
+        if (!IsSystemColumn(c.Tag)) {
+            Columns.emplace_back(std::move(c));
+        } else {
+            SystemColumns.emplace_back(std::move(c));
+        }
+    }
+
+    if (statsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC) {
+        BasicStats = std::make_unique<TBasicStats>();
+    }
+    if (Y_UNLIKELY(statsMode >= NYql::NDqProto::DQ_STATS_MODE_PROFILE)) {
+        ProfileStats = std::make_unique<TProfileStats>();
+    }
+}
+
 
 ui64 TKqpScanComputeContext::TScanData::AddRows(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory) {
     if (Finished || batch.empty()) {
@@ -394,34 +394,34 @@ NUdf::TUnboxedValue TKqpScanComputeContext::TScanData::TakeRow() {
     return row;
 }
 
-void TKqpScanComputeContext::AddTableScan(ui32, const TTableId& tableId, const TTableRange& range, 
-    const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys) 
+void TKqpScanComputeContext::AddTableScan(ui32, const TTableId& tableId, const TTableRange& range,
+    const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys)
 {
-    auto scanData = TKqpScanComputeContext::TScanData(tableId, range, columns, systemColumns, skipNullKeys); 
- 
-    if (Y_UNLIKELY(StatsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC)) { 
-        scanData.BasicStats = std::make_unique<TScanData::TBasicStats>(); 
-    } 
- 
-    if (Y_UNLIKELY(StatsMode >= NYql::NDqProto::DQ_STATS_MODE_PROFILE)) { 
-        scanData.ProfileStats = std::make_unique<TScanData::TProfileStats>(); 
-    } 
- 
-    auto result = Scans.emplace(0, std::move(scanData)); 
+    auto scanData = TKqpScanComputeContext::TScanData(tableId, range, columns, systemColumns, skipNullKeys);
+
+    if (Y_UNLIKELY(StatsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC)) {
+        scanData.BasicStats = std::make_unique<TScanData::TBasicStats>();
+    }
+
+    if (Y_UNLIKELY(StatsMode >= NYql::NDqProto::DQ_STATS_MODE_PROFILE)) {
+        scanData.ProfileStats = std::make_unique<TScanData::TProfileStats>();
+    }
+
+    auto result = Scans.emplace(0, std::move(scanData));
     Y_ENSURE(result.second);
 }
 
-void TKqpScanComputeContext::AddTableScan(ui32, const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, 
-    NYql::NDqProto::EDqStatsMode statsMode) 
-{ 
-    auto scanData = TKqpScanComputeContext::TScanData(meta, statsMode); 
- 
-    auto result = Scans.emplace(0, std::move(scanData)); 
-    Y_ENSURE(result.second); 
-} 
- 
-TKqpScanComputeContext::TScanData& TKqpScanComputeContext::GetTableScan(ui32) { 
-    auto scanData = Scans.FindPtr(0); 
+void TKqpScanComputeContext::AddTableScan(ui32, const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
+    NYql::NDqProto::EDqStatsMode statsMode)
+{
+    auto scanData = TKqpScanComputeContext::TScanData(meta, statsMode);
+
+    auto result = Scans.emplace(0, std::move(scanData));
+    Y_ENSURE(result.second);
+}
+
+TKqpScanComputeContext::TScanData& TKqpScanComputeContext::GetTableScan(ui32) {
+    auto scanData = Scans.FindPtr(0);
     Y_ENSURE(scanData);
 
     return *scanData;
@@ -431,13 +431,13 @@ TMap<ui32, TKqpScanComputeContext::TScanData>& TKqpScanComputeContext::GetTableS
     return Scans;
 }
 
-const TMap<ui32, TKqpScanComputeContext::TScanData>& TKqpScanComputeContext::GetTableScans() const { 
-    return Scans; 
-} 
- 
-TIntrusivePtr<IKqpTableReader> TKqpScanComputeContext::ReadTable(ui32) const { 
-    auto scanData = Scans.FindPtr(0); 
-    Y_ENSURE(scanData); 
+const TMap<ui32, TKqpScanComputeContext::TScanData>& TKqpScanComputeContext::GetTableScans() const {
+    return Scans;
+}
+
+TIntrusivePtr<IKqpTableReader> TKqpScanComputeContext::ReadTable(ui32) const {
+    auto scanData = Scans.FindPtr(0);
+    Y_ENSURE(scanData);
     Y_ENSURE(scanData->TableReader);
 
     return scanData->TableReader;
@@ -487,5 +487,5 @@ TIntrusivePtr<IKqpTableReader> CreateKqpTableReader(TKqpScanComputeContext::TSca
     return MakeIntrusive<TKqpTableReader>(scanData);
 }
 
-} // namespace NMiniKQL 
+} // namespace NMiniKQL
 } // namespace NKikimr

@@ -46,7 +46,7 @@ struct IDqSourceActor {
     virtual ui64 GetInputIndex() const = 0;
 
     // Gets data and returns space used by filled data batch.
-    // Method should be called under bound mkql allocator. 
+    // Method should be called under bound mkql allocator.
     // Could throw YQL errors.
     virtual i64 GetSourceData(NKikimr::NMiniKQL::TUnboxedValueVector& batch, bool& finished, i64 freeSpace) = 0;
 

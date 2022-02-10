@@ -12,8 +12,8 @@ namespace NMonitoring {
                << ", 95%: " << Percentile95
                << ", 98%: " << Percentile98
                << ", 99%: " << Percentile99
-               << ", 99.9%: " << Percentile999 
-               << ", count: " << TotalCount; 
+               << ", 99.9%: " << Percentile999
+               << ", count: " << TotalCount;
     }
 
     void THdrHistogram::TakeSnaphot(THistogramSnapshot* snapshot) {
@@ -30,7 +30,7 @@ namespace NMonitoring {
             snapshot->Percentile98 = Data_.GetValueAtPercentile(98.0);
             snapshot->Percentile99 = Data_.GetValueAtPercentile(99.0);
             snapshot->Percentile999 = Data_.GetValueAtPercentile(99.9);
-            snapshot->TotalCount = Data_.GetTotalCount(); 
+            snapshot->TotalCount = Data_.GetTotalCount();
 
             // cleanup histogram data
             Data_.Reset();

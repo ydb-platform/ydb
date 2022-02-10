@@ -429,7 +429,7 @@ private:
                 .Done();
         }
 
-        return Build<TDqCnHashShuffle>(ctx, pos) 
+        return Build<TDqCnHashShuffle>(ctx, pos)
             .Output()
                 .Stage(mappedInput)
                 .Index().Value("0").Build()

@@ -1,14 +1,14 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(g:kikimr)
- 
-SRCS( 
-    kqp_resource_estimation.cpp 
+
+SRCS(
+    kqp_resource_estimation.cpp
     kqp_snapshot_manager.cpp
-    kqp_rm.cpp 
-) 
- 
-PEERDIR( 
+    kqp_rm.cpp
+)
+
+PEERDIR(
     library/cpp/actors/core
     ydb/core/actorlib_impl
     ydb/core/base
@@ -19,12 +19,12 @@ PEERDIR(
     ydb/core/mon
     ydb/core/protos
     ydb/core/tablet
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
-END() 
- 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

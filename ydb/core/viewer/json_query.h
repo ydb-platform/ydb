@@ -108,7 +108,7 @@ public:
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
         }
         if (Stats == "profile") {
-            request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_PROFILE); 
+            request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_PROFILE);
         }
         if (database) {
             request.SetDatabase(database);

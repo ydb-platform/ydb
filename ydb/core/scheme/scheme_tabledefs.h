@@ -167,12 +167,12 @@ public:
         , To(toValues)
         , InclusiveFrom(inclusiveFrom || point)
         , InclusiveTo(inclusiveTo || point)
-        , Point(point) 
-    { 
-        if (Point) { 
-            Y_VERIFY_DEBUG(toValues.empty() || fromValues.size() == toValues.size()); 
-        } 
-    } 
+        , Point(point)
+    {
+        if (Point) {
+            Y_VERIFY_DEBUG(toValues.empty() || fromValues.size() == toValues.size());
+        }
+    }
 
     bool IsEmptyRange(TConstArrayRef<const NScheme::TTypeId> cellTypeIds) const;
 };
@@ -183,8 +183,8 @@ public:
     TSerializedCellVec To;
     bool FromInclusive = false;
     bool ToInclusive = false;
-    bool Point = false; 
- 
+    bool Point = false;
+
     TSerializedTableRange() {}
 
     TSerializedTableRange(const TString& from, const TString& to, bool fromInclusive, bool toInclusive)
@@ -203,9 +203,9 @@ public:
 
     explicit TSerializedTableRange(const TTableRange& range)
         : TSerializedTableRange(range.From, range.InclusiveFrom, range.To, range.InclusiveTo)
-    { 
-        Point = range.Point; 
-    } 
+    {
+        Point = range.Point;
+    }
 
     explicit TSerializedTableRange(const NKikimrTx::TKeyRange& range) {
         Load(range);
@@ -226,20 +226,20 @@ public:
     void Serialize(NKikimrTx::TKeyRange& range) const {
         range.SetFrom(From.GetBuffer());
         range.SetFromInclusive(FromInclusive);
-        if (Point) { 
-            Y_VERIFY_DEBUG(FromInclusive); 
-            range.SetTo(From.GetBuffer()); 
-            range.SetToInclusive(true); 
-        } else { 
-            range.SetTo(To.GetBuffer()); 
-            range.SetToInclusive(ToInclusive); 
-        } 
+        if (Point) {
+            Y_VERIFY_DEBUG(FromInclusive);
+            range.SetTo(From.GetBuffer());
+            range.SetToInclusive(true);
+        } else {
+            range.SetTo(To.GetBuffer());
+            range.SetToInclusive(ToInclusive);
+        }
     }
 
     bool IsEmpty(TConstArrayRef<NScheme::TTypeId> type) const;
 
     TTableRange ToTableRange() const {
-        return TTableRange(From.GetCells(), FromInclusive, To.GetCells(), ToInclusive, Point); 
+        return TTableRange(From.GetCells(), FromInclusive, To.GetCells(), ToInclusive, Point);
     }
 };
 
@@ -678,8 +678,8 @@ public:
     TVector<TPartitionInfo> Partitions;
     TIntrusivePtr<TSecurityObject> SecurityObject;
 
-    bool IsSystemView() const { return Partitions.empty(); } 
- 
+    bool IsSystemView() const { return Partitions.empty(); }
+
     template<typename TKeyColumnTypes, typename TColumns>
     TKeyDesc(const TTableId& tableId, const TTableRange& range, ERowOperation rowOperation,
             const TKeyColumnTypes &keyColumnTypes, const TColumns &columns,

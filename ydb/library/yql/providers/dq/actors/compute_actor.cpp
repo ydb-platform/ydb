@@ -24,7 +24,7 @@ IActor* CreateComputeActor(
     const TString& computeActorType,
     const NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory)
 {
-    auto memoryLimits = NDq::TComputeMemoryLimits(); 
+    auto memoryLimits = NDq::TComputeMemoryLimits();
     memoryLimits.ChannelBufferSize = 1000000;
     memoryLimits.ScanBufferSize = 16_MB;
     // light == heavy since we allow extra allocation
@@ -36,10 +36,10 @@ IActor* CreateComputeActor(
     memoryLimits.MinMemAllocSize = options.MkqlMinAllocSize;
     memoryLimits.MinMemFreeSize = options.MkqlMinAllocSize;
 
-    auto computeRuntimeSettings = NDq::TComputeRuntimeSettings(); 
+    auto computeRuntimeSettings = NDq::TComputeRuntimeSettings();
     computeRuntimeSettings.ExtraMemoryAllocationPool = 3;
-    computeRuntimeSettings.FailOnUndelivery = false; 
-    computeRuntimeSettings.StatsMode = NDqProto::DQ_STATS_MODE_PROFILE; 
+    computeRuntimeSettings.FailOnUndelivery = false;
+    computeRuntimeSettings.StatsMode = NDqProto::DQ_STATS_MODE_PROFILE;
 
     // clear fake actorids
     for (auto& input : *task.MutableInputs()) {
@@ -55,7 +55,7 @@ IActor* CreateComputeActor(
         }
     }
 
-    auto taskRunnerFactory = [=](const NDqProto::TDqTask& task, const NDq::TLogFunc& logger) { 
+    auto taskRunnerFactory = [=](const NDqProto::TDqTask& task, const NDq::TLogFunc& logger) {
         Y_UNUSED(logger);
         return options.Factory->Get(task, {});
     };

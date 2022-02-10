@@ -1,7 +1,7 @@
 #pragma once
 
-#include "yql_kikimr_query_traits.h" 
- 
+#include "yql_kikimr_query_traits.h"
+
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/utils/resetable_setting.h>
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -57,8 +57,8 @@ struct TIndexDescription {
     enum class EIndexState : ui32 {
         Invalid = 0,  // this state should not be used
         Ready = 1,    // index is ready to use
-        NotReady = 2, // index is visible but not ready to use 
-        WriteOnly = 3 // index is visible only write operations to index are allowed 
+        NotReady = 2, // index is visible but not ready to use
+        WriteOnly = 3 // index is visible only write operations to index are allowed
     };
 
     const TString Name;
@@ -490,7 +490,7 @@ template<typename TResult>
 class IKikimrAsyncResult : public TThrRefBase {
 public:
     virtual bool HasResult() const = 0;
-    virtual TResult GetResult() = 0; 
+    virtual TResult GetResult() = 0;
     virtual NThreading::TFuture<bool> Continue() = 0;
 
     virtual ~IKikimrAsyncResult() {}
@@ -499,16 +499,16 @@ public:
 template<typename TResult>
 class TKikimrResultHolder : public IKikimrAsyncResult<TResult> {
 public:
-    TKikimrResultHolder(TResult&& result) 
-        : Result(std::move(result)) {} 
+    TKikimrResultHolder(TResult&& result)
+        : Result(std::move(result)) {}
 
     bool HasResult() const override {
-        return Full; 
+        return Full;
     }
 
-    TResult GetResult() override { 
-        Full = false; 
-        return std::move(Result); 
+    TResult GetResult() override {
+        Full = false;
+        return std::move(Result);
     }
 
     NThreading::TFuture<bool> Continue() override {
@@ -517,12 +517,12 @@ public:
 
 private:
     TResult Result;
-    bool Full = true; 
+    bool Full = true;
 };
 
 template<typename TResult>
-static TIntrusivePtr<TKikimrResultHolder<TResult>> MakeKikimrResultHolder(TResult&& result) { 
-    return MakeIntrusive<TKikimrResultHolder<TResult>>(std::move(result)); 
+static TIntrusivePtr<TKikimrResultHolder<TResult>> MakeKikimrResultHolder(TResult&& result) {
+    return MakeIntrusive<TKikimrResultHolder<TResult>>(std::move(result));
 }
 
 class IKikimrGateway : public TThrRefBase {
@@ -546,9 +546,9 @@ public:
         TVector<NKikimrMiniKQL::TResult*> Results;
         TMaybe<NKikimrKqp::TQueryProfile> Profile; // TODO: Deprecate.
         NKqpProto::TKqpStatsQuery QueryStats;
-        std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery; 
-        std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery; 
-        std::optional<NKikimr::NKqp::TQueryTraits> QueryTraits; 
+        std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery;
+        std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
+        std::optional<NKikimr::NKqp::TQueryTraits> QueryTraits;
         TString QueryAst;
         TString QueryPlan;
         std::shared_ptr<google::protobuf::Arena> ProtobufArenaPtr;

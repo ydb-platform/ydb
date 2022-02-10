@@ -52,7 +52,7 @@ IActor* CreateKqpCompileService(const NKikimrConfig::TTableServiceConfig& servic
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
     const NKikimrConfig::TTableServiceConfig& serviceConfig, TIntrusivePtr<TModuleResolverState> moduleResolverState,
     TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken,
-    TKqpDbCountersPtr dbCounters, bool recompileWithNewEngine); 
+    TKqpDbCountersPtr dbCounters, bool recompileWithNewEngine);
 
 IActor* CreateKqpCompileRequestActor(const TActorId& owner, const TString& userToken, const TMaybe<TString>& uid,
     TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters);
@@ -86,13 +86,13 @@ TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, const T
     std::shared_ptr<IKqpGateway::IKqpTableMetadataLoader>&& metadataLoader, NActors::TActorSystem* actorSystem, ui32 nodeId, TKqpRequestCounters::TPtr counters,
     const TActorId& MkqlCompileService);
 
-Ydb::StatusIds::StatusCode GetYdbStatus(const NYql::NCommon::TOperationResult& queryResult); 
+Ydb::StatusIds::StatusCode GetYdbStatus(const NYql::NCommon::TOperationResult& queryResult);
 void AddQueryIssues(NKikimrKqp::TQueryResponse& response, const NYql::TIssues& issues);
 bool HasSchemeOrFatalIssues(const NYql::TIssues& issues);
 
-// for tests only 
-void FailForcedNewEngineCompilationForTests(bool fail = true); 
-void FailForcedNewEngineExecutionForTests(bool fail = true); 
- 
-} // namespace NKqp 
+// for tests only
+void FailForcedNewEngineCompilationForTests(bool fail = true);
+void FailForcedNewEngineExecutionForTests(bool fail = true);
+
+} // namespace NKqp
 } // namespace NKikimr

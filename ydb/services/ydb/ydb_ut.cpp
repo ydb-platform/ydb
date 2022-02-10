@@ -2169,10 +2169,10 @@ tx_meta {
             {
                 const TString type =
                     "type_id: UUID\n";
-                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(type, parameter.mutable_type())); 
-                const TString value = R"(low_128: 1290426546294828066 
-                                         high_128: 13600338575655354541)"; 
-                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(value, parameter.mutable_value())); 
+                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(type, parameter.mutable_type()));
+                const TString value = R"(low_128: 1290426546294828066
+                                         high_128: 13600338575655354541)";
+                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(value, parameter.mutable_value()));
             }
 
             auto& map = *request.mutable_parameters();

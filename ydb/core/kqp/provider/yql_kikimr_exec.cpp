@@ -128,30 +128,30 @@ public:
     TKiSinkPlanInfoTransformer(TIntrusivePtr<IKikimrQueryExecutor> queryExecutor)
         : QueryExecutor(queryExecutor) {}
 
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ) final { 
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ) final {
         output = input;
-        VisitExpr(input, [](const TExprNode::TPtr& node) { 
+        VisitExpr(input, [](const TExprNode::TPtr& node) {
             if (auto maybeExec = TMaybeNode<TKiExecDataQuery>(node)) {
                 auto exec = maybeExec.Cast();
                 if (exec.Ast().Maybe<TCoVoid>()) {
-                    YQL_ENSURE(false); 
+                    YQL_ENSURE(false);
                 }
             }
 
             return true;
         });
 
-        return TStatus::Ok; 
+        return TStatus::Ok;
     }
 
     TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
         Y_UNUSED(input);
-        return MakeFuture(); 
+        return MakeFuture();
     }
 
-    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext&) final { 
+    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext&) final {
         output = input;
-        return TStatus::Ok; 
+        return TStatus::Ok;
     }
 
 private:
@@ -247,7 +247,7 @@ public:
         if (input->Content() == "Result") {
             auto resultInput = TExprBase(input->ChildPtr(0));
             auto exec = resultInput.Maybe<TCoNth>().Tuple().Maybe<TCoRight>().Input();
-            YQL_ENSURE(exec.Maybe<TKiExecDataQuery>()); 
+            YQL_ENSURE(exec.Maybe<TKiExecDataQuery>());
 
             ui32 index = FromString<ui32>(resultInput.Cast<TCoNth>().Index().Value());
             YQL_ENSURE(index == 0);
@@ -407,7 +407,7 @@ public:
         TIntrusivePtr<IKikimrGateway> gateway,
         TIntrusivePtr<TKikimrSessionContext> sessionCtx,
         TIntrusivePtr<IKikimrQueryExecutor> queryExecutor)
-        : Gateway(gateway) 
+        : Gateway(gateway)
         , SessionCtx(sessionCtx)
         , QueryExecutor(queryExecutor) {}
 
@@ -1043,7 +1043,7 @@ private:
                 return std::make_pair(IGraphTransformer::TStatus::Error, TAsyncTransformCallbackFuture());
             }
 
-            auto insertResult = SessionCtx->Query().Results.emplace(resultId, std::move(result)); 
+            auto insertResult = SessionCtx->Query().Results.emplace(resultId, std::move(result));
             YQL_ENSURE(insertResult.second);
 
             SessionCtx->Query().ExecutionOrder.push_back(resultId);
@@ -1179,7 +1179,7 @@ TAutoPtr<IGraphTransformer> CreateKiSinkCallableExecutionTransformer(
     TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     TIntrusivePtr<IKikimrQueryExecutor> queryExecutor)
 {
-    return new TKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor); 
+    return new TKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor);
 }
 
 TAutoPtr<IGraphTransformer> CreateKiSinkPlanInfoTransformer(TIntrusivePtr<IKikimrQueryExecutor> queryExecutor) {

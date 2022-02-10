@@ -131,18 +131,18 @@ void ParseWideReadColumns(const TCallable& callable, const TRuntimeNode& tagsNod
 
         if (IsSystemColumn(columnId)) {
             systemColumns.push_back({columnId, AS_TYPE(TDataType, memberType)->GetSchemeType()});
-        } else { 
+        } else {
             columns.push_back({columnId, AS_TYPE(TDataType, memberType)->GetSchemeType()});
-        } 
-    } 
+        }
+    }
 }
 
 TParseReadTableResult ParseWideReadTable(TCallable& callable) {
-    MKQL_ENSURE_S(callable.GetInputsCount() >= 4); 
+    MKQL_ENSURE_S(callable.GetInputsCount() >= 4);
 
     TParseReadTableResult result;
 
-    result.CallableId = 0; // callable.GetUniqueId(); 
+    result.CallableId = 0; // callable.GetUniqueId();
 
     auto tableNode = callable.GetInput(0);
     auto rangeNode = callable.GetInput(1);
@@ -163,27 +163,27 @@ TParseReadTableResult ParseWideReadTable(TCallable& callable) {
 
     ParseWideReadColumns(callable, tagsNode, result.Columns, result.SystemColumns);
 
-    auto skipNullKeys = AS_VALUE(TListLiteral, callable.GetInput(3)); 
-    result.SkipNullKeys.reserve(skipNullKeys->GetItemsCount()); 
-    for (ui32 i = 0; i < skipNullKeys->GetItemsCount(); ++i) { 
-        result.SkipNullKeys.push_back(AS_VALUE(TDataLiteral, skipNullKeys->GetItems()[i])->AsValue().Get<bool>()); 
-    } 
+    auto skipNullKeys = AS_VALUE(TListLiteral, callable.GetInput(3));
+    result.SkipNullKeys.reserve(skipNullKeys->GetItemsCount());
+    for (ui32 i = 0; i < skipNullKeys->GetItemsCount(); ++i) {
+        result.SkipNullKeys.push_back(AS_VALUE(TDataLiteral, skipNullKeys->GetItems()[i])->AsValue().Get<bool>());
+    }
 
-    if (callable.GetInputsCount() >= 5) { 
-        auto node = callable.GetInput(4).GetNode(); 
-        if (node->GetType()->GetKind() == TType::EKind::Callable) { 
-            MKQL_ENSURE_S(AS_TYPE(TDataType, AS_TYPE(TCallableType, node->GetType())->GetReturnType())->GetSchemeType() 
-                == NUdf::TDataType<ui64>::Id, "ItemsLimit must be () -> ui64"); 
-            result.ItemsLimit = node; 
-        } else { 
-            MKQL_ENSURE_S(node->GetType()->GetKind() == TType::EKind::Null, "ItemsLimit expected to be Callable or Null"); 
-        } 
-    } 
- 
-    if (callable.GetInputsCount() >= 6) { 
-        result.Reverse = AS_VALUE(TDataLiteral, callable.GetInput(5))->AsValue().Get<bool>(); 
-    } 
- 
+    if (callable.GetInputsCount() >= 5) {
+        auto node = callable.GetInput(4).GetNode();
+        if (node->GetType()->GetKind() == TType::EKind::Callable) {
+            MKQL_ENSURE_S(AS_TYPE(TDataType, AS_TYPE(TCallableType, node->GetType())->GetReturnType())->GetSchemeType()
+                == NUdf::TDataType<ui64>::Id, "ItemsLimit must be () -> ui64");
+            result.ItemsLimit = node;
+        } else {
+            MKQL_ENSURE_S(node->GetType()->GetKind() == TType::EKind::Null, "ItemsLimit expected to be Callable or Null");
+        }
+    }
+
+    if (callable.GetInputsCount() >= 6) {
+        result.Reverse = AS_VALUE(TDataLiteral, callable.GetInput(5))->AsValue().Get<bool>();
+    }
+
     return result;
 }
 
@@ -229,7 +229,7 @@ TParseReadTableRangesResult ParseWideReadTableRanges(TCallable& callable) {
     return result;
 }
 
-namespace { 
+namespace {
 
 class TKqpScanWideReadTableWrapperBase : public TStatelessWideFlowCodegeneratorNode<TKqpScanWideReadTableWrapperBase> {
     using TBase = TStatelessWideFlowCodegeneratorNode<TKqpScanWideReadTableWrapperBase>;
@@ -377,8 +377,8 @@ private:
     TParseReadTableRangesResult ParseResult;
 };
 
-} // namespace 
- 
+} // namespace
+
 IComputationNode* WrapKqpScanWideReadTableRanges(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     TKqpScanComputeContext& computeCtx)
 {
@@ -424,5 +424,5 @@ IComputationNode* WrapKqpScanWideReadTable(TCallable& callable, const TComputati
     return new TKqpScanWideReadTableWrapper(computeCtx, parseResult, fromNode, toNode, std::move(representations));
 }
 
-} // namespace NMiniKQL 
-} // namespace NKikimr 
+} // namespace NMiniKQL
+} // namespace NKikimr

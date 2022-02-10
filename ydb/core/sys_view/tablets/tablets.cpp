@@ -266,7 +266,7 @@ private:
                     if (!entry.HasGeneration()) {
                         return TCell();
                     }
-                    return TCell::Make<ui32>(entry.GetGeneration()); 
+                    return TCell::Make<ui32>(entry.GetGeneration());
                 }});
                 insert({TSchema::NodeId::ColumnId, [] (const TEntry& entry) {
                     return TCell::Make<ui32>(entry.GetNodeId());

@@ -638,7 +638,7 @@ bool TKikimrTransactionContextBase::ApplyTableOperations(const TVector<NKqpProto
 
         if ((KikimrRequireUnmodifiedOps() & newOp) && isolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) {
             TString message = TStringBuilder()
-                << "Operation '" << newOp << "' is only supported with SERIALIZABLE isolation level"; 
+                << "Operation '" << newOp << "' is only supported with SERIALIZABLE isolation level";
             ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
             return false;
         }

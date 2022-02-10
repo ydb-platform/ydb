@@ -3,7 +3,7 @@
 #include "kqp_query_replay.h"
 #include <ydb/core/kqp/common/kqp_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/core/kqp/provider/yql_kikimr_query_traits.h> 
+#include <ydb/core/kqp/provider/yql_kikimr_query_traits.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/library/yql/dq/actors/dq.h>
@@ -29,25 +29,25 @@ inline NActors::TActorId MakeKqpCompileServiceID(ui32 nodeId) {
 }
 
 inline NActors::TActorId MakeKqpResourceManagerServiceID(ui32 nodeId) {
-    const char name[12] = "kqp_resman"; 
+    const char name[12] = "kqp_resman";
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
-} 
- 
-inline NActors::TActorId MakeKqpRmServiceID(ui32 nodeId) { 
-    const char name[12] = "kqp_rm"; 
-    return NActors::TActorId(nodeId, TStringBuf(name, 12)); 
-} 
- 
-inline NActors::TActorId MakeKqpNodeServiceID(ui32 nodeId) { 
-    const char name[12] = "kqp_node"; 
-    return NActors::TActorId(nodeId, TStringBuf(name, 12)); 
-} 
- 
+}
+
+inline NActors::TActorId MakeKqpRmServiceID(ui32 nodeId) {
+    const char name[12] = "kqp_rm";
+    return NActors::TActorId(nodeId, TStringBuf(name, 12));
+}
+
+inline NActors::TActorId MakeKqpNodeServiceID(ui32 nodeId) {
+    const char name[12] = "kqp_node";
+    return NActors::TActorId(nodeId, TStringBuf(name, 12));
+}
+
 inline NActors::TActorId MakeKqpLocalFileSpillingServiceID(ui32 nodeId) {
-    const char name[12] = "kqp_lfspill"; 
+    const char name[12] = "kqp_lfspill";
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
-} 
- 
+}
+
 class TKqpShutdownController;
 
 class TKqpShutdownState : public TThrRefBase {
@@ -164,8 +164,8 @@ public:
     }
 };
 
-using TPreparedQueryConstPtr = std::shared_ptr<const NKikimrKqp::TPreparedQuery>; 
- 
+using TPreparedQueryConstPtr = std::shared_ptr<const NKikimrKqp::TPreparedQuery>;
+
 struct TKqpCompileResult {
     using TConstPtr = std::shared_ptr<const TKqpCompileResult>;
 
@@ -199,9 +199,9 @@ struct TKqpCompileResult {
     TMaybe<TKqpQueryId> Query;
     TString Uid;
 
-    TPreparedQueryConstPtr PreparedQuery; 
-    TPreparedQueryConstPtr PreparedQueryNewEngine; 
-    std::optional<TQueryTraits> QueryTraits; 
+    TPreparedQueryConstPtr PreparedQuery;
+    TPreparedQueryConstPtr PreparedQueryNewEngine;
+    std::optional<TQueryTraits> QueryTraits;
 };
 
 struct TEvKqp {
@@ -364,7 +364,7 @@ struct TEvKqp {
 
     struct TEvCompileRequest : public TEventLocal<TEvCompileRequest, TKqpEvents::EvCompileRequest> {
         TEvCompileRequest(const TString& userToken, const TMaybe<TString>& uid, TMaybe<TKqpQueryId>&& query,
-            bool keepInCache, TInstant deadline, TKqpDbCountersPtr dbCounters) 
+            bool keepInCache, TInstant deadline, TKqpDbCountersPtr dbCounters)
             : UserToken(userToken)
             , Uid(uid)
             , Query(std::move(query))
@@ -379,7 +379,7 @@ struct TEvKqp {
         TMaybe<TString> Uid;
         TMaybe<TKqpQueryId> Query;
         bool KeepInCache = false;
-        // it is allowed for local event to use absolute time (TInstant) instead of time interval (TDuration) 
+        // it is allowed for local event to use absolute time (TInstant) instead of time interval (TDuration)
         TInstant Deadline;
         TKqpDbCountersPtr DbCounters;
         TMaybe<bool> DocumentApiRestricted;
@@ -387,7 +387,7 @@ struct TEvKqp {
 
     struct TEvRecompileRequest : public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
         TEvRecompileRequest(const TString& userToken, const TString& uid, const TMaybe<TKqpQueryId>& query,
-            TInstant deadline, TKqpDbCountersPtr dbCounters) 
+            TInstant deadline, TKqpDbCountersPtr dbCounters)
             : UserToken(userToken)
             , Uid(uid)
             , Query(query)
@@ -408,10 +408,10 @@ struct TEvKqp {
 
         TKqpCompileResult::TConstPtr CompileResult;
         NKqpProto::TKqpStatsCompile Stats;
-        std::optional<TString> ReplayMessage; 
- 
-        ui32 ForceNewEnginePercent = 0; 
-        ui32 ForceNewEngineLevel = 0; 
+        std::optional<TString> ReplayMessage;
+
+        ui32 ForceNewEnginePercent = 0;
+        ui32 ForceNewEngineLevel = 0;
     };
 
     struct TEvCompileInvalidateRequest : public TEventLocal<TEvCompileInvalidateRequest,
@@ -424,18 +424,18 @@ struct TEvKqp {
         TString Uid;
         TKqpDbCountersPtr DbCounters;
     };
- 
-    struct TEvInitiateShutdownRequest : public TEventLocal<TEvInitiateShutdownRequest, TKqpEvents::EvInitiateShutdownRequest> { 
-        TIntrusivePtr<TKqpShutdownState> ShutdownState; 
- 
-        TEvInitiateShutdownRequest(TIntrusivePtr<TKqpShutdownState> ShutdownState) 
-            : ShutdownState(ShutdownState) 
-        {} 
-    }; 
- 
-    using TEvAbortExecution = NYql::NDq::TEvDq::TEvAbortExecution; 
-}; 
- 
+
+    struct TEvInitiateShutdownRequest : public TEventLocal<TEvInitiateShutdownRequest, TKqpEvents::EvInitiateShutdownRequest> {
+        TIntrusivePtr<TKqpShutdownState> ShutdownState;
+
+        TEvInitiateShutdownRequest(TIntrusivePtr<TKqpShutdownState> ShutdownState)
+            : ShutdownState(ShutdownState)
+        {}
+    };
+
+    using TEvAbortExecution = NYql::NDq::TEvDq::TEvAbortExecution;
+};
+
 class TKqpRequestInfo {
 public:
     TKqpRequestInfo(const TString& traceId, const TString& sessionId)
@@ -480,7 +480,7 @@ IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     TVector<NKikimrKqp::TKqpSetting>&& settings,
     std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory);
 
-} // namespace NKqp 
+} // namespace NKqp
 } // namespace NKikimr
 
 template<>

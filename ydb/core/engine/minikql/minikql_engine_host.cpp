@@ -332,7 +332,7 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     rowBytes = std::max(rowBytes, (ui64)8);
 
     Counters.SelectRowBytes += rowBytes;
-    Counters.SelectRowRows++; 
+    Counters.SelectRowRows++;
 
     return std::move(rowResult);
 }
@@ -964,72 +964,72 @@ NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeId type) {
         return NUdf::TUnboxedValue();
     }
 
-    switch (type) { 
-        case NYql::NProto::TypeIds::Bool: 
-            return NUdf::TUnboxedValuePod(cell.AsValue<bool>()); 
-        case NYql::NProto::TypeIds::Int8: 
-            return NUdf::TUnboxedValuePod(cell.AsValue<i8>()); 
-        case NYql::NProto::TypeIds::Uint8: 
-            return NUdf::TUnboxedValuePod(cell.AsValue<ui8>()); 
-        case NYql::NProto::TypeIds::Int16: 
-            return NUdf::TUnboxedValuePod(cell.AsValue<i16>()); 
-        case NYql::NProto::TypeIds::Uint16: 
-            return NUdf::TUnboxedValuePod(cell.AsValue<ui16>()); 
-        case NYql::NProto::TypeIds::Int32: 
-            return NUdf::TUnboxedValuePod(cell.AsValue<i32>()); 
-        case NYql::NProto::TypeIds::Uint32: 
-            return NUdf::TUnboxedValuePod(cell.AsValue<ui32>()); 
-        case NYql::NProto::TypeIds::Int64: 
-            return NUdf::TUnboxedValuePod(cell.AsValue<i64>()); 
-        case NYql::NProto::TypeIds::Uint64: 
-            return NUdf::TUnboxedValuePod(cell.AsValue<ui64>()); 
-        case NYql::NProto::TypeIds::Float: 
-            return NUdf::TUnboxedValuePod(cell.AsValue<float>()); 
-        case NYql::NProto::TypeIds::Double: 
-            return NUdf::TUnboxedValuePod(cell.AsValue<double>()); 
- 
-        case NYql::NProto::TypeIds::Decimal: { 
-            // Decimal values are stored as 128-bit integers in Kikimr but 
-            // should be stored as 120-bit embedded value in UnboxedValue. 
-            NYql::NDecimal::TInt128 val; 
-            std::memcpy(reinterpret_cast<char*>(&val), cell.Data(), cell.Size()); 
-            return NUdf::TUnboxedValuePod(val); 
-        } 
- 
-        case NYql::NProto::TypeIds::Date: { 
-            NUdf::TDataType<NUdf::TDate>::TLayout v = cell.AsValue<ui16>(); 
-            return NUdf::TUnboxedValuePod(v); 
-        } 
-        case NYql::NProto::TypeIds::Datetime: { 
-            NUdf::TDataType<NUdf::TDatetime>::TLayout v = cell.AsValue<ui32>(); 
-            return NUdf::TUnboxedValuePod(v); 
-        } 
-        case NYql::NProto::TypeIds::Timestamp: { 
-            NUdf::TDataType<NUdf::TTimestamp>::TLayout v = cell.AsValue<ui64>(); 
-            return NUdf::TUnboxedValuePod(v); 
-        } 
-        case NYql::NProto::TypeIds::Interval: { 
-            NUdf::TDataType<NUdf::TInterval>::TLayout v = cell.AsValue<i64>(); 
-            return NUdf::TUnboxedValuePod(v); 
-        } 
- 
-        case NYql::NProto::TypeIds::TzDate: 
-        case NYql::NProto::TypeIds::TzDatetime: 
-        case NYql::NProto::TypeIds::TzTimestamp: 
-            // TODO: create TUnboxedValue and call .SetTimezoneId() 
- 
-        case NYql::NProto::TypeIds::String: 
-        case NYql::NProto::TypeIds::Utf8: 
-        case NYql::NProto::TypeIds::Yson: 
-        case NYql::NProto::TypeIds::Json: 
-        case NYql::NProto::TypeIds::Uuid: 
-        case NYql::NProto::TypeIds::JsonDocument: 
-        case NYql::NProto::TypeIds::DyNumber: 
-            return MakeString(NUdf::TStringRef(cell.Data(), cell.Size())); 
- 
-        default: 
-            Y_VERIFY_DEBUG(false, "Unsupported type: %" PRIu16, type); 
-            return MakeString(NUdf::TStringRef(cell.Data(), cell.Size())); 
+    switch (type) {
+        case NYql::NProto::TypeIds::Bool:
+            return NUdf::TUnboxedValuePod(cell.AsValue<bool>());
+        case NYql::NProto::TypeIds::Int8:
+            return NUdf::TUnboxedValuePod(cell.AsValue<i8>());
+        case NYql::NProto::TypeIds::Uint8:
+            return NUdf::TUnboxedValuePod(cell.AsValue<ui8>());
+        case NYql::NProto::TypeIds::Int16:
+            return NUdf::TUnboxedValuePod(cell.AsValue<i16>());
+        case NYql::NProto::TypeIds::Uint16:
+            return NUdf::TUnboxedValuePod(cell.AsValue<ui16>());
+        case NYql::NProto::TypeIds::Int32:
+            return NUdf::TUnboxedValuePod(cell.AsValue<i32>());
+        case NYql::NProto::TypeIds::Uint32:
+            return NUdf::TUnboxedValuePod(cell.AsValue<ui32>());
+        case NYql::NProto::TypeIds::Int64:
+            return NUdf::TUnboxedValuePod(cell.AsValue<i64>());
+        case NYql::NProto::TypeIds::Uint64:
+            return NUdf::TUnboxedValuePod(cell.AsValue<ui64>());
+        case NYql::NProto::TypeIds::Float:
+            return NUdf::TUnboxedValuePod(cell.AsValue<float>());
+        case NYql::NProto::TypeIds::Double:
+            return NUdf::TUnboxedValuePod(cell.AsValue<double>());
+
+        case NYql::NProto::TypeIds::Decimal: {
+            // Decimal values are stored as 128-bit integers in Kikimr but
+            // should be stored as 120-bit embedded value in UnboxedValue.
+            NYql::NDecimal::TInt128 val;
+            std::memcpy(reinterpret_cast<char*>(&val), cell.Data(), cell.Size());
+            return NUdf::TUnboxedValuePod(val);
+        }
+
+        case NYql::NProto::TypeIds::Date: {
+            NUdf::TDataType<NUdf::TDate>::TLayout v = cell.AsValue<ui16>();
+            return NUdf::TUnboxedValuePod(v);
+        }
+        case NYql::NProto::TypeIds::Datetime: {
+            NUdf::TDataType<NUdf::TDatetime>::TLayout v = cell.AsValue<ui32>();
+            return NUdf::TUnboxedValuePod(v);
+        }
+        case NYql::NProto::TypeIds::Timestamp: {
+            NUdf::TDataType<NUdf::TTimestamp>::TLayout v = cell.AsValue<ui64>();
+            return NUdf::TUnboxedValuePod(v);
+        }
+        case NYql::NProto::TypeIds::Interval: {
+            NUdf::TDataType<NUdf::TInterval>::TLayout v = cell.AsValue<i64>();
+            return NUdf::TUnboxedValuePod(v);
+        }
+
+        case NYql::NProto::TypeIds::TzDate:
+        case NYql::NProto::TypeIds::TzDatetime:
+        case NYql::NProto::TypeIds::TzTimestamp:
+            // TODO: create TUnboxedValue and call .SetTimezoneId()
+
+        case NYql::NProto::TypeIds::String:
+        case NYql::NProto::TypeIds::Utf8:
+        case NYql::NProto::TypeIds::Yson:
+        case NYql::NProto::TypeIds::Json:
+        case NYql::NProto::TypeIds::Uuid:
+        case NYql::NProto::TypeIds::JsonDocument:
+        case NYql::NProto::TypeIds::DyNumber:
+            return MakeString(NUdf::TStringRef(cell.Data(), cell.Size()));
+
+        default:
+            Y_VERIFY_DEBUG(false, "Unsupported type: %" PRIu16, type);
+            return MakeString(NUdf::TStringRef(cell.Data(), cell.Size()));
     }
 }
 

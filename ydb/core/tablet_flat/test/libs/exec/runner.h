@@ -163,7 +163,7 @@ namespace NFake {
             { /*_ Resource broker service, used for generic scans */
                 using namespace NResourceBroker;
 
-                auto *actor = CreateResourceBrokerActor(MakeDefaultConfig(),  Env.GetDynamicCounters(0)); 
+                auto *actor = CreateResourceBrokerActor(MakeDefaultConfig(),  Env.GetDynamicCounters(0));
 
                 AddService(MakeResourceBrokerID(), actor, EMail::Revolving);
             }

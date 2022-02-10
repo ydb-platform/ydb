@@ -59,9 +59,9 @@ TMaybe<Ydb::StatusIds::StatusCode> GetYdbStatus(const TIssue& issue) {
         case TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN:
             return Ydb::StatusIds::UNDETERMINED;
 
-        case TIssuesIds::KIKIMR_PRECONDITION_FAILED: 
-            return Ydb::StatusIds::PRECONDITION_FAILED; 
- 
+        case TIssuesIds::KIKIMR_PRECONDITION_FAILED:
+            return Ydb::StatusIds::PRECONDITION_FAILED;
+
         case TIssuesIds::KIKIMR_UNSUPPORTED:
             return Ydb::StatusIds::UNSUPPORTED;
 
@@ -114,7 +114,7 @@ bool HasSchemeOrFatalIssues(const TIssue& issue) {
 
 } // namespace
 
-Ydb::StatusIds::StatusCode GetYdbStatus(const NYql::NCommon::TOperationResult& queryResult) { 
+Ydb::StatusIds::StatusCode GetYdbStatus(const NYql::NCommon::TOperationResult& queryResult) {
     if (queryResult.Success()) {
         return Ydb::StatusIds::SUCCESS;
     }
@@ -159,5 +159,5 @@ bool HasSchemeOrFatalIssues(const TIssues& issues) {
     return false;
 }
 
-} // namespace NKqp 
+} // namespace NKqp
 } // namespace NKikimr

@@ -54,8 +54,8 @@ void FromProto(TDqOutputChannelStats* s, const T& f)
     s->RowsIn = f.GetRowsIn();
     s->RowsOut = f.GetRowsOut();
     s->MaxMemoryUsage = f.GetMaxMemoryUsage();
-    //s->StartTs = TInstant::MilliSeconds(f.GetStartTs()); 
-    //s->FinishTs = TInstant::MilliSeconds(f.GetFinishTs()); 
+    //s->StartTs = TInstant::MilliSeconds(f.GetStartTs());
+    //s->FinishTs = TInstant::MilliSeconds(f.GetFinishTs());
 }
 
 template<typename T>
@@ -67,9 +67,9 @@ void FromProto(TDqInputChannelStats* s, const T& f)
     s->RowsIn = f.GetRowsIn();
     s->RowsOut = f.GetRowsOut();
     s->MaxMemoryUsage = f.GetMaxMemoryUsage();
-    //s->StartTs = TInstant::MilliSeconds(f.GetStartTs()); 
-    //s->FinishTs = TInstant::MilliSeconds(f.GetFinishTs()); 
-    s->DeserializationTime = TDuration::MicroSeconds(f.GetDeserializationTimeUs()); 
+    //s->StartTs = TInstant::MilliSeconds(f.GetStartTs());
+    //s->FinishTs = TInstant::MilliSeconds(f.GetFinishTs());
+    s->DeserializationTime = TDuration::MicroSeconds(f.GetDeserializationTimeUs());
 }
 
 template<typename T>
@@ -81,8 +81,8 @@ void FromProto(TDqSourceStats* s, const T& f)
     s->RowsIn = f.GetRowsIn();
     s->RowsOut = f.GetRowsOut();
     s->MaxMemoryUsage = f.GetMaxMemoryUsage();
-    //s->StartTs = TInstant::MilliSeconds(f.GetStartTs()); 
-    //s->FinishTs = TInstant::MilliSeconds(f.GetFinishTs()); 
+    //s->StartTs = TInstant::MilliSeconds(f.GetStartTs());
+    //s->FinishTs = TInstant::MilliSeconds(f.GetFinishTs());
 }
 
 template<typename T>
@@ -98,24 +98,24 @@ void FromProto(TDqSinkStats* s, const T& f)
 template<typename T>
 void FromProto(TDqTaskRunnerStats* s, const T& f)
 {
-    //s->StartTs = TInstant::MilliSeconds(f.GetStartTs()); 
-    //s->FinishTs = TInstant::MilliSeconds(f.GetFinishTs()); 
-    s->BuildCpuTime = TDuration::MicroSeconds(f.GetBuildCpuTimeUs()); 
-    s->ComputeCpuTime = TDuration::MicroSeconds(f.GetComputeCpuTimeUs()); 
+    //s->StartTs = TInstant::MilliSeconds(f.GetStartTs());
+    //s->FinishTs = TInstant::MilliSeconds(f.GetFinishTs());
+    s->BuildCpuTime = TDuration::MicroSeconds(f.GetBuildCpuTimeUs());
+    s->ComputeCpuTime = TDuration::MicroSeconds(f.GetComputeCpuTimeUs());
     s->RunStatusTimeMetrics.Load(ERunStatus::PendingInput, TDuration::MicroSeconds(f.GetPendingInputTimeUs()));
     s->RunStatusTimeMetrics.Load(ERunStatus::PendingOutput, TDuration::MicroSeconds(f.GetPendingOutputTimeUs()));
     s->RunStatusTimeMetrics.Load(ERunStatus::Finished, TDuration::MicroSeconds(f.GetFinishTimeUs()));
-    //s->TotalTime = TDuration::MilliSeconds(f.GetTotalTime()); 
-    s->WaitTime = TDuration::MicroSeconds(f.GetWaitTimeUs()); 
-    s->WaitOutputTime = TDuration::MicroSeconds(f.GetWaitOutputTimeUs()); 
+    //s->TotalTime = TDuration::MilliSeconds(f.GetTotalTime());
+    s->WaitTime = TDuration::MicroSeconds(f.GetWaitTimeUs());
+    s->WaitOutputTime = TDuration::MicroSeconds(f.GetWaitOutputTimeUs());
 
-    //s->MkqlTotalNodes = f.GetMkqlTotalNodes(); 
-    //s->MkqlCodegenFunctions = f.GetMkqlCodegenFunctions(); 
-    //s->CodeGenTotalInstructions = f.GetCodeGenTotalInstructions(); 
-    //s->CodeGenTotalFunctions = f.GetCodeGenTotalFunctions(); 
-    //s->CodeGenFullTime = f.GetCodeGenFullTime(); 
-    //s->CodeGenFinalizeTime = f.GetCodeGenFinalizeTime(); 
-    //s->CodeGenModulePassTime = f.GetCodeGenModulePassTime(); 
+    //s->MkqlTotalNodes = f.GetMkqlTotalNodes();
+    //s->MkqlCodegenFunctions = f.GetMkqlCodegenFunctions();
+    //s->CodeGenTotalInstructions = f.GetCodeGenTotalInstructions();
+    //s->CodeGenTotalFunctions = f.GetCodeGenTotalFunctions();
+    //s->CodeGenFullTime = f.GetCodeGenFullTime();
+    //s->CodeGenFinalizeTime = f.GetCodeGenFinalizeTime();
+    //s->CodeGenModulePassTime = f.GetCodeGenModulePassTime();
 
     for (const auto& input : f.GetInputChannels()) {
         FromProto(const_cast<TDqInputChannelStats*>(s->InputChannels[input.GetChannelId()]), input);
@@ -956,7 +956,7 @@ public:
         ythrow yexception() << "unimplemented";
     }
 
-    void Push(NDqProto::TCheckpoint&& checkpoint) override { 
+    void Push(NDqProto::TCheckpoint&& checkpoint) override {
         Y_UNUSED(checkpoint);
         ythrow yexception() << "unimplemented";
     }
@@ -999,7 +999,7 @@ public:
         }
     }
 
-    bool Pop(NDqProto::TCheckpoint&) override { 
+    bool Pop(NDqProto::TCheckpoint&) override {
         return false;
     }
 
@@ -1013,11 +1013,11 @@ public:
         Y_UNUSED(data);
         ythrow yexception() << "unimplemented";
     }
- 
-    bool PopAll(NKikimr::NMiniKQL::TUnboxedValueVector& rows) override { 
-        Y_UNUSED(rows); 
-        ythrow yexception() << "unimplemented"; 
-    } 
+
+    bool PopAll(NKikimr::NMiniKQL::TUnboxedValueVector& rows) override {
+        Y_UNUSED(rows);
+        ythrow yexception() << "unimplemented";
+    }
     // |>
 
     ui64 Drop() override {
@@ -1285,13 +1285,13 @@ public:
         InitTaskMeta();
     }
 
-    ~TTaskRunner() { 
+    ~TTaskRunner() {
         Alloc.Acquire();
         Command->Kill();
         Command->Wait(TDuration::Seconds(0));
     }
 
-    void ReadStderr() { 
+    void ReadStderr() {
         auto& input = Command->GetStderr();
         char buf[1024];
         size_t size;
@@ -1303,10 +1303,10 @@ public:
         YQL_LOG(DEBUG) << "stderr (" << StageId << " " << TraceId << " ) finished";
     }
 
-    ui64 GetTaskId() const override { 
+    ui64 GetTaskId() const override {
         return TaskId;
-    } 
- 
+    }
+
     i32 GetProtocolVersion() override {
         if (ProtocolVersion < 0) {
             NDqProto::TCommandHeader header;
@@ -1344,20 +1344,20 @@ public:
         header.SetCommand(NDqProto::TCommandHeader::RUN);
         header.SetTaskId(Task.GetId());
         header.Save(&Output);
- 
+
         NDqProto::TRunResponse response;
         response.Load(&Input);
         return response;
     }
 
-    IInputChannel::TPtr GetInputChannel(ui64 channelId) override { 
+    IInputChannel::TPtr GetInputChannel(ui64 channelId) override {
         return new TInputChannel(this, Task.GetId(), channelId, Input, Output);
-    } 
- 
-    IOutputChannel::TPtr GetOutputChannel(ui64 channelId) override { 
+    }
+
+    IOutputChannel::TPtr GetOutputChannel(ui64 channelId) override {
         return new TOutputChannel(Task.GetId(), channelId, Input, Output);
-    } 
- 
+    }
+
     IDqSource::TPtr GetSource(ui64 index) override {
         return new TDqSource(Task.GetId(), index, this);
     }
@@ -1366,7 +1366,7 @@ public:
         return new TDqSink(Task.GetId(), index, this);
     }
 
-    const NMiniKQL::TTypeEnvironment& GetTypeEnv() const override { 
+    const NMiniKQL::TTypeEnvironment& GetTypeEnv() const override {
         return TypeEnv;
     }
 
@@ -1382,18 +1382,18 @@ public:
         return TaskParams;
     }
 
-    TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit) override { 
+    TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit) override {
         auto guard = TypeEnv.BindAllocator();
-        if (memoryLimit) { 
-            guard.GetMutex()->SetLimit(*memoryLimit); 
-        } 
-        return guard; 
-    } 
- 
-    bool IsAllocatorAttached() override { 
+        if (memoryLimit) {
+            guard.GetMutex()->SetLimit(*memoryLimit);
+        }
+        return guard;
+    }
+
+    bool IsAllocatorAttached() override {
         return TypeEnv.GetAllocator().IsAttached();
-    } 
- 
+    }
+
     void Kill() override {
         bool expected = true;
         if (!Running.compare_exchange_strong(expected, false)) {
@@ -1488,16 +1488,16 @@ public:
         , Task(task)
     { }
 
-    ui64 GetTaskId() const override { 
-        return Task.GetId(); 
+    ui64 GetTaskId() const override {
+        return Task.GetId();
     }
 
-    void Prepare(const NDqProto::TDqTask& task, const TDqTaskRunnerMemoryLimits& memoryLimits, 
-        const IDqTaskRunnerExecutionContext& execCtx, const TDqTaskRunnerParameterProvider&) override 
-    { 
-        Y_UNUSED(memoryLimits); 
-        Y_UNUSED(execCtx); 
-        Y_VERIFY(Task.GetId() == task.GetId()); 
+    void Prepare(const NDqProto::TDqTask& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
+        const IDqTaskRunnerExecutionContext& execCtx, const TDqTaskRunnerParameterProvider&) override
+    {
+        Y_UNUSED(memoryLimits);
+        Y_UNUSED(execCtx);
+        Y_VERIFY(Task.GetId() == task.GetId());
         try {
             auto result = Delegate->Prepare();
             Y_UNUSED(result);
@@ -1573,8 +1573,8 @@ public:
         return sink;
     }
 
-    const NKikimr::NMiniKQL::TTypeEnvironment& GetTypeEnv() const override { 
-        return Delegate->GetTypeEnv(); 
+    const NKikimr::NMiniKQL::TTypeEnvironment& GetTypeEnv() const override {
+        return Delegate->GetTypeEnv();
     }
 
     const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const override {
@@ -1589,14 +1589,14 @@ public:
         return Delegate->GetTaskParams();
     }
 
-    TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit) override { 
-        return Delegate->BindAllocator(memoryLimit); 
+    TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit) override {
+        return Delegate->BindAllocator(memoryLimit);
     }
 
-    bool IsAllocatorAttached() override { 
-        return Delegate->IsAllocatorAttached(); 
-    } 
- 
+    bool IsAllocatorAttached() override {
+        return Delegate->IsAllocatorAttached();
+    }
+
     void UpdateStats() override {
     }
 
@@ -1877,7 +1877,7 @@ private:
             YQL_LOG(DEBUG) << "Arg: " << arg;
         }
         command->Run();
-        return command; 
+        return command;
     }
 
     std::atomic<i64> ContainerId = 1;

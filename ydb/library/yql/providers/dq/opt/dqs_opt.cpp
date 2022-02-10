@@ -44,7 +44,7 @@ namespace NYql::NDqs {
 
                 output = Build<TDqCnUnionAll>(ctx, input->Pos()) // clang-format off
                     .Output()
-                        .Stage<TDqStage>() 
+                        .Stage<TDqStage>()
                             .Inputs()
                                 .Build()
                             .Program()
@@ -79,7 +79,7 @@ namespace NYql::NDqs {
 
             output = Build<TDqCnResult>(ctx, input->Pos()) // clang-format off
               .Output()
-                .Stage<TDqStage>() 
+                .Stage<TDqStage>()
                     .Inputs()
                         .Add(node.Cast<TDqCnUnionAll>())
                         .Build()
@@ -92,8 +92,8 @@ namespace NYql::NDqs {
                 .Index()
                     .Build("0")
                 .Build()
-              .ColumnHints() // TODO: set column hints 
-                .Build() 
+              .ColumnHints() // TODO: set column hints
+                .Build()
               .Done().Ptr(); // clang-format on
             return TStatus(IGraphTransformer::TStatus::Repeat, true);
         });
@@ -118,10 +118,10 @@ namespace NYql::NDqs {
 
     namespace NPeephole {
 
-        class TDqsPeepholeTransformer: public TSyncTransformerBase { 
+        class TDqsPeepholeTransformer: public TSyncTransformerBase {
         public:
-            TDqsPeepholeTransformer(THolder<IGraphTransformer>&& typeAnnTransformer, 
-                                    TTypeAnnotationContext& typesCtx) 
+            TDqsPeepholeTransformer(THolder<IGraphTransformer>&& typeAnnTransformer,
+                                    TTypeAnnotationContext& typesCtx)
                 : TypeAnnTransformer(std::move(typeAnnTransformer))
                 , TypesCtx(typesCtx)
             {
@@ -164,17 +164,17 @@ namespace NYql::NDqs {
     }
 
     THolder<IGraphTransformer> CreateDqsPeepholeTransformer(THolder<IGraphTransformer>&& typeAnnTransformer, TTypeAnnotationContext& typesCtx) {
-        return MakeHolder<NPeephole::TDqsPeepholeTransformer>(std::move(typeAnnTransformer), typesCtx); 
+        return MakeHolder<NPeephole::TDqsPeepholeTransformer>(std::move(typeAnnTransformer), typesCtx);
     }
 
     THolder<IGraphTransformer> CreateDqsFinalizingOptTransformer() {
         return CreateFunctorTransformer(
             [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-                auto status = NDq::DqReplicateStageMultiOutput(input, output, ctx); 
+                auto status = NDq::DqReplicateStageMultiOutput(input, output, ctx);
                 if (status.Level != TStatus::Error && input != output) {
                     YQL_CVLOG(NLog::ELevel::INFO, NLog::EComponent::ProviderDq) << "DqReplicateStageMultiOutput";
                 }
                 return status;
-            }); 
+            });
     }
-} 
+}

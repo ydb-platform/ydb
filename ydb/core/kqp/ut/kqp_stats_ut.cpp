@@ -75,12 +75,12 @@ Y_UNIT_TEST(JoinStatsBasic) {
         UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(0).partitions_count(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(1).name(), "/Root/EightShard");
         UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(1).partitions_count(), 8);
-    } else { 
+    } else {
         UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(0).name(), "/Root/EightShard");
         UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(0).partitions_count(), 8);
         UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(1).name(), "/Root/KeyValue");
         UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(1).partitions_count(), 1);
-    } 
+    }
 
     UNIT_ASSERT(!res.PlanJson);
 }
@@ -127,8 +127,8 @@ Y_UNIT_TEST(DeferredEffects) {
     auto result = session.ExecuteDataQuery(R"(
         PRAGMA kikimr.UseNewEngine = "true";
 
-        UPSERT INTO `/Root/TwoShard` 
-        SELECT Key + 100u AS Key, Value1 FROM `/Root/TwoShard` WHERE Key in (1,2,3,4,5); 
+        UPSERT INTO `/Root/TwoShard`
+        SELECT Key + 100u AS Key, Value1 FROM `/Root/TwoShard` WHERE Key in (1,2,3,4,5);
     )", TTxControl::BeginTx(), settings).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -156,7 +156,7 @@ Y_UNIT_TEST(DeferredEffects) {
         DECLARE $key AS Uint32;
         DECLARE $value AS String;
 
-        UPSERT INTO `/Root/TwoShard` (Key, Value1) VALUES 
+        UPSERT INTO `/Root/TwoShard` (Key, Value1) VALUES
             ($key, $value);
     )", TTxControl::Tx(*tx).CommitTx(), std::move(params), settings).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -166,8 +166,8 @@ Y_UNIT_TEST(DeferredEffects) {
 
     result = session.ExecuteDataQuery(R"(
         PRAGMA kikimr.UseNewEngine = "true";
-        SELECT * FROM `/Root/TwoShard`; 
-        UPDATE `/Root/TwoShard` SET Value1 = "XXX" WHERE Key in (3,600); 
+        SELECT * FROM `/Root/TwoShard`;
+        UPDATE `/Root/TwoShard` SET Value1 = "XXX" WHERE Key in (3,600);
     )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
     result.GetIssues().PrintTo(Cerr);
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -192,8 +192,8 @@ Y_UNIT_TEST(DataQueryWithEffects) {
     auto result = session.ExecuteDataQuery(R"(
         PRAGMA kikimr.UseNewEngine = "true";
 
-        UPSERT INTO `/Root/TwoShard` 
-        SELECT Key + 1u AS Key, Value1 FROM `/Root/TwoShard`; 
+        UPSERT INTO `/Root/TwoShard`
+        SELECT Key + 1u AS Key, Value1 FROM `/Root/TwoShard`;
     )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), settings).ExtractValueSync();
     result.GetIssues().PrintTo(Cerr);
     AssertSuccessResult(result);
@@ -216,8 +216,8 @@ Y_UNIT_TEST(DataQueryOldEngine) {
     auto result = session.ExecuteDataQuery(R"(
         PRAGMA kikimr.UseNewEngine = "false";
 
-        UPSERT INTO `/Root/TwoShard` 
-        SELECT Key + 1u AS Key, Value1 FROM `/Root/TwoShard`; 
+        UPSERT INTO `/Root/TwoShard`
+        SELECT Key + 1u AS Key, Value1 FROM `/Root/TwoShard`;
     )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), settings).ExtractValueSync();
     result.GetIssues().PrintTo(Cerr);
     AssertSuccessResult(result);
@@ -247,14 +247,14 @@ Y_UNIT_TEST(DataQueryMulti) {
     UNIT_ASSERT_EQUAL_C(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 0, result.GetQueryPlan());
 }
 
-Y_UNIT_TEST_NEW_ENGINE(RequestUnitForBadRequestExecute) { 
+Y_UNIT_TEST_NEW_ENGINE(RequestUnitForBadRequestExecute) {
     TKikimrRunner kikimr;
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
-    auto result = session.ExecuteDataQuery(Q_(R"( 
+    auto result = session.ExecuteDataQuery(Q_(R"(
             INCORRECT_STMT
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), TExecDataQuerySettings().ReportCostInfo(true)) 
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), TExecDataQuerySettings().ReportCostInfo(true))
         .ExtractValueSync();
     result.GetIssues().PrintTo(Cerr);
 
@@ -265,14 +265,14 @@ Y_UNIT_TEST_NEW_ENGINE(RequestUnitForBadRequestExecute) {
     UNIT_ASSERT(result.GetConsumedRu() > 0);
 }
 
-Y_UNIT_TEST_NEW_ENGINE(RequestUnitForBadRequestExplicitPrepare) { 
+Y_UNIT_TEST_NEW_ENGINE(RequestUnitForBadRequestExplicitPrepare) {
     TKikimrRunner kikimr;
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
-    auto result = session.PrepareDataQuery(Q_(R"( 
+    auto result = session.PrepareDataQuery(Q_(R"(
         INCORRECT_STMT
-    )"), TPrepareDataQuerySettings().ReportCostInfo(true)).ExtractValueSync(); 
+    )"), TPrepareDataQuerySettings().ReportCostInfo(true)).ExtractValueSync();
     result.GetIssues().PrintTo(Cerr);
 
     auto ru = result.GetResponseMetadata().find(NYdb::YDB_CONSUMED_UNITS_HEADER);
@@ -282,15 +282,15 @@ Y_UNIT_TEST_NEW_ENGINE(RequestUnitForBadRequestExplicitPrepare) {
     UNIT_ASSERT(result.GetConsumedRu() > 0);
 }
 
-Y_UNIT_TEST_NEW_ENGINE(RequestUnitForSuccessExplicitPrepare) { 
+Y_UNIT_TEST_NEW_ENGINE(RequestUnitForSuccessExplicitPrepare) {
     TKikimrRunner kikimr;
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
-    auto result = session.PrepareDataQuery(Q_(R"( 
+    auto result = session.PrepareDataQuery(Q_(R"(
         SELECT 0; SELECT 1; SELECT 2; SELECT 3; SELECT 4;
         SELECT 5; SELECT 6; SELECT 7; SELECT 8; SELECT 9;
-    )"), TPrepareDataQuerySettings().ReportCostInfo(true)).ExtractValueSync(); 
+    )"), TPrepareDataQuerySettings().ReportCostInfo(true)).ExtractValueSync();
     result.GetIssues().PrintTo(Cerr);
 
     auto ru = result.GetResponseMetadata().find(NYdb::YDB_CONSUMED_UNITS_HEADER);

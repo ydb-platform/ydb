@@ -3,7 +3,7 @@
 
 #include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
- 
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -18,7 +18,7 @@ public:
         : TKqpExecutePhysicalTransformerBase(gateway, cluster, txState, transformCtx) {}
 
 protected:
-    TStatus DoExecute(const NKqpProto::TKqpPhyTx* tx, bool commit, NYql::TExprContext&) final { 
+    TStatus DoExecute(const NKqpProto::TKqpPhyTx* tx, bool commit, NYql::TExprContext&) final {
         YQL_ENSURE(tx);
         YQL_ENSURE(!commit);
 
@@ -26,36 +26,36 @@ protected:
         request.Transactions.emplace_back(*tx, PrepareParameters(*tx));
 
         request.RlPath = TransformCtx->QueryCtx->RlPath;
-        request.Timeout = TransformCtx->QueryCtx->Deadlines.TimeoutAt - Gateway->GetCurrentTime(); 
-        if (!request.Timeout) { 
+        request.Timeout = TransformCtx->QueryCtx->Deadlines.TimeoutAt - Gateway->GetCurrentTime();
+        if (!request.Timeout) {
             // TODO: Just cancel request.
-            request.Timeout = TDuration::MilliSeconds(1); 
-        } 
-        request.MaxComputeActors = TransformCtx->Config->_KqpMaxComputeActors.Get().GetRef(); 
+            request.Timeout = TDuration::MilliSeconds(1);
+        }
+        request.MaxComputeActors = TransformCtx->Config->_KqpMaxComputeActors.Get().GetRef();
         request.StatsMode = GetStatsMode(TransformCtx->QueryCtx->StatsMode);
-        request.DisableLlvmForUdfStages = TransformCtx->Config->DisableLlvmForUdfStages(); 
+        request.DisableLlvmForUdfStages = TransformCtx->Config->DisableLlvmForUdfStages();
         request.LlvmEnabled = TransformCtx->Config->GetEnableLlvm() != EOptionalFlag::Disabled;
         request.Snapshot = TxState->Tx().GetSnapshot();
 
         switch (tx->GetType()) {
             case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
-                ExecuteFuture = Gateway->ExecutePhysical(std::move(request), TransformCtx->ReplyTarget); 
+                ExecuteFuture = Gateway->ExecutePhysical(std::move(request), TransformCtx->ReplyTarget);
                 break;
             case NKqpProto::TKqpPhyTx::TYPE_SCAN:
                 ExecuteFuture = Gateway->ExecuteScanQuery(std::move(request), TransformCtx->ReplyTarget);
                 break;
             default:
-                YQL_ENSURE(false, "Unexpected physical tx type in scan query: " 
-                    << NKqpProto::TKqpPhyTx_EType_Name(tx->GetType())); 
+                YQL_ENSURE(false, "Unexpected physical tx type in scan query: "
+                    << NKqpProto::TKqpPhyTx_EType_Name(tx->GetType()));
         }
 
         return TStatus::Async;
     }
 
-    TStatus DoRollback() final { 
-        YQL_ENSURE(false, "Rollback in ScanQuery tx"); 
-    } 
- 
+    TStatus DoRollback() final {
+        YQL_ENSURE(false, "Rollback in ScanQuery tx");
+    }
+
     bool OnExecuterResult(NKikimrKqp::TExecuterTxResult&& execResult, TExprContext& ctx, bool commit) override {
         Y_UNUSED(execResult);
         Y_UNUSED(ctx);
@@ -68,7 +68,7 @@ protected:
 class TKqpCreateSnapshotTransformer : public TGraphTransformerBase {
 public:
     TKqpCreateSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKqlTransformContext> transformCtx,
-        TIntrusivePtr<TKqpTransactionState> txState) 
+        TIntrusivePtr<TKqpTransactionState> txState)
         : Gateway(gateway)
         , TransformCtx(transformCtx)
         , TxState(txState)
@@ -114,27 +114,27 @@ public:
         auto handle = SnapshotFuture.ExtractValue();
 
         if (!handle.Snapshot.IsValid()) {
-            YQL_CLOG(NOTICE, ProviderKqp) << "Failed to create persistent snapshot. " 
-                << "Status: " << NKikimrIssues::TStatusIds_EStatusCode_Name(handle.Status) 
+            YQL_CLOG(NOTICE, ProviderKqp) << "Failed to create persistent snapshot. "
+                << "Status: " << NKikimrIssues::TStatusIds_EStatusCode_Name(handle.Status)
                 << ", issues: " << handle.Issues().ToString();
- 
+
             TIssue issue("Failed to create persistent snapshot");
-            switch (handle.Status) { 
-                case NKikimrIssues::TStatusIds::SCHEME_ERROR: 
-                    issue.SetCode(NYql::TIssuesIds::KIKIMR_SCHEME_ERROR, NYql::TSeverityIds::S_ERROR); 
-                    break; 
-                case NKikimrIssues::TStatusIds::TIMEOUT: 
-                    issue.SetCode(NYql::TIssuesIds::KIKIMR_TIMEOUT, NYql::TSeverityIds::S_ERROR); 
-                    break; 
-                case NKikimrIssues::TStatusIds::OVERLOADED: 
-                    issue.SetCode(NYql::TIssuesIds::KIKIMR_OVERLOADED, NYql::TSeverityIds::S_ERROR); 
-                    break; 
-                default: 
-                    // ScanQuery is always RO, so we can return UNAVAILABLE here 
-                    issue.SetCode(NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, NYql::TSeverityIds::S_ERROR); 
-                    break; 
-            } 
- 
+            switch (handle.Status) {
+                case NKikimrIssues::TStatusIds::SCHEME_ERROR:
+                    issue.SetCode(NYql::TIssuesIds::KIKIMR_SCHEME_ERROR, NYql::TSeverityIds::S_ERROR);
+                    break;
+                case NKikimrIssues::TStatusIds::TIMEOUT:
+                    issue.SetCode(NYql::TIssuesIds::KIKIMR_TIMEOUT, NYql::TSeverityIds::S_ERROR);
+                    break;
+                case NKikimrIssues::TStatusIds::OVERLOADED:
+                    issue.SetCode(NYql::TIssuesIds::KIKIMR_OVERLOADED, NYql::TSeverityIds::S_ERROR);
+                    break;
+                default:
+                    // ScanQuery is always RO, so we can return UNAVAILABLE here
+                    issue.SetCode(NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, NYql::TSeverityIds::S_ERROR);
+                    break;
+            }
+
             for (const auto& subIssue: handle.Issues()) {
                 issue.AddSubIssue(MakeIntrusive<TIssue>(subIssue));
             }
@@ -186,9 +186,9 @@ TAutoPtr<IGraphTransformer> CreateKqpExecuteScanTransformer(TIntrusivePtr<IKqpGa
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpCreateSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway,
-    TIntrusivePtr<TKqlTransformContext> transformCtx, TIntrusivePtr<TKqpTransactionState> txState) 
+    TIntrusivePtr<TKqlTransformContext> transformCtx, TIntrusivePtr<TKqpTransactionState> txState)
 {
-    return new TKqpCreateSnapshotTransformer(gateway, transformCtx, txState); 
+    return new TKqpCreateSnapshotTransformer(gateway, transformCtx, txState);
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpReleaseSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway,
@@ -197,5 +197,5 @@ TAutoPtr<IGraphTransformer> CreateKqpReleaseSnapshotTransformer(TIntrusivePtr<IK
     return new TKqpReleaseSnapshotTransformer(gateway, txState);
 }
 
-} // namespace NKqp 
+} // namespace NKqp
 } // namespace NKikimr

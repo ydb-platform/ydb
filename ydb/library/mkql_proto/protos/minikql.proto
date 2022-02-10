@@ -2,8 +2,8 @@ package NKikimrMiniKQL;
 option java_package = "ru.yandex.kikimr.proto";
 option cc_enable_arenas = true;
 
-import "google/protobuf/struct.proto"; 
- 
+import "google/protobuf/struct.proto";
+
 enum ETypeKind {
     Unknown = 0;
     Void = 1;
@@ -14,12 +14,12 @@ enum ETypeKind {
     Struct = 6;
     Dict = 7;
     Variant = 8;
-    Null = 9; 
+    Null = 9;
     Reserved_10 = 10;
     Reserved_11 = 11;
     Reserved_12 = 12;
-    Reserved_13 = 13; 
-    Reserved_14 = 14; 
+    Reserved_13 = 13;
+    Reserved_14 = 14;
 }
 
 message TDecimalParams {
@@ -96,7 +96,7 @@ message TValue {
         string Text = 9;
         TValue Optional = 10;
         fixed64 Low128 = 15;
-        google.protobuf.NullValue NullFlagValue = 18; // Set if current TValue is terminal Null 
+        google.protobuf.NullValue NullFlagValue = 18; // Set if current TValue is terminal Null
     }
     // Logically part of oneof,
     // but protobuf does not allow repeated fields in oneof.

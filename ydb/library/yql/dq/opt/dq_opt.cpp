@@ -11,11 +11,11 @@ namespace NYql::NDq {
 
 TDqStageSettings TDqStageSettings::Parse(const TDqStageBase& node) {
     TDqStageSettings settings{};
- 
-    for (const auto& tuple : node.Settings()) { 
+
+    for (const auto& tuple : node.Settings()) {
         if (const auto name = tuple.Name().Value(); name == IdSettingName) {
-            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>()); 
-            settings.Id = tuple.Value().Cast<TCoAtom>().Value(); 
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+            settings.Id = tuple.Value().Cast<TCoAtom>().Value();
         } else if (name == LogicalIdSettingName) {
             YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
             settings.LogicalId = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
@@ -35,12 +35,12 @@ TDqStageSettings TDqStageSettings::Parse(const TDqStageBase& node) {
             }
         } else if (name == TransformConcurrencySetting) {
             settings.TransformConcurrency = FromString<ui32>(tuple.Value().Cast<TCoAtom>().Value());
-        } 
-    } 
- 
-    return settings; 
-} 
- 
+        }
+    }
+
+    return settings;
+}
+
 TDqStageSettings TDqStageSettings::New(const NNodes::TDqStageBase& node) {
     auto settings = Parse(node);
 
@@ -52,35 +52,35 @@ TDqStageSettings TDqStageSettings::New(const NNodes::TDqStageBase& node) {
 }
 
 NNodes::TCoNameValueTupleList TDqStageSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
-    TVector<TCoNameValueTuple> settings; 
+    TVector<TCoNameValueTuple> settings;
     auto logicalId = LogicalId;
     if (!logicalId) {
         logicalId = ctx.NextUniqueId;
     }
- 
+
     settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
         .Name().Build(LogicalIdSettingName)
         .Value<TCoAtom>().Build(logicalId)
         .Done());
 
-    if (Id) { 
-        settings.push_back(Build<TCoNameValueTuple>(ctx, pos) 
-            .Name().Build(IdSettingName) 
-            .Value<TCoAtom>().Build(Id) 
-            .Done()); 
-    } 
- 
+    if (Id) {
+        settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(IdSettingName)
+            .Value<TCoAtom>().Build(Id)
+            .Done());
+    }
+
     if (SinglePartition) {
         settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(SinglePartitionSettingName)
             .Done());
     }
 
-    return Build<TCoNameValueTupleList>(ctx, pos) 
-        .Add(settings) 
-        .Done(); 
-} 
- 
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add(settings)
+        .Done();
+}
+
 ui32 TDqStageSettings::MaxTransformConcurrency() const {
     return TransformConcurrency > 0 ? TransformConcurrency : TDqSettings::TDefault::CloudFunctionConcurrency;
 }
@@ -109,7 +109,7 @@ TCoLambda BuildIdentityLambda(TPositionHandle pos, TExprContext& ctx) {
 bool EnsureDqUnion(const TExprBase& node, TExprContext& ctx) {
     if (!node.Maybe<TDqCnUnionAll>()) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-            TStringBuilder() << "Expected physical input, got " << node.Ref().Content())); 
+            TStringBuilder() << "Expected physical input, got " << node.Ref().Content()));
         return false;
     }
 
@@ -134,16 +134,16 @@ ui32 GetConsumersCount(const TExprBase& node, const TParentsMap& parentsMap) {
     return GetConsumers(node, parentsMap).size();
 }
 
-bool IsSingleConsumer(const TExprBase& node, const TParentsMap& parentsMap) { 
-    return GetConsumersCount(node, parentsMap) == 1; 
-} 
- 
+bool IsSingleConsumer(const TExprBase& node, const TParentsMap& parentsMap) {
+    return GetConsumersCount(node, parentsMap) == 1;
+}
+
 bool IsSingleConsumerConnection(const TDqConnection& node, const TParentsMap& parentsMap, bool allowStageMultiUsage) {
     return IsSingleConsumer(node, parentsMap)
         && IsSingleConsumer(node.Output(), parentsMap)
         && (allowStageMultiUsage || IsSingleConsumer(node.Output().Stage(), parentsMap));
-} 
- 
+}
+
 ui32 GetStageOutputsCount(const TDqStageBase& stage, bool includingSinks) {
     auto stageType = stage.Ref().GetTypeAnn();
     YQL_ENSURE(stageType);
@@ -161,13 +161,13 @@ TVector<TDqConnection> FindDqConnections(const TExprBase& node) {
     VisitExpr(node.Ptr(), [&connections](const TExprNode::TPtr& exprNode) {
         TExprBase node(exprNode);
 
-        if (node.Maybe<TDqPhyPrecompute>()) { 
-            return false; 
-        } 
- 
+        if (node.Maybe<TDqPhyPrecompute>()) {
+            return false;
+        }
+
         if (auto maybeConnection = node.Maybe<TDqConnection>()) {
-            YQL_ENSURE(!maybeConnection.Maybe<TDqCnValue>()); 
-            connections.emplace_back(maybeConnection.Cast()); 
+            YQL_ENSURE(!maybeConnection.Maybe<TDqCnValue>());
+            connections.emplace_back(maybeConnection.Cast());
             return false;
         }
 
@@ -195,8 +195,8 @@ bool IsDqPureExpr(const TExprBase& node, bool isPrecomputePure) {
 }
 
 bool IsDqDependsOnStage(const TExprBase& node, const TDqStageBase& stage) {
-    return !!FindNode(node.Ptr(), [ptr = stage.Raw()](const TExprNode::TPtr& exprNode) { 
-        return exprNode.Get() == ptr; 
+    return !!FindNode(node.Ptr(), [ptr = stage.Raw()](const TExprNode::TPtr& exprNode) {
+        return exprNode.Get() == ptr;
     });
 }
 

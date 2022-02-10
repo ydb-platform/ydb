@@ -60,10 +60,10 @@ void ConvertMiniKQLTypeToYdbType(const NKikimrMiniKQL::TType& input, Ydb::Type& 
             output.set_void_type(::google::protobuf::NULL_VALUE);
             break;
         }
-        case NKikimrMiniKQL::ETypeKind::Null: { 
-            output.set_null_type(::google::protobuf::NULL_VALUE); 
-            break; 
-        } 
+        case NKikimrMiniKQL::ETypeKind::Null: {
+            output.set_null_type(::google::protobuf::NULL_VALUE);
+            break;
+        }
         case NKikimrMiniKQL::ETypeKind::Data: {
             const NKikimrMiniKQL::TDataType& protoData = input.GetData();
             NUdf::TDataTypeId schemeType = protoData.GetScheme();
@@ -134,9 +134,9 @@ void ConvertYdbTypeToMiniKQLType(const Ydb::Type& input, NKikimrMiniKQL::TType& 
         case Ydb::Type::kVoidType:
             output.SetKind(NKikimrMiniKQL::ETypeKind::Void);
             break;
-        case Ydb::Type::kNullType: 
-            output.SetKind(NKikimrMiniKQL::ETypeKind::Null); 
-            break; 
+        case Ydb::Type::kNullType:
+            output.SetKind(NKikimrMiniKQL::ETypeKind::Null);
+            break;
         case Ydb::Type::kTypeId:
             output.SetKind(NKikimrMiniKQL::ETypeKind::Data);
             output.MutableData()->SetScheme(input.type_id());
@@ -451,10 +451,10 @@ void ConvertMiniKQLValueToYdbValue(const NKikimrMiniKQL::TType& inputType,
         case NKikimrMiniKQL::ETypeKind::Void: {
             break;
         }
-        case NKikimrMiniKQL::ETypeKind::Null: { 
-            output.set_null_flag_value(::google::protobuf::NULL_VALUE); 
-            break; 
-        } 
+        case NKikimrMiniKQL::ETypeKind::Null: {
+            output.set_null_flag_value(::google::protobuf::NULL_VALUE);
+            break;
+        }
         case NKikimrMiniKQL::ETypeKind::Data: {
             const NKikimrMiniKQL::TDataType& protoData = inputType.GetData();
             const NUdf::TDataTypeId typeId = protoData.GetScheme();

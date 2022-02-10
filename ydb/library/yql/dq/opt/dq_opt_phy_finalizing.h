@@ -11,9 +11,9 @@
 namespace NYql::NDq {
 
 IGraphTransformer::TStatus DqReplicateStageMultiOutput(TExprNode::TPtr input, TExprNode::TPtr& output,
-    TExprContext& ctx); 
+    TExprContext& ctx);
 
 IGraphTransformer::TStatus DqExtractPrecomputeToStageInput(const TExprNode::TPtr& input, TExprNode::TPtr& output,
-    TExprContext& ctx); 
+    TExprContext& ctx);
 
 } // namespace NYql::NDq

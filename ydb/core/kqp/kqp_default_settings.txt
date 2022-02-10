@@ -60,7 +60,7 @@ DefaultSettings {
 
 DefaultSettings {
     Name: "_KqpAllowNewEngine"
-    Value: "true" 
+    Value: "true"
 }
 
 DefaultSettings {
@@ -122,13 +122,13 @@ DefaultSettings {
     Name: "OptDisableJoinReverseTableLookup"
     Value: "true"
 }
- 
-DefaultSettings { 
-    Name: "_KqpMaxComputeActors" 
-    Value: "10000" 
-} 
- 
-DefaultSettings { 
-    Name: "_KqpDisableLlvmForUdfStages" 
+
+DefaultSettings {
+    Name: "_KqpMaxComputeActors"
+    Value: "10000"
+}
+
+DefaultSettings {
+    Name: "_KqpDisableLlvmForUdfStages"
     Value: "false"
-} 
+}

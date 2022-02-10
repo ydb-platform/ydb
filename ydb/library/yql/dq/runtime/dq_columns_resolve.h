@@ -22,18 +22,18 @@ struct TSortColumnInfo : public TColumnInfo {
 };
 
 TMaybe<TColumnInfo> FindColumnInfo(const NKikimr::NMiniKQL::TType* type, TStringBuf column);
-TColumnInfo GetColumnInfo(const NKikimr::NMiniKQL::TType* type, TStringBuf column); 
+TColumnInfo GetColumnInfo(const NKikimr::NMiniKQL::TType* type, TStringBuf column);
 
 template<typename TList>
-void GetColumnsInfo(const NKikimr::NMiniKQL::TType* type, const TList& columns, 
+void GetColumnsInfo(const NKikimr::NMiniKQL::TType* type, const TList& columns,
     TVector<NUdf::TDataTypeId>& columnTypes, TVector<ui32>& columnIndices)
 {
     columnTypes.clear();
     columnIndices.clear();
 
-    columnTypes.reserve(columns.size()); 
-    columnIndices.reserve(columns.size()); 
- 
+    columnTypes.reserve(columns.size());
+    columnIndices.reserve(columns.size());
+
     for (auto& column : columns) {
         auto columnInfo = GetColumnInfo(type, column);
         columnTypes.push_back(columnInfo.TypeId);

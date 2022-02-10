@@ -54,8 +54,8 @@ public:
 
     virtual ~ITaskRunner() = default;
 
-    virtual ui64 GetTaskId() const = 0; 
- 
+    virtual ui64 GetTaskId() const = 0;
+
     virtual NYql::NDqProto::TPrepareResponse Prepare() = 0;
     virtual NYql::NDqProto::TRunResponse Run() = 0;
 
@@ -66,16 +66,16 @@ public:
 
     virtual const THashMap<TString,TString>& GetTaskParams() const = 0;
     virtual const THashMap<TString,TString>& GetSecureParams() const = 0;
-    virtual const NKikimr::NMiniKQL::TTypeEnvironment& GetTypeEnv() const = 0; 
+    virtual const NKikimr::NMiniKQL::TTypeEnvironment& GetTypeEnv() const = 0;
     virtual const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const = 0;
 
-    // if memoryLimit = Nothing()  then don't set memory limit, use existing one (if any) 
-    // if memoryLimit = 0          then set unlimited 
-    // otherwise use particular memory limit 
-    virtual TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit = Nothing()) = 0; 
-    virtual bool IsAllocatorAttached() = 0; 
- 
-    struct TStatus { 
+    // if memoryLimit = Nothing()  then don't set memory limit, use existing one (if any)
+    // if memoryLimit = 0          then set unlimited
+    // otherwise use particular memory limit
+    virtual TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit = Nothing()) = 0;
+    virtual bool IsAllocatorAttached() = 0;
+
+    struct TStatus {
         int ExitCode;
         TString Stderr;
     };

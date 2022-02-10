@@ -2545,7 +2545,7 @@ void TDataShard::ScanComplete(NTable::EAbort,
                 LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
                             "Scan complete at " << TabletID() << " for unknown tx " << cookie);
             }
-        } 
+        }
     }
 
     // Continue current Tx

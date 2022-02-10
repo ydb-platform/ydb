@@ -1,4 +1,4 @@
-package NYql.NDqProto; 
+package NYql.NDqProto;
 option cc_enable_arenas = true;
 
 import "library/cpp/actors/protos/actors.proto";
@@ -42,18 +42,18 @@ enum EComputeState {
     COMPUTE_STATE_FINISHED = 3;
 };
 
-message TComputeActorStats { 
+message TComputeActorStats {
     optional NActorsProto.TActorId ActorId = 1;
-    reserved 2; //optional NKqpProto.TKqpStatsRun LegacyStats = 2; 
-}; 
- 
+    reserved 2; //optional NKqpProto.TKqpStatsRun LegacyStats = 2;
+};
+
 message TEvComputeActorState {
-    optional uint32 State = 1; // == EComputeState 
-    optional TComputeActorStats LegacyStats = 2; 
+    optional uint32 State = 1; // == EComputeState
+    optional TComputeActorStats LegacyStats = 2;
     optional Ydb.StatusIds.StatusCode Status = 3;
     repeated Ydb.Issue.IssueMessage Issues = 4;
-    optional uint64 TaskId = 5; 
-    optional TDqComputeActorStats Stats = 6; 
+    optional uint64 TaskId = 5;
+    optional TDqComputeActorStats Stats = 6;
 };
 
 message TEvComputeStateRequest {
@@ -61,23 +61,23 @@ message TEvComputeStateRequest {
 
 message TEvComputeChannelData {
     optional TChannelData ChannelData = 1;
-    optional uint64 SendTime = 2; 
-    optional uint64 SeqNo = 3; 
-    optional bool NoAck = 4; 
+    optional uint64 SendTime = 2;
+    optional uint64 SeqNo = 3;
+    optional bool NoAck = 4;
 };
- 
-message TEvComputeChannelDataAck { 
-    optional uint64 ChannelId = 1; 
-    optional uint64 SeqNo = 2; 
-    optional int64 FreeSpace = 3; 
-    optional bool Finish = 4; 
+
+message TEvComputeChannelDataAck {
+    optional uint64 ChannelId = 1;
+    optional uint64 SeqNo = 2;
+    optional int64 FreeSpace = 3;
+    optional bool Finish = 4;
 };
- 
-message TEvAbortExecution { 
-    optional Ydb.StatusIds.StatusCode StatusCode = 1; 
-    optional string Message = 2; 
-} 
- 
+
+message TEvAbortExecution {
+    optional Ydb.StatusIds.StatusCode StatusCode = 1;
+    optional string Message = 2;
+}
+
 message TRlPath {
     optional string CoordinationNode = 1;
     optional string ResourcePath = 2;
@@ -85,23 +85,23 @@ message TRlPath {
     optional string Token = 4;
 }
 
-message TComputeRuntimeSettings { 
-    optional uint32 TimeoutMs = 1; 
- 
-    enum EExecType { 
-        UNSPECIFIED = 0; 
+message TComputeRuntimeSettings {
+    optional uint32 TimeoutMs = 1;
+
+    enum EExecType {
+        UNSPECIFIED = 0;
         SCAN = 1;
-        DATA = 2; 
-    } 
-    optional EExecType ExecType = 2; 
- 
-    reserved 3; //optional NKqpProto.EKqpStatsMode LegacyStatsMode = 3; 
-    optional EDqStatsMode StatsMode = 8; 
-    optional bool UseLLVM = 4; 
-    optional bool UseSpilling = 6; 
-    optional uint32 TasksOnNodeCount = 5; // approx 
+        DATA = 2;
+    }
+    optional EExecType ExecType = 2;
+
+    reserved 3; //optional NKqpProto.EKqpStatsMode LegacyStatsMode = 3;
+    optional EDqStatsMode StatsMode = 8;
+    optional bool UseLLVM = 4;
+    optional bool UseSpilling = 6;
+    optional uint32 TasksOnNodeCount = 5; // approx
     optional TRlPath RlPath = 7;
-} 
+}
 
 message TEvNewCheckpointCoordinator {
     optional uint64 Generation = 1;

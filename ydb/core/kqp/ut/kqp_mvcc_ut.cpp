@@ -9,22 +9,22 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
-    Y_UNIT_TEST_NEW_ENGINE(TestSnapshotExpiration) { 
+    Y_UNIT_TEST_NEW_ENGINE(TestSnapshotExpiration) {
         TKikimrRunner kikimr(TKikimrSettings()
             .SetEnableMvcc(true)
             .SetEnableMvccSnapshotReads(true)
             .SetKeepSnapshotTimeout(TDuration::Seconds(1)));
 
-//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG); 
-//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG); 
+//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
+//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
 
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
         auto session2 = db.CreateSession().GetValueSync().GetSession();
 
-        auto result = session1.ExecuteDataQuery(Q_(R"( 
+        auto result = session1.ExecuteDataQuery(Q_(R"(
             SELECT * FROM `/Root/TwoShard` WHERE Key = 1u OR Key = 4000000001u;
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync(); 
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([
@@ -34,19 +34,19 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
 
         auto tx = result.GetTransaction();
 
-        result = session2.ExecuteDataQuery(Q_(R"( 
+        result = session2.ExecuteDataQuery(Q_(R"(
             UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES (1u, "ChangedOne", 1);
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto deadline = TInstant::Now() + TDuration::Seconds(30);
-        auto caught = false; 
+        auto caught = false;
         do {
             Sleep(TDuration::Seconds(1));
-            auto result = session1.ExecuteDataQuery(Q_(R"( 
+            auto result = session1.ExecuteDataQuery(Q_(R"(
                 SELECT * FROM `/Root/TwoShard` WHERE Key = 1u OR Key = 4000000001u;
-            )"), TTxControl::Tx(*tx)).ExtractValueSync(); 
+            )"), TTxControl::Tx(*tx)).ExtractValueSync();
             if (result.GetStatus() == EStatus::SUCCESS)
                 continue;
 
@@ -55,25 +55,25 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
                     return issue.Message.Contains("stale snapshot");
                 }), result.GetIssues().ToString());
 
-            caught = true; 
+            caught = true;
             break;
         } while (TInstant::Now() < deadline);
-        UNIT_ASSERT_C(caught, "Failed to wait for snapshot expiration."); 
+        UNIT_ASSERT_C(caught, "Failed to wait for snapshot expiration.");
     }
 
     Y_UNIT_TEST_NEW_ENGINE(ReadOnlyTxCommitsOnConcurrentWrite) {
         TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
 
-//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG); 
-//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG); 
-//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG); 
+//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
+//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
+//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
 
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
         auto session2 = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session1.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM `/Root/TwoShard` WHERE Key = 1u OR Key = 4000000001u; 
+            SELECT * FROM `/Root/TwoShard` WHERE Key = 1u OR Key = 4000000001u;
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
 
         auto tx = result.GetTransaction();
@@ -85,13 +85,13 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
         result = session2.ExecuteDataQuery(Q_(R"(
-            UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES (1u, "ChangedOne", 1); 
+            UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES (1u, "ChangedOne", 1);
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session2.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM `/Root/TwoShard` WHERE Key = 1u; 
+            SELECT * FROM `/Root/TwoShard` WHERE Key = 1u;
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
         result = session1.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM `/Root/TwoShard` WHERE Key = 1u; 
+            SELECT * FROM `/Root/TwoShard` WHERE Key = 1u;
         )"), TTxControl::Tx(*tx)).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
         result = session1.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM `/Root/TwoShard` WHERE Key = 2u OR Key = 4000000002u; 
+            SELECT * FROM `/Root/TwoShard` WHERE Key = 2u OR Key = 4000000002u;
         )"), TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -119,12 +119,12 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ReadOnlyTxWithIndexCommitsOnConcurrentWrite) { 
+    Y_UNIT_TEST_NEW_ENGINE(ReadOnlyTxWithIndexCommitsOnConcurrentWrite) {
         TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
 
-//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG); 
-//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG); 
-//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG); 
+//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
+//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
+//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
 
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
@@ -132,21 +132,21 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
 
         CreateSampleTablesWithIndex(session1);
 
-        auto result = session1.ExecuteDataQuery(Q_(R"( 
-            UPSERT INTO `/Root/SecondaryWithDataColumns` (Key, Index2, Value) VALUES 
+        auto result = session1.ExecuteDataQuery(Q_(R"(
+            UPSERT INTO `/Root/SecondaryWithDataColumns` (Key, Index2, Value) VALUES
                 ("Pk1",    "Fk1",    "One"),
                 ("Pk2",    "Fk2",    "Two"),
                 ("Pk3",    "Fk3",    "Three"),
                 ("Pk4",    "Fk4",    "Four"),
                 ("Pk5",    "Fk5",    "Five"),
                 ("Pk6",    "Fk6",    "Six");
-            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        result = session1.ExecuteDataQuery(Q1_(R"( 
-            SELECT Value FROM `/Root/SecondaryWithDataColumns` view Index WHERE Index2 = "Fk1"; 
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync(); 
+        result = session1.ExecuteDataQuery(Q1_(R"(
+            SELECT Value FROM `/Root/SecondaryWithDataColumns` view Index WHERE Index2 = "Fk1";
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
 
         auto tx = result.GetTransaction();
 
@@ -155,24 +155,24 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
             [["One"]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
-        result = session2.ExecuteDataQuery(Q_(R"( 
-            UPSERT INTO `/Root/SecondaryWithDataColumns` (Key, Index2, Value) VALUES ("Pk1", "Fk1", "ChangedOne"); 
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+        result = session2.ExecuteDataQuery(Q_(R"(
+            UPSERT INTO `/Root/SecondaryWithDataColumns` (Key, Index2, Value) VALUES ("Pk1", "Fk1", "ChangedOne");
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        result = session2.ExecuteDataQuery(Q1_(R"( 
-            SELECT Value FROM `/Root/SecondaryWithDataColumns` view Index WHERE Index2 = "Fk1"; 
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+        result = session2.ExecuteDataQuery(Q1_(R"(
+            SELECT Value FROM `/Root/SecondaryWithDataColumns` view Index WHERE Index2 = "Fk1";
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([
             [["ChangedOne"]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
-        result = session1.ExecuteDataQuery(Q1_(R"( 
-            SELECT Value FROM `/Root/SecondaryWithDataColumns` view Index WHERE Index2 = "Fk1"; 
-        )"), TTxControl::Tx(*tx).CommitTx()).ExtractValueSync(); 
+        result = session1.ExecuteDataQuery(Q1_(R"(
+            SELECT Value FROM `/Root/SecondaryWithDataColumns` view Index WHERE Index2 = "Fk1";
+        )"), TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([
@@ -183,16 +183,16 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     Y_UNIT_TEST_NEW_ENGINE(ReadWriteTxFailsOnConcurrentWrite1) {
         TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
 
-//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG); 
-//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG); 
-//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG); 
+//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
+//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
+//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
 
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
         auto session2 = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session1.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM `/Root/TwoShard` WHERE Key = 1u OR Key = 4000000001u; 
+            SELECT * FROM `/Root/TwoShard` WHERE Key = 1u OR Key = 4000000001u;
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
 
         auto tx = result.GetTransaction();
@@ -204,13 +204,13 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
         result = session2.ExecuteDataQuery(Q_(R"(
-            UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES (1u, "ChangedOne", 1); 
+            UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES (1u, "ChangedOne", 1);
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session1.ExecuteDataQuery(Q_(R"(
-            UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES (1u, "TwiceChangedOne", 2); 
+            UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES (1u, "TwiceChangedOne", 2);
         )"), TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
@@ -220,16 +220,16 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     Y_UNIT_TEST_NEW_ENGINE(ReadWriteTxFailsOnConcurrentWrite2) {
         TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
 
-//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG); 
-//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG); 
-//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG); 
+//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
+//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
+//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
 
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
         auto session2 = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session1.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM `/Root/TwoShard` WHERE Key = 1u OR Key = 4000000001u; 
+            SELECT * FROM `/Root/TwoShard` WHERE Key = 1u OR Key = 4000000001u;
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
 
         auto tx = result.GetTransaction();
@@ -241,14 +241,14 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
         result = session2.ExecuteDataQuery(Q_(R"(
-            UPSERT INTO `/Root/EightShard` (Key, Text) VALUES (101u, "SomeText"); 
+            UPSERT INTO `/Root/EightShard` (Key, Text) VALUES (101u, "SomeText");
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session1.ExecuteDataQuery(Q_(R"(
-            UPDATE `/Root/TwoShard` SET Value2 = 2 WHERE Key = 1u; 
-            UPDATE `/Root/EightShard` SET Text = "AnotherString" WHERE Key = 101u; 
+            UPDATE `/Root/TwoShard` SET Value2 = 2 WHERE Key = 1u;
+            UPDATE `/Root/EightShard` SET Text = "AnotherString" WHERE Key = 101u;
         )"), TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
@@ -258,16 +258,16 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
     Y_UNIT_TEST_NEW_ENGINE(ReadWriteTxFailsOnConcurrentWrite3) {
         TKikimrRunner kikimr(TKikimrSettings().SetEnableMvcc(true).SetEnableMvccSnapshotReads(true));
 
-//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG); 
-//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG); 
-//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG); 
+//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
+//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
+//        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
 
         auto db = kikimr.GetTableClient();
         auto session1 = db.CreateSession().GetValueSync().GetSession();
         auto session2 = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session1.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM `/Root/TwoShard` WHERE Key = 1u OR Key = 4000000001u; 
+            SELECT * FROM `/Root/TwoShard` WHERE Key = 1u OR Key = 4000000001u;
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
 
         auto tx = result.GetTransaction();
@@ -279,13 +279,13 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
         result = session2.ExecuteDataQuery(Q_(R"(
-            UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES (2u, "ChangedTwo", 1); 
+            UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES (2u, "ChangedTwo", 1);
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session1.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM `/Root/TwoShard` WHERE Key = 2u OR Key = 4000000002u; 
+            SELECT * FROM `/Root/TwoShard` WHERE Key = 2u OR Key = 4000000002u;
         )"), TTxControl::Tx(*tx)).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -295,7 +295,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
         result = session1.ExecuteDataQuery(Q_(R"(
-            UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES (2u, "TwiceChangedTwo", 1); 
+            UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES (2u, "TwiceChangedTwo", 1);
         )"), TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());

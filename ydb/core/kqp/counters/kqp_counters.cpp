@@ -140,7 +140,7 @@ void TKqpCountersBase::Init() {
 
     YdbQueryExecuteLatency = YdbGroup->GetNamedHistogram("name",
         "table.query.execution.latency_milliseconds", NMonitoring::ExponentialHistogram(20, 2, 1));
- 
+
     // TODO move to grpc
     YdbResponsesLocksInvalidated = YdbGroup->GetSubgroup("issue_type", "optimistic_locks_invalidation")
         ->GetNamedCounter("name", "api.grpc.response.issues", true);
@@ -379,11 +379,11 @@ void TKqpCountersBase::ReportIssues(const Ydb::Issue::IssueMessage& issue) {
 }
 
 void TKqpCountersBase::ReportQueryLatency(NKikimrKqp::EQueryAction action, const TDuration& duration) {
-    if (action == NKikimrKqp::QUERY_ACTION_EXECUTE || 
-        action == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED || 
-        action == NKikimrKqp::QUERY_ACTION_COMMIT_TX || 
-        action == NKikimrKqp::QUERY_ACTION_ROLLBACK_TX) 
-    { 
+    if (action == NKikimrKqp::QUERY_ACTION_EXECUTE ||
+        action == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED ||
+        action == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
+        action == NKikimrKqp::QUERY_ACTION_ROLLBACK_TX)
+    {
         YdbQueryExecuteLatency->Collect(duration.MilliSeconds());
     }
 
@@ -393,7 +393,7 @@ void TKqpCountersBase::ReportQueryLatency(NKikimrKqp::EQueryAction action, const
     }
 }
 
- 
+
 void TKqpCountersBase::ReportTransaction(const TKqpTransactionInfo& txInfo) {
     switch (txInfo.Status) {
         case TKqpTransactionInfo::EStatus::Active:
@@ -401,7 +401,7 @@ void TKqpCountersBase::ReportTransaction(const TKqpTransactionInfo& txInfo) {
         case TKqpTransactionInfo::EStatus::Aborted:
             TxAborted->Inc();
             return;
-        case TKqpTransactionInfo::EStatus::Committed: 
+        case TKqpTransactionInfo::EStatus::Committed:
             TxCommited->Inc();
             break;
     }
@@ -681,7 +681,7 @@ void TKqpCounters::UpdateTxCounters(const TKqpTransactionInfo& txInfo,
 
     byKind->TotalDuration->Collect(txInfo.TotalDuration.MilliSeconds());
     byKind->ServerDuration->Collect(txInfo.ServerDuration.MilliSeconds());
-    byKind->ClientDuration->Collect((txInfo.TotalDuration - txInfo.ServerDuration).MilliSeconds()); 
+    byKind->ClientDuration->Collect((txInfo.TotalDuration - txInfo.ServerDuration).MilliSeconds());
     byKind->Queries->Collect(txInfo.QueriesCount);
 }
 
@@ -720,7 +720,7 @@ TKqpCounters::TKqpCounters(const NMonitoring::TDynamicCounterPtr& counters, cons
     /* Resource Manager */
     RmComputeActors = KqpGroup->GetCounter("RM/ComputeActors", false);
     RmMemory = KqpGroup->GetCounter("RM/Memory", false);
-    RmExternalMemory = KqpGroup->GetCounter("RM/ExternalMemory", false); 
+    RmExternalMemory = KqpGroup->GetCounter("RM/ExternalMemory", false);
     RmNotEnoughMemory = KqpGroup->GetCounter("RM/NotEnoughMemory", true);
     RmNotEnoughComputeActors = KqpGroup->GetCounter("RM/NotEnoughComputeActors", true);
     RmExtraMemAllocs = KqpGroup->GetCounter("RM/ExtraMemAllocs", true);
@@ -734,10 +734,10 @@ TKqpCounters::TKqpCounters(const NMonitoring::TDynamicCounterPtr& counters, cons
     SpillingTooBigFileErrors = KqpGroup->GetCounter("Spilling/TooBigFileErrors", true);
     SpillingNoSpaceErrors = KqpGroup->GetCounter("Spilling/NoSpaceErrors", true);
     SpillingIoErrors = KqpGroup->GetCounter("Spilling/IoErrors", true);
- 
-    /* Scan queries */ 
-    ScanQueryShardDisconnect = KqpGroup->GetCounter("ScanQuery/ShardDisconnect", true); 
-    ScanQueryShardResolve = KqpGroup->GetCounter("ScanQuery/ShardResolve", true); 
+
+    /* Scan queries */
+    ScanQueryShardDisconnect = KqpGroup->GetCounter("ScanQuery/ShardDisconnect", true);
+    ScanQueryShardResolve = KqpGroup->GetCounter("ScanQuery/ShardResolve", true);
     ScanQueryRateLimitLatency = KqpGroup->GetHistogram(
         "ScanQuery/RateLimitLatency", NMonitoring::ExponentialHistogram(20, 2, 1));
 
@@ -755,13 +755,13 @@ TKqpCounters::TKqpCounters(const NMonitoring::TDynamicCounterPtr& counters, cons
     NewEngineCompatibleComputeCpuTime = KqpGroup->GetCounter("Query/ComputeCpuTime_NECompatible", true);
     NewEngineForcedQueryCount = KqpGroup->GetCounter("Query/Count_NEForced", true);
     NewEngineCompatibleQueryCount = KqpGroup->GetCounter("Query/Count_NECompatible", true);
- 
-    LiteralTxTotalTimeHistogram = KqpGroup->GetHistogram( 
-        "NE/LiteralTxTotalTimeMs", NMonitoring::ExponentialHistogram(10, 2, 1)); 
-    DataTxTotalTimeHistogram = KqpGroup->GetHistogram( 
-        "NE/DataTxTotalTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1)); 
-    ScanTxTotalTimeHistogram = KqpGroup->GetHistogram( 
-        "NE/ScanTxTotalTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1)); 
+
+    LiteralTxTotalTimeHistogram = KqpGroup->GetHistogram(
+        "NE/LiteralTxTotalTimeMs", NMonitoring::ExponentialHistogram(10, 2, 1));
+    DataTxTotalTimeHistogram = KqpGroup->GetHistogram(
+        "NE/DataTxTotalTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    ScanTxTotalTimeHistogram = KqpGroup->GetHistogram(
+        "NE/ScanTxTotalTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
 }
 
 NMonitoring::TDynamicCounterPtr TKqpCounters::GetQueryReplayCounters() const {
@@ -914,9 +914,9 @@ void TKqpCounters::ReportTransaction(TKqpDbCountersPtr dbCounters, const TKqpTra
     }
     if (txInfo.Status == TKqpTransactionInfo::EStatus::Committed) {
         UpdateTxCounters(txInfo, TxByKind);
-    } 
-} 
- 
+    }
+}
+
 void TKqpCounters::ReportSqlVersion(TKqpDbCountersPtr dbCounters, ui16 sqlVersion) {
     TKqpCountersBase::ReportSqlVersion(sqlVersion);
     if (dbCounters) {
@@ -1134,5 +1134,5 @@ void TKqpCounters::RemoveDbCounters(const TString& database) {
     DbCounters.Erase(database);
 }
 
-} // namespace NKqp 
+} // namespace NKqp
 } // namespace NKikimr

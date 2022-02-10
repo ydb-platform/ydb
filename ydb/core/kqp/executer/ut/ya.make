@@ -12,7 +12,7 @@ IF (SANITIZER_TYPE OR WITH_VALGRIND)
 ENDIF()
 
 SRCS(
-    # kqp_executer_ut.cpp 
+    # kqp_executer_ut.cpp
 )
 
 PEERDIR(

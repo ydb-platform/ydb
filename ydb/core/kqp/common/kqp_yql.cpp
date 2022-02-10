@@ -1,7 +1,7 @@
 #include "kqp_yql.h"
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
- 
+
 namespace NYql {
 
 using namespace NKikimr;
@@ -95,8 +95,8 @@ TKqpPhyTxSettings TKqpPhyTxSettings::Parse(const TKqpPhysicalTx& node) {
         if (name == TypeSettingName) {
             YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
             settings.Type = GetPhysicalTxType(tuple.Value().Cast<TCoAtom>().Value());
-        } else if (name == WithEffectsSettingName) { 
-            settings.WithEffects = true; 
+        } else if (name == WithEffectsSettingName) {
+            settings.WithEffects = true;
         }
     }
 
@@ -105,21 +105,21 @@ TKqpPhyTxSettings TKqpPhyTxSettings::Parse(const TKqpPhysicalTx& node) {
 
 NNodes::TCoNameValueTupleList TKqpPhyTxSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
     TVector<TCoNameValueTuple> settings;
-    settings.reserve(2); 
+    settings.reserve(2);
 
     if (Type) {
-        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos) 
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(TypeSettingName)
             .Value<TCoAtom>().Build(PhysicalTxTypeToString(*Type))
             .Done());
     }
 
-    if (WithEffects) { 
-        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos) 
-            .Name().Build(WithEffectsSettingName) 
-            .Done()); 
-    } 
- 
+    if (WithEffects) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(WithEffectsSettingName)
+            .Done());
+    }
+
     return Build<TCoNameValueTupleList>(ctx, pos)
         .Add(settings)
         .Done();
@@ -129,30 +129,30 @@ namespace {
 
 template <typename TKqlReadOperation>
 TKqpReadTableSettings ParseInternal(const TKqlReadOperation& node) {
-    TKqpReadTableSettings settings; 
- 
-    for (const auto& tuple : node.Settings()) { 
-        TStringBuf name = tuple.Name().Value(); 
+    TKqpReadTableSettings settings;
+
+    for (const auto& tuple : node.Settings()) {
+        TStringBuf name = tuple.Name().Value();
 
         if (name == TKqpReadTableSettings::SkipNullKeysSettingName) {
             YQL_ENSURE(tuple.Value().template Maybe<TCoAtomList>());
             for (const auto& key : tuple.Value().template Cast<TCoAtomList>()) {
-                settings.SkipNullKeys.emplace_back(TString(key.Value())); 
-            } 
+                settings.SkipNullKeys.emplace_back(TString(key.Value()));
+            }
         } else if (name == TKqpReadTableSettings::ItemsLimitSettingName) {
-            YQL_ENSURE(tuple.Value().IsValid()); 
-            settings.ItemsLimit = tuple.Value().Cast().Ptr(); 
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.ItemsLimit = tuple.Value().Cast().Ptr();
         } else if (name == TKqpReadTableSettings::ReverseSettingName) {
-            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1); 
-            settings.Reverse = true; 
-        } else { 
-            YQL_ENSURE(false, "Unknown KqpReadTable setting name '" << name << "'"); 
-        } 
-    } 
- 
-    return settings; 
-} 
- 
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
+            settings.Reverse = true;
+        } else {
+            YQL_ENSURE(false, "Unknown KqpReadTable setting name '" << name << "'");
+        }
+    }
+
+    return settings;
+}
+
 } // anonymous namespace end
 
 TKqpReadTableSettings TKqpReadTableSettings::Parse(const TKqlReadTableBase& node) {
@@ -163,58 +163,58 @@ TKqpReadTableSettings TKqpReadTableSettings::Parse(const TKqlReadTableRangesBase
     return ParseInternal(node);
 }
 
-NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const { 
-    TVector<TCoNameValueTuple> settings; 
-    settings.reserve(3); 
- 
-    if (!SkipNullKeys.empty()) { 
-        TVector<TExprNodePtr> keys; 
-        keys.reserve(SkipNullKeys.size()); 
-        for (auto& key: SkipNullKeys) { 
-            keys.emplace_back(ctx.NewAtom(pos, key)); 
-        } 
- 
-        settings.emplace_back( 
-            Build<TCoNameValueTuple>(ctx, pos) 
-                .Name() 
-                    .Build(SkipNullKeysSettingName) 
-                .Value<TCoAtomList>() 
-                    .Add(keys) 
-                    .Build() 
-                .Done()); 
-    } 
- 
-    if (ItemsLimit) { 
-        settings.emplace_back( 
-            Build<TCoNameValueTuple>(ctx, pos) 
-                .Name() 
-                    .Build(ItemsLimitSettingName) 
-                .Value(ItemsLimit) 
-                .Done()); 
-    } 
- 
-    if (Reverse) { 
-        settings.emplace_back( 
-            Build<TCoNameValueTuple>(ctx, pos) 
-                .Name() 
-                    .Build(ReverseSettingName) 
-                .Done()); 
-    } 
- 
-    return Build<TCoNameValueTupleList>(ctx, pos) 
-        .Add(settings) 
-        .Done(); 
-} 
- 
-void TKqpReadTableSettings::AddSkipNullKey(const TString& key) { 
-    for (auto& k : SkipNullKeys) { 
-        if (k == key) { 
-            return; 
-        } 
-    } 
-    SkipNullKeys.emplace_back(key); 
-} 
- 
+NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
+    TVector<TCoNameValueTuple> settings;
+    settings.reserve(3);
+
+    if (!SkipNullKeys.empty()) {
+        TVector<TExprNodePtr> keys;
+        keys.reserve(SkipNullKeys.size());
+        for (auto& key: SkipNullKeys) {
+            keys.emplace_back(ctx.NewAtom(pos, key));
+        }
+
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name()
+                    .Build(SkipNullKeysSettingName)
+                .Value<TCoAtomList>()
+                    .Add(keys)
+                    .Build()
+                .Done());
+    }
+
+    if (ItemsLimit) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name()
+                    .Build(ItemsLimitSettingName)
+                .Value(ItemsLimit)
+                .Done());
+    }
+
+    if (Reverse) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name()
+                    .Build(ReverseSettingName)
+                .Done());
+    }
+
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add(settings)
+        .Done();
+}
+
+void TKqpReadTableSettings::AddSkipNullKey(const TString& key) {
+    for (auto& k : SkipNullKeys) {
+        if (k == key) {
+            return;
+        }
+    }
+    SkipNullKeys.emplace_back(key);
+}
+
 TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const TKqpUpsertRows& node) {
     TKqpUpsertRowsSettings settings;
 
@@ -342,8 +342,8 @@ TString KqpExprToPrettyString(const TExprNode& expr, TExprContext& ctx) {
         TString exprText = exprStream.Str();
 
         return exprText;
-    } catch (const std::exception& e) { 
-        return TStringBuilder() << "Failed to render expression to pretty string: " << e.what(); 
+    } catch (const std::exception& e) {
+        return TStringBuilder() << "Failed to render expression to pretty string: " << e.what();
     }
 }
 
@@ -351,24 +351,24 @@ TString KqpExprToPrettyString(const TExprBase& expr, TExprContext& ctx) {
     return KqpExprToPrettyString(expr.Ref(), ctx);
 }
 
-TString PrintKqpStageOnly(const TDqStageBase& stage, TExprContext& ctx) { 
-    if (stage.Inputs().Empty()) { 
-        return KqpExprToPrettyString(stage, ctx); 
-    } 
- 
-    TNodeOnNodeOwnedMap replaces; 
-    for (ui64 i = 0; i < stage.Inputs().Size(); ++i) { 
-        auto input = stage.Inputs().Item(i); 
-        auto param = Build<TCoParameter>(ctx, input.Pos()) 
-            .Name().Build(TStringBuilder() << "stage_input_" << i) 
-            .Type(ExpandType(input.Pos(), *input.Ref().GetTypeAnn(), ctx)) 
-            .Done(); 
- 
-        replaces[input.Raw()] = param.Ptr(); 
-    } 
- 
-    auto newStage = ctx.ReplaceNodes(stage.Ptr(), replaces); 
-    return KqpExprToPrettyString(TExprBase(newStage), ctx); 
-} 
- 
+TString PrintKqpStageOnly(const TDqStageBase& stage, TExprContext& ctx) {
+    if (stage.Inputs().Empty()) {
+        return KqpExprToPrettyString(stage, ctx);
+    }
+
+    TNodeOnNodeOwnedMap replaces;
+    for (ui64 i = 0; i < stage.Inputs().Size(); ++i) {
+        auto input = stage.Inputs().Item(i);
+        auto param = Build<TCoParameter>(ctx, input.Pos())
+            .Name().Build(TStringBuilder() << "stage_input_" << i)
+            .Type(ExpandType(input.Pos(), *input.Ref().GetTypeAnn(), ctx))
+            .Done();
+
+        replaces[input.Raw()] = param.Ptr();
+    }
+
+    auto newStage = ctx.ReplaceNodes(stage.Ptr(), replaces);
+    return KqpExprToPrettyString(TExprBase(newStage), ctx);
+}
+
 } // namespace NYql

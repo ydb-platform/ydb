@@ -108,9 +108,9 @@ public:
     }
 
     size_t GetUsed() const { return MyState_.GetUsed(); }
-    size_t GetPeakUsed() const { return MyState_.GetPeakUsed(); } 
+    size_t GetPeakUsed() const { return MyState_.GetPeakUsed(); }
     size_t GetAllocated() const { return MyState_.GetAllocated(); }
-    size_t GetPeakAllocated() const { return MyState_.GetPeakAllocated(); } 
+    size_t GetPeakAllocated() const { return MyState_.GetPeakAllocated(); }
 
     size_t GetLimit() const { return MyState_.GetLimit(); }
     void SetLimit(size_t limit) { MyState_.SetLimit(limit); }

@@ -111,7 +111,7 @@ namespace NMonitoring {
         template <typename TFunc>
         void Measure(TFunc&& fn) {
             using TClock = std::chrono::high_resolution_clock;
- 
+
             auto start = TClock::now();
 
             Y_SCOPE_EXIT(this, start) {

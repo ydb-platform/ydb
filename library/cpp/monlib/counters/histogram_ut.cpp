@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(THistorgamTest) {
         UNIT_ASSERT_EQUAL(snapshot.Percentile98, 5);
         UNIT_ASSERT_EQUAL(snapshot.Percentile99, 5);
         UNIT_ASSERT_EQUAL(snapshot.Percentile999, 5);
- 
-        UNIT_ASSERT_EQUAL(snapshot.TotalCount, 14); 
+
+        UNIT_ASSERT_EQUAL(snapshot.TotalCount, 14);
     }
 }

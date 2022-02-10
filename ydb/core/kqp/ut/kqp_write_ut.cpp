@@ -9,7 +9,7 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpWrite) {
-    Y_UNIT_TEST_NEW_ENGINE(UpsertNullKey) { 
+    Y_UNIT_TEST_NEW_ENGINE(UpsertNullKey) {
         auto setting = NKikimrKqp::TKqpSetting();
         setting.SetName("_KqpYqlSyntaxVersion");
         setting.SetValue("1");
@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         {
-            const TString query = Q_(R"( 
+            const TString query = Q_(R"(
                 UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES
                     (Null, "Value1");
             )");
@@ -31,9 +31,9 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
 
         {
 
-            auto result = session.ExecuteDataQuery(Q_(R"( 
+            auto result = session.ExecuteDataQuery(Q_(R"(
                 SELECT * FROM `/Root/KeyValue`;
-            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
+            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL("[[#;[\"Value1\"]];[[1u];[\"One\"]];[[2u];[\"Two\"]]]",
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         }
 
         {
-            const TString query = Q_(R"( 
+            const TString query = Q_(R"(
                 UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES
                     (Null, "Value2");
             )");
@@ -53,9 +53,9 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
 
         {
 
-            auto result = session.ExecuteDataQuery(Q_(R"( 
+            auto result = session.ExecuteDataQuery(Q_(R"(
                 SELECT * FROM `/Root/KeyValue`;
-            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
+            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL("[[#;[\"Value2\"]];[[1u];[\"One\"]];[[2u];[\"Two\"]]]",
@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         }
 
         {
-            const TString query = Q_(R"( 
+            const TString query = Q_(R"(
                 UPSERT INTO `/Root/KeyValue` (Key) VALUES
                     (Null);
             )");
@@ -75,9 +75,9 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
 
         {
 
-            auto result = session.ExecuteDataQuery(Q_(R"( 
+            auto result = session.ExecuteDataQuery(Q_(R"(
                 SELECT * FROM `/Root/KeyValue`;
-            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
+            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL("[[#;[\"Value2\"]];[[1u];[\"One\"]];[[2u];[\"Two\"]]]",
@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
             .Build();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA Kikimr.UseNewEngine = 'false'; 
+            PRAGMA Kikimr.UseNewEngine = 'false';
             PRAGMA kikimr.CommitSafety = "Moderate";
 
             DECLARE $key AS Uint64;
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto queryPrefix = R"(
-            PRAGMA Kikimr.UseNewEngine = 'false'; 
+            PRAGMA Kikimr.UseNewEngine = 'false';
             PRAGMA kikimr.CommitSafety = "Moderate";
         )";
 
@@ -210,7 +210,7 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         TString query(R"(
-            PRAGMA Kikimr.UseNewEngine = 'false'; 
+            PRAGMA Kikimr.UseNewEngine = 'false';
             PRAGMA kikimr.CommitSafety = "%s";
 
             DECLARE $Key AS Uint32;
@@ -266,7 +266,7 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
             .Build();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA Kikimr.UseNewEngine = 'false'; 
+            PRAGMA Kikimr.UseNewEngine = 'false';
             PRAGMA kikimr.CommitSafety = "Moderate";
 
             DECLARE $key AS Uint64;
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_OPERATION));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(Insert) { 
+    Y_UNIT_TEST_NEW_ENGINE(Insert) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -296,15 +296,15 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
             );
         )").GetValueSync().IsSuccess());
 
-        auto insertQuery = Q1_(R"( 
-            DECLARE $rows AS List<Struct<Key: Uint64, Value: String>>; 
+        auto insertQuery = Q1_(R"(
+            DECLARE $rows AS List<Struct<Key: Uint64, Value: String>>;
             DECLARE $id AS Uint32;
 
-            INSERT INTO `/Root/KeyValue` 
+            INSERT INTO `/Root/KeyValue`
             SELECT * FROM AS_TABLE($rows);
 
-            UPSERT INTO `/Root/TxCheck` (Id) VALUES ($id); 
-        )"); 
+            UPSERT INTO `/Root/TxCheck` (Id) VALUES ($id);
+        )");
 
         auto params = db.GetParamsBuilder()
             .AddParam("$rows")
@@ -329,8 +329,8 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         auto result = session.ExecuteDataQuery(insertQuery,
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED); 
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION)); 
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION));
 
         params = db.GetParamsBuilder()
             .AddParam("$rows")
@@ -360,8 +360,8 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         result = session.ExecuteDataQuery(insertQuery,
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED); 
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION)); 
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION));
 
         params = db.GetParamsBuilder()
             .AddParam("$rows")
@@ -387,10 +387,10 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        result = session.ExecuteDataQuery(Q_(R"( 
-            SELECT * FROM `/Root/KeyValue`; 
-            SELECT * FROM `/Root/TxCheck`; 
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+        result = session.ExecuteDataQuery(Q_(R"(
+            SELECT * FROM `/Root/KeyValue`;
+            SELECT * FROM `/Root/TxCheck`;
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([
             [[1u];["One"]];
@@ -401,27 +401,27 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         CompareYson(R"([[[3u]]])", FormatResultSetYson(result.GetResultSet(1)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(InsertRevert) { 
+    Y_UNIT_TEST_NEW_ENGINE(InsertRevert) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
-            CREATE TABLE `/Root/TxCheck` ( 
+            CREATE TABLE `/Root/TxCheck` (
                 Id Uint32,
                 PRIMARY KEY (Id)
             );
         )").GetValueSync().IsSuccess());
 
-        auto insertQuery = Q1_(R"( 
-            DECLARE $rows AS List<Struct<Key: Uint64, Value: String>>; 
+        auto insertQuery = Q1_(R"(
+            DECLARE $rows AS List<Struct<Key: Uint64, Value: String>>;
             DECLARE $id AS Uint32;
 
-            INSERT OR REVERT INTO `/Root/KeyValue` 
+            INSERT OR REVERT INTO `/Root/KeyValue`
             SELECT * FROM AS_TABLE($rows);
 
-            UPSERT INTO `/Root/TxCheck` (Id) VALUES ($id); 
-        )"); 
+            UPSERT INTO `/Root/TxCheck` (Id) VALUES ($id);
+        )");
 
         auto params = db.GetParamsBuilder()
             .AddParam("$rows")
@@ -447,12 +447,12 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        if constexpr (UseNewEngine) { 
-            // ¯\_(ツ)_/¯ 
-            UNIT_ASSERT_C(result.GetIssues().Size() == 0, result.GetIssues().ToString()); 
-        } else { 
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_OPERATION_REVERTED)); 
-        } 
+        if constexpr (UseNewEngine) {
+            // ¯\_(ツ)_/¯
+            UNIT_ASSERT_C(result.GetIssues().Size() == 0, result.GetIssues().ToString());
+        } else {
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_OPERATION_REVERTED));
+        }
 
         params = db.GetParamsBuilder()
             .AddParam("$rows")
@@ -483,12 +483,12 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        if constexpr (UseNewEngine) { 
-            // ¯\_(ツ)_/¯ 
-            UNIT_ASSERT_C(result.GetIssues().Size() == 0, result.GetIssues().ToString()); 
-        } else { 
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_OPERATION_REVERTED)); 
-        } 
+        if constexpr (UseNewEngine) {
+            // ¯\_(ツ)_/¯
+            UNIT_ASSERT_C(result.GetIssues().Size() == 0, result.GetIssues().ToString());
+        } else {
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_OPERATION_REVERTED));
+        }
 
         params = db.GetParamsBuilder()
             .AddParam("$rows")
@@ -514,10 +514,10 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        result = session.ExecuteDataQuery(Q_(R"( 
-            SELECT * FROM `/Root/KeyValue`; 
-            SELECT * FROM `/Root/TxCheck`; 
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+        result = session.ExecuteDataQuery(Q_(R"(
+            SELECT * FROM `/Root/KeyValue`;
+            SELECT * FROM `/Root/TxCheck`;
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([
             [[1u];["One"]];
@@ -528,7 +528,7 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         CompareYson(R"([[[1u]];[[2u]];[[3u]]])", FormatResultSetYson(result.GetResultSet(1)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ProjectReplace) { 
+    Y_UNIT_TEST_NEW_ENGINE(ProjectReplace) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -555,7 +555,7 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
                 .Build()
             .Build();
 
-        auto result = session.ExecuteDataQuery(Q1_(R"( 
+        auto result = session.ExecuteDataQuery(Q1_(R"(
             DECLARE $rows AS List<Struct<
                 In_Group : Uint32?,
                 In_Name : String?,
@@ -568,12 +568,12 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
                 In_Name AS Name,
                 In_Amount AS Amount
             FROM AS_TABLE($rows);
-        )"), TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync(); 
+        )"), TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 2 : 1); 
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 2 : 1);
     }
 
     Y_UNIT_TEST(Uint8Key) {
@@ -591,14 +591,14 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA Kikimr.UseNewEngine = 'false'; 
+            PRAGMA Kikimr.UseNewEngine = 'false';
             UPSERT INTO `/Root/Temp` (Key) VALUES (127);
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA Kikimr.UseNewEngine = 'false'; 
+            PRAGMA Kikimr.UseNewEngine = 'false';
             UPSERT INTO `/Root/Temp` (Key) VALUES (128);
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
@@ -606,7 +606,7 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
 
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA Kikimr.UseNewEngine = 'false'; 
+            PRAGMA Kikimr.UseNewEngine = 'false';
             DELETE FROM `/Root/Temp` ON (Key) VALUES (140);
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
@@ -614,7 +614,7 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
 
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            PRAGMA Kikimr.UseNewEngine = 'false'; 
+            PRAGMA Kikimr.UseNewEngine = 'false';
             SELECT * FROM `/Root/Temp`;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -693,5 +693,5 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
     }
 }
 
-} // namespace NKqp 
+} // namespace NKqp
 } // namespace NKikimr

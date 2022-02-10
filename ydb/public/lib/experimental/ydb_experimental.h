@@ -19,49 +19,49 @@ public:
 
 class TStreamPart : public TStreamPartStatus {
 public:
-    bool HasResultSet() const { return ResultSet_.Defined(); } 
-    const TResultSet& GetResultSet() const { return *ResultSet_; } 
-    TResultSet ExtractResultSet() { return std::move(*ResultSet_); } 
+    bool HasResultSet() const { return ResultSet_.Defined(); }
+    const TResultSet& GetResultSet() const { return *ResultSet_; }
+    TResultSet ExtractResultSet() { return std::move(*ResultSet_); }
 
-    bool HasProfile() const { return Profile_.Defined(); } 
-    const TString& GetProfile() const { return *Profile_; } 
-    TString ExtractProfile() { return std::move(*Profile_); } 
+    bool HasProfile() const { return Profile_.Defined(); }
+    const TString& GetProfile() const { return *Profile_; }
+    TString ExtractProfile() { return std::move(*Profile_); }
 
     bool HasPlan() const { return Plan_.Defined(); }
     const TString& GetPlan() const { return *Plan_; }
     TString ExtractPlan() { return std::move(*Plan_); }
 
-    TStreamPart(TStatus&& status) 
+    TStreamPart(TStatus&& status)
         : TStreamPartStatus(std::move(status))
     {}
 
-    TStreamPart(TResultSet&& resultSet, TStatus&& status) 
-        : TStreamPartStatus(std::move(status)) 
-        , ResultSet_(std::move(resultSet)) 
-    {} 
- 
-    TStreamPart(TString&& profile, TStatus&& status) 
-        : TStreamPartStatus(std::move(status)) 
-        , Profile_(std::move(profile)) 
-    {} 
- 
+    TStreamPart(TResultSet&& resultSet, TStatus&& status)
+        : TStreamPartStatus(std::move(status))
+        , ResultSet_(std::move(resultSet))
+    {}
+
+    TStreamPart(TString&& profile, TStatus&& status)
+        : TStreamPartStatus(std::move(status))
+        , Profile_(std::move(profile))
+    {}
+
     TStreamPart(const TMaybe<TString>& plan, TStatus&& status)
         : TStreamPartStatus(std::move(status))
         , Plan_(plan)
     {}
 
 private:
-    TMaybe<TResultSet> ResultSet_; 
-    TMaybe<TString> Profile_; 
+    TMaybe<TResultSet> ResultSet_;
+    TMaybe<TString> Profile_;
     TMaybe<TString> Plan_;
 };
 
-using TAsyncStreamPart = NThreading::TFuture<TStreamPart>; 
+using TAsyncStreamPart = NThreading::TFuture<TStreamPart>;
 
 class TStreamPartIterator : public TStatus {
     friend class TStreamQueryClient;
 public:
-    TAsyncStreamPart ReadNext(); 
+    TAsyncStreamPart ReadNext();
     class TReaderImpl;
 private:
     TStreamPartIterator(
@@ -71,16 +71,16 @@ private:
     std::shared_ptr<TReaderImpl> ReaderImpl_;
 };
 
-enum class EStreamQueryProfileMode { 
-    None, 
+enum class EStreamQueryProfileMode {
+    None,
     Basic,
     Full
-}; 
- 
+};
+
 struct TExecuteStreamQuerySettings : public TRequestSettings<TExecuteStreamQuerySettings> {
     using TSelf = TExecuteStreamQuerySettings;
- 
-    FLUENT_SETTING_DEFAULT(EStreamQueryProfileMode, ProfileMode, EStreamQueryProfileMode::None); 
+
+    FLUENT_SETTING_DEFAULT(EStreamQueryProfileMode, ProfileMode, EStreamQueryProfileMode::None);
     FLUENT_SETTING_DEFAULT(bool, Explain, false);
 };
 

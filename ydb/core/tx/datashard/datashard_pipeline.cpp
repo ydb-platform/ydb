@@ -1213,7 +1213,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
     } else {
         Y_VERIFY(tx->IsReadTable() || tx->IsDataTx());
         auto dataTx = tx->BuildDataTx(Self, txc, ctx);
-        if (dataTx->Ready() && (dataTx->ProgramSize() || dataTx->IsKqpDataTx())) 
+        if (dataTx->Ready() && (dataTx->ProgramSize() || dataTx->IsKqpDataTx()))
             dataTx->ExtractKeys(true);
 
         if (!dataTx->Ready() && !dataTx->RequirePrepare()) {
@@ -1237,7 +1237,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             tx->SetReadOnlyFlag();
         if (dataTx->NeedDiagnostics())
             tx->SetNeedDiagnosticsFlag();
-        if (dataTx->IsKqpDataTx()) 
+        if (dataTx->IsKqpDataTx())
             tx->SetKqpDataTransactionFlag();
         if (dataTx->IsKqpScanTx()) {
             tx->SetKqpScanTransactionFlag();
@@ -1332,7 +1332,7 @@ void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, co
     Y_VERIFY(dataTx->Ready());
     // TODO: we should have no requirement to have keys
     // for restarted immediate tx.
-    if (dataTx->ProgramSize() || dataTx->IsKqpDataTx()) 
+    if (dataTx->ProgramSize() || dataTx->IsKqpDataTx())
         dataTx->ExtractKeys(false);
 }
 

@@ -148,7 +148,7 @@ struct TAppData {
     NKikimrConfig::TCompactionConfig CompactionConfig;
     bool EnforceUserTokenRequirement = false;
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
-    bool EnableKqpSpilling = false; 
+    bool EnableKqpSpilling = false;
     bool AllowShadowDataInSchemeShardForTests = false;
     bool EnableMvccSnapshotWithLegacyDomainRoot = false;
     TVector<TString> AdministrationAllowedSIDs; // users/groups which allowed to perform administrative tasks

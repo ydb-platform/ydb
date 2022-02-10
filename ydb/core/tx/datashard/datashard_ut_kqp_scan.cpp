@@ -28,12 +28,12 @@ namespace {
 
     void EnableLogging(TTestActorRuntime& runtime) {
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-        //runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
-        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE); 
-        //runtime.SetLogPriority(NKikimrServices::KQP_WORKER, NActors::NLog::PRI_DEBUG); 
-        //runtime.SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_DEBUG); 
-        //runtime.SetLogPriority(NKikimrServices::KQP_NODE, NActors::NLog::PRI_DEBUG); 
-        runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_TRACE); 
+        //runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);
+        //runtime.SetLogPriority(NKikimrServices::KQP_WORKER, NActors::NLog::PRI_DEBUG);
+        //runtime.SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_DEBUG);
+        //runtime.SetLogPriority(NKikimrServices::KQP_NODE, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_TRACE);
     }
 
 }
@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         ExecSQL(server, sender, FillTableQuery());
 
         TSet<TActorId> scans;
-        TSet<TActorId> killedTablets; 
+        TSet<TActorId> killedTablets;
 
         ui64 result = 0;
 
@@ -87,16 +87,16 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
                     auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
                     for (auto& [shardId, nodeId]: msg->ShardNodes) {
-                        Cerr << "-- nodeId: " << nodeId << Endl; 
-                        Cerr.Flush(); 
-                        nodeId = runtime.GetNodeId(0); 
+                        Cerr << "-- nodeId: " << nodeId << Endl;
+                        Cerr.Flush();
+                        nodeId = runtime.GetNodeId(0);
                     }
                     break;
                 }
 
                 case TEvDataShard::EvKqpScan: {
                     Cerr << (TStringBuilder() << "-- EvScan " << ev->Sender << " -> " << ev->Recipient << Endl);
-                    Cerr.Flush(); 
+                    Cerr.Flush();
                     break;
                 }
 
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
 
                     Cerr << (TStringBuilder() << "-- EvStreamData: " << record.AsJSON() << Endl);
-                    Cerr.Flush(); 
+                    Cerr.Flush();
 
                     Y_ASSERT(record.GetResultSet().rows().size() == 1);
                     Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
@@ -125,16 +125,16 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 /* Drop message and kill tablet if we already had seen this tablet */
                 case NKqp::TKqpComputeEvents::EvScanData: {
                     if (scans.contains(ev->Sender)) {
-                        if (killedTablets.empty()) { // do only 1 kill per test 
-                            runtime.Send(new IEventHandle(ev->Sender, ev->Sender, new NKqp::TEvKqpCompute::TEvKillScanTablet)); 
-                            Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event, kill tablet " << ev->Sender << Endl); 
-                            Cerr.Flush(); 
-                        } 
+                        if (killedTablets.empty()) { // do only 1 kill per test
+                            runtime.Send(new IEventHandle(ev->Sender, ev->Sender, new NKqp::TEvKqpCompute::TEvKillScanTablet));
+                            Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event, kill tablet " << ev->Sender << Endl);
+                            Cerr.Flush();
+                        }
                     } else {
                         scans.insert(ev->Sender);
-                        runtime.EnableScheduleForActor(ev->Sender); 
+                        runtime.EnableScheduleForActor(ev->Sender);
                         Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": pass" << Endl);
-                        Cerr.Flush(); 
+                        Cerr.Flush();
                     }
 
                     break;
@@ -178,9 +178,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         CreateShardedTable(server, sender, "/Root", "table-1", 7);
         ExecSQL(server, sender, FillTableQuery());
 
-        ui64 firstNodeId = server->GetRuntime()->GetNodeId(0); 
-        // ui64 secondNodeId = server->GetRuntime()->GetNodeId(1); 
- 
+        ui64 firstNodeId = server->GetRuntime()->GetNodeId(0);
+        // ui64 secondNodeId = server->GetRuntime()->GetNodeId(1);
+
         bool remoteScanDetected = false;
 
         ui64 result = 0;
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
                     auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
                     for (auto& [shardId, nodeId]: msg->ShardNodes) {
-                        nodeId = firstNodeId; 
+                        nodeId = firstNodeId;
                     }
                     break;
                 }
@@ -266,17 +266,17 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         // EnableLogging(runtime);
 
-        SetSplitMergePartCountLimit(&runtime, -1); 
- 
+        SetSplitMergePartCountLimit(&runtime, -1);
+
         InitRoot(server, sender);
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
         ExecSQL(server, sender, FillTableQuery());
 
         auto shards = GetTableShards(server, sender, "/Root/table-1");
-        for (const auto& shard: shards) { 
-            Cerr << (TStringBuilder() << "-- shardId=" << shard << Endl); 
-            Cerr.Flush(); 
-        } 
+        for (const auto& shard: shards) {
+            Cerr << (TStringBuilder() << "-- shardId=" << shard << Endl);
+            Cerr.Flush();
+        }
 
         TSet<TActorId> scans;
         TActorId firstScanActor;
@@ -284,21 +284,21 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         ui64 result = 0;
 
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) { 
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
                     auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
                     for (auto& [shardId, nodeId]: msg->ShardNodes) {
                         tabletId = shardId;
                         Cerr << (TStringBuilder() << "-- tabletId= " << tabletId << Endl);
-                        Cerr.Flush(); 
+                        Cerr.Flush();
                     }
                     break;
                 }
 
                 case TEvDataShard::EvKqpScan: {
                     Cerr << (TStringBuilder() << "-- EvScan " << ev->Sender << " -> " << ev->Recipient << Endl);
-                    Cerr.Flush(); 
+                    Cerr.Flush();
                     break;
                 }
 
@@ -310,7 +310,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
 
                     Cerr << (TStringBuilder() << "-- EvStreamData: " << record.AsJSON() << Endl);
-                    Cerr.Flush(); 
+                    Cerr.Flush();
 
                     Y_ASSERT(record.GetResultSet().rows().size() == 1);
                     Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
@@ -345,16 +345,16 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                         runtime.Send(new IEventHandle(MakeTxProxyID(), senderSplit, request.Release()));
 
                         Cerr << (TStringBuilder() << "-- EvScanData from old tablet " << ev->Sender << ": pass and split" << Endl);
-                        Cerr.Flush(); 
+                        Cerr.Flush();
                     } else if (firstScanActor == ev->Sender) {
                         // data from old table scan, drop it
                         Cerr << (TStringBuilder() << "-- EvScanData from old tablet " << ev->Sender << ": drop" << Endl);
-                        Cerr.Flush(); 
-                        return TTestActorRuntime::EEventAction::DROP; 
+                        Cerr.Flush();
+                        return TTestActorRuntime::EEventAction::DROP;
                     } else {
                         // data from new tablet scan, pass it
                         Cerr << (TStringBuilder() << "-- EvScanData from new tablet" << ev->Sender << ": pass" << Endl);
-                        Cerr.Flush(); 
+                        Cerr.Flush();
                     }
 
                     break;
@@ -403,7 +403,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         ExecSQL(server, sender, FillTableQuery());
 
         TSet<TActorId> scans;
-        TSet<TActorId> killedTablets; 
+        TSet<TActorId> killedTablets;
 
         ui64 result = 0;
         ui64 incomingRangesSize = 0;
@@ -463,15 +463,15 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 /* Drop message and kill tablet if we already had seen this tablet */
                 case NKqp::TKqpComputeEvents::EvScanData: {
                     if (scans.contains(ev->Sender)) {
-                        if (killedTablets.empty()) { // do only 1 kill per test 
-                            runtime.Send(new IEventHandle(ev->Sender, ev->Sender, new NKqp::TEvKqpCompute::TEvKillScanTablet)); 
-                            Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event, kill tablet " << ev->Sender << Endl); 
-                            Cerr.Flush(); 
-                        } 
+                        if (killedTablets.empty()) { // do only 1 kill per test
+                            runtime.Send(new IEventHandle(ev->Sender, ev->Sender, new NKqp::TEvKqpCompute::TEvKillScanTablet));
+                            Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event, kill tablet " << ev->Sender << Endl);
+                            Cerr.Flush();
+                        }
                     } else {
                         scans.insert(ev->Sender);
-                        runtime.EnableScheduleForActor(ev->Sender); 
- 
+                        runtime.EnableScheduleForActor(ev->Sender);
+
                         Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": pass" << Endl);
 
                         auto scanEvent = ev->Get<NKqp::TEvKqpCompute::TEvScanData>();

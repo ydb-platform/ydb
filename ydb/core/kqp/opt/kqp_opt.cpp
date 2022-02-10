@@ -50,10 +50,10 @@ bool IsKqpPureLambda(const TCoLambda& lambda) {
             return true;
         }
 
-        if (TMaybeNode<TKqlLookupTableBase>(node)) { 
-            return true; 
-        } 
- 
+        if (TMaybeNode<TKqlLookupTableBase>(node)) {
+            return true;
+        }
+
         if (TMaybeNode<TKqlTableEffect>(node)) {
             return true;
         }

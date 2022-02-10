@@ -24,23 +24,23 @@ TExprBase DqRewriteAggregate(TExprBase node, TExprContext& ctx) {
     return TExprBase(result);
 }
 
-// Take . Sort -> TopSort 
-// Take . Skip . Sort -> Take . Skip . TopSort 
+// Take . Sort -> TopSort
+// Take . Skip . Sort -> Take . Skip . TopSort
 TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TParentsMap& parents) {
-    if (!node.Maybe<TCoTake>()) { 
+    if (!node.Maybe<TCoTake>()) {
         return node;
     }
     auto take = node.Cast<TCoTake>();
 
-    auto maybeSkip = take.Input().Maybe<TCoSkip>(); 
-    auto maybeSort = maybeSkip ? maybeSkip.Cast().Input().Maybe<TCoSort>() : take.Input().Maybe<TCoSort>(); 
- 
-    if (!maybeSort) { 
-        return node; 
-    } 
-    auto sort = maybeSort.Cast(); 
- 
-    if (!IsSingleConsumer(sort, parents)) { 
+    auto maybeSkip = take.Input().Maybe<TCoSkip>();
+    auto maybeSort = maybeSkip ? maybeSkip.Cast().Input().Maybe<TCoSort>() : take.Input().Maybe<TCoSort>();
+
+    if (!maybeSort) {
+        return node;
+    }
+    auto sort = maybeSort.Cast();
+
+    if (!IsSingleConsumer(sort, parents)) {
         return node;
     }
 
@@ -48,34 +48,34 @@ TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TP
         return node;
     }
 
-    if (maybeSkip) { 
-        auto skip = maybeSkip.Cast(); 
- 
-        if (!IsSingleConsumer(skip, parents)) { 
-            return node; 
-        } 
- 
-        if (!IsDqPureExpr(skip)) { 
-            return node; 
-        } 
- 
-        return Build<TCoTake>(ctx, node.Pos()) 
-            .Input<TCoSkip>() 
-                .Input<TCoTopSort>() 
-                    .Input(sort.Input()) 
-                    .KeySelectorLambda(sort.KeySelectorLambda()) 
-                    .SortDirections(sort.SortDirections()) 
-                    .Count<TCoPlus>() 
-                        .Left(take.Count()) 
-                        .Right(skip.Count()) 
-                        .Build() 
-                    .Build() 
-                .Count(skip.Count()) 
-                .Build() 
-            .Count(take.Count()) 
-            .Done(); 
-    } 
- 
+    if (maybeSkip) {
+        auto skip = maybeSkip.Cast();
+
+        if (!IsSingleConsumer(skip, parents)) {
+            return node;
+        }
+
+        if (!IsDqPureExpr(skip)) {
+            return node;
+        }
+
+        return Build<TCoTake>(ctx, node.Pos())
+            .Input<TCoSkip>()
+                .Input<TCoTopSort>()
+                    .Input(sort.Input())
+                    .KeySelectorLambda(sort.KeySelectorLambda())
+                    .SortDirections(sort.SortDirections())
+                    .Count<TCoPlus>()
+                        .Left(take.Count())
+                        .Right(skip.Count())
+                        .Build()
+                    .Build()
+                .Count(skip.Count())
+                .Build()
+            .Count(take.Count())
+            .Done();
+    }
+
     return Build<TCoTopSort>(ctx, node.Pos())
         .Input(sort.Input())
         .KeySelectorLambda(sort.KeySelectorLambda())

@@ -9,16 +9,16 @@ namespace {
 
 class TTasksValidator {
     using TGraphType = TKqpTasksGraph;
-    using TStageType = TGraphType::TStageInfoType; 
+    using TStageType = TGraphType::TStageInfoType;
     using TTaskType = TGraphType::TTaskType;
     using TInputType = TGraphType::TTaskType::TInputType;
     using TOutputType = TGraphType::TTaskType::TOutputType;
 
 public:
-    TTasksValidator(const TGraphType& tasksGraph, const EExecType& execType, bool enableSpilling) 
+    TTasksValidator(const TGraphType& tasksGraph, const EExecType& execType, bool enableSpilling)
         : TasksGraph(tasksGraph)
-        , ExecType(execType) 
-        , EnableSpilling(enableSpilling) {} 
+        , ExecType(execType)
+        , EnableSpilling(enableSpilling) {}
 
     void Validate() {
         for (auto& task : TasksGraph.GetTasks()) {
@@ -42,11 +42,11 @@ private:
                     << ", dstTaskId: " << channel.DstTask);
             }
         }
- 
-        if (!EnableSpilling) { 
-            YQL_ENSURE(channel.InMemory, "With spilling off, all channels should be stored in memory only. " 
-                << "Not InMemory channelId: " << channelId); 
-        } 
+
+        if (!EnableSpilling) {
+            YQL_ENSURE(channel.InMemory, "With spilling off, all channels should be stored in memory only. "
+                << "Not InMemory channelId: " << channelId);
+        }
     }
 
     void ValidateInput(const TInputType& input) {
@@ -89,14 +89,14 @@ private:
 private:
     const TGraphType& TasksGraph;
     EExecType ExecType;
-    bool EnableSpilling; 
+    bool EnableSpilling;
 };
 
 } // namespace
 
-bool ValidateTasks(const TKqpTasksGraph& tasksGraph, const EExecType& execType, bool enableSpilling, NYql::TIssue& issue) { 
+bool ValidateTasks(const TKqpTasksGraph& tasksGraph, const EExecType& execType, bool enableSpilling, NYql::TIssue& issue) {
     try {
-        TTasksValidator(tasksGraph, execType, enableSpilling).Validate(); 
+        TTasksValidator(tasksGraph, execType, enableSpilling).Validate();
         return true;
     } catch (const TYqlPanic& e) {
         issue = YqlIssue({}, TIssuesIds::DEFAULT_ERROR, e.what());

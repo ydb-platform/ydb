@@ -185,13 +185,13 @@ static void CheckConfigure(TTestActorRuntime &runtime, TActorId broker, TActorId
     UNIT_ASSERT_VALUES_EQUAL((int)rec.GetSuccess(), (int)success);
 }
 
-static 
-TIntrusivePtr<IResourceBroker> GetInstantResourceBroker(TTestActorRuntime &runtime, TActorId broker, TActorId sender) { 
-    runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvResourceBrokerRequest)); 
-    auto answer = runtime.GrabEdgeEvent<TEvResourceBroker::TEvResourceBrokerResponse>(sender); 
-    return answer->Get()->ResourceBroker; 
-} 
- 
+static
+TIntrusivePtr<IResourceBroker> GetInstantResourceBroker(TTestActorRuntime &runtime, TActorId broker, TActorId sender) {
+    runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvResourceBrokerRequest));
+    auto answer = runtime.GrabEdgeEvent<TEvResourceBroker::TEvResourceBrokerResponse>(sender);
+    return answer->Get()->ResourceBroker;
+}
+
 Y_UNIT_TEST_SUITE(TResourceBroker) {
     Y_UNIT_TEST(TestErrors) {
         TTestBasicRuntime runtime;
@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
-        auto broker = CreateResourceBrokerActor(config, counters); 
+        auto broker = CreateResourceBrokerActor(config, counters);
         auto brokerId = runtime.Register(broker);
         WaitForBootstrap(runtime);
 
@@ -285,7 +285,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
-        auto broker = CreateResourceBrokerActor(config, counters); 
+        auto broker = CreateResourceBrokerActor(config, counters);
         auto brokerId = runtime.Register(broker);
         WaitForBootstrap(runtime);
 
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
-        auto broker = CreateResourceBrokerActor(config, counters); 
+        auto broker = CreateResourceBrokerActor(config, counters);
         auto brokerId = runtime.Register(broker);
         WaitForBootstrap(runtime);
 
@@ -413,7 +413,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
-        auto broker = CreateResourceBrokerActor(config, counters); 
+        auto broker = CreateResourceBrokerActor(config, counters);
         auto brokerId = runtime.Register(broker);
         WaitForBootstrap(runtime);
 
@@ -462,7 +462,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
-        auto broker = CreateResourceBrokerActor(config, counters); 
+        auto broker = CreateResourceBrokerActor(config, counters);
         auto brokerId = runtime.Register(broker);
         WaitForBootstrap(runtime);
 
@@ -557,7 +557,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
-        auto broker = CreateResourceBrokerActor(config, counters); 
+        auto broker = CreateResourceBrokerActor(config, counters);
         auto brokerId = runtime.Register(broker);
         WaitForBootstrap(runtime);
 
@@ -615,7 +615,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
-        auto broker = CreateResourceBrokerActor(config, counters); 
+        auto broker = CreateResourceBrokerActor(config, counters);
         auto brokerId = runtime.Register(broker);
         WaitForBootstrap(runtime);
 
@@ -652,7 +652,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
-        auto broker = CreateResourceBrokerActor(config, counters); 
+        auto broker = CreateResourceBrokerActor(config, counters);
         auto brokerId = runtime.Register(broker);
         WaitForBootstrap(runtime);
 
@@ -690,7 +690,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
-        auto broker = CreateResourceBrokerActor(config, counters); 
+        auto broker = CreateResourceBrokerActor(config, counters);
         auto brokerId = runtime.Register(broker);
         WaitForBootstrap(runtime);
 
@@ -727,7 +727,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
-        auto broker = CreateResourceBrokerActor(config, counters); 
+        auto broker = CreateResourceBrokerActor(config, counters);
         auto brokerId = runtime.Register(broker);
         WaitForBootstrap(runtime);
 
@@ -764,7 +764,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
-        auto broker = CreateResourceBrokerActor(config, counters); 
+        auto broker = CreateResourceBrokerActor(config, counters);
         auto brokerId = runtime.Register(broker);
         WaitForBootstrap(runtime);
 
@@ -810,7 +810,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto config = MakeTestConfig();
-        auto broker = CreateResourceBrokerActor(config, counters); 
+        auto broker = CreateResourceBrokerActor(config, counters);
         auto brokerId = runtime.Register(broker);
         WaitForBootstrap(runtime);
 
@@ -893,122 +893,122 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
     }
 };
 
-Y_UNIT_TEST_SUITE(TResourceBrokerInstant) { 
-    Y_UNIT_TEST(Test) { 
-        TTestBasicRuntime runtime; 
-        SetupTabletServices(runtime); 
-        SetupLogging(runtime); 
- 
-        TActorId sender = runtime.AllocateEdgeActor(); 
- 
-        NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>(); 
-        auto broker = runtime.Register(CreateResourceBrokerActor(MakeTestConfig(), counters)); 
-        WaitForBootstrap(runtime); 
- 
-        auto rb = GetInstantResourceBroker(runtime, broker, sender); 
- 
-        bool ok = rb->SubmitTaskInstant({/* taskId */ 1, /* name */ "task-1", /* resources */ {100, 100}, 
-                                         /* type */ "compaction0", /* priority */ 0, /* cookie */ nullptr}, sender); 
-        UNIT_ASSERT(ok); 
-        CheckCounters(counters, "queue", "total", 100, 100, 0, 0, 1); 
- 
-        ok = rb->ReduceTaskResourcesInstant(/* taskId */ 1, /* reduceBy */ {20, 30}, sender); 
-        UNIT_ASSERT(ok); 
-        CheckCounters(counters, "queue", "total", 80, 70, 0, 0, 1); 
- 
-        ok = rb->FinishTaskInstant({/* taskId */ 1, /* cancel */ false}, sender); 
-        UNIT_ASSERT(ok); 
-        CheckCounters(counters, "queue", "total", 0, 0, 1, 0, 0); 
-    } 
- 
-    Y_UNIT_TEST(TestErrors) { 
-        TTestBasicRuntime runtime; 
-        SetupTabletServices(runtime); 
-        SetupLogging(runtime); 
- 
-        TActorId sender = runtime.AllocateEdgeActor(); 
- 
-        NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>(); 
-        auto broker = runtime.Register(CreateResourceBrokerActor(MakeTestConfig(), counters)); 
-        WaitForBootstrap(runtime); 
- 
-        auto rb = GetInstantResourceBroker(runtime, broker, sender); 
- 
-        bool ok = rb->SubmitTaskInstant({/* taskId */ 1, /* name */ "task-1", /* resources */ {100, 100}, 
-                                         /* type */ "compaction0", /* priority */ 0, /* cookie */ nullptr}, sender); 
-        UNIT_ASSERT(ok); 
-        CheckCounters(counters, "queue", "total", 100, 100, 0, 0, 1); 
- 
-        ok = rb->SubmitTaskInstant({/* taskId */ 1, /* name */ "task-1", /* resources */ {100500, 100500}, 
-                                    /* type */ "compaction0", /* priority */ 0, /* cookie */ nullptr}, sender); 
-        UNIT_ASSERT(!ok); 
-        CheckCounters(counters, "queue", "total", 100, 100, 0, 0, 1); 
- 
-        ok = rb->ReduceTaskResourcesInstant(/* taskId */ 2, /* reduceBy */ {20, 30}, sender); 
-        UNIT_ASSERT(!ok); 
-        CheckCounters(counters, "queue", "total", 100, 100, 0, 0, 1); 
- 
-        ok = rb->FinishTaskInstant({/* taskId */ 2, /* cancel */ false}, sender); 
-        UNIT_ASSERT(!ok); 
-        CheckCounters(counters, "queue", "total", 100, 100, 0, 0, 1); 
-    } 
- 
-    Y_UNIT_TEST(TestMerge) { 
-        TTestBasicRuntime runtime; 
-        SetupTabletServices(runtime); 
-        SetupLogging(runtime); 
- 
-        TActorId sender = runtime.AllocateEdgeActor(); 
- 
-        NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>(); 
-        auto broker = runtime.Register(CreateResourceBrokerActor(MakeTestConfig(), counters)); 
-        WaitForBootstrap(runtime); 
- 
-        auto rb = GetInstantResourceBroker(runtime, broker, sender); 
- 
-        // recipient task 
-        { 
-            bool ok = rb->SubmitTaskInstant({/* taskId */ 1, /* name */ "task-1", /* resources */ {100, 200}, 
-                                             /* type */ "compaction0", /* priority */ 0, /* cookie */ nullptr}, sender); 
-            UNIT_ASSERT(ok); 
-            CheckCounters(counters, "queue", "total", 100, 200, 0, 0, 1); 
-        } 
- 
-        // donor task 
-        { 
-            bool ok = rb->SubmitTaskInstant({/* taskId */ 2, /* name */ "task-2", /* resources */ {100, 100}, 
-                                             /* type */ "compaction0", /* priority */ 0, /* cookie */ nullptr}, sender); 
-            UNIT_ASSERT(ok); 
-            CheckCounters(counters, "queue", "total", 200, 300, 0, 0, 2); 
-        } 
- 
-        // merge tasks 
-        { 
-            bool ok = rb->MergeTasksInstant(/* recipientTaskId */ 1, /* donorTaskId */ 2, sender); 
-            UNIT_ASSERT(ok); 
- 
-            CheckCounters(counters, "queue", "total", 200, 300, 1, 0, 1); 
-        } 
- 
-        // donor task of different type 
-        { 
-            bool ok = rb->SubmitTaskInstant({/* taskId */ 3, /* name */ "task-3", /* resources */ {10, 20}, 
-                                             /* type */ "compaction1", /* priority */ 0, /* cookie */ nullptr}, sender); 
-            UNIT_ASSERT(ok); 
- 
-            CheckCounters(counters, "queue", "total", 210, 320, 1, 0, 2); 
-        } 
- 
-        // merge tasks 
-        { 
-            bool ok = rb->MergeTasksInstant(/* recipientTaskId */ 1, /* donorTaskId */ 3, sender); 
-            UNIT_ASSERT(!ok); 
- 
-            CheckCounters(counters, "queue", "total", 210, 320, 1, 0, 2); 
-        } 
-    } 
-}; 
- 
+Y_UNIT_TEST_SUITE(TResourceBrokerInstant) {
+    Y_UNIT_TEST(Test) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        SetupLogging(runtime);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto broker = runtime.Register(CreateResourceBrokerActor(MakeTestConfig(), counters));
+        WaitForBootstrap(runtime);
+
+        auto rb = GetInstantResourceBroker(runtime, broker, sender);
+
+        bool ok = rb->SubmitTaskInstant({/* taskId */ 1, /* name */ "task-1", /* resources */ {100, 100},
+                                         /* type */ "compaction0", /* priority */ 0, /* cookie */ nullptr}, sender);
+        UNIT_ASSERT(ok);
+        CheckCounters(counters, "queue", "total", 100, 100, 0, 0, 1);
+
+        ok = rb->ReduceTaskResourcesInstant(/* taskId */ 1, /* reduceBy */ {20, 30}, sender);
+        UNIT_ASSERT(ok);
+        CheckCounters(counters, "queue", "total", 80, 70, 0, 0, 1);
+
+        ok = rb->FinishTaskInstant({/* taskId */ 1, /* cancel */ false}, sender);
+        UNIT_ASSERT(ok);
+        CheckCounters(counters, "queue", "total", 0, 0, 1, 0, 0);
+    }
+
+    Y_UNIT_TEST(TestErrors) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        SetupLogging(runtime);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto broker = runtime.Register(CreateResourceBrokerActor(MakeTestConfig(), counters));
+        WaitForBootstrap(runtime);
+
+        auto rb = GetInstantResourceBroker(runtime, broker, sender);
+
+        bool ok = rb->SubmitTaskInstant({/* taskId */ 1, /* name */ "task-1", /* resources */ {100, 100},
+                                         /* type */ "compaction0", /* priority */ 0, /* cookie */ nullptr}, sender);
+        UNIT_ASSERT(ok);
+        CheckCounters(counters, "queue", "total", 100, 100, 0, 0, 1);
+
+        ok = rb->SubmitTaskInstant({/* taskId */ 1, /* name */ "task-1", /* resources */ {100500, 100500},
+                                    /* type */ "compaction0", /* priority */ 0, /* cookie */ nullptr}, sender);
+        UNIT_ASSERT(!ok);
+        CheckCounters(counters, "queue", "total", 100, 100, 0, 0, 1);
+
+        ok = rb->ReduceTaskResourcesInstant(/* taskId */ 2, /* reduceBy */ {20, 30}, sender);
+        UNIT_ASSERT(!ok);
+        CheckCounters(counters, "queue", "total", 100, 100, 0, 0, 1);
+
+        ok = rb->FinishTaskInstant({/* taskId */ 2, /* cancel */ false}, sender);
+        UNIT_ASSERT(!ok);
+        CheckCounters(counters, "queue", "total", 100, 100, 0, 0, 1);
+    }
+
+    Y_UNIT_TEST(TestMerge) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        SetupLogging(runtime);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto broker = runtime.Register(CreateResourceBrokerActor(MakeTestConfig(), counters));
+        WaitForBootstrap(runtime);
+
+        auto rb = GetInstantResourceBroker(runtime, broker, sender);
+
+        // recipient task
+        {
+            bool ok = rb->SubmitTaskInstant({/* taskId */ 1, /* name */ "task-1", /* resources */ {100, 200},
+                                             /* type */ "compaction0", /* priority */ 0, /* cookie */ nullptr}, sender);
+            UNIT_ASSERT(ok);
+            CheckCounters(counters, "queue", "total", 100, 200, 0, 0, 1);
+        }
+
+        // donor task
+        {
+            bool ok = rb->SubmitTaskInstant({/* taskId */ 2, /* name */ "task-2", /* resources */ {100, 100},
+                                             /* type */ "compaction0", /* priority */ 0, /* cookie */ nullptr}, sender);
+            UNIT_ASSERT(ok);
+            CheckCounters(counters, "queue", "total", 200, 300, 0, 0, 2);
+        }
+
+        // merge tasks
+        {
+            bool ok = rb->MergeTasksInstant(/* recipientTaskId */ 1, /* donorTaskId */ 2, sender);
+            UNIT_ASSERT(ok);
+
+            CheckCounters(counters, "queue", "total", 200, 300, 1, 0, 1);
+        }
+
+        // donor task of different type
+        {
+            bool ok = rb->SubmitTaskInstant({/* taskId */ 3, /* name */ "task-3", /* resources */ {10, 20},
+                                             /* type */ "compaction1", /* priority */ 0, /* cookie */ nullptr}, sender);
+            UNIT_ASSERT(ok);
+
+            CheckCounters(counters, "queue", "total", 210, 320, 1, 0, 2);
+        }
+
+        // merge tasks
+        {
+            bool ok = rb->MergeTasksInstant(/* recipientTaskId */ 1, /* donorTaskId */ 3, sender);
+            UNIT_ASSERT(!ok);
+
+            CheckCounters(counters, "queue", "total", 210, 320, 1, 0, 2);
+        }
+    }
+};
+
 Y_UNIT_TEST_SUITE(TResourceBrokerConfig) {
 
     Y_UNIT_TEST(UpdateQueues) {

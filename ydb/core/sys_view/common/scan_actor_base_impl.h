@@ -67,18 +67,18 @@ protected:
         ReplyErrorAndDie(Ydb::StatusIds::TIMEOUT, "System view: timeout");
     }
 
-    void HandleAbortExecution(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) { 
-        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS, 
-            "Got abort execution event, actor: " << TBase::SelfId() 
-                << ", owner: " << OwnerActorId 
-                << ", scan id: " << ScanId 
-                << ", table id: " << TableId 
-                << ", code: " << Ydb::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode()) 
-                << ", error: " << ev->Get()->Record.GetMessage()); 
- 
-        this->PassAway(); 
-    } 
- 
+    void HandleAbortExecution(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) {
+        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
+            "Got abort execution event, actor: " << TBase::SelfId()
+                << ", owner: " << OwnerActorId
+                << ", scan id: " << ScanId
+                << ", table id: " << TableId
+                << ", code: " << Ydb::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())
+                << ", error: " << ev->Get()->Record.GetMessage());
+
+        this->PassAway();
+    }
+
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, const TString& message) {
         LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
             "Scan error, actor: " << TBase::SelfId()
@@ -293,7 +293,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScanAck);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
-            hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution); 
+            hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, this->PassAway);
             default:
@@ -306,7 +306,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScanAck);
             hFunc(TEvTenantNodeEnumerator::TEvLookupResult, HandleLookup);
-            hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution); 
+            hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, this->PassAway);
             default:

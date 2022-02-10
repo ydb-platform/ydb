@@ -159,7 +159,7 @@ namespace Tests {
 
         TAppPrepare app; /* will cook TAppData */
         app.SetNetDataSourceUrl(Settings->NetClassifierConfig.GetUpdaterConfig().GetNetDataSourceUrl());
-        app.SetEnableKqpSpilling(Settings->EnableKqpSpilling); 
+        app.SetEnableKqpSpilling(Settings->EnableKqpSpilling);
         app.SetKeepSnapshotTimeout(Settings->KeepSnapshotTimeout);
         app.SetChangesQueueItemsLimit(Settings->ChangesQueueItemsLimit);
         app.SetChangesQueueBytesLimit(Settings->ChangesQueueBytesLimit);
@@ -249,8 +249,8 @@ namespace Tests {
         auto grpcService = new NGRpcProxy::TGRpcService();
 
         auto system(Runtime->GetAnyNodeActorSystem());
-        auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(Settings->AppConfig); 
-        auto grpcRequestProxyId = system->Register(grpcRequestProxy, TMailboxType::ReadAsFilled); 
+        auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(Settings->AppConfig);
+        auto grpcRequestProxyId = system->Register(grpcRequestProxy, TMailboxType::ReadAsFilled);
         system->RegisterLocalService(NGRpcService::CreateGRpcRequestProxyId(), grpcRequestProxyId);
         auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled);
         system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);
@@ -598,14 +598,14 @@ namespace Tests {
         }
 
         {
-            IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(Settings->AppConfig.GetTableServiceConfig().GetResourceManager(), nullptr); 
-            TActorId kqpRmServiceId = Runtime->Register(kqpRmService, nodeIdx); 
-            Runtime->RegisterService(NKqp::MakeKqpRmServiceID(Runtime->GetNodeId(nodeIdx)), kqpRmServiceId, nodeIdx); 
-        } 
- 
-        { 
+            IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(Settings->AppConfig.GetTableServiceConfig().GetResourceManager(), nullptr);
+            TActorId kqpRmServiceId = Runtime->Register(kqpRmService, nodeIdx);
+            Runtime->RegisterService(NKqp::MakeKqpRmServiceID(Runtime->GetNodeId(nodeIdx)), kqpRmServiceId, nodeIdx);
+        }
+
+        {
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig.GetLogConfig(),
-                                                                  Settings->AppConfig.GetTableServiceConfig(), 
+                                                                  Settings->AppConfig.GetTableServiceConfig(),
                                                                   TVector<NKikimrKqp::TKqpSetting>(Settings->KqpSettings),
                                                                   nullptr);
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx);

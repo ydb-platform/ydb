@@ -9,10 +9,10 @@
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 
-namespace NKikimrConfig { 
-class TAppConfig; 
-} 
- 
+namespace NKikimrConfig {
+class TAppConfig;
+}
+
 namespace NKikimr {
 
 struct TAppData;
@@ -20,7 +20,7 @@ struct TAppData;
 namespace NGRpcService {
 
 TString DatabaseFromDomain(const TAppData* appdata);
-IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig); 
+IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig);
 
 class TGRpcRequestProxy : public IFacilityProvider {
 public:

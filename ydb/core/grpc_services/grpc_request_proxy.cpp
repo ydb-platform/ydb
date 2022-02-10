@@ -289,7 +289,7 @@ private:
     std::unordered_map<TString, TActorId> Subscribers;
     THashSet<TSubDomainKey> SubDomainKeys;
     bool AllowYdbRequestsWithoutDatabase = true;
-    NKikimrConfig::TAppConfig AppConfig; 
+    NKikimrConfig::TAppConfig AppConfig;
     TActorId SchemeCache;
     bool DynamicNode = false;
     TString RootDatabase;
@@ -299,13 +299,13 @@ private:
 void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
     ctx.Send(MakeTenantPoolRootID(), new TEvents::TEvSubscribe());
     AllowYdbRequestsWithoutDatabase = AppData(ctx)->FeatureFlags.GetAllowYdbRequestsWithoutDatabase();
- 
-    // Subscribe for TableService config changes 
-    ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem; 
-    Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), 
-         new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}), 
-         IEventHandle::FlagTrackDelivery); 
- 
+
+    // Subscribe for TableService config changes
+    ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
+    Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+         new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
+         IEventHandle::FlagTrackDelivery);
+
     Send(MakeTxProxyID(), new TEvTxUserProxy::TEvGetProxyServicesRequest);
 
     auto nodeID = SelfId().NodeId();
@@ -387,43 +387,43 @@ void TGRpcRequestProxyImpl::HandleRefreshToken(TRefreshTokenImpl::TPtr& ev, cons
         NYql::TIssues()});
 }
 
-void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) { 
-    LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Subscribed for config changes"); 
-} 
- 
-void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) { 
-    auto &event = ev->Get()->Record; 
- 
-    AppConfig.Swap(event.MutableConfig()); 
-    LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Updated app config"); 
- 
-    auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event); 
-    Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie); 
-} 
- 
+void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
+    LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Subscribed for config changes");
+}
+
+void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    auto &event = ev->Get()->Record;
+
+    AppConfig.Swap(event.MutableConfig());
+    LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Updated app config");
+
+    auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+    Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
+}
+
 void TGRpcRequestProxyImpl::HandleProxyService(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev) {
     SchemeCache = ev->Get()->Services.SchemeCache;
     LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
         "Got proxy service configuration");
 }
 
-void TGRpcRequestProxyImpl::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) { 
-    switch (ev->Get()->SourceType) { 
-        case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest: 
-            LOG_CRIT(*TlsActivationContext, NKikimrServices::GRPC_SERVER, 
-                "Failed to deliver subscription request to config dispatcher"); 
-            break; 
-        case NConsole::TEvConsole::EvConfigNotificationResponse: 
-            LOG_ERROR(*TlsActivationContext, NKikimrServices::GRPC_SERVER, 
-                "Failed to deliver config notification response"); 
-            break; 
-        default: 
-            LOG_ERROR(*TlsActivationContext, NKikimrServices::GRPC_SERVER, 
-                "Undelivered event with unexpected source type: %d", ev->Get()->SourceType); 
-            break; 
-    } 
-} 
- 
+void TGRpcRequestProxyImpl::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) {
+    switch (ev->Get()->SourceType) {
+        case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
+            LOG_CRIT(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
+                "Failed to deliver subscription request to config dispatcher");
+            break;
+        case NConsole::TEvConsole::EvConfigNotificationResponse:
+            LOG_ERROR(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
+                "Failed to deliver config notification response");
+            break;
+        default:
+            LOG_ERROR(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
+                "Undelivered event with unexpected source type: %d", ev->Get()->SourceType);
+            break;
+    }
+}
+
 bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
     const auto& state = ctx.GetAuthState();
     return state.State == NGrpc::TAuthState::AS_OK ||
@@ -547,9 +547,9 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvTenantPool::TEvTenantPoolStatus, HandlePoolStatus);
         hFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, HandleProxyService);
-        hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig); 
-        hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig); 
-        hFunc(TEvents::TEvUndelivered, HandleUndelivery); 
+        hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig);
+        hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);
+        hFunc(TEvents::TEvUndelivered, HandleUndelivery);
         HFunc(TSchemeBoardEvents::TEvNotifyUpdate, HandleSchemeBoard);
         hFunc(TSchemeBoardEvents::TEvNotifyDelete, HandleSchemeBoard);
 
@@ -678,8 +678,8 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
     }
 }
 
-IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig) { 
-    return new TGRpcRequestProxyImpl(appConfig); 
+IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig) {
+    return new TGRpcRequestProxyImpl(appConfig);
 }
 
 } // namespace NGRpcService

@@ -13,15 +13,15 @@ import "ydb/public/api/protos/ydb_value.proto";
 message ExecuteStreamQueryRequest {
     string yql_text = 1;
     map<string, TypedValue> parameters = 2;
- 
-    enum ProfileMode { 
-        PROFILE_MODE_UNSPECIFIED = 0; 
-        NONE = 1; 
+
+    enum ProfileMode {
+        PROFILE_MODE_UNSPECIFIED = 0;
+        NONE = 1;
         BASIC = 2;
         FULL = 3;
-    } 
- 
-    ProfileMode profile_mode = 3; 
+    }
+
+    ProfileMode profile_mode = 3;
     bool explain = 4;
 }
 
@@ -31,14 +31,14 @@ message ExecuteStreamQueryResponse {
     ExecuteStreamQueryResult result = 3;
 }
 
-message StreamQueryProgress { 
-} 
- 
+message StreamQueryProgress {
+}
+
 message ExecuteStreamQueryResult {
-    oneof result { 
-        Ydb.ResultSet result_set = 1; 
-        string profile = 2; 
-        StreamQueryProgress progress = 3; 
+    oneof result {
+        Ydb.ResultSet result_set = 1;
+        string profile = 2;
+        StreamQueryProgress progress = 3;
         string query_plan = 4;
-    } 
+    }
 }

@@ -206,5 +206,5 @@ TAutoPtr<IGraphTransformer> CreateKqpExecutePreparedTransformer(TIntrusivePtr<IK
     return new TKqpExecutePreparedTransformer(gateway, cluster, txState, transformCtx);
 }
 
-} // namespace NKqp 
+} // namespace NKqp
 } // namespace NKikimr

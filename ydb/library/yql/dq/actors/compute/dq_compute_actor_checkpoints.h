@@ -18,7 +18,7 @@ namespace NYql::NDqProto {
 enum ECheckpointingMode;
 } // namespace NYql::NDqProto
 
-namespace NYql::NDq { 
+namespace NYql::NDq {
 
 NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const NDqProto::TDqTask& task);
 
@@ -90,7 +90,7 @@ public:
     bool ComputeActorStateSaved() const;
     void DoCheckpoint();
     bool SaveState();
-    void RegisterCheckpoint(const NDqProto::TCheckpoint& checkpoint, ui64 channelId); 
+    void RegisterCheckpoint(const NDqProto::TCheckpoint& checkpoint, ui64 channelId);
 
     // Sink actor support.
     void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint);
@@ -99,12 +99,12 @@ public:
 
 private:
     STATEFN(StateFunc);
-    void Handle(TEvDqCompute::TEvNewCheckpointCoordinator::TPtr&); 
-    void Handle(TEvDqCompute::TEvInjectCheckpoint::TPtr&); 
-    void Handle(TEvDqCompute::TEvSaveTaskStateResult::TPtr&); 
-    void Handle(TEvDqCompute::TEvCommitState::TPtr&); 
-    void Handle(TEvDqCompute::TEvRestoreFromCheckpoint::TPtr&); 
-    void Handle(TEvDqCompute::TEvGetTaskStateResult::TPtr&); 
+    void Handle(TEvDqCompute::TEvNewCheckpointCoordinator::TPtr&);
+    void Handle(TEvDqCompute::TEvInjectCheckpoint::TPtr&);
+    void Handle(TEvDqCompute::TEvSaveTaskStateResult::TPtr&);
+    void Handle(TEvDqCompute::TEvCommitState::TPtr&);
+    void Handle(TEvDqCompute::TEvRestoreFromCheckpoint::TPtr&);
+    void Handle(TEvDqCompute::TEvGetTaskStateResult::TPtr&);
     void Handle(TEvDqCompute::TEvRun::TPtr& ev);
     void Handle(NActors::TEvents::TEvPoison::TPtr&);
     void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
@@ -119,7 +119,7 @@ private:
 
 private:
     const TTxId TxId;
-    const NDqProto::TDqTask Task; 
+    const NDqProto::TDqTask Task;
     const bool IngressTask;
 
     const NActors::TActorId CheckpointStorage;
@@ -135,4 +135,4 @@ private:
     NYql::NDqProto::NDqStateLoadPlan::TTaskPlan TaskLoadPlan;
 };
 
-} // namespace NYql::NDq 
+} // namespace NYql::NDq

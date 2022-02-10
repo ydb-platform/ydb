@@ -4,7 +4,7 @@ OWNER(g:yql)
 
 SRCS(
     dq_events.proto
-    dq_stats.proto 
+    dq_stats.proto
 )
 
 PEERDIR(

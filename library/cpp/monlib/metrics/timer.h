@@ -1,29 +1,29 @@
-#pragma once 
- 
+#pragma once
+
 #include "metric.h"
- 
+
 #include <util/generic/typetraits.h>
 
-#include <chrono> 
- 
- 
-namespace NMonitoring { 
- 
-    /** 
-     * A timing scope to record elapsed time since creation. 
-     */ 
+#include <chrono>
+
+
+namespace NMonitoring {
+
+    /**
+     * A timing scope to record elapsed time since creation.
+     */
     template <typename TMetric,
-              typename Resolution = std::chrono::milliseconds, 
-              typename Clock = std::chrono::high_resolution_clock> 
+              typename Resolution = std::chrono::milliseconds,
+              typename Clock = std::chrono::high_resolution_clock>
     class TMetricTimerScope {
-    public: 
+    public:
         explicit TMetricTimerScope(TMetric* metric)
                 : Metric_(metric)
-                , StartTime_(Clock::now()) 
-        { 
+                , StartTime_(Clock::now())
+        {
             Y_ENSURE(Metric_);
-        } 
- 
+        }
+
         TMetricTimerScope(TMetricTimerScope&) = delete;
         TMetricTimerScope& operator=(const TMetricTimerScope&) = delete;
 
@@ -45,7 +45,7 @@ namespace NMonitoring {
                 return;
             }
 
-            auto duration = std::chrono::duration_cast<Resolution>(Clock::now() - StartTime_).count(); 
+            auto duration = std::chrono::duration_cast<Resolution>(Clock::now() - StartTime_).count();
             if constexpr (std::is_same<TMetric, TGauge>::value) {
                 Metric_->Set(duration);
             } else if constexpr (std::is_same<TMetric, TIntGauge>::value) {
@@ -56,13 +56,13 @@ namespace NMonitoring {
                 Metric_->Add(duration);
             } else if constexpr (std::is_same<TMetric, THistogram>::value) {
                 Metric_->Record(duration);
-            } else { 
+            } else {
                 static_assert(TDependentFalse<TMetric>, "Not supported metric type");
-            } 
+            }
 
             Metric_ = nullptr;
-        } 
- 
+        }
+
         ~TMetricTimerScope() {
             if (Metric_ == nullptr) {
                 return;
@@ -71,11 +71,11 @@ namespace NMonitoring {
             Record();
         }
 
-    private: 
+    private:
         TMetric* Metric_{nullptr};
-        typename Clock::time_point StartTime_; 
-    }; 
- 
+        typename Clock::time_point StartTime_;
+    };
+
     /**
      * @brief A class that is supposed to use to measure execution time of an asynchronuous operation.
      *
@@ -124,4 +124,4 @@ namespace NMonitoring {
     TFutureFriendlyTimer<TMetric> FutureTimer(TMetric* metric) {
         return TFutureFriendlyTimer<TMetric>{metric};
     }
-} 
+}

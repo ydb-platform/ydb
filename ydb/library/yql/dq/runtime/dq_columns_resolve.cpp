@@ -8,7 +8,7 @@ using namespace NKikimr::NMiniKQL;
 
 TMaybe<TColumnInfo> FindColumnInfo(const NKikimr::NMiniKQL::TType* type, TStringBuf columnName) {
     YQL_ENSURE(type->GetKind() == TType::EKind::Struct);
-    const auto& structType = static_cast<const TStructType&>(*type); 
+    const auto& structType = static_cast<const TStructType&>(*type);
 
     auto columnIndex = structType.FindMemberIndex(columnName);
     if (!columnIndex) {

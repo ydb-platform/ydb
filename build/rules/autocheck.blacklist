@@ -1,5 +1,5 @@
 # Atocheck blacklist
-# The list of directories excluded from autocheck (with all subdirs)
+# The list of directories excluded from autocheck (with all subdirs) 
 browser/frontend
 data-ui/abc
 data-ui/arcanum
@@ -16,7 +16,7 @@ junk
 kinopoisk/frontend
 kinopoisk/analytics
 maps/front
-mobile
+mobile 
 music/frontend
 serp/hermione
 zen/frontend

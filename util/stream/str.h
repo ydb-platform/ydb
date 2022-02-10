@@ -94,7 +94,7 @@ public:
         DoSwap(S_, s.S_);
     }
 
-protected:
+protected: 
     size_t DoNext(void** ptr) override;
     void DoUndo(size_t len) override;
     void DoWrite(const void* buf, size_t len) override;

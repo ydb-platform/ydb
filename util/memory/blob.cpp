@@ -193,7 +193,7 @@ TBlob TBlob::Copy(const void* data, size_t length) {
 }
 
 TBlob TBlob::NoCopy(const void* data, size_t length) {
-    return TBlob(data, length, nullptr);
+    return TBlob(data, length, nullptr); 
 }
 
 template <class TCounter>

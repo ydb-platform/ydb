@@ -20,8 +20,8 @@
 
 #include <grpc/support/port_platform.h>
 
-#if defined(GPR_WINDOWS) && !defined(GPR_ABSEIL_SYNC) && \ 
-    !defined(GPR_CUSTOM_SYNC) 
+#if defined(GPR_WINDOWS) && !defined(GPR_ABSEIL_SYNC) && \
+    !defined(GPR_CUSTOM_SYNC)
 
 #include <grpc/support/log.h>
 #include <grpc/support/sync.h>
@@ -116,5 +116,5 @@ void gpr_once_init(gpr_once* once, void (*init_function)(void)) {
   InitOnceExecuteOnce(once, run_once_func, &arg, &dummy);
 }
 
-#endif /* defined(GPR_WINDOWS) && !defined(GPR_ABSEIL_SYNC) && \ 
-          !defined(GPR_CUSTOM_SYNC) */ 
+#endif /* defined(GPR_WINDOWS) && !defined(GPR_ABSEIL_SYNC) && \
+          !defined(GPR_CUSTOM_SYNC) */

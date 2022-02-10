@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2021 The OpenSSL Project Authors. All Rights Reserved. 
+ * Copyright 1995-2021 The OpenSSL Project Authors. All Rights Reserved.
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  * Copyright 2005 Nokia. All rights reserved.
  *
@@ -779,10 +779,10 @@ SSL *SSL_new(SSL_CTX *ctx)
         s->ext.ecpointformats =
             OPENSSL_memdup(ctx->ext.ecpointformats,
                            ctx->ext.ecpointformats_len);
-        if (!s->ext.ecpointformats) { 
-            s->ext.ecpointformats_len = 0; 
+        if (!s->ext.ecpointformats) {
+            s->ext.ecpointformats_len = 0;
             goto err;
-        } 
+        }
         s->ext.ecpointformats_len =
             ctx->ext.ecpointformats_len;
     }
@@ -791,10 +791,10 @@ SSL *SSL_new(SSL_CTX *ctx)
             OPENSSL_memdup(ctx->ext.supportedgroups,
                            ctx->ext.supportedgroups_len
                                 * sizeof(*ctx->ext.supportedgroups));
-        if (!s->ext.supportedgroups) { 
-            s->ext.supportedgroups_len = 0; 
+        if (!s->ext.supportedgroups) {
+            s->ext.supportedgroups_len = 0;
             goto err;
-        } 
+        }
         s->ext.supportedgroups_len = ctx->ext.supportedgroups_len;
     }
 #endif
@@ -804,10 +804,10 @@ SSL *SSL_new(SSL_CTX *ctx)
 
     if (s->ctx->ext.alpn) {
         s->ext.alpn = OPENSSL_malloc(s->ctx->ext.alpn_len);
-        if (s->ext.alpn == NULL) { 
-            s->ext.alpn_len = 0; 
+        if (s->ext.alpn == NULL) {
+            s->ext.alpn_len = 0;
             goto err;
-        } 
+        }
         memcpy(s->ext.alpn, s->ctx->ext.alpn, s->ctx->ext.alpn_len);
         s->ext.alpn_len = s->ctx->ext.alpn_len;
     }
@@ -1206,8 +1206,8 @@ void SSL_free(SSL *s)
     OPENSSL_free(s->ext.ocsp.resp);
     OPENSSL_free(s->ext.alpn);
     OPENSSL_free(s->ext.tls13_cookie);
-    if (s->clienthello != NULL) 
-        OPENSSL_free(s->clienthello->pre_proc_exts); 
+    if (s->clienthello != NULL)
+        OPENSSL_free(s->clienthello->pre_proc_exts);
     OPENSSL_free(s->clienthello);
     OPENSSL_free(s->pha_context);
     EVP_MD_CTX_free(s->pha_dgst);
@@ -2119,11 +2119,11 @@ int SSL_key_update(SSL *s, int updatetype)
         return 0;
     }
 
-    if (RECORD_LAYER_write_pending(&s->rlayer)) { 
-        SSLerr(SSL_F_SSL_KEY_UPDATE, SSL_R_BAD_WRITE_RETRY); 
-        return 0; 
-    } 
- 
+    if (RECORD_LAYER_write_pending(&s->rlayer)) {
+        SSLerr(SSL_F_SSL_KEY_UPDATE, SSL_R_BAD_WRITE_RETRY);
+        return 0;
+    }
+
     ossl_statem_set_in_init(s, 1);
     s->key_update = updatetype;
     return 1;
@@ -2689,7 +2689,7 @@ const char *SSL_get_servername(const SSL *s, const int type)
          *  - Otherwise it returns NULL
          *
          * During/after the handshake (TLSv1.2 or below resumption occurred):
-         * - If the session from the original handshake had a servername accepted 
+         * - If the session from the original handshake had a servername accepted
          *   by the server then it will return that servername.
          * - Otherwise it returns the servername set via
          *   SSL_set_tlsext_host_name() (or NULL if it was not called).
@@ -2834,19 +2834,19 @@ void SSL_CTX_set_npn_select_cb(SSL_CTX *ctx,
 }
 #endif
 
-static int alpn_value_ok(const unsigned char *protos, unsigned int protos_len) 
-{ 
-    unsigned int idx; 
- 
-    if (protos_len < 2 || protos == NULL) 
-        return 0; 
- 
-    for (idx = 0; idx < protos_len; idx += protos[idx] + 1) { 
-        if (protos[idx] == 0) 
-            return 0; 
-    } 
-    return idx == protos_len; 
-} 
+static int alpn_value_ok(const unsigned char *protos, unsigned int protos_len)
+{
+    unsigned int idx;
+
+    if (protos_len < 2 || protos == NULL)
+        return 0;
+
+    for (idx = 0; idx < protos_len; idx += protos[idx] + 1) {
+        if (protos[idx] == 0)
+            return 0;
+    }
+    return idx == protos_len;
+}
 /*
  * SSL_CTX_set_alpn_protos sets the ALPN protocol list on |ctx| to |protos|.
  * |protos| must be in wire-format (i.e. a series of non-empty, 8-bit
@@ -2855,25 +2855,25 @@ static int alpn_value_ok(const unsigned char *protos, unsigned int protos_len)
 int SSL_CTX_set_alpn_protos(SSL_CTX *ctx, const unsigned char *protos,
                             unsigned int protos_len)
 {
-    unsigned char *alpn; 
- 
-    if (protos_len == 0 || protos == NULL) { 
-        OPENSSL_free(ctx->ext.alpn); 
-        ctx->ext.alpn = NULL; 
-        ctx->ext.alpn_len = 0; 
-        return 0; 
-    } 
-    /* Not valid per RFC */ 
-    if (!alpn_value_ok(protos, protos_len)) 
-        return 1; 
- 
-    alpn = OPENSSL_memdup(protos, protos_len); 
-    if (alpn == NULL) { 
+    unsigned char *alpn;
+
+    if (protos_len == 0 || protos == NULL) {
+        OPENSSL_free(ctx->ext.alpn);
+        ctx->ext.alpn = NULL;
+        ctx->ext.alpn_len = 0;
+        return 0;
+    }
+    /* Not valid per RFC */
+    if (!alpn_value_ok(protos, protos_len))
+        return 1;
+
+    alpn = OPENSSL_memdup(protos, protos_len);
+    if (alpn == NULL) {
         SSLerr(SSL_F_SSL_CTX_SET_ALPN_PROTOS, ERR_R_MALLOC_FAILURE);
         return 1;
     }
-    OPENSSL_free(ctx->ext.alpn); 
-    ctx->ext.alpn = alpn; 
+    OPENSSL_free(ctx->ext.alpn);
+    ctx->ext.alpn = alpn;
     ctx->ext.alpn_len = protos_len;
 
     return 0;
@@ -2887,25 +2887,25 @@ int SSL_CTX_set_alpn_protos(SSL_CTX *ctx, const unsigned char *protos,
 int SSL_set_alpn_protos(SSL *ssl, const unsigned char *protos,
                         unsigned int protos_len)
 {
-    unsigned char *alpn; 
- 
-    if (protos_len == 0 || protos == NULL) { 
-        OPENSSL_free(ssl->ext.alpn); 
-        ssl->ext.alpn = NULL; 
-        ssl->ext.alpn_len = 0; 
-        return 0; 
-    } 
-    /* Not valid per RFC */ 
-    if (!alpn_value_ok(protos, protos_len)) 
-        return 1; 
- 
-    alpn = OPENSSL_memdup(protos, protos_len); 
-    if (alpn == NULL) { 
+    unsigned char *alpn;
+
+    if (protos_len == 0 || protos == NULL) {
+        OPENSSL_free(ssl->ext.alpn);
+        ssl->ext.alpn = NULL;
+        ssl->ext.alpn_len = 0;
+        return 0;
+    }
+    /* Not valid per RFC */
+    if (!alpn_value_ok(protos, protos_len))
+        return 1;
+
+    alpn = OPENSSL_memdup(protos, protos_len);
+    if (alpn == NULL) {
         SSLerr(SSL_F_SSL_SET_ALPN_PROTOS, ERR_R_MALLOC_FAILURE);
         return 1;
     }
-    OPENSSL_free(ssl->ext.alpn); 
-    ssl->ext.alpn = alpn; 
+    OPENSSL_free(ssl->ext.alpn);
+    ssl->ext.alpn = alpn;
     ssl->ext.alpn_len = protos_len;
 
     return 0;
@@ -2947,8 +2947,8 @@ int SSL_export_keying_material(SSL *s, unsigned char *out, size_t olen,
                                const unsigned char *context, size_t contextlen,
                                int use_context)
 {
-    if (s->session == NULL 
-        || (s->version < TLS1_VERSION && s->version != DTLS1_BAD_VER)) 
+    if (s->session == NULL
+        || (s->version < TLS1_VERSION && s->version != DTLS1_BAD_VER))
         return -1;
 
     return s->method->ssl3_enc->export_keying_material(s, out, olen, label,
@@ -3877,8 +3877,8 @@ SSL *SSL_dup(SSL *s)
         goto err;
     ret->version = s->version;
     ret->options = s->options;
-    ret->min_proto_version = s->min_proto_version; 
-    ret->max_proto_version = s->max_proto_version; 
+    ret->min_proto_version = s->min_proto_version;
+    ret->max_proto_version = s->max_proto_version;
     ret->mode = s->mode;
     SSL_set_max_cert_list(ret, SSL_get_max_cert_list(s));
     SSL_set_read_ahead(ret, SSL_get_read_ahead(s));
@@ -4562,11 +4562,11 @@ int ssl_handshake_hash(SSL *s, unsigned char *out, size_t outlen,
     }
 
     ctx = EVP_MD_CTX_new();
-    if (ctx == NULL) { 
-        SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_SSL_HANDSHAKE_HASH, 
-                 ERR_R_INTERNAL_ERROR); 
+    if (ctx == NULL) {
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_SSL_HANDSHAKE_HASH,
+                 ERR_R_INTERNAL_ERROR);
         goto err;
-    } 
+    }
 
     if (!EVP_MD_CTX_copy_ex(ctx, hdgst)
         || EVP_DigestFinal_ex(ctx, out, NULL) <= 0) {

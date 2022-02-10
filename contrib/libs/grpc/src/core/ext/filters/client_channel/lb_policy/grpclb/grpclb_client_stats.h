@@ -23,8 +23,8 @@
 
 #include <grpc/support/atm.h>
 
-#include "y_absl/container/inlined_vector.h" 
- 
+#include "y_absl/container/inlined_vector.h"
+
 #include "src/core/lib/gprpp/memory.h"
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/sync.h"
@@ -41,7 +41,7 @@ class GrpcLbClientStats : public RefCounted<GrpcLbClientStats> {
         : token(std::move(token)), count(count) {}
   };
 
-  typedef y_absl::InlinedVector<DropTokenCount, 10> DroppedCallCounts; 
+  typedef y_absl::InlinedVector<DropTokenCount, 10> DroppedCallCounts;
 
   void AddCallStarted();
   void AddCallFinished(bool finished_with_client_failed_to_send,

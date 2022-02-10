@@ -19,8 +19,8 @@
 #ifndef GRPCPP_IMPL_CODEGEN_INTERCEPTOR_H
 #define GRPCPP_IMPL_CODEGEN_INTERCEPTOR_H
 
-#include <memory> 
- 
+#include <memory>
+
 #include <grpc/impl/codegen/grpc_types.h>
 #include <grpcpp/impl/codegen/byte_buffer.h>
 #include <grpcpp/impl/codegen/config.h>
@@ -157,7 +157,7 @@ class InterceptorBatchMethods {
   /// Returns a modifiable multimap of the initial metadata to be sent. Valid
   /// for PRE_SEND_INITIAL_METADATA interceptions. A value of nullptr indicates
   /// that this field is not valid.
-  virtual std::multimap<TString, TString>* GetSendInitialMetadata() = 0; 
+  virtual std::multimap<TString, TString>* GetSendInitialMetadata() = 0;
 
   /// Returns the status to be sent. Valid for PRE_SEND_STATUS interceptions.
   virtual Status GetSendStatus() = 0;
@@ -169,7 +169,7 @@ class InterceptorBatchMethods {
   /// Returns a modifiable multimap of the trailing metadata to be sent. Valid
   /// for PRE_SEND_STATUS interceptions. A value of nullptr indicates
   /// that this field is not valid.
-  virtual std::multimap<TString, TString>* 
+  virtual std::multimap<TString, TString>*
   GetSendTrailingMetadata() = 0;
 
   /// Returns a pointer to the modifiable received message. Note that the

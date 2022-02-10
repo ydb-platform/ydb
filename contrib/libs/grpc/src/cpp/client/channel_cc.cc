@@ -41,10 +41,10 @@
 #include "src/core/lib/gpr/string.h"
 #include "src/core/lib/surface/completion_queue.h"
 
-namespace grpc { 
+namespace grpc {
 
 static ::grpc::internal::GrpcLibraryInitializer g_gli_initializer;
-Channel::Channel(const TString& host, grpc_channel* channel, 
+Channel::Channel(const TString& host, grpc_channel* channel,
                  std::vector<std::unique_ptr<
                      ::grpc::experimental::ClientInterceptorFactoryInterface>>
                      interceptor_creators)
@@ -63,31 +63,31 @@ Channel::~Channel() {
 namespace {
 
 inline grpc_slice SliceFromArray(const char* arr, size_t len) {
-  return g_core_codegen_interface->grpc_slice_from_copied_buffer(arr, len); 
+  return g_core_codegen_interface->grpc_slice_from_copied_buffer(arr, len);
 }
 
-TString GetChannelInfoField(grpc_channel* channel, 
-                                grpc_channel_info* channel_info, 
-                                char*** channel_info_field) { 
+TString GetChannelInfoField(grpc_channel* channel,
+                                grpc_channel_info* channel_info,
+                                char*** channel_info_field) {
   char* value = nullptr;
   memset(channel_info, 0, sizeof(*channel_info));
   *channel_info_field = &value;
   grpc_channel_get_info(channel, channel_info);
   if (value == nullptr) return "";
-  TString result = value; 
+  TString result = value;
   gpr_free(value);
   return result;
 }
 
 }  // namespace
 
-TString Channel::GetLoadBalancingPolicyName() const { 
+TString Channel::GetLoadBalancingPolicyName() const {
   grpc_channel_info channel_info;
   return GetChannelInfoField(c_channel_, &channel_info,
                              &channel_info.lb_policy_name);
 }
 
-TString Channel::GetServiceConfigJSON() const { 
+TString Channel::GetServiceConfigJSON() const {
   grpc_channel_info channel_info;
   return GetChannelInfoField(c_channel_, &channel_info,
                              &channel_info.service_config_json);
@@ -112,7 +112,7 @@ void ChannelResetConnectionBackoff(Channel* channel) {
         context->propagation_options_.c_bitmask(), cq->cq(),
         method.channel_tag(), context->raw_deadline(), nullptr);
   } else {
-    const ::TString* host_str = nullptr; 
+    const ::TString* host_str = nullptr;
     if (!context->authority_.empty()) {
       host_str = &context->authority_;
     } else if (!host_.empty()) {
@@ -249,4 +249,4 @@ class ShutdownCallback : public grpc_experimental_completion_queue_functor {
   return callback_cq_;
 }
 
-}  // namespace grpc 
+}  // namespace grpc

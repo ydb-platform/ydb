@@ -56,10 +56,10 @@ namespace testing {
 namespace {
 
 struct TestScenario {
-  TestScenario(const TString& creds_type, const TString& content) 
+  TestScenario(const TString& creds_type, const TString& content)
       : credentials_type(creds_type), message_content(content) {}
-  const TString credentials_type; 
-  const TString message_content; 
+  const TString credentials_type;
+  const TString message_content;
 };
 
 class FlakyNetworkTest : public ::testing::TestWithParam<TestScenario> {
@@ -191,7 +191,7 @@ class FlakyNetworkTest : public ::testing::TestWithParam<TestScenario> {
   }
 
   std::shared_ptr<Channel> BuildChannel(
-      const TString& lb_policy_name, 
+      const TString& lb_policy_name,
       ChannelArguments args = ChannelArguments()) {
     if (lb_policy_name.size() > 0) {
       args.SetLoadBalancingPolicyName(lb_policy_name);
@@ -213,9 +213,9 @@ class FlakyNetworkTest : public ::testing::TestWithParam<TestScenario> {
     ClientContext context;
     if (timeout_ms > 0) {
       context.set_deadline(grpc_timeout_milliseconds_to_deadline(timeout_ms));
-      // Allow an RPC to be canceled (for deadline exceeded) after it has 
-      // reached the server. 
-      request.mutable_param()->set_skip_cancelled_check(true); 
+      // Allow an RPC to be canceled (for deadline exceeded) after it has
+      // reached the server.
+      request.mutable_param()->set_skip_cancelled_check(true);
     }
     // See https://github.com/grpc/grpc/blob/master/doc/wait-for-ready.md for
     // details of wait-for-ready semantics
@@ -243,16 +243,16 @@ class FlakyNetworkTest : public ::testing::TestWithParam<TestScenario> {
 
   struct ServerData {
     int port_;
-    const TString creds_; 
+    const TString creds_;
     std::unique_ptr<Server> server_;
     TestServiceImpl service_;
     std::unique_ptr<std::thread> thread_;
     bool server_ready_ = false;
 
-    ServerData(int port, const TString& creds) 
+    ServerData(int port, const TString& creds)
         : port_(port), creds_(creds) {}
 
-    void Start(const TString& server_host) { 
+    void Start(const TString& server_host) {
       gpr_log(GPR_INFO, "starting server on port %d", port_);
       std::mutex mu;
       std::unique_lock<std::mutex> lock(mu);
@@ -264,7 +264,7 @@ class FlakyNetworkTest : public ::testing::TestWithParam<TestScenario> {
       gpr_log(GPR_INFO, "server startup complete");
     }
 
-    void Serve(const TString& server_host, std::mutex* mu, 
+    void Serve(const TString& server_host, std::mutex* mu,
                std::condition_variable* cond) {
       std::ostringstream server_address;
       server_address << server_host << ":" << port_;
@@ -308,10 +308,10 @@ class FlakyNetworkTest : public ::testing::TestWithParam<TestScenario> {
   }
 
  private:
-  const TString server_host_; 
-  const TString interface_; 
-  const TString ipv4_address_; 
-  const TString netmask_; 
+  const TString server_host_;
+  const TString interface_;
+  const TString ipv4_address_;
+  const TString netmask_;
   std::unique_ptr<grpc::testing::EchoTestService::Stub> stub_;
   std::unique_ptr<ServerData> server_;
   const int SERVER_PORT = 32750;
@@ -320,8 +320,8 @@ class FlakyNetworkTest : public ::testing::TestWithParam<TestScenario> {
 
 std::vector<TestScenario> CreateTestScenarios() {
   std::vector<TestScenario> scenarios;
-  std::vector<TString> credentials_types; 
-  std::vector<TString> messages; 
+  std::vector<TString> credentials_types;
+  std::vector<TString> messages;
 
   credentials_types.push_back(kInsecureCredentialsType);
   auto sec_list = GetCredentialsProvider()->GetSecureCredentialsTypeList();
@@ -331,7 +331,7 @@ std::vector<TestScenario> CreateTestScenarios() {
 
   messages.push_back("🖖");
   for (size_t k = 1; k < GRPC_DEFAULT_MAX_RECV_MESSAGE_LENGTH / 1024; k *= 32) {
-    TString big_msg; 
+    TString big_msg;
     for (size_t i = 0; i < k * 1024; ++i) {
       char c = 'a' + (i % 26);
       big_msg += c;
@@ -552,7 +552,7 @@ TEST_P(FlakyNetworkTest, ServerRestartKeepaliveDisabled) {
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
-  grpc::testing::TestEnvironment env(argc, argv); 
+  grpc::testing::TestEnvironment env(argc, argv);
   auto result = RUN_ALL_TESTS();
   return result;
 }

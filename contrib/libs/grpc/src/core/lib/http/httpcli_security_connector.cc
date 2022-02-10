@@ -22,9 +22,9 @@
 
 #include <string.h>
 
-#include "y_absl/strings/str_cat.h" 
-#include "y_absl/strings/string_view.h" 
- 
+#include "y_absl/strings/str_cat.h"
+#include "y_absl/strings/string_view.h"
+
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include <grpc/support/string_util.h>
@@ -96,10 +96,10 @@ class grpc_httpcli_ssl_channel_security_connector final
     /* Check the peer name. */
     if (secure_peer_name_ != nullptr &&
         !tsi_ssl_peer_matches_name(&peer, secure_peer_name_)) {
-      error = GRPC_ERROR_CREATE_FROM_COPIED_STRING( 
-          y_absl::StrCat("Peer name ", secure_peer_name_, 
-                       " is not in peer certificate") 
-              .c_str()); 
+      error = GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat("Peer name ", secure_peer_name_,
+                       " is not in peer certificate")
+              .c_str());
     }
     grpc_core::ExecCtx::Run(DEBUG_LOCATION, on_peer_checked, error);
     tsi_peer_destruct(&peer);
@@ -112,7 +112,7 @@ class grpc_httpcli_ssl_channel_security_connector final
     return strcmp(secure_peer_name_, other->secure_peer_name_);
   }
 
-  bool check_call_host(y_absl::string_view /*host*/, 
+  bool check_call_host(y_absl::string_view /*host*/,
                        grpc_auth_context* /*auth_context*/,
                        grpc_closure* /*on_call_host_checked*/,
                        grpc_error** error) override {

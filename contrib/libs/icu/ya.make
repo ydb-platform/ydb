@@ -8,16 +8,16 @@ VERSION(67.1)
 
 ORIGINAL_SOURCE(https://github.com/unicode-org/icu/releases/download/release-67-1/icu4c-67_1-src.tgz)
 
-LICENSE( 
-    BSD-3-Clause AND 
-    Custom-Punycode AND 
-    ICU AND 
-    Unicode AND 
-    Unicode-Icu-58 
-) 
+LICENSE(
+    BSD-3-Clause AND
+    Custom-Punycode AND
+    ICU AND
+    Unicode AND
+    Unicode-Icu-58
+)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 ADDINCL(
     GLOBAL contrib/libs/icu/include
     contrib/libs/icu/common
@@ -45,7 +45,7 @@ ELSE()
     )
 ENDIF()
 
-CXXFLAGS(-std=c++17) 
+CXXFLAGS(-std=c++17)
 
 SRCS(
     common/appendable.cpp

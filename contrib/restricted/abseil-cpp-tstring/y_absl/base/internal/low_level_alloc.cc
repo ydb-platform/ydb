@@ -598,7 +598,7 @@ static void *DoAllocWithArena(size_t request, LowLevelAlloc::Arena *arena) {
     section.Leave();
     result = &s->levels;
   }
-  ABSL_ANNOTATE_MEMORY_IS_UNINITIALIZED(result, request); 
+  ABSL_ANNOTATE_MEMORY_IS_UNINITIALIZED(result, request);
   return result;
 }
 

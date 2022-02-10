@@ -3,13 +3,13 @@
 
 .globl	sha256_block_ppc
 .type	sha256_block_ppc,@function
-.section	".opd","aw" 
-.align	3 
-sha256_block_ppc: 
-.quad	.sha256_block_ppc,.TOC.@tocbase,0 
-.previous 
+.section	".opd","aw"
+.align	3
+sha256_block_ppc:
+.quad	.sha256_block_ppc,.TOC.@tocbase,0
+.previous
 .align	6
-.sha256_block_ppc: 
+.sha256_block_ppc:
 	stdu	1,-320(1)
 	mflr	0
 	sldi	5,5,6
@@ -133,7 +133,7 @@ sha256_block_ppc:
 .align	4
 .Lsha2_block_private:
 	lwz	0,0(7)
-	lwz	16,0(31) 
+	lwz	16,0(31)
 	rotrwi	3,12,6
 	rotrwi	4,12,11
 	and	5,6,12
@@ -162,7 +162,7 @@ sha256_block_ppc:
 	add	15,15,3
 	add	15,15,5
 
-	lwz	17,4(31) 
+	lwz	17,4(31)
 	rotrwi	3,11,6
 	rotrwi	4,11,11
 	and	5,12,11
@@ -191,7 +191,7 @@ sha256_block_ppc:
 	add	14,14,3
 	add	14,14,5
 
-	lwz	18,8(31) 
+	lwz	18,8(31)
 	rotrwi	3,10,6
 	rotrwi	4,10,11
 	and	5,11,10
@@ -220,7 +220,7 @@ sha256_block_ppc:
 	add	6,6,3
 	add	6,6,5
 
-	lwz	19,12(31) 
+	lwz	19,12(31)
 	rotrwi	3,9,6
 	rotrwi	4,9,11
 	and	5,10,9
@@ -249,7 +249,7 @@ sha256_block_ppc:
 	add	12,12,3
 	add	12,12,5
 
-	lwz	20,16(31) 
+	lwz	20,16(31)
 	rotrwi	3,8,6
 	rotrwi	4,8,11
 	and	5,9,8
@@ -278,7 +278,7 @@ sha256_block_ppc:
 	add	11,11,3
 	add	11,11,5
 
-	lwz	21,20(31) 
+	lwz	21,20(31)
 	rotrwi	3,15,6
 	rotrwi	4,15,11
 	and	5,8,15
@@ -307,7 +307,7 @@ sha256_block_ppc:
 	add	10,10,3
 	add	10,10,5
 
-	lwz	22,24(31) 
+	lwz	22,24(31)
 	rotrwi	3,14,6
 	rotrwi	4,14,11
 	and	5,15,14
@@ -336,7 +336,7 @@ sha256_block_ppc:
 	add	9,9,3
 	add	9,9,5
 
-	lwz	23,28(31) 
+	lwz	23,28(31)
 	rotrwi	3,6,6
 	rotrwi	4,6,11
 	and	5,14,6
@@ -365,7 +365,7 @@ sha256_block_ppc:
 	add	8,8,3
 	add	8,8,5
 
-	lwz	24,32(31) 
+	lwz	24,32(31)
 	rotrwi	3,12,6
 	rotrwi	4,12,11
 	and	5,6,12
@@ -394,7 +394,7 @@ sha256_block_ppc:
 	add	15,15,3
 	add	15,15,5
 
-	lwz	25,36(31) 
+	lwz	25,36(31)
 	rotrwi	3,11,6
 	rotrwi	4,11,11
 	and	5,12,11
@@ -423,7 +423,7 @@ sha256_block_ppc:
 	add	14,14,3
 	add	14,14,5
 
-	lwz	26,40(31) 
+	lwz	26,40(31)
 	rotrwi	3,10,6
 	rotrwi	4,10,11
 	and	5,11,10
@@ -452,7 +452,7 @@ sha256_block_ppc:
 	add	6,6,3
 	add	6,6,5
 
-	lwz	27,44(31) 
+	lwz	27,44(31)
 	rotrwi	3,9,6
 	rotrwi	4,9,11
 	and	5,10,9
@@ -481,7 +481,7 @@ sha256_block_ppc:
 	add	12,12,3
 	add	12,12,5
 
-	lwz	28,48(31) 
+	lwz	28,48(31)
 	rotrwi	3,8,6
 	rotrwi	4,8,11
 	and	5,9,8
@@ -510,7 +510,7 @@ sha256_block_ppc:
 	add	11,11,3
 	add	11,11,5
 
-	lwz	29,52(31) 
+	lwz	29,52(31)
 	rotrwi	3,15,6
 	rotrwi	4,15,11
 	and	5,8,15
@@ -539,7 +539,7 @@ sha256_block_ppc:
 	add	10,10,3
 	add	10,10,5
 
-	lwz	30,56(31) 
+	lwz	30,56(31)
 	rotrwi	3,14,6
 	rotrwi	4,14,11
 	and	5,15,14
@@ -568,7 +568,7 @@ sha256_block_ppc:
 	add	9,9,3
 	add	9,9,5
 
-	lwz	31,60(31) 
+	lwz	31,60(31)
 	rotrwi	3,6,6
 	rotrwi	4,6,11
 	and	5,14,6
@@ -1295,8 +1295,8 @@ sha256_block_ppc:
 	blr	
 .long	0
 .byte	0,12,0x14,0,0,0,0,0
-.size	.sha256_block_ppc,.-.sha256_block_ppc 
-.size	sha256_block_ppc,.-.sha256_block_ppc 
+.size	.sha256_block_ppc,.-.sha256_block_ppc
+.size	sha256_block_ppc,.-.sha256_block_ppc
 .align	6
 .LPICmeup:
 	mflr	0

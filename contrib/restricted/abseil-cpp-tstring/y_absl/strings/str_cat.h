@@ -256,7 +256,7 @@ class AlphaNum {
   AlphaNum(const TString& str)
       : piece_(str.data(), str.size()) {}
 
-  // Use string literals ":" instead of character literals ':'. 
+  // Use string literals ":" instead of character literals ':'.
   AlphaNum(char c) = delete;  // NOLINT(runtime/explicit)
 
   AlphaNum(const AlphaNum&) = delete;

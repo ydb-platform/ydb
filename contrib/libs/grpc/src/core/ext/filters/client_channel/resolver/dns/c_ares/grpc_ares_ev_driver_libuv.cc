@@ -20,8 +20,8 @@
 #include "src/core/lib/iomgr/port.h"
 #if GRPC_ARES == 1 && defined(GRPC_UV)
 
-#include "y_absl/strings/str_format.h" 
- 
+#include "y_absl/strings/str_format.h"
+
 #include <ares.h>
 #error #include <uv.h>
 
@@ -33,7 +33,7 @@
 #include <grpc/support/time.h>
 #include "src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper.h"
 #include "src/core/lib/gpr/string.h"
-#include "src/core/lib/iomgr/work_serializer.h" 
+#include "src/core/lib/iomgr/work_serializer.h"
 
 namespace grpc_core {
 
@@ -43,11 +43,11 @@ void ares_uv_poll_close_cb(uv_handle_t* handle) { delete handle; }
 
 class GrpcPolledFdLibuv : public GrpcPolledFd {
  public:
-  GrpcPolledFdLibuv(ares_socket_t as, 
-                    std::shared_ptr<WorkSerializer> work_serializer) 
-      : name_(y_absl::StrFormat("c-ares socket: %" PRIdPTR, (intptr_t)as)), 
-        as_(as), 
-        work_serializer_(std::move(work_serializer)) { 
+  GrpcPolledFdLibuv(ares_socket_t as,
+                    std::shared_ptr<WorkSerializer> work_serializer)
+      : name_(y_absl::StrFormat("c-ares socket: %" PRIdPTR, (intptr_t)as)),
+        as_(as),
+        work_serializer_(std::move(work_serializer)) {
     handle_ = new uv_poll_t();
     uv_poll_init_socket(uv_default_loop(), handle_, as);
     handle_->data = this;
@@ -99,16 +99,16 @@ class GrpcPolledFdLibuv : public GrpcPolledFd {
 
   ares_socket_t GetWrappedAresSocketLocked() override { return as_; }
 
-  const char* GetName() override { return name_.c_str(); } 
+  const char* GetName() override { return name_.c_str(); }
 
-  // TODO(apolcyn): Data members should be private. 
-  TString name_; 
+  // TODO(apolcyn): Data members should be private.
+  TString name_;
   ares_socket_t as_;
   uv_poll_t* handle_;
   grpc_closure* read_closure_ = nullptr;
   grpc_closure* write_closure_ = nullptr;
   int poll_events_ = 0;
-  std::shared_ptr<WorkSerializer> work_serializer_; 
+  std::shared_ptr<WorkSerializer> work_serializer_;
 };
 
 struct AresUvPollCbArg {
@@ -120,14 +120,14 @@ struct AresUvPollCbArg {
   int events;
 };
 
-static void ares_uv_poll_cb_locked(AresUvPollCbArg* arg) { 
-  std::unique_ptr<AresUvPollCbArg> arg_struct(arg); 
+static void ares_uv_poll_cb_locked(AresUvPollCbArg* arg) {
+  std::unique_ptr<AresUvPollCbArg> arg_struct(arg);
   uv_poll_t* handle = arg_struct->handle;
   int status = arg_struct->status;
   int events = arg_struct->events;
   GrpcPolledFdLibuv* polled_fd =
       reinterpret_cast<GrpcPolledFdLibuv*>(handle->data);
-  grpc_error* error = GRPC_ERROR_NONE; 
+  grpc_error* error = GRPC_ERROR_NONE;
   if (status < 0) {
     error = GRPC_ERROR_CREATE_FROM_STATIC_STRING("cares polling error");
     error =
@@ -154,24 +154,24 @@ void ares_uv_poll_cb(uv_poll_t* handle, int status, int events) {
   GrpcPolledFdLibuv* polled_fd =
       reinterpret_cast<GrpcPolledFdLibuv*>(handle->data);
   AresUvPollCbArg* arg = new AresUvPollCbArg(handle, status, events);
-  polled_fd->work_serializer_->Run([arg]() { ares_uv_poll_cb_locked(arg); }, 
-                                   DEBUG_LOCATION); 
+  polled_fd->work_serializer_->Run([arg]() { ares_uv_poll_cb_locked(arg); },
+                                   DEBUG_LOCATION);
 }
 
 class GrpcPolledFdFactoryLibuv : public GrpcPolledFdFactory {
  public:
-  GrpcPolledFd* NewGrpcPolledFdLocked( 
-      ares_socket_t as, grpc_pollset_set* driver_pollset_set, 
-      std::shared_ptr<WorkSerializer> work_serializer) override { 
-    return new GrpcPolledFdLibuv(as, std::move(work_serializer)); 
+  GrpcPolledFd* NewGrpcPolledFdLocked(
+      ares_socket_t as, grpc_pollset_set* driver_pollset_set,
+      std::shared_ptr<WorkSerializer> work_serializer) override {
+    return new GrpcPolledFdLibuv(as, std::move(work_serializer));
   }
 
   void ConfigureAresChannelLocked(ares_channel channel) override {}
 };
 
 std::unique_ptr<GrpcPolledFdFactory> NewGrpcPolledFdFactory(
-    std::shared_ptr<WorkSerializer> work_serializer) { 
-  return y_absl::make_unique<GrpcPolledFdFactoryLibuv>(); 
+    std::shared_ptr<WorkSerializer> work_serializer) {
+  return y_absl::make_unique<GrpcPolledFdFactoryLibuv>();
 }
 
 }  // namespace grpc_core

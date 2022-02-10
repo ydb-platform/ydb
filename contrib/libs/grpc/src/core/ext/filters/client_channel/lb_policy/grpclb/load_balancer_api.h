@@ -21,8 +21,8 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <vector> 
- 
+#include <vector>
+
 #include <grpc/slice_buffer.h>
 
 #include "src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb_client_stats.h"
@@ -37,36 +37,36 @@ namespace grpc_core {
 
 // Contains server information. When the drop field is not true, use the other
 // fields.
-struct GrpcLbServer { 
-  int32_t ip_size; 
-  char ip_addr[GRPC_GRPCLB_SERVER_IP_ADDRESS_MAX_SIZE]; 
+struct GrpcLbServer {
+  int32_t ip_size;
+  char ip_addr[GRPC_GRPCLB_SERVER_IP_ADDRESS_MAX_SIZE];
   int32_t port;
   char load_balance_token[GRPC_GRPCLB_SERVER_LOAD_BALANCE_TOKEN_MAX_SIZE];
   bool drop;
 
-  bool operator==(const GrpcLbServer& other) const; 
-}; 
+  bool operator==(const GrpcLbServer& other) const;
+};
 
-struct GrpcLbResponse { 
-  enum { INITIAL, SERVERLIST, FALLBACK } type; 
-  grpc_millis client_stats_report_interval = 0; 
-  std::vector<GrpcLbServer> serverlist; 
-}; 
+struct GrpcLbResponse {
+  enum { INITIAL, SERVERLIST, FALLBACK } type;
+  grpc_millis client_stats_report_interval = 0;
+  std::vector<GrpcLbServer> serverlist;
+};
 
-// Creates a serialized grpclb request. 
-grpc_slice GrpcLbRequestCreate(const char* lb_service_name, upb_arena* arena); 
+// Creates a serialized grpclb request.
+grpc_slice GrpcLbRequestCreate(const char* lb_service_name, upb_arena* arena);
 
-// Creates a serialized grpclb load report request. 
-grpc_slice GrpcLbLoadReportRequestCreate( 
-    int64_t num_calls_started, int64_t num_calls_finished, 
-    int64_t num_calls_finished_with_client_failed_to_send, 
-    int64_t num_calls_finished_known_received, 
-    const GrpcLbClientStats::DroppedCallCounts* drop_token_counts, 
-    upb_arena* arena); 
+// Creates a serialized grpclb load report request.
+grpc_slice GrpcLbLoadReportRequestCreate(
+    int64_t num_calls_started, int64_t num_calls_finished,
+    int64_t num_calls_finished_with_client_failed_to_send,
+    int64_t num_calls_finished_known_received,
+    const GrpcLbClientStats::DroppedCallCounts* drop_token_counts,
+    upb_arena* arena);
 
-// Deserialize a grpclb response. 
-bool GrpcLbResponseParse(const grpc_slice& serialized_response, 
-                         upb_arena* arena, GrpcLbResponse* response); 
+// Deserialize a grpclb response.
+bool GrpcLbResponseParse(const grpc_slice& serialized_response,
+                         upb_arena* arena, GrpcLbResponse* response);
 
 }  // namespace grpc_core
 

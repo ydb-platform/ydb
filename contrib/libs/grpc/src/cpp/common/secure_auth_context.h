@@ -37,19 +37,19 @@ class SecureAuthContext final : public AuthContext {
 
   std::vector<grpc::string_ref> GetPeerIdentity() const override;
 
-  TString GetPeerIdentityPropertyName() const override; 
+  TString GetPeerIdentityPropertyName() const override;
 
   std::vector<grpc::string_ref> FindPropertyValues(
-      const TString& name) const override; 
+      const TString& name) const override;
 
   AuthPropertyIterator begin() const override;
 
   AuthPropertyIterator end() const override;
 
-  void AddProperty(const TString& key, 
+  void AddProperty(const TString& key,
                    const grpc::string_ref& value) override;
 
-  virtual bool SetPeerIdentityPropertyName(const TString& name) override; 
+  virtual bool SetPeerIdentityPropertyName(const TString& name) override;
 
  private:
   grpc_core::RefCountedPtr<grpc_auth_context> ctx_;

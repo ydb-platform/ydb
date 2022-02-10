@@ -1,9 +1,9 @@
 UNITTEST()
 
-WITHOUT_LICENSE_TEXTS() 
+WITHOUT_LICENSE_TEXTS()
 
-OWNER(somov) 
- 
+OWNER(somov)
+
 SRCS(
     libunwind_ut.cpp
 )

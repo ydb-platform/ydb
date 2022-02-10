@@ -30,63 +30,63 @@ namespace container_internal {
 // containers - that chain of allocators uses the same state and is
 // thus easier to query for aggregate allocation information.
 template <typename T>
-class CountingAllocator { 
+class CountingAllocator {
  public:
-  using Allocator = std::allocator<T>; 
-  using AllocatorTraits = std::allocator_traits<Allocator>; 
-  using value_type = typename AllocatorTraits::value_type; 
-  using pointer = typename AllocatorTraits::pointer; 
-  using const_pointer = typename AllocatorTraits::const_pointer; 
-  using size_type = typename AllocatorTraits::size_type; 
-  using difference_type = typename AllocatorTraits::difference_type; 
+  using Allocator = std::allocator<T>;
+  using AllocatorTraits = std::allocator_traits<Allocator>;
+  using value_type = typename AllocatorTraits::value_type;
+  using pointer = typename AllocatorTraits::pointer;
+  using const_pointer = typename AllocatorTraits::const_pointer;
+  using size_type = typename AllocatorTraits::size_type;
+  using difference_type = typename AllocatorTraits::difference_type;
 
-  CountingAllocator() = default; 
-  explicit CountingAllocator(int64_t* bytes_used) : bytes_used_(bytes_used) {} 
-  CountingAllocator(int64_t* bytes_used, int64_t* instance_count) 
-      : bytes_used_(bytes_used), instance_count_(instance_count) {} 
+  CountingAllocator() = default;
+  explicit CountingAllocator(int64_t* bytes_used) : bytes_used_(bytes_used) {}
+  CountingAllocator(int64_t* bytes_used, int64_t* instance_count)
+      : bytes_used_(bytes_used), instance_count_(instance_count) {}
 
   template <typename U>
   CountingAllocator(const CountingAllocator<U>& x)
-      : bytes_used_(x.bytes_used_), instance_count_(x.instance_count_) {} 
+      : bytes_used_(x.bytes_used_), instance_count_(x.instance_count_) {}
 
-  pointer allocate( 
-      size_type n, 
-      typename AllocatorTraits::const_void_pointer hint = nullptr) { 
-    Allocator allocator; 
-    pointer ptr = AllocatorTraits::allocate(allocator, n, hint); 
-    if (bytes_used_ != nullptr) { 
-      *bytes_used_ += n * sizeof(T); 
-    } 
-    return ptr; 
+  pointer allocate(
+      size_type n,
+      typename AllocatorTraits::const_void_pointer hint = nullptr) {
+    Allocator allocator;
+    pointer ptr = AllocatorTraits::allocate(allocator, n, hint);
+    if (bytes_used_ != nullptr) {
+      *bytes_used_ += n * sizeof(T);
+    }
+    return ptr;
   }
 
   void deallocate(pointer p, size_type n) {
-    Allocator allocator; 
-    AllocatorTraits::deallocate(allocator, p, n); 
-    if (bytes_used_ != nullptr) { 
-      *bytes_used_ -= n * sizeof(T); 
-    } 
+    Allocator allocator;
+    AllocatorTraits::deallocate(allocator, p, n);
+    if (bytes_used_ != nullptr) {
+      *bytes_used_ -= n * sizeof(T);
+    }
   }
 
-  template <typename U, typename... Args> 
-  void construct(U* p, Args&&... args) { 
-    Allocator allocator; 
-    AllocatorTraits::construct(allocator, p, std::forward<Args>(args)...); 
-    if (instance_count_ != nullptr) { 
-      *instance_count_ += 1; 
-    } 
-  } 
- 
-  template <typename U> 
-  void destroy(U* p) { 
-    Allocator allocator; 
-    AllocatorTraits::destroy(allocator, p); 
-    if (instance_count_ != nullptr) { 
-      *instance_count_ -= 1; 
-    } 
-  } 
- 
-  template <typename U> 
+  template <typename U, typename... Args>
+  void construct(U* p, Args&&... args) {
+    Allocator allocator;
+    AllocatorTraits::construct(allocator, p, std::forward<Args>(args)...);
+    if (instance_count_ != nullptr) {
+      *instance_count_ += 1;
+    }
+  }
+
+  template <typename U>
+  void destroy(U* p) {
+    Allocator allocator;
+    AllocatorTraits::destroy(allocator, p);
+    if (instance_count_ != nullptr) {
+      *instance_count_ -= 1;
+    }
+  }
+
+  template <typename U>
   class rebind {
    public:
     using other = CountingAllocator<U>;
@@ -94,8 +94,8 @@ class CountingAllocator {
 
   friend bool operator==(const CountingAllocator& a,
                          const CountingAllocator& b) {
-    return a.bytes_used_ == b.bytes_used_ && 
-           a.instance_count_ == b.instance_count_; 
+    return a.bytes_used_ == b.bytes_used_ &&
+           a.instance_count_ == b.instance_count_;
   }
 
   friend bool operator!=(const CountingAllocator& a,
@@ -103,8 +103,8 @@ class CountingAllocator {
     return !(a == b);
   }
 
-  int64_t* bytes_used_ = nullptr; 
-  int64_t* instance_count_ = nullptr; 
+  int64_t* bytes_used_ = nullptr;
+  int64_t* instance_count_ = nullptr;
 };
 
 }  // namespace container_internal

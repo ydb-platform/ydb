@@ -14,8 +14,8 @@ nonnull-attribute:gsec_test_random_encrypt_decrypt
 nonnull-attribute:gsec_test_multiple_random_encrypt_decrypt
 nonnull-attribute:gsec_test_copy
 nonnull-attribute:gsec_test_encrypt_decrypt_test_vector
-alignment:y_absl::little_endian::Store64 
-alignment:y_absl::little_endian::Load64 
+alignment:y_absl::little_endian::Store64
+alignment:y_absl::little_endian::Load64
 float-divide-by-zero:grpc::testing::postprocess_scenario_result
 enum:grpc_op_string
 signed-integer-overflow:chrono

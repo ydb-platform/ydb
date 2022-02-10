@@ -32,7 +32,7 @@
 #include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/iomgr/iomgr_custom.h"
 #include "src/core/lib/iomgr/resource_quota.h"
-#include "src/core/lib/iomgr/sockaddr_utils.h" 
+#include "src/core/lib/iomgr/sockaddr_utils.h"
 #include "src/core/lib/iomgr/tcp_client.h"
 #include "src/core/lib/iomgr/tcp_custom.h"
 #include "src/core/lib/iomgr/tcp_server.h"
@@ -58,24 +58,24 @@ struct custom_tcp_endpoint {
   gpr_refcount refcount;
   grpc_custom_socket* socket;
 
-  grpc_closure* read_cb = nullptr; 
-  grpc_closure* write_cb = nullptr; 
+  grpc_closure* read_cb = nullptr;
+  grpc_closure* write_cb = nullptr;
 
-  grpc_slice_buffer* read_slices = nullptr; 
-  grpc_slice_buffer* write_slices = nullptr; 
+  grpc_slice_buffer* read_slices = nullptr;
+  grpc_slice_buffer* write_slices = nullptr;
 
   grpc_resource_user* resource_user;
   grpc_resource_user_slice_allocator slice_allocator;
 
   bool shutting_down;
 
-  TString peer_string; 
-  TString local_address; 
+  TString peer_string;
+  TString local_address;
 };
 static void tcp_free(grpc_custom_socket* s) {
   custom_tcp_endpoint* tcp = (custom_tcp_endpoint*)s->endpoint;
   grpc_resource_user_unref(tcp->resource_user);
-  delete tcp; 
+  delete tcp;
   s->refs--;
   if (s->refs == 0) {
     grpc_custom_socket_vtable->destroy(s);
@@ -133,8 +133,8 @@ static void call_read_cb(custom_tcp_endpoint* tcp, grpc_error* error) {
     for (i = 0; i < tcp->read_slices->count; i++) {
       char* dump = grpc_dump_slice(tcp->read_slices->slices[i],
                                    GPR_DUMP_HEX | GPR_DUMP_ASCII);
-      gpr_log(GPR_INFO, "READ %p (peer=%s): %s", tcp, tcp->peer_string.c_str(), 
-              dump); 
+      gpr_log(GPR_INFO, "READ %p (peer=%s): %s", tcp, tcp->peer_string.c_str(),
+              dump);
       gpr_free(dump);
     }
   }
@@ -235,8 +235,8 @@ static void endpoint_write(grpc_endpoint* ep, grpc_slice_buffer* write_slices,
     for (j = 0; j < write_slices->count; j++) {
       char* data = grpc_dump_slice(write_slices->slices[j],
                                    GPR_DUMP_HEX | GPR_DUMP_ASCII);
-      gpr_log(GPR_INFO, "WRITE %p (peer=%s): %s", tcp->socket, 
-              tcp->peer_string.c_str(), data); 
+      gpr_log(GPR_INFO, "WRITE %p (peer=%s): %s", tcp->socket,
+              tcp->peer_string.c_str(), data);
       gpr_free(data);
     }
   }
@@ -319,16 +319,16 @@ static void endpoint_destroy(grpc_endpoint* ep) {
   grpc_custom_socket_vtable->close(tcp->socket, custom_close_callback);
 }
 
-static y_absl::string_view endpoint_get_peer(grpc_endpoint* ep) { 
+static y_absl::string_view endpoint_get_peer(grpc_endpoint* ep) {
   custom_tcp_endpoint* tcp = (custom_tcp_endpoint*)ep;
-  return tcp->peer_string; 
+  return tcp->peer_string;
 }
 
-static y_absl::string_view endpoint_get_local_address(grpc_endpoint* ep) { 
-  custom_tcp_endpoint* tcp = (custom_tcp_endpoint*)ep; 
-  return tcp->local_address; 
-} 
- 
+static y_absl::string_view endpoint_get_local_address(grpc_endpoint* ep) {
+  custom_tcp_endpoint* tcp = (custom_tcp_endpoint*)ep;
+  return tcp->local_address;
+}
+
 static grpc_resource_user* endpoint_get_resource_user(grpc_endpoint* ep) {
   custom_tcp_endpoint* tcp = (custom_tcp_endpoint*)ep;
   return tcp->resource_user;
@@ -347,14 +347,14 @@ static grpc_endpoint_vtable vtable = {endpoint_read,
                                       endpoint_destroy,
                                       endpoint_get_resource_user,
                                       endpoint_get_peer,
-                                      endpoint_get_local_address, 
+                                      endpoint_get_local_address,
                                       endpoint_get_fd,
                                       endpoint_can_track_err};
 
 grpc_endpoint* custom_tcp_endpoint_create(grpc_custom_socket* socket,
                                           grpc_resource_quota* resource_quota,
-                                          const char* peer_string) { 
-  custom_tcp_endpoint* tcp = new custom_tcp_endpoint; 
+                                          const char* peer_string) {
+  custom_tcp_endpoint* tcp = new custom_tcp_endpoint;
   grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
   grpc_core::ExecCtx exec_ctx;
 
@@ -366,17 +366,17 @@ grpc_endpoint* custom_tcp_endpoint_create(grpc_custom_socket* socket,
   tcp->socket = socket;
   tcp->base.vtable = &vtable;
   gpr_ref_init(&tcp->refcount, 1);
-  tcp->peer_string = peer_string; 
-  grpc_resolved_address resolved_local_addr; 
-  resolved_local_addr.len = sizeof(resolved_local_addr.addr); 
-  if (grpc_custom_socket_vtable->getsockname( 
-          socket, reinterpret_cast<sockaddr*>(resolved_local_addr.addr), 
-          reinterpret_cast<int*>(&resolved_local_addr.len)) != 
-      GRPC_ERROR_NONE) { 
-    tcp->local_address = ""; 
-  } else { 
-    tcp->local_address = grpc_sockaddr_to_uri(&resolved_local_addr); 
-  } 
+  tcp->peer_string = peer_string;
+  grpc_resolved_address resolved_local_addr;
+  resolved_local_addr.len = sizeof(resolved_local_addr.addr);
+  if (grpc_custom_socket_vtable->getsockname(
+          socket, reinterpret_cast<sockaddr*>(resolved_local_addr.addr),
+          reinterpret_cast<int*>(&resolved_local_addr.len)) !=
+      GRPC_ERROR_NONE) {
+    tcp->local_address = "";
+  } else {
+    tcp->local_address = grpc_sockaddr_to_uri(&resolved_local_addr);
+  }
   tcp->shutting_down = false;
   tcp->resource_user = grpc_resource_user_create(resource_quota, peer_string);
   grpc_resource_user_slice_allocator_init(

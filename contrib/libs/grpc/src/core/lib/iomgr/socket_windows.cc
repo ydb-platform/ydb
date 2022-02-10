@@ -31,8 +31,8 @@
 
 #undef OPTIONAL
 
-#include "y_absl/strings/str_format.h" 
- 
+#include "y_absl/strings/str_format.h"
+
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include <grpc/support/log_windows.h>
@@ -51,8 +51,8 @@ grpc_winsocket* grpc_winsocket_create(SOCKET socket, const char* name) {
   memset(r, 0, sizeof(grpc_winsocket));
   r->socket = socket;
   gpr_mu_init(&r->state_mu);
-  grpc_iomgr_register_object( 
-      &r->iomgr_object, y_absl::StrFormat("%s:socket=0x%p", name, r).c_str()); 
+  grpc_iomgr_register_object(
+      &r->iomgr_object, y_absl::StrFormat("%s:socket=0x%p", name, r).c_str());
   grpc_iocp_add_socket(r);
   return r;
 }

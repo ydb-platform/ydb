@@ -21,12 +21,12 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <util/generic/string.h> 
- 
-#include <grpc/support/time.h> 
- 
-#include "y_absl/strings/str_format.h" 
-#include "y_absl/time/time.h" 
+#include <util/generic/string.h>
+
+#include <grpc/support/time.h>
+
+#include "y_absl/strings/str_format.h"
+#include "y_absl/time/time.h"
 #include "src/core/lib/security/credentials/credentials.h"
 #include "src/core/lib/security/credentials/jwt/json_token.h"
 
@@ -49,12 +49,12 @@ class grpc_service_account_jwt_access_credentials
   const gpr_timespec& jwt_lifetime() const { return jwt_lifetime_; }
   const grpc_auth_json_key& key() const { return key_; }
 
-  TString debug_string() override { 
-    return y_absl::StrFormat("JWTAccessCredentials{ExpirationTime:%s}", 
-                           y_absl::FormatTime(y_absl::FromUnixMicros( 
-                               gpr_timespec_to_micros(jwt_lifetime_)))); 
-  }; 
- 
+  TString debug_string() override {
+    return y_absl::StrFormat("JWTAccessCredentials{ExpirationTime:%s}",
+                           y_absl::FormatTime(y_absl::FromUnixMicros(
+                               gpr_timespec_to_micros(jwt_lifetime_))));
+  };
+
  private:
   void reset_cache();
 

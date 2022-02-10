@@ -23,12 +23,12 @@
 #include <assert.h>
 #include <string.h>
 
-#include <util/generic/string.h> 
- 
+#include <util/generic/string.h>
+
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 
-#include "src/core/lib/channel/channel_args.h" 
+#include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/iomgr/iomgr_custom.h"
@@ -75,7 +75,7 @@ struct grpc_tcp_server {
   grpc_closure* shutdown_complete;
 
   bool shutdown;
-  bool so_reuseport; 
+  bool so_reuseport;
 
   grpc_resource_quota* resource_quota;
 };
@@ -84,13 +84,13 @@ static grpc_error* tcp_server_create(grpc_closure* shutdown_complete,
                                      const grpc_channel_args* args,
                                      grpc_tcp_server** server) {
   grpc_tcp_server* s = (grpc_tcp_server*)gpr_malloc(sizeof(grpc_tcp_server));
-  // Let the implementation decide if so_reuseport can be enabled or not. 
-  s->so_reuseport = true; 
+  // Let the implementation decide if so_reuseport can be enabled or not.
+  s->so_reuseport = true;
   s->resource_quota = grpc_resource_quota_create(nullptr);
   for (size_t i = 0; i < (args == nullptr ? 0 : args->num_args); i++) {
-    if (!grpc_channel_args_find_bool(args, GRPC_ARG_ALLOW_REUSEPORT, true)) { 
-      s->so_reuseport = false; 
-    } 
+    if (!grpc_channel_args_find_bool(args, GRPC_ARG_ALLOW_REUSEPORT, true)) {
+      s->so_reuseport = false;
+    }
     if (0 == strcmp(GRPC_ARG_RESOURCE_QUOTA, args->args[i].key)) {
       if (args->args[i].type == GRPC_ARG_POINTER) {
         grpc_resource_quota_unref_internal(s->resource_quota);
@@ -216,7 +216,7 @@ static void finish_accept(grpc_tcp_listener* sp, grpc_custom_socket* socket) {
       (grpc_tcp_server_acceptor*)gpr_malloc(sizeof(*acceptor));
   grpc_endpoint* ep = nullptr;
   grpc_resolved_address peer_name;
-  TString peer_name_string; 
+  TString peer_name_string;
   grpc_error* err;
 
   memset(&peer_name, 0, sizeof(grpc_resolved_address));
@@ -230,11 +230,11 @@ static void finish_accept(grpc_tcp_listener* sp, grpc_custom_socket* socket) {
     GRPC_ERROR_UNREF(err);
   }
   if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) {
-    gpr_log(GPR_INFO, "SERVER_CONNECT: %p accepted connection: %s", sp->server, 
-            peer_name_string.c_str()); 
+    gpr_log(GPR_INFO, "SERVER_CONNECT: %p accepted connection: %s", sp->server,
+            peer_name_string.c_str());
   }
   ep = custom_tcp_endpoint_create(socket, sp->server->resource_quota,
-                                  peer_name_string.c_str()); 
+                                  peer_name_string.c_str());
   acceptor->from_server = sp->server;
   acceptor->port_index = sp->port_index;
   acceptor->fd_index = 0;
@@ -283,15 +283,15 @@ static grpc_error* add_socket_to_server(grpc_tcp_server* s,
   grpc_error* error;
   grpc_resolved_address sockname_temp;
 
-  // NOTE(lidiz) The last argument is "flags" which is unused by other 
-  // implementations. Python IO managers uses it to specify SO_REUSEPORT. 
-  int flags = 0; 
-  if (s->so_reuseport) { 
-    flags |= GRPC_CUSTOM_SOCKET_OPT_SO_REUSEPORT; 
-  } 
- 
+  // NOTE(lidiz) The last argument is "flags" which is unused by other
+  // implementations. Python IO managers uses it to specify SO_REUSEPORT.
+  int flags = 0;
+  if (s->so_reuseport) {
+    flags |= GRPC_CUSTOM_SOCKET_OPT_SO_REUSEPORT;
+  }
+
   error = grpc_custom_socket_vtable->bind(socket, (grpc_sockaddr*)addr->addr,
-                                          addr->len, flags); 
+                                          addr->len, flags);
   if (error != GRPC_ERROR_NONE) {
     return error;
   }
@@ -385,9 +385,9 @@ static grpc_error* tcp_server_add_port(grpc_tcp_server* s,
   }
 
   if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) {
-    gpr_log(GPR_INFO, "SERVER %p add_port %s error=%s", s, 
-            grpc_sockaddr_to_string(addr, false).c_str(), 
-            grpc_error_string(error)); 
+    gpr_log(GPR_INFO, "SERVER %p add_port %s error=%s", s,
+            grpc_sockaddr_to_string(addr, false).c_str(),
+            grpc_error_string(error));
   }
 
   family = grpc_sockaddr_get_family(addr);
@@ -417,8 +417,8 @@ static grpc_error* tcp_server_add_port(grpc_tcp_server* s,
   return error;
 }
 
-static void tcp_server_start(grpc_tcp_server* server, 
-                             const std::vector<grpc_pollset*>* /*pollsets*/, 
+static void tcp_server_start(grpc_tcp_server* server,
+                             const std::vector<grpc_pollset*>* /*pollsets*/,
                              grpc_tcp_server_cb on_accept_cb, void* cb_arg) {
   grpc_tcp_listener* sp;
   GRPC_CUSTOM_IOMGR_ASSERT_SAME_THREAD();

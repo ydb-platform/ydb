@@ -22,8 +22,8 @@
 
 #include <string.h>
 
-#include "y_absl/strings/str_cat.h" 
- 
+#include "y_absl/strings/str_cat.h"
+
 #include <grpc/slice_buffer.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
@@ -243,10 +243,10 @@ void HttpConnectHandshaker::OnReadDone(void* arg, grpc_error* error) {
   // Make sure we got a 2xx response.
   if (handshaker->http_response_.status < 200 ||
       handshaker->http_response_.status >= 300) {
-    error = GRPC_ERROR_CREATE_FROM_COPIED_STRING( 
-        y_absl::StrCat("HTTP proxy returned response code ", 
-                     handshaker->http_response_.status) 
-            .c_str()); 
+    error = GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+        y_absl::StrCat("HTTP proxy returned response code ",
+                     handshaker->http_response_.status)
+            .c_str());
     handshaker->HandshakeFailedLocked(error);
     goto done;
   }
@@ -325,9 +325,9 @@ void HttpConnectHandshaker::DoHandshake(grpc_tcp_server_acceptor* /*acceptor*/,
   args_ = args;
   on_handshake_done_ = on_handshake_done;
   // Log connection via proxy.
-  TString proxy_name(grpc_endpoint_get_peer(args->endpoint)); 
+  TString proxy_name(grpc_endpoint_get_peer(args->endpoint));
   gpr_log(GPR_INFO, "Connecting to server %s via HTTP proxy %s", server_name,
-          proxy_name.c_str()); 
+          proxy_name.c_str());
   // Construct HTTP CONNECT request.
   grpc_httpcli_request request;
   request.host = server_name;
@@ -385,5 +385,5 @@ void grpc_http_connect_register_handshaker_factory() {
   using namespace grpc_core;
   HandshakerRegistry::RegisterHandshakerFactory(
       true /* at_start */, HANDSHAKER_CLIENT,
-      y_absl::make_unique<HttpConnectHandshakerFactory>()); 
+      y_absl::make_unique<HttpConnectHandshakerFactory>());
 }

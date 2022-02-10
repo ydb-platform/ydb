@@ -29,11 +29,11 @@ namespace grpc_core {
 // Resolver
 //
 
-Resolver::Resolver(std::shared_ptr<WorkSerializer> work_serializer, 
+Resolver::Resolver(std::shared_ptr<WorkSerializer> work_serializer,
                    std::unique_ptr<ResultHandler> result_handler)
     : InternallyRefCounted(&grpc_trace_resolver_refcount),
-      work_serializer_(std::move(work_serializer)), 
-      result_handler_(std::move(result_handler)) {} 
+      work_serializer_(std::move(work_serializer)),
+      result_handler_(std::move(result_handler)) {}
 
 //
 // Resolver::Result
@@ -51,7 +51,7 @@ Resolver::Result::Result(const Result& other) {
   args = grpc_channel_args_copy(other.args);
 }
 
-Resolver::Result::Result(Result&& other) noexcept { 
+Resolver::Result::Result(Result&& other) noexcept {
   addresses = std::move(other.addresses);
   service_config = std::move(other.service_config);
   service_config_error = other.service_config_error;
@@ -70,7 +70,7 @@ Resolver::Result& Resolver::Result::operator=(const Result& other) {
   return *this;
 }
 
-Resolver::Result& Resolver::Result::operator=(Result&& other) noexcept { 
+Resolver::Result& Resolver::Result::operator=(Result&& other) noexcept {
   addresses = std::move(other.addresses);
   service_config = std::move(other.service_config);
   GRPC_ERROR_UNREF(service_config_error);

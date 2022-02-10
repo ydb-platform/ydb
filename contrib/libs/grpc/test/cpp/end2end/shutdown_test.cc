@@ -68,7 +68,7 @@ class ShutdownTest : public ::testing::TestWithParam<string> {
   }
 
   std::unique_ptr<Server> SetUpServer(const int port) {
-    TString server_address = "localhost:" + to_string(port); 
+    TString server_address = "localhost:" + to_string(port);
 
     ServerBuilder builder;
     auto server_creds =
@@ -117,7 +117,7 @@ class ShutdownTest : public ::testing::TestWithParam<string> {
 };
 
 std::vector<string> GetAllCredentialsTypeList() {
-  std::vector<TString> credentials_types; 
+  std::vector<TString> credentials_types;
   if (GetCredentialsProvider()->GetChannelCredentials(kInsecureCredentialsType,
                                                       nullptr) != nullptr) {
     credentials_types.push_back(kInsecureCredentialsType);
@@ -128,7 +128,7 @@ std::vector<string> GetAllCredentialsTypeList() {
   }
   GPR_ASSERT(!credentials_types.empty());
 
-  TString credentials_type_list("credentials types:"); 
+  TString credentials_type_list("credentials types:");
   for (const string& type : credentials_types) {
     credentials_type_list.append(" " + type);
   }

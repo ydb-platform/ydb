@@ -24,13 +24,13 @@
 #include <grpcpp/support/config.h>
 #include "src/cpp/client/create_channel_internal.h"
 
-namespace grpc { 
+namespace grpc {
 
 namespace {
 class InsecureChannelCredentialsImpl final : public ChannelCredentials {
  public:
   std::shared_ptr<Channel> CreateChannelImpl(
-      const TString& target, const ChannelArguments& args) override { 
+      const TString& target, const ChannelArguments& args) override {
     return CreateChannelWithInterceptors(
         target, args,
         std::vector<std::unique_ptr<
@@ -38,7 +38,7 @@ class InsecureChannelCredentialsImpl final : public ChannelCredentials {
   }
 
   std::shared_ptr<Channel> CreateChannelWithInterceptors(
-      const TString& target, const ChannelArguments& args, 
+      const TString& target, const ChannelArguments& args,
       std::vector<std::unique_ptr<
           grpc::experimental::ClientInterceptorFactoryInterface>>
           interceptor_creators) override {
@@ -59,4 +59,4 @@ std::shared_ptr<ChannelCredentials> InsecureChannelCredentials() {
       new InsecureChannelCredentialsImpl());
 }
 
-}  // namespace grpc 
+}  // namespace grpc

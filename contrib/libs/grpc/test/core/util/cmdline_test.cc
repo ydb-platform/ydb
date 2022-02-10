@@ -321,15 +321,15 @@ static void test_usage(void) {
   gpr_cmdline_on_extra_arg(cl, "file", "filenames to process", extra_arg_cb,
                            nullptr);
 
-  TString usage = gpr_cmdline_usage_string(cl, "test"); 
-  GPR_ASSERT(usage == 
-             "Usage: test [--str=string] [--x=int] " 
-             "[--flag|--no-flag] [file...]\n"); 
+  TString usage = gpr_cmdline_usage_string(cl, "test");
+  GPR_ASSERT(usage ==
+             "Usage: test [--str=string] [--x=int] "
+             "[--flag|--no-flag] [file...]\n");
 
   usage = gpr_cmdline_usage_string(cl, "/foo/test");
-  GPR_ASSERT(usage == 
-             "Usage: test [--str=string] [--x=int] " 
-             "[--flag|--no-flag] [file...]\n"); 
+  GPR_ASSERT(usage ==
+             "Usage: test [--str=string] [--x=int] "
+             "[--flag|--no-flag] [file...]\n");
 
   gpr_cmdline_destroy(cl);
 }

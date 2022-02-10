@@ -52,7 +52,7 @@ class TestServerBuilderPlugin : public ServerBuilderPlugin {
     register_service_ = false;
   }
 
-  TString name() override { return PLUGIN_NAME; } 
+  TString name() override { return PLUGIN_NAME; }
 
   void InitServer(ServerInitializer* si) override {
     init_server_is_called_ = true;
@@ -63,7 +63,7 @@ class TestServerBuilderPlugin : public ServerBuilderPlugin {
 
   void Finish(ServerInitializer* /*si*/) override { finish_is_called_ = true; }
 
-  void ChangeArguments(const TString& /*name*/, void* /*value*/) override { 
+  void ChangeArguments(const TString& /*name*/, void* /*value*/) override {
     change_arguments_is_called_ = true;
   }
 
@@ -123,10 +123,10 @@ std::unique_ptr<ServerBuilderPlugin> CreateTestServerBuilderPlugin() {
 
 // Force AddServerBuilderPlugin() to be called at static initialization time.
 struct StaticTestPluginInitializer {
-  StaticTestPluginInitializer() { 
-    ::grpc::ServerBuilder::InternalAddPluginFactory( 
-        &CreateTestServerBuilderPlugin); 
-  } 
+  StaticTestPluginInitializer() {
+    ::grpc::ServerBuilder::InternalAddPluginFactory(
+        &CreateTestServerBuilderPlugin);
+  }
 } static_plugin_initializer_test_;
 
 // When the param boolean is true, the ServerBuilder plugin will be added at the
@@ -168,7 +168,7 @@ class ServerBuilderPluginTest : public ::testing::TestWithParam<bool> {
   }
 
   void StartServer() {
-    TString server_address = "localhost:" + to_string(port_); 
+    TString server_address = "localhost:" + to_string(port_);
     builder_->AddListeningPort(server_address, InsecureServerCredentials());
     // we run some tests without a service, and for those we need to supply a
     // frequently polled completion queue

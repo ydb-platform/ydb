@@ -20,7 +20,7 @@
 #define GRPC_TEST_CPP_UTIL_SUBPROCESS_H
 
 #include <initializer_list>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <vector>
 
 struct gpr_subprocess;
@@ -29,7 +29,7 @@ namespace grpc {
 
 class SubProcess {
  public:
-  SubProcess(const std::vector<TString>& args); 
+  SubProcess(const std::vector<TString>& args);
   ~SubProcess();
 
   int Join();

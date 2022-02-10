@@ -1,63 +1,63 @@
-# File format ($ symbol means the beginning of a line): 
-# 
-# $ # this message 
-# $ # ======================= 
-# $     # comments (all commentaries should starts with some number of spaces and # symbol) 
-# ${action} {license spdx} {license text hash} 
-# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make 
-# ${all_file_action} filename 
-# $ # user commentaries (many lines) 
-# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify) 
-# ${action} {license spdx} {license text hash} 
-# $BELONGS ./ya/make/file/relative/path/3/ya.make 
-# ${all_file_action} filename 
-# $    #    user commentaries 
-# $ generated description 
-# $ ... 
-# 
-# You can modify action, all_file_action and add commentaries 
-# Available actions: 
-# keep - keep license in contrib and use in credits 
-# skip - skip license 
-# remove - remove all files with this license 
-# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file 
-# 
-# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory) 
-# We suppose that that files can contain some license info 
-# Available all file actions: 
-# FILE_IGNORE - ignore file (do nothing) 
-# FILE_INCLUDE - include all file data into licenses text file 
-# ======================= 
- 
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
 KEEP     NCSA                 1975f079a20b2f4a333fa0d9e510d9fa
 BELONGS ya.make
-    License text: 
+    License text:
         \# This file is distributed under the University of Illinois Open Source
         \# License. See LICENSE.TXT for details.
-    Scancode info: 
-        Original SPDX id: NCSA 
+    Scancode info:
+        Original SPDX id: NCSA
         Score           : 94.00
-        Match type      : NOTICE 
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA 
-    Files with this license: 
+        Match type      : NOTICE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
         arm/Makefile.mk [5:6]
         arm64/Makefile.mk [5:6]
         armv6m/Makefile.mk [5:6]
         i386/Makefile.mk [5:6]
         ppc/Makefile.mk [5:6]
         x86_64/Makefile.mk [5:6]
- 
+
 KEEP     NCSA AND MIT         27a91d3feda74cb7f51826c55ccf86e1
 BELONGS ya.make
     License text:
          * This file is dual licensed under the MIT and the University of Illinois Open
          * Source Licenses. See LICENSE.TXT for details.
-    Scancode info: 
-        Original SPDX id: NCSA 
-        Score           : 100.00 
-        Match type      : NOTICE 
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA 
-    Files with this license: 
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
         absvdi2.c [5:6]
         absvsi2.c [5:6]
         absvti2.c [5:6]
@@ -220,12 +220,12 @@ BELONGS ya.make
         umoddi3.c [5:6]
         umodsi3.c [5:6]
         umodti3.c [5:6]
-    Scancode info: 
-        Original SPDX id: MIT 
-        Score           : 100.00 
-        Match type      : NOTICE 
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT 
-    Files with this license: 
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
         absvdi2.c [5:6]
         absvsi2.c [5:6]
         absvti2.c [5:6]
@@ -388,70 +388,70 @@ BELONGS ya.make
         umoddi3.c [5:6]
         umodsi3.c [5:6]
         umodti3.c [5:6]
- 
+
 KEEP     NCSA                 281d1ec07e86b61c925d7c514deecb25
 BELONGS ya.make
 FILE_INCLUDE LICENSE.txt found in files: README.txt at line 8
-    License text: 
+    License text:
         Compiler-RT is open source software. You may freely distribute it under the
         terms of the license agreement found in LICENSE.txt.
-    Scancode info: 
-        Original SPDX id: NCSA 
-        Score           : 100.00 
-        Match type      : NOTICE 
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA 
-    Files with this license: 
-        README.txt [7:8]
- 
-KEEP     NCSA                 5a35b4c0d3b3923cac31a5a371332ca2 
-BELONGS ya.make
-    License text: 
-        Legacy LLVM License (https://llvm.org/docs/DeveloperPolicy.html#legacy): 
-    Scancode info: 
-        Original SPDX id: NCSA 
-        Score           : 100.00 
-        Match type      : REFERENCE 
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA 
-    Files with this license: 
-        LICENSE.os_version_check.c.patch.txt [237:237]
- 
-KEEP     NCSA                 5b89aaa4f22bc812b081b9e1de7d0a13
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files. 
-    Scancode info: 
+    Scancode info:
         Original SPDX id: NCSA
-        Score           : 100.00 
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        README.txt [7:8]
+
+KEEP     NCSA                 5a35b4c0d3b3923cac31a5a371332ca2
+BELONGS ya.make
+    License text:
+        Legacy LLVM License (https://llvm.org/docs/DeveloperPolicy.html#legacy):
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
         Match type      : REFERENCE
         Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
-    Files with this license: 
+    Files with this license:
+        LICENSE.os_version_check.c.patch.txt [237:237]
+
+KEEP     NCSA                 5b89aaa4f22bc812b081b9e1de7d0a13
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
         LICENSE.os_version_check.c.txt [81:90]
         LICENSE.txt [81:90]
- 
-KEEP     MIT                  5debb370f50e1dfd24ff5144233a2ef6 
+
+KEEP     MIT                  5debb370f50e1dfd24ff5144233a2ef6
 BELONGS ya.make
-    # any - just word, not file reference 
-    Note: matched license text is too long. Read it in the source files. 
-    Scancode info: 
-        Original SPDX id: MIT 
-        Score           : 100.00 
-        Match type      : TEXT 
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT 
-    Files with this license: 
+    # any - just word, not file reference
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
         LICENSE.os_version_check.c.patch.txt [295:311]
         LICENSE.os_version_check.c.txt [60:76]
         LICENSE.txt [60:76]
- 
+
 KEEP     NCSA AND MIT         72d4e9e6f06ffb6f0c77cb800c3ac442
 BELONGS ya.make
-    License text: 
+    License text:
         // This file is dual licensed under the MIT and the University of Illinois Open
         // Source Licenses. See LICENSE.TXT for details.
-    Scancode info: 
-        Original SPDX id: NCSA 
-        Score           : 100.00 
-        Match type      : NOTICE 
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA 
-    Files with this license: 
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
         adddf3.c [5:6]
         addsf3.c [5:6]
         addtf3.c [5:6]
@@ -578,12 +578,12 @@ BELONGS ya.make
         x86_64/floatundidf.S [5:6]
         x86_64/floatundisf.S [1:2]
         x86_64/floatundixf.S [1:2]
-    Scancode info: 
-        Original SPDX id: MIT 
-        Score           : 100.00 
-        Match type      : NOTICE 
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT 
-    Files with this license: 
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
         adddf3.c [5:6]
         addsf3.c [5:6]
         addtf3.c [5:6]
@@ -710,29 +710,29 @@ BELONGS ya.make
         x86_64/floatundidf.S [5:6]
         x86_64/floatundisf.S [1:2]
         x86_64/floatundixf.S [1:2]
- 
-KEEP     Apache-2.0 WITH LLVM-exception 8494a9caed330d9a4f40e19cce7dc770 
+
+KEEP     Apache-2.0 WITH LLVM-exception 8494a9caed330d9a4f40e19cce7dc770
 BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files. 
-    Scancode info: 
-        Original SPDX id: LLVM-exception 
-        Score           : 100.00 
-        Match type      : TEXT 
-        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception 
-    Files with this license: 
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
         LICENSE.os_version_check.c.patch.txt [208:222]
- 
+
 KEEP     NCSA                 866c17e668b5e51841e1c1979de94aa1
 BELONGS ya.make
-    License text: 
+    License text:
         /* This file is distributed under the University of Illinois Open Source
          * License. See LICENSE.TXT for details.
-    Scancode info: 
+    Scancode info:
         Original SPDX id: NCSA
         Score           : 94.00
         Match type      : NOTICE
         Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
-    Files with this license: 
+    Files with this license:
         ppc/divtc3.c [1:2]
         ppc/fixtfdi.c [1:2]
         ppc/fixunstfdi.c [1:2]
@@ -745,98 +745,98 @@ BELONGS ya.make
         x86_64/floatdidf.c [1:2]
         x86_64/floatdisf.c [1:2]
         x86_64/floatdixf.c [1:2]
- 
-KEEP     Apache-2.0           9ac77f65a898755c7eed97099caded94 
+
+KEEP     Apache-2.0           9ac77f65a898755c7eed97099caded94
 BELONGS ya.make
-    # any and version - just words, not file reference 
-    Note: matched license text is too long. Read it in the source files. 
-    Scancode info: 
-        Original SPDX id: Apache-2.0 
-        Score           : 100.00 
-        Match type      : TEXT 
-        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0 
-    Files with this license: 
+    # any and version - just words, not file reference
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
         LICENSE.os_version_check.c.patch.txt [5:205]
- 
+
 KEEP     NCSA AND MIT         acaf5a1ddffd6829f7ebecb9e50c6c5f
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
-    Scancode info: 
-        Original SPDX id: NCSA 
-        Score           : 100.00 
-        Match type      : NOTICE 
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA 
-    Files with this license: 
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
         LICENSE.os_version_check.c.patch.txt [240:245]
         LICENSE.os_version_check.c.txt [5:10]
         LICENSE.txt [5:10]
-    Scancode info: 
-        Original SPDX id: MIT 
-        Score           : 100.00 
-        Match type      : NOTICE 
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT 
-    Files with this license: 
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
         LICENSE.os_version_check.c.patch.txt [240:245]
         LICENSE.os_version_check.c.txt [5:10]
         LICENSE.txt [5:10]
- 
-KEEP     NCSA                 b160d8bd561da097b0edd40b062e1c84 
+
+KEEP     NCSA                 b160d8bd561da097b0edd40b062e1c84
 BELONGS ya.make
-    # any and list - just words, not file reference 
-    Note: matched license text is too long. Read it in the source files. 
-    Scancode info: 
-        Original SPDX id: NCSA 
-        Score           : 100.00 
-        Match type      : TEXT 
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA 
-    Files with this license: 
+    # any and list - just words, not file reference
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
         LICENSE.os_version_check.c.patch.txt [264:289]
         LICENSE.os_version_check.c.txt [29:54]
         LICENSE.txt [29:54]
- 
-KEEP     NCSA                 c26d0b72f92421989c4471ae0acbc943 
+
+KEEP     NCSA                 c26d0b72f92421989c4471ae0acbc943
 BELONGS ya.make
-    License text: 
-        University of Illinois/NCSA 
-        Open Source License 
-    Scancode info: 
-        Original SPDX id: NCSA 
-        Score           : 100.00 
-        Match type      : REFERENCE 
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA 
-    Files with this license: 
+    License text:
+        University of Illinois/NCSA
+        Open Source License
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
         LICENSE.os_version_check.c.patch.txt [249:250]
         LICENSE.os_version_check.c.txt [14:15]
         LICENSE.txt [14:15]
- 
-KEEP     Apache-2.0 WITH LLVM-exception df18889e552d44a4679aff552267f802 
+
+KEEP     Apache-2.0 WITH LLVM-exception df18889e552d44a4679aff552267f802
 BELONGS ya.make
-    License text: 
-        The LLVM Project is under the Apache License v2.0 with LLVM Exceptions: 
-    Scancode info: 
-        Original SPDX id: Apache-2.0 
-        Score           : 100.00 
-        Match type      : NOTICE 
-        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0 
-    Files with this license: 
+    License text:
+        The LLVM Project is under the Apache License v2.0 with LLVM Exceptions:
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
         LICENSE.os_version_check.c.patch.txt [2:2]
-    Scancode info: 
-        Original SPDX id: LLVM-exception 
-        Score           : 100.00 
-        Match type      : NOTICE 
-        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception 
-    Files with this license: 
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
         LICENSE.os_version_check.c.patch.txt [2:2]
- 
+
 KEEP     NCSA                 efa7c9a4e646ac38725d00250dd0b1a5
 BELONGS ya.make
-    License text: 
+    License text:
         /* This file is distributed under the University of Illinois Open Source
          *  License. See LICENSE.TXT for details.
-    Scancode info: 
-        Original SPDX id: NCSA 
+    Scancode info:
+        Original SPDX id: NCSA
         Score           : 94.00
-        Match type      : NOTICE 
-        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA 
-    Files with this license: 
+        Match type      : NOTICE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
         ppc/gcc_qadd.c [1:2]

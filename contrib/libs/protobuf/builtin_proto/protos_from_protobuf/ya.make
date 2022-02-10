@@ -1,10 +1,10 @@
 PROTO_LIBRARY()
 
-WITHOUT_LICENSE_TEXTS() 
- 
+WITHOUT_LICENSE_TEXTS()
+
 LICENSE(BSD-3-Clause)
 
-OWNER(g:yatool) 
+OWNER(g:yatool)
 
 EXCLUDE_TAGS(
     CPP_PROTO
@@ -18,14 +18,14 @@ NO_OPTIMIZE_PY_PROTOS()
 DISABLE(NEED_GOOGLE_PROTO_PEERDIRS)
 
 PY_NAMESPACE(.)
- 
+
 PROTO_NAMESPACE(
     GLOBAL
     contrib/libs/protobuf/src
 )
- 
+
 SRCDIR(contrib/libs/protobuf/src)
- 
+
 SRCS(
     google/protobuf/any.proto
     google/protobuf/api.proto

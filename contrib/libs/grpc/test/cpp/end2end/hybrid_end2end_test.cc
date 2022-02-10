@@ -43,12 +43,12 @@ namespace grpc {
 namespace testing {
 namespace {
 
-#ifndef GRPC_CALLBACK_API_NONEXPERIMENTAL 
-using ::grpc::experimental::CallbackGenericService; 
-using ::grpc::experimental::GenericCallbackServerContext; 
-using ::grpc::experimental::ServerGenericBidiReactor; 
-#endif 
- 
+#ifndef GRPC_CALLBACK_API_NONEXPERIMENTAL
+using ::grpc::experimental::CallbackGenericService;
+using ::grpc::experimental::GenericCallbackServerContext;
+using ::grpc::experimental::ServerGenericBidiReactor;
+#endif
+
 void* tag(int i) { return (void*)static_cast<intptr_t>(i); }
 
 bool VerifyReturnSuccess(CompletionQueue* cq, int i) {
@@ -251,10 +251,10 @@ class HybridEnd2endTest : public ::testing::TestWithParam<bool> {
                   : false;
   }
 
-  bool SetUpServer(::grpc::Service* service1, ::grpc::Service* service2, 
-                   AsyncGenericService* generic_service, 
-                   CallbackGenericService* callback_generic_service, 
-                   int max_message_size = 0) { 
+  bool SetUpServer(::grpc::Service* service1, ::grpc::Service* service2,
+                   AsyncGenericService* generic_service,
+                   CallbackGenericService* callback_generic_service,
+                   int max_message_size = 0) {
     int port = grpc_pick_unused_port_or_die();
     server_address_ << "localhost:" << port;
 
@@ -273,12 +273,12 @@ class HybridEnd2endTest : public ::testing::TestWithParam<bool> {
       builder.RegisterAsyncGenericService(generic_service);
     }
     if (callback_generic_service) {
-#ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL 
-      builder.RegisterCallbackGenericService(callback_generic_service); 
-#else 
+#ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+      builder.RegisterCallbackGenericService(callback_generic_service);
+#else
       builder.experimental().RegisterCallbackGenericService(
           callback_generic_service);
-#endif 
+#endif
     }
 
     if (max_message_size != 0) {
@@ -354,7 +354,7 @@ class HybridEnd2endTest : public ::testing::TestWithParam<bool> {
   void SendSimpleClientStreaming() {
     EchoRequest send_request;
     EchoResponse recv_response;
-    TString expected_message; 
+    TString expected_message;
     ClientContext cli_ctx;
     cli_ctx.set_wait_for_ready(true);
     send_request.set_message("Hello");
@@ -417,7 +417,7 @@ class HybridEnd2endTest : public ::testing::TestWithParam<bool> {
     EchoResponse response;
     ClientContext context;
     context.set_wait_for_ready(true);
-    TString msg("hello"); 
+    TString msg("hello");
 
     auto stream = stub_->BidiStream(&context);
 
@@ -661,7 +661,7 @@ class SplitResponseStreamDupPkg
     gpr_log(GPR_INFO, "Split Streamed Next Message Size is %u", next_msg_sz);
     GPR_ASSERT(stream->Read(&req));
     for (int i = 0; i < kServerDefaultResponseStreamsToSend; i++) {
-      resp.set_message(req.message() + ToString(i) + "_dup"); 
+      resp.set_message(req.message() + ToString(i) + "_dup");
       GPR_ASSERT(stream->Write(resp));
     }
     return Status::OK;
@@ -701,7 +701,7 @@ class FullySplitStreamedDupPkg
     gpr_log(GPR_INFO, "Split Streamed Next Message Size is %u", next_msg_sz);
     GPR_ASSERT(stream->Read(&req));
     for (int i = 0; i < kServerDefaultResponseStreamsToSend; i++) {
-      resp.set_message(req.message() + ToString(i) + "_dup"); 
+      resp.set_message(req.message() + ToString(i) + "_dup");
       GPR_ASSERT(stream->Write(resp));
     }
     return Status::OK;
@@ -753,7 +753,7 @@ class FullyStreamedDupPkg : public duplicate::EchoTestService::StreamedService {
     gpr_log(GPR_INFO, "Split Streamed Next Message Size is %u", next_msg_sz);
     GPR_ASSERT(stream->Read(&req));
     for (int i = 0; i < kServerDefaultResponseStreamsToSend; i++) {
-      resp.set_message(req.message() + ToString(i) + "_dup"); 
+      resp.set_message(req.message() + ToString(i) + "_dup");
       GPR_ASSERT(stream->Write(resp));
     }
     return Status::OK;
@@ -816,15 +816,15 @@ TEST_F(HybridEnd2endTest, GenericEcho) {
 
 TEST_P(HybridEnd2endTest, CallbackGenericEcho) {
   EchoTestService::WithGenericMethod_Echo<TestServiceImpl> service;
-  class GenericEchoService : public CallbackGenericService { 
+  class GenericEchoService : public CallbackGenericService {
    private:
-    ServerGenericBidiReactor* CreateReactor( 
-        GenericCallbackServerContext* context) override { 
+    ServerGenericBidiReactor* CreateReactor(
+        GenericCallbackServerContext* context) override {
       EXPECT_EQ(context->method(), "/grpc.testing.EchoTestService/Echo");
-      gpr_log(GPR_DEBUG, "Constructor of generic service %d", 
-              static_cast<int>(context->deadline().time_since_epoch().count())); 
+      gpr_log(GPR_DEBUG, "Constructor of generic service %d",
+              static_cast<int>(context->deadline().time_since_epoch().count()));
 
-      class Reactor : public ServerGenericBidiReactor { 
+      class Reactor : public ServerGenericBidiReactor {
        public:
         Reactor() { StartRead(&request_); }
 

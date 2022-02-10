@@ -223,8 +223,8 @@ GRPCAPI grpc_call* grpc_channel_create_call(
     const grpc_slice* host, gpr_timespec deadline, void* reserved);
 
 /** Pre-register a method/host pair on a channel.
-    method and host are not owned and must remain alive while the channel is 
-    alive. */ 
+    method and host are not owned and must remain alive while the channel is
+    alive. */
 GRPCAPI void* grpc_channel_register_call(grpc_channel* channel,
                                          const char* method, const char* host,
                                          void* reserved);

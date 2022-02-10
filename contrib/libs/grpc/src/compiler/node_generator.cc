@@ -37,7 +37,7 @@ namespace {
 // Returns the alias we assign to the module of the given .proto filename
 // when importing. Copied entirely from
 // github:google/protobuf/src/google/protobuf/compiler/js/js_generator.cc#L154
-TString ModuleAlias(const TString filename) { 
+TString ModuleAlias(const TString filename) {
   // This scheme could technically cause problems if a file includes any 2 of:
   //   foo/bar_baz.proto
   //   foo_bar_baz.proto
@@ -45,7 +45,7 @@ TString ModuleAlias(const TString filename) {
   //
   // We'll worry about this problem if/when we actually see it.  This name isn't
   // exposed to users so we can change it later if we need to.
-  TString basename = grpc_generator::StripProto(filename); 
+  TString basename = grpc_generator::StripProto(filename);
   basename = grpc_generator::StringReplace(basename, "-", "$");
   basename = grpc_generator::StringReplace(basename, "/", "_");
   basename = grpc_generator::StringReplace(basename, ".", "_");
@@ -54,15 +54,15 @@ TString ModuleAlias(const TString filename) {
 
 // Given a filename like foo/bar/baz.proto, returns the corresponding JavaScript
 // message file foo/bar/baz.js
-TString GetJSMessageFilename(const TString& filename) { 
-  TString name = filename; 
+TString GetJSMessageFilename(const TString& filename) {
+  TString name = filename;
   return grpc_generator::StripProto(name) + "_pb.js";
 }
 
 // Given a filename like foo/bar/baz.proto, returns the root directory
 // path ../../
-TString GetRootPath(const TString& from_filename, 
-                        const TString& to_filename) { 
+TString GetRootPath(const TString& from_filename,
+                        const TString& to_filename) {
   if (to_filename.find("google/protobuf") == 0) {
     // Well-known types (.proto files in the google/protobuf directory) are
     // assumed to come from the 'google-protobuf' npm package.  We may want to
@@ -74,7 +74,7 @@ TString GetRootPath(const TString& from_filename,
   if (slashes == 0) {
     return "./";
   }
-  TString result = ""; 
+  TString result = "";
   for (size_t i = 0; i < slashes; i++) {
     result += "../";
   }
@@ -83,15 +83,15 @@ TString GetRootPath(const TString& from_filename,
 
 // Return the relative path to load to_file from the directory containing
 // from_file, assuming that both paths are relative to the same directory
-TString GetRelativePath(const TString& from_file, 
-                            const TString& to_file) { 
+TString GetRelativePath(const TString& from_file,
+                            const TString& to_file) {
   return GetRootPath(from_file, to_file) + to_file;
 }
 
 /* Finds all message types used in all services in the file, and returns them
  * as a map of fully qualified message type name to message descriptor */
-map<TString, const Descriptor*> GetAllMessages(const FileDescriptor* file) { 
-  map<TString, const Descriptor*> message_types; 
+map<TString, const Descriptor*> GetAllMessages(const FileDescriptor* file) {
+  map<TString, const Descriptor*> message_types;
   for (int service_num = 0; service_num < file->service_count();
        service_num++) {
     const ServiceDescriptor* service = file->service(service_num);
@@ -107,13 +107,13 @@ map<TString, const Descriptor*> GetAllMessages(const FileDescriptor* file) {
   return message_types;
 }
 
-TString MessageIdentifierName(const TString& name) { 
+TString MessageIdentifierName(const TString& name) {
   return grpc_generator::StringReplace(name, ".", "_");
 }
 
-TString NodeObjectPath(const Descriptor* descriptor) { 
-  TString module_alias = ModuleAlias(descriptor->file()->name()); 
-  TString name = descriptor->full_name(); 
+TString NodeObjectPath(const Descriptor* descriptor) {
+  TString module_alias = ModuleAlias(descriptor->file()->name());
+  TString name = descriptor->full_name();
   grpc_generator::StripPrefix(&name, descriptor->file()->package() + ".");
   return module_alias + "." + name;
 }
@@ -121,8 +121,8 @@ TString NodeObjectPath(const Descriptor* descriptor) {
 // Prints out the message serializer and deserializer functions
 void PrintMessageTransformer(const Descriptor* descriptor, Printer* out,
                              const Parameters& params) {
-  map<TString, TString> template_vars; 
-  TString full_name = descriptor->full_name(); 
+  map<TString, TString> template_vars;
+  TString full_name = descriptor->full_name();
   template_vars["identifier_name"] = MessageIdentifierName(full_name);
   template_vars["name"] = full_name;
   template_vars["node_name"] = NodeObjectPath(descriptor);
@@ -158,7 +158,7 @@ void PrintMessageTransformer(const Descriptor* descriptor, Printer* out,
 void PrintMethod(const MethodDescriptor* method, Printer* out) {
   const Descriptor* input_type = method->input_type();
   const Descriptor* output_type = method->output_type();
-  map<TString, TString> vars; 
+  map<TString, TString> vars;
   vars["service_name"] = method->service()->full_name();
   vars["name"] = method->name();
   vars["input_type"] = NodeObjectPath(input_type);
@@ -184,13 +184,13 @@ void PrintMethod(const MethodDescriptor* method, Printer* out) {
 
 // Prints out the service descriptor object
 void PrintService(const ServiceDescriptor* service, Printer* out) {
-  map<TString, TString> template_vars; 
+  map<TString, TString> template_vars;
   out->Print(GetNodeComments(service, true).c_str());
   template_vars["name"] = service->name();
   out->Print(template_vars, "var $name$Service = exports.$name$Service = {\n");
   out->Indent();
   for (int i = 0; i < service->method_count(); i++) {
-    TString method_name = 
+    TString method_name =
         grpc_generator::LowercaseFirstLetter(service->method(i)->name());
     out->Print(GetNodeComments(service->method(i), true).c_str());
     out->Print("$method_name$: ", "method_name", method_name);
@@ -209,14 +209,14 @@ void PrintService(const ServiceDescriptor* service, Printer* out) {
 void PrintImports(const FileDescriptor* file, Printer* out) {
   out->Print("var grpc = require('grpc');\n");
   if (file->message_type_count() > 0) {
-    TString file_path = 
+    TString file_path =
         GetRelativePath(file->name(), GetJSMessageFilename(file->name()));
     out->Print("var $module_alias$ = require('$file_path$');\n", "module_alias",
                ModuleAlias(file->name()), "file_path", file_path);
   }
 
   for (int i = 0; i < file->dependency_count(); i++) {
-    TString file_path = GetRelativePath( 
+    TString file_path = GetRelativePath(
         file->name(), GetJSMessageFilename(file->dependency(i)->name()));
     out->Print("var $module_alias$ = require('$file_path$');\n", "module_alias",
                ModuleAlias(file->dependency(i)->name()), "file_path",
@@ -227,8 +227,8 @@ void PrintImports(const FileDescriptor* file, Printer* out) {
 
 void PrintTransformers(const FileDescriptor* file, Printer* out,
                        const Parameters& params) {
-  map<TString, const Descriptor*> messages = GetAllMessages(file); 
-  for (std::map<TString, const Descriptor*>::iterator it = messages.begin(); 
+  map<TString, const Descriptor*> messages = GetAllMessages(file);
+  for (std::map<TString, const Descriptor*>::iterator it = messages.begin();
        it != messages.end(); it++) {
     PrintMessageTransformer(it->second, out, params);
   }
@@ -242,8 +242,8 @@ void PrintServices(const FileDescriptor* file, Printer* out) {
 }
 }  // namespace
 
-TString GenerateFile(const FileDescriptor* file, const Parameters& params) { 
-  TString output; 
+TString GenerateFile(const FileDescriptor* file, const Parameters& params) {
+  TString output;
   {
     StringOutputStream output_stream(&output);
     Printer out(&output_stream, '$');
@@ -253,7 +253,7 @@ TString GenerateFile(const FileDescriptor* file, const Parameters& params) {
     }
     out.Print("// GENERATED CODE -- DO NOT EDIT!\n\n");
 
-    TString leading_comments = GetNodeComments(file, true); 
+    TString leading_comments = GetNodeComments(file, true);
     if (!leading_comments.empty()) {
       out.Print("// Original file comments:\n");
       out.PrintRaw(leading_comments.c_str());

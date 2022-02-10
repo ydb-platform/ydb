@@ -2,19 +2,19 @@
 
 LIBRARY()
 
-OWNER( 
-    orivej 
-    g:cpp-contrib 
-) 
+OWNER(
+    orivej
+    g:cpp-contrib
+)
 
-LICENSE( 
-    BSD-3-Clause AND 
-    BSL-1.0 AND 
-    Custom-Punycode 
-) 
+LICENSE(
+    BSD-3-Clause AND
+    BSL-1.0 AND
+    Custom-Punycode
+)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 PEERDIR(
     contrib/libs/poco/Foundation
 )
@@ -29,14 +29,14 @@ NO_COMPILER_WARNINGS()
 
 NO_UTIL()
 
-CFLAGS( 
-    -DPOCO_SOCKETADDRESS_DONT_PREFER_IPV4 
-) 
+CFLAGS(
+    -DPOCO_SOCKETADDRESS_DONT_PREFER_IPV4
+)
 
 IF (OS_LINUX)
-    CFLAGS( 
-        -DPOCO_HAVE_FD_EPOLL 
-    ) 
+    CFLAGS(
+        -DPOCO_HAVE_FD_EPOLL
+    )
 ENDIF()
 
 SRCS(

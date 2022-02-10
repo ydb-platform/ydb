@@ -82,7 +82,7 @@ class MetricsServiceImpl final : public MetricsService::Service {
   // is already present in the map.
   // NOTE: CreateQpsGauge can be called anytime (i.e before or after calling
   // StartServer).
-  std::shared_ptr<QpsGauge> CreateQpsGauge(const TString& name, 
+  std::shared_ptr<QpsGauge> CreateQpsGauge(const TString& name,
                                            bool* already_present);
 
   std::unique_ptr<grpc::Server> StartServer(int port);

@@ -22,10 +22,10 @@
 
 #include <string.h>
 
-#include <util/generic/string.h> 
- 
-#include "y_absl/strings/str_format.h" 
- 
+#include <util/generic/string.h>
+
+#include "y_absl/strings/str_format.h"
+
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include <grpc/support/string_util.h>
@@ -116,11 +116,11 @@ static void append_error(internal_request* req, grpc_error* error) {
         GRPC_ERROR_CREATE_FROM_STATIC_STRING("Failed HTTP/1 client request");
   }
   grpc_resolved_address* addr = &req->addresses->addrs[req->next_address - 1];
-  TString addr_text = grpc_sockaddr_to_uri(addr); 
+  TString addr_text = grpc_sockaddr_to_uri(addr);
   req->overall_error = grpc_error_add_child(
       req->overall_error,
       grpc_error_set_str(error, GRPC_ERROR_STR_TARGET_ADDRESS,
-                         grpc_slice_from_cpp_string(std::move(addr_text)))); 
+                         grpc_slice_from_cpp_string(std::move(addr_text))));
 }
 
 static void do_read(internal_request* req) {
@@ -273,10 +273,10 @@ void grpc_httpcli_get(grpc_httpcli_context* context,
   if (g_get_override && g_get_override(request, deadline, on_done, response)) {
     return;
   }
-  TString name = 
-      y_absl::StrFormat("HTTP:GET:%s:%s", request->host, request->http.path); 
+  TString name =
+      y_absl::StrFormat("HTTP:GET:%s:%s", request->host, request->http.path);
   internal_request_begin(context, pollent, resource_quota, request, deadline,
-                         on_done, response, name.c_str(), 
+                         on_done, response, name.c_str(),
                          grpc_httpcli_format_get_request(request));
 }
 
@@ -291,12 +291,12 @@ void grpc_httpcli_post(grpc_httpcli_context* context,
                                          deadline, on_done, response)) {
     return;
   }
-  TString name = 
-      y_absl::StrFormat("HTTP:POST:%s:%s", request->host, request->http.path); 
+  TString name =
+      y_absl::StrFormat("HTTP:POST:%s:%s", request->host, request->http.path);
   internal_request_begin(
       context, pollent, resource_quota, request, deadline, on_done, response,
-      name.c_str(), 
-      grpc_httpcli_format_post_request(request, body_bytes, body_size)); 
+      name.c_str(),
+      grpc_httpcli_format_post_request(request, body_bytes, body_size));
 }
 
 void grpc_httpcli_set_override(grpc_httpcli_get_override get,

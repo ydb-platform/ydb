@@ -1,6 +1,6 @@
 import errno
 import functools
-import json 
+import json
 import os
 import threading
 
@@ -254,13 +254,13 @@ def cxx_compiler_path():
     return os.environ.get("YA_CXX")
 
 
-def global_resources(): 
-    try: 
-        return json.loads(os.environ.get("YA_GLOBAL_RESOURCES")) 
-    except (TypeError, ValueError): 
-        return {} 
- 
- 
+def global_resources():
+    try:
+        return json.loads(os.environ.get("YA_GLOBAL_RESOURCES"))
+    except (TypeError, ValueError):
+        return {}
+
+
 def _register_core(name, binary_path, core_path, bt_path, pbt_path):
     config = _get_ya_config()
 

@@ -4,8 +4,8 @@ LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 OWNER(g:cpp-contrib)
 
 VERSION(2.0.4)

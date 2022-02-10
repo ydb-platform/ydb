@@ -1,7 +1,7 @@
 RECURSE(
     2d_array
     absl_flat_hash
-    absl_tstring_flat_hash 
+    absl_tstring_flat_hash
     atomizer
     bitseq
     bitseq/ut

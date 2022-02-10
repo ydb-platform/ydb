@@ -2,10 +2,10 @@
 
 LIBRARY()
 
-OWNER( 
-    orivej 
-    g:cpp-contrib 
-) 
+OWNER(
+    orivej
+    g:cpp-contrib
+)
 
 VERSION(2021.2.0)
 
@@ -13,12 +13,12 @@ ORIGINAL_SOURCE(https://github.com/oneapi-src/oneTBB/archive/v2021.2.0.tar.gz)
 
 LICENSE(Apache-2.0)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 ADDINCL(
     GLOBAL contrib/libs/tbb/include
 )
- 
+
 NO_COMPILER_WARNINGS()
 
 NO_UTIL()

@@ -21,8 +21,8 @@
 
 #include <grpc/support/port_platform.h>
 
-#include "y_absl/strings/string_view.h" 
- 
+#include "y_absl/strings/string_view.h"
+
 #include <stddef.h>
 
 struct grpc_uri {
@@ -39,7 +39,7 @@ struct grpc_uri {
   char* fragment;
 };
 /** parse a uri, return NULL on failure */
-grpc_uri* grpc_uri_parse(y_absl::string_view uri_text, bool suppress_errors); 
+grpc_uri* grpc_uri_parse(y_absl::string_view uri_text, bool suppress_errors);
 
 /** return the part of a query string after the '=' in "?key=xxx&...", or NULL
  * if key is not present */

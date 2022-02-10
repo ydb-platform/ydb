@@ -18,17 +18,17 @@
 
 #include <grpc/support/port_platform.h>
 
-#if defined(GPR_POSIX_SYNC) && !defined(GPR_ABSEIL_SYNC) && \ 
-    !defined(GPR_CUSTOM_SYNC) 
- 
+#if defined(GPR_POSIX_SYNC) && !defined(GPR_ABSEIL_SYNC) && \
+    !defined(GPR_CUSTOM_SYNC)
+
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include <grpc/support/sync.h>
 #include <grpc/support/time.h>
- 
-#include <errno.h> 
+
+#include <errno.h>
 #include <time.h>
- 
+
 #include "src/core/lib/profiling/timers.h"
 
 #ifdef GPR_LOW_LEVEL_COUNTERS
@@ -128,9 +128,9 @@ int gpr_cv_wait(gpr_cv* cv, gpr_mu* mu, gpr_timespec abs_deadline) {
   } else {
     struct timespec abs_deadline_ts;
 #if GPR_LINUX
-    abs_deadline = gpr_convert_clock_type(abs_deadline, GPR_CLOCK_MONOTONIC); 
+    abs_deadline = gpr_convert_clock_type(abs_deadline, GPR_CLOCK_MONOTONIC);
 #else
-    abs_deadline = gpr_convert_clock_type(abs_deadline, GPR_CLOCK_REALTIME); 
+    abs_deadline = gpr_convert_clock_type(abs_deadline, GPR_CLOCK_REALTIME);
 #endif  // GPR_LINUX
     abs_deadline_ts.tv_sec = static_cast<time_t>(abs_deadline.tv_sec);
     abs_deadline_ts.tv_nsec = abs_deadline.tv_nsec;
@@ -166,5 +166,5 @@ void gpr_once_init(gpr_once* once, void (*init_function)(void)) {
   GPR_ASSERT(pthread_once(once, init_function) == 0);
 }
 
-#endif /* defined(GPR_POSIX_SYNC) && !defined(GPR_ABSEIL_SYNC) && \ 
-          !defined(GPR_CUSTOM_SYNC) */ 
+#endif /* defined(GPR_POSIX_SYNC) && !defined(GPR_ABSEIL_SYNC) && \
+          !defined(GPR_CUSTOM_SYNC) */

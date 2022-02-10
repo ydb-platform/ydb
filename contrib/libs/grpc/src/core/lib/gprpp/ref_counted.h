@@ -204,46 +204,46 @@ class RefCount {
   Atomic<Value> value_;
 };
 
-// PolymorphicRefCount enforces polymorphic destruction of RefCounted. 
-class PolymorphicRefCount { 
- public: 
-  virtual ~PolymorphicRefCount() = default; 
-}; 
- 
-// NonPolymorphicRefCount does not enforce polymorphic destruction of 
-// RefCounted. Please refer to grpc_core::RefCounted for more details, and 
-// when in doubt use PolymorphicRefCount. 
-class NonPolymorphicRefCount { 
- public: 
-  ~NonPolymorphicRefCount() = default; 
-}; 
- 
-namespace internal { 
-template <typename T, bool DoDelete> 
-class Delete; 
-template <typename T> 
-class Delete<T, true> { 
- public: 
-  Delete(T* t) { delete t; } 
-}; 
-template <typename T> 
-class Delete<T, false> { 
- public: 
-  Delete(T* /*t*/) {} 
-}; 
-}  // namespace internal 
- 
+// PolymorphicRefCount enforces polymorphic destruction of RefCounted.
+class PolymorphicRefCount {
+ public:
+  virtual ~PolymorphicRefCount() = default;
+};
+
+// NonPolymorphicRefCount does not enforce polymorphic destruction of
+// RefCounted. Please refer to grpc_core::RefCounted for more details, and
+// when in doubt use PolymorphicRefCount.
+class NonPolymorphicRefCount {
+ public:
+  ~NonPolymorphicRefCount() = default;
+};
+
+namespace internal {
+template <typename T, bool DoDelete>
+class Delete;
+template <typename T>
+class Delete<T, true> {
+ public:
+  Delete(T* t) { delete t; }
+};
+template <typename T>
+class Delete<T, false> {
+ public:
+  Delete(T* /*t*/) {}
+};
+}  // namespace internal
+
 // A base class for reference-counted objects.
-// New objects should be created via new and start with a refcount of 1. 
-// When the refcount reaches 0, the object will be deleted via delete. 
+// New objects should be created via new and start with a refcount of 1.
+// When the refcount reaches 0, the object will be deleted via delete.
 //
-// If DeleteUponUnref is false, deletion will not occur when the ref 
-// count reaches 0.  This is useful in cases where all existing objects 
-// must be tracked in a registry but the object's entry in the registry 
-// cannot be removed from the object's dtor due to synchronization issues. 
-// In this case, the registry can be cleaned up later by identifying 
-// entries for which RefIfNonZero() returns null. 
-// 
+// If DeleteUponUnref is false, deletion will not occur when the ref
+// count reaches 0.  This is useful in cases where all existing objects
+// must be tracked in a registry but the object's entry in the registry
+// cannot be removed from the object's dtor due to synchronization issues.
+// In this case, the registry can be cleaned up later by identifying
+// entries for which RefIfNonZero() returns null.
+//
 // This will commonly be used by CRTP (curiously-recurring template pattern)
 // e.g., class MyClass : public RefCounted<MyClass>
 //
@@ -266,8 +266,8 @@ class Delete<T, false> {
 //    Child* ch;
 //    ch->Unref();
 //
-template <typename Child, typename Impl = PolymorphicRefCount, 
-          bool DeleteUponUnref = true> 
+template <typename Child, typename Impl = PolymorphicRefCount,
+          bool DeleteUponUnref = true>
 class RefCounted : public Impl {
  public:
   // Note: Depending on the Impl used, this dtor can be implicitly virtual.
@@ -290,25 +290,25 @@ class RefCounted : public Impl {
   // friend of this class.
   void Unref() {
     if (GPR_UNLIKELY(refs_.Unref())) {
-      internal::Delete<Child, DeleteUponUnref>(static_cast<Child*>(this)); 
+      internal::Delete<Child, DeleteUponUnref>(static_cast<Child*>(this));
     }
   }
   void Unref(const DebugLocation& location, const char* reason) {
     if (GPR_UNLIKELY(refs_.Unref(location, reason))) {
-      internal::Delete<Child, DeleteUponUnref>(static_cast<Child*>(this)); 
+      internal::Delete<Child, DeleteUponUnref>(static_cast<Child*>(this));
     }
   }
 
-  RefCountedPtr<Child> RefIfNonZero() GRPC_MUST_USE_RESULT { 
-    return RefCountedPtr<Child>(refs_.RefIfNonZero() ? static_cast<Child*>(this) 
-                                                     : nullptr); 
+  RefCountedPtr<Child> RefIfNonZero() GRPC_MUST_USE_RESULT {
+    return RefCountedPtr<Child>(refs_.RefIfNonZero() ? static_cast<Child*>(this)
+                                                     : nullptr);
   }
-  RefCountedPtr<Child> RefIfNonZero(const DebugLocation& location, 
-                                    const char* reason) GRPC_MUST_USE_RESULT { 
-    return RefCountedPtr<Child>(refs_.RefIfNonZero(location, reason) 
-                                    ? static_cast<Child*>(this) 
-                                    : nullptr); 
-  } 
+  RefCountedPtr<Child> RefIfNonZero(const DebugLocation& location,
+                                    const char* reason) GRPC_MUST_USE_RESULT {
+    return RefCountedPtr<Child>(refs_.RefIfNonZero(location, reason)
+                                    ? static_cast<Child*>(this)
+                                    : nullptr);
+  }
 
   // Not copyable nor movable.
   RefCounted(const RefCounted&) = delete;

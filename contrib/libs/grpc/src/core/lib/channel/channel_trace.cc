@@ -144,46 +144,46 @@ const char* severity_string(ChannelTrace::Severity severity) {
 
 }  // anonymous namespace
 
-Json ChannelTrace::TraceEvent::RenderTraceEvent() const { 
-  char* description = grpc_slice_to_c_string(data_); 
-  Json::Object object = { 
-      {"description", description}, 
-      {"severity", severity_string(severity_)}, 
-      {"timestamp", gpr_format_timespec(timestamp_)}, 
-  }; 
-  gpr_free(description); 
+Json ChannelTrace::TraceEvent::RenderTraceEvent() const {
+  char* description = grpc_slice_to_c_string(data_);
+  Json::Object object = {
+      {"description", description},
+      {"severity", severity_string(severity_)},
+      {"timestamp", gpr_format_timespec(timestamp_)},
+  };
+  gpr_free(description);
   if (referenced_entity_ != nullptr) {
     const bool is_channel =
         (referenced_entity_->type() == BaseNode::EntityType::kTopLevelChannel ||
          referenced_entity_->type() == BaseNode::EntityType::kInternalChannel);
-    object[is_channel ? "channelRef" : "subchannelRef"] = Json::Object{ 
-        {(is_channel ? "channelId" : "subchannelId"), 
-         ToString(referenced_entity_->uuid())}, 
-    }; 
+    object[is_channel ? "channelRef" : "subchannelRef"] = Json::Object{
+        {(is_channel ? "channelId" : "subchannelId"),
+         ToString(referenced_entity_->uuid())},
+    };
   }
-  return object; 
+  return object;
 }
 
-Json ChannelTrace::RenderJson() const { 
-  // Tracing is disabled if max_event_memory_ == 0. 
-  if (max_event_memory_ == 0) { 
-    return Json();  // JSON null 
-  } 
-  Json::Object object = { 
-      {"creationTimestamp", gpr_format_timespec(time_created_)}, 
-  }; 
+Json ChannelTrace::RenderJson() const {
+  // Tracing is disabled if max_event_memory_ == 0.
+  if (max_event_memory_ == 0) {
+    return Json();  // JSON null
+  }
+  Json::Object object = {
+      {"creationTimestamp", gpr_format_timespec(time_created_)},
+  };
   if (num_events_logged_ > 0) {
-    object["numEventsLogged"] = ToString(num_events_logged_); 
+    object["numEventsLogged"] = ToString(num_events_logged_);
   }
-  // Only add in the event list if it is non-empty. 
+  // Only add in the event list if it is non-empty.
   if (head_trace_ != nullptr) {
-    Json::Array array; 
-    for (TraceEvent* it = head_trace_; it != nullptr; it = it->next()) { 
-      array.emplace_back(it->RenderTraceEvent()); 
+    Json::Array array;
+    for (TraceEvent* it = head_trace_; it != nullptr; it = it->next()) {
+      array.emplace_back(it->RenderTraceEvent());
     }
-    object["events"] = std::move(array); 
+    object["events"] = std::move(array);
   }
-  return object; 
+  return object;
 }
 
 }  // namespace channelz

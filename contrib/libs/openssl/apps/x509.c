@@ -140,8 +140,8 @@ const OPTIONS x509_options[] = {
     {"", OPT_MD, '-', "Any supported digest"},
 #ifndef OPENSSL_NO_MD5
     {"subject_hash_old", OPT_SUBJECT_HASH_OLD, '-',
-     "Print old-style (MD5) subject hash value"}, 
-    {"issuer_hash_old", OPT_ISSUER_HASH_OLD, '-', 
+     "Print old-style (MD5) subject hash value"},
+    {"issuer_hash_old", OPT_ISSUER_HASH_OLD, '-',
      "Print old-style (MD5) issuer hash value"},
 #endif
 #ifndef OPENSSL_NO_ENGINE

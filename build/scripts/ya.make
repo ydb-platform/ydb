@@ -3,11 +3,11 @@ OWNER(g:ymake)
 PY2TEST()
 
 TEST_SRCS(
-    build_dll_and_java.py 
-    build_info_gen.py 
-    build_java_codenav_index.py 
-    build_java_with_error_prone.py 
-    build_java_with_error_prone2.py 
+    build_dll_and_java.py
+    build_info_gen.py
+    build_java_codenav_index.py
+    build_java_with_error_prone.py
+    build_java_with_error_prone2.py
     build_mn.py
     build_pln_header.py
     cat.py
@@ -26,7 +26,7 @@ TEST_SRCS(
     create_jcoverage_report.py
     extract_asrc.py
     extract_docs.py
-    extract_jacoco_report.py 
+    extract_jacoco_report.py
     f2c.py
     fail_module_cmd.py
     fetch_from.py
@@ -35,13 +35,13 @@ TEST_SRCS(
     fetch_from_npm.py
     fetch_from_sandbox.py
     fetch_resource.py
-    filter_zip.py 
+    filter_zip.py
     find_and_tar.py
     fix_msvc_output.py
     fs_tools.py
     gen_aar_gradle_script.py
     gen_java_codenav_entry.py
-    gen_java_codenav_protobuf.py 
+    gen_java_codenav_protobuf.py
     gen_mx_table.py
     gen_py3_reg.py
     gen_py_reg.py
@@ -50,7 +50,7 @@ TEST_SRCS(
     generate_pom.py
     go_proto_wrapper.py
     go_tool.py
-    ios_wrapper.py 
+    ios_wrapper.py
     java_pack_to_file.py
     link_asrc.py
     link_dyn_lib.py
@@ -59,17 +59,17 @@ TEST_SRCS(
     link_lib.py
     llvm_opt_wrapper.py
     merge_coverage_data.py
-    merge_files.py 
+    merge_files.py
     mkdir.py
     mkdocs_builder_wrapper.py
     mkver.py
-    pack_ios.py 
+    pack_ios.py
     pack_jcoverage_resources.py
     perl_wrapper.py
     postprocess_go_fbs.py
     preprocess.py
     py_compile.py
-    run_ios_simulator.py 
+    run_ios_simulator.py
     run_javac.py
     run_junit.py
     run_llvm_dsymutil.py

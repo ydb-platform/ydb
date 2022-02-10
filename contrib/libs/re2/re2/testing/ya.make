@@ -6,8 +6,8 @@ OWNER(g:cpp-contrib)
 
 LICENSE(BSD-3-Clause)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 PEERDIR(
     contrib/libs/re2
 )

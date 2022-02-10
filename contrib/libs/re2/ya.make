@@ -8,13 +8,13 @@ VERSION(2022-02-01)
 
 ORIGINAL_SOURCE(https://github.com/google/re2/archive/2022-02-01.tar.gz)
 
-LICENSE( 
+LICENSE(
     BSD-3-Clause AND
-    X11-Lucent 
-) 
+    X11-Lucent
+)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 ADDINCL(
     GLOBAL contrib/libs/re2/include
     contrib/libs/re2

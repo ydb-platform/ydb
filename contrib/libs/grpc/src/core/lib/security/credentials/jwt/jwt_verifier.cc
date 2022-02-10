@@ -35,15 +35,15 @@ extern "C" {
 }
 
 #include "src/core/lib/gpr/string.h"
-#include "src/core/lib/gprpp/manual_constructor.h" 
+#include "src/core/lib/gprpp/manual_constructor.h"
 #include "src/core/lib/http/httpcli.h"
 #include "src/core/lib/iomgr/polling_entity.h"
 #include "src/core/lib/slice/b64.h"
 #include "src/core/lib/slice/slice_internal.h"
 #include "src/core/tsi/ssl_types.h"
 
-using grpc_core::Json; 
- 
+using grpc_core::Json;
+
 /* --- Utils. --- */
 
 const char* grpc_jwt_verifier_status_to_string(
@@ -80,39 +80,39 @@ static const EVP_MD* evp_md_from_alg(const char* alg) {
   }
 }
 
-static Json parse_json_part_from_jwt(const char* str, size_t len) { 
-  grpc_slice slice = grpc_base64_decode_with_len(str, len, 1); 
-  if (GRPC_SLICE_IS_EMPTY(slice)) { 
+static Json parse_json_part_from_jwt(const char* str, size_t len) {
+  grpc_slice slice = grpc_base64_decode_with_len(str, len, 1);
+  if (GRPC_SLICE_IS_EMPTY(slice)) {
     gpr_log(GPR_ERROR, "Invalid base64.");
-    return Json();  // JSON null 
+    return Json();  // JSON null
   }
-  y_absl::string_view string = grpc_core::StringViewFromSlice(slice); 
-  grpc_error* error = GRPC_ERROR_NONE; 
-  Json json = Json::Parse(string, &error); 
-  if (error != GRPC_ERROR_NONE) { 
-    gpr_log(GPR_ERROR, "JSON parse error: %s", grpc_error_string(error)); 
-    GRPC_ERROR_UNREF(error); 
-    json = Json();  // JSON null 
+  y_absl::string_view string = grpc_core::StringViewFromSlice(slice);
+  grpc_error* error = GRPC_ERROR_NONE;
+  Json json = Json::Parse(string, &error);
+  if (error != GRPC_ERROR_NONE) {
+    gpr_log(GPR_ERROR, "JSON parse error: %s", grpc_error_string(error));
+    GRPC_ERROR_UNREF(error);
+    json = Json();  // JSON null
   }
-  grpc_slice_unref_internal(slice); 
+  grpc_slice_unref_internal(slice);
   return json;
 }
 
-static const char* validate_string_field(const Json& json, const char* key) { 
-  if (json.type() != Json::Type::STRING) { 
-    gpr_log(GPR_ERROR, "Invalid %s field", key); 
+static const char* validate_string_field(const Json& json, const char* key) {
+  if (json.type() != Json::Type::STRING) {
+    gpr_log(GPR_ERROR, "Invalid %s field", key);
     return nullptr;
   }
-  return json.string_value().c_str(); 
+  return json.string_value().c_str();
 }
 
-static gpr_timespec validate_time_field(const Json& json, const char* key) { 
+static gpr_timespec validate_time_field(const Json& json, const char* key) {
   gpr_timespec result = gpr_time_0(GPR_CLOCK_REALTIME);
-  if (json.type() != Json::Type::NUMBER) { 
-    gpr_log(GPR_ERROR, "Invalid %s field", key); 
+  if (json.type() != Json::Type::NUMBER) {
+    gpr_log(GPR_ERROR, "Invalid %s field", key);
     return result;
   }
-  result.tv_sec = strtol(json.string_value().c_str(), nullptr, 10); 
+  result.tv_sec = strtol(json.string_value().c_str(), nullptr, 10);
   return result;
 }
 
@@ -123,51 +123,51 @@ struct jose_header {
   const char* kid;
   const char* typ;
   /* TODO(jboeuf): Add others as needed (jku, jwk, x5u, x5c and so on...). */
-  grpc_core::ManualConstructor<Json> json; 
+  grpc_core::ManualConstructor<Json> json;
 };
 static void jose_header_destroy(jose_header* h) {
-  h->json.Destroy(); 
+  h->json.Destroy();
   gpr_free(h);
 }
 
-static jose_header* jose_header_from_json(Json json) { 
-  const char* alg_value; 
-  Json::Object::const_iterator it; 
+static jose_header* jose_header_from_json(Json json) {
+  const char* alg_value;
+  Json::Object::const_iterator it;
   jose_header* h = static_cast<jose_header*>(gpr_zalloc(sizeof(jose_header)));
-  if (json.type() != Json::Type::OBJECT) { 
-    gpr_log(GPR_ERROR, "JSON value is not an object"); 
-    goto error; 
+  if (json.type() != Json::Type::OBJECT) {
+    gpr_log(GPR_ERROR, "JSON value is not an object");
+    goto error;
   }
-  // Check alg field. 
-  it = json.object_value().find("alg"); 
-  if (it == json.object_value().end()) { 
+  // Check alg field.
+  it = json.object_value().find("alg");
+  if (it == json.object_value().end()) {
     gpr_log(GPR_ERROR, "Missing alg field.");
     goto error;
   }
-  /* We only support RSA-1.5 signatures for now. 
-     Beware of this if we add HMAC support: 
-     https://auth0.com/blog/2015/03/31/critical-vulnerabilities-in-json-web-token-libraries/ 
-   */ 
-  alg_value = it->second.string_value().c_str(); 
-  if (it->second.type() != Json::Type::STRING || strncmp(alg_value, "RS", 2) || 
-      evp_md_from_alg(alg_value) == nullptr) { 
-    gpr_log(GPR_ERROR, "Invalid alg field"); 
-    goto error; 
-  } 
-  h->alg = alg_value; 
-  // Check typ field. 
-  it = json.object_value().find("typ"); 
-  if (it != json.object_value().end()) { 
-    h->typ = validate_string_field(it->second, "typ"); 
-    if (h->typ == nullptr) goto error; 
-  } 
-  // Check kid field. 
-  it = json.object_value().find("kid"); 
-  if (it != json.object_value().end()) { 
-    h->kid = validate_string_field(it->second, "kid"); 
-    if (h->kid == nullptr) goto error; 
-  } 
-  h->json.Init(std::move(json)); 
+  /* We only support RSA-1.5 signatures for now.
+     Beware of this if we add HMAC support:
+     https://auth0.com/blog/2015/03/31/critical-vulnerabilities-in-json-web-token-libraries/
+   */
+  alg_value = it->second.string_value().c_str();
+  if (it->second.type() != Json::Type::STRING || strncmp(alg_value, "RS", 2) ||
+      evp_md_from_alg(alg_value) == nullptr) {
+    gpr_log(GPR_ERROR, "Invalid alg field");
+    goto error;
+  }
+  h->alg = alg_value;
+  // Check typ field.
+  it = json.object_value().find("typ");
+  if (it != json.object_value().end()) {
+    h->typ = validate_string_field(it->second, "typ");
+    if (h->typ == nullptr) goto error;
+  }
+  // Check kid field.
+  it = json.object_value().find("kid");
+  if (it != json.object_value().end()) {
+    h->kid = validate_string_field(it->second, "kid");
+    if (h->kid == nullptr) goto error;
+  }
+  h->json.Init(std::move(json));
   return h;
 
 error:
@@ -187,17 +187,17 @@ struct grpc_jwt_claims {
   gpr_timespec exp;
   gpr_timespec nbf;
 
-  grpc_core::ManualConstructor<Json> json; 
+  grpc_core::ManualConstructor<Json> json;
 };
 
 void grpc_jwt_claims_destroy(grpc_jwt_claims* claims) {
-  claims->json.Destroy(); 
+  claims->json.Destroy();
   gpr_free(claims);
 }
 
-const Json* grpc_jwt_claims_json(const grpc_jwt_claims* claims) { 
+const Json* grpc_jwt_claims_json(const grpc_jwt_claims* claims) {
   if (claims == nullptr) return nullptr;
-  return claims->json.get(); 
+  return claims->json.get();
 }
 
 const char* grpc_jwt_claims_subject(const grpc_jwt_claims* claims) {
@@ -235,43 +235,43 @@ gpr_timespec grpc_jwt_claims_not_before(const grpc_jwt_claims* claims) {
   return claims->nbf;
 }
 
-grpc_jwt_claims* grpc_jwt_claims_from_json(Json json) { 
+grpc_jwt_claims* grpc_jwt_claims_from_json(Json json) {
   grpc_jwt_claims* claims =
-      static_cast<grpc_jwt_claims*>(gpr_zalloc(sizeof(grpc_jwt_claims))); 
-  claims->json.Init(std::move(json)); 
+      static_cast<grpc_jwt_claims*>(gpr_zalloc(sizeof(grpc_jwt_claims)));
+  claims->json.Init(std::move(json));
   claims->iat = gpr_inf_past(GPR_CLOCK_REALTIME);
   claims->nbf = gpr_inf_past(GPR_CLOCK_REALTIME);
   claims->exp = gpr_inf_future(GPR_CLOCK_REALTIME);
 
   /* Per the spec, all fields are optional. */
-  for (const auto& p : claims->json->object_value()) { 
-    if (p.first == "sub") { 
-      claims->sub = validate_string_field(p.second, "sub"); 
+  for (const auto& p : claims->json->object_value()) {
+    if (p.first == "sub") {
+      claims->sub = validate_string_field(p.second, "sub");
       if (claims->sub == nullptr) goto error;
-    } else if (p.first == "iss") { 
-      claims->iss = validate_string_field(p.second, "iss"); 
+    } else if (p.first == "iss") {
+      claims->iss = validate_string_field(p.second, "iss");
       if (claims->iss == nullptr) goto error;
-    } else if (p.first == "aud") { 
-      claims->aud = validate_string_field(p.second, "aud"); 
+    } else if (p.first == "aud") {
+      claims->aud = validate_string_field(p.second, "aud");
       if (claims->aud == nullptr) goto error;
-    } else if (p.first == "jti") { 
-      claims->jti = validate_string_field(p.second, "jti"); 
+    } else if (p.first == "jti") {
+      claims->jti = validate_string_field(p.second, "jti");
       if (claims->jti == nullptr) goto error;
-    } else if (p.first == "iat") { 
-      claims->iat = validate_time_field(p.second, "iat"); 
-      if (gpr_time_cmp(claims->iat, gpr_time_0(GPR_CLOCK_REALTIME)) == 0) { 
+    } else if (p.first == "iat") {
+      claims->iat = validate_time_field(p.second, "iat");
+      if (gpr_time_cmp(claims->iat, gpr_time_0(GPR_CLOCK_REALTIME)) == 0) {
         goto error;
-      } 
-    } else if (p.first == "exp") { 
-      claims->exp = validate_time_field(p.second, "exp"); 
-      if (gpr_time_cmp(claims->exp, gpr_time_0(GPR_CLOCK_REALTIME)) == 0) { 
+      }
+    } else if (p.first == "exp") {
+      claims->exp = validate_time_field(p.second, "exp");
+      if (gpr_time_cmp(claims->exp, gpr_time_0(GPR_CLOCK_REALTIME)) == 0) {
         goto error;
-      } 
-    } else if (p.first == "nbf") { 
-      claims->nbf = validate_time_field(p.second, "nbf"); 
-      if (gpr_time_cmp(claims->nbf, gpr_time_0(GPR_CLOCK_REALTIME)) == 0) { 
+      }
+    } else if (p.first == "nbf") {
+      claims->nbf = validate_time_field(p.second, "nbf");
+      if (gpr_time_cmp(claims->nbf, gpr_time_0(GPR_CLOCK_REALTIME)) == 0) {
         goto error;
-      } 
+      }
     }
   }
   return claims;
@@ -334,7 +334,7 @@ typedef enum {
   HTTP_RESPONSE_COUNT /* must be last */
 } http_response_index;
 
-struct verifier_cb_ctx { 
+struct verifier_cb_ctx {
   grpc_jwt_verifier* verifier;
   grpc_polling_entity pollent;
   jose_header* header;
@@ -345,7 +345,7 @@ struct verifier_cb_ctx {
   void* user_data;
   grpc_jwt_verification_done_cb user_cb;
   grpc_http_response responses[HTTP_RESPONSE_COUNT];
-}; 
+};
 /* Takes ownership of the header, claims and signature. */
 static verifier_cb_ctx* verifier_cb_ctx_create(
     grpc_jwt_verifier* verifier, grpc_pollset* pollset, jose_header* header,
@@ -390,10 +390,10 @@ gpr_timespec grpc_jwt_verifier_clock_skew = {60, 0, GPR_TIMESPAN};
 /* Max delay defaults to one minute. */
 grpc_millis grpc_jwt_verifier_max_delay = 60 * GPR_MS_PER_SEC;
 
-struct email_key_mapping { 
+struct email_key_mapping {
   char* email_domain;
   char* key_url_prefix;
-}; 
+};
 struct grpc_jwt_verifier {
   email_key_mapping* mappings;
   size_t num_mappings; /* Should be very few, linear search ok. */
@@ -401,32 +401,32 @@ struct grpc_jwt_verifier {
   grpc_httpcli_context http_ctx;
 };
 
-static Json json_from_http(const grpc_httpcli_response* response) { 
+static Json json_from_http(const grpc_httpcli_response* response) {
   if (response == nullptr) {
     gpr_log(GPR_ERROR, "HTTP response is NULL.");
-    return Json();  // JSON null 
+    return Json();  // JSON null
   }
   if (response->status != 200) {
     gpr_log(GPR_ERROR, "Call to http server failed with error %d.",
             response->status);
-    return Json();  // JSON null 
+    return Json();  // JSON null
   }
-  grpc_error* error = GRPC_ERROR_NONE; 
-  Json json = Json::Parse( 
-      y_absl::string_view(response->body, response->body_length), &error); 
-  if (error != GRPC_ERROR_NONE) { 
+  grpc_error* error = GRPC_ERROR_NONE;
+  Json json = Json::Parse(
+      y_absl::string_view(response->body, response->body_length), &error);
+  if (error != GRPC_ERROR_NONE) {
     gpr_log(GPR_ERROR, "Invalid JSON found in response.");
-    return Json();  // JSON null 
+    return Json();  // JSON null
   }
   return json;
 }
 
-static const Json* find_property_by_name(const Json& json, const char* name) { 
-  auto it = json.object_value().find(name); 
-  if (it == json.object_value().end()) { 
-    return nullptr; 
+static const Json* find_property_by_name(const Json& json, const char* name) {
+  auto it = json.object_value().find(name);
+  if (it == json.object_value().end()) {
+    return nullptr;
   }
-  return &it->second; 
+  return &it->second;
 }
 
 static EVP_PKEY* extract_pkey_from_x509(const char* x509_str) {
@@ -497,15 +497,15 @@ static int RSA_set0_key(RSA* r, BIGNUM* n, BIGNUM* e, BIGNUM* d) {
 }
 #endif  // OPENSSL_VERSION_NUMBER < 0x10100000L
 
-static EVP_PKEY* pkey_from_jwk(const Json& json, const char* kty) { 
+static EVP_PKEY* pkey_from_jwk(const Json& json, const char* kty) {
   RSA* rsa = nullptr;
   EVP_PKEY* result = nullptr;
   BIGNUM* tmp_n = nullptr;
   BIGNUM* tmp_e = nullptr;
-  Json::Object::const_iterator it; 
+  Json::Object::const_iterator it;
 
-  GPR_ASSERT(json.type() == Json::Type::OBJECT); 
-  GPR_ASSERT(kty != nullptr); 
+  GPR_ASSERT(json.type() == Json::Type::OBJECT);
+  GPR_ASSERT(kty != nullptr);
   if (strcmp(kty, "RSA") != 0) {
     gpr_log(GPR_ERROR, "Unsupported key type %s.", kty);
     goto end;
@@ -515,20 +515,20 @@ static EVP_PKEY* pkey_from_jwk(const Json& json, const char* kty) {
     gpr_log(GPR_ERROR, "Could not create rsa key.");
     goto end;
   }
-  it = json.object_value().find("n"); 
-  if (it == json.object_value().end()) { 
-    gpr_log(GPR_ERROR, "Missing RSA public key field."); 
-    goto end; 
-  }
-  tmp_n = bignum_from_base64(validate_string_field(it->second, "n")); 
-  if (tmp_n == nullptr) goto end; 
-  it = json.object_value().find("e"); 
-  if (it == json.object_value().end()) { 
+  it = json.object_value().find("n");
+  if (it == json.object_value().end()) {
     gpr_log(GPR_ERROR, "Missing RSA public key field.");
     goto end;
   }
-  tmp_e = bignum_from_base64(validate_string_field(it->second, "e")); 
-  if (tmp_e == nullptr) goto end; 
+  tmp_n = bignum_from_base64(validate_string_field(it->second, "n"));
+  if (tmp_n == nullptr) goto end;
+  it = json.object_value().find("e");
+  if (it == json.object_value().end()) {
+    gpr_log(GPR_ERROR, "Missing RSA public key field.");
+    goto end;
+  }
+  tmp_e = bignum_from_base64(validate_string_field(it->second, "e"));
+  if (tmp_e == nullptr) goto end;
   if (!RSA_set0_key(rsa, tmp_n, tmp_e, nullptr)) {
     gpr_log(GPR_ERROR, "Cannot set RSA key from inputs.");
     goto end;
@@ -546,41 +546,41 @@ end:
   return result;
 }
 
-static EVP_PKEY* find_verification_key(const Json& json, const char* header_alg, 
+static EVP_PKEY* find_verification_key(const Json& json, const char* header_alg,
                                        const char* header_kid) {
   /* Try to parse the json as a JWK set:
      https://tools.ietf.org/html/rfc7517#section-5. */
-  const Json* jwt_keys = find_property_by_name(json, "keys"); 
-  if (jwt_keys == nullptr) { 
+  const Json* jwt_keys = find_property_by_name(json, "keys");
+  if (jwt_keys == nullptr) {
     /* Use the google proprietary format which is:
        { <kid1>: <x5091>, <kid2>: <x5092>, ... } */
-    const Json* cur = find_property_by_name(json, header_kid); 
+    const Json* cur = find_property_by_name(json, header_kid);
     if (cur == nullptr) return nullptr;
-    return extract_pkey_from_x509(cur->string_value().c_str()); 
+    return extract_pkey_from_x509(cur->string_value().c_str());
   }
-  if (jwt_keys->type() != Json::Type::ARRAY) { 
+  if (jwt_keys->type() != Json::Type::ARRAY) {
     gpr_log(GPR_ERROR,
             "Unexpected value type of keys property in jwks key set.");
     return nullptr;
   }
   /* Key format is specified in:
      https://tools.ietf.org/html/rfc7518#section-6. */
-  for (const Json& jkey : jwt_keys->array_value()) { 
-    if (jkey.type() != Json::Type::OBJECT) continue; 
+  for (const Json& jkey : jwt_keys->array_value()) {
+    if (jkey.type() != Json::Type::OBJECT) continue;
     const char* alg = nullptr;
-    auto it = jkey.object_value().find("alg"); 
-    if (it != jkey.object_value().end()) { 
-      alg = validate_string_field(it->second, "alg"); 
-    } 
+    auto it = jkey.object_value().find("alg");
+    if (it != jkey.object_value().end()) {
+      alg = validate_string_field(it->second, "alg");
+    }
     const char* kid = nullptr;
-    it = jkey.object_value().find("kid"); 
-    if (it != jkey.object_value().end()) { 
-      kid = validate_string_field(it->second, "kid"); 
-    } 
+    it = jkey.object_value().find("kid");
+    if (it != jkey.object_value().end()) {
+      kid = validate_string_field(it->second, "kid");
+    }
     const char* kty = nullptr;
-    it = jkey.object_value().find("kty"); 
-    if (it != jkey.object_value().end()) { 
-      kty = validate_string_field(it->second, "kty"); 
+    it = jkey.object_value().find("kty");
+    if (it != jkey.object_value().end()) {
+      kty = validate_string_field(it->second, "kty");
     }
     if (alg != nullptr && kid != nullptr && kty != nullptr &&
         strcmp(kid, header_kid) == 0 && strcmp(alg, header_alg) == 0) {
@@ -628,12 +628,12 @@ end:
 
 static void on_keys_retrieved(void* user_data, grpc_error* /*error*/) {
   verifier_cb_ctx* ctx = static_cast<verifier_cb_ctx*>(user_data);
-  Json json = json_from_http(&ctx->responses[HTTP_RESPONSE_KEYS]); 
+  Json json = json_from_http(&ctx->responses[HTTP_RESPONSE_KEYS]);
   EVP_PKEY* verification_key = nullptr;
   grpc_jwt_verifier_status status = GRPC_JWT_VERIFIER_GENERIC_ERROR;
   grpc_jwt_claims* claims = nullptr;
 
-  if (json.type() == Json::Type::JSON_NULL) { 
+  if (json.type() == Json::Type::JSON_NULL) {
     status = GRPC_JWT_VERIFIER_KEY_RETRIEVAL_ERROR;
     goto end;
   }
@@ -668,20 +668,20 @@ end:
 static void on_openid_config_retrieved(void* user_data, grpc_error* /*error*/) {
   verifier_cb_ctx* ctx = static_cast<verifier_cb_ctx*>(user_data);
   const grpc_http_response* response = &ctx->responses[HTTP_RESPONSE_OPENID];
-  Json json = json_from_http(response); 
+  Json json = json_from_http(response);
   grpc_httpcli_request req;
   const char* jwks_uri;
   grpc_resource_quota* resource_quota = nullptr;
-  const Json* cur; 
+  const Json* cur;
 
   /* TODO(jboeuf): Cache the jwks_uri in order to avoid this hop next time. */
-  if (json.type() == Json::Type::JSON_NULL) goto error; 
+  if (json.type() == Json::Type::JSON_NULL) goto error;
   cur = find_property_by_name(json, "jwks_uri");
   if (cur == nullptr) {
     gpr_log(GPR_ERROR, "Could not find jwks_uri in openid config.");
     goto error;
   }
-  jwks_uri = validate_string_field(*cur, "jwks_uri"); 
+  jwks_uri = validate_string_field(*cur, "jwks_uri");
   if (jwks_uri == nullptr) goto error;
   if (strstr(jwks_uri, "https://") != jwks_uri) {
     gpr_log(GPR_ERROR, "Invalid non https jwks_uri: %s.", jwks_uri);
@@ -852,23 +852,23 @@ void grpc_jwt_verifier_verify(grpc_jwt_verifier* verifier,
   grpc_slice signature;
   size_t signed_jwt_len;
   const char* cur = jwt;
-  Json json; 
+  Json json;
 
   GPR_ASSERT(verifier != nullptr && jwt != nullptr && audience != nullptr &&
              cb != nullptr);
   dot = strchr(cur, '.');
   if (dot == nullptr) goto error;
-  json = parse_json_part_from_jwt(cur, static_cast<size_t>(dot - cur)); 
-  if (json.type() == Json::Type::JSON_NULL) goto error; 
-  header = jose_header_from_json(std::move(json)); 
+  json = parse_json_part_from_jwt(cur, static_cast<size_t>(dot - cur));
+  if (json.type() == Json::Type::JSON_NULL) goto error;
+  header = jose_header_from_json(std::move(json));
   if (header == nullptr) goto error;
 
   cur = dot + 1;
   dot = strchr(cur, '.');
   if (dot == nullptr) goto error;
-  json = parse_json_part_from_jwt(cur, static_cast<size_t>(dot - cur)); 
-  if (json.type() == Json::Type::JSON_NULL) goto error; 
-  claims = grpc_jwt_claims_from_json(std::move(json)); 
+  json = parse_json_part_from_jwt(cur, static_cast<size_t>(dot - cur));
+  if (json.type() == Json::Type::JSON_NULL) goto error;
+  claims = grpc_jwt_claims_from_json(std::move(json));
   if (claims == nullptr) goto error;
 
   signed_jwt_len = static_cast<size_t>(dot - jwt);

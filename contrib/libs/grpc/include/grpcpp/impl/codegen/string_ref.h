@@ -28,8 +28,8 @@
 
 #include <grpcpp/impl/codegen/config.h>
 
-#include <util/stream/output.h> 
- 
+#include <util/stream/output.h>
+
 namespace grpc {
 
 /// This class is a non owning reference to a string.
@@ -61,7 +61,7 @@ class string_ref {
 
   string_ref(const char* s) : data_(s), length_(strlen(s)) {}
   string_ref(const char* s, size_t l) : data_(s), length_(l) {}
-  string_ref(const TString& s) : data_(s.data()), length_(s.length()) {} 
+  string_ref(const TString& s) : data_(s.data()), length_(s.length()) {}
 
   /// iterators
   const_iterator begin() const { return data_; }
@@ -139,9 +139,9 @@ inline bool operator<=(string_ref x, string_ref y) { return x.compare(y) <= 0; }
 inline bool operator>(string_ref x, string_ref y) { return x.compare(y) > 0; }
 inline bool operator>=(string_ref x, string_ref y) { return x.compare(y) >= 0; }
 
-inline IOutputStream& operator<<(IOutputStream& out, const string_ref& string) { 
-  TString t(string.begin(), string.end()); 
-  return out << t; 
+inline IOutputStream& operator<<(IOutputStream& out, const string_ref& string) {
+  TString t(string.begin(), string.end());
+  return out << t;
 }
 
 }  // namespace grpc

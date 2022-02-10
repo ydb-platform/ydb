@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2021 The OpenSSL Project Authors. All Rights Reserved. 
+ * Copyright 1995-2021 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -48,8 +48,8 @@ int ssl3_send_alert(SSL *s, int level, int desc)
                                           * protocol_version alerts */
     if (desc < 0)
         return -1;
-    if (s->shutdown & SSL_SENT_SHUTDOWN && desc != SSL_AD_CLOSE_NOTIFY) 
-        return -1; 
+    if (s->shutdown & SSL_SENT_SHUTDOWN && desc != SSL_AD_CLOSE_NOTIFY)
+        return -1;
     /* If a fatal one, remove from cache */
     if ((level == SSL3_AL_FATAL) && (s->session != NULL))
         SSL_CTX_remove_session(s->session_ctx, s->session);

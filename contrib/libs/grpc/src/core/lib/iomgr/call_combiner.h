@@ -23,8 +23,8 @@
 
 #include <stddef.h>
 
-#include "y_absl/container/inlined_vector.h" 
- 
+#include "y_absl/container/inlined_vector.h"
+
 #include <grpc/support/atm.h>
 
 #include "src/core/lib/gprpp/mpscq.h"
@@ -209,7 +209,7 @@ class CallCombinerClosureList {
 
   // There are generally a maximum of 6 closures to run in the call
   // combiner, one for each pending op.
-  y_absl::InlinedVector<CallCombinerClosure, 6> closures_; 
+  y_absl::InlinedVector<CallCombinerClosure, 6> closures_;
 };
 
 }  // namespace grpc_core

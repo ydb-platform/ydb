@@ -21,9 +21,9 @@
 #include "src/core/ext/transport/chttp2/transport/frame_rst_stream.h"
 #include "src/core/ext/transport/chttp2/transport/internal.h"
 
-#include "y_absl/strings/str_cat.h" 
-#include "y_absl/strings/str_format.h" 
- 
+#include "y_absl/strings/str_cat.h"
+#include "y_absl/strings/str_format.h"
+
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 
@@ -71,10 +71,10 @@ void grpc_chttp2_add_rst_stream_to_next_write(
 grpc_error* grpc_chttp2_rst_stream_parser_begin_frame(
     grpc_chttp2_rst_stream_parser* parser, uint32_t length, uint8_t flags) {
   if (length != 4) {
-    return GRPC_ERROR_CREATE_FROM_COPIED_STRING( 
-        y_absl::StrFormat("invalid rst_stream: length=%d, flags=%02x", length, 
-                        flags) 
-            .c_str()); 
+    return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+        y_absl::StrFormat("invalid rst_stream: length=%d, flags=%02x", length,
+                        flags)
+            .c_str());
   }
   parser->byte = 0;
   return GRPC_ERROR_NONE;
@@ -107,11 +107,11 @@ grpc_error* grpc_chttp2_rst_stream_parser_parse(void* parser,
     grpc_error* error = GRPC_ERROR_NONE;
     if (reason != GRPC_HTTP2_NO_ERROR || s->metadata_buffer[1].size == 0) {
       error = grpc_error_set_int(
-          grpc_error_set_str( 
-              GRPC_ERROR_CREATE_FROM_STATIC_STRING("RST_STREAM"), 
-              GRPC_ERROR_STR_GRPC_MESSAGE, 
-              grpc_slice_from_cpp_string(y_absl::StrCat( 
-                  "Received RST_STREAM with error code ", reason))), 
+          grpc_error_set_str(
+              GRPC_ERROR_CREATE_FROM_STATIC_STRING("RST_STREAM"),
+              GRPC_ERROR_STR_GRPC_MESSAGE,
+              grpc_slice_from_cpp_string(y_absl::StrCat(
+                  "Received RST_STREAM with error code ", reason))),
           GRPC_ERROR_INT_HTTP2_ERROR, static_cast<intptr_t>(reason));
     }
     grpc_chttp2_mark_stream_closed(t, s, true, true, error);

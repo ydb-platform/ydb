@@ -22,12 +22,12 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <vector> 
- 
-#include "y_absl/strings/str_cat.h" 
-#include "y_absl/strings/str_format.h" 
-#include "y_absl/strings/str_join.h" 
- 
+#include <vector>
+
+#include "y_absl/strings/str_cat.h"
+#include "y_absl/strings/str_format.h"
+#include "y_absl/strings/str_join.h"
+
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include <grpc/support/string_util.h>
@@ -130,42 +130,42 @@ void gpr_cmdline_on_extra_arg(
 /* recursively descend argument list, adding the last element
    to s first - so that arguments are added in the order they were
    added to the list by api calls */
-static void add_args_to_usage(arg* a, std::vector<TString>* s) { 
-  if (a == nullptr) return; 
-  add_args_to_usage(a->next, s); 
+static void add_args_to_usage(arg* a, std::vector<TString>* s) {
+  if (a == nullptr) return;
+  add_args_to_usage(a->next, s);
   switch (a->type) {
     case ARGTYPE_BOOL:
-      s->push_back(y_absl::StrFormat(" [--%s|--no-%s]", a->name, a->name)); 
+      s->push_back(y_absl::StrFormat(" [--%s|--no-%s]", a->name, a->name));
       break;
     case ARGTYPE_STRING:
-      s->push_back(y_absl::StrFormat(" [--%s=string]", a->name)); 
+      s->push_back(y_absl::StrFormat(" [--%s=string]", a->name));
       break;
     case ARGTYPE_INT:
-      s->push_back(y_absl::StrFormat(" [--%s=int]", a->name)); 
+      s->push_back(y_absl::StrFormat(" [--%s=int]", a->name));
       break;
   }
 }
 
-TString gpr_cmdline_usage_string(gpr_cmdline* cl, const char* argv0) { 
+TString gpr_cmdline_usage_string(gpr_cmdline* cl, const char* argv0) {
   const char* name = strrchr(argv0, '/');
-  if (name != nullptr) { 
+  if (name != nullptr) {
     name++;
   } else {
     name = argv0;
   }
 
-  std::vector<TString> s; 
-  s.push_back(y_absl::StrCat("Usage: ", name)); 
-  add_args_to_usage(cl->args, &s); 
+  std::vector<TString> s;
+  s.push_back(y_absl::StrCat("Usage: ", name));
+  add_args_to_usage(cl->args, &s);
   if (cl->extra_arg) {
-    s.push_back(y_absl::StrFormat(" [%s...]", cl->extra_arg_name)); 
+    s.push_back(y_absl::StrFormat(" [%s...]", cl->extra_arg_name));
   }
-  s.push_back("\n"); 
-  return y_absl::StrJoin(s, ""); 
+  s.push_back("\n");
+  return y_absl::StrJoin(s, "");
 }
 
 static int print_usage_and_die(gpr_cmdline* cl) {
-  fprintf(stderr, "%s", gpr_cmdline_usage_string(cl, cl->argv0).c_str()); 
+  fprintf(stderr, "%s", gpr_cmdline_usage_string(cl, cl->argv0).c_str());
   if (!cl->survive_failure) {
     exit(1);
   }

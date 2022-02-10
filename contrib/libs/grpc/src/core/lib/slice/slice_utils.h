@@ -23,8 +23,8 @@
 
 #include <cstring>
 
-#include "y_absl/strings/string_view.h" 
- 
+#include "y_absl/strings/string_view.h"
+
 #include <grpc/slice.h>
 
 #include "src/core/lib/gpr/murmur_hash.h"
@@ -188,13 +188,13 @@ struct InternedSlice : public ManagedMemorySlice {
   explicit InternedSlice(InternedSliceRefcount* s);
 };
 
-// Converts grpc_slice to y_absl::string_view. 
-inline y_absl::string_view StringViewFromSlice(const grpc_slice& slice) { 
-  return y_absl::string_view( 
-      reinterpret_cast<const char*>(GRPC_SLICE_START_PTR(slice)), 
-      GRPC_SLICE_LENGTH(slice)); 
-} 
- 
+// Converts grpc_slice to y_absl::string_view.
+inline y_absl::string_view StringViewFromSlice(const grpc_slice& slice) {
+  return y_absl::string_view(
+      reinterpret_cast<const char*>(GRPC_SLICE_START_PTR(slice)),
+      GRPC_SLICE_LENGTH(slice));
+}
+
 }  // namespace grpc_core
 
 #endif /* GRPC_CORE_LIB_SLICE_SLICE_UTILS_H */

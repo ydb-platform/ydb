@@ -1,12 +1,12 @@
 LIBRARY()
 
-LICENSE( 
-    BSD-2-Clause AND 
-    CC0-1.0 
-) 
+LICENSE(
+    BSD-2-Clause AND
+    CC0-1.0
+)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 VERSION(0.9.5)
 
 OWNER(
@@ -16,12 +16,12 @@ OWNER(
 )
 
 NO_UTIL()
- 
+
 NO_COMPILER_WARNINGS()
 
-ADDINCL( 
-    contrib/libs/hdr_histogram/src 
-) 
+ADDINCL(
+    contrib/libs/hdr_histogram/src
+)
 
 SRCS(
     src/hdr_encoding.c

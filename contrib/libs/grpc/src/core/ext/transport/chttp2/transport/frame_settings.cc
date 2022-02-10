@@ -23,8 +23,8 @@
 
 #include <string.h>
 
-#include "y_absl/strings/str_format.h" 
- 
+#include "y_absl/strings/str_format.h"
+
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 
@@ -208,10 +208,10 @@ grpc_error* grpc_chttp2_settings_parser_parse(void* p, grpc_chttp2_transport* t,
                     t->last_new_stream_id, sp->error_value,
                     grpc_slice_from_static_string("HTTP2 settings error"),
                     &t->qbuf);
-                return GRPC_ERROR_CREATE_FROM_COPIED_STRING( 
-                    y_absl::StrFormat("invalid value %u passed for %s", 
-                                    parser->value, sp->name) 
-                        .c_str()); 
+                return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+                    y_absl::StrFormat("invalid value %u passed for %s",
+                                    parser->value, sp->name)
+                        .c_str());
             }
           }
           if (id == GRPC_CHTTP2_SETTINGS_INITIAL_WINDOW_SIZE &&
@@ -228,8 +228,8 @@ grpc_error* grpc_chttp2_settings_parser_parse(void* p, grpc_chttp2_transport* t,
           parser->incoming_settings[id] = parser->value;
           if (GRPC_TRACE_FLAG_ENABLED(grpc_http_trace)) {
             gpr_log(GPR_INFO, "CHTTP2:%s:%s: got setting %s = %d",
-                    t->is_client ? "CLI" : "SVR", t->peer_string.c_str(), 
-                    sp->name, parser->value); 
+                    t->is_client ? "CLI" : "SVR", t->peer_string.c_str(),
+                    sp->name, parser->value);
           }
         } else if (GRPC_TRACE_FLAG_ENABLED(grpc_http_trace)) {
           gpr_log(GPR_ERROR, "CHTTP2: Ignoring unknown setting %d (value %d)",

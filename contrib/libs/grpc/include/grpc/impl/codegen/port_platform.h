@@ -28,17 +28,17 @@
  */
 
 /*
- * Defines GPR_ABSEIL_SYNC to use synchronization features from Abseil 
- */ 
-#ifndef GPR_ABSEIL_SYNC 
-#if defined(__APPLE__) 
-// This is disabled on Apple platforms because macos/grpc_basictests_c_cpp 
-// fails with this. https://github.com/grpc/grpc/issues/23661 
-#else 
-#define GPR_ABSEIL_SYNC 1 
-#endif 
-#endif  // GPR_ABSEIL_SYNC 
- 
+ * Defines GPR_ABSEIL_SYNC to use synchronization features from Abseil
+ */
+#ifndef GPR_ABSEIL_SYNC
+#if defined(__APPLE__)
+// This is disabled on Apple platforms because macos/grpc_basictests_c_cpp
+// fails with this. https://github.com/grpc/grpc/issues/23661
+#else
+#define GPR_ABSEIL_SYNC 1
+#endif
+#endif  // GPR_ABSEIL_SYNC
+
 /* Get windows.h included everywhere (we need it) */
 #if defined(_WIN64) || defined(WIN64) || defined(_WIN32) || defined(WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -51,8 +51,8 @@
 #define NOMINMAX
 #endif /* NOMINMAX */
 
-#include <util/system/winint.h> 
- 
+#include <util/system/winint.h>
+
 #ifndef _WIN32_WINNT
 #error \
     "Please compile grpc with _WIN32_WINNT of at least 0x600 (aka Windows Vista)"
@@ -639,22 +639,22 @@ typedef unsigned __int64 uint64_t;
 #endif /* GPR_ATTRIBUTE_NO_TSAN (1) */
 
 /* GRPC_TSAN_ENABLED will be defined, when compiled with thread sanitizer. */
-#ifndef GRPC_TSAN_SUPPRESSED 
+#ifndef GRPC_TSAN_SUPPRESSED
 #if defined(__SANITIZE_THREAD__)
 #define GRPC_TSAN_ENABLED
 #elif GPR_HAS_FEATURE(thread_sanitizer)
 #define GRPC_TSAN_ENABLED
 #endif
-#endif 
+#endif
 
 /* GRPC_ASAN_ENABLED will be defined, when compiled with address sanitizer. */
-#ifndef GRPC_ASAN_SUPPRESSED 
+#ifndef GRPC_ASAN_SUPPRESSED
 #if defined(__SANITIZE_ADDRESS__)
 #define GRPC_ASAN_ENABLED
 #elif GPR_HAS_FEATURE(address_sanitizer)
 #define GRPC_ASAN_ENABLED
 #endif
-#endif 
+#endif
 
 /* GRPC_ALLOW_EXCEPTIONS should be 0 or 1 if exceptions are allowed or not */
 #ifndef GRPC_ALLOW_EXCEPTIONS

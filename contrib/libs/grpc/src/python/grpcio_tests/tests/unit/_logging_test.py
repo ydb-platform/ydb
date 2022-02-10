@@ -87,10 +87,10 @@ class LoggingTest(unittest.TestCase):
     def _verifyScriptSucceeds(self, script):
         env = os.environ.copy()
         env['Y_PYTHON_ENTRY_POINT'] = ':main'
-        process = subprocess.Popen([INTERPRETER, '-c', script], 
-                                   stdout=subprocess.PIPE, 
-                                   stderr=subprocess.PIPE, 
-                                   env=env) 
+        process = subprocess.Popen([INTERPRETER, '-c', script],
+                                   stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE,
+                                   env=env)
         out, err = process.communicate()
         self.assertEqual(
             0, process.returncode,

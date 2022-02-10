@@ -11,7 +11,7 @@ LICENSE(Apache-2.0)
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/restricted/abseil-cpp/absl/algorithm 
+    contrib/restricted/abseil-cpp/absl/algorithm
     contrib/restricted/abseil-cpp/absl/base
     contrib/restricted/abseil-cpp/absl/base/internal/low_level_alloc
     contrib/restricted/abseil-cpp/absl/base/internal/raw_logging
@@ -21,7 +21,7 @@ PEERDIR(
     contrib/restricted/abseil-cpp/absl/base/internal/throw_delegate
     contrib/restricted/abseil-cpp/absl/base/log_severity
     contrib/restricted/abseil-cpp/absl/city
-    contrib/restricted/abseil-cpp/absl/container 
+    contrib/restricted/abseil-cpp/absl/container
     contrib/restricted/abseil-cpp/absl/container/internal/absl_hashtablez_sampler
     contrib/restricted/abseil-cpp/absl/container/internal/raw_hash_set
     contrib/restricted/abseil-cpp/absl/debugging
@@ -44,7 +44,7 @@ PEERDIR(
     contrib/restricted/abseil-cpp/absl/flags/reflection
     contrib/restricted/abseil-cpp/absl/flags/usage
     contrib/restricted/abseil-cpp/absl/flags/usage_config
-    contrib/restricted/abseil-cpp/absl/functional 
+    contrib/restricted/abseil-cpp/absl/functional
     contrib/restricted/abseil-cpp/absl/hash
     contrib/restricted/abseil-cpp/absl/hash/internal
     contrib/restricted/abseil-cpp/absl/memory
@@ -79,12 +79,12 @@ PEERDIR(
     contrib/restricted/abseil-cpp/absl/time
     contrib/restricted/abseil-cpp/absl/time/civil_time
     contrib/restricted/abseil-cpp/absl/time/time_zone
-    contrib/restricted/abseil-cpp/absl/types 
+    contrib/restricted/abseil-cpp/absl/types
     contrib/restricted/abseil-cpp/absl/types/bad_any_cast
     contrib/restricted/abseil-cpp/absl/types/bad_optional_access
     contrib/restricted/abseil-cpp/absl/types/bad_variant_access
     contrib/restricted/abseil-cpp/absl/types/internal
-    contrib/restricted/abseil-cpp/absl/utility 
+    contrib/restricted/abseil-cpp/absl/utility
 )
 
 NO_RUNTIME()
@@ -92,7 +92,7 @@ NO_RUNTIME()
 END()
 
 RECURSE(
-    absl/algorithm 
+    absl/algorithm
     absl/base
     absl/base/internal/low_level_alloc
     absl/base/internal/raw_logging
@@ -102,7 +102,7 @@ RECURSE(
     absl/base/internal/throw_delegate
     absl/base/log_severity
     absl/city
-    absl/container 
+    absl/container
     absl/container/internal/absl_hashtablez_sampler
     absl/container/internal/raw_hash_set
     absl/debugging
@@ -125,7 +125,7 @@ RECURSE(
     absl/flags/reflection
     absl/flags/usage
     absl/flags/usage_config
-    absl/functional 
+    absl/functional
     absl/hash
     absl/hash/internal
     absl/memory
@@ -160,10 +160,10 @@ RECURSE(
     absl/time
     absl/time/civil_time
     absl/time/time_zone
-    absl/types 
+    absl/types
     absl/types/bad_any_cast
     absl/types/bad_optional_access
     absl/types/bad_variant_access
     absl/types/internal
-    absl/utility 
+    absl/utility
 )

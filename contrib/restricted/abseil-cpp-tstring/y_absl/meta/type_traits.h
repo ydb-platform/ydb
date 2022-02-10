@@ -227,7 +227,7 @@ using void_t = typename type_traits_internal::VoidTImpl<Ts...>::type;
 // This metafunction is designed to be a drop-in replacement for the C++17
 // `std::conjunction` metafunction.
 template <typename... Ts>
-struct conjunction : std::true_type {}; 
+struct conjunction : std::true_type {};
 
 template <typename T, typename... Ts>
 struct conjunction<T, Ts...>
@@ -246,7 +246,7 @@ struct conjunction<T> : T {};
 // This metafunction is designed to be a drop-in replacement for the C++17
 // `std::disjunction` metafunction.
 template <typename... Ts>
-struct disjunction : std::false_type {}; 
+struct disjunction : std::false_type {};
 
 template <typename T, typename... Ts>
 struct disjunction<T, Ts...> :
@@ -641,23 +641,23 @@ using underlying_type_t = typename std::underlying_type<T>::type;
 
 
 namespace type_traits_internal {
- 
+
 #if (defined(__cpp_lib_is_invocable) && __cpp_lib_is_invocable >= 201703L) || \
     (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L)
-// std::result_of is deprecated (C++17) or removed (C++20) 
-template<typename> struct result_of; 
-template<typename F, typename... Args> 
-struct result_of<F(Args...)> : std::invoke_result<F, Args...> {}; 
-#else 
-template<typename F> using result_of = std::result_of<F>; 
-#endif 
- 
-}  // namespace type_traits_internal 
- 
-template<typename F> 
-using result_of_t = typename type_traits_internal::result_of<F>::type; 
- 
-namespace type_traits_internal { 
+// std::result_of is deprecated (C++17) or removed (C++20)
+template<typename> struct result_of;
+template<typename F, typename... Args>
+struct result_of<F(Args...)> : std::invoke_result<F, Args...> {};
+#else
+template<typename F> using result_of = std::result_of<F>;
+#endif
+
+}  // namespace type_traits_internal
+
+template<typename F>
+using result_of_t = typename type_traits_internal::result_of<F>::type;
+
+namespace type_traits_internal {
 // In MSVC we can't probe std::hash or stdext::hash because it triggers a
 // static_assert instead of failing substitution. Libc++ prior to 4.0
 // also used a static_assert.

@@ -44,10 +44,10 @@
     #endif
 #endif
 
-#if defined(__IOS__) 
+#if defined(__IOS__)
     #define _ios_
-#endif 
- 
+#endif
+
 #if defined(_linux_)
     #if defined(_musl_)
         // nothing to do

@@ -20,8 +20,8 @@
 *
 * This file is private and must not be included by users!
 */
-#include <stdint.h> 
-#include <stddef.h> 
+#include <stdint.h>
+#include <stddef.h>
 
 #if UINTPTR_MAX == 0xffffffff
 #define UPB_SIZE(size32, size64) size32
@@ -29,22 +29,22 @@
 #define UPB_SIZE(size32, size64) size64
 #endif
 
-/* If we always read/write as a consistent type to each address, this shouldn't 
- * violate aliasing. 
- */ 
-#define UPB_PTR_AT(msg, ofs, type) ((type*)((char*)(msg) + (ofs))) 
+/* If we always read/write as a consistent type to each address, this shouldn't
+ * violate aliasing.
+ */
+#define UPB_PTR_AT(msg, ofs, type) ((type*)((char*)(msg) + (ofs)))
 
 #define UPB_READ_ONEOF(msg, fieldtype, offset, case_offset, case_val, default) \
-  *UPB_PTR_AT(msg, case_offset, int) == case_val                              \ 
-      ? *UPB_PTR_AT(msg, offset, fieldtype)                                   \ 
+  *UPB_PTR_AT(msg, case_offset, int) == case_val                              \
+      ? *UPB_PTR_AT(msg, offset, fieldtype)                                   \
       : default
 
 #define UPB_WRITE_ONEOF(msg, fieldtype, offset, value, case_offset, case_val) \
-  *UPB_PTR_AT(msg, case_offset, int) = case_val;                             \ 
-  *UPB_PTR_AT(msg, offset, fieldtype) = value; 
+  *UPB_PTR_AT(msg, case_offset, int) = case_val;                             \
+  *UPB_PTR_AT(msg, offset, fieldtype) = value;
 
-#define UPB_MAPTYPE_STRING 0 
- 
+#define UPB_MAPTYPE_STRING 0
+
 /* UPB_INLINE: inline if possible, emit standalone code if required. */
 #ifdef __cplusplus
 #define UPB_INLINE inline
@@ -54,11 +54,11 @@
 #define UPB_INLINE static
 #endif
 
-#define UPB_ALIGN_UP(size, align) (((size) + (align) - 1) / (align) * (align)) 
-#define UPB_ALIGN_DOWN(size, align) ((size) / (align) * (align)) 
-#define UPB_ALIGN_MALLOC(size) UPB_ALIGN_UP(size, 16) 
-#define UPB_ALIGN_OF(type) offsetof (struct { char c; type member; }, member) 
- 
+#define UPB_ALIGN_UP(size, align) (((size) + (align) - 1) / (align) * (align))
+#define UPB_ALIGN_DOWN(size, align) ((size) / (align) * (align))
+#define UPB_ALIGN_MALLOC(size) UPB_ALIGN_UP(size, 16)
+#define UPB_ALIGN_OF(type) offsetof (struct { char c; type member; }, member)
+
 /* Hints to the compiler about likely/unlikely branches. */
 #if defined (__GNUC__) || defined(__clang__)
 #define UPB_LIKELY(x) __builtin_expect((x),1)
@@ -133,20 +133,20 @@ int msvc_vsnprintf(char* s, size_t n, const char* format, va_list arg);
 
 #define UPB_UNUSED(var) (void)var
 
-/* UPB_ASSUME(): in release mode, we tell the compiler to assume this is true. 
- */ 
-#ifdef NDEBUG 
-#ifdef __GNUC__ 
-#define UPB_ASSUME(expr) if (!(expr)) __builtin_unreachable() 
-#elif defined _MSC_VER 
-#define UPB_ASSUME(expr) if (!(expr)) __assume(0) 
-#else 
-#define UPB_ASSUME(expr) do {} while (false && (expr)) 
-#endif 
-#else 
-#define UPB_ASSUME(expr) assert(expr) 
-#endif 
- 
+/* UPB_ASSUME(): in release mode, we tell the compiler to assume this is true.
+ */
+#ifdef NDEBUG
+#ifdef __GNUC__
+#define UPB_ASSUME(expr) if (!(expr)) __builtin_unreachable()
+#elif defined _MSC_VER
+#define UPB_ASSUME(expr) if (!(expr)) __assume(0)
+#else
+#define UPB_ASSUME(expr) do {} while (false && (expr))
+#endif
+#else
+#define UPB_ASSUME(expr) assert(expr)
+#endif
+
 /* UPB_ASSERT(): in release mode, we use the expression without letting it be
  * evaluated.  This prevents "unused variable" warnings. */
 #ifdef NDEBUG
@@ -172,8 +172,8 @@ int msvc_vsnprintf(char* s, size_t n, const char* format, va_list arg);
 #else
 #define UPB_INFINITY (1.0 / 0.0)
 #endif
-#ifdef NAN 
-#define UPB_NAN NAN 
-#else 
-#define UPB_NAN (0.0 / 0.0) 
-#endif 
+#ifdef NAN
+#define UPB_NAN NAN
+#else
+#define UPB_NAN (0.0 / 0.0)
+#endif

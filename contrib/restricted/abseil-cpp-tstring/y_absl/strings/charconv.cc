@@ -20,7 +20,7 @@
 #include <cstring>
 
 #include "y_absl/base/casts.h"
-#include "y_absl/numeric/bits.h" 
+#include "y_absl/numeric/bits.h"
 #include "y_absl/numeric/int128.h"
 #include "y_absl/strings/internal/charconv_bigint.h"
 #include "y_absl/strings/internal/charconv_parse.h"
@@ -242,11 +242,11 @@ struct CalculatedFloat {
 
 // Returns the bit width of the given uint128.  (Equivalently, returns 128
 // minus the number of leading zero bits.)
-unsigned BitWidth(uint128 value) { 
+unsigned BitWidth(uint128 value) {
   if (Uint128High64(value) == 0) {
-    return static_cast<unsigned>(bit_width(Uint128Low64(value))); 
+    return static_cast<unsigned>(bit_width(Uint128Low64(value)));
   }
-  return 128 - countl_zero(Uint128High64(value)); 
+  return 128 - countl_zero(Uint128High64(value));
 }
 
 // Calculates how far to the right a mantissa needs to be shifted to create a
@@ -519,7 +519,7 @@ CalculatedFloat CalculateFromParsedHexadecimal(
     const strings_internal::ParsedFloat& parsed_hex) {
   uint64_t mantissa = parsed_hex.mantissa;
   int exponent = parsed_hex.exponent;
-  auto mantissa_width = static_cast<unsigned>(bit_width(mantissa)); 
+  auto mantissa_width = static_cast<unsigned>(bit_width(mantissa));
   const int shift = NormalizedShiftSize<FloatType>(mantissa_width, exponent);
   bool result_exact;
   exponent += shift;
@@ -619,10 +619,10 @@ from_chars_result FromCharsImpl(const char* first, const char* last,
       // Either we failed to parse a hex float after the "0x", or we read
       // "0xinf" or "0xnan" which we don't want to match.
       //
-      // However, a string that begins with "0x" also begins with "0", which 
+      // However, a string that begins with "0x" also begins with "0", which
       // is normally a valid match for the number zero.  So we want these
       // strings to match zero unless fmt_flags is `scientific`.  (This flag
-      // means an exponent is required, which the string "0" does not have.) 
+      // means an exponent is required, which the string "0" does not have.)
       if (fmt_flags == chars_format::scientific) {
         result.ec = std::errc::invalid_argument;
       } else {

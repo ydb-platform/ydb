@@ -1,7 +1,7 @@
 LIBRARY()
 
-WITHOUT_LICENSE_TEXTS() 
- 
+WITHOUT_LICENSE_TEXTS()
+
 LICENSE(BSD-3-Clause)
 
 VERSION(2.0)
@@ -14,7 +14,7 @@ OWNER(
 )
 
 NO_UTIL()
- 
+
 NO_RUNTIME()
 
 IF (OS_LINUX)
@@ -24,10 +24,10 @@ IF (OS_LINUX)
     SRCS(
         interface.cpp
     )
-ELSE() 
+ELSE()
     SRCS(
         fake.cpp
     )
-ENDIF() 
+ENDIF()
 
 END()

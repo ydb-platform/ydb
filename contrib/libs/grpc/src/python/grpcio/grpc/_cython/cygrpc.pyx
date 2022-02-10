@@ -15,14 +15,14 @@
 
 cimport cpython
 
-import logging 
-import os 
+import logging
+import os
 import sys
-import threading 
-import time 
- 
-import grpc 
- 
+import threading
+import time
+
+import grpc
+
 try:
     import asyncio
 except ImportError:
@@ -31,9 +31,9 @@ except ImportError:
     # Asyncio package is not available we just skip it.
     pass
 
-# The only copy of Python logger for the Cython extension 
-_LOGGER = logging.getLogger(__name__) 
- 
+# The only copy of Python logger for the Cython extension
+_LOGGER = logging.getLogger(__name__)
+
 # TODO(atash): figure out why the coverage tool gets confused about the Cython
 # coverage plugin when the following files don't have a '.pxi' suffix.
 include "_cygrpc/grpc_string.pyx.pxi"
@@ -59,8 +59,8 @@ include "_cygrpc/iomgr.pyx.pxi"
 
 include "_cygrpc/grpc_gevent.pyx.pxi"
 
-include "_cygrpc/thread.pyx.pxi" 
- 
+include "_cygrpc/thread.pyx.pxi"
+
 IF UNAME_SYSNAME == "Windows":
     include "_cygrpc/fork_windows.pyx.pxi"
 ELSE:
@@ -71,10 +71,10 @@ include "_cygrpc/aio/iomgr/iomgr.pyx.pxi"
 include "_cygrpc/aio/iomgr/socket.pyx.pxi"
 include "_cygrpc/aio/iomgr/timer.pyx.pxi"
 include "_cygrpc/aio/iomgr/resolver.pyx.pxi"
-include "_cygrpc/aio/common.pyx.pxi" 
-include "_cygrpc/aio/rpc_status.pyx.pxi" 
-include "_cygrpc/aio/completion_queue.pyx.pxi" 
-include "_cygrpc/aio/callback_common.pyx.pxi" 
+include "_cygrpc/aio/common.pyx.pxi"
+include "_cygrpc/aio/rpc_status.pyx.pxi"
+include "_cygrpc/aio/completion_queue.pyx.pxi"
+include "_cygrpc/aio/callback_common.pyx.pxi"
 include "_cygrpc/aio/grpc_aio.pyx.pxi"
 include "_cygrpc/aio/call.pyx.pxi"
 include "_cygrpc/aio/channel.pyx.pxi"

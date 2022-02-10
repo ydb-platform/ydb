@@ -21,11 +21,11 @@
 #include <grpc/grpc.h>
 #include <grpc/support/log.h>
 
-namespace grpc { 
+namespace grpc {
 namespace {
 class InsecureServerCredentialsImpl final : public ServerCredentials {
  public:
-  int AddPortToServer(const TString& addr, grpc_server* server) override { 
+  int AddPortToServer(const TString& addr, grpc_server* server) override {
     return grpc_server_add_insecure_http2_port(server, addr.c_str());
   }
   void SetAuthMetadataProcessor(
@@ -41,4 +41,4 @@ std::shared_ptr<ServerCredentials> InsecureServerCredentials() {
       new InsecureServerCredentialsImpl());
 }
 
-}  // namespace grpc 
+}  // namespace grpc

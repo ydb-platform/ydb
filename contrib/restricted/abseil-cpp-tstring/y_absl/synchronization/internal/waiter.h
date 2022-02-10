@@ -36,7 +36,7 @@
 #include <cstdint>
 
 #include "y_absl/base/internal/thread_identity.h"
-#include "y_absl/synchronization/internal/futex.h" 
+#include "y_absl/synchronization/internal/futex.h"
 #include "y_absl/synchronization/internal/kernel_timeout.h"
 
 // May be chosen at compile time via -DABSL_FORCE_WAITER_MODE=<index>
@@ -49,7 +49,7 @@
 #define ABSL_WAITER_MODE ABSL_FORCE_WAITER_MODE
 #elif defined(_WIN32) && _WIN32_WINNT >= _WIN32_WINNT_VISTA
 #define ABSL_WAITER_MODE ABSL_WAITER_MODE_WIN32
-#elif defined(ABSL_INTERNAL_HAVE_FUTEX) 
+#elif defined(ABSL_INTERNAL_HAVE_FUTEX)
 #define ABSL_WAITER_MODE ABSL_WAITER_MODE_FUTEX
 #elif defined(ABSL_HAVE_SEMAPHORE_H)
 #define ABSL_WAITER_MODE ABSL_WAITER_MODE_SEM
@@ -96,8 +96,8 @@ class Waiter {
   }
 
   // How many periods to remain idle before releasing resources
-#ifndef ABSL_HAVE_THREAD_SANITIZER 
-  static constexpr int kIdlePeriods = 60; 
+#ifndef ABSL_HAVE_THREAD_SANITIZER
+  static constexpr int kIdlePeriods = 60;
 #else
   // Memory consumption under ThreadSanitizer is a serious concern,
   // so we release resources sooner. The value of 1 leads to 1 to 2 second

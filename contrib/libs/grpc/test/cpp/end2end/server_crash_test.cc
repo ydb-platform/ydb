@@ -38,7 +38,7 @@ using grpc::testing::EchoRequest;
 using grpc::testing::EchoResponse;
 using std::chrono::system_clock;
 
-static TString g_root; 
+static TString g_root;
 
 namespace grpc {
 namespace testing {
@@ -94,7 +94,7 @@ class CrashTest : public ::testing::Test {
  protected:
   CrashTest() {}
 
-  std::unique_ptr<Server> CreateServerAndClient(const TString& mode) { 
+  std::unique_ptr<Server> CreateServerAndClient(const TString& mode) {
     auto port = grpc_pick_unused_port_or_die();
     std::ostringstream addr_stream;
     addr_stream << "localhost:" << port;
@@ -146,9 +146,9 @@ TEST_F(CrashTest, BidiStream) {
 }  // namespace grpc
 
 int main(int argc, char** argv) {
-  TString me = argv[0]; 
+  TString me = argv[0];
   auto lslash = me.rfind('/');
-  if (lslash != TString::npos) { 
+  if (lslash != TString::npos) {
     g_root = me.substr(0, lslash);
   } else {
     g_root = ".";

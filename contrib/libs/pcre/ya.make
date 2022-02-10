@@ -2,29 +2,29 @@
 
 LIBRARY()
 
-OWNER( 
-    orivej 
-    g:cpp-contrib 
-) 
+OWNER(
+    orivej
+    g:cpp-contrib
+)
 
 VERSION(8.44)
 
 ORIGINAL_SOURCE(https://ftp.pcre.org/pub/pcre/pcre-8.44.tar.bz2)
 
-LICENSE( 
-    BSD-2-Clause AND 
-    BSD-3-Clause AND 
-    FSFAP AND 
-    PCRE AND 
-    Public-Domain 
+LICENSE(
+    BSD-2-Clause AND
+    BSD-3-Clause AND
+    FSFAP AND
+    PCRE AND
+    Public-Domain
 )
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
-ADDINCL( 
-    contrib/libs/pcre 
-) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
+ADDINCL(
+    contrib/libs/pcre
+)
+
 NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()
@@ -36,11 +36,11 @@ CFLAGS(
 
 # JIT adds ≈108KB to binary size which may be critical for mobile and embedded devices binary distributions
 DEFAULT(ARCADIA_PCRE_ENABLE_JIT yes)
- 
+
 IF (ARCADIA_PCRE_ENABLE_JIT)
-    CFLAGS( 
-        -DARCADIA_PCRE_ENABLE_JIT 
-    ) 
+    CFLAGS(
+        -DARCADIA_PCRE_ENABLE_JIT
+    )
 ENDIF()
 
 SRCS(

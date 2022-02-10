@@ -45,7 +45,7 @@ template <typename CivilT>
 bool ParseYearAnd(string_view fmt, string_view s, CivilT* c) {
   // Civil times support a larger year range than y_absl::Time, so we need to
   // parse the year separately, normalize it, then use y_absl::ParseTime on the
-  // normalized string. 
+  // normalized string.
   const TString ss = TString(s);  // TODO(y_absl-team): Avoid conversion.
   const char* const np = ss.c_str();
   char* endp;
@@ -80,7 +80,7 @@ bool ParseAs(string_view s, CivilT2* c) {
 
 template <typename CivilT>
 bool ParseLenient(string_view s, CivilT* c) {
-  // A fastpath for when the given string data parses exactly into the given 
+  // A fastpath for when the given string data parses exactly into the given
   // type T (e.g., s="YYYY-MM-DD" and CivilT=CivilDay).
   if (ParseCivilTime(s, c)) return true;
   // Try parsing as each of the 6 types, trying the most common types first
@@ -96,26 +96,26 @@ bool ParseLenient(string_view s, CivilT* c) {
 }  // namespace
 
 TString FormatCivilTime(CivilSecond c) {
-  return FormatYearAnd("-%m-%d%ET%H:%M:%S", c); 
+  return FormatYearAnd("-%m-%d%ET%H:%M:%S", c);
 }
 TString FormatCivilTime(CivilMinute c) {
-  return FormatYearAnd("-%m-%d%ET%H:%M", c); 
+  return FormatYearAnd("-%m-%d%ET%H:%M", c);
 }
 TString FormatCivilTime(CivilHour c) {
-  return FormatYearAnd("-%m-%d%ET%H", c); 
+  return FormatYearAnd("-%m-%d%ET%H", c);
 }
 TString FormatCivilTime(CivilDay c) { return FormatYearAnd("-%m-%d", c); }
 TString FormatCivilTime(CivilMonth c) { return FormatYearAnd("-%m", c); }
 TString FormatCivilTime(CivilYear c) { return FormatYearAnd("", c); }
 
 bool ParseCivilTime(string_view s, CivilSecond* c) {
-  return ParseYearAnd("-%m-%d%ET%H:%M:%S", s, c); 
+  return ParseYearAnd("-%m-%d%ET%H:%M:%S", s, c);
 }
 bool ParseCivilTime(string_view s, CivilMinute* c) {
-  return ParseYearAnd("-%m-%d%ET%H:%M", s, c); 
+  return ParseYearAnd("-%m-%d%ET%H:%M", s, c);
 }
 bool ParseCivilTime(string_view s, CivilHour* c) {
-  return ParseYearAnd("-%m-%d%ET%H", s, c); 
+  return ParseYearAnd("-%m-%d%ET%H", s, c);
 }
 bool ParseCivilTime(string_view s, CivilDay* c) {
   return ParseYearAnd("-%m-%d", s, c);

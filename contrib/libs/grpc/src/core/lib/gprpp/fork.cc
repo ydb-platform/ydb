@@ -164,7 +164,7 @@ class ThreadState {
   int count_;
 };
 
-}  // namespace internal 
+}  // namespace internal
 
 void Fork::GlobalInit() {
   if (!override_enabled_) {

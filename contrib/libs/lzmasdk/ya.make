@@ -1,16 +1,16 @@
 LIBRARY()
 
-LICENSE(Public-Domain) 
+LICENSE(Public-Domain)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 OWNER(
     g:contrib
     g:cpp-contrib
 )
 
-# https://www.7-zip.org/sdk.html 
-VERSION(19.00) 
+# https://www.7-zip.org/sdk.html
+VERSION(19.00)
 
 CFLAGS(-D_7ZIP_ST=1)
 

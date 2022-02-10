@@ -19,5 +19,5 @@
 #elif defined(_MSC_VER) && defined(_M_IX86)
 #   include "bn_conf-win-i686.h"
 #else
-#   include "bn_conf-osx-linux_aarch64-osx_arm64-linux.h" 
+#   include "bn_conf-osx-linux_aarch64-osx_arm64-linux.h"
 #endif

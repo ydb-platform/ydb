@@ -44,13 +44,13 @@
 #include "src/core/lib/slice/slice_string_helpers.h"
 #include "src/core/lib/surface/api_trace.h"
 
-using grpc_core::Json; 
- 
+using grpc_core::Json;
+
 /* -- Constants. -- */
 
 #define GRPC_COMPUTE_ENGINE_DETECTION_HOST "metadata.google.internal."
-#define GRPC_GOOGLE_CREDENTIAL_CREATION_ERROR \ 
-  "Failed to create Google credentials" 
+#define GRPC_GOOGLE_CREDENTIAL_CREATION_ERROR \
+  "Failed to create Google credentials"
 
 /* -- Default credentials. -- */
 
@@ -90,7 +90,7 @@ grpc_google_default_channel_credentials::create_security_connector(
   bool use_alts =
       is_grpclb_load_balancer || is_backend_from_grpclb_load_balancer;
   /* Return failure if ALTS is selected but not running on GCE. */
-  if (use_alts && alts_creds_ == nullptr) { 
+  if (use_alts && alts_creds_ == nullptr) {
     gpr_log(GPR_ERROR, "ALTS is selected, but not running on GCE.");
     return nullptr;
   }
@@ -217,23 +217,23 @@ static int is_metadata_server_reachable() {
 
 /* Takes ownership of creds_path if not NULL. */
 static grpc_error* create_default_creds_from_path(
-    const TString& creds_path, 
-    grpc_core::RefCountedPtr<grpc_call_credentials>* creds) { 
+    const TString& creds_path,
+    grpc_core::RefCountedPtr<grpc_call_credentials>* creds) {
   grpc_auth_json_key key;
   grpc_auth_refresh_token token;
   grpc_core::RefCountedPtr<grpc_call_credentials> result;
   grpc_slice creds_data = grpc_empty_slice();
   grpc_error* error = GRPC_ERROR_NONE;
-  Json json; 
-  if (creds_path.empty()) { 
+  Json json;
+  if (creds_path.empty()) {
     error = GRPC_ERROR_CREATE_FROM_STATIC_STRING("creds_path unset");
     goto end;
   }
-  error = grpc_load_file(creds_path.c_str(), 0, &creds_data); 
-  if (error != GRPC_ERROR_NONE) goto end; 
-  json = Json::Parse(grpc_core::StringViewFromSlice(creds_data), &error); 
-  if (error != GRPC_ERROR_NONE) goto end; 
-  if (json.type() != Json::Type::OBJECT) { 
+  error = grpc_load_file(creds_path.c_str(), 0, &creds_data);
+  if (error != GRPC_ERROR_NONE) goto end;
+  json = Json::Parse(grpc_core::StringViewFromSlice(creds_data), &error);
+  if (error != GRPC_ERROR_NONE) goto end;
+  if (json.type() != Json::Type::OBJECT) {
     error = grpc_error_set_str(
         GRPC_ERROR_CREATE_FROM_STATIC_STRING("Failed to parse JSON"),
         GRPC_ERROR_STR_RAW_BYTES, grpc_slice_ref_internal(creds_data));
@@ -274,13 +274,13 @@ end:
   return error;
 }
 
-static void update_tenancy() { 
+static void update_tenancy() {
   gpr_once_init(&g_once, init_default_credentials);
-  grpc_core::MutexLock lock(&g_state_mu); 
+  grpc_core::MutexLock lock(&g_state_mu);
 
   /* Try a platform-provided hint for GCE. */
   if (!g_metadata_server_available) {
-    g_metadata_server_available = g_gce_tenancy_checker(); 
+    g_metadata_server_available = g_gce_tenancy_checker();
   }
   /* TODO: Add a platform-provided hint for GAE. */
 
@@ -288,64 +288,64 @@ static void update_tenancy() {
   if (!g_metadata_server_available) {
     g_metadata_server_available = is_metadata_server_reachable();
   }
-} 
+}
 
-static bool metadata_server_available() { 
-  grpc_core::MutexLock lock(&g_state_mu); 
-  return static_cast<bool>(g_metadata_server_available); 
-} 
- 
-static grpc_core::RefCountedPtr<grpc_call_credentials> make_default_call_creds( 
-    grpc_error** error) { 
-  grpc_core::RefCountedPtr<grpc_call_credentials> call_creds; 
-  grpc_error* err; 
- 
-  /* First, try the environment variable. */ 
-  char* path_from_env = gpr_getenv(GRPC_GOOGLE_CREDENTIALS_ENV_VAR); 
-  if (path_from_env != nullptr) { 
-    err = create_default_creds_from_path(path_from_env, &call_creds); 
-    gpr_free(path_from_env); 
-    if (err == GRPC_ERROR_NONE) return call_creds; 
-    *error = grpc_error_add_child(*error, err); 
-  } 
- 
-  /* Then the well-known file. */ 
-  err = create_default_creds_from_path( 
-      grpc_get_well_known_google_credentials_file_path(), &call_creds); 
-  if (err == GRPC_ERROR_NONE) return call_creds; 
-  *error = grpc_error_add_child(*error, err); 
- 
-  update_tenancy(); 
- 
-  if (metadata_server_available()) { 
+static bool metadata_server_available() {
+  grpc_core::MutexLock lock(&g_state_mu);
+  return static_cast<bool>(g_metadata_server_available);
+}
+
+static grpc_core::RefCountedPtr<grpc_call_credentials> make_default_call_creds(
+    grpc_error** error) {
+  grpc_core::RefCountedPtr<grpc_call_credentials> call_creds;
+  grpc_error* err;
+
+  /* First, try the environment variable. */
+  char* path_from_env = gpr_getenv(GRPC_GOOGLE_CREDENTIALS_ENV_VAR);
+  if (path_from_env != nullptr) {
+    err = create_default_creds_from_path(path_from_env, &call_creds);
+    gpr_free(path_from_env);
+    if (err == GRPC_ERROR_NONE) return call_creds;
+    *error = grpc_error_add_child(*error, err);
+  }
+
+  /* Then the well-known file. */
+  err = create_default_creds_from_path(
+      grpc_get_well_known_google_credentials_file_path(), &call_creds);
+  if (err == GRPC_ERROR_NONE) return call_creds;
+  *error = grpc_error_add_child(*error, err);
+
+  update_tenancy();
+
+  if (metadata_server_available()) {
     call_creds = grpc_core::RefCountedPtr<grpc_call_credentials>(
         grpc_google_compute_engine_credentials_create(nullptr));
     if (call_creds == nullptr) {
-      *error = GRPC_ERROR_CREATE_FROM_STATIC_STRING( 
-          GRPC_GOOGLE_CREDENTIAL_CREATION_ERROR); 
-      *error = grpc_error_add_child( 
-          *error, GRPC_ERROR_CREATE_FROM_STATIC_STRING( 
-                      "Failed to get credentials from network")); 
+      *error = GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+          GRPC_GOOGLE_CREDENTIAL_CREATION_ERROR);
+      *error = grpc_error_add_child(
+          *error, GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+                      "Failed to get credentials from network"));
     }
   }
 
-  return call_creds; 
-} 
- 
-grpc_channel_credentials* grpc_google_default_credentials_create( 
-    grpc_call_credentials* call_credentials) { 
-  grpc_channel_credentials* result = nullptr; 
-  grpc_core::RefCountedPtr<grpc_call_credentials> call_creds(call_credentials); 
-  grpc_error* error = nullptr; 
-  grpc_core::ExecCtx exec_ctx; 
- 
-  GRPC_API_TRACE("grpc_google_default_credentials_create(%p)", 1, 
-                 (call_credentials)); 
- 
-  if (call_creds == nullptr) { 
-    call_creds = make_default_call_creds(&error); 
-  } 
- 
+  return call_creds;
+}
+
+grpc_channel_credentials* grpc_google_default_credentials_create(
+    grpc_call_credentials* call_credentials) {
+  grpc_channel_credentials* result = nullptr;
+  grpc_core::RefCountedPtr<grpc_call_credentials> call_creds(call_credentials);
+  grpc_error* error = nullptr;
+  grpc_core::ExecCtx exec_ctx;
+
+  GRPC_API_TRACE("grpc_google_default_credentials_create(%p)", 1,
+                 (call_credentials));
+
+  if (call_creds == nullptr) {
+    call_creds = make_default_call_creds(&error);
+  }
+
   if (call_creds != nullptr) {
     /* Create google default credentials. */
     grpc_channel_credentials* ssl_creds =
@@ -358,8 +358,8 @@ grpc_channel_credentials* grpc_google_default_credentials_create(
     grpc_alts_credentials_options_destroy(options);
     auto creds =
         grpc_core::MakeRefCounted<grpc_google_default_channel_credentials>(
-            grpc_core::RefCountedPtr<grpc_channel_credentials>(alts_creds), 
-            grpc_core::RefCountedPtr<grpc_channel_credentials>(ssl_creds)); 
+            grpc_core::RefCountedPtr<grpc_channel_credentials>(alts_creds),
+            grpc_core::RefCountedPtr<grpc_channel_credentials>(ssl_creds));
     result = grpc_composite_channel_credentials_create(
         creds.get(), call_creds.get(), nullptr);
     GPR_ASSERT(result != nullptr);
@@ -393,7 +393,7 @@ void grpc_flush_cached_google_default_credentials(void) {
 
 static grpc_well_known_credentials_path_getter creds_path_getter = nullptr;
 
-TString grpc_get_well_known_google_credentials_file_path(void) { 
+TString grpc_get_well_known_google_credentials_file_path(void) {
   if (creds_path_getter != nullptr) return creds_path_getter();
   return grpc_get_well_known_google_credentials_file_path_impl();
 }

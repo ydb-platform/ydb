@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2021 The OpenSSL Project Authors. All Rights Reserved. 
+ * Copyright 2016-2021 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -1151,7 +1151,7 @@ int tls_parse_ctos_psk(SSL *s, PACKET *pkt, unsigned int context, X509 *x,
             if (sesstmp == NULL) {
                 SSLfatal(s, SSL_AD_INTERNAL_ERROR,
                          SSL_F_TLS_PARSE_CTOS_PSK, ERR_R_INTERNAL_ERROR);
-                goto err; 
+                goto err;
             }
             SSL_SESSION_free(sess);
             sess = sesstmp;
@@ -1714,13 +1714,13 @@ EXT_RETURN tls_construct_stoc_key_share(SSL *s, WPACKET *pkt,
         }
         return EXT_RETURN_NOT_SENT;
     }
-    if (s->hit && (s->ext.psk_kex_mode & TLSEXT_KEX_MODE_FLAG_KE_DHE) == 0) { 
-        /* 
-         * PSK ('hit') and explicitly not doing DHE (if the client sent the 
-         * DHE option we always take it); don't send key share. 
-         */ 
-        return EXT_RETURN_NOT_SENT; 
-    } 
+    if (s->hit && (s->ext.psk_kex_mode & TLSEXT_KEX_MODE_FLAG_KE_DHE) == 0) {
+        /*
+         * PSK ('hit') and explicitly not doing DHE (if the client sent the
+         * DHE option we always take it); don't send key share.
+         */
+        return EXT_RETURN_NOT_SENT;
+    }
 
     if (!WPACKET_put_bytes_u16(pkt, TLSEXT_TYPE_key_share)
             || !WPACKET_start_sub_packet_u16(pkt)

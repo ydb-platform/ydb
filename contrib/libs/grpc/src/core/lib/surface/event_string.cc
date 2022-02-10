@@ -22,40 +22,40 @@
 
 #include <stdio.h>
 
-#include <vector> 
- 
-#include "y_absl/strings/str_format.h" 
-#include "y_absl/strings/str_join.h" 
- 
+#include <vector>
+
+#include "y_absl/strings/str_format.h"
+#include "y_absl/strings/str_join.h"
+
 #include <grpc/byte_buffer.h>
 #include <grpc/support/string_util.h>
 #include "src/core/lib/gpr/string.h"
 
-static void addhdr(grpc_event* ev, std::vector<TString>* buf) { 
-  buf->push_back(y_absl::StrFormat("tag:%p", ev->tag)); 
+static void addhdr(grpc_event* ev, std::vector<TString>* buf) {
+  buf->push_back(y_absl::StrFormat("tag:%p", ev->tag));
 }
 
 static const char* errstr(int success) { return success ? "OK" : "ERROR"; }
 
-static void adderr(int success, std::vector<TString>* buf) { 
-  buf->push_back(y_absl::StrFormat(" %s", errstr(success))); 
+static void adderr(int success, std::vector<TString>* buf) {
+  buf->push_back(y_absl::StrFormat(" %s", errstr(success)));
 }
 
-TString grpc_event_string(grpc_event* ev) { 
-  if (ev == nullptr) return "null"; 
-  std::vector<TString> out; 
+TString grpc_event_string(grpc_event* ev) {
+  if (ev == nullptr) return "null";
+  std::vector<TString> out;
   switch (ev->type) {
     case GRPC_QUEUE_TIMEOUT:
-      out.push_back("QUEUE_TIMEOUT"); 
+      out.push_back("QUEUE_TIMEOUT");
       break;
     case GRPC_QUEUE_SHUTDOWN:
-      out.push_back("QUEUE_SHUTDOWN"); 
+      out.push_back("QUEUE_SHUTDOWN");
       break;
     case GRPC_OP_COMPLETE:
-      out.push_back("OP_COMPLETE: "); 
-      addhdr(ev, &out); 
-      adderr(ev->success, &out); 
+      out.push_back("OP_COMPLETE: ");
+      addhdr(ev, &out);
+      adderr(ev->success, &out);
       break;
   }
-  return y_absl::StrJoin(out, ""); 
+  return y_absl::StrJoin(out, "");
 }

@@ -2,13 +2,13 @@
 
 LIBRARY()
 
-WITHOUT_LICENSE_TEXTS() 
+WITHOUT_LICENSE_TEXTS()
 
-OWNER( 
-    orivej 
-    g:cpp-contrib 
-) 
- 
+OWNER(
+    orivej
+    g:cpp-contrib
+)
+
 LICENSE(MIT)
 
 PEERDIR(

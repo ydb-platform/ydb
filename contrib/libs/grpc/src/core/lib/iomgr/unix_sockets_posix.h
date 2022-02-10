@@ -21,8 +21,8 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <util/generic/string.h> 
- 
+#include <util/generic/string.h>
+
 #include "src/core/lib/iomgr/port.h"
 
 #include <grpc/support/string_util.h>
@@ -39,7 +39,7 @@ int grpc_is_unix_socket(const grpc_resolved_address* resolved_addr);
 void grpc_unlink_if_unix_domain_socket(
     const grpc_resolved_address* resolved_addr);
 
-TString grpc_sockaddr_to_uri_unix_if_possible( 
+TString grpc_sockaddr_to_uri_unix_if_possible(
     const grpc_resolved_address* resolved_addr);
 
 #endif /* GRPC_CORE_LIB_IOMGR_UNIX_SOCKETS_POSIX_H */

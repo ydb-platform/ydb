@@ -21,7 +21,7 @@
 
 #include <grpc/support/port_platform.h>
 
-#include "src/core/ext/filters/client_channel/server_address.h" 
+#include "src/core/ext/filters/client_channel/server_address.h"
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 
@@ -88,51 +88,51 @@ class SubchannelInterface : public RefCounted<SubchannelInterface> {
 
   // TODO(roth): Need a better non-grpc-specific abstraction here.
   virtual const grpc_channel_args* channel_args() = 0;
- 
-  // Allows accessing the attributes associated with the address for 
-  // this subchannel. 
-  virtual const ServerAddress::AttributeInterface* GetAttribute( 
-      const char* key) const = 0; 
+
+  // Allows accessing the attributes associated with the address for
+  // this subchannel.
+  virtual const ServerAddress::AttributeInterface* GetAttribute(
+      const char* key) const = 0;
 };
 
-// A class that delegates to another subchannel, to be used in cases 
-// where an LB policy needs to wrap a subchannel. 
-class DelegatingSubchannel : public SubchannelInterface { 
- public: 
-  explicit DelegatingSubchannel(RefCountedPtr<SubchannelInterface> subchannel) 
-      : wrapped_subchannel_(std::move(subchannel)) {} 
- 
-  RefCountedPtr<SubchannelInterface> wrapped_subchannel() const { 
-    return wrapped_subchannel_; 
-  } 
- 
-  grpc_connectivity_state CheckConnectivityState() override { 
-    return wrapped_subchannel_->CheckConnectivityState(); 
-  } 
-  void WatchConnectivityState( 
-      grpc_connectivity_state initial_state, 
-      std::unique_ptr<ConnectivityStateWatcherInterface> watcher) override { 
-    return wrapped_subchannel_->WatchConnectivityState(initial_state, 
-                                                       std::move(watcher)); 
-  } 
-  void CancelConnectivityStateWatch( 
-      ConnectivityStateWatcherInterface* watcher) override { 
-    return wrapped_subchannel_->CancelConnectivityStateWatch(watcher); 
-  } 
-  void AttemptToConnect() override { wrapped_subchannel_->AttemptToConnect(); } 
-  void ResetBackoff() override { wrapped_subchannel_->ResetBackoff(); } 
-  const grpc_channel_args* channel_args() override { 
-    return wrapped_subchannel_->channel_args(); 
-  } 
-  const ServerAddress::AttributeInterface* GetAttribute( 
-      const char* key) const override { 
-    return wrapped_subchannel_->GetAttribute(key); 
-  } 
- 
- private: 
-  RefCountedPtr<SubchannelInterface> wrapped_subchannel_; 
-}; 
- 
+// A class that delegates to another subchannel, to be used in cases
+// where an LB policy needs to wrap a subchannel.
+class DelegatingSubchannel : public SubchannelInterface {
+ public:
+  explicit DelegatingSubchannel(RefCountedPtr<SubchannelInterface> subchannel)
+      : wrapped_subchannel_(std::move(subchannel)) {}
+
+  RefCountedPtr<SubchannelInterface> wrapped_subchannel() const {
+    return wrapped_subchannel_;
+  }
+
+  grpc_connectivity_state CheckConnectivityState() override {
+    return wrapped_subchannel_->CheckConnectivityState();
+  }
+  void WatchConnectivityState(
+      grpc_connectivity_state initial_state,
+      std::unique_ptr<ConnectivityStateWatcherInterface> watcher) override {
+    return wrapped_subchannel_->WatchConnectivityState(initial_state,
+                                                       std::move(watcher));
+  }
+  void CancelConnectivityStateWatch(
+      ConnectivityStateWatcherInterface* watcher) override {
+    return wrapped_subchannel_->CancelConnectivityStateWatch(watcher);
+  }
+  void AttemptToConnect() override { wrapped_subchannel_->AttemptToConnect(); }
+  void ResetBackoff() override { wrapped_subchannel_->ResetBackoff(); }
+  const grpc_channel_args* channel_args() override {
+    return wrapped_subchannel_->channel_args();
+  }
+  const ServerAddress::AttributeInterface* GetAttribute(
+      const char* key) const override {
+    return wrapped_subchannel_->GetAttribute(key);
+  }
+
+ private:
+  RefCountedPtr<SubchannelInterface> wrapped_subchannel_;
+};
+
 }  // namespace grpc_core
 
 #endif /* GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_SUBCHANNEL_INTERFACE_H */

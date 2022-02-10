@@ -6,30 +6,30 @@ OWNER(g:cpp-contrib)
 
 LICENSE(Apache-2.0)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 PEERDIR(
-    contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/spinlock_wait 
-    contrib/restricted/abseil-cpp-tstring/y_absl/container 
-    contrib/restricted/abseil-cpp-tstring/y_absl/memory 
-    contrib/restricted/abseil-cpp-tstring/y_absl/strings 
-    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/str_format 
-    contrib/restricted/abseil-cpp-tstring/y_absl/synchronization 
-    contrib/restricted/abseil-cpp-tstring/y_absl/time 
+    contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/spinlock_wait
+    contrib/restricted/abseil-cpp-tstring/y_absl/container
+    contrib/restricted/abseil-cpp-tstring/y_absl/memory
+    contrib/restricted/abseil-cpp-tstring/y_absl/strings
+    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/str_format
+    contrib/restricted/abseil-cpp-tstring/y_absl/synchronization
+    contrib/restricted/abseil-cpp-tstring/y_absl/time
 )
 
 ADDINCL(
     GLOBAL contrib/libs/grpc/include
-    ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc 
+    ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc
     contrib/libs/grpc
 )
 
 NO_COMPILER_WARNINGS()
 
 IF (OS_LINUX OR OS_DARWIN)
-    CFLAGS( 
-        -DGRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK=1 
-    ) 
+    CFLAGS(
+        -DGRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK=1
+    )
 ENDIF()
 
 SRCS(
@@ -53,7 +53,7 @@ SRCS(
     gpr/string_util_windows.cc
     gpr/string_windows.cc
     gpr/sync.cc
-    gpr/sync_abseil.cc 
+    gpr/sync_abseil.cc
     gpr/sync_posix.cc
     gpr/sync_windows.cc
     gpr/time.cc

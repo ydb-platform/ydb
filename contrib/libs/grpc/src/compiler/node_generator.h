@@ -29,8 +29,8 @@ struct Parameters {
   int minimum_node_version;
 };
 
-TString GenerateFile(const grpc::protobuf::FileDescriptor* file, 
-                         const Parameters& params); 
+TString GenerateFile(const grpc::protobuf::FileDescriptor* file,
+                         const Parameters& params);
 
 }  // namespace grpc_node_generator
 

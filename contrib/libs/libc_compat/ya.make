@@ -2,19 +2,19 @@ OWNER(g:cpp-contrib)
 
 LIBRARY()
 
-LICENSE( 
-    BSD-1-Clause AND 
-    BSD-2-Clause AND 
-    BSD-3-Clause AND 
-    ISC 
-) 
+LICENSE(
+    BSD-1-Clause AND
+    BSD-2-Clause AND
+    BSD-3-Clause AND
+    ISC
+)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 NO_COMPILER_WARNINGS()
- 
+
 NO_UTIL()
- 
+
 NO_RUNTIME()
 
 IF (NOT OS_WINDOWS)
@@ -55,7 +55,7 @@ ENDIF()
 
 IF (OS_WINDOWS OR OS_DARWIN OR OS_IOS)
     SRCS(
-        memrchr.c 
+        memrchr.c
     )
 ENDIF()
 

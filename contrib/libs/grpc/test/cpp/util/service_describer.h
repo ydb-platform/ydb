@@ -25,16 +25,16 @@
 namespace grpc {
 namespace testing {
 
-TString DescribeServiceList(std::vector<TString> service_list, 
-                                grpc::protobuf::DescriptorPool& desc_pool); 
+TString DescribeServiceList(std::vector<TString> service_list,
+                                grpc::protobuf::DescriptorPool& desc_pool);
 
-TString DescribeService(const grpc::protobuf::ServiceDescriptor* service); 
+TString DescribeService(const grpc::protobuf::ServiceDescriptor* service);
 
-TString DescribeMethod(const grpc::protobuf::MethodDescriptor* method); 
+TString DescribeMethod(const grpc::protobuf::MethodDescriptor* method);
 
-TString SummarizeService(const grpc::protobuf::ServiceDescriptor* service); 
+TString SummarizeService(const grpc::protobuf::ServiceDescriptor* service);
 
-TString SummarizeMethod(const grpc::protobuf::MethodDescriptor* method); 
+TString SummarizeMethod(const grpc::protobuf::MethodDescriptor* method);
 
 }  // namespace testing
 }  // namespace grpc

@@ -11,22 +11,22 @@ LIBRARY()
 
 LICENSE(
     Apache-2.0 AND
-    Apache-2.0 WITH LLVM-exception AND 
-    MIT AND 
-    NCSA 
+    Apache-2.0 WITH LLVM-exception AND
+    MIT AND
+    NCSA
 )
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 VERSION(2016-03-03-08f0372c351a57b01afee6c64066961203da28c5)
 
 ORIGINAL_SOURCE(https://github.com/llvm/llvm-project)
 
 OWNER(
-    pg 
-    somov 
-    g:contrib 
-    g:cpp-contrib 
+    pg
+    somov
+    g:contrib
+    g:cpp-contrib
 )
 
 # Check MUSL before NO_PLATFORM() disables it.
@@ -44,11 +44,11 @@ IF (MUSL)
 ENDIF()
 
 NO_UTIL()
- 
+
 NO_RUNTIME()
- 
+
 NO_PLATFORM()
- 
+
 NO_COMPILER_WARNINGS()
 
 IF (GCC OR CLANG)
@@ -82,7 +82,7 @@ SRCS(
     fixunssfti.c
     fixunstfdi.c
     fixunstfsi.c
-    fixunstfti.c 
+    fixunstfti.c
     fixunsxfti.c
     floatditf.c
     floatsitf.c
@@ -111,11 +111,11 @@ SRCS(
 )
 
 IF (OS_DARWIN OR OS_IOS)
-    SRCS( 
-        os_version_check.c 
-    ) 
-ENDIF() 
- 
+    SRCS(
+        os_version_check.c
+    )
+ENDIF()
+
 IF (ARCH_ARM)
     SRCS(
         clear_cache.c

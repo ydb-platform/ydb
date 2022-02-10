@@ -24,8 +24,8 @@
 
 #ifdef GPR_SUPPORT_CHANNELS_FROM_FD
 
-#include "y_absl/strings/str_cat.h" 
- 
+#include "y_absl/strings/str_cat.h"
+
 #include <grpc/support/alloc.h>
 
 #include "src/core/ext/transport/chttp2/transport/chttp2_transport.h"
@@ -41,21 +41,21 @@ void grpc_server_add_insecure_channel_from_fd(grpc_server* server,
   GPR_ASSERT(reserved == nullptr);
 
   grpc_core::ExecCtx exec_ctx;
-  grpc_core::Server* core_server = server->core_server.get(); 
+  grpc_core::Server* core_server = server->core_server.get();
 
-  const grpc_channel_args* server_args = core_server->channel_args(); 
-  TString name = y_absl::StrCat("fd:", fd); 
-  grpc_endpoint* server_endpoint = grpc_tcp_create( 
-      grpc_fd_create(fd, name.c_str(), true), server_args, name.c_str()); 
+  const grpc_channel_args* server_args = core_server->channel_args();
+  TString name = y_absl::StrCat("fd:", fd);
+  grpc_endpoint* server_endpoint = grpc_tcp_create(
+      grpc_fd_create(fd, name.c_str(), true), server_args, name.c_str());
 
   grpc_transport* transport = grpc_create_chttp2_transport(
       server_args, server_endpoint, false /* is_client */);
 
-  for (grpc_pollset* pollset : core_server->pollsets()) { 
-    grpc_endpoint_add_to_pollset(server_endpoint, pollset); 
+  for (grpc_pollset* pollset : core_server->pollsets()) {
+    grpc_endpoint_add_to_pollset(server_endpoint, pollset);
   }
 
-  core_server->SetupTransport(transport, nullptr, server_args, nullptr); 
+  core_server->SetupTransport(transport, nullptr, server_args, nullptr);
   grpc_chttp2_transport_start_reading(transport, nullptr, nullptr);
 }
 

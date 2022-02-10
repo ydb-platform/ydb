@@ -51,11 +51,11 @@
        --decode=grpc.testing.SimpleResponse \
        src/proto/grpc/testing/messages.proto \
        < output.bin > output.txt
-   10. --default_service_config, optional default service config to use 
-       on the channel. Note that this may be ignored if the name resolver 
-       returns a service config. 
-   11. --display_peer_address, on CallMethod commands, log the peer socket 
-       address of the connection that each RPC is made on to stderr. 
+   10. --default_service_config, optional default service config to use
+       on the channel. Note that this may be ignored if the name resolver
+       returns a service config.
+   11. --display_peer_address, on CallMethod commands, log the peer socket
+       address of the connection that each RPC is made on to stderr.
 */
 
 #include <fstream>
@@ -70,12 +70,12 @@
 
 DEFINE_string(outfile, "", "Output file (default is stdout)");
 
-static bool SimplePrint(const TString& outfile, const TString& output) { 
+static bool SimplePrint(const TString& outfile, const TString& output) {
   if (outfile.empty()) {
-    std::cout << output << std::flush; 
+    std::cout << output << std::flush;
   } else {
     std::ofstream output_file(outfile, std::ios::app | std::ios::binary);
-    output_file << output << std::flush; 
+    output_file << output << std::flush;
     output_file.close();
   }
   return true;
@@ -86,5 +86,5 @@ int main(int argc, char** argv) {
 
   return grpc::testing::GrpcToolMainLib(
       argc, (const char**)argv, grpc::testing::CliCredentials(),
-      std::bind(SimplePrint, TString(FLAGS_outfile.c_str()), std::placeholders::_1)); 
+      std::bind(SimplePrint, TString(FLAGS_outfile.c_str()), std::placeholders::_1));
 }

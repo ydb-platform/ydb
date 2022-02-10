@@ -52,12 +52,12 @@ class ContextList;
 /* streams are kept in various linked lists depending on what things need to
    happen to them... this enum labels each list */
 typedef enum {
-  /* If a stream is in the following two lists, an explicit ref is associated 
-     with the stream */ 
+  /* If a stream is in the following two lists, an explicit ref is associated
+     with the stream */
   GRPC_CHTTP2_LIST_WRITABLE,
   GRPC_CHTTP2_LIST_WRITING,
-  /* No additional ref is taken for the following refs. Make sure to remove the 
-     stream from these lists when the stream is removed. */ 
+  /* No additional ref is taken for the following refs. Make sure to remove the
+     stream from these lists when the stream is removed. */
   GRPC_CHTTP2_LIST_STALLED_BY_TRANSPORT,
   GRPC_CHTTP2_LIST_STALLED_BY_STREAM,
   /** streams that are waiting to start because there are too many concurrent
@@ -101,7 +101,7 @@ typedef enum {
   GRPC_CHTTP2_INITIATE_WRITE_FLOW_CONTROL_UNSTALLED_BY_SETTING,
   GRPC_CHTTP2_INITIATE_WRITE_FLOW_CONTROL_UNSTALLED_BY_UPDATE,
   GRPC_CHTTP2_INITIATE_WRITE_APPLICATION_PING,
-  GRPC_CHTTP2_INITIATE_WRITE_BDP_PING, 
+  GRPC_CHTTP2_INITIATE_WRITE_BDP_PING,
   GRPC_CHTTP2_INITIATE_WRITE_KEEPALIVE_PING,
   GRPC_CHTTP2_INITIATE_WRITE_TRANSPORT_FLOW_CONTROL_UNSTALLED,
   GRPC_CHTTP2_INITIATE_WRITE_PING_RESPONSE,
@@ -295,7 +295,7 @@ struct grpc_chttp2_transport {
   grpc_transport base; /* must be first */
   grpc_core::RefCount refs;
   grpc_endpoint* ep;
-  TString peer_string; 
+  TString peer_string;
 
   grpc_resource_user* resource_user;
 
@@ -435,8 +435,8 @@ struct grpc_chttp2_transport {
   grpc_chttp2_write_cb* write_cb_pool = nullptr;
 
   /* bdp estimator */
-  bool bdp_ping_blocked = 
-      false; /* Is the BDP blocked due to not receiving any data? */ 
+  bool bdp_ping_blocked =
+      false; /* Is the BDP blocked due to not receiving any data? */
   grpc_closure next_bdp_ping_timer_expired_locked;
   grpc_closure start_bdp_ping_locked;
   grpc_closure finish_bdp_ping_locked;
@@ -534,13 +534,13 @@ struct grpc_chttp2_stream {
   grpc_metadata_batch* send_initial_metadata = nullptr;
   grpc_closure* send_initial_metadata_finished = nullptr;
   grpc_metadata_batch* send_trailing_metadata = nullptr;
-  // TODO(yashykt): Find a better name for the below field and others in this 
-  //                struct to betteer distinguish inputs, return values, and 
-  //                internal state. 
-  // sent_trailing_metadata_op allows the transport to fill in to the upper 
-  // layer whether this stream was able to send its trailing metadata (used for 
-  // detecting cancellation on the server-side).. 
-  bool* sent_trailing_metadata_op = nullptr; 
+  // TODO(yashykt): Find a better name for the below field and others in this
+  //                struct to betteer distinguish inputs, return values, and
+  //                internal state.
+  // sent_trailing_metadata_op allows the transport to fill in to the upper
+  // layer whether this stream was able to send its trailing metadata (used for
+  // detecting cancellation on the server-side)..
+  bool* sent_trailing_metadata_op = nullptr;
   grpc_closure* send_trailing_metadata_finished = nullptr;
 
   grpc_core::OrphanablePtr<grpc_core::ByteStream> fetching_send_message;
@@ -850,12 +850,12 @@ void grpc_chttp2_ack_ping(grpc_chttp2_transport* t, uint64_t id);
     "too_many_pings" followed by immediately closing the connection. */
 void grpc_chttp2_add_ping_strike(grpc_chttp2_transport* t);
 
-/** Resets ping clock. Should be called when flushing window updates, 
- * initial/trailing metadata or data frames. For a server, it resets the number 
- * of ping strikes and the last_ping_recv_time. For a ping sender, it resets 
- * pings_before_data_required. */ 
-void grpc_chttp2_reset_ping_clock(grpc_chttp2_transport* t); 
- 
+/** Resets ping clock. Should be called when flushing window updates,
+ * initial/trailing metadata or data frames. For a server, it resets the number
+ * of ping strikes and the last_ping_recv_time. For a ping sender, it resets
+ * pings_before_data_required. */
+void grpc_chttp2_reset_ping_clock(grpc_chttp2_transport* t);
+
 /** add a ref to the stream and add it to the writable list;
     ref will be dropped in writing.c */
 void grpc_chttp2_mark_stream_writable(grpc_chttp2_transport* t,
@@ -881,6 +881,6 @@ void grpc_chttp2_config_default_keepalive_args(grpc_channel_args* args,
 
 void grpc_chttp2_retry_initiate_ping(void* tp, grpc_error* error);
 
-void schedule_bdp_ping_locked(grpc_chttp2_transport* t); 
- 
+void schedule_bdp_ping_locked(grpc_chttp2_transport* t);
+
 #endif /* GRPC_CORE_EXT_TRANSPORT_CHTTP2_TRANSPORT_INTERNAL_H */

@@ -29,10 +29,10 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <util/generic/string.h> 
- 
-#include "y_absl/strings/str_cat.h" 
- 
+#include <util/generic/string.h>
+
+#include "y_absl/strings/str_cat.h"
+
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include <grpc/support/sync.h>
@@ -91,8 +91,8 @@ static grpc_error* add_socket_to_server(grpc_tcp_server* s, int fd,
       grpc_tcp_server_prepare_socket(s, fd, addr, s->so_reuseport, &port);
   if (err == GRPC_ERROR_NONE) {
     GPR_ASSERT(port > 0);
-    TString addr_str = grpc_sockaddr_to_string(addr, true); 
-    TString name = y_absl::StrCat("tcp-server-listener:", addr_str); 
+    TString addr_str = grpc_sockaddr_to_string(addr, true);
+    TString name = y_absl::StrCat("tcp-server-listener:", addr_str);
     gpr_mu_lock(&s->mu);
     s->nports++;
     GPR_ASSERT(!s->on_accept_cb && "must add ports before starting server");
@@ -106,7 +106,7 @@ static grpc_error* add_socket_to_server(grpc_tcp_server* s, int fd,
     s->tail = sp;
     sp->server = s;
     sp->fd = fd;
-    sp->emfd = grpc_fd_create(fd, name.c_str(), true); 
+    sp->emfd = grpc_fd_create(fd, name.c_str(), true);
     memcpy(&sp->addr, addr, sizeof(grpc_resolved_address));
     sp->port = port;
     sp->port_index = port_index;
@@ -156,14 +156,14 @@ grpc_error* grpc_tcp_server_prepare_socket(grpc_tcp_server* s, int fd,
     if (err != GRPC_ERROR_NONE) goto error;
   }
 
-#ifdef GRPC_LINUX_ERRQUEUE 
-  err = grpc_set_socket_zerocopy(fd); 
-  if (err != GRPC_ERROR_NONE) { 
-    /* it's not fatal, so just log it. */ 
-    gpr_log(GPR_DEBUG, "Node does not support SO_ZEROCOPY, continuing."); 
-    GRPC_ERROR_UNREF(err); 
-  } 
-#endif 
+#ifdef GRPC_LINUX_ERRQUEUE
+  err = grpc_set_socket_zerocopy(fd);
+  if (err != GRPC_ERROR_NONE) {
+    /* it's not fatal, so just log it. */
+    gpr_log(GPR_DEBUG, "Node does not support SO_ZEROCOPY, continuing.");
+    GRPC_ERROR_UNREF(err);
+  }
+#endif
   err = grpc_set_socket_nonblocking(fd, 1);
   if (err != GRPC_ERROR_NONE) goto error;
   err = grpc_set_socket_cloexec(fd, 1);

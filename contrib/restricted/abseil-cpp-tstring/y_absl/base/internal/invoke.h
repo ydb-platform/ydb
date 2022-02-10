@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// y_absl::base_internal::invoke(f, args...) is an implementation of 
+// y_absl::base_internal::invoke(f, args...) is an implementation of
 // INVOKE(f, args...) from section [func.require] of the C++ standard.
 //
 // [func.require]
@@ -29,7 +29,7 @@
 //    is not one of the types described in the previous item;
 // 5. f(t1, t2, ..., tN) in all other cases.
 //
-// The implementation is SFINAE-friendly: substitution failure within invoke() 
+// The implementation is SFINAE-friendly: substitution failure within invoke()
 // isn't an error.
 
 #ifndef ABSL_BASE_INTERNAL_INVOKE_H_
@@ -170,13 +170,13 @@ struct Invoker {
 
 // The result type of Invoke<F, Args...>.
 template <typename F, typename... Args>
-using invoke_result_t = decltype(Invoker<F, Args...>::type::Invoke( 
+using invoke_result_t = decltype(Invoker<F, Args...>::type::Invoke(
     std::declval<F>(), std::declval<Args>()...));
 
 // Invoke(f, args...) is an implementation of INVOKE(f, args...) from section
 // [func.require] of the C++ standard.
 template <typename F, typename... Args>
-invoke_result_t<F, Args...> invoke(F&& f, Args&&... args) { 
+invoke_result_t<F, Args...> invoke(F&& f, Args&&... args) {
   return Invoker<F, Args...>::type::Invoke(std::forward<F>(f),
                                            std::forward<Args>(args)...);
 }

@@ -64,9 +64,9 @@
 // proper Abseil implementation at compile-time, which will not be sufficient
 // to guarantee ABI stability to package managers.
 
-#ifndef ABSL_BASE_OPTIONS_H_ 
-#define ABSL_BASE_OPTIONS_H_ 
- 
+#ifndef ABSL_BASE_OPTIONS_H_
+#define ABSL_BASE_OPTIONS_H_
+
 // Include a standard library header to allow configuration based on the
 // standard library in use.
 #ifdef __cplusplus
@@ -208,31 +208,31 @@
 #define ABSL_OPTION_USE_INLINE_NAMESPACE 1
 #define ABSL_OPTION_INLINE_NAMESPACE_NAME lts_y_20211102
 
-// ABSL_OPTION_HARDENED 
-// 
-// This option enables a "hardened" build in release mode (in this context, 
-// release mode is defined as a build where the `NDEBUG` macro is defined). 
-// 
-// A value of 0 means that "hardened" mode is not enabled. 
-// 
-// A value of 1 means that "hardened" mode is enabled. 
-// 
-// Hardened builds have additional security checks enabled when `NDEBUG` is 
-// defined. Defining `NDEBUG` is normally used to turn `assert()` macro into a 
-// no-op, as well as disabling other bespoke program consistency checks. By 
-// defining ABSL_OPTION_HARDENED to 1, a select set of checks remain enabled in 
-// release mode. These checks guard against programming errors that may lead to 
-// security vulnerabilities. In release mode, when one of these programming 
-// errors is encountered, the program will immediately abort, possibly without 
-// any attempt at logging. 
-// 
-// The checks enabled by this option are not free; they do incur runtime cost. 
-// 
-// The checks enabled by this option are always active when `NDEBUG` is not 
-// defined, even in the case when ABSL_OPTION_HARDENED is defined to 0. The 
-// checks enabled by this option may abort the program in a different way and 
-// log additional information when `NDEBUG` is not defined. 
- 
-#define ABSL_OPTION_HARDENED 0 
- 
+// ABSL_OPTION_HARDENED
+//
+// This option enables a "hardened" build in release mode (in this context,
+// release mode is defined as a build where the `NDEBUG` macro is defined).
+//
+// A value of 0 means that "hardened" mode is not enabled.
+//
+// A value of 1 means that "hardened" mode is enabled.
+//
+// Hardened builds have additional security checks enabled when `NDEBUG` is
+// defined. Defining `NDEBUG` is normally used to turn `assert()` macro into a
+// no-op, as well as disabling other bespoke program consistency checks. By
+// defining ABSL_OPTION_HARDENED to 1, a select set of checks remain enabled in
+// release mode. These checks guard against programming errors that may lead to
+// security vulnerabilities. In release mode, when one of these programming
+// errors is encountered, the program will immediately abort, possibly without
+// any attempt at logging.
+//
+// The checks enabled by this option are not free; they do incur runtime cost.
+//
+// The checks enabled by this option are always active when `NDEBUG` is not
+// defined, even in the case when ABSL_OPTION_HARDENED is defined to 0. The
+// checks enabled by this option may abort the program in a different way and
+// log additional information when `NDEBUG` is not defined.
+
+#define ABSL_OPTION_HARDENED 0
+
 #endif  // ABSL_BASE_OPTIONS_H_

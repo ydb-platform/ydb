@@ -38,7 +38,7 @@ using grpc::testing::EchoRequest;
 using grpc::testing::EchoResponse;
 using std::chrono::system_clock;
 
-static TString g_root; 
+static TString g_root;
 
 namespace grpc {
 namespace testing {
@@ -127,9 +127,9 @@ TEST_F(CrashTest, KillAfterWrite) {
 }  // namespace grpc
 
 int main(int argc, char** argv) {
-  TString me = argv[0]; 
+  TString me = argv[0];
   auto lslash = me.rfind('/');
-  if (lslash != TString::npos) { 
+  if (lslash != TString::npos) {
     g_root = me.substr(0, lslash);
   } else {
     g_root = ".";

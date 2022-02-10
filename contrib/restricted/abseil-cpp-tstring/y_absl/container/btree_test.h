@@ -25,7 +25,7 @@
 #include "y_absl/container/btree_map.h"
 #include "y_absl/container/btree_set.h"
 #include "y_absl/container/flat_hash_set.h"
-#include "y_absl/strings/cord.h" 
+#include "y_absl/strings/cord.h"
 #include "y_absl/time/time.h"
 
 namespace y_absl {
@@ -101,16 +101,16 @@ struct Generator<TString> {
   }
 };
 
-template <> 
-struct Generator<Cord> { 
-  int maxval; 
-  explicit Generator(int m) : maxval(m) {} 
-  Cord operator()(int i) const { 
-    char buf[16]; 
-    return Cord(GenerateDigits(buf, i, maxval)); 
-  } 
-}; 
- 
+template <>
+struct Generator<Cord> {
+  int maxval;
+  explicit Generator(int m) : maxval(m) {}
+  Cord operator()(int i) const {
+    char buf[16];
+    return Cord(GenerateDigits(buf, i, maxval));
+  }
+};
+
 template <typename T, typename U>
 struct Generator<std::pair<T, U> > {
   Generator<typename remove_pair_const<T>::type> tgen;

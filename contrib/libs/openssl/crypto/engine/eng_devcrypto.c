@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2021 The OpenSSL Project Authors. All Rights Reserved. 
+ * Copyright 2017-2021 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -758,9 +758,9 @@ static int devcrypto_unload(ENGINE *e)
 void engine_load_devcrypto_int()
 {
     ENGINE *e = NULL;
-    int fd; 
+    int fd;
 
-    if ((fd = open("/dev/crypto", O_RDWR, 0)) < 0) { 
+    if ((fd = open("/dev/crypto", O_RDWR, 0)) < 0) {
 #ifndef ENGINE_DEVCRYPTO_DEBUG
         if (errno != ENOENT)
 #endif
@@ -768,18 +768,18 @@ void engine_load_devcrypto_int()
         return;
     }
 
-#ifdef CRIOGET 
-    if (ioctl(fd, CRIOGET, &cfd) < 0) { 
-        fprintf(stderr, "Could not create crypto fd: %s\n", strerror(errno)); 
-        close(fd); 
-        cfd = -1; 
-        return; 
-    } 
-    close(fd); 
-#else 
-    cfd = fd; 
-#endif 
- 
+#ifdef CRIOGET
+    if (ioctl(fd, CRIOGET, &cfd) < 0) {
+        fprintf(stderr, "Could not create crypto fd: %s\n", strerror(errno));
+        close(fd);
+        cfd = -1;
+        return;
+    }
+    close(fd);
+#else
+    cfd = fd;
+#endif
+
     if ((e = ENGINE_new()) == NULL
         || !ENGINE_set_destroy_function(e, devcrypto_unload)) {
         ENGINE_free(e);

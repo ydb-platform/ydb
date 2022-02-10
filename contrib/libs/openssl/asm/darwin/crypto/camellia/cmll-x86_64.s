@@ -5,7 +5,7 @@
 
 .p2align	4
 _Camellia_EncryptBlock:
- 
+
 	movl	$128,%eax
 	subl	%edi,%eax
 	movl	$3,%edi
@@ -13,7 +13,7 @@ _Camellia_EncryptBlock:
 	jmp	L$enc_rounds
 
 
- 
+
 .globl	_Camellia_EncryptBlock_Rounds
 
 .p2align	4
@@ -80,7 +80,7 @@ L$enc_epilogue:
 
 .p2align	4
 _x86_64_Camellia_encrypt:
- 
+
 	xorl	0(%r14),%r9d
 	xorl	4(%r14),%r8d
 	xorl	8(%r14),%r11d
@@ -286,12 +286,12 @@ L$edone:
 
 
 
- 
+
 .globl	_Camellia_DecryptBlock
 
 .p2align	4
 _Camellia_DecryptBlock:
- 
+
 	movl	$128,%eax
 	subl	%edi,%eax
 	movl	$3,%edi
@@ -299,7 +299,7 @@ _Camellia_DecryptBlock:
 	jmp	L$dec_rounds
 
 
- 
+
 .globl	_Camellia_DecryptBlock_Rounds
 
 .p2align	4
@@ -366,7 +366,7 @@ L$dec_epilogue:
 
 .p2align	4
 _x86_64_Camellia_decrypt:
- 
+
 	xorl	0(%r14),%r9d
 	xorl	4(%r14),%r8d
 	xorl	8(%r14),%r11d
@@ -571,7 +571,7 @@ L$ddone:
 
 .byte	0xf3,0xc3
 
- 
+
 .globl	_Camellia_Ekeygen
 
 .p2align	4

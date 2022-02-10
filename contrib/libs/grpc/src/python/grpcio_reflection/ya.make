@@ -2,8 +2,8 @@ PY23_LIBRARY()
 
 LICENSE(Apache-2.0)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 OWNER(
     akastornov
     dvshkurko
@@ -25,7 +25,7 @@ IF (PYTHON2)
 ENDIF()
 
 ADDINCL(
-    ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc 
+    ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc
     contrib/libs/grpc
     contrib/libs/grpc/include
 )
@@ -43,15 +43,15 @@ PY_SRCS(
     TOP_LEVEL
     grpc_reflection/__init__.py
     grpc_reflection/v1alpha/__init__.py
-    grpc_reflection/v1alpha/_base.py 
+    grpc_reflection/v1alpha/_base.py
     grpc_reflection/v1alpha/reflection.py
 )
 
-IF (PYTHON3) 
-    PY_SRCS( 
-        TOP_LEVEL 
-        grpc_reflection/v1alpha/_async.py 
-    ) 
-ENDIF() 
- 
+IF (PYTHON3)
+    PY_SRCS(
+        TOP_LEVEL
+        grpc_reflection/v1alpha/_async.py
+    )
+ENDIF()
+
 END()

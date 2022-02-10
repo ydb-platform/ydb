@@ -1,13 +1,13 @@
 LIBRARY()
 
-WITHOUT_LICENSE_TEXTS() 
- 
+WITHOUT_LICENSE_TEXTS()
+
 LICENSE(BSD-2-Clause)
 
 OWNER(
-    orivej 
-    g:contrib 
-    g:cpp-contrib 
+    orivej
+    g:contrib
+    g:cpp-contrib
 )
 
 NO_UTIL()

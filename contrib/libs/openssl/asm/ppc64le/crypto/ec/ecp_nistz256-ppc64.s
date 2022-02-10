@@ -2380,13 +2380,13 @@ ecp_nistz256_precomputed:
 
 .globl	ecp_nistz256_mul_mont
 .type	ecp_nistz256_mul_mont,@function
-.section	".opd","aw" 
-.align	3 
-ecp_nistz256_mul_mont: 
-.quad	.ecp_nistz256_mul_mont,.TOC.@tocbase,0 
-.previous 
+.section	".opd","aw"
+.align	3
+ecp_nistz256_mul_mont:
+.quad	.ecp_nistz256_mul_mont,.TOC.@tocbase,0
+.previous
 .align	5
-.ecp_nistz256_mul_mont: 
+.ecp_nistz256_mul_mont:
 	stdu	1,-128(1)
 	mflr	0
 	std	22,48(1)
@@ -2429,19 +2429,19 @@ ecp_nistz256_mul_mont:
 .long	0
 .byte	0,12,4,0,0x80,10,3,0
 .long	0
-.size	.ecp_nistz256_mul_mont,.-.ecp_nistz256_mul_mont 
-.size	ecp_nistz256_mul_mont,.-.ecp_nistz256_mul_mont 
+.size	.ecp_nistz256_mul_mont,.-.ecp_nistz256_mul_mont
+.size	ecp_nistz256_mul_mont,.-.ecp_nistz256_mul_mont
 
 
 .globl	ecp_nistz256_sqr_mont
 .type	ecp_nistz256_sqr_mont,@function
-.section	".opd","aw" 
-.align	3 
-ecp_nistz256_sqr_mont: 
-.quad	.ecp_nistz256_sqr_mont,.TOC.@tocbase,0 
-.previous 
+.section	".opd","aw"
+.align	3
+ecp_nistz256_sqr_mont:
+.quad	.ecp_nistz256_sqr_mont,.TOC.@tocbase,0
+.previous
 .align	4
-.ecp_nistz256_sqr_mont: 
+.ecp_nistz256_sqr_mont:
 	stdu	1,-128(1)
 	mflr	0
 	std	22,48(1)
@@ -2483,20 +2483,20 @@ ecp_nistz256_sqr_mont:
 .long	0
 .byte	0,12,4,0,0x80,10,2,0
 .long	0
-.size	.ecp_nistz256_sqr_mont,.-.ecp_nistz256_sqr_mont 
-.size	ecp_nistz256_sqr_mont,.-.ecp_nistz256_sqr_mont 
+.size	.ecp_nistz256_sqr_mont,.-.ecp_nistz256_sqr_mont
+.size	ecp_nistz256_sqr_mont,.-.ecp_nistz256_sqr_mont
 
 
 
 .globl	ecp_nistz256_add
 .type	ecp_nistz256_add,@function
-.section	".opd","aw" 
-.align	3 
-ecp_nistz256_add: 
-.quad	.ecp_nistz256_add,.TOC.@tocbase,0 
-.previous 
+.section	".opd","aw"
+.align	3
+ecp_nistz256_add:
+.quad	.ecp_nistz256_add,.TOC.@tocbase,0
+.previous
 .align	4
-.ecp_nistz256_add: 
+.ecp_nistz256_add:
 	stdu	1,-128(1)
 	mflr	0
 	std	28,96(1)
@@ -2530,19 +2530,19 @@ ecp_nistz256_add:
 .long	0
 .byte	0,12,4,0,0x80,4,3,0
 .long	0
-.size	.ecp_nistz256_add,.-.ecp_nistz256_add 
-.size	ecp_nistz256_add,.-.ecp_nistz256_add 
+.size	.ecp_nistz256_add,.-.ecp_nistz256_add
+.size	ecp_nistz256_add,.-.ecp_nistz256_add
 
 
 .globl	ecp_nistz256_div_by_2
 .type	ecp_nistz256_div_by_2,@function
-.section	".opd","aw" 
-.align	3 
-ecp_nistz256_div_by_2: 
-.quad	.ecp_nistz256_div_by_2,.TOC.@tocbase,0 
-.previous 
+.section	".opd","aw"
+.align	3
+ecp_nistz256_div_by_2:
+.quad	.ecp_nistz256_div_by_2,.TOC.@tocbase,0
+.previous
 .align	4
-.ecp_nistz256_div_by_2: 
+.ecp_nistz256_div_by_2:
 	stdu	1,-128(1)
 	mflr	0
 	std	28,96(1)
@@ -2572,19 +2572,19 @@ ecp_nistz256_div_by_2:
 .long	0
 .byte	0,12,4,0,0x80,4,2,0
 .long	0
-.size	.ecp_nistz256_div_by_2,.-.ecp_nistz256_div_by_2 
-.size	ecp_nistz256_div_by_2,.-.ecp_nistz256_div_by_2 
+.size	.ecp_nistz256_div_by_2,.-.ecp_nistz256_div_by_2
+.size	ecp_nistz256_div_by_2,.-.ecp_nistz256_div_by_2
 
 
 .globl	ecp_nistz256_mul_by_2
 .type	ecp_nistz256_mul_by_2,@function
-.section	".opd","aw" 
-.align	3 
-ecp_nistz256_mul_by_2: 
-.quad	.ecp_nistz256_mul_by_2,.TOC.@tocbase,0 
-.previous 
+.section	".opd","aw"
+.align	3
+ecp_nistz256_mul_by_2:
+.quad	.ecp_nistz256_mul_by_2,.TOC.@tocbase,0
+.previous
 .align	4
-.ecp_nistz256_mul_by_2: 
+.ecp_nistz256_mul_by_2:
 	stdu	1,-128(1)
 	mflr	0
 	std	28,96(1)
@@ -2619,19 +2619,19 @@ ecp_nistz256_mul_by_2:
 .long	0
 .byte	0,12,4,0,0x80,4,3,0
 .long	0
-.size	.ecp_nistz256_mul_by_2,.-.ecp_nistz256_mul_by_2 
-.size	ecp_nistz256_mul_by_2,.-.ecp_nistz256_mul_by_2 
+.size	.ecp_nistz256_mul_by_2,.-.ecp_nistz256_mul_by_2
+.size	ecp_nistz256_mul_by_2,.-.ecp_nistz256_mul_by_2
 
 
 .globl	ecp_nistz256_mul_by_3
 .type	ecp_nistz256_mul_by_3,@function
-.section	".opd","aw" 
-.align	3 
-ecp_nistz256_mul_by_3: 
-.quad	.ecp_nistz256_mul_by_3,.TOC.@tocbase,0 
-.previous 
+.section	".opd","aw"
+.align	3
+ecp_nistz256_mul_by_3:
+.quad	.ecp_nistz256_mul_by_3,.TOC.@tocbase,0
+.previous
 .align	4
-.ecp_nistz256_mul_by_3: 
+.ecp_nistz256_mul_by_3:
 	stdu	1,-128(1)
 	mflr	0
 	std	28,96(1)
@@ -2677,20 +2677,20 @@ ecp_nistz256_mul_by_3:
 .long	0
 .byte	0,12,4,0,0x80,4,2,0
 .long	0
-.size	.ecp_nistz256_mul_by_3,.-.ecp_nistz256_mul_by_3 
-.size	ecp_nistz256_mul_by_3,.-.ecp_nistz256_mul_by_3 
+.size	.ecp_nistz256_mul_by_3,.-.ecp_nistz256_mul_by_3
+.size	ecp_nistz256_mul_by_3,.-.ecp_nistz256_mul_by_3
 
 
 
 .globl	ecp_nistz256_sub
 .type	ecp_nistz256_sub,@function
-.section	".opd","aw" 
-.align	3 
-ecp_nistz256_sub: 
-.quad	.ecp_nistz256_sub,.TOC.@tocbase,0 
-.previous 
+.section	".opd","aw"
+.align	3
+ecp_nistz256_sub:
+.quad	.ecp_nistz256_sub,.TOC.@tocbase,0
+.previous
 .align	4
-.ecp_nistz256_sub: 
+.ecp_nistz256_sub:
 	stdu	1,-128(1)
 	mflr	0
 	std	28,96(1)
@@ -2720,19 +2720,19 @@ ecp_nistz256_sub:
 .long	0
 .byte	0,12,4,0,0x80,4,3,0
 .long	0
-.size	.ecp_nistz256_sub,.-.ecp_nistz256_sub 
-.size	ecp_nistz256_sub,.-.ecp_nistz256_sub 
+.size	.ecp_nistz256_sub,.-.ecp_nistz256_sub
+.size	ecp_nistz256_sub,.-.ecp_nistz256_sub
 
 
 .globl	ecp_nistz256_neg
 .type	ecp_nistz256_neg,@function
-.section	".opd","aw" 
-.align	3 
-ecp_nistz256_neg: 
-.quad	.ecp_nistz256_neg,.TOC.@tocbase,0 
-.previous 
+.section	".opd","aw"
+.align	3
+ecp_nistz256_neg:
+.quad	.ecp_nistz256_neg,.TOC.@tocbase,0
+.previous
 .align	4
-.ecp_nistz256_neg: 
+.ecp_nistz256_neg:
 	stdu	1,-128(1)
 	mflr	0
 	std	28,96(1)
@@ -2763,8 +2763,8 @@ ecp_nistz256_neg:
 .long	0
 .byte	0,12,4,0,0x80,4,2,0
 .long	0
-.size	.ecp_nistz256_neg,.-.ecp_nistz256_neg 
-.size	ecp_nistz256_neg,.-.ecp_nistz256_neg 
+.size	.ecp_nistz256_neg,.-.ecp_nistz256_neg
+.size	ecp_nistz256_neg,.-.ecp_nistz256_neg
 
 
 
@@ -3202,13 +3202,13 @@ __ecp_nistz256_div_by_2:
 .size	__ecp_nistz256_div_by_2,.-__ecp_nistz256_div_by_2
 .globl	ecp_nistz256_point_double
 .type	ecp_nistz256_point_double,@function
-.section	".opd","aw" 
-.align	3 
-ecp_nistz256_point_double: 
-.quad	.ecp_nistz256_point_double,.TOC.@tocbase,0 
-.previous 
+.section	".opd","aw"
+.align	3
+ecp_nistz256_point_double:
+.quad	.ecp_nistz256_point_double,.TOC.@tocbase,0
+.previous
 .align	5
-.ecp_nistz256_point_double: 
+.ecp_nistz256_point_double:
 	stdu	1,-288(1)
 	mflr	0
 	std	20,288-8*12(1)
@@ -3386,17 +3386,17 @@ ecp_nistz256_point_double:
 .long	0
 .byte	0,12,4,0,0x80,12,2,0
 .long	0
-.size	.ecp_nistz256_point_double,.-.ecp_nistz256_point_double 
-.size	ecp_nistz256_point_double,.-.ecp_nistz256_point_double 
+.size	.ecp_nistz256_point_double,.-.ecp_nistz256_point_double
+.size	ecp_nistz256_point_double,.-.ecp_nistz256_point_double
 .globl	ecp_nistz256_point_add
 .type	ecp_nistz256_point_add,@function
-.section	".opd","aw" 
-.align	3 
-ecp_nistz256_point_add: 
-.quad	.ecp_nistz256_point_add,.TOC.@tocbase,0 
-.previous 
+.section	".opd","aw"
+.align	3
+ecp_nistz256_point_add:
+.quad	.ecp_nistz256_point_add,.TOC.@tocbase,0
+.previous
 .align	5
-.ecp_nistz256_point_add: 
+.ecp_nistz256_point_add:
 	stdu	1,-576(1)
 	mflr	0
 	std	16,576-8*16(1)
@@ -3791,17 +3791,17 @@ ecp_nistz256_point_add:
 .long	0
 .byte	0,12,4,0,0x80,16,3,0
 .long	0
-.size	.ecp_nistz256_point_add,.-.ecp_nistz256_point_add 
-.size	ecp_nistz256_point_add,.-.ecp_nistz256_point_add 
+.size	.ecp_nistz256_point_add,.-.ecp_nistz256_point_add
+.size	ecp_nistz256_point_add,.-.ecp_nistz256_point_add
 .globl	ecp_nistz256_point_add_affine
 .type	ecp_nistz256_point_add_affine,@function
-.section	".opd","aw" 
-.align	3 
-ecp_nistz256_point_add_affine: 
-.quad	.ecp_nistz256_point_add_affine,.TOC.@tocbase,0 
-.previous 
+.section	".opd","aw"
+.align	3
+ecp_nistz256_point_add_affine:
+.quad	.ecp_nistz256_point_add_affine,.TOC.@tocbase,0
+.previous
 .align	5
-.ecp_nistz256_point_add_affine: 
+.ecp_nistz256_point_add_affine:
 	stdu	1,-512(1)
 	mflr	0
 	std	16,512-8*16(1)
@@ -4121,20 +4121,20 @@ ecp_nistz256_point_add_affine:
 .long	0
 .byte	0,12,4,0,0x80,16,3,0
 .long	0
-.size	.ecp_nistz256_point_add_affine,.-.ecp_nistz256_point_add_affine 
-.size	ecp_nistz256_point_add_affine,.-.ecp_nistz256_point_add_affine 
+.size	.ecp_nistz256_point_add_affine,.-.ecp_nistz256_point_add_affine
+.size	ecp_nistz256_point_add_affine,.-.ecp_nistz256_point_add_affine
 
 
 
 .globl	ecp_nistz256_ord_mul_mont
 .type	ecp_nistz256_ord_mul_mont,@function
-.section	".opd","aw" 
-.align	3 
-ecp_nistz256_ord_mul_mont: 
-.quad	.ecp_nistz256_ord_mul_mont,.TOC.@tocbase,0 
-.previous 
+.section	".opd","aw"
+.align	3
+ecp_nistz256_ord_mul_mont:
+.quad	.ecp_nistz256_ord_mul_mont,.TOC.@tocbase,0
+.previous
 .align	5
-.ecp_nistz256_ord_mul_mont: 
+.ecp_nistz256_ord_mul_mont:
 	stdu	1,-160(1)
 	std	18,48(1)
 	std	19,56(1)
@@ -4380,21 +4380,21 @@ ecp_nistz256_ord_mul_mont:
 .long	0
 .byte	0,12,4,0,0x80,14,3,0
 .long	0
-.size	.ecp_nistz256_ord_mul_mont,.-.ecp_nistz256_ord_mul_mont 
-.size	ecp_nistz256_ord_mul_mont,.-.ecp_nistz256_ord_mul_mont 
+.size	.ecp_nistz256_ord_mul_mont,.-.ecp_nistz256_ord_mul_mont
+.size	ecp_nistz256_ord_mul_mont,.-.ecp_nistz256_ord_mul_mont
 
 
 
 
 .globl	ecp_nistz256_ord_sqr_mont
 .type	ecp_nistz256_ord_sqr_mont,@function
-.section	".opd","aw" 
-.align	3 
-ecp_nistz256_ord_sqr_mont: 
-.quad	.ecp_nistz256_ord_sqr_mont,.TOC.@tocbase,0 
-.previous 
+.section	".opd","aw"
+.align	3
+ecp_nistz256_ord_sqr_mont:
+.quad	.ecp_nistz256_ord_sqr_mont,.TOC.@tocbase,0
+.previous
 .align	5
-.ecp_nistz256_ord_sqr_mont: 
+.ecp_nistz256_ord_sqr_mont:
 	stdu	1,-160(1)
 	std	18,48(1)
 	std	19,56(1)
@@ -4622,20 +4622,20 @@ ecp_nistz256_ord_sqr_mont:
 .long	0
 .byte	0,12,4,0,0x80,14,3,0
 .long	0
-.size	.ecp_nistz256_ord_sqr_mont,.-.ecp_nistz256_ord_sqr_mont 
-.size	ecp_nistz256_ord_sqr_mont,.-.ecp_nistz256_ord_sqr_mont 
+.size	.ecp_nistz256_ord_sqr_mont,.-.ecp_nistz256_ord_sqr_mont
+.size	ecp_nistz256_ord_sqr_mont,.-.ecp_nistz256_ord_sqr_mont
 
 
 
 .globl	ecp_nistz256_scatter_w5
 .type	ecp_nistz256_scatter_w5,@function
-.section	".opd","aw" 
-.align	3 
-ecp_nistz256_scatter_w5: 
-.quad	.ecp_nistz256_scatter_w5,.TOC.@tocbase,0 
-.previous 
+.section	".opd","aw"
+.align	3
+ecp_nistz256_scatter_w5:
+.quad	.ecp_nistz256_scatter_w5,.TOC.@tocbase,0
+.previous
 .align	4
-.ecp_nistz256_scatter_w5: 
+.ecp_nistz256_scatter_w5:
 	slwi	5,5,2
 	add	3,3,5
 
@@ -4699,21 +4699,21 @@ ecp_nistz256_scatter_w5:
 .long	0
 .byte	0,12,0x14,0,0,0,3,0
 .long	0
-.size	.ecp_nistz256_scatter_w5,.-.ecp_nistz256_scatter_w5 
-.size	ecp_nistz256_scatter_w5,.-.ecp_nistz256_scatter_w5 
+.size	.ecp_nistz256_scatter_w5,.-.ecp_nistz256_scatter_w5
+.size	ecp_nistz256_scatter_w5,.-.ecp_nistz256_scatter_w5
 
 
 
 
 .globl	ecp_nistz256_gather_w5
 .type	ecp_nistz256_gather_w5,@function
-.section	".opd","aw" 
-.align	3 
-ecp_nistz256_gather_w5: 
-.quad	.ecp_nistz256_gather_w5,.TOC.@tocbase,0 
-.previous 
+.section	".opd","aw"
+.align	3
+ecp_nistz256_gather_w5:
+.quad	.ecp_nistz256_gather_w5,.TOC.@tocbase,0
+.previous
 .align	4
-.ecp_nistz256_gather_w5: 
+.ecp_nistz256_gather_w5:
 	neg	0,5
 	sradi	0,0,63
 
@@ -4802,21 +4802,21 @@ ecp_nistz256_gather_w5:
 .long	0
 .byte	0,12,0x14,0,0,0,3,0
 .long	0
-.size	.ecp_nistz256_gather_w5,.-.ecp_nistz256_gather_w5 
-.size	ecp_nistz256_gather_w5,.-.ecp_nistz256_gather_w5 
+.size	.ecp_nistz256_gather_w5,.-.ecp_nistz256_gather_w5
+.size	ecp_nistz256_gather_w5,.-.ecp_nistz256_gather_w5
 
 
 
 
 .globl	ecp_nistz256_scatter_w7
 .type	ecp_nistz256_scatter_w7,@function
-.section	".opd","aw" 
-.align	3 
-ecp_nistz256_scatter_w7: 
-.quad	.ecp_nistz256_scatter_w7,.TOC.@tocbase,0 
-.previous 
+.section	".opd","aw"
+.align	3
+ecp_nistz256_scatter_w7:
+.quad	.ecp_nistz256_scatter_w7,.TOC.@tocbase,0
+.previous
 .align	4
-.ecp_nistz256_scatter_w7: 
+.ecp_nistz256_scatter_w7:
 	li	0,8
 	mtctr	0
 	add	3,3,5
@@ -4846,21 +4846,21 @@ ecp_nistz256_scatter_w7:
 .long	0
 .byte	0,12,0x14,0,0,0,3,0
 .long	0
-.size	.ecp_nistz256_scatter_w7,.-.ecp_nistz256_scatter_w7 
-.size	ecp_nistz256_scatter_w7,.-.ecp_nistz256_scatter_w7 
+.size	.ecp_nistz256_scatter_w7,.-.ecp_nistz256_scatter_w7
+.size	ecp_nistz256_scatter_w7,.-.ecp_nistz256_scatter_w7
 
 
 
 
 .globl	ecp_nistz256_gather_w7
 .type	ecp_nistz256_gather_w7,@function
-.section	".opd","aw" 
-.align	3 
-ecp_nistz256_gather_w7: 
-.quad	.ecp_nistz256_gather_w7,.TOC.@tocbase,0 
-.previous 
+.section	".opd","aw"
+.align	3
+ecp_nistz256_gather_w7:
+.quad	.ecp_nistz256_gather_w7,.TOC.@tocbase,0
+.previous
 .align	4
-.ecp_nistz256_gather_w7: 
+.ecp_nistz256_gather_w7:
 	li	0,8
 	mtctr	0
 	neg	0,5
@@ -4904,5 +4904,5 @@ ecp_nistz256_gather_w7:
 .long	0
 .byte	0,12,0x14,0,0,0,3,0
 .long	0
-.size	.ecp_nistz256_gather_w7,.-.ecp_nistz256_gather_w7 
-.size	ecp_nistz256_gather_w7,.-.ecp_nistz256_gather_w7 
+.size	.ecp_nistz256_gather_w7,.-.ecp_nistz256_gather_w7
+.size	ecp_nistz256_gather_w7,.-.ecp_nistz256_gather_w7

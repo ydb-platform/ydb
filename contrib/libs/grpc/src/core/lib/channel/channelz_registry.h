@@ -23,9 +23,9 @@
 
 #include <stdint.h>
 
-#include <map> 
-#include <util/generic/string.h> 
- 
+#include <map>
+#include <util/generic/string.h>
+
 #include "src/core/lib/channel/channel_trace.h"
 #include "src/core/lib/channel/channelz.h"
 #include "src/core/lib/gprpp/map.h"
@@ -54,13 +54,13 @@ class ChannelzRegistry {
 
   // Returns the allocated JSON string that represents the proto
   // GetTopChannelsResponse as per channelz.proto.
-  static TString GetTopChannels(intptr_t start_channel_id) { 
+  static TString GetTopChannels(intptr_t start_channel_id) {
     return Default()->InternalGetTopChannels(start_channel_id);
   }
 
   // Returns the allocated JSON string that represents the proto
   // GetServersResponse as per channelz.proto.
-  static TString GetServers(intptr_t start_server_id) { 
+  static TString GetServers(intptr_t start_server_id) {
     return Default()->InternalGetServers(start_server_id);
   }
 
@@ -83,8 +83,8 @@ class ChannelzRegistry {
   // returns the void* associated with that uuid. Else returns nullptr.
   RefCountedPtr<BaseNode> InternalGet(intptr_t uuid);
 
-  TString InternalGetTopChannels(intptr_t start_channel_id); 
-  TString InternalGetServers(intptr_t start_server_id); 
+  TString InternalGetTopChannels(intptr_t start_channel_id);
+  TString InternalGetServers(intptr_t start_server_id);
 
   void InternalLogAllEntities();
 

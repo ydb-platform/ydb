@@ -1,6 +1,6 @@
 /*
  *
- * Copyright 2016 gRPC authors. 
+ * Copyright 2016 gRPC authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,36 +19,36 @@
 #ifndef GRPCPP_IMPL_SERVER_INITIALIZER_H
 #define GRPCPP_IMPL_SERVER_INITIALIZER_H
 
-#include <memory> 
-#include <vector> 
+#include <memory>
+#include <vector>
 
-#include <grpcpp/server.h> 
- 
+#include <grpcpp/server.h>
+
 namespace grpc {
-class Server; 
-class Service; 
+class Server;
+class Service;
 
-class ServerInitializer { 
- public: 
-  ServerInitializer(grpc::Server* server) : server_(server) {} 
+class ServerInitializer {
+ public:
+  ServerInitializer(grpc::Server* server) : server_(server) {}
 
-  bool RegisterService(std::shared_ptr<grpc::Service> service) { 
-    if (!server_->RegisterService(nullptr, service.get())) { 
-      return false; 
-    } 
-    default_services_.push_back(service); 
-    return true; 
-  } 
- 
-  const std::vector<TString>* GetServiceList() { 
-    return &server_->services_; 
-  } 
- 
- private: 
-  grpc::Server* server_; 
-  std::vector<std::shared_ptr<grpc::Service> > default_services_; 
-}; 
- 
+  bool RegisterService(std::shared_ptr<grpc::Service> service) {
+    if (!server_->RegisterService(nullptr, service.get())) {
+      return false;
+    }
+    default_services_.push_back(service);
+    return true;
+  }
+
+  const std::vector<TString>* GetServiceList() {
+    return &server_->services_;
+  }
+
+ private:
+  grpc::Server* server_;
+  std::vector<std::shared_ptr<grpc::Service> > default_services_;
+};
+
 }  // namespace grpc
 
 #endif  // GRPCPP_IMPL_SERVER_INITIALIZER_H

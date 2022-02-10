@@ -33,7 +33,7 @@
 #include "src/proto/grpc/lb/v1/load_reporter.grpc.pb.h"
 #include "src/proto/grpc/testing/echo.grpc.pb.h"
 #include "test/core/util/port.h"
-#include "test/core/util/test_config.h" 
+#include "test/core/util/test_config.h"
 
 namespace grpc {
 namespace testing {
@@ -71,7 +71,7 @@ class ServerLoadReportingEnd2endTest : public ::testing::Test {
  protected:
   void SetUp() override {
     server_address_ =
-        "localhost:" + ToString(grpc_pick_unused_port_or_die()); 
+        "localhost:" + ToString(grpc_pick_unused_port_or_die());
     server_ =
         ServerBuilder()
             .AddListeningPort(server_address_, InsecureServerCredentials())
@@ -91,11 +91,11 @@ class ServerLoadReportingEnd2endTest : public ::testing::Test {
     server_thread_.join();
   }
 
-  void ClientMakeEchoCalls(const TString& lb_id, const TString& lb_tag, 
-                           const TString& message, size_t num_requests) { 
+  void ClientMakeEchoCalls(const TString& lb_id, const TString& lb_tag,
+                           const TString& message, size_t num_requests) {
     auto stub = EchoTestService::NewStub(
         grpc::CreateChannel(server_address_, InsecureChannelCredentials()));
-    TString lb_token = lb_id + lb_tag; 
+    TString lb_token = lb_id + lb_tag;
     for (int i = 0; i < num_requests; ++i) {
       ClientContext ctx;
       if (!lb_token.empty()) ctx.AddMetadata(GRPC_LB_TOKEN_MD_KEY, lb_token);
@@ -114,7 +114,7 @@ class ServerLoadReportingEnd2endTest : public ::testing::Test {
     }
   }
 
-  TString server_address_; 
+  TString server_address_;
   std::unique_ptr<Server> server_;
   std::thread server_thread_;
   EchoTestServiceImpl echo_service_;
@@ -139,7 +139,7 @@ TEST_F(ServerLoadReportingEnd2endTest, BasicReport) {
   gpr_log(GPR_INFO, "Initial request sent.");
   ::grpc::lb::v1::LoadReportResponse response;
   stream->Read(&response);
-  const TString& lb_id = response.initial_response().load_balancer_id(); 
+  const TString& lb_id = response.initial_response().load_balancer_id();
   gpr_log(GPR_INFO, "Initial response received (lb_id: %s).", lb_id.c_str());
   ClientMakeEchoCalls(lb_id, "LB_TAG", kOkMessage, 1);
   while (true) {
@@ -186,7 +186,7 @@ TEST_F(ServerLoadReportingEnd2endTest, BasicReport) {
 }  // namespace grpc
 
 int main(int argc, char** argv) {
-  grpc::testing::TestEnvironment env(argc, argv); 
+  grpc::testing::TestEnvironment env(argc, argv);
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

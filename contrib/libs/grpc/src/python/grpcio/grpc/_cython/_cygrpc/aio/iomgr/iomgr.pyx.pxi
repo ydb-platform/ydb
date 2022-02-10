@@ -13,8 +13,8 @@
 # limitations under the License.
 
 
-import platform 
- 
+import platform
+
 from cpython cimport Py_INCREF, Py_DECREF
 from libc cimport string
 
@@ -28,7 +28,7 @@ cdef grpc_socket_vtable asyncio_socket_vtable
 cdef grpc_custom_resolver_vtable asyncio_resolver_vtable
 cdef grpc_custom_timer_vtable asyncio_timer_vtable
 cdef grpc_custom_poller_vtable asyncio_pollset_vtable
-cdef bint so_reuse_port 
+cdef bint so_reuse_port
 
 
 cdef grpc_error* asyncio_socket_init(
@@ -123,14 +123,14 @@ cdef grpc_error* asyncio_socket_listen(grpc_custom_socket* grpc_socket) with gil
     return grpc_error_none()
 
 
-def _asyncio_apply_socket_options(object s, int flags): 
-    # Turn SO_REUSEADDR on for TCP sockets; if we want to support UDS, we will 
-    # need to update this function. 
+def _asyncio_apply_socket_options(object s, int flags):
+    # Turn SO_REUSEADDR on for TCP sockets; if we want to support UDS, we will
+    # need to update this function.
     s.setsockopt(native_socket.SOL_SOCKET, native_socket.SO_REUSEADDR, 1)
-    # SO_REUSEPORT only available in POSIX systems. 
-    if platform.system() != 'Windows': 
-        if GRPC_CUSTOM_SOCKET_OPT_SO_REUSEPORT & flags: 
-            s.setsockopt(native_socket.SOL_SOCKET, native_socket.SO_REUSEPORT, 1) 
+    # SO_REUSEPORT only available in POSIX systems.
+    if platform.system() != 'Windows':
+        if GRPC_CUSTOM_SOCKET_OPT_SO_REUSEPORT & flags:
+            s.setsockopt(native_socket.SOL_SOCKET, native_socket.SO_REUSEPORT, 1)
     s.setsockopt(native_socket.IPPROTO_TCP, native_socket.TCP_NODELAY, True)
 
 
@@ -147,10 +147,10 @@ cdef grpc_error* asyncio_socket_bind(
             family = native_socket.AF_INET
 
         socket = native_socket.socket(family=family)
-        _asyncio_apply_socket_options(socket, flags) 
+        _asyncio_apply_socket_options(socket, flags)
         socket.bind((host, port))
     except IOError as io_error:
-        socket.close() 
+        socket.close()
         return socket_error("bind", str(io_error))
     else:
         aio_socket = _AsyncioSocket.create_with_py_socket(grpc_socket, socket)
@@ -167,8 +167,8 @@ cdef void asyncio_socket_accept(
 
 
 cdef grpc_error* asyncio_resolve(
-        const char* host, 
-        const char* port, 
+        const char* host,
+        const char* port,
         grpc_resolved_addresses** res) with gil:
     result = native_socket.getaddrinfo(host, port)
     res[0] = tuples_to_resolvaddr(result)
@@ -176,8 +176,8 @@ cdef grpc_error* asyncio_resolve(
 
 cdef void asyncio_resolve_async(
         grpc_custom_resolver* grpc_resolver,
-        const char* host, 
-        const char* port) with gil: 
+        const char* host,
+        const char* port) with gil:
     resolver = _AsyncioResolver.create(grpc_resolver)
     resolver.resolve(host, port)
 
@@ -188,12 +188,12 @@ cdef void asyncio_timer_start(grpc_custom_timer* grpc_timer) with gil:
 
 
 cdef void asyncio_timer_stop(grpc_custom_timer* grpc_timer) with gil:
-    # TODO(https://github.com/grpc/grpc/issues/22278) remove this if condition 
-    if grpc_timer.timer == NULL: 
-        return 
-    else: 
-        timer = <_AsyncioTimer>grpc_timer.timer 
-        timer.stop() 
+    # TODO(https://github.com/grpc/grpc/issues/22278) remove this if condition
+    if grpc_timer.timer == NULL:
+        return
+    else:
+        timer = <_AsyncioTimer>grpc_timer.timer
+        timer.stop()
 
 
 cdef void asyncio_init_loop() with gil:
@@ -212,18 +212,18 @@ cdef void asyncio_run_loop(size_t timeout_ms) with gil:
     pass
 
 
-def _auth_plugin_callback_wrapper(object cb, 
-                                  str service_url, 
-                                  str method_name, 
-                                  object callback): 
-    get_working_loop().call_soon(cb, service_url, method_name, callback) 
- 
- 
+def _auth_plugin_callback_wrapper(object cb,
+                                  str service_url,
+                                  str method_name,
+                                  object callback):
+    get_working_loop().call_soon(cb, service_url, method_name, callback)
+
+
 def install_asyncio_iomgr():
-    # Auth plugins invoke user provided logic in another thread by default. We 
-    # need to override that behavior by registering the call to the event loop. 
-    set_async_callback_func(_auth_plugin_callback_wrapper) 
- 
+    # Auth plugins invoke user provided logic in another thread by default. We
+    # need to override that behavior by registering the call to the event loop.
+    set_async_callback_func(_auth_plugin_callback_wrapper)
+
     asyncio_resolver_vtable.resolve = asyncio_resolve
     asyncio_resolver_vtable.resolve_async = asyncio_resolve_async
 

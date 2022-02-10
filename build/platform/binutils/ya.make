@@ -2,7 +2,7 @@ RESOURCES_LIBRARY()
 
 OWNER(g:contrib somov)
 
-INCLUDE(binutils.resource) 
+INCLUDE(binutils.resource)
 
 END()
 

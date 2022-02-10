@@ -21,8 +21,8 @@
 #include <algorithm>
 #include <cstring>
 
-#include "y_absl/container/inlined_vector.h" 
- 
+#include "y_absl/container/inlined_vector.h"
+
 #include "src/core/lib/channel/channel_trace.h"
 #include "src/core/lib/channel/channelz.h"
 #include "src/core/lib/channel/channelz_registry.h"
@@ -32,7 +32,7 @@
 
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
-#include <grpc/support/string_util.h> 
+#include <grpc/support/string_util.h>
 #include <grpc/support/sync.h>
 
 namespace grpc_core {
@@ -78,21 +78,21 @@ RefCountedPtr<BaseNode> ChannelzRegistry::InternalGet(intptr_t uuid) {
   // Found node.  Return only if its refcount is not zero (i.e., when we
   // know that there is no other thread about to destroy it).
   BaseNode* node = it->second;
-  return node->RefIfNonZero(); 
+  return node->RefIfNonZero();
 }
 
-TString ChannelzRegistry::InternalGetTopChannels( 
-    intptr_t start_channel_id) { 
-  y_absl::InlinedVector<RefCountedPtr<BaseNode>, 10> top_level_channels; 
+TString ChannelzRegistry::InternalGetTopChannels(
+    intptr_t start_channel_id) {
+  y_absl::InlinedVector<RefCountedPtr<BaseNode>, 10> top_level_channels;
   RefCountedPtr<BaseNode> node_after_pagination_limit;
   {
     MutexLock lock(&mu_);
     for (auto it = node_map_.lower_bound(start_channel_id);
          it != node_map_.end(); ++it) {
       BaseNode* node = it->second;
-      RefCountedPtr<BaseNode> node_ref; 
+      RefCountedPtr<BaseNode> node_ref;
       if (node->type() == BaseNode::EntityType::kTopLevelChannel &&
-          (node_ref = node->RefIfNonZero()) != nullptr) { 
+          (node_ref = node->RefIfNonZero()) != nullptr) {
         // Check if we are over pagination limit to determine if we need to set
         // the "end" element. If we don't go through this block, we know that
         // when the loop terminates, we have <= to kPaginationLimit.
@@ -100,38 +100,38 @@ TString ChannelzRegistry::InternalGetTopChannels(
         // refcount, we need to decrease it, but we can't unref while
         // holding the lock, because this may lead to a deadlock.
         if (top_level_channels.size() == kPaginationLimit) {
-          node_after_pagination_limit = std::move(node_ref); 
+          node_after_pagination_limit = std::move(node_ref);
           break;
         }
-        top_level_channels.emplace_back(std::move(node_ref)); 
+        top_level_channels.emplace_back(std::move(node_ref));
       }
     }
   }
-  Json::Object object; 
+  Json::Object object;
   if (!top_level_channels.empty()) {
-    // Create list of channels. 
-    Json::Array array; 
+    // Create list of channels.
+    Json::Array array;
     for (size_t i = 0; i < top_level_channels.size(); ++i) {
-      array.emplace_back(top_level_channels[i]->RenderJson()); 
+      array.emplace_back(top_level_channels[i]->RenderJson());
     }
-    object["channel"] = std::move(array); 
+    object["channel"] = std::move(array);
   }
-  if (node_after_pagination_limit == nullptr) object["end"] = true; 
-  Json json(std::move(object)); 
-  return json.Dump(); 
+  if (node_after_pagination_limit == nullptr) object["end"] = true;
+  Json json(std::move(object));
+  return json.Dump();
 }
 
-TString ChannelzRegistry::InternalGetServers(intptr_t start_server_id) { 
-  y_absl::InlinedVector<RefCountedPtr<BaseNode>, 10> servers; 
+TString ChannelzRegistry::InternalGetServers(intptr_t start_server_id) {
+  y_absl::InlinedVector<RefCountedPtr<BaseNode>, 10> servers;
   RefCountedPtr<BaseNode> node_after_pagination_limit;
   {
     MutexLock lock(&mu_);
     for (auto it = node_map_.lower_bound(start_server_id);
          it != node_map_.end(); ++it) {
       BaseNode* node = it->second;
-      RefCountedPtr<BaseNode> node_ref; 
+      RefCountedPtr<BaseNode> node_ref;
       if (node->type() == BaseNode::EntityType::kServer &&
-          (node_ref = node->RefIfNonZero()) != nullptr) { 
+          (node_ref = node->RefIfNonZero()) != nullptr) {
         // Check if we are over pagination limit to determine if we need to set
         // the "end" element. If we don't go through this block, we know that
         // when the loop terminates, we have <= to kPaginationLimit.
@@ -139,41 +139,41 @@ TString ChannelzRegistry::InternalGetServers(intptr_t start_server_id) {
         // refcount, we need to decrease it, but we can't unref while
         // holding the lock, because this may lead to a deadlock.
         if (servers.size() == kPaginationLimit) {
-          node_after_pagination_limit = std::move(node_ref); 
+          node_after_pagination_limit = std::move(node_ref);
           break;
         }
-        servers.emplace_back(std::move(node_ref)); 
+        servers.emplace_back(std::move(node_ref));
       }
     }
   }
-  Json::Object object; 
+  Json::Object object;
   if (!servers.empty()) {
-    // Create list of servers. 
-    Json::Array array; 
+    // Create list of servers.
+    Json::Array array;
     for (size_t i = 0; i < servers.size(); ++i) {
-      array.emplace_back(servers[i]->RenderJson()); 
+      array.emplace_back(servers[i]->RenderJson());
     }
-    object["server"] = std::move(array); 
+    object["server"] = std::move(array);
   }
-  if (node_after_pagination_limit == nullptr) object["end"] = true; 
-  Json json(std::move(object)); 
-  return json.Dump(); 
+  if (node_after_pagination_limit == nullptr) object["end"] = true;
+  Json json(std::move(object));
+  return json.Dump();
 }
 
 void ChannelzRegistry::InternalLogAllEntities() {
-  y_absl::InlinedVector<RefCountedPtr<BaseNode>, 10> nodes; 
+  y_absl::InlinedVector<RefCountedPtr<BaseNode>, 10> nodes;
   {
     MutexLock lock(&mu_);
     for (auto& p : node_map_) {
-      RefCountedPtr<BaseNode> node = p.second->RefIfNonZero(); 
-      if (node != nullptr) { 
-        nodes.emplace_back(std::move(node)); 
+      RefCountedPtr<BaseNode> node = p.second->RefIfNonZero();
+      if (node != nullptr) {
+        nodes.emplace_back(std::move(node));
       }
     }
   }
   for (size_t i = 0; i < nodes.size(); ++i) {
-    TString json = nodes[i]->RenderJsonString(); 
-    gpr_log(GPR_INFO, "%s", json.c_str()); 
+    TString json = nodes[i]->RenderJsonString();
+    gpr_log(GPR_INFO, "%s", json.c_str());
   }
 }
 
@@ -181,15 +181,15 @@ void ChannelzRegistry::InternalLogAllEntities() {
 }  // namespace grpc_core
 
 char* grpc_channelz_get_top_channels(intptr_t start_channel_id) {
-  return gpr_strdup( 
-      grpc_core::channelz::ChannelzRegistry::GetTopChannels(start_channel_id) 
-          .c_str()); 
+  return gpr_strdup(
+      grpc_core::channelz::ChannelzRegistry::GetTopChannels(start_channel_id)
+          .c_str());
 }
 
 char* grpc_channelz_get_servers(intptr_t start_server_id) {
-  return gpr_strdup( 
-      grpc_core::channelz::ChannelzRegistry::GetServers(start_server_id) 
-          .c_str()); 
+  return gpr_strdup(
+      grpc_core::channelz::ChannelzRegistry::GetServers(start_server_id)
+          .c_str());
 }
 
 char* grpc_channelz_get_server(intptr_t server_id) {
@@ -200,29 +200,29 @@ char* grpc_channelz_get_server(intptr_t server_id) {
           grpc_core::channelz::BaseNode::EntityType::kServer) {
     return nullptr;
   }
-  grpc_core::Json json = grpc_core::Json::Object{ 
-      {"server", server_node->RenderJson()}, 
-  }; 
-  return gpr_strdup(json.Dump().c_str()); 
+  grpc_core::Json json = grpc_core::Json::Object{
+      {"server", server_node->RenderJson()},
+  };
+  return gpr_strdup(json.Dump().c_str());
 }
 
 char* grpc_channelz_get_server_sockets(intptr_t server_id,
                                        intptr_t start_socket_id,
                                        intptr_t max_results) {
-  // Validate inputs before handing them of to the renderer. 
+  // Validate inputs before handing them of to the renderer.
   grpc_core::RefCountedPtr<grpc_core::channelz::BaseNode> base_node =
       grpc_core::channelz::ChannelzRegistry::Get(server_id);
   if (base_node == nullptr ||
-      base_node->type() != grpc_core::channelz::BaseNode::EntityType::kServer || 
-      start_socket_id < 0 || max_results < 0) { 
+      base_node->type() != grpc_core::channelz::BaseNode::EntityType::kServer ||
+      start_socket_id < 0 || max_results < 0) {
     return nullptr;
   }
   // This cast is ok since we have just checked to make sure base_node is
-  // actually a server node. 
+  // actually a server node.
   grpc_core::channelz::ServerNode* server_node =
       static_cast<grpc_core::channelz::ServerNode*>(base_node.get());
-  return gpr_strdup( 
-      server_node->RenderServerSockets(start_socket_id, max_results).c_str()); 
+  return gpr_strdup(
+      server_node->RenderServerSockets(start_socket_id, max_results).c_str());
 }
 
 char* grpc_channelz_get_channel(intptr_t channel_id) {
@@ -235,10 +235,10 @@ char* grpc_channelz_get_channel(intptr_t channel_id) {
            grpc_core::channelz::BaseNode::EntityType::kInternalChannel)) {
     return nullptr;
   }
-  grpc_core::Json json = grpc_core::Json::Object{ 
-      {"channel", channel_node->RenderJson()}, 
-  }; 
-  return gpr_strdup(json.Dump().c_str()); 
+  grpc_core::Json json = grpc_core::Json::Object{
+      {"channel", channel_node->RenderJson()},
+  };
+  return gpr_strdup(json.Dump().c_str());
 }
 
 char* grpc_channelz_get_subchannel(intptr_t subchannel_id) {
@@ -249,10 +249,10 @@ char* grpc_channelz_get_subchannel(intptr_t subchannel_id) {
           grpc_core::channelz::BaseNode::EntityType::kSubchannel) {
     return nullptr;
   }
-  grpc_core::Json json = grpc_core::Json::Object{ 
-      {"subchannel", subchannel_node->RenderJson()}, 
-  }; 
-  return gpr_strdup(json.Dump().c_str()); 
+  grpc_core::Json json = grpc_core::Json::Object{
+      {"subchannel", subchannel_node->RenderJson()},
+  };
+  return gpr_strdup(json.Dump().c_str());
 }
 
 char* grpc_channelz_get_socket(intptr_t socket_id) {
@@ -263,8 +263,8 @@ char* grpc_channelz_get_socket(intptr_t socket_id) {
           grpc_core::channelz::BaseNode::EntityType::kSocket) {
     return nullptr;
   }
-  grpc_core::Json json = grpc_core::Json::Object{ 
-      {"socket", socket_node->RenderJson()}, 
-  }; 
-  return gpr_strdup(json.Dump().c_str()); 
+  grpc_core::Json json = grpc_core::Json::Object{
+      {"socket", socket_node->RenderJson()},
+  };
+  return gpr_strdup(json.Dump().c_str());
 }

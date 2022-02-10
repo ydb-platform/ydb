@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2021 The OpenSSL Project Authors. All Rights Reserved. 
+ * Copyright 1999-2021 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -9,7 +9,7 @@
 
 #include <stdio.h>
 #include "internal/cryptlib.h"
-#include "crypto/x509.h" 
+#include "crypto/x509.h"
 #include <openssl/conf.h>
 #include <openssl/x509v3.h>
 #include "ext_dat.h"
@@ -100,20 +100,20 @@ STACK_OF(CONF_VALUE) *i2v_GENERAL_NAME(X509V3_EXT_METHOD *method,
         break;
 
     case GEN_EMAIL:
-        if (!x509v3_add_len_value_uchar("email", gen->d.ia5->data, 
-                                        gen->d.ia5->length, &ret)) 
+        if (!x509v3_add_len_value_uchar("email", gen->d.ia5->data,
+                                        gen->d.ia5->length, &ret))
             return NULL;
         break;
 
     case GEN_DNS:
-        if (!x509v3_add_len_value_uchar("DNS", gen->d.ia5->data, 
-                                        gen->d.ia5->length, &ret)) 
+        if (!x509v3_add_len_value_uchar("DNS", gen->d.ia5->data,
+                                        gen->d.ia5->length, &ret))
             return NULL;
         break;
 
     case GEN_URI:
-        if (!x509v3_add_len_value_uchar("URI", gen->d.ia5->data, 
-                                        gen->d.ia5->length, &ret)) 
+        if (!x509v3_add_len_value_uchar("URI", gen->d.ia5->data,
+                                        gen->d.ia5->length, &ret))
             return NULL;
         break;
 
@@ -279,7 +279,7 @@ static int copy_issuer(X509V3_CTX *ctx, GENERAL_NAMES *gens)
     num = sk_GENERAL_NAME_num(ialt);
     if (!sk_GENERAL_NAME_reserve(gens, num)) {
         X509V3err(X509V3_F_COPY_ISSUER, ERR_R_MALLOC_FAILURE);
-        sk_GENERAL_NAME_free(ialt); 
+        sk_GENERAL_NAME_free(ialt);
         goto err;
     }
 

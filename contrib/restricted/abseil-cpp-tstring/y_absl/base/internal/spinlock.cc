@@ -66,13 +66,13 @@ void RegisterSpinLockProfiler(void (*fn)(const void *contendedlock,
   submit_profile_data.Store(fn);
 }
 
-// Static member variable definitions. 
-constexpr uint32_t SpinLock::kSpinLockHeld; 
-constexpr uint32_t SpinLock::kSpinLockCooperative; 
-constexpr uint32_t SpinLock::kSpinLockDisabledScheduling; 
-constexpr uint32_t SpinLock::kSpinLockSleeper; 
-constexpr uint32_t SpinLock::kWaitTimeMask; 
- 
+// Static member variable definitions.
+constexpr uint32_t SpinLock::kSpinLockHeld;
+constexpr uint32_t SpinLock::kSpinLockCooperative;
+constexpr uint32_t SpinLock::kSpinLockDisabledScheduling;
+constexpr uint32_t SpinLock::kSpinLockSleeper;
+constexpr uint32_t SpinLock::kWaitTimeMask;
+
 // Uncommon constructors.
 SpinLock::SpinLock(base_internal::SchedulingMode mode)
     : lockword_(IsCooperative(mode) ? kSpinLockCooperative : 0) {
@@ -105,14 +105,14 @@ void SpinLock::SlowLock() {
   if ((lock_value & kSpinLockHeld) == 0) {
     return;
   }
- 
-  base_internal::SchedulingMode scheduling_mode; 
-  if ((lock_value & kSpinLockCooperative) != 0) { 
-    scheduling_mode = base_internal::SCHEDULE_COOPERATIVE_AND_KERNEL; 
-  } else { 
-    scheduling_mode = base_internal::SCHEDULE_KERNEL_ONLY; 
-  } 
- 
+
+  base_internal::SchedulingMode scheduling_mode;
+  if ((lock_value & kSpinLockCooperative) != 0) {
+    scheduling_mode = base_internal::SCHEDULE_COOPERATIVE_AND_KERNEL;
+  } else {
+    scheduling_mode = base_internal::SCHEDULE_KERNEL_ONLY;
+  }
+
   // The lock was not obtained initially, so this thread needs to wait for
   // it.  Record the current timestamp in the local variable wait_start_time
   // so the total wait time can be stored in the lockword once this thread
@@ -125,9 +125,9 @@ void SpinLock::SlowLock() {
     // it as having a sleeper.
     if ((lock_value & kWaitTimeMask) == 0) {
       // Here, just "mark" that the thread is going to sleep.  Don't store the
-      // lock wait time in the lock -- the lock word stores the amount of time 
-      // that the current holder waited before acquiring the lock, not the wait 
-      // time of any thread currently waiting to acquire it. 
+      // lock wait time in the lock -- the lock word stores the amount of time
+      // that the current holder waited before acquiring the lock, not the wait
+      // time of any thread currently waiting to acquire it.
       if (lockword_.compare_exchange_strong(
               lock_value, lock_value | kSpinLockSleeper,
               std::memory_order_relaxed, std::memory_order_relaxed)) {
@@ -141,14 +141,14 @@ void SpinLock::SlowLock() {
         // this thread obtains the lock.
         lock_value = TryLockInternal(lock_value, wait_cycles);
         continue;   // Skip the delay at the end of the loop.
-      } else if ((lock_value & kWaitTimeMask) == 0) { 
-        // The lock is still held, without a waiter being marked, but something 
-        // else about the lock word changed, causing our CAS to fail. For 
-        // example, a new lock holder may have acquired the lock with 
-        // kSpinLockDisabledScheduling set, whereas the previous holder had not 
-        // set that flag. In this case, attempt again to mark ourselves as a 
-        // waiter. 
-        continue; 
+      } else if ((lock_value & kWaitTimeMask) == 0) {
+        // The lock is still held, without a waiter being marked, but something
+        // else about the lock word changed, causing our CAS to fail. For
+        // example, a new lock holder may have acquired the lock with
+        // kSpinLockDisabledScheduling set, whereas the previous holder had not
+        // set that flag. In this case, attempt again to mark ourselves as a
+        // waiter.
+        continue;
       }
     }
 
@@ -185,32 +185,32 @@ void SpinLock::SlowUnlock(uint32_t lock_value) {
 // We use the upper 29 bits of the lock word to store the time spent waiting to
 // acquire this lock.  This is reported by contentionz profiling.  Since the
 // lower bits of the cycle counter wrap very quickly on high-frequency
-// processors we divide to reduce the granularity to 2^kProfileTimestampShift 
+// processors we divide to reduce the granularity to 2^kProfileTimestampShift
 // sized units.  On a 4Ghz machine this will lose track of wait times greater
 // than (2^29/4 Ghz)*128 =~ 17.2 seconds.  Such waits should be extremely rare.
-static constexpr int kProfileTimestampShift = 7; 
+static constexpr int kProfileTimestampShift = 7;
 
-// We currently reserve the lower 3 bits. 
-static constexpr int kLockwordReservedShift = 3; 
- 
+// We currently reserve the lower 3 bits.
+static constexpr int kLockwordReservedShift = 3;
+
 uint32_t SpinLock::EncodeWaitCycles(int64_t wait_start_time,
                                     int64_t wait_end_time) {
   static const int64_t kMaxWaitTime =
-      std::numeric_limits<uint32_t>::max() >> kLockwordReservedShift; 
+      std::numeric_limits<uint32_t>::max() >> kLockwordReservedShift;
   int64_t scaled_wait_time =
-      (wait_end_time - wait_start_time) >> kProfileTimestampShift; 
+      (wait_end_time - wait_start_time) >> kProfileTimestampShift;
 
   // Return a representation of the time spent waiting that can be stored in
   // the lock word's upper bits.
   uint32_t clamped = static_cast<uint32_t>(
-      std::min(scaled_wait_time, kMaxWaitTime) << kLockwordReservedShift); 
+      std::min(scaled_wait_time, kMaxWaitTime) << kLockwordReservedShift);
 
   if (clamped == 0) {
     return kSpinLockSleeper;  // Just wake waiters, but don't record contention.
   }
   // Bump up value if necessary to avoid returning kSpinLockSleeper.
   const uint32_t kMinWaitTime =
-      kSpinLockSleeper + (1 << kLockwordReservedShift); 
+      kSpinLockSleeper + (1 << kLockwordReservedShift);
   if (clamped == kSpinLockSleeper) {
     return kMinWaitTime;
   }
@@ -221,7 +221,7 @@ uint64_t SpinLock::DecodeWaitCycles(uint32_t lock_value) {
   // Cast to uint32_t first to ensure bits [63:32] are cleared.
   const uint64_t scaled_wait_time =
       static_cast<uint32_t>(lock_value & kWaitTimeMask);
-  return scaled_wait_time << (kProfileTimestampShift - kLockwordReservedShift); 
+  return scaled_wait_time << (kProfileTimestampShift - kLockwordReservedShift);
 }
 
 }  // namespace base_internal

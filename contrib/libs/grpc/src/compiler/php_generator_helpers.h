@@ -26,32 +26,32 @@
 
 namespace grpc_php_generator {
 
-inline TString GetPHPServiceClassname( 
+inline TString GetPHPServiceClassname(
     const grpc::protobuf::ServiceDescriptor* service,
-    const TString& class_suffix) { 
+    const TString& class_suffix) {
   return service->name() + (class_suffix == "" ? "Client" : class_suffix);
 }
 
 // ReplaceAll replaces all instances of search with replace in s.
-inline TString ReplaceAll(TString s, const TString& search, 
-                              const TString& replace) { 
+inline TString ReplaceAll(TString s, const TString& search,
+                              const TString& replace) {
   size_t pos = 0;
-  while ((pos = s.find(search, pos)) != TString::npos) { 
+  while ((pos = s.find(search, pos)) != TString::npos) {
     s.replace(pos, search.length(), replace);
     pos += replace.length();
   }
   return s;
 }
 
-inline TString GetPHPServiceFilename( 
+inline TString GetPHPServiceFilename(
     const grpc::protobuf::FileDescriptor* file,
     const grpc::protobuf::ServiceDescriptor* service,
-    const TString& class_suffix) { 
+    const TString& class_suffix) {
   std::ostringstream oss;
   if (file->options().has_php_namespace()) {
     oss << ReplaceAll(file->options().php_namespace(), "\\", "/");
   } else {
-    std::vector<TString> tokens = 
+    std::vector<TString> tokens =
         grpc_generator::tokenize(file->package(), ".");
     for (unsigned int i = 0; i < tokens.size(); i++) {
       oss << (i == 0 ? "" : "/")
@@ -65,8 +65,8 @@ inline TString GetPHPServiceFilename(
 // Get leading or trailing comments in a string. Comment lines start with "// ".
 // Leading detached comments are put in front of leading comments.
 template <typename DescriptorType>
-inline TString GetPHPComments(const DescriptorType* desc, 
-                                  TString prefix) { 
+inline TString GetPHPComments(const DescriptorType* desc,
+                                  TString prefix) {
   return ReplaceAll(grpc_generator::GetPrefixedComments(desc, true, prefix),
                     "*/", "&#42;/");
 }

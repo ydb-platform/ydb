@@ -2,7 +2,7 @@
 
 import sys
 import os.path
-import re 
+import re
 
 cmakeDef01 = "#cmakedefine01"
 cmakeDef = "#cmakedefine"
@@ -26,13 +26,13 @@ def replaceLine(l, varDict, define):
             ePos = l.find(var) + len(var)
             l = l[:sPos] + define + ' ' + var + ' ' + val + l[ePos + 1:] + '\n'
 
-    finder = re.compile(".*?(@[a-zA-Z0-9_]+@).*") 
+    finder = re.compile(".*?(@[a-zA-Z0-9_]+@).*")
     while True:
-        re_result = finder.match(l) 
-        if not re_result: 
+        re_result = finder.match(l)
+        if not re_result:
             return l
-        key = re_result.group(1)[1:-1] 
-        l = l[:re_result.start(1)] + varDict.get(key, '') + l[re_result.end(1):] 
+        key = re_result.group(1)[1:-1]
+        l = l[:re_result.start(1)] + varDict.get(key, '') + l[re_result.end(1):]
 
 
 def main(inputPath, outputPath, varDict):

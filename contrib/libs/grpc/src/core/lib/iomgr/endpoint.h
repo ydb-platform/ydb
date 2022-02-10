@@ -21,8 +21,8 @@
 
 #include <grpc/support/port_platform.h>
 
-#include "y_absl/strings/string_view.h" 
- 
+#include "y_absl/strings/string_view.h"
+
 #include <grpc/slice.h>
 #include <grpc/slice_buffer.h>
 #include <grpc/support/time.h>
@@ -47,8 +47,8 @@ struct grpc_endpoint_vtable {
   void (*shutdown)(grpc_endpoint* ep, grpc_error* why);
   void (*destroy)(grpc_endpoint* ep);
   grpc_resource_user* (*get_resource_user)(grpc_endpoint* ep);
-  y_absl::string_view (*get_peer)(grpc_endpoint* ep); 
-  y_absl::string_view (*get_local_address)(grpc_endpoint* ep); 
+  y_absl::string_view (*get_peer)(grpc_endpoint* ep);
+  y_absl::string_view (*get_local_address)(grpc_endpoint* ep);
   int (*get_fd)(grpc_endpoint* ep);
   bool (*can_track_err)(grpc_endpoint* ep);
 };
@@ -61,10 +61,10 @@ struct grpc_endpoint_vtable {
 void grpc_endpoint_read(grpc_endpoint* ep, grpc_slice_buffer* slices,
                         grpc_closure* cb, bool urgent);
 
-y_absl::string_view grpc_endpoint_get_peer(grpc_endpoint* ep); 
+y_absl::string_view grpc_endpoint_get_peer(grpc_endpoint* ep);
 
-y_absl::string_view grpc_endpoint_get_local_address(grpc_endpoint* ep); 
- 
+y_absl::string_view grpc_endpoint_get_local_address(grpc_endpoint* ep);
+
 /* Get the file descriptor used by \a ep. Return -1 if \a ep is not using an fd.
  */
 int grpc_endpoint_get_fd(grpc_endpoint* ep);

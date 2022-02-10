@@ -6,13 +6,13 @@ OWNER(
 
 LIBRARY()
 
-LICENSE( 
-    BSD-2-Clause AND 
-    MIT 
-) 
+LICENSE(
+    BSD-2-Clause AND
+    MIT
+)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 NO_UTIL()
 
 SRCS(
@@ -23,13 +23,13 @@ SRCS(
 IF (ARCH_X86_64 OR ARCH_I386)
     IF (MSVC AND NOT CLANG_CL)
         CONLYFLAGS(/D__SSSE3__=1)
-    ELSEIF (CLANG_CL) 
+    ELSEIF (CLANG_CL)
         CONLYFLAGS(-mssse3)
     ELSE()
-        CONLYFLAGS( 
-            -mssse3 
-            -std=c11 
-        ) 
+        CONLYFLAGS(
+            -mssse3
+            -std=c11
+        )
     ENDIF()
 ENDIF()
 

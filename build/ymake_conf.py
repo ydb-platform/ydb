@@ -57,7 +57,7 @@ class Platform(object):
         self.is_armv7 = self.arch in ('armv7', 'armv7a', 'armv7a_neon', 'arm', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv8 = self.arch in ('armv8', 'armv8a', 'arm64', 'aarch64', 'armv8a_cortex_a35', 'armv8a_cortex_a53')
         self.is_armv8m = self.arch in ('armv8m_cortex_m33',)
-        self.is_arm64 = self.arch in ('arm64',) 
+        self.is_arm64 = self.arch in ('arm64',)
         self.is_arm = self.is_armv7 or self.is_armv8 or self.is_armv8m
         self.is_armv7_neon = self.arch in ('armv7a_neon', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv7hf = self.arch in ('armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
@@ -94,7 +94,7 @@ class Platform(object):
 
         self.is_macos = self.os == 'macos'
         self.is_macos_x86_64 = self.is_macos and self.is_x86_64
-        self.is_macos_arm64 = self.is_macos and self.is_arm64 
+        self.is_macos_arm64 = self.is_macos and self.is_arm64
         self.is_iossim = self.os == 'iossim' or (self.os == 'ios' and self.is_intel)
         self.is_ios = self.os == 'ios' or self.is_iossim
         self.is_apple = self.is_macos or self.is_ios
@@ -111,7 +111,7 @@ class Platform(object):
             self.android_api = int(preset('ANDROID_API', default_android_api))
 
         self.is_cygwin = self.os == 'cygwin'
-        self.is_yocto = self.os == 'yocto' 
+        self.is_yocto = self.os == 'yocto'
 
         self.is_none = self.os == 'none'
 
@@ -138,9 +138,9 @@ class Platform(object):
         if self.is_macos:
             yield 'DARWIN'
             yield 'OS_DARWIN'
-        if self.is_iossim: 
-            yield 'IOS' 
-            yield 'OS_IOS' 
+        if self.is_iossim:
+            yield 'IOS'
+            yield 'OS_IOS'
             yield 'OS_IOSSIM'
 
     @property
@@ -154,7 +154,7 @@ class Platform(object):
             (self.is_armv8, 'ARCH_ARM64'),
             (self.is_armv8m, 'ARCH_ARM8M'),
             (self.is_arm, 'ARCH_ARM'),
-            (self.is_linux_armv8 or self.is_macos_arm64, 'ARCH_AARCH64'), 
+            (self.is_linux_armv8 or self.is_macos_arm64, 'ARCH_AARCH64'),
             (self.is_powerpc, 'ARCH_PPC64LE'),
             (self.is_power8le, 'ARCH_POWER8LE'),
             (self.is_power9le, 'ARCH_POWER9LE'),
@@ -624,13 +624,13 @@ class Build(object):
         perl.configure_local()
         perl.print_variables('LOCAL_')
 
-        swiftc = SwiftCompiler(self) 
-        swiftc.configure() 
-        swiftc.print_compiler() 
- 
+        swiftc = SwiftCompiler(self)
+        swiftc.configure()
+        swiftc.print_compiler()
+
         if host.is_linux or host.is_macos or host.is_cygwin:
             if is_negative('USE_ARCADIA_PYTHON'):
-                python = Python(self.tc) 
+                python = Python(self.tc)
                 python.configure_posix()
                 python.print_variables()
 
@@ -975,27 +975,27 @@ class ToolchainOptions(object):
     def version_at_least(self, *args):
         return args <= tuple(self.compiler_version_list)
 
-    def version_exactly(self, *args): 
-        if not args or len(args) > len(self.compiler_version_list): 
-            return False 
-        for l, r in zip(args, list(self.compiler_version_list)[:len(args)]): 
-            if l != r: 
-                return False 
-        return True 
- 
+    def version_exactly(self, *args):
+        if not args or len(args) > len(self.compiler_version_list):
+            return False
+        for l, r in zip(args, list(self.compiler_version_list)[:len(args)]):
+            if l != r:
+                return False
+        return True
+
     @property
     def is_gcc(self):
         return self.type == 'gnu'
 
     @property
     def is_clang(self):
-        return self.type in ('clang', 'xcode') 
+        return self.type in ('clang', 'xcode')
 
     @property
-    def is_xcode(self): 
-        return self.type == 'xcode' 
- 
-    @property 
+    def is_xcode(self):
+        return self.type == 'xcode'
+
+    @property
     def is_from_arcadia(self):
         return self.from_arcadia
 
@@ -1020,8 +1020,8 @@ class GnuToolchainOptions(ToolchainOptions):
         self.ar = self.params.get('ar')
         self.ar_plugin = self.params.get('ar_plugin')
         self.inplace_tools = self.params.get('inplace_tools', False)
-        self.strip = self.params.get('strip') 
-        self.objcopy = self.params.get('objcopy') 
+        self.strip = self.params.get('strip')
+        self.objcopy = self.params.get('objcopy')
         self.isystem = self.params.get('isystem')
 
         self.dwarf_tool = self.target.find_in_dict(self.params.get('dwarf_tool'))
@@ -1031,14 +1031,14 @@ class GnuToolchainOptions(ToolchainOptions):
         if isinstance(self.sys_lib, dict):
             self.sys_lib = self.target.find_in_dict(self.sys_lib, [])
 
-        self.os_sdk = preset('OS_SDK') or self._default_os_sdk() 
-        self.os_sdk_local = self.os_sdk == 'local' 
+        self.os_sdk = preset('OS_SDK') or self._default_os_sdk()
+        self.os_sdk_local = self.os_sdk == 'local'
 
-    def _default_os_sdk(self): 
-        if self.target.is_linux: 
+    def _default_os_sdk(self):
+        if self.target.is_linux:
             if self.target.is_armv8:
-                return 'ubuntu-16' 
- 
+                return 'ubuntu-16'
+
             if self.target.is_armv7 and self.target.armv7_float_abi == 'hard':
                 return 'ubuntu-16'
 
@@ -1048,10 +1048,10 @@ class GnuToolchainOptions(ToolchainOptions):
             if self.target.is_powerpc:
                 return 'ubuntu-14'
 
-            # Default OS SDK for Linux builds 
+            # Default OS SDK for Linux builds
             return 'ubuntu-14'
- 
- 
+
+
 class Toolchain(object):
     def __init__(self, tc, build):
         """
@@ -1076,8 +1076,8 @@ class Compiler(object):
         # CLANG and CLANG_VER variables
         emit(self.compiler_variable, 'yes')
         emit('{}_VER'.format(self.compiler_variable), self.tc.compiler_version)
-        if self.tc.is_xcode: 
-            emit('XCODE', 'yes') 
+        if self.tc.is_xcode:
+            emit('XCODE', 'yes')
 
 
 class GnuToolchain(Toolchain):
@@ -1086,15 +1086,15 @@ class GnuToolchain(Toolchain):
         :type tc: GnuToolchainOptions
         :type build: Build
         """
- 
-        def get_os_sdk(target): 
-            sdk_native_version = 10.11 if not preset('EXPERIMENTAL_MACOS_M1_SUPPORT') else '11.1' 
-            if target.is_macos: 
-                return '$MACOS_SDK_RESOURCE_GLOBAL/MacOSX{}.sdk'.format(sdk_native_version) 
+
+        def get_os_sdk(target):
+            sdk_native_version = 10.11 if not preset('EXPERIMENTAL_MACOS_M1_SUPPORT') else '11.1'
+            if target.is_macos:
+                return '$MACOS_SDK_RESOURCE_GLOBAL/MacOSX{}.sdk'.format(sdk_native_version)
             elif target.is_yocto:
-                return '$YOCTO_SDK_RESOURCE_GLOBAL' 
-            return '$OS_SDK_ROOT_RESOURCE_GLOBAL' 
- 
+                return '$YOCTO_SDK_RESOURCE_GLOBAL'
+            return '$OS_SDK_ROOT_RESOURCE_GLOBAL'
+
         super(GnuToolchain, self).__init__(tc, build)
         self.tc = tc
 
@@ -1103,7 +1103,7 @@ class GnuToolchain(Toolchain):
 
         self.c_flags_platform = list(tc.target_opt)
 
-        self.default_os_sdk_root = get_os_sdk(target) 
+        self.default_os_sdk_root = get_os_sdk(target)
 
         self.env = self.tc.get_env()
 
@@ -1122,9 +1122,9 @@ class GnuToolchain(Toolchain):
                     '$GO_FAKE_XCRUN_RESOURCE_GLOBAL',
                 ])
 
-        self.swift_flags_platform = [] 
-        self.swift_lib_path = None 
- 
+        self.swift_flags_platform = []
+        self.swift_lib_path = None
+
         if self.tc.is_from_arcadia:
             for lib_path in build.host.library_path_variables:
                 self.env.setdefault(lib_path, []).append('{}/lib'.format(self.tc.name_marker))
@@ -1138,22 +1138,22 @@ class GnuToolchain(Toolchain):
         if preset('MAPSMOBI_BUILD_TARGET') and target.is_iossim and target.is_armv8:
             ios_version_min = '13.0'
 
-        swift_target = select(default=None, selectors=[ 
+        swift_target = select(default=None, selectors=[
             (target.is_iossim and target.is_x86_64, 'x86_64-apple-ios{}-simulator'.format(ios_version_min)),
             (target.is_iossim and target.is_x86, 'i386-apple-ios{}-simulator'.format(ios_version_min)),
             (target.is_iossim and target.is_armv8, 'arm64-apple-ios{}-simulator'.format(ios_version_min)),
             (not target.is_iossim and target.is_ios and target.is_armv8, 'arm64-apple-ios9'),
             (not target.is_iossim and target.is_ios and target.is_armv7, 'armv7-apple-ios9'),
-        ]) 
-        if swift_target: 
-            self.swift_flags_platform += ['-target', swift_target] 
- 
-        if self.tc.is_from_arcadia: 
-            self.swift_lib_path = select(default=None, selectors=[ 
-                (host.is_macos and target.is_iossim, '$SWIFT_XCODE_TOOLCHAIN_ROOT_RESOURCE_GLOBAL/usr/lib/swift/iphonesimulator'), 
+        ])
+        if swift_target:
+            self.swift_flags_platform += ['-target', swift_target]
+
+        if self.tc.is_from_arcadia:
+            self.swift_lib_path = select(default=None, selectors=[
+                (host.is_macos and target.is_iossim, '$SWIFT_XCODE_TOOLCHAIN_ROOT_RESOURCE_GLOBAL/usr/lib/swift/iphonesimulator'),
                 (host.is_macos and not target.is_iossim and target.is_ios and (target.is_armv8 or target.is_armv7), '$SWIFT_XCODE_TOOLCHAIN_ROOT_RESOURCE_GLOBAL/usr/lib/swift/iphoneos'),
-            ]) 
- 
+            ])
+
         if self.tc.is_clang:
             target_triple = self.tc.triplet_opt.get(target.arch, None)
             if not target_triple:
@@ -1166,7 +1166,7 @@ class GnuToolchain(Toolchain):
                     (target.is_iossim and target.is_arm64, 'arm64-apple-ios{}-simulator'.format(ios_version_min)),
                     (target.is_apple and target.is_x86, 'i386-apple-darwin14'),
                     (target.is_apple and target.is_x86_64, 'x86_64-apple-darwin14'),
-                    (target.is_apple and target.is_macos_arm64, 'arm64-apple-macos11'), 
+                    (target.is_apple and target.is_macos_arm64, 'arm64-apple-macos11'),
                     (target.is_apple and target.is_armv7, 'armv7-apple-darwin14'),
                     (target.is_apple and target.is_armv8, 'arm64-apple-darwin14'),
                     (target.is_yocto and target.is_armv7, 'arm-poky-linux-gnueabi'),
@@ -1221,29 +1221,29 @@ class GnuToolchain(Toolchain):
                 (target.is_linux and target.is_power8le, ['-mcpu=power8', '-mtune=power8', '-maltivec']),
                 (target.is_linux and target.is_power9le, ['-mcpu=power9', '-mtune=power9', '-maltivec']),
                 (target.is_linux and target.is_armv8, ['-march=armv8a']),
-                (target.is_macos_arm64, ['-mmacosx-version-min={}'.format(macos_arm64_version_min)]), 
-                (target.is_macos, ['-mmacosx-version-min={}'.format(macos_version_min)]), 
-                (target.is_ios and not target.is_iossim, ['-mios-version-min={}'.format(ios_version_min)]), 
-                (target.is_iossim, ['-mios-simulator-version-min={}'.format(ios_version_min)]), 
+                (target.is_macos_arm64, ['-mmacosx-version-min={}'.format(macos_arm64_version_min)]),
+                (target.is_macos, ['-mmacosx-version-min={}'.format(macos_version_min)]),
+                (target.is_ios and not target.is_iossim, ['-mios-version-min={}'.format(ios_version_min)]),
+                (target.is_iossim, ['-mios-simulator-version-min={}'.format(ios_version_min)]),
                 (target.is_android and target.is_armv7, ['-march=armv7-a', '-mfloat-abi=softfp']),
-                (target.is_android and target.is_armv8, ['-march=armv8-a']), 
-                (target.is_yocto and target.is_armv7, ['-march=armv7-a', '-mfpu=neon', '-mfloat-abi=hard', '-mcpu=cortex-a9', '-O1']) 
+                (target.is_android and target.is_armv8, ['-march=armv8-a']),
+                (target.is_yocto and target.is_armv7, ['-march=armv7-a', '-mfpu=neon', '-mfloat-abi=hard', '-mcpu=cortex-a9', '-O1'])
             ])
 
             if target_flags:
                 self.c_flags_platform.extend(target_flags)
 
             if target.is_ios:
-                self.c_flags_platform.append('-D__IOS__=1') 
- 
+                self.c_flags_platform.append('-D__IOS__=1')
+
             if self.tc.is_from_arcadia:
                 if target.is_apple:
                     if target.is_ios:
                         self.setup_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
-                        self.platform_projects.append('build/platform/macos_system_stl') 
+                        self.platform_projects.append('build/platform/macos_system_stl')
                     if target.is_macos:
                         self.setup_sdk(project='build/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
-                        self.platform_projects.append('build/platform/macos_system_stl') 
+                        self.platform_projects.append('build/platform/macos_system_stl')
 
                     if not self.tc.inplace_tools:
                         self.setup_tools(project='build/platform/cctools', var='${CCTOOLS_ROOT_RESOURCE_GLOBAL}', bin='bin', ldlibs=None)
@@ -1262,7 +1262,7 @@ class GnuToolchain(Toolchain):
                     elif target.is_armv8:
                         self.setup_tools(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL', bin='usr/bin', ldlibs='usr/lib/x86_64-linux-gnu')
 
-                if target.is_yocto: 
+                if target.is_yocto:
                     self.setup_sdk(project='build/platform/yocto_sdk/yocto_sdk', var='${YOCTO_SDK_ROOT_RESOURCE_GLOBAL}')
             elif self.tc.params.get('local'):
                 if target.is_apple:
@@ -1280,11 +1280,11 @@ class GnuToolchain(Toolchain):
                             self.env.setdefault('SDKROOT', subprocess.check_output(['xcrun', '-sdk', 'iphoneos', '--show-sdk-path']).strip())
                         elif target.is_macos:
                             self.env.setdefault('SDKROOT', subprocess.check_output(['xcrun', '-sdk', 'macosx', '--show-sdk-path']).strip())
- 
+
     def setup_sdk(self, project, var):
         self.platform_projects.append(project)
         self.c_flags_platform.append('--sysroot={}'.format(var))
-        self.swift_flags_platform += ['-sdk', var] 
+        self.swift_flags_platform += ['-sdk', var]
 
     # noinspection PyShadowingBuiltins
     def setup_tools(self, project, var, bin, ldlibs):
@@ -1300,15 +1300,15 @@ class GnuToolchain(Toolchain):
         emit('TOOLCHAIN_ENV', format_env(self.env, list_separator=':'))
         emit('_GO_TOOLCHAIN_ENV_PATH', format_env(self.env_go, list_separator=':'))
         emit('C_FLAGS_PLATFORM', self.c_flags_platform)
-        emit('SWIFT_FLAGS_PLATFORM', self.swift_flags_platform) 
-        emit('SWIFT_LD_FLAGS', '-L{}'.format(self.swift_lib_path) if self.swift_lib_path else '') 
+        emit('SWIFT_FLAGS_PLATFORM', self.swift_flags_platform)
+        emit('SWIFT_LD_FLAGS', '-L{}'.format(self.swift_lib_path) if self.swift_lib_path else '')
 
         emit('PERL_SDK', preset('OS_SDK') or self.tc.os_sdk)
-        if preset('OS_SDK') is None: 
-            emit('OS_SDK', self.tc.os_sdk) 
-        emit('OS_SDK_ROOT', None if self.tc.os_sdk_local else self.default_os_sdk_root) 
+        if preset('OS_SDK') is None:
+            emit('OS_SDK', self.tc.os_sdk)
+        emit('OS_SDK_ROOT', None if self.tc.os_sdk_local else self.default_os_sdk_root)
 
- 
+
 class GnuCompiler(Compiler):
     gcc_fstack = ['-fstack-protector']
 
@@ -1395,8 +1395,8 @@ class GnuCompiler(Compiler):
 
         if self.target.is_ios:
             self.c_defines.extend(['-D_XOPEN_SOURCE', '-D_DARWIN_C_SOURCE'])
-            if preset('MAPSMOBI_BUILD_TARGET') and self.target.is_arm: 
-                self.c_foptions.append('-fembed-bitcode') 
+            if preset('MAPSMOBI_BUILD_TARGET') and self.target.is_arm:
+                self.c_foptions.append('-fembed-bitcode')
 
         self.extra_compile_opts = []
 
@@ -1723,25 +1723,25 @@ class GnuCompiler(Compiler):
         emit('_SRC_M_CMD', '$SRC_c($SRC $SRCFLAGS)')
         emit('_SRC_MASM_CMD', '$_EMPTY_CMD')
 
-        # fuzzing configuration 
+        # fuzzing configuration
         if self.tc.is_clang:
             if self.tc.version_at_least(12):
                 emit('LIBFUZZER_PATH', 'contrib/libs/libfuzzer12')
- 
- 
-class SwiftCompiler(object): 
-    def __init__(self, build): 
-        self.host = build.host 
-        self.compiler = None 
- 
-    def configure(self): 
-        if self.host.is_macos: 
-            self.compiler = '$SWIFT_XCODE_TOOLCHAIN_ROOT_RESOURCE_GLOBAL/usr/bin/swiftc' 
- 
-    def print_compiler(self): 
-        emit('SWIFT_COMPILER', self.compiler or '') 
- 
- 
+
+
+class SwiftCompiler(object):
+    def __init__(self, build):
+        self.host = build.host
+        self.compiler = None
+
+    def configure(self):
+        if self.host.is_macos:
+            self.compiler = '$SWIFT_XCODE_TOOLCHAIN_ROOT_RESOURCE_GLOBAL/usr/bin/swiftc'
+
+    def print_compiler(self):
+        emit('SWIFT_COMPILER', self.compiler or '')
+
+
 class Linker(object):
     BFD = 'bfd'
     LLD = 'lld'
@@ -1807,8 +1807,8 @@ class LD(Linker):
 
         self.ar = preset('AR') or self.tc.ar
         self.ar_plugin = self.tc.ar_plugin
-        self.strip = self.tc.strip 
-        self.objcopy = self.tc.objcopy 
+        self.strip = self.tc.strip
+        self.objcopy = self.tc.objcopy
 
         self.musl = Setting('MUSL', convert=to_bool)
 
@@ -1932,7 +1932,7 @@ class LD(Linker):
             self.use_stdlib = None
 
         self.ld_sdk = select(default=None, selectors=[
-            (target.is_macos_arm64, '-Wl,-sdk_version,11.0'), 
+            (target.is_macos_arm64, '-Wl,-sdk_version,11.0'),
             (target.is_macos, '-Wl,-sdk_version,10.15'),
             (not target.is_iossim and target.is_ios, '-Wl,-sdk_version,13.1'),
             (target.is_iossim, '-Wl,-sdk_version,14.5'),
@@ -1972,9 +1972,9 @@ class LD(Linker):
         emit('AR_TOOL', self.ar)
         emit('AR_TYPE', self.ar_type)
 
-        emit('STRIP_TOOL_VENDOR', self.strip) 
-        emit('OBJCOPY_TOOL_VENDOR', self.objcopy) 
- 
+        emit('STRIP_TOOL_VENDOR', self.strip)
+        emit('OBJCOPY_TOOL_VENDOR', self.objcopy)
+
         append('LDFLAGS', '$USER_LDFLAGS', self.ld_flags)
         append('LDFLAGS_GLOBAL', '')
 
@@ -2055,9 +2055,9 @@ class LD(Linker):
 
         # Program
         emit(
-            "GENERATE_MF_CMD", 
+            "GENERATE_MF_CMD",
             '$YMAKE_PYTHON', '${input:"build/scripts/generate_mf.py"}',
-            '--build-root $ARCADIA_BUILD_ROOT --module-name $REALPRJNAME -o ${output;pre=$MODULE_PREFIX;suf=$MODULE_SUFFIX.mf:REALPRJNAME}', 
+            '--build-root $ARCADIA_BUILD_ROOT --module-name $REALPRJNAME -o ${output;pre=$MODULE_PREFIX;suf=$MODULE_SUFFIX.mf:REALPRJNAME}',
             '-t $MODULE_TYPE --ya-start-command-file -Ya,lics $LICENSE_NAMES -Ya,peers ${rootrel:PEERS} -Ya,credits ${input:CREDITS_TEXTS_FILE} $CREDITS_FLAGS --ya-end-command-file',
         )
         if is_positive("TIDY"):
@@ -2129,7 +2129,7 @@ class LD(Linker):
              ld_env_style)
         emit('REAL_LINK_DYN_LIB', '$REAL_LINK_DYN_LIB_IMPL($_WHOLE_ARCHIVE_PEERS_VALUE)')
 
-        if self.dwarf_command is None or self.target.is_ios: 
+        if self.dwarf_command is None or self.target.is_ios:
             emit('DWARF_COMMAND')
         else:
             emit('DWARF_COMMAND', self.dwarf_command, ld_env_style)
@@ -2156,14 +2156,14 @@ class LD(Linker):
 
         # "Fat Object" : pre-linked global objects and static library with all dependencies
         def emit_link_fat_obj(cmd_name, need_wa_option, *extended_flags):
-            prefix = ['$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP &&', 
-                      '$YMAKE_PYTHON ${input:"build/scripts/link_fat_obj.py"} --build-root $ARCADIA_BUILD_ROOT'] 
+            prefix = ['$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP &&',
+                      '$YMAKE_PYTHON ${input:"build/scripts/link_fat_obj.py"} --build-root $ARCADIA_BUILD_ROOT']
             globals_libs = srcs_globals if need_wa_option else '${rootrel;ext=.a:SRCS_GLOBAL} ${rootrel;ext=.o:SRCS_GLOBAL}'
-            suffix = [arch_flag, 
+            suffix = [arch_flag,
                       '-Ya,input $AUTO_INPUT $VCS_C_OBJ -Ya,global_srcs', globals_libs, '-Ya,peers $PEERS',
                       '-Ya,linker $CXX_COMPILER $LDFLAGS_GLOBAL $C_FLAGS_PLATFORM', self.ld_sdk, '-Ya,archiver', archiver,
                       '$TOOLCHAIN_ENV ${kv;hide:"p LD"} ${requirements;hide:LD_REQUIREMENTS} ${kv;hide:"pc light-blue"} ${kv;hide:"show_out"}']
-            emit(cmd_name, *(prefix + list(extended_flags) + suffix)) 
+            emit(cmd_name, *(prefix + list(extended_flags) + suffix))
 
         # TODO(somov): Проверить, не нужны ли здесь все остальные флаги компоновки (LDFLAGS и т. д.).
         emit_link_fat_obj('LINK_FAT_OBJECT', True, '--obj=$TARGET', '--lib=${output:REALPRJNAME.a}')
@@ -2311,7 +2311,7 @@ class MSVCToolchain(MSVC, Toolchain):
         if self.tc.from_arcadia and not self.tc.ide_msvs:
             self.platform_projects.append('build/platform/msvc')
             if tc.under_wine:
-                self.platform_projects.append('build/platform/wine') 
+                self.platform_projects.append('build/platform/wine')
 
     def print_toolchain(self):
         super(MSVCToolchain, self).print_toolchain()
@@ -2444,10 +2444,10 @@ class MSVCCompiler(MSVC, Compiler):
                 # See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85678#c0
                 '-fno-common',
             ]
-            if target.is_x86: 
-                flags.append('-m32') 
-            if target.is_x86_64: 
-                flags.append('-m64') 
+            if target.is_x86:
+                flags.append('-m32')
+            if target.is_x86_64:
+                flags.append('-m64')
 
             # Some warnings are getting triggered even when NO_COMPILER_WARNINGS is enabled
             flags.extend((
@@ -2481,27 +2481,27 @@ class MSVCCompiler(MSVC, Compiler):
                 '-Wimport-preprocessor-directive-pedantic',
                 '-Wno-undefined-var-template',
             ]
-            if self.tc.version_at_least(2019): 
-                cxx_warnings += [ 
-                    '-Wno-deprecated-volatile', 
-                    '-Wno-deprecated-anon-enum-enum-conversion', 
-                    '-Wno-defaulted-function-deleted', 
-                    '-Wno-deprecated-enum-enum-conversion', 
-                    '-Wno-ambiguous-reversed-operator', 
-                    '-Wno-deprecated-enum-float-conversion', 
-                    '-Wno-pointer-to-int-cast',  # didn't fail on linux 
-                ] 
- 
-                # heretic: на момент коммита в нашей конфигурации указано, что тулчейн clang11-windows - аналог msvc 2019 
-                # https://a.yandex-team.ru/arc/trunk/arcadia/build/ya.conf.json?rev=r7910792#L2185 
-                # сам clang11 по дефолту представляется msvc2017 (#define _MSC_VER 1911) 
-                # https://a.yandex-team.ru/arc/trunk/arcadia/contrib/libs/clang11/lib/Driver/ToolChains/MSVC.cpp?rev=r7913127#L1352 
-                # вручную заставляем его представляться msvc2019 (#define _MSC_VER 1921) 
-                # значение версии взято вот отсюда: 
-                # https://a.yandex-team.ru/arc/trunk/arcadia/contrib/libs/llvm11/include/llvm/Support/Compiler.h?blame=true&rev=r7913127#L89 
-                if self.tc.version_exactly(2019): 
-                    flags.append('-fms-compatibility-version=19.21') 
- 
+            if self.tc.version_at_least(2019):
+                cxx_warnings += [
+                    '-Wno-deprecated-volatile',
+                    '-Wno-deprecated-anon-enum-enum-conversion',
+                    '-Wno-defaulted-function-deleted',
+                    '-Wno-deprecated-enum-enum-conversion',
+                    '-Wno-ambiguous-reversed-operator',
+                    '-Wno-deprecated-enum-float-conversion',
+                    '-Wno-pointer-to-int-cast',  # didn't fail on linux
+                ]
+
+                # heretic: на момент коммита в нашей конфигурации указано, что тулчейн clang11-windows - аналог msvc 2019
+                # https://a.yandex-team.ru/arc/trunk/arcadia/build/ya.conf.json?rev=r7910792#L2185
+                # сам clang11 по дефолту представляется msvc2017 (#define _MSC_VER 1911)
+                # https://a.yandex-team.ru/arc/trunk/arcadia/contrib/libs/clang11/lib/Driver/ToolChains/MSVC.cpp?rev=r7913127#L1352
+                # вручную заставляем его представляться msvc2019 (#define _MSC_VER 1921)
+                # значение версии взято вот отсюда:
+                # https://a.yandex-team.ru/arc/trunk/arcadia/contrib/libs/llvm11/include/llvm/Support/Compiler.h?blame=true&rev=r7913127#L89
+                if self.tc.version_exactly(2019):
+                    flags.append('-fms-compatibility-version=19.21')
+
             if self.tc.ide_msvs:
                 cxx_warnings += [
                     '-Wno-unused-command-line-argument',
@@ -2761,8 +2761,8 @@ class MSVCLinker(MSVC, Linker):
                 EXPORTS_VALUE=/DEF:${input:EXPORTS_FILE}
             }''')
 
-        emit("GENERATE_MF_CMD", '$YMAKE_PYTHON ${input:"build/scripts/generate_mf.py"}', 
-             '--build-root $ARCADIA_BUILD_ROOT --module-name $REALPRJNAME -o ${output;pre=$MODULE_PREFIX;suf=$MODULE_SUFFIX.mf:REALPRJNAME}', 
+        emit("GENERATE_MF_CMD", '$YMAKE_PYTHON ${input:"build/scripts/generate_mf.py"}',
+             '--build-root $ARCADIA_BUILD_ROOT --module-name $REALPRJNAME -o ${output;pre=$MODULE_PREFIX;suf=$MODULE_SUFFIX.mf:REALPRJNAME}',
              '-t $MODULE_TYPE --ya-start-command-file -Ya,lics $LICENSE_NAMES -Ya,peers ${rootrel:PEERS} -Ya,credits ${input:CREDITS_TEXTS_FILE} $CREDITS_FLAGS --ya-end-command-file',
              )
 
@@ -2779,9 +2779,9 @@ class MSVCLinker(MSVC, Linker):
              srcs_globals, '--ya-start-command-file ${VCS_C_OBJ_RR} ${qe;rootrel:AUTO_INPUT}  ${qe;rootrel;ext=.lib:PEERS} ${qe;rootrel;ext=.dll;noext;suf=.lib:PEERS} \
              $LINK_EXE_FLAGS $LINK_STDLIBS $LDFLAGS $LDFLAGS_GLOBAL $OBJADDE --ya-end-command-file')
         emit('REAL_LINK_DYN_LIB', '$REAL_LINK_DYN_LIB_IMPL($_WHOLE_ARCHIVE_PEERS_VALUE)')
- 
-        emit('SWIG_DLL_JAR_CMD', '$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP && $REAL_SWIG_DLL_JAR_CMD') 
- 
+
+        emit('SWIG_DLL_JAR_CMD', '$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP && $REAL_SWIG_DLL_JAR_CMD')
+
         head_link_lib = '${TOOLCHAIN_ENV} ${cwd:ARCADIA_BUILD_ROOT} ${LIB_WRAPPER} ${LINK_LIB_CMD}'
         tail_link_lib = '--ya-start-command-file ${qe;rootrel:AUTO_INPUT} $LINK_LIB_FLAGS --ya-end-command-file \
                         ${requirements;hide:LIB_REQUIREMENTS} ${hide;kv:"soe"} ${hide;kv:"p AR"} ${hide;kv:"pc light-red"}'
@@ -2819,7 +2819,7 @@ class MSVCLinker(MSVC, Linker):
 Compilers = {
     'gnu': (GnuToolchain, GnuCompiler, LD),
     'clang': (GnuToolchain, GnuCompiler, LD),
-    'xcode': (GnuToolchain, GnuCompiler, LD), 
+    'xcode': (GnuToolchain, GnuCompiler, LD),
     'msvc': (MSVCToolchain, MSVCCompiler, MSVCLinker),
 }
 
@@ -2853,13 +2853,13 @@ class Ragel(object):
 
 
 class Python(object):
-    def __init__(self, tc): 
+    def __init__(self, tc):
         self.python = None
         self.flags = None
         self.ldflags = None
         self.libraries = None
         self.includes = None
-        self.tc = tc 
+        self.tc = tc
 
     def configure_posix(self, python=None, python_config=None):
         python = python or preset('PYTHON_BIN') or which('python')
@@ -2882,8 +2882,8 @@ class Python(object):
         # They are not used separately and get overriden together, so it is safe.
         # TODO(somov): Удалить эту переменную и PYTHON_LIBRARIES из makelist-ов.
         self.libraries = ''
-        if preset('USE_ARCADIA_PYTHON') == 'no' and not preset('USE_SYSTEM_PYTHON') and not self.tc.os_sdk_local: 
-            raise Exception("Use fixed python (see https://clubs.at.yandex-team.ru/arcadia/15392) or set OS_SDK=local flag") 
+        if preset('USE_ARCADIA_PYTHON') == 'no' and not preset('USE_SYSTEM_PYTHON') and not self.tc.os_sdk_local:
+            raise Exception("Use fixed python (see https://clubs.at.yandex-team.ru/arcadia/15392) or set OS_SDK=local flag")
 
     def print_variables(self):
         variables = Variables({
@@ -3002,7 +3002,7 @@ class Cuda(object):
         self.cuda_host_msvc_version = Setting('CUDA_HOST_MSVC_VERSION')
         self.cuda_nvcc_flags = Setting('CUDA_NVCC_FLAGS', auto=[])
 
-        self.peerdirs = ['build/platform/cuda'] 
+        self.peerdirs = ['build/platform/cuda']
 
         self.nvcc_std = '-std=c++14'
         if self.build.tc.type == 'msvc':
@@ -3069,12 +3069,12 @@ class Cuda(object):
             return False
 
         if host != target:
-            if not(host.is_linux_x86_64 and target.is_linux_armv8): 
-                return False 
-            if not self.cuda_version.from_user: 
-                return False 
-            if self.cuda_version.value not in ('11.3',): 
-                raise ConfigureError('Only CUDA 11.3 are available for cross compilation from linux-x86 to linux-aarch64.\nUse -DCUDA_VERSION=11.3 flag.') 
+            if not(host.is_linux_x86_64 and target.is_linux_armv8):
+                return False
+            if not self.cuda_version.from_user:
+                return False
+            if self.cuda_version.value not in ('11.3',):
+                raise ConfigureError('Only CUDA 11.3 are available for cross compilation from linux-x86 to linux-aarch64.\nUse -DCUDA_VERSION=11.3 flag.')
 
         if self.cuda_version.value in ('8.0', '9.0', '9.1', '9.2', '10.0'):
             raise ConfigureError('CUDA versions 8.x, 9.x and 10.0 are no longer supported.\nSee DEVTOOLS-7108.')
@@ -3133,7 +3133,7 @@ class Cuda(object):
 
         return select((
             (host.is_linux_x86_64 and target.is_linux_x86_64, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
-            (host.is_linux_x86_64 and target.is_linux_armv8, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'), 
+            (host.is_linux_x86_64 and target.is_linux_armv8, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
             (host.is_linux_powerpc and target.is_linux_powerpc, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
             (host.is_macos_x86_64 and target.is_macos_x86_64, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/usr/bin/clang'),
         ))

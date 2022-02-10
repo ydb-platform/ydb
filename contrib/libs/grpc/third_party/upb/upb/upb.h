@@ -12,10 +12,10 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "upb/port_def.inc" 
- 
+#include "upb/port_def.inc"
+
 #ifdef __cplusplus
-extern "C" { 
+extern "C" {
 #endif
 
 /* upb_status *****************************************************************/
@@ -30,12 +30,12 @@ typedef struct {
 const char *upb_status_errmsg(const upb_status *status);
 bool upb_ok(const upb_status *status);
 
-/* These are no-op if |status| is NULL. */ 
+/* These are no-op if |status| is NULL. */
 void upb_status_clear(upb_status *status);
 void upb_status_seterrmsg(upb_status *status, const char *msg);
 void upb_status_seterrf(upb_status *status, const char *fmt, ...);
 void upb_status_vseterrf(upb_status *status, const char *fmt, va_list args);
-void upb_status_vappenderrf(upb_status *status, const char *fmt, va_list args); 
+void upb_status_vappenderrf(upb_status *status, const char *fmt, va_list args);
 
 /** upb_strview ************************************************************/
 
@@ -141,49 +141,49 @@ typedef void upb_cleanup_func(void *ud);
 struct upb_arena;
 typedef struct upb_arena upb_arena;
 
-typedef struct { 
-  /* We implement the allocator interface. 
-   * This must be the first member of upb_arena! 
-   * TODO(haberman): remove once handlers are gone. */ 
-  upb_alloc alloc; 
+typedef struct {
+  /* We implement the allocator interface.
+   * This must be the first member of upb_arena!
+   * TODO(haberman): remove once handlers are gone. */
+  upb_alloc alloc;
 
-  char *ptr, *end; 
-} _upb_arena_head; 
- 
+  char *ptr, *end;
+} _upb_arena_head;
+
 /* Creates an arena from the given initial block (if any -- n may be 0).
  * Additional blocks will be allocated from |alloc|.  If |alloc| is NULL, this
  * is a fixed-size arena and cannot grow. */
 upb_arena *upb_arena_init(void *mem, size_t n, upb_alloc *alloc);
 void upb_arena_free(upb_arena *a);
 bool upb_arena_addcleanup(upb_arena *a, void *ud, upb_cleanup_func *func);
-void upb_arena_fuse(upb_arena *a, upb_arena *b); 
-void *_upb_arena_slowmalloc(upb_arena *a, size_t size); 
+void upb_arena_fuse(upb_arena *a, upb_arena *b);
+void *_upb_arena_slowmalloc(upb_arena *a, size_t size);
 
 UPB_INLINE upb_alloc *upb_arena_alloc(upb_arena *a) { return (upb_alloc*)a; }
 
-UPB_INLINE void *upb_arena_malloc(upb_arena *a, size_t size) { 
-  _upb_arena_head *h = (_upb_arena_head*)a; 
-  void* ret; 
-  size = UPB_ALIGN_MALLOC(size); 
+UPB_INLINE void *upb_arena_malloc(upb_arena *a, size_t size) {
+  _upb_arena_head *h = (_upb_arena_head*)a;
+  void* ret;
+  size = UPB_ALIGN_MALLOC(size);
 
-  if (UPB_UNLIKELY((size_t)(h->end - h->ptr) < size)) { 
-    return _upb_arena_slowmalloc(a, size); 
-  } 
- 
-  ret = h->ptr; 
-  h->ptr += size; 
-  return ret; 
+  if (UPB_UNLIKELY((size_t)(h->end - h->ptr) < size)) {
+    return _upb_arena_slowmalloc(a, size);
+  }
+
+  ret = h->ptr;
+  h->ptr += size;
+  return ret;
 }
 
 UPB_INLINE void *upb_arena_realloc(upb_arena *a, void *ptr, size_t oldsize,
                                    size_t size) {
-  void *ret = upb_arena_malloc(a, size); 
- 
-  if (ret && oldsize > 0) { 
-    memcpy(ret, ptr, oldsize); 
-  } 
- 
-  return ret; 
+  void *ret = upb_arena_malloc(a, size);
+
+  if (ret && oldsize > 0) {
+    memcpy(ret, ptr, oldsize);
+  }
+
+  return ret;
 }
 
 UPB_INLINE upb_arena *upb_arena_new(void) {
@@ -214,12 +214,12 @@ typedef enum {
   UPB_TYPE_INT32    = 3,
   UPB_TYPE_UINT32   = 4,
   UPB_TYPE_ENUM     = 5,  /* Enum values are int32. */
-  UPB_TYPE_MESSAGE  = 6, 
-  UPB_TYPE_DOUBLE   = 7, 
-  UPB_TYPE_INT64    = 8, 
-  UPB_TYPE_UINT64   = 9, 
-  UPB_TYPE_STRING   = 10, 
-  UPB_TYPE_BYTES    = 11 
+  UPB_TYPE_MESSAGE  = 6,
+  UPB_TYPE_DOUBLE   = 7,
+  UPB_TYPE_INT64    = 8,
+  UPB_TYPE_UINT64   = 9,
+  UPB_TYPE_STRING   = 10,
+  UPB_TYPE_BYTES    = 11
 } upb_fieldtype_t;
 
 /* The repeated-ness of each field; this matches descriptor.proto. */
@@ -231,7 +231,7 @@ typedef enum {
 
 /* Descriptor types, as defined in descriptor.proto. */
 typedef enum {
-  /* Old (long) names.  TODO(haberman): remove */ 
+  /* Old (long) names.  TODO(haberman): remove */
   UPB_DESCRIPTOR_TYPE_DOUBLE   = 1,
   UPB_DESCRIPTOR_TYPE_FLOAT    = 2,
   UPB_DESCRIPTOR_TYPE_INT64    = 3,
@@ -249,60 +249,60 @@ typedef enum {
   UPB_DESCRIPTOR_TYPE_SFIXED32 = 15,
   UPB_DESCRIPTOR_TYPE_SFIXED64 = 16,
   UPB_DESCRIPTOR_TYPE_SINT32   = 17,
-  UPB_DESCRIPTOR_TYPE_SINT64   = 18, 
- 
-  UPB_DTYPE_DOUBLE   = 1, 
-  UPB_DTYPE_FLOAT    = 2, 
-  UPB_DTYPE_INT64    = 3, 
-  UPB_DTYPE_UINT64   = 4, 
-  UPB_DTYPE_INT32    = 5, 
-  UPB_DTYPE_FIXED64  = 6, 
-  UPB_DTYPE_FIXED32  = 7, 
-  UPB_DTYPE_BOOL     = 8, 
-  UPB_DTYPE_STRING   = 9, 
-  UPB_DTYPE_GROUP    = 10, 
-  UPB_DTYPE_MESSAGE  = 11, 
-  UPB_DTYPE_BYTES    = 12, 
-  UPB_DTYPE_UINT32   = 13, 
-  UPB_DTYPE_ENUM     = 14, 
-  UPB_DTYPE_SFIXED32 = 15, 
-  UPB_DTYPE_SFIXED64 = 16, 
-  UPB_DTYPE_SINT32   = 17, 
-  UPB_DTYPE_SINT64   = 18 
+  UPB_DESCRIPTOR_TYPE_SINT64   = 18,
+
+  UPB_DTYPE_DOUBLE   = 1,
+  UPB_DTYPE_FLOAT    = 2,
+  UPB_DTYPE_INT64    = 3,
+  UPB_DTYPE_UINT64   = 4,
+  UPB_DTYPE_INT32    = 5,
+  UPB_DTYPE_FIXED64  = 6,
+  UPB_DTYPE_FIXED32  = 7,
+  UPB_DTYPE_BOOL     = 8,
+  UPB_DTYPE_STRING   = 9,
+  UPB_DTYPE_GROUP    = 10,
+  UPB_DTYPE_MESSAGE  = 11,
+  UPB_DTYPE_BYTES    = 12,
+  UPB_DTYPE_UINT32   = 13,
+  UPB_DTYPE_ENUM     = 14,
+  UPB_DTYPE_SFIXED32 = 15,
+  UPB_DTYPE_SFIXED64 = 16,
+  UPB_DTYPE_SINT32   = 17,
+  UPB_DTYPE_SINT64   = 18
 } upb_descriptortype_t;
 
-#define UPB_MAP_BEGIN ((size_t)-1) 
+#define UPB_MAP_BEGIN ((size_t)-1)
 
-UPB_INLINE bool _upb_isle(void) { 
-  int x = 1; 
-  return *(char*)&x == 1; 
-} 
- 
-UPB_INLINE uint32_t _upb_be_swap32(uint32_t val) { 
-  if (_upb_isle()) { 
-    return val; 
-  } else { 
-    return ((val & 0xff) << 24) | ((val & 0xff00) << 8) | 
-           ((val & 0xff0000ULL) >> 8) | ((val & 0xff000000ULL) >> 24); 
-  } 
-} 
- 
-UPB_INLINE uint64_t _upb_be_swap64(uint64_t val) { 
-  if (_upb_isle()) { 
-    return val; 
-  } else { 
-    return ((val & 0xff) << 56) | ((val & 0xff00) << 40) | 
-           ((val & 0xff0000) << 24) | ((val & 0xff000000) << 8) | 
-           ((val & 0xff00000000ULL) >> 8) | ((val & 0xff0000000000ULL) >> 24) | 
-           ((val & 0xff000000000000ULL) >> 40) | 
-           ((val & 0xff00000000000000ULL) >> 56); 
-  } 
-} 
- 
+UPB_INLINE bool _upb_isle(void) {
+  int x = 1;
+  return *(char*)&x == 1;
+}
+
+UPB_INLINE uint32_t _upb_be_swap32(uint32_t val) {
+  if (_upb_isle()) {
+    return val;
+  } else {
+    return ((val & 0xff) << 24) | ((val & 0xff00) << 8) |
+           ((val & 0xff0000ULL) >> 8) | ((val & 0xff000000ULL) >> 24);
+  }
+}
+
+UPB_INLINE uint64_t _upb_be_swap64(uint64_t val) {
+  if (_upb_isle()) {
+    return val;
+  } else {
+    return ((val & 0xff) << 56) | ((val & 0xff00) << 40) |
+           ((val & 0xff0000) << 24) | ((val & 0xff000000) << 8) |
+           ((val & 0xff00000000ULL) >> 8) | ((val & 0xff0000000000ULL) >> 24) |
+           ((val & 0xff000000000000ULL) >> 40) |
+           ((val & 0xff00000000000000ULL) >> 56);
+  }
+}
+
 #include "upb/port_undef.inc"
 
-#ifdef __cplusplus 
-}  /* extern "C" */ 
-#endif 
- 
+#ifdef __cplusplus
+}  /* extern "C" */
+#endif
+
 #endif  /* UPB_H_ */

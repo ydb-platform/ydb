@@ -9,11 +9,11 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-OWNER( 
-    g:clickhouse 
-    g:cpp-contrib 
-    g:kikimr 
-) 
+OWNER(
+    g:clickhouse
+    g:cpp-contrib
+    g:kikimr
+)
 
 VERSION(3.4.0)
 

@@ -81,7 +81,7 @@ grpc::Status MetricsServiceImpl::GetGauge(ServerContext* /*context*/,
 }
 
 std::shared_ptr<QpsGauge> MetricsServiceImpl::CreateQpsGauge(
-    const TString& name, bool* already_present) { 
+    const TString& name, bool* already_present) {
   std::lock_guard<std::mutex> lock(mu_);
 
   std::shared_ptr<QpsGauge> qps_gauge(new QpsGauge());
@@ -100,7 +100,7 @@ std::shared_ptr<QpsGauge> MetricsServiceImpl::CreateQpsGauge(
 std::unique_ptr<grpc::Server> MetricsServiceImpl::StartServer(int port) {
   gpr_log(GPR_INFO, "Building metrics server..");
 
-  const TString address = "0.0.0.0:" + ToString(port); 
+  const TString address = "0.0.0.0:" + ToString(port);
 
   ServerBuilder builder;
   builder.AddListeningPort(address, grpc::InsecureServerCredentials());

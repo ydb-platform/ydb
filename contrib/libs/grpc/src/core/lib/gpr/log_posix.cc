@@ -29,8 +29,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
-#include <util/generic/string.h> 
-#include "y_absl/strings/str_format.h" 
+#include <util/generic/string.h>
+#include "y_absl/strings/str_format.h"
 
 static intptr_t sys_gettid(void) { return (intptr_t)pthread_self(); }
 
@@ -84,10 +84,10 @@ void gpr_default_log(gpr_log_func_args* args) {
     strcpy(time_buffer, "error:strftime");
   }
 
-  TString prefix = y_absl::StrFormat( 
-      "%s%s.%09d %7" PRIdPTR " %s:%d]", gpr_log_severity_string(args->severity), 
-      time_buffer, (int)(now.tv_nsec), sys_gettid(), display_file, args->line); 
-  fprintf(stderr, "%-70s %s\n", prefix.c_str(), args->message); 
+  TString prefix = y_absl::StrFormat(
+      "%s%s.%09d %7" PRIdPTR " %s:%d]", gpr_log_severity_string(args->severity),
+      time_buffer, (int)(now.tv_nsec), sys_gettid(), display_file, args->line);
+  fprintf(stderr, "%-70s %s\n", prefix.c_str(), args->message);
 }
 
 #endif /* defined(GPR_POSIX_LOG) */

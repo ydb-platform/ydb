@@ -2,34 +2,34 @@
 
 LIBRARY()
 
-OWNER( 
-    dfyz 
-    petrk 
-) 
+OWNER(
+    dfyz
+    petrk
+)
 
 VERSION(2020-11-11)
 
 ORIGINAL_SOURCE(https://github.com/google/cctz/archive/98fb541c6f0f35cf0dffcbc3777d8385bbd5b4c1.tar.gz)
 
-LICENSE( 
+LICENSE(
     Apache-2.0 AND
-    Public-Domain 
+    Public-Domain
 )
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 ADDINCL(
     GLOBAL contrib/libs/cctz/include
 )
- 
+
 NO_COMPILER_WARNINGS()
 
 NO_UTIL()
 
 IF (OS_DARWIN)
     LDFLAGS(
-        -framework 
-        CoreFoundation 
+        -framework
+        CoreFoundation
     )
 ENDIF()
 

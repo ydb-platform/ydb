@@ -19,12 +19,12 @@
 #include "test/cpp/end2end/test_service_impl.h"
 
 #include <grpc/support/log.h>
-#include <grpcpp/alarm.h> 
+#include <grpcpp/alarm.h>
 #include <grpcpp/security/credentials.h>
 #include <grpcpp/server_context.h>
 #include <gtest/gtest.h>
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <thread>
 
 #include "src/proto/grpc/testing/echo.grpc.pb.h"
@@ -34,7 +34,7 @@ using std::chrono::system_clock;
 
 namespace grpc {
 namespace testing {
-namespace internal { 
+namespace internal {
 
 // When echo_deadline is requested, deadline seen in the ServerContext is set in
 // the response in seconds.
@@ -49,9 +49,9 @@ void MaybeEchoDeadline(experimental::ServerContextBase* context,
   }
 }
 
-void CheckServerAuthContext(const experimental::ServerContextBase* context, 
-                            const TString& expected_transport_security_type, 
-                            const TString& expected_client_identity) { 
+void CheckServerAuthContext(const experimental::ServerContextBase* context,
+                            const TString& expected_transport_security_type,
+                            const TString& expected_client_identity) {
   std::shared_ptr<const AuthContext> auth_ctx = context->auth_context();
   std::vector<grpc::string_ref> tst =
       auth_ctx->FindPropertyValues("transport_security_type");
@@ -65,7 +65,7 @@ void CheckServerAuthContext(const experimental::ServerContextBase* context,
     auto identity = auth_ctx->GetPeerIdentity();
     EXPECT_TRUE(auth_ctx->IsPeerAuthenticated());
     EXPECT_EQ(1u, identity.size());
-    EXPECT_EQ(expected_client_identity.c_str(), ToString(identity[0])); 
+    EXPECT_EQ(expected_client_identity.c_str(), ToString(identity[0]));
   }
 }
 
@@ -73,7 +73,7 @@ void CheckServerAuthContext(const experimental::ServerContextBase* context,
 // key-value pair. Returns -1 if the pair wasn't found.
 int MetadataMatchCount(
     const std::multimap<grpc::string_ref, grpc::string_ref>& metadata,
-    const TString& key, const TString& value) { 
+    const TString& key, const TString& value) {
   int count = 0;
   for (const auto& metadatum : metadata) {
     if (ToString(metadatum.first) == key &&
@@ -118,11 +118,11 @@ void ServerTryCancel(ServerContext* context) {
 void ServerTryCancelNonblocking(experimental::CallbackServerContext* context) {
   EXPECT_FALSE(context->IsCancelled());
   context->TryCancel();
-  gpr_log(GPR_INFO, 
-          "Server called TryCancelNonblocking() to cancel the request"); 
+  gpr_log(GPR_INFO,
+          "Server called TryCancelNonblocking() to cancel the request");
 }
 
-}  // namespace internal 
+}  // namespace internal
 
 experimental::ServerUnaryReactor* CallbackTestServiceImpl::Echo(
     experimental::CallbackServerContext* context, const EchoRequest* request,
@@ -135,38 +135,38 @@ experimental::ServerUnaryReactor* CallbackTestServiceImpl::Echo(
         : service_(service), ctx_(ctx), req_(request), resp_(response) {
       // It should be safe to call IsCancelled here, even though we don't know
       // the result. Call it asynchronously to see if we trigger any data races.
-      // Join it in OnDone (technically that could be blocking but shouldn't be 
-      // for very long). 
+      // Join it in OnDone (technically that could be blocking but shouldn't be
+      // for very long).
       async_cancel_check_ = std::thread([this] { (void)ctx_->IsCancelled(); });
 
-      started_ = true; 
- 
-      if (request->has_param() && 
-          request->param().server_notify_client_when_started()) { 
-        service->signaller_.SignalClientThatRpcStarted(); 
-        // Block on the "wait to continue" decision in a different thread since 
-        // we can't tie up an EM thread with blocking events. We can join it in 
-        // OnDone since it would definitely be done by then. 
-        rpc_wait_thread_ = std::thread([this] { 
-          service_->signaller_.ServerWaitToContinue(); 
-          StartRpc(); 
-        }); 
-      } else { 
-        StartRpc(); 
-      } 
-    } 
- 
-    void StartRpc() { 
-      if (req_->has_param() && req_->param().server_sleep_us() > 0) { 
+      started_ = true;
+
+      if (request->has_param() &&
+          request->param().server_notify_client_when_started()) {
+        service->signaller_.SignalClientThatRpcStarted();
+        // Block on the "wait to continue" decision in a different thread since
+        // we can't tie up an EM thread with blocking events. We can join it in
+        // OnDone since it would definitely be done by then.
+        rpc_wait_thread_ = std::thread([this] {
+          service_->signaller_.ServerWaitToContinue();
+          StartRpc();
+        });
+      } else {
+        StartRpc();
+      }
+    }
+
+    void StartRpc() {
+      if (req_->has_param() && req_->param().server_sleep_us() > 0) {
         // Set an alarm for that much time
         alarm_.experimental().Set(
             gpr_time_add(gpr_now(GPR_CLOCK_MONOTONIC),
-                         gpr_time_from_micros(req_->param().server_sleep_us(), 
-                                              GPR_TIMESPAN)), 
+                         gpr_time_from_micros(req_->param().server_sleep_us(),
+                                              GPR_TIMESPAN)),
             [this](bool ok) { NonDelayed(ok); });
-        return; 
+        return;
       }
-      NonDelayed(true); 
+      NonDelayed(true);
     }
     void OnSendInitialMetadataDone(bool ok) override {
       EXPECT_TRUE(ok);
@@ -176,25 +176,25 @@ experimental::ServerUnaryReactor* CallbackTestServiceImpl::Echo(
       EXPECT_TRUE(started_);
       EXPECT_TRUE(ctx_->IsCancelled());
       on_cancel_invoked_ = true;
-      std::lock_guard<std::mutex> l(cancel_mu_); 
-      cancel_cv_.notify_one(); 
+      std::lock_guard<std::mutex> l(cancel_mu_);
+      cancel_cv_.notify_one();
     }
     void OnDone() override {
       if (req_->has_param() && req_->param().echo_metadata_initially()) {
         EXPECT_TRUE(initial_metadata_sent_);
       }
       EXPECT_EQ(ctx_->IsCancelled(), on_cancel_invoked_);
-      // Validate that finishing with a non-OK status doesn't cause cancellation 
-      if (req_->has_param() && req_->param().has_expected_error()) { 
-        EXPECT_FALSE(on_cancel_invoked_); 
-      } 
+      // Validate that finishing with a non-OK status doesn't cause cancellation
+      if (req_->has_param() && req_->param().has_expected_error()) {
+        EXPECT_FALSE(on_cancel_invoked_);
+      }
       async_cancel_check_.join();
-      if (rpc_wait_thread_.joinable()) { 
-        rpc_wait_thread_.join(); 
-      } 
-      if (finish_when_cancelled_.joinable()) { 
-        finish_when_cancelled_.join(); 
-      } 
+      if (rpc_wait_thread_.joinable()) {
+        rpc_wait_thread_.join();
+      }
+      if (finish_when_cancelled_.joinable()) {
+        finish_when_cancelled_.join();
+      }
       delete this;
     }
 
@@ -215,7 +215,7 @@ experimental::ServerUnaryReactor* CallbackTestServiceImpl::Echo(
                       error.error_message(), error.binary_error_details()));
         return;
       }
-      int server_try_cancel = internal::GetIntValueFromMetadata( 
+      int server_try_cancel = internal::GetIntValueFromMetadata(
           kServerTryCancelRequest, ctx_->client_metadata(), DO_NOT_CANCEL);
       if (server_try_cancel != DO_NOT_CANCEL) {
         // Since this is a unary RPC, by the time this server handler is called,
@@ -225,11 +225,11 @@ experimental::ServerUnaryReactor* CallbackTestServiceImpl::Echo(
         EXPECT_FALSE(ctx_->IsCancelled());
         ctx_->TryCancel();
         gpr_log(GPR_INFO, "Server called TryCancel() to cancel the request");
-        FinishWhenCancelledAsync(); 
+        FinishWhenCancelledAsync();
         return;
       }
       resp_->set_message(req_->message());
-      internal::MaybeEchoDeadline(ctx_, req_, resp_); 
+      internal::MaybeEchoDeadline(ctx_, req_, resp_);
       if (service_->host_) {
         resp_->mutable_param()->set_host(*service_->host_);
       }
@@ -238,7 +238,7 @@ experimental::ServerUnaryReactor* CallbackTestServiceImpl::Echo(
           std::unique_lock<std::mutex> lock(service_->mu_);
           service_->signal_client_ = true;
         }
-        FinishWhenCancelledAsync(); 
+        FinishWhenCancelledAsync();
         return;
       } else if (req_->has_param() && req_->param().server_cancel_after_us()) {
         alarm_.experimental().Set(
@@ -272,7 +272,7 @@ experimental::ServerUnaryReactor* CallbackTestServiceImpl::Echo(
         // Terminate rpc with error and debug info in trailer.
         if (req_->param().debug_info().stack_entries_size() ||
             !req_->param().debug_info().detail().empty()) {
-          TString serialized_debug_info = 
+          TString serialized_debug_info =
               req_->param().debug_info().SerializeAsString();
           ctx_->AddTrailingMetadata(kDebugInfoTrailerKey,
                                     serialized_debug_info);
@@ -283,25 +283,25 @@ experimental::ServerUnaryReactor* CallbackTestServiceImpl::Echo(
       if (req_->has_param() &&
           (req_->param().expected_client_identity().length() > 0 ||
            req_->param().check_auth_context())) {
-        internal::CheckServerAuthContext( 
-            ctx_, req_->param().expected_transport_security_type(), 
-            req_->param().expected_client_identity()); 
+        internal::CheckServerAuthContext(
+            ctx_, req_->param().expected_transport_security_type(),
+            req_->param().expected_client_identity());
       }
       if (req_->has_param() && req_->param().response_message_length() > 0) {
         resp_->set_message(
-            TString(req_->param().response_message_length(), '\0')); 
+            TString(req_->param().response_message_length(), '\0'));
       }
       if (req_->has_param() && req_->param().echo_peer()) {
         resp_->mutable_param()->set_peer(ctx_->peer().c_str());
       }
       Finish(Status::OK);
     }
-    void FinishWhenCancelledAsync() { 
-      finish_when_cancelled_ = std::thread([this] { 
-        std::unique_lock<std::mutex> l(cancel_mu_); 
-        cancel_cv_.wait(l, [this] { return ctx_->IsCancelled(); }); 
+    void FinishWhenCancelledAsync() {
+      finish_when_cancelled_ = std::thread([this] {
+        std::unique_lock<std::mutex> l(cancel_mu_);
+        cancel_cv_.wait(l, [this] { return ctx_->IsCancelled(); });
         Finish(Status::CANCELLED);
-      }); 
+      });
     }
 
     CallbackTestServiceImpl* const service_;
@@ -309,14 +309,14 @@ experimental::ServerUnaryReactor* CallbackTestServiceImpl::Echo(
     const EchoRequest* const req_;
     EchoResponse* const resp_;
     Alarm alarm_;
-    std::mutex cancel_mu_; 
-    std::condition_variable cancel_cv_; 
-    bool initial_metadata_sent_ = false; 
-    bool started_ = false; 
-    bool on_cancel_invoked_ = false; 
+    std::mutex cancel_mu_;
+    std::condition_variable cancel_cv_;
+    bool initial_metadata_sent_ = false;
+    bool started_ = false;
+    bool on_cancel_invoked_ = false;
     std::thread async_cancel_check_;
-    std::thread rpc_wait_thread_; 
-    std::thread finish_when_cancelled_; 
+    std::thread rpc_wait_thread_;
+    std::thread finish_when_cancelled_;
   };
 
   return new Reactor(this, context, request, response);
@@ -324,14 +324,14 @@ experimental::ServerUnaryReactor* CallbackTestServiceImpl::Echo(
 
 experimental::ServerUnaryReactor*
 CallbackTestServiceImpl::CheckClientInitialMetadata(
-    experimental::CallbackServerContext* context, const SimpleRequest42*, 
-    SimpleResponse42*) { 
+    experimental::CallbackServerContext* context, const SimpleRequest42*,
+    SimpleResponse42*) {
   class Reactor : public ::grpc::experimental::ServerUnaryReactor {
    public:
     explicit Reactor(experimental::CallbackServerContext* ctx) {
-      EXPECT_EQ(internal::MetadataMatchCount(ctx->client_metadata(), 
-                                             kCheckClientInitialMetadataKey, 
-                                             kCheckClientInitialMetadataVal), 
+      EXPECT_EQ(internal::MetadataMatchCount(ctx->client_metadata(),
+                                             kCheckClientInitialMetadataKey,
+                                             kCheckClientInitialMetadataVal),
                 1);
       EXPECT_EQ(ctx->client_metadata().count(kCheckClientInitialMetadataKey),
                 1u);
@@ -354,10 +354,10 @@ CallbackTestServiceImpl::RequestStream(
   //   is cancelled while the server is reading messages from the client
   //   CANCEL_AFTER_PROCESSING: The RPC is cancelled after the server reads
   //   all the messages from the client
-  int server_try_cancel = internal::GetIntValueFromMetadata( 
+  int server_try_cancel = internal::GetIntValueFromMetadata(
       kServerTryCancelRequest, context->client_metadata(), DO_NOT_CANCEL);
   if (server_try_cancel == CANCEL_BEFORE_PROCESSING) {
-    internal::ServerTryCancelNonblocking(context); 
+    internal::ServerTryCancelNonblocking(context);
     // Don't need to provide a reactor since the RPC is canceled
     return nullptr;
   }
@@ -398,7 +398,7 @@ CallbackTestServiceImpl::RequestStream(
           return;
         }
         if (server_try_cancel_ == CANCEL_AFTER_PROCESSING) {
-          internal::ServerTryCancelNonblocking(ctx_); 
+          internal::ServerTryCancelNonblocking(ctx_);
           return;
         }
         FinishOnce(Status::OK);
@@ -440,10 +440,10 @@ CallbackTestServiceImpl::ResponseStream(
   //   is cancelled while the server is reading messages from the client
   //   CANCEL_AFTER_PROCESSING: The RPC is cancelled after the server reads
   //   all the messages from the client
-  int server_try_cancel = internal::GetIntValueFromMetadata( 
+  int server_try_cancel = internal::GetIntValueFromMetadata(
       kServerTryCancelRequest, context->client_metadata(), DO_NOT_CANCEL);
   if (server_try_cancel == CANCEL_BEFORE_PROCESSING) {
-    internal::ServerTryCancelNonblocking(context); 
+    internal::ServerTryCancelNonblocking(context);
   }
 
   class Reactor
@@ -452,9 +452,9 @@ CallbackTestServiceImpl::ResponseStream(
     Reactor(experimental::CallbackServerContext* ctx,
             const EchoRequest* request, int server_try_cancel)
         : ctx_(ctx), request_(request), server_try_cancel_(server_try_cancel) {
-      server_coalescing_api_ = internal::GetIntValueFromMetadata( 
+      server_coalescing_api_ = internal::GetIntValueFromMetadata(
           kServerUseCoalescingApi, ctx->client_metadata(), 0);
-      server_responses_to_send_ = internal::GetIntValueFromMetadata( 
+      server_responses_to_send_ = internal::GetIntValueFromMetadata(
           kServerResponseStreamsToSend, ctx->client_metadata(),
           kServerDefaultResponseStreamsToSend);
       if (server_try_cancel_ == CANCEL_DURING_PROCESSING) {
@@ -481,7 +481,7 @@ CallbackTestServiceImpl::ResponseStream(
       } else if (server_try_cancel_ == CANCEL_DURING_PROCESSING) {
         // Let OnCancel recover this
       } else if (server_try_cancel_ == CANCEL_AFTER_PROCESSING) {
-        internal::ServerTryCancelNonblocking(ctx_); 
+        internal::ServerTryCancelNonblocking(ctx_);
       } else {
         FinishOnce(Status::OK);
       }
@@ -498,24 +498,24 @@ CallbackTestServiceImpl::ResponseStream(
 
     void NextWrite() {
       response_.set_message(request_->message() +
-                            ::ToString(num_msgs_sent_)); 
+                            ::ToString(num_msgs_sent_));
       if (num_msgs_sent_ == server_responses_to_send_ - 1 &&
           server_coalescing_api_ != 0) {
-        { 
-          std::lock_guard<std::mutex> l(finish_mu_); 
-          if (!finished_) { 
-            num_msgs_sent_++; 
-            StartWriteLast(&response_, WriteOptions()); 
-          } 
-        } 
+        {
+          std::lock_guard<std::mutex> l(finish_mu_);
+          if (!finished_) {
+            num_msgs_sent_++;
+            StartWriteLast(&response_, WriteOptions());
+          }
+        }
         // If we use WriteLast, we shouldn't wait before attempting Finish
         FinishOnce(Status::OK);
       } else {
-        std::lock_guard<std::mutex> l(finish_mu_); 
-        if (!finished_) { 
-          num_msgs_sent_++; 
-          StartWrite(&response_); 
-        } 
+        std::lock_guard<std::mutex> l(finish_mu_);
+        if (!finished_) {
+          num_msgs_sent_++;
+          StartWrite(&response_);
+        }
       }
     }
     experimental::CallbackServerContext* const ctx_;
@@ -547,12 +547,12 @@ CallbackTestServiceImpl::BidiStream(
       //   is cancelled while the server is reading messages from the client
       //   CANCEL_AFTER_PROCESSING: The RPC is cancelled after the server reads
       //   all the messages from the client
-      server_try_cancel_ = internal::GetIntValueFromMetadata( 
+      server_try_cancel_ = internal::GetIntValueFromMetadata(
           kServerTryCancelRequest, ctx->client_metadata(), DO_NOT_CANCEL);
-      server_write_last_ = internal::GetIntValueFromMetadata( 
-          kServerFinishAfterNReads, ctx->client_metadata(), 0); 
+      server_write_last_ = internal::GetIntValueFromMetadata(
+          kServerFinishAfterNReads, ctx->client_metadata(), 0);
       if (server_try_cancel_ == CANCEL_BEFORE_PROCESSING) {
-        internal::ServerTryCancelNonblocking(ctx); 
+        internal::ServerTryCancelNonblocking(ctx);
       } else {
         if (server_try_cancel_ == CANCEL_DURING_PROCESSING) {
           ctx->TryCancel();
@@ -561,15 +561,15 @@ CallbackTestServiceImpl::BidiStream(
       }
       setup_done_ = true;
     }
-    void OnDone() override { 
-      { 
-        // Use the same lock as finish to make sure that OnDone isn't inlined. 
-        std::lock_guard<std::mutex> l(finish_mu_); 
-        EXPECT_TRUE(finished_); 
-        finish_thread_.join(); 
-      } 
-      delete this; 
-    } 
+    void OnDone() override {
+      {
+        // Use the same lock as finish to make sure that OnDone isn't inlined.
+        std::lock_guard<std::mutex> l(finish_mu_);
+        EXPECT_TRUE(finished_);
+        finish_thread_.join();
+      }
+      delete this;
+    }
     void OnCancel() override {
       EXPECT_TRUE(setup_done_);
       EXPECT_TRUE(ctx_->IsCancelled());
@@ -579,22 +579,22 @@ CallbackTestServiceImpl::BidiStream(
       if (ok) {
         num_msgs_read_++;
         response_.set_message(request_.message());
-        std::lock_guard<std::mutex> l(finish_mu_); 
-        if (!finished_) { 
-          if (num_msgs_read_ == server_write_last_) { 
-            StartWriteLast(&response_, WriteOptions()); 
-            // If we use WriteLast, we shouldn't wait before attempting Finish 
-          } else { 
-            StartWrite(&response_); 
-            return; 
-          } 
+        std::lock_guard<std::mutex> l(finish_mu_);
+        if (!finished_) {
+          if (num_msgs_read_ == server_write_last_) {
+            StartWriteLast(&response_, WriteOptions());
+            // If we use WriteLast, we shouldn't wait before attempting Finish
+          } else {
+            StartWrite(&response_);
+            return;
+          }
         }
       }
 
       if (server_try_cancel_ == CANCEL_DURING_PROCESSING) {
         // Let OnCancel handle this
       } else if (server_try_cancel_ == CANCEL_AFTER_PROCESSING) {
-        internal::ServerTryCancelNonblocking(ctx_); 
+        internal::ServerTryCancelNonblocking(ctx_);
       } else {
         FinishOnce(Status::OK);
       }
@@ -611,11 +611,11 @@ CallbackTestServiceImpl::BidiStream(
       std::lock_guard<std::mutex> l(finish_mu_);
       if (!finished_) {
         finished_ = true;
-        // Finish asynchronously to make sure that there are no deadlocks. 
-        finish_thread_ = std::thread([this, s] { 
-          std::lock_guard<std::mutex> l(finish_mu_); 
-          Finish(s); 
-        }); 
+        // Finish asynchronously to make sure that there are no deadlocks.
+        finish_thread_ = std::thread([this, s] {
+          std::lock_guard<std::mutex> l(finish_mu_);
+          Finish(s);
+        });
       }
     }
 
@@ -628,7 +628,7 @@ CallbackTestServiceImpl::BidiStream(
     std::mutex finish_mu_;
     bool finished_{false};
     bool setup_done_{false};
-    std::thread finish_thread_; 
+    std::thread finish_thread_;
   };
 
   return new Reactor(context);

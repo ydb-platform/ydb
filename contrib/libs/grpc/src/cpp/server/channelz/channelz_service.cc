@@ -24,9 +24,9 @@
 #include <grpc/support/alloc.h>
 
 namespace grpc {
- 
-namespace { 
- 
+
+namespace {
+
 grpc::protobuf::util::Status ParseJson(const char* json_str,
                                        grpc::protobuf::Message* message) {
   grpc::protobuf::json::JsonParseOptions options;
@@ -34,8 +34,8 @@ grpc::protobuf::util::Status ParseJson(const char* json_str,
   return grpc::protobuf::json::JsonStringToMessage(json_str, message, options);
 }
 
-}  // namespace 
- 
+}  // namespace
+
 Status ChannelzService::GetTopChannels(
     ServerContext* /*unused*/,
     const channelz::v1::GetTopChannelsRequest* request,

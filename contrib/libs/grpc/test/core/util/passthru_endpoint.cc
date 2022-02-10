@@ -27,10 +27,10 @@
 #include <inttypes.h>
 #include <string.h>
 
-#include <util/generic/string.h> 
- 
-#include "y_absl/strings/str_format.h" 
- 
+#include <util/generic/string.h>
+
+#include "y_absl/strings/str_format.h"
+
 #include <grpc/support/alloc.h>
 #include <grpc/support/string_util.h>
 #include "src/core/lib/iomgr/sockaddr.h"
@@ -152,20 +152,20 @@ static void me_destroy(grpc_endpoint* ep) {
   }
 }
 
-static y_absl::string_view me_get_peer(grpc_endpoint* ep) { 
+static y_absl::string_view me_get_peer(grpc_endpoint* ep) {
   passthru_endpoint* p = (reinterpret_cast<half*>(ep))->parent;
   return (reinterpret_cast<half*>(ep)) == &p->client
-             ? "fake:mock_client_endpoint" 
-             : "fake:mock_server_endpoint"; 
+             ? "fake:mock_client_endpoint"
+             : "fake:mock_server_endpoint";
 }
 
-static y_absl::string_view me_get_local_address(grpc_endpoint* ep) { 
-  passthru_endpoint* p = (reinterpret_cast<half*>(ep))->parent; 
-  return (reinterpret_cast<half*>(ep)) == &p->client 
-             ? "fake:mock_client_endpoint" 
-             : "fake:mock_server_endpoint"; 
-} 
- 
+static y_absl::string_view me_get_local_address(grpc_endpoint* ep) {
+  passthru_endpoint* p = (reinterpret_cast<half*>(ep))->parent;
+  return (reinterpret_cast<half*>(ep)) == &p->client
+             ? "fake:mock_client_endpoint"
+             : "fake:mock_server_endpoint";
+}
+
 static int me_get_fd(grpc_endpoint* /*ep*/) { return -1; }
 
 static bool me_can_track_err(grpc_endpoint* /*ep*/) { return false; }
@@ -185,7 +185,7 @@ static const grpc_endpoint_vtable vtable = {
     me_destroy,
     me_get_resource_user,
     me_get_peer,
-    me_get_local_address, 
+    me_get_local_address,
     me_get_fd,
     me_can_track_err,
 };
@@ -197,9 +197,9 @@ static void half_init(half* m, passthru_endpoint* parent,
   m->parent = parent;
   grpc_slice_buffer_init(&m->read_buffer);
   m->on_read = nullptr;
-  TString name = y_absl::StrFormat("passthru_endpoint_%s_%" PRIxPTR, 
-                                     half_name, (intptr_t)parent); 
-  m->resource_user = grpc_resource_user_create(resource_quota, name.c_str()); 
+  TString name = y_absl::StrFormat("passthru_endpoint_%s_%" PRIxPTR,
+                                     half_name, (intptr_t)parent);
+  m->resource_user = grpc_resource_user_create(resource_quota, name.c_str());
 }
 
 void grpc_passthru_endpoint_create(grpc_endpoint** client,

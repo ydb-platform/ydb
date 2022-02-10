@@ -2,17 +2,17 @@
 
 PY3_LIBRARY()
 
-OWNER( 
-    orivej 
-    g:python-contrib 
-) 
+OWNER(
+    orivej
+    g:python-contrib
+)
 
 VERSION(21.3)
 
-LICENSE( 
-    BSD-2-Clause OR 
-    Apache-2.0 
-) 
+LICENSE(
+    BSD-2-Clause OR
+    Apache-2.0
+)
 
 PEERDIR(
     contrib/python/pyparsing

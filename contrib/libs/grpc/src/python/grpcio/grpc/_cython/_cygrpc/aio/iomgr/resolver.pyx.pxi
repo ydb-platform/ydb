@@ -15,7 +15,7 @@
 
 cdef class _AsyncioResolver:
     def __cinit__(self):
-        self._loop = get_working_loop() 
+        self._loop = get_working_loop()
         self._grpc_resolver = NULL
         self._task_resolve = None
 
@@ -30,27 +30,27 @@ cdef class _AsyncioResolver:
         id_ = id(self)
         return f"<{class_name} {id_}>"
 
-    async def _async_resolve(self, bytes host, bytes port): 
-        self._task_resolve = None 
+    async def _async_resolve(self, bytes host, bytes port):
+        self._task_resolve = None
         try:
-            resolved = await self._loop.getaddrinfo(host, port) 
+            resolved = await self._loop.getaddrinfo(host, port)
         except Exception as e:
             grpc_custom_resolve_callback(
                 <grpc_custom_resolver*>self._grpc_resolver,
-                NULL, 
-                grpc_socket_error("Resolve address [{}:{}] failed: {}: {}".format( 
-                    host, port, type(e), str(e)).encode()) 
+                NULL,
+                grpc_socket_error("Resolve address [{}:{}] failed: {}: {}".format(
+                    host, port, type(e), str(e)).encode())
             )
         else:
             grpc_custom_resolve_callback(
                 <grpc_custom_resolver*>self._grpc_resolver,
-                tuples_to_resolvaddr(resolved), 
-                <grpc_error*>0 
+                tuples_to_resolvaddr(resolved),
+                <grpc_error*>0
             )
 
-    cdef void resolve(self, const char* host, const char* port): 
+    cdef void resolve(self, const char* host, const char* port):
         assert not self._task_resolve
 
-        self._task_resolve = self._loop.create_task( 
-            self._async_resolve(host, port) 
+        self._task_resolve = self._loop.create_task(
+            self._async_resolve(host, port)
         )

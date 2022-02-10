@@ -75,9 +75,9 @@ class ChannelTrace {
   void AddTraceEventWithReference(Severity severity, const grpc_slice& data,
                                   RefCountedPtr<BaseNode> referenced_entity);
 
-  // Creates and returns the raw Json object, so a parent channelz 
+  // Creates and returns the raw Json object, so a parent channelz
   // object may incorporate the json before rendering.
-  Json RenderJson() const; 
+  Json RenderJson() const;
 
  private:
   friend size_t testing::GetSizeofTraceEvent(void);
@@ -98,7 +98,7 @@ class ChannelTrace {
 
     // Renders the data inside of this TraceEvent into a json object. This is
     // used by the ChannelTrace, when it is rendering itself.
-    Json RenderTraceEvent() const; 
+    Json RenderTraceEvent() const;
 
     // set and get for the next_ pointer.
     TraceEvent* next() const { return next_; }

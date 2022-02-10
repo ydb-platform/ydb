@@ -2,33 +2,33 @@
 
 LIBRARY()
 
-OWNER( 
-    orivej 
-    g:cpp-contrib 
-) 
+OWNER(
+    orivej
+    g:cpp-contrib
+)
 
-LICENSE( 
-    Apache-2.0 WITH LLVM-exception AND 
-    BSD-2-Clause AND 
-    BSD-3-Clause AND 
-    ISC AND 
-    NCSA AND 
-    Public-Domain AND 
-    Spencer-94 AND 
-    Unicode-Mappings 
-) 
- 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE(
+    Apache-2.0 WITH LLVM-exception AND
+    BSD-2-Clause AND
+    BSD-3-Clause AND
+    ISC AND
+    NCSA AND
+    Public-Domain AND
+    Spencer-94 AND
+    Unicode-Mappings
+)
+
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 PEERDIR(
     contrib/libs/llvm12
     contrib/libs/llvm12/lib/Demangle
     contrib/libs/zlib
 )
 
-ADDINCL( 
-    contrib/libs/llvm12/lib/Support 
-) 
+ADDINCL(
+    contrib/libs/llvm12/lib/Support
+)
 
 NO_COMPILER_WARNINGS()
 

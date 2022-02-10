@@ -1,19 +1,19 @@
-import argparse 
-import tarfile 
+import argparse
+import tarfile
 import zipfile
-import os 
+import os
 import sys
 import time
-import subprocess 
- 
- 
-def mkdir_p(path): 
-    try: 
-        os.makedirs(path) 
-    except OSError: 
-        pass 
- 
- 
+import subprocess
+
+
+def mkdir_p(path):
+    try:
+        os.makedirs(path)
+    except OSError:
+        pass
+
+
 class Timer(object):
 
     def __init__(self):
@@ -24,7 +24,7 @@ class Timer(object):
         self.start = time.time()
 
 
-def main(source, output, java, prefix_filter, exclude_filter, jars_list, output_format, tar_output, agent_disposition, runners_paths): 
+def main(source, output, java, prefix_filter, exclude_filter, jars_list, output_format, tar_output, agent_disposition, runners_paths):
     timer = Timer()
     reports_dir = 'jacoco_reports_dir'
     mkdir_p(reports_dir)
@@ -35,12 +35,12 @@ def main(source, output, java, prefix_filter, exclude_filter, jars_list, output_
 
     with open(jars_list) as f:
         jars = f.read().strip().split()
-    if jars and runners_paths: 
-        for r in runners_paths: 
-            try: 
-                jars.remove(r) 
-            except ValueError: 
-                pass 
+    if jars and runners_paths:
+        for r in runners_paths:
+            try:
+                jars.remove(r)
+            except ValueError:
+                pass
 
     src_dir = 'sources_dir'
     cls_dir = 'classes_dir'
@@ -78,8 +78,8 @@ def main(source, output, java, prefix_filter, exclude_filter, jars_list, output_
         report_dir = 'java.report.temp'
     else:
         report_dir = output
-    mkdir_p(report_dir) 
- 
+    mkdir_p(report_dir)
+
     if agent_disposition:
         agent_cmd = [java, '-jar', agent_disposition, src_dir, cls_dir, prefix_filter or '.', exclude_filter or '__no_exclude__', report_dir, output_format]
         agent_cmd += reports
@@ -89,24 +89,24 @@ def main(source, output, java, prefix_filter, exclude_filter, jars_list, output_
     if tar_output:
         with tarfile.open(output, 'w') as outf:
             outf.add(report_dir, arcname='.')
- 
- 
-if __name__ == '__main__': 
+
+
+if __name__ == '__main__':
     if 'LC_ALL' in os.environ:
         if os.environ['LC_ALL'] == 'C':
             os.environ['LC_ALL'] = 'en_GB.UTF-8'
 
-    parser = argparse.ArgumentParser() 
- 
-    parser.add_argument('--source', action='store') 
-    parser.add_argument('--output', action='store') 
-    parser.add_argument('--java', action='store') 
-    parser.add_argument('--prefix-filter', action='store') 
-    parser.add_argument('--exclude-filter', action='store') 
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--source', action='store')
+    parser.add_argument('--output', action='store')
+    parser.add_argument('--java', action='store')
+    parser.add_argument('--prefix-filter', action='store')
+    parser.add_argument('--exclude-filter', action='store')
     parser.add_argument('--jars-list', action='store')
     parser.add_argument('--output-format', action='store', default="html")
     parser.add_argument('--raw-output', dest='tar_output', action='store_false', default=True)
     parser.add_argument('--agent-disposition', action='store')
-    parser.add_argument('--runner-path', dest='runners_paths', action='append', default=[]) 
-    args = parser.parse_args() 
-    main(**vars(args)) 
+    parser.add_argument('--runner-path', dest='runners_paths', action='append', default=[])
+    args = parser.parse_args()
+    main(**vars(args))

@@ -58,7 +58,7 @@ namespace {
 class TestScenario {
  public:
   TestScenario(bool server_port, bool pending_data,
-               const TString& creds_type) 
+               const TString& creds_type)
       : server_has_port(server_port),
         queue_pending_data(pending_data),
         credentials_type(creds_type) {}
@@ -67,7 +67,7 @@ class TestScenario {
   bool server_has_port;
   // whether tcp server should read some data before handoff
   bool queue_pending_data;
-  const TString credentials_type; 
+  const TString credentials_type;
 };
 
 static std::ostream& operator<<(std::ostream& out,
@@ -115,7 +115,7 @@ class TestTcpServer {
     gpr_log(GPR_INFO, "Test TCP server started at %s", address_.c_str());
   }
 
-  const TString& address() { return address_; } 
+  const TString& address() { return address_; }
 
   void SetAcceptor(
       std::unique_ptr<experimental::ExternalConnectionAcceptor> acceptor) {
@@ -156,8 +156,8 @@ class TestTcpServer {
  private:
   void OnConnect(grpc_endpoint* tcp, grpc_pollset* /*accepting_pollset*/,
                  grpc_tcp_server_acceptor* acceptor) {
-    TString peer(grpc_endpoint_get_peer(tcp)); 
-    gpr_log(GPR_INFO, "Got incoming connection! from %s", peer.c_str()); 
+    TString peer(grpc_endpoint_get_peer(tcp));
+    gpr_log(GPR_INFO, "Got incoming connection! from %s", peer.c_str());
     EXPECT_FALSE(acceptor->external_connection);
     listener_fd_ = grpc_tcp_server_port_fd(
         acceptor->from_server, acceptor->port_index, acceptor->fd_index);
@@ -194,7 +194,7 @@ class TestTcpServer {
   grpc_closure on_fd_released_;
   std::thread running_thread_;
   int port_ = -1;
-  TString address_; 
+  TString address_;
   std::unique_ptr<experimental::ExternalConnectionAcceptor>
       connection_acceptor_;
   test_tcp_server tcp_server_;
@@ -309,7 +309,7 @@ static void SendRpc(EchoTestService::Stub* stub, int num_rpcs) {
 
 std::vector<TestScenario> CreateTestScenarios() {
   std::vector<TestScenario> scenarios;
-  std::vector<TString> credentials_types; 
+  std::vector<TString> credentials_types;
 
 #if TARGET_OS_IPHONE
   // Workaround Apple CFStream bug

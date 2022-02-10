@@ -13,19 +13,19 @@
 # limitations under the License.
 """Reference implementation for reflection in gRPC Python."""
 
-import sys 
+import sys
 import grpc
 
 from src.proto.grpc.reflection.v1alpha import reflection_pb2 as _reflection_pb2
 from src.proto.grpc.reflection.v1alpha import reflection_pb2_grpc as _reflection_pb2_grpc
 
-from grpc_reflection.v1alpha._base import BaseReflectionServicer 
- 
+from grpc_reflection.v1alpha._base import BaseReflectionServicer
+
 SERVICE_NAME = _reflection_pb2.DESCRIPTOR.services_by_name[
     'ServerReflection'].full_name
 
 
-class ReflectionServicer(BaseReflectionServicer): 
+class ReflectionServicer(BaseReflectionServicer):
     """Servicer handling RPCs for service statuses."""
 
     def ServerReflectionInfo(self, request_iterator, context):
@@ -49,50 +49,50 @@ class ReflectionServicer(BaseReflectionServicer):
                 yield _reflection_pb2.ServerReflectionResponse(
                     error_response=_reflection_pb2.ErrorResponse(
                         error_code=grpc.StatusCode.INVALID_ARGUMENT.value[0],
-                        error_message=grpc.StatusCode.INVALID_ARGUMENT.value[1]. 
-                        encode(), 
+                        error_message=grpc.StatusCode.INVALID_ARGUMENT.value[1].
+                        encode(),
                     ))
 
 
-_enable_server_reflection_doc = """Enables server reflection on a server. 
+_enable_server_reflection_doc = """Enables server reflection on a server.
 
-Args: 
-    service_names: Iterable of fully-qualified service names available. 
-    server: grpc.Server to which reflection service will be added. 
-    pool: DescriptorPool object to use (descriptor_pool.Default() if None). 
-""" 
- 
-if sys.version_info[0] >= 3 and sys.version_info[1] >= 6: 
-    # Exposes AsyncReflectionServicer as public API. 
-    from . import _async as aio 
-    from grpc.experimental import aio as grpc_aio  # pylint: disable=ungrouped-imports 
- 
-    def enable_server_reflection(service_names, server, pool=None): 
-        if isinstance(server, grpc_aio.Server): 
-            _reflection_pb2_grpc.add_ServerReflectionServicer_to_server( 
-                aio.ReflectionServicer(service_names, pool=pool), server) 
-        else: 
-            _reflection_pb2_grpc.add_ServerReflectionServicer_to_server( 
-                ReflectionServicer(service_names, pool=pool), server) 
- 
-    enable_server_reflection.__doc__ = _enable_server_reflection_doc 
- 
-    __all__ = [ 
-        "SERVICE_NAME", 
-        "ReflectionServicer", 
-        "enable_server_reflection", 
-        "aio", 
-    ] 
-else: 
- 
-    def enable_server_reflection(service_names, server, pool=None): 
-        _reflection_pb2_grpc.add_ServerReflectionServicer_to_server( 
-            ReflectionServicer(service_names, pool=pool), server) 
- 
-    enable_server_reflection.__doc__ = _enable_server_reflection_doc 
- 
-    __all__ = [ 
-        "SERVICE_NAME", 
-        "ReflectionServicer", 
-        "enable_server_reflection", 
-    ] 
+Args:
+    service_names: Iterable of fully-qualified service names available.
+    server: grpc.Server to which reflection service will be added.
+    pool: DescriptorPool object to use (descriptor_pool.Default() if None).
+"""
+
+if sys.version_info[0] >= 3 and sys.version_info[1] >= 6:
+    # Exposes AsyncReflectionServicer as public API.
+    from . import _async as aio
+    from grpc.experimental import aio as grpc_aio  # pylint: disable=ungrouped-imports
+
+    def enable_server_reflection(service_names, server, pool=None):
+        if isinstance(server, grpc_aio.Server):
+            _reflection_pb2_grpc.add_ServerReflectionServicer_to_server(
+                aio.ReflectionServicer(service_names, pool=pool), server)
+        else:
+            _reflection_pb2_grpc.add_ServerReflectionServicer_to_server(
+                ReflectionServicer(service_names, pool=pool), server)
+
+    enable_server_reflection.__doc__ = _enable_server_reflection_doc
+
+    __all__ = [
+        "SERVICE_NAME",
+        "ReflectionServicer",
+        "enable_server_reflection",
+        "aio",
+    ]
+else:
+
+    def enable_server_reflection(service_names, server, pool=None):
+        _reflection_pb2_grpc.add_ServerReflectionServicer_to_server(
+            ReflectionServicer(service_names, pool=pool), server)
+
+    enable_server_reflection.__doc__ = _enable_server_reflection_doc
+
+    __all__ = [
+        "SERVICE_NAME",
+        "ReflectionServicer",
+        "enable_server_reflection",
+    ]

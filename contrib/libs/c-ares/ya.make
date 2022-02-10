@@ -2,31 +2,31 @@
 
 LIBRARY()
 
-OWNER( 
-    max42 
-    g:cpp-contrib 
-) 
+OWNER(
+    max42
+    g:cpp-contrib
+)
 
 VERSION(1.16.1)
 
 ORIGINAL_SOURCE(https://c-ares.haxx.se/download/c-ares-1.16.1.tar.gz)
 
-LICENSE( 
-    BSD-3-Clause AND 
-    ISC AND 
-    MIT AND 
-    NTP 
-) 
+LICENSE(
+    BSD-3-Clause AND
+    ISC AND
+    MIT AND
+    NTP
+)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 PEERDIR(
     contrib/libs/libc_compat
 )
 
-ADDINCL( 
-    contrib/libs/c-ares 
-) 
+ADDINCL(
+    contrib/libs/c-ares
+)
 
 NO_COMPILER_WARNINGS()
 
@@ -37,15 +37,15 @@ CFLAGS(
 )
 
 IF (NOT DLL_FOR)
-    CFLAGS( 
-        -DCARES_STATICLIB 
-    ) 
+    CFLAGS(
+        -DCARES_STATICLIB
+    )
 ENDIF()
 
 IF (ARCH_ARM7)
-    CFLAGS( 
-        GLOBAL -D__SIZEOF_LONG__=4 
-    ) 
+    CFLAGS(
+        GLOBAL -D__SIZEOF_LONG__=4
+    )
 ENDIF()
 
 SRCS(
@@ -109,7 +109,7 @@ SRCS(
 )
 
 CHECK_CONFIG_H(ares_setup.h)
- 
+
 END()
 
 RECURSE(

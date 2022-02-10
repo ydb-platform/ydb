@@ -200,10 +200,10 @@ inline void grpc_error_unref(grpc_error* err) {
 
 // Consumes all the errors in the vector and forms a referencing error from
 // them. If the vector is empty, return GRPC_ERROR_NONE.
-template <typename VectorType> 
-static grpc_error* grpc_error_create_from_vector(const char* file, int line, 
-                                                 const char* desc, 
-                                                 VectorType* error_list) { 
+template <typename VectorType>
+static grpc_error* grpc_error_create_from_vector(const char* file, int line,
+                                                 const char* desc,
+                                                 VectorType* error_list) {
   grpc_error* error = GRPC_ERROR_NONE;
   if (error_list->size() != 0) {
     error = grpc_error_create(file, line, grpc_slice_from_static_string(desc),

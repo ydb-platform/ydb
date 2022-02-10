@@ -60,10 +60,10 @@ inline cctz::time_point<cctz::seconds> unix_epoch() {
 inline int64_t FloorToUnit(y_absl::Duration d, y_absl::Duration unit) {
   y_absl::Duration rem;
   int64_t q = y_absl::IDivDuration(d, unit, &rem);
-  return (q > 0 || rem >= ZeroDuration() || 
-          q == std::numeric_limits<int64_t>::min()) 
-             ? q 
-             : q - 1; 
+  return (q > 0 || rem >= ZeroDuration() ||
+          q == std::numeric_limits<int64_t>::min())
+             ? q
+             : q - 1;
 }
 
 inline y_absl::Time::Breakdown InfiniteFutureBreakdown() {

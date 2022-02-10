@@ -23,11 +23,11 @@
 
 #include <grpc/grpc.h>
 
-#include <set> 
-#include <util/generic/string.h> 
+#include <set>
+#include <util/generic/string.h>
 
-#include "y_absl/container/inlined_vector.h" 
- 
+#include "y_absl/container/inlined_vector.h"
+
 #include "src/core/lib/channel/channel_trace.h"
 #include "src/core/lib/gpr/time_precise.h"
 #include "src/core/lib/gprpp/atomic.h"
@@ -43,9 +43,9 @@
 // Channel arg key for channelz node.
 #define GRPC_ARG_CHANNELZ_CHANNEL_NODE "grpc.channelz_channel_node"
 
-// Channel arg key for indicating an internal channel. 
-#define GRPC_ARG_CHANNELZ_IS_INTERNAL_CHANNEL \ 
-  "grpc.channelz_is_internal_channel" 
+// Channel arg key for indicating an internal channel.
+#define GRPC_ARG_CHANNELZ_IS_INTERNAL_CHANNEL \
+  "grpc.channelz_is_internal_channel"
 
 /** This is the default value for whether or not to enable channelz. If
  * GRPC_ARG_ENABLE_CHANNELZ is set, it will override this default value. */
@@ -84,28 +84,28 @@ class BaseNode : public RefCounted<BaseNode> {
   };
 
  protected:
-  BaseNode(EntityType type, TString name); 
+  BaseNode(EntityType type, TString name);
 
  public:
   virtual ~BaseNode();
 
   // All children must implement this function.
-  virtual Json RenderJson() = 0; 
+  virtual Json RenderJson() = 0;
 
   // Renders the json and returns allocated string that must be freed by the
   // caller.
-  TString RenderJsonString(); 
+  TString RenderJsonString();
 
   EntityType type() const { return type_; }
   intptr_t uuid() const { return uuid_; }
-  const TString& name() const { return name_; } 
+  const TString& name() const { return name_; }
 
  private:
   // to allow the ChannelzRegistry to set uuid_ under its lock.
   friend class ChannelzRegistry;
   const EntityType type_;
   intptr_t uuid_;
-  TString name_; 
+  TString name_;
 };
 
 // This class is a helper class for channelz entities that deal with Channels,
@@ -123,7 +123,7 @@ class CallCountingHelper {
   void RecordCallSucceeded();
 
   // Common rendering of the call count data and last_call_started_timestamp.
-  void PopulateCallCounts(Json::Object* json); 
+  void PopulateCallCounts(Json::Object* json);
 
  private:
   // testing peer friend.
@@ -147,13 +147,13 @@ class CallCountingHelper {
     // Make sure the size is exactly one cache line.
     uint8_t padding[GPR_CACHELINE_SIZE - 3 * sizeof(Atomic<intptr_t>) -
                     sizeof(Atomic<gpr_cycle_counter>)];
-  }; 
-  // TODO(soheilhy,veblush): Revist this after abseil integration. 
-  // This has a problem when using abseil inlined_vector because it 
-  // carries an alignment attribute properly but our allocator doesn't 
-  // respect this. To avoid UBSAN errors, this should be removed with 
-  // abseil inlined_vector. 
-  // GPR_ALIGN_STRUCT(GPR_CACHELINE_SIZE); 
+  };
+  // TODO(soheilhy,veblush): Revist this after abseil integration.
+  // This has a problem when using abseil inlined_vector because it
+  // carries an alignment attribute properly but our allocator doesn't
+  // respect this. To avoid UBSAN errors, this should be removed with
+  // abseil inlined_vector.
+  // GPR_ALIGN_STRUCT(GPR_CACHELINE_SIZE);
 
   struct CounterData {
     int64_t calls_started = 0;
@@ -166,21 +166,21 @@ class CallCountingHelper {
   void CollectData(CounterData* out);
 
   // Really zero-sized, but 0-sized arrays are illegal on MSVC.
-  y_absl::InlinedVector<AtomicCounterData, 1> per_cpu_counter_data_storage_; 
+  y_absl::InlinedVector<AtomicCounterData, 1> per_cpu_counter_data_storage_;
   size_t num_cores_ = 0;
 };
 
 // Handles channelz bookkeeping for channels
 class ChannelNode : public BaseNode {
  public:
-  ChannelNode(TString target, size_t channel_tracer_max_nodes, 
-              bool is_internal_channel); 
+  ChannelNode(TString target, size_t channel_tracer_max_nodes,
+              bool is_internal_channel);
 
   // Returns the string description of the given connectivity state.
   static const char* GetChannelConnectivityStateChangeString(
       grpc_connectivity_state state);
 
-  Json RenderJson() override; 
+  Json RenderJson() override;
 
   // proxy methods to composed classes.
   void AddTraceEvent(ChannelTrace::Severity severity, const grpc_slice& data) {
@@ -209,12 +209,12 @@ class ChannelNode : public BaseNode {
   void RemoveChildSubchannel(intptr_t child_uuid);
 
  private:
-  // Allows the channel trace test to access trace_. 
-  friend class testing::ChannelNodePeer; 
- 
-  void PopulateChildRefs(Json::Object* json); 
+  // Allows the channel trace test to access trace_.
+  friend class testing::ChannelNodePeer;
 
-  TString target_; 
+  void PopulateChildRefs(Json::Object* json);
+
+  TString target_;
   CallCountingHelper call_counter_;
   ChannelTrace trace_;
 
@@ -222,22 +222,22 @@ class ChannelNode : public BaseNode {
   // bits are a grpc_connectivity_state value.
   Atomic<int> connectivity_state_{0};
 
-  Mutex child_mu_;  // Guards sets below. 
-  std::set<intptr_t> child_channels_; 
-  std::set<intptr_t> child_subchannels_; 
+  Mutex child_mu_;  // Guards sets below.
+  std::set<intptr_t> child_channels_;
+  std::set<intptr_t> child_subchannels_;
 };
 
 // Handles channelz bookkeeping for servers
 class ServerNode : public BaseNode {
  public:
-  explicit ServerNode(size_t channel_tracer_max_nodes); 
+  explicit ServerNode(size_t channel_tracer_max_nodes);
 
   ~ServerNode() override;
 
-  Json RenderJson() override; 
+  Json RenderJson() override;
 
-  TString RenderServerSockets(intptr_t start_socket_id, 
-                                  intptr_t max_results); 
+  TString RenderServerSockets(intptr_t start_socket_id,
+                                  intptr_t max_results);
 
   void AddChildSocket(RefCountedPtr<SocketNode> node);
 
@@ -272,10 +272,10 @@ class ServerNode : public BaseNode {
 // Handles channelz bookkeeping for sockets
 class SocketNode : public BaseNode {
  public:
-  SocketNode(TString local, TString remote, TString name); 
+  SocketNode(TString local, TString remote, TString name);
   ~SocketNode() override {}
 
-  Json RenderJson() override; 
+  Json RenderJson() override;
 
   void RecordStreamStartedFromLocal();
   void RecordStreamStartedFromRemote();
@@ -291,7 +291,7 @@ class SocketNode : public BaseNode {
     keepalives_sent_.FetchAdd(1, MemoryOrder::RELAXED);
   }
 
-  const TString& remote() { return remote_; } 
+  const TString& remote() { return remote_; }
 
  private:
   Atomic<int64_t> streams_started_{0};
@@ -304,20 +304,20 @@ class SocketNode : public BaseNode {
   Atomic<gpr_cycle_counter> last_remote_stream_created_cycle_{0};
   Atomic<gpr_cycle_counter> last_message_sent_cycle_{0};
   Atomic<gpr_cycle_counter> last_message_received_cycle_{0};
-  TString local_; 
-  TString remote_; 
+  TString local_;
+  TString remote_;
 };
 
 // Handles channelz bookkeeping for listen sockets
 class ListenSocketNode : public BaseNode {
  public:
-  ListenSocketNode(TString local_addr, TString name); 
+  ListenSocketNode(TString local_addr, TString name);
   ~ListenSocketNode() override {}
 
-  Json RenderJson() override; 
+  Json RenderJson() override;
 
  private:
-  TString local_addr_; 
+  TString local_addr_;
 };
 
 }  // namespace channelz

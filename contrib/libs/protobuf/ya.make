@@ -4,31 +4,31 @@ LIBRARY()
 
 PROVIDES(protobuf)
 
-OWNER( 
+OWNER(
     g:cpp-committee
-    g:cpp-contrib 
-) 
+    g:cpp-contrib
+)
 
 VERSION(3.17.3)
 
 ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v3.17.3.tar.gz)
 
-LICENSE( 
+LICENSE(
     BSD-3-Clause AND
-    Protobuf-License 
-) 
+    Protobuf-License
+)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 PEERDIR(
     contrib/libs/zlib
 )
 
 ADDINCL(
     GLOBAL contrib/libs/protobuf/src
-    GLOBAL FOR 
-    proto 
-    contrib/libs/protobuf/src 
+    GLOBAL FOR
+    proto
+    contrib/libs/protobuf/src
 )
 
 NO_COMPILER_WARNINGS()

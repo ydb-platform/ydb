@@ -118,15 +118,15 @@
         "jar15": {
             "description": "Run jar from jdk15"
         },
-        "java15": { 
-            "description": "Run java 15" 
-        }, 
-        "javac15": { 
-            "description": "Run javac 15" 
-        }, 
+        "java15": {
+            "description": "Run java 15"
+        },
+        "javac15": {
+            "description": "Run javac 15"
+        },
         "jar17": {
-            "description": "Run jar from jdk15" 
-        }, 
+            "description": "Run jar from jdk15"
+        },
         "java17": {
             "description": "Run java 15"
         },
@@ -161,10 +161,10 @@
             "description": "Run wine64",
             "visible": false
         },
-        "wine32": { 
-            "description": "Run wine", 
-            "visible": false 
-        }, 
+        "wine32": {
+            "description": "Run wine",
+            "visible": false
+        },
         "deploy": {
             "description": "Run Samogon",
             "visible": false
@@ -432,13 +432,13 @@
         },
         "yoimports": {
             "description": "Go imports formatting tool"
-        }, 
-        "jstyle": { 
-            "description": "Java styler" 
         },
-        "ktlint": { 
-            "description": "Run kotlin styler" 
-        }, 
+        "jstyle": {
+            "description": "Java styler"
+        },
+        "ktlint": {
+            "description": "Run kotlin styler"
+        },
         "ya_sed": {
             "description": "This tool simplifies replacing of some text in Arcadia"
         },
@@ -471,9 +471,9 @@
         },
         "skotty": {
             "description": "Skotty (SSH-agent) launcher"
-        }, 
-        "license_analyzer": { 
-            "description": "Run devtools license analyzer" 
+        },
+        "license_analyzer": {
+            "description": "Run devtools license analyzer"
         },
         "eductl": {
             "description": "eductl is a toolchain of Yandex Education"
@@ -1053,13 +1053,13 @@
                 },
                 {
                     "host": {
-                        "os": "DARWIN", 
-                        "arch": "arm64" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
+                        "os": "DARWIN",
+                        "arch": "arm64"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
                         "os": "LINUX",
                         "arch": "aarch64"
                     },
@@ -2135,12 +2135,12 @@
                 }
             ],
             "params": {
-                "type": "xcode", 
+                "type": "xcode",
                 "match_root": "CLANG",
                 "werror_mode": "all",
                 "c_compiler": "$(CLANG)/usr/bin/clang",
                 "cxx_compiler": "$(CLANG)/usr/bin/clang++",
-                "ar": "$(CLANG)/usr/bin/libtool", 
+                "ar": "$(CLANG)/usr/bin/libtool",
                 "inplace_tools": true,
                 "gcc_version": "8.0",
                 "dwarf_tool": {
@@ -2228,7 +2228,7 @@
                 }
             ],
             "params": {
-                "type": "xcode", 
+                "type": "xcode",
                 "match_root": "CLANG",
                 "werror_mode": "all",
                 "c_compiler": "$(CLANG)/usr/bin/clang",
@@ -2319,20 +2319,20 @@
                         "arch": "arm64"
                     },
                     "default": false
-                }, 
-                { 
-                    "host": { 
-                        "os": "DARWIN" 
-                    }, 
-                    "target": { 
-                        "os": "IOSSIM", 
-                        "arch": "arm64" 
-                    }, 
-                    "default": false 
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "os": "IOSSIM",
+                        "arch": "arm64"
+                    },
+                    "default": false
                 }
             ],
             "params": {
-                "type": "xcode", 
+                "type": "xcode",
                 "match_root": "CLANG",
                 "werror_mode": "all",
                 "c_compiler": "$(CLANG)/usr/bin/clang",
@@ -2734,13 +2734,13 @@
                 },
                 {
                     "host": {
-                        "os": "DARWIN", 
-                        "arch": "arm64" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
+                        "os": "DARWIN",
+                        "arch": "arm64"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
                         "os": "LINUX",
                         "arch": "ppc64le"
                     },
@@ -2816,13 +2816,13 @@
                 },
                 {
                     "host": {
-                        "os": "DARWIN", 
-                        "arch": "arm64" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
+                        "os": "DARWIN",
+                        "arch": "arm64"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
                         "os": "LINUX",
                         "arch": "aarch64"
                     },
@@ -2909,22 +2909,22 @@
                 }
             ]
         },
-        "wine32": { 
-            "tools": { 
-                "wine32": { 
-                    "bottle": "wine32", 
-                    "executable": "wine" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
+        "wine32": {
+            "tools": {
+                "wine32": {
+                    "bottle": "wine32",
+                    "executable": "wine"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                }
+            ]
+        },
         "deploy": {
             "tools": {
                 "deploy": {
@@ -3201,8 +3201,8 @@
                 }
             ]
         },
-        "jdk10": { 
-            "tools": { 
+        "jdk10": {
+            "tools": {
                 "javac10": {
                     "bottle": "jdk10",
                     "executable": "javac10"
@@ -3215,8 +3215,8 @@
                     "bottle": "jdk10",
                     "executable": "jar10"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -3235,10 +3235,10 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
-        "jdk11": { 
-            "tools": { 
+            ]
+        },
+        "jdk11": {
+            "tools": {
                 "javac11": {
                     "bottle": "jdk11",
                     "executable": "javac11"
@@ -3251,8 +3251,8 @@
                     "bottle": "jdk11",
                     "executable": "jar11"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -3271,44 +3271,44 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
-        "jdk15": { 
-            "tools": { 
-                "javac15": { 
-                    "bottle": "jdk15", 
-                    "executable": "javac15" 
-                }, 
-                "java15": { 
-                    "bottle": "jdk15", 
-                    "executable": "java15" 
-                }, 
-                "jar15": { 
-                    "bottle": "jdk15", 
-                    "executable": "jar15" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
-                        "os": "WIN" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
-                        "os": "DARWIN" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
+            ]
+        },
+        "jdk15": {
+            "tools": {
+                "javac15": {
+                    "bottle": "jdk15",
+                    "executable": "javac15"
+                },
+                "java15": {
+                    "bottle": "jdk15",
+                    "executable": "java15"
+                },
+                "jar15": {
+                    "bottle": "jdk15",
+                    "executable": "jar15"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "WIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                }
+            ]
+        },
         "jdk17": {
             "tools": {
                 "jar17": {
@@ -3909,7 +3909,7 @@
                     "executable": "mvn"
                 }
             },
-            "platforms": [ 
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -3928,7 +3928,7 @@
                     },
                     "default": true
                 }
-            ] 
+            ]
         },
         "fast_diff": {
             "tools": {
@@ -3961,13 +3961,13 @@
                 }
             ]
         },
-        "idea_run_plugin": { 
-            "tools": { 
+        "idea_run_plugin": {
+            "tools": {
                 "idea_run_plugin": {
                     "bottle": "idea_run_plugin"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -3986,15 +3986,15 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
-        "idea_style_config": { 
-            "tools": { 
+            ]
+        },
+        "idea_style_config": {
+            "tools": {
                 "idea_style_config": {
                     "bottle": "idea_style_config"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -4013,15 +4013,15 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
-        "error_prone": { 
-            "tools": { 
+            ]
+        },
+        "error_prone": {
+            "tools": {
                 "error_prone": {
                     "bottle": "error_prone"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -4040,15 +4040,15 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
-        "jstyle_runner": { 
-            "tools": { 
+            ]
+        },
+        "jstyle_runner": {
+            "tools": {
                 "jstyle_runner": {
                     "bottle": "jstyle_runner"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -4067,15 +4067,15 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
-        "sonar_scanner": { 
-            "tools": { 
+            ]
+        },
+        "sonar_scanner": {
+            "tools": {
                 "sonar_scanner": {
                     "bottle": "sonar_scanner"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -4094,16 +4094,16 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
-        "gcovr": { 
-            "tools": { 
+            ]
+        },
+        "gcovr": {
+            "tools": {
                 "gcovr": {
                     "bottle": "gcovr",
                     "executable": "gcovr"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -4122,16 +4122,16 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
-        "lcov_cobertura": { 
-            "tools": { 
+            ]
+        },
+        "lcov_cobertura": {
+            "tools": {
                 "lcov_cobertura": {
                     "bottle": "lcov_cobertura",
                     "executable": "lcov_cobertura"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -4150,15 +4150,15 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
-        "uber_jar": { 
-            "tools": { 
+            ]
+        },
+        "uber_jar": {
+            "tools": {
                 "uber_jar": {
                     "bottle": "uber_jar"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -4177,15 +4177,15 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
-        "uber_jar10": { 
-            "tools": { 
+            ]
+        },
+        "uber_jar10": {
+            "tools": {
                 "uber_jar10": {
                     "bottle": "uber_jar10"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -4204,45 +4204,45 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
-        "kythe": { 
-            "tools": { 
+            ]
+        },
+        "kythe": {
+            "tools": {
                 "kythe": {
                     "bottle": "kythe"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
                     },
                     "default": true
                 }
-            ] 
-        }, 
-        "kythe_to_proto": { 
-            "tools": { 
+            ]
+        },
+        "kythe_to_proto": {
+            "tools": {
                 "kythe_to_proto": {
                     "bottle": "kythe_to_proto"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
                     },
                     "default": true
                 }
-            ] 
-        }, 
-        "scriptgen": { 
-            "tools": { 
+            ]
+        },
+        "scriptgen": {
+            "tools": {
                 "scriptgen": {
                     "bottle": "scriptgen"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -4260,16 +4260,16 @@
                         "os": "DARWIN"
                     },
                     "default": true
-                }, 
-                { 
-                    "host": { 
-                        "os": "DARWIN", 
-                        "arch": "arm64" 
-                    }, 
-                    "default": true 
+                },
+                {
+                    "host": {
+                        "os": "DARWIN",
+                        "arch": "arm64"
+                    },
+                    "default": true
                 }
-            ] 
-        }, 
+            ]
+        },
         "kiwi_protos": {
             "tools": {
                 "kiwi_protos": {
@@ -5313,79 +5313,79 @@
                     "default": true
                 }
             ]
-        }, 
-        "jstyle_bundle": { 
-            "tools": { 
-                "jstyle": { 
-                    "bottle": "jstyle_bundle", 
-                    "executable": "jstyle" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
-                        "os": "WIN" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
-                        "os": "DARWIN" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
         },
-        "ktlint_bundle": { 
-            "tools": { 
-                "ktlint": { 
-                    "bottle": "ktlint_bundle", 
-                    "executable": "ktlint" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
-                        "os": "WIN" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
-                        "os": "DARWIN" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
-        "devtools_license_analyzer_bundle": { 
-            "tools": { 
-                "license_analyzer": { 
-                    "bottle": "devtools_license_analyzer_bundle", 
-                    "executable": "license_analyzer" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
+        "jstyle_bundle": {
+            "tools": {
+                "jstyle": {
+                    "bottle": "jstyle_bundle",
+                    "executable": "jstyle"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "WIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                }
+            ]
+        },
+        "ktlint_bundle": {
+            "tools": {
+                "ktlint": {
+                    "bottle": "ktlint_bundle",
+                    "executable": "ktlint"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "WIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                }
+            ]
+        },
+        "devtools_license_analyzer_bundle": {
+            "tools": {
+                "license_analyzer": {
+                    "bottle": "devtools_license_analyzer_bundle",
+                    "executable": "license_analyzer"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                }
+            ]
+        },
         "ya_sed": {
             "tools": {
                 "ya_sed": {
@@ -5935,7 +5935,7 @@
         },
         "python": {
             "formula": {
-                "sandbox_id": 981577320, 
+                "sandbox_id": 981577320,
                 "match": "Python"
             },
             "executable": {
@@ -5982,16 +5982,16 @@
                 ]
             }
         },
-        "jdk10": { 
-            "formula": { 
+        "jdk10": {
+            "formula": {
                 "sandbox_id": [
                     240834225,
                     240834934,
                     240835020
                 ],
-                "match": "jdk" 
-            }, 
-            "executable": { 
+                "match": "jdk"
+            },
+            "executable": {
                 "javac10": [
                     "bin",
                     "javac"
@@ -6004,18 +6004,18 @@
                     "bin",
                     "jar"
                 ]
-            } 
-        }, 
-        "jdk11": { 
-            "formula": { 
+            }
+        },
+        "jdk11": {
+            "formula": {
                 "sandbox_id": [
                     365362175,
                     365387897,
                     365361227
                 ],
-                "match": "jdk" 
-            }, 
-            "executable": { 
+                "match": "jdk"
+            },
+            "executable": {
                 "javac11": [
                     "bin",
                     "javac"
@@ -6028,32 +6028,32 @@
                     "bin",
                     "jar"
                 ]
-            } 
-        }, 
-        "jdk15": { 
-            "formula": { 
-                "sandbox_id": [ 
-                    823158461, 
-                    823183568, 
-                    823899886 
-                ], 
-                "match": "openjdk" 
-            }, 
-            "executable": { 
-                "javac15": [ 
-                    "bin", 
-                    "javac" 
-                ], 
-                "java15": [ 
-                    "bin", 
-                    "java" 
-                ], 
-                "jar15": [ 
-                    "bin", 
-                    "jar" 
-                ] 
-            } 
-        }, 
+            }
+        },
+        "jdk15": {
+            "formula": {
+                "sandbox_id": [
+                    823158461,
+                    823183568,
+                    823899886
+                ],
+                "match": "openjdk"
+            },
+            "executable": {
+                "javac15": [
+                    "bin",
+                    "javac"
+                ],
+                "java15": [
+                    "bin",
+                    "java"
+                ],
+                "jar15": [
+                    "bin",
+                    "jar"
+                ]
+            }
+        },
         "jdk17": {
             "formula": {
                 "sandbox_id": [
@@ -6377,112 +6377,112 @@
                 "match": "CUDA"
             }
         },
-        "idea_run_plugin": { 
-            "formula": { 
+        "idea_run_plugin": {
+            "formula": {
                 "sandbox_id": [
                     98817148
                 ],
-                "match": "ya runner idea plugin" 
-            } 
-        }, 
-        "idea_style_config": { 
-            "formula": { 
+                "match": "ya runner idea plugin"
+            }
+        },
+        "idea_style_config": {
+            "formula": {
                 "sandbox_id": [
-                    874273162 
+                    874273162
                 ],
-                "match": "Intellij IDEA codestyle config" 
-            } 
-        }, 
-        "error_prone": { 
-            "formula": { 
+                "match": "Intellij IDEA codestyle config"
+            }
+        },
+        "error_prone": {
+            "formula": {
                 "sandbox_id": [
                     273389189
                 ],
-                "match": "ERRORPRONE" 
-            } 
-        }, 
-        "jstyle_runner": { 
-            "formula": { 
+                "match": "ERRORPRONE"
+            }
+        },
+        "jstyle_runner": {
+            "formula": {
                 "sandbox_id": [
-                    623847348 
+                    623847348
                 ],
-                "match": "JSTYLERUNNER" 
-            } 
-        }, 
-        "sonar_scanner": { 
-            "formula": { 
+                "match": "JSTYLERUNNER"
+            }
+        },
+        "sonar_scanner": {
+            "formula": {
                 "sandbox_id": [
                     142526229
                 ],
-                "match": "sonar_scanner" 
-            } 
-        }, 
-        "gcovr": { 
-            "formula": { 
+                "match": "sonar_scanner"
+            }
+        },
+        "gcovr": {
+            "formula": {
                 "sandbox_id": [
                     145238992
                 ],
-                "match": "gcovr" 
-            }, 
-            "executable": { 
+                "match": "gcovr"
+            },
+            "executable": {
                 "gcovr": [
                     "gcovr"
                 ]
-            } 
-        }, 
-        "lcov_cobertura": { 
-            "formula": { 
+            }
+        },
+        "lcov_cobertura": {
+            "formula": {
                 "sandbox_id": [
                     151814389
                 ],
-                "match": "lcov_cobertura" 
-            }, 
-            "executable": { 
+                "match": "lcov_cobertura"
+            },
+            "executable": {
                 "lcov_cobertura": [
                     "lcovcob"
                 ]
-            } 
-        }, 
-        "uber_jar": { 
-            "formula": { 
+            }
+        },
+        "uber_jar": {
+            "formula": {
                 "sandbox_id": [
                     147123506
                 ],
-                "match": "uber_jar" 
-            } 
-        }, 
-        "uber_jar10": { 
-            "formula": { 
+                "match": "uber_jar"
+            }
+        },
+        "uber_jar10": {
+            "formula": {
                 "sandbox_id": [
                     260182938
                 ],
-                "match": "uber_jar10" 
-            } 
-        }, 
-        "kythe": { 
-            "formula": { 
+                "match": "uber_jar10"
+            }
+        },
+        "kythe": {
+            "formula": {
                 "sandbox_id": [
                     377918568
                 ],
-                "match": "KYTHE" 
-            } 
-        }, 
-        "kythe_to_proto": { 
-            "formula": { 
+                "match": "KYTHE"
+            }
+        },
+        "kythe_to_proto": {
+            "formula": {
                 "sandbox_id": [
                     403346294
                 ],
-                "match": "KYTHETOPROTO" 
-            } 
-        }, 
-        "scriptgen": { 
-            "formula": { 
+                "match": "KYTHETOPROTO"
+            }
+        },
+        "scriptgen": {
+            "formula": {
                 "sandbox_id": [
                     1164520637
                 ],
-                "match": "SCRIPTGEN" 
-            } 
-        }, 
+                "match": "SCRIPTGEN"
+            }
+        },
         "wine": {
             "formula": {
                 "sandbox_id": 495594294,
@@ -6495,18 +6495,18 @@
                 ]
             }
         },
-        "wine32": { 
-            "formula": { 
-                "sandbox_id": 1010959442, 
-                "match": "Wine" 
-            }, 
-            "executable": { 
-                "wine": [ 
-                    "bin", 
-                    "wine" 
-                ] 
-            } 
-        }, 
+        "wine32": {
+            "formula": {
+                "sandbox_id": 1010959442,
+                "match": "Wine"
+            },
+            "executable": {
+                "wine": [
+                    "bin",
+                    "wine"
+                ]
+            }
+        },
         "deploy": {
             "formula": {
                 "sandbox_id": 243231127,
@@ -6727,7 +6727,7 @@
                 "sandbox_id": [
                     1037272933,
                     1032891985,
-                    717207102, 
+                    717207102,
                     1032896450
                 ],
                 "match": "GDB"
@@ -7755,53 +7755,53 @@
                     "sedem"
                 ]
             }
-        }, 
-        "jstyle_bundle": { 
-            "formula": { 
-                "sandbox_id": [ 
-                    603849348, 
-                    603450767, 
-                    603859837 
-                ], 
-                "match": "jstyle" 
-            }, 
-            "executable": { 
-                "jstyle": [ 
-                    "idea-community", 
-                    "bin", 
-                    "format.bat" 
-                ] 
-            } 
         },
-        "ktlint_bundle": { 
-            "formula": { 
-                "sandbox_id": [ 
-                    1037460929, 
-                    1037467384, 
-                    1038449502 
-                ], 
-                "match": "ktlint" 
-            }, 
-            "executable": { 
-                "ktlint": [ 
-                    "run.bat" 
-                ] 
-            } 
-        }, 
-        "devtools_license_analyzer_bundle": { 
-            "formula": { 
-                "sandbox_id": [ 
-                    1207941042, 
-                    1207941794 
-                ], 
-                "match": "license_analyzer" 
-            }, 
-            "executable": { 
-                "license_analyzer": [ 
-                    "license_analyzer" 
-                ] 
-            } 
-        }, 
+        "jstyle_bundle": {
+            "formula": {
+                "sandbox_id": [
+                    603849348,
+                    603450767,
+                    603859837
+                ],
+                "match": "jstyle"
+            },
+            "executable": {
+                "jstyle": [
+                    "idea-community",
+                    "bin",
+                    "format.bat"
+                ]
+            }
+        },
+        "ktlint_bundle": {
+            "formula": {
+                "sandbox_id": [
+                    1037460929,
+                    1037467384,
+                    1038449502
+                ],
+                "match": "ktlint"
+            },
+            "executable": {
+                "ktlint": [
+                    "run.bat"
+                ]
+            }
+        },
+        "devtools_license_analyzer_bundle": {
+            "formula": {
+                "sandbox_id": [
+                    1207941042,
+                    1207941794
+                ],
+                "match": "license_analyzer"
+            },
+            "executable": {
+                "license_analyzer": [
+                    "license_analyzer"
+                ]
+            }
+        },
         "ya_sed": {
             "formula": {
                 "sandbox_id": [
@@ -8090,8 +8090,8 @@
                 ]
             }
         }
-    }, 
-    "toolchain_aliases": { 
+    },
+    "toolchain_aliases": {
         "clang-win-x86_64": "clang12-win-x86_64",
         "clang-win-i686": "clang12-win-i686",
         "gcc-linux-x86_64": "gcc82-linux-x86_64"

@@ -63,15 +63,15 @@ def main():
         if flag in cflags:
             cflags.remove(flag)
 
-    skip_prefix_list = [ 
-        '-fsanitize=', 
+    skip_prefix_list = [
+        '-fsanitize=',
         '-fsanitize-coverage=',
-        '-fsanitize-blacklist=', 
+        '-fsanitize-blacklist=',
         '--system-header-prefix',
-    ] 
-    for prefix in skip_prefix_list: 
-        cflags = [i for i in cflags if not i.startswith(prefix)] 
- 
+    ]
+    for prefix in skip_prefix_list:
+        cflags = [i for i in cflags if not i.startswith(prefix)]
+
     if not is_clang(command):
         def good(arg):
             if arg.startswith('--target='):
@@ -99,14 +99,14 @@ def main():
             compiler_args.append(arg)
             compiler_args.append(cflags_queue.popleft())
             continue
-        if arg[:2].upper() in ('-I', '/I', '-B'): 
+        if arg[:2].upper() in ('-I', '/I', '-B'):
             value = arg[2:]
             if not value:
                 value = cflags_queue.popleft()
-            if arg[1] == 'I': 
+            if arg[1] == 'I':
                 cpp_args.append('-I{}'.format(value))
-            elif arg[1] == 'B':  # todo: delete "B" flag check when cuda stop to use gcc 
-                pass 
+            elif arg[1] == 'B':  # todo: delete "B" flag check when cuda stop to use gcc
+                pass
             continue
 
         match = re.match(r'[-/]D(.*)', arg)

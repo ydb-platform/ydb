@@ -41,8 +41,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <util/generic/string.h> 
- 
+#include <util/generic/string.h>
+
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include <grpc/support/sync.h>
@@ -63,19 +63,19 @@ extern "C" bool IsReusePortAvailable();
 #define TCP_USER_TIMEOUT 18 /* How long for loss retry before timeout */
 #endif
 
-/* set a socket to use zerocopy */ 
-grpc_error* grpc_set_socket_zerocopy(int fd) { 
-#ifdef GRPC_LINUX_ERRQUEUE 
-  const int enable = 1; 
-  auto err = setsockopt(fd, SOL_SOCKET, SO_ZEROCOPY, &enable, sizeof(enable)); 
-  if (err != 0) { 
-    return GRPC_OS_ERROR(errno, "setsockopt(SO_ZEROCOPY)"); 
-  } 
-  return GRPC_ERROR_NONE; 
-#else 
-  return GRPC_OS_ERROR(ENOSYS, "setsockopt(SO_ZEROCOPY)"); 
-#endif 
-} 
+/* set a socket to use zerocopy */
+grpc_error* grpc_set_socket_zerocopy(int fd) {
+#ifdef GRPC_LINUX_ERRQUEUE
+  const int enable = 1;
+  auto err = setsockopt(fd, SOL_SOCKET, SO_ZEROCOPY, &enable, sizeof(enable));
+  if (err != 0) {
+    return GRPC_OS_ERROR(errno, "setsockopt(SO_ZEROCOPY)");
+  }
+  return GRPC_ERROR_NONE;
+#else
+  return GRPC_OS_ERROR(ENOSYS, "setsockopt(SO_ZEROCOPY)");
+#endif
+}
 
 /* set a socket to non blocking mode */
 grpc_error* grpc_set_socket_nonblocking(int fd, int non_blocking) {
@@ -270,27 +270,27 @@ static int g_default_server_tcp_user_timeout_ms =
 static bool g_default_client_tcp_user_timeout_enabled = false;
 static bool g_default_server_tcp_user_timeout_enabled = true;
 
-#if GPR_LINUX == 1 
-// For Linux, it will be detected to support TCP_USER_TIMEOUT 
-#ifndef TCP_USER_TIMEOUT 
-#define TCP_USER_TIMEOUT 18 
-#endif 
-#define SOCKET_SUPPORTS_TCP_USER_TIMEOUT_DEFAULT 0 
-#else 
-// For non-Linux, TCP_USER_TIMEOUT will be used if TCP_USER_TIMEOUT is defined. 
-#ifdef TCP_USER_TIMEOUT 
-#define SOCKET_SUPPORTS_TCP_USER_TIMEOUT_DEFAULT 0 
-#else 
-#define TCP_USER_TIMEOUT 0 
-#define SOCKET_SUPPORTS_TCP_USER_TIMEOUT_DEFAULT -1 
-#endif  // TCP_USER_TIMEOUT 
-#endif  // GPR_LINUX == 1 
- 
-// Whether the socket supports TCP_USER_TIMEOUT option. 
-// (0: don't know, 1: support, -1: not support) 
-static std::atomic<int> g_socket_supports_tcp_user_timeout( 
-    SOCKET_SUPPORTS_TCP_USER_TIMEOUT_DEFAULT); 
- 
+#if GPR_LINUX == 1
+// For Linux, it will be detected to support TCP_USER_TIMEOUT
+#ifndef TCP_USER_TIMEOUT
+#define TCP_USER_TIMEOUT 18
+#endif
+#define SOCKET_SUPPORTS_TCP_USER_TIMEOUT_DEFAULT 0
+#else
+// For non-Linux, TCP_USER_TIMEOUT will be used if TCP_USER_TIMEOUT is defined.
+#ifdef TCP_USER_TIMEOUT
+#define SOCKET_SUPPORTS_TCP_USER_TIMEOUT_DEFAULT 0
+#else
+#define TCP_USER_TIMEOUT 0
+#define SOCKET_SUPPORTS_TCP_USER_TIMEOUT_DEFAULT -1
+#endif  // TCP_USER_TIMEOUT
+#endif  // GPR_LINUX == 1
+
+// Whether the socket supports TCP_USER_TIMEOUT option.
+// (0: don't know, 1: support, -1: not support)
+static std::atomic<int> g_socket_supports_tcp_user_timeout(
+    SOCKET_SUPPORTS_TCP_USER_TIMEOUT_DEFAULT);
+
 void config_default_tcp_user_timeout(bool enable, int timeout, bool is_client) {
   if (is_client) {
     g_default_client_tcp_user_timeout_enabled = enable;
@@ -312,85 +312,85 @@ grpc_error* grpc_set_socket_tcp_user_timeout(
   (void)fd;
   (void)channel_args;
   (void)is_client;
-  extern grpc_core::TraceFlag grpc_tcp_trace; 
-  if (g_socket_supports_tcp_user_timeout.load() >= 0) { 
-    bool enable; 
-    int timeout; 
-    if (is_client) { 
-      enable = g_default_client_tcp_user_timeout_enabled; 
-      timeout = g_default_client_tcp_user_timeout_ms; 
-    } else { 
-      enable = g_default_server_tcp_user_timeout_enabled; 
-      timeout = g_default_server_tcp_user_timeout_ms; 
-    } 
-    if (channel_args) { 
-      for (unsigned int i = 0; i < channel_args->num_args; i++) { 
-        if (0 == 
-            strcmp(channel_args->args[i].key, GRPC_ARG_KEEPALIVE_TIME_MS)) { 
-          const int value = grpc_channel_arg_get_integer( 
-              &channel_args->args[i], grpc_integer_options{0, 1, INT_MAX}); 
-          /* Continue using default if value is 0 */ 
-          if (value == 0) { 
-            continue; 
-          } 
-          /* Disable if value is INT_MAX */ 
-          enable = value != INT_MAX; 
-        } else if (0 == strcmp(channel_args->args[i].key, 
-                               GRPC_ARG_KEEPALIVE_TIMEOUT_MS)) { 
-          const int value = grpc_channel_arg_get_integer( 
-              &channel_args->args[i], grpc_integer_options{0, 1, INT_MAX}); 
-          /* Continue using default if value is 0 */ 
-          if (value == 0) { 
-            continue; 
-          } 
-          timeout = value; 
-        }
-      } 
-    } 
-    if (enable) { 
-      int newval; 
-      socklen_t len = sizeof(newval); 
-      // If this is the first time to use TCP_USER_TIMEOUT, try to check 
-      // if it is available. 
-      if (g_socket_supports_tcp_user_timeout.load() == 0) { 
-        if (0 != getsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &newval, &len)) { 
-          gpr_log(GPR_INFO, 
-                  "TCP_USER_TIMEOUT is not available. TCP_USER_TIMEOUT won't " 
-                  "be used thereafter"); 
-          g_socket_supports_tcp_user_timeout.store(-1); 
-        } else { 
-          gpr_log(GPR_INFO, 
-                  "TCP_USER_TIMEOUT is available. TCP_USER_TIMEOUT will be " 
-                  "used thereafter"); 
-          g_socket_supports_tcp_user_timeout.store(1); 
+  extern grpc_core::TraceFlag grpc_tcp_trace;
+  if (g_socket_supports_tcp_user_timeout.load() >= 0) {
+    bool enable;
+    int timeout;
+    if (is_client) {
+      enable = g_default_client_tcp_user_timeout_enabled;
+      timeout = g_default_client_tcp_user_timeout_ms;
+    } else {
+      enable = g_default_server_tcp_user_timeout_enabled;
+      timeout = g_default_server_tcp_user_timeout_ms;
+    }
+    if (channel_args) {
+      for (unsigned int i = 0; i < channel_args->num_args; i++) {
+        if (0 ==
+            strcmp(channel_args->args[i].key, GRPC_ARG_KEEPALIVE_TIME_MS)) {
+          const int value = grpc_channel_arg_get_integer(
+              &channel_args->args[i], grpc_integer_options{0, 1, INT_MAX});
+          /* Continue using default if value is 0 */
+          if (value == 0) {
+            continue;
+          }
+          /* Disable if value is INT_MAX */
+          enable = value != INT_MAX;
+        } else if (0 == strcmp(channel_args->args[i].key,
+                               GRPC_ARG_KEEPALIVE_TIMEOUT_MS)) {
+          const int value = grpc_channel_arg_get_integer(
+              &channel_args->args[i], grpc_integer_options{0, 1, INT_MAX});
+          /* Continue using default if value is 0 */
+          if (value == 0) {
+            continue;
+          }
+          timeout = value;
         }
       }
-      if (g_socket_supports_tcp_user_timeout.load() > 0) { 
-        if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) { 
-          gpr_log(GPR_INFO, "Enabling TCP_USER_TIMEOUT with a timeout of %d ms", 
-                  timeout); 
-        } 
-        if (0 != setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &timeout, 
-                            sizeof(timeout))) { 
-          gpr_log(GPR_ERROR, "setsockopt(TCP_USER_TIMEOUT) %s", 
-                  strerror(errno)); 
-          return GRPC_ERROR_NONE; 
-        } 
-        if (0 != getsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &newval, &len)) { 
-          gpr_log(GPR_ERROR, "getsockopt(TCP_USER_TIMEOUT) %s", 
-                  strerror(errno)); 
-          return GRPC_ERROR_NONE; 
-        } 
-        if (newval != timeout) { 
-          /* Do not fail on failing to set TCP_USER_TIMEOUT for now. */ 
-          gpr_log(GPR_ERROR, "Failed to set TCP_USER_TIMEOUT"); 
-          return GRPC_ERROR_NONE; 
-        } 
-      } 
     }
-  } else { 
+    if (enable) {
+      int newval;
+      socklen_t len = sizeof(newval);
+      // If this is the first time to use TCP_USER_TIMEOUT, try to check
+      // if it is available.
+      if (g_socket_supports_tcp_user_timeout.load() == 0) {
+        if (0 != getsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &newval, &len)) {
+          gpr_log(GPR_INFO,
+                  "TCP_USER_TIMEOUT is not available. TCP_USER_TIMEOUT won't "
+                  "be used thereafter");
+          g_socket_supports_tcp_user_timeout.store(-1);
+        } else {
+          gpr_log(GPR_INFO,
+                  "TCP_USER_TIMEOUT is available. TCP_USER_TIMEOUT will be "
+                  "used thereafter");
+          g_socket_supports_tcp_user_timeout.store(1);
+        }
+      }
+      if (g_socket_supports_tcp_user_timeout.load() > 0) {
+        if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) {
+          gpr_log(GPR_INFO, "Enabling TCP_USER_TIMEOUT with a timeout of %d ms",
+                  timeout);
+        }
+        if (0 != setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &timeout,
+                            sizeof(timeout))) {
+          gpr_log(GPR_ERROR, "setsockopt(TCP_USER_TIMEOUT) %s",
+                  strerror(errno));
+          return GRPC_ERROR_NONE;
+        }
+        if (0 != getsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &newval, &len)) {
+          gpr_log(GPR_ERROR, "getsockopt(TCP_USER_TIMEOUT) %s",
+                  strerror(errno));
+          return GRPC_ERROR_NONE;
+        }
+        if (newval != timeout) {
+          /* Do not fail on failing to set TCP_USER_TIMEOUT for now. */
+          gpr_log(GPR_ERROR, "Failed to set TCP_USER_TIMEOUT");
+          return GRPC_ERROR_NONE;
+        }
+      }
+    }
+  } else {
     if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) {
-      gpr_log(GPR_INFO, "TCP_USER_TIMEOUT not supported for this platform"); 
+      gpr_log(GPR_INFO, "TCP_USER_TIMEOUT not supported for this platform");
     }
   }
   return GRPC_ERROR_NONE;
@@ -448,10 +448,10 @@ int grpc_ipv6_loopback_available(void) {
 
 static grpc_error* error_for_fd(int fd, const grpc_resolved_address* addr) {
   if (fd >= 0) return GRPC_ERROR_NONE;
-  TString addr_str = grpc_sockaddr_to_string(addr, false); 
-  grpc_error* err = grpc_error_set_str( 
-      GRPC_OS_ERROR(errno, "socket"), GRPC_ERROR_STR_TARGET_ADDRESS, 
-      grpc_slice_from_copied_string(addr_str.c_str())); 
+  TString addr_str = grpc_sockaddr_to_string(addr, false);
+  grpc_error* err = grpc_error_set_str(
+      GRPC_OS_ERROR(errno, "socket"), GRPC_ERROR_STR_TARGET_ADDRESS,
+      grpc_slice_from_copied_string(addr_str.c_str()));
   return err;
 }
 
@@ -483,7 +483,7 @@ grpc_error* grpc_create_dualstack_socket_using_factory(
       errno = EAFNOSUPPORT;
     }
     /* Check if we've got a valid dualstack socket. */
-    if (*newfd >= 0 && grpc_set_socket_dualstack(*newfd)) { 
+    if (*newfd >= 0 && grpc_set_socket_dualstack(*newfd)) {
       *dsmode = GRPC_DSMODE_DUALSTACK;
       return GRPC_ERROR_NONE;
     }

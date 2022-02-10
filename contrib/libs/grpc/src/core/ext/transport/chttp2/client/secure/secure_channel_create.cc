@@ -36,7 +36,7 @@
 #include "src/core/lib/slice/slice_internal.h"
 #include "src/core/lib/surface/api_trace.h"
 #include "src/core/lib/surface/channel.h"
-#include "src/core/lib/transport/authority_override.h" 
+#include "src/core/lib/transport/authority_override.h"
 #include "src/core/lib/uri/uri_parser.h"
 
 namespace grpc_core {
@@ -74,16 +74,16 @@ class Chttp2SecureClientChannelFactory : public ClientChannelFactory {
               "channel args.");
       return nullptr;
     }
-    // Find the authority to use in the security connector. 
-    // First, check the authority override channel arg. 
-    // Otherwise, get it from the server name used to construct the 
-    // channel. 
-    grpc_core::UniquePtr<char> authority( 
-        gpr_strdup(FindAuthorityOverrideInArgs(args))); 
+    // Find the authority to use in the security connector.
+    // First, check the authority override channel arg.
+    // Otherwise, get it from the server name used to construct the
+    // channel.
+    grpc_core::UniquePtr<char> authority(
+        gpr_strdup(FindAuthorityOverrideInArgs(args)));
     if (authority == nullptr) {
-      const char* server_uri_str = 
-          grpc_channel_args_find_string(args, GRPC_ARG_SERVER_URI); 
-      GPR_ASSERT(server_uri_str != nullptr); 
+      const char* server_uri_str =
+          grpc_channel_args_find_string(args, GRPC_ARG_SERVER_URI);
+      GPR_ASSERT(server_uri_str != nullptr);
       authority = ResolverRegistry::GetDefaultAuthority(server_uri_str);
     }
     grpc_arg args_to_add[2];

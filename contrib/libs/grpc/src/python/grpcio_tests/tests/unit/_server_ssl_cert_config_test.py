@@ -161,14 +161,14 @@ class _ServerSSLCertReloadTest(
         else:
             with self.assertRaises(grpc.RpcError) as exception_context:
                 client_stub.UnUn(request)
-            # If TLS 1.2 is used, then the client receives an alert message 
-            # before the handshake is complete, so the status is UNAVAILABLE. If 
-            # TLS 1.3 is used, then the client receives the alert message after 
-            # the handshake is complete, so the TSI handshaker returns the 
-            # TSI_PROTOCOL_FAILURE result. This result does not have a 
-            # corresponding status code, so this yields an UNKNOWN status. 
-            self.assertTrue(exception_context.exception.code( 
-            ) in [grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.UNKNOWN]) 
+            # If TLS 1.2 is used, then the client receives an alert message
+            # before the handshake is complete, so the status is UNAVAILABLE. If
+            # TLS 1.3 is used, then the client receives the alert message after
+            # the handshake is complete, so the TSI handshaker returns the
+            # TSI_PROTOCOL_FAILURE result. This result does not have a
+            # corresponding status code, so this yields an UNKNOWN status.
+            self.assertTrue(exception_context.exception.code(
+            ) in [grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.UNKNOWN])
 
     def _do_one_shot_client_rpc(self,
                                 expect_success,
@@ -186,10 +186,10 @@ class _ServerSSLCertReloadTest(
     def _test(self):
         # things should work...
         self.cert_config_fetcher.configure(False, None)
-        self._do_one_shot_client_rpc(True, 
-                                     root_certificates=CA_1_PEM, 
-                                     private_key=CLIENT_KEY_2_PEM, 
-                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM) 
+        self._do_one_shot_client_rpc(True,
+                                     root_certificates=CA_1_PEM,
+                                     private_key=CLIENT_KEY_2_PEM,
+                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM)
         actual_calls = self.cert_config_fetcher.getCalls()
         self.assertEqual(len(actual_calls), 1)
         self.assertFalse(actual_calls[0].did_raise)
@@ -199,10 +199,10 @@ class _ServerSSLCertReloadTest(
         # fails because client trusts ca2 and so will reject server
         self.cert_config_fetcher.reset()
         self.cert_config_fetcher.configure(False, None)
-        self._do_one_shot_client_rpc(False, 
-                                     root_certificates=CA_2_PEM, 
-                                     private_key=CLIENT_KEY_2_PEM, 
-                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM) 
+        self._do_one_shot_client_rpc(False,
+                                     root_certificates=CA_2_PEM,
+                                     private_key=CLIENT_KEY_2_PEM,
+                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM)
         actual_calls = self.cert_config_fetcher.getCalls()
         self.assertGreaterEqual(len(actual_calls), 1)
         self.assertFalse(actual_calls[0].did_raise)
@@ -213,10 +213,10 @@ class _ServerSSLCertReloadTest(
         # should work again...
         self.cert_config_fetcher.reset()
         self.cert_config_fetcher.configure(True, None)
-        self._do_one_shot_client_rpc(True, 
-                                     root_certificates=CA_1_PEM, 
-                                     private_key=CLIENT_KEY_2_PEM, 
-                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM) 
+        self._do_one_shot_client_rpc(True,
+                                     root_certificates=CA_1_PEM,
+                                     private_key=CLIENT_KEY_2_PEM,
+                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM)
         actual_calls = self.cert_config_fetcher.getCalls()
         self.assertEqual(len(actual_calls), 1)
         self.assertTrue(actual_calls[0].did_raise)
@@ -227,10 +227,10 @@ class _ServerSSLCertReloadTest(
         # so server will reject
         self.cert_config_fetcher.reset()
         self.cert_config_fetcher.configure(False, None)
-        self._do_one_shot_client_rpc(not self.require_client_auth(), 
-                                     root_certificates=CA_1_PEM, 
-                                     private_key=CLIENT_KEY_1_PEM, 
-                                     certificate_chain=CLIENT_CERT_CHAIN_1_PEM) 
+        self._do_one_shot_client_rpc(not self.require_client_auth(),
+                                     root_certificates=CA_1_PEM,
+                                     private_key=CLIENT_KEY_1_PEM,
+                                     certificate_chain=CLIENT_CERT_CHAIN_1_PEM)
         actual_calls = self.cert_config_fetcher.getCalls()
         self.assertGreaterEqual(len(actual_calls), 1)
         for i, call in enumerate(actual_calls):
@@ -240,10 +240,10 @@ class _ServerSSLCertReloadTest(
         # should work again...
         self.cert_config_fetcher.reset()
         self.cert_config_fetcher.configure(False, None)
-        self._do_one_shot_client_rpc(True, 
-                                     root_certificates=CA_1_PEM, 
-                                     private_key=CLIENT_KEY_2_PEM, 
-                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM) 
+        self._do_one_shot_client_rpc(True,
+                                     root_certificates=CA_1_PEM,
+                                     private_key=CLIENT_KEY_2_PEM,
+                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM)
         actual_calls = self.cert_config_fetcher.getCalls()
         self.assertEqual(len(actual_calls), 1)
         self.assertFalse(actual_calls[0].did_raise)
@@ -287,10 +287,10 @@ class _ServerSSLCertReloadTest(
             root_certificates=CA_1_PEM)
         self.cert_config_fetcher.reset()
         self.cert_config_fetcher.configure(False, cert_config)
-        self._do_one_shot_client_rpc(False, 
-                                     root_certificates=CA_1_PEM, 
-                                     private_key=CLIENT_KEY_2_PEM, 
-                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM) 
+        self._do_one_shot_client_rpc(False,
+                                     root_certificates=CA_1_PEM,
+                                     private_key=CLIENT_KEY_2_PEM,
+                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM)
         actual_calls = self.cert_config_fetcher.getCalls()
         self.assertGreaterEqual(len(actual_calls), 1)
         self.assertFalse(actual_calls[0].did_raise)
@@ -302,10 +302,10 @@ class _ServerSSLCertReloadTest(
         # now should work again...
         self.cert_config_fetcher.reset()
         self.cert_config_fetcher.configure(False, None)
-        self._do_one_shot_client_rpc(True, 
-                                     root_certificates=CA_2_PEM, 
-                                     private_key=CLIENT_KEY_1_PEM, 
-                                     certificate_chain=CLIENT_CERT_CHAIN_1_PEM) 
+        self._do_one_shot_client_rpc(True,
+                                     root_certificates=CA_2_PEM,
+                                     private_key=CLIENT_KEY_1_PEM,
+                                     certificate_chain=CLIENT_CERT_CHAIN_1_PEM)
         actual_calls = self.cert_config_fetcher.getCalls()
         self.assertEqual(len(actual_calls), 1)
         self.assertFalse(actual_calls[0].did_raise)
@@ -314,10 +314,10 @@ class _ServerSSLCertReloadTest(
         # client should be rejected by server if with_client_auth
         self.cert_config_fetcher.reset()
         self.cert_config_fetcher.configure(False, None)
-        self._do_one_shot_client_rpc(not self.require_client_auth(), 
-                                     root_certificates=CA_2_PEM, 
-                                     private_key=CLIENT_KEY_2_PEM, 
-                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM) 
+        self._do_one_shot_client_rpc(not self.require_client_auth(),
+                                     root_certificates=CA_2_PEM,
+                                     private_key=CLIENT_KEY_2_PEM,
+                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM)
         actual_calls = self.cert_config_fetcher.getCalls()
         self.assertGreaterEqual(len(actual_calls), 1)
         for i, call in enumerate(actual_calls):
@@ -327,10 +327,10 @@ class _ServerSSLCertReloadTest(
         # here client should reject server...
         self.cert_config_fetcher.reset()
         self.cert_config_fetcher.configure(False, None)
-        self._do_one_shot_client_rpc(False, 
-                                     root_certificates=CA_1_PEM, 
-                                     private_key=CLIENT_KEY_2_PEM, 
-                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM) 
+        self._do_one_shot_client_rpc(False,
+                                     root_certificates=CA_1_PEM,
+                                     private_key=CLIENT_KEY_2_PEM,
+                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM)
         actual_calls = self.cert_config_fetcher.getCalls()
         self.assertGreaterEqual(len(actual_calls), 1)
         for i, call in enumerate(actual_calls):
@@ -426,10 +426,10 @@ class ServerSSLCertReloadTestCertConfigReuse(_ServerSSLCertReloadTest):
         # succeed with A
         self.cert_config_fetcher.reset()
         self.cert_config_fetcher.configure(False, self.cert_config_A)
-        self._do_one_shot_client_rpc(True, 
-                                     root_certificates=CA_1_PEM, 
-                                     private_key=CLIENT_KEY_2_PEM, 
-                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM) 
+        self._do_one_shot_client_rpc(True,
+                                     root_certificates=CA_1_PEM,
+                                     private_key=CLIENT_KEY_2_PEM,
+                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM)
         actual_calls = self.cert_config_fetcher.getCalls()
         self.assertEqual(len(actual_calls), 1)
         self.assertFalse(actual_calls[0].did_raise)
@@ -439,10 +439,10 @@ class ServerSSLCertReloadTestCertConfigReuse(_ServerSSLCertReloadTest):
         # fail with A
         self.cert_config_fetcher.reset()
         self.cert_config_fetcher.configure(False, self.cert_config_A)
-        self._do_one_shot_client_rpc(False, 
-                                     root_certificates=CA_2_PEM, 
-                                     private_key=CLIENT_KEY_1_PEM, 
-                                     certificate_chain=CLIENT_CERT_CHAIN_1_PEM) 
+        self._do_one_shot_client_rpc(False,
+                                     root_certificates=CA_2_PEM,
+                                     private_key=CLIENT_KEY_1_PEM,
+                                     certificate_chain=CLIENT_CERT_CHAIN_1_PEM)
         actual_calls = self.cert_config_fetcher.getCalls()
         self.assertGreaterEqual(len(actual_calls), 1)
         self.assertFalse(actual_calls[0].did_raise)
@@ -454,10 +454,10 @@ class ServerSSLCertReloadTestCertConfigReuse(_ServerSSLCertReloadTest):
         # succeed again with A
         self.cert_config_fetcher.reset()
         self.cert_config_fetcher.configure(False, self.cert_config_A)
-        self._do_one_shot_client_rpc(True, 
-                                     root_certificates=CA_1_PEM, 
-                                     private_key=CLIENT_KEY_2_PEM, 
-                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM) 
+        self._do_one_shot_client_rpc(True,
+                                     root_certificates=CA_1_PEM,
+                                     private_key=CLIENT_KEY_2_PEM,
+                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM)
         actual_calls = self.cert_config_fetcher.getCalls()
         self.assertEqual(len(actual_calls), 1)
         self.assertFalse(actual_calls[0].did_raise)
@@ -467,10 +467,10 @@ class ServerSSLCertReloadTestCertConfigReuse(_ServerSSLCertReloadTest):
         # succeed with B
         self.cert_config_fetcher.reset()
         self.cert_config_fetcher.configure(False, self.cert_config_B)
-        self._do_one_shot_client_rpc(True, 
-                                     root_certificates=CA_2_PEM, 
-                                     private_key=CLIENT_KEY_1_PEM, 
-                                     certificate_chain=CLIENT_CERT_CHAIN_1_PEM) 
+        self._do_one_shot_client_rpc(True,
+                                     root_certificates=CA_2_PEM,
+                                     private_key=CLIENT_KEY_1_PEM,
+                                     certificate_chain=CLIENT_CERT_CHAIN_1_PEM)
         actual_calls = self.cert_config_fetcher.getCalls()
         self.assertEqual(len(actual_calls), 1)
         self.assertFalse(actual_calls[0].did_raise)
@@ -480,10 +480,10 @@ class ServerSSLCertReloadTestCertConfigReuse(_ServerSSLCertReloadTest):
         # fail with B
         self.cert_config_fetcher.reset()
         self.cert_config_fetcher.configure(False, self.cert_config_B)
-        self._do_one_shot_client_rpc(False, 
-                                     root_certificates=CA_1_PEM, 
-                                     private_key=CLIENT_KEY_2_PEM, 
-                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM) 
+        self._do_one_shot_client_rpc(False,
+                                     root_certificates=CA_1_PEM,
+                                     private_key=CLIENT_KEY_2_PEM,
+                                     certificate_chain=CLIENT_CERT_CHAIN_2_PEM)
         actual_calls = self.cert_config_fetcher.getCalls()
         self.assertGreaterEqual(len(actual_calls), 1)
         self.assertFalse(actual_calls[0].did_raise)
@@ -495,10 +495,10 @@ class ServerSSLCertReloadTestCertConfigReuse(_ServerSSLCertReloadTest):
         # succeed again with B
         self.cert_config_fetcher.reset()
         self.cert_config_fetcher.configure(False, self.cert_config_B)
-        self._do_one_shot_client_rpc(True, 
-                                     root_certificates=CA_2_PEM, 
-                                     private_key=CLIENT_KEY_1_PEM, 
-                                     certificate_chain=CLIENT_CERT_CHAIN_1_PEM) 
+        self._do_one_shot_client_rpc(True,
+                                     root_certificates=CA_2_PEM,
+                                     private_key=CLIENT_KEY_1_PEM,
+                                     certificate_chain=CLIENT_CERT_CHAIN_1_PEM)
         actual_calls = self.cert_config_fetcher.getCalls()
         self.assertEqual(len(actual_calls), 1)
         self.assertFalse(actual_calls[0].did_raise)

@@ -22,15 +22,15 @@
 
 #include <stdbool.h>
 
-#include "y_absl/strings/str_cat.h" 
- 
+#include "y_absl/strings/str_cat.h"
+
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include <grpc/support/string_util.h>
 
 #include "src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb.h"
 #include "src/core/ext/transport/chttp2/alpn/alpn.h"
-#include "src/core/ext/xds/xds_channel_args.h" 
+#include "src/core/ext/xds/xds_channel_args.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/channel/handshaker.h"
 #include "src/core/lib/gpr/string.h"
@@ -56,9 +56,9 @@ class grpc_fake_channel_security_connector final
         target_(gpr_strdup(target)),
         expected_targets_(
             gpr_strdup(grpc_fake_transport_get_expected_targets(args))),
-        is_lb_channel_(grpc_channel_args_find( 
-                           args, GRPC_ARG_ADDRESS_IS_GRPCLB_LOAD_BALANCER) != 
-                       nullptr) { 
+        is_lb_channel_(grpc_channel_args_find(
+                           args, GRPC_ARG_ADDRESS_IS_GRPCLB_LOAD_BALANCER) !=
+                       nullptr) {
     const grpc_arg* target_name_override_arg =
         grpc_channel_args_find(args, GRPC_SSL_TARGET_NAME_OVERRIDE_ARG);
     if (target_name_override_arg != nullptr) {
@@ -102,20 +102,20 @@ class grpc_fake_channel_security_connector final
         tsi_create_fake_handshaker(/*is_client=*/true), this, args));
   }
 
-  bool check_call_host(y_absl::string_view host, 
+  bool check_call_host(y_absl::string_view host,
                        grpc_auth_context* /*auth_context*/,
                        grpc_closure* /*on_call_host_checked*/,
                        grpc_error** /*error*/) override {
-    y_absl::string_view authority_hostname; 
-    y_absl::string_view authority_ignored_port; 
-    y_absl::string_view target_hostname; 
-    y_absl::string_view target_ignored_port; 
+    y_absl::string_view authority_hostname;
+    y_absl::string_view authority_ignored_port;
+    y_absl::string_view target_hostname;
+    y_absl::string_view target_ignored_port;
     grpc_core::SplitHostPort(host, &authority_hostname,
                              &authority_ignored_port);
     grpc_core::SplitHostPort(target_, &target_hostname, &target_ignored_port);
     if (target_name_override_ != nullptr) {
-      y_absl::string_view fake_security_target_name_override_hostname; 
-      y_absl::string_view fake_security_target_name_override_ignored_port; 
+      y_absl::string_view fake_security_target_name_override_hostname;
+      y_absl::string_view fake_security_target_name_override_ignored_port;
       grpc_core::SplitHostPort(
           target_name_override_, &fake_security_target_name_override_hostname,
           &fake_security_target_name_override_ignored_port);
@@ -145,7 +145,7 @@ class grpc_fake_channel_security_connector final
   char* target_name_override() const { return target_name_override_; }
 
  private:
-  bool fake_check_target(const char* target, const char* set_str) const { 
+  bool fake_check_target(const char* target, const char* set_str) const {
     GPR_ASSERT(target != nullptr);
     char** set = nullptr;
     size_t set_size = 0;
@@ -181,14 +181,14 @@ class grpc_fake_channel_security_connector final
                 expected_targets_);
         goto done;
       }
-      if (!fake_check_target(target_, lbs_and_backends[1])) { 
+      if (!fake_check_target(target_, lbs_and_backends[1])) {
         gpr_log(GPR_ERROR, "LB target '%s' not found in expected set '%s'",
                 target_, lbs_and_backends[1]);
         goto done;
       }
       success = true;
     } else {
-      if (!fake_check_target(target_, lbs_and_backends[0])) { 
+      if (!fake_check_target(target_, lbs_and_backends[0])) {
         gpr_log(GPR_ERROR, "Backend target '%s' not found in expected set '%s'",
                 target_, lbs_and_backends[0]);
         goto done;
@@ -216,18 +216,18 @@ static void fake_check_peer(
   const char* prop_name;
   grpc_error* error = GRPC_ERROR_NONE;
   *auth_context = nullptr;
-  if (peer.property_count != 2) { 
+  if (peer.property_count != 2) {
     error = GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-        "Fake peers should only have 2 properties."); 
+        "Fake peers should only have 2 properties.");
     goto end;
   }
   prop_name = peer.properties[0].name;
   if (prop_name == nullptr ||
       strcmp(prop_name, TSI_CERTIFICATE_TYPE_PEER_PROPERTY)) {
-    error = GRPC_ERROR_CREATE_FROM_COPIED_STRING( 
-        y_absl::StrCat("Unexpected property in fake peer: ", 
-                     prop_name == nullptr ? "<EMPTY>" : prop_name) 
-            .c_str()); 
+    error = GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+        y_absl::StrCat("Unexpected property in fake peer: ",
+                     prop_name == nullptr ? "<EMPTY>" : prop_name)
+            .c_str());
     goto end;
   }
   if (strncmp(peer.properties[0].value.data, TSI_FAKE_CERTIFICATE_TYPE,
@@ -236,29 +236,29 @@ static void fake_check_peer(
         "Invalid value for cert type property.");
     goto end;
   }
-  prop_name = peer.properties[1].name; 
-  if (prop_name == nullptr || 
-      strcmp(prop_name, TSI_SECURITY_LEVEL_PEER_PROPERTY) != 0) { 
-    error = GRPC_ERROR_CREATE_FROM_COPIED_STRING( 
-        y_absl::StrCat("Unexpected property in fake peer: ", 
-                     prop_name == nullptr ? "<EMPTY>" : prop_name) 
-            .c_str()); 
-    goto end; 
-  } 
-  if (strncmp(peer.properties[1].value.data, TSI_FAKE_SECURITY_LEVEL, 
-              peer.properties[1].value.length) != 0) { 
-    error = GRPC_ERROR_CREATE_FROM_STATIC_STRING( 
-        "Invalid value for security level property."); 
-    goto end; 
-  } 
- 
+  prop_name = peer.properties[1].name;
+  if (prop_name == nullptr ||
+      strcmp(prop_name, TSI_SECURITY_LEVEL_PEER_PROPERTY) != 0) {
+    error = GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+        y_absl::StrCat("Unexpected property in fake peer: ",
+                     prop_name == nullptr ? "<EMPTY>" : prop_name)
+            .c_str());
+    goto end;
+  }
+  if (strncmp(peer.properties[1].value.data, TSI_FAKE_SECURITY_LEVEL,
+              peer.properties[1].value.length) != 0) {
+    error = GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+        "Invalid value for security level property.");
+    goto end;
+  }
+
   *auth_context = grpc_core::MakeRefCounted<grpc_auth_context>(nullptr);
   grpc_auth_context_add_cstring_property(
       auth_context->get(), GRPC_TRANSPORT_SECURITY_TYPE_PROPERTY_NAME,
       GRPC_FAKE_TRANSPORT_SECURITY_TYPE);
-  grpc_auth_context_add_cstring_property( 
-      auth_context->get(), GRPC_TRANSPORT_SECURITY_LEVEL_PROPERTY_NAME, 
-      TSI_FAKE_SECURITY_LEVEL); 
+  grpc_auth_context_add_cstring_property(
+      auth_context->get(), GRPC_TRANSPORT_SECURITY_LEVEL_PROPERTY_NAME,
+      TSI_FAKE_SECURITY_LEVEL);
 end:
   grpc_core::ExecCtx::Run(DEBUG_LOCATION, on_peer_checked, error);
   tsi_peer_destruct(&peer);

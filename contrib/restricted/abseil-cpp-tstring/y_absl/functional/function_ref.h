@@ -91,7 +91,7 @@ class FunctionRef<R(Args...)> {
   // Used to disable constructors for objects that are not compatible with the
   // signature of this FunctionRef.
   template <typename F,
-            typename FR = y_absl::base_internal::invoke_result_t<F, Args&&...>> 
+            typename FR = y_absl::base_internal::invoke_result_t<F, Args&&...>>
   using EnableIfCompatible =
       typename std::enable_if<std::is_void<R>::value ||
                               std::is_convertible<FR, R>::value>::type;

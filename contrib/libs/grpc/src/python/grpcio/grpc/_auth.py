@@ -34,18 +34,18 @@ class GoogleCallCredentials(grpc.AuthMetadataPlugin):
             credentials.get_access_token).args
 
     def __call__(self, context, callback):
-        try: 
-            if self._is_jwt: 
-                access_token = self._credentials.get_access_token( 
-                    additional_claims={ 
-                        'aud': context.service_url 
-                    }).access_token 
-            else: 
-                access_token = self._credentials.get_access_token().access_token 
-        except Exception as exception:  # pylint: disable=broad-except 
-            _sign_request(callback, None, exception) 
+        try:
+            if self._is_jwt:
+                access_token = self._credentials.get_access_token(
+                    additional_claims={
+                        'aud': context.service_url
+                    }).access_token
+            else:
+                access_token = self._credentials.get_access_token().access_token
+        except Exception as exception:  # pylint: disable=broad-except
+            _sign_request(callback, None, exception)
         else:
-            _sign_request(callback, access_token, None) 
+            _sign_request(callback, access_token, None)
 
 
 class AccessTokenAuthMetadataPlugin(grpc.AuthMetadataPlugin):

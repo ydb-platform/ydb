@@ -2,19 +2,19 @@
 
 LIBRARY()
 
-OWNER( 
-    va-kuznecov 
-    g:cpp-contrib 
-) 
+OWNER(
+    va-kuznecov
+    g:cpp-contrib
+)
 
 VERSION(2.1.4)
 
 ORIGINAL_SOURCE(https://github.com/PositiveTechnologies/t1ha/archive/v2.1.4.tar.gz)
 
-LICENSE(Zlib) 
+LICENSE(Zlib)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()

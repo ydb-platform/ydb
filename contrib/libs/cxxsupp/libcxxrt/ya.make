@@ -2,21 +2,21 @@
 
 LIBRARY()
 
-LICENSE( 
+LICENSE(
     BSD-2-Clause AND
     BSD-2-Clause-Views AND
     BSD-3-Clause AND
-    MIT 
-) 
+    MIT
+)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 OWNER(
     pg
     setser
     somov
     g:cpp-committee
-    g:cpp-contrib 
+    g:cpp-contrib
 )
 
 VERSION(2021-09-08-14bf5d5526056ae1cc16f03b7b8e96108a1e38d0)
@@ -36,15 +36,15 @@ CXXFLAGS(-nostdinc++)
 IF (CXX_UNWIND == "glibcxx_dynamic" OR ARCH_PPC64LE)
     LDFLAGS(-lgcc_s)
 ELSE()
-    PEERDIR( 
-        contrib/libs/libunwind 
-    ) 
+    PEERDIR(
+        contrib/libs/libunwind
+    )
 ENDIF()
 
 IF (SANITIZER_TYPE == undefined OR FUZZING)
     NO_SANITIZE()
     NO_SANITIZE_COVERAGE()
-ENDIF() 
+ENDIF()
 
 SRCS(
     auxhelper.cc

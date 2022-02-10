@@ -21,11 +21,11 @@
 #include <mutex>
 #include <random>
 #include <set>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <thread>
 
-#include "y_absl/strings/str_cat.h" 
- 
+#include "y_absl/strings/str_cat.h"
+
 #include <grpc/grpc.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/atm.h>
@@ -49,7 +49,7 @@
 #include "src/core/lib/gpr/env.h"
 #include "src/core/lib/gprpp/debug_location.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
-#include "src/core/lib/iomgr/parse_address.h" 
+#include "src/core/lib/iomgr/parse_address.h"
 #include "src/core/lib/iomgr/tcp_client.h"
 #include "src/core/lib/security/credentials/fake/fake_credentials.h"
 #include "src/cpp/client/secure_credentials.h"
@@ -127,7 +127,7 @@ class MyTestServiceImpl : public TestServiceImpl {
     request_count_ = 0;
   }
 
-  std::set<TString> clients() { 
+  std::set<TString> clients() {
     grpc::internal::MutexLock lock(&clients_mu_);
     return clients_;
   }
@@ -138,7 +138,7 @@ class MyTestServiceImpl : public TestServiceImpl {
   }
 
  private:
-  void AddClient(const TString& client) { 
+  void AddClient(const TString& client) {
     grpc::internal::MutexLock lock(&clients_mu_);
     clients_.insert(client);
   }
@@ -147,7 +147,7 @@ class MyTestServiceImpl : public TestServiceImpl {
   int request_count_ = 0;
   const udpa::data::orca::v1::OrcaLoadReport* load_report_ = nullptr;
   grpc::internal::Mutex clients_mu_;
-  std::set<TString> clients_; 
+  std::set<TString> clients_;
 };
 
 class FakeResolverResponseGeneratorWrapper {
@@ -157,18 +157,18 @@ class FakeResolverResponseGeneratorWrapper {
                             grpc_core::FakeResolverResponseGenerator>()) {}
 
   FakeResolverResponseGeneratorWrapper(
-      FakeResolverResponseGeneratorWrapper&& other) noexcept { 
+      FakeResolverResponseGeneratorWrapper&& other) noexcept {
     response_generator_ = std::move(other.response_generator_);
   }
 
-  void SetNextResolution( 
-      const std::vector<int>& ports, const char* service_config_json = nullptr, 
-      const char* attribute_key = nullptr, 
-      std::unique_ptr<grpc_core::ServerAddress::AttributeInterface> attribute = 
-          nullptr) { 
+  void SetNextResolution(
+      const std::vector<int>& ports, const char* service_config_json = nullptr,
+      const char* attribute_key = nullptr,
+      std::unique_ptr<grpc_core::ServerAddress::AttributeInterface> attribute =
+          nullptr) {
     grpc_core::ExecCtx exec_ctx;
-    response_generator_->SetResponse(BuildFakeResults( 
-        ports, service_config_json, attribute_key, std::move(attribute))); 
+    response_generator_->SetResponse(BuildFakeResults(
+        ports, service_config_json, attribute_key, std::move(attribute)));
   }
 
   void SetNextResolutionUponError(const std::vector<int>& ports) {
@@ -187,30 +187,30 @@ class FakeResolverResponseGeneratorWrapper {
 
  private:
   static grpc_core::Resolver::Result BuildFakeResults(
-      const std::vector<int>& ports, const char* service_config_json = nullptr, 
-      const char* attribute_key = nullptr, 
-      std::unique_ptr<grpc_core::ServerAddress::AttributeInterface> attribute = 
-          nullptr) { 
+      const std::vector<int>& ports, const char* service_config_json = nullptr,
+      const char* attribute_key = nullptr,
+      std::unique_ptr<grpc_core::ServerAddress::AttributeInterface> attribute =
+          nullptr) {
     grpc_core::Resolver::Result result;
     for (const int& port : ports) {
-      TString lb_uri_str = y_absl::StrCat("ipv4:127.0.0.1:", port); 
-      grpc_uri* lb_uri = grpc_uri_parse(lb_uri_str.c_str(), true); 
+      TString lb_uri_str = y_absl::StrCat("ipv4:127.0.0.1:", port);
+      grpc_uri* lb_uri = grpc_uri_parse(lb_uri_str.c_str(), true);
       GPR_ASSERT(lb_uri != nullptr);
       grpc_resolved_address address;
       GPR_ASSERT(grpc_parse_uri(lb_uri, &address));
-      std::map<const char*, 
-               std::unique_ptr<grpc_core::ServerAddress::AttributeInterface>> 
-          attributes; 
-      if (attribute != nullptr) { 
-        attributes[attribute_key] = attribute->Copy(); 
-      } 
+      std::map<const char*,
+               std::unique_ptr<grpc_core::ServerAddress::AttributeInterface>>
+          attributes;
+      if (attribute != nullptr) {
+        attributes[attribute_key] = attribute->Copy();
+      }
       result.addresses.emplace_back(address.addr, address.len,
-                                    nullptr /* args */, std::move(attributes)); 
+                                    nullptr /* args */, std::move(attributes));
       grpc_uri_destroy(lb_uri);
     }
     if (service_config_json != nullptr) {
       result.service_config = grpc_core::ServiceConfig::Create(
-          nullptr, service_config_json, &result.service_config_error); 
+          nullptr, service_config_json, &result.service_config_error);
       GPR_ASSERT(result.service_config != nullptr);
     }
     return result;
@@ -287,7 +287,7 @@ class ClientLbEnd2endTest : public ::testing::Test {
   }
 
   std::shared_ptr<Channel> BuildChannel(
-      const TString& lb_policy_name, 
+      const TString& lb_policy_name,
       const FakeResolverResponseGeneratorWrapper& response_generator,
       ChannelArguments args = ChannelArguments()) {
     if (lb_policy_name.size() > 0) {
@@ -306,13 +306,13 @@ class ClientLbEnd2endTest : public ::testing::Test {
     if (local_response) response = new EchoResponse;
     EchoRequest request;
     request.set_message(kRequestMessage_);
-    request.mutable_param()->set_echo_metadata(true); 
+    request.mutable_param()->set_echo_metadata(true);
     ClientContext context;
     context.set_deadline(grpc_timeout_milliseconds_to_deadline(timeout_ms));
     if (wait_for_ready) context.set_wait_for_ready(true);
-    context.AddMetadata("foo", "1"); 
-    context.AddMetadata("bar", "2"); 
-    context.AddMetadata("baz", "3"); 
+    context.AddMetadata("foo", "1");
+    context.AddMetadata("bar", "2");
+    context.AddMetadata("baz", "3");
     Status status = stub->Echo(&context, request, response);
     if (result != nullptr) *result = status;
     if (local_response) delete response;
@@ -353,7 +353,7 @@ class ClientLbEnd2endTest : public ::testing::Test {
       port_ = port > 0 ? port : 5100; // grpc_pick_unused_port_or_die();
     }
 
-    void Start(const TString& server_host) { 
+    void Start(const TString& server_host) {
       gpr_log(GPR_INFO, "starting server on port %d", port_);
       started_ = true;
       grpc::internal::Mutex mu;
@@ -366,7 +366,7 @@ class ClientLbEnd2endTest : public ::testing::Test {
       gpr_log(GPR_INFO, "server startup complete");
     }
 
-    void Serve(const TString& server_host, grpc::internal::Mutex* mu, 
+    void Serve(const TString& server_host, grpc::internal::Mutex* mu,
                grpc::internal::CondVar* cond) {
       std::ostringstream server_address;
       server_address << server_host << ":" << port_;
@@ -388,7 +388,7 @@ class ClientLbEnd2endTest : public ::testing::Test {
       started_ = false;
     }
 
-    void SetServingStatus(const TString& service, bool serving) { 
+    void SetServingStatus(const TString& service, bool serving) {
       server_->GetHealthCheckService()->SetServingStatus(service, serving);
     }
   };
@@ -463,9 +463,9 @@ class ClientLbEnd2endTest : public ::testing::Test {
     }
   }
 
-  const TString server_host_; 
+  const TString server_host_;
   std::vector<std::unique_ptr<ServerData>> servers_;
-  const TString kRequestMessage_; 
+  const TString kRequestMessage_;
   std::shared_ptr<ChannelCredentials> creds_;
 };
 
@@ -642,11 +642,11 @@ TEST_F(ClientLbEnd2endTest, PickFirstResetConnectionBackoff) {
       channel->WaitForConnected(grpc_timeout_milliseconds_to_deadline(10)));
   // Reset connection backoff.
   experimental::ChannelResetConnectionBackoff(channel.get());
-  // Wait for connect.  Should happen as soon as the client connects to 
-  // the newly started server, which should be before the initial 
-  // backoff timeout elapses. 
+  // Wait for connect.  Should happen as soon as the client connects to
+  // the newly started server, which should be before the initial
+  // backoff timeout elapses.
   EXPECT_TRUE(
-      channel->WaitForConnected(grpc_timeout_milliseconds_to_deadline(20))); 
+      channel->WaitForConnected(grpc_timeout_milliseconds_to_deadline(20)));
   const gpr_timespec t1 = gpr_now(GPR_CLOCK_MONOTONIC);
   const grpc_millis waited_ms = gpr_time_to_millis(gpr_time_sub(t1, t0));
   gpr_log(GPR_DEBUG, "Waited %" PRId64 " milliseconds", waited_ms);
@@ -1650,96 +1650,96 @@ TEST_F(ClientLbEnd2endTest, ChannelIdleness) {
   EXPECT_EQ(channel->GetState(false), GRPC_CHANNEL_READY);
 }
 
-class ClientLbPickArgsTest : public ClientLbEnd2endTest { 
- protected: 
-  void SetUp() override { 
-    ClientLbEnd2endTest::SetUp(); 
-    current_test_instance_ = this; 
-  } 
- 
-  static void SetUpTestCase() { 
-    grpc_init(); 
-    grpc_core::RegisterTestPickArgsLoadBalancingPolicy(SavePickArgs); 
-  } 
- 
-  static void TearDownTestCase() { grpc_shutdown_blocking(); } 
- 
-  const std::vector<grpc_core::PickArgsSeen>& args_seen_list() { 
-    grpc::internal::MutexLock lock(&mu_); 
-    return args_seen_list_; 
-  } 
- 
- private: 
-  static void SavePickArgs(const grpc_core::PickArgsSeen& args_seen) { 
-    ClientLbPickArgsTest* self = current_test_instance_; 
-    grpc::internal::MutexLock lock(&self->mu_); 
-    self->args_seen_list_.emplace_back(args_seen); 
-  } 
- 
-  static ClientLbPickArgsTest* current_test_instance_; 
-  grpc::internal::Mutex mu_; 
-  std::vector<grpc_core::PickArgsSeen> args_seen_list_; 
-}; 
- 
-ClientLbPickArgsTest* ClientLbPickArgsTest::current_test_instance_ = nullptr; 
- 
-TEST_F(ClientLbPickArgsTest, Basic) { 
-  const int kNumServers = 1; 
-  StartServers(kNumServers); 
-  auto response_generator = BuildResolverResponseGenerator(); 
-  auto channel = BuildChannel("test_pick_args_lb", response_generator); 
-  auto stub = BuildStub(channel); 
-  response_generator.SetNextResolution(GetServersPorts()); 
-  CheckRpcSendOk(stub, DEBUG_LOCATION, /*wait_for_ready=*/true); 
-  // Check LB policy name for the channel. 
-  EXPECT_EQ("test_pick_args_lb", channel->GetLoadBalancingPolicyName()); 
-  // There will be two entries, one for the pick tried in state 
-  // CONNECTING and another for the pick tried in state READY. 
-  EXPECT_THAT(args_seen_list(), 
-              ::testing::ElementsAre( 
-                  ::testing::AllOf( 
-                      ::testing::Field(&grpc_core::PickArgsSeen::path, 
-                                       "/grpc.testing.EchoTestService/Echo"), 
-                      ::testing::Field(&grpc_core::PickArgsSeen::metadata, 
-                                       ::testing::UnorderedElementsAre( 
-                                           ::testing::Pair("foo", "1"), 
-                                           ::testing::Pair("bar", "2"), 
-                                           ::testing::Pair("baz", "3")))), 
-                  ::testing::AllOf( 
-                      ::testing::Field(&grpc_core::PickArgsSeen::path, 
-                                       "/grpc.testing.EchoTestService/Echo"), 
-                      ::testing::Field(&grpc_core::PickArgsSeen::metadata, 
-                                       ::testing::UnorderedElementsAre( 
-                                           ::testing::Pair("foo", "1"), 
-                                           ::testing::Pair("bar", "2"), 
-                                           ::testing::Pair("baz", "3")))))); 
-} 
- 
+class ClientLbPickArgsTest : public ClientLbEnd2endTest {
+ protected:
+  void SetUp() override {
+    ClientLbEnd2endTest::SetUp();
+    current_test_instance_ = this;
+  }
+
+  static void SetUpTestCase() {
+    grpc_init();
+    grpc_core::RegisterTestPickArgsLoadBalancingPolicy(SavePickArgs);
+  }
+
+  static void TearDownTestCase() { grpc_shutdown_blocking(); }
+
+  const std::vector<grpc_core::PickArgsSeen>& args_seen_list() {
+    grpc::internal::MutexLock lock(&mu_);
+    return args_seen_list_;
+  }
+
+ private:
+  static void SavePickArgs(const grpc_core::PickArgsSeen& args_seen) {
+    ClientLbPickArgsTest* self = current_test_instance_;
+    grpc::internal::MutexLock lock(&self->mu_);
+    self->args_seen_list_.emplace_back(args_seen);
+  }
+
+  static ClientLbPickArgsTest* current_test_instance_;
+  grpc::internal::Mutex mu_;
+  std::vector<grpc_core::PickArgsSeen> args_seen_list_;
+};
+
+ClientLbPickArgsTest* ClientLbPickArgsTest::current_test_instance_ = nullptr;
+
+TEST_F(ClientLbPickArgsTest, Basic) {
+  const int kNumServers = 1;
+  StartServers(kNumServers);
+  auto response_generator = BuildResolverResponseGenerator();
+  auto channel = BuildChannel("test_pick_args_lb", response_generator);
+  auto stub = BuildStub(channel);
+  response_generator.SetNextResolution(GetServersPorts());
+  CheckRpcSendOk(stub, DEBUG_LOCATION, /*wait_for_ready=*/true);
+  // Check LB policy name for the channel.
+  EXPECT_EQ("test_pick_args_lb", channel->GetLoadBalancingPolicyName());
+  // There will be two entries, one for the pick tried in state
+  // CONNECTING and another for the pick tried in state READY.
+  EXPECT_THAT(args_seen_list(),
+              ::testing::ElementsAre(
+                  ::testing::AllOf(
+                      ::testing::Field(&grpc_core::PickArgsSeen::path,
+                                       "/grpc.testing.EchoTestService/Echo"),
+                      ::testing::Field(&grpc_core::PickArgsSeen::metadata,
+                                       ::testing::UnorderedElementsAre(
+                                           ::testing::Pair("foo", "1"),
+                                           ::testing::Pair("bar", "2"),
+                                           ::testing::Pair("baz", "3")))),
+                  ::testing::AllOf(
+                      ::testing::Field(&grpc_core::PickArgsSeen::path,
+                                       "/grpc.testing.EchoTestService/Echo"),
+                      ::testing::Field(&grpc_core::PickArgsSeen::metadata,
+                                       ::testing::UnorderedElementsAre(
+                                           ::testing::Pair("foo", "1"),
+                                           ::testing::Pair("bar", "2"),
+                                           ::testing::Pair("baz", "3"))))));
+}
+
 class ClientLbInterceptTrailingMetadataTest : public ClientLbEnd2endTest {
  protected:
   void SetUp() override {
     ClientLbEnd2endTest::SetUp();
-    current_test_instance_ = this; 
+    current_test_instance_ = this;
   }
 
-  static void SetUpTestCase() { 
-    grpc_init(); 
-    grpc_core::RegisterInterceptRecvTrailingMetadataLoadBalancingPolicy( 
-        ReportTrailerIntercepted); 
-  } 
- 
-  static void TearDownTestCase() { grpc_shutdown_blocking(); } 
- 
+  static void SetUpTestCase() {
+    grpc_init();
+    grpc_core::RegisterInterceptRecvTrailingMetadataLoadBalancingPolicy(
+        ReportTrailerIntercepted);
+  }
+
+  static void TearDownTestCase() { grpc_shutdown_blocking(); }
+
   int trailers_intercepted() {
     grpc::internal::MutexLock lock(&mu_);
     return trailers_intercepted_;
   }
 
-  const grpc_core::MetadataVector& trailing_metadata() { 
-    grpc::internal::MutexLock lock(&mu_); 
-    return trailing_metadata_; 
-  } 
- 
+  const grpc_core::MetadataVector& trailing_metadata() {
+    grpc::internal::MutexLock lock(&mu_);
+    return trailing_metadata_;
+  }
+
   const udpa::data::orca::v1::OrcaLoadReport* backend_load_report() {
     grpc::internal::MutexLock lock(&mu_);
     return load_report_.get();
@@ -1747,12 +1747,12 @@ class ClientLbInterceptTrailingMetadataTest : public ClientLbEnd2endTest {
 
  private:
   static void ReportTrailerIntercepted(
-      const grpc_core::TrailingMetadataArgsSeen& args_seen) { 
-    const auto* backend_metric_data = args_seen.backend_metric_data; 
-    ClientLbInterceptTrailingMetadataTest* self = current_test_instance_; 
+      const grpc_core::TrailingMetadataArgsSeen& args_seen) {
+    const auto* backend_metric_data = args_seen.backend_metric_data;
+    ClientLbInterceptTrailingMetadataTest* self = current_test_instance_;
     grpc::internal::MutexLock lock(&self->mu_);
     self->trailers_intercepted_++;
-    self->trailing_metadata_ = args_seen.metadata; 
+    self->trailing_metadata_ = args_seen.metadata;
     if (backend_metric_data != nullptr) {
       self->load_report_.reset(new udpa::data::orca::v1::OrcaLoadReport);
       self->load_report_->set_cpu_utilization(
@@ -1761,28 +1761,28 @@ class ClientLbInterceptTrailingMetadataTest : public ClientLbEnd2endTest {
           backend_metric_data->mem_utilization);
       self->load_report_->set_rps(backend_metric_data->requests_per_second);
       for (const auto& p : backend_metric_data->request_cost) {
-        TString name = TString(p.first); 
-        (*self->load_report_->mutable_request_cost())[std::move(name)] = 
-            p.second; 
+        TString name = TString(p.first);
+        (*self->load_report_->mutable_request_cost())[std::move(name)] =
+            p.second;
       }
       for (const auto& p : backend_metric_data->utilization) {
-        TString name = TString(p.first); 
-        (*self->load_report_->mutable_utilization())[std::move(name)] = 
-            p.second; 
+        TString name = TString(p.first);
+        (*self->load_report_->mutable_utilization())[std::move(name)] =
+            p.second;
       }
     }
   }
 
-  static ClientLbInterceptTrailingMetadataTest* current_test_instance_; 
+  static ClientLbInterceptTrailingMetadataTest* current_test_instance_;
   grpc::internal::Mutex mu_;
   int trailers_intercepted_ = 0;
-  grpc_core::MetadataVector trailing_metadata_; 
+  grpc_core::MetadataVector trailing_metadata_;
   std::unique_ptr<udpa::data::orca::v1::OrcaLoadReport> load_report_;
 };
 
-ClientLbInterceptTrailingMetadataTest* 
-    ClientLbInterceptTrailingMetadataTest::current_test_instance_ = nullptr; 
- 
+ClientLbInterceptTrailingMetadataTest*
+    ClientLbInterceptTrailingMetadataTest::current_test_instance_ = nullptr;
+
 TEST_F(ClientLbInterceptTrailingMetadataTest, InterceptsRetriesDisabled) {
   const int kNumServers = 1;
   const int kNumRpcs = 10;
@@ -1799,13 +1799,13 @@ TEST_F(ClientLbInterceptTrailingMetadataTest, InterceptsRetriesDisabled) {
   EXPECT_EQ("intercept_trailing_metadata_lb",
             channel->GetLoadBalancingPolicyName());
   EXPECT_EQ(kNumRpcs, trailers_intercepted());
-  EXPECT_THAT(trailing_metadata(), 
-              ::testing::UnorderedElementsAre( 
-                  // TODO(roth): Should grpc-status be visible here? 
-                  ::testing::Pair("grpc-status", "0"), 
-                  ::testing::Pair("user-agent", ::testing::_), 
-                  ::testing::Pair("foo", "1"), ::testing::Pair("bar", "2"), 
-                  ::testing::Pair("baz", "3"))); 
+  EXPECT_THAT(trailing_metadata(),
+              ::testing::UnorderedElementsAre(
+                  // TODO(roth): Should grpc-status be visible here?
+                  ::testing::Pair("grpc-status", "0"),
+                  ::testing::Pair("user-agent", ::testing::_),
+                  ::testing::Pair("foo", "1"), ::testing::Pair("bar", "2"),
+                  ::testing::Pair("baz", "3")));
   EXPECT_EQ(nullptr, backend_load_report());
 }
 
@@ -1841,13 +1841,13 @@ TEST_F(ClientLbInterceptTrailingMetadataTest, InterceptsRetriesEnabled) {
   EXPECT_EQ("intercept_trailing_metadata_lb",
             channel->GetLoadBalancingPolicyName());
   EXPECT_EQ(kNumRpcs, trailers_intercepted());
-  EXPECT_THAT(trailing_metadata(), 
-              ::testing::UnorderedElementsAre( 
-                  // TODO(roth): Should grpc-status be visible here? 
-                  ::testing::Pair("grpc-status", "0"), 
-                  ::testing::Pair("user-agent", ::testing::_), 
-                  ::testing::Pair("foo", "1"), ::testing::Pair("bar", "2"), 
-                  ::testing::Pair("baz", "3"))); 
+  EXPECT_THAT(trailing_metadata(),
+              ::testing::UnorderedElementsAre(
+                  // TODO(roth): Should grpc-status be visible here?
+                  ::testing::Pair("grpc-status", "0"),
+                  ::testing::Pair("user-agent", ::testing::_),
+                  ::testing::Pair("foo", "1"), ::testing::Pair("bar", "2"),
+                  ::testing::Pair("baz", "3")));
   EXPECT_EQ(nullptr, backend_load_report());
 }
 
@@ -1901,83 +1901,83 @@ TEST_F(ClientLbInterceptTrailingMetadataTest, BackendMetricData) {
   EXPECT_EQ(kNumRpcs, trailers_intercepted());
 }
 
-class ClientLbAddressTest : public ClientLbEnd2endTest { 
- protected: 
-  static const char* kAttributeKey; 
- 
-  class Attribute : public grpc_core::ServerAddress::AttributeInterface { 
-   public: 
-    explicit Attribute(const TString& str) : str_(str) {} 
- 
-    std::unique_ptr<AttributeInterface> Copy() const override { 
-      return y_absl::make_unique<Attribute>(str_); 
-    } 
- 
-    int Cmp(const AttributeInterface* other) const override { 
-      return str_.compare(static_cast<const Attribute*>(other)->str_); 
-    } 
- 
-    TString ToString() const override { return str_; } 
- 
-   private: 
-    TString str_; 
-  }; 
- 
-  void SetUp() override { 
-    ClientLbEnd2endTest::SetUp(); 
-    current_test_instance_ = this; 
-  } 
- 
-  static void SetUpTestCase() { 
-    grpc_init(); 
-    grpc_core::RegisterAddressTestLoadBalancingPolicy(SaveAddress); 
-  } 
- 
-  static void TearDownTestCase() { grpc_shutdown_blocking(); } 
- 
-  const std::vector<TString>& addresses_seen() { 
-    grpc::internal::MutexLock lock(&mu_); 
-    return addresses_seen_; 
-  } 
- 
- private: 
-  static void SaveAddress(const grpc_core::ServerAddress& address) { 
-    ClientLbAddressTest* self = current_test_instance_; 
-    grpc::internal::MutexLock lock(&self->mu_); 
-    self->addresses_seen_.emplace_back(address.ToString()); 
-  } 
- 
-  static ClientLbAddressTest* current_test_instance_; 
-  grpc::internal::Mutex mu_; 
-  std::vector<TString> addresses_seen_; 
-}; 
- 
-const char* ClientLbAddressTest::kAttributeKey = "attribute_key"; 
- 
-ClientLbAddressTest* ClientLbAddressTest::current_test_instance_ = nullptr; 
- 
-TEST_F(ClientLbAddressTest, Basic) { 
-  const int kNumServers = 1; 
-  StartServers(kNumServers); 
-  auto response_generator = BuildResolverResponseGenerator(); 
-  auto channel = BuildChannel("address_test_lb", response_generator); 
-  auto stub = BuildStub(channel); 
-  // Addresses returned by the resolver will have attached attributes. 
-  response_generator.SetNextResolution(GetServersPorts(), nullptr, 
-                                       kAttributeKey, 
-                                       y_absl::make_unique<Attribute>("foo")); 
-  CheckRpcSendOk(stub, DEBUG_LOCATION); 
-  // Check LB policy name for the channel. 
-  EXPECT_EQ("address_test_lb", channel->GetLoadBalancingPolicyName()); 
-  // Make sure that the attributes wind up on the subchannels. 
-  std::vector<TString> expected; 
-  for (const int port : GetServersPorts()) { 
-    expected.emplace_back(y_absl::StrCat( 
-        "127.0.0.1:", port, " args={} attributes={", kAttributeKey, "=foo}")); 
-  } 
-  EXPECT_EQ(addresses_seen(), expected); 
-} 
- 
+class ClientLbAddressTest : public ClientLbEnd2endTest {
+ protected:
+  static const char* kAttributeKey;
+
+  class Attribute : public grpc_core::ServerAddress::AttributeInterface {
+   public:
+    explicit Attribute(const TString& str) : str_(str) {}
+
+    std::unique_ptr<AttributeInterface> Copy() const override {
+      return y_absl::make_unique<Attribute>(str_);
+    }
+
+    int Cmp(const AttributeInterface* other) const override {
+      return str_.compare(static_cast<const Attribute*>(other)->str_);
+    }
+
+    TString ToString() const override { return str_; }
+
+   private:
+    TString str_;
+  };
+
+  void SetUp() override {
+    ClientLbEnd2endTest::SetUp();
+    current_test_instance_ = this;
+  }
+
+  static void SetUpTestCase() {
+    grpc_init();
+    grpc_core::RegisterAddressTestLoadBalancingPolicy(SaveAddress);
+  }
+
+  static void TearDownTestCase() { grpc_shutdown_blocking(); }
+
+  const std::vector<TString>& addresses_seen() {
+    grpc::internal::MutexLock lock(&mu_);
+    return addresses_seen_;
+  }
+
+ private:
+  static void SaveAddress(const grpc_core::ServerAddress& address) {
+    ClientLbAddressTest* self = current_test_instance_;
+    grpc::internal::MutexLock lock(&self->mu_);
+    self->addresses_seen_.emplace_back(address.ToString());
+  }
+
+  static ClientLbAddressTest* current_test_instance_;
+  grpc::internal::Mutex mu_;
+  std::vector<TString> addresses_seen_;
+};
+
+const char* ClientLbAddressTest::kAttributeKey = "attribute_key";
+
+ClientLbAddressTest* ClientLbAddressTest::current_test_instance_ = nullptr;
+
+TEST_F(ClientLbAddressTest, Basic) {
+  const int kNumServers = 1;
+  StartServers(kNumServers);
+  auto response_generator = BuildResolverResponseGenerator();
+  auto channel = BuildChannel("address_test_lb", response_generator);
+  auto stub = BuildStub(channel);
+  // Addresses returned by the resolver will have attached attributes.
+  response_generator.SetNextResolution(GetServersPorts(), nullptr,
+                                       kAttributeKey,
+                                       y_absl::make_unique<Attribute>("foo"));
+  CheckRpcSendOk(stub, DEBUG_LOCATION);
+  // Check LB policy name for the channel.
+  EXPECT_EQ("address_test_lb", channel->GetLoadBalancingPolicyName());
+  // Make sure that the attributes wind up on the subchannels.
+  std::vector<TString> expected;
+  for (const int port : GetServersPorts()) {
+    expected.emplace_back(y_absl::StrCat(
+        "127.0.0.1:", port, " args={} attributes={", kAttributeKey, "=foo}"));
+  }
+  EXPECT_EQ(addresses_seen(), expected);
+}
+
 }  // namespace
 }  // namespace testing
 }  // namespace grpc

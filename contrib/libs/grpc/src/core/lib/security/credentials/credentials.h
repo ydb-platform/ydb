@@ -21,10 +21,10 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <string.h> 
- 
-#include <util/generic/string.h> 
- 
+#include <string.h>
+
+#include <util/generic/string.h>
+
 #include <grpc/grpc.h>
 #include <grpc/grpc_security.h>
 #include <grpc/support/sync.h>
@@ -81,13 +81,13 @@ typedef enum {
 /* --- Google utils --- */
 
 /* It is the caller's responsibility to gpr_free the result if not NULL. */
-TString grpc_get_well_known_google_credentials_file_path(void); 
+TString grpc_get_well_known_google_credentials_file_path(void);
 
 /* Implementation function for the different platforms. */
-TString grpc_get_well_known_google_credentials_file_path_impl(void); 
+TString grpc_get_well_known_google_credentials_file_path_impl(void);
 
 /* Override for testing only. Not thread-safe */
-typedef TString (*grpc_well_known_credentials_path_getter)(void); 
+typedef TString (*grpc_well_known_credentials_path_getter)(void);
 void grpc_override_well_known_credentials_path_getter(
     grpc_well_known_credentials_path_getter getter);
 
@@ -172,11 +172,11 @@ void grpc_credentials_mdelem_array_destroy(grpc_credentials_mdelem_array* list);
 struct grpc_call_credentials
     : public grpc_core::RefCounted<grpc_call_credentials> {
  public:
-  explicit grpc_call_credentials( 
-      const char* type, 
-      grpc_security_level min_security_level = GRPC_PRIVACY_AND_INTEGRITY) 
-      : type_(type), min_security_level_(min_security_level) {} 
- 
+  explicit grpc_call_credentials(
+      const char* type,
+      grpc_security_level min_security_level = GRPC_PRIVACY_AND_INTEGRITY)
+      : type_(type), min_security_level_(min_security_level) {}
+
   virtual ~grpc_call_credentials() = default;
 
   // Returns true if completed synchronously, in which case \a error will
@@ -195,19 +195,19 @@ struct grpc_call_credentials
   virtual void cancel_get_request_metadata(
       grpc_credentials_mdelem_array* md_array, grpc_error* error) = 0;
 
-  virtual grpc_security_level min_security_level() const { 
-    return min_security_level_; 
-  } 
- 
-  virtual TString debug_string() { 
-    return "grpc_call_credentials did not provide debug string"; 
-  } 
- 
+  virtual grpc_security_level min_security_level() const {
+    return min_security_level_;
+  }
+
+  virtual TString debug_string() {
+    return "grpc_call_credentials did not provide debug string";
+  }
+
   const char* type() const { return type_; }
 
  private:
   const char* type_;
-  const grpc_security_level min_security_level_; 
+  const grpc_security_level min_security_level_;
 };
 
 /* Metadata-only credentials with the specified key and value where

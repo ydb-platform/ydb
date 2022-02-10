@@ -27,7 +27,7 @@ extern const upb_msglayout google_protobuf_Empty_msginit;
 /* google.protobuf.Empty */
 
 UPB_INLINE google_protobuf_Empty *google_protobuf_Empty_new(upb_arena *arena) {
-  return (google_protobuf_Empty *)_upb_msg_new(&google_protobuf_Empty_msginit, arena); 
+  return (google_protobuf_Empty *)_upb_msg_new(&google_protobuf_Empty_msginit, arena);
 }
 UPB_INLINE google_protobuf_Empty *google_protobuf_Empty_parse(const char *buf, size_t size,
                         upb_arena *arena) {

@@ -18,13 +18,13 @@
 #ifndef ABSL_DEBUGGING_INTERNAL_SYMBOLIZE_H_
 #define ABSL_DEBUGGING_INTERNAL_SYMBOLIZE_H_
 
-#ifdef __cplusplus 
- 
+#ifdef __cplusplus
+
 #include <cstddef>
 #include <cstdint>
 
 #include "y_absl/base/config.h"
-#include "y_absl/strings/string_view.h" 
+#include "y_absl/strings/string_view.h"
 
 #ifdef ABSL_INTERNAL_HAVE_ELF_SYMBOLIZE
 #error ABSL_INTERNAL_HAVE_ELF_SYMBOLIZE cannot be directly set
@@ -48,7 +48,7 @@ namespace debugging_internal {
 //
 // This is not async-signal-safe.
 bool ForEachSection(int fd,
-                    const std::function<bool(y_absl::string_view name, 
+                    const std::function<bool(y_absl::string_view name,
                                              const ElfW(Shdr) &)>& callback);
 
 // Gets the section header for the given name, if it exists. Returns true on
@@ -62,12 +62,12 @@ ABSL_NAMESPACE_END
 
 #endif  // ABSL_INTERNAL_HAVE_ELF_SYMBOLIZE
 
-#ifdef ABSL_INTERNAL_HAVE_DARWIN_SYMBOLIZE 
-#error ABSL_INTERNAL_HAVE_DARWIN_SYMBOLIZE cannot be directly set 
-#elif defined(__APPLE__) 
-#define ABSL_INTERNAL_HAVE_DARWIN_SYMBOLIZE 1 
-#endif 
- 
+#ifdef ABSL_INTERNAL_HAVE_DARWIN_SYMBOLIZE
+#error ABSL_INTERNAL_HAVE_DARWIN_SYMBOLIZE cannot be directly set
+#elif defined(__APPLE__)
+#define ABSL_INTERNAL_HAVE_DARWIN_SYMBOLIZE 1
+#endif
+
 #ifdef ABSL_INTERNAL_HAVE_EMSCRIPTEN_SYMBOLIZE
 #error ABSL_INTERNAL_HAVE_EMSCRIPTEN_SYMBOLIZE cannot be directly set
 #elif defined(__EMSCRIPTEN__)
@@ -124,30 +124,30 @@ bool RemoveAllSymbolDecorators(void);
 //   filename != nullptr
 //
 // Returns true if the file was successfully registered.
-bool RegisterFileMappingHint(const void* start, const void* end, 
-                             uint64_t offset, const char* filename); 
+bool RegisterFileMappingHint(const void* start, const void* end,
+                             uint64_t offset, const char* filename);
 
 // Looks up the file mapping registered by RegisterFileMappingHint for an
 // address range. If there is one, the file name is stored in *filename and
 // *start and *end are modified to reflect the registered mapping. Returns
 // whether any hint was found.
-bool GetFileMappingHint(const void** start, const void** end, uint64_t* offset, 
+bool GetFileMappingHint(const void** start, const void** end, uint64_t* offset,
                         const char** filename);
 
 }  // namespace debugging_internal
 ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // __cplusplus 
- 
-#include <stdbool.h> 
- 
-#ifdef __cplusplus 
-extern "C" 
-#endif  // __cplusplus 
- 
-    bool 
-    YAbslInternalGetFileMappingHint(const void** start, const void** end, 
-                                   uint64_t* offset, const char** filename); 
- 
+#endif  // __cplusplus
+
+#include <stdbool.h>
+
+#ifdef __cplusplus
+extern "C"
+#endif  // __cplusplus
+
+    bool
+    YAbslInternalGetFileMappingHint(const void** start, const void** end,
+                                   uint64_t* offset, const char** filename);
+
 #endif  // ABSL_DEBUGGING_INTERNAL_SYMBOLIZE_H_

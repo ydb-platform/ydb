@@ -30,11 +30,11 @@
 #include <grpcpp/server_context.h>
 #include <gtest/gtest.h>
 
-#include <chrono> 
-#include <sstream> 
- 
+#include <chrono>
+#include <sstream>
+
 #include "src/core/lib/gpr/env.h"
-#include "src/core/lib/iomgr/load_file.h" 
+#include "src/core/lib/iomgr/load_file.h"
 #include "src/proto/grpc/testing/echo.grpc.pb.h"
 #include "src/proto/grpc/testing/echo.pb.h"
 #include "test/core/util/port.h"
@@ -42,10 +42,10 @@
 #include "test/cpp/util/cli_credentials.h"
 #include "test/cpp/util/string_ref_helper.h"
 
-#define CA_CERT_PATH "src/core/tsi/test_creds/ca.pem" 
-#define SERVER_CERT_PATH "src/core/tsi/test_creds/server1.pem" 
-#define SERVER_KEY_PATH "src/core/tsi/test_creds/server1.key" 
- 
+#define CA_CERT_PATH "src/core/tsi/test_creds/ca.pem"
+#define SERVER_CERT_PATH "src/core/tsi/test_creds/server1.pem"
+#define SERVER_KEY_PATH "src/core/tsi/test_creds/server1.key"
+
 using grpc::testing::EchoRequest;
 using grpc::testing::EchoResponse;
 
@@ -53,41 +53,41 @@ using grpc::testing::EchoResponse;
 
 #define ECHO_TEST_SERVICE_SUMMARY \
   "Echo\n"                        \
-  "Echo1\n"                       \ 
-  "Echo2\n"                       \ 
-  "CheckDeadlineUpperBound\n"     \ 
-  "CheckDeadlineSet\n"            \ 
+  "Echo1\n"                       \
+  "Echo2\n"                       \
+  "CheckDeadlineUpperBound\n"     \
+  "CheckDeadlineSet\n"            \
   "CheckClientInitialMetadata\n"  \
   "RequestStream\n"               \
   "ResponseStream\n"              \
   "BidiStream\n"                  \
   "Unimplemented\n"
 
-#define ECHO_TEST_SERVICE_DESCRIPTION                                          \ 
-  "filename: src/proto/grpc/testing/echo.proto\n"                              \ 
-  "package: grpc.testing;\n"                                                   \ 
-  "service EchoTestService {\n"                                                \ 
-  "  rpc Echo(grpc.testing.EchoRequest) returns (grpc.testing.EchoResponse) "  \ 
-  "{}\n"                                                                       \ 
-  "  rpc Echo1(grpc.testing.EchoRequest) returns (grpc.testing.EchoResponse) " \ 
-  "{}\n"                                                                       \ 
-  "  rpc Echo2(grpc.testing.EchoRequest) returns (grpc.testing.EchoResponse) " \ 
-  "{}\n"                                                                       \ 
-  "  rpc CheckDeadlineUpperBound(grpc.testing.SimpleRequest) returns "         \ 
-  "(grpc.testing.StringValue) {}\n"                                            \ 
-  "  rpc CheckDeadlineSet(grpc.testing.SimpleRequest) returns "                \ 
-  "(grpc.testing.StringValue) {}\n"                                            \ 
-  "  rpc CheckClientInitialMetadata(grpc.testing.SimpleRequest) returns "      \ 
-  "(grpc.testing.SimpleResponse) {}\n"                                         \ 
-  "  rpc RequestStream(stream grpc.testing.EchoRequest) returns "              \ 
-  "(grpc.testing.EchoResponse) {}\n"                                           \ 
-  "  rpc ResponseStream(grpc.testing.EchoRequest) returns (stream "            \ 
-  "grpc.testing.EchoResponse) {}\n"                                            \ 
-  "  rpc BidiStream(stream grpc.testing.EchoRequest) returns (stream "         \ 
-  "grpc.testing.EchoResponse) {}\n"                                            \ 
-  "  rpc Unimplemented(grpc.testing.EchoRequest) returns "                     \ 
-  "(grpc.testing.EchoResponse) {}\n"                                           \ 
-  "}\n"                                                                        \ 
+#define ECHO_TEST_SERVICE_DESCRIPTION                                          \
+  "filename: src/proto/grpc/testing/echo.proto\n"                              \
+  "package: grpc.testing;\n"                                                   \
+  "service EchoTestService {\n"                                                \
+  "  rpc Echo(grpc.testing.EchoRequest) returns (grpc.testing.EchoResponse) "  \
+  "{}\n"                                                                       \
+  "  rpc Echo1(grpc.testing.EchoRequest) returns (grpc.testing.EchoResponse) " \
+  "{}\n"                                                                       \
+  "  rpc Echo2(grpc.testing.EchoRequest) returns (grpc.testing.EchoResponse) " \
+  "{}\n"                                                                       \
+  "  rpc CheckDeadlineUpperBound(grpc.testing.SimpleRequest) returns "         \
+  "(grpc.testing.StringValue) {}\n"                                            \
+  "  rpc CheckDeadlineSet(grpc.testing.SimpleRequest) returns "                \
+  "(grpc.testing.StringValue) {}\n"                                            \
+  "  rpc CheckClientInitialMetadata(grpc.testing.SimpleRequest) returns "      \
+  "(grpc.testing.SimpleResponse) {}\n"                                         \
+  "  rpc RequestStream(stream grpc.testing.EchoRequest) returns "              \
+  "(grpc.testing.EchoResponse) {}\n"                                           \
+  "  rpc ResponseStream(grpc.testing.EchoRequest) returns (stream "            \
+  "grpc.testing.EchoResponse) {}\n"                                            \
+  "  rpc BidiStream(stream grpc.testing.EchoRequest) returns (stream "         \
+  "grpc.testing.EchoResponse) {}\n"                                            \
+  "  rpc Unimplemented(grpc.testing.EchoRequest) returns "                     \
+  "(grpc.testing.EchoResponse) {}\n"                                           \
+  "}\n"                                                                        \
   "\n"
 
 #define ECHO_METHOD_DESCRIPTION                                               \
@@ -125,8 +125,8 @@ DECLARE_bool(batch);
 DECLARE_string(metadata);
 DECLARE_string(protofiles);
 DECLARE_string(proto_path);
-DECLARE_string(default_service_config); 
-DECLARE_double(timeout); 
+DECLARE_string(default_service_config);
+DECLARE_double(timeout);
 
 namespace {
 
@@ -140,24 +140,24 @@ class TestCliCredentials final : public grpc::testing::CliCredentials {
     if (!secure_) {
       return InsecureChannelCredentials();
     }
-    grpc_slice ca_slice; 
-    GPR_ASSERT(GRPC_LOG_IF_ERROR("load_file", 
-                                 grpc_load_file(CA_CERT_PATH, 1, &ca_slice))); 
-    const char* test_root_cert = 
-        reinterpret_cast<const char*> GRPC_SLICE_START_PTR(ca_slice); 
+    grpc_slice ca_slice;
+    GPR_ASSERT(GRPC_LOG_IF_ERROR("load_file",
+                                 grpc_load_file(CA_CERT_PATH, 1, &ca_slice)));
+    const char* test_root_cert =
+        reinterpret_cast<const char*> GRPC_SLICE_START_PTR(ca_slice);
     SslCredentialsOptions ssl_opts = {test_root_cert, "", ""};
-    std::shared_ptr<grpc::ChannelCredentials> credential_ptr = 
-        grpc::SslCredentials(grpc::SslCredentialsOptions(ssl_opts)); 
-    grpc_slice_unref(ca_slice); 
-    return credential_ptr; 
+    std::shared_ptr<grpc::ChannelCredentials> credential_ptr =
+        grpc::SslCredentials(grpc::SslCredentialsOptions(ssl_opts));
+    grpc_slice_unref(ca_slice);
+    return credential_ptr;
   }
-  const TString GetCredentialUsage() const override { return ""; } 
+  const TString GetCredentialUsage() const override { return ""; }
 
  private:
   const bool secure_;
 };
 
-bool PrintStream(std::stringstream* ss, const TString& output) { 
+bool PrintStream(std::stringstream* ss, const TString& output) {
   (*ss) << output;
   return true;
 }
@@ -185,29 +185,29 @@ class TestServiceImpl : public ::grpc::testing::EchoTestService::Service {
     return Status::OK;
   }
 
-  Status CheckDeadlineSet(ServerContext* context, const SimpleRequest* request, 
-                          StringValue* response) override { 
-    response->set_message(context->deadline() != 
-                                  std::chrono::system_clock::time_point::max() 
-                              ? "true" 
-                              : "false"); 
-    return Status::OK; 
-  } 
- 
-  // Check if deadline - current time <= timeout 
-  // If deadline set, timeout + current time should be an upper bound for it 
-  Status CheckDeadlineUpperBound(ServerContext* context, 
-                                 const SimpleRequest* request, 
-                                 StringValue* response) override { 
-    auto seconds = std::chrono::duration_cast<std::chrono::seconds>( 
-        context->deadline() - std::chrono::system_clock::now()); 
- 
-    // Returning string instead of bool to avoid using embedded messages in 
-    // proto3 
-    response->set_message(seconds.count() <= FLAGS_timeout ? "true" : "false"); 
-    return Status::OK; 
-  } 
- 
+  Status CheckDeadlineSet(ServerContext* context, const SimpleRequest* request,
+                          StringValue* response) override {
+    response->set_message(context->deadline() !=
+                                  std::chrono::system_clock::time_point::max()
+                              ? "true"
+                              : "false");
+    return Status::OK;
+  }
+
+  // Check if deadline - current time <= timeout
+  // If deadline set, timeout + current time should be an upper bound for it
+  Status CheckDeadlineUpperBound(ServerContext* context,
+                                 const SimpleRequest* request,
+                                 StringValue* response) override {
+    auto seconds = std::chrono::duration_cast<std::chrono::seconds>(
+        context->deadline() - std::chrono::system_clock::now());
+
+    // Returning string instead of bool to avoid using embedded messages in
+    // proto3
+    response->set_message(seconds.count() <= FLAGS_timeout ? "true" : "false");
+    return Status::OK;
+  }
+
   Status RequestStream(ServerContext* context,
                        ServerReader<EchoRequest>* reader,
                        EchoResponse* response) override {
@@ -243,7 +243,7 @@ class TestServiceImpl : public ::grpc::testing::EchoTestService::Service {
 
     EchoResponse response;
     for (int i = 0; i < kServerDefaultResponseStreamsToSend; i++) {
-      response.set_message(request->message() + ToString(i)); 
+      response.set_message(request->message() + ToString(i));
       writer->Write(response);
     }
 
@@ -283,24 +283,24 @@ class GrpcToolTest : public ::testing::Test {
   // SetUpServer cannot be used with EXPECT_EXIT. grpc_pick_unused_port_or_die()
   // uses atexit() to free chosen ports, and it will spawn a new thread in
   // resolve_address_posix.c:192 at exit time.
-  const TString SetUpServer(bool secure = false) { 
+  const TString SetUpServer(bool secure = false) {
     std::ostringstream server_address;
     int port = grpc_pick_unused_port_or_die();
     server_address << "localhost:" << port;
     // Setup server
     ServerBuilder builder;
     std::shared_ptr<grpc::ServerCredentials> creds;
-    grpc_slice cert_slice, key_slice; 
-    GPR_ASSERT(GRPC_LOG_IF_ERROR( 
-        "load_file", grpc_load_file(SERVER_CERT_PATH, 1, &cert_slice))); 
-    GPR_ASSERT(GRPC_LOG_IF_ERROR( 
-        "load_file", grpc_load_file(SERVER_KEY_PATH, 1, &key_slice))); 
-    const char* server_cert = 
-        reinterpret_cast<const char*> GRPC_SLICE_START_PTR(cert_slice); 
-    const char* server_key = 
-        reinterpret_cast<const char*> GRPC_SLICE_START_PTR(key_slice); 
-    SslServerCredentialsOptions::PemKeyCertPair pkcp = {server_key, 
-                                                        server_cert}; 
+    grpc_slice cert_slice, key_slice;
+    GPR_ASSERT(GRPC_LOG_IF_ERROR(
+        "load_file", grpc_load_file(SERVER_CERT_PATH, 1, &cert_slice)));
+    GPR_ASSERT(GRPC_LOG_IF_ERROR(
+        "load_file", grpc_load_file(SERVER_KEY_PATH, 1, &key_slice)));
+    const char* server_cert =
+        reinterpret_cast<const char*> GRPC_SLICE_START_PTR(cert_slice);
+    const char* server_key =
+        reinterpret_cast<const char*> GRPC_SLICE_START_PTR(key_slice);
+    SslServerCredentialsOptions::PemKeyCertPair pkcp = {server_key,
+                                                        server_cert};
     if (secure) {
       SslServerCredentialsOptions ssl_opts;
       ssl_opts.pem_root_certs = "";
@@ -312,8 +312,8 @@ class GrpcToolTest : public ::testing::Test {
     builder.AddListeningPort(server_address.str(), creds);
     builder.RegisterService(&service_);
     server_ = builder.BuildAndStart();
-    grpc_slice_unref(cert_slice); 
-    grpc_slice_unref(key_slice); 
+    grpc_slice_unref(cert_slice);
+    grpc_slice_unref(key_slice);
     return server_address.str();
   }
 
@@ -369,7 +369,7 @@ TEST_F(GrpcToolTest, ListCommand) {
   // Test input "grpc_cli list localhost:<port>"
   std::stringstream output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "ls", server_address.c_str()};
 
   FLAGS_l = false;
@@ -387,7 +387,7 @@ TEST_F(GrpcToolTest, ListOneService) {
   // Test input "grpc_cli list localhost:<port> grpc.testing.EchoTestService"
   std::stringstream output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "ls", server_address.c_str(),
                         "grpc.testing.EchoTestService"};
   // without -l flag
@@ -400,7 +400,7 @@ TEST_F(GrpcToolTest, ListOneService) {
               strcmp(output_stream.str().c_str(), ECHO_TEST_SERVICE_SUMMARY));
 
   // with -l flag
-  output_stream.str(TString()); 
+  output_stream.str(TString());
   output_stream.clear();
   FLAGS_l = true;
   EXPECT_TRUE(0 == GrpcToolMainLib(ArraySize(argv), argv, TestCliCredentials(),
@@ -417,7 +417,7 @@ TEST_F(GrpcToolTest, TypeCommand) {
   // Test input "grpc_cli type localhost:<port> grpc.testing.EchoRequest"
   std::stringstream output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "type", server_address.c_str(),
                         "grpc.testing.EchoRequest"};
 
@@ -438,7 +438,7 @@ TEST_F(GrpcToolTest, ListOneMethod) {
   // Test input "grpc_cli list localhost:<port> grpc.testing.EchoTestService"
   std::stringstream output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "ls", server_address.c_str(),
                         "grpc.testing.EchoTestService.Echo"};
   // without -l flag
@@ -450,7 +450,7 @@ TEST_F(GrpcToolTest, ListOneMethod) {
   EXPECT_TRUE(0 == strcmp(output_stream.str().c_str(), "Echo\n"));
 
   // with -l flag
-  output_stream.str(TString()); 
+  output_stream.str(TString());
   output_stream.clear();
   FLAGS_l = true;
   EXPECT_TRUE(0 == GrpcToolMainLib(ArraySize(argv), argv, TestCliCredentials(),
@@ -467,7 +467,7 @@ TEST_F(GrpcToolTest, TypeNotFound) {
   // Test input "grpc_cli type localhost:<port> grpc.testing.DummyRequest"
   std::stringstream output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "type", server_address.c_str(),
                         "grpc.testing.DummyRequest"};
 
@@ -481,7 +481,7 @@ TEST_F(GrpcToolTest, CallCommand) {
   // Test input "grpc_cli call localhost:<port> Echo "message: 'Hello'"
   std::stringstream output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "call", server_address.c_str(), "Echo",
                         "message: 'Hello'"};
 
@@ -493,7 +493,7 @@ TEST_F(GrpcToolTest, CallCommand) {
               strstr(output_stream.str().c_str(), "message: \"Hello\""));
 
   // with json_output
-  output_stream.str(TString()); 
+  output_stream.str(TString());
   output_stream.clear();
 
   FLAGS_json_output = true;
@@ -516,7 +516,7 @@ TEST_F(GrpcToolTest, CallCommandJsonInput) {
   // Test input "grpc_cli call localhost:<port> Echo "{ \"message\": \"Hello\"}"
   std::stringstream output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "call", server_address.c_str(), "Echo",
                         "{ \"message\": \"Hello\"}"};
 
@@ -529,7 +529,7 @@ TEST_F(GrpcToolTest, CallCommandJsonInput) {
               strstr(output_stream.str().c_str(), "message: \"Hello\""));
 
   // with json_output
-  output_stream.str(TString()); 
+  output_stream.str(TString());
   output_stream.clear();
 
   FLAGS_json_output = true;
@@ -553,7 +553,7 @@ TEST_F(GrpcToolTest, CallCommandBatch) {
   // Test input "grpc_cli call Echo"
   std::stringstream output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "call", server_address.c_str(), "Echo",
                         "message: 'Hello0'"};
 
@@ -574,7 +574,7 @@ TEST_F(GrpcToolTest, CallCommandBatch) {
                                 "message: \"Hello0\"\nmessage: "
                                 "\"Hello1\"\nmessage: \"Hello2\"\n"));
   // with json_output
-  output_stream.str(TString()); 
+  output_stream.str(TString());
   output_stream.clear();
   ss.clear();
   ss.seekg(0);
@@ -613,7 +613,7 @@ TEST_F(GrpcToolTest, CallCommandBatchJsonInput) {
   // Test input "grpc_cli call Echo"
   std::stringstream output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "call", server_address.c_str(), "Echo",
                         "{\"message\": \"Hello0\"}"};
 
@@ -636,7 +636,7 @@ TEST_F(GrpcToolTest, CallCommandBatchJsonInput) {
                                 "message: \"Hello0\"\nmessage: "
                                 "\"Hello1\"\nmessage: \"Hello2\"\n"));
   // with json_output
-  output_stream.str(TString()); 
+  output_stream.str(TString());
   output_stream.clear();
   ss.clear();
   ss.seekg(0);
@@ -676,7 +676,7 @@ TEST_F(GrpcToolTest, CallCommandBatchWithBadRequest) {
   // Test input "grpc_cli call Echo"
   std::stringstream output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "call", server_address.c_str(), "Echo",
                         "message: 'Hello0'"};
 
@@ -696,7 +696,7 @@ TEST_F(GrpcToolTest, CallCommandBatchWithBadRequest) {
                                 "message: \"Hello0\"\nmessage: \"Hello2\"\n"));
 
   // with json_output
-  output_stream.str(TString()); 
+  output_stream.str(TString());
   output_stream.clear();
   ss.clear();
   ss.seekg(0);
@@ -731,7 +731,7 @@ TEST_F(GrpcToolTest, CallCommandBatchJsonInputWithBadRequest) {
   // Test input "grpc_cli call Echo"
   std::stringstream output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "call", server_address.c_str(), "Echo",
                         "{ \"message\": \"Hello0\"}"};
 
@@ -754,7 +754,7 @@ TEST_F(GrpcToolTest, CallCommandBatchJsonInputWithBadRequest) {
                                 "message: \"Hello0\"\nmessage: \"Hello2\"\n"));
 
   // with json_output
-  output_stream.str(TString()); 
+  output_stream.str(TString());
   output_stream.clear();
   ss.clear();
   ss.seekg(0);
@@ -792,7 +792,7 @@ TEST_F(GrpcToolTest, CallCommandRequestStream) {
   // 'Hello0'"
   std::stringstream output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "call", server_address.c_str(),
                         "RequestStream", "message: 'Hello0'"};
 
@@ -817,7 +817,7 @@ TEST_F(GrpcToolTest, CallCommandRequestStreamJsonInput) {
   // \"Hello0\"}"
   std::stringstream output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "call", server_address.c_str(),
                         "RequestStream", "{ \"message\": \"Hello0\" }"};
 
@@ -845,7 +845,7 @@ TEST_F(GrpcToolTest, CallCommandRequestStreamWithBadRequest) {
   // 'Hello0'"
   std::stringstream output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "call", server_address.c_str(),
                         "RequestStream", "message: 'Hello0'"};
 
@@ -870,7 +870,7 @@ TEST_F(GrpcToolTest, CallCommandRequestStreamWithBadRequestJsonInput) {
   // 'Hello0'"
   std::stringstream output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "call", server_address.c_str(),
                         "RequestStream", "{ \"message\": \"Hello0\" }"};
 
@@ -893,99 +893,99 @@ TEST_F(GrpcToolTest, CallCommandRequestStreamWithBadRequestJsonInput) {
   ShutdownServer();
 }
 
-TEST_F(GrpcToolTest, CallCommandWithTimeoutDeadlineSet) { 
-  // Test input "grpc_cli call CheckDeadlineSet --timeout=5000.25" 
-  std::stringstream output_stream; 
- 
-  const TString server_address = SetUpServer(); 
-  const char* argv[] = {"grpc_cli", "call", server_address.c_str(), 
-                        "CheckDeadlineSet"}; 
- 
-  // Set timeout to 5000.25 seconds 
-  FLAGS_timeout = 5000.25; 
- 
-  EXPECT_TRUE(0 == GrpcToolMainLib(ArraySize(argv), argv, TestCliCredentials(), 
-                                   std::bind(PrintStream, &output_stream, 
-                                             std::placeholders::_1))); 
- 
-  // Expected output: "message: "true"", deadline set 
-  EXPECT_TRUE(nullptr != 
-              strstr(output_stream.str().c_str(), "message: \"true\"")); 
-  ShutdownServer(); 
-} 
- 
-TEST_F(GrpcToolTest, CallCommandWithTimeoutDeadlineUpperBound) { 
-  // Test input "grpc_cli call CheckDeadlineUpperBound --timeout=900" 
-  std::stringstream output_stream; 
- 
-  const TString server_address = SetUpServer(); 
-  const char* argv[] = {"grpc_cli", "call", server_address.c_str(), 
-                        "CheckDeadlineUpperBound"}; 
- 
-  // Set timeout to 900 seconds 
-  FLAGS_timeout = 900; 
- 
-  EXPECT_TRUE(0 == GrpcToolMainLib(ArraySize(argv), argv, TestCliCredentials(), 
-                                   std::bind(PrintStream, &output_stream, 
-                                             std::placeholders::_1))); 
- 
-  // Expected output: "message: "true"" 
-  // deadline not greater than timeout + current time 
-  EXPECT_TRUE(nullptr != 
-              strstr(output_stream.str().c_str(), "message: \"true\"")); 
-  ShutdownServer(); 
-} 
- 
-TEST_F(GrpcToolTest, CallCommandWithNegativeTimeoutValue) { 
-  // Test input "grpc_cli call CheckDeadlineSet --timeout=-5" 
-  std::stringstream output_stream; 
- 
-  const TString server_address = SetUpServer(); 
-  const char* argv[] = {"grpc_cli", "call", server_address.c_str(), 
-                        "CheckDeadlineSet"}; 
- 
-  // Set timeout to -5 (deadline not set) 
-  FLAGS_timeout = -5; 
- 
-  EXPECT_TRUE(0 == GrpcToolMainLib(ArraySize(argv), argv, TestCliCredentials(), 
-                                   std::bind(PrintStream, &output_stream, 
-                                             std::placeholders::_1))); 
- 
-  // Expected output: "message: "false"", deadline not set 
-  EXPECT_TRUE(nullptr != 
-              strstr(output_stream.str().c_str(), "message: \"false\"")); 
- 
-  ShutdownServer(); 
-} 
- 
-TEST_F(GrpcToolTest, CallCommandWithDefaultTimeoutValue) { 
-  // Test input "grpc_cli call CheckDeadlineSet --timeout=-1" 
-  std::stringstream output_stream; 
- 
-  const TString server_address = SetUpServer(); 
-  const char* argv[] = {"grpc_cli", "call", server_address.c_str(), 
-                        "CheckDeadlineSet"}; 
- 
-  // Set timeout to -1 (default value, deadline not set) 
-  FLAGS_timeout = -1; 
- 
-  EXPECT_TRUE(0 == GrpcToolMainLib(ArraySize(argv), argv, TestCliCredentials(), 
-                                   std::bind(PrintStream, &output_stream, 
-                                             std::placeholders::_1))); 
- 
-  // Expected output: "message: "false"", deadline not set 
-  EXPECT_TRUE(nullptr != 
-              strstr(output_stream.str().c_str(), "message: \"false\"")); 
- 
-  ShutdownServer(); 
-} 
- 
+TEST_F(GrpcToolTest, CallCommandWithTimeoutDeadlineSet) {
+  // Test input "grpc_cli call CheckDeadlineSet --timeout=5000.25"
+  std::stringstream output_stream;
+
+  const TString server_address = SetUpServer();
+  const char* argv[] = {"grpc_cli", "call", server_address.c_str(),
+                        "CheckDeadlineSet"};
+
+  // Set timeout to 5000.25 seconds
+  FLAGS_timeout = 5000.25;
+
+  EXPECT_TRUE(0 == GrpcToolMainLib(ArraySize(argv), argv, TestCliCredentials(),
+                                   std::bind(PrintStream, &output_stream,
+                                             std::placeholders::_1)));
+
+  // Expected output: "message: "true"", deadline set
+  EXPECT_TRUE(nullptr !=
+              strstr(output_stream.str().c_str(), "message: \"true\""));
+  ShutdownServer();
+}
+
+TEST_F(GrpcToolTest, CallCommandWithTimeoutDeadlineUpperBound) {
+  // Test input "grpc_cli call CheckDeadlineUpperBound --timeout=900"
+  std::stringstream output_stream;
+
+  const TString server_address = SetUpServer();
+  const char* argv[] = {"grpc_cli", "call", server_address.c_str(),
+                        "CheckDeadlineUpperBound"};
+
+  // Set timeout to 900 seconds
+  FLAGS_timeout = 900;
+
+  EXPECT_TRUE(0 == GrpcToolMainLib(ArraySize(argv), argv, TestCliCredentials(),
+                                   std::bind(PrintStream, &output_stream,
+                                             std::placeholders::_1)));
+
+  // Expected output: "message: "true""
+  // deadline not greater than timeout + current time
+  EXPECT_TRUE(nullptr !=
+              strstr(output_stream.str().c_str(), "message: \"true\""));
+  ShutdownServer();
+}
+
+TEST_F(GrpcToolTest, CallCommandWithNegativeTimeoutValue) {
+  // Test input "grpc_cli call CheckDeadlineSet --timeout=-5"
+  std::stringstream output_stream;
+
+  const TString server_address = SetUpServer();
+  const char* argv[] = {"grpc_cli", "call", server_address.c_str(),
+                        "CheckDeadlineSet"};
+
+  // Set timeout to -5 (deadline not set)
+  FLAGS_timeout = -5;
+
+  EXPECT_TRUE(0 == GrpcToolMainLib(ArraySize(argv), argv, TestCliCredentials(),
+                                   std::bind(PrintStream, &output_stream,
+                                             std::placeholders::_1)));
+
+  // Expected output: "message: "false"", deadline not set
+  EXPECT_TRUE(nullptr !=
+              strstr(output_stream.str().c_str(), "message: \"false\""));
+
+  ShutdownServer();
+}
+
+TEST_F(GrpcToolTest, CallCommandWithDefaultTimeoutValue) {
+  // Test input "grpc_cli call CheckDeadlineSet --timeout=-1"
+  std::stringstream output_stream;
+
+  const TString server_address = SetUpServer();
+  const char* argv[] = {"grpc_cli", "call", server_address.c_str(),
+                        "CheckDeadlineSet"};
+
+  // Set timeout to -1 (default value, deadline not set)
+  FLAGS_timeout = -1;
+
+  EXPECT_TRUE(0 == GrpcToolMainLib(ArraySize(argv), argv, TestCliCredentials(),
+                                   std::bind(PrintStream, &output_stream,
+                                             std::placeholders::_1)));
+
+  // Expected output: "message: "false"", deadline not set
+  EXPECT_TRUE(nullptr !=
+              strstr(output_stream.str().c_str(), "message: \"false\""));
+
+  ShutdownServer();
+}
+
 TEST_F(GrpcToolTest, CallCommandResponseStream) {
   // Test input: grpc_cli call localhost:<port> ResponseStream "message:
   // 'Hello'"
   std::stringstream output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "call", server_address.c_str(),
                         "ResponseStream", "message: 'Hello'"};
 
@@ -995,14 +995,14 @@ TEST_F(GrpcToolTest, CallCommandResponseStream) {
 
   // Expected output: "message: \"Hello{n}\""
   for (int i = 0; i < kServerDefaultResponseStreamsToSend; i++) {
-    TString expected_response_text = 
-        "message: \"Hello" + ToString(i) + "\"\n"; 
+    TString expected_response_text =
+        "message: \"Hello" + ToString(i) + "\"\n";
     EXPECT_TRUE(nullptr != strstr(output_stream.str().c_str(),
                                   expected_response_text.c_str()));
   }
 
   // with json_output
-  output_stream.str(TString()); 
+  output_stream.str(TString());
   output_stream.clear();
 
   FLAGS_json_output = true;
@@ -1013,8 +1013,8 @@ TEST_F(GrpcToolTest, CallCommandResponseStream) {
 
   // Expected output: "{\n \"message\": \"Hello{n}\"\n}\n"
   for (int i = 0; i < kServerDefaultResponseStreamsToSend; i++) {
-    TString expected_response_text = 
-        "{\n \"message\": \"Hello" + ToString(i) + "\"\n}\n"; 
+    TString expected_response_text =
+        "{\n \"message\": \"Hello" + ToString(i) + "\"\n}\n";
     EXPECT_TRUE(nullptr != strstr(output_stream.str().c_str(),
                                   expected_response_text.c_str()));
   }
@@ -1026,7 +1026,7 @@ TEST_F(GrpcToolTest, CallCommandBidiStream) {
   // Test input: grpc_cli call localhost:<port> BidiStream "message: 'Hello0'"
   std::stringstream output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "call", server_address.c_str(),
                         "BidiStream", "message: 'Hello0'"};
 
@@ -1052,7 +1052,7 @@ TEST_F(GrpcToolTest, CallCommandBidiStreamWithBadRequest) {
   // Test input: grpc_cli call localhost:<port> BidiStream "message: 'Hello0'"
   std::stringstream output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "call", server_address.c_str(),
                         "BidiStream", "message: 'Hello0'"};
 
@@ -1080,7 +1080,7 @@ TEST_F(GrpcToolTest, ParseCommand) {
   std::stringstream output_stream;
   std::stringstream binary_output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "parse", server_address.c_str(),
                         "grpc.testing.EchoResponse",
                         ECHO_RESPONSE_MESSAGE_TEXT_FORMAT};
@@ -1095,7 +1095,7 @@ TEST_F(GrpcToolTest, ParseCommand) {
                           ECHO_RESPONSE_MESSAGE_TEXT_FORMAT));
 
   // with json_output
-  output_stream.str(TString()); 
+  output_stream.str(TString());
   output_stream.clear();
 
   FLAGS_json_output = true;
@@ -1109,14 +1109,14 @@ TEST_F(GrpcToolTest, ParseCommand) {
                           ECHO_RESPONSE_MESSAGE_JSON_FORMAT));
 
   // Parse text message to binary message and then parse it back to text message
-  output_stream.str(TString()); 
+  output_stream.str(TString());
   output_stream.clear();
   FLAGS_binary_output = true;
   EXPECT_TRUE(0 == GrpcToolMainLib(ArraySize(argv), argv, TestCliCredentials(),
                                    std::bind(PrintStream, &output_stream,
                                              std::placeholders::_1)));
-  TString binary_data = output_stream.str(); 
-  output_stream.str(TString()); 
+  TString binary_data = output_stream.str();
+  output_stream.str(TString());
   output_stream.clear();
   argv[4] = binary_data.c_str();
   FLAGS_binary_input = true;
@@ -1140,7 +1140,7 @@ TEST_F(GrpcToolTest, ParseCommandJsonFormat) {
   std::stringstream output_stream;
   std::stringstream binary_output_stream;
 
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "parse", server_address.c_str(),
                         "grpc.testing.EchoResponse",
                         ECHO_RESPONSE_MESSAGE_JSON_FORMAT};
@@ -1155,7 +1155,7 @@ TEST_F(GrpcToolTest, ParseCommandJsonFormat) {
                           ECHO_RESPONSE_MESSAGE_TEXT_FORMAT));
 
   // with json_output
-  output_stream.str(TString()); 
+  output_stream.str(TString());
   output_stream.clear();
 
   FLAGS_json_output = true;
@@ -1205,7 +1205,7 @@ TEST_F(GrpcToolTest, TooManyArguments) {
 
 TEST_F(GrpcToolTest, CallCommandWithMetadata) {
   // Test input "grpc_cli call localhost:<port> Echo "message: 'Hello'"
-  const TString server_address = SetUpServer(); 
+  const TString server_address = SetUpServer();
   const char* argv[] = {"grpc_cli", "call", server_address.c_str(), "Echo",
                         "message: 'Hello'"};
 
@@ -1251,13 +1251,13 @@ TEST_F(GrpcToolTest, CallCommandWithMetadata) {
 
 TEST_F(GrpcToolTest, CallCommandWithBadMetadata) {
   // Test input "grpc_cli call localhost:10000 Echo "message: 'Hello'"
-  const char* argv[] = {"grpc_cli", "call", "localhost:10000", 
-                        "grpc.testing.EchoTestService.Echo", 
+  const char* argv[] = {"grpc_cli", "call", "localhost:10000",
+                        "grpc.testing.EchoTestService.Echo",
                         "message: 'Hello'"};
   FLAGS_protofiles = "src/proto/grpc/testing/echo.proto";
   char* test_srcdir = gpr_getenv("TEST_SRCDIR");
   if (test_srcdir != nullptr) {
-    FLAGS_proto_path = test_srcdir + TString("/com_github_grpc_grpc"); 
+    FLAGS_proto_path = test_srcdir + TString("/com_github_grpc_grpc");
   }
 
   {
@@ -1289,7 +1289,7 @@ TEST_F(GrpcToolTest, CallCommandWithBadMetadata) {
 }
 
 TEST_F(GrpcToolTest, ListCommand_OverrideSslHostName) {
-  const TString server_address = SetUpServer(true); 
+  const TString server_address = SetUpServer(true);
 
   // Test input "grpc_cli ls localhost:<port> --channel_creds_type=ssl
   // --ssl_target=z.test.google.fr"
@@ -1311,28 +1311,28 @@ TEST_F(GrpcToolTest, ListCommand_OverrideSslHostName) {
   ShutdownServer();
 }
 
-TEST_F(GrpcToolTest, ConfiguringDefaultServiceConfig) { 
-  // Test input "grpc_cli list localhost:<port> 
-  // --default_service_config={\"loadBalancingConfig\":[{\"pick_first\":{}}]}" 
-  std::stringstream output_stream; 
-  const TString server_address = SetUpServer(); 
-  const char* argv[] = {"grpc_cli", "ls", server_address.c_str()}; 
-  // Just check that the tool is still operational when --default_service_config 
-  // is configured. This particular service config is in reality redundant with 
-  // the channel's default configuration. 
-  FLAGS_l = false; 
-  FLAGS_default_service_config = 
-      "{\"loadBalancingConfig\":[{\"pick_first\":{}}]}"; 
-  EXPECT_TRUE(0 == GrpcToolMainLib(ArraySize(argv), argv, TestCliCredentials(), 
-                                   std::bind(PrintStream, &output_stream, 
-                                             std::placeholders::_1))); 
-  FLAGS_default_service_config = ""; 
-  EXPECT_TRUE(0 == strcmp(output_stream.str().c_str(), 
-                          "grpc.testing.EchoTestService\n" 
-                          "grpc.reflection.v1alpha.ServerReflection\n")); 
-  ShutdownServer(); 
-} 
- 
+TEST_F(GrpcToolTest, ConfiguringDefaultServiceConfig) {
+  // Test input "grpc_cli list localhost:<port>
+  // --default_service_config={\"loadBalancingConfig\":[{\"pick_first\":{}}]}"
+  std::stringstream output_stream;
+  const TString server_address = SetUpServer();
+  const char* argv[] = {"grpc_cli", "ls", server_address.c_str()};
+  // Just check that the tool is still operational when --default_service_config
+  // is configured. This particular service config is in reality redundant with
+  // the channel's default configuration.
+  FLAGS_l = false;
+  FLAGS_default_service_config =
+      "{\"loadBalancingConfig\":[{\"pick_first\":{}}]}";
+  EXPECT_TRUE(0 == GrpcToolMainLib(ArraySize(argv), argv, TestCliCredentials(),
+                                   std::bind(PrintStream, &output_stream,
+                                             std::placeholders::_1)));
+  FLAGS_default_service_config = "";
+  EXPECT_TRUE(0 == strcmp(output_stream.str().c_str(),
+                          "grpc.testing.EchoTestService\n"
+                          "grpc.reflection.v1alpha.ServerReflection\n"));
+  ShutdownServer();
+}
+
 }  // namespace testing
 }  // namespace grpc
 

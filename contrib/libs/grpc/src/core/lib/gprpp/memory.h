@@ -28,8 +28,8 @@
 #include <memory>
 #include <utility>
 
-#include "y_absl/memory/memory.h" 
- 
+#include "y_absl/memory/memory.h"
+
 namespace grpc_core {
 
 class DefaultDeleteChar {
@@ -41,7 +41,7 @@ class DefaultDeleteChar {
 };
 
 // UniquePtr<T> is only allowed for char and UniquePtr<char> is deprecated
-// in favor of TString. UniquePtr<char> is equivalent std::unique_ptr 
+// in favor of TString. UniquePtr<char> is equivalent std::unique_ptr
 // except that it uses gpr_free for deleter.
 template <typename T>
 using UniquePtr = std::unique_ptr<T, DefaultDeleteChar>;

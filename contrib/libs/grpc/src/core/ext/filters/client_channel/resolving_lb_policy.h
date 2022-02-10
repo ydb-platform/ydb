@@ -21,9 +21,9 @@
 
 #include <grpc/support/port_platform.h>
 
-#include "y_absl/container/inlined_vector.h" 
- 
-#include "src/core/ext/filters/client_channel/config_selector.h" 
+#include "y_absl/container/inlined_vector.h"
+
+#include "src/core/ext/filters/client_channel/config_selector.h"
 #include "src/core/ext/filters/client_channel/lb_policy.h"
 #include "src/core/ext/filters/client_channel/lb_policy_factory.h"
 #include "src/core/ext/filters/client_channel/resolver.h"
@@ -53,36 +53,36 @@ namespace grpc_core {
 // child LB policy and config to use.
 class ResolvingLoadBalancingPolicy : public LoadBalancingPolicy {
  public:
-  class ChannelConfigHelper { 
-   public: 
-    struct ChooseServiceConfigResult { 
-      // Set to true if the service config has changed since the last result. 
-      bool service_config_changed = false; 
-      // Set to true if we don't have a valid service config to use. 
-      // This tells the ResolvingLoadBalancingPolicy to put the channel 
-      // into TRANSIENT_FAILURE. 
-      bool no_valid_service_config = false; 
-      // The LB policy config to use. 
-      RefCountedPtr<LoadBalancingPolicy::Config> lb_policy_config; 
-    }; 
+  class ChannelConfigHelper {
+   public:
+    struct ChooseServiceConfigResult {
+      // Set to true if the service config has changed since the last result.
+      bool service_config_changed = false;
+      // Set to true if we don't have a valid service config to use.
+      // This tells the ResolvingLoadBalancingPolicy to put the channel
+      // into TRANSIENT_FAILURE.
+      bool no_valid_service_config = false;
+      // The LB policy config to use.
+      RefCountedPtr<LoadBalancingPolicy::Config> lb_policy_config;
+    };
 
-    virtual ~ChannelConfigHelper() = default; 
- 
-    // Chooses the service config for the channel. 
-    virtual ChooseServiceConfigResult ChooseServiceConfig( 
-        const Resolver::Result& result) = 0; 
- 
-    // Starts using the service config for calls. 
-    virtual void StartUsingServiceConfigForCalls() = 0; 
- 
-    // Indicates a resolver transient failure. 
-    virtual void ResolverTransientFailure(grpc_error* error) = 0; 
-  }; 
- 
-  ResolvingLoadBalancingPolicy(Args args, TraceFlag* tracer, 
-                               grpc_core::UniquePtr<char> target_uri, 
-                               ChannelConfigHelper* helper); 
- 
+    virtual ~ChannelConfigHelper() = default;
+
+    // Chooses the service config for the channel.
+    virtual ChooseServiceConfigResult ChooseServiceConfig(
+        const Resolver::Result& result) = 0;
+
+    // Starts using the service config for calls.
+    virtual void StartUsingServiceConfigForCalls() = 0;
+
+    // Indicates a resolver transient failure.
+    virtual void ResolverTransientFailure(grpc_error* error) = 0;
+  };
+
+  ResolvingLoadBalancingPolicy(Args args, TraceFlag* tracer,
+                               grpc_core::UniquePtr<char> target_uri,
+                               ChannelConfigHelper* helper);
+
   virtual const char* name() const override { return "resolving_lb"; }
 
   // No-op -- should never get updates from the channel.
@@ -95,7 +95,7 @@ class ResolvingLoadBalancingPolicy : public LoadBalancingPolicy {
   void ResetBackoffLocked() override;
 
  private:
-  using TraceStringVector = y_absl::InlinedVector<const char*, 3>; 
+  using TraceStringVector = y_absl::InlinedVector<const char*, 3>;
 
   class ResolverResultHandler;
   class ResolvingControlHelper;
@@ -107,28 +107,28 @@ class ResolvingLoadBalancingPolicy : public LoadBalancingPolicy {
   void OnResolverError(grpc_error* error);
   void CreateOrUpdateLbPolicyLocked(
       RefCountedPtr<LoadBalancingPolicy::Config> lb_policy_config,
-      Resolver::Result result); 
+      Resolver::Result result);
   OrphanablePtr<LoadBalancingPolicy> CreateLbPolicyLocked(
-      const grpc_channel_args& args); 
+      const grpc_channel_args& args);
   void MaybeAddTraceMessagesForAddressChangesLocked(
       bool resolution_contains_addresses, TraceStringVector* trace_strings);
   void ConcatenateAndAddChannelTraceLocked(
-      const TraceStringVector& trace_strings) const; 
+      const TraceStringVector& trace_strings) const;
   void OnResolverResultChangedLocked(Resolver::Result result);
 
   // Passed in from caller at construction time.
   TraceFlag* tracer_;
   grpc_core::UniquePtr<char> target_uri_;
-  ChannelConfigHelper* helper_; 
+  ChannelConfigHelper* helper_;
 
   // Resolver and associated state.
   OrphanablePtr<Resolver> resolver_;
   bool previous_resolution_contained_addresses_ = false;
 
-  // Determined by resolver results. 
-  grpc_core::UniquePtr<char> child_policy_name_; 
-  RefCountedPtr<LoadBalancingPolicy::Config> child_lb_config_; 
- 
+  // Determined by resolver results.
+  grpc_core::UniquePtr<char> child_policy_name_;
+  RefCountedPtr<LoadBalancingPolicy::Config> child_lb_config_;
+
   // Child LB policy.
   OrphanablePtr<LoadBalancingPolicy> lb_policy_;
 };

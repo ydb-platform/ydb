@@ -26,14 +26,14 @@
 
 #include "src/cpp/client/create_channel_internal.h"
 
-namespace grpc { 
-std::shared_ptr<grpc::Channel> CreateChannel( 
+namespace grpc {
+std::shared_ptr<grpc::Channel> CreateChannel(
     const grpc::string& target,
     const std::shared_ptr<grpc::ChannelCredentials>& creds) {
-  return CreateCustomChannel(target, creds, grpc::ChannelArguments()); 
+  return CreateCustomChannel(target, creds, grpc::ChannelArguments());
 }
 
-std::shared_ptr<grpc::Channel> CreateCustomChannel( 
+std::shared_ptr<grpc::Channel> CreateCustomChannel(
     const grpc::string& target,
     const std::shared_ptr<grpc::ChannelCredentials>& creds,
     const grpc::ChannelArguments& args) {
@@ -63,7 +63,7 @@ namespace experimental {
 /// fail) is returned.
 /// \param args Options for channel creation.
 std::shared_ptr<grpc::Channel> CreateCustomChannelWithInterceptors(
-    const TString& target, 
+    const TString& target,
     const std::shared_ptr<grpc::ChannelCredentials>& creds,
     const grpc::ChannelArguments& args,
     std::vector<
@@ -82,4 +82,4 @@ std::shared_ptr<grpc::Channel> CreateCustomChannelWithInterceptors(
 }
 }  // namespace experimental
 
-}  // namespace grpc 
+}  // namespace grpc

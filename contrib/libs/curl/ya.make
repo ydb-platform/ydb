@@ -2,24 +2,24 @@
 
 LIBRARY()
 
-OWNER( 
-    g:cpp-contrib 
-    g:geoapps_infra 
-) 
+OWNER(
+    g:cpp-contrib
+    g:geoapps_infra
+)
 
 VERSION(7.74.0)
 
 ORIGINAL_SOURCE(https://curl.haxx.se/download/curl-7.74.0.tar.bz2)
 
-LICENSE( 
+LICENSE(
     BSD-3-Clause AND
     ISC AND
     Public-Domain AND
-    curl 
-) 
+    curl
+)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 PEERDIR(
     contrib/libs/libc_compat
     contrib/libs/openssl
@@ -50,7 +50,7 @@ IF (MAPSMOBI_BUILD_TARGET)
 ENDIF()
 
 DEFAULT(ARCADIA_CURL_DNS_RESOLVER ARES)
- 
+
 CFLAGS(
     GLOBAL -DCURL_STATICLIB
     -DBUILDING_LIBCURL

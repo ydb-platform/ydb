@@ -21,8 +21,8 @@
 namespace grpc {
 namespace testing {
 
-TString ToString(const grpc::string_ref& r) { 
-  return TString(r.data(), r.size()); 
+TString ToString(const grpc::string_ref& r) {
+  return TString(r.data(), r.size());
 }
 
 }  // namespace testing

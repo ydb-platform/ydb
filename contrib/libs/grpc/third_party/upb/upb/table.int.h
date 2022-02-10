@@ -64,13 +64,13 @@ UPB_INLINE char *upb_gstrdup(const char *s) {
   return upb_strdup(s, &upb_alloc_global);
 }
 
-UPB_INLINE void _upb_value_setval(upb_value *v, uint64_t val) { 
+UPB_INLINE void _upb_value_setval(upb_value *v, uint64_t val) {
   v->val = val;
 }
 
-UPB_INLINE upb_value _upb_value_val(uint64_t val) { 
+UPB_INLINE upb_value _upb_value_val(uint64_t val) {
   upb_value ret;
-  _upb_value_setval(&ret, val); 
+  _upb_value_setval(&ret, val);
   return ret;
 }
 
@@ -262,7 +262,7 @@ upb_inttable *upb_inttable_pack(const upb_inttable *t, void *p, size_t *ofs,
                                 size_t size);
 upb_strtable *upb_strtable_pack(const upb_strtable *t, void *p, size_t *ofs,
                                 size_t size);
-void upb_strtable_clear(upb_strtable *t); 
+void upb_strtable_clear(upb_strtable *t);
 
 /* Inserts the given key into the hashtable with the given value.  The key must
  * not already exist in the hash table.  For string tables, the key must be
@@ -355,7 +355,7 @@ UPB_INLINE bool upb_inttable_lookup32(const upb_inttable *t, uint32_t key,
   if (key < t->array_size) {
     upb_tabval arrval = t->array[key];
     if (upb_arrhas(arrval)) {
-      _upb_value_setval(v, arrval.val); 
+      _upb_value_setval(v, arrval.val);
       return true;
     } else {
       return false;
@@ -365,7 +365,7 @@ UPB_INLINE bool upb_inttable_lookup32(const upb_inttable *t, uint32_t key,
     if (t->t.entries == NULL) return false;
     for (e = upb_getentry(&t->t, upb_inthash(key)); true; e = e->next) {
       if ((uint32_t)e->key == key) {
-        _upb_value_setval(v, e->val.val); 
+        _upb_value_setval(v, e->val.val);
         return true;
       }
       if (e->next == NULL) return false;
@@ -419,7 +419,7 @@ typedef struct {
 void upb_strtable_begin(upb_strtable_iter *i, const upb_strtable *t);
 void upb_strtable_next(upb_strtable_iter *i);
 bool upb_strtable_done(const upb_strtable_iter *i);
-upb_strview upb_strtable_iter_key(const upb_strtable_iter *i); 
+upb_strview upb_strtable_iter_key(const upb_strtable_iter *i);
 upb_value upb_strtable_iter_value(const upb_strtable_iter *i);
 void upb_strtable_iter_setdone(upb_strtable_iter *i);
 bool upb_strtable_iter_isequal(const upb_strtable_iter *i1,
@@ -443,10 +443,10 @@ typedef struct {
   bool array_part;
 } upb_inttable_iter;
 
-UPB_INLINE const upb_tabent *str_tabent(const upb_strtable_iter *i) { 
-  return &i->t->t.entries[i->index]; 
-} 
- 
+UPB_INLINE const upb_tabent *str_tabent(const upb_strtable_iter *i) {
+  return &i->t->t.entries[i->index];
+}
+
 void upb_inttable_begin(upb_inttable_iter *i, const upb_inttable *t);
 void upb_inttable_next(upb_inttable_iter *i);
 bool upb_inttable_done(const upb_inttable_iter *i);

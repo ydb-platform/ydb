@@ -2,35 +2,35 @@
 
 LIBRARY()
 
-OWNER( 
-    g:contrib 
-    g:cpp-contrib 
-) 
+OWNER(
+    g:contrib
+    g:cpp-contrib
+)
 
 VERSION(5.2.1)
 
 ORIGINAL_SOURCE(https://github.com/jemalloc/jemalloc/releases/download/5.2.1/jemalloc-5.2.1.tar.bz2)
 
-LICENSE( 
-    BSD-2-Clause AND 
-    Public-Domain 
-) 
+LICENSE(
+    BSD-2-Clause AND
+    Public-Domain
+)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 ADDINCL(
     contrib/libs/jemalloc/include
     contrib/libs/libunwind/include
 )
 
 IF (OS_WINDOWS)
-    ADDINCL( 
-        contrib/libs/jemalloc/include/msvc_compat 
-    ) 
+    ADDINCL(
+        contrib/libs/jemalloc/include/msvc_compat
+    )
 ELSE()
-    CFLAGS( 
-        -funroll-loops 
-    ) 
+    CFLAGS(
+        -funroll-loops
+    )
     IF (OS_DARWIN OR OS_IOS)
         SRCS(
             GLOBAL reg_zone.cpp
@@ -40,9 +40,9 @@ ELSE()
         PEERDIR(
             contrib/libs/libunwind
         )
-        CFLAGS( 
-            -fvisibility=hidden 
-        ) 
+        CFLAGS(
+            -fvisibility=hidden
+        )
     ENDIF()
 ENDIF()
 

@@ -52,11 +52,11 @@ extern void initspwd(void);
 #endif
 
 #ifdef _DARWIN_
-#ifndef __IOS__ 
+#ifndef __IOS__
 extern void init_multiprocessing(void);
 extern void init_scproxy(void);
 #endif
-#endif 
+#endif
 
 #ifdef _CYGWIN_
 extern void init_multiprocessing(void);

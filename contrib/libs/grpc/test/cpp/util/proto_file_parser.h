@@ -37,7 +37,7 @@ class ProtoFileParser {
   // provided on the given channel. The given protofiles in a source tree rooted
   // from proto_path will also be searched.
   ProtoFileParser(const std::shared_ptr<grpc::Channel>& channel,
-                  const TString& proto_path, const TString& protofiles); 
+                  const TString& proto_path, const TString& protofiles);
 
   ~ProtoFileParser();
 
@@ -46,11 +46,11 @@ class ProtoFileParser {
   // there is ambiguity.
   // Full method name is in the form of Service.Method, it's good to be used in
   // descriptor database queries.
-  TString GetFullMethodName(const TString& method); 
+  TString GetFullMethodName(const TString& method);
 
   // Formatted method name is in the form of /Service/Method, it's good to be
   // used as the argument of Stub::Call()
-  TString GetFormattedMethodName(const TString& method); 
+  TString GetFormattedMethodName(const TString& method);
 
   /// Converts a text or json string to its binary proto representation for the
   /// given method's input or return type.
@@ -63,18 +63,18 @@ class ProtoFileParser {
   ///        json-formatted proto, otherwise it is treated as a text-formatted
   ///        proto
   /// \return the serialised binary proto representation of \c formatted_proto
-  TString GetSerializedProtoFromMethod(const TString& method, 
-                                           const TString& formatted_proto, 
-                                           bool is_request, 
-                                           bool is_json_format); 
+  TString GetSerializedProtoFromMethod(const TString& method,
+                                           const TString& formatted_proto,
+                                           bool is_request,
+                                           bool is_json_format);
 
   /// Converts a text or json string to its proto representation for the given
   /// message type.
   /// \param formatted_proto the text- or json-formatted proto string
   /// \return the serialised binary proto representation of \c formatted_proto
-  TString GetSerializedProtoFromMessageType( 
-      const TString& message_type_name, const TString& formatted_proto, 
-      bool is_json_format); 
+  TString GetSerializedProtoFromMessageType(
+      const TString& message_type_name, const TString& formatted_proto,
+      bool is_json_format);
 
   /// Converts a binary proto string to its text or json string representation
   /// for the given method's input or return type.
@@ -83,32 +83,32 @@ class ProtoFileParser {
   /// \param the serialised binary proto representation of type
   ///        \c message_type_name
   /// \return the text- or json-formatted proto string of \c serialized_proto
-  TString GetFormattedStringFromMethod(const TString& method, 
-                                           const TString& serialized_proto, 
-                                           bool is_request, 
-                                           bool is_json_format); 
+  TString GetFormattedStringFromMethod(const TString& method,
+                                           const TString& serialized_proto,
+                                           bool is_request,
+                                           bool is_json_format);
 
   /// Converts a binary proto string to its text or json string representation
   /// for the given message type.
   /// \param the serialised binary proto representation of type
   ///        \c message_type_name
   /// \return the text- or json-formatted proto string of \c serialized_proto
-  TString GetFormattedStringFromMessageType( 
-      const TString& message_type_name, const TString& serialized_proto, 
-      bool is_json_format); 
+  TString GetFormattedStringFromMessageType(
+      const TString& message_type_name, const TString& serialized_proto,
+      bool is_json_format);
 
-  bool IsStreaming(const TString& method, bool is_request); 
+  bool IsStreaming(const TString& method, bool is_request);
 
   bool HasError() const { return has_error_; }
 
-  void LogError(const TString& error_msg); 
+  void LogError(const TString& error_msg);
 
  private:
-  TString GetMessageTypeFromMethod(const TString& method, 
-                                       bool is_request); 
+  TString GetMessageTypeFromMethod(const TString& method,
+                                       bool is_request);
 
   bool has_error_;
-  TString request_text_; 
+  TString request_text_;
   protobuf::compiler::DiskSourceTree source_tree_;
   std::unique_ptr<ErrorPrinter> error_printer_;
   std::unique_ptr<protobuf::compiler::Importer> importer_;
@@ -119,7 +119,7 @@ class ProtoFileParser {
   std::unique_ptr<protobuf::DynamicMessageFactory> dynamic_factory_;
   std::unique_ptr<grpc::protobuf::Message> request_prototype_;
   std::unique_ptr<grpc::protobuf::Message> response_prototype_;
-  std::unordered_map<TString, TString> known_methods_; 
+  std::unordered_map<TString, TString> known_methods_;
   std::vector<const protobuf::ServiceDescriptor*> service_desc_list_;
 };
 

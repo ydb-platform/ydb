@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 The OpenSSL Project Authors. All Rights Reserved. 
+ * Copyright 2012-2020 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -656,10 +656,10 @@ static int ssl_print_random(BIO *bio, int indent,
 
     if (*pmsglen < 32)
         return 0;
-    tm = ((unsigned int)p[0] << 24) 
-         | ((unsigned int)p[1] << 16) 
-         | ((unsigned int)p[2] << 8) 
-         | (unsigned int)p[3]; 
+    tm = ((unsigned int)p[0] << 24)
+         | ((unsigned int)p[1] << 16)
+         | ((unsigned int)p[2] << 8)
+         | (unsigned int)p[3];
     p += 4;
     BIO_indent(bio, indent, 80);
     BIO_puts(bio, "Random:\n");
@@ -867,10 +867,10 @@ static int ssl_print_extension(BIO *bio, int indent, int server,
             break;
         if (extlen != 4)
             return 0;
-        max_early_data = ((unsigned int)ext[0] << 24) 
-                         | ((unsigned int)ext[1] << 16) 
-                         | ((unsigned int)ext[2] << 8) 
-                         | (unsigned int)ext[3]; 
+        max_early_data = ((unsigned int)ext[0] << 24)
+                         | ((unsigned int)ext[1] << 16)
+                         | ((unsigned int)ext[2] << 8)
+                         | (unsigned int)ext[3];
         BIO_indent(bio, indent + 2, 80);
         BIO_printf(bio, "max_early_data=%u\n", max_early_data);
         break;
@@ -1361,10 +1361,10 @@ static int ssl_print_ticket(BIO *bio, int indent, const SSL *ssl,
     }
     if (msglen < 4)
         return 0;
-    tick_life = ((unsigned int)msg[0] << 24) 
-                | ((unsigned int)msg[1] << 16) 
-                | ((unsigned int)msg[2] << 8) 
-                | (unsigned int)msg[3]; 
+    tick_life = ((unsigned int)msg[0] << 24)
+                | ((unsigned int)msg[1] << 16)
+                | ((unsigned int)msg[2] << 8)
+                | (unsigned int)msg[3];
     msglen -= 4;
     msg += 4;
     BIO_indent(bio, indent + 2, 80);
@@ -1375,10 +1375,10 @@ static int ssl_print_ticket(BIO *bio, int indent, const SSL *ssl,
         if (msglen < 4)
             return 0;
         ticket_age_add =
-            ((unsigned int)msg[0] << 24) 
-            | ((unsigned int)msg[1] << 16) 
-            | ((unsigned int)msg[2] << 8) 
-            | (unsigned int)msg[3]; 
+            ((unsigned int)msg[0] << 24)
+            | ((unsigned int)msg[1] << 16)
+            | ((unsigned int)msg[2] << 8)
+            | (unsigned int)msg[3];
         msglen -= 4;
         msg += 4;
         BIO_indent(bio, indent + 2, 80);

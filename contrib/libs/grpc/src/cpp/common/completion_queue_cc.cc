@@ -24,9 +24,9 @@
 #include <grpcpp/impl/grpc_library.h>
 #include <grpcpp/support/time.h>
 
-namespace grpc { 
+namespace grpc {
 
-static internal::GrpcLibraryInitializer g_gli_initializer; 
+static internal::GrpcLibraryInitializer g_gli_initializer;
 
 // 'CompletionQueue' constructor can safely call GrpcLibraryCodegen(false) here
 // i.e not have GrpcLibraryCodegen call grpc_init(). This is because, to create
@@ -39,12 +39,12 @@ CompletionQueue::CompletionQueue(grpc_completion_queue* take)
 
 void CompletionQueue::Shutdown() {
   g_gli_initializer.summon();
-#ifndef NDEBUG 
-  if (!ServerListEmpty()) { 
-    gpr_log(GPR_ERROR, 
-            "CompletionQueue shutdown being shutdown before its server."); 
-  } 
-#endif 
+#ifndef NDEBUG
+  if (!ServerListEmpty()) {
+    gpr_log(GPR_ERROR,
+            "CompletionQueue shutdown being shutdown before its server.");
+  }
+#endif
   CompleteAvalanching();
 }
 
@@ -96,4 +96,4 @@ bool CompletionQueue::CompletionQueueTLSCache::Flush(void** tag, bool* ok) {
   return false;
 }
 
-}  // namespace grpc 
+}  // namespace grpc

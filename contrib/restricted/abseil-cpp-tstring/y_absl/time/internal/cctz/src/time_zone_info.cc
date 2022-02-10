@@ -84,27 +84,27 @@ const std::int_least32_t kSecsPerYear[2] = {
     366 * kSecsPerDay,
 };
 
-// Convert a cctz::weekday to a POSIX TZ weekday number (0==Sun, ..., 6=Sat). 
-inline int ToPosixWeekday(weekday wd) { 
-  switch (wd) { 
-    case weekday::sunday: 
-      return 0; 
-    case weekday::monday: 
-      return 1; 
-    case weekday::tuesday: 
-      return 2; 
-    case weekday::wednesday: 
-      return 3; 
-    case weekday::thursday: 
-      return 4; 
-    case weekday::friday: 
-      return 5; 
-    case weekday::saturday: 
-      return 6; 
-  } 
-  return 0; /*NOTREACHED*/ 
-} 
- 
+// Convert a cctz::weekday to a POSIX TZ weekday number (0==Sun, ..., 6=Sat).
+inline int ToPosixWeekday(weekday wd) {
+  switch (wd) {
+    case weekday::sunday:
+      return 0;
+    case weekday::monday:
+      return 1;
+    case weekday::tuesday:
+      return 2;
+    case weekday::wednesday:
+      return 3;
+    case weekday::thursday:
+      return 4;
+    case weekday::friday:
+      return 5;
+    case weekday::saturday:
+      return 6;
+  }
+  return 0; /*NOTREACHED*/
+}
+
 // Single-byte, unsigned numeric values are encoded directly.
 inline std::uint_fast8_t Decode8(const char* cp) {
   return static_cast<std::uint_fast8_t>(*cp) & 0xff;
@@ -210,13 +210,13 @@ bool TimeZoneInfo::ResetToBuiltinUTC(const seconds& offset) {
   tt.is_dst = false;
   tt.abbr_index = 0;
 
-  // We temporarily add some redundant, contemporary (2015 through 2025) 
+  // We temporarily add some redundant, contemporary (2015 through 2025)
   // transitions for performance reasons.  See TimeZoneInfo::LocalTime().
   // TODO: Fix the performance issue and remove the extra transitions.
   transitions_.clear();
   transitions_.reserve(12);
   for (const std::int_fast64_t unix_time : {
-           -(1LL << 59),  // a "first half" transition 
+           -(1LL << 59),  // a "first half" transition
            1420070400LL,  // 2015-01-01T00:00:00+00:00
            1451606400LL,  // 2016-01-01T00:00:00+00:00
            1483228800LL,  // 2017-01-01T00:00:00+00:00
@@ -226,8 +226,8 @@ bool TimeZoneInfo::ResetToBuiltinUTC(const seconds& offset) {
            1609459200LL,  // 2021-01-01T00:00:00+00:00
            1640995200LL,  // 2022-01-01T00:00:00+00:00
            1672531200LL,  // 2023-01-01T00:00:00+00:00
-           1704067200LL,  // 2024-01-01T00:00:00+00:00 
-           1735689600LL,  // 2025-01-01T00:00:00+00:00 
+           1704067200LL,  // 2024-01-01T00:00:00+00:00
+           1735689600LL,  // 2025-01-01T00:00:00+00:00
        }) {
     Transition& tr(*transitions_.emplace(transitions_.end()));
     tr.unix_time = unix_time;
@@ -238,8 +238,8 @@ bool TimeZoneInfo::ResetToBuiltinUTC(const seconds& offset) {
 
   default_transition_type_ = 0;
   abbreviations_ = FixedOffsetToAbbr(offset);
-  abbreviations_.append(1, '\0'); 
-  future_spec_.clear();  // never needed for a fixed-offset zone 
+  abbreviations_.append(1, '\0');
+  future_spec_.clear();  // never needed for a fixed-offset zone
   extended_ = false;
 
   tt.civil_max = LocalTime(seconds::max().count(), tt).cs;
@@ -288,108 +288,108 @@ bool TimeZoneInfo::EquivTransitions(std::uint_fast8_t tt1_index,
   if (tt1_index == tt2_index) return true;
   const TransitionType& tt1(transition_types_[tt1_index]);
   const TransitionType& tt2(transition_types_[tt2_index]);
-  if (tt1.utc_offset != tt2.utc_offset) return false; 
+  if (tt1.utc_offset != tt2.utc_offset) return false;
   if (tt1.is_dst != tt2.is_dst) return false;
   if (tt1.abbr_index != tt2.abbr_index) return false;
   return true;
 }
 
-// Find/make a transition type with these attributes. 
-bool TimeZoneInfo::GetTransitionType(std::int_fast32_t utc_offset, bool is_dst, 
-                                     const TString& abbr, 
-                                     std::uint_least8_t* index) { 
-  std::size_t type_index = 0; 
-  std::size_t abbr_index = abbreviations_.size(); 
-  for (; type_index != transition_types_.size(); ++type_index) { 
-    const TransitionType& tt(transition_types_[type_index]); 
-    const char* tt_abbr = &*abbreviations_.begin() + tt.abbr_index; 
-    if (tt_abbr == abbr) abbr_index = tt.abbr_index; 
-    if (tt.utc_offset == utc_offset && tt.is_dst == is_dst) { 
-      if (abbr_index == tt.abbr_index) break;  // reuse 
-    } 
-  } 
-  if (type_index > 255 || abbr_index > 255) { 
-    // No index space (8 bits) available for a new type or abbreviation. 
-    return false; 
-  } 
-  if (type_index == transition_types_.size()) { 
-    TransitionType& tt(*transition_types_.emplace(transition_types_.end())); 
-    tt.utc_offset = static_cast<std::int_least32_t>(utc_offset); 
-    tt.is_dst = is_dst; 
-    if (abbr_index == abbreviations_.size()) { 
-      abbreviations_.append(abbr); 
-      abbreviations_.append(1, '\0'); 
-    } 
-    tt.abbr_index = static_cast<std::uint_least8_t>(abbr_index); 
-  } 
-  *index = static_cast<std::uint_least8_t>(type_index); 
-  return true; 
-} 
- 
+// Find/make a transition type with these attributes.
+bool TimeZoneInfo::GetTransitionType(std::int_fast32_t utc_offset, bool is_dst,
+                                     const TString& abbr,
+                                     std::uint_least8_t* index) {
+  std::size_t type_index = 0;
+  std::size_t abbr_index = abbreviations_.size();
+  for (; type_index != transition_types_.size(); ++type_index) {
+    const TransitionType& tt(transition_types_[type_index]);
+    const char* tt_abbr = &*abbreviations_.begin() + tt.abbr_index;
+    if (tt_abbr == abbr) abbr_index = tt.abbr_index;
+    if (tt.utc_offset == utc_offset && tt.is_dst == is_dst) {
+      if (abbr_index == tt.abbr_index) break;  // reuse
+    }
+  }
+  if (type_index > 255 || abbr_index > 255) {
+    // No index space (8 bits) available for a new type or abbreviation.
+    return false;
+  }
+  if (type_index == transition_types_.size()) {
+    TransitionType& tt(*transition_types_.emplace(transition_types_.end()));
+    tt.utc_offset = static_cast<std::int_least32_t>(utc_offset);
+    tt.is_dst = is_dst;
+    if (abbr_index == abbreviations_.size()) {
+      abbreviations_.append(abbr);
+      abbreviations_.append(1, '\0');
+    }
+    tt.abbr_index = static_cast<std::uint_least8_t>(abbr_index);
+  }
+  *index = static_cast<std::uint_least8_t>(type_index);
+  return true;
+}
+
 // Use the POSIX-TZ-environment-variable-style string to handle times
 // in years after the last transition stored in the zoneinfo data.
-bool TimeZoneInfo::ExtendTransitions() { 
+bool TimeZoneInfo::ExtendTransitions() {
   extended_ = false;
-  if (future_spec_.empty()) return true;  // last transition prevails 
+  if (future_spec_.empty()) return true;  // last transition prevails
 
   PosixTimeZone posix;
-  if (!ParsePosixSpec(future_spec_, &posix)) return false; 
+  if (!ParsePosixSpec(future_spec_, &posix)) return false;
 
-  // Find transition type for the future std specification. 
-  std::uint_least8_t std_ti; 
-  if (!GetTransitionType(posix.std_offset, false, posix.std_abbr, &std_ti)) 
-    return false; 
+  // Find transition type for the future std specification.
+  std::uint_least8_t std_ti;
+  if (!GetTransitionType(posix.std_offset, false, posix.std_abbr, &std_ti))
+    return false;
 
-  if (posix.dst_abbr.empty()) {  // std only 
-    // The future specification should match the last transition, and 
-    // that means that handling the future will fall out naturally. 
-    return EquivTransitions(transitions_.back().type_index, std_ti); 
+  if (posix.dst_abbr.empty()) {  // std only
+    // The future specification should match the last transition, and
+    // that means that handling the future will fall out naturally.
+    return EquivTransitions(transitions_.back().type_index, std_ti);
   }
 
-  // Find transition type for the future dst specification. 
-  std::uint_least8_t dst_ti; 
-  if (!GetTransitionType(posix.dst_offset, true, posix.dst_abbr, &dst_ti)) 
-    return false; 
+  // Find transition type for the future dst specification.
+  std::uint_least8_t dst_ti;
+  if (!GetTransitionType(posix.dst_offset, true, posix.dst_abbr, &dst_ti))
+    return false;
 
   // Extend the transitions for an additional 400 years using the
   // future specification. Years beyond those can be handled by
   // mapping back to a cycle-equivalent year within that range.
-  // We may need two additional transitions for the current year. 
-  transitions_.reserve(transitions_.size() + 400 * 2 + 2); 
+  // We may need two additional transitions for the current year.
+  transitions_.reserve(transitions_.size() + 400 * 2 + 2);
   extended_ = true;
 
-  const Transition& last(transitions_.back()); 
-  const std::int_fast64_t last_time = last.unix_time; 
-  const TransitionType& last_tt(transition_types_[last.type_index]); 
-  last_year_ = LocalTime(last_time, last_tt).cs.year(); 
-  bool leap_year = IsLeap(last_year_); 
-  const civil_second jan1(last_year_); 
-  std::int_fast64_t jan1_time = jan1 - civil_second(); 
-  int jan1_weekday = ToPosixWeekday(get_weekday(jan1)); 
+  const Transition& last(transitions_.back());
+  const std::int_fast64_t last_time = last.unix_time;
+  const TransitionType& last_tt(transition_types_[last.type_index]);
+  last_year_ = LocalTime(last_time, last_tt).cs.year();
+  bool leap_year = IsLeap(last_year_);
+  const civil_second jan1(last_year_);
+  std::int_fast64_t jan1_time = jan1 - civil_second();
+  int jan1_weekday = ToPosixWeekday(get_weekday(jan1));
 
-  Transition dst = {0, dst_ti, civil_second(), civil_second()}; 
-  Transition std = {0, std_ti, civil_second(), civil_second()}; 
-  for (const year_t limit = last_year_ + 400;; ++last_year_) { 
-    auto dst_trans_off = TransOffset(leap_year, jan1_weekday, posix.dst_start); 
-    auto std_trans_off = TransOffset(leap_year, jan1_weekday, posix.dst_end); 
-    dst.unix_time = jan1_time + dst_trans_off - posix.std_offset; 
-    std.unix_time = jan1_time + std_trans_off - posix.dst_offset; 
-    const auto* ta = dst.unix_time < std.unix_time ? &dst : &std; 
-    const auto* tb = dst.unix_time < std.unix_time ? &std : &dst; 
-    if (last_time < tb->unix_time) { 
-      if (last_time < ta->unix_time) transitions_.push_back(*ta); 
-      transitions_.push_back(*tb); 
-    } 
-    if (last_year_ == limit) break; 
+  Transition dst = {0, dst_ti, civil_second(), civil_second()};
+  Transition std = {0, std_ti, civil_second(), civil_second()};
+  for (const year_t limit = last_year_ + 400;; ++last_year_) {
+    auto dst_trans_off = TransOffset(leap_year, jan1_weekday, posix.dst_start);
+    auto std_trans_off = TransOffset(leap_year, jan1_weekday, posix.dst_end);
+    dst.unix_time = jan1_time + dst_trans_off - posix.std_offset;
+    std.unix_time = jan1_time + std_trans_off - posix.dst_offset;
+    const auto* ta = dst.unix_time < std.unix_time ? &dst : &std;
+    const auto* tb = dst.unix_time < std.unix_time ? &std : &dst;
+    if (last_time < tb->unix_time) {
+      if (last_time < ta->unix_time) transitions_.push_back(*ta);
+      transitions_.push_back(*tb);
+    }
+    if (last_year_ == limit) break;
     jan1_time += kSecsPerYear[leap_year];
     jan1_weekday = (jan1_weekday + kDaysPerYear[leap_year]) % 7;
-    leap_year = !leap_year && IsLeap(last_year_ + 1); 
+    leap_year = !leap_year && IsLeap(last_year_ + 1);
   }
- 
-  return true; 
+
+  return true;
 }
 
-bool TimeZoneInfo::Load(ZoneInfoSource* zip) { 
+bool TimeZoneInfo::Load(ZoneInfoSource* zip) {
   // Read and validate the header.
   tzhead tzh;
   if (zip->Read(&tzh, sizeof(tzh)) != sizeof(tzh)) return false;
@@ -427,7 +427,7 @@ bool TimeZoneInfo::Load(ZoneInfoSource* zip) {
   const char* bp = tbuf.data();
 
   // Decode and validate the transitions.
-  transitions_.reserve(hdr.timecnt + 2); 
+  transitions_.reserve(hdr.timecnt + 2);
   transitions_.resize(hdr.timecnt);
   for (std::size_t i = 0; i != hdr.timecnt; ++i) {
     transitions_[i].unix_time = (time_len == 4) ? Decode32(bp) : Decode64(bp);
@@ -446,7 +446,7 @@ bool TimeZoneInfo::Load(ZoneInfoSource* zip) {
   }
 
   // Decode and validate the transition types.
-  transition_types_.reserve(hdr.typecnt + 2); 
+  transition_types_.reserve(hdr.typecnt + 2);
   transition_types_.resize(hdr.typecnt);
   for (std::size_t i = 0; i != hdr.typecnt; ++i) {
     transition_types_[i].utc_offset =
@@ -473,7 +473,7 @@ bool TimeZoneInfo::Load(ZoneInfoSource* zip) {
   }
 
   // Copy all the abbreviations.
-  abbreviations_.reserve(hdr.charcnt + 10); 
+  abbreviations_.reserve(hdr.charcnt + 10);
   abbreviations_.assign(bp, hdr.charcnt);
   bp += hdr.charcnt;
 
@@ -505,7 +505,7 @@ bool TimeZoneInfo::Load(ZoneInfoSource* zip) {
 
   // If we did not find version information during the standard loading
   // process (as of tzh_version '3' that is unsupported), then ask the
-  // ZoneInfoSource for any out-of-bound version string it may be privy to. 
+  // ZoneInfoSource for any out-of-bound version string it may be privy to.
   if (version_.empty()) {
     version_ = zip->Version();
   }
@@ -524,30 +524,30 @@ bool TimeZoneInfo::Load(ZoneInfoSource* zip) {
   transitions_.resize(hdr.timecnt);
 
   // Ensure that there is always a transition in the first half of the
-  // time line (the second half is handled below) so that the signed 
-  // difference between a civil_second and the civil_second of its 
-  // previous transition is always representable, without overflow. 
+  // time line (the second half is handled below) so that the signed
+  // difference between a civil_second and the civil_second of its
+  // previous transition is always representable, without overflow.
   if (transitions_.empty() || transitions_.front().unix_time >= 0) {
     Transition& tr(*transitions_.emplace(transitions_.begin()));
-    tr.unix_time = -(1LL << 59);  // -18267312070-10-26T17:01:52+00:00 
+    tr.unix_time = -(1LL << 59);  // -18267312070-10-26T17:01:52+00:00
     tr.type_index = default_transition_type_;
   }
 
   // Extend the transitions using the future specification.
-  if (!ExtendTransitions()) return false; 
+  if (!ExtendTransitions()) return false;
 
-  // Ensure that there is always a transition in the second half of the 
-  // time line (the first half is handled above) so that the signed 
-  // difference between a civil_second and the civil_second of its 
-  // previous transition is always representable, without overflow. 
-  const Transition& last(transitions_.back()); 
-  if (last.unix_time < 0) { 
-    const std::uint_fast8_t type_index = last.type_index; 
-    Transition& tr(*transitions_.emplace(transitions_.end())); 
-    tr.unix_time = 2147483647;  // 2038-01-19T03:14:07+00:00 
-    tr.type_index = type_index; 
-  } 
- 
+  // Ensure that there is always a transition in the second half of the
+  // time line (the first half is handled above) so that the signed
+  // difference between a civil_second and the civil_second of its
+  // previous transition is always representable, without overflow.
+  const Transition& last(transitions_.back());
+  if (last.unix_time < 0) {
+    const std::uint_fast8_t type_index = last.type_index;
+    Transition& tr(*transitions_.emplace(transitions_.end()));
+    tr.unix_time = 2147483647;  // 2038-01-19T03:14:07+00:00
+    tr.type_index = type_index;
+  }
+
   // Compute the local civil time for each transition and the preceding
   // second. These will be used for reverse conversions in MakeTime().
   const TransitionType* ttp = &transition_types_[default_transition_type_];
@@ -786,13 +786,13 @@ bool TimeZoneInfo::Load(const TString& name) {
 
   // Find and use a ZoneInfoSource to load the named zone.
   auto zip = cctz_extension::zone_info_source_factory(
-      name, [](const TString& n) -> std::unique_ptr<ZoneInfoSource> { 
-        if (auto z = FileZoneInfoSource::Open(n)) return z; 
-        if (auto z = AndroidZoneInfoSource::Open(n)) return z; 
+      name, [](const TString& n) -> std::unique_ptr<ZoneInfoSource> {
+        if (auto z = FileZoneInfoSource::Open(n)) return z;
+        if (auto z = AndroidZoneInfoSource::Open(n)) return z;
         if (auto z = FuchsiaZoneInfoSource::Open(n)) return z;
         return nullptr;
       });
-  return zip != nullptr && Load(zip.get()); 
+  return zip != nullptr && Load(zip.get());
 }
 
 // BreakTime() translation for a particular transition type.
@@ -966,8 +966,8 @@ bool TimeZoneInfo::NextTransition(const time_point<seconds>& tp,
   const Transition* begin = &transitions_[0];
   const Transition* end = begin + transitions_.size();
   if (begin->unix_time <= -(1LL << 59)) {
-    // Do not report the BIG_BANG found in some zoneinfo data as it is 
-    // really a sentinel, not a transition.  See pre-2018f tz/zic.c. 
+    // Do not report the BIG_BANG found in some zoneinfo data as it is
+    // really a sentinel, not a transition.  See pre-2018f tz/zic.c.
     ++begin;
   }
   std::int_fast64_t unix_time = ToUnixSeconds(tp);
@@ -992,8 +992,8 @@ bool TimeZoneInfo::PrevTransition(const time_point<seconds>& tp,
   const Transition* begin = &transitions_[0];
   const Transition* end = begin + transitions_.size();
   if (begin->unix_time <= -(1LL << 59)) {
-    // Do not report the BIG_BANG found in some zoneinfo data as it is 
-    // really a sentinel, not a transition.  See pre-2018f tz/zic.c. 
+    // Do not report the BIG_BANG found in some zoneinfo data as it is
+    // really a sentinel, not a transition.  See pre-2018f tz/zic.c.
     ++begin;
   }
   std::int_fast64_t unix_time = ToUnixSeconds(tp);

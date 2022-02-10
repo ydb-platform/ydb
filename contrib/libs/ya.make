@@ -26,9 +26,9 @@ RECURSE(
     c-ares
     cairo
     cbc
-    cctools 
+    cctools
     cctz
-    cereal 
+    cereal
     ceres-solver
     chromaprint
     clang12
@@ -88,7 +88,7 @@ RECURSE(
     geos/capi/ctypes
     gflags
     giflib
-    glslang 
+    glslang
     google-compute-engine-oslogin
     googleapis-common-protos
     gost-engine
@@ -184,7 +184,7 @@ RECURSE(
     libspf2
     libsrtp
     libssh2
-    libtapi 
+    libtapi
     libtess2
     libtiff
     libunistring
@@ -247,8 +247,8 @@ RECURSE(
     onnx
     opencl-headers
     opencv
-    opencv/modules 
-    opencv/modules/python/src2 
+    opencv/modules
+    opencv/modules/python/src2
     openfst
     opengv
     openjpeg
@@ -306,9 +306,9 @@ RECURSE(
     sparsehash
     spdk
     speex
-    spirv_cross 
-    spirv_headers 
-    spirv_tools 
+    spirv_cross
+    spirv_headers
+    spirv_tools
     sqlite3
     srt
     stan
@@ -341,7 +341,7 @@ RECURSE(
     tlsh
     trace_viewer
     tralics
-    tree_sitter 
+    tree_sitter
     uatraits
     usrsctp
     utf8proc
@@ -434,12 +434,12 @@ IF (OS_ANDROID)
         android_crazy_linker
     )
 ENDIF()
- 
-IF (OS_IOS AND ARCH_ARM64 OR OS_DARWIN) 
-    RECURSE( 
-        MoltenVK 
-    ) 
-ENDIF() 
+
+IF (OS_IOS AND ARCH_ARM64 OR OS_DARWIN)
+    RECURSE(
+        MoltenVK
+    )
+ENDIF()
 
 IF (MUSL)
     RECURSE(musl_extra)

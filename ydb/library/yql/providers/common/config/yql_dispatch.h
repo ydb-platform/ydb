@@ -232,7 +232,7 @@ public:
         }
 
         TSettingHandlerImpl& GlobalOnly() {
-            Validators_.push_back([] (const TString& cluster, TType) { 
+            Validators_.push_back([] (const TString& cluster, TType) {
                 if (cluster != NCommon::ALL_CLUSTERS) {
                     throw yexception() << "Option cannot be used with specific cluster";
                 }

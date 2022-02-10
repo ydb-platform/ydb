@@ -16,10 +16,10 @@
  *
  */
 
-#include <grpcpp/security/server_credentials.h> 
+#include <grpcpp/security/server_credentials.h>
 
-namespace grpc { 
+namespace grpc {
 
 ServerCredentials::~ServerCredentials() {}
 
-}  // namespace grpc 
+}  // namespace grpc

@@ -23,12 +23,12 @@
 
 namespace grpc {
 namespace experimental {
-TString ValidateServiceConfigJSON(const TString& service_config_json) { 
+TString ValidateServiceConfigJSON(const TString& service_config_json) {
   grpc_init();
   grpc_error* error = GRPC_ERROR_NONE;
-  grpc_core::ServiceConfig::Create(/*args=*/nullptr, 
-                                   service_config_json.c_str(), &error); 
-  TString return_value; 
+  grpc_core::ServiceConfig::Create(/*args=*/nullptr,
+                                   service_config_json.c_str(), &error);
+  TString return_value;
   if (error != GRPC_ERROR_NONE) {
     return_value = grpc_error_string(error);
     GRPC_ERROR_UNREF(error);

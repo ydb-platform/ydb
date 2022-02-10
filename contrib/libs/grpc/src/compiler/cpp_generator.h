@@ -24,22 +24,22 @@
 // FlatBuffers.
 
 #include <memory>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <vector>
 
 #include "src/compiler/config.h"
 #include "src/compiler/schema_interface.h"
 
-#ifdef GRPC_CUSTOM_STRING 
-#warning GRPC_CUSTOM_STRING is no longer supported. Please use TString. 
+#ifdef GRPC_CUSTOM_STRING
+#warning GRPC_CUSTOM_STRING is no longer supported. Please use TString.
 #endif
 
 namespace grpc {
 
-// Using grpc::string and grpc::to_string is discouraged in favor of 
-// TString and ToString. This is only for legacy code using 
-// them explictly. 
-typedef TString string;     // deprecated 
+// Using grpc::string and grpc::to_string is discouraged in favor of
+// TString and ToString. This is only for legacy code using
+// them explictly.
+typedef TString string;     // deprecated
 
 }  // namespace grpc
 
@@ -48,86 +48,86 @@ namespace grpc_cpp_generator {
 // Contains all the parameters that are parsed from the command line.
 struct Parameters {
   // Puts the service into a namespace
-  TString services_namespace; 
+  TString services_namespace;
   // Use system includes (<>) or local includes ("")
   bool use_system_headers;
   // Prefix to any grpc include
-  TString grpc_search_path; 
+  TString grpc_search_path;
   // Generate Google Mock code to facilitate unit testing.
   bool generate_mock_code;
   // Google Mock search path, when non-empty, local includes will be used.
-  TString gmock_search_path; 
+  TString gmock_search_path;
   // *EXPERIMENTAL* Additional include files in grpc.pb.h
-  std::vector<TString> additional_header_includes; 
+  std::vector<TString> additional_header_includes;
   // By default, use "pb.h"
-  TString message_header_extension; 
+  TString message_header_extension;
   // Whether to include headers corresponding to imports in source file.
   bool include_import_headers;
 };
 
 // Return the prologue of the generated header file.
-TString GetHeaderPrologue(grpc_generator::File* file, 
-                              const Parameters& params); 
+TString GetHeaderPrologue(grpc_generator::File* file,
+                              const Parameters& params);
 
 // Return the includes needed for generated header file.
-TString GetHeaderIncludes(grpc_generator::File* file, 
-                              const Parameters& params); 
+TString GetHeaderIncludes(grpc_generator::File* file,
+                              const Parameters& params);
 
 // Return the includes needed for generated source file.
-TString GetSourceIncludes(grpc_generator::File* file, 
-                              const Parameters& params); 
+TString GetSourceIncludes(grpc_generator::File* file,
+                              const Parameters& params);
 
 // Return the epilogue of the generated header file.
-TString GetHeaderEpilogue(grpc_generator::File* file, 
-                              const Parameters& params); 
+TString GetHeaderEpilogue(grpc_generator::File* file,
+                              const Parameters& params);
 
 // Return the prologue of the generated source file.
-TString GetSourcePrologue(grpc_generator::File* file, 
-                              const Parameters& params); 
+TString GetSourcePrologue(grpc_generator::File* file,
+                              const Parameters& params);
 
 // Return the services for generated header file.
-TString GetHeaderServices(grpc_generator::File* file, 
-                              const Parameters& params); 
+TString GetHeaderServices(grpc_generator::File* file,
+                              const Parameters& params);
 
 // Return the services for generated source file.
-TString GetSourceServices(grpc_generator::File* file, 
-                              const Parameters& params); 
+TString GetSourceServices(grpc_generator::File* file,
+                              const Parameters& params);
 
 // Return the epilogue of the generated source file.
-TString GetSourceEpilogue(grpc_generator::File* file, 
-                              const Parameters& params); 
+TString GetSourceEpilogue(grpc_generator::File* file,
+                              const Parameters& params);
 
 // Return the prologue of the generated mock file.
-TString GetMockPrologue(grpc_generator::File* file, 
-                            const Parameters& params); 
+TString GetMockPrologue(grpc_generator::File* file,
+                            const Parameters& params);
 
 // Return the includes needed for generated mock file.
-TString GetMockIncludes(grpc_generator::File* file, 
-                            const Parameters& params); 
+TString GetMockIncludes(grpc_generator::File* file,
+                            const Parameters& params);
 
 // Return the services for generated mock file.
-TString GetMockServices(grpc_generator::File* file, 
-                            const Parameters& params); 
+TString GetMockServices(grpc_generator::File* file,
+                            const Parameters& params);
 
 // Return the epilogue of generated mock file.
-TString GetMockEpilogue(grpc_generator::File* file, 
-                            const Parameters& params); 
+TString GetMockEpilogue(grpc_generator::File* file,
+                            const Parameters& params);
 
 // Return the prologue of the generated mock file.
-TString GetMockPrologue(grpc_generator::File* file, 
-                            const Parameters& params); 
+TString GetMockPrologue(grpc_generator::File* file,
+                            const Parameters& params);
 
 // Return the includes needed for generated mock file.
-TString GetMockIncludes(grpc_generator::File* file, 
-                            const Parameters& params); 
+TString GetMockIncludes(grpc_generator::File* file,
+                            const Parameters& params);
 
 // Return the services for generated mock file.
-TString GetMockServices(grpc_generator::File* file, 
-                            const Parameters& params); 
+TString GetMockServices(grpc_generator::File* file,
+                            const Parameters& params);
 
 // Return the epilogue of generated mock file.
-TString GetMockEpilogue(grpc_generator::File* file, 
-                            const Parameters& params); 
+TString GetMockEpilogue(grpc_generator::File* file,
+                            const Parameters& params);
 
 }  // namespace grpc_cpp_generator
 

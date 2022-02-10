@@ -39,8 +39,8 @@ extern "C" {
 #include <openssl/pem.h>
 }
 
-using grpc_core::Json; 
- 
+using grpc_core::Json;
+
 /* --- Constants. --- */
 
 /* 1 hour max. */
@@ -67,7 +67,7 @@ int grpc_auth_json_key_is_valid(const grpc_auth_json_key* json_key) {
          strcmp(json_key->type, GRPC_AUTH_JSON_TYPE_INVALID);
 }
 
-grpc_auth_json_key grpc_auth_json_key_create_from_json(const Json& json) { 
+grpc_auth_json_key grpc_auth_json_key_create_from_json(const Json& json) {
   grpc_auth_json_key result;
   BIO* bio = nullptr;
   const char* prop_value;
@@ -76,7 +76,7 @@ grpc_auth_json_key grpc_auth_json_key_create_from_json(const Json& json) {
 
   memset(&result, 0, sizeof(grpc_auth_json_key));
   result.type = GRPC_AUTH_JSON_TYPE_INVALID;
-  if (json.type() == Json::Type::JSON_NULL) { 
+  if (json.type() == Json::Type::JSON_NULL) {
     gpr_log(GPR_ERROR, "Invalid json.");
     goto end;
   }
@@ -124,10 +124,10 @@ end:
 
 grpc_auth_json_key grpc_auth_json_key_create_from_string(
     const char* json_string) {
-  grpc_error* error = GRPC_ERROR_NONE; 
-  Json json = Json::Parse(json_string, &error); 
-  GRPC_LOG_IF_ERROR("JSON key parsing", error); 
-  return grpc_auth_json_key_create_from_json(json); 
+  grpc_error* error = GRPC_ERROR_NONE;
+  Json json = Json::Parse(json_string, &error);
+  GRPC_LOG_IF_ERROR("JSON key parsing", error);
+  return grpc_auth_json_key_create_from_json(json);
 }
 
 void grpc_auth_json_key_destruct(grpc_auth_json_key* json_key) {
@@ -154,13 +154,13 @@ void grpc_auth_json_key_destruct(grpc_auth_json_key* json_key) {
 /* --- jwt encoding and signature. --- */
 
 static char* encoded_jwt_header(const char* key_id, const char* algorithm) {
-  Json json = Json::Object{ 
-      {"alg", algorithm}, 
-      {"typ", GRPC_JWT_TYPE}, 
-      {"kid", key_id}, 
-  }; 
-  TString json_str = json.Dump(); 
-  return grpc_base64_encode(json_str.c_str(), json_str.size(), 1, 0); 
+  Json json = Json::Object{
+      {"alg", algorithm},
+      {"typ", GRPC_JWT_TYPE},
+      {"kid", key_id},
+  };
+  TString json_str = json.Dump();
+  return grpc_base64_encode(json_str.c_str(), json_str.size(), 1, 0);
 }
 
 static char* encoded_jwt_claim(const grpc_auth_json_key* json_key,
@@ -173,22 +173,22 @@ static char* encoded_jwt_claim(const grpc_auth_json_key* json_key,
     expiration = gpr_time_add(now, grpc_max_auth_token_lifetime());
   }
 
-  Json::Object object = { 
-      {"iss", json_key->client_email}, 
-      {"aud", audience}, 
-      {"iat", now.tv_sec}, 
-      {"exp", expiration.tv_sec}, 
-  }; 
+  Json::Object object = {
+      {"iss", json_key->client_email},
+      {"aud", audience},
+      {"iat", now.tv_sec},
+      {"exp", expiration.tv_sec},
+  };
   if (scope != nullptr) {
-    object["scope"] = scope; 
+    object["scope"] = scope;
   } else {
     /* Unscoped JWTs need a sub field. */
-    object["sub"] = json_key->client_email; 
+    object["sub"] = json_key->client_email;
   }
 
-  Json json(object); 
-  TString json_str = json.Dump(); 
-  return grpc_base64_encode(json_str.c_str(), json_str.size(), 1, 0); 
+  Json json(object);
+  TString json_str = json.Dump();
+  return grpc_base64_encode(json_str.c_str(), json_str.size(), 1, 0);
 }
 
 static char* dot_concat_and_free_strings(char* str1, char* str2) {

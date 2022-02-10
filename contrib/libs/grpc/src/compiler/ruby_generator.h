@@ -23,7 +23,7 @@
 
 namespace grpc_ruby_generator {
 
-TString GetServices(const grpc::protobuf::FileDescriptor* file); 
+TString GetServices(const grpc::protobuf::FileDescriptor* file);
 
 }  // namespace grpc_ruby_generator
 

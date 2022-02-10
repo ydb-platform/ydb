@@ -2,8 +2,8 @@
 
 LIBRARY()
 
-WITHOUT_LICENSE_TEXTS() 
- 
+WITHOUT_LICENSE_TEXTS()
+
 OWNER(g:cpp-contrib)
 
 LICENSE(Apache-2.0)
@@ -19,7 +19,7 @@ PEERDIR(
 
 ADDINCL(
     GLOBAL contrib/libs/grpc/include
-    ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc 
+    ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc
     contrib/libs/grpc
     contrib/libs/grpc/src/core/ext/upb-generated
     contrib/libs/grpc/third_party/upb
@@ -27,16 +27,16 @@ ADDINCL(
 
 NO_COMPILER_WARNINGS()
 
-SRCDIR(contrib/libs/grpc/src/cpp) 
+SRCDIR(contrib/libs/grpc/src/cpp)
 
 IF (OS_LINUX OR OS_DARWIN)
-    CFLAGS( 
-        -DGRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK=1 
-    ) 
+    CFLAGS(
+        -DGRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK=1
+    )
 ENDIF()
 
 SRCS(
-    common/insecure_create_auth_context.cc 
+    common/insecure_create_auth_context.cc
 )
 
 END()

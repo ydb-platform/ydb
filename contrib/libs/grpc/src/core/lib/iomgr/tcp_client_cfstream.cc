@@ -46,7 +46,7 @@
 
 extern grpc_core::TraceFlag grpc_tcp_trace;
 
-struct CFStreamConnect { 
+struct CFStreamConnect {
   gpr_mu mu;
   gpr_refcount refcount;
 
@@ -65,9 +65,9 @@ struct CFStreamConnect {
   grpc_closure* closure;
   grpc_endpoint** endpoint;
   int refs;
-  TString addr_name; 
+  TString addr_name;
   grpc_resource_quota* resource_quota;
-}; 
+};
 
 static void CFStreamConnectCleanup(CFStreamConnect* connect) {
   grpc_resource_quota_unref_internal(connect->resource_quota);
@@ -75,7 +75,7 @@ static void CFStreamConnectCleanup(CFStreamConnect* connect) {
   CFRelease(connect->read_stream);
   CFRelease(connect->write_stream);
   gpr_mu_destroy(&connect->mu);
-  delete connect; 
+  delete connect;
 }
 
 static void OnAlarm(void* arg, grpc_error* error) {
@@ -129,9 +129,9 @@ static void OnOpen(void* arg, grpc_error* error) {
       }
       if (error == GRPC_ERROR_NONE) {
         *endpoint = grpc_cfstream_endpoint_create(
-            connect->read_stream, connect->write_stream, 
-            connect->addr_name.c_str(), connect->resource_quota, 
-            connect->stream_handle); 
+            connect->read_stream, connect->write_stream,
+            connect->addr_name.c_str(), connect->resource_quota,
+            connect->stream_handle);
       }
     } else {
       GRPC_ERROR_REF(error);
@@ -143,12 +143,12 @@ static void OnOpen(void* arg, grpc_error* error) {
 
 static void ParseResolvedAddress(const grpc_resolved_address* addr,
                                  CFStringRef* host, int* port) {
-  TString host_port = grpc_sockaddr_to_string(addr, true); 
-  TString host_string; 
-  TString port_string; 
+  TString host_port = grpc_sockaddr_to_string(addr, true);
+  TString host_string;
+  TString port_string;
   grpc_core::SplitHostPort(host_port, &host_string, &port_string);
-  *host = CFStringCreateWithCString(NULL, host_string.c_str(), 
-                                    kCFStringEncodingUTF8); 
+  *host = CFStringCreateWithCString(NULL, host_string.c_str(),
+                                    kCFStringEncodingUTF8);
   *port = grpc_sockaddr_get_port(addr);
 }
 
@@ -157,7 +157,7 @@ static void CFStreamClientConnect(grpc_closure* closure, grpc_endpoint** ep,
                                   const grpc_channel_args* channel_args,
                                   const grpc_resolved_address* resolved_addr,
                                   grpc_millis deadline) {
-  CFStreamConnect* connect = new CFStreamConnect(); 
+  CFStreamConnect* connect = new CFStreamConnect();
   connect->closure = closure;
   connect->endpoint = ep;
   connect->addr_name = grpc_sockaddr_to_uri(resolved_addr);
@@ -168,7 +168,7 @@ static void CFStreamClientConnect(grpc_closure* closure, grpc_endpoint** ep,
 
   if (grpc_tcp_trace.enabled()) {
     gpr_log(GPR_DEBUG, "CLIENT_CONNECT: %p, %s: asynchronously connecting",
-            connect, connect->addr_name.c_str()); 
+            connect, connect->addr_name.c_str());
   }
 
   grpc_resource_quota* resource_quota = grpc_resource_quota_create(NULL);

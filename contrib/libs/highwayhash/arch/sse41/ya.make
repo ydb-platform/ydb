@@ -1,10 +1,10 @@
 LIBRARY()
 
-WITHOUT_LICENSE_TEXTS() 
- 
+WITHOUT_LICENSE_TEXTS()
+
 LICENSE(Apache-2.0)
 
-OWNER(somov) 
+OWNER(somov)
 
 ADDINCL(contrib/libs/highwayhash)
 

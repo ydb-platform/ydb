@@ -799,14 +799,14 @@ constexpr bool operator==(uint128 lhs, uint128 rhs) {
 constexpr bool operator!=(uint128 lhs, uint128 rhs) { return !(lhs == rhs); }
 
 constexpr bool operator<(uint128 lhs, uint128 rhs) {
-#ifdef ABSL_HAVE_INTRINSIC_INT128 
-  return static_cast<unsigned __int128>(lhs) < 
-         static_cast<unsigned __int128>(rhs); 
-#else 
+#ifdef ABSL_HAVE_INTRINSIC_INT128
+  return static_cast<unsigned __int128>(lhs) <
+         static_cast<unsigned __int128>(rhs);
+#else
   return (Uint128High64(lhs) == Uint128High64(rhs))
              ? (Uint128Low64(lhs) < Uint128Low64(rhs))
              : (Uint128High64(lhs) < Uint128High64(rhs));
-#endif 
+#endif
 }
 
 constexpr bool operator>(uint128 lhs, uint128 rhs) { return rhs < lhs; }
@@ -901,9 +901,9 @@ inline uint128& uint128::operator^=(uint128 other) {
 // Arithmetic operators.
 
 constexpr uint128 operator<<(uint128 lhs, int amount) {
-#ifdef ABSL_HAVE_INTRINSIC_INT128 
-  return static_cast<unsigned __int128>(lhs) << amount; 
-#else 
+#ifdef ABSL_HAVE_INTRINSIC_INT128
+  return static_cast<unsigned __int128>(lhs) << amount;
+#else
   // uint64_t shifts of >= 64 are undefined, so we will need some
   // special-casing.
   return amount >= 64 ? MakeUint128(Uint128Low64(lhs) << (amount - 64), 0)
@@ -911,13 +911,13 @@ constexpr uint128 operator<<(uint128 lhs, int amount) {
                        : MakeUint128((Uint128High64(lhs) << amount) |
                                          (Uint128Low64(lhs) >> (64 - amount)),
                                      Uint128Low64(lhs) << amount);
-#endif 
+#endif
 }
 
 constexpr uint128 operator>>(uint128 lhs, int amount) {
-#ifdef ABSL_HAVE_INTRINSIC_INT128 
-  return static_cast<unsigned __int128>(lhs) >> amount; 
-#else 
+#ifdef ABSL_HAVE_INTRINSIC_INT128
+  return static_cast<unsigned __int128>(lhs) >> amount;
+#else
   // uint64_t shifts of >= 64 are undefined, so we will need some
   // special-casing.
   return amount >= 64 ? MakeUint128(0, Uint128High64(lhs) >> (amount - 64))
@@ -925,7 +925,7 @@ constexpr uint128 operator>>(uint128 lhs, int amount) {
                        : MakeUint128(Uint128High64(lhs) >> amount,
                                      (Uint128Low64(lhs) >> amount) |
                                          (Uint128High64(lhs) << (64 - amount)));
-#endif 
+#endif
 }
 
 #if !defined(ABSL_HAVE_INTRINSIC_INT128)

@@ -10,7 +10,7 @@ OWNER(
 )
 
 LICENSE(
-    LGPL-2.1-only AND 
+    LGPL-2.1-only AND
     LGPL-2.1-or-later
 )
 
@@ -20,9 +20,9 @@ PEERDIR(
     contrib/restricted/uriparser
 )
 
-ADDINCL( 
-    contrib/restricted/uriparser 
-) 
+ADDINCL(
+    contrib/restricted/uriparser
+)
 
 NO_COMPILER_WARNINGS()
 

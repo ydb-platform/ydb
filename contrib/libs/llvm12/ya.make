@@ -2,22 +2,22 @@
 
 LIBRARY()
 
-OWNER( 
-    orivej 
-    g:cpp-contrib 
-) 
+OWNER(
+    orivej
+    g:cpp-contrib
+)
 
 VERSION(12.0.1)
 
 ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.1/llvm-12.0.1.src.tar.xz)
 
-LICENSE( 
-    Apache-2.0 WITH LLVM-exception AND 
-    NCSA 
-) 
- 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE(
+    Apache-2.0 WITH LLVM-exception AND
+    NCSA
+)
+
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 ADDINCL(
     GLOBAL ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/include
     GLOBAL contrib/libs/llvm12/include

@@ -12,16 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cdef enum AioChannelStatus: 
-    AIO_CHANNEL_STATUS_UNKNOWN 
-    AIO_CHANNEL_STATUS_READY 
-    AIO_CHANNEL_STATUS_CLOSING 
-    AIO_CHANNEL_STATUS_DESTROYED 
- 
+cdef enum AioChannelStatus:
+    AIO_CHANNEL_STATUS_UNKNOWN
+    AIO_CHANNEL_STATUS_READY
+    AIO_CHANNEL_STATUS_CLOSING
+    AIO_CHANNEL_STATUS_DESTROYED
+
 cdef class AioChannel:
     cdef:
         grpc_channel * channel
-        object loop 
+        object loop
         bytes _target
-        AioChannelStatus _status 
-        bint _is_secure 
+        AioChannelStatus _status
+        bint _is_secure

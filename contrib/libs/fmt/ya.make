@@ -2,28 +2,28 @@
 
 LIBRARY()
 
-OWNER( 
-    orivej 
-    g:cpp-contrib 
-) 
+OWNER(
+    orivej
+    g:cpp-contrib
+)
 
 VERSION(7.1.3)
 
 ORIGINAL_SOURCE(https://github.com/fmtlib/fmt/archive/7.1.3.tar.gz)
 
-LICENSE( 
+LICENSE(
     Apache-2.0 WITH LLVM-exception AND
     MIT AND
     Public-Domain AND
-    Python-2.0 
+    Python-2.0
 )
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 ADDINCL(
     GLOBAL contrib/libs/fmt/include
 )
- 
+
 NO_COMPILER_WARNINGS()
 
 NO_UTIL()

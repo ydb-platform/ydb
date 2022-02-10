@@ -20,7 +20,7 @@
 #include <iostream>
 #include <memory>
 #include <sstream>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 #include <grpc/support/log.h>
 #include <grpcpp/channel.h>

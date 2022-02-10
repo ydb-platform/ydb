@@ -3,7 +3,7 @@ LIBRARY()
 VERSION(0.6.2)
 
 LICENSE(
-    BSD-2-Clause AND 
+    BSD-2-Clause AND
     MIT
 )
 
@@ -42,9 +42,9 @@ SRCS(
 
 NO_COMPILER_WARNINGS()
 
-CFLAGS( 
-    -DZSTD_LEGACY_SUPPORT=1 
-) 
+CFLAGS(
+    -DZSTD_LEGACY_SUPPORT=1
+)
 
 ADDINCL(
     contrib/libs/zstd06

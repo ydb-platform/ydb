@@ -102,16 +102,16 @@ class EchoTestServiceStreamingImpl : public EchoTestService::Service {
  public:
   ~EchoTestServiceStreamingImpl() override {}
 
-  Status Echo(ServerContext* context, const EchoRequest* request, 
-              EchoResponse* response) override { 
-    auto client_metadata = context->client_metadata(); 
-    for (const auto& pair : client_metadata) { 
-      context->AddTrailingMetadata(ToString(pair.first), ToString(pair.second)); 
-    } 
-    response->set_message(request->message()); 
-    return Status::OK; 
-  } 
- 
+  Status Echo(ServerContext* context, const EchoRequest* request,
+              EchoResponse* response) override {
+    auto client_metadata = context->client_metadata();
+    for (const auto& pair : client_metadata) {
+      context->AddTrailingMetadata(ToString(pair.first), ToString(pair.second));
+    }
+    response->set_message(request->message());
+    return Status::OK;
+  }
+
   Status BidiStream(
       ServerContext* context,
       grpc::ServerReaderWriter<EchoResponse, EchoRequest>* stream) override {
@@ -138,7 +138,7 @@ class EchoTestServiceStreamingImpl : public EchoTestService::Service {
     }
 
     EchoRequest req;
-    string response_str = ""; 
+    string response_str = "";
     while (reader->Read(&req)) {
       response_str += req.message();
     }
@@ -172,20 +172,20 @@ void MakeServerStreamingCall(const std::shared_ptr<Channel>& channel);
 
 void MakeBidiStreamingCall(const std::shared_ptr<Channel>& channel);
 
-void MakeAsyncCQCall(const std::shared_ptr<Channel>& channel); 
- 
-void MakeAsyncCQClientStreamingCall(const std::shared_ptr<Channel>& channel); 
- 
-void MakeAsyncCQServerStreamingCall(const std::shared_ptr<Channel>& channel); 
- 
-void MakeAsyncCQBidiStreamingCall(const std::shared_ptr<Channel>& channel); 
- 
+void MakeAsyncCQCall(const std::shared_ptr<Channel>& channel);
+
+void MakeAsyncCQClientStreamingCall(const std::shared_ptr<Channel>& channel);
+
+void MakeAsyncCQServerStreamingCall(const std::shared_ptr<Channel>& channel);
+
+void MakeAsyncCQBidiStreamingCall(const std::shared_ptr<Channel>& channel);
+
 void MakeCallbackCall(const std::shared_ptr<Channel>& channel);
 
 bool CheckMetadata(const std::multimap<grpc::string_ref, grpc::string_ref>& map,
                    const string& key, const string& value);
 
-bool CheckMetadata(const std::multimap<TString, TString>& map, 
+bool CheckMetadata(const std::multimap<TString, TString>& map,
                    const string& key, const string& value);
 
 std::vector<std::unique_ptr<experimental::ClientInterceptorFactoryInterface>>

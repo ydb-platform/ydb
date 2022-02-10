@@ -74,7 +74,7 @@ class ProtoReflectionDescriptorDatabase : public protobuf::DescriptorDatabase {
                                std::vector<int>* output) override;
 
   // Provide a list of full names of registered services
-  bool GetServices(std::vector<TString>* output); 
+  bool GetServices(std::vector<TString>* output);
 
  private:
   typedef ClientReaderWriter<
@@ -83,7 +83,7 @@ class ProtoReflectionDescriptorDatabase : public protobuf::DescriptorDatabase {
       ClientStream;
 
   const protobuf::FileDescriptorProto ParseFileDescriptorProtoResponse(
-      const TString& byte_fd_proto); 
+      const TString& byte_fd_proto);
 
   void AddFileFromResponse(
       const grpc::reflection::v1alpha::FileDescriptorResponse& response);

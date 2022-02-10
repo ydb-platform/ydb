@@ -58,7 +58,7 @@ class DelegatingChannelTest : public ::testing::Test {
   DelegatingChannelTest() {
     int port = grpc_pick_unused_port_or_die();
     ServerBuilder builder;
-    server_address_ = "localhost:" + ToString(port); 
+    server_address_ = "localhost:" + ToString(port);
     builder.AddListeningPort(server_address_, InsecureServerCredentials());
     builder.RegisterService(&service_);
     server_ = builder.BuildAndStart();
@@ -66,7 +66,7 @@ class DelegatingChannelTest : public ::testing::Test {
 
   ~DelegatingChannelTest() { server_->Shutdown(); }
 
-  TString server_address_; 
+  TString server_address_;
   TestServiceImpl service_;
   std::unique_ptr<Server> server_;
 };

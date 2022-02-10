@@ -11,12 +11,12 @@ VERSION(1.46.0)
 
 ORIGINAL_SOURCE(https://github.com/nghttp2/nghttp2/archive/v1.46.0.tar.gz)
 
-LICENSE( 
-    FSFAP AND 
-    MIT 
-) 
+LICENSE(
+    FSFAP AND
+    MIT
+)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 ADDINCL(
     GLOBAL contrib/libs/nghttp2/lib/includes

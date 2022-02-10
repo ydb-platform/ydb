@@ -33,7 +33,7 @@ DebugOnlyTraceFlag grpc_trace_lb_policy_refcount(false, "lb_policy_refcount");
 
 LoadBalancingPolicy::LoadBalancingPolicy(Args args, intptr_t initial_refcount)
     : InternallyRefCounted(&grpc_trace_lb_policy_refcount, initial_refcount),
-      work_serializer_(std::move(args.work_serializer)), 
+      work_serializer_(std::move(args.work_serializer)),
       interested_parties_(grpc_pollset_set_create()),
       channel_control_helper_(std::move(args.channel_control_helper)) {}
 
@@ -43,7 +43,7 @@ LoadBalancingPolicy::~LoadBalancingPolicy() {
 
 void LoadBalancingPolicy::Orphan() {
   ShutdownLocked();
-  Unref(DEBUG_LOCATION, "Orphan"); 
+  Unref(DEBUG_LOCATION, "Orphan");
 }
 
 //
@@ -56,7 +56,7 @@ LoadBalancingPolicy::UpdateArgs::UpdateArgs(const UpdateArgs& other) {
   args = grpc_channel_args_copy(other.args);
 }
 
-LoadBalancingPolicy::UpdateArgs::UpdateArgs(UpdateArgs&& other) noexcept { 
+LoadBalancingPolicy::UpdateArgs::UpdateArgs(UpdateArgs&& other) noexcept {
   addresses = std::move(other.addresses);
   config = std::move(other.config);
   // TODO(roth): Use std::move() once channel args is converted to C++.
@@ -74,7 +74,7 @@ LoadBalancingPolicy::UpdateArgs& LoadBalancingPolicy::UpdateArgs::operator=(
 }
 
 LoadBalancingPolicy::UpdateArgs& LoadBalancingPolicy::UpdateArgs::operator=(
-    UpdateArgs&& other) noexcept { 
+    UpdateArgs&& other) noexcept {
   addresses = std::move(other.addresses);
   config = std::move(other.config);
   // TODO(roth): Use std::move() once channel args is converted to C++.
@@ -98,25 +98,25 @@ LoadBalancingPolicy::PickResult LoadBalancingPolicy::QueuePicker::Pick(
   //    the time this function returns, the pick will already have
   //    been processed, and we'll be trying to re-process the same
   //    pick again, leading to a crash.
-  // 2. We are currently running in the data plane mutex, but we 
-  //    need to bounce into the control plane work_serializer to call 
+  // 2. We are currently running in the data plane mutex, but we
+  //    need to bounce into the control plane work_serializer to call
   //    ExitIdleLocked().
   if (!exit_idle_called_) {
     exit_idle_called_ = true;
-    auto* parent = parent_->Ref().release();  // ref held by lambda. 
-    ExecCtx::Run(DEBUG_LOCATION, 
-                 GRPC_CLOSURE_CREATE( 
-                     [](void* arg, grpc_error* /*error*/) { 
-                       auto* parent = static_cast<LoadBalancingPolicy*>(arg); 
-                       parent->work_serializer()->Run( 
-                           [parent]() { 
-                             parent->ExitIdleLocked(); 
-                             parent->Unref(); 
-                           }, 
-                           DEBUG_LOCATION); 
-                     }, 
-                     parent, nullptr), 
-                 GRPC_ERROR_NONE); 
+    auto* parent = parent_->Ref().release();  // ref held by lambda.
+    ExecCtx::Run(DEBUG_LOCATION,
+                 GRPC_CLOSURE_CREATE(
+                     [](void* arg, grpc_error* /*error*/) {
+                       auto* parent = static_cast<LoadBalancingPolicy*>(arg);
+                       parent->work_serializer()->Run(
+                           [parent]() {
+                             parent->ExitIdleLocked();
+                             parent->Unref();
+                           },
+                           DEBUG_LOCATION);
+                     },
+                     parent, nullptr),
+                 GRPC_ERROR_NONE);
   }
   PickResult result;
   result.type = PickResult::PICK_QUEUE;

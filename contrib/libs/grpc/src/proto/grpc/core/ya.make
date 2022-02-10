@@ -2,18 +2,18 @@ PROTO_LIBRARY()
 
 LICENSE(Apache-2.0)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
- 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 OWNER(
     akastornov
     g:contrib
     g:cpp-contrib
 )
 
-PROTO_NAMESPACE( 
-    GLOBAL 
-    contrib/libs/grpc 
-) 
+PROTO_NAMESPACE(
+    GLOBAL
+    contrib/libs/grpc
+)
 
 GRPC()
 

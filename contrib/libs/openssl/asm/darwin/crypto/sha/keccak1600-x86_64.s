@@ -3,7 +3,7 @@
 
 .p2align	5
 __KeccakF1600:
- 
+
 	movq	60(%rdi),%rax
 	movq	68(%rdi),%rbx
 	movq	76(%rdi),%rcx
@@ -259,7 +259,7 @@ L$oop:
 
 
 
- 
+
 .p2align	5
 KeccakF1600:
 

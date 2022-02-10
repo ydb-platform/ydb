@@ -2,22 +2,22 @@
 
 LIBRARY()
 
-WITHOUT_LICENSE_TEXTS() 
+WITHOUT_LICENSE_TEXTS()
 
-OWNER( 
-    orivej 
-    g:cpp-contrib 
-) 
- 
+OWNER(
+    orivej
+    g:cpp-contrib
+)
+
 LICENSE(BSD-3-Clause)
 
-ADDINCL(contrib/libs/pcre) 
+ADDINCL(contrib/libs/pcre)
 
 NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()
 
-CFLAGS(-DHAVE_CONFIG_H) 
+CFLAGS(-DHAVE_CONFIG_H)
 
 SRCDIR(contrib/libs/pcre)
 

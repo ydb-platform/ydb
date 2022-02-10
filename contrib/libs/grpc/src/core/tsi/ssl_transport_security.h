@@ -21,14 +21,14 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <grpc/grpc_security_constants.h> 
-#include "y_absl/strings/string_view.h" 
+#include <grpc/grpc_security_constants.h>
+#include "y_absl/strings/string_view.h"
 #include "src/core/tsi/transport_security_interface.h"
 
-extern "C" { 
-#include <openssl/x509.h> 
-} 
- 
+extern "C" {
+#include <openssl/x509.h>
+}
+
 /* Value for the TSI_CERTIFICATE_TYPE_PEER_PROPERTY property for X509 certs. */
 #define TSI_X509_CERTIFICATE_TYPE "X509"
 
@@ -40,12 +40,12 @@ extern "C" {
 
 #define TSI_X509_PEM_CERT_PROPERTY "x509_pem_cert"
 
-#define TSI_X509_PEM_CERT_CHAIN_PROPERTY "x509_pem_cert_chain" 
- 
+#define TSI_X509_PEM_CERT_CHAIN_PROPERTY "x509_pem_cert_chain"
+
 #define TSI_SSL_ALPN_SELECTED_PROTOCOL "ssl_alpn_selected_protocol"
 
-#define TSI_X509_URI_PEER_PROPERTY "x509_uri" 
- 
+#define TSI_X509_URI_PEER_PROPERTY "x509_uri"
+
 /* --- tsi_ssl_root_certs_store object ---
 
    This object stores SSL root certificates. It can be shared by multiple SSL
@@ -150,13 +150,13 @@ struct tsi_ssl_client_handshaker_options {
   /* ssl_session_cache is a cache for reusable client-side sessions. */
   tsi_ssl_session_cache* session_cache;
 
-  /* skip server certificate verification. */ 
-  bool skip_server_certificate_verification; 
- 
-  /* The min and max TLS versions that will be negotiated by the handshaker. */ 
-  tsi_tls_version min_tls_version; 
-  tsi_tls_version max_tls_version; 
- 
+  /* skip server certificate verification. */
+  bool skip_server_certificate_verification;
+
+  /* The min and max TLS versions that will be negotiated by the handshaker. */
+  tsi_tls_version min_tls_version;
+  tsi_tls_version max_tls_version;
+
   tsi_ssl_client_handshaker_options()
       : pem_key_cert_pair(nullptr),
         pem_root_certs(nullptr),
@@ -164,10 +164,10 @@ struct tsi_ssl_client_handshaker_options {
         cipher_suites(nullptr),
         alpn_protocols(nullptr),
         num_alpn_protocols(0),
-        session_cache(nullptr), 
-        skip_server_certificate_verification(false), 
-        min_tls_version(tsi_tls_version::TSI_TLS1_2), 
-        max_tls_version(tsi_tls_version::TSI_TLS1_3) {} 
+        session_cache(nullptr),
+        skip_server_certificate_verification(false),
+        min_tls_version(tsi_tls_version::TSI_TLS1_2),
+        max_tls_version(tsi_tls_version::TSI_TLS1_3) {}
 };
 
 /* Creates a client handshaker factory.
@@ -283,9 +283,9 @@ struct tsi_ssl_server_handshaker_options {
   const char* session_ticket_key;
   /* session_ticket_key_size is a size of session ticket encryption key. */
   size_t session_ticket_key_size;
-  /* The min and max TLS versions that will be negotiated by the handshaker. */ 
-  tsi_tls_version min_tls_version; 
-  tsi_tls_version max_tls_version; 
+  /* The min and max TLS versions that will be negotiated by the handshaker. */
+  tsi_tls_version min_tls_version;
+  tsi_tls_version max_tls_version;
 
   tsi_ssl_server_handshaker_options()
       : pem_key_cert_pairs(nullptr),
@@ -296,9 +296,9 @@ struct tsi_ssl_server_handshaker_options {
         alpn_protocols(nullptr),
         num_alpn_protocols(0),
         session_ticket_key(nullptr),
-        session_ticket_key_size(0), 
-        min_tls_version(tsi_tls_version::TSI_TLS1_2), 
-        max_tls_version(tsi_tls_version::TSI_TLS1_3) {} 
+        session_ticket_key_size(0),
+        min_tls_version(tsi_tls_version::TSI_TLS1_2),
+        max_tls_version(tsi_tls_version::TSI_TLS1_3) {}
 };
 
 /* Creates a server handshaker factory.
@@ -330,7 +330,7 @@ void tsi_ssl_server_handshaker_factory_unref(
    - handle mixed case.
    - handle %encoded chars.
    - handle public suffix wildchar more strictly (e.g. *.co.uk) */
-int tsi_ssl_peer_matches_name(const tsi_peer* peer, y_absl::string_view name); 
+int tsi_ssl_peer_matches_name(const tsi_peer* peer, y_absl::string_view name);
 
 /* --- Testing support. ---
 
@@ -358,8 +358,8 @@ const tsi_ssl_handshaker_factory_vtable* tsi_ssl_handshaker_factory_swap_vtable(
 tsi_result tsi_ssl_extract_x509_subject_names_from_pem_cert(
     const char* pem_cert, tsi_peer* peer);
 
-/* Exposed for testing only. */ 
-tsi_result tsi_ssl_get_cert_chain_contents(STACK_OF(X509) * peer_chain, 
-                                           tsi_peer_property* property); 
- 
+/* Exposed for testing only. */
+tsi_result tsi_ssl_get_cert_chain_contents(STACK_OF(X509) * peer_chain,
+                                           tsi_peer_property* property);
+
 #endif /* GRPC_CORE_TSI_SSL_TRANSPORT_SECURITY_H */

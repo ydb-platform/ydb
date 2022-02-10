@@ -1,7 +1,7 @@
 #include <library/cpp/containers/limited_heap/limited_heap.h>
 #include <library/cpp/containers/top_keeper/top_keeper.h>
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/random/random.h>
+#include <util/random/random.h> 
 
 static ui32 seed = 3;
 ui32 Rnd() {
@@ -158,50 +158,50 @@ Y_UNIT_TEST_SUITE(TTopKeeperTest) {
             h2.Pop();
         }
     }
-
+ 
     Y_UNIT_TEST(PreRegressionTest) {
-        typedef std::pair<float, unsigned int> TElementType;
-
-        const size_t randomTriesCount = 128;
+        typedef std::pair<float, unsigned int> TElementType; 
+ 
+        const size_t randomTriesCount = 128; 
         for (size_t i1 = 0; i1 < randomTriesCount; ++i1) {
-            const size_t desiredElementsCount = RandomNumber<size_t>(5) + 1;
-            TLimitedHeap<TElementType> h1(desiredElementsCount);
-            TTopKeeper<TElementType> h2(desiredElementsCount);
-
-            const size_t elementsToInsert = RandomNumber<size_t>(10) + desiredElementsCount;
-            UNIT_ASSERT_C(desiredElementsCount <= elementsToInsert, "Test internal invariant is broken");
+            const size_t desiredElementsCount = RandomNumber<size_t>(5) + 1; 
+            TLimitedHeap<TElementType> h1(desiredElementsCount); 
+            TTopKeeper<TElementType> h2(desiredElementsCount); 
+ 
+            const size_t elementsToInsert = RandomNumber<size_t>(10) + desiredElementsCount; 
+            UNIT_ASSERT_C(desiredElementsCount <= elementsToInsert, "Test internal invariant is broken"); 
             for (size_t i2 = 0; i2 < elementsToInsert; ++i2) {
-                const auto f = RandomNumber<float>();
-                const auto id = RandomNumber<unsigned int>();
-
-                h1.Insert(TElementType(f, id));
-                h2.Insert(TElementType(f, id));
-            }
-
-            h2.Finalize();
-
-            //we inserted enough elements to guarantee this outcome
-            UNIT_ASSERT_EQUAL(h1.GetSize(), desiredElementsCount);
-            UNIT_ASSERT_EQUAL(h2.GetSize(), desiredElementsCount);
-
-            const auto n = h2.GetSize();
+                const auto f = RandomNumber<float>(); 
+                const auto id = RandomNumber<unsigned int>(); 
+ 
+                h1.Insert(TElementType(f, id)); 
+                h2.Insert(TElementType(f, id)); 
+            } 
+ 
+            h2.Finalize(); 
+ 
+            //we inserted enough elements to guarantee this outcome 
+            UNIT_ASSERT_EQUAL(h1.GetSize(), desiredElementsCount); 
+            UNIT_ASSERT_EQUAL(h2.GetSize(), desiredElementsCount); 
+ 
+            const auto n = h2.GetSize(); 
             for (size_t i3 = 0; i3 < n; ++i3) {
-                UNIT_ASSERT_EQUAL(h1.GetMin(), h2.GetNext());
-                h1.PopMin();
-                h2.Pop();
-            }
-        }
-    }
-
+                UNIT_ASSERT_EQUAL(h1.GetMin(), h2.GetNext()); 
+                h1.PopMin(); 
+                h2.Pop(); 
+            } 
+        } 
+    } 
+ 
     Y_UNIT_TEST(CopyKeeperRegressionCase) {
-        using TKeeper = TTopKeeper<float>;
+        using TKeeper = TTopKeeper<float>; 
         TVector<TKeeper> v(2, TKeeper(200));
-        auto& k = v[1];
-        for (size_t i = 0; i < 100; ++i) {
-            k.Insert(RandomNumber<float>());
-        }
-        k.Finalize();
-    }
+        auto& k = v[1]; 
+        for (size_t i = 0; i < 100; ++i) { 
+            k.Insert(RandomNumber<float>()); 
+        } 
+        k.Finalize(); 
+    } 
 
     Y_UNIT_TEST(ExtractTest) {
         TTopKeeper<size_t> keeper(100);

@@ -13,7 +13,7 @@ private:
         TVector<T, Alloc> Internal;
         size_t HalfMaxSize;
         TComparator Comparer;
-        size_t MinElementIndex;
+        size_t MinElementIndex; 
 
     private:
         void Reserve() {
@@ -27,12 +27,12 @@ private:
             }
 
             if (Internal.size() < HalfMaxSize) {
-                if (Internal.empty() || Comparer(Internal[MinElementIndex], value)) {
-                    MinElementIndex = Internal.size();
+                if (Internal.empty() || Comparer(Internal[MinElementIndex], value)) { 
+                    MinElementIndex = Internal.size(); 
                     Internal.push_back(std::forward<UT>(value));
                     return true;
                 }
-            } else if (!Comparer(value, Internal[MinElementIndex])) {
+            } else if (!Comparer(value, Internal[MinElementIndex])) { 
                 return false;
             }
 
@@ -75,9 +75,9 @@ private:
             if (Y_LIKELY(Internal.size() >= HalfMaxSize)) {
                 NthElement(Internal.begin(), Internal.begin() + HalfMaxSize - 1, Internal.end(), Comparer);
                 Internal.erase(Internal.begin() + HalfMaxSize, Internal.end());
-
-                //we should update MinElementIndex cause we just altered Internal
-                MinElementIndex = HalfMaxSize - 1;
+ 
+                //we should update MinElementIndex cause we just altered Internal 
+                MinElementIndex = HalfMaxSize - 1; 
             }
         }
 
@@ -127,7 +127,7 @@ private:
 
         void Reset() {
             Internal.clear();
-            //MinElementIndex will reset itself when we start adding new values
+            //MinElementIndex will reset itself when we start adding new values 
         }
     };
 

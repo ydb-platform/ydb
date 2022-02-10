@@ -153,7 +153,7 @@
 
 - source_filter: "^contrib/libs/ffmpeg-3"
   includes:
-    - fontconfig/fontconfig.h
+    - fontconfig/fontconfig.h 
     - fribidi.h
     - stdatomic.h:   contrib/libs/ffmpeg-3.4.1/compat/atomics/win32/stdatomic.h
 
@@ -297,7 +297,7 @@
 
 - source_filter: "^contrib/libs/freetype"
   includes:
-    - hb-ot.h
+    - hb-ot.h 
     - hb-ft.h
     - hb.h
 

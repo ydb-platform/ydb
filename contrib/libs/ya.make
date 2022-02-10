@@ -80,7 +80,7 @@ RECURSE(
     freetype
     fuse
     fxdiv
-    gamma_function_apache_math_port 
+    gamma_function_apache_math_port
     gdal
     gdal/apps
     gdk-pixbuf

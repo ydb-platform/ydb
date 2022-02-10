@@ -149,8 +149,8 @@ namespace NPar {
         template <typename TBody>
         inline void ExecRange(TBody&& body, TExecRangeParams params, int flags) {
             if (TryExecRangeSequentially(body, params.FirstId, params.LastId, flags)) {
-                return; 
-            } 
+                return;
+            }
             if (params.GetBlockEqualToThreads()) {
                 params.SetBlockCount(GetThreadCount() + ((flags & WAIT_COMPLETE) != 0)); // ThreadCount or ThreadCount+1 depending on WaitFlag
             }
@@ -272,23 +272,23 @@ namespace NPar {
     static inline TLocalExecutor& LocalExecutor() {
         return *Singleton<TLocalExecutor>();
     }
- 
-    template <typename TBody> 
+
+    template <typename TBody>
     inline void ParallelFor(ILocalExecutor& executor, ui32 from, ui32 to, TBody&& body) {
         ILocalExecutor::TExecRangeParams params(from, to);
-        params.SetBlockCountToThreadCount(); 
+        params.SetBlockCountToThreadCount();
         executor.ExecRange(std::forward<TBody>(body), params, TLocalExecutor::WAIT_COMPLETE);
-    } 
- 
-    template <typename TBody> 
-    inline void ParallelFor(ui32 from, ui32 to, TBody&& body) { 
-        ParallelFor(LocalExecutor(), from, to, std::forward<TBody>(body)); 
-    } 
- 
-    template <typename TBody> 
-    inline void AsyncParallelFor(ui32 from, ui32 to, TBody&& body) { 
+    }
+
+    template <typename TBody>
+    inline void ParallelFor(ui32 from, ui32 to, TBody&& body) {
+        ParallelFor(LocalExecutor(), from, to, std::forward<TBody>(body));
+    }
+
+    template <typename TBody>
+    inline void AsyncParallelFor(ui32 from, ui32 to, TBody&& body) {
         ILocalExecutor::TExecRangeParams params(from, to);
-        params.SetBlockCountToThreadCount(); 
+        params.SetBlockCountToThreadCount();
         LocalExecutor().ExecRange(std::forward<TBody>(body), params, 0);
-    } 
+    }
 }

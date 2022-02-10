@@ -51,7 +51,7 @@ int main(int argc, const char* argv[]) {
     }*/
     //for (size_t i = 0; i < 10000000; ++i) {
     //for (size_t i = 0; i < 1000000; ++i) {
-    for (size_t i = 0; i < 1000000; ++i) { 
+    for (size_t i = 0; i < 1000000; ++i) {
         size_t size = rr.Uniform(32);
         TString res = "www.yandex.ru/yandsearch?text=";
         for (size_t j = 0; j < size; ++j) {

@@ -472,12 +472,12 @@ void FormatValueViaSprintf(
         *formatEnd = '\0';
     }
 
-    char* result = builder->Preallocate(SmallResultSize); 
+    char* result = builder->Preallocate(SmallResultSize);
     size_t resultSize = ::snprintf(result, SmallResultSize, formatBuf, value);
-    if (resultSize >= SmallResultSize) { 
-        result = builder->Preallocate(resultSize + 1); 
+    if (resultSize >= SmallResultSize) {
+        result = builder->Preallocate(resultSize + 1);
         YT_VERIFY(::snprintf(result, resultSize + 1, formatBuf, value) == static_cast<int>(resultSize));
-    } 
+    }
     builder->Advance(resultSize);
 }
 

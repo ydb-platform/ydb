@@ -1,5 +1,5 @@
-#include "float_huffman.h" 
- 
+#include "float_huffman.h"
+
 #include <util/generic/array_ref.h>
 #include <util/generic/bitops.h>
 #include <util/generic/cast.h>
@@ -56,12 +56,12 @@ namespace NCodecs::NFloatHuff {
             {0x3b000000, 0x26, 6, 34}, // [0.001953125, end of range), 40 bits, prefix [011001]
             {0x00000000, 0x16, 5, 32}, // whole range, 37 bits, prefix                 [01101]
         };
- 
+
         [[noreturn]] Y_NO_INLINE void ThrowInvalidOffset(size_t size, size_t byteOffset) {
             ythrow yexception() <<
                 "Decompression error: requested decoding 8 bytes past end of input buffer of " << size << " bytes size at position " << byteOffset << ". ";
         }
- 
+
         struct THuffInfo {
             constexpr THuffInfo() {
                 for (size_t i = 0; i < 64; ++i) {

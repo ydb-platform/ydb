@@ -1,6 +1,6 @@
 #include "shmat.h"
 
-#include <util/generic/guid.h> 
+#include <util/generic/guid.h>
 
 #if defined(_win_)
     #include <stdio.h>

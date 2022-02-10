@@ -1,6 +1,6 @@
-#include "hp_timer.h" 
+#include "hp_timer.h"
 
-#include <util/generic/algorithm.h> 
+#include <util/generic/algorithm.h>
 #include <util/generic/singleton.h>
 #include <util/datetime/cputimer.h>
 

@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include <util/system/defaults.h>
 
 namespace NCompProto {
@@ -15,7 +15,7 @@ namespace NCompProto {
                 PrefLength[i] = 0;
                 Id[i] = 0;
             }
-        } 
+        }
         ui32 CodeBase[64];
         ui32 CodeMask[64];
         ui8 Length[64];
@@ -23,15 +23,15 @@ namespace NCompProto {
         ui8 Id[64];
         enum {
             PAGE_BOUND = 4096,
-#ifdef WITH_VALGRIND 
+#ifdef WITH_VALGRIND
             SAFE_MODE = 1,
-#else 
+#else
 #if defined(__has_feature)
 #if __has_feature(address_sanitizer)
             SAFE_MODE = 1,
 #else
             SAFE_MODE = 0,
-#endif 
+#endif
 #else
             SAFE_MODE = 0,
 #endif
@@ -44,7 +44,7 @@ namespace NCompProto {
             if (pageOff > PAGE_BOUND - 8 || SAFE_MODE) {
                 size_t off = 8;
                 ui64 res = codes[0];
-                ++codes; 
+                ++codes;
                 ui64 indexCur = ((res + 0x0000) >> readOff) & 63;
                 ui64 indexAlt = ((res + 0xff00) >> readOff) & 63;
                 if (Id[indexCur] != Id[indexAlt]) {
@@ -63,12 +63,12 @@ namespace NCompProto {
                 offset += length;
                 ui64 code = res >> readOff;
                 return (((ui32)(code >> PrefLength[index])) & CodeMask[index]) + CodeBase[index];
-            } 
+            }
             ui64 code = ((const ui64*)(codes))[0] >> readOff;
             ui64 index = code & 63;
             offset += Length[index];
-            return (((ui32)(code >> PrefLength[index])) & CodeMask[index]) + CodeBase[index]; 
-        } 
+            return (((ui32)(code >> PrefLength[index])) & CodeMask[index]) + CodeBase[index];
+        }
     };
 
 }

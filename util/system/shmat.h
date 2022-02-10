@@ -3,7 +3,7 @@
 #include "fhandle.h"
 
 #include <util/generic/ptr.h>
-#include <util/generic/guid.h> 
+#include <util/generic/guid.h>
 
 class TSharedMemory: public TThrRefBase {
     TGUID Id;

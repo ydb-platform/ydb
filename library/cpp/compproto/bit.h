@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include <util/generic/array_ref.h>
 #include <util/generic/vector.h>
@@ -6,9 +6,9 @@
 #include <util/stream/input.h>
 
 #include "huff.h"
-#include "compressor.h" 
+#include "compressor.h"
 #include "metainfo.h"
- 
+
 namespace NCompProto {
     struct TBitBuffer {
         TVector<ui8> Out;
@@ -29,13 +29,13 @@ namespace NCompProto {
         ui64 Read(ui64 position, size_t size) {
             return Read(&Out[0], position, size);
         }
- 
+
         void Code(ui64 value, size_t size) {
             if (++Counter == 0) {
                 Junk(257 * 64);
             }
             Position = Code(value, size, Position);
-        } 
+        }
         ui64 Code(ui64 value, size_t size, ui64 position) {
             ui8* dst = &Out[size_t(position >> 3)];
             ui64& outCode = *(ui64*)dst;
@@ -43,7 +43,7 @@ namespace NCompProto {
             ui64 mask = ((1ULL << size) - 1) << shift;
             outCode = ((value << shift) & mask) | (outCode & ~mask);
             return position + size;
-        } 
+        }
         void Junk(size_t junk = 1024) {
             size_t need = size_t(Position >> 3);
             if (Out.size() * 8 < Position + junk) {
@@ -55,16 +55,16 @@ namespace NCompProto {
             ui64 newVal = Read(position, 56);
             position = Code(value, size, position);
             value = newVal;
- 
+
             while (position < Position + 64) {
                 newVal = Read(position + 56 - size, 56);
                 position = Code(value, 56, position);
                 value = newVal;
             }
- 
+
             Position += size;
-        } 
- 
+        }
+
         size_t ByteLength() const {
             return (Position + 7) / 8;
         }
@@ -116,7 +116,7 @@ namespace NCompProto {
                 }
             }
         }
- 
+
         void Save(IOutputStream& stream, TString offset) {
             TString step = "    ";
             for (size_t i = 0; i < Coder.Entries.size(); ++i) {
@@ -126,13 +126,13 @@ namespace NCompProto {
                 stream << (ui32)Coder.Entries[i].PrefixBits << " ";
                 stream << (ui32)Coder.Entries[i].AllBits << " ";
                 stream << Endl;
-            } 
+            }
             stream << offset << "end" << Endl;
-        } 
- 
+        }
+
         void BeginElement(TBitBuffer& out) {
             Position = out.Position;
-        } 
+        }
         void Add(ui32 value, TBitBuffer& out) {
             size_t val = 0;
             ui64 code = Coder.Code(value, val);
@@ -148,12 +148,12 @@ namespace NCompProto {
             out.Junk();
         }
     };
- 
+
     struct THist {
         TAccum Accum;
         THist() {
-        } 
- 
+        }
+
         void Load(IInputStream& stream) {
             TString name;
             while (1) {
@@ -168,14 +168,14 @@ namespace NCompProto {
 
         void Add(ui32 value, TEmpty& /*empty*/) {
             Accum.Add(value);
-        } 
+        }
         void AddDelayed(ui32 value, TEmpty& /*empty*/) {
             Accum.Add(value);
         }
         void BeginElement(TEmpty& /*empty*/) {
         }
     };
- 
+
     struct THistToHuff {
         static THistToHuff Instance() {
             return THistToHuff();
@@ -188,7 +188,7 @@ namespace NCompProto {
             info.Coder.Normalize();
         }
     };
- 
+
     struct IDecompressor {
         // sequentially decompresses whole structure according to metainfo, starts at position offset
         virtual void Decompress(const TMetaInfo<TTable>* table, const ui8* codes, ui64& offset) = 0;
@@ -196,14 +196,14 @@ namespace NCompProto {
         virtual void DecompressOne(const TMetaInfo<TTable>* table, const ui8* codes, ui64& offset, ui32 prevIndex = -1) = 0;
         virtual ~IDecompressor() = default;
     };
- 
+
     template <class X>
     struct TMetaIterator: public IDecompressor {
         X Self;
         TMetaIterator() {
             Self.Parent = this;
         }
- 
+
     private:
         inline void DecompressSingle(ui32 repeatedIndex, const TMetaInfo<TTable>* table, const ui8* codes, ui64& offset) {
             Self.BeginElement(repeatedIndex);
@@ -227,7 +227,7 @@ namespace NCompProto {
             }
             Self.EndElement();
         }
- 
+
         inline void DecompressSingleScalarsOnly(ui32 repeatedIndex, const TMetaInfo<TTable>* table, const ui8* codes, ui64& offset) {
             Self.BeginElement(repeatedIndex);
             ui32 mask = table->Mask.Decompress(codes, offset);
@@ -236,7 +236,7 @@ namespace NCompProto {
             while (scalarMask) {
                 if (mask & 1) {
                     ui32 val = table->Scalar[index].Decompress(codes, offset);
-                    Self.SetScalar(index, val); 
+                    Self.SetScalar(index, val);
                 } else if (table->Default[index].Type == TScalarDefaultValue::Fixed) {
                     Self.SetScalar(index, table->Default[index].Value);
                 }
@@ -275,7 +275,7 @@ namespace NCompProto {
         void DecompressOne(const TMetaInfo<TTable>* table, const ui8* codes, ui64& offset, ui32 prevIndex = -1) override {
             table->Index.Decompress(codes, offset);
             DecompressSingle(prevIndex, table, codes, offset);
-        } 
+        }
 
         ui32 DecompressCount(const TMetaInfo<TTable>* table, const ui8* codes, ui64& offset) {
             return table->Count.Decompress(codes, offset);
@@ -290,7 +290,7 @@ namespace NCompProto {
         {
         }
     };
- 
+
     struct TEmptyDecompressor: public TParentHold<TEmptyDecompressor> {
         void BeginSelf(ui32 /*count*/, ui32 /*id*/) {
         }
@@ -307,12 +307,12 @@ namespace NCompProto {
             return *Parent;
         }
     };
- 
+
     inline TMetaIterator<TEmptyDecompressor>& GetEmptyDecompressor() {
         static TMetaIterator<TEmptyDecompressor> empty;
         return empty;
-    } 
- 
+    }
+
     struct THuffToTable {
         static THuffToTable Instance() {
             return THuffToTable();
@@ -330,13 +330,13 @@ namespace NCompProto {
             }
         }
     };
- 
+
     struct THuffToTableWithDecompressor: private THuffToTable {
         TSimpleSharedPtr<IDecompressor> Decompressor;
         THuffToTableWithDecompressor(TSimpleSharedPtr<IDecompressor> decompressor)
             : Decompressor(decompressor)
         {
-        } 
+        }
         TSimpleSharedPtr<IDecompressor> Build() const {
             return Decompressor;
         }

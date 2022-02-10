@@ -1,9 +1,9 @@
 #pragma once
 
-#include <stdlib.h> 
-#include <stdio.h> 
-#include <stdarg.h> 
- 
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdarg.h>
+
 #include <library/cpp/malloc/api/malloc.h>
 
 #include <util/system/compat.h>
@@ -442,7 +442,7 @@ static void LargeBlockUnmap(void* p, size_t pages) {
 
 //////////////////////////////////////////////////////////////////////////
 const size_t LB_BUF_SIZE = 250;
-const size_t LB_BUF_HASH = 977; 
+const size_t LB_BUF_HASH = 977;
 static int LB_LIMIT_TOTAL_SIZE = 500 * 1024 * 1024 / 4096; // do not keep more then this mem total in lbFreePtrs[]
 static void* volatile lbFreePtrs[LB_BUF_HASH][LB_BUF_SIZE];
 static TAtomic lbFreePageCount;
@@ -1120,7 +1120,7 @@ struct TThreadAllocInfo {
             i = THREAD_BUF;
 #ifdef _win_
         BOOL b = DuplicateHandle(
-            GetCurrentProcess(), GetCurrentThread(), 
+            GetCurrentProcess(), GetCurrentThread(),
             GetCurrentProcess(), &hThread,
             0, FALSE, DUPLICATE_SAME_ACCESS);
         Y_ASSERT_NOBT(b);
@@ -1305,7 +1305,7 @@ static void AllocThreadInfo() {
     //////////////////////////////////////////////////////////////////////////
 
 #if defined(LFALLOC_DBG)
- 
+
 struct TAllocHeader {
     uint64_t Size;
     int Tag;
@@ -1529,18 +1529,18 @@ static Y_FORCE_INLINE void* LFAllocImpl(size_t _nSize) {
 
     // check per thread buffer
     TThreadAllocInfo* thr = pThreadInfo;
-    if (!thr) { 
-        AllocThreadInfo(); 
-        thr = pThreadInfo; 
-        if (!thr) { 
+    if (!thr) {
+        AllocThreadInfo();
+        thr = pThreadInfo;
+        if (!thr) {
             void* ptr = LFAllocNoCache(nSizeIdx, MEM_DEFRAG);
 #if defined(LFALLOC_DBG)
             ptr = TrackAllocation(ptr, size, nSizeIdx);
 #endif
             return ptr;
-        } 
-    } 
-    { 
+        }
+    }
+    {
         int& freePtrIdx = thr->FreePtrIndex[nSizeIdx];
         if (freePtrIdx < THREAD_BUF) {
             void* ptr = thr->FreePtrs[nSizeIdx][freePtrIdx++];
@@ -1568,7 +1568,7 @@ static Y_FORCE_INLINE void* LFAllocImpl(size_t _nSize) {
         ptr = TrackAllocation(ptr, size, nSizeIdx);
 #endif
         return ptr;
-    } 
+    }
 }
 
 static Y_FORCE_INLINE void* LFAlloc(size_t _nSize) {
@@ -1792,13 +1792,13 @@ static void DumpMemoryBlockUtilizationLocked() {
 }
 
 void FlushThreadFreeList() {
-    if (pThreadInfo) 
-        MoveSingleThreadFreeToGlobal(pThreadInfo); 
-} 
- 
+    if (pThreadInfo)
+        MoveSingleThreadFreeToGlobal(pThreadInfo);
+}
+
 void DumpMemoryBlockUtilization() {
     // move current thread free to global lists to get better statistics
-    FlushThreadFreeList(); 
+    FlushThreadFreeList();
     {
         TLFLockHolder ls(&LFGlobalLock);
         DumpMemoryBlockUtilizationLocked();

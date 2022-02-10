@@ -172,7 +172,7 @@ protected:
         config->SetMaxCountInPartition(20000000);
         config->SetMaxSizeInPartition(100 * 1024 * 1024);
         config->SetLifetimeSeconds(0);
-        config->SetSourceIdLifetimeSeconds(1*60*60);
+        config->SetSourceIdLifetimeSeconds(1*60*60); 
         config->SetMaxWriteInflightSize(90000000);
         config->SetLowWatermark(6*1024*1024);
 

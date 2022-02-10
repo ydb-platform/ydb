@@ -375,20 +375,20 @@ namespace {
     }
 
     Y_UNIT_TEST(StoreNoMoreThanXSourceIDs) {
-        ui16 X = 4;
-        ui64 SOURCEID_COUNT_DELETE_BATCH_SIZE = 100;
+        ui16 X = 4; 
+        ui64 SOURCEID_COUNT_DELETE_BATCH_SIZE = 100; 
         NPersQueue::TTestServer server;
         server.EnableLogs({ NKikimrServices::PERSQUEUE, NKikimrServices::PQ_WRITE_PROXY });
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8*1024*1024, 86400, 20000000, "", 200000000, {}, {}, {}, X, 86400);
-
+ 
         auto driver = server.AnnoyingClient->GetDriver();
-
+ 
         auto writer1 = CreateSimpleWriter(*driver, SHORT_TOPIC_NAME, TStringBuilder() << "test source ID " << 0, {}, {}, true);
         writer1->GetInitSeqNo();
-
+ 
         bool res = writer1->Write("x", 1);
         UNIT_ASSERT(res);
-
+ 
         Sleep(TDuration::Seconds(5));
 
         auto writer2 = CreateSimpleWriter(*driver, SHORT_TOPIC_NAME, TStringBuilder() << "test source ID Del " << 0);
@@ -404,7 +404,7 @@ namespace {
 
         Sleep(TDuration::Seconds(5));
 
-        for (ui32 nProducer=1; nProducer < X + SOURCEID_COUNT_DELETE_BATCH_SIZE + 1; ++nProducer) {
+        for (ui32 nProducer=1; nProducer < X + SOURCEID_COUNT_DELETE_BATCH_SIZE + 1; ++nProducer) { 
             auto writer = CreateSimpleWriter(*driver, SHORT_TOPIC_NAME, TStringBuilder() << "test source ID " << nProducer);
 
             res = writer->Write("x", 1);
@@ -415,19 +415,19 @@ namespace {
             res = writer->Close(TDuration::Seconds(10));
             UNIT_ASSERT(res);
 
-        }
-
+        } 
+ 
         res = writer1->Write("x", 3);
         UNIT_ASSERT(res);
         res = writer1->Close(TDuration::Seconds(5));
         UNIT_ASSERT(res);
-
+ 
         res = writer2->Write("x", 4);
         UNIT_ASSERT(res);
-
+ 
         UNIT_ASSERT(!writer2->Close());
-    }
-
+    } 
+ 
     Y_UNIT_TEST(EachMessageGetsExactlyOneAcknowledgementInCorrectOrder) {
         NPersQueue::TTestServer server;
         server.AnnoyingClient->CreateTopic("rt3.dc1--topic", 1);
@@ -2494,7 +2494,7 @@ namespace {
       MaxSizeInPartition: 234
       LifetimeSeconds: 86400
       ImportantClientId: "consumer"
-      SourceIdLifetimeSeconds: 1382400
+      SourceIdLifetimeSeconds: 1382400 
       WriteSpeedInBytesPerSecond: 123
       BurstSize: 1234
       NumChannels: 10
@@ -2534,7 +2534,7 @@ namespace {
       ExplicitChannelProfiles {
         PoolKind: "test"
       }
-      SourceIdMaxCounts: 6000000
+      SourceIdMaxCounts: 6000000 
     }
     Version: 3
     LocalDC: true

@@ -756,9 +756,9 @@ void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev
         const auto& error = result.GetError();
         if (error.Response.HasErrorCode()) {
             return CloseSession("status is not ok: " + error.Response.GetErrorReason(), ConvertOldCode(error.Response.GetErrorCode()), ctx);
-        } else {
+        } else { 
             return CloseSession("error at writer init: " + error.Reason, PersQueue::ErrorCode::ERROR, ctx);
-        }
+        } 
     }
 
     OwnerCookie = result.GetResult().OwnerCookie;

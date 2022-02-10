@@ -45,7 +45,7 @@ enum EClientLabeledCounters {
     METRIC_WRITE_TIME_LAG = 24                                       [(LabeledCounterOpts) = {Name: "WriteTimeLagMsByLastRead" AggrFunc : EAF_MAX}];
     METRIC_LAST_READ_TIME = 25                                       [(LabeledCounterOpts) = {Name: "TimeSinceLastReadMs" AggrFunc : EAF_MIN Type : CT_TIMELAG}];
 
-    METRIC_READ_QUOTA_USAGE = 26                                     [(LabeledCounterOpts) = {Name: "PartitionMaxReadQuotaUsage" AggrFunc : EAF_MAX}];
+    METRIC_READ_QUOTA_USAGE = 26                                     [(LabeledCounterOpts) = {Name: "PartitionMaxReadQuotaUsage" AggrFunc : EAF_MAX}]; 
 }
 
 
@@ -94,7 +94,7 @@ enum EPartitionLabeledCounters {
     METRIC_TOTAL_QUOTA_SPEED_4 = 30                               [(LabeledCounterOpts) = {Name: "QuotaBytesPerDay" AggrFunc : EAF_SUM}];
     METRIC_MAX_QUOTA_SPEED_4 = 31                                 [(LabeledCounterOpts) = {Name: "QuotaBytesMaxPerDay" AggrFunc : EAF_MAX}];
 
-    METRIC_WRITE_QUOTA_USAGE = 32                                 [(LabeledCounterOpts) = {Name: "PartitionMaxWriteQuotaUsage" AggrFunc : EAF_MAX}];
+    METRIC_WRITE_QUOTA_USAGE = 32                                 [(LabeledCounterOpts) = {Name: "PartitionMaxWriteQuotaUsage" AggrFunc : EAF_MAX}]; 
 
 }
 

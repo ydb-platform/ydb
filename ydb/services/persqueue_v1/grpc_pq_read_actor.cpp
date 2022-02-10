@@ -2996,7 +2996,7 @@ Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const PersQueue:
         case WRITE_ERROR_PARTITION_IS_FULL:
         case WRITE_ERROR_DISK_IS_FULL:
         case WRITE_ERROR_BAD_OFFSET:
-        case SOURCEID_DELETED:
+        case SOURCEID_DELETED: 
         case READ_ERROR_IN_PROGRESS:
         case READ_ERROR_TOO_SMALL_OFFSET:
         case READ_ERROR_TOO_BIG_OFFSET:

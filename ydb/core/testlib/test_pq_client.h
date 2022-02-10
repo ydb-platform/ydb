@@ -122,9 +122,9 @@ struct TRequestCreatePQ {
 
     std::optional<NKikimrPQ::TMirrorPartitionConfig> MirrorFrom;
 
-    ui64 SourceIdMaxCount;
-    ui64 SourceIdLifetime;
-
+    ui64 SourceIdMaxCount; 
+    ui64 SourceIdLifetime; 
+ 
     THolder<NMsgBusProxy::TBusPersQueue> GetRequest() const {
         THolder<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
         auto req = request->Record.MutableMetaRequest()->MutableCmdCreateTopic();
@@ -134,8 +134,8 @@ struct TRequestCreatePQ {
         if (CacheSize)
             config->SetCacheSize(CacheSize);
         config->MutablePartitionConfig()->SetLifetimeSeconds(LifetimeS);
-        config->MutablePartitionConfig()->SetSourceIdLifetimeSeconds(SourceIdLifetime);
-        config->MutablePartitionConfig()->SetSourceIdMaxCounts(SourceIdMaxCount);
+        config->MutablePartitionConfig()->SetSourceIdLifetimeSeconds(SourceIdLifetime); 
+        config->MutablePartitionConfig()->SetSourceIdMaxCounts(SourceIdMaxCount); 
         config->MutablePartitionConfig()->SetLowWatermark(LowWatermark);
 
         config->SetLocalDC(true);
@@ -925,9 +925,9 @@ public:
         ui64 readSpeed = 200000000,
         TVector<TString> rr = {},
         TVector<TString> important = {},
-        std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {},
-        ui64 sourceIdMaxCount = 6000000,
-        ui64 sourceIdLifetime = 86400
+        std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {}, 
+        ui64 sourceIdMaxCount = 6000000, 
+        ui64 sourceIdLifetime = 86400 
     ) {
         Y_VERIFY(name.StartsWith("rt3."));
 

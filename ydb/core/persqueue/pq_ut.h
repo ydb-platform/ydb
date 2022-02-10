@@ -237,9 +237,9 @@ void PQTabletPrepare(ui32 mcip, ui64 msip, ui32 deleteTime, const TVector<std::p
             config->SetMaxCountInPartition(mcip);
             config->SetMaxSizeInPartition(msip);
             config->SetLifetimeSeconds(deleteTime);
-            config->SetSourceIdLifetimeSeconds(1*60*60);
-            if (sidMaxCount > 0)
-                config->SetSourceIdMaxCounts(sidMaxCount);
+            config->SetSourceIdLifetimeSeconds(1*60*60); 
+            if (sidMaxCount > 0) 
+                config->SetSourceIdMaxCounts(sidMaxCount); 
             config->SetMaxWriteInflightSize(90000000);
             config->SetLowWatermark(lw);
 
@@ -946,47 +946,47 @@ void CmdUpdateWriteTimestamp(const ui32 partition, ui64 timestamp, TTestContext&
 }
 
 
-TVector<TString> CmdSourceIdRead(TTestContext& tc) {
-    TAutoPtr<IEventHandle> handle;
-    TVector<TString> sourceIds;
-    THolder<TEvKeyValue::TEvRequest> request;
-    TEvKeyValue::TEvResponse *result;
+TVector<TString> CmdSourceIdRead(TTestContext& tc) { 
+    TAutoPtr<IEventHandle> handle; 
+    TVector<TString> sourceIds; 
+    THolder<TEvKeyValue::TEvRequest> request; 
+    TEvKeyValue::TEvResponse *result; 
 
-    for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
-        try {
-            request.Reset(new TEvKeyValue::TEvRequest);
-            sourceIds.clear();
-            auto read = request->Record.AddCmdReadRange();
-            auto range = read->MutableRange();
-            NPQ::TKeyPrefix ikeyFrom(NPQ::TKeyPrefix::TypeInfo, 0, NPQ::TKeyPrefix::MarkSourceId);
-            range->SetFrom(ikeyFrom.Data(), ikeyFrom.Size());
-            range->SetIncludeFrom(true);
-            NPQ::TKeyPrefix ikeyTo(NPQ::TKeyPrefix::TypeInfo, 1, NPQ::TKeyPrefix::MarkSourceId);
-            range->SetTo(ikeyTo.Data(), ikeyTo.Size());
-            range->SetIncludeTo(true);
-            Cout << request.Get()->ToString() << Endl;
-            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-            result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
-            UNIT_ASSERT(result);
-            UNIT_ASSERT(result->Record.HasStatus());
-            UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
-            for (ui64 idx = 0; idx < result->Record.ReadRangeResultSize(); ++idx) {
-                const auto &readResult = result->Record.GetReadRangeResult(idx);
-                UNIT_ASSERT(readResult.HasStatus());
-                UNIT_ASSERT_EQUAL(readResult.GetStatus(), NKikimrProto::OK);
-                for (size_t j = 0; j < readResult.PairSize(); ++j) {
-                    const auto& pair = readResult.GetPair(j);
-                    TString s = pair.GetKey().substr(NPQ::TKeyPrefix::MarkedSize());
-                    sourceIds.push_back(s);
-                }
-            }
-            retriesLeft = 0;
-        } catch (NActors::TSchedulingLimitReachedException) {
-            UNIT_ASSERT_VALUES_EQUAL(retriesLeft, 2);
-        }
-    }
-    return sourceIds;
-}
+    for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) { 
+        try { 
+            request.Reset(new TEvKeyValue::TEvRequest); 
+            sourceIds.clear(); 
+            auto read = request->Record.AddCmdReadRange(); 
+            auto range = read->MutableRange(); 
+            NPQ::TKeyPrefix ikeyFrom(NPQ::TKeyPrefix::TypeInfo, 0, NPQ::TKeyPrefix::MarkSourceId); 
+            range->SetFrom(ikeyFrom.Data(), ikeyFrom.Size()); 
+            range->SetIncludeFrom(true); 
+            NPQ::TKeyPrefix ikeyTo(NPQ::TKeyPrefix::TypeInfo, 1, NPQ::TKeyPrefix::MarkSourceId); 
+            range->SetTo(ikeyTo.Data(), ikeyTo.Size()); 
+            range->SetIncludeTo(true); 
+            Cout << request.Get()->ToString() << Endl; 
+            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries()); 
+            result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle); 
+            UNIT_ASSERT(result); 
+            UNIT_ASSERT(result->Record.HasStatus()); 
+            UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK); 
+            for (ui64 idx = 0; idx < result->Record.ReadRangeResultSize(); ++idx) { 
+                const auto &readResult = result->Record.GetReadRangeResult(idx); 
+                UNIT_ASSERT(readResult.HasStatus()); 
+                UNIT_ASSERT_EQUAL(readResult.GetStatus(), NKikimrProto::OK); 
+                for (size_t j = 0; j < readResult.PairSize(); ++j) { 
+                    const auto& pair = readResult.GetPair(j); 
+                    TString s = pair.GetKey().substr(NPQ::TKeyPrefix::MarkedSize()); 
+                    sourceIds.push_back(s); 
+                } 
+            } 
+            retriesLeft = 0; 
+        } catch (NActors::TSchedulingLimitReachedException) { 
+            UNIT_ASSERT_VALUES_EQUAL(retriesLeft, 2); 
+        } 
+    } 
+    return sourceIds; 
+} 
 
 
 void CmdRead(const ui32 partition, const ui64 offset, const ui32 count, const ui32 size, const ui32 resCount, bool timeouted, TTestContext& tc, TVector<i32> offsets = {}, const ui32 maxTimeLagMs = 0, const ui64 readTimestampMs = 0) {

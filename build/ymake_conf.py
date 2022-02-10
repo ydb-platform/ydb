@@ -579,28 +579,28 @@ class Build(object):
     def is_ide_build_type(build_type):
         return build_type == 'nobuild'
 
-    def _configure_runtime_versions(self): 
-        res = subprocess.check_output(['xcrun', 'simctl', 'list', '--json', 'runtimes']) 
-        raw_object = json.loads(res) 
-        raw_object = raw_object['runtimes'] 
-        for runtime in raw_object: 
-            if runtime['isAvailable']: 
-                if "iOS" in runtime['identifier']: 
-                    emit('DEFAULT_IOS_RUNTIME', '{}'.format(runtime['identifier'])) 
- 
+    def _configure_runtime_versions(self):
+        res = subprocess.check_output(['xcrun', 'simctl', 'list', '--json', 'runtimes'])
+        raw_object = json.loads(res)
+        raw_object = raw_object['runtimes']
+        for runtime in raw_object:
+            if runtime['isAvailable']:
+                if "iOS" in runtime['identifier']:
+                    emit('DEFAULT_IOS_RUNTIME', '{}'.format(runtime['identifier']))
+
     def _get_toolchain_options(self):
         type_ = self.params['params']['type']
 
-        if self.params['params'].get('local') and type_ == 'xcode': 
+        if self.params['params'].get('local') and type_ == 'xcode':
             detector = CompilerDetector()
-            detector.detect(self.params['params']['c_compiler'], self.params['params']['cxx_compiler']) 
-            emit('LOCAL_XCODE_TOOLS', 'yes') 
-            emit('XCODE', 'yes') 
-            emit('ACTOOL_PATH', self.params['params']['actool']) 
-            emit('IBTOOL_PATH', self.params['params']['ibtool']) 
-            self._configure_runtime_versions() 
-        elif type_ == 'system_cxx': 
-            detector = CompilerDetector() 
+            detector.detect(self.params['params']['c_compiler'], self.params['params']['cxx_compiler'])
+            emit('LOCAL_XCODE_TOOLS', 'yes')
+            emit('XCODE', 'yes')
+            emit('ACTOOL_PATH', self.params['params']['actool'])
+            emit('IBTOOL_PATH', self.params['params']['ibtool'])
+            self._configure_runtime_versions()
+        elif type_ == 'system_cxx':
+            detector = CompilerDetector()
             detector.detect(self.params['params'].get('c_compiler'), self.params['params'].get('cxx_compiler'))
             type_ = detector.type
         else:
@@ -1264,22 +1264,22 @@ class GnuToolchain(Toolchain):
 
                 if target.is_yocto:
                     self.setup_sdk(project='build/platform/yocto_sdk/yocto_sdk', var='${YOCTO_SDK_ROOT_RESOURCE_GLOBAL}')
-            elif self.tc.params.get('local'): 
-                if target.is_apple: 
-                    if not tc.os_sdk_local: 
-                        if target.is_ios: 
-                            self.setup_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}') 
-                            self.platform_projects.append('build/platform/macos_system_stl') 
-                        if target.is_macos: 
-                            self.setup_sdk(project='build/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}') 
-                            self.platform_projects.append('build/platform/macos_system_stl') 
-                    else: 
-                        if target.is_iossim: 
-                            self.env.setdefault('SDKROOT', subprocess.check_output(['xcrun', '-sdk', 'iphonesimulator', '--show-sdk-path']).strip()) 
-                        elif target.is_ios: 
-                            self.env.setdefault('SDKROOT', subprocess.check_output(['xcrun', '-sdk', 'iphoneos', '--show-sdk-path']).strip()) 
-                        elif target.is_macos: 
-                            self.env.setdefault('SDKROOT', subprocess.check_output(['xcrun', '-sdk', 'macosx', '--show-sdk-path']).strip()) 
+            elif self.tc.params.get('local'):
+                if target.is_apple:
+                    if not tc.os_sdk_local:
+                        if target.is_ios:
+                            self.setup_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
+                            self.platform_projects.append('build/platform/macos_system_stl')
+                        if target.is_macos:
+                            self.setup_sdk(project='build/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
+                            self.platform_projects.append('build/platform/macos_system_stl')
+                    else:
+                        if target.is_iossim:
+                            self.env.setdefault('SDKROOT', subprocess.check_output(['xcrun', '-sdk', 'iphonesimulator', '--show-sdk-path']).strip())
+                        elif target.is_ios:
+                            self.env.setdefault('SDKROOT', subprocess.check_output(['xcrun', '-sdk', 'iphoneos', '--show-sdk-path']).strip())
+                        elif target.is_macos:
+                            self.env.setdefault('SDKROOT', subprocess.check_output(['xcrun', '-sdk', 'macosx', '--show-sdk-path']).strip())
 
     def setup_sdk(self, project, var):
         self.platform_projects.append(project)
@@ -2058,7 +2058,7 @@ class LD(Linker):
             "GENERATE_MF_CMD",
             '$YMAKE_PYTHON', '${input:"build/scripts/generate_mf.py"}',
             '--build-root $ARCADIA_BUILD_ROOT --module-name $REALPRJNAME -o ${output;pre=$MODULE_PREFIX;suf=$MODULE_SUFFIX.mf:REALPRJNAME}',
-            '-t $MODULE_TYPE --ya-start-command-file -Ya,lics $LICENSE_NAMES -Ya,peers ${rootrel:PEERS} -Ya,credits ${input:CREDITS_TEXTS_FILE} $CREDITS_FLAGS --ya-end-command-file', 
+            '-t $MODULE_TYPE --ya-start-command-file -Ya,lics $LICENSE_NAMES -Ya,peers ${rootrel:PEERS} -Ya,credits ${input:CREDITS_TEXTS_FILE} $CREDITS_FLAGS --ya-end-command-file',
         )
         if is_positive("TIDY"):
             emit(
@@ -2763,7 +2763,7 @@ class MSVCLinker(MSVC, Linker):
 
         emit("GENERATE_MF_CMD", '$YMAKE_PYTHON ${input:"build/scripts/generate_mf.py"}',
              '--build-root $ARCADIA_BUILD_ROOT --module-name $REALPRJNAME -o ${output;pre=$MODULE_PREFIX;suf=$MODULE_SUFFIX.mf:REALPRJNAME}',
-             '-t $MODULE_TYPE --ya-start-command-file -Ya,lics $LICENSE_NAMES -Ya,peers ${rootrel:PEERS} -Ya,credits ${input:CREDITS_TEXTS_FILE} $CREDITS_FLAGS --ya-end-command-file', 
+             '-t $MODULE_TYPE --ya-start-command-file -Ya,lics $LICENSE_NAMES -Ya,peers ${rootrel:PEERS} -Ya,credits ${input:CREDITS_TEXTS_FILE} $CREDITS_FLAGS --ya-end-command-file',
              )
 
         # we split srcs_global into two groups: libs and objs

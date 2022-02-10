@@ -2,11 +2,11 @@
 
 LIBRARY()
 
-OWNER( 
-    borman 
-    g:cpp-contrib 
-) 
- 
+OWNER(
+    borman
+    g:cpp-contrib
+)
+
 VERSION(0.2.5)
 
 ORIGINAL_SOURCE(https://github.com/yaml/libyaml/archive/0.2.5.tar.gz)

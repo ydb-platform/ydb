@@ -71,43 +71,43 @@ namespace std
 }
 
 
-#if __cplusplus < 201103L 
-#define NOEXCEPT noexcept 
-#define BADALLOC throw(std::bad_alloc) 
-#else 
-#define NOEXCEPT noexcept 
-#define BADALLOC 
-#endif 
- 
-namespace 
-{ 
-	/** 
-	 * Helper for forwarding from no-throw operators to versions that can 
-	 * return nullptr.  Catches any exception and converts it into a nullptr 
-	 * return. 
-	 */ 
-	template<void*(New)(size_t)> 
-	void *noexcept_new(size_t size) 
-	{ 
-#if !defined(_CXXRT_NO_EXCEPTIONS) 
-	try 
-	{ 
-		return New(size); 
-	} catch (...) 
-	{ 
-		// nothrow operator new should return NULL in case of 
-		// std::bad_alloc exception in new handler 
-		return nullptr; 
-	} 
-#else 
-	return New(size); 
-#endif 
-	} 
-} 
- 
- 
+#if __cplusplus < 201103L
+#define NOEXCEPT noexcept
+#define BADALLOC throw(std::bad_alloc)
+#else
+#define NOEXCEPT noexcept
+#define BADALLOC
+#endif
+
+namespace
+{
+	/**
+	 * Helper for forwarding from no-throw operators to versions that can
+	 * return nullptr.  Catches any exception and converts it into a nullptr
+	 * return.
+	 */
+	template<void*(New)(size_t)>
+	void *noexcept_new(size_t size)
+	{
+#if !defined(_CXXRT_NO_EXCEPTIONS)
+	try
+	{
+		return New(size);
+	} catch (...)
+	{
+		// nothrow operator new should return NULL in case of
+		// std::bad_alloc exception in new handler
+		return nullptr;
+	}
+#else
+	return New(size);
+#endif
+	}
+}
+
+
 __attribute__((weak))
-void* operator new(size_t size) BADALLOC 
+void* operator new(size_t size) BADALLOC
 {
 	if (0 == size)
 	{
@@ -123,11 +123,11 @@ void* operator new(size_t size) BADALLOC
 		}
 		else
 		{
-#if !defined(_CXXRT_NO_EXCEPTIONS) 
-			throw std::bad_alloc(); 
-#else 
-			break; 
-#endif 
+#if !defined(_CXXRT_NO_EXCEPTIONS)
+			throw std::bad_alloc();
+#else
+			break;
+#endif
 		}
 		mem = malloc(size);
 	}
@@ -135,56 +135,56 @@ void* operator new(size_t size) BADALLOC
 	return mem;
 }
 
- 
+
 __attribute__((weak))
-void* operator new(size_t size, const std::nothrow_t &) NOEXCEPT 
+void* operator new(size_t size, const std::nothrow_t &) NOEXCEPT
 {
-	return noexcept_new<(::operator new)>(size); 
+	return noexcept_new<(::operator new)>(size);
 }
 
 
 __attribute__((weak))
-void operator delete(void * ptr) NOEXCEPT 
+void operator delete(void * ptr) NOEXCEPT
 {
 	free(ptr);
 }
 
 
 __attribute__((weak))
-void * operator new[](size_t size) BADALLOC 
+void * operator new[](size_t size) BADALLOC
 {
 	return ::operator new(size);
 }
 
 
 __attribute__((weak))
-void * operator new[](size_t size, const std::nothrow_t &) NOEXCEPT 
+void * operator new[](size_t size, const std::nothrow_t &) NOEXCEPT
 {
-	return noexcept_new<(::operator new[])>(size); 
+	return noexcept_new<(::operator new[])>(size);
 }
 
 
 __attribute__((weak))
-void operator delete[](void * ptr) NOEXCEPT 
+void operator delete[](void * ptr) NOEXCEPT
 {
 	::operator delete(ptr);
 }
- 
-// C++14 additional delete operators 
- 
-#if __cplusplus >= 201402L 
- 
-__attribute__((weak)) 
-void operator delete(void * ptr, size_t) NOEXCEPT 
-{ 
-	::operator delete(ptr); 
-} 
- 
- 
-__attribute__((weak)) 
-void operator delete[](void * ptr, size_t) NOEXCEPT 
-{ 
-	::operator delete(ptr); 
-} 
- 
-#endif 
+
+// C++14 additional delete operators
+
+#if __cplusplus >= 201402L
+
+__attribute__((weak))
+void operator delete(void * ptr, size_t) NOEXCEPT
+{
+	::operator delete(ptr);
+}
+
+
+__attribute__((weak))
+void operator delete[](void * ptr, size_t) NOEXCEPT
+{
+	::operator delete(ptr);
+}
+
+#endif

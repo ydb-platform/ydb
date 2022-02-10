@@ -2,8 +2,8 @@ LIBRARY()
 
 LICENSE(MIT)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 VERSION(0.5.3)
 
 OWNER(
@@ -13,10 +13,10 @@ OWNER(
 )
 
 NO_UTIL()
-
+ 
 NO_WSHADOW()
 
-ADDINCL(GLOBAL contrib/libs/yaml-cpp/include)
+ADDINCL(GLOBAL contrib/libs/yaml-cpp/include) 
 
 SRCS(
     src/binary.cpp

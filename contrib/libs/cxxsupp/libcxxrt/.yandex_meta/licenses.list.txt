@@ -51,12 +51,12 @@ The BSD License
  * Copyright 2012 David Chisnall. All rights reserved.
 
 
-====================File: AUTHORS====================
+====================File: AUTHORS==================== 
 David Chisnall
 PathScale engineers
 
 
-====================File: COPYRIGHT====================
+====================File: COPYRIGHT==================== 
 PathScale Inc
 NetBSD Foundation
 FreeBSD Foundation

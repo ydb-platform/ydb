@@ -2,13 +2,13 @@ LIBRARY()
 
 VERSION(0.6.2)
 
-LICENSE(
+LICENSE( 
     BSD-2-Clause AND
-    MIT
-)
+    MIT 
+) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 OWNER(
     pg
     g:contrib

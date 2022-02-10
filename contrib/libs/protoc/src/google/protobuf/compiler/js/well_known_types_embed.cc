@@ -30,7 +30,7 @@
 
 #include <google/protobuf/compiler/js/well_known_types_embed.h>
 
-struct FileToc well_known_types_js[] = {
+struct FileToc well_known_types_js[] = { 
     {"any.js",
      "/* This code will be inserted into generated code for\n"
      " * google/protobuf/any.proto. */\n"
@@ -267,4 +267,4 @@ struct FileToc well_known_types_js[] = {
      "  return ret;\n"
      "};\n"},
     {NULL, NULL}  // Terminate the list.
-};
+}; 

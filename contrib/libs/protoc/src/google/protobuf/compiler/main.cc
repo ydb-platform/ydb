@@ -101,11 +101,11 @@ int ProtobufMain(int argc, char* argv[]) {
   perlxs::PerlXSGenerator perlxs_generator;
   cli.RegisterGenerator("--perlxs_out", &perlxs_generator,
                         "Generate Perl/XS source files.");
-
-  // JavaScript
+ 
+  // JavaScript 
   js::Generator js_generator;
   cli.RegisterGenerator("--js_out", "--js_opt", &js_generator,
-                        "Generate JavaScript source.");
+                        "Generate JavaScript source."); 
 
   return cli.Run(argc, argv);
 }

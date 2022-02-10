@@ -442,14 +442,14 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
                     Cerr << (TStringBuilder() << "-- EvStreamData: " << record.AsJSON() << Endl);
 
-                    // Empty message can come on finish 
-                    if (!record.GetResultSet().rows().empty()) { 
-                        Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 2); 
-                        for (int i = 0; i < record.GetResultSet().rows().size(); ++i) { 
-                            // Get value from (key, value) 
-                            auto val = record.GetResultSet().rows().at(i).items().at(1).uint32_value(); 
-                            result += val; 
-                        } 
+                    // Empty message can come on finish
+                    if (!record.GetResultSet().rows().empty()) {
+                        Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 2);
+                        for (int i = 0; i < record.GetResultSet().rows().size(); ++i) {
+                            // Get value from (key, value)
+                            auto val = record.GetResultSet().rows().at(i).items().at(1).uint32_value();
+                            result += val;
+                        }
                     }
 
                     auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();

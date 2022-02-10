@@ -1106,7 +1106,7 @@ private:
                     case NKqpProto::TKqpPhyConnection::kBroadcast:
                     case NKqpProto::TKqpPhyConnection::kHashShuffle:
                     case NKqpProto::TKqpPhyConnection::kUnionAll:
-                    case NKqpProto::TKqpPhyConnection::kMerge: 
+                    case NKqpProto::TKqpPhyConnection::kMerge:
                         break;
                     default:
                         YQL_ENSURE(false, "Unexpected connection type: " << (ui32)input.GetTypeCase());
@@ -1321,7 +1321,7 @@ private:
             ActorIdToProto(SelfId(), taskDesc.MutableExecuter()->MutableActorId());
 
             for (auto& input : task.Inputs) {
-                FillInputDesc(*taskDesc.AddInputs(), input); 
+                FillInputDesc(*taskDesc.AddInputs(), input);
             }
 
             for (auto& output : task.Outputs) {

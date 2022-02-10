@@ -164,27 +164,27 @@
         "Match": {"Type": "Callable", "Name": "DqCnValue"}
     },
     {
-        "Name": "TDqSortColumn", 
-        "Base": "TExprBase", 
-        "Match": {"Type": "Tuple"}, 
-        "Children": [ 
-            {"Index": 0, "Name": "Column", "Type": "TCoAtom"}, 
-            {"Index": 1, "Name": "SortDirection", "Type": "TCoAtom"} 
-        ] 
-    }, 
-    { 
-        "Name": "TDqSortColumnList", 
-        "ListBase": "TDqSortColumn" 
-    }, 
-    { 
-        "Name": "TDqCnMerge", 
-        "Base": "TDqConnection", 
-        "Match": {"Type": "Callable", "Name": "DqCnMerge"}, 
-        "Children": [ 
-            {"Index": 1, "Name": "SortColumns", "Type": "TDqSortColumnList"} 
-        ] 
-    }, 
-    { 
+        "Name": "TDqSortColumn",
+        "Base": "TExprBase",
+        "Match": {"Type": "Tuple"},
+        "Children": [
+            {"Index": 0, "Name": "Column", "Type": "TCoAtom"},
+            {"Index": 1, "Name": "SortDirection", "Type": "TCoAtom"}
+        ]
+    },
+    {
+        "Name": "TDqSortColumnList",
+        "ListBase": "TDqSortColumn"
+    },
+    {
+        "Name": "TDqCnMerge",
+        "Base": "TDqConnection",
+        "Match": {"Type": "Callable", "Name": "DqCnMerge"},
+        "Children": [
+            {"Index": 1, "Name": "SortColumns", "Type": "TDqSortColumnList"}
+        ]
+    },
+    {
         "Name": "TDqReplicate",
         "Base": "TFreeArgCallable",
         "Match": {"Type": "Callable", "Name": "DqReplicate"},

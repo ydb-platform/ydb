@@ -367,16 +367,16 @@ void FillConnection(const TDqConnection& connection, const TMap<ui64, ui32>& sta
         return;
     }
 
-    if (auto maybeMerge = connection.Maybe<TDqCnMerge>()) { 
-        auto& mergeProto = *connectionProto.MutableMerge(); 
-        for (const auto& sortColumn : maybeMerge.Cast().SortColumns()) { 
-            auto newSortColumn = mergeProto.AddSortColumns(); 
-            newSortColumn->SetColumn(sortColumn.Column().StringValue()); 
-            newSortColumn->SetAscending(sortColumn.SortDirection().Value() == TTopSortSettings::AscendingSort); 
-        } 
-        return; 
-    } 
- 
+    if (auto maybeMerge = connection.Maybe<TDqCnMerge>()) {
+        auto& mergeProto = *connectionProto.MutableMerge();
+        for (const auto& sortColumn : maybeMerge.Cast().SortColumns()) {
+            auto newSortColumn = mergeProto.AddSortColumns();
+            newSortColumn->SetColumn(sortColumn.Column().StringValue());
+            newSortColumn->SetAscending(sortColumn.SortDirection().Value() == TTopSortSettings::AscendingSort);
+        }
+        return;
+    }
+
     YQL_ENSURE(false, "Unexpected connection type: " << connection.CallableName());
 }
 

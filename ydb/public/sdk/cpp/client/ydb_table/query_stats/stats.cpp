@@ -2,8 +2,8 @@
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
-#include <util/datetime/base.h> 
- 
+#include <util/datetime/base.h>
+
 #include <google/protobuf/text_format.h>
 
 namespace NYdb {
@@ -42,14 +42,14 @@ TMaybe<TString> TQueryStats::GetPlan() const {
     return proto.query_plan();
 }
 
-TDuration TQueryStats::GetTotalDuration() const { 
-    return TDuration::MicroSeconds(Impl_->Proto.total_duration_us()); 
-} 
- 
-TDuration TQueryStats::GetTotalCpuTime() const { 
-    return TDuration::MicroSeconds(Impl_->Proto.total_cpu_time_us()); 
-} 
- 
+TDuration TQueryStats::GetTotalDuration() const {
+    return TDuration::MicroSeconds(Impl_->Proto.total_duration_us());
+}
+
+TDuration TQueryStats::GetTotalCpuTime() const {
+    return TDuration::MicroSeconds(Impl_->Proto.total_cpu_time_us());
+}
+
 const Ydb::TableStats::QueryStats& TQueryStats::GetProto() const {
     return Impl_->Proto;
 }

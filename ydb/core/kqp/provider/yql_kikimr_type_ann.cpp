@@ -605,11 +605,11 @@ private:
 
             meta->ColumnOrder.push_back(columnName);
             auto insertRes = meta->Columns.insert(std::make_pair(columnName, columnMeta));
-            if (!insertRes.second) { 
-                ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder() 
-                    << "Duplicate column: " << columnName << ".")); 
-                return TStatus::Error; 
-            } 
+            if (!insertRes.second) {
+                ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
+                    << "Duplicate column: " << columnName << "."));
+                return TStatus::Error;
+            }
         }
 
         for (const auto& index : create.Indexes()) {

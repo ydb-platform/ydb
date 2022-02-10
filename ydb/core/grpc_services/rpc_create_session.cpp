@@ -20,7 +20,7 @@ class TCreateSessionRPC : public TRpcKqpRequestActor<TCreateSessionRPC, TEvCreat
     using TBase = TRpcKqpRequestActor<TCreateSessionRPC, TEvCreateSessionRequest>;
 
 public:
-    TCreateSessionRPC(IRequestOpCtx* msg) 
+    TCreateSessionRPC(IRequestOpCtx* msg)
         : TBase(msg) {}
 
     void Bootstrap(const TActorContext& ctx) {
@@ -138,10 +138,10 @@ void TGRpcRequestProxy::Handle(TEvCreateSessionRequest::TPtr& ev, const TActorCo
     ctx.Register(new TCreateSessionRPC(ev->Release().Release()));
 }
 
-template<> 
-IActor* TEvCreateSessionRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) { 
-    return new TCreateSessionRPC(msg); 
-} 
- 
+template<>
+IActor* TEvCreateSessionRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TCreateSessionRPC(msg);
+}
+
 } // namespace NGRpcService
 } // namespace NKikimr

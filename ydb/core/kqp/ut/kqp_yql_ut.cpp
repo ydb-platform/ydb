@@ -81,26 +81,26 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR));
     }
 
-    Y_UNIT_TEST(ColumnNameConflict) { 
-        TKikimrRunner kikimr; 
-        TScriptingClient client(kikimr.GetDriver()); 
- 
-        auto result = client.ExecuteYqlScript(R"( 
-            --!syntax_v1 
-            CREATE TABLE `/Root/ConflictColumn` ( 
-                Id Uint32, 
-                Value int32, 
-                Value int32, 
-                PRIMARY KEY (Id) 
-            ); 
-        )").GetValueSync(); 
-        result.GetIssues().PrintTo(Cerr); 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR); 
- 
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::CORE_TYPE_ANN)); 
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR)); 
-    } 
- 
+    Y_UNIT_TEST(ColumnNameConflict) {
+        TKikimrRunner kikimr;
+        TScriptingClient client(kikimr.GetDriver());
+
+        auto result = client.ExecuteYqlScript(R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/ConflictColumn` (
+                Id Uint32,
+                Value int32,
+                Value int32,
+                PRIMARY KEY (Id)
+            );
+        )").GetValueSync();
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::CORE_TYPE_ANN));
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR));
+    }
+
     Y_UNIT_TEST(TableNameConflict) {
         TKikimrRunner kikimr;
         TScriptingClient client(kikimr.GetDriver());

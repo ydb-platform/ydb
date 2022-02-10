@@ -6,11 +6,11 @@ namespace NYql::NDq {
 
 using namespace NKikimr::NMiniKQL;
 
-TMaybe<TColumnInfo> FindColumnInfo(const NKikimr::NMiniKQL::TType* type, TStringBuf columnName) { 
+TMaybe<TColumnInfo> FindColumnInfo(const NKikimr::NMiniKQL::TType* type, TStringBuf columnName) {
     YQL_ENSURE(type->GetKind() == TType::EKind::Struct);
     const auto& structType = static_cast<const TStructType&>(*type);
 
-    auto columnIndex = structType.FindMemberIndex(columnName); 
+    auto columnIndex = structType.FindMemberIndex(columnName);
     if (!columnIndex) {
         return {};
     }
@@ -24,11 +24,11 @@ TMaybe<TColumnInfo> FindColumnInfo(const NKikimr::NMiniKQL::TType* type, TString
     YQL_ENSURE(memberType->GetKind() == TType::EKind::Data);
     auto columnType = static_cast<TDataType&>(*memberType).GetSchemeType();
 
-    return TColumnInfo{TString(columnName), *columnIndex, columnType}; 
+    return TColumnInfo{TString(columnName), *columnIndex, columnType};
 }
 
-TColumnInfo GetColumnInfo(const TType* type, TStringBuf columnName) { 
-    auto columnInfo = FindColumnInfo(type, columnName); 
+TColumnInfo GetColumnInfo(const TType* type, TStringBuf columnName) {
+    auto columnInfo = FindColumnInfo(type, columnName);
     YQL_ENSURE(columnInfo);
 
     return *columnInfo;

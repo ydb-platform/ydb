@@ -20,7 +20,7 @@ class TExecuteSchemeQueryRPC : public TRpcKqpRequestActor<TExecuteSchemeQueryRPC
     using TBase = TRpcKqpRequestActor<TExecuteSchemeQueryRPC, TEvExecuteSchemeQueryRequest>;
 
 public:
-    TExecuteSchemeQueryRPC(IRequestOpCtx* msg) 
+    TExecuteSchemeQueryRPC(IRequestOpCtx* msg)
         : TBase(msg) {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -91,10 +91,10 @@ void TGRpcRequestProxy::Handle(TEvExecuteSchemeQueryRequest::TPtr& ev, const TAc
     ctx.Register(new TExecuteSchemeQueryRPC(ev->Release().Release()));
 }
 
-template<> 
-IActor* TEvExecuteSchemeQueryRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) { 
-    return new TExecuteSchemeQueryRPC(msg); 
-} 
- 
+template<>
+IActor* TEvExecuteSchemeQueryRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TExecuteSchemeQueryRPC(msg);
+}
+
 } // namespace NGRpcService
 } // namespace NKikimr

@@ -351,7 +351,7 @@ namespace NYql::NDqs {
                     *sourceProto->MutableSettings() = *input.SourceSettings;
                     sourceProto->SetType(input.SourceType);
                 } else {
-                    FillInputDesc(inputDesc, input); 
+                    FillInputDesc(inputDesc, input);
                 }
             }
 
@@ -503,7 +503,7 @@ namespace NYql::NDqs {
                 BUILD_CONNECTION(TDqCnHashShuffle, BuildHashShuffleChannels);
                 BUILD_CONNECTION(TDqCnBroadcast, BuildBroadcastChannels);
                 BUILD_CONNECTION(TDqCnMap, BuildMapChannels);
-                BUILD_CONNECTION(TDqCnMerge, BuildMergeChannels); 
+                BUILD_CONNECTION(TDqCnMerge, BuildMergeChannels);
                 YQL_ENSURE(false, "Unknown stage connection type: " << input.Cast<NNodes::TCallable>().CallableName());
             } else {
                 YQL_ENSURE(input.Maybe<TDqSource>());
@@ -583,32 +583,32 @@ namespace NYql::NDqs {
         }
     }
 
-    void TDqsExecutionPlanner::FillInputDesc(NDqProto::TTaskInput& inputDesc, const TTaskInput& input) { 
-        switch (input.Type()) { 
-            case TTaskInputType::UnionAll: { 
-                inputDesc.MutableUnionAll(); 
-                break; 
-            } 
-            case TTaskInputType::Merge: { 
-                auto& mergeProto = *inputDesc.MutableMerge(); 
-                auto& sortColumns = std::get<NYql::NDq::TMergeTaskInput>(input.ConnectionInfo).SortColumns; 
-                for (const auto& sortColumn : sortColumns) { 
-                    auto newSortCol = mergeProto.AddSortColumns(); 
-                    newSortCol->SetColumn(sortColumn.Column.c_str()); 
-                    newSortCol->SetAscending(sortColumn.Ascending); 
-                } 
-                break; 
-            } 
-            default: 
-                YQL_ENSURE(false, "Unexpected task input type."); 
-        } 
+    void TDqsExecutionPlanner::FillInputDesc(NDqProto::TTaskInput& inputDesc, const TTaskInput& input) {
+        switch (input.Type()) {
+            case TTaskInputType::UnionAll: {
+                inputDesc.MutableUnionAll();
+                break;
+            }
+            case TTaskInputType::Merge: {
+                auto& mergeProto = *inputDesc.MutableMerge();
+                auto& sortColumns = std::get<NYql::NDq::TMergeTaskInput>(input.ConnectionInfo).SortColumns;
+                for (const auto& sortColumn : sortColumns) {
+                    auto newSortCol = mergeProto.AddSortColumns();
+                    newSortCol->SetColumn(sortColumn.Column.c_str());
+                    newSortCol->SetAscending(sortColumn.Ascending);
+                }
+                break;
+            }
+            default:
+                YQL_ENSURE(false, "Unexpected task input type.");
+        }
 
-        for (ui64 channel : input.Channels) { 
-            auto& channelDesc = *inputDesc.AddChannels(); 
-            FillChannelDesc(channelDesc, TasksGraph.GetChannel(channel)); 
-        } 
-    } 
- 
+        for (ui64 channel : input.Channels) {
+            auto& channelDesc = *inputDesc.AddChannels();
+            FillChannelDesc(channelDesc, TasksGraph.GetChannel(channel));
+        }
+    }
+
     void TDqsExecutionPlanner::FillOutputDesc(NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output) {
         switch (output.Type) {
             case TTaskOutputType::Map:

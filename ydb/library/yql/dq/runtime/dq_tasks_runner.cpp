@@ -121,7 +121,7 @@ void ValidateParamValue(std::string_view paramName, const TType* type, const NUd
 #define LOG(...) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(__VA_ARGS__); } } while (0)
 
 NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, const NKikimr::NMiniKQL::TType* type,
-    TVector<IDqInput::TPtr>&& inputs, const THolderFactory& holderFactory) 
+    TVector<IDqInput::TPtr>&& inputs, const THolderFactory& holderFactory)
 {
     switch (inputDesc.GetTypeCase()) {
         case NYql::NDqProto::TTaskInput::kSource:
@@ -129,14 +129,14 @@ NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, con
             [[fallthrough]];
         case NYql::NDqProto::TTaskInput::kUnionAll:
             return CreateInputUnionValue(std::move(inputs), holderFactory);
-        case NYql::NDqProto::TTaskInput::kMerge: { 
-            const auto& protoSortCols = inputDesc.GetMerge().GetSortColumns(); 
-            TVector<TSortColumnInfo> sortColsInfo; 
-            GetColumnsInfo(type, protoSortCols, sortColsInfo); 
-            YQL_ENSURE(!sortColsInfo.empty()); 
- 
-            return CreateInputMergeValue(std::move(inputs), std::move(sortColsInfo), holderFactory); 
-        } 
+        case NYql::NDqProto::TTaskInput::kMerge: {
+            const auto& protoSortCols = inputDesc.GetMerge().GetSortColumns();
+            TVector<TSortColumnInfo> sortColsInfo;
+            GetColumnsInfo(type, protoSortCols, sortColsInfo);
+            YQL_ENSURE(!sortColsInfo.empty());
+
+            return CreateInputMergeValue(std::move(inputs), std::move(sortColsInfo), holderFactory);
+        }
         default:
             YQL_ENSURE(false, "Unknown input type: " << (ui32) inputDesc.GetTypeCase());
     }
@@ -430,7 +430,7 @@ public:
 
             auto entryNode = ProgramParsed.CompGraph->GetEntryPoint(i, true);
             entryNode->SetValue(ProgramParsed.CompGraph->GetContext(),
-                DqBuildInputValue(inputDesc, ProgramParsed.InputItemTypes[i], std::move(inputs), holderFactory)); 
+                DqBuildInputValue(inputDesc, ProgramParsed.InputItemTypes[i], std::move(inputs), holderFactory));
         }
 
         ResultStream = ProgramParsed.CompGraph->GetValue();

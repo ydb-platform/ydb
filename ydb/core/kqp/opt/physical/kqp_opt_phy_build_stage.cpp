@@ -55,11 +55,11 @@ TMaybeNode<TDqPhyPrecompute> BuildLookupKeysPrecompute(const TExprBase& input, T
         .Done();
 }
 
-TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) { 
-    if (!node.Maybe<TKqlReadTable>()) { 
-        return node; 
-    } 
-    const TKqlReadTable& read = node.Cast<TKqlReadTable>(); 
+TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (!node.Maybe<TKqlReadTable>()) {
+        return node;
+    }
+    const TKqlReadTable& read = node.Cast<TKqlReadTable>();
 
     TVector<TExprBase> values;
     TNodeOnNodeOwnedMap replaceMap;
@@ -168,14 +168,14 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
         .Done();
 }
 
-TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx, 
+TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx)
 {
-    if (!node.Maybe<TKqlReadTableRanges>()) { 
-        return node; 
-    } 
-    const TKqlReadTableRanges& read = node.Cast<TKqlReadTableRanges>(); 
- 
+    if (!node.Maybe<TKqlReadTableRanges>()) {
+        return node;
+    }
+    const TKqlReadTableRanges& read = node.Cast<TKqlReadTableRanges>();
+
     auto ranges = read.Ranges();
     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
 
@@ -311,13 +311,13 @@ bool RequireLookupPrecomputeStage(const TKqlLookupTable& lookup) {
     return false;
 }
 
-TExprBase KqpBuildLookupTableStage(TExprBase node, TExprContext& ctx) { 
-    if (!node.Maybe<TKqlLookupTable>()) { 
-        return node; 
-    } 
-    const TKqlLookupTable& lookup = node.Cast<TKqlLookupTable>(); 
+TExprBase KqpBuildLookupTableStage(TExprBase node, TExprContext& ctx) {
+    if (!node.Maybe<TKqlLookupTable>()) {
+        return node;
+    }
+    const TKqlLookupTable& lookup = node.Cast<TKqlLookupTable>();
 
-    YQL_ENSURE(lookup.CallableName() == TKqlLookupTable::CallableName()); 
+    YQL_ENSURE(lookup.CallableName() == TKqlLookupTable::CallableName());
 
     TMaybeNode<TDqStage> stage;
 
@@ -361,7 +361,7 @@ TExprBase KqpBuildLookupTableStage(TExprBase node, TExprContext& ctx) {
             .Done();
     }
 
-    return Build<TDqCnUnionAll>(ctx, lookup.Pos()) 
+    return Build<TDqCnUnionAll>(ctx, lookup.Pos())
         .Output()
             .Stage(stage.Cast())
             .Index().Build("0")

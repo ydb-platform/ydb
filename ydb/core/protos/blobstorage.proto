@@ -1449,10 +1449,10 @@ message TEvTestLoadRequest {
     }
 
     message TKqpLoadStart {
-        message TStockWorkload { 
-            optional uint64 ProductCount = 1; 
-            optional uint64 Quantity = 2; 
-        } 
+        message TStockWorkload {
+            optional uint64 ProductCount = 1;
+            optional uint64 Quantity = 2;
+        }
         optional uint64 Tag = 1;
         optional uint32 DurationSeconds = 2;
         optional uint32 NumOfSessions = 3;
@@ -1464,10 +1464,10 @@ message TEvTestLoadRequest {
         optional uint32 UniformPartitionsCount = 9 [default = 1];
         optional uint64 TotalRowsToUpsert = 10;
         optional string WorkingDir = 11;
-        optional string WorkloadName = 12; 
-        oneof Workload { 
-            TStockWorkload Stock = 13; 
-        } 
+        optional string WorkloadName = 12;
+        oneof Workload {
+            TStockWorkload Stock = 13;
+        }
     }
 
     message TMemoryLoadStart {

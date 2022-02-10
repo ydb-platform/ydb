@@ -7,20 +7,20 @@
 namespace NYql::NDq {
 
 struct TColumnInfo {
-    TString Name; 
-    ui32 Index; 
+    TString Name;
+    ui32 Index;
     NUdf::TDataTypeId TypeId;
 };
 
-struct TSortColumnInfo : public TColumnInfo { 
-    bool Ascending; 
- 
-    TSortColumnInfo(const TColumnInfo&& colInfo) 
-        : TColumnInfo(std::move(colInfo)) 
-        , Ascending(false) 
-    {} 
-}; 
- 
+struct TSortColumnInfo : public TColumnInfo {
+    bool Ascending;
+
+    TSortColumnInfo(const TColumnInfo&& colInfo)
+        : TColumnInfo(std::move(colInfo))
+        , Ascending(false)
+    {}
+};
+
 TMaybe<TColumnInfo> FindColumnInfo(const NKikimr::NMiniKQL::TType* type, TStringBuf column);
 TColumnInfo GetColumnInfo(const NKikimr::NMiniKQL::TType* type, TStringBuf column);
 
@@ -41,18 +41,18 @@ void GetColumnsInfo(const NKikimr::NMiniKQL::TType* type, const TList& columns,
     }
 }
 
-template<typename TList> 
+template<typename TList>
 void GetColumnsInfo(const NKikimr::NMiniKQL::TType* type, const TList& protoSortCols,
-    TVector<TSortColumnInfo>& sortCols) 
-{ 
-    sortCols.clear(); 
-    sortCols.reserve(protoSortCols.size()); 
+    TVector<TSortColumnInfo>& sortCols)
+{
+    sortCols.clear();
+    sortCols.reserve(protoSortCols.size());
 
-    for (const auto& protoSortCol : protoSortCols) { 
-        TSortColumnInfo colInfo = static_cast<TSortColumnInfo>(GetColumnInfo(type, protoSortCol.GetColumn())); 
-        colInfo.Ascending = protoSortCol.GetAscending(); 
-        sortCols.emplace_back(std::move(colInfo)); 
-    } 
+    for (const auto& protoSortCol : protoSortCols) {
+        TSortColumnInfo colInfo = static_cast<TSortColumnInfo>(GetColumnInfo(type, protoSortCol.GetColumn()));
+        colInfo.Ascending = protoSortCol.GetAscending();
+        sortCols.emplace_back(std::move(colInfo));
+    }
 }
- 
-} 
+
+}

@@ -890,7 +890,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             FormatResultSetYson(result.GetResultSet(0))
         );
     }
- 
+
     Y_UNIT_TEST_NEW_ENGINE(FullOuterJoin2) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -940,21 +940,21 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         );
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(CrossJoinCount) { 
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
-        CreateSampleTables(session); 
- 
-        auto result = session.ExecuteDataQuery(Q1_(R"( 
-            SELECT COUNT(*) 
-            FROM `/Root/Join1_1` as left 
-            CROSS JOIN `/Root/Join1_2` as right 
-        )"), TTxControl::BeginTx().CommitTx()).GetValueSync(); 
- 
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
-        CompareYson(R"([[88u]])", FormatResultSetYson(result.GetResultSet(0))); 
-    } 
+    Y_UNIT_TEST_NEW_ENGINE(CrossJoinCount) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTables(session);
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT COUNT(*)
+            FROM `/Root/Join1_1` as left
+            CROSS JOIN `/Root/Join1_2` as right
+        )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        CompareYson(R"([[88u]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 
     Y_UNIT_TEST_NEW_ENGINE(JoinDupColumnRight) {
         TKikimrRunner kikimr;

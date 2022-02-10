@@ -54,7 +54,7 @@ namespace NYql::NDqs {
         void BuildConnections(const NNodes::TDqPhyStage& stage);
         THashMap<NDq::TStageId, std::tuple<TString,ui64>> BuildAllPrograms();
         void FillChannelDesc(NDqProto::TChannel& channelDesc, const NDq::TChannel& channel);
-        void FillInputDesc(NDqProto::TTaskInput& inputDesc, const TTaskInput& input); 
+        void FillInputDesc(NDqProto::TTaskInput& inputDesc, const TTaskInput& input);
         void FillOutputDesc(NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output);
 
         void GatherPhyMapping(THashMap<std::tuple<TString, TString>, TString>& clusters, THashMap<std::tuple<TString, TString, TString>, TString>& tables);

@@ -195,7 +195,7 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
     // check left
     bool isLeftOptional = IsLeftJoinSideOptional(joinType);
     auto leftType = ParseJoinInputType(leftRowType, leftLabel, ctx, isLeftOptional);
-    if (leftType.empty() && joinType != "Cross") { 
+    if (leftType.empty() && joinType != "Cross") {
         TStringStream str; str << "Cannot parse left join input type: ";
         leftRowType.Out(str);
         ctx.AddError(TIssue(ctx.GetPosition(pos), str.Str()));
@@ -205,7 +205,7 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
     // check right
     bool isRightOptional = IsRightJoinSideOptional(joinType);
     auto rightType = ParseJoinInputType(rightRowType, rightLabel, ctx, isRightOptional);
-    if (rightType.empty() && joinType != "Cross") { 
+    if (rightType.empty() && joinType != "Cross") {
         TStringStream str; str << "Cannot parse right join input type: ";
         rightRowType.Out(str);
         ctx.AddError(TIssue(ctx.GetPosition(pos), str.Str()));
@@ -456,72 +456,72 @@ TStatus AnnotateDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus AnnotateDqCnMerge(const TExprNode::TPtr& node, TExprContext& ctx) { 
-    if (!EnsureArgsCount(*node, 2, ctx)) { 
-        return TStatus::Error; 
-    } 
- 
-    if (!EnsureCallable(*node->Child(TDqCnMerge::idx_Output), ctx)) { 
-        return TStatus::Error; 
-    } 
- 
-    if (!TDqOutput::Match(node->Child(TDqCnMerge::idx_Output))) { 
-        ctx.AddError(TIssue(ctx.GetPosition(node->Child(TDqCnMerge::idx_Output)->Pos()), TStringBuilder() << "Expected " << TDqOutput::CallableName())); 
-        return TStatus::Error; 
-    } 
- 
-    auto cnMerge = TDqCnMerge(node); 
- 
-    if (!EnsureTupleMinSize(*cnMerge.SortColumns().Ptr(), 1, ctx)) { 
-        return TStatus::Error; 
-    } 
- 
-    auto outputType = GetDqConnectionType(TDqConnection(node), ctx); 
-    if (!outputType) { 
-        return TStatus::Error; 
-    } 
- 
-    auto itemType = outputType->Cast<TListExprType>()->GetItemType(); 
-    if (!EnsureStructType(node->Pos(), *itemType, ctx)) { 
-        return TStatus::Error; 
-    } 
- 
-    auto structType = itemType->Cast<TStructExprType>(); 
-    for (const auto& column : cnMerge.SortColumns()) { 
-        if (!EnsureTuple(*column.Ptr(), ctx)) { 
-            return TStatus::Error; 
-        } 
-        if (column.Column().StringValue().empty()) 
-        { 
-            return TStatus::Error; 
-        } 
-        TMaybe<ui32> colIndex = structType->FindItem(column.Column().StringValue()); 
-        if (!colIndex) { 
-            ctx.AddError(TIssue(ctx.GetPosition(column.Pos()), 
-                TStringBuilder() << "Missing sort column: " << column.Column().StringValue())); 
-            return TStatus::Error; 
-        } 
-        const TTypeAnnotationNode* colType = (structType->GetItems())[*colIndex]->GetItemType(); 
-        if (colType->GetKind() == ETypeAnnotationKind::Optional) { 
-            colType = colType->Cast<TOptionalExprType>()->GetItemType(); 
-        } 
-        if (!EnsureDataType(column.Pos(), *colType, ctx)) { 
-            ctx.AddError(TIssue(ctx.GetPosition(column.Pos()), 
-                TStringBuilder() << "For Merge connection column should be Data Expression: " << column.Column().StringValue())); 
-            return TStatus::Error; 
-        } 
-        if (!IsTypeSupportedInMergeCn(colType->Cast<TDataExprType>())) { 
-            ctx.AddError(TIssue(ctx.GetPosition(column.Pos()), 
+TStatus AnnotateDqCnMerge(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 2, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureCallable(*node->Child(TDqCnMerge::idx_Output), ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!TDqOutput::Match(node->Child(TDqCnMerge::idx_Output))) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Child(TDqCnMerge::idx_Output)->Pos()), TStringBuilder() << "Expected " << TDqOutput::CallableName()));
+        return TStatus::Error;
+    }
+
+    auto cnMerge = TDqCnMerge(node);
+
+    if (!EnsureTupleMinSize(*cnMerge.SortColumns().Ptr(), 1, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto outputType = GetDqConnectionType(TDqConnection(node), ctx);
+    if (!outputType) {
+        return TStatus::Error;
+    }
+
+    auto itemType = outputType->Cast<TListExprType>()->GetItemType();
+    if (!EnsureStructType(node->Pos(), *itemType, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto structType = itemType->Cast<TStructExprType>();
+    for (const auto& column : cnMerge.SortColumns()) {
+        if (!EnsureTuple(*column.Ptr(), ctx)) {
+            return TStatus::Error;
+        }
+        if (column.Column().StringValue().empty())
+        {
+            return TStatus::Error;
+        }
+        TMaybe<ui32> colIndex = structType->FindItem(column.Column().StringValue());
+        if (!colIndex) {
+            ctx.AddError(TIssue(ctx.GetPosition(column.Pos()),
+                TStringBuilder() << "Missing sort column: " << column.Column().StringValue()));
+            return TStatus::Error;
+        }
+        const TTypeAnnotationNode* colType = (structType->GetItems())[*colIndex]->GetItemType();
+        if (colType->GetKind() == ETypeAnnotationKind::Optional) {
+            colType = colType->Cast<TOptionalExprType>()->GetItemType();
+        }
+        if (!EnsureDataType(column.Pos(), *colType, ctx)) {
+            ctx.AddError(TIssue(ctx.GetPosition(column.Pos()),
+                TStringBuilder() << "For Merge connection column should be Data Expression: " << column.Column().StringValue()));
+            return TStatus::Error;
+        }
+        if (!IsTypeSupportedInMergeCn(colType->Cast<TDataExprType>())) {
+            ctx.AddError(TIssue(ctx.GetPosition(column.Pos()),
                 TStringBuilder() << "Unsupported type " << colType->Cast<TDataExprType>()->GetName()
-                << " for column '" << column.Column().StringValue() << "' in Merge connection.")); 
-            return TStatus::Error; 
-        } 
-    } 
- 
-    node->SetTypeAnn(outputType); 
-    return TStatus::Ok; 
-} 
- 
+                << " for column '" << column.Column().StringValue() << "' in Merge connection."));
+            return TStatus::Error;
+        }
+    }
+
+    node->SetTypeAnn(outputType);
+    return TStatus::Ok;
+}
+
 TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx) {
     if (!EnsureArgsCount(*input, 2, ctx)) {
         return TStatus::Error;
@@ -816,10 +816,10 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
                 return AnnotateDqCnValue(input, ctx);
             }
 
-            if (TDqCnMerge::Match(input.Get())) { 
-                return AnnotateDqCnMerge(input, ctx); 
-            } 
- 
+            if (TDqCnMerge::Match(input.Get())) {
+                return AnnotateDqCnMerge(input, ctx);
+            }
+
             if (TDqReplicate::Match(input.Get())) {
                 return AnnotateDqReplicate(input, ctx);
             }
@@ -864,58 +864,58 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
         });
 }
 
-bool IsTypeSupportedInMergeCn(EDataSlot type) { 
-    switch (type) { 
-        case EDataSlot::Bool: 
-        case EDataSlot::Int8: 
-        case EDataSlot::Uint8: 
-        case EDataSlot::Int16: 
-        case EDataSlot::Uint16: 
-        case EDataSlot::Int32: 
-        case EDataSlot::Uint32: 
-        case EDataSlot::Int64: 
-        case EDataSlot::Uint64: 
-        case EDataSlot::Double: 
-        case EDataSlot::Float: 
-        case EDataSlot::String: 
-        case EDataSlot::Utf8: 
-        case EDataSlot::Uuid: 
-        case EDataSlot::Date: 
-        case EDataSlot::Datetime: 
-        case EDataSlot::Timestamp: 
-        case EDataSlot::Interval: 
-        case EDataSlot::Decimal: 
-        case EDataSlot::DyNumber: 
-            // Supported 
-            return true; 
-        case EDataSlot::Yson: 
-        case EDataSlot::Json: 
-        case EDataSlot::TzDate: 
-        case EDataSlot::TzDatetime: 
-        case EDataSlot::TzTimestamp: 
-        case EDataSlot::JsonDocument: 
-            return false; 
-    } 
-    return false; 
-} 
- 
-bool IsTypeSupportedInMergeCn(const TDataExprType* dataType) { 
-   return IsTypeSupportedInMergeCn(dataType->GetSlot()); 
-} 
- 
-bool IsMergeConnectionApplicable(const TVector<const TTypeAnnotationNode*>& sortKeyTypes) { 
-    for (auto sortKeyType : sortKeyTypes) { 
-        if (sortKeyType->GetKind() == ETypeAnnotationKind::Optional) { 
-            sortKeyType = sortKeyType->Cast<TOptionalExprType>()->GetItemType(); 
-        } 
+bool IsTypeSupportedInMergeCn(EDataSlot type) {
+    switch (type) {
+        case EDataSlot::Bool:
+        case EDataSlot::Int8:
+        case EDataSlot::Uint8:
+        case EDataSlot::Int16:
+        case EDataSlot::Uint16:
+        case EDataSlot::Int32:
+        case EDataSlot::Uint32:
+        case EDataSlot::Int64:
+        case EDataSlot::Uint64:
+        case EDataSlot::Double:
+        case EDataSlot::Float:
+        case EDataSlot::String:
+        case EDataSlot::Utf8:
+        case EDataSlot::Uuid:
+        case EDataSlot::Date:
+        case EDataSlot::Datetime:
+        case EDataSlot::Timestamp:
+        case EDataSlot::Interval:
+        case EDataSlot::Decimal:
+        case EDataSlot::DyNumber:
+            // Supported
+            return true;
+        case EDataSlot::Yson:
+        case EDataSlot::Json:
+        case EDataSlot::TzDate:
+        case EDataSlot::TzDatetime:
+        case EDataSlot::TzTimestamp:
+        case EDataSlot::JsonDocument:
+            return false;
+    }
+    return false;
+}
+
+bool IsTypeSupportedInMergeCn(const TDataExprType* dataType) {
+   return IsTypeSupportedInMergeCn(dataType->GetSlot());
+}
+
+bool IsMergeConnectionApplicable(const TVector<const TTypeAnnotationNode*>& sortKeyTypes) {
+    for (auto sortKeyType : sortKeyTypes) {
+        if (sortKeyType->GetKind() == ETypeAnnotationKind::Optional) {
+            sortKeyType = sortKeyType->Cast<TOptionalExprType>()->GetItemType();
+        }
         if (sortKeyType->GetKind() != ETypeAnnotationKind::Data
-            || !IsTypeSupportedInMergeCn(sortKeyType->Cast<TDataExprType>())) { 
-            return false; 
-        } 
-    } 
-    return true; 
-} 
- 
+            || !IsTypeSupportedInMergeCn(sortKeyType->Cast<TDataExprType>())) {
+            return false;
+        }
+    }
+    return true;
+}
+
 TString PrintDqStageOnly(const TDqStageBase& stage, TExprContext& ctx) {
     if (stage.Inputs().Empty()) {
         return NCommon::ExprToPrettyString(ctx, stage.Ref());

@@ -25,7 +25,7 @@ public:
         AddHandler({TDqCnMap::CallableName()}, Hndl(&NDq::AnnotateDqConnection));
         AddHandler({TDqCnBroadcast::CallableName()}, Hndl(&NDq::AnnotateDqConnection));
         AddHandler({TDqCnValue::CallableName()}, Hndl(&NDq::AnnotateDqCnValue));
-        AddHandler({TDqCnMerge::CallableName()}, Hndl(&NDq::AnnotateDqCnMerge)); 
+        AddHandler({TDqCnMerge::CallableName()}, Hndl(&NDq::AnnotateDqCnMerge));
         AddHandler({TDqReplicate::CallableName()}, Hndl(&NDq::AnnotateDqReplicate));
         AddHandler({TDqJoin::CallableName()}, Hndl(&NDq::AnnotateDqJoin));
         AddHandler({TDqPhyMapJoin::CallableName()}, Hndl(&NDq::AnnotateDqMapOrDictJoin));

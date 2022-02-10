@@ -193,8 +193,8 @@ private:
                 // Proper check should use partitioning information for results stage via opt constraints.
                 if (resultStage.Inputs().Size() == 1 && resultStage.Inputs().Item(0).Maybe<TDqCnUnionAll>()) {
                     collectStage = resultStage;
-                } else if (resultStage.Inputs().Size() == 1 && resultStage.Inputs().Item(0).Maybe<TDqCnMerge>()) { 
-                    collectStage = resultStage; 
+                } else if (resultStage.Inputs().Size() == 1 && resultStage.Inputs().Item(0).Maybe<TDqCnMerge>()) {
+                    collectStage = resultStage;
                 } else if (resultStage.Inputs().Size() == 1 && resultStage.Inputs().Item(0).Maybe<TDqPhyPrecompute>()) {
                     collectStage = resultStage;
                 } else if (resultStage.Inputs().Empty() && IsKqpPureLambda(resultStage.Program())) {

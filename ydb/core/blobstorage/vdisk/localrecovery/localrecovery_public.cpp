@@ -653,8 +653,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_DB_LOCAL_RECOVERY;
-        }
-
+        } 
+ 
         TDatabaseLocalRecovery(
                 const TIntrusivePtr<TVDiskContext> &vctx,
                 const TIntrusivePtr<TVDiskConfig> &config,

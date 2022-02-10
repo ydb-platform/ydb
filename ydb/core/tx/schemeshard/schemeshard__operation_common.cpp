@@ -3,33 +3,33 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-namespace
+namespace 
 {
-
-template <typename T, typename TFuncCheck, typename TFuncToString>
-bool CollectProposeTxResults(
-        const T& ev,
+ 
+template <typename T, typename TFuncCheck, typename TFuncToString> 
+bool CollectProposeTxResults( 
+        const T& ev, 
         const NKikimr::NSchemeShard::TOperationId& operationId,
         NKikimr::NSchemeShard::TOperationContext& context,
-        TFuncCheck checkPrepared,
-        TFuncToString toString)
-{
+        TFuncCheck checkPrepared, 
+        TFuncToString toString) 
+{ 
     auto ssId = context.SS->SelfTabletId();
 
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TEvProposeTransactionResult at tablet: " << ssId);
-
-    auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
+                "TEvProposeTransactionResult at tablet: " << ssId); 
+ 
+    auto tabletId = TTabletId(ev->Get()->Record.GetOrigin()); 
     auto shardMinStep = TStepId(ev->Get()->Record.GetMinStep());
     auto status = ev->Get()->Record.GetStatus();
 
     // Ignore COMPLETE
-    if (!checkPrepared(status)) {
+    if (!checkPrepared(status)) { 
         LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Ignore TEvProposeTransactionResult as not prepared"
-                        << ", shard: " << tabletId
+                    "Ignore TEvProposeTransactionResult as not prepared" 
+                        << ", shard: " << tabletId 
                         << ", operationId: " << operationId
-                        << ", result status: " << toString(status)
+                        << ", result status: " << toString(status) 
                         << ", at schemeshard: " << ssId);
         return false;
     }
@@ -48,8 +48,8 @@ bool CollectProposeTxResults(
     // Ignore if this is a repeated message
     if (!txState.ShardsInProgress.contains(shardIdx)) {
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Ignore TEvProposeTransactionResult as duplicate"
-                        << ", shard: " << tabletId
+                    "Ignore TEvProposeTransactionResult as duplicate" 
+                        << ", shard: " << tabletId 
                         << ", shardIdx: " << shardIdx
                         << ", operationId: " << operationId
                         << ", at schemeshard: " << ssId);
@@ -57,11 +57,11 @@ bool CollectProposeTxResults(
     }
 
     txState.ShardsInProgress.erase(shardIdx);
-    context.OnComplete.UnbindMsgFromPipe(operationId, tabletId, shardIdx);
+    context.OnComplete.UnbindMsgFromPipe(operationId, tabletId, shardIdx); 
 
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "CollectProposeTransactionResults accept TEvProposeTransactionResult"
-                    << ", shard: " << tabletId
+                "CollectProposeTransactionResults accept TEvProposeTransactionResult" 
+                    << ", shard: " << tabletId 
                     << ", shardIdx: " << shardIdx
                     << ", operationId: " << operationId
                     << ", left await: " << txState.ShardsInProgress.size()
@@ -76,40 +76,40 @@ bool CollectProposeTxResults(
     return false;
 }
 
-}
-
-bool NTableState::CollectProposeTransactionResults(
+} 
+ 
+bool NTableState::CollectProposeTransactionResults( 
         const NKikimr::NSchemeShard::TOperationId &operationId,
-        const TEvDataShard::TEvProposeTransactionResult::TPtr &ev,
+        const TEvDataShard::TEvProposeTransactionResult::TPtr &ev, 
         NKikimr::NSchemeShard::TOperationContext &context)
-{
-    auto prepared = [](NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status) -> bool {
-        return status == NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED;
-    };
-
-    auto toString = [](NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status) -> TString {
-        return NKikimrTxDataShard::TEvProposeTransactionResult_EStatus_Name(status);
-    };
-
-    return CollectProposeTxResults(ev, operationId, context, prepared, toString);
-}
-
-bool NTableState::CollectProposeTransactionResults(
+{ 
+    auto prepared = [](NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status) -> bool { 
+        return status == NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED; 
+    }; 
+ 
+    auto toString = [](NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status) -> TString { 
+        return NKikimrTxDataShard::TEvProposeTransactionResult_EStatus_Name(status); 
+    }; 
+ 
+    return CollectProposeTxResults(ev, operationId, context, prepared, toString); 
+} 
+ 
+bool NTableState::CollectProposeTransactionResults( 
         const NKikimr::NSchemeShard::TOperationId& operationId,
-        const TEvColumnShard::TEvProposeTransactionResult::TPtr& ev,
+        const TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, 
         NKikimr::NSchemeShard::TOperationContext& context)
-{
-    auto prepared = [](NKikimrTxColumnShard::EResultStatus status) -> bool {
-        return status == NKikimrTxColumnShard::EResultStatus::PREPARED;
-    };
-
-    auto toString = [](NKikimrTxColumnShard::EResultStatus status) -> TString {
-        return NKikimrTxColumnShard::EResultStatus_Name(status);
-    };
-
-    return CollectProposeTxResults(ev, operationId, context, prepared, toString);
-}
-
+{ 
+    auto prepared = [](NKikimrTxColumnShard::EResultStatus status) -> bool { 
+        return status == NKikimrTxColumnShard::EResultStatus::PREPARED; 
+    }; 
+ 
+    auto toString = [](NKikimrTxColumnShard::EResultStatus status) -> TString { 
+        return NKikimrTxColumnShard::EResultStatus_Name(status); 
+    }; 
+ 
+    return CollectProposeTxResults(ev, operationId, context, prepared, toString); 
+} 
+ 
 bool NTableState::CollectSchemaChanged(
         const TOperationId& operationId,
         const TEvDataShard::TEvSchemaChanged::TPtr& ev,

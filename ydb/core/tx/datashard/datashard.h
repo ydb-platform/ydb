@@ -1,7 +1,7 @@
 #pragma once
 
 #include "datashard_s3_upload.h"
-
+ 
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/base/domain.h>
@@ -169,12 +169,12 @@ namespace NDataShard {
 
 }
 
-// legacy
-namespace NTxDataShard {
+// legacy 
+namespace NTxDataShard { 
     using NDataShard::TShardState;
     using NDataShard::TTxFlags;
-}
-
+} 
+ 
 struct TEvDataShard {
     enum EEv {
         EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_DATASHARD),
@@ -195,7 +195,7 @@ struct TEvDataShard {
         EvGetShardState,
         EvReadOperationHistogram,
         EvUpdateConfig,
-        EvSchemaChanged,
+        EvSchemaChanged, 
         EvStateChanged,
         EvCancelBackup,
         EvMigrateSchemeShardRequest,
@@ -206,7 +206,7 @@ struct TEvDataShard {
         EvGetShardStateResult,
         EvReadOperationHistogramResult,
         EvUpdateConfigResult,
-        EvSchemaChangedResult,
+        EvSchemaChangedResult, 
         EvStateChangedResult,
 
         EvReturnBorrowedPart = 6 * 512,
@@ -339,39 +339,39 @@ struct TEvDataShard {
         }
     };
 
-    struct TEvSchemaChanged : public TEventPB<TEvSchemaChanged, NKikimrTxDataShard::TEvSchemaChanged,
-                                        TEvDataShard::EvSchemaChanged> {
-        TEvSchemaChanged()
-        {}
-
+    struct TEvSchemaChanged : public TEventPB<TEvSchemaChanged, NKikimrTxDataShard::TEvSchemaChanged, 
+                                        TEvDataShard::EvSchemaChanged> { 
+        TEvSchemaChanged() 
+        {} 
+ 
         TEvSchemaChanged(const TActorId& source, ui64 origin, ui32 state, ui64 txId, ui64 step, ui32 generation) {
             ActorIdToProto(source, Record.MutableSource());
-            Record.SetOrigin(origin);
-            Record.SetState(state);
-            Record.SetTxId(txId);
-            Record.SetStep(step);
-            Record.SetGeneration(generation);
-        }
-
+            Record.SetOrigin(origin); 
+            Record.SetState(state); 
+            Record.SetTxId(txId); 
+            Record.SetStep(step); 
+            Record.SetGeneration(generation); 
+        } 
+ 
         TActorId GetSource() const {
             return ActorIdFromProto(Record.GetSource());
-        }
-
-        ui32 GetGeneration() const {
-            return Record.GetGeneration();
-        }
-    };
-
-    struct TEvSchemaChangedResult : public TEventPB<TEvSchemaChangedResult, NKikimrTxDataShard::TEvSchemaChangedResult,
-                                                TEvDataShard::EvSchemaChangedResult> {
+        } 
+ 
+        ui32 GetGeneration() const { 
+            return Record.GetGeneration(); 
+        } 
+    }; 
+ 
+    struct TEvSchemaChangedResult : public TEventPB<TEvSchemaChangedResult, NKikimrTxDataShard::TEvSchemaChangedResult, 
+                                                TEvDataShard::EvSchemaChangedResult> { 
         TEvSchemaChangedResult()
         {}
 
         explicit TEvSchemaChangedResult(ui64 txId) {
             Record.SetTxId(txId);
         }
-    };
-
+    }; 
+ 
     struct TEvStateChanged : public TEventPB<TEvStateChanged, NKikimrTxDataShard::TEvStateChanged,
                                         TEvDataShard::EvStateChanged> {
         TEvStateChanged()
@@ -411,7 +411,7 @@ struct TEvDataShard {
             Record.SetTxKind(txKind);
             ActorIdToProto(source, Record.MutableSource());
             Record.SetTxId(txId);
-            Record.SetExecLevel(0);
+            Record.SetExecLevel(0); 
             Record.SetTxBody(txBody.data(), txBody.size());
             Record.SetFlags(flags);
         }
@@ -461,8 +461,8 @@ struct TEvDataShard {
             return Record.GetTxId();
         }
 
-        ui32 GetFlags() const {
-            return Record.GetFlags();
+        ui32 GetFlags() const { 
+            return Record.GetFlags(); 
         }
 
         TStringBuf GetTxBody() const {
@@ -483,8 +483,8 @@ struct TEvDataShard {
     struct TEvProposeTransactionResult : public TEventPB<TEvProposeTransactionResult, NKikimrTxDataShard::TEvProposeTransactionResult,
         TEvDataShard::EvProposeTransactionResult> {
 
-        TEvProposeTransactionResult() = default;
-
+        TEvProposeTransactionResult() = default; 
+ 
         TEvProposeTransactionResult(NKikimrTxDataShard::ETransactionKind txKind, ui64 origin, ui64 txId,
             NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status)
         {
@@ -494,22 +494,22 @@ struct TEvDataShard {
             Record.SetStatus(status);
         }
 
-        bool IsPrepared() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED; }
-        bool IsComplete() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE; }
-        bool IsTryLater() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::TRY_LATER; }
+        bool IsPrepared() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED; } 
+        bool IsComplete() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE; } 
+        bool IsTryLater() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::TRY_LATER; } 
         bool IsExecError() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR; }
-        bool IsError() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::ERROR; }
+        bool IsError() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::ERROR; } 
         bool IsBadRequest() const { return GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST; }
-
-        bool IsForceOnline() const { return ForceOnline; }
-        bool IsForceDirty() const { return ForceDirty; }
-        void SetForceOnline(bool online = true) { ForceOnline = online; }
-        void SetForceDirty(bool dirty = true) { ForceDirty = dirty; }
-
-        void SetTryLater() {
-            Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::TRY_LATER);
-        }
-
+ 
+        bool IsForceOnline() const { return ForceOnline; } 
+        bool IsForceDirty() const { return ForceDirty; } 
+        void SetForceOnline(bool online = true) { ForceOnline = online; } 
+        void SetForceDirty(bool dirty = true) { ForceDirty = dirty; } 
+ 
+        void SetTryLater() { 
+            Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::TRY_LATER); 
+        } 
+ 
         void SetDomainCoordinators(const NKikimrSubDomains::TProcessingParams& params) {
             Record.MutableDomainCoordinators()->CopyFrom(params.GetCoordinators());
         }
@@ -521,15 +521,15 @@ struct TEvDataShard {
                 SetProcessError(NKikimrTxDataShard::TError::SCHEME_CHANGED,
                     "Duplicate scheme tx must not be proposed with a different tx id");
             }
-        }
-
-        void SetPrepared(ui64 minStep, ui64 maxStep, const TInstant& RequestStartTime) {
-            Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED);
-            Record.SetMinStep(minStep);
-            Record.SetMaxStep(maxStep);
-            Record.SetPrepareArriveTime(RequestStartTime.MicroSeconds());
-        }
-
+        } 
+ 
+        void SetPrepared(ui64 minStep, ui64 maxStep, const TInstant& RequestStartTime) { 
+            Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED); 
+            Record.SetMinStep(minStep); 
+            Record.SetMaxStep(maxStep); 
+            Record.SetPrepareArriveTime(RequestStartTime.MicroSeconds()); 
+        } 
+ 
         void SetTxResult(const TStringBuf& txResult) {
             Record.SetTxResult(txResult.data(), txResult.size());
         }
@@ -568,16 +568,16 @@ struct TEvDataShard {
             Record.SetOrderId(stepOrderId.second);
         }
 
-        void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId) {
-            auto entry = Record.AddTxLocks();
-            entry->SetLockId(lockId);
-            entry->SetDataShard(shard);
-            entry->SetGeneration(generation);
-            entry->SetCounter(counter);
-            entry->SetSchemeShard(ssId);
-            entry->SetPathId(pathId);
-        }
-
+        void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId) { 
+            auto entry = Record.AddTxLocks(); 
+            entry->SetLockId(lockId); 
+            entry->SetDataShard(shard); 
+            entry->SetGeneration(generation); 
+            entry->SetCounter(counter); 
+            entry->SetSchemeShard(ssId); 
+            entry->SetPathId(pathId); 
+        } 
+ 
         NKikimrTxDataShard::ETransactionKind GetTxKind() const {
             return Record.GetTxKind();
         }
@@ -633,10 +633,10 @@ struct TEvDataShard {
                 error->SetKey(keyBuffer.data(), keyBuffer.size());
             }
         }
-
-    private:
-        bool ForceOnline = false;
-        bool ForceDirty = false;
+ 
+    private: 
+        bool ForceOnline = false; 
+        bool ForceDirty = false; 
     };
 
     struct TEvProposeTransactionRestart : public TEventPB<TEvProposeTransactionRestart, NKikimrTxDataShard::TEvProposeTransactionRestart, TEvDataShard::EvProposeTransactionRestart> {

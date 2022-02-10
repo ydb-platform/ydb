@@ -4446,78 +4446,78 @@ Value {
         }
       }
     }
-    Member {
-      Name: "__tx_locks2"
-      Type {
-        Kind: Optional
-        Optional {
-          Item {
-            Kind: List
-            List {
-              Item {
-                Kind: Struct
-                Struct {
-                  Member {
-                    Name: "Counter"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 4
-                      }
-                    }
-                  }
-                  Member {
-                    Name: "DataShard"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 4
-                      }
-                    }
-                  }
-                  Member {
-                    Name: "Generation"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 2
-                      }
-                    }
-                  }
-                  Member {
-                    Name: "LockId"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 4
-                      }
-                    }
-                  }
-                  Member {
-                    Name: "PathId"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 4
-                      }
-                    }
-                  }
-                  Member {
-                    Name: "SchemeShard"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 4
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+    Member { 
+      Name: "__tx_locks2" 
+      Type { 
+        Kind: Optional 
+        Optional { 
+          Item { 
+            Kind: List 
+            List { 
+              Item { 
+                Kind: Struct 
+                Struct { 
+                  Member { 
+                    Name: "Counter" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 4 
+                      } 
+                    } 
+                  } 
+                  Member { 
+                    Name: "DataShard" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 4 
+                      } 
+                    } 
+                  } 
+                  Member { 
+                    Name: "Generation" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 2 
+                      } 
+                    } 
+                  } 
+                  Member { 
+                    Name: "LockId" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 4 
+                      } 
+                    } 
+                  } 
+                  Member { 
+                    Name: "PathId" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 4 
+                      } 
+                    } 
+                  } 
+                  Member { 
+                    Name: "SchemeShard" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 4 
+                      } 
+                    } 
+                  } 
+                } 
+              } 
+            } 
+          } 
+        } 
+      } 
+    } 
   }
 }
 Value {
@@ -4525,168 +4525,168 @@ Value {
     Optional {
     }
   }
-  Struct {
-    Optional {
-    }
-  }
+  Struct { 
+    Optional { 
+    } 
+  } 
 }
 )___";
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
     Y_UNIT_TEST(TestDiagnostics) {
-        TDriver driver;
-        driver.ShardDbState.AddShard<Schema1>(Shard1);
-        auto& pgmBuilder = driver.PgmBuilder;
-
-        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.Diagnostics()));
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
-        auto resStr = res.DebugString();
-        //Cerr << resStr << Endl;
-
-        auto expectedStr = R"___(Type {
-  Kind: Struct
-  Struct {
-    Member {
-      Name: "__tx_info"
-      Type {
-        Kind: Optional
-        Optional {
-          Item {
-            Kind: List
-            List {
-              Item {
-                Kind: Struct
-                Struct {
-                  Member {
-                    Name: "ActorIdRawX1"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 4
-                      }
-                    }
-                  }
-                  Member {
-                    Name: "ActorIdRawX2"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 4
-                      }
-                    }
-                  }
-                  Member {
-                    Name: "ExecLatency"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 4
-                      }
-                    }
-                  }
-                  Member {
-                    Name: "GenStep"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 4
-                      }
-                    }
-                  }
-                  Member {
-                    Name: "Generation"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 2
-                      }
-                    }
-                  }
-                  Member {
+        TDriver driver; 
+        driver.ShardDbState.AddShard<Schema1>(Shard1); 
+        auto& pgmBuilder = driver.PgmBuilder; 
+ 
+        auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.Diagnostics())); 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete); 
+        auto resStr = res.DebugString(); 
+        //Cerr << resStr << Endl; 
+ 
+        auto expectedStr = R"___(Type { 
+  Kind: Struct 
+  Struct { 
+    Member { 
+      Name: "__tx_info" 
+      Type { 
+        Kind: Optional 
+        Optional { 
+          Item { 
+            Kind: List 
+            List { 
+              Item { 
+                Kind: Struct 
+                Struct { 
+                  Member { 
+                    Name: "ActorIdRawX1" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 4 
+                      } 
+                    } 
+                  } 
+                  Member { 
+                    Name: "ActorIdRawX2" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 4 
+                      } 
+                    } 
+                  } 
+                  Member { 
+                    Name: "ExecLatency" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 4 
+                      } 
+                    } 
+                  } 
+                  Member { 
+                    Name: "GenStep" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 4 
+                      } 
+                    } 
+                  } 
+                  Member { 
+                    Name: "Generation" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 2 
+                      } 
+                    } 
+                  } 
+                  Member { 
                     Name: "IsFollower"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 6
-                      }
-                    }
-                  }
-                  Member {
-                    Name: "PrepareArriveTime"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 4
-                      }
-                    }
-                  }
-                  Member {
-                    Name: "ProposeLatency"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 4
-                      }
-                    }
-                  }
-                  Member {
-                    Name: "Status"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 2
-                      }
-                    }
-                  }
-                  Member {
-                    Name: "TabletId"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 4
-                      }
-                    }
-                  }
-                  Member {
-                    Name: "TxId"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 4
-                      }
-                    }
-                  }
-                  Member {
-                    Name: "TxStep"
-                    Type {
-                      Kind: Data
-                      Data {
-                        Scheme: 4
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-Value {
-  Struct {
-    Optional {
-    }
-  }
-}
-)___";
-        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
-    }
-
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 6 
+                      } 
+                    } 
+                  } 
+                  Member { 
+                    Name: "PrepareArriveTime" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 4 
+                      } 
+                    } 
+                  } 
+                  Member { 
+                    Name: "ProposeLatency" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 4 
+                      } 
+                    } 
+                  } 
+                  Member { 
+                    Name: "Status" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 2 
+                      } 
+                    } 
+                  } 
+                  Member { 
+                    Name: "TabletId" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 4 
+                      } 
+                    } 
+                  } 
+                  Member { 
+                    Name: "TxId" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 4 
+                      } 
+                    } 
+                  } 
+                  Member { 
+                    Name: "TxStep" 
+                    Type { 
+                      Kind: Data 
+                      Data { 
+                        Scheme: 4 
+                      } 
+                    } 
+                  } 
+                } 
+              } 
+            } 
+          } 
+        } 
+      } 
+    } 
+  } 
+} 
+Value { 
+  Struct { 
+    Optional { 
+    } 
+  } 
+} 
+)___"; 
+        UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr); 
+    } 
+ 
     Y_UNIT_TEST(TestMapsPushdown) {
         const TString okValue = "Ok";
 

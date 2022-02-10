@@ -176,7 +176,7 @@ public:
                             TPathElement::EPathType::EPathTypeDir,
                             TPathElement::EPathType::EPathTypeSubDomain,
                             TPathElement::EPathType::EPathTypeExtSubDomain,
-                            TPathElement::EPathType::EPathTypeColumnStore
+                            TPathElement::EPathType::EPathTypeColumnStore 
                         }, acceptExisted);
             } else {
                 checks

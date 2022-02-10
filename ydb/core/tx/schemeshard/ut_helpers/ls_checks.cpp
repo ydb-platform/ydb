@@ -858,28 +858,28 @@ TCheckFunc IsBackupTable(bool value) {
 
 TCheckFunc HasOlapTableSchemaPreset(const TString& presetName) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        const auto& table = record.GetPathDescription().GetColumnTableDescription();
+        const auto& table = record.GetPathDescription().GetColumnTableDescription(); 
         UNIT_ASSERT_VALUES_EQUAL(table.GetSchemaPresetName(), presetName);
     };
 }
 
 TCheckFunc HasOlapTableSchemaVersion(ui64 schemaVersion) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        const auto& table = record.GetPathDescription().GetColumnTableDescription();
+        const auto& table = record.GetPathDescription().GetColumnTableDescription(); 
         UNIT_ASSERT_VALUES_EQUAL(table.GetSchema().GetVersion(), schemaVersion);
     };
 }
 
 TCheckFunc HasOlapTableTtlSettingsVersion(ui64 ttlSettingsVersion) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        const auto& table = record.GetPathDescription().GetColumnTableDescription();
+        const auto& table = record.GetPathDescription().GetColumnTableDescription(); 
         UNIT_ASSERT_VALUES_EQUAL(table.GetTtlSettings().GetVersion(), ttlSettingsVersion);
     };
 }
 
 TCheckFunc HasOlapTableTtlSettingsEnabled(const TString& columnName, const TDuration& expireAfter) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        const auto& table = record.GetPathDescription().GetColumnTableDescription();
+        const auto& table = record.GetPathDescription().GetColumnTableDescription(); 
         UNIT_ASSERT(table.HasTtlSettings());
         const auto& ttl = table.GetTtlSettings();
         UNIT_ASSERT(ttl.HasEnabled());
@@ -890,29 +890,29 @@ TCheckFunc HasOlapTableTtlSettingsEnabled(const TString& columnName, const TDura
 
 TCheckFunc HasOlapTableTtlSettingsDisabled() {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        const auto& table = record.GetPathDescription().GetColumnTableDescription();
+        const auto& table = record.GetPathDescription().GetColumnTableDescription(); 
         UNIT_ASSERT(table.HasTtlSettings());
         const auto& ttl = table.GetTtlSettings();
         UNIT_ASSERT(ttl.HasDisabled());
     };
 }
 
-TCheckFunc HasOlapTableTtlSettingsTiering(ui32 tierNo, const TString& tierName, const TString& columnName,
-                                          const TDuration& evictAfter) {
-    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        const auto& table = record.GetPathDescription().GetColumnTableDescription();
-        UNIT_ASSERT(table.HasTtlSettings());
-        const auto& ttl = table.GetTtlSettings();
-        UNIT_ASSERT(ttl.HasTiering());
-        UNIT_ASSERT(ttl.GetTiering().TiersSize() > tierNo);
-        const auto& tier = ttl.GetTiering().GetTiers()[tierNo];
-        UNIT_ASSERT_VALUES_EQUAL(tier.GetName(), tierName);
-        UNIT_ASSERT(tier.HasEviction());
-        UNIT_ASSERT_VALUES_EQUAL(tier.GetEviction().GetColumnName(), columnName);
-        UNIT_ASSERT_VALUES_EQUAL(tier.GetEviction().GetExpireAfterSeconds(), evictAfter.Seconds());
-    };
-}
-
+TCheckFunc HasOlapTableTtlSettingsTiering(ui32 tierNo, const TString& tierName, const TString& columnName, 
+                                          const TDuration& evictAfter) { 
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) { 
+        const auto& table = record.GetPathDescription().GetColumnTableDescription(); 
+        UNIT_ASSERT(table.HasTtlSettings()); 
+        const auto& ttl = table.GetTtlSettings(); 
+        UNIT_ASSERT(ttl.HasTiering()); 
+        UNIT_ASSERT(ttl.GetTiering().TiersSize() > tierNo); 
+        const auto& tier = ttl.GetTiering().GetTiers()[tierNo]; 
+        UNIT_ASSERT_VALUES_EQUAL(tier.GetName(), tierName); 
+        UNIT_ASSERT(tier.HasEviction()); 
+        UNIT_ASSERT_VALUES_EQUAL(tier.GetEviction().GetColumnName(), columnName); 
+        UNIT_ASSERT_VALUES_EQUAL(tier.GetEviction().GetExpireAfterSeconds(), evictAfter.Seconds()); 
+    }; 
+} 
+ 
 void CheckEffectiveRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TString& right, bool mustHave) {
     const auto& self = record.GetPathDescription().GetSelf();
     TSecurityObject src(self.GetOwner(), self.GetEffectiveACL(), false);

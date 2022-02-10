@@ -3,7 +3,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NArrow { 
 
 constexpr size_t NextSize(size_t size) {
     if (size < 8) {
@@ -98,4 +98,4 @@ template <typename A> struct TToInteger {
         std::is_floating_point_v<A> ? 8 : sizeof(A)>::Type;
 };
 
-}
+} 

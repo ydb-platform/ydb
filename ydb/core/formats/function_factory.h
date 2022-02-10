@@ -13,7 +13,7 @@
 
 #include <ydb/core/formats/arrow/compute/function.h>
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NArrow { 
 
 template <bool mt = false>
 class TFunctionFactory {
@@ -72,4 +72,4 @@ private:
     std::unordered_map<std::string, std::shared_ptr<arrow::compute::Function>> nameToFunc;
 };
 
-}
+} 

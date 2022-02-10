@@ -52,7 +52,7 @@ const bool ENABLE_REBOOT_DISPATCH_LOG = true;
 const bool TRACE_DELAY_TIMING = true;
 const bool SUPPRESS_DELAYS = false;
 const bool VARIATE_RANDOM_SEED = false;
-const ui64 PQ_CACHE_MAX_SIZE_MB = 32;
+const ui64 PQ_CACHE_MAX_SIZE_MB = 32; 
 const TDuration PQ_CACHE_KEEP_TIMEOUT = TDuration::Seconds(10);
 
 static NActors::TTestActorRuntime& AsKikimrRuntime(NActors::TTestActorRuntimeBase& r) {
@@ -97,30 +97,30 @@ namespace NKikimr {
     };
 
     void SetupMediatorTimecastProxy(TTestActorRuntime& runtime, ui32 nodeIndex, bool useFake = false)
-    {
+    { 
         runtime.AddLocalService(
             MakeMediatorTimecastProxyID()
             , TActorSetupCmd(useFake ? new TFakeMediatorTimecastProxy() : CreateMediatorTimecastProxy()
                             , TMailboxType::Revolving, 0)
             , nodeIndex);
-    }
-
-    void SetupTabletCountersAggregator(TTestActorRuntime& runtime, ui32 nodeIndex)
-    {
-        runtime.AddLocalService(MakeTabletCountersAggregatorID(runtime.GetNodeId(nodeIndex)),
-            TActorSetupCmd(CreateTabletCountersAggregator(false), TMailboxType::Revolving, 0), nodeIndex);
-    }
-
-    void SetupPQNodeCache(TTestActorRuntime& runtime, ui32 nodeIndex)
-    {
+    } 
+ 
+    void SetupTabletCountersAggregator(TTestActorRuntime& runtime, ui32 nodeIndex) 
+    { 
+        runtime.AddLocalService(MakeTabletCountersAggregatorID(runtime.GetNodeId(nodeIndex)), 
+            TActorSetupCmd(CreateTabletCountersAggregator(false), TMailboxType::Revolving, 0), nodeIndex); 
+    } 
+ 
+    void SetupPQNodeCache(TTestActorRuntime& runtime, ui32 nodeIndex) 
+    { 
         struct NPQ::TCacheL2Parameters l2Params = {PQ_CACHE_MAX_SIZE_MB, PQ_CACHE_KEEP_TIMEOUT};
-        runtime.AddLocalService(NPQ::MakePersQueueL2CacheID(),
-            TActorSetupCmd(
-                NPQ::CreateNodePersQueueL2Cache(l2Params, runtime.GetDynamicCounters(0)),
-                TMailboxType::Simple, 0),
-            nodeIndex);
-    }
-
+        runtime.AddLocalService(NPQ::MakePersQueueL2CacheID(), 
+            TActorSetupCmd( 
+                NPQ::CreateNodePersQueueL2Cache(l2Params, runtime.GetDynamicCounters(0)), 
+                TMailboxType::Simple, 0), 
+            nodeIndex); 
+    } 
+ 
     struct TUltimateNodes : public NFake::INode {
         TUltimateNodes(TTestActorRuntime &runtime, const TAppPrepare *app)
             : Runtime(runtime)
@@ -145,12 +145,12 @@ namespace NKikimr {
         void Birth(ui32 node) noexcept override
         {
             SetupMediatorTimecastProxy(Runtime, node, UseFakeTimeCast);
-            SetupMonitoringProxy(Runtime, node);
-            SetupTabletCountersAggregator(Runtime, node);
-            SetupGRpcProxyStatus(Runtime, node);
-            SetupNodeWhiteboard(Runtime, node);
-            SetupNodeTabletMonitor(Runtime, node);
-            SetupPQNodeCache(Runtime, node);
+            SetupMonitoringProxy(Runtime, node); 
+            SetupTabletCountersAggregator(Runtime, node); 
+            SetupGRpcProxyStatus(Runtime, node); 
+            SetupNodeWhiteboard(Runtime, node); 
+            SetupNodeTabletMonitor(Runtime, node); 
+            SetupPQNodeCache(Runtime, node); 
         }
 
         TTestActorRuntime &Runtime;
@@ -616,14 +616,14 @@ namespace NKikimr {
         WaitScheduledEvents(runtime, TDuration::Seconds(1), sender, nodeIndex);
     }
 
-    void SetupTabletServices(TTestActorRuntime &runtime, TAppPrepare *app, bool mockDisk, NFake::TStorage storage,
+    void SetupTabletServices(TTestActorRuntime &runtime, TAppPrepare *app, bool mockDisk, NFake::TStorage storage, 
                             NFake::TCaches caches) {
         TAutoPtr<TAppPrepare> dummy;
         if (app == nullptr) {
             dummy = app = new TAppPrepare;
         }
         TUltimateNodes nodes(runtime, app);
-        SetupBasicServices(runtime, *app, mockDisk, &nodes, storage, caches);
+        SetupBasicServices(runtime, *app, mockDisk, &nodes, storage, caches); 
     }
 
     TDomainsInfo::TDomain::TStoragePoolKinds DefaultPoolKinds(ui32 count) {
@@ -1131,7 +1131,7 @@ namespace NKikimr {
                 HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
                 HFunc(TEvHive::TEvCreateTablet, Handle);
                 HFunc(TEvHive::TEvAdoptTablet, Handle);
-                HFunc(TEvHive::TEvDeleteTablet, Handle);
+                HFunc(TEvHive::TEvDeleteTablet, Handle); 
                 HFunc(TEvHive::TEvDeleteOwnerTablets, Handle);
                 HFunc(TEvHive::TEvRequestHiveInfo, Handle);
                 HFunc(TEvHive::TEvInitiateTabletExternalBoot, Handle);
@@ -1164,8 +1164,8 @@ namespace NKikimr {
                     bootstrapperActorId = Boot(ctx, type, &CreateDataShard, DataGroupErasure);
                 } else if (type == defaultTabletTypes.KeyValue) {
                     bootstrapperActorId = Boot(ctx, type, &CreateKeyValueFlat, DataGroupErasure);
-                } else if (type == defaultTabletTypes.ColumnShard) {
-                    bootstrapperActorId = Boot(ctx, type, &CreateColumnShard, DataGroupErasure);
+                } else if (type == defaultTabletTypes.ColumnShard) { 
+                    bootstrapperActorId = Boot(ctx, type, &CreateColumnShard, DataGroupErasure); 
                 } else if (type == defaultTabletTypes.PersQueue) {
                     bootstrapperActorId = Boot(ctx, type, &CreatePersQueue, DataGroupErasure);
                 } else if (type == defaultTabletTypes.PersQueueReadBalancer) {
@@ -1303,8 +1303,8 @@ namespace NKikimr {
             State->Tablets.erase(it);
         }
 
-        void Handle(TEvHive::TEvDeleteTablet::TPtr &ev, const TActorContext &ctx) {
-            NKikimrHive::TEvDeleteTablet& rec = ev->Get()->Record;
+        void Handle(TEvHive::TEvDeleteTablet::TPtr &ev, const TActorContext &ctx) { 
+            NKikimrHive::TEvDeleteTablet& rec = ev->Get()->Record; 
             Cout << "FAKEHIVE " << TabletID() << " TEvDeleteTablet " << rec.ShortDebugString() << Endl;
             TVector<ui64> deletedIdx;
             for (size_t i = 0; i < rec.ShardLocalIdxSize(); ++i) {
@@ -1347,8 +1347,8 @@ namespace NKikimr {
             }
 
             ctx.Send(ev->Sender, new TEvHive::TEvDeleteOwnerTabletsReply(NKikimrProto::OK, TabletID(), ownerId, rec.GetTxId()));
-        }
-
+        } 
+ 
         void Handle(TEvHive::TEvRequestHiveInfo::TPtr &ev, const TActorContext &ctx) {
             const auto& record = ev->Get()->Record;
             TAutoPtr<TEvHive::TEvResponseHiveInfo> response = new TEvHive::TEvResponseHiveInfo();

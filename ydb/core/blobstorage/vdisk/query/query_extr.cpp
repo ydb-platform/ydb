@@ -140,8 +140,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HULLQUERY_EXTREME_INDEX_ONLY;
-        }
-
+        } 
+ 
         TLevelIndexExtremeQueryViaBatcherIndexOnly(
                 std::shared_ptr<TQueryCtx> &queryCtx,
                 const TActorId &parentId,
@@ -154,7 +154,7 @@ namespace NKikimr {
                     std::move(barrierSnapshot), ev, std::move(result), replSchedulerId)
             , TActorBootstrapped<TLevelIndexExtremeQueryViaBatcherIndexOnly>()
             , Merger(QueryCtx->HullCtx->VCtx->Top->GType)
-        {}
+        {} 
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -378,8 +378,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HULLQUERY_EXTREME_DATA;
-        }
-
+        } 
+ 
         TLevelIndexExtremeQueryViaBatcherMergeData(
                 std::shared_ptr<TQueryCtx> &queryCtx,
                 const TActorId &parentId,
@@ -394,7 +394,7 @@ namespace NKikimr {
             , GType(QueryCtx->HullCtx->VCtx->Top->GType)
             , Batcher(BatcherCtx)
             , Merger(&Batcher, GType)
-        {}
+        {} 
     };
 
 

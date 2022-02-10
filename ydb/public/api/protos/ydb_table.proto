@@ -946,16 +946,16 @@ message BulkUpsertRequest {
     // It must contain all key columns but not necessarily all non-key columns.
     // Similar to UPSERT statement only values of specified columns will be updated.
     TypedValue rows = 2;
-    Ydb.Operations.OperationParams operation_params = 3;
+    Ydb.Operations.OperationParams operation_params = 3; 
 
-    // You may set data_format + data instead of rows to insert data in serialized formats.
-    oneof data_format {
-        Ydb.Formats.ArrowBatchSettings arrow_batch_settings = 7;
-        Ydb.Formats.CsvSettings csv_settings = 8;
-    }
-
-    // It's last in the definition to help with sidecar patterns
-    bytes data = 1000;
+    // You may set data_format + data instead of rows to insert data in serialized formats. 
+    oneof data_format { 
+        Ydb.Formats.ArrowBatchSettings arrow_batch_settings = 7; 
+        Ydb.Formats.CsvSettings csv_settings = 8; 
+    } 
+ 
+    // It's last in the definition to help with sidecar patterns 
+    bytes data = 1000; 
 }
 
 message BulkUpsertResponse {

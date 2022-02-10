@@ -114,8 +114,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_READ_BATCHER;
-        }
-
+        } 
+ 
         TTReadBatcherActor(
                 TReadBatcherCtxPtr ctx,
                 const TActorId notifyID,
@@ -130,7 +130,7 @@ namespace NKikimr {
             , Priority(priority)
             , TraceId(std::move(traceId))
             , IsRepl(isRepl)
-        {}
+        {} 
     };
 
     IActor *CreateReadBatcherActor(

@@ -13,13 +13,13 @@
 
 #include <util/generic/vector.h>
 
-namespace NKikimr::NBlobCache {
+namespace NKikimr::NBlobCache { 
 
 using NOlap::TUnifiedBlobId;
 using NOlap::TBlobRange;
 
-using TLogThis = TCtorLogger<NKikimrServices::BLOB_CACHE>;
-
+using TLogThis = TCtorLogger<NKikimrServices::BLOB_CACHE>; 
+ 
 
 struct TEvBlobCache {
     enum EEv {

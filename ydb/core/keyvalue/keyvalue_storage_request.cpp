@@ -64,8 +64,8 @@ class TKeyValueStorageRequest : public TActorBootstrapped<TKeyValueStorageReques
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KEYVALUE_ACTOR;
-    }
-
+    } 
+ 
     TKeyValueStorageRequest(THolder<TIntermediate>&& intermediate, const TTabletStorageInfo *tabletInfo)
         : ReadRequestsSent(0)
         , ReadRequestsReplied(0)

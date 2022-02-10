@@ -509,8 +509,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SS_PROXY_REQUEST;
-    }
-
+    } 
+ 
     TStateStorageProxyRequest(const TIntrusivePtr<TStateStorageInfo> &info, const TIntrusivePtr<TStateStorageInfo> &flowControlledInfo)
         : TActor(&TThis::StateInit)
         , Info(info)
@@ -529,7 +529,7 @@ public:
         , ReplyStep(0)
         , ReplyLocked(false)
         , ReplyLockedFor(0)
-    {}
+    {} 
 
     STATEFN(StateInit) {
         switch (ev->GetTypeRewrite()) {
@@ -609,13 +609,13 @@ protected:
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
-    }
-
+    } 
+ 
     TStateStorageDumpRequest(const TActorId &sender, const TIntrusivePtr<TStateStorageInfo> &info)
         : Sender(sender)
         , Info(info)
         , UndeliveredCount(0)
-    {}
+    {} 
 
     void SendResponse() {
         Send(Sender, Response.Release());
@@ -948,8 +948,8 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SS_PROXY;
-    }
-
+    } 
+ 
     TStateStorageProxy(
             const TIntrusivePtr<TStateStorageInfo> &info,
             const TIntrusivePtr<TStateStorageInfo> &boardInfo,
@@ -958,7 +958,7 @@ public:
         , Info(info)
         , BoardInfo(boardInfo)
         , SchemeBoardInfo(schemeBoardInfo)
-    {}
+    {} 
 
     STATEFN(StateInit) {
         BLOG_TRACE("Proxy::StateInit ev type# " << ev->GetTypeRewrite() << " event: "
@@ -998,11 +998,11 @@ class TStateStorageProxyStub : public TActor<TStateStorageProxyStub> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SS_PROXY_STUB;
-    }
-
+    } 
+ 
     TStateStorageProxyStub()
         : TActor(&TThis::StateFunc)
-    {}
+    {} 
 
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {

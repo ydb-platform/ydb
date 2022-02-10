@@ -6,7 +6,7 @@
 
 #include <ydb/core/base/blobstorage.h>
 
-namespace NKikimr::NColumnShard {
+namespace NKikimr::NColumnShard { 
 
 TLogoBlobID ParseLogoBlobId(TString blobId) {
     TLogoBlobID logoBlobId;
@@ -76,7 +76,7 @@ TBlobBatch& TBlobBatch::operator =(TBlobBatch&& other) = default;
 TBlobBatch::~TBlobBatch() = default;
 
 void TBlobBatch::SendWriteRequest(const TActorContext& ctx, ui32 groupId, const TLogoBlobID& logoBlobId, const TString& data, ui64 cookie, TInstant deadline) {
-    LOG_S_TRACE("EvPut " << data.size() << " bytes to group " << groupId
+    LOG_S_TRACE("EvPut " << data.size() << " bytes to group " << groupId 
         << " at tablet " << BatchInfo->TabletInfo->TabletID);
 
     auto handleClass = NKikimrBlobStorage::UserData;
@@ -103,7 +103,7 @@ TUnifiedBlobId TBlobBatch::SendWriteBlobRequest(const TString& blobData, TInstan
 void TBlobBatch::OnBlobWriteResult(TEvBlobStorage::TEvPutResult::TPtr& ev) {
     TLogoBlobID blobId = ev->Get()->Id;
     Y_VERIFY(ev->Get()->Status == NKikimrProto::OK, "The caller must handle unsuccessful status");
-    Y_VERIFY(BatchInfo);
+    Y_VERIFY(BatchInfo); 
     Y_VERIFY(BatchInfo->InFlight[blobId.Cookie()], "Blob %s is already acked!", blobId.ToString().c_str());
     BatchInfo->InFlight[blobId.Cookie()] = false;
     --BatchInfo->InFlightCount;
@@ -111,22 +111,22 @@ void TBlobBatch::OnBlobWriteResult(TEvBlobStorage::TEvPutResult::TPtr& ev) {
 }
 
 bool TBlobBatch::AllBlobWritesCompleted() const {
-    Y_VERIFY(BatchInfo);
+    Y_VERIFY(BatchInfo); 
     return BatchInfo->InFlightCount == 0;
 }
 
 ui64 TBlobBatch::GetBlobCount() const {
-    if (BatchInfo) {
-        return BatchInfo->BlobSizes.size();
-    }
-    return 0;
+    if (BatchInfo) { 
+        return BatchInfo->BlobSizes.size(); 
+    } 
+    return 0; 
 }
 
 ui64 TBlobBatch::GetTotalSize() const {
-    if (BatchInfo) {
-        return BatchInfo->TotalSizeBytes;
-    }
-    return 0;
+    if (BatchInfo) { 
+        return BatchInfo->TotalSizeBytes; 
+    } 
+    return 0; 
 }
 
 
@@ -397,11 +397,11 @@ TBlobBatch TBlobManager::StartBlobBatch(ui32 channel) {
 }
 
 void TBlobManager::SaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) {
-    Y_VERIFY(blobBatch.BatchInfo);
+    Y_VERIFY(blobBatch.BatchInfo); 
     ++CountersUpdate.BatchesCommitted;
     CountersUpdate.BlobsWritten += blobBatch.GetBlobCount();
 
-    LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID
+    LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID 
         << " Save Batch GenStep: " << blobBatch.BatchInfo->Gen << ":" << blobBatch.BatchInfo->Step
         << " Blob count: " << blobBatch.BatchInfo->BlobSizes.size());
 
@@ -510,4 +510,4 @@ void TBlobManager::SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) {
     NBlobCache::ForgetBlob(blobId);
 }
 
-}
+} 

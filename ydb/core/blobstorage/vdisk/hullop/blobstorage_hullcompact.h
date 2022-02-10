@@ -316,8 +316,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::VDISK_COMPACTION;
-        }
-
+        } 
+ 
         THullCompaction(THullCtxPtr hullCtx,
                         const std::shared_ptr<TLevelIndexRunTimeCtx> &rtCtx,
                         TIntrusivePtr<TFreshSegment> freshSegment,
@@ -346,7 +346,7 @@ namespace NKikimr {
                     partitionKey)
             , CompactionID(TAppData::RandomProvider->GenRand64())
             , SkeletonId(rtCtx->SkeletonId)
-        {}
+        {} 
     };
 
 } // NKikimr

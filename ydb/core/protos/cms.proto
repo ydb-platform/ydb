@@ -72,8 +72,8 @@ message THostState {
   repeated TServiceState Services  = 3;
   repeated TDeviceState  Devices   = 4;
   optional uint64        Timestamp = 5;
-  optional uint32        NodeId    = 6;
-  optional uint32        InterconnectPort = 7;
+  optional uint32        NodeId    = 6; 
+  optional uint32        InterconnectPort = 7; 
   repeated EMarker       Markers   = 8;
 }
 
@@ -115,13 +115,13 @@ message TAction {
   optional string    Tenant      = 6;
 }
 
-enum ETenantPolicy {
+enum ETenantPolicy { 
     // No limits for computational nodes restarts.
-    NONE    = 0;
+    NONE    = 0; 
     // Follow TenantLimits specified in CMS config.
-    DEFAULT = 1;
-}
-
+    DEFAULT = 1; 
+} 
+ 
 enum EAvailabilityMode {
     // By default CMS tries to guarantee cluster availability
     // by allowing at most 1 disabled disk in each storage group.
@@ -159,20 +159,20 @@ message TPermissionRequest {
   optional EAvailabilityMode AvailabilityMode = 9 [default = MODE_MAX_AVAILABILITY];
 }
 
-enum EExtensionType {
-    HostInfo = 1;
-}
-
-message TPermissionExtension {
-    optional EExtensionType Type  = 1;
-    repeated THostState Hosts     = 2;
-}
-
+enum EExtensionType { 
+    HostInfo = 1; 
+} 
+ 
+message TPermissionExtension { 
+    optional EExtensionType Type  = 1; 
+    repeated THostState Hosts     = 2; 
+} 
+ 
 message TPermission {
   optional string   Id       = 1;
   optional TAction  Action   = 2;
   optional uint64   Deadline = 3;
-  repeated TPermissionExtension Extentions = 4;
+  repeated TPermissionExtension Extentions = 4; 
 }
 
 message TPermissionResponse {
@@ -497,7 +497,7 @@ message TSetConfigRequest {
 
 message TSetConfigResponse {
     optional TStatus Status = 1;
-}
+} 
 
 message TAvailabilityStats {
     message TDowntime {

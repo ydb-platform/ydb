@@ -6,7 +6,7 @@ namespace NKikimr {
 namespace NFlatTests {
 
 using namespace Tests;
-using NClient::TValue;
+using NClient::TValue; 
 
 Y_UNIT_TEST_SUITE(TS3ListingTest) {
 
@@ -206,13 +206,13 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
         annoyingClient.FlatQuery(Sprintf(selectBucketQuery.data(), hash, hash, name.data(), name.data(), table.data()), opts, res);
 
         //Cout << res << Endl;
-        TValue value = TValue::Create(res.GetValue(), res.GetType());
-        TValue objects = value["Objects"];
-        TValue l = objects["List"];
+        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
+        TValue objects = value["Objects"]; 
+        TValue l = objects["List"]; 
         TVector<TString> paths;
-        for (ui32 i = 0; i < l.Size(); ++i) {
-            TValue ps = l[i];
-            paths.emplace_back(ps["Path"]);
+        for (ui32 i = 0; i < l.Size(); ++i) { 
+            TValue ps = l[i]; 
+            paths.emplace_back(ps["Path"]); 
         }
 
         // Make a list of common prefixes and a list of full paths that match the parameter
@@ -284,16 +284,16 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
         commonPrefixes.clear();
         contents.clear();
 
-        TValue value = TValue::Create(res.GetValue(), res.GetType());
-        TValue prefixes = value["CommonPrefixes"];
-        TValue objects = value["Contents"];
-        for (ui32 i = 0; i < prefixes.Size(); ++i) {
-            TValue ps = prefixes[i];
-            commonPrefixes.emplace_back(ps["Path"]);
+        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
+        TValue prefixes = value["CommonPrefixes"]; 
+        TValue objects = value["Contents"]; 
+        for (ui32 i = 0; i < prefixes.Size(); ++i) { 
+            TValue ps = prefixes[i]; 
+            commonPrefixes.emplace_back(ps["Path"]); 
         }
-        for (ui32 i = 0; i < objects.Size(); ++i) {
-            TValue ps = objects[i];
-            contents.emplace_back(ps["Path"]);
+        for (ui32 i = 0; i < objects.Size(); ++i) { 
+            TValue ps = objects[i]; 
+            contents.emplace_back(ps["Path"]); 
         }
     }
 

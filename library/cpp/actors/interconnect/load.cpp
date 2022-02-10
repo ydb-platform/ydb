@@ -62,10 +62,10 @@ namespace NInterconnect {
             : TActor(&TLoadResponderActor::StateFunc)
             , Traffic(std::move(traffic))
         {}
-
-        static constexpr IActor::EActivityType ActorActivityType() {
+ 
+        static constexpr IActor::EActivityType ActorActivityType() { 
             return IActor::INTERCONNECT_LOAD_RESPONDER;
-        }
+        } 
 
     private:
         std::shared_ptr<std::atomic_uint64_t> Traffic;

@@ -20,7 +20,7 @@ namespace cp = arrow::compute;
 using cp::internal::applicator::ScalarBinary;
 using cp::internal::applicator::ScalarUnary;
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NArrow { 
 
 template <template <typename... Args> class KernelGenerator, typename Op>
 cp::ArrayKernelExec ArithmeticBinaryExec(cp::internal::detail::GetTypeId getId) {
@@ -180,4 +180,4 @@ static arrow::Status SimpleNullaryExec(cp::KernelContext* ctx, const cp::ExecBat
     return arrow::Status::OK();
 }
 
-}
+} 

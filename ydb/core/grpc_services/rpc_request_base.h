@@ -60,7 +60,7 @@ protected:
         const TString& error
     ) {
         Request->RaiseIssue(MakeIssue(code, error));
-        Reply(status, error);
+        Reply(status, error); 
     }
 
     void Reply(const Ydb::StatusIds::StatusCode status, NKikimrIssues::TIssuesIds::EIssueCode code) {

@@ -24,9 +24,9 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     cluster_info_ut.cpp
     cms_ut.cpp
-    cms_tenants_ut.cpp
+    cms_tenants_ut.cpp 
     cms_ut_common.cpp
-    cms_ut_common.h
+    cms_ut_common.h 
     downtime_ut.cpp
     ut_helpers.cpp
 )

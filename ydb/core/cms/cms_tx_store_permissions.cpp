@@ -76,7 +76,7 @@ public:
             }
         }
 
-        Self->PersistNodeTenants(txc, ctx);
+        Self->PersistNodeTenants(txc, ctx); 
         return true;
     }
 

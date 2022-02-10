@@ -7,7 +7,7 @@ OWNER(
 
 SRCS(
     ydb_scripting.cpp
-    ydb_long_tx.cpp
+    ydb_long_tx.cpp 
 )
 
 PEERDIR(

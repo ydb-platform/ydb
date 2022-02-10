@@ -77,7 +77,7 @@ private:
     using IThreadRef = TAutoPtr<IThreadFactory::IThread>;
 
 
-    NActors::TActorSystem* ActorSystem;
+    NActors::TActorSystem* ActorSystem; 
     NActors::TActorId PQMeta;
     NActors::TActorId MsgBusProxy;
 

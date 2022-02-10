@@ -22,8 +22,8 @@ class TForwardingActor : public TActorBootstrapped<TForwardingActor> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
-    }
-
+    } 
+ 
     TForwardingActor(const TTabletMonitoringProxyConfig& config, ui64 targetTablet, bool forceFollower, const TActorId& sender, const TString& query, HTTP_METHOD method)
         : Config(config)
         , TargetTablet(targetTablet)
@@ -31,7 +31,7 @@ public:
         , Sender(sender)
         , Query(query)
         , Method(method)
-    {}
+    {} 
 
     TForwardingActor(const TTabletMonitoringProxyConfig& config, ui64 targetTablet, bool forceFollower, const TActorId& sender, const TString& query)
         : TForwardingActor(config, targetTablet, forceFollower, sender, query, HTTP_METHOD::HTTP_METHOD_GET)
@@ -126,8 +126,8 @@ class TTabletMonitoringProxyActor : public TActorBootstrapped<TTabletMonitoringP
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_MONITORING_PROXY;
-    }
-
+    } 
+ 
     //
     TTabletMonitoringProxyActor(TTabletMonitoringProxyConfig config);
     virtual ~TTabletMonitoringProxyActor();
@@ -151,7 +151,7 @@ private:
 ////////////////////////////////////////////
 TTabletMonitoringProxyActor::TTabletMonitoringProxyActor(TTabletMonitoringProxyConfig config)
     : Config(std::move(config))
-{}
+{} 
 
 ////////////////////////////////////////////
 TTabletMonitoringProxyActor::~TTabletMonitoringProxyActor()

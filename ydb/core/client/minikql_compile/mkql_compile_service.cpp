@@ -61,8 +61,8 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::MINIKQL_COMPILE_SERVICE;
-    }
-
+    } 
+ 
     TMiniKQLCompileService(size_t compileInflightLimit, THolder<NYql::IDbSchemeResolver>&& dbSchemeResolver)
         : COMPILE_INFLIGHT_LIMIT(compileInflightLimit)
         , DbSchemeResolver(std::move(dbSchemeResolver))

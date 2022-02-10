@@ -49,7 +49,7 @@ protected:
             TTestActorRuntime::DefaultRegistrationObserver(runtime, parentId, actorId);
             return RegistrationObserver(parentId, actorId);
         });
-        SetupTabletServices(*Runtime); // Calls Runtime->Initialize();
+        SetupTabletServices(*Runtime); // Calls Runtime->Initialize(); 
 
         // Edge actor
         EdgeActorId = Runtime->AllocateEdgeActor();

@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                                              Columns { Name: "timestamp" Type: "Timestamp" }
                                              #Columns { Name: "resource_type" Type: "Utf8" }
                                              Columns { Name: "resource_id" Type: "Utf8" }
-                                             Columns { Name: "uid" Type: "Utf8" }
+                                             Columns { Name: "uid" Type: "Utf8" } 
                                              Columns { Name: "level" Type: "Int32" }
                                              Columns { Name: "message" Type: "Utf8" }
                                              #Columns { Name: "json_payload" Type: "Json" }
@@ -52,18 +52,18 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                                              #Columns { Name: "saved_at" Type: "Timestamp" }
                                              #Columns { Name: "request_id" Type: "Utf8" }
                                              KeyColumnNames: "timestamp"
-                                             Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+                                             Engine: COLUMN_ENGINE_REPLACING_TIMESERIES 
                                          }
                                      }
                                      )");
         legacyClient.CreateOlapTable("/Root/olapStore", Sprintf(R"(
             Name: "%s"
             ColumnShardCount: 3
-            Sharding {
-                HashSharding {
-                    Function: HASH_FUNCTION_CLOUD_LOGS
-                    Columns: ["timestamp", "uid"]
-                }
+            Sharding { 
+                HashSharding { 
+                    Function: HASH_FUNCTION_CLOUD_LOGS 
+                    Columns: ["timestamp", "uid"] 
+                } 
             })", tableName.c_str()));
 
         legacyClient.Ls("/Root");
@@ -76,13 +76,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             std::vector<std::shared_ptr<arrow::Field>>{
                 arrow::field("timestamp", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO)),
                 arrow::field("resource_id", arrow::utf8()),
-                arrow::field("uid", arrow::utf8()),
+                arrow::field("uid", arrow::utf8()), 
                 arrow::field("level", arrow::int32()),
                 arrow::field("message", arrow::utf8())
             });
 
-        arrow::TimestampBuilder b1(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool());
-        arrow::StringBuilder b2;
+        arrow::TimestampBuilder b1(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool()); 
+        arrow::StringBuilder b2; 
         arrow::StringBuilder b3;
         arrow::Int32Builder b4;
         arrow::StringBuilder b5;
@@ -90,15 +90,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         for (size_t i = 0; i < rowCount; ++i) {
             std::string uid("uid_" + std::to_string(tsBegin + i));
             std::string message("some prefix " + std::string(1024 + i % 200, 'x'));
-            Y_VERIFY(b1.Append(tsBegin + i).ok());
-            Y_VERIFY(b2.Append(std::to_string(pathIdBegin + i)).ok());
+            Y_VERIFY(b1.Append(tsBegin + i).ok()); 
+            Y_VERIFY(b2.Append(std::to_string(pathIdBegin + i)).ok()); 
             Y_VERIFY(b3.Append(uid).ok());
             Y_VERIFY(b4.Append(i % 5).ok());
             Y_VERIFY(b5.Append(message).ok());
         }
 
-        std::shared_ptr<arrow::TimestampArray> a1;
-        std::shared_ptr<arrow::StringArray> a2;
+        std::shared_ptr<arrow::TimestampArray> a1; 
+        std::shared_ptr<arrow::StringArray> a2; 
         std::shared_ptr<arrow::StringArray> a3;
         std::shared_ptr<arrow::Int32Array> a4;
         std::shared_ptr<arrow::StringArray> a5;
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         Y_VERIFY(b1.Finish(&a1).ok());
         Y_VERIFY(b2.Finish(&a2).ok());
         Y_VERIFY(b3.Finish(&a3).ok());
-        Y_VERIFY(b4.Finish(&a4).ok());
+        Y_VERIFY(b4.Finish(&a4).ok()); 
         Y_VERIFY(b5.Finish(&a5).ok());
 
         return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5 });
@@ -298,7 +298,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                                              Columns { Name: "Datetime_column" Type: "Datetime" }
                                              Columns { Name: "Interval_column" Type: "Interval" }
                                              KeyColumnNames: "key"
-                                             Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+                                             Engine: COLUMN_ENGINE_REPLACING_TIMESERIES 
                                          }
                                      }
         )");
@@ -457,8 +457,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
-
-            CompareYson(result, R"([[["0"];[1000000u]]])");
+ 
+            CompareYson(result, R"([[["0"];[1000000u]]])"); 
         }
     }
 
@@ -489,145 +489,145 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
-
-            CompareYson(result, R"([[["0"];[1000000u]];[["1"];[1000001u]]])");
+ 
+            CompareYson(result, R"([[["0"];[1000000u]];[["1"];[1000001u]]])"); 
         }
     }
 
-    Y_UNIT_TEST(CompositeRangeOlap) {
+    Y_UNIT_TEST(CompositeRangeOlap) { 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
-
-        // EnableDebugLogging(kikimr);
-
-        CreateTestOlapTable(kikimr);
-
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
-
-        auto client = kikimr.GetTableClient();
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                --!syntax_v1
-
-                SELECT `resource_id`, `timestamp`
-                FROM `/Root/olapStore/olapTable`
-                WHERE `timestamp` >= CAST(1000000 AS Timestamp)
-                    AND `timestamp` < CAST(1000001 AS Timestamp)
-            )").GetValueSync();
-
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << result << Endl;
-
-            CompareYson(result, R"([[["0"];[1000000u]]])");
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                --!syntax_v1
-
-                SELECT `resource_id`, `timestamp`
-                FROM `/Root/olapStore/olapTable`
-                WHERE `timestamp` >= CAST(1000000 AS Timestamp)
-                    AND `timestamp` <= CAST(1000001 AS Timestamp)
-            )").GetValueSync();
-
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << result << Endl;
-
-            CompareYson(result, R"([[["0"];[1000000u]];[["1"];[1000001u]]])");
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                --!syntax_v1
-
-                SELECT `resource_id`, `timestamp`
-                FROM `/Root/olapStore/olapTable`
-                WHERE `timestamp` > CAST(1000000 AS Timestamp)
-                    AND `timestamp` <= CAST(1000001 AS Timestamp)
-            )").GetValueSync();
-
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << result << Endl;
-
-            CompareYson(result, R"([[["1"];[1000001u]]])");
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                --!syntax_v1
-
-                SELECT `resource_id`, `timestamp`
-                FROM `/Root/olapStore/olapTable`
-                WHERE `timestamp` >= CAST(1000000 AS Timestamp)
-                    AND `resource_id` == "0"
-            )").GetValueSync();
-
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << result << Endl;
-
-            CompareYson(result, R"([[["0"];[1000000u]]])");
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                --!syntax_v1
-
-                SELECT `resource_id`, `timestamp`
-                FROM `/Root/olapStore/olapTable`
-                WHERE `timestamp` <= CAST(1000001 AS Timestamp)
-                    AND `resource_id` == "1"
-            )").GetValueSync();
-
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << result << Endl;
-
-            CompareYson(result, R"([[["1"];[1000001u]]])");
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                --!syntax_v1
-
-                SELECT `resource_id`, `timestamp`
-                FROM `/Root/olapStore/olapTable`
-                WHERE `timestamp` > CAST(1000000 AS Timestamp)
-                    AND `resource_id` == "1"
-            )").GetValueSync();
-
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << result << Endl;
-
-            CompareYson(result, R"([[["1"];[1000001u]]])");
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                --!syntax_v1
-
-                SELECT `resource_id`, `timestamp`
-                FROM `/Root/olapStore/olapTable`
-                WHERE `timestamp` < CAST(1000001 AS Timestamp)
-                    AND `resource_id` == "0"
-            )").GetValueSync();
-
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << result << Endl;
-
-            CompareYson(result, R"([[["0"];[1000000u]]])");
-        }
-    }
-
+ 
+        // EnableDebugLogging(kikimr); 
+ 
+        CreateTestOlapTable(kikimr); 
+ 
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2); 
+ 
+        auto client = kikimr.GetTableClient(); 
+ 
+        { 
+            auto it = client.StreamExecuteScanQuery(R"( 
+                --!syntax_v1 
+ 
+                SELECT `resource_id`, `timestamp` 
+                FROM `/Root/olapStore/olapTable` 
+                WHERE `timestamp` >= CAST(1000000 AS Timestamp) 
+                    AND `timestamp` < CAST(1000001 AS Timestamp) 
+            )").GetValueSync(); 
+ 
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
+            TString result = StreamResultToYson(it); 
+            Cout << result << Endl; 
+ 
+            CompareYson(result, R"([[["0"];[1000000u]]])"); 
+        } 
+ 
+        { 
+            auto it = client.StreamExecuteScanQuery(R"( 
+                --!syntax_v1 
+ 
+                SELECT `resource_id`, `timestamp` 
+                FROM `/Root/olapStore/olapTable` 
+                WHERE `timestamp` >= CAST(1000000 AS Timestamp) 
+                    AND `timestamp` <= CAST(1000001 AS Timestamp) 
+            )").GetValueSync(); 
+ 
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
+            TString result = StreamResultToYson(it); 
+            Cout << result << Endl; 
+ 
+            CompareYson(result, R"([[["0"];[1000000u]];[["1"];[1000001u]]])"); 
+        } 
+ 
+        { 
+            auto it = client.StreamExecuteScanQuery(R"( 
+                --!syntax_v1 
+ 
+                SELECT `resource_id`, `timestamp` 
+                FROM `/Root/olapStore/olapTable` 
+                WHERE `timestamp` > CAST(1000000 AS Timestamp) 
+                    AND `timestamp` <= CAST(1000001 AS Timestamp) 
+            )").GetValueSync(); 
+ 
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
+            TString result = StreamResultToYson(it); 
+            Cout << result << Endl; 
+ 
+            CompareYson(result, R"([[["1"];[1000001u]]])"); 
+        } 
+ 
+        { 
+            auto it = client.StreamExecuteScanQuery(R"( 
+                --!syntax_v1 
+ 
+                SELECT `resource_id`, `timestamp` 
+                FROM `/Root/olapStore/olapTable` 
+                WHERE `timestamp` >= CAST(1000000 AS Timestamp) 
+                    AND `resource_id` == "0" 
+            )").GetValueSync(); 
+ 
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
+            TString result = StreamResultToYson(it); 
+            Cout << result << Endl; 
+ 
+            CompareYson(result, R"([[["0"];[1000000u]]])"); 
+        } 
+ 
+        { 
+            auto it = client.StreamExecuteScanQuery(R"( 
+                --!syntax_v1 
+ 
+                SELECT `resource_id`, `timestamp` 
+                FROM `/Root/olapStore/olapTable` 
+                WHERE `timestamp` <= CAST(1000001 AS Timestamp) 
+                    AND `resource_id` == "1" 
+            )").GetValueSync(); 
+ 
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
+            TString result = StreamResultToYson(it); 
+            Cout << result << Endl; 
+ 
+            CompareYson(result, R"([[["1"];[1000001u]]])"); 
+        } 
+ 
+        { 
+            auto it = client.StreamExecuteScanQuery(R"( 
+                --!syntax_v1 
+ 
+                SELECT `resource_id`, `timestamp` 
+                FROM `/Root/olapStore/olapTable` 
+                WHERE `timestamp` > CAST(1000000 AS Timestamp) 
+                    AND `resource_id` == "1" 
+            )").GetValueSync(); 
+ 
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
+            TString result = StreamResultToYson(it); 
+            Cout << result << Endl; 
+ 
+            CompareYson(result, R"([[["1"];[1000001u]]])"); 
+        } 
+ 
+        { 
+            auto it = client.StreamExecuteScanQuery(R"( 
+                --!syntax_v1 
+ 
+                SELECT `resource_id`, `timestamp` 
+                FROM `/Root/olapStore/olapTable` 
+                WHERE `timestamp` < CAST(1000001 AS Timestamp) 
+                    AND `resource_id` == "0" 
+            )").GetValueSync(); 
+ 
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
+            TString result = StreamResultToYson(it); 
+            Cout << result << Endl; 
+ 
+            CompareYson(result, R"([[["0"];[1000000u]]])"); 
+        } 
+    } 
+ 
     void CreateSampleOltpTable(TKikimrRunner& kikimr) {
         kikimr.GetTestClient().CreateTable("/Root", R"(
             Name: "OltpTable"
@@ -843,13 +843,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
                 TString result = StreamResultToYson(it);
 
-                CompareYson(result, R"([[
+                CompareYson(result, R"([[ 
                     [0];
-                    ["some prefix xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"];
-                    ["5"];
-                    [1000005u];
-                    ["uid_1000005"]
-                    ]])");
+                    ["some prefix xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"]; 
+                    ["5"]; 
+                    [1000005u]; 
+                    ["uid_1000005"] 
+                    ]])"); 
 
                 it = client.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
                 auto explainResult = CollectStreamResult(it);
@@ -891,8 +891,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
 
-        // EnableDebugLogging(kikimr);
-
+        // EnableDebugLogging(kikimr); 
+ 
         CreateTestOlapTable(kikimr);
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 128);
 

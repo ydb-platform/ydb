@@ -16,7 +16,7 @@ public:
     static constexpr EType TYPE_INVALID = TypeInvalid;
     static constexpr EType FLAT_SCHEMESHARD = SchemeShard;
     static constexpr EType FLAT_DATASHARD = DataShard;
-    static constexpr EType COLUMNSHARD = ColumnShard;
+    static constexpr EType COLUMNSHARD = ColumnShard; 
     static constexpr EType KEYVALUEFLAT = KeyValue;
     static constexpr EType PERSQUEUE = PersQueue;
     static constexpr EType PERSQUEUE_READ_BALANCER = PersQueueReadBalancer;

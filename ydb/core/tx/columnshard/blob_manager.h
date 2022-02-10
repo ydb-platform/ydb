@@ -8,7 +8,7 @@
 
 #include <util/generic/string.h>
 
-namespace NKikimr::NColumnShard {
+namespace NKikimr::NColumnShard { 
 
 using NOlap::TUnifiedBlobId;
 using NOlap::TBlobRange;
@@ -216,4 +216,4 @@ private:
     void PerformDelayedDeletes(IBlobManagerDb& db);
 };
 
-}
+} 

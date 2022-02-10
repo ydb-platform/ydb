@@ -2,7 +2,7 @@
 #include "func_common.h"
 #include <cmath>
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NArrow { 
 
 struct TAcosh {
 
@@ -166,4 +166,4 @@ struct TTgamma {
     }
 };
 
-}
+} 

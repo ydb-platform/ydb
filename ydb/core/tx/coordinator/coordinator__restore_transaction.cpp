@@ -74,8 +74,8 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
         return true;
     }
 
-    TTxType GetTxType() const override { return TXTYPE_INIT; }
-
+    TTxType GetTxType() const override { return TXTYPE_INIT; } 
+ 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         TTransactions transactions;
         bool result = Restore(transactions, txc, ctx);

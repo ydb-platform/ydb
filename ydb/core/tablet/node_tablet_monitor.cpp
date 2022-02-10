@@ -22,11 +22,11 @@ class TNodeList : public TActorBootstrapped<TNodeList> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
-    }
-
+    } 
+ 
     TNodeList(const TActorId &sender)
         : Sender(sender)
-    {}
+    {} 
 
     void Bootstrap(const TActorContext& ctx) {
         const TActorId nameserviceId = GetNameserviceActorId();
@@ -134,8 +134,8 @@ class TTabletList : public TActorBootstrapped<TTabletList> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
-    }
-
+    } 
+ 
     TTabletList(const TActorId &sender, ui32 filterNodeId,
                 const TIntrusivePtr<ITabletStateClassifier>& stateClassifier,
                 const TIntrusivePtr<ITabletListRenderer>& renderer)
@@ -145,7 +145,7 @@ public:
         , FilterNodeId(filterNodeId)
         , StateClassifier(stateClassifier)
         , Renderer(renderer)
-    {}
+    {} 
 
     void Bootstrap(const TActorContext& ctx) {
         const TActorId nameserviceId = GetNameserviceActorId();
@@ -299,12 +299,12 @@ class TStateStorageTabletList : public TActorBootstrapped<TStateStorageTabletLis
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
-    }
-
+    } 
+ 
     TStateStorageTabletList(const TActorId &sender, ui32 stateStorageId)
         : Sender(sender)
         , StateStorageId(stateStorageId)
-    {}
+    {} 
 
     void Bootstrap(const TActorContext& ctx) {
         const TActorId nameserviceId = GetNameserviceActorId();
@@ -418,8 +418,8 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_MONITORING_PROXY;
-    }
-
+    } 
+ 
     TNodeTabletMonitor(const TIntrusivePtr<ITabletStateClassifier>& stateClassifier,
                        const TIntrusivePtr<ITabletListRenderer>& renderer)
         : StateClassifier(stateClassifier)

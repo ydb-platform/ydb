@@ -313,7 +313,7 @@ public:
     }
 
     void MigrateOldInfo(const TLockableItem &old) override;
-
+ 
     ui32 NodeId = 0;
     TString Host;
     TString Address;
@@ -323,9 +323,9 @@ public:
     TSet<ui64> Tablets;
     TSet<TPDiskID> PDisks;
     TSet<TVDiskID> VDisks;
-    bool HasTenantInfo = false;
-    TString Tenant;
-    TString PreviousTenant;
+    bool HasTenantInfo = false; 
+    TString Tenant; 
+    TString PreviousTenant; 
     TServices Services;
 };
 using TNodeInfoPtr = TIntrusivePtr<TNodeInfo>;
@@ -493,25 +493,25 @@ public:
         return *Nodes.find(nodeId)->second;
     }
 
-    TVector<const TNodeInfo *> HostNodes(const TString &hostName) const
+    TVector<const TNodeInfo *> HostNodes(const TString &hostName) const 
     {
-        TVector<const TNodeInfo *> nodes;
-
+        TVector<const TNodeInfo *> nodes; 
+ 
         ui32 nodeId;
-        if (TryFromString(hostName, nodeId)) {
+        if (TryFromString(hostName, nodeId)) { 
             if (HasNode(nodeId))
                 nodes.push_back(&NodeRef(nodeId));
-            return nodes;
-        }
+            return nodes; 
+        } 
 
-        auto pr = HostNameToNodeId.equal_range(hostName);
-        for (auto it = pr.first; it != pr.second; ++it) {
-            nodeId = it->second;
-            Y_VERIFY(HasNode(nodeId));
-            nodes.push_back(Nodes.find(nodeId)->second.Get());
-        }
-
-        return nodes;
+        auto pr = HostNameToNodeId.equal_range(hostName); 
+        for (auto it = pr.first; it != pr.second; ++it) { 
+            nodeId = it->second; 
+            Y_VERIFY(HasNode(nodeId)); 
+            nodes.push_back(Nodes.find(nodeId)->second.Get()); 
+        } 
+ 
+        return nodes; 
     }
 
     TVector<const TNodeInfo *> TenantNodes(const TString &tenant) const
@@ -680,7 +680,7 @@ public:
     void AddVDisk(const NKikimrBlobStorage::TBaseConfig::TVSlot &info);
     void UpdateVDiskState(const TVDiskID &id, const NKikimrWhiteboard::TVDiskStateInfo &info);
     void AddBSGroup(const NKikimrBlobStorage::TBaseConfig::TGroup &info);
-    void AddNodeTenants(ui32 nodeId, const NKikimrTenantPool::TTenantPoolStatus &info);
+    void AddNodeTenants(ui32 nodeId, const NKikimrTenantPool::TTenantPoolStatus &info); 
 
     void AddNodeTempLock(ui32 nodeId, const NKikimrCms::TAction &action);
     void AddPDiskTempLock(TPDiskID pdiskId, const NKikimrCms::TAction &action);
@@ -712,12 +712,12 @@ public:
     }
 
     void MigrateOldInfo(TClusterInfoPtr old);
-    void ApplyInitialNodeTenants(const TActorContext& ctx, const THashMap<ui32, TString>& nodeTenants);
+    void ApplyInitialNodeTenants(const TActorContext& ctx, const THashMap<ui32, TString>& nodeTenants); 
 
     void DebugDump(const TActorContext &ctx) const;
 
-    void SetTenantsInfo(bool value) { HasTenantsInfo = value; }
-
+    void SetTenantsInfo(bool value) { HasTenantsInfo = value; } 
+ 
     bool IsOutdated() const { return Outdated; }
     void SetOutdated(bool val) { Outdated = val; }
 
@@ -729,7 +729,7 @@ public:
     static bool IsDynamicGroupVDisk(const TVDiskID &vdId) { return GroupConfigurationTypeDynamic == VDiskConfigurationType(vdId); }
 
 private:
-    TNodeInfo &NodeRef(ui32 nodeId) const
+    TNodeInfo &NodeRef(ui32 nodeId) const 
     {
         Y_VERIFY(HasNode(nodeId));
         return *Nodes.find(nodeId)->second;
@@ -737,20 +737,20 @@ private:
 
     TVector<TNodeInfo *> NodePtrs(const TString &hostName, const TServices &filterByServices = {})
     {
-        TVector<TNodeInfo *> nodes;
-
+        TVector<TNodeInfo *> nodes; 
+ 
         ui32 nodeId;
-        if (TryFromString(hostName, nodeId)) {
+        if (TryFromString(hostName, nodeId)) { 
             if (HasNode(nodeId))
                 nodes.push_back(&NodeRef(nodeId));
-            return nodes;
-        }
+            return nodes; 
+        } 
 
         auto range = HostNameToNodeId.equal_range(hostName);
         for (auto it = range.first; it != range.second; ++it) {
-            nodeId = it->second;
+            nodeId = it->second; 
 
-            Y_VERIFY(HasNode(nodeId));
+            Y_VERIFY(HasNode(nodeId)); 
             auto &node = NodeRef(nodeId);
 
             if (filterByServices && !(node.Services & filterByServices)) {
@@ -758,9 +758,9 @@ private:
             }
 
             nodes.push_back(&node);
-        }
-
-        return nodes;
+        } 
+ 
+        return nodes; 
     }
 
     TPDiskInfo &PDiskRef(TPDiskID pdId)
@@ -818,7 +818,7 @@ private:
     TBSGroups BSGroups;
     TInstant Timestamp;
     ui64 RollbackPoint = 0;
-    bool HasTenantsInfo = false;
+    bool HasTenantsInfo = false; 
     bool Outdated = false;
 
     // Fast access structures.

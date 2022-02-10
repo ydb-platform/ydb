@@ -644,10 +644,10 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
 
         if (changesFamily.HasColumnCodec()) {
             if (changesFamily.GetColumnCodec() == NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD) {
-                errDesr = TStringBuilder()
-                    << "Unsupported ColumnCodec. ColumnFamily id: " << familyId << " name: " << familyName;
-                return false;
-            }
+                errDesr = TStringBuilder() 
+                    << "Unsupported ColumnCodec. ColumnFamily id: " << familyId << " name: " << familyName; 
+                return false; 
+            } 
             dstFamily.SetColumnCodec(changesFamily.GetColumnCodec());
         }
 
@@ -1982,9 +1982,9 @@ NKikimr::NSchemeShard::TBillingStats::operator bool() const {
 
 TOlapStoreInfo::TOlapStoreInfo(
         ui64 alterVersion,
-        NKikimrSchemeOp::TColumnStoreDescription&& description,
-        NKikimrSchemeOp::TColumnStoreSharding&& sharding,
-        TMaybe<NKikimrSchemeOp::TAlterColumnStore>&& alterBody)
+        NKikimrSchemeOp::TColumnStoreDescription&& description, 
+        NKikimrSchemeOp::TColumnStoreSharding&& sharding, 
+        TMaybe<NKikimrSchemeOp::TAlterColumnStore>&& alterBody) 
     : AlterVersion(alterVersion)
     , Description(std::move(description))
     , Sharding(std::move(sharding))
@@ -2019,14 +2019,14 @@ TOlapStoreInfo::TOlapStoreInfo(
             col.KeyOrder = preset.KeyColumnIds.size();
             preset.KeyColumnIds.push_back(col.Id);
         }
-        for (const auto& tierConfig : presetProto.GetSchema().GetStorageTiers()) {
-            preset.Tiers.insert(tierConfig.GetName());
-        }
+        for (const auto& tierConfig : presetProto.GetSchema().GetStorageTiers()) { 
+            preset.Tiers.insert(tierConfig.GetName()); 
+        } 
         preset.Engine = presetProto.GetSchema().GetEngine();
         preset.NextColumnId = presetProto.GetSchema().GetNextColumnId();
         preset.Version = presetProto.GetSchema().GetVersion();
     }
-#if 0
+#if 0 
     size_t ttlSettingsPresetIndex = 0;
     for (const auto& presetProto : Description.GetTtlSettingsPresets()) {
         Y_VERIFY(presetProto.HasId());
@@ -2041,7 +2041,7 @@ TOlapStoreInfo::TOlapStoreInfo(
         // TODO: parse relevant settings
         preset.Version = presetProto.GetTtlSettings().GetVersion();
     }
-#endif
+#endif 
     for (const auto& shardIdx : Sharding.GetColumnShards()) {
         ColumnShards.push_back(TShardIdx(
             TOwnerId(shardIdx.GetOwnerId()),
@@ -2051,17 +2051,17 @@ TOlapStoreInfo::TOlapStoreInfo(
 
 TOlapTableInfo::TOlapTableInfo(
         ui64 alterVersion,
-        NKikimrSchemeOp::TColumnTableDescription&& description,
-        NKikimrSchemeOp::TColumnTableSharding&& sharding,
-        TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody)
+        NKikimrSchemeOp::TColumnTableDescription&& description, 
+        NKikimrSchemeOp::TColumnTableSharding&& sharding, 
+        TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody) 
     : AlterVersion(alterVersion)
     , Description(std::move(description))
     , Sharding(std::move(sharding))
     , AlterBody(std::move(alterBody))
 {
     OlapStorePathId = TPathId(
-        TOwnerId(Description.GetColumnStorePathId().GetOwnerId()),
-        TLocalPathId(Description.GetColumnStorePathId().GetLocalId()));
+        TOwnerId(Description.GetColumnStorePathId().GetOwnerId()), 
+        TLocalPathId(Description.GetColumnStorePathId().GetLocalId())); 
 
     ColumnShards.reserve(Sharding.GetColumnShards().size());
     for (ui64 columnShard : Sharding.GetColumnShards()) {

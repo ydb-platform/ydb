@@ -204,14 +204,14 @@ namespace Tests {
         void SetupProxies(ui32 nodeIdx);
         void SetupLogging();
 
-        void Initialize();
+        void Initialize(); 
 
     public:
         using TPtr = TIntrusivePtr<TServer>;
         using TMapStoragePool = TDomainsInfo::TDomain::TStoragePoolKinds;
 
-        TServer(const TServerSettings& settings, bool defaultInit = true);
-        TServer(TServerSettings::TConstPtr settings, bool defaultInit = true);
+        TServer(const TServerSettings& settings, bool defaultInit = true); 
+        TServer(TServerSettings::TConstPtr settings, bool defaultInit = true); 
 
         TServer(TServer&& server) = default;
         TServer& operator =(TServer&& server) = default;
@@ -262,12 +262,12 @@ namespace Tests {
 
     class TClient {
     public:
-        struct TFlatQueryOptions {
+        struct TFlatQueryOptions { 
             TString Params;
-            bool IsQueryCompiled = false;
+            bool IsQueryCompiled = false; 
             bool CollectStats = false;
-        };
-
+        }; 
+ 
         struct TPathVersion {
             ui64 OwnerId = 0;
             ui64 PathId = 0;
@@ -375,10 +375,10 @@ namespace Tests {
         TAutoPtr<NMsgBusProxy::TBusResponse> AlterTable(const TString& parent, const NKikimrSchemeOp::TTableDescription& update, const TString& userToken);
         TAutoPtr<NMsgBusProxy::TBusResponse> AlterTable(const TString& parent, const TString& alter, const TString& userToken);
 
-        NMsgBusProxy::EResponseStatus CreateOlapStore(const TString& parent, const TString& scheme);
-        NMsgBusProxy::EResponseStatus CreateOlapStore(const TString& parent, const NKikimrSchemeOp::TColumnStoreDescription& store);
+        NMsgBusProxy::EResponseStatus CreateOlapStore(const TString& parent, const TString& scheme); 
+        NMsgBusProxy::EResponseStatus CreateOlapStore(const TString& parent, const NKikimrSchemeOp::TColumnStoreDescription& store); 
         NMsgBusProxy::EResponseStatus CreateOlapTable(const TString& parent, const TString& scheme);
-        NMsgBusProxy::EResponseStatus CreateOlapTable(const TString& parent, const NKikimrSchemeOp::TColumnTableDescription& table);
+        NMsgBusProxy::EResponseStatus CreateOlapTable(const TString& parent, const NKikimrSchemeOp::TColumnTableDescription& table); 
         NMsgBusProxy::EResponseStatus CreateSolomon(const TString& parent, const TString& name, ui32 parts = 4, ui32 channelProfile = 0);
         NMsgBusProxy::EResponseStatus StoreTableBackup(const TString& parent, const NKikimrSchemeOp::TBackupTask& task);
         NMsgBusProxy::EResponseStatus DeleteTopic(const TString& parent, const TString& name);
@@ -390,7 +390,7 @@ namespace Tests {
         bool FlatQuery(const TString& mkql, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult& result,
                        const NKikimrClient::TResponse& expectedResponse);
         bool FlatQuery(const TString& mkql, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult& result,
-                       ui32 expectedStatus = NMsgBusProxy::MSTATUS_OK);
+                       ui32 expectedStatus = NMsgBusProxy::MSTATUS_OK); 
         bool FlatQueryParams(const TString &query, const TString &params, bool queryCompiled, NKikimrMiniKQL::TResult &result);
 
         // returns NMsgBusProxy::MSTATUS_* and the raw response

@@ -65,8 +65,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HANDOFF_SYNCLOG_PROXY;
-        }
-
+        } 
+ 
         THandoffSyncLogProxy(const TActorId &skeletonId,
                              const TActorId &notifyId)
             : TActor<THandoffSyncLogProxy>(&TThis::StateFunc)

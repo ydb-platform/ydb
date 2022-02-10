@@ -9,7 +9,7 @@
 #include <fenv.h>
 #include <type_traits>
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NArrow { 
 
 struct TRound {
 
@@ -66,4 +66,4 @@ struct TRoundToExp2 {
     }
 };
 
-}
+} 

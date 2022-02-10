@@ -175,10 +175,10 @@ protected:
     TProcessingResult ProcessingResult;
 public:
     void Bootstrap(const TActorContext& ctx);
-
+ 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PQ_BASE_REQUEST_PROCESSOR;
-    }
+    } 
 };
 
 template <class TBase>

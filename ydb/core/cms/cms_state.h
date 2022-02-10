@@ -48,7 +48,7 @@ struct TCmsState : public TAtomicRefCount<TCmsState> {
     // in local structures and should be accessed through
     // pointer to CMS state.
     TClusterInfoPtr ClusterInfo;
-    THashMap<ui32, TString> InitialNodeTenants; // would be applyed to ClusterInfo at first update
+    THashMap<ui32, TString> InitialNodeTenants; // would be applyed to ClusterInfo at first update 
 
     // Static info.
     ui64 CmsTabletId = 0;

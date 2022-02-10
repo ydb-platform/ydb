@@ -2,7 +2,7 @@
 #include "blob_manager.h"
 #include "columnshard_schema.h"
 
-namespace NKikimr::NColumnShard {
+namespace NKikimr::NColumnShard { 
 
 bool TBlobManagerDb::LoadLastGcBarrier(TGenStep& lastCollectedGenStep) {
     NIceDb::TNiceDb db(Database);
@@ -106,4 +106,4 @@ void TBlobManagerDb::EraseSmallBlob(const TUnifiedBlobId& blobId) {
     db.Table<Schema::SmallBlobs>().Key(blobId.ToStringNew()).Delete();
 }
 
-}
+} 

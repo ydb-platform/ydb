@@ -1,7 +1,7 @@
 #pragma once
 
-#include "msgbus_client_config.h"
-
+#include "msgbus_client_config.h" 
+ 
 #include <ydb/public/lib/base/defs.h>
 #include <ydb/public/lib/base/msgbus.h>
 
@@ -13,7 +13,7 @@ namespace NKikimr {
 namespace NMsgBusProxy {
 
 class TMsgBusClient : NBus::IBusClientHandler {
-    TMsgBusClientConfig Config;
+    TMsgBusClientConfig Config; 
     TProtocol Protocol;
     TAutoPtr<NBus::TNetAddr> NetAddr;
     NBus::TBusMessageQueuePtr Bus;

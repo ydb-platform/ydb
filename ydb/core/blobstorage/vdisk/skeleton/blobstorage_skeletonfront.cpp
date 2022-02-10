@@ -1804,8 +1804,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_SKELETON_FRONT;
-        }
-
+        } 
+ 
         static TIntrusivePtr<NMonitoring::TDynamicCounters> CreateVDiskCounters(
                 TIntrusivePtr<TVDiskConfig> cfg,
                 TIntrusivePtr<TBlobStorageGroupInfo> info,

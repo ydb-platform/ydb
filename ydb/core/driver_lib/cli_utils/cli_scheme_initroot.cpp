@@ -77,7 +77,7 @@ void TCmdSchemeInitShardConfig::Parse(int argc, char **argv) {
     TOptsParseResult res(&opts, argc, argv);
     ConfigureMsgBusLastGetopt(res, argc, argv);
 
-#if 0
+#if 0 
     if (!configPbFile.empty()) {
         GlobalConfig.Reset(new NKikimrTxScheme::TConfig);
         Y_VERIFY(ParsePBFromFile(configPbFile, GlobalConfig.Get()));
@@ -85,9 +85,9 @@ void TCmdSchemeInitShardConfig::Parse(int argc, char **argv) {
         GlobalConfig.Reset(new NKikimrTxScheme::TConfig);
         Y_VERIFY(::google::protobuf::TextFormat::ParseFromString(configPb, GlobalConfig.Get()));
     }
-#else
-    Cout << "config options for init-root are not used anymore (deprecated)" << Endl;
-#endif
+#else 
+    Cout << "config options for init-root are not used anymore (deprecated)" << Endl; 
+#endif 
 }
 
 }

@@ -3,11 +3,11 @@
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/import/import.h>
-#include <ydb/library/backup/util.h>
+#include <ydb/library/backup/util.h> 
 
 #include <util/string/builder.h>
 #include <util/string/join.h>
-#include <util/stream/format.h> // for SF_BYTES
+#include <util/stream/format.h> // for SF_BYTES 
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -123,93 +123,93 @@ int TCommandImportFromS3::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-/// File
-
-TCommandImportFromFile::TCommandImportFromFile()
-    : TClientCommandTree("file", {}, "Import data from file")
-{
+/// File 
+ 
+TCommandImportFromFile::TCommandImportFromFile() 
+    : TClientCommandTree("file", {}, "Import data from file") 
+{ 
     AddCommand(std::make_unique<TCommandImportFromCsv>());
     AddCommand(std::make_unique<TCommandImportFromTsv>());
 }
-
-/// CSV
-
-TCommandImportFromCsv::TCommandImportFromCsv(const TString& cmd, const TString& cmdDescription)
-    : TYdbCommand(cmd, {}, cmdDescription)
-{}
-
-void TCommandImportFromCsv::Config(TConfig& config) {
-    TYdbCommand::Config(config);
-
-    config.SetFreeArgsNum(0);
-
-    config.Opts->AddLongOption('p', "path", "Database path to table")
-        .Required().RequiredArgument("STRING").StoreResult(&Path);
-    config.Opts->AddLongOption("input-file", "Path to file to import in a local filesystem")
-        .Required().RequiredArgument("STRING").StoreResult(&FilePath);
-    config.Opts->AddLongOption("skip-rows",
-            "Number of header rows to skip (not including the row of column names, if any)")
-        .RequiredArgument("NUM").StoreResult(&SkipRows).DefaultValue(SkipRows);
-    config.Opts->AddLongOption("header",
-            "Set if file contains column names at the first not skipped row")
-        .StoreTrue(&Header);
-    if (InputFormat == EOutputFormat::Csv) {
-        config.Opts->AddLongOption("delimiter", "Field delimiter in rows")
-            .RequiredArgument("STRING").StoreResult(&Delimiter).DefaultValue(Delimiter);
-    }
-    config.Opts->AddLongOption("null-value", "Value that would be interpreted as NULL")
-            .RequiredArgument("STRING").StoreResult(&NullValue).DefaultValue(NullValue);
-    // TODO: quoting/quote_char
-
-    TImportFileSettings defaults;
-
-    config.Opts->AddLongOption("batch-bytes",
-            "Use portions of this size in bytes to parse and upload file data")
-        .DefaultValue(HumanReadableSize(defaults.BytesPerRequest_, SF_BYTES)).StoreResult(&BytesPerRequest);
+ 
+/// CSV 
+ 
+TCommandImportFromCsv::TCommandImportFromCsv(const TString& cmd, const TString& cmdDescription) 
+    : TYdbCommand(cmd, {}, cmdDescription) 
+{} 
+ 
+void TCommandImportFromCsv::Config(TConfig& config) { 
+    TYdbCommand::Config(config); 
+ 
+    config.SetFreeArgsNum(0); 
+ 
+    config.Opts->AddLongOption('p', "path", "Database path to table") 
+        .Required().RequiredArgument("STRING").StoreResult(&Path); 
+    config.Opts->AddLongOption("input-file", "Path to file to import in a local filesystem") 
+        .Required().RequiredArgument("STRING").StoreResult(&FilePath); 
+    config.Opts->AddLongOption("skip-rows", 
+            "Number of header rows to skip (not including the row of column names, if any)") 
+        .RequiredArgument("NUM").StoreResult(&SkipRows).DefaultValue(SkipRows); 
+    config.Opts->AddLongOption("header", 
+            "Set if file contains column names at the first not skipped row") 
+        .StoreTrue(&Header); 
+    if (InputFormat == EOutputFormat::Csv) { 
+        config.Opts->AddLongOption("delimiter", "Field delimiter in rows") 
+            .RequiredArgument("STRING").StoreResult(&Delimiter).DefaultValue(Delimiter); 
+    } 
+    config.Opts->AddLongOption("null-value", "Value that would be interpreted as NULL") 
+            .RequiredArgument("STRING").StoreResult(&NullValue).DefaultValue(NullValue); 
+    // TODO: quoting/quote_char 
+ 
+    TImportFileSettings defaults; 
+ 
+    config.Opts->AddLongOption("batch-bytes", 
+            "Use portions of this size in bytes to parse and upload file data") 
+        .DefaultValue(HumanReadableSize(defaults.BytesPerRequest_, SF_BYTES)).StoreResult(&BytesPerRequest); 
 
     config.Opts->AddLongOption("max-in-flight",
             "Maximum number of in-flight requests; increase to load big files faster (more memory needed)")
         .DefaultValue(defaults.MaxInFlightRequests_).StoreResult(&MaxInFlightRequests);
 }
-
-void TCommandImportFromCsv::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
-    AdjustPath(config);
-}
-
-int TCommandImportFromCsv::Run(TConfig& config) {
-    TImportFileSettings settings;
-    settings.SkipRows(SkipRows);
-    settings.Header(Header);
-    settings.NullValue(NullValue);
-
-    if (auto bytesPerRequest = NYdb::SizeFromString(BytesPerRequest)) {
-        if (bytesPerRequest > TImportFileSettings::MaxBytesPerRequest) {
-            throw TMissUseException()
-                << "--batch-bytes cannot be larger than "
-                << HumanReadableSize(TImportFileSettings::MaxBytesPerRequest, SF_BYTES);
-        }
-
-        settings.BytesPerRequest(bytesPerRequest);
-    }
-
+ 
+void TCommandImportFromCsv::Parse(TConfig& config) { 
+    TClientCommand::Parse(config); 
+    AdjustPath(config); 
+} 
+ 
+int TCommandImportFromCsv::Run(TConfig& config) { 
+    TImportFileSettings settings; 
+    settings.SkipRows(SkipRows); 
+    settings.Header(Header); 
+    settings.NullValue(NullValue); 
+ 
+    if (auto bytesPerRequest = NYdb::SizeFromString(BytesPerRequest)) { 
+        if (bytesPerRequest > TImportFileSettings::MaxBytesPerRequest) { 
+            throw TMissUseException() 
+                << "--batch-bytes cannot be larger than " 
+                << HumanReadableSize(TImportFileSettings::MaxBytesPerRequest, SF_BYTES); 
+        } 
+ 
+        settings.BytesPerRequest(bytesPerRequest); 
+    } 
+ 
     if (MaxInFlightRequests == 0) {
         MaxInFlightRequests = 1;
     }
     settings.MaxInFlightRequests(MaxInFlightRequests);
 
-    if (Delimiter.size() != 1) {
-        throw TMissUseException()
-            << "--delimiter should be a one symbol string. Got: '" << Delimiter << "'";
-    } else {
-        settings.Delimiter(Delimiter);
-    }
-
-    TImportFileClient client(CreateDriver(config));
-    ThrowOnError(client.Import(FilePath, Path, settings));
-
-    return EXIT_SUCCESS;
-}
-
-}
-}
+    if (Delimiter.size() != 1) { 
+        throw TMissUseException() 
+            << "--delimiter should be a one symbol string. Got: '" << Delimiter << "'"; 
+    } else { 
+        settings.Delimiter(Delimiter); 
+    } 
+ 
+    TImportFileClient client(CreateDriver(config)); 
+    ThrowOnError(client.Import(FilePath, Path, settings)); 
+ 
+    return EXIT_SUCCESS; 
+} 
+ 
+} 
+} 

@@ -8,7 +8,7 @@
 #include <cstdlib>
 #include <type_traits>
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NArrow { 
 
 template<typename T>
 __attribute__((always_inline)) void FastIntSwap(T& lhs, T& rhs) {
@@ -34,4 +34,4 @@ struct TGreatestCommonDivisor {
     }
 };
 
-}
+} 

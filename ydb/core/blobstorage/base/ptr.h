@@ -94,12 +94,12 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_LEVEL_INDEX_STAT_QUERY;
-        }
-
+        } 
+ 
         TObjDeleterActor(std::unique_ptr<T> obj)
             : TActorBootstrapped<TThis>()
             , Obj(std::move(obj))
-        {}
+        {} 
 
     private:
         std::unique_ptr<T> Obj;

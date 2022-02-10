@@ -1,17 +1,17 @@
-#include "defs.h"
-
-#include "datashard_active_transaction.h"
+#include "defs.h" 
+ 
+#include "datashard_active_transaction.h" 
 #include "datashard_kqp.h"
-#include "datashard_locks.h"
-#include "datashard_impl.h"
+#include "datashard_locks.h" 
+#include "datashard_impl.h" 
 #include "datashard_failpoints.h"
 #include "key_conflicts.h"
-
+ 
 #include <library/cpp/actors/core/memory_track.h>
 
-namespace NKikimr {
+namespace NKikimr { 
 namespace NDataShard {
-
+ 
 TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                                    TTransactionContext &txc,
                                    const TActorContext &ctx,
@@ -19,8 +19,8 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                                    TInstant receivedAt,
                                    const TString &txBody)
     : StepTxId_(stepTxId)
-    , TabletId_(self->TabletID())
-    , TxBody(txBody)
+    , TabletId_(self->TabletID()) 
+    , TxBody(txBody) 
     , EngineBay(self, txc, ctx, stepTxId.ToPair())
     , ErrCode(NKikimrTxDataShard::TError::OK)
     , TxSize(0)
@@ -30,20 +30,20 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
     , AllowCancelROwithReadsets(self->AllowCancelROwithReadsets())
     , Cancelled(false)
     , ReceivedAt_(receivedAt)
-{
+{ 
     bool success = Tx.ParseFromArray(TxBody.data(), TxBody.size());
-    if (!success) {
-        ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
-        ErrStr = "Failed to parse TxBody";
-        return;
-    }
-
+    if (!success) { 
+        ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT; 
+        ErrStr = "Failed to parse TxBody"; 
+        return; 
+    } 
+ 
     ComputeTxSize();
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Add(TxSize);
 
     Y_VERIFY(Tx.HasMiniKQL() || Tx.HasReadTableTransaction() || Tx.HasKqpTransaction(),
              "One of the fields should be set: MiniKQL, ReadTableTransaction, KqpTransaction");
-
+ 
     if (Tx.GetLockTxId())
         EngineBay.SetLockTxId(Tx.GetLockTxId());
 
@@ -182,7 +182,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
         if (Tx.HasPerShardKeysSizeLimitBytes()) {
             PerShardKeysSizeLimitBytes_ = Tx.GetPerShardKeysSizeLimitBytes();
         }
-
+ 
         IsReadOnly = IsReadOnly && Tx.GetReadOnly();
 
         auto engine = EngineBay.GetEngine();
@@ -190,11 +190,11 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
 
         ErrStr = engine->GetErrors();
         ErrCode = ConvertErrCode(result);
-    }
+    } 
 
     ComputeDeadline();
-}
-
+} 
+ 
 TValidatedDataTx::~TValidatedDataTx() {
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize);
 }
@@ -206,9 +206,9 @@ const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& TValidatedDat
 
 ui32 TValidatedDataTx::ExtractKeys(bool allowErrors)
 {
-    using EResult = NMiniKQL::IEngineFlat::EResult;
-
-    EResult result = EngineBay.Validate();
+    using EResult = NMiniKQL::IEngineFlat::EResult; 
+ 
+    EResult result = EngineBay.Validate(); 
     if (allowErrors) {
         if (result != EResult::Ok) {
             ErrStr = EngineBay.GetEngine()->GetErrors();
@@ -218,9 +218,9 @@ ui32 TValidatedDataTx::ExtractKeys(bool allowErrors)
     } else {
         Y_VERIFY(result == EResult::Ok, "Engine errors: %s", EngineBay.GetEngine()->GetErrors().data());
     }
-    return KeysCount();
-}
-
+    return KeysCount(); 
+} 
+ 
 bool TValidatedDataTx::ReValidateKeys()
 {
     using EResult = NMiniKQL::IEngineFlat::EResult;
@@ -235,38 +235,38 @@ bool TValidatedDataTx::ReValidateKeys()
     return true;
 }
 
-ETxOrder TValidatedDataTx::CheckOrder(const TSysLocks& sysLocks, const TValidatedDataTx& dataTx) const {
+ETxOrder TValidatedDataTx::CheckOrder(const TSysLocks& sysLocks, const TValidatedDataTx& dataTx) const { 
     Y_VERIFY(TxInfo().Loaded);
     Y_VERIFY(dataTx.TxInfo().Loaded);
-
-    if (KeysCount() > MaxReorderTxKeys())
-        return ETxOrder::Unknown;
-
-    if (HasLockedWrites()) {
-        if (sysLocks.IsBroken(LockTxId()))
-            return ETxOrder::Any;
-
-        // TODO: dataTx.DynRW && dataTx.RW && dataTx.LockedRW
-        if (dataTx.HasWrites())
-            return ETxOrder::Unknown;
-
-    } else if (dataTx.HasLockedWrites()) {
-        if (sysLocks.IsBroken(dataTx.LockTxId()))
-            return ETxOrder::Any;
-
-        if (LockTxId() == dataTx.LockTxId())
-            return ETxOrder::Unknown;
-
-        // TODO: DynRW && RW
-        if (HasWrites())
-            return ETxOrder::Unknown;
-    }
-
-    if (HasKeyConflict(TxInfo(), dataTx.TxInfo()))
-        return StepTxId_.CheckOrder(dataTx.StepTxId());
-    return ETxOrder::Any;
-}
-
+ 
+    if (KeysCount() > MaxReorderTxKeys()) 
+        return ETxOrder::Unknown; 
+ 
+    if (HasLockedWrites()) { 
+        if (sysLocks.IsBroken(LockTxId())) 
+            return ETxOrder::Any; 
+ 
+        // TODO: dataTx.DynRW && dataTx.RW && dataTx.LockedRW 
+        if (dataTx.HasWrites()) 
+            return ETxOrder::Unknown; 
+ 
+    } else if (dataTx.HasLockedWrites()) { 
+        if (sysLocks.IsBroken(dataTx.LockTxId())) 
+            return ETxOrder::Any; 
+ 
+        if (LockTxId() == dataTx.LockTxId()) 
+            return ETxOrder::Unknown; 
+ 
+        // TODO: DynRW && RW 
+        if (HasWrites()) 
+            return ETxOrder::Unknown; 
+    } 
+ 
+    if (HasKeyConflict(TxInfo(), dataTx.TxInfo())) 
+        return StepTxId_.CheckOrder(dataTx.StepTxId()); 
+    return ETxOrder::Any; 
+} 
+ 
 bool TValidatedDataTx::CanCancel() {
     if (!IsTxReadOnly()) {
         return false;
@@ -329,12 +329,12 @@ void TValidatedDataTx::ComputeDeadline() {
     }
 }
 
-//
-
+// 
+ 
 TActiveTransaction::TActiveTransaction(const TBasicOpInfo &op,
                                        TValidatedDataTx::TPtr dataTx)
-    : TActiveTransaction(op)
-{
+    : TActiveTransaction(op) 
+{ 
     TrackMemory();
     FillTxData(dataTx);
 }
@@ -364,12 +364,12 @@ void TActiveTransaction::FillTxData(TValidatedDataTx::TPtr dataTx)
     Y_VERIFY(TxBody.empty());
 
     Target = dataTx->Source();
-    DataTx = dataTx;
+    DataTx = dataTx; 
 
     if (DataTx->HasStreamResponse())
         SetStreamSink(DataTx->GetSink());
-}
-
+} 
+ 
 void TActiveTransaction::FillTxData(TDataShard *self,
                                     TTransactionContext &txc,
                                     const TActorContext &ctx,
@@ -377,7 +377,7 @@ void TActiveTransaction::FillTxData(TDataShard *self,
                                     const TString &txBody,
                                     const TVector<TSysTables::TLocksTable::TLock> &locks,
                                     ui64 artifactFlags)
-{
+{ 
     UntrackMemory();
 
     Y_VERIFY(!DataTx);
@@ -391,7 +391,7 @@ void TActiveTransaction::FillTxData(TDataShard *self,
     }
     ArtifactFlags = artifactFlags;
     if (IsDataTx() || IsReadTable()) {
-        Y_VERIFY(!DataTx);
+        Y_VERIFY(!DataTx); 
         BuildDataTx(self, txc, ctx);
         Y_VERIFY(DataTx->Ready());
 
@@ -421,10 +421,10 @@ TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
                                                     GetReceivedAt(), TxBody);
         if (DataTx->HasStreamResponse())
             SetStreamSink(DataTx->GetSink());
-    }
+    } 
     return DataTx;
-}
-
+} 
+ 
 bool TActiveTransaction::BuildSchemeTx()
 {
     Y_VERIFY(TxBody);
@@ -519,8 +519,8 @@ bool TActiveTransaction::BuildDistributedEraseTx() {
     return DistributedEraseTx->TryParse(TxBody);
 }
 
-//
-
+// 
+ 
 bool TCommitWritesTx::TryParse(const TString& serialized) {
     if (!Body.ParseFromArray(serialized.data(), serialized.size())) {
         return false;
@@ -598,11 +598,11 @@ void TActiveTransaction::DbStoreArtifactFlags(TDataShard * self,
 ui64 TActiveTransaction::GetMemoryConsumption() const {
     ui64 res = 0;
     if (DataTx) {
-        res += DataTx->GetTxSize() + DataTx->GetMemoryAllocated();
+        res += DataTx->GetTxSize() + DataTx->GetMemoryAllocated(); 
     }
     return res;
 }
-
+ 
 ERestoreDataStatus TActiveTransaction::RestoreTxData(
         TDataShard *self,
         TTransactionContext &txc,
@@ -920,4 +920,4 @@ void TActiveTransaction::UntrackMemory() const {
     NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Sub(TxBody.size());
 }
 
-}}
+}} 

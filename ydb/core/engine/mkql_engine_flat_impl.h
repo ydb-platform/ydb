@@ -67,7 +67,7 @@ namespace NMiniKQL {
             All.insert(StepTxId);
             All.insert(AcquireLocks);
             All.insert(CombineByKeyMerge);
-            All.insert(Diagnostics);
+            All.insert(Diagnostics); 
         }
 
         TBuiltinStrings Builtins;
@@ -77,48 +77,48 @@ namespace NMiniKQL {
         const TInternName StepTxId;
         const TInternName AcquireLocks;
         const TInternName CombineByKeyMerge;
-        const TInternName Diagnostics;
+        const TInternName Diagnostics; 
         const TInternName PartialTake;
         const TInternName PartialSort;
     };
 
-    struct TShardExecData {
-        TShardExecData(const TEngineFlatSettings& settings, const TFlatEngineStrings& strings,
-                       const std::pair<ui64, ui64>& stepTxId)
-            : Settings(settings)
-            , Strings(strings)
-            , StepTxId(stepTxId)
-        {}
+    struct TShardExecData { 
+        TShardExecData(const TEngineFlatSettings& settings, const TFlatEngineStrings& strings, 
+                       const std::pair<ui64, ui64>& stepTxId) 
+            : Settings(settings) 
+            , Strings(strings) 
+            , StepTxId(stepTxId) 
+        {} 
 
-        const TEngineFlatSettings& Settings;
-        const TFlatEngineStrings& Strings;
-        const std::pair<ui64, ui64>& StepTxId;
+        const TEngineFlatSettings& Settings; 
+        const TFlatEngineStrings& Strings; 
+        const std::pair<ui64, ui64>& StepTxId; 
         THashSet<ui32> LocalReadCallables;
-        TIncomingResults Results;
-    };
+        TIncomingResults Results; 
+    }; 
 
-    struct TProxyExecData {
-        TProxyExecData(const TEngineFlatSettings& settings, const TFlatEngineStrings& strings,
+    struct TProxyExecData { 
+        TProxyExecData(const TEngineFlatSettings& settings, const TFlatEngineStrings& strings, 
                      const std::pair<ui64, ui64>& stepTxId, const TVector<IEngineFlat::TTabletInfo>& tabletInfos,
                      const TVector<IEngineFlat::TTxLock>& locks)
-            : Settings(settings)
-            , Strings(strings)
-            , StepTxId(stepTxId)
-            , TabletInfos(tabletInfos)
-            , TxLocks(locks)
-        {}
-
-        const TEngineFlatSettings& Settings;
-        const TFlatEngineStrings& Strings;
-        const std::pair<ui64, ui64> StepTxId;
+            : Settings(settings) 
+            , Strings(strings) 
+            , StepTxId(stepTxId) 
+            , TabletInfos(tabletInfos) 
+            , TxLocks(locks) 
+        {} 
+ 
+        const TEngineFlatSettings& Settings; 
+        const TFlatEngineStrings& Strings; 
+        const std::pair<ui64, ui64> StepTxId; 
         const TVector<IEngineFlat::TTabletInfo>& TabletInfos;
         const TVector<IEngineFlat::TTxLock>& TxLocks;
-        TIncomingResults Results;
-    };
-
-    TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, bool validateOnly);
-    TComputationNodeFactory GetFlatProxyExecutionFactory(TProxyExecData& execData);
-
+        TIncomingResults Results; 
+    }; 
+ 
+    TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, bool validateOnly); 
+    TComputationNodeFactory GetFlatProxyExecutionFactory(TProxyExecData& execData); 
+ 
     NUdf::TUnboxedValue PerformLocalSelectRow(TCallable& callable, IEngineFlatHost& engineHost,
         const THolderFactory& holderFactory, const TTypeEnvironment& env);
     NUdf::TUnboxedValue PerformLocalSelectRange(TCallable& callable, IEngineFlatHost& engineHost,
@@ -131,8 +131,8 @@ namespace NMiniKQL {
         const TTypeEnvironment* Env = nullptr;
     };
 
-    TStructType* GetTxLockType(const TTypeEnvironment& env, bool v2);
-    TStructType* GetDiagnosticsType(const TTypeEnvironment& env);
+    TStructType* GetTxLockType(const TTypeEnvironment& env, bool v2); 
+    TStructType* GetDiagnosticsType(const TTypeEnvironment& env); 
     TType* GetActualReturnType(const TCallable& callable, const TTypeEnvironment& env,
         const TFlatEngineStrings& strings);
 }

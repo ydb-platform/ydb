@@ -61,8 +61,8 @@ enum ECumulativeCounters {
 enum ESimpleCounters {
     COUNTER_PQ_TABLET_CACHE_SIZE = 0                                 [(CounterOpts) = {Name: "TabletCacheSizeBytes"}];
     COUNTER_PQ_TABLET_CACHE_COUNT = 1                                [(CounterOpts) = {Name: "TabletCacheSizeBlobs"}];
-    COUNTER_PQ_TABLET_CACHED_ON_READ = 2                             [(CounterOpts) = {Name: "TabletCachedOnRead"}];
-    COUNTER_PQ_TABLET_CACHED_ON_WRATE = 3                            [(CounterOpts) = {Name: "TabletCachedOnWrite"}];
+    COUNTER_PQ_TABLET_CACHED_ON_READ = 2                             [(CounterOpts) = {Name: "TabletCachedOnRead"}]; 
+    COUNTER_PQ_TABLET_CACHED_ON_WRATE = 3                            [(CounterOpts) = {Name: "TabletCachedOnWrite"}]; 
     COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE = 4                        [(CounterOpts) = {Name: "ReservedBytesSize"}];
 
     COUNTER_PQ_TABLET_OPENED_PIPES = 5                               [(CounterOpts) = {Name: "OpenedPipes"}];

@@ -554,8 +554,8 @@ class TBootstrapper : public TActor<TBootstrapper> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_BOOTSTRAPPER;
-    }
-
+    } 
+ 
     TBootstrapper(TTabletStorageInfo *tabletInfo, TBootstrapperInfo *bootstrapperInfo, bool standby)
         : TActor(standby ? &TThis::StateStandBy : &TThis::StateBoot)
         , TabletInfo(tabletInfo)

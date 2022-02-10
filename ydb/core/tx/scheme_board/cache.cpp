@@ -530,7 +530,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         TCounterPtr PerEntryHits;
         TCounterPtr PerEntryMisses;
         TCounterPtr PerEntrySyncs;
-
+ 
     public:
         explicit TCounters(NMonitoring::TDynamicCounterPtr counters)
             : InFlight(counters->GetCounter("InFlight", false))
@@ -768,7 +768,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         void FillTableInfoFromOlapTable(const NKikimrSchemeOp::TPathDescription& pathDesc) {
-            const auto& desc = pathDesc.GetColumnTableDescription();
+            const auto& desc = pathDesc.GetColumnTableDescription(); 
 
             THashMap<TString, ui32> nameToId;
             const auto& schemaDesc = desc.GetSchema();
@@ -1362,21 +1362,21 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     SchemaVersion = tableSchemaVersion(entryDesc);
                 }
                 break;
-            case NKikimrSchemeOp::EPathTypeColumnStore:
+            case NKikimrSchemeOp::EPathTypeColumnStore: 
                 Kind = TNavigate::KindOlapStore;
                 if (Created) {
                     FillTableInfoFromOlapStore(pathDesc);
                 }
-                FillInfo(Kind, OlapStoreInfo, std::move(*pathDesc.MutableColumnStoreDescription()));
+                FillInfo(Kind, OlapStoreInfo, std::move(*pathDesc.MutableColumnStoreDescription())); 
                 break;
-            case NKikimrSchemeOp::EPathTypeColumnTable:
+            case NKikimrSchemeOp::EPathTypeColumnTable: 
                 Kind = TNavigate::KindOlapTable;
                 if (Created) {
                     FillTableInfoFromOlapTable(pathDesc);
                 }
-                FillInfo(Kind, OlapTableInfo, std::move(*pathDesc.MutableColumnTableDescription()));
-                if (OlapTableInfo->Description.HasColumnStorePathId()) {
-                    auto& p = OlapTableInfo->Description.GetColumnStorePathId();
+                FillInfo(Kind, OlapTableInfo, std::move(*pathDesc.MutableColumnTableDescription())); 
+                if (OlapTableInfo->Description.HasColumnStorePathId()) { 
+                    auto& p = OlapTableInfo->Description.GetColumnStorePathId(); 
                     OlapTableInfo->OlapStoreId = TTableId(p.GetOwnerId(), p.GetLocalId());
                 }
                 break;
@@ -1446,10 +1446,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     case NKikimrSchemeOp::EPathTypeTable:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindTable, tableSchemaVersion(child));
                         break;
-                    case NKikimrSchemeOp::EPathTypeColumnStore:
+                    case NKikimrSchemeOp::EPathTypeColumnStore: 
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindOlapStore);
                         break;
-                    case NKikimrSchemeOp::EPathTypeColumnTable:
+                    case NKikimrSchemeOp::EPathTypeColumnTable: 
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindOlapTable);
                         break;
                     case NKikimrSchemeOp::EPathTypeRtmrVolume:

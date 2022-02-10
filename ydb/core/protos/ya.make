@@ -39,12 +39,12 @@ SRCS(
     counters_tx_allocator.proto
     counters_bs_controller.proto
     counters_coordinator.proto
-    counters_columnshard.proto
+    counters_columnshard.proto 
     counters_datashard.proto
     counters_hive.proto
     counters_kesus.proto
     counters_keyvalue.proto
-    counters_olapshard.proto
+    counters_olapshard.proto 
     counters_pq.proto
     counters_replication.proto
     counters_schemeshard.proto
@@ -93,7 +93,7 @@ SRCS(
     shared_cache.proto
     sqs.proto
     follower_group.proto
-    ssa.proto
+    ssa.proto 
     statestorage.proto
     stream.proto
     subdomains.proto
@@ -111,7 +111,7 @@ SRCS(
     tablet_tracing_signals.proto
     node_whiteboard.proto
     tx.proto
-    tx_columnshard.proto
+    tx_columnshard.proto 
     tx_datashard.proto
     tx_mediator_timecast.proto
     tx_proxy.proto

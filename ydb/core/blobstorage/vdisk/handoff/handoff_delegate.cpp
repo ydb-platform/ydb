@@ -29,7 +29,7 @@ namespace NKikimr {
             , Info(info)
             , ProxiesPtr(new TProxies(SelfVDisk, info->PickTopology()))
             , Params(params)
-        {}
+        {} 
     };
 
     ////////////////////////////////////////////////////////////////////////////

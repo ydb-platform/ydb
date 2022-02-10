@@ -112,8 +112,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HANDOFF_MON_REQUEST;
-        }
-
+        } 
+ 
         THandoffMonRequestActor(const TActorId &parentId,
                                 const TVDiskID &selfVDisk,
                                 const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
@@ -125,7 +125,7 @@ namespace NKikimr {
             , Ev(ev)
             , Cells(selfVDisk, top)
             , Counter(0)
-        {}
+        {} 
     };
 
 
@@ -165,8 +165,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HANDOFF_MON;
-        }
-
+        } 
+ 
         THandoffMonActor(const TVDiskID &selfVDisk,
                 std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                 TProxiesPtr proxiesPtr)
@@ -174,7 +174,7 @@ namespace NKikimr {
             , SelfVDisk(selfVDisk)
             , Top(top)
             , ProxiesPtr(proxiesPtr)
-        {}
+        {} 
     };
 
     IActor *CreateHandoffMonActor(const TVDiskID &selfVDisk,

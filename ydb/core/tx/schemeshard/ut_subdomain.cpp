@@ -442,7 +442,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
                             "TimeCastBucketsPerMediator: 2 "
-                            "Mediators: 1 "
+                            "Mediators: 1 " 
                             "Name: \"USER_2\"",
                             {NKikimrScheme::StatusInvalidParameter});
 

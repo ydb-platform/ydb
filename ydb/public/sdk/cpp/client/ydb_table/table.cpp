@@ -2551,46 +2551,46 @@ public:
         return promise.GetFuture();
     }
 
-    TAsyncBulkUpsertResult BulkUpsert(const TString& table, EDataFormat format,
-        const TString& data, const TString& schema, const TBulkUpsertSettings& settings)
-    {
-        auto request = MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings);
-        request.set_table(table);
-        if (format == EDataFormat::ApacheArrow) {
-            request.mutable_arrow_batch_settings()->set_schema(schema);
-        } else if (format == EDataFormat::CSV) {
-            auto* csv_settings = request.mutable_csv_settings();
-            const auto& format_settings = settings.FormatSettings_;
-            if (!format_settings.empty()) {
-                bool ok = csv_settings->ParseFromString(format_settings);
-                if (!ok) {
-                    return {};
-                }
-            }
-        }
-        request.set_data(data);
-
-        auto promise = NewPromise<TBulkUpsertResult>();
-
-        auto extractor = [promise]
-            (google::protobuf::Any* any, TPlainStatus status) mutable {
-                Y_UNUSED(any);
-                TBulkUpsertResult val(TStatus(std::move(status)));
-                promise.SetValue(std::move(val));
-            };
-
-        Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>(
-            std::move(request),
-            extractor,
-            &Ydb::Table::V1::TableService::Stub::AsyncBulkUpsert,
-            DbDriverState_,
-            INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
-
-        return promise.GetFuture();
-    }
-
+    TAsyncBulkUpsertResult BulkUpsert(const TString& table, EDataFormat format, 
+        const TString& data, const TString& schema, const TBulkUpsertSettings& settings) 
+    { 
+        auto request = MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings); 
+        request.set_table(table); 
+        if (format == EDataFormat::ApacheArrow) { 
+            request.mutable_arrow_batch_settings()->set_schema(schema); 
+        } else if (format == EDataFormat::CSV) { 
+            auto* csv_settings = request.mutable_csv_settings(); 
+            const auto& format_settings = settings.FormatSettings_; 
+            if (!format_settings.empty()) { 
+                bool ok = csv_settings->ParseFromString(format_settings); 
+                if (!ok) { 
+                    return {}; 
+                } 
+            } 
+        } 
+        request.set_data(data); 
+ 
+        auto promise = NewPromise<TBulkUpsertResult>(); 
+ 
+        auto extractor = [promise] 
+            (google::protobuf::Any* any, TPlainStatus status) mutable { 
+                Y_UNUSED(any); 
+                TBulkUpsertResult val(TStatus(std::move(status))); 
+                promise.SetValue(std::move(val)); 
+            }; 
+ 
+        Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>( 
+            std::move(request), 
+            extractor, 
+            &Ydb::Table::V1::TableService::Stub::AsyncBulkUpsert, 
+            DbDriverState_, 
+            INITIAL_DEFERRED_CALL_DELAY, 
+            TRpcRequestSettings::Make(settings), 
+            settings.ClientTimeout_); 
+ 
+        return promise.GetFuture(); 
+    } 
+ 
     TFuture<std::pair<TPlainStatus, TScanQueryProcessorPtr>> StreamExecuteScanQueryInternal(const TString& query,
         const ::google::protobuf::Map<TString, Ydb::TypedValue>* params,
         const TStreamExecScanQuerySettings& settings)
@@ -3540,12 +3540,12 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const TString& table, TValue&& r
     return Impl_->BulkUpsert(table, std::move(rows), settings);
 }
 
-TAsyncBulkUpsertResult TTableClient::BulkUpsert(const TString& table, EDataFormat format,
-        const TString& data, const TString& schema, const TBulkUpsertSettings& settings)
-{
-    return Impl_->BulkUpsert(table, format, data, schema, settings);
-}
-
+TAsyncBulkUpsertResult TTableClient::BulkUpsert(const TString& table, EDataFormat format, 
+        const TString& data, const TString& schema, const TBulkUpsertSettings& settings) 
+{ 
+    return Impl_->BulkUpsert(table, format, data, schema, settings); 
+} 
+ 
 TAsyncScanQueryPartIterator TTableClient::StreamExecuteScanQuery(const TString& query, const TParams& params,
     const TStreamExecScanQuerySettings& settings)
 {

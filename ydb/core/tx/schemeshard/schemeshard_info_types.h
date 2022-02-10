@@ -713,8 +713,8 @@ struct TOlapSchema {
     TColumns Columns;
     TColumnsByName ColumnsByName;
     TVector<ui32> KeyColumnIds;
-    THashSet<TString> Tiers; // TODO: hash map with tier config
-    NKikimrSchemeOp::EColumnTableEngine Engine = NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES;
+    THashSet<TString> Tiers; // TODO: hash map with tier config 
+    NKikimrSchemeOp::EColumnTableEngine Engine = NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES; 
     ui32 NextColumnId = 1;
     ui64 Version = 1;
 
@@ -747,7 +747,7 @@ struct TOlapTtlSettings {
     // TODO: add parsed settings
     ui64 Version = 1;
 };
-#if 0
+#if 0 
 struct TOlapStoreTtlSettingsPreset : public TOlapTtlSettings {
     ui32 Id;
     TString Name;
@@ -755,21 +755,21 @@ struct TOlapStoreTtlSettingsPreset : public TOlapTtlSettings {
     // Preset index in the olap store description
     size_t ProtoIndex = -1;
 };
-#endif
-struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> {
-    using TPtr = TIntrusivePtr<TOlapStoreInfo>;
-
+#endif 
+struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> { 
+    using TPtr = TIntrusivePtr<TOlapStoreInfo>; 
+ 
     ui64 AlterVersion = 0;
     TPtr AlterData;
 
-    NKikimrSchemeOp::TColumnStoreDescription Description;
-    NKikimrSchemeOp::TColumnStoreSharding Sharding;
-    TMaybe<NKikimrSchemeOp::TAlterColumnStore> AlterBody;
+    NKikimrSchemeOp::TColumnStoreDescription Description; 
+    NKikimrSchemeOp::TColumnStoreSharding Sharding; 
+    TMaybe<NKikimrSchemeOp::TAlterColumnStore> AlterBody; 
 
-    TVector<TShardIdx> ColumnShards;
+    TVector<TShardIdx> ColumnShards; 
 
     THashMap<ui32, TOlapStoreSchemaPreset> SchemaPresets;
-    //THashMap<ui32, TOlapStoreTtlSettingsPreset> TtlSettingsPresets;
+    //THashMap<ui32, TOlapStoreTtlSettingsPreset> TtlSettingsPresets; 
     THashMap<TString, ui32> SchemaPresetByName;
     THashMap<TString, ui32> TtlSettingsPresetByName;
 
@@ -777,20 +777,20 @@ struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> {
     THashSet<TPathId> OlapTablesUnderOperation;
 
     TOlapStoreInfo() = default;
-    TOlapStoreInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnStoreDescription&& description,
-            NKikimrSchemeOp::TColumnStoreSharding&& sharding,
-            TMaybe<NKikimrSchemeOp::TAlterColumnStore>&& alterBody = Nothing());
-};
-
+    TOlapStoreInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnStoreDescription&& description, 
+            NKikimrSchemeOp::TColumnStoreSharding&& sharding, 
+            TMaybe<NKikimrSchemeOp::TAlterColumnStore>&& alterBody = Nothing()); 
+}; 
+ 
 struct TOlapTableInfo : TSimpleRefCount<TOlapTableInfo> {
     using TPtr = TIntrusivePtr<TOlapTableInfo>;
 
     ui64 AlterVersion = 0;
     TPtr AlterData;
 
-    NKikimrSchemeOp::TColumnTableDescription Description;
-    NKikimrSchemeOp::TColumnTableSharding Sharding;
-    TMaybe<NKikimrSchemeOp::TAlterColumnTable> AlterBody;
+    NKikimrSchemeOp::TColumnTableDescription Description; 
+    NKikimrSchemeOp::TColumnTableSharding Sharding; 
+    TMaybe<NKikimrSchemeOp::TAlterColumnTable> AlterBody; 
 
     // Path id of the olap store
     TPathId OlapStorePathId;
@@ -799,14 +799,14 @@ struct TOlapTableInfo : TSimpleRefCount<TOlapTableInfo> {
     TVector<ui64> ColumnShards;
 
     TOlapTableInfo() = default;
-    TOlapTableInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnTableDescription&& description,
-            NKikimrSchemeOp::TColumnTableSharding&& sharding,
-            TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody = Nothing());
+    TOlapTableInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnTableDescription&& description, 
+            NKikimrSchemeOp::TColumnTableSharding&& sharding, 
+            TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody = Nothing()); 
 
     void SetOlapStorePathId(const TPathId& pathId) {
         OlapStorePathId = pathId;
-        Description.MutableColumnStorePathId()->SetOwnerId(pathId.OwnerId);
-        Description.MutableColumnStorePathId()->SetLocalId(pathId.LocalPathId);
+        Description.MutableColumnStorePathId()->SetOwnerId(pathId.OwnerId); 
+        Description.MutableColumnStorePathId()->SetLocalId(pathId.LocalPathId); 
     }
 };
 
@@ -928,14 +928,14 @@ struct TShardInfo {
     static TShardInfo KesusInfo(TTxId txId, TPathId pathId) {
         return TShardInfo(txId, pathId, ETabletType::Kesus);
     }
-
-    static TShardInfo OlapShardInfo(TTxId txId, TPathId pathId) {
-         return TShardInfo(txId, pathId, ETabletType::OlapShard);
-    }
-
-    static TShardInfo ColumnShardInfo(TTxId txId, TPathId pathId) {
-         return TShardInfo(txId, pathId, ETabletType::ColumnShard);
-    }
+ 
+    static TShardInfo OlapShardInfo(TTxId txId, TPathId pathId) { 
+         return TShardInfo(txId, pathId, ETabletType::OlapShard); 
+    } 
+ 
+    static TShardInfo ColumnShardInfo(TTxId txId, TPathId pathId) { 
+         return TShardInfo(txId, pathId, ETabletType::ColumnShard); 
+    } 
 
     static TShardInfo SequenceShardInfo(TTxId txId, TPathId pathId) {
         return TShardInfo(txId, pathId, ETabletType::SequenceShard);
@@ -1847,7 +1847,7 @@ struct TBlockStoreVolumeInfo : public TSimpleRefCount<TBlockStoreVolumeInfo> {
     ui32 DefaultPartitionCount = 0;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
     ui64 AlterVersion = 0;
-    ui64 TokenVersion = 0;
+    ui64 TokenVersion = 0; 
     THashMap<TShardIdx, TBlockStorePartitionInfo::TPtr> Shards; // key ShardIdx
     TBlockStoreVolumeInfo::TPtr AlterData;
     TTabletId VolumeTabletId = InvalidTabletId;
@@ -2640,21 +2640,21 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     }
 };
 
-bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
-    const THashMap<ui32, TTableInfo::TColumn>& sourceColumns,
-    const THashMap<ui32, TTableInfo::TColumn>& alterColumns,
-    const THashMap<TString, ui32>& colName2Id,
-    const TSubDomainInfo& subDomain, TString& errStr);
-bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl,
-    const THashMap<ui32, TOlapSchema::TColumn>& columns,
-    const THashMap<TString, ui32>& columnsByName,
-    const THashSet<TString>& knownTiers,
-    TString& errStr);
-bool ValidateTtlSettingsChange(
-    const NKikimrSchemeOp::TColumnDataLifeCycle& oldTtl,
-    const NKikimrSchemeOp::TColumnDataLifeCycle& ttl,
-    TString& errStr);
-
+bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl, 
+    const THashMap<ui32, TTableInfo::TColumn>& sourceColumns, 
+    const THashMap<ui32, TTableInfo::TColumn>& alterColumns, 
+    const THashMap<TString, ui32>& colName2Id, 
+    const TSubDomainInfo& subDomain, TString& errStr); 
+bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl, 
+    const THashMap<ui32, TOlapSchema::TColumn>& columns, 
+    const THashMap<TString, ui32>& columnsByName, 
+    const THashSet<TString>& knownTiers, 
+    TString& errStr); 
+bool ValidateTtlSettingsChange( 
+    const NKikimrSchemeOp::TColumnDataLifeCycle& oldTtl, 
+    const NKikimrSchemeOp::TColumnDataLifeCycle& ttl, 
+    TString& errStr); 
+ 
 }
 }
 

@@ -523,7 +523,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["clickhouse_internal"] = &hasClickhouseInternal;
         bool hasRateLimiter = false;
         names["rate_limiter"] = &hasRateLimiter;
-        bool hasLongTx = false;
+        bool hasLongTx = false; 
         names["long_tx"] = &hasLongTx;
         bool hasExport = services.empty();
         names["export"] = &hasExport;
@@ -649,10 +649,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 grpcRequestProxyId));
         }
 
-        if (hasLongTx) {
-            server.AddService(new NGRpcService::TGRpcYdbLongTxService(ActorSystem.Get(), Counters, grpcRequestProxyId));
-        }
-
+        if (hasLongTx) { 
+            server.AddService(new NGRpcService::TGRpcYdbLongTxService(ActorSystem.Get(), Counters, grpcRequestProxyId)); 
+        } 
+ 
         if (hasSchemeService) {
             server.AddService(new NGRpcService::TGRpcYdbSchemeService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }

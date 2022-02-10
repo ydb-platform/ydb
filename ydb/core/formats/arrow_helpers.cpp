@@ -1,7 +1,7 @@
-#include "arrow_helpers.h"
-#include "switch_type.h"
-#include "one_batch_input_stream.h"
-#include "merging_sorted_input_stream.h"
+#include "arrow_helpers.h" 
+#include "switch_type.h" 
+#include "one_batch_input_stream.h" 
+#include "merging_sorted_input_stream.h" 
 #include <util/system/yassert.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
@@ -9,183 +9,183 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
-#include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h> 
 #include <memory>
-
-#define Y_VERIFY_OK(status) Y_VERIFY(status.ok(), "%s", status.ToString().c_str())
-
-namespace NKikimr::NArrow {
-
-namespace {
-
-enum class ECompareResult : i8 {
-    LESS = -1,
-    BORDER = 0,
-    GREATER = 1
-};
-
-template <typename T>
-inline void UpdateCompare(const T& value, const T& border, ECompareResult& res) {
-    if (res == ECompareResult::BORDER) {
-        if constexpr (std::is_same_v<T, arrow::util::string_view>) {
-            size_t minSize = (value.size() < border.size()) ? value.size() : border.size();
-            int cmp = memcmp(value.data(), border.data(), minSize);
-            if (cmp < 0) {
-                res = ECompareResult::LESS;
-            } else if (cmp > 0) {
-                res = ECompareResult::GREATER;
-            } else {
-                UpdateCompare(value.size(), border.size(), res);
-            }
-        } else {
-            if (value < border) {
-                res = ECompareResult::LESS;
-            } else if (value > border) {
-                res = ECompareResult::GREATER;
-            }
-        }
-    }
-}
-
-template <typename TArray>
-inline auto GetValue(const std::shared_ptr<TArray>& array, int pos) {
-    return array->GetView(pos);
-}
-
-template <typename TArray, typename T>
-bool CompareImpl(const std::shared_ptr<arrow::Array>& column, const T& border,
-                 std::vector<NArrow::ECompareResult>& rowsCmp)
-{
-    bool hasBorder = false;
-    ECompareResult* res = &rowsCmp[0];
-    auto array = std::static_pointer_cast<TArray>(column);
-
-    for (int i = 0; i < array->length(); ++i, ++res) {
-        UpdateCompare(GetValue(array, i), border, *res);
-        hasBorder = hasBorder || (*res == ECompareResult::BORDER);
-    }
-    return !hasBorder;
-}
-
-template <typename TArray, typename T>
-bool CompareImpl(const std::shared_ptr<arrow::ChunkedArray>& column, const T& border,
-                 std::vector<NArrow::ECompareResult>& rowsCmp)
-{
-    bool hasBorder = false;
-    ECompareResult* res = &rowsCmp[0];
-
-    for (auto& chunk : column->chunks()) {
-        auto array = std::static_pointer_cast<TArray>(chunk);
-
-        for (int i = 0; i < chunk->length(); ++i, ++res) {
-            UpdateCompare(GetValue(array, i), border, *res);
-            hasBorder = hasBorder || (*res == ECompareResult::BORDER);
-        }
-    }
-    return !hasBorder;
-}
-
-/// @return true in case we have no borders in compare: no need for future keys, allow early exit
-template <typename TArray>
-bool Compare(const arrow::Datum& column, const std::shared_ptr<arrow::Array>& borderArray,
-             std::vector<NArrow::ECompareResult>& rowsCmp)
-{
-    auto border = GetValue(std::static_pointer_cast<TArray>(borderArray), 0);
-
-    switch (column.kind()) {
-        case arrow::Datum::ARRAY:
-            return CompareImpl<TArray>(column.make_array(), border, rowsCmp);
-        case arrow::Datum::CHUNKED_ARRAY:
-            return CompareImpl<TArray>(column.chunked_array(), border, rowsCmp);
-        default:
-            break;
-    }
-    Y_VERIFY(false);
-    return false;
-}
-
-bool SwitchCompare(const arrow::Datum& column, const std::shared_ptr<arrow::Array>& border,
-                   std::vector<NArrow::ECompareResult>& rowsCmp) {
-    Y_VERIFY(border->length() == 1);
-
-    // first time it's empty
-    if (rowsCmp.empty()) {
-        rowsCmp.resize(column.length(), ECompareResult::BORDER);
-    }
-
-    return SwitchArrayType(column, [&](const auto& type) -> bool {
-        using TWrap = std::decay_t<decltype(type)>;
-        using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
-        return Compare<TArray>(column, border, rowsCmp);
-    });
-}
-
-template <typename T>
-void CompositeCompare(std::shared_ptr<T> some, std::shared_ptr<arrow::RecordBatch> borderBatch,
-                      std::vector<NArrow::ECompareResult>& rowsCmp) {
-    auto key = borderBatch->schema()->fields();
-    Y_VERIFY(key.size());
-
-    for (size_t i = 0; i < key.size(); ++i) {
-        auto& field = key[i];
-        auto typeId = field->type()->id();
-        auto column = some->GetColumnByName(field->name());
-        std::shared_ptr<arrow::Array> border = borderBatch->GetColumnByName(field->name());
-        Y_VERIFY(column);
-        Y_VERIFY(border);
-        Y_VERIFY(some->schema()->GetFieldByName(field->name())->type()->id() == typeId);
-
-        if (SwitchCompare(column, border, rowsCmp)) {
-            break; // early exit in case we have all rows compared: no borders, can omit key tail
-        }
-    }
-}
-#if 0
-std::shared_ptr<arrow::Array> CastToInt32Array(const std::shared_ptr<arrow::Array>& arr) {
-    auto newData = arr->data()->Copy();
-    newData->type = arrow::int32();
-    return std::make_shared<arrow::Int32Array>(newData);
-}
-
-std::shared_ptr<arrow::Array> CastToInt64Array(const std::shared_ptr<arrow::Array>& arr) {
-    auto newData = arr->data()->Copy();
-    newData->type = arrow::int64();
-    return std::make_shared<arrow::Int64Array>(newData);
-}
-
-// We need more types than arrow::compute::SortToIndices() support out of the box
-std::shared_ptr<arrow::UInt64Array> SortPermutation(const std::shared_ptr<arrow::Array>& arr) {
-    switch (arr->type_id()) {
-        case arrow::Type::DATE32:
-        case arrow::Type::TIME32:
-        {
-            auto res = arrow::compute::SortToIndices(*CastToInt32Array(arr));
-            Y_VERIFY_OK(res.status());
-            return std::static_pointer_cast<arrow::UInt64Array>(*res);
-        }
-        case arrow::Type::DATE64:
-        case arrow::Type::TIMESTAMP:
-        case arrow::Type::TIME64:
-        {
-            auto res = arrow::compute::SortToIndices(*CastToInt64Array(arr));
-            Y_VERIFY_OK(res.status());
-            return std::static_pointer_cast<arrow::UInt64Array>(*res);
-        }
-        default:
-            break;
-    }
-    auto res = arrow::compute::SortToIndices(*arr);
-    Y_VERIFY_OK(res.status());
-    return std::static_pointer_cast<arrow::UInt64Array>(*res);
-}
-#endif
-}
-
+ 
+#define Y_VERIFY_OK(status) Y_VERIFY(status.ok(), "%s", status.ToString().c_str()) 
+ 
+namespace NKikimr::NArrow { 
+ 
+namespace { 
+ 
+enum class ECompareResult : i8 { 
+    LESS = -1, 
+    BORDER = 0, 
+    GREATER = 1 
+}; 
+ 
+template <typename T> 
+inline void UpdateCompare(const T& value, const T& border, ECompareResult& res) { 
+    if (res == ECompareResult::BORDER) { 
+        if constexpr (std::is_same_v<T, arrow::util::string_view>) { 
+            size_t minSize = (value.size() < border.size()) ? value.size() : border.size(); 
+            int cmp = memcmp(value.data(), border.data(), minSize); 
+            if (cmp < 0) { 
+                res = ECompareResult::LESS; 
+            } else if (cmp > 0) { 
+                res = ECompareResult::GREATER; 
+            } else { 
+                UpdateCompare(value.size(), border.size(), res); 
+            } 
+        } else { 
+            if (value < border) { 
+                res = ECompareResult::LESS; 
+            } else if (value > border) { 
+                res = ECompareResult::GREATER; 
+            } 
+        } 
+    } 
+} 
+ 
+template <typename TArray> 
+inline auto GetValue(const std::shared_ptr<TArray>& array, int pos) { 
+    return array->GetView(pos); 
+} 
+ 
+template <typename TArray, typename T> 
+bool CompareImpl(const std::shared_ptr<arrow::Array>& column, const T& border, 
+                 std::vector<NArrow::ECompareResult>& rowsCmp) 
+{ 
+    bool hasBorder = false; 
+    ECompareResult* res = &rowsCmp[0]; 
+    auto array = std::static_pointer_cast<TArray>(column); 
+ 
+    for (int i = 0; i < array->length(); ++i, ++res) { 
+        UpdateCompare(GetValue(array, i), border, *res); 
+        hasBorder = hasBorder || (*res == ECompareResult::BORDER); 
+    } 
+    return !hasBorder; 
+} 
+ 
+template <typename TArray, typename T> 
+bool CompareImpl(const std::shared_ptr<arrow::ChunkedArray>& column, const T& border, 
+                 std::vector<NArrow::ECompareResult>& rowsCmp) 
+{ 
+    bool hasBorder = false; 
+    ECompareResult* res = &rowsCmp[0]; 
+ 
+    for (auto& chunk : column->chunks()) { 
+        auto array = std::static_pointer_cast<TArray>(chunk); 
+ 
+        for (int i = 0; i < chunk->length(); ++i, ++res) { 
+            UpdateCompare(GetValue(array, i), border, *res); 
+            hasBorder = hasBorder || (*res == ECompareResult::BORDER); 
+        } 
+    } 
+    return !hasBorder; 
+} 
+ 
+/// @return true in case we have no borders in compare: no need for future keys, allow early exit 
+template <typename TArray> 
+bool Compare(const arrow::Datum& column, const std::shared_ptr<arrow::Array>& borderArray, 
+             std::vector<NArrow::ECompareResult>& rowsCmp) 
+{ 
+    auto border = GetValue(std::static_pointer_cast<TArray>(borderArray), 0); 
+ 
+    switch (column.kind()) { 
+        case arrow::Datum::ARRAY: 
+            return CompareImpl<TArray>(column.make_array(), border, rowsCmp); 
+        case arrow::Datum::CHUNKED_ARRAY: 
+            return CompareImpl<TArray>(column.chunked_array(), border, rowsCmp); 
+        default: 
+            break; 
+    } 
+    Y_VERIFY(false); 
+    return false; 
+} 
+ 
+bool SwitchCompare(const arrow::Datum& column, const std::shared_ptr<arrow::Array>& border, 
+                   std::vector<NArrow::ECompareResult>& rowsCmp) { 
+    Y_VERIFY(border->length() == 1); 
+ 
+    // first time it's empty 
+    if (rowsCmp.empty()) { 
+        rowsCmp.resize(column.length(), ECompareResult::BORDER); 
+    } 
+ 
+    return SwitchArrayType(column, [&](const auto& type) -> bool { 
+        using TWrap = std::decay_t<decltype(type)>; 
+        using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType; 
+        return Compare<TArray>(column, border, rowsCmp); 
+    }); 
+} 
+ 
+template <typename T> 
+void CompositeCompare(std::shared_ptr<T> some, std::shared_ptr<arrow::RecordBatch> borderBatch, 
+                      std::vector<NArrow::ECompareResult>& rowsCmp) { 
+    auto key = borderBatch->schema()->fields(); 
+    Y_VERIFY(key.size()); 
+ 
+    for (size_t i = 0; i < key.size(); ++i) { 
+        auto& field = key[i]; 
+        auto typeId = field->type()->id(); 
+        auto column = some->GetColumnByName(field->name()); 
+        std::shared_ptr<arrow::Array> border = borderBatch->GetColumnByName(field->name()); 
+        Y_VERIFY(column); 
+        Y_VERIFY(border); 
+        Y_VERIFY(some->schema()->GetFieldByName(field->name())->type()->id() == typeId); 
+ 
+        if (SwitchCompare(column, border, rowsCmp)) { 
+            break; // early exit in case we have all rows compared: no borders, can omit key tail 
+        } 
+    } 
+} 
+#if 0 
+std::shared_ptr<arrow::Array> CastToInt32Array(const std::shared_ptr<arrow::Array>& arr) { 
+    auto newData = arr->data()->Copy(); 
+    newData->type = arrow::int32(); 
+    return std::make_shared<arrow::Int32Array>(newData); 
+} 
+ 
+std::shared_ptr<arrow::Array> CastToInt64Array(const std::shared_ptr<arrow::Array>& arr) { 
+    auto newData = arr->data()->Copy(); 
+    newData->type = arrow::int64(); 
+    return std::make_shared<arrow::Int64Array>(newData); 
+} 
+ 
+// We need more types than arrow::compute::SortToIndices() support out of the box 
+std::shared_ptr<arrow::UInt64Array> SortPermutation(const std::shared_ptr<arrow::Array>& arr) { 
+    switch (arr->type_id()) { 
+        case arrow::Type::DATE32: 
+        case arrow::Type::TIME32: 
+        { 
+            auto res = arrow::compute::SortToIndices(*CastToInt32Array(arr)); 
+            Y_VERIFY_OK(res.status()); 
+            return std::static_pointer_cast<arrow::UInt64Array>(*res); 
+        } 
+        case arrow::Type::DATE64: 
+        case arrow::Type::TIMESTAMP: 
+        case arrow::Type::TIME64: 
+        { 
+            auto res = arrow::compute::SortToIndices(*CastToInt64Array(arr)); 
+            Y_VERIFY_OK(res.status()); 
+            return std::static_pointer_cast<arrow::UInt64Array>(*res); 
+        } 
+        default: 
+            break; 
+    } 
+    auto res = arrow::compute::SortToIndices(*arr); 
+    Y_VERIFY_OK(res.status()); 
+    return std::static_pointer_cast<arrow::UInt64Array>(*res); 
+} 
+#endif 
+} 
+ 
 template <typename TType>
 std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl() {
     return std::make_shared<TType>();
 }
-
+ 
 template <>
 std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>() {
     return arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
@@ -214,39 +214,39 @@ std::shared_ptr<arrow::DataType> GetArrowType(NScheme::TTypeId typeId) {
     return std::make_shared<arrow::NullType>();
 }
 
-std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const TVector<std::pair<TString, NScheme::TTypeId>>& columns) {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.reserve(columns.size());
-    for (auto& [name, ydbType] : columns) {
-        std::string colName(name.data(), name.size());
-        fields.emplace_back(std::make_shared<arrow::Field>(colName, GetArrowType(ydbType)));
-    }
-    return fields;
-}
-
+std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const TVector<std::pair<TString, NScheme::TTypeId>>& columns) { 
+    std::vector<std::shared_ptr<arrow::Field>> fields; 
+    fields.reserve(columns.size()); 
+    for (auto& [name, ydbType] : columns) { 
+        std::string colName(name.data(), name.size()); 
+        fields.emplace_back(std::make_shared<arrow::Field>(colName, GetArrowType(ydbType))); 
+    } 
+    return fields; 
+} 
+ 
 std::shared_ptr<arrow::Schema> MakeArrowSchema(const TVector<std::pair<TString, NScheme::TTypeId>>& ydbColumns) {
-    return std::make_shared<arrow::Schema>(MakeArrowFields(ydbColumns));
-}
-
-TString SerializeSchema(const arrow::Schema& schema) {
-    auto buffer = arrow::ipc::SerializeSchema(schema);
-    if (!buffer.ok()) {
-        return {};
-    }
-    return TString((const char*)(*buffer)->data(), (*buffer)->size());
-}
-
+    return std::make_shared<arrow::Schema>(MakeArrowFields(ydbColumns)); 
+} 
+ 
+TString SerializeSchema(const arrow::Schema& schema) { 
+    auto buffer = arrow::ipc::SerializeSchema(schema); 
+    if (!buffer.ok()) { 
+        return {}; 
+    } 
+    return TString((const char*)(*buffer)->data(), (*buffer)->size()); 
+} 
+ 
 std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str) {
     std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(str));
     arrow::io::BufferReader reader(buffer);
-    arrow::ipc::DictionaryMemo dictMemo;
-    auto schema = ReadSchema(&reader, &dictMemo);
-    if (!schema.ok()) {
-        return {};
-    }
-    return *schema;
-}
-
+    arrow::ipc::DictionaryMemo dictMemo; 
+    auto schema = ReadSchema(&reader, &dictMemo); 
+    if (!schema.ok()) { 
+        return {}; 
+    } 
+    return *schema; 
+} 
+ 
 namespace {
     class TFixedStringOutputStream final : public arrow::io::OutputStream {
     public:
@@ -254,19 +254,19 @@ namespace {
             : Out(out)
             , Position(0)
         { }
-
+ 
         arrow::Status Close() override {
             Out = nullptr;
             return arrow::Status::OK();
         }
-
+ 
         bool closed() const override {
             return Out == nullptr;
         }
-
+ 
         arrow::Result<int64_t> Tell() const override {
             return Position;
-        }
+        } 
 
         arrow::Status Write(const void* data, int64_t nbytes) override {
             if (Y_LIKELY(nbytes > 0)) {
@@ -287,9 +287,9 @@ namespace {
         TString* Out;
         size_t Position;
     };
-}
-
-TString SerializeBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const arrow::ipc::IpcWriteOptions& options) {
+} 
+ 
+TString SerializeBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const arrow::ipc::IpcWriteOptions& options) { 
     arrow::ipc::IpcPayload payload;
     auto status = arrow::ipc::GetRecordBatchPayload(*batch, options, &payload);
     Y_VERIFY_OK(status);
@@ -308,149 +308,149 @@ TString SerializeBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const a
     Y_VERIFY(out.GetPosition() == str.size());
 
     return str;
-}
-
-TString SerializeBatchNoCompression(const std::shared_ptr<arrow::RecordBatch>& batch) {
-    auto writeOptions = arrow::ipc::IpcWriteOptions::Defaults();
-    writeOptions.use_threads = false;
+} 
+ 
+TString SerializeBatchNoCompression(const std::shared_ptr<arrow::RecordBatch>& batch) { 
+    auto writeOptions = arrow::ipc::IpcWriteOptions::Defaults(); 
+    writeOptions.use_threads = false; 
     return SerializeBatch(batch, writeOptions);
-}
-
+} 
+ 
 std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const std::shared_ptr<arrow::Schema>& schema) {
-    arrow::ipc::DictionaryMemo dictMemo;
-    auto options = arrow::ipc::IpcReadOptions::Defaults();
-    options.use_threads = false;
-
+    arrow::ipc::DictionaryMemo dictMemo; 
+    auto options = arrow::ipc::IpcReadOptions::Defaults(); 
+    options.use_threads = false; 
+ 
     std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(blob));
     arrow::io::BufferReader reader(buffer);
-    auto batch = ReadRecordBatch(schema, &dictMemo, options, &reader);
-    if (!batch.ok() || !(*batch)->Validate().ok()) {
-        return {};
-    }
-    return *batch;
-}
+    auto batch = ReadRecordBatch(schema, &dictMemo, options, &reader); 
+    if (!batch.ok() || !(*batch)->Validate().ok()) { 
+        return {}; 
+    } 
+    return *batch; 
+} 
+ 
+std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::Schema>& schema) { 
+    std::vector<std::shared_ptr<arrow::Array>> columns; 
+    columns.reserve(schema->num_fields()); 
+ 
+    for (auto& field : schema->fields()) { 
+        auto result = arrow::MakeArrayOfNull(field->type(), 0); 
+        Y_VERIFY_OK(result.status()); 
+        columns.emplace_back(*result); 
+        Y_VERIFY(columns.back()); 
+    } 
+    return arrow::RecordBatch::Make(schema, 0, columns); 
+} 
+ 
+std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch, 
+                                                   const std::vector<TString>& columnNames) { 
+    std::vector<std::shared_ptr<arrow::Field>> fields; 
+    fields.reserve(columnNames.size()); 
+    std::vector<std::shared_ptr<arrow::Array>> columns; 
+    columns.reserve(columnNames.size()); 
+ 
+    auto srcSchema = srcBatch->schema(); 
+    for (auto& name : columnNames) { 
+        fields.push_back(srcSchema->GetFieldByName(name)); 
+        columns.push_back(srcBatch->GetColumnByName(name)); 
+        if (!columns.back()) { 
+            return {}; 
+        } 
+    } 
+ 
+    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), srcBatch->num_rows(), columns); 
+} 
+ 
+std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch, 
+                                                   const std::shared_ptr<arrow::Schema>& dstSchema, 
+                                                   bool addNotExisted) { 
+    std::vector<std::shared_ptr<arrow::Array>> columns; 
+    columns.reserve(dstSchema->num_fields()); 
+ 
+    for (auto& field : dstSchema->fields()) { 
+        columns.push_back(srcBatch->GetColumnByName(field->name())); 
+        if (!columns.back()) { 
+            if (addNotExisted) { 
+                auto result = arrow::MakeArrayOfNull(field->type(), srcBatch->num_rows()); 
+                if (!result.ok()) { 
+                    return {}; 
+                } 
+                columns.back() = *result; 
+            } else { 
+                return {}; 
+            } 
+        } 
+    } 
+ 
+    return arrow::RecordBatch::Make(dstSchema, srcBatch->num_rows(), columns); 
+} 
+ 
 
-std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::Schema>& schema) {
-    std::vector<std::shared_ptr<arrow::Array>> columns;
-    columns.reserve(schema->num_fields());
 
-    for (auto& field : schema->fields()) {
-        auto result = arrow::MakeArrayOfNull(field->type(), 0);
-        Y_VERIFY_OK(result.status());
-        columns.emplace_back(*result);
-        Y_VERIFY(columns.back());
-    }
-    return arrow::RecordBatch::Make(schema, 0, columns);
-}
-
-std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                   const std::vector<TString>& columnNames) {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.reserve(columnNames.size());
-    std::vector<std::shared_ptr<arrow::Array>> columns;
-    columns.reserve(columnNames.size());
-
-    auto srcSchema = srcBatch->schema();
-    for (auto& name : columnNames) {
-        fields.push_back(srcSchema->GetFieldByName(name));
-        columns.push_back(srcBatch->GetColumnByName(name));
-        if (!columns.back()) {
-            return {};
-        }
-    }
-
-    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), srcBatch->num_rows(), columns);
-}
-
-std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
-                                                   const std::shared_ptr<arrow::Schema>& dstSchema,
-                                                   bool addNotExisted) {
-    std::vector<std::shared_ptr<arrow::Array>> columns;
-    columns.reserve(dstSchema->num_fields());
-
-    for (auto& field : dstSchema->fields()) {
-        columns.push_back(srcBatch->GetColumnByName(field->name()));
-        if (!columns.back()) {
-            if (addNotExisted) {
-                auto result = arrow::MakeArrayOfNull(field->type(), srcBatch->num_rows());
-                if (!result.ok()) {
-                    return {};
-                }
-                columns.back() = *result;
-            } else {
-                return {};
-            }
-        }
-    }
-
-    return arrow::RecordBatch::Make(dstSchema, srcBatch->num_rows(), columns);
-}
-
-
-
-std::shared_ptr<arrow::Table> CombineInTable(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {
-    auto res = arrow::Table::FromRecordBatches(batches);
-    if (!res.ok()) {
-        return {};
-    }
-
-    res = (*res)->CombineChunks();
-    if (!res.ok()) {
-        return {};
-    }
-
-    return *res;
-}
-
-std::shared_ptr<arrow::RecordBatch> CombineBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {
-    auto table = CombineInTable(batches);
-    return ToBatch(table);
-}
-
-std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& table) {
-    std::vector<std::shared_ptr<arrow::Array>> columns;
-    columns.reserve(table->num_columns());
-    for (auto& col : table->columns()) {
-        Y_VERIFY(col->num_chunks() == 1);
-        columns.push_back(col->chunk(0));
-    }
-    return arrow::RecordBatch::Make(table->schema(), table->num_rows(), columns);
-}
-
-std::shared_ptr<arrow::RecordBatch> CombineSortedBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
-                                                         const std::shared_ptr<TSortDescription>& description) {
-    TVector<NArrow::IInputStream::TPtr> streams;
-    for (auto& batch : batches) {
-        streams.push_back(std::make_shared<NArrow::TOneBatchInputStream>(batch));
-    }
-
-    auto mergeStream = std::make_shared<NArrow::TMergingSortedInputStream>(streams, description, Max<ui64>());
-    std::shared_ptr<arrow::RecordBatch> batch = mergeStream->Read();
-    Y_VERIFY(!mergeStream->Read());
-    return batch;
-}
-
-std::vector<std::shared_ptr<arrow::RecordBatch>> MergeSortedBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
-                                                                    const std::shared_ptr<TSortDescription>& description,
-                                                                    size_t maxBatchRows, ui64 limit) {
-    Y_VERIFY(maxBatchRows);
-    ui64 numRows = 0;
-    TVector<NArrow::IInputStream::TPtr> streams;
-    for (auto& batch : batches) {
-        numRows += batch->num_rows();
-        streams.push_back(std::make_shared<NArrow::TOneBatchInputStream>(batch));
-    }
-
-    std::vector<std::shared_ptr<arrow::RecordBatch>> out;
-    out.reserve(numRows / maxBatchRows + 1);
-
-    auto mergeStream = std::make_shared<NArrow::TMergingSortedInputStream>(streams, description, maxBatchRows, limit);
-    while (std::shared_ptr<arrow::RecordBatch> batch = mergeStream->Read()) {
-        out.push_back(batch);
-    }
-    return out;
-}
-
+std::shared_ptr<arrow::Table> CombineInTable(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) { 
+    auto res = arrow::Table::FromRecordBatches(batches); 
+    if (!res.ok()) { 
+        return {}; 
+    } 
+ 
+    res = (*res)->CombineChunks(); 
+    if (!res.ok()) { 
+        return {}; 
+    } 
+ 
+    return *res; 
+} 
+ 
+std::shared_ptr<arrow::RecordBatch> CombineBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) { 
+    auto table = CombineInTable(batches); 
+    return ToBatch(table); 
+} 
+ 
+std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& table) { 
+    std::vector<std::shared_ptr<arrow::Array>> columns; 
+    columns.reserve(table->num_columns()); 
+    for (auto& col : table->columns()) { 
+        Y_VERIFY(col->num_chunks() == 1); 
+        columns.push_back(col->chunk(0)); 
+    } 
+    return arrow::RecordBatch::Make(table->schema(), table->num_rows(), columns); 
+} 
+ 
+std::shared_ptr<arrow::RecordBatch> CombineSortedBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, 
+                                                         const std::shared_ptr<TSortDescription>& description) { 
+    TVector<NArrow::IInputStream::TPtr> streams; 
+    for (auto& batch : batches) { 
+        streams.push_back(std::make_shared<NArrow::TOneBatchInputStream>(batch)); 
+    } 
+ 
+    auto mergeStream = std::make_shared<NArrow::TMergingSortedInputStream>(streams, description, Max<ui64>()); 
+    std::shared_ptr<arrow::RecordBatch> batch = mergeStream->Read(); 
+    Y_VERIFY(!mergeStream->Read()); 
+    return batch; 
+} 
+ 
+std::vector<std::shared_ptr<arrow::RecordBatch>> MergeSortedBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, 
+                                                                    const std::shared_ptr<TSortDescription>& description, 
+                                                                    size_t maxBatchRows, ui64 limit) { 
+    Y_VERIFY(maxBatchRows); 
+    ui64 numRows = 0; 
+    TVector<NArrow::IInputStream::TPtr> streams; 
+    for (auto& batch : batches) { 
+        numRows += batch->num_rows(); 
+        streams.push_back(std::make_shared<NArrow::TOneBatchInputStream>(batch)); 
+    } 
+ 
+    std::vector<std::shared_ptr<arrow::RecordBatch>> out; 
+    out.reserve(numRows / maxBatchRows + 1); 
+ 
+    auto mergeStream = std::make_shared<NArrow::TMergingSortedInputStream>(streams, description, maxBatchRows, limit); 
+    while (std::shared_ptr<arrow::RecordBatch> batch = mergeStream->Read()) { 
+        out.push_back(batch); 
+    } 
+    return out; 
+} 
+ 
 // Check if the pertumation doesn't reoder anything
 bool IsNoOp(const arrow::UInt64Array& permutation) {
     for (i64 i = 0; i < permutation.length(); ++i) {
@@ -470,147 +470,147 @@ std::shared_ptr<arrow::RecordBatch> Reorder(const std::shared_ptr<arrow::RecordB
     return (*res).record_batch();
 }
 
-std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                               const std::vector<ui32>& sharding, ui32 numShards) {
-    Y_VERIFY((size_t)batch->num_rows() == sharding.size());
-
-    std::vector<std::vector<ui32>> shardRows(numShards);
-    for (size_t row = 0; row < sharding.size(); ++row) {
-        ui32 shardNo = sharding[row];
-        Y_VERIFY(shardNo < numShards);
-        shardRows[shardNo].push_back(row);
-    }
-
-    std::shared_ptr<arrow::UInt64Array> permutation;
-    {
-        arrow::UInt64Builder builder;
-        Y_VERIFY_OK(builder.Reserve(sharding.size()));
-
-        for (ui32 shardNo = 0; shardNo < numShards; ++shardNo) {
-            for (auto& row : shardRows[shardNo]) {
-                Y_VERIFY_OK(builder.Append(row));
-            }
-        }
-        Y_VERIFY_OK(builder.Finish(&permutation));
-    }
-
+std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch, 
+                                                               const std::vector<ui32>& sharding, ui32 numShards) { 
+    Y_VERIFY((size_t)batch->num_rows() == sharding.size()); 
+ 
+    std::vector<std::vector<ui32>> shardRows(numShards); 
+    for (size_t row = 0; row < sharding.size(); ++row) { 
+        ui32 shardNo = sharding[row]; 
+        Y_VERIFY(shardNo < numShards); 
+        shardRows[shardNo].push_back(row); 
+    } 
+ 
+    std::shared_ptr<arrow::UInt64Array> permutation; 
+    { 
+        arrow::UInt64Builder builder; 
+        Y_VERIFY_OK(builder.Reserve(sharding.size())); 
+ 
+        for (ui32 shardNo = 0; shardNo < numShards; ++shardNo) { 
+            for (auto& row : shardRows[shardNo]) { 
+                Y_VERIFY_OK(builder.Append(row)); 
+            } 
+        } 
+        Y_VERIFY_OK(builder.Finish(&permutation)); 
+    } 
+ 
     auto reorderedBatch = Reorder(batch, permutation);
-
-    std::vector<std::shared_ptr<arrow::RecordBatch>> out(numShards);
-
-    int offset = 0;
-    for (ui32 shardNo = 0; shardNo < numShards; ++shardNo) {
-        int length = shardRows[shardNo].size();
-        if (length) {
-            out[shardNo] = reorderedBatch->Slice(offset, length);
-            offset += length;
-        }
-    }
-
-    Y_VERIFY(offset == batch->num_rows());
-    return out;
-}
-
-template <bool desc, bool uniq>
-static bool IsSelfSorted(const std::shared_ptr<arrow::RecordBatch>& batch) {
-    auto columns = std::make_shared<TArrayVec>(batch->columns());
-
-    for (int i = 0; i < batch->num_rows() - 1; ++i) {
-        TRawReplaceKey current(columns.get(), i);
-        TRawReplaceKey next(columns.get(), i + 1);
-        if constexpr (desc) {
-            if (current < next) {
-                return false;
-            }
-        } else {
-            if (next < current) {
-                return false;
-            }
-        }
-        if constexpr (uniq) {
-            if (next == current) {
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
-bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch,
-              const std::shared_ptr<arrow::Schema>& sortingKey, bool desc) {
-    if (batch->num_rows() < 2) {
-        return true;
-    }
-
-    auto keyBatch = ExtractColumns(batch, sortingKey);
-    if (desc) {
-        return IsSelfSorted<true, false>(keyBatch);
-    } else {
-        return IsSelfSorted<false, false>(keyBatch);
-    }
-}
-
-bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch,
-                       const std::shared_ptr<arrow::Schema>& sortingKey, bool desc) {
-    if (batch->num_rows() < 2) {
-        return true;
-    }
-
-    auto keyBatch = ExtractColumns(batch, sortingKey);
-    if (desc) {
-        return IsSelfSorted<true, true>(keyBatch);
-    } else {
-        return IsSelfSorted<false, true>(keyBatch);
-    }
-}
-
-std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared_ptr<arrow::Schema>& schema,
-                                                               size_t reserve) {
-    std::vector<std::unique_ptr<arrow::ArrayBuilder>> builders;
-    builders.reserve(schema->num_fields());
-
-    for (auto& field : schema->fields()) {
-        std::unique_ptr<arrow::ArrayBuilder> builder;
-        auto status = arrow::MakeBuilder(arrow::default_memory_pool(), field->type(), &builder);
-        Y_VERIFY_OK(status);
-        builders.emplace_back(std::move(builder));
-
-        if (reserve) {
-            status = builders.back()->Reserve(reserve);
-            Y_VERIFY_OK(status);
-        }
-    }
-    return builders;
-}
-
-std::vector<std::shared_ptr<arrow::Array>> Finish(std::vector<std::unique_ptr<arrow::ArrayBuilder>>&& builders) {
-    std::vector<std::shared_ptr<arrow::Array>> out;
-    for (auto& builder : builders) {
-        std::shared_ptr<arrow::Array> array;
-        auto status = builder->Finish(&array);
-        Y_VERIFY_OK(status);
-        out.emplace_back(array);
-    }
-    return out;
-}
-
-TVector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema) {
-    TVector<TString> out;
-    out.reserve(schema->num_fields());
-    for (int i = 0; i < schema->num_fields(); ++i) {
-        auto& name = schema->field(i)->name();
-        out.emplace_back(TString(name.data(), name.size()));
-    }
-    return out;
-}
-
+ 
+    std::vector<std::shared_ptr<arrow::RecordBatch>> out(numShards); 
+ 
+    int offset = 0; 
+    for (ui32 shardNo = 0; shardNo < numShards; ++shardNo) { 
+        int length = shardRows[shardNo].size(); 
+        if (length) { 
+            out[shardNo] = reorderedBatch->Slice(offset, length); 
+            offset += length; 
+        } 
+    } 
+ 
+    Y_VERIFY(offset == batch->num_rows()); 
+    return out; 
+} 
+ 
+template <bool desc, bool uniq> 
+static bool IsSelfSorted(const std::shared_ptr<arrow::RecordBatch>& batch) { 
+    auto columns = std::make_shared<TArrayVec>(batch->columns()); 
+ 
+    for (int i = 0; i < batch->num_rows() - 1; ++i) { 
+        TRawReplaceKey current(columns.get(), i); 
+        TRawReplaceKey next(columns.get(), i + 1); 
+        if constexpr (desc) { 
+            if (current < next) { 
+                return false; 
+            } 
+        } else { 
+            if (next < current) { 
+                return false; 
+            } 
+        } 
+        if constexpr (uniq) { 
+            if (next == current) { 
+                return false; 
+            } 
+        } 
+    } 
+    return true; 
+} 
+ 
+bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch, 
+              const std::shared_ptr<arrow::Schema>& sortingKey, bool desc) { 
+    if (batch->num_rows() < 2) { 
+        return true; 
+    } 
+ 
+    auto keyBatch = ExtractColumns(batch, sortingKey); 
+    if (desc) { 
+        return IsSelfSorted<true, false>(keyBatch); 
+    } else { 
+        return IsSelfSorted<false, false>(keyBatch); 
+    } 
+} 
+ 
+bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch, 
+                       const std::shared_ptr<arrow::Schema>& sortingKey, bool desc) { 
+    if (batch->num_rows() < 2) { 
+        return true; 
+    } 
+ 
+    auto keyBatch = ExtractColumns(batch, sortingKey); 
+    if (desc) { 
+        return IsSelfSorted<true, true>(keyBatch); 
+    } else { 
+        return IsSelfSorted<false, true>(keyBatch); 
+    } 
+} 
+ 
+std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared_ptr<arrow::Schema>& schema, 
+                                                               size_t reserve) { 
+    std::vector<std::unique_ptr<arrow::ArrayBuilder>> builders; 
+    builders.reserve(schema->num_fields()); 
+ 
+    for (auto& field : schema->fields()) { 
+        std::unique_ptr<arrow::ArrayBuilder> builder; 
+        auto status = arrow::MakeBuilder(arrow::default_memory_pool(), field->type(), &builder); 
+        Y_VERIFY_OK(status); 
+        builders.emplace_back(std::move(builder)); 
+ 
+        if (reserve) { 
+            status = builders.back()->Reserve(reserve); 
+            Y_VERIFY_OK(status); 
+        } 
+    } 
+    return builders; 
+} 
+ 
+std::vector<std::shared_ptr<arrow::Array>> Finish(std::vector<std::unique_ptr<arrow::ArrayBuilder>>&& builders) { 
+    std::vector<std::shared_ptr<arrow::Array>> out; 
+    for (auto& builder : builders) { 
+        std::shared_ptr<arrow::Array> array; 
+        auto status = builder->Finish(&array); 
+        Y_VERIFY_OK(status); 
+        out.emplace_back(array); 
+    } 
+    return out; 
+} 
+ 
+TVector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema) { 
+    TVector<TString> out; 
+    out.reserve(schema->num_fields()); 
+    for (int i = 0; i < schema->num_fields(); ++i) { 
+        auto& name = schema->field(i)->name(); 
+        out.emplace_back(TString(name.data(), name.size())); 
+    } 
+    return out; 
+} 
+ 
 ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch) {
-    if (!batch) {
+    if (!batch) { 
         return 0;
     }
     ui64 bytes = 0;
-    for (auto& column : batch->columns()) { // TODO: use column_data() instead of columns()
-        bytes += GetArrayDataSize(column);
+    for (auto& column : batch->columns()) { // TODO: use column_data() instead of columns() 
+        bytes += GetArrayDataSize(column); 
     }
     return bytes;
 }
@@ -660,347 +660,347 @@ ui64 GetArrayDataSizeImpl<arrow::Decimal128Type>(const std::shared_ptr<arrow::Ar
     return sizeof(ui64) * 2 * column->length();
 }
 
-ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column) {
-    auto type = column->type();
+ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column) { 
+    auto type = column->type(); 
     ui64 bytes = 0;
     bool success = SwitchTypeWithNull(type->id(), [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
         Y_UNUSED(typeHolder);
         bytes = GetArrayDataSizeImpl<TType>(column);
         return true;
     });
-
-    // Add null bit mask overhead if any.
-    if (HasNulls(column)) {
-        bytes += column->length() / 8 + 1;
-    }
-
-    Y_VERIFY_DEBUG(success, "Unsupported arrow type %s", type->ToString().data());
+ 
+    // Add null bit mask overhead if any. 
+    if (HasNulls(column)) { 
+        bytes += column->length() / 8 + 1; 
+    } 
+ 
+    Y_VERIFY_DEBUG(success, "Unsupported arrow type %s", type->ToString().data()); 
     return bytes;
 }
 
-std::shared_ptr<arrow::UInt64Array> MakeUI64Array(ui64 value, i64 size) {
-    auto res = arrow::MakeArrayFromScalar(arrow::UInt64Scalar(value), size);
-    Y_VERIFY(res.ok());
-    return std::static_pointer_cast<arrow::UInt64Array>(*res);
-}
-
-std::pair<int, int> FindMinMaxPosition(const std::shared_ptr<arrow::Array>& array) {
-    if (array->length() == 0) {
-        return {-1, -1};
-    }
-
-    int minPos = 0;
-    int maxPos = 0;
-    SwitchType(array->type_id(), [&](const auto& type) {
-        using TWrap = std::decay_t<decltype(type)>;
-        using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
-
-        auto& column = static_cast<const TArray&>(*array);
-
-        for (int i = 1; i < column.length(); ++i) {
-            const auto& value = column.GetView(i);
-            if (value < column.GetView(minPos)) {
-                minPos = i;
-            }
-            if (value > column.GetView(maxPos)) {
-                maxPos = i;
-            }
-        }
-        return true;
-    });
-    return {minPos, maxPos};
-}
-
-std::shared_ptr<arrow::Scalar> GetScalar(const std::shared_ptr<arrow::Array>& array, int position) {
-    std::shared_ptr<arrow::Scalar> out;
-    SwitchType(array->type_id(), [&](const auto& type) {
-        using TWrap = std::decay_t<decltype(type)>;
-        using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
-        using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
-
-        auto& column = static_cast<const TArray&>(*array);
-        if constexpr (std::is_same_v<TScalar, arrow::StringScalar> ||
-                      std::is_same_v<TScalar, arrow::BinaryScalar> ||
-                      std::is_same_v<TScalar, arrow::FixedSizeBinaryScalar> ||
-                      std::is_same_v<TScalar, arrow::Decimal128Scalar> ||
-                      std::is_same_v<TScalar, arrow::LargeStringScalar> ||
-                      std::is_same_v<TScalar, arrow::LargeBinaryScalar>) {
-            // TODO
-        } else {
-            out = std::make_shared<TScalar>(column.GetView(position), array->type());
-        }
-        return true;
-    });
-    return out;
-}
-
-bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y) {
-    Y_VERIFY(x.type->Equals(y.type));
-
-    return SwitchType(x.type->id(), [&](const auto& type) {
-        using TWrap = std::decay_t<decltype(type)>;
-        using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
-        using TValue = std::decay_t<decltype(static_cast<const TScalar&>(x).value)>;
-
-        if constexpr (std::is_arithmetic_v<TValue>) {
-            const auto& xval = static_cast<const TScalar&>(x).value;
-            const auto& yval = static_cast<const TScalar&>(y).value;
-            return xval < yval;
-        }
-        Y_VERIFY(false); // TODO: non primitive types
-        return false;
-    });
-}
-
-std::shared_ptr<arrow::UInt64Array> MakePermutation(int size, bool reverse) {
-    if (size < 1) {
-        return {};
-    }
-
-    arrow::UInt64Builder builder;
-    if (!builder.Reserve(size).ok()) {
-        return {};
-    }
-
-    if (reverse) {
-        ui64 value = size - 1;
-        for (i64 i = 0; i < size; ++i, --value) {
-            if (!builder.Append(value).ok()) {
-                return {};
-            }
-        }
-    } else {
-        for (i64 i = 0; i < size; ++i) {
-            if (!builder.Append(i).ok()) {
-                return {};
-            }
-        }
-    }
-
-    std::shared_ptr<arrow::UInt64Array> out;
-    if (!builder.Finish(&out).ok()) {
-        return {};
-    }
-    return out;
-}
-
-std::shared_ptr<arrow::BooleanArray> MakeFilter(const std::vector<bool>& bits) {
-    arrow::BooleanBuilder builder;
-    auto res = builder.Resize(bits.size());
-    Y_VERIFY_OK(res);
-    res = builder.AppendValues(bits);
-    Y_VERIFY_OK(res);
-
-    std::shared_ptr<arrow::BooleanArray> out;
-    res = builder.Finish(&out);
-    Y_VERIFY_OK(res);
-    return out;
-}
-
-std::vector<bool> CombineFilters(std::vector<bool>&& f1, std::vector<bool>&& f2) {
-    if (f1.empty()) {
-        return f2;
-    } else if (f2.empty()) {
-        return f1;
-    }
-
-    Y_VERIFY(f1.size() == f2.size());
-    for (size_t i = 0; i < f1.size(); ++i) {
-        f1[i] = f1[i] && f2[i];
-    }
-    return f1;
-}
-
-std::vector<bool> MakePredicateFilter(const arrow::Datum& datum, const arrow::Datum& border,
-                                      ECompareType compareType) {
-    std::vector<NArrow::ECompareResult> cmps;
-
-    switch (datum.kind()) {
-        case arrow::Datum::ARRAY:
-            Y_VERIFY(border.kind() == arrow::Datum::ARRAY);
-            SwitchCompare(datum, border.make_array(), cmps);
-            break;
-        case arrow::Datum::CHUNKED_ARRAY:
-            Y_VERIFY(border.kind() == arrow::Datum::ARRAY);
-            SwitchCompare(datum, border.make_array(), cmps);
-            break;
-        case arrow::Datum::RECORD_BATCH:
-            Y_VERIFY(border.kind() == arrow::Datum::RECORD_BATCH);
-            CompositeCompare(datum.record_batch(), border.record_batch(), cmps);
-            break;
-        case arrow::Datum::TABLE:
-            Y_VERIFY(border.kind() == arrow::Datum::RECORD_BATCH);
-            CompositeCompare(datum.table(), border.record_batch(), cmps);
-            break;
-        default:
-            Y_VERIFY(false);
-            break;
-    }
-
-    std::vector<bool> bits(cmps.size());
-
-    switch (compareType) {
-        case ECompareType::LESS:
-            for (size_t i = 0; i < cmps.size(); ++i) {
-                bits[i] = (cmps[i] < ECompareResult::BORDER);
-            }
-            break;
-        case ECompareType::LESS_OR_EQUAL:
-            for (size_t i = 0; i < cmps.size(); ++i) {
-                bits[i] = (cmps[i] <= ECompareResult::BORDER);
-            }
-            break;
-        case ECompareType::GREATER:
-            for (size_t i = 0; i < cmps.size(); ++i) {
-                bits[i] = (cmps[i] > ECompareResult::BORDER);
-            }
-            break;
-        case ECompareType::GREATER_OR_EQUAL:
-            for (size_t i = 0; i < cmps.size(); ++i) {
-                bits[i] = (cmps[i] >= ECompareResult::BORDER);
-            }
-            break;
-    }
-
-    return bits;
-}
-
-std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                        const std::shared_ptr<arrow::Schema>& sortingKey) {
-    auto keyBatch = ExtractColumns(batch, sortingKey);
-    auto keyColumns = std::make_shared<TArrayVec>(keyBatch->columns());
-    std::vector<TRawReplaceKey> points;
-    points.reserve(keyBatch->num_rows());
-
-    for (int i = 0; i < keyBatch->num_rows(); ++i) {
-        points.push_back(TRawReplaceKey(keyColumns.get(), i));
-    }
-
-    bool haveNulls = false;
-    for (auto& column : *keyColumns) {
-        if (HasNulls(column)) {
-            haveNulls = true;
-            break;
-        }
-    }
-
-    if (haveNulls) {
-        std::sort(points.begin(), points.end());
-    } else {
-        std::sort(points.begin(), points.end(),
-            [](const TRawReplaceKey& a, const TRawReplaceKey& b) {
-                return a.LessNotNull(b);
-            }
-        );
-    }
-
-    arrow::UInt64Builder builder;
-    Y_VERIFY_OK(builder.Reserve(points.size()));
-
-    for (auto& point : points) {
-        Y_VERIFY_OK(builder.Append(point.GetPosition()));
-    }
-
-    std::shared_ptr<arrow::UInt64Array> out;
-    Y_VERIFY_OK(builder.Finish(&out));
-    return out;
-}
-
-std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                              const std::shared_ptr<arrow::Schema>& sortingKey) {
-    auto sortPermutation = MakeSortPermutation(batch, sortingKey);
+std::shared_ptr<arrow::UInt64Array> MakeUI64Array(ui64 value, i64 size) { 
+    auto res = arrow::MakeArrayFromScalar(arrow::UInt64Scalar(value), size); 
+    Y_VERIFY(res.ok()); 
+    return std::static_pointer_cast<arrow::UInt64Array>(*res); 
+} 
+ 
+std::pair<int, int> FindMinMaxPosition(const std::shared_ptr<arrow::Array>& array) { 
+    if (array->length() == 0) { 
+        return {-1, -1}; 
+    } 
+ 
+    int minPos = 0; 
+    int maxPos = 0; 
+    SwitchType(array->type_id(), [&](const auto& type) { 
+        using TWrap = std::decay_t<decltype(type)>; 
+        using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType; 
+ 
+        auto& column = static_cast<const TArray&>(*array); 
+ 
+        for (int i = 1; i < column.length(); ++i) { 
+            const auto& value = column.GetView(i); 
+            if (value < column.GetView(minPos)) { 
+                minPos = i; 
+            } 
+            if (value > column.GetView(maxPos)) { 
+                maxPos = i; 
+            } 
+        } 
+        return true; 
+    }); 
+    return {minPos, maxPos}; 
+} 
+ 
+std::shared_ptr<arrow::Scalar> GetScalar(const std::shared_ptr<arrow::Array>& array, int position) { 
+    std::shared_ptr<arrow::Scalar> out; 
+    SwitchType(array->type_id(), [&](const auto& type) { 
+        using TWrap = std::decay_t<decltype(type)>; 
+        using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType; 
+        using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType; 
+ 
+        auto& column = static_cast<const TArray&>(*array); 
+        if constexpr (std::is_same_v<TScalar, arrow::StringScalar> || 
+                      std::is_same_v<TScalar, arrow::BinaryScalar> || 
+                      std::is_same_v<TScalar, arrow::FixedSizeBinaryScalar> || 
+                      std::is_same_v<TScalar, arrow::Decimal128Scalar> || 
+                      std::is_same_v<TScalar, arrow::LargeStringScalar> || 
+                      std::is_same_v<TScalar, arrow::LargeBinaryScalar>) { 
+            // TODO 
+        } else { 
+            out = std::make_shared<TScalar>(column.GetView(position), array->type()); 
+        } 
+        return true; 
+    }); 
+    return out; 
+} 
+ 
+bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y) { 
+    Y_VERIFY(x.type->Equals(y.type)); 
+ 
+    return SwitchType(x.type->id(), [&](const auto& type) { 
+        using TWrap = std::decay_t<decltype(type)>; 
+        using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType; 
+        using TValue = std::decay_t<decltype(static_cast<const TScalar&>(x).value)>; 
+ 
+        if constexpr (std::is_arithmetic_v<TValue>) { 
+            const auto& xval = static_cast<const TScalar&>(x).value; 
+            const auto& yval = static_cast<const TScalar&>(y).value; 
+            return xval < yval; 
+        } 
+        Y_VERIFY(false); // TODO: non primitive types 
+        return false; 
+    }); 
+} 
+ 
+std::shared_ptr<arrow::UInt64Array> MakePermutation(int size, bool reverse) { 
+    if (size < 1) { 
+        return {}; 
+    } 
+ 
+    arrow::UInt64Builder builder; 
+    if (!builder.Reserve(size).ok()) { 
+        return {}; 
+    } 
+ 
+    if (reverse) { 
+        ui64 value = size - 1; 
+        for (i64 i = 0; i < size; ++i, --value) { 
+            if (!builder.Append(value).ok()) { 
+                return {}; 
+            } 
+        } 
+    } else { 
+        for (i64 i = 0; i < size; ++i) { 
+            if (!builder.Append(i).ok()) { 
+                return {}; 
+            } 
+        } 
+    } 
+ 
+    std::shared_ptr<arrow::UInt64Array> out; 
+    if (!builder.Finish(&out).ok()) { 
+        return {}; 
+    } 
+    return out; 
+} 
+ 
+std::shared_ptr<arrow::BooleanArray> MakeFilter(const std::vector<bool>& bits) { 
+    arrow::BooleanBuilder builder; 
+    auto res = builder.Resize(bits.size()); 
+    Y_VERIFY_OK(res); 
+    res = builder.AppendValues(bits); 
+    Y_VERIFY_OK(res); 
+ 
+    std::shared_ptr<arrow::BooleanArray> out; 
+    res = builder.Finish(&out); 
+    Y_VERIFY_OK(res); 
+    return out; 
+} 
+ 
+std::vector<bool> CombineFilters(std::vector<bool>&& f1, std::vector<bool>&& f2) { 
+    if (f1.empty()) { 
+        return f2; 
+    } else if (f2.empty()) { 
+        return f1; 
+    } 
+ 
+    Y_VERIFY(f1.size() == f2.size()); 
+    for (size_t i = 0; i < f1.size(); ++i) { 
+        f1[i] = f1[i] && f2[i]; 
+    } 
+    return f1; 
+} 
+ 
+std::vector<bool> MakePredicateFilter(const arrow::Datum& datum, const arrow::Datum& border, 
+                                      ECompareType compareType) { 
+    std::vector<NArrow::ECompareResult> cmps; 
+ 
+    switch (datum.kind()) { 
+        case arrow::Datum::ARRAY: 
+            Y_VERIFY(border.kind() == arrow::Datum::ARRAY); 
+            SwitchCompare(datum, border.make_array(), cmps); 
+            break; 
+        case arrow::Datum::CHUNKED_ARRAY: 
+            Y_VERIFY(border.kind() == arrow::Datum::ARRAY); 
+            SwitchCompare(datum, border.make_array(), cmps); 
+            break; 
+        case arrow::Datum::RECORD_BATCH: 
+            Y_VERIFY(border.kind() == arrow::Datum::RECORD_BATCH); 
+            CompositeCompare(datum.record_batch(), border.record_batch(), cmps); 
+            break; 
+        case arrow::Datum::TABLE: 
+            Y_VERIFY(border.kind() == arrow::Datum::RECORD_BATCH); 
+            CompositeCompare(datum.table(), border.record_batch(), cmps); 
+            break; 
+        default: 
+            Y_VERIFY(false); 
+            break; 
+    } 
+ 
+    std::vector<bool> bits(cmps.size()); 
+ 
+    switch (compareType) { 
+        case ECompareType::LESS: 
+            for (size_t i = 0; i < cmps.size(); ++i) { 
+                bits[i] = (cmps[i] < ECompareResult::BORDER); 
+            } 
+            break; 
+        case ECompareType::LESS_OR_EQUAL: 
+            for (size_t i = 0; i < cmps.size(); ++i) { 
+                bits[i] = (cmps[i] <= ECompareResult::BORDER); 
+            } 
+            break; 
+        case ECompareType::GREATER: 
+            for (size_t i = 0; i < cmps.size(); ++i) { 
+                bits[i] = (cmps[i] > ECompareResult::BORDER); 
+            } 
+            break; 
+        case ECompareType::GREATER_OR_EQUAL: 
+            for (size_t i = 0; i < cmps.size(); ++i) { 
+                bits[i] = (cmps[i] >= ECompareResult::BORDER); 
+            } 
+            break; 
+    } 
+ 
+    return bits; 
+} 
+ 
+std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<arrow::RecordBatch>& batch, 
+                                                        const std::shared_ptr<arrow::Schema>& sortingKey) { 
+    auto keyBatch = ExtractColumns(batch, sortingKey); 
+    auto keyColumns = std::make_shared<TArrayVec>(keyBatch->columns()); 
+    std::vector<TRawReplaceKey> points; 
+    points.reserve(keyBatch->num_rows()); 
+ 
+    for (int i = 0; i < keyBatch->num_rows(); ++i) { 
+        points.push_back(TRawReplaceKey(keyColumns.get(), i)); 
+    } 
+ 
+    bool haveNulls = false; 
+    for (auto& column : *keyColumns) { 
+        if (HasNulls(column)) { 
+            haveNulls = true; 
+            break; 
+        } 
+    } 
+ 
+    if (haveNulls) { 
+        std::sort(points.begin(), points.end()); 
+    } else { 
+        std::sort(points.begin(), points.end(), 
+            [](const TRawReplaceKey& a, const TRawReplaceKey& b) { 
+                return a.LessNotNull(b); 
+            } 
+        ); 
+    } 
+ 
+    arrow::UInt64Builder builder; 
+    Y_VERIFY_OK(builder.Reserve(points.size())); 
+ 
+    for (auto& point : points) { 
+        Y_VERIFY_OK(builder.Append(point.GetPosition())); 
+    } 
+ 
+    std::shared_ptr<arrow::UInt64Array> out; 
+    Y_VERIFY_OK(builder.Finish(&out)); 
+    return out; 
+} 
+ 
+std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch, 
+                                              const std::shared_ptr<arrow::Schema>& sortingKey) { 
+    auto sortPermutation = MakeSortPermutation(batch, sortingKey); 
     return Reorder(batch, sortPermutation);
-}
-
-bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& errorMessage) {
-    std::vector<std::shared_ptr<arrow::Array>> allColumns;
-    allColumns.reserve(YdbSchema.size());
-
-    // Shrink and reorder columns
-    for (auto& [colName, colType] : YdbSchema) {
-        auto column = batch.GetColumnByName(colName);
-        if (!column) {
-            errorMessage = TStringBuilder() << "No column '" << colName << "' in source batch";
-            return false;
-        }
-        allColumns.emplace_back(std::move(column));
+} 
+ 
+bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& errorMessage) { 
+    std::vector<std::shared_ptr<arrow::Array>> allColumns; 
+    allColumns.reserve(YdbSchema.size()); 
+ 
+    // Shrink and reorder columns 
+    for (auto& [colName, colType] : YdbSchema) { 
+        auto column = batch.GetColumnByName(colName); 
+        if (!column) { 
+            errorMessage = TStringBuilder() << "No column '" << colName << "' in source batch"; 
+            return false; 
+        } 
+        allColumns.emplace_back(std::move(column)); 
     }
-
-    std::vector<TSmallVec<TCell>> cells;
-    i64 row = 0;
-
-#if 1 // optimization
-    static constexpr i32 unroll = 32;
-    cells.reserve(unroll);
-    for (i32 i = 0; i < unroll; ++i) {
-        cells.push_back(TSmallVec<TCell>(YdbSchema.size()));
-    }
-
-    i64 rowsUnroll = batch.num_rows() - batch.num_rows() % unroll;
-    for (; row < rowsUnroll; row += unroll) {
-        ui32 col = 0;
-        for (auto& [colName, colType] : YdbSchema) {
-            auto& column = allColumns[col];
-            bool success = SwitchYqlTypeToArrowType(colType, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
+ 
+    std::vector<TSmallVec<TCell>> cells; 
+    i64 row = 0; 
+ 
+#if 1 // optimization 
+    static constexpr i32 unroll = 32; 
+    cells.reserve(unroll); 
+    for (i32 i = 0; i < unroll; ++i) { 
+        cells.push_back(TSmallVec<TCell>(YdbSchema.size())); 
+    } 
+ 
+    i64 rowsUnroll = batch.num_rows() - batch.num_rows() % unroll; 
+    for (; row < rowsUnroll; row += unroll) { 
+        ui32 col = 0; 
+        for (auto& [colName, colType] : YdbSchema) { 
+            auto& column = allColumns[col]; 
+            bool success = SwitchYqlTypeToArrowType(colType, [&]<typename TType>(TTypeWrapper<TType> typeHolder) { 
+                Y_UNUSED(typeHolder); 
+                for (i32 i = 0; i < unroll; ++i) { 
+                    i32 realRow = row + i; 
+                    if (column->IsNull(realRow)) { 
+                        cells[i][col] = TCell(); 
+                    } else { 
+                        cells[i][col] = MakeCell<typename arrow::TypeTraits<TType>::ArrayType>(column, realRow); 
+                    } 
+                } 
+                return true; 
+            }); 
+ 
+            if (!success) { 
+                errorMessage = TStringBuilder() << "No arrow conversion for type Yql::" << NScheme::TypeName(colType) 
+                        << " at column '" << colName << "'"; 
+                return false; 
+            } 
+            ++col; 
+        } 
+ 
+        for (i32 i = 0; i < unroll; ++i) { 
+            RowWriter.AddRow(cells[i]); 
+        } 
+    } 
+    cells.resize(1); 
+#else 
+    cells.reserve(1); 
+    cells.push_back(TSmallVec<TCell>(YdbSchema.size())); 
+#endif 
+ 
+    for (; row < batch.num_rows(); ++row) { 
+        ui32 col = 0; 
+        for (auto& [colName, colType] : YdbSchema) { 
+            auto& column = allColumns[col]; 
+            if (column->IsNull(row)) { 
+                cells[0][col] = TCell(); 
+                continue; 
+            } 
+ 
+            bool success = SwitchYqlTypeToArrowType(colType, [&]<typename TType>(TTypeWrapper<TType> typeHolder) { 
                 Y_UNUSED(typeHolder);
-                for (i32 i = 0; i < unroll; ++i) {
-                    i32 realRow = row + i;
-                    if (column->IsNull(realRow)) {
-                        cells[i][col] = TCell();
-                    } else {
-                        cells[i][col] = MakeCell<typename arrow::TypeTraits<TType>::ArrayType>(column, realRow);
-                    }
-                }
+                cells[0][col] = MakeCell<typename arrow::TypeTraits<TType>::ArrayType>(column, row); 
                 return true;
             });
-
+ 
             if (!success) {
-                errorMessage = TStringBuilder() << "No arrow conversion for type Yql::" << NScheme::TypeName(colType)
-                        << " at column '" << colName << "'";
-                return false;
-            }
-            ++col;
-        }
-
-        for (i32 i = 0; i < unroll; ++i) {
-            RowWriter.AddRow(cells[i]);
-        }
-    }
-    cells.resize(1);
-#else
-    cells.reserve(1);
-    cells.push_back(TSmallVec<TCell>(YdbSchema.size()));
-#endif
-
-    for (; row < batch.num_rows(); ++row) {
-        ui32 col = 0;
-        for (auto& [colName, colType] : YdbSchema) {
-            auto& column = allColumns[col];
-            if (column->IsNull(row)) {
-                cells[0][col] = TCell();
-                continue;
-            }
-
-            bool success = SwitchYqlTypeToArrowType(colType, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
-                Y_UNUSED(typeHolder);
-                cells[0][col] = MakeCell<typename arrow::TypeTraits<TType>::ArrayType>(column, row);
-                return true;
-            });
-
-            if (!success) {
-                errorMessage = TStringBuilder() << "No arrow conversion for type Yql::" << NScheme::TypeName(colType)
-                        << " at column '" << colName << "'";
-                return false;
-            }
-            ++col;
-        }
-
-        RowWriter.AddRow(cells[0]);
-    }
-
-    return true;
-}
-
+                errorMessage = TStringBuilder() << "No arrow conversion for type Yql::" << NScheme::TypeName(colType) 
+                        << " at column '" << colName << "'"; 
+                return false; 
+            } 
+            ++col; 
+        } 
+ 
+        RowWriter.AddRow(cells[0]); 
+    } 
+ 
+    return true; 
+} 
+ 
 std::shared_ptr<arrow::Array> NumVecToArray(const std::shared_ptr<arrow::DataType>& type,
                                             const std::vector<double>& vec) {
     std::shared_ptr<arrow::Array> out;
@@ -1038,4 +1038,4 @@ bool ArrayScalarsEqual(const std::shared_ptr<arrow::Array>& lhs, const std::shar
     return res;
 }
 
-}
+} 

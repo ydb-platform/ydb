@@ -5,7 +5,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/sys_view/common/schema.h>
 
-namespace NKikimr::NColumnShard {
+namespace NKikimr::NColumnShard { 
 
 static const NTable::TScheme::TTableSchema PrimaryIndexStatsSchema = []() {
     NTable::TScheme::TTableSchema schema;

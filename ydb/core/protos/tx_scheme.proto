@@ -7,12 +7,12 @@ option java_package = "ru.yandex.kikimr.proto";
 
 message TSchemeConfig {
     optional uint64 PipeClientCachePoolLimit = 1;
-    //optional NKikimrTablet.TExecutorSettings ExecutorSettings = 2;
+    //optional NKikimrTablet.TExecutorSettings ExecutorSettings = 2; 
 }
 
 message TConfig {
     optional TSchemeConfig Current = 1;
-    //optional NKikimrTxDataShard.TConfig DefaultDataShardConfig = 2; // DEPRECATED
+    //optional NKikimrTxDataShard.TConfig DefaultDataShardConfig = 2; // DEPRECATED 
     optional TSchemeConfig DefaultSchemeShardConfig = 3;
 }
 

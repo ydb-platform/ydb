@@ -64,7 +64,7 @@ inline void add_unsigned(CppInt1& result, const CppInt2& a, const CppInt3& b) BO
       if(!carry)
       {
          if(pa != pr)
-#if BOOST_WORKAROUND(BOOST_MSVC, >= 1600) && !defined(_LIBCPP_VERSION)
+#if BOOST_WORKAROUND(BOOST_MSVC, >= 1600) && !defined(_LIBCPP_VERSION) 
             std::copy(pa, pa + (pr_end - pr), stdext::checked_array_iterator<limb_type*>(pr, result.size()));
 #else
             std::copy(pa, pa + (pr_end - pr), pr);
@@ -201,7 +201,7 @@ inline void subtract_unsigned(CppInt1& result, const CppInt2& a, const CppInt3& 
    }
    // Any remaining digits are the same as those in pa:
    if((x != i) && (pa != pr))
-#if BOOST_WORKAROUND(BOOST_MSVC, >= 1600) && !defined(_LIBCPP_VERSION)
+#if BOOST_WORKAROUND(BOOST_MSVC, >= 1600) && !defined(_LIBCPP_VERSION) 
       std::copy(pa + i, pa + x, stdext::checked_array_iterator<limb_type*>(pr + i, result.size() - i));
 #else
       std::copy(pa + i, pa + x, pr + i);
@@ -233,7 +233,7 @@ inline void subtract_unsigned(CppInt1& result, const CppInt2& a, const limb_type
       *pr = *pa - b;
       if(&result != &a)
       {
-#if BOOST_WORKAROUND(BOOST_MSVC, >= 1600) && !defined(_LIBCPP_VERSION)
+#if BOOST_WORKAROUND(BOOST_MSVC, >= 1600) && !defined(_LIBCPP_VERSION) 
          std::copy(pa + 1, pa + a.size(), stdext::checked_array_iterator<limb_type*>(pr + 1, result.size() - 1));
 #else
          std::copy(pa + 1, pa + a.size(), pr + 1);
@@ -263,7 +263,7 @@ inline void subtract_unsigned(CppInt1& result, const CppInt2& a, const limb_type
       if(&result != &a)
       {
          ++i;
-#if BOOST_WORKAROUND(BOOST_MSVC, >= 1600) && !defined(_LIBCPP_VERSION)
+#if BOOST_WORKAROUND(BOOST_MSVC, >= 1600) && !defined(_LIBCPP_VERSION) 
          std::copy(pa + i, pa + a.size(), stdext::checked_array_iterator<limb_type*>(pr + i, result.size() - i));
 #else
          std::copy(pa + i, pa + a.size(), pr + i);

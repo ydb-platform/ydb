@@ -1,5 +1,5 @@
-#include "datashard_ut_common.h"
-
+#include "datashard_ut_common.h" 
+ 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/testlib/test_client.h>
@@ -8,7 +8,7 @@
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include <util/string/printf.h>
-
+ 
 namespace NKikimr {
 
 using namespace NSchemeShard;
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
 
     Y_UNIT_TEST(TestGetShardStateAfterInitialization) {
         TTestBasicRuntime runtime;
-        TTester::Setup(runtime);
+        TTester::Setup(runtime); 
 
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::FLAT_DATASHARD), &CreateDataShard);

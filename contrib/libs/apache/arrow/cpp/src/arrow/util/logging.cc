@@ -28,7 +28,7 @@
 #include <signal.h>
 #include <vector>
 
-#error #include "glog/logging.h"
+#error #include "glog/logging.h" 
 
 // Restore our versions of DCHECK and friends, as GLog defines its own
 #undef DCHECK

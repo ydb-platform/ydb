@@ -14,24 +14,24 @@ namespace Tests {
 
 class TYqlServer : public TServer {
 public:
-    TYqlServer(const TServerSettings& settings)
-        : TServer(settings, false)
-    {
-        Initialize();
-    }
-
-    TYqlServer(TServerSettings::TConstPtr settings)
-        : TServer(settings, false)
-    {
-        Initialize();
-    }
-
+    TYqlServer(const TServerSettings& settings) 
+        : TServer(settings, false) 
+    { 
+        Initialize(); 
+    } 
+ 
+    TYqlServer(TServerSettings::TConstPtr settings) 
+        : TServer(settings, false) 
+    { 
+        Initialize(); 
+    } 
+ 
     TYqlServer& operator=(TYqlServer&& server) = default;
 
     void ResumeYqlExecutionActor();
 
 protected:
-    void Initialize();
+    void Initialize(); 
 
     TAutoPtr<IThreadPool> YqlQueue;
     NThreading::TPromise<void> ResumeYqlExecutionPromise;

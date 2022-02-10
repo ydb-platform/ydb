@@ -4,7 +4,7 @@
 
 #include <util/generic/string.h>
 
-namespace NKikimr::NOlap {
+namespace NKikimr::NOlap { 
 
 class IBlobGroupSelector;
 
@@ -244,7 +244,7 @@ struct TBlobRange {
     }
 };
 
-}
+} 
 
 inline
 IOutputStream& operator <<(IOutputStream& out, const NKikimr::NOlap::TUnifiedBlobId& blobId) {

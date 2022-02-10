@@ -328,14 +328,14 @@ public:
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
-
-class TPersQueueL2CacheInitializer : public IKikimrServicesInitializer {
-public:
-    TPersQueueL2CacheInitializer(const TKikimrRunConfig& runConfig);
+ 
+class TPersQueueL2CacheInitializer : public IKikimrServicesInitializer { 
+public: 
+    TPersQueueL2CacheInitializer(const TKikimrRunConfig& runConfig); 
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-};
-
+}; 
+ 
 class TNetClassifierInitializer : public IKikimrServicesInitializer {
 public:
     TNetClassifierInitializer(const TKikimrRunConfig& runConfig);

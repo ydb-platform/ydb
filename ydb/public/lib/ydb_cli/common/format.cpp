@@ -12,9 +12,9 @@ namespace NConsoleClient {
 namespace {
     THashMap<EOutputFormat, TString> InputFormatDescriptions = {
         { EOutputFormat::JsonUnicode, "Input in json format, binary strings are decoded with unicode characters" },
-        { EOutputFormat::JsonBase64, "Input in json format, binary strings are decoded with base64" },
-        { EOutputFormat::Csv, "Input in csv format" },
-        { EOutputFormat::Tsv, "Input in tsv format" }
+        { EOutputFormat::JsonBase64, "Input in json format, binary strings are decoded with base64" }, 
+        { EOutputFormat::Csv, "Input in csv format" }, 
+        { EOutputFormat::Tsv, "Input in tsv format" } 
     };
 
     THashMap<EOutputFormat, TString> FormatDescriptions = {
@@ -30,7 +30,7 @@ namespace {
                                            "Every resultset is a json array of rows. "
                                            "Every row is a separate json on a separate line." },
         { EOutputFormat::ProtoJsonBase64, "Output result protobuf in json format, binary strings are encoded with base64" },
-        { EOutputFormat::Csv, "Output in csv format" },
+        { EOutputFormat::Csv, "Output in csv format" }, 
     };
 }
 
@@ -70,7 +70,7 @@ void TCommandWithFormat::AddInputFormats(TClientCommand::TConfig& config, const 
     for (const auto& format : allowedFormats) {
         auto findResult = InputFormatDescriptions.find(format);
         Y_VERIFY(findResult != InputFormatDescriptions.end(),
-            "Couldn't find description for %s input format", (TStringBuilder() << format).c_str());
+            "Couldn't find description for %s input format", (TStringBuilder() << format).c_str()); 
         description << "\n  " << colors.BoldColor() << format << colors.OldColor()
             << "\n    " << findResult->second;
     }

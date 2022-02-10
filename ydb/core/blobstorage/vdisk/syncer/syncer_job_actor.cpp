@@ -85,7 +85,7 @@ namespace NKikimr {
                       VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
                         "TSyncerJob::Handle(TEvNodeDisconnected): msg# %s",
                             ev->Get()->ToString().data()));
-
+ 
             TSjOutcome outcome = Task->Terminate(TSyncStatusVal::DroppedConnection);
             Handle(std::move(outcome), ctx);
         }

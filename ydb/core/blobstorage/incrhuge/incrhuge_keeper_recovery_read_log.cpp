@@ -18,8 +18,8 @@ namespace NKikimr {
         public:
             static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
                 return NKikimrServices::TActivity::BS_INCR_HUGE_KEEPER_RECOVERY_READ_LOG;
-            }
-
+            } 
+ 
             TReadLogActor(const TActorId& pdiskActorId, ui8 owner, NPDisk::TOwnerRound ownerRound,
                     TMaybe<ui64> chunksEntrypointLsn, TMaybe<ui64> deletesEntrypointLsn)
                 : TActor<TReadLogActor>(&TReadLogActor::StateFunc)
@@ -28,7 +28,7 @@ namespace NKikimr {
                 , OwnerRound(ownerRound)
                 , ChunksEntrypointLsn(chunksEntrypointLsn)
                 , DeletesEntrypointLsn(deletesEntrypointLsn)
-            {}
+            {} 
 
         private:
             TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override {

@@ -364,8 +364,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_SYNCER_SCHEDULER;
-        }
-
+        } 
+ 
         TSyncerScheduler(const TIntrusivePtr<TSyncerContext> &sc,
                          const TIntrusivePtr<TBlobStorageGroupInfo> &info,
                          const TIntrusivePtr<TSyncerData> &syncerData,
@@ -380,7 +380,7 @@ namespace NKikimr {
             , CommitterId(committerId)
             , Scheduled(false)
             , JobCtx(TSjCtx::Create(SyncerContext, GInfo))
-        {}
+        {} 
     };
 
 

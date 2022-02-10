@@ -12,54 +12,54 @@
 
 namespace NKikimr {
 
-namespace NPQ {
+namespace NPQ { 
 
-    struct TRequestedBlob {
-        ui64 Offset;
+    struct TRequestedBlob { 
+        ui64 Offset; 
         ui16 PartNo;
-        ui32 Count;
+        ui32 Count; 
         ui16 InternalPartsCount;
         ui32 Size;
         TString Value;
-        bool Cached;
-
+        bool Cached; 
+ 
         TRequestedBlob() = delete;
 
         TRequestedBlob(ui64 offset, ui16 partNo, ui32 count, ui16 internalPartsCount, ui32 size, TString value)
-            : Offset(offset)
+            : Offset(offset) 
             , PartNo(partNo)
-            , Count(count)
+            , Count(count) 
             , InternalPartsCount(internalPartsCount)
-            , Size(size)
-            , Value(value)
-            , Cached(false)
-        {}
-    };
-
-    struct TErrorInfo {
+            , Size(size) 
+            , Value(value) 
+            , Cached(false) 
+        {} 
+    }; 
+ 
+    struct TErrorInfo { 
         NPersQueue::NErrorCode::EErrorCode ErrorCode;
         TString ErrorStr;
-
-        TErrorInfo()
+ 
+        TErrorInfo() 
         : ErrorCode(NPersQueue::NErrorCode::OK)
-        {}
-
+        {} 
+ 
         TErrorInfo(NPersQueue::NErrorCode::EErrorCode err, const TString& str)
-        : ErrorCode(err)
-        , ErrorStr(str)
-        {}
-
-        bool HasError() const {
+        : ErrorCode(err) 
+        , ErrorStr(str) 
+        {} 
+ 
+        bool HasError() const { 
             return ErrorCode != NPersQueue::NErrorCode::OK;
-        }
-    };
-
-    template <typename T>
-    inline bool HasError(const T& event) {
-        return event.Error.HasError();
-    }
-}
-
+        } 
+    }; 
+ 
+    template <typename T> 
+    inline bool HasError(const T& event) { 
+        return event.Error.HasError(); 
+    } 
+} 
+ 
 struct TEvPQ {
     enum EEv {
         EvWrite = TEvPersQueue::EvInternalEvents,
@@ -84,7 +84,7 @@ struct TEvPQ {
         EvChangeConfig,
         EvChangeCacheConfig,
         EvPartitionCounters,
-        EvTabletCacheCounters,
+        EvTabletCacheCounters, 
         EvPartitionLabeledCounters,
         EvGetPartitionClientInfo,
         EvUpdateAvailableSize,
@@ -364,14 +364,14 @@ struct TEvPQ {
 
     class TEvBlobResponse : public TEventLocal<TEvBlobResponse, EvBlobResponse> {
     public:
-        NPQ::TErrorInfo Error;
-
+        NPQ::TErrorInfo Error; 
+ 
         TEvBlobResponse(const ui64 cookie, TVector<NPQ::TRequestedBlob>&& blobs, NPQ::TErrorInfo error = NPQ::TErrorInfo())
-        : Error(error)
-        , Cookie(cookie)
+        : Error(error) 
+        , Cookie(cookie) 
         , Blobs(std::move(blobs))
         {}
-
+ 
         ui64 GetCookie() const
         {
             return Cookie;
@@ -384,8 +384,8 @@ struct TEvPQ {
 
         void Check() const
         {
-            //error or empty response(all from cache) or not empty response at all
-            Y_VERIFY(Error.HasError() || Blobs.empty() || !Blobs[0].Value.empty(),
+            //error or empty response(all from cache) or not empty response at all 
+            Y_VERIFY(Error.HasError() || Blobs.empty() || !Blobs[0].Value.empty(), 
                 "Cookie %" PRIu64 " Error code: %" PRIu32 ", blobs count: %" PRIu64, Cookie, Error.ErrorCode, Blobs.size());
         }
 
@@ -489,20 +489,20 @@ struct TEvPQ {
     };
 
 
-    struct TEvTabletCacheCounters : public TEventLocal<TEvTabletCacheCounters, EvTabletCacheCounters> {
-        struct TCacheCounters {
-            ui64 CacheSizeBytes = 0;
-            ui64 CacheSizeBlobs = 0;
-            ui64 CachedOnRead = 0;
-            ui64 CachedOnWrite = 0;
-        };
-
-        TEvTabletCacheCounters()
-        {}
-
-        TCacheCounters Counters;
-    };
-
+    struct TEvTabletCacheCounters : public TEventLocal<TEvTabletCacheCounters, EvTabletCacheCounters> { 
+        struct TCacheCounters { 
+            ui64 CacheSizeBytes = 0; 
+            ui64 CacheSizeBlobs = 0; 
+            ui64 CachedOnRead = 0; 
+            ui64 CachedOnWrite = 0; 
+        }; 
+ 
+        TEvTabletCacheCounters() 
+        {} 
+ 
+        TCacheCounters Counters; 
+    }; 
+ 
     struct TEvGetPartitionClientInfo : TEventLocal<TEvGetPartitionClientInfo, EvGetPartitionClientInfo> {
         TEvGetPartitionClientInfo(const TActorId& sender)
             : Sender(sender)

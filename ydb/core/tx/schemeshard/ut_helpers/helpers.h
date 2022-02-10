@@ -18,14 +18,14 @@
 
 #include <util/stream/null.h>
 
-#include <functional>
-
+#include <functional> 
+ 
 #undef Cdbg
-#if 1
+#if 1 
     #define Cdbg Cerr
-#else
+#else 
     #define Cdbg Cnull
-#endif
+#endif 
 
 namespace NSchemeShardUT_Private {
     using namespace NKikimr;
@@ -69,7 +69,7 @@ namespace NSchemeShardUT_Private {
     void TestModificationResult(TTestActorRuntime& runtime, ui64 txId,TEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusAccepted);
     ui64 TestModificationResults(TTestActorRuntime& runtime, ui64 txId, const TVector<TEvSchemeShard::EStatus>& expectedResults);
     void SkipModificationReply(TTestActorRuntime& runtime, ui32 num = 1);
-
+ 
     TEvTx* CombineSchemeTransactions(const TVector<TEvTx*>& transactions);
     void AsyncSendTransaction(TTestActorRuntime& runtime, ui64 schemeShard, TEvTx* evTx);
 
@@ -265,7 +265,7 @@ namespace NSchemeShardUT_Private {
         TVector<TString> IndexColumns;
         TVector<TString> DataColumns;
     };
-
+ 
     TEvIndexBuilder::TEvCreateRequest* CreateBuildIndexRequest(ui64 id, const TString& dbName, const TString& src, const TBuildIndexConfig& cfg);
     void AsyncBuilIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TBuildIndexConfig &cfg);
     void AsyncBuilIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns = {});

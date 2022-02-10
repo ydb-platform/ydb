@@ -75,8 +75,8 @@ namespace NKikimr {
         public:
             static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
                 return NKikimrServices::TActivity::BS_PROXY_ACTOR;
-            }
-
+            } 
+ 
             TBlobStorageGroupProxyMockActor(TIntrusivePtr<NFake::TProxyDS> model)
                 : TActor(&TBlobStorageGroupProxyMockActor::StateFunc)
                 , Model(model ? std::move(model) : MakeIntrusive<NFake::TProxyDS>())

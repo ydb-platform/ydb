@@ -592,10 +592,10 @@ class TTablet : public TActor<TTablet> {
         }
     }
 
-public:
+public: 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_ACTOR;
-    }
+    } 
 
     TTablet(
             const TActorId &launcher,

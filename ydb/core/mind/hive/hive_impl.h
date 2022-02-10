@@ -505,8 +505,8 @@ protected:
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::HIVE_ACTOR;
-    }
-
+    } 
+ 
     THive(TTabletStorageInfo *info, const TActorId &tablet);
 
 protected:

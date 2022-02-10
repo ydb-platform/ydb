@@ -149,10 +149,10 @@ NBus::EMessageStatus TMsgBusClient::AsyncCall(TAutoPtr<NBus::TBusMessage> msg, T
     TAutoPtr<TMessageCookie> cookie(new TAsyncMessageCookie<TOnCall>(callback, msg->Data));
     msg->Data = cookie.Get();
 
-    if (Config.UseCompression) {
+    if (Config.UseCompression) { 
         msg->SetCompressed(true);
-        msg->SetCompressedResponse(true);
-    }
+        msg->SetCompressedResponse(true); 
+    } 
 
     NBus::EMessageStatus status = Session->SendMessage(msg.Get(), NetAddr.Get(), false);
 
@@ -169,10 +169,10 @@ NBus::EMessageStatus TMsgBusClient::AsyncCall(TAutoPtr<NBus::TBusMessage> msg, T
     TAutoPtr<TMessageCookie> cookie(new TAsyncMessageCookie<TOnCallWithRequest>(callback, msg->Data));
     msg->Data = cookie.Get();
 
-    if (Config.UseCompression) {
+    if (Config.UseCompression) { 
         msg->SetCompressed(true);
-        msg->SetCompressedResponse(true);
-    }
+        msg->SetCompressedResponse(true); 
+    } 
 
     NBus::EMessageStatus status = Session->SendMessage(msg.Get(), NetAddr.Get(), false);
 

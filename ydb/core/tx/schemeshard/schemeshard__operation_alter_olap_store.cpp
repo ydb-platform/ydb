@@ -9,7 +9,7 @@ using namespace NSchemeShard;
 
 TOlapStoreInfo::TPtr ParseParams(
         const TPath& path, const TOlapStoreInfo::TPtr& storeInfo,
-        const NKikimrSchemeOp::TAlterColumnStore& alter,
+        const NKikimrSchemeOp::TAlterColumnStore& alter, 
         NKikimrScheme::EStatus& status, TString& errStr, TOperationContext& context)
 {
     Y_UNUSED(path);
@@ -172,25 +172,25 @@ TOlapStoreInfo::TPtr ParseParams(
         return nullptr;
     }
 
-    for (const auto& removeTtlSettingsPreset : alter.GetRESERVED_RemoveTtlSettingsPresets()) {
+    for (const auto& removeTtlSettingsPreset : alter.GetRESERVED_RemoveTtlSettingsPresets()) { 
         Y_UNUSED(removeTtlSettingsPreset);
         status = NKikimrScheme::StatusInvalidParameter;
-        errStr = "TTL presets are not supported";
+        errStr = "TTL presets are not supported"; 
         return nullptr;
     }
 
-    for (const auto& alterTtlSettingsPreset : alter.GetRESERVED_AlterTtlSettingsPresets()) {
-        Y_UNUSED(alterTtlSettingsPreset);
-        status = NKikimrScheme::StatusInvalidParameter;
-        errStr = "TTL presets are not supported";
-        return nullptr;
+    for (const auto& alterTtlSettingsPreset : alter.GetRESERVED_AlterTtlSettingsPresets()) { 
+        Y_UNUSED(alterTtlSettingsPreset); 
+        status = NKikimrScheme::StatusInvalidParameter; 
+        errStr = "TTL presets are not supported"; 
+        return nullptr; 
     }
 
-    for (const auto& addTtlSettingsPreset : alter.GetRESERVED_AddTtlSettingsPresets()) {
-        Y_UNUSED(addTtlSettingsPreset);
-        status = NKikimrScheme::StatusInvalidParameter;
-        errStr = "TTL presets are not supported";
-        return nullptr;
+    for (const auto& addTtlSettingsPreset : alter.GetRESERVED_AddTtlSettingsPresets()) { 
+        Y_UNUSED(addTtlSettingsPreset); 
+        status = NKikimrScheme::StatusInvalidParameter; 
+        errStr = "TTL presets are not supported"; 
+        return nullptr; 
     }
 
     storeInfo->AlterData = alterData;
@@ -254,7 +254,7 @@ public:
             const ui32 presetId = alterData->SchemaPresetByName.at(presetName);
             updatedSchemaPresets.insert(presetId);
         }
-#if 0
+#if 0 
         TVector<ui32> droppedTtlSettingsPresets;
         for (const auto& presetProto : storeInfo->Description.GetTtlSettingsPresets()) {
             const ui32 presetId = presetProto.GetId();
@@ -273,7 +273,7 @@ public:
             const ui32 presetId = alterData->TtlSettingsPresetByName.at(presetName);
             updatedTtlSettingsPresets.insert(presetId);
         }
-#endif
+#endif 
 
         TString columnShardTxBody;
         {
@@ -290,7 +290,7 @@ public:
                     *alter->AddSchemaPresets() = presetProto;
                 }
             }
-#if 0
+#if 0 
             for (ui32 id : droppedTtlSettingsPresets) {
                 alter->AddDroppedTtlSettingsPresets(id);
             }
@@ -299,14 +299,14 @@ public:
                     *alter->AddTtlSettingsPresets() = presetProto;
                 }
             }
-#endif
+#endif 
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&columnShardTxBody);
         }
 
         for (auto& shard : txState->Shards) {
             TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
 
-            if (shard.TabletType == ETabletType::ColumnShard) {
+            if (shard.TabletType == ETabletType::ColumnShard) { 
                 auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
                     NKikimrTxColumnShard::TX_KIND_SCHEMA,
                     context.SS->TabletID(),
@@ -316,8 +316,8 @@ public:
                     context.SS->SelectProcessingPrarams(txState->TargetPathId));
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
-            } else {
-                Y_FAIL("unexpected tablet type");
+            } else { 
+                Y_FAIL("unexpected tablet type"); 
             }
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -347,7 +347,7 @@ public:
     {
         IgnoreMessages(DebugHint(),
             {TEvHive::TEvCreateTabletReply::EventType,
-             TEvColumnShard::TEvProposeTransactionResult::EventType});
+             TEvColumnShard::TEvProposeTransactionResult::EventType}); 
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -629,7 +629,7 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto& alter = Transaction.GetAlterColumnStore();
+        const auto& alter = Transaction.GetAlterColumnStore(); 
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = alter.GetName();

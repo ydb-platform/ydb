@@ -92,7 +92,7 @@ TEvMessageBusTracer::TEvTraceEvent::TEvTraceEvent(NBus::TBusMessage *msg, TBuffe
 
 TMessageBusTracerService::TMessageBusTracerService()
     : TActor(&TMessageBusTracerService::StateFunc)
-{}
+{} 
 
 void TMessageBusTracerService::StateFunc(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx) {
     switch (ev->GetTypeRewrite()) {

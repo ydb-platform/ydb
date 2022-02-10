@@ -136,8 +136,8 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_COORDINATOR_MEDIATORQ_ACTOR;
-    }
-
+    } 
+ 
     TTxCoordinatorMediatorQueue(const TActorId &owner, ui64 coordinator, ui64 mediator, ui64 coordinatorGeneration)
         : Owner(owner)
         , Coordinator(coordinator)
@@ -146,7 +146,7 @@ public:
         , PipeClient()
         , GenCookie(0)
         , PrevStep(0)
-    {}
+    {} 
 
     void Bootstrap(const TActorContext &ctx) {
         Sync(ctx);

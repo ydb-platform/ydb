@@ -285,18 +285,18 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
         TMaybe<TOwnedCellVec> prevKey;
         TMemoryPool pool(256);
 
-        std::vector<std::pair<i32, ui32>> columnOrderTypes; // {keyOrder, PType}
-        columnOrderTypes.reserve(format.columns().size());
-        for (const auto& column : format.columns()) {
-            const auto* info = Columns.FindPtr(column);
-            if (!info) {
-                Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
-                    TStringBuilder() << "Unknown column: " << column);
-                return Nothing();
-            }
-            columnOrderTypes.emplace_back(info->KeyOrder, info->PType);
-        }
-
+        std::vector<std::pair<i32, ui32>> columnOrderTypes; // {keyOrder, PType} 
+        columnOrderTypes.reserve(format.columns().size()); 
+        for (const auto& column : format.columns()) { 
+            const auto* info = Columns.FindPtr(column); 
+            if (!info) { 
+                Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, 
+                    TStringBuilder() << "Unknown column: " << column); 
+                return Nothing(); 
+            } 
+            columnOrderTypes.emplace_back(info->KeyOrder, info->PType); 
+        } 
+ 
         while (data) {
             pool.Clear();
 
@@ -313,13 +313,13 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
 
             TVector<TCell> keys;
             TVector<TCell> values;
-            TString strError;
-            ui64 numBytes = 0;
+            TString strError; 
+            ui64 numBytes = 0; 
 
-            if (!NFormats::TYdbDump::ParseLine(line, columnOrderTypes, pool, keys, values, strError, numBytes)) {
-                TString message = TStringBuilder() << strError << " on line: " << origLine;
-                Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, message);
-                return Nothing();
+            if (!NFormats::TYdbDump::ParseLine(line, columnOrderTypes, pool, keys, values, strError, numBytes)) { 
+                TString message = TStringBuilder() << strError << " on line: " << origLine; 
+                Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, message); 
+                return Nothing(); 
             }
 
             Y_VERIFY(!keys.empty());

@@ -12,19 +12,19 @@ namespace NKikimr {
 namespace NPQ {
 
 struct TPartitionInfo;
-struct TChangeNotification;
+struct TChangeNotification; 
 
 class TResponseBuilder;
 
 //USES MAIN chanel for big blobs, INLINE or EXTRA for ZK-like load, EXTRA2 for small blob for logging (VDISK of type LOG is ok with EXTRA2)
 
 class TPersQueue : public NKeyValue::TKeyValueFlat {
-    enum ECookie : ui64 {
-        WRITE_CONFIG_COOKIE = 2,
-        READ_CONFIG_COOKIE  = 3,
-        WRITE_STATE_COOKIE  = 4
-    };
-
+    enum ECookie : ui64 { 
+        WRITE_CONFIG_COOKIE = 2, 
+        READ_CONFIG_COOKIE  = 3, 
+        WRITE_STATE_COOKIE  = 4 
+    }; 
+ 
     void CreatedHook(const TActorContext& ctx) override;
     bool HandleHook(STFUNC_SIG) override;
 
@@ -53,18 +53,18 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvPartitionLabeledCountersDrop::TPtr& ev, const TActorContext&);
     void AggregateAndSendLabeledCountersFor(const TString& group, const TActorContext&);
 
-    void Handle(TEvPQ::TEvTabletCacheCounters::TPtr& ev, const TActorContext&);
-    void SetCacheCounters(TEvPQ::TEvTabletCacheCounters::TCacheCounters& cacheCounters);
+    void Handle(TEvPQ::TEvTabletCacheCounters::TPtr& ev, const TActorContext&); 
+    void SetCacheCounters(TEvPQ::TEvTabletCacheCounters::TCacheCounters& cacheCounters); 
 
     //client requests
     void Handle(TEvPersQueue::TEvUpdateConfig::TPtr& ev, const TActorContext& ctx);
     void ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvDropTablet::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvDropTablet::TPtr& ev, const TActorContext& ctx); 
     void Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TActorContext& ctx);
-
+ 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
 
     void HandleDie(const TActorContext& ctx) override;
@@ -78,7 +78,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     void ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx);
     void ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx);
-
+ 
     void FillMeteringParams(const TActorContext& ctx);
     TString GetMeteringJson(const TString& metricBillingId, const TString& schemeName, const THashMap<TString, ui64>& tags,
                          ui64 quantity, const TString& quantityUnit,
@@ -118,18 +118,18 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     DESCRIBE_HANDLE_WITH_SENDER(HandleGetOwnershipRequest)
     DESCRIBE_HANDLE_WITH_SENDER(HandleReserveBytesRequest)
 #undef DESCRIBE_HANDLE_WITH_SENDER
-    bool ChangingState() const { return !TabletStateRequests.empty(); }
-    void ReturnTabletStateAll(const TActorContext& ctx, NKikimrProto::EReplyStatus status = NKikimrProto::OK);
-    void ReturnTabletState(const TActorContext& ctx, const TChangeNotification& req, NKikimrProto::EReplyStatus status);
-
-    static constexpr const char * KeyConfig() { return "_config"; }
-    static constexpr const char * KeyState() { return "_state"; }
-
+    bool ChangingState() const { return !TabletStateRequests.empty(); } 
+    void ReturnTabletStateAll(const TActorContext& ctx, NKikimrProto::EReplyStatus status = NKikimrProto::OK); 
+    void ReturnTabletState(const TActorContext& ctx, const TChangeNotification& req, NKikimrProto::EReplyStatus status); 
+ 
+    static constexpr const char * KeyConfig() { return "_config"; } 
+    static constexpr const char * KeyState() { return "_state"; } 
+ 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_ACTOR;
-    }
-
+    } 
+ 
     TPersQueue(const TActorId& tablet, TTabletStorageInfo *info);
 
 private:
@@ -151,11 +151,11 @@ private:
     TVector<NScheme::TTypeId> KeySchema;
     NKikimrPQ::TPQTabletConfig Config;
 
-    NKikimrPQ::ETabletState TabletState;
+    NKikimrPQ::ETabletState TabletState; 
     TSet<TChangeNotification> TabletStateRequests;
-
+ 
     TAutoPtr<TTabletCountersBase> Counters;
-    TEvPQ::TEvTabletCacheCounters::TCacheCounters CacheCounters;
+    TEvPQ::TEvTabletCacheCounters::TCacheCounters CacheCounters; 
     TMap<TString, NKikimr::NPQ::TMultiCounter> BytesWrittenFromDC;
 
 

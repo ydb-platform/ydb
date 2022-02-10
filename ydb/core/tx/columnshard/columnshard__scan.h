@@ -3,7 +3,7 @@
 #include "blob_cache.h"
 #include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
 
-namespace NKikimr::NColumnShard {
+namespace NKikimr::NColumnShard { 
 
 class TScanIteratorBase {
 public:

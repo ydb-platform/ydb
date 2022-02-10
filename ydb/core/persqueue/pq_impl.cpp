@@ -53,7 +53,7 @@ struct TPartitionInfo {
     THashMap<TString, TTabletLabeledCountersBase> LabeledCounters;
 };
 
-struct TChangeNotification {
+struct TChangeNotification { 
     TChangeNotification(const TActorId& actor, const ui64 txId)
         : Actor(actor)
         , TxId(txId)
@@ -63,14 +63,14 @@ struct TChangeNotification {
         return THash<TActorId>()(Actor) + TxId;
     }
 
-    bool operator==(const TChangeNotification& b) {
+    bool operator==(const TChangeNotification& b) { 
         return b.Actor == Actor && b.TxId == TxId;
     }
 
-    bool operator < (const TChangeNotification& req) const {
-        return (Actor < req.Actor) || (Actor == req.Actor && TxId < req.TxId);
-    }
-
+    bool operator < (const TChangeNotification& req) const { 
+        return (Actor < req.Actor) || (Actor == req.Actor && TxId < req.TxId); 
+    } 
+ 
     TActorId Actor;
     ui64 TxId;
 };
@@ -212,7 +212,7 @@ TActorId CreateReadProxy(const TActorId& sender, const TActorId& tablet, const N
 /******************************************************* AnswerBuilderProxy *********************************************************/
 class TResponseBuilder {
 public:
-
+ 
     TResponseBuilder(const TActorId& sender, const TActorId& tablet, const TString& topicName, const ui32 partition, const ui64 messageNo,
                      const TString& reqId, const TMaybe<ui64> cookie, NMetrics::TResourceMetrics* resourceMetrics, const TActorContext& ctx)
     : Sender(sender)
@@ -327,14 +327,14 @@ class TBuilderProxy : public TActorBootstrapped<TBuilderProxy<T,T2,T3>> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_ANS_ACTOR;
-    }
-
+    } 
+ 
     TBuilderProxy(const ui64 tabletId, const TActorId& sender, const ui32 count)
     : TabletId(tabletId)
     , Sender(sender)
     , Waiting(count)
     , Result()
-    {}
+    {} 
 
     void Bootstrap(const TActorContext& ctx)
     {
@@ -415,8 +415,8 @@ class TMonitoringProxy : public TActorBootstrapped<TMonitoringProxy> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_MON_ACTOR;
-    }
-
+    } 
+ 
     TMonitoringProxy(const TActorId& sender, const TString& query, const TMap<ui32, TActorId>& partitions, const TActorId& cache,
                      const TString& topicName, ui64 tabletId, ui32 inflight)
     : Sender(sender)
@@ -590,11 +590,11 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
         }
     }
 
-    ui32 cacheSize = CACHE_SIZE;
-    if (Config.HasCacheSize())
-        cacheSize = Config.GetCacheSize();
+    ui32 cacheSize = CACHE_SIZE; 
+    if (Config.HasCacheSize()) 
+        cacheSize = Config.GetCacheSize(); 
 
-    if (TopicName.empty()) { // it's the first time
+    if (TopicName.empty()) { // it's the first time 
         TopicName = Config.GetTopicName();
         TopicPath = Config.GetTopicPath();
         LocalDC = Config.GetLocalDC();
@@ -605,13 +605,13 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
             KeySchema.push_back(component.GetTypeId());
         }
 
-        Y_VERIFY(TopicName.size(), "Need topic name here");
-        CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TopicName, cacheSize));
-    } else {
+        Y_VERIFY(TopicName.size(), "Need topic name here"); 
+        CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TopicName, cacheSize)); 
+    } else { 
         Y_VERIFY(TopicName == Config.GetTopicName(), "Changing topic name is not supported");
-        ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(cacheSize));
-    }
-
+        ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(cacheSize)); 
+    } 
+ 
     for (auto& p : Partitions) { //change config for already created partitions
         ctx.Send(p.second.Actor, new TEvPQ::TEvChangeConfig(TopicName, Config));
     }
@@ -670,29 +670,29 @@ void TPersQueue::HandleConfigReadResponse(const NKikimrClient::TResponse& resp, 
 {
     bool ok = (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK) && (resp.ReadResultSize() == 2) && (resp.HasSetExecutorFastLogPolicyResult()) &&
                     (resp.GetSetExecutorFastLogPolicyResult().GetStatus() == NKikimrProto::OK);
-    if (!ok) {
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
-            "Tablet " << TabletID() << " Config read error: " << resp.DebugString() << " " << ctx.SelfID);
+    if (!ok) { 
+        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, 
+            "Tablet " << TabletID() << " Config read error: " << resp.DebugString() << " " << ctx.SelfID); 
         ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
         return;
     }
 
-    ReadConfig(resp.GetReadResult(0), ctx);
-    ReadState(resp.GetReadResult(1), ctx);
-}
-
+    ReadConfig(resp.GetReadResult(0), ctx); 
+    ReadState(resp.GetReadResult(1), ctx); 
+} 
+ 
 void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx)
-{
-    if (read.GetStatus() != NKikimrProto::OK && read.GetStatus() != NKikimrProto::NODATA) {
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
-            "Tablet " << TabletID() << " Config read error " << ctx.SelfID);
-        ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
-        return;
-    }
-
+{ 
+    if (read.GetStatus() != NKikimrProto::OK && read.GetStatus() != NKikimrProto::NODATA) { 
+        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, 
+            "Tablet " << TabletID() << " Config read error " << ctx.SelfID); 
+        ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill()); 
+        return; 
+    } 
+ 
     Y_VERIFY(!ConfigInited);
     Y_VERIFY(read.HasStatus());
-
+ 
     if (read.GetStatus() == NKikimrProto::OK) {
         bool res = Config.ParseFromString(read.GetValue());
         Y_VERIFY(res);
@@ -705,19 +705,19 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
         TopicName = Config.GetTopicName();
         LocalDC = Config.GetLocalDC();
-
+ 
         KeySchema.clear();
         KeySchema.reserve(Config.PartitionKeySchemaSize());
         for (const auto& component : Config.GetPartitionKeySchema()) {
             KeySchema.push_back(component.GetTypeId());
         }
 
-        ui32 cacheSize = CACHE_SIZE;
-        if (Config.HasCacheSize())
-            cacheSize = Config.GetCacheSize();
-
-        Y_VERIFY(TopicName.size(), "Need topic name here");
-        CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TopicName, cacheSize));
+        ui32 cacheSize = CACHE_SIZE; 
+        if (Config.HasCacheSize()) 
+            cacheSize = Config.GetCacheSize(); 
+ 
+        Y_VERIFY(TopicName.size(), "Need topic name here"); 
+        CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TopicName, cacheSize)); 
     } else if (read.GetStatus() == NKikimrProto::NODATA) {
         LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " no config, start with empty partitions and default config");
     } else {
@@ -760,89 +760,89 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 }
 
 void TPersQueue::ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx)
-{
-    Y_UNUSED(ctx);
+{ 
+    Y_UNUSED(ctx); 
 
-    if (read.GetStatus() == NKikimrProto::OK) {
-        NKikimrPQ::TTabletState stateProto;
-        bool ok = stateProto.ParseFromString(read.GetValue());
-        Y_VERIFY(ok);
-        Y_VERIFY(stateProto.HasState());
-        TabletState = stateProto.GetState();
-    } else if (read.GetStatus() == NKikimrProto::NODATA) {
-        TabletState = NKikimrPQ::ENormal;
-    } else {
-        Y_FAIL("Unexpected state read status: %d", read.GetStatus());
-    }
-}
-
-void TPersQueue::ReturnTabletState(const TActorContext& ctx, const TChangeNotification& req, NKikimrProto::EReplyStatus status)
-{
+    if (read.GetStatus() == NKikimrProto::OK) { 
+        NKikimrPQ::TTabletState stateProto; 
+        bool ok = stateProto.ParseFromString(read.GetValue()); 
+        Y_VERIFY(ok); 
+        Y_VERIFY(stateProto.HasState()); 
+        TabletState = stateProto.GetState(); 
+    } else if (read.GetStatus() == NKikimrProto::NODATA) { 
+        TabletState = NKikimrPQ::ENormal; 
+    } else { 
+        Y_FAIL("Unexpected state read status: %d", read.GetStatus()); 
+    } 
+} 
+ 
+void TPersQueue::ReturnTabletState(const TActorContext& ctx, const TChangeNotification& req, NKikimrProto::EReplyStatus status) 
+{ 
     THolder<TEvPersQueue::TEvDropTabletReply> event = MakeHolder<TEvPersQueue::TEvDropTabletReply>();
-    event->Record.SetStatus(status);
-    event->Record.SetTabletId(TabletID());
-    event->Record.SetTxId(req.TxId);
-    event->Record.SetActualState(TabletState);
-
-    ctx.Send(req.Actor, event.Release());
-}
-
-void TPersQueue::ReturnTabletStateAll(const TActorContext& ctx, NKikimrProto::EReplyStatus status)
-{
-    for (auto req : TabletStateRequests)
-        ReturnTabletState(ctx, req, status);
-    TabletStateRequests.clear();
-}
-
+    event->Record.SetStatus(status); 
+    event->Record.SetTabletId(TabletID()); 
+    event->Record.SetTxId(req.TxId); 
+    event->Record.SetActualState(TabletState); 
+ 
+    ctx.Send(req.Actor, event.Release()); 
+} 
+ 
+void TPersQueue::ReturnTabletStateAll(const TActorContext& ctx, NKikimrProto::EReplyStatus status) 
+{ 
+    for (auto req : TabletStateRequests) 
+        ReturnTabletState(ctx, req, status); 
+    TabletStateRequests.clear(); 
+} 
+ 
 void TPersQueue::HandleStateWriteResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx)
-{
-    bool ok = (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK) &&
-            (resp.WriteResultSize() == 1) &&
-            (resp.GetWriteResult(0).GetStatus() == NKikimrProto::OK);
-    if (!ok) {
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
-            "Tablet " << TabletID() << " SelfId " << ctx.SelfID << " State write error: " << resp.DebugString());
-
-        ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
-        return;
-    }
-
-    TabletState = NKikimrPQ::EDropped;
-    ReturnTabletStateAll(ctx);
-}
-
+{ 
+    bool ok = (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK) && 
+            (resp.WriteResultSize() == 1) && 
+            (resp.GetWriteResult(0).GetStatus() == NKikimrProto::OK); 
+    if (!ok) { 
+        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, 
+            "Tablet " << TabletID() << " SelfId " << ctx.SelfID << " State write error: " << resp.DebugString()); 
+ 
+        ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill()); 
+        return; 
+    } 
+ 
+    TabletState = NKikimrPQ::EDropped; 
+    ReturnTabletStateAll(ctx); 
+} 
+ 
 void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx)
 {
     auto& resp = ev->Get()->Record;
 
-    switch (resp.GetCookie()) {
-    case WRITE_CONFIG_COOKIE:
+    switch (resp.GetCookie()) { 
+    case WRITE_CONFIG_COOKIE: 
         HandleConfigWriteResponse(resp, ctx);
-        break;
-    case READ_CONFIG_COOKIE:
+        break; 
+    case READ_CONFIG_COOKIE: 
         // read is only for config - is signal to create interal actors
         HandleConfigReadResponse(resp, ctx);
-        break;
-    case WRITE_STATE_COOKIE:
-        HandleStateWriteResponse(resp, ctx);
-        break;
-    default:
+        break; 
+    case WRITE_STATE_COOKIE: 
+        HandleStateWriteResponse(resp, ctx); 
+        break; 
+    default: 
         LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID()
                     << " Unexpected KV response: " << ev->Get()->ToString() << " " << ctx.SelfID);
         ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
     }
 }
 
-void TPersQueue::SetCacheCounters(TEvPQ::TEvTabletCacheCounters::TCacheCounters& cacheCounters)
-{
-    Counters->Simple()[COUNTER_PQ_TABLET_CACHE_SIZE] = cacheCounters.CacheSizeBytes;
-    Counters->Simple()[COUNTER_PQ_TABLET_CACHE_COUNT] = cacheCounters.CacheSizeBlobs;
-    Counters->Simple()[COUNTER_PQ_TABLET_CACHED_ON_READ] = cacheCounters.CachedOnRead;
-    Counters->Simple()[COUNTER_PQ_TABLET_CACHED_ON_WRATE] = cacheCounters.CachedOnWrite;
+void TPersQueue::SetCacheCounters(TEvPQ::TEvTabletCacheCounters::TCacheCounters& cacheCounters) 
+{ 
+    Counters->Simple()[COUNTER_PQ_TABLET_CACHE_SIZE] = cacheCounters.CacheSizeBytes; 
+    Counters->Simple()[COUNTER_PQ_TABLET_CACHE_COUNT] = cacheCounters.CacheSizeBlobs; 
+    Counters->Simple()[COUNTER_PQ_TABLET_CACHED_ON_READ] = cacheCounters.CachedOnRead; 
+    Counters->Simple()[COUNTER_PQ_TABLET_CACHED_ON_WRATE] = cacheCounters.CachedOnWrite; 
     Counters->Simple()[COUNTER_PQ_TABLET_OPENED_PIPES] = PipesInfo.size();
-}
-
-
+} 
+ 
+ 
 void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorContext& ctx)
 {
     auto it = Partitions.find(ev->Get()->Partition);
@@ -864,9 +864,9 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorConte
 
     Counters->Populate(*diff.Get());
     ev->Get()->Counters.RememberCurrentStateAsBaseline(it->second.Baseline);
-
-    // restore cache's simple counters cleaned by partition's counters
-    SetCacheCounters(CacheCounters);
+ 
+    // restore cache's simple counters cleaned by partition's counters 
+    SetCacheCounters(CacheCounters); 
     ui64 reservedSize = 0;
     for (auto& p : Partitions) {
         if (p.second.Baseline.Simple().Size() > 0) //there could be no counters from this partition yet
@@ -930,16 +930,16 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionLabeledCountersDrop::TPtr& ev, const 
 
 
 
-void TPersQueue::Handle(TEvPQ::TEvTabletCacheCounters::TPtr& ev, const TActorContext& ctx)
-{
-    CacheCounters = ev->Get()->Counters;
-    SetCacheCounters(CacheCounters);
-
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " topic '" << TopicName
-        << "Counters. CacheSize " << CacheCounters.CacheSizeBytes << " CachedBlobs " << CacheCounters.CacheSizeBlobs);
-}
-
-
+void TPersQueue::Handle(TEvPQ::TEvTabletCacheCounters::TPtr& ev, const TActorContext& ctx) 
+{ 
+    CacheCounters = ev->Get()->Counters; 
+    SetCacheCounters(CacheCounters); 
+ 
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " topic '" << TopicName 
+        << "Counters. CacheSize " << CacheCounters.CacheSizeBytes << " CachedBlobs " << CacheCounters.CacheSizeBlobs); 
+} 
+ 
+ 
 void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& ctx)
 {
     auto it = Partitions.find(ev->Get()->Partition);
@@ -1144,7 +1144,7 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
     request->Record.SetCookie(WRITE_CONFIG_COOKIE);
 
     auto write = request->Record.AddCmdWrite();
-    write->SetKey(KeyConfig());
+    write->SetKey(KeyConfig()); 
     write->SetValue(str);
     write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
 
@@ -1167,44 +1167,44 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
 }
 
 
-void TPersQueue::Handle(TEvPersQueue::TEvDropTablet::TPtr& ev, const TActorContext& ctx)
-{
-    auto& record = ev->Get()->Record;
-    ui64 txId = record.GetTxId();
-
-    TChangeNotification stateRequest(ev->Sender, txId);
-
-    NKikimrPQ::ETabletState reqState = record.GetRequestedState();
-    if (reqState == TabletState) {
-        ReturnTabletState(ctx, stateRequest, NKikimrProto::OK);
-        return;
-    } else if (reqState == NKikimrPQ::ENormal &&
-            TabletState == NKikimrPQ::EDropped) {
-        ReturnTabletState(ctx, stateRequest, NKikimrProto::ERROR);
-        return;
-    }
-
-    TabletStateRequests.insert(stateRequest);
-    if (TabletStateRequests.size() > 1)
-        return; // already sent, just enqueue
-
-    NKikimrPQ::TTabletState stateProto;
-    stateProto.SetState(record.GetRequestedState());
+void TPersQueue::Handle(TEvPersQueue::TEvDropTablet::TPtr& ev, const TActorContext& ctx) 
+{ 
+    auto& record = ev->Get()->Record; 
+    ui64 txId = record.GetTxId(); 
+ 
+    TChangeNotification stateRequest(ev->Sender, txId); 
+ 
+    NKikimrPQ::ETabletState reqState = record.GetRequestedState(); 
+    if (reqState == TabletState) { 
+        ReturnTabletState(ctx, stateRequest, NKikimrProto::OK); 
+        return; 
+    } else if (reqState == NKikimrPQ::ENormal && 
+            TabletState == NKikimrPQ::EDropped) { 
+        ReturnTabletState(ctx, stateRequest, NKikimrProto::ERROR); 
+        return; 
+    } 
+ 
+    TabletStateRequests.insert(stateRequest); 
+    if (TabletStateRequests.size() > 1) 
+        return; // already sent, just enqueue 
+ 
+    NKikimrPQ::TTabletState stateProto; 
+    stateProto.SetState(record.GetRequestedState()); 
     TString strState;
-    bool ok = stateProto.SerializeToString(&strState);
-    Y_VERIFY(ok);
-
-    TAutoPtr<TEvKeyValue::TEvRequest> kvRequest(new TEvKeyValue::TEvRequest);
-    kvRequest->Record.SetCookie(WRITE_STATE_COOKIE);
-
-    auto kvCmd = kvRequest->Record.AddCmdWrite();
-    kvCmd->SetKey(KeyState());
-    kvCmd->SetValue(strState);
+    bool ok = stateProto.SerializeToString(&strState); 
+    Y_VERIFY(ok); 
+ 
+    TAutoPtr<TEvKeyValue::TEvRequest> kvRequest(new TEvKeyValue::TEvRequest); 
+    kvRequest->Record.SetCookie(WRITE_STATE_COOKIE); 
+ 
+    auto kvCmd = kvRequest->Record.AddCmdWrite(); 
+    kvCmd->SetKey(KeyState()); 
+    kvCmd->SetValue(strState); 
     kvCmd->SetTactic(AppData(ctx)->PQConfig.GetTactic());
-
-    ctx.Send(ctx.SelfID, kvRequest.Release());
-}
-
+ 
+    ctx.Send(ctx.SelfID, kvRequest.Release()); 
+} 
+ 
 void TPersQueue::Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext& ctx)
 {
     if (!ConfigInited) {
@@ -1333,10 +1333,10 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, const TAc
     Y_VERIFY(req.HasCmdCreateSession());
     const auto& cmd = req.GetCmdCreateSession();
 
-    if (!cmd.HasClientId()){
+    if (!cmd.HasClientId()){ 
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "no clientId in CreateSession request: " << ToString(req).data());
-    } else if (!cmd.HasSessionId()) {
+    } else if (!cmd.HasSessionId()) { 
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "not sessionId in CreateSession request: " << ToString(req).data());
     } else if (!cmd.HasGeneration()) {
@@ -1635,7 +1635,7 @@ void TPersQueue::HandleReadRequest(const ui64 responseCookie, const TActorId& pa
     } else if (cmd.HasCount() && cmd.GetCount() <= 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "invalid count in read request: " << ToString(req).data());
-    } else if (!cmd.HasOffset() || cmd.GetOffset() < 0) {
+    } else if (!cmd.HasOffset() || cmd.GetOffset() < 0) { 
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "invalid offset in read request: " << ToString(req).data());
     } else if (cmd.HasBytes() && cmd.GetBytes() <= 0) {
@@ -1811,11 +1811,11 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
-    if (TabletState == NKikimrPQ::EDropped) {
+    if (TabletState == NKikimrPQ::EDropped) { 
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::TABLET_IS_DROPPED, "tablet is dropped");
-        return;
-    }
-
+        return; 
+    } 
+ 
     if (!request.HasPartitionRequest()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "no partition request");
         return;
@@ -1835,13 +1835,13 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
 
     if (it == Partitions.end()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::WRONG_PARTITION_NUMBER,
-            TStringBuilder() << "wrong partition number " << partition);
+            TStringBuilder() << "wrong partition number " << partition); 
         return;
     }
 
     if (!it->second.InitDone) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::INITIALIZING,
-            TStringBuilder() << "partition " << partition << " is not ready");
+            TStringBuilder() << "partition " << partition << " is not ready"); 
         return;
     }
 
@@ -1861,7 +1861,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
 
     if (count != 1) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "multiple commands in request: " << count);
+            TStringBuilder() << "multiple commands in request: " << count); 
         return;
     }
 
@@ -1951,7 +1951,7 @@ void TPersQueue::HandleDie(const TActorContext& ctx)
 {
     FlushMetrics(true, ctx);
 
-    for (const auto& p : Partitions) {
+    for (const auto& p : Partitions) { 
         ctx.Send(p.second.Actor, new TEvents::TEvPoisonPill());
     }
     ctx.Send(CacheActor, new TEvents::TEvPoisonPill());
@@ -1972,7 +1972,7 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
     , ConfigInited(false)
     , PartitionsInited(0)
     , NewConfigShouldBeApplied(false)
-    , TabletState(NKikimrPQ::ENormal)
+    , TabletState(NKikimrPQ::ENormal) 
     , Counters(nullptr)
     , NextResponseCookie(0)
     , ResourceMetrics(nullptr)
@@ -2016,8 +2016,8 @@ void TPersQueue::Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev, const TActorCont
     ResourceMetrics = Executor()->GetResourceMetrics();
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
     request->Record.SetCookie(READ_CONFIG_COOKIE);
-    request->Record.AddCmdRead()->SetKey(KeyConfig());
-    request->Record.AddCmdRead()->SetKey(KeyState());
+    request->Record.AddCmdRead()->SetKey(KeyConfig()); 
+    request->Record.AddCmdRead()->SetKey(KeyState()); 
     request->Record.MutableCmdSetExecutorFastLogPolicy()
                 ->SetIsAllowed(AppData(ctx)->PQConfig.GetTactic() == NKikimrClient::TKeyValueRequest::MIN_LATENCY);
     ctx.Send(ctx.SelfID, request.Release());
@@ -2153,23 +2153,23 @@ void TPersQueue::FlushMetrics(bool force, const TActorContext &ctx) {
 bool TPersQueue::HandleHook(STFUNC_SIG)
 {
     SetActivityType(NKikimrServices::TActivity::PERSQUEUE_ACTOR);
-    TRACE_EVENT(NKikimrServices::PERSQUEUE);
+    TRACE_EVENT(NKikimrServices::PERSQUEUE); 
     switch(ev->GetTypeRewrite())
     {
         HFuncTraced(TEvInterconnect::TEvNodeInfo, Handle);
-        HFuncTraced(TEvPersQueue::TEvRequest, Handle);
-        HFuncTraced(TEvPersQueue::TEvUpdateConfig, Handle);
-        HFuncTraced(TEvPersQueue::TEvOffsets, Handle);
+        HFuncTraced(TEvPersQueue::TEvRequest, Handle); 
+        HFuncTraced(TEvPersQueue::TEvUpdateConfig, Handle); 
+        HFuncTraced(TEvPersQueue::TEvOffsets, Handle); 
         HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
         HFuncTraced(TEvPersQueue::TEvStatus, Handle);
         HFuncTraced(TEvPersQueue::TEvPartitionClientInfo, Handle);
-        HFuncTraced(TEvKeyValue::TEvResponse, Handle);
-        HFuncTraced(TEvPQ::TEvInitComplete, Handle);
+        HFuncTraced(TEvKeyValue::TEvResponse, Handle); 
+        HFuncTraced(TEvPQ::TEvInitComplete, Handle); 
         HFuncTraced(TEvPQ::TEvPartitionCounters, Handle);
         HFuncTraced(TEvPQ::TEvPartitionLabeledCounters, Handle);
         HFuncTraced(TEvPQ::TEvPartitionLabeledCountersDrop, Handle);
-        HFuncTraced(TEvPQ::TEvTabletCacheCounters, Handle);
-        HFuncTraced(TEvPersQueue::TEvDropTablet, Handle);
+        HFuncTraced(TEvPQ::TEvTabletCacheCounters, Handle); 
+        HFuncTraced(TEvPersQueue::TEvDropTablet, Handle); 
         HFuncTraced(TEvTabletPipe::TEvServerConnected, Handle);
         HFuncTraced(TEvTabletPipe::TEvServerDisconnected, Handle);
         HFuncTraced(TEvPQ::TEvError, Handle);

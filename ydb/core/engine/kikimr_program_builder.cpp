@@ -489,11 +489,11 @@ TRuntimeNode TKikimrProgramBuilder::CombineByKeyMerge(TRuntimeNode list) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TKikimrProgramBuilder::Diagnostics() {
-    TCallableBuilder callableBuilder(Env, "Diagnostics", Env.GetTypeOfVoid());
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
+TRuntimeNode TKikimrProgramBuilder::Diagnostics() { 
+    TCallableBuilder callableBuilder(Env, "Diagnostics", Env.GetTypeOfVoid()); 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
 TRuntimeNode TKikimrProgramBuilder::PartialSort(TRuntimeNode list, TRuntimeNode ascending,
     std::function<TRuntimeNode(TRuntimeNode item)> keyExtractor)
 {
@@ -643,7 +643,7 @@ TRuntimeNode TKikimrProgramBuilder::StepTxId() {
     TCallableBuilder callableBuilder(Env, "StepTxId", returnType);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
-
+ 
 TRuntimeNode TKikimrProgramBuilder::SetResult(const TStringBuf& label, TRuntimeNode payload) {
     MKQL_ENSURE(!label.empty(), "label must not be empty");
     MKQL_ENSURE(CanExportType(payload.GetStaticType(), Env),

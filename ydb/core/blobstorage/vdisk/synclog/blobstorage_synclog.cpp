@@ -66,8 +66,8 @@ namespace NKikimr {
         public:
             static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
                 return NKikimrServices::TActivity::BS_SYNCLOG_LOCAL_STATUS;
-            }
-
+            } 
+ 
             TSyncLogGetLocalStatusActor(TIntrusivePtr<TSyncLogCtx> &slCtx,
                                         TEvLocalStatus::TPtr &ev,
                                         const TActorId &notifyId,
@@ -77,7 +77,7 @@ namespace NKikimr {
                 , Ev(ev)
                 , NotifyId(notifyId)
                 , KeeperId(keeperId)
-            {}
+            {} 
         };
 
 
@@ -303,8 +303,8 @@ namespace NKikimr {
         public:
             static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
                 return NKikimrServices::TActivity::BS_SYNCLOG_ACTOR;
-            }
-
+            } 
+ 
             TSyncLogActor(
                     const TIntrusivePtr<TSyncLogCtx> &slCtx,
                     const TIntrusivePtr<TBlobStorageGroupInfo> &ginfo,
@@ -318,7 +318,7 @@ namespace NKikimr {
                 , NeighborsPtr()
                 , VDiskIncarnationGuid(Repaired->SyncLogPtr->Header.VDiskIncarnationGuid)
                 , KeeperId()
-            {}
+            {} 
         };
 
     } // NSyncLog

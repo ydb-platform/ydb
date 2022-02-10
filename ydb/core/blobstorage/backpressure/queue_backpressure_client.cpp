@@ -67,8 +67,8 @@ class TVDiskBackpressureClientActor : public TActorBootstrapped<TVDiskBackpressu
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_QUEUE_ACTOR;
-    }
-
+    } 
+ 
     TVDiskBackpressureClientActor(const TIntrusivePtr<TBlobStorageGroupInfo>& info, TVDiskIdShort vdiskId,
             NKikimrBlobStorage::EVDiskQueueId queueId,const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
             const TBSProxyContextPtr& bspctx, const NBackpressure::TQueueClientId& clientId, const TString& queueName,

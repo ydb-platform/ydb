@@ -597,11 +597,11 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable:
         targetName = tx.GetCreateIndexedTable().GetTableDescription().GetName();
         break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore:
-        targetName = tx.GetCreateColumnStore().GetName();
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore: 
+        targetName = tx.GetCreateColumnStore().GetName(); 
         break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
-        targetName = tx.GetCreateColumnTable().GetName();
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable: 
+        targetName = tx.GetCreateColumnTable().GetName(); 
         break;
     default:
         result.Transactions.push_back(tx);
@@ -684,11 +684,11 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable:
             create.MutableCreateIndexedTable()->MutableTableDescription()->SetName(name);
             break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore:
-            create.MutableCreateColumnStore()->SetName(name);
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore: 
+            create.MutableCreateColumnStore()->SetName(name); 
             break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
-            create.MutableCreateColumnTable()->SetName(name);
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable: 
+            create.MutableCreateColumnTable()->SetName(name); 
             break;
         default:
             Y_UNREACHABLE();
@@ -793,8 +793,8 @@ ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxSta
             return CreateDropTableIndex(NextPartId(), txState);
         case TTxState::ETxType::TxCreateRtmrVolume:
             return CreateNewRTMR(NextPartId(), txState);
-        case TTxState::ETxType::TxCreateOlapStore:
-            return CreateNewOlapStore(NextPartId(), txState);
+        case TTxState::ETxType::TxCreateOlapStore: 
+            return CreateNewOlapStore(NextPartId(), txState); 
         case TTxState::ETxType::TxAlterOlapStore:
             return CreateAlterOlapStore(NextPartId(), txState);
         case TTxState::ETxType::TxDropOlapStore:
@@ -951,17 +951,17 @@ ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationTyp
         Y_FAIL("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolume:
         return CreateNewRTMR(NextPartId(), tx);
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore:
-        return CreateNewOlapStore(NextPartId(), tx);
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnStore:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore: 
+        return CreateNewOlapStore(NextPartId(), tx); 
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnStore: 
         return CreateAlterOlapStore(NextPartId(), tx);
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore: 
         return CreateDropOlapStore(NextPartId(), tx);
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable: 
         return CreateNewOlapTable(NextPartId(), tx);
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable: 
         return CreateAlterOlapTable(NextPartId(), tx);
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable: 
         return CreateDropOlapTable(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
         return CreateNewPQ(NextPartId(), tx);

@@ -54,8 +54,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_LEVEL_INDEX_STAT_QUERY;
-        }
-
+        } 
+ 
         TLevelIndexDumpActor(TIntrusivePtr<THullCtx> hullCtx,
                              const TActorId &parentId,
                              TLevelIndexSnapshot &&snapshot,

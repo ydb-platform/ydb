@@ -204,8 +204,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_RECOVERY_LOG_WRITER;
-        }
-
+        } 
+ 
         TRecoveryLogWriter(const TActorId &yardID, const TActorId &skeletonID,
                            NPDisk::TOwner owner, NPDisk::TOwnerRound ownerRound, ui64 startLsn,
                            TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
@@ -218,7 +218,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             , Queue()
             , LsmLogBytesWritten(counters->GetSubgroup("subsystem", "lsmhull")->GetCounter("LsmLogBytesWritten"))
             , Counters(counters)
-        {}
+        {} 
     };
 
     IActor* CreateRecoveryLogWriter(const TActorId &yardID, const TActorId &skeletonID, NPDisk::TOwner owner,

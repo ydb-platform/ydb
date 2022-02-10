@@ -62,7 +62,7 @@ public:
         for (auto& shard : txState->Shards) {
             TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
 
-            if (shard.TabletType == ETabletType::ColumnShard) {
+            if (shard.TabletType == ETabletType::ColumnShard) { 
                 auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
                     NKikimrTxColumnShard::TX_KIND_SCHEMA,
                     context.SS->TabletID(),
@@ -72,8 +72,8 @@ public:
                     context.SS->SelectProcessingPrarams(txState->TargetPathId));
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
-            } else {
-                Y_FAIL("unexpected tablet type");
+            } else { 
+                Y_FAIL("unexpected tablet type"); 
             }
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -103,7 +103,7 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(),
-            {TEvColumnShard::TEvProposeTransactionResult::EventType});
+            {TEvColumnShard::TEvProposeTransactionResult::EventType}); 
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -190,7 +190,7 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(),
-            {TEvColumnShard::TEvProposeTransactionResult::EventType,
+            {TEvColumnShard::TEvProposeTransactionResult::EventType, 
              TEvPrivate::TEvOperationPlan::EventType});
     }
 
@@ -271,7 +271,7 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(),
-            {TEvColumnShard::TEvProposeTransactionResult::EventType,
+            {TEvColumnShard::TEvProposeTransactionResult::EventType, 
              TEvColumnShard::TEvNotifyTxCompletionResult::EventType,
              TEvPrivate::TEvOperationPlan::EventType});
     }

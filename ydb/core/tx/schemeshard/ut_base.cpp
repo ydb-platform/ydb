@@ -13,9 +13,9 @@ using namespace NSchemeShardUT_Private;
 Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     Y_UNIT_TEST(Boot) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-    }
-
+        TTestEnv env(runtime); 
+    } 
+ 
     Y_UNIT_TEST(InitRootAgain) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -45,18 +45,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(MkRmDir) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
         TestMkDir(runtime, ++txId, "/", "DirA", {NKikimrScheme::StatusPathDoesNotExist});
         TestMkDir(runtime, ++txId, "/", "MyRoot", {NKikimrScheme::StatusPathDoesNotExist});
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
         TestMkDir(runtime, ++txId, "/MyRoot", "DirB");
         TestMkDir(runtime, ++txId, "/MyRoot/DirA", "SubDirA");
         TestMkDir(runtime, ++txId, "/MyRoot/DirA/SubDirA", "DirB");
-
+ 
         env.TestWaitNotification(runtime, xrange(txId - 5, txId + 1));
-
+ 
         TestDescribeResult(DescribePath(runtime, "/"),
                            {NLs::PathNotExist});
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
@@ -75,46 +75,46 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/SubDirA/DirB"),
                            {NLs::Finished,
                             NLs::PathVersionEqual(3)});
-
+ 
         TestRmDir(runtime, ++txId, "/MyRoot/DirA", "SubDirA", {NKikimrScheme::StatusNameConflict});
         TestRmDir(runtime, ++txId, "/MyRoot/DirA/SubDirA", "DirB");
         env.TestWaitNotification(runtime, txId);
         TestRmDir(runtime, ++txId, "/MyRoot/DirA", "SubDirA");
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/SubDirA/DirB"), {NLs::PathNotExist});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/SubDirA"), {NLs::PathNotExist});
-
-        //
-
+ 
+        // 
+ 
         TestMkDir(runtime, ++txId, "/MyRoot/DirA/SubDirA", "DirB", {NKikimrScheme::StatusPathDoesNotExist});
-
-        //
-
+ 
+        // 
+ 
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA", {NKikimrScheme::StatusAlreadyExists});
         TestRmDir(runtime, ++txId, "/MyRoot", "DirA");
         env.TestWaitNotification(runtime, txId);
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::Finished,
                             NLs::PathsInsideDomain(2)});
-
-        //
-
+ 
+        // 
+ 
         TestRmDir(runtime, ++txId, "/MyRoot", "DirA");
         TestRmDir(runtime, ++txId, "/MyRoot", "DirB");
         env.TestWaitNotification(runtime, {txId-1, txId});
         TestRmDir(runtime, ++txId, "/", "MyRoot", {NKikimrScheme::StatusNameConflict});
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::NoChildren,
                             NLs::PathsInsideDomain(0),
                             NLs::ShardsInsideDomain(0)});
-    }
-
+    } 
+ 
     using TRuntimeTxFn = std::function<void(TTestBasicRuntime&, ui64)>;
 
     void DropTwice(const TString& path, TRuntimeTxFn createFn, TRuntimeTxFn dropFn) {
@@ -665,16 +665,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     Y_UNIT_TEST(CreateTable) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        ui64 txId = 100;
+        ui64 txId = 100; 
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA", R"(
-            Name: "Table1"
-            Columns { Name: "key"   Type: "Uint64" }
-            Columns { Name: "value" Type: "Utf8" }
-            KeyColumnNames: ["key"]
-        )");
-
+            Name: "Table1" 
+            Columns { Name: "key"   Type: "Uint64" } 
+            Columns { Name: "value" Type: "Utf8" } 
+            KeyColumnNames: ["key"] 
+        )"); 
+ 
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
                         "Name: \"Table2\""
                             "Columns { Name: \"key1\"       Type: \"Uint32\"}"
@@ -707,45 +707,45 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                             "KeyColumnNames: [\"RowId\", \"key1\"]");
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"\""
-                            "Columns { Name: \"key\"       Type: \"Uint32\"}"
+                        "Name: \"\"" 
+                            "Columns { Name: \"key\"       Type: \"Uint32\"}" 
                             "KeyColumnNames: [\"key\"]");
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA/Table1",
-                        "Name: \"x/y\""
-                            "Columns { Name: \"key\"       Type: \"Uint32\"}"
+                        "Name: \"x/y\"" 
+                            "Columns { Name: \"key\"       Type: \"Uint32\"}" 
                             "KeyColumnNames: [\"key\"]");
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"Name with spaces\""
-                            "Columns { Name: \"key\"       Type: \"Uint32\"}"
+                        "Name: \"Name with spaces\"" 
+                            "Columns { Name: \"key\"       Type: \"Uint32\"}" 
                             "KeyColumnNames: [\"key\"]");
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"TableN\""
-                            "Columns { Name: \"key\"       Type: \"Uint32\"}"
-                            "Columns { Name: \"column with spaces\" Type: \"Uint32\"}"
+                        "Name: \"TableN\"" 
+                            "Columns { Name: \"key\"       Type: \"Uint32\"}" 
+                            "Columns { Name: \"column with spaces\" Type: \"Uint32\"}" 
                             "KeyColumnNames: [\"key\"]");
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"TableN\""
-                            "Columns { Name: \"key\"       Type: \"Uint32\"}"
-                            "Columns { Name: \"кокошник\"  Type: \"Uint32\"}"
+                        "Name: \"TableN\"" 
+                            "Columns { Name: \"key\"       Type: \"Uint32\"}" 
+                            "Columns { Name: \"кокошник\"  Type: \"Uint32\"}" 
                             "KeyColumnNames: [\"key\"]");
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"*.#\""
-                            "Columns { Name: \"key\"       Type: \"Uint32\"}"
-                            "Columns { Name: \"!a~\" Type: \"Uint32\"}"
-                            "Columns { Name: \"(a+b)*c=5\" Type: \"Uint32\"}"
-                            "Columns { Name: \"1-x/y+q^6\" Type: \"Uint32\"}"
-                            "Columns { Name: \"!@#$%^&*()_-+=~:;,./?{}|\" Type: \"Uint32\"}"
+                        "Name: \"*.#\"" 
+                            "Columns { Name: \"key\"       Type: \"Uint32\"}" 
+                            "Columns { Name: \"!a~\" Type: \"Uint32\"}" 
+                            "Columns { Name: \"(a+b)*c=5\" Type: \"Uint32\"}" 
+                            "Columns { Name: \"1-x/y+q^6\" Type: \"Uint32\"}" 
+                            "Columns { Name: \"!@#$%^&*()_-+=~:;,./?{}|\" Type: \"Uint32\"}" 
                             "KeyColumnNames: [\"key\"]");
         AsyncCreateTable(runtime, ++txId, "/NotMyRoot/DirA",
-                        "Name: \"Table3\""
-                            "Columns { Name: \"key\"       Type: \"Uint32\"}"
+                        "Name: \"Table3\"" 
+                            "Columns { Name: \"key\"       Type: \"Uint32\"}" 
                             "KeyColumnNames: [\"key\"]");
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"Table3\""
-                            "Columns { Name: \"key\"       Type: \"Uint32\"}"
+                        "Name: \"Table3\"" 
+                            "Columns { Name: \"key\"       Type: \"Uint32\"}" 
                             "KeyColumnNames: [\"key\", \"key\"]");
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"Table3\""
+                        "Name: \"Table3\"" 
                             "Columns { Name: \"key\"       Type: \"Uint32\"}");
 
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
@@ -2425,68 +2425,68 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             }});
     }
 
-#if 0 // KIKIMR-1452
+#if 0 // KIKIMR-1452 
     Y_UNIT_TEST(CreateSameTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table"
-            Columns { Name: "key"   Type: "Uint64" }
-            Columns { Name: "value" Type: "Utf8" }
-            KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table"
-            Columns { Name: "key"   Type: "Uint64" }
-            Columns { Name: "value" Type: "Utf8" }
-            KeyColumnNames: ["key"]
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
+            Name: "Table" 
+            Columns { Name: "key"   Type: "Uint64" } 
+            Columns { Name: "value" Type: "Utf8" } 
+            KeyColumnNames: ["key"] 
+        )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
+            Name: "Table" 
+            Columns { Name: "key"   Type: "Uint64" } 
+            Columns { Name: "value" Type: "Utf8" } 
+            KeyColumnNames: ["key"] 
         )", {NKikimrScheme::StatusAlreadyExists});
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table"
-            Columns { Name: "key"   Type: "Uint64" }
-            Columns { Name: "value" Type: "Utf8" }
-            KeyColumnNames: ["value"]
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
+            Name: "Table" 
+            Columns { Name: "key"   Type: "Uint64" } 
+            Columns { Name: "value" Type: "Utf8" } 
+            KeyColumnNames: ["value"] 
         )", {NKikimrScheme::StatusSchemeError});
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table"
-            Columns { Name: "diff"   Type: "Uint64" }
-            Columns { Name: "value" Type: "Utf8" }
-            KeyColumnNames: ["diff"]
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
+            Name: "Table" 
+            Columns { Name: "diff"   Type: "Uint64" } 
+            Columns { Name: "value" Type: "Utf8" } 
+            KeyColumnNames: ["diff"] 
         )", {NKikimrScheme::StatusSchemeError});
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table"
-            Columns { Name: "key"   Type: "Uint32" }
-            Columns { Name: "value" Type: "Utf8" }
-            KeyColumnNames: ["key"]
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
+            Name: "Table" 
+            Columns { Name: "key"   Type: "Uint32" } 
+            Columns { Name: "value" Type: "Utf8" } 
+            KeyColumnNames: ["key"] 
         )", {NKikimrScheme::StatusSchemeError});
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table"
-            Columns { Name: "key"   Type: "Uint64" }
-            Columns { Name: "value" Type: "Utf8" }
-            KeyColumnNames: ["key"]
-            PartitionConfig {ChannelProfileId: 0}
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
+            Name: "Table" 
+            Columns { Name: "key"   Type: "Uint64" } 
+            Columns { Name: "value" Type: "Utf8" } 
+            KeyColumnNames: ["key"] 
+            PartitionConfig {ChannelProfileId: 0} 
         )", {NKikimrScheme::StatusSchemeError});
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table"
-            Columns { Name: "key"   Type: "Uint64" }
-            Columns { Name: "value" Type: "Utf8" }
-            KeyColumnNames: ["key"]
-            UniformPartitionsCount: 10
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
+            Name: "Table" 
+            Columns { Name: "key"   Type: "Uint64" } 
+            Columns { Name: "value" Type: "Utf8" } 
+            KeyColumnNames: ["key"] 
+            UniformPartitionsCount: 10 
         )", {NKikimrScheme::StatusSchemeError});
-    }
-#endif
-
+    } 
+#endif 
+ 
     Y_UNIT_TEST(CreateTableWithUniformPartitioning) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 123;
 
-        TestCreateTable(runtime, ++txId, "/MyRoot",
+        TestCreateTable(runtime, ++txId, "/MyRoot", 
                         "Name: \"PartitionedTable1\""
                             "Columns { Name: \"key1\"       Type: \"Uint32\"}"
                             "Columns { Name: \"key2\"       Type: \"Utf8\"}"
@@ -2496,21 +2496,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             "UniformPartitionsCount: 10"
                         );
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PartitionedTable1"),
                            {NLs::IsTable,
                             NLs::ShardsInsideDomain(10)});
-
-        TestCreateTable(runtime, ++txId, "/MyRoot",
-                        R"(Name: "PartitionedTable2"
-                            Columns { Name: "key1"       Type: "Uint64"}
-                            Columns { Name: "Value"      Type: "Utf8"}
-                            KeyColumnNames: ["key1"]
-                            UniformPartitionsCount: 10
-                            PartitionConfig {
-                                TxReadSizeLimit: 1000
-                            })");
-        env.TestWaitNotification(runtime, txId);
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", 
+                        R"(Name: "PartitionedTable2" 
+                            Columns { Name: "key1"       Type: "Uint64"} 
+                            Columns { Name: "Value"      Type: "Utf8"} 
+                            KeyColumnNames: ["key1"] 
+                            UniformPartitionsCount: 10 
+                            PartitionConfig { 
+                                TxReadSizeLimit: 1000 
+                            })"); 
+        env.TestWaitNotification(runtime, txId); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PartitionedTable2"),
                            {NLs::IsTable,
@@ -2634,83 +2634,83 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         {NKikimrScheme::StatusInvalidParameter});
     }
 
-    Y_UNIT_TEST(CreateAlterTableWithCodec) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 123;
-
-        runtime.GetAppData().AllowColumnFamiliesForTest = true;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
-                        Name: "Table1"
-                        Columns { Name: "key1"       Type: "Uint32"}
-                        Columns { Name: "Value"      Type: "Utf8"}
-                        KeyColumnNames: ["key1"]
-                        UniformPartitionsCount: 2
-                        PartitionConfig {
-                            NamedCompactionPolicy : "UserTableDefault"
-                            ColumnFamilies {
-                                Id: 0
-                                ColumnCodec: ColumnCodecLZ4
-                                ColumnCache: ColumnCacheNone
-                            }
-                        })_");
-        env.TestWaitNotification(runtime, txId);
-
-        auto t1 = DescribePath(runtime, "/MyRoot/Table1");
-
-        TActorId sender = runtime.AllocateEdgeActor();
+    Y_UNIT_TEST(CreateAlterTableWithCodec) { 
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime); 
+        ui64 txId = 123; 
+ 
+        runtime.GetAppData().AllowColumnFamiliesForTest = true; 
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"_( 
+                        Name: "Table1" 
+                        Columns { Name: "key1"       Type: "Uint32"} 
+                        Columns { Name: "Value"      Type: "Utf8"} 
+                        KeyColumnNames: ["key1"] 
+                        UniformPartitionsCount: 2 
+                        PartitionConfig { 
+                            NamedCompactionPolicy : "UserTableDefault" 
+                            ColumnFamilies { 
+                                Id: 0 
+                                ColumnCodec: ColumnCodecLZ4 
+                                ColumnCache: ColumnCacheNone 
+                            } 
+                        })_"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        auto t1 = DescribePath(runtime, "/MyRoot/Table1"); 
+ 
+        TActorId sender = runtime.AllocateEdgeActor(); 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
-
-        auto t2 = DescribePath(runtime, "/MyRoot/Table1");
-
-        UNIT_ASSERT_VALUES_EQUAL(t1.DebugString(), t2.DebugString());
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"_(
-                        Name: "Table1"
-                        PartitionConfig {
-                            ColumnFamilies {
-                                Id: 0
-                                ColumnCodec: ColumnCodecZSTD
-                                ColumnCache: ColumnCacheNone
-                            }
+ 
+        auto t2 = DescribePath(runtime, "/MyRoot/Table1"); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(t1.DebugString(), t2.DebugString()); 
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"_( 
+                        Name: "Table1" 
+                        PartitionConfig { 
+                            ColumnFamilies { 
+                                Id: 0 
+                                ColumnCodec: ColumnCodecZSTD 
+                                ColumnCache: ColumnCacheNone 
+                            } 
                         })_", {NKikimrScheme::StatusInvalidParameter});
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"_(
-                        Name: "Table1"
-                        PartitionConfig {
-                            ColumnFamilies {
-                                Id: 0
-                                ColumnCodec: ColumnCodecPlain
-                                ColumnCache: ColumnCacheNone
-                            }
-                        })_");
-        env.TestWaitNotification(runtime, txId);
-
-        auto t3 = DescribePath(runtime, "/MyRoot/Table1");
-        UNIT_ASSERT(t2.DebugString() != t3.DebugString());
-
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"_( 
+                        Name: "Table1" 
+                        PartitionConfig { 
+                            ColumnFamilies { 
+                                Id: 0 
+                                ColumnCodec: ColumnCodecPlain 
+                                ColumnCache: ColumnCacheNone 
+                            } 
+                        })_"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        auto t3 = DescribePath(runtime, "/MyRoot/Table1"); 
+        UNIT_ASSERT(t2.DebugString() != t3.DebugString()); 
+ 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
-
-        auto t4 = DescribePath(runtime, "/MyRoot/Table1");
-        UNIT_ASSERT_VALUES_EQUAL(t3.DebugString(), t4.DebugString());
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
-                        Name: "Table2"
-                        Columns { Name: "key1"       Type: "Uint32"}
-                        Columns { Name: "Value"      Type: "Utf8"}
-                        KeyColumnNames: ["key1"]
-                        UniformPartitionsCount: 2
-                        PartitionConfig {
-                            NamedCompactionPolicy : "UserTableDefault"
-                            ColumnFamilies {
-                                Id: 0
-                                ColumnCodec: ColumnCodecZSTD
-                                ColumnCache: ColumnCacheNone
-                            }
+ 
+        auto t4 = DescribePath(runtime, "/MyRoot/Table1"); 
+        UNIT_ASSERT_VALUES_EQUAL(t3.DebugString(), t4.DebugString()); 
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"_( 
+                        Name: "Table2" 
+                        Columns { Name: "key1"       Type: "Uint32"} 
+                        Columns { Name: "Value"      Type: "Utf8"} 
+                        KeyColumnNames: ["key1"] 
+                        UniformPartitionsCount: 2 
+                        PartitionConfig { 
+                            NamedCompactionPolicy : "UserTableDefault" 
+                            ColumnFamilies { 
+                                Id: 0 
+                                ColumnCodec: ColumnCodecZSTD 
+                                ColumnCache: ColumnCacheNone 
+                            } 
                         })_", {NKikimrScheme::StatusInvalidParameter});
-    }
-
+    } 
+ 
     Y_UNIT_TEST(DependentOps) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -2793,27 +2793,27 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(ParallelCreateSameTable) { //+
         using ESts = NKikimrScheme::EStatus;
-
+ 
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 123;
-
+        TTestEnv env(runtime); 
+        ui64 txId = 123; 
+ 
         TString tableConfig = "Name: \"NilNoviSubLuna\""
-            "Columns { Name: \"key\"        Type: \"Uint64\"}"
-            "Columns { Name: \"value\"      Type: \"Uint64\"}"
-            "KeyColumnNames: [\"key\"]"
-            "UniformPartitionsCount: 16";
-
-        AsyncCreateTable(runtime, ++txId, "/MyRoot", tableConfig);
-        AsyncCreateTable(runtime, ++txId, "/MyRoot", tableConfig);
-        AsyncCreateTable(runtime, ++txId, "/MyRoot", tableConfig);
-
-        ui64 sts[3];
+            "Columns { Name: \"key\"        Type: \"Uint64\"}" 
+            "Columns { Name: \"value\"      Type: \"Uint64\"}" 
+            "KeyColumnNames: [\"key\"]" 
+            "UniformPartitionsCount: 16"; 
+ 
+        AsyncCreateTable(runtime, ++txId, "/MyRoot", tableConfig); 
+        AsyncCreateTable(runtime, ++txId, "/MyRoot", tableConfig); 
+        AsyncCreateTable(runtime, ++txId, "/MyRoot", tableConfig); 
+ 
+        ui64 sts[3]; 
         sts[0] = TestModificationResults(runtime, txId-2, {ESts::StatusAccepted, ESts::StatusMultipleModifications, ESts::StatusAlreadyExists});
         sts[1] = TestModificationResults(runtime, txId-1, {ESts::StatusAccepted, ESts::StatusMultipleModifications, ESts::StatusAlreadyExists});
         sts[2] = TestModificationResults(runtime, txId,   {ESts::StatusAccepted, ESts::StatusMultipleModifications, ESts::StatusAlreadyExists});
-
-        for (ui32 i=0; i<3; ++i) {
+ 
+        for (ui32 i=0; i<3; ++i) { 
             if (sts[i] == ESts::StatusAlreadyExists) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/NilNoviSubLuna"),
                                    {NLs::Finished,
@@ -2825,18 +2825,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                    {NLs::NotFinished,
                                     NLs::IsTable});
             }
-        }
-
-        env.TestWaitNotification(runtime, {txId-2, txId-1, txId});
-
+        } 
+ 
+        env.TestWaitNotification(runtime, {txId-2, txId-1, txId}); 
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/NilNoviSubLuna"),
                            {NLs::Finished,
                             NLs::IsTable,
                             NLs::PathVersionEqual(3)});
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", tableConfig, {ESts::StatusAlreadyExists});
-    }
-
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", tableConfig, {ESts::StatusAlreadyExists}); 
+    } 
+ 
     Y_UNIT_TEST(CopyTable) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -3589,7 +3589,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                   CompactionBrokerQueue: 1
                                   KeepInCache: true
                                 }
-                            }}
+                            }} 
                         )");
         env.TestWaitNotification(runtime, txId);
 
@@ -3762,62 +3762,62 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(AlterTable) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
         TSet<TString> cols = {"key1", "key2", "value"};
-        TSet<TString> keyCol = {"key1", "key2"};
+        TSet<TString> keyCol = {"key1", "key2"}; 
         TSet<TString> dropCols;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    Columns { Name: "key2"   Type: "Uint32"}
-                    Columns { Name: "key1"   Type: "Uint64"}
-                    Columns { Name: "value"  Type: "Utf8"}
-                    KeyColumnNames: ["key1", "key2"]
-                )");
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    Columns { Name: "key2"   Type: "Uint32"} 
+                    Columns { Name: "key1"   Type: "Uint64"} 
+                    Columns { Name: "value"  Type: "Utf8"} 
+                    KeyColumnNames: ["key1", "key2"] 
+                )"); 
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
 
         Cdbg << "AlterTable: add column" << Endl;
-        cols.insert("add_1");
-        cols.insert("add_2");
+        cols.insert("add_1"); 
+        cols.insert("add_2"); 
         cols.insert("add_50");
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    Columns { Name: "add_1"  Type: "Uint32"}
-                    Columns { Name: "add_2"  Type: "Uint64"}
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    Columns { Name: "add_1"  Type: "Uint32"} 
+                    Columns { Name: "add_2"  Type: "Uint64"} 
                     Columns { Name: "add_50" Type: "Utf8" Id: 100500}
-                )");
+                )"); 
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
 
         Cdbg << "AlterTable: add existed column" << Endl;
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table" Columns { Name: "value"  Type: "Utf8"})",
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" Columns { Name: "value"  Type: "Utf8"})", 
                 {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table" Columns { Name: "add_1"  Type: "Uint64"})",
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" Columns { Name: "add_1"  Type: "Uint64"})", 
                 {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
 
-        Cdbg << "AlterTable: add wrong column" << Endl;
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table" Columns { Name: "кокошник" Type: "Utf8"})",
+        Cdbg << "AlterTable: add wrong column" << Endl; 
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" Columns { Name: "кокошник" Type: "Utf8"})", 
                 {NKikimrScheme::StatusInvalidParameter});
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table" Columns { Name: "name with spaces" Type: "Uint64"})",
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" Columns { Name: "name with spaces" Type: "Uint64"})", 
                 {NKikimrScheme::StatusInvalidParameter});
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table" Columns { Name: "\x10xyz" Type: "Uint64"})",
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" Columns { Name: "\x10xyz" Type: "Uint64"})", 
                 {NKikimrScheme::StatusInvalidParameter});
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
 
@@ -3831,14 +3831,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
 
         Cdbg << "AlterTable: drop column" << Endl;
-        cols.erase("value");
-        cols.erase("add_2");
-        dropCols.insert("value");
-        dropCols.insert("add_2");
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table" DropColumns { Name: "value" } DropColumns { Name: "add_2" })");
+        cols.erase("value"); 
+        cols.erase("add_2"); 
+        dropCols.insert("value"); 
+        dropCols.insert("add_2"); 
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" DropColumns { Name: "value" } DropColumns { Name: "add_2" })"); 
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
 
@@ -3852,51 +3852,51 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
 
         Cdbg << "AlterTable: drop dropped column" << Endl;
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table" DropColumns { Name: "add_2"})",
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" DropColumns { Name: "add_2"})", 
                 {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
-
+ 
         Cdbg << "AlterTable: drop key column" << Endl;
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table" DropColumns { Name: "key1" })",
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" DropColumns { Name: "key1" })", 
                 {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
-
+ 
         Cdbg << "AlterTable: drop without column name " << Endl;
         TestAlterTable(runtime, ++txId, "/MyRoot",
                 R"(Name: "Table" DropColumns { Id: 3 })",
                 {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
 
         Cdbg << "AlterTable: add + drop different column" << Endl;
-        cols.insert("add_3");
-        dropCols.insert("add_1");
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    Columns { Name: "add_3"  Type: "Uint32" }
-                    DropColumns { Name: "add_1" }
-                )");
+        cols.insert("add_3"); 
+        dropCols.insert("add_1"); 
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    Columns { Name: "add_3"  Type: "Uint32" } 
+                    DropColumns { Name: "add_1" } 
+                )"); 
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
 
         Cdbg << "AlterTable: add + drop same column (exist)" << Endl;
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    Columns { Name: "add_3"  Type: "Uint32"}
-                    DropColumns { Name: "add_3" }
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    Columns { Name: "add_3"  Type: "Uint32"} 
+                    DropColumns { Name: "add_3" } 
                 )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
-
+ 
         Cdbg << "AlterTable: add + drop same column (not exist)" << Endl;
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    Columns { Name: "add_4"  Type: "Uint32"}
-                    DropColumns { Name: "add_4" }
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    Columns { Name: "add_4"  Type: "Uint32"} 
+                    DropColumns { Name: "add_4" } 
                 )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
-    }
-
+    } 
+ 
     Y_UNIT_TEST(AlterTableDropColumnReCreateSplit) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -3971,128 +3971,128 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(AlterTableKeyColumns) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        TSet<TString> cols = {"key1", "value"};
-        TSet<TString> keyCol = {"key1"};
-        TSet<TString> dropCols;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    Columns { Name: "key1" Type: "Uint64" }
-                    Columns { Name: "value" Type: "Utf8" }
-                    KeyColumnNames: ["key1"]
-                )");
-        env.TestWaitNotification(runtime, txId);
-
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        TSet<TString> cols = {"key1", "value"}; 
+        TSet<TString> keyCol = {"key1"}; 
+        TSet<TString> dropCols; 
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    Columns { Name: "key1" Type: "Uint64" } 
+                    Columns { Name: "value" Type: "Utf8" } 
+                    KeyColumnNames: ["key1"] 
+                )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
 
-        Cdbg << "AlterTable: add key column (errors)" << Endl;
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    Columns { Name: "key2" Type: "Uint32" }
-                    KeyColumnNames: ["key2", "key1"]
+        Cdbg << "AlterTable: add key column (errors)" << Endl; 
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    Columns { Name: "key2" Type: "Uint32" } 
+                    KeyColumnNames: ["key2", "key1"] 
                 )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    Columns { Name: "key1" Type: "Uint64" }
-                    KeyColumnNames: ["key1", "key1"]
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    Columns { Name: "key1" Type: "Uint64" } 
+                    KeyColumnNames: ["key1", "key1"] 
                 )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    Columns { Name: "some" Type: "Uint32" }
-                    KeyColumnNames: ["key1", "value"]
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    Columns { Name: "some" Type: "Uint32" } 
+                    KeyColumnNames: ["key1", "value"] 
                 )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    KeyColumnNames: ["key1"]
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    KeyColumnNames: ["key1"] 
                 )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    Columns { Name: "key2" Type: "Uint32" }
-                    KeyColumnNames: ["key1", "key2"]
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    Columns { Name: "key2" Type: "Uint32" } 
+                    KeyColumnNames: ["key1", "key2"] 
                     PartitionConfig { ChannelProfileId: 1 }
                 )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
-
-        Cdbg << "AlterTable: add key column" << Endl;
-        cols.insert("key2");
-        keyCol.insert("key2");
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    Columns { Name: "key2" Type: "Uint32" }
-                    KeyColumnNames: ["key1", "key2"]
-                )");
-        env.TestWaitNotification(runtime, txId);
-
+ 
+        Cdbg << "AlterTable: add key column" << Endl; 
+        cols.insert("key2"); 
+        keyCol.insert("key2"); 
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    Columns { Name: "key2" Type: "Uint32" } 
+                    KeyColumnNames: ["key1", "key2"] 
+                )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
 
-        cols.insert("key3");
-        cols.insert("value2");
-        keyCol.insert("key3");
-        dropCols.insert("value");
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    Columns { Name: "key3"  Type: "Utf8"}
-                    Columns { Name: "value2"  Type: "Utf8"}
-                    DropColumns { Name: "value" }
-                    KeyColumnNames: ["key1", "key2", "key3"]
-                )");
-        env.TestWaitNotification(runtime, txId);
-
+        cols.insert("key3"); 
+        cols.insert("value2"); 
+        keyCol.insert("key3"); 
+        dropCols.insert("value"); 
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    Columns { Name: "key3"  Type: "Utf8"} 
+                    Columns { Name: "value2"  Type: "Utf8"} 
+                    DropColumns { Name: "value" } 
+                    KeyColumnNames: ["key1", "key2", "key3"] 
+                )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
 
-        cols.insert("value3");
-        dropCols.insert("value");
-        TestAlterTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    Columns { Name: "value3"  Type: "Utf8"}
-                    KeyColumnNames: ["key1", "key2", "key3"]
-                )");
-        env.TestWaitNotification(runtime, txId);
+        cols.insert("value3"); 
+        dropCols.insert("value"); 
+        TestAlterTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    Columns { Name: "value3"  Type: "Utf8"} 
+                    KeyColumnNames: ["key1", "key2", "key3"] 
+                )"); 
+        env.TestWaitNotification(runtime, txId); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
-    }
-
+    } 
+ 
     Y_UNIT_TEST(AlterTableById) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
         TSet<TString> cols = {"key1", "key2", "value"};
-        TSet<TString> keyCol = {"key1", "key2"};
+        TSet<TString> keyCol = {"key1", "key2"}; 
         TSet<TString> dropCols;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot",
-                R"(Name: "Table"
-                    Columns { Name: "key2"   Type: "Uint32" }
-                    Columns { Name: "key1"   Type: "Uint64" }
-                    Columns { Name: "value"  Type: "Utf8" }
-                    KeyColumnNames: ["key1", "key2"]
-                )");
-        env.TestWaitNotification(runtime, txId);
-
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", 
+                R"(Name: "Table" 
+                    Columns { Name: "key2"   Type: "Uint32" } 
+                    Columns { Name: "key1"   Type: "Uint64" } 
+                    Columns { Name: "value"  Type: "Utf8" } 
+                    KeyColumnNames: ["key1", "key2"] 
+                )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
 
-        Cdbg << "AlterTable: add column" << Endl;
-        cols.insert("add_1");
-        cols.insert("add_2");
-        TestAlterTable(runtime, ++txId, "not used",
+        Cdbg << "AlterTable: add column" << Endl; 
+        cols.insert("add_1"); 
+        cols.insert("add_2"); 
+        TestAlterTable(runtime, ++txId, "not used", 
                 R"(Id_Deprecated: 2
-                    Columns { Name: "add_1"  Type: "Uint32"}
-                    Columns { Name: "add_2"  Type: "Uint64"})"
-                );
-        env.TestWaitNotification(runtime, txId);
+                    Columns { Name: "add_1"  Type: "Uint32"} 
+                    Columns { Name: "add_2"  Type: "Uint64"})" 
+                ); 
+        env.TestWaitNotification(runtime, txId); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
-    }
-
+    } 
+ 
     Y_UNIT_TEST(AlterTableConfig) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -4107,7 +4107,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             PartitionConfig {
                                 TxReadSizeLimit: 100
                                 ExecutorCacheSize: 42
-                                ChannelProfileId: 1
+                                ChannelProfileId: 1 
                             }
                         )");
         env.TestWaitNotification(runtime, txId);
@@ -4116,11 +4116,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         UNIT_ASSERT_VALUES_EQUAL(GetTxReadSizeLimit(runtime, datashardTabletId), 100);
         UNIT_ASSERT_VALUES_EQUAL(GetExecutorCacheSize(runtime, datashardTabletId), 42);
 
-        { // ChannelProfileId
+        { // ChannelProfileId 
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, datashardTabletId, 2);
-            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetPartitionConfig().GetChannelProfileId(), 1);
-        }
-
+            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetPartitionConfig().GetChannelProfileId(), 1); 
+        } 
+ 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table"
                             PartitionConfig {
@@ -4141,76 +4141,76 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
         UNIT_ASSERT_VALUES_EQUAL(GetTxReadSizeLimit(runtime, datashardTabletId), 2000);
         UNIT_ASSERT_VALUES_EQUAL(GetExecutorCacheSize(runtime, datashardTabletId), 100500);
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table"
-                            DropColumns { Name: "add_2" }
-                            PartitionConfig {
-                                TxReadSizeLimit: 1000
-                            }
-                       )");
-        env.TestWaitNotification(runtime, txId);
-        UNIT_ASSERT_VALUES_EQUAL(GetTxReadSizeLimit(runtime, datashardTabletId), 1000);
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                    Name: "Table"
-                    Columns { Name: "add_1" Type: "Uint64" }
-                    DropColumns { Name: "value" }
-                    PartitionConfig {
-                        PipelineConfig {
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+                            Name: "Table" 
+                            DropColumns { Name: "add_2" } 
+                            PartitionConfig { 
+                                TxReadSizeLimit: 1000 
+                            } 
+                       )"); 
+        env.TestWaitNotification(runtime, txId); 
+        UNIT_ASSERT_VALUES_EQUAL(GetTxReadSizeLimit(runtime, datashardTabletId), 1000); 
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+                    Name: "Table" 
+                    Columns { Name: "add_1" Type: "Uint64" } 
+                    DropColumns { Name: "value" } 
+                    PartitionConfig { 
+                        PipelineConfig { 
                             NumActiveTx: 8
-                            EnableOutOfOrder: 1
-                        }
-                    }
-                )");
+                            EnableOutOfOrder: 1 
+                        } 
+                    } 
+                )"); 
 
-        env.TestWaitNotification(runtime, txId);
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                Name: "Table"
-                Columns { Name: "noPartConfig"  Type: "Uint64"}
-            )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                Name: "Table"
-                PartitionConfig {
+        env.TestWaitNotification(runtime, txId); 
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+                Name: "Table" 
+                Columns { Name: "noPartConfig"  Type: "Uint64"} 
+            )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+                Name: "Table" 
+                PartitionConfig { 
                     CrossDataCenterFollowerCount: 1
-                }
-            )");
-
-        env.TestWaitNotification(runtime, txId);
-
-        { // ChannelProfileId
+                } 
+            )"); 
+ 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        { // ChannelProfileId 
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, datashardTabletId, 2);
-            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetPartitionConfig().GetChannelProfileId(), 1);
-        }
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                Name: "Table"
-                PartitionConfig {
-                    ChannelProfileId: 0
-                }
+            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetPartitionConfig().GetChannelProfileId(), 1); 
+        } 
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+                Name: "Table" 
+                PartitionConfig { 
+                    ChannelProfileId: 0 
+                } 
             )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                Name: "Table"
-                PartitionConfig {
-                    DisableStatisticsCalculation: true
-                }
-            )");
-        env.TestWaitNotification(runtime, txId);
-        UNIT_ASSERT_VALUES_EQUAL(GetStatDisabled(runtime, datashardTabletId), 1);
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                Name: "Table"
-                PartitionConfig {
-                    DisableStatisticsCalculation: false
-                }
-            )");
-        env.TestWaitNotification(runtime, txId);
-        UNIT_ASSERT_VALUES_EQUAL(GetStatDisabled(runtime, datashardTabletId), 0);
-
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+                Name: "Table" 
+                PartitionConfig { 
+                    DisableStatisticsCalculation: true 
+                } 
+            )"); 
+        env.TestWaitNotification(runtime, txId); 
+        UNIT_ASSERT_VALUES_EQUAL(GetStatDisabled(runtime, datashardTabletId), 1); 
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+                Name: "Table" 
+                PartitionConfig { 
+                    DisableStatisticsCalculation: false 
+                } 
+            )"); 
+        env.TestWaitNotification(runtime, txId); 
+        UNIT_ASSERT_VALUES_EQUAL(GetStatDisabled(runtime, datashardTabletId), 0); 
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::IsTable,
                             NLs::PathVersionEqual(11)});
@@ -4220,64 +4220,73 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         using NKikimrSchemeOp::EColumnCodec;
         using NKikimrSchemeOp::EColumnCache;
         using NKikimrSchemeOp::EColumnStorage;
-
+ 
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
         TVector<ui64> tabletIds = {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1};
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table"
-            Columns { Name: "key1" Type: "Uint64" }
-            Columns { Name: "c1" Type: "Uint32" }
-            Columns { Name: "c2" Type: "Uint32" Family: 0 }
-            Columns { Name: "c3" Type: "Uint32" Family: 0 }
-            KeyColumnNames: ["key1"]
-            UniformPartitionsCount: 2
-            PartitionConfig {
-                ColumnFamilies { Id: 0 Name: "default"
-                    Storage: ColumnStorage1
-                    ColumnCache: ColumnCacheNone
-                }
-            }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        for (ui64 tabletId : tabletIds) {
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
+            Name: "Table" 
+            Columns { Name: "key1" Type: "Uint64" } 
+            Columns { Name: "c1" Type: "Uint32" } 
+            Columns { Name: "c2" Type: "Uint32" Family: 0 } 
+            Columns { Name: "c3" Type: "Uint32" Family: 0 } 
+            KeyColumnNames: ["key1"] 
+            UniformPartitionsCount: 2 
+            PartitionConfig { 
+                ColumnFamilies { Id: 0 Name: "default" 
+                    Storage: ColumnStorage1 
+                    ColumnCache: ColumnCacheNone 
+                } 
+            } 
+        )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        for (ui64 tabletId : tabletIds) { 
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 2);
-            auto partConfig = tableDescription.GetPartitionConfig();
-            Cdbg << ToString(partConfig) << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(tableDescription.ColumnsSize(), 4);
-            UNIT_ASSERT_VALUES_EQUAL(partConfig.ColumnFamiliesSize(), 1);
-
-            const auto& defaultFamily = partConfig.GetColumnFamilies(0);
-            UNIT_ASSERT_VALUES_EQUAL(defaultFamily.GetId(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(defaultFamily.GetName(), "default");
-            UNIT_ASSERT_EQUAL(defaultFamily.GetStorage(), EColumnStorage::ColumnStorage1);
-            UNIT_ASSERT_EQUAL(defaultFamily.GetColumnCache(), EColumnCache::ColumnCacheNone);
-
-            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(0).GetName(), "key1");
-            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(1).GetName(), "c1");
-            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(2).GetName(), "c2");
-            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(3).GetName(), "c3");
-
-            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(0).GetFamily(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(1).GetFamily(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(2).GetFamily(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(3).GetFamily(), 0);
-        }
-
-        // add family (fails for now)
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table"
-            PartitionConfig {
-                ColumnFamilies { Id: 1 Name: "other" Storage: ColumnStorage1 ColumnCache: ColumnCacheEver }
-            }
+            auto partConfig = tableDescription.GetPartitionConfig(); 
+            Cdbg << ToString(partConfig) << Endl; 
+            UNIT_ASSERT_VALUES_EQUAL(tableDescription.ColumnsSize(), 4); 
+            UNIT_ASSERT_VALUES_EQUAL(partConfig.ColumnFamiliesSize(), 1); 
+ 
+            const auto& defaultFamily = partConfig.GetColumnFamilies(0); 
+            UNIT_ASSERT_VALUES_EQUAL(defaultFamily.GetId(), 0); 
+            UNIT_ASSERT_VALUES_EQUAL(defaultFamily.GetName(), "default"); 
+            UNIT_ASSERT_EQUAL(defaultFamily.GetStorage(), EColumnStorage::ColumnStorage1); 
+            UNIT_ASSERT_EQUAL(defaultFamily.GetColumnCache(), EColumnCache::ColumnCacheNone); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(0).GetName(), "key1"); 
+            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(1).GetName(), "c1"); 
+            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(2).GetName(), "c2"); 
+            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(3).GetName(), "c3"); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(0).GetFamily(), 0); 
+            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(1).GetFamily(), 0); 
+            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(2).GetFamily(), 0); 
+            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(3).GetFamily(), 0); 
+        } 
+ 
+        // add family (fails for now) 
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+            Name: "Table" 
+            PartitionConfig { 
+                ColumnFamilies { Id: 1 Name: "other" Storage: ColumnStorage1 ColumnCache: ColumnCacheEver } 
+            } 
         )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
-
-        // change colFamily + change family for columns
-
+ 
+        // change colFamily + change family for columns 
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+            Name: "Table" 
+            Columns { Name: "c1" Family: 0 } 
+            PartitionConfig { 
+                ColumnFamilies { Id: 0 ColumnCache: ColumnCacheEver } 
+            } 
+        )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "c1" Family: 0 }
@@ -4287,29 +4296,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table"
-            Columns { Name: "c1" Family: 0 }
-            PartitionConfig {
-                ColumnFamilies { Id: 0 ColumnCache: ColumnCacheEver }
-            }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        for (ui64 tabletId : tabletIds) {
+        for (ui64 tabletId : tabletIds) { 
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 2);
-            auto partConfig = tableDescription.GetPartitionConfig();
-            //Cdbg << ToString(partConfig) << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(tableDescription.ColumnsSize(), 4);
-            UNIT_ASSERT_VALUES_EQUAL(partConfig.ColumnFamiliesSize(), 1);
-
-            const auto& otherFamily = partConfig.GetColumnFamilies(0);
-            UNIT_ASSERT_VALUES_EQUAL(otherFamily.GetId(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(otherFamily.GetName(), "default");
-            UNIT_ASSERT_EQUAL(otherFamily.GetColumnCache(), EColumnCache::ColumnCacheEver);
-
-            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(1).GetFamily(), 0);
-        }
+            auto partConfig = tableDescription.GetPartitionConfig(); 
+            //Cdbg << ToString(partConfig) << Endl; 
+            UNIT_ASSERT_VALUES_EQUAL(tableDescription.ColumnsSize(), 4); 
+            UNIT_ASSERT_VALUES_EQUAL(partConfig.ColumnFamiliesSize(), 1); 
+ 
+            const auto& otherFamily = partConfig.GetColumnFamilies(0); 
+            UNIT_ASSERT_VALUES_EQUAL(otherFamily.GetId(), 0); 
+            UNIT_ASSERT_VALUES_EQUAL(otherFamily.GetName(), "default"); 
+            UNIT_ASSERT_EQUAL(otherFamily.GetColumnCache(), EColumnCache::ColumnCacheEver); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(1).GetFamily(), 0); 
+        } 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {NLs::IsTable,
@@ -4318,13 +4318,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 UNIT_ASSERT_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
                                 UNIT_ASSERT_EQUAL(1, record.GetPathDescription().GetTable().GetPartitionConfig().ColumnFamiliesSize());
                             }});
-    }
-
+    } 
+ 
     Y_UNIT_TEST(MultipleColumnFamilies) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
         runtime.GetAppData().AllowColumnFamiliesForTest = true;
 
         TestAlterSubDomain(runtime, ++txId,  "/", R"(
@@ -5207,24 +5207,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(AlterTableFollowers) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table"
-                            Columns { Name: "key"   Type: "Uint64"}
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
+                            Name: "Table" 
+                            Columns { Name: "key"   Type: "Uint64"} 
                             Columns { Name: "value"  Type: "Utf8"}
-                            KeyColumnNames: ["key"]
-                            PartitionConfig {
+                            KeyColumnNames: ["key"] 
+                            PartitionConfig { 
                                 FollowerCount: 100
-                            }
+                            } 
                         )", {NKikimrScheme::StatusInvalidParameter});
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table"
-                            Columns { Name: "key"   Type: "Uint64"}
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
+                            Name: "Table" 
+                            Columns { Name: "key"   Type: "Uint64"} 
                             Columns { Name: "value"  Type: "Utf8"}
-                            KeyColumnNames: ["key"]
+                            KeyColumnNames: ["key"] 
                             PartitionConfig {
                                 FollowerCount: 1
                                 CrossDataCenterFollowerCount: 1
@@ -5283,9 +5283,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             Columns { Name: "key"   Type: "Uint64"}
                             Columns { Name: "value"  Type: "Utf8"}
                             KeyColumnNames: ["key"]
-                        )");
-        env.TestWaitNotification(runtime, txId);
-
+                        )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)});
 
@@ -5297,29 +5297,29 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                NLs::FollowerGroups({})
                             });
 
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                        Name: "Table"
-                        PartitionConfig {
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+                        Name: "Table" 
+                        PartitionConfig { 
                             FollowerCount: 100
                             AllowFollowerPromotion: true
-                        }
+                        } 
                     )", {NKikimrScheme::StatusInvalidParameter});
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                        Name: "Table"
-                        PartitionConfig {
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+                        Name: "Table" 
+                        PartitionConfig { 
                             CrossDataCenterFollowerCount: 100
                             AllowFollowerPromotion: true
-                        }
+                        } 
                     )", {NKikimrScheme::StatusInvalidParameter});
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table"
-                            PartitionConfig {
+ 
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+                            Name: "Table" 
+                            PartitionConfig { 
                                 FollowerCount: 2
                                 AllowFollowerPromotion: true
-                            }
-                        )");
-        env.TestWaitNotification(runtime, txId);
+                            } 
+                        )"); 
+        env.TestWaitNotification(runtime, txId); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)});
@@ -5331,16 +5331,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                NLs::AllowFollowerPromotion(true),
                                NLs::FollowerGroups({})
                            });
-
+ 
         //////////
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table"
-                            DropColumns { Name: "value" }
-                            PartitionConfig {
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+                            Name: "Table" 
+                            DropColumns { Name: "value" } 
+                            PartitionConfig { 
                                 FollowerCount: 1
-                            }
-                        )");
-        env.TestWaitNotification(runtime, txId);
+                            } 
+                        )"); 
+        env.TestWaitNotification(runtime, txId); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
@@ -5352,18 +5352,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)});
-
+ 
 
         //////////
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table"
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+                            Name: "Table" 
                             Columns { Name: "value" Type: "Utf8" }
-                            PartitionConfig {
+                            PartitionConfig { 
                                 AllowFollowerPromotion: false
-                            }
-                        )");
-        env.TestWaitNotification(runtime, txId);
-
+                            } 
+                        )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
                                NLs::FollowerCount(1),
@@ -5373,15 +5373,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            });
 
         //////////
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table"
-                            PartitionConfig {
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+                            Name: "Table" 
+                            PartitionConfig { 
                                 AllowFollowerPromotion: true
-                                ExecutorCacheSize: 100500
-                            }
+                                ExecutorCacheSize: 100500 
+                            } 
                         )");
-        env.TestWaitNotification(runtime, txId);
-
+        env.TestWaitNotification(runtime, txId); 
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
                                NLs::FollowerCount(1),
@@ -5391,15 +5391,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            });
 
         //////////
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table"
-                            PartitionConfig {
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+                            Name: "Table" 
+                            PartitionConfig { 
                                 FollowerCount: 0
                                 AllowFollowerPromotion: false
-                            }
-                        )");
-        env.TestWaitNotification(runtime, txId);
-
+                            } 
+                        )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
                                NLs::FollowerCount(0),
@@ -5409,15 +5409,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            });
 
         //////////
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table"
-                            PartitionConfig {
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+                            Name: "Table" 
+                            PartitionConfig { 
                                 CrossDataCenterFollowerCount: 1
                                 AllowFollowerPromotion: true
-                            }
-                        )");
-        env.TestWaitNotification(runtime, txId);
-
+                            } 
+                        )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
                                NLs::FollowerCount(0),
@@ -5427,14 +5427,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            });
 
         //////////
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table"
-                            PartitionConfig {
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+                            Name: "Table" 
+                            PartitionConfig { 
                                 CrossDataCenterFollowerCount: 0
-                            }
-                        )");
-        env.TestWaitNotification(runtime, txId);
-
+                            } 
+                        )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
                                NLs::FollowerCount(0),
@@ -5444,13 +5444,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            });
 
         //////////
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                            Name: "Table"
-                            PartitionConfig {
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"( 
+                            Name: "Table" 
+                            PartitionConfig { 
                                 AllowFollowerPromotion: false
-                            }
-                        )");
-        env.TestWaitNotification(runtime, txId);
+                            } 
+                        )"); 
+        env.TestWaitNotification(runtime, txId); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {
@@ -5715,8 +5715,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                      NLs::FollowerGroups({control})
                                  });
           }
-    }
-
+    } 
+ 
 
     Y_UNIT_TEST(AlterTableSizeToSplit) { //+
         TTestBasicRuntime runtime;
@@ -5747,7 +5747,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
                            {NLs::SizeToSplitEqual(100500)});
     }
-
+ 
     Y_UNIT_TEST(AlterTableSplitSchema) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -5924,26 +5924,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     Y_UNIT_TEST(CreatePersQueueGroup) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        ui64 txId = 1000;
-
+        ui64 txId = 1000; 
+ 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot", "");
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"PQGroup_2\""
+                        "Name: \"PQGroup_2\"" 
                         "TotalGroupCount: 10 "
-                        "PartitionPerTablet: 10 "
+                        "PartitionPerTablet: 10 " 
                         "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"PQGroup_3\""
+                        "Name: \"PQGroup_3\"" 
                         "TotalGroupCount: 10 "
-                        "PartitionPerTablet: 3 "
+                        "PartitionPerTablet: 3 " 
                         "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
         TestModificationResult(runtime, txId-3, NKikimrScheme::StatusAccepted);
         TestModificationResult(runtime, txId-2, NKikimrScheme::StatusSchemeError);
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
         env.TestWaitNotification(runtime, {txId-3, txId-2, txId-1, txId});
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                            {NLs::Finished,
                             NLs::PathsInsideDomain(3),
@@ -5954,21 +5954,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::CheckPartCount("PQGroup_3", 10, 3, 4, 10)});
 
         TestCreatePQGroup(runtime, ++txId, "/MyRoot/DirA",
-                        "Name: \"PQGroup_1\""
+                        "Name: \"PQGroup_1\"" 
                         "TotalGroupCount: 100 "
-                        "PartitionPerTablet: 10 "
-                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}"
-                        );
+                        "PartitionPerTablet: 10 " 
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}" 
+                        ); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup_1", true),
                            {NLs::PathsInsideDomain(4),
                             NLs::ShardsInsideDomain(18),
                             NLs::PathVersionEqual(1),
                             NLs::NotFinished});
-
+ 
         TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
-
+ 
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup_1", true),
@@ -5977,41 +5977,41 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::ShardsInsideDomain(18),
                             NLs::PathVersionEqual(2),
                             NLs::Finished});
-    }
-
+    } 
+ 
     Y_UNIT_TEST(AlterPersQueueGroup) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 1000;
-
+        TTestEnv env(runtime); 
+        ui64 txId = 1000; 
+ 
         TestCreatePQGroup(runtime, ++txId, "/MyRoot",
-                        "Name: \"PQGroup\""
+                        "Name: \"PQGroup\"" 
                         "TotalGroupCount: 4 "
-                        "PartitionPerTablet: 3 "
-                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}");
+                        "PartitionPerTablet: 3 " 
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}"); 
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup"),
                            {NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(3)});
-
-        // invalid params
+ 
+        // invalid params 
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
-                        "Name: \"PQGroup\""
+                        "Name: \"PQGroup\"" 
                         "TotalGroupCount: 3 "
-                        "PartitionPerTablet: 3 ",
+                        "PartitionPerTablet: 3 ", 
                          {NKikimrScheme::StatusInvalidParameter});
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
-                        "Name: \"PQGroup\""
+                        "Name: \"PQGroup\"" 
                         "TotalGroupCount: 4 "
-                        "PartitionPerTablet: 2 ",
+                        "PartitionPerTablet: 2 ", 
                          {NKikimrScheme::StatusInvalidParameter});
-
-        // TODO: describe + alter by PathId
-
-        // same sizes - reconfig
+ 
+        // TODO: describe + alter by PathId 
+ 
+        // same sizes - reconfig 
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
-                        "Name: \"PQGroup\""
+                        "Name: \"PQGroup\"" 
                         "PartitionPerTablet: 3 "); // do not change TotalGroupCount
         env.TestWaitNotification(runtime, txId);
 
@@ -6019,21 +6019,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::CheckPartCount("PQGroup", 4, 3, 2, 4),
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(3)});
-
+ 
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
-                        "Name: \"PQGroup\""
+                        "Name: \"PQGroup\"" 
                         "TotalGroupCount: 6 "
-                        "PartitionPerTablet: 3 "
-                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 42}}");
+                        "PartitionPerTablet: 3 " 
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 42}}"); 
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup", true),
                            {NLs::CheckPartCount("PQGroup", 6, 3, 2, 6),
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(3)});
-
+ 
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
-                        "Name: \"PQGroup\""
+                        "Name: \"PQGroup\"" 
                         "TotalGroupCount: 8 "); // do not change PartitionPerTablet
         env.TestWaitNotification(runtime, txId);
 
@@ -6041,34 +6041,34 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::CheckPartCount("PQGroup", 8, 3, 3, 8),
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(4)});
-
+ 
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
-                        "Name: \"PQGroup\""
+                        "Name: \"PQGroup\"" 
                         "TotalGroupCount: 8 "
-                        "PartitionPerTablet: 4 ");
+                        "PartitionPerTablet: 4 "); 
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup", true),
                            {NLs::CheckPartCount("PQGroup", 8, 4, 3, 8),
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(4)});
-
+ 
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
-                        "Name: \"PQGroup\""
+                        "Name: \"PQGroup\"" 
                         "TotalGroupCount: 14 "
-                        "PartitionPerTablet: 4 ");
+                        "PartitionPerTablet: 4 "); 
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup", true),
                            {NLs::CheckPartCount("PQGroup", 14, 4, 4, 14),
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(5)});
-
-        // Alter + Alter + reboot
+ 
+        // Alter + Alter + reboot 
         TestAlterPQGroup(runtime, ++txId, "/MyRoot",
-                        "Name: \"PQGroup\""
+                        "Name: \"PQGroup\"" 
                         "TotalGroupCount: 400 "
-                        "PartitionPerTablet: 10 ");
+                        "PartitionPerTablet: 10 "); 
         TestAlterPQGroup(runtime, ++txId, "/MyRoot", "Name: \"PQGroup\"",
                          {NKikimrScheme::StatusMultipleModifications});
 
@@ -6076,18 +6076,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::CheckPartCount("PQGroup", 14, 4, 4, 14, NKikimrSchemeOp::EPathStateAlter),
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(41)});
-
+ 
 
         TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
-
+ 
         env.TestWaitNotification(runtime, txId-1);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup", true),
                            {NLs::CheckPartCount("PQGroup", 400, 10, 40, 400),
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(41)});
-    }
-
+    } 
+ 
     Y_UNIT_TEST(CreatePersQueueGroupWithKeySchema) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -6238,38 +6238,38 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(DropTable) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 1000;
-
+        TTestEnv env(runtime); 
+        ui64 txId = 1000; 
+ 
         TString tcfg1 = "Name: \"Table\""
-            "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
+            "Columns { Name: \"RowId\"      Type: \"Uint64\"}" 
             "Columns { Name: \"Value\"      Type: \"Utf8\"}"
-            "KeyColumnNames: [\"RowId\"]";
-
+            "KeyColumnNames: [\"RowId\"]"; 
+ 
         TString tcfg2 = "Name: \"PartTable\""
-                    "Columns { Name: \"key1\"       Type: \"Uint32\"}"
+                    "Columns { Name: \"key1\"       Type: \"Uint32\"}" 
                     "Columns { Name: \"key2\"       Type: \"Utf8\"}"
-                    "Columns { Name: \"key3\"       Type: \"Uint64\"}"
+                    "Columns { Name: \"key3\"       Type: \"Uint64\"}" 
                     "Columns { Name: \"value\"      Type: \"Utf8\"}"
-                    "KeyColumnNames: [\"key1\", \"key2\", \"key3\"]"
-                    "UniformPartitionsCount: 10";
-
+                    "KeyColumnNames: [\"key1\", \"key2\", \"key3\"]" 
+                    "UniformPartitionsCount: 10"; 
+ 
         TestMkDir(runtime, ++txId, "/MyRoot", "Ops");
-
+ 
         TestDropTable(runtime, ++txId, "/MyRoot/Ops", "Table", {NKikimrScheme::StatusPathDoesNotExist});
-
+ 
         Cdbg << "Create, Drop (simple table)" << Endl;
         TestCreateTable(runtime, ++txId, "/MyRoot/Ops", tcfg1);
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Ops/Table", true),
                            {NLs::Finished});
-
+ 
         TestRmDir(runtime, ++txId, "/MyRoot", "Ops", {NKikimrScheme::StatusNameConflict});
-
+ 
         TestDropTable(runtime, ++txId, "/MyRoot/Ops", "Table");
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Ops/Table"),
                            {NLs::PathNotExist});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Ops"),
@@ -6281,10 +6281,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         Cdbg << "Create, Drop (partitioned table)" << Endl;
         TestCreateTable(runtime, ++txId, "/MyRoot/Ops", tcfg2);
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Ops/PartTable", true),
                            {NLs::Finished});
-
+ 
         TestRmDir(runtime, ++txId, "/MyRoot", "Ops", {NKikimrScheme::StatusNameConflict});
 
         TestDropTable(runtime, ++txId, "/MyRoot/Ops", "PartTable");
@@ -6296,83 +6296,83 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::NoChildren});
 
         env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets+1);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(DropTableById) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 1000;
-
+        TTestEnv env(runtime); 
+        ui64 txId = 1000; 
+ 
         TString tcfg = "Name: \"Table\""
-            "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
+            "Columns { Name: \"RowId\"      Type: \"Uint64\"}" 
             "Columns { Name: \"Value\"      Type: \"Utf8\"}"
-            "KeyColumnNames: [\"RowId\"]";
-
-        //
-
-        Cdbg << "Create, Drop (simple table)" << Endl;
-        TestCreateTable(runtime, ++txId, "/MyRoot", tcfg);
-        env.TestWaitNotification(runtime, txId);
-
+            "KeyColumnNames: [\"RowId\"]"; 
+ 
+        // 
+ 
+        Cdbg << "Create, Drop (simple table)" << Endl; 
+        TestCreateTable(runtime, ++txId, "/MyRoot", tcfg); 
+        env.TestWaitNotification(runtime, txId); 
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::Finished});
 
-        TestDropTable(runtime, ++txId, 2);
-        env.TestWaitNotification(runtime, txId);
-
+        TestDropTable(runtime, ++txId, 2); 
+        env.TestWaitNotification(runtime, txId); 
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::PathNotExist});
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::NoChildren});
 
         env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(DropPQ) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 1000;
-
+        TTestEnv env(runtime); 
+        ui64 txId = 1000; 
+ 
         TString tableConfig = "Name: \"DropMeBaby\""
-            "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
+            "Columns { Name: \"RowId\"      Type: \"Uint64\"}" 
             "Columns { Name: \"Value\"      Type: \"Utf8\"}"
-            "KeyColumnNames: [\"RowId\"]";
-
+            "KeyColumnNames: [\"RowId\"]"; 
+ 
         TString pqGroupConfig = "Name: \"DropMeBaby\""
             "TotalGroupCount: 100 "
-            "PartitionPerTablet: 10 "
-            "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}";
-
+            "PartitionPerTablet: 10 " 
+            "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}"; 
+ 
         TString pqGroupConfig1 = "Name: \"DropMeBaby\""
             "TotalGroupCount: 2 "
-            "PartitionPerTablet: 1 "
-            "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}";
-
+            "PartitionPerTablet: 1 " 
+            "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}"; 
+ 
         TString pqGroupAlter = "Name: \"DropMeBaby\""
                 "TotalGroupCount: 3 ";
-
+ 
         TestMkDir(runtime, ++txId, "/MyRoot", "Ops");
-
+ 
         TestDropPQGroup(runtime, ++txId, "/MyRoot/Ops", "DropMeBaby", {NKikimrScheme::StatusPathDoesNotExist});
-
+ 
         TestCreatePQGroup(runtime, ++txId, "/MyRoot/Ops", pqGroupConfig);
         env.TestWaitNotification(runtime, {txId, txId-1, txId-2});
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Ops"),
                            {NLs::Finished});
 
         TestRmDir(runtime, ++txId, "/MyRoot", "Ops", {NKikimrScheme::StatusNameConflict});
-
+ 
         TestDropPQGroup(runtime, ++txId, "/MyRoot/Ops", "DropMeBaby");
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Ops"),
                            {NLs::NoChildren});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Ops/DropMeBaby"),
                            {NLs::PathNotExist});
 
-        // check config after Drop
-
+        // check config after Drop 
+ 
         TestCreatePQGroup(runtime, ++txId, "/MyRoot/Ops", pqGroupConfig1);
         env.TestWaitNotification(runtime, txId);
 
@@ -6387,7 +6387,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDropPQGroup(runtime, ++txId, "/MyRoot/Ops", "DropMeBaby");
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestCreatePQGroup(runtime, ++txId, "/MyRoot/Ops", pqGroupConfig1);
         env.TestWaitNotification(runtime, txId);
 
@@ -6396,43 +6396,43 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDropPQGroup(runtime, ++txId, "/MyRoot/Ops", "DropMeBaby");
         env.TestWaitNotification(runtime, txId);
-
-        //
-
+ 
+        // 
+ 
         TestCreateTable(runtime, ++txId, "/MyRoot/Ops", tableConfig);
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Ops/DropMeBaby", true),
                            {NLs::Finished});
 
         TestRmDir(runtime, ++txId, "/MyRoot", "Ops", {NKikimrScheme::StatusNameConflict});
-
+ 
         TestDropTable(runtime, ++txId, "/MyRoot/Ops", "DropMeBaby");
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Ops"),
                            {NLs::NoChildren});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Ops/DropMeBaby"),
                            {NLs::PathNotExist});
 
-        //
-
+        // 
+ 
         Cdbg << "Create + Drop + Drop" << Endl;
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot/Ops", pqGroupConfig);
         auto pVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/Ops/DropMeBaby"));
         AsyncDropPQGroup(runtime, ++txId, "/MyRoot/Ops", "DropMeBaby");
         AsyncForceDropUnsafe(runtime, ++txId, pVer.PathId.LocalPathId);
-
+ 
         TestModificationResult(runtime, txId-2, NKikimrScheme::StatusAccepted);
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusMultipleModifications);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
         TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
-
+ 
         env.TestWaitNotification(runtime, {txId, txId-1, txId-2});
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+20));
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Ops/DropMeBaby"),
                            {NLs::PathNotExist});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Ops"),
@@ -6441,28 +6441,28 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestRmDir(runtime, ++txId, "/MyRoot", "Ops");
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Ops"),
                            {NLs::PathNotExist});
 
         TestRmDir(runtime, ++txId, "/MyRoot", "Ops", {NKikimrScheme::StatusPathDoesNotExist});
 
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+40));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(ParallelModifying) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 1000;
-
+        TTestEnv env(runtime); 
+        ui64 txId = 1000; 
+ 
         TString pqGroupConfig = "Name: \"Isolda\""
             "TotalGroupCount: 40 "
-            "PartitionPerTablet: 10 "
-            "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}";
-
+            "PartitionPerTablet: 10 " 
+            "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}"; 
+ 
         TString pqGroupAlter = "Name: \"Isolda\""
             "TotalGroupCount: 100 ";
-
+ 
         Cdbg << "Create + Drop + Create" << Endl;
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot", pqGroupConfig);
         AsyncDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
@@ -6471,10 +6471,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusMultipleModifications);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusMultipleModifications);
         env.TestWaitNotification(runtime, {txId-2, txId-1, txId});
-
+ 
         TestDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
         env.TestWaitNotification(runtime, txId);
-
+ 
         Cdbg << "Create + Create + Drop" << Endl;
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot", pqGroupConfig);
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot", pqGroupConfig);
@@ -6483,7 +6483,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusMultipleModifications);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusMultipleModifications);
         env.TestWaitNotification(runtime, {txId-2, txId-1, txId});
-
+ 
         TestDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
         env.TestWaitNotification(runtime, txId);
 
@@ -6495,7 +6495,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusMultipleModifications);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusMultipleModifications);
         env.TestWaitNotification(runtime, {txId-2, txId-1, txId});
-
+ 
         TestDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
         env.TestWaitNotification(runtime, txId);
 
@@ -6507,7 +6507,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusMultipleModifications);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusMultipleModifications);
         env.TestWaitNotification(runtime, {txId-2, txId-1, txId});
-
+ 
         TestDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
         env.TestWaitNotification(runtime, txId);
 
@@ -6519,7 +6519,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusMultipleModifications);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusMultipleModifications);
         env.TestWaitNotification(runtime, {txId-2, txId-1, txId});
-
+ 
         TestDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
         env.TestWaitNotification(runtime, txId);
 
@@ -6533,7 +6533,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusMultipleModifications);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusMultipleModifications);
         env.TestWaitNotification(runtime, {txId-3, txId-2, txId-1, txId});
-
+ 
         TestDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
         env.TestWaitNotification(runtime, txId);
 
@@ -6552,19 +6552,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+40));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(DropPQFail) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
         TString pqGroupConfig = "Name: \"Isolda\""
                                 "TotalGroupCount: 100 "
                                 "PartitionPerTablet: 10 "
                                 "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}";
-
-        const char * path = "/MyRoot/A/B/C/D/I/F";
+ 
+        const char * path = "/MyRoot/A/B/C/D/I/F"; 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "A");
         AsyncMkDir(runtime, ++txId, "/MyRoot/A", "B");
         AsyncMkDir(runtime, ++txId, "/MyRoot/A/B", "C");
@@ -6573,54 +6573,54 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncMkDir(runtime, ++txId, "/MyRoot/A/B/C/D/I", "F");
         AsyncCreatePQGroup(runtime, ++txId, path, pqGroupConfig);
         AsyncDropPQGroup(runtime, ++txId, path, "Isolda");
-        SkipModificationReply(runtime, 8);
+        SkipModificationReply(runtime, 8); 
         env.TestWaitNotification(runtime, xrange(txId-7, txId+1));
-
+ 
         TestDescribeResult(DescribePath(runtime, TString(path) + "/Isolda"),
                            {NLs::Finished});
-
+ 
         TestDropPQGroup(runtime, ++txId, path, "Isolda");
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestDescribeResult(DescribePath(runtime, TString(path) + "/Isolda"),
                            {NLs::PathNotExist});
-
+ 
         Cdbg << "Create + Drop (fail) + Drop" << Endl;
         AsyncCreatePQGroup(runtime, ++txId, path, pqGroupConfig);
         AsyncDropPQGroup(runtime, ++txId, path, "Isolda");
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusMultipleModifications);
         env.TestWaitNotification(runtime, {txId-1, txId});
-
+ 
         TestDropPQGroup(runtime, ++txId, path, "Isolda");
         env.TestWaitNotification(runtime, txId);
 
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+5));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(DropPQAbort) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
         //using ESts = NKikimrScheme::EStatus;
-
+ 
         const TString basePath = "/MyRoot/A/B/C/D/I/F";
         const TString pqPath = basePath + "/Isolda";
-
+ 
         TString pqGroupConfig = "Name: \"Isolda\""
             "TotalGroupCount: 1 "
-            "PartitionPerTablet: 10 "
-            "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}";
-
+            "PartitionPerTablet: 10 " 
+            "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}"; 
+ 
         TString pqGroupBigConfig = "Name: \"Isolda\""
             "TotalGroupCount: 1000 "
-            "PartitionPerTablet: 10 "
-            "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}";
-
+            "PartitionPerTablet: 10 " 
+            "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}"; 
+ 
         TString pqGroupBigAlter = "Name: \"Isolda\""
             "TotalGroupCount: 1000 ";
-
+ 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "A");
         AsyncMkDir(runtime, ++txId, "/MyRoot/A", "B");
         AsyncMkDir(runtime, ++txId, "/MyRoot/A/B", "C");
@@ -6642,16 +6642,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusMultipleModifications);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
         env.TestWaitNotification(runtime, xrange(txId - 8, txId + 1));
-
+ 
         TestDescribeResult(DescribePath(runtime, pqPath),
                            {NLs::PathNotExist});
-
+ 
         TestCreatePQGroup(runtime, ++txId, basePath, pqGroupBigConfig);
         env.TestWaitNotification(runtime, txId);
-
+ 
         TestDescribeResult(DescribePath(runtime, pqPath),
                            {NLs::PathExist});
-
+ 
         Cdbg << "AlterPQ (big) + Drop (abort)" << Endl;
         AsyncAlterPQGroup(runtime, ++txId, basePath, pqGroupBigAlter);
         AsyncDropPQGroup(runtime, ++txId, basePath, "Isolda");
@@ -6666,8 +6666,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::PathNotExist});
 
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+20));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(PQGroupExplicitChannels) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -6900,8 +6900,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         auto tableDesrc = [=] (const TString& name) {
             return Sprintf(R"(Name: "%s"
-                Columns { Name: "RowId" Type: "Uint64" }
-                KeyColumnNames: ["RowId"]
+                Columns { Name: "RowId" Type: "Uint64" } 
+                KeyColumnNames: ["RowId"] 
             )", name.c_str());
         };
 
@@ -6911,7 +6911,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA", {NKikimrScheme::StatusAlreadyExists});
         TestCreateTable(runtime, ++txId, "/MyRoot", tableDesrc("DirA"), {NKikimrScheme::StatusNameConflict});
         TestMkDir(runtime, ++txId, "/MyRoot/DirA/SubDirA", "AAA", {NKikimrScheme::StatusPathDoesNotExist});
-
+ 
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA", tableDesrc("Table1"));
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA/", tableDesrc("Table1"));
         TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
@@ -6921,7 +6921,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCreateTable(runtime, ++txId, "/MyRoot/DirA/", tableDesrc("Table1"), {NKikimrScheme::StatusAlreadyExists});
         TestMkDir(runtime, ++txId, "/MyRoot/DirA", "Table1", {NKikimrScheme::StatusNameConflict});
         TestMkDir(runtime, ++txId, "/MyRoot/DirA/Table1", "CCC", {NKikimrScheme::StatusPathIsNotDirectory});
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/"),
                            {NLs::Finished});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
@@ -6929,7 +6929,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/Table1"),
                            {NLs::IsTable,
                             NLs::Finished});
-
+ 
         TestCreateTable(runtime, ++txId, "/MyRoot/DirA", tableDesrc("/WrongPath"), {NKikimrScheme::StatusSchemeError});
         TestCreateTable(runtime, ++txId, "/MyRoot/DirA", tableDesrc("WrongPath/"), {NKikimrScheme::StatusSchemeError});
         TestCreateTable(runtime, ++txId, "/MyRoot/DirA", tableDesrc("Table1/WrongPath"), {NKikimrScheme::StatusPathIsNotDirectory});
@@ -6968,25 +6968,25 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
-        ui64 num = 500;
+        ui64 num = 500; 
         ui64 txId = 123;
         TSet<ui64> ids;
-
-        for (ui32 id = 0; id < num; ++id) {
+ 
+        for (ui32 id = 0; id < num; ++id) { 
             AsyncMkDir(runtime, ++txId, "/MyRoot", Sprintf("Dir_%u", id));
             ids.insert(txId);
         }
         env.TestWaitNotification(runtime, ids);
-
+ 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathsInsideDomain(num),
                             NLs::ChildrenCount(num)});
 
         ids.clear();
-        for (ui32 id = 0; id < num; ++id) {
+        for (ui32 id = 0; id < num; ++id) { 
             AsyncRmDir(runtime, ++txId, "/MyRoot", Sprintf("Dir_%u", id));
             ids.insert(txId);
-        }
+        } 
         env.TestWaitNotification(runtime, ids);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
@@ -6996,28 +6996,28 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(NestedDirs) { //+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-
+        TTestEnv env(runtime); 
+ 
         ui64 txId = 123;
         TSchemeLimits limits;
-
-        TString path = "/MyRoot";
+ 
+        TString path = "/MyRoot"; 
         TSet<ui64> ids;
         for (ui32 i = 1; i < limits.MaxDepth; ++i) {
-            TString name = Sprintf("%u", i);
+            TString name = Sprintf("%u", i); 
             TestMkDir(runtime, ++txId, path, name);
-            path += '/';
-            path += name;
+            path += '/'; 
+            path += name; 
             ids.insert(txId);
-        }
+        } 
         env.TestWaitNotification(runtime, ids);
-
+ 
         TestMkDir(runtime, ++txId, path, "fail", {NKikimrScheme::StatusSchemeError});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathsInsideDomain(limits.MaxDepth - 1)});
-    }
-
+    } 
+ 
     void VerifyEqualCells(const TCell& a, const TCell& b) {
         UNIT_ASSERT_VALUES_EQUAL_C(a.IsNull(), b.IsNull(), "NULL/not-NULL mismatch");
         UNIT_ASSERT_VALUES_EQUAL_C(a.Size(), b.Size(), "size mismatch");
@@ -9847,4 +9847,4 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         }
 
     }
-}
+} 

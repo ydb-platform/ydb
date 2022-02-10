@@ -16,7 +16,7 @@ class TMessageBusKeyValue
 public:
     NKikimrClient::TKeyValueRequest RequestProto;
     ui64 TabletId;
-
+ 
     TMessageBusKeyValue(TBusMessageContext &msg, ui64 tabletId, bool withRetry, TDuration timeout)
         : TBase(msg, tabletId, withRetry, timeout, false)
         , RequestProto(static_cast<TBusKeyValue *>(msg.GetMessage())->Record)

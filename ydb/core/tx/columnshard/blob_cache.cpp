@@ -11,7 +11,7 @@
 
 #include <util/string/vector.h>
 
-namespace NKikimr::NBlobCache {
+namespace NKikimr::NBlobCache { 
 
 using namespace NActors;
 
@@ -118,7 +118,7 @@ private:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvColumnShard::TEvReadBlobRangesResult, Handle);
         default:
-            LOG_S_WARN("Unhandled event type: " << ev->GetTypeRewrite()
+            LOG_S_WARN("Unhandled event type: " << ev->GetTypeRewrite() 
                        << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
             ctx.Send(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::ReasonActorUnknown));
             break;
@@ -350,7 +350,7 @@ private:
 
     void SendResult(const TActorId& to, const TBlobRange& blobRange, NKikimrProto::EReplyStatus status,
                     const TString& data, const TActorContext& ctx) {
-        LOG_S_DEBUG("Send result: " << blobRange << " to: " << to << " status: " << status);
+        LOG_S_DEBUG("Send result: " << blobRange << " to: " << to << " status: " << status); 
 
         ctx.Send(to, new TEvBlobCache::TEvReadBlobRangeResult(blobRange, status, data));
     }
@@ -392,7 +392,7 @@ private:
         auto readIt = OutstandingReads.find(blobRange);
         if (readIt == OutstandingReads.end()) {
             // This shouldn't happen
-            LOG_S_CRIT("Unknown read result key: " << blobRange << " cookie: " << readCookie);
+            LOG_S_CRIT("Unknown read result key: " << blobRange << " cookie: " << readCookie); 
             return;
         }
 
@@ -551,14 +551,14 @@ private:
         CachedRanges[blobRange.BlobId].insert(blobRange);
     }
 
-    void Evict(const TActorContext&) {
+    void Evict(const TActorContext&) { 
         while (CacheDataSize + InFlightDataSize > MaxCacheDataSize) {
             auto it = Cache.FindOldest();
             if (it == Cache.End()) {
                 break;
             }
 
-            LOG_S_DEBUG("Evict: " << it.Key());
+            LOG_S_DEBUG("Evict: " << it.Key()); 
 
             {
                 // Remove the range from list of ranges by blob id

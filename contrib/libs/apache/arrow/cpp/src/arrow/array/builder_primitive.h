@@ -32,7 +32,7 @@ namespace arrow {
 class ARROW_EXPORT NullBuilder : public ArrayBuilder {
  public:
   explicit NullBuilder(MemoryPool* pool = default_memory_pool()) : ArrayBuilder(pool) {}
-  explicit NullBuilder(const std::shared_ptr<DataType>& /*type*/,
+  explicit NullBuilder(const std::shared_ptr<DataType>& /*type*/, 
                        MemoryPool* pool = default_memory_pool())
       : NullBuilder(pool) {}
 

@@ -17,7 +17,7 @@ namespace cp = arrow::compute;
 using cp::internal::applicator::ScalarBinary;
 using cp::internal::applicator::ScalarUnary;
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NArrow { 
 
 template <typename T>
 using IsUnsignedInteger =
@@ -174,4 +174,4 @@ std::shared_ptr<cp::ScalarFunction> MakeMathBinary(const std::string& name) {
     return func;
 }
 
-}
+} 

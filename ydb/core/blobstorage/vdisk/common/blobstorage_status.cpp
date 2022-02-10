@@ -89,8 +89,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_STATUS_REQUEST_HANDLER;
-        }
-
+        } 
+ 
         TStatusRequestHandler(
                 const TIntrusivePtr<TVDiskContext> &vctx,
                 const TActorId &skeletonId,
@@ -118,7 +118,7 @@ namespace NKikimr {
             , Now(now)
             , ReplDone(replDone)
             , Counter(0)
-        {}
+        {} 
     };
 
     IActor *CreateStatusRequestHandler(

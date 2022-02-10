@@ -445,11 +445,11 @@ public:
     }
 
     bool IsOlapStore() const {
-        return PathType == EPathType::EPathTypeColumnStore;
+        return PathType == EPathType::EPathTypeColumnStore; 
     }
 
     bool IsOlapTable() const {
-        return PathType == EPathType::EPathTypeColumnTable;
+        return PathType == EPathType::EPathTypeColumnTable; 
     }
 
     bool IsSequence() const {
@@ -462,7 +462,7 @@ public:
 
     bool IsContainer() const {
         return PathType == EPathType::EPathTypeDir || PathType == EPathType::EPathTypeSubDomain
-            || PathType == EPathType::EPathTypeColumnStore;
+            || PathType == EPathType::EPathTypeColumnStore; 
     }
 
     bool IsLikeDirectory() const {

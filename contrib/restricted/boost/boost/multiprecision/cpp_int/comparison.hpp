@@ -27,7 +27,7 @@ BOOST_MP_FORCEINLINE typename enable_if_c<
    >::type 
    eval_eq(const cpp_int_backend<MinBits, MaxBits, SignType, Checked, Allocator>& a, const cpp_int_backend<MinBits, MaxBits, SignType, Checked, Allocator>& b) BOOST_NOEXCEPT
 {
-#if BOOST_WORKAROUND(BOOST_MSVC, >= 1600) && !defined(_LIBCPP_VERSION)
+#if BOOST_WORKAROUND(BOOST_MSVC, >= 1600) && !defined(_LIBCPP_VERSION) 
    return (a.sign() == b.sign())
       && (a.size() == b.size())
       && std::equal(a.limbs(), a.limbs() + a.size(), 
@@ -46,7 +46,7 @@ BOOST_MP_FORCEINLINE typename enable_if_c<
    >::type 
    eval_eq(const cpp_int_backend<MinBits1, MaxBits1, SignType1, Checked1, Allocator1>& a, const cpp_int_backend<MinBits2, MaxBits2, SignType2, Checked2, Allocator2>& b) BOOST_NOEXCEPT
 {
-#if BOOST_WORKAROUND(BOOST_MSVC, >= 1600) && !defined(_LIBCPP_VERSION)
+#if BOOST_WORKAROUND(BOOST_MSVC, >= 1600) && !defined(_LIBCPP_VERSION) 
    return (a.sign() == b.sign())
       && (a.size() == b.size())
       && std::equal(a.limbs(), a.limbs() + a.size(), stdext::checked_array_iterator<cpp_int_backend<MinBits2, MaxBits2, SignType2, Checked2, Allocator2>::const_limb_pointer>(b.limbs(), b.size()));

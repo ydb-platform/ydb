@@ -8,8 +8,8 @@ struct TTxCoordinator::TTxSchema : public TTransactionBase<TTxCoordinator> {
         : TBase(coordinator)
     {}
 
-    TTxType GetTxType() const override { return TXTYPE_INIT; }
-
+    TTxType GetTxType() const override { return TXTYPE_INIT; } 
+ 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
         return true;

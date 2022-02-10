@@ -16,7 +16,7 @@
 #include "arrow_helpers.h"
 
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NArrow { 
 
 namespace cp = ::arrow::compute;
 

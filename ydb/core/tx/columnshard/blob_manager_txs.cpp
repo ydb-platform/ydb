@@ -5,7 +5,7 @@
 
 #include <ydb/core/base/blobstorage.h>
 
-namespace NKikimr::NColumnShard {
+namespace NKikimr::NColumnShard { 
 
 // Run GC related logic of the BlobManager
 class TTxRunGC : public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
@@ -28,7 +28,7 @@ public:
         for (auto& r : Requests) {
             ui32 groupId = r.first;
             auto ev = std::move(r.second);
-            LOG_S_DEBUG("BlobManager at tablet " << Self->TabletID()
+            LOG_S_DEBUG("BlobManager at tablet " << Self->TabletID() 
                 << " Sending GC to group " << groupId << ": " << ev->Print(true));
 
             SendToBSProxy(ctx, groupId, ev.release());
@@ -58,7 +58,7 @@ public:
             return true;
         }
 
-        LOG_S_DEBUG("BlobManager at tablet " << Self->TabletID()
+        LOG_S_DEBUG("BlobManager at tablet " << Self->TabletID() 
             << " GC Result: " << Ev->Get()->Print(true));
 
         // Update Keep/DontKeep lists and last GC barrier
@@ -79,4 +79,4 @@ void TColumnShard::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, con
     Execute(new TTxProcessGCResult(this, ev), ctx);
 }
 
-}
+} 

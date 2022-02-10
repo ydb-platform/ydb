@@ -190,10 +190,10 @@ private:
                 hostAction.CopyFrom(action);
                 hostAction.SetHost(host);
                 if (action.GetType() == TAction::REPLACE_DEVICES) {
-                    for (const auto node : cluster->HostNodes(host)) {
-                        for (auto &pdiskId : node->PDisks)
-                            *hostAction.AddDevices() = cluster->PDisk(pdiskId).GetDeviceName();
-                    }
+                    for (const auto node : cluster->HostNodes(host)) { 
+                        for (auto &pdiskId : node->PDisks) 
+                            *hostAction.AddDevices() = cluster->PDisk(pdiskId).GetDeviceName(); 
+                    } 
                 }
             }
         }

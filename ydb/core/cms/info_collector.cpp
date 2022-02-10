@@ -76,14 +76,14 @@ private:
 
     // Nodes
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev);
-
+ 
     // BSC
     void RequestBaseConfig();
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev);
     void OnPipeDestroyed();
-
+ 
     // Whiteboard & TenantPool
     void SendNodeRequests(ui32 nodeId);
     void SendNodeEvent(ui32 nodeId, const TActorId& recipient, IEventBase* request, ui32 responseType);
@@ -96,7 +96,7 @@ private:
     void Handle(TEvTenantPool::TEvTenantPoolStatus::TPtr& ev);
     void Handle(TEvents::TEvUndelivered::TPtr& ev);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
-
+ 
 private:
     const TActorId Client;
     const TDuration Timeout;
@@ -414,7 +414,7 @@ void TInfoCollector::Handle(TEvents::TEvUndelivered::TPtr& ev) {
 
 void TInfoCollector::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     const ui32 nodeId = ev->Get()->NodeId;
-
+ 
     LOG_D("Disconnected"
         << ": nodeId# " << nodeId);
 
@@ -431,7 +431,7 @@ void TInfoCollector::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
 
 IActor* CreateInfoCollector(const TActorId& client, const TDuration& timeout) {
     return new TInfoCollector(client, timeout);
-}
-
+} 
+ 
 } // NCms
 } // NKikimr

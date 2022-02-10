@@ -237,48 +237,48 @@ public:
     }
 
     bool IsEmpty(TConstArrayRef<NScheme::TTypeId> type) const;
-
+ 
     TTableRange ToTableRange() const {
         return TTableRange(From.GetCells(), FromInclusive, To.GetCells(), ToInclusive, Point);
-    }
+    } 
 };
 
-template <typename T>
-int ComparePointAndRange(const TConstArrayRef<TCell>& point, const TTableRange& range,
-                         const T& pointTypes, const T& rangeTypes)
-{
-    Y_VERIFY(!range.Point);
-    Y_VERIFY(rangeTypes.size() <= pointTypes.size());
-    Y_VERIFY(range.From.size() <= rangeTypes.size());
-    Y_VERIFY(range.To.size() <= rangeTypes.size());
-
-    int cmpFrom = CompareTypedCellVectors(point.data(), range.From.data(), pointTypes.data(), range.From.size());
-    if (!range.InclusiveFrom && cmpFrom == 0) {
-        cmpFrom = -1;
-        for (ui32 i = range.From.size(); i < point.size(); ++i) {
-            if (!point[i].IsNull()) {
-                cmpFrom = 1;
-                break;
-            }
-        }
-    }
-
-    if (cmpFrom < 0)
-        return -1;
-
-    int cmpTo = CompareTypedCellVectors(point.data(), range.To.data(), pointTypes.data(), range.To.size());
-    if (!range.InclusiveTo && cmpTo == 0) {
-        cmpTo = 1;
-        if (range.To.size() < point.size()) {
-            cmpTo = -1;
-        }
-    }
-
-    if (cmpTo > 0)
-        return 1;
-    return 0;
-}
-
+template <typename T> 
+int ComparePointAndRange(const TConstArrayRef<TCell>& point, const TTableRange& range, 
+                         const T& pointTypes, const T& rangeTypes) 
+{ 
+    Y_VERIFY(!range.Point); 
+    Y_VERIFY(rangeTypes.size() <= pointTypes.size()); 
+    Y_VERIFY(range.From.size() <= rangeTypes.size()); 
+    Y_VERIFY(range.To.size() <= rangeTypes.size()); 
+ 
+    int cmpFrom = CompareTypedCellVectors(point.data(), range.From.data(), pointTypes.data(), range.From.size()); 
+    if (!range.InclusiveFrom && cmpFrom == 0) { 
+        cmpFrom = -1; 
+        for (ui32 i = range.From.size(); i < point.size(); ++i) { 
+            if (!point[i].IsNull()) { 
+                cmpFrom = 1; 
+                break; 
+            } 
+        } 
+    } 
+ 
+    if (cmpFrom < 0) 
+        return -1; 
+ 
+    int cmpTo = CompareTypedCellVectors(point.data(), range.To.data(), pointTypes.data(), range.To.size()); 
+    if (!range.InclusiveTo && cmpTo == 0) { 
+        cmpTo = 1; 
+        if (range.To.size() < point.size()) { 
+            cmpTo = -1; 
+        } 
+    } 
+ 
+    if (cmpTo > 0) 
+        return 1; 
+    return 0; 
+} 
+ 
 // Method used to compare range borders.
 // Template args determine where range lies regarding compared border.
 // E.g. CompareBorders<true, true>(...) compares borders of ranges lying on the left
@@ -332,26 +332,26 @@ int CompareBorders(TConstArrayRef<TCell> first, TConstArrayRef<TCell> second, bo
     }
 }
 
-/// @note returns 0 on any overlap
-inline int CompareRanges(const TTableRange& rangeX, const TTableRange& rangeY,
-                         const TConstArrayRef<NScheme::TTypeId> types)
-{
-    Y_VERIFY(!rangeX.Point);
-    Y_VERIFY(!rangeY.Point);
-
-    int xStart_yEnd = CompareBorders<true, false>(
-        rangeX.From, rangeY.To, rangeX.InclusiveFrom, rangeY.InclusiveTo, types);
-    if (xStart_yEnd > 0)
-        return 1;
-
-    int xEnd_yStart = CompareBorders<false, true>(
-        rangeX.To, rangeY.From, rangeX.InclusiveTo, rangeY.InclusiveFrom, types);
-    if (xEnd_yStart < 0)
-        return -1;
-
-    return 0; // overlapped
-}
-
+/// @note returns 0 on any overlap 
+inline int CompareRanges(const TTableRange& rangeX, const TTableRange& rangeY, 
+                         const TConstArrayRef<NScheme::TTypeId> types) 
+{ 
+    Y_VERIFY(!rangeX.Point); 
+    Y_VERIFY(!rangeY.Point); 
+ 
+    int xStart_yEnd = CompareBorders<true, false>( 
+        rangeX.From, rangeY.To, rangeX.InclusiveFrom, rangeY.InclusiveTo, types); 
+    if (xStart_yEnd > 0) 
+        return 1; 
+ 
+    int xEnd_yStart = CompareBorders<false, true>( 
+        rangeX.To, rangeY.From, rangeX.InclusiveTo, rangeY.InclusiveFrom, types); 
+    if (xEnd_yStart < 0) 
+        return -1; 
+ 
+    return 0; // overlapped 
+} 
+ 
 /// @note returns true on any overlap
 inline bool CheckRangesOverlap(
         const TTableRange& rangeX,
@@ -705,22 +705,22 @@ const TMap<TString, TSystemColumnInfo>& GetSystemColumns();
 bool IsSystemColumn(ui32 columnId);
 bool IsSystemColumn(const TStringBuf columnName);
 
-inline int ComparePointKeys(const TKeyDesc& point1, const TKeyDesc& point2) {
-    Y_VERIFY(point1.Range.Point);
-    Y_VERIFY(point2.Range.Point);
-    return CompareTypedCellVectors(
+inline int ComparePointKeys(const TKeyDesc& point1, const TKeyDesc& point2) { 
+    Y_VERIFY(point1.Range.Point); 
+    Y_VERIFY(point2.Range.Point); 
+    return CompareTypedCellVectors( 
         point1.Range.From.data(), point2.Range.From.data(), point1.KeyColumnTypes.data(), point1.KeyColumnTypes.size());
 }
 
-inline int ComparePointAndRangeKeys(const TKeyDesc& point, const TKeyDesc& range) {
-    Y_VERIFY(point.Range.Point);
-    return ComparePointAndRange(point.Range.From, range.Range, point.KeyColumnTypes, range.KeyColumnTypes);
-}
-
-inline int CompareRangeKeys(const TKeyDesc& rangeX, const TKeyDesc& rangeY) {
-    return CompareRanges(rangeX.Range, rangeY.Range, rangeX.KeyColumnTypes);
-}
-
+inline int ComparePointAndRangeKeys(const TKeyDesc& point, const TKeyDesc& range) { 
+    Y_VERIFY(point.Range.Point); 
+    return ComparePointAndRange(point.Range.From, range.Range, point.KeyColumnTypes, range.KeyColumnTypes); 
+} 
+ 
+inline int CompareRangeKeys(const TKeyDesc& rangeX, const TKeyDesc& rangeY) { 
+    return CompareRanges(rangeX.Range, rangeY.Range, rangeX.KeyColumnTypes); 
+} 
+ 
 } // namespace NKikimr
 
 template<>
@@ -737,7 +737,7 @@ inline void Out<NKikimr::TTableId>(IOutputStream& o, const NKikimr::TTableId& x)
         o << ":" << x.SysViewInfo;
     }
     o << ']';
-}
+} 
 
 template<>
 inline void Out<NKikimr::TIndexId>(IOutputStream& o, const NKikimr::TIndexId& x) {

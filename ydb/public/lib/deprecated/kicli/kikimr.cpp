@@ -2,7 +2,7 @@
 
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <util/string/builder.h>
-
+ 
 namespace NKikimr {
 namespace NClient {
 
@@ -48,7 +48,7 @@ protected:
             return Time > other.Time;
         }
     };
-
+ 
     TKikimr::TImpl& Kikimr;
     volatile bool TimeToQuit;
     TMutex QueueMutex;
@@ -417,14 +417,14 @@ TTextQuery TKikimr::Query(const TString& program) {
 }
 
 TSchemaObject TKikimr::GetSchemaRoot(const TString& name) {
-    return TSchemaObject(*this, "/", name, 0, TSchemaObject::EPathType::SubDomain);
+    return TSchemaObject(*this, "/", name, 0, TSchemaObject::EPathType::SubDomain); 
 }
 
 TSchemaObject TKikimr::GetSchemaObject(const TString& name) {
     auto pos = name.rfind('/');
     TString pathObj(name.substr(0, pos));
     TString nameObj(pos != TString::npos ? name.substr(pos + 1) : "");
-    return TSchemaObject(*this, pathObj, nameObj, 0, TSchemaObject::EPathType::Unknown);
+    return TSchemaObject(*this, pathObj, nameObj, 0, TSchemaObject::EPathType::Unknown); 
 }
 
 NThreading::TFuture<TResult> TKikimr::ExecuteRequest(TAutoPtr<NBus::TBusMessage> request) {
@@ -505,13 +505,13 @@ NThreading::TFuture<TResult> TKikimr::DescribeObject(const TSchemaObject& object
     return ExecuteRequest(request.Release());
 }
 
-NThreading::TFuture<TResult> TKikimr::ModifySchema(const TModifyScheme& schema) {
-    TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-    request->Record.MutablePollOptions()->SetTimeout(POLLING_TIMEOUT);
-    request->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(schema);
-    return ExecuteRequest(request.Release());
-}
-
+NThreading::TFuture<TResult> TKikimr::ModifySchema(const TModifyScheme& schema) { 
+    TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation()); 
+    request->Record.MutablePollOptions()->SetTimeout(POLLING_TIMEOUT); 
+    request->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(schema); 
+    return ExecuteRequest(request.Release()); 
+} 
+ 
 NThreading::TFuture<TResult> TKikimr::MakeDirectory(const TSchemaObject& object, const TString& name) {
     TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
     request->Record.MutablePollOptions()->SetTimeout(POLLING_TIMEOUT);

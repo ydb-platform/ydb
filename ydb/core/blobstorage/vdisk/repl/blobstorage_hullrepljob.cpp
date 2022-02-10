@@ -175,8 +175,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HULL_REPL_PLANNER;
-        }
-
+        } 
+ 
         THullReplPlannerActor(std::shared_ptr<TReplCtx> replCtx,
                 TIntrusivePtr<TBlobStorageGroupInfo> ginfo,
                 const TLogoBlobID &startKey,
@@ -787,8 +787,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HULL_REPL_JOB;
-        }
-
+        } 
+ 
         THullReplJobActor(
                 std::shared_ptr<TReplCtx> replCtx,
                 const TActorId &parentId,

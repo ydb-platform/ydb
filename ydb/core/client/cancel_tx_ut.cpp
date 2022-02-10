@@ -13,7 +13,7 @@ namespace NKikimr {
 namespace NFlatTests {
 
 using namespace Tests;
-using NClient::TValue;
+using NClient::TValue; 
 
 Y_UNIT_TEST_SUITE(TCancelTx) {
 

@@ -84,8 +84,8 @@ class TBlobStorageGroupMultiCollectRequest
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_PROXY_MULTICOLLECT_ACTOR;
-    }
-
+    } 
+ 
     static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
         return mon->ActiveMultiCollect;
     }

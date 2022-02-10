@@ -13,8 +13,8 @@ class TBsTestLoadActorRequest : public TActorBootstrapped<TBsTestLoadActorReques
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::MSGBUS_COMMON;
-    }
-
+    } 
+ 
     TBsTestLoadActorRequest(NKikimrClient::TBsTestLoadRequest& record, NMsgBusProxy::TBusMessageContext& msg)
         : TMessageBusSessionIdentHolder(msg)
         , NodeIds(record.GetNodeId().begin(), record.GetNodeId().end())

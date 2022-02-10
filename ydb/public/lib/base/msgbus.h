@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-#include "msgbus_status.h"
+#include "msgbus_status.h" 
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/msgbus_kv.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
@@ -30,7 +30,7 @@ enum {
     MTYPE_CLIENT_DELAYED_JOB_LAUNCH = 10415, // deprecated
     MTYPE_CLIENT_JOB_EXECUTION_STATUS = 10416, // deprecated
     MTYPE_CLIENT_REQUEST_JOB_INFORMATION = 10417, // deprecated
-    MTYPE_CLIENT_DATASHARD_SET_CONFIG = 10418, // deprecated
+    MTYPE_CLIENT_DATASHARD_SET_CONFIG = 10418, // deprecated 
     MTYPE_CLIENT_DESTROY_JOB = 10419, // deprecated
     MTYPE_CLIENT_COMPACTION_BROKER_SET_CONFIG = 10420, // deprecated
     MTYPE_CLIENT_OLD_HIVE_CREATE_TABLET = 10421, // deprecated
@@ -253,8 +253,8 @@ public:
 
 class IMessageBusServer {
 public:
-    virtual NActors::IActor* CreateProxy() = 0;
-    virtual NActors::IActor* CreateMessageBusTraceService() = 0;
+    virtual NActors::IActor* CreateProxy() = 0; 
+    virtual NActors::IActor* CreateMessageBusTraceService() = 0; 
     virtual ~IMessageBusServer() {}
 };
 

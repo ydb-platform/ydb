@@ -93,86 +93,86 @@ bool CheckValueData(NScheme::TTypeId type, const TCell& cell, TString& err) {
     return ok;
 }
 
-// TODO: no mapping for DATE, DATETIME, TZ_*, YSON, JSON, UUID, JSON_DOCUMENT, DYNUMBER
-bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) {
-    switch (type.id()) {
-        case arrow::Type::BOOL:
-            toType.set_type_id(Ydb::Type::BOOL);
-            return true;
-        case arrow::Type::UINT8:
-            toType.set_type_id(Ydb::Type::UINT8);
-            return true;
-        case arrow::Type::INT8:
-            toType.set_type_id(Ydb::Type::INT8);
-            return true;
-        case arrow::Type::UINT16:
-            toType.set_type_id(Ydb::Type::UINT16);
-            return true;
-        case arrow::Type::INT16:
-            toType.set_type_id(Ydb::Type::INT16);
-            return true;
-        case arrow::Type::UINT32:
-            toType.set_type_id(Ydb::Type::UINT32);
-            return true;
-        case arrow::Type::INT32:
-            toType.set_type_id(Ydb::Type::INT32);
-            return true;
-        case arrow::Type::UINT64:
-            toType.set_type_id(Ydb::Type::UINT64);
-            return true;
-        case arrow::Type::INT64:
-            toType.set_type_id(Ydb::Type::INT64);
-            return true;
-        case arrow::Type::FLOAT:
-            toType.set_type_id(Ydb::Type::FLOAT);
-            return true;
-        case arrow::Type::DOUBLE:
-            toType.set_type_id(Ydb::Type::DOUBLE);
-            return true;
-        case arrow::Type::STRING:
-            toType.set_type_id(Ydb::Type::UTF8);
-            return true;
-        case arrow::Type::BINARY:
-            toType.set_type_id(Ydb::Type::STRING);
-            return true;
-        case arrow::Type::TIMESTAMP:
-            toType.set_type_id(Ydb::Type::TIMESTAMP);
-            return true;
-        case arrow::Type::DURATION:
-            toType.set_type_id(Ydb::Type::INTERVAL);
-            return true;
-        case arrow::Type::DECIMAL:
-            // TODO
-            return false;
-        case arrow::Type::NA:
-        case arrow::Type::HALF_FLOAT:
-        case arrow::Type::FIXED_SIZE_BINARY:
-        case arrow::Type::DATE32:
-        case arrow::Type::DATE64:
-        case arrow::Type::TIME32:
-        case arrow::Type::TIME64:
-        case arrow::Type::INTERVAL_MONTHS:
-        case arrow::Type::LARGE_STRING:
-        case arrow::Type::LARGE_BINARY:
-        case arrow::Type::DECIMAL256:
-        case arrow::Type::DENSE_UNION:
-        case arrow::Type::DICTIONARY:
-        case arrow::Type::EXTENSION:
-        case arrow::Type::FIXED_SIZE_LIST:
-        case arrow::Type::INTERVAL_DAY_TIME:
-        case arrow::Type::LARGE_LIST:
-        case arrow::Type::LIST:
-        case arrow::Type::MAP:
-        case arrow::Type::MAX_ID:
-        case arrow::Type::SPARSE_UNION:
-        case arrow::Type::STRUCT:
-            break;
-    }
-    return false;
+// TODO: no mapping for DATE, DATETIME, TZ_*, YSON, JSON, UUID, JSON_DOCUMENT, DYNUMBER 
+bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) { 
+    switch (type.id()) { 
+        case arrow::Type::BOOL: 
+            toType.set_type_id(Ydb::Type::BOOL); 
+            return true; 
+        case arrow::Type::UINT8: 
+            toType.set_type_id(Ydb::Type::UINT8); 
+            return true; 
+        case arrow::Type::INT8: 
+            toType.set_type_id(Ydb::Type::INT8); 
+            return true; 
+        case arrow::Type::UINT16: 
+            toType.set_type_id(Ydb::Type::UINT16); 
+            return true; 
+        case arrow::Type::INT16: 
+            toType.set_type_id(Ydb::Type::INT16); 
+            return true; 
+        case arrow::Type::UINT32: 
+            toType.set_type_id(Ydb::Type::UINT32); 
+            return true; 
+        case arrow::Type::INT32: 
+            toType.set_type_id(Ydb::Type::INT32); 
+            return true; 
+        case arrow::Type::UINT64: 
+            toType.set_type_id(Ydb::Type::UINT64); 
+            return true; 
+        case arrow::Type::INT64: 
+            toType.set_type_id(Ydb::Type::INT64); 
+            return true; 
+        case arrow::Type::FLOAT: 
+            toType.set_type_id(Ydb::Type::FLOAT); 
+            return true; 
+        case arrow::Type::DOUBLE: 
+            toType.set_type_id(Ydb::Type::DOUBLE); 
+            return true; 
+        case arrow::Type::STRING: 
+            toType.set_type_id(Ydb::Type::UTF8); 
+            return true; 
+        case arrow::Type::BINARY: 
+            toType.set_type_id(Ydb::Type::STRING); 
+            return true; 
+        case arrow::Type::TIMESTAMP: 
+            toType.set_type_id(Ydb::Type::TIMESTAMP); 
+            return true; 
+        case arrow::Type::DURATION: 
+            toType.set_type_id(Ydb::Type::INTERVAL); 
+            return true; 
+        case arrow::Type::DECIMAL: 
+            // TODO 
+            return false; 
+        case arrow::Type::NA: 
+        case arrow::Type::HALF_FLOAT: 
+        case arrow::Type::FIXED_SIZE_BINARY: 
+        case arrow::Type::DATE32: 
+        case arrow::Type::DATE64: 
+        case arrow::Type::TIME32: 
+        case arrow::Type::TIME64: 
+        case arrow::Type::INTERVAL_MONTHS: 
+        case arrow::Type::LARGE_STRING: 
+        case arrow::Type::LARGE_BINARY: 
+        case arrow::Type::DECIMAL256: 
+        case arrow::Type::DENSE_UNION: 
+        case arrow::Type::DICTIONARY: 
+        case arrow::Type::EXTENSION: 
+        case arrow::Type::FIXED_SIZE_LIST: 
+        case arrow::Type::INTERVAL_DAY_TIME: 
+        case arrow::Type::LARGE_LIST: 
+        case arrow::Type::LIST: 
+        case arrow::Type::MAP: 
+        case arrow::Type::MAX_ID: 
+        case arrow::Type::SPARSE_UNION: 
+        case arrow::Type::STRUCT: 
+            break; 
+    } 
+    return false; 
 }
 
-}
-
+} 
+ 
 class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
@@ -358,9 +358,9 @@ private:
         return true;
     }
 
-    TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const override {
-        Y_UNUSED(errorMessage);
-
+    TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const override { 
+        Y_UNUSED(errorMessage); 
+ 
         const auto& type = Request->GetProtoRequest()->Getrows().Gettype();
         const auto& rowType = type.Getlist_type();
         const auto& rowFields = rowType.Getitem().Getstruct_type().Getmembers();
@@ -377,7 +377,7 @@ private:
         return result;
     }
 
-    bool ExtractRows(TString& errorMessage) override {
+    bool ExtractRows(TString& errorMessage) override { 
         // Parse type field
         // Check that it is a list of stuct
         // List all memebers and check their names and types
@@ -385,7 +385,7 @@ private:
 
         TVector<TCell> keyCells;
         TVector<TCell> valueCells;
-        float cost = 0.0f;
+        float cost = 0.0f; 
 
         // TODO: check that value is a list of structs
 
@@ -414,7 +414,7 @@ private:
                 sz += cell.Size();
             }
 
-            cost += TUpsertCost::OneRowCost(sz);
+            cost += TUpsertCost::OneRowCost(sz); 
 
             // Save serialized key and value
             TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(keyCells));
@@ -422,247 +422,247 @@ private:
             AllRows.emplace_back(serializedKey, serializedValue);
         }
 
-        RuCost = TUpsertCost::CostToRu(cost);
+        RuCost = TUpsertCost::CostToRu(cost); 
         return true;
     }
-
-    bool ExtractBatch(TString& errorMessage) override {
-        Batch = RowsToBatch(AllRows, errorMessage);
-        return Batch.get();
-    }
-
+ 
+    bool ExtractBatch(TString& errorMessage) override { 
+        Batch = RowsToBatch(AllRows, errorMessage); 
+        return Batch.get(); 
+    } 
+ 
 private:
     TAutoPtr<TEvBulkUpsertRequest> Request;
     TVector<std::pair<TSerializedCellVec, TString>> AllRows;
 };
 
-class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
-    using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
-public:
-    explicit TUploadColumnsRPCPublic(TAutoPtr<TEvBulkUpsertRequest> request)
-        : TBase(GetDuration(request->GetProtoRequest()->operation_params().operation_timeout()))
-        , Request(request)
-    {}
-
-private:
-    bool ReportCostInfoEnabled() const {
-        return Request->GetProtoRequest()->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED;
-    }
-
-    EUploadSource GetSourceType() const override {
-        auto* req = Request->GetProtoRequest();
-        if (req->has_arrow_batch_settings()) {
-            return EUploadSource::ArrowBatch;
-        }
-        if (req->has_csv_settings()) {
-            return EUploadSource::CSV;
-        }
-        Y_VERIFY(false, "unexpected format");
-    }
-
-    TString GetDatabase() override {
-        return Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData()));
-    }
-
-    const TString& GetTable() override {
-        return Request->GetProtoRequest()->table();
-    }
-
-    const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
-        return Rows;
-    }
-
-    const TString& GetSourceData() const override {
-        return Request->GetProtoRequest()->data();
-    }
-
-    const TString& GetSourceSchema() const override {
-        static const TString none;
-        if (Request->GetProtoRequest()->has_arrow_batch_settings()) {
-            return Request->GetProtoRequest()->arrow_batch_settings().schema();
-        }
-        return none;
-    }
-
-    void RaiseIssue(const NYql::TIssue& issue) override {
-        return Request->RaiseIssue(issue);
-    }
-
-    void SendResult(const NActors::TActorContext&, const StatusIds::StatusCode& status) override {
-        const Ydb::Table::BulkUpsertResult result;
-        if (status == StatusIds::SUCCESS) {
-            ui64 cost = std::ceil(RuCost);
-            Request->SetRuHeader(cost);
-            if (ReportCostInfoEnabled()) {
-                Request->SetCostInfo(cost);
-            }
-        }
-        return Request->SendResult(result, status);
-    }
-
-    bool CheckAccess(TString& errorMessage) override {
-        if (Request->GetInternalToken().empty())
-            return true;
-
-        NACLib::TUserToken userToken(Request->GetInternalToken());
-        const ui32 access = NACLib::EAccessRights::UpdateRow;
-        auto resolveResult = GetResolveNameResult();
-        if (!resolveResult) {
-            TStringStream explanation;
-            explanation << "Access denied for " << userToken.GetUserSID()
-                        << " table '" << Request->GetProtoRequest()->table()
-                        << "' has not been resolved yet";
-
-            errorMessage = explanation.Str();
-            return false;
-        }
-        for (const NSchemeCache::TSchemeCacheNavigate::TEntry& entry : resolveResult->ResultSet) {
-            if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok
-                && entry.SecurityObject != nullptr
-                && !entry.SecurityObject->CheckAccess(access, userToken))
-            {
-                TStringStream explanation;
-                explanation << "Access denied for " << userToken.GetUserSID()
-                            << " with access " << NACLib::AccessRightsToString(access)
-                            << " to table '" << Request->GetProtoRequest()->table() << "'";
-
-                errorMessage = explanation.Str();
-                return false;
-            }
-        }
-        return true;
-    }
-
-    TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const override {
-        if (GetSourceType() == EUploadSource::CSV) {
-            // TODO: for CSV with header we have to extract columns from data (from first batch in file stream)
-            return {};
-        }
-
-        auto schema = NArrow::DeserializeSchema(GetSourceSchema());
-        if (!schema) {
-            errorMessage = TString("Wrong schema in bulk upsert data");
-            return {};
-        }
-
-        TVector<std::pair<TString, Ydb::Type>> out;
-        out.reserve(schema->num_fields());
-
-        for (auto& field : schema->fields()) {
-            auto& name = field->name();
-            auto& type = field->type();
-
-            Ydb::Type ydbType;
-            if (!ConvertArrowToYdbPrimitive(*type, ydbType)) {
-                errorMessage = TString("Cannot convert arrow type to ydb one: " + type->ToString());
-                return {};
-            }
-            out.emplace_back(name, std::move(ydbType));
-        }
-
-        return out;
-    }
-
-    bool ExtractRows(TString& errorMessage) override {
-        Y_VERIFY(Batch);
-        Rows = BatchToRows(Batch, errorMessage);
-        return errorMessage.empty();
-    }
-
-    bool ExtractBatch(TString& errorMessage) override {
-        switch (GetSourceType()) {
-            case EUploadSource::ProtoValues:
-            {
-                errorMessage = "Unexpected data format in column upsert";
-                return false;
-            }
-            case EUploadSource::ArrowBatch:
-            {
-                auto schema = NArrow::DeserializeSchema(GetSourceSchema());
-                if (!schema) {
-                    errorMessage = "Bad schema in bulk upsert data";
-                    return false;
-                }
-
-                auto& data = GetSourceData();
-                Batch = NArrow::DeserializeBatch(data, schema);
-                if (!Batch) {
-                    errorMessage = "Cannot deserialize arrow batch with specified schema";
-                    return false;
-                }
-                break;
-            }
-            case EUploadSource::CSV:
-            {
-                if (SrcColumns.empty()) {
-                    errorMessage = "Cannot upsert CSV: no src columns";
-                    return false;
-                }
-
-                auto& data = GetSourceData();
-                auto& cvsSettings = GetCsvSettings();
-                ui32 skipRows = cvsSettings.skip_rows();
-                auto& delimiter = cvsSettings.delimiter();
-                auto& nullValue = cvsSettings.null_value();
-                bool withHeader = cvsSettings.header();
-
-                ui32 blockSize = NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE;
-                if (data.size() >= blockSize) {
-                    blockSize *= data.size() / blockSize + 1;
-                }
-                NFormats::TArrowCSV reader(SrcColumns, skipRows, withHeader, blockSize);
-
-                if (!delimiter.empty()) {
-                    if (delimiter.size() != 1) {
-                        errorMessage = TStringBuilder() << "Wrong delimiter '" << delimiter << "'";
-                        return false;
-                    }
-
-                    reader.SetDelimiter(delimiter[0]);
-                }
-
-                if (!nullValue.empty()) {
-                    reader.SetNullValue(nullValue);
-                }
-
-                Batch = reader.ReadNext(data, errorMessage);
-                if (!Batch) {
-                    if (errorMessage.empty()) {
-                        errorMessage = "Cannot read CSV data";
-                    }
-                    return false;
-                }
-
-                if (reader.ReadNext(data, errorMessage)) {
-                    errorMessage = "Too big CSV batch";
-                    return false;
-                }
-
-                break;
-            }
-        }
-
-        return true;
-    }
-
-private:
-    TAutoPtr<TEvBulkUpsertRequest> Request;
-    TVector<std::pair<TSerializedCellVec, TString>> Rows;
-
-    const Ydb::Formats::CsvSettings& GetCsvSettings() const {
-        return Request->GetProtoRequest()->csv_settings();
-    }
-};
-
+class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> { 
+    using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>; 
+public: 
+    explicit TUploadColumnsRPCPublic(TAutoPtr<TEvBulkUpsertRequest> request) 
+        : TBase(GetDuration(request->GetProtoRequest()->operation_params().operation_timeout())) 
+        , Request(request) 
+    {} 
+ 
+private: 
+    bool ReportCostInfoEnabled() const { 
+        return Request->GetProtoRequest()->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED; 
+    } 
+ 
+    EUploadSource GetSourceType() const override { 
+        auto* req = Request->GetProtoRequest(); 
+        if (req->has_arrow_batch_settings()) { 
+            return EUploadSource::ArrowBatch; 
+        } 
+        if (req->has_csv_settings()) { 
+            return EUploadSource::CSV; 
+        } 
+        Y_VERIFY(false, "unexpected format"); 
+    } 
+ 
+    TString GetDatabase() override { 
+        return Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData())); 
+    } 
+ 
+    const TString& GetTable() override { 
+        return Request->GetProtoRequest()->table(); 
+    } 
+ 
+    const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override { 
+        return Rows; 
+    } 
+ 
+    const TString& GetSourceData() const override { 
+        return Request->GetProtoRequest()->data(); 
+    } 
+ 
+    const TString& GetSourceSchema() const override { 
+        static const TString none; 
+        if (Request->GetProtoRequest()->has_arrow_batch_settings()) { 
+            return Request->GetProtoRequest()->arrow_batch_settings().schema(); 
+        } 
+        return none; 
+    } 
+ 
+    void RaiseIssue(const NYql::TIssue& issue) override { 
+        return Request->RaiseIssue(issue); 
+    } 
+ 
+    void SendResult(const NActors::TActorContext&, const StatusIds::StatusCode& status) override { 
+        const Ydb::Table::BulkUpsertResult result; 
+        if (status == StatusIds::SUCCESS) { 
+            ui64 cost = std::ceil(RuCost); 
+            Request->SetRuHeader(cost); 
+            if (ReportCostInfoEnabled()) { 
+                Request->SetCostInfo(cost); 
+            } 
+        } 
+        return Request->SendResult(result, status); 
+    } 
+ 
+    bool CheckAccess(TString& errorMessage) override { 
+        if (Request->GetInternalToken().empty()) 
+            return true; 
+ 
+        NACLib::TUserToken userToken(Request->GetInternalToken()); 
+        const ui32 access = NACLib::EAccessRights::UpdateRow; 
+        auto resolveResult = GetResolveNameResult(); 
+        if (!resolveResult) { 
+            TStringStream explanation; 
+            explanation << "Access denied for " << userToken.GetUserSID() 
+                        << " table '" << Request->GetProtoRequest()->table() 
+                        << "' has not been resolved yet"; 
+ 
+            errorMessage = explanation.Str(); 
+            return false; 
+        } 
+        for (const NSchemeCache::TSchemeCacheNavigate::TEntry& entry : resolveResult->ResultSet) { 
+            if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok 
+                && entry.SecurityObject != nullptr 
+                && !entry.SecurityObject->CheckAccess(access, userToken)) 
+            { 
+                TStringStream explanation; 
+                explanation << "Access denied for " << userToken.GetUserSID() 
+                            << " with access " << NACLib::AccessRightsToString(access) 
+                            << " to table '" << Request->GetProtoRequest()->table() << "'"; 
+ 
+                errorMessage = explanation.Str(); 
+                return false; 
+            } 
+        } 
+        return true; 
+    } 
+ 
+    TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const override { 
+        if (GetSourceType() == EUploadSource::CSV) { 
+            // TODO: for CSV with header we have to extract columns from data (from first batch in file stream) 
+            return {}; 
+        } 
+ 
+        auto schema = NArrow::DeserializeSchema(GetSourceSchema()); 
+        if (!schema) { 
+            errorMessage = TString("Wrong schema in bulk upsert data"); 
+            return {}; 
+        } 
+ 
+        TVector<std::pair<TString, Ydb::Type>> out; 
+        out.reserve(schema->num_fields()); 
+ 
+        for (auto& field : schema->fields()) { 
+            auto& name = field->name(); 
+            auto& type = field->type(); 
+ 
+            Ydb::Type ydbType; 
+            if (!ConvertArrowToYdbPrimitive(*type, ydbType)) { 
+                errorMessage = TString("Cannot convert arrow type to ydb one: " + type->ToString()); 
+                return {}; 
+            } 
+            out.emplace_back(name, std::move(ydbType)); 
+        } 
+ 
+        return out; 
+    } 
+ 
+    bool ExtractRows(TString& errorMessage) override { 
+        Y_VERIFY(Batch); 
+        Rows = BatchToRows(Batch, errorMessage); 
+        return errorMessage.empty(); 
+    } 
+ 
+    bool ExtractBatch(TString& errorMessage) override { 
+        switch (GetSourceType()) { 
+            case EUploadSource::ProtoValues: 
+            { 
+                errorMessage = "Unexpected data format in column upsert"; 
+                return false; 
+            } 
+            case EUploadSource::ArrowBatch: 
+            { 
+                auto schema = NArrow::DeserializeSchema(GetSourceSchema()); 
+                if (!schema) { 
+                    errorMessage = "Bad schema in bulk upsert data"; 
+                    return false; 
+                } 
+ 
+                auto& data = GetSourceData(); 
+                Batch = NArrow::DeserializeBatch(data, schema); 
+                if (!Batch) { 
+                    errorMessage = "Cannot deserialize arrow batch with specified schema"; 
+                    return false; 
+                } 
+                break; 
+            } 
+            case EUploadSource::CSV: 
+            { 
+                if (SrcColumns.empty()) { 
+                    errorMessage = "Cannot upsert CSV: no src columns"; 
+                    return false; 
+                } 
+ 
+                auto& data = GetSourceData(); 
+                auto& cvsSettings = GetCsvSettings(); 
+                ui32 skipRows = cvsSettings.skip_rows(); 
+                auto& delimiter = cvsSettings.delimiter(); 
+                auto& nullValue = cvsSettings.null_value(); 
+                bool withHeader = cvsSettings.header(); 
+ 
+                ui32 blockSize = NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE; 
+                if (data.size() >= blockSize) { 
+                    blockSize *= data.size() / blockSize + 1; 
+                } 
+                NFormats::TArrowCSV reader(SrcColumns, skipRows, withHeader, blockSize); 
+ 
+                if (!delimiter.empty()) { 
+                    if (delimiter.size() != 1) { 
+                        errorMessage = TStringBuilder() << "Wrong delimiter '" << delimiter << "'"; 
+                        return false; 
+                    } 
+ 
+                    reader.SetDelimiter(delimiter[0]); 
+                } 
+ 
+                if (!nullValue.empty()) { 
+                    reader.SetNullValue(nullValue); 
+                } 
+ 
+                Batch = reader.ReadNext(data, errorMessage); 
+                if (!Batch) { 
+                    if (errorMessage.empty()) { 
+                        errorMessage = "Cannot read CSV data"; 
+                    } 
+                    return false; 
+                } 
+ 
+                if (reader.ReadNext(data, errorMessage)) { 
+                    errorMessage = "Too big CSV batch"; 
+                    return false; 
+                } 
+ 
+                break; 
+            } 
+        } 
+ 
+        return true; 
+    } 
+ 
+private: 
+    TAutoPtr<TEvBulkUpsertRequest> Request; 
+    TVector<std::pair<TSerializedCellVec, TString>> Rows; 
+ 
+    const Ydb::Formats::CsvSettings& GetCsvSettings() const { 
+        return Request->GetProtoRequest()->csv_settings(); 
+    } 
+}; 
+ 
 void TGRpcRequestProxy::Handle(TEvBulkUpsertRequest::TPtr& ev, const TActorContext& ctx) {
-    auto* req = ev->Get()->GetProtoRequest();
-    if (req->has_arrow_batch_settings()) {
-        ctx.Register(new TUploadColumnsRPCPublic(ev->Release().Release()));
-    } else if (req->has_csv_settings()) {
-        ctx.Register(new TUploadColumnsRPCPublic(ev->Release().Release()));
-    } else {
-        ctx.Register(new TUploadRowsRPCPublic(ev->Release().Release()));
-    }
+    auto* req = ev->Get()->GetProtoRequest(); 
+    if (req->has_arrow_batch_settings()) { 
+        ctx.Register(new TUploadColumnsRPCPublic(ev->Release().Release())); 
+    } else if (req->has_csv_settings()) { 
+        ctx.Register(new TUploadColumnsRPCPublic(ev->Release().Release())); 
+    } else { 
+        ctx.Register(new TUploadRowsRPCPublic(ev->Release().Release())); 
+    } 
 }
 
 } // namespace NKikimr

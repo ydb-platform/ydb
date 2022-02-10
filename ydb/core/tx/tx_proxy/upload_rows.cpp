@@ -58,17 +58,17 @@ private:
         Issues.AddIssue(issue);
     }
 
-    bool ExtractRows(TString&) override {
+    bool ExtractRows(TString&) override { 
         return true;
     }
 
-    bool ExtractBatch(TString& errorMessage) override {
-        errorMessage = "Not supported";
-        return false;
-    }
-
-    TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const override {
-        Y_UNUSED(errorMessage);
+    bool ExtractBatch(TString& errorMessage) override { 
+        errorMessage = "Not supported"; 
+        return false; 
+    } 
+ 
+    TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const override { 
+        Y_UNUSED(errorMessage); 
         return *ColumnTypes;
     }
 

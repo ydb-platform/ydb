@@ -1,145 +1,145 @@
-#include "defs.h"
+#include "defs.h" 
 #include "datashard_locks.h"
 #include "datashard_ut_common.h"
-
+ 
 #include <ydb/core/tablet_flat/flat_dbase_apply.h>
 #include <ydb/core/tablet_flat/flat_exec_commit.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
-
-namespace NKikimr {
-
+ 
+ 
+namespace NKikimr { 
+ 
 using namespace NSchemeShard;
 using namespace Tests;
 
-struct TTableId;
-
-namespace NTest {
-    enum EFakeIds : ui64 {
-        ESchemeShardId = 1000,
-        EUserTableId = 10001
-    };
-
-    ///
-    class TFakeDataShard {
-    public:
+struct TTableId; 
+ 
+namespace NTest { 
+    enum EFakeIds : ui64 { 
+        ESchemeShardId = 1000, 
+        EUserTableId = 10001 
+    }; 
+ 
+    /// 
+    class TFakeDataShard { 
+    public: 
         ui64 PathOwnerId = 0;
         ui64 CurrentSchemeShardId = 0;
         TRowVersion CompleteVersion = TRowVersion::Min();
-
-        TFakeDataShard() {
-            InitSchema();
-        }
-
-        static ui64 TabletID() { return 0; }
-        static ui32 Generation() { return 0; }
+ 
+        TFakeDataShard() { 
+            InitSchema(); 
+        } 
+ 
+        static ui64 TabletID() { return 0; } 
+        static ui32 Generation() { return 0; } 
         TRowVersion LastCompleteTxVersion() const { return CompleteVersion; }
-
-        bool IsUserTable(const TTableId& tableId) const;
-
-        //
-
-        template <typename T> void SetCounter(T, ui64) const {}
-        template <typename T> void IncCounter(T, ui64 num = 1) const { Y_UNUSED(num); }
-        template <typename T> void IncCounter(T, const TDuration&) const {}
-
-    private:
+ 
+        bool IsUserTable(const TTableId& tableId) const; 
+ 
+        // 
+ 
+        template <typename T> void SetCounter(T, ui64) const {} 
+        template <typename T> void IncCounter(T, ui64 num = 1) const { Y_UNUSED(num); } 
+        template <typename T> void IncCounter(T, const TDuration&) const {} 
+ 
+    private: 
         NTable::TScheme Schema;
-
-        static ui32 NumSysTables() { return 10; }
-
-        void InitSchema() {
-            TableInfos[EUserTableId].LocalTid = EUserTableId;
-            TableInfos[EUserTableId].Name = "user____Table";
-            TableInfos[EUserTableId].KeyColumnTypes.push_back(NScheme::NTypeIds::Uint32);
-
+ 
+        static ui32 NumSysTables() { return 10; } 
+ 
+        void InitSchema() { 
+            TableInfos[EUserTableId].LocalTid = EUserTableId; 
+            TableInfos[EUserTableId].Name = "user____Table"; 
+            TableInfos[EUserTableId].KeyColumnTypes.push_back(NScheme::NTypeIds::Uint32); 
+ 
             NTable::TAlter delta;
-
-            for (ui32 tableId = 0; tableId < NumSysTables(); ++tableId) {
+ 
+            for (ui32 tableId = 0; tableId < NumSysTables(); ++tableId) { 
                 delta.AddTable(TString("Table") + ('A'+tableId), tableId);
                 delta.AddColumn(tableId, "key", 0, NScheme::NTypeIds::Uint32, false);
                 delta.AddColumnToKey(tableId, 0);
-            }
-
+            } 
+ 
             delta.AddTable("user____Table", EUserTableId);
             delta.AddColumn(EUserTableId, "key", 0, NScheme::NTypeIds::Uint32, false);
             delta.AddColumnToKey(EUserTableId, 0);
 
 
             NTable::TSchemeModifier(Schema).Apply(*delta.Flush());
-        }
+        } 
 
     public:
         TTabletCountersBase* TabletCounters = nullptr;
         THashMap<ui64, NDataShard::TUserTable> TableInfos;
-    };
-}
-
-}
-
-namespace NKikimr {
-
+    }; 
+} 
+ 
+} 
+ 
+namespace NKikimr { 
+ 
 using namespace NDataShard;
-
-namespace NTest {
-
-    bool TFakeDataShard::IsUserTable(const TTableId& tableId) const {
+ 
+namespace NTest { 
+ 
+    bool TFakeDataShard::IsUserTable(const TTableId& tableId) const { 
         return tableId.PathId.LocalPathId >= NumSysTables();
-    }
-
-    ///
-    class TLockTester {
-    public:
-        template <typename T>
-        struct TPointKey {
-            T Key;
-            TCell Cell;
-
-            TPointKey(const T& key)
-                : Key(key)
-                , Cell((const char*)&Key, sizeof(T))
-            {}
-
-            TArrayRef<const TCell> GetRow() const {
-                return TArrayRef<const TCell>(&Cell, 1);
-            }
-        };
-
-        template <typename T>
-        struct TRangeKey {
-            enum EFlags : ui32 {
-                EIncFrom = 0x1,
-                EIncTo = 0x2
-            };
-
-            T KeyFrom;
-            T KeyTo;
-            ui32 Flags;
-            TCell Cells[2];
-
-            TRangeKey(const T& from, const T& to, ui32 flags = 0)
-                : KeyFrom(from)
-                , KeyTo(to)
-                , Flags(flags)
-            {
-                Cells[0] = TCell((const char*)&KeyFrom, sizeof(T));
-                Cells[1] = TCell((const char*)&KeyTo, sizeof(T));
-            }
-
-            TTableRange GetRowsRange() const {
-                return TTableRange(TArrayRef<const TCell>(&Cells[0], 1), Flags & EIncFrom,
-                                   TArrayRef<const TCell>(&Cells[0], 1), Flags & EIncTo);
-            }
-        };
-
-        TLockTester(const TTableId tableId = TTableId(ESchemeShardId, EUserTableId))
-            : TableId(tableId)
-            , Locks(&DataShard)
-        {
+    } 
+ 
+    /// 
+    class TLockTester { 
+    public: 
+        template <typename T> 
+        struct TPointKey { 
+            T Key; 
+            TCell Cell; 
+ 
+            TPointKey(const T& key) 
+                : Key(key) 
+                , Cell((const char*)&Key, sizeof(T)) 
+            {} 
+ 
+            TArrayRef<const TCell> GetRow() const { 
+                return TArrayRef<const TCell>(&Cell, 1); 
+            } 
+        }; 
+ 
+        template <typename T> 
+        struct TRangeKey { 
+            enum EFlags : ui32 { 
+                EIncFrom = 0x1, 
+                EIncTo = 0x2 
+            }; 
+ 
+            T KeyFrom; 
+            T KeyTo; 
+            ui32 Flags; 
+            TCell Cells[2]; 
+ 
+            TRangeKey(const T& from, const T& to, ui32 flags = 0) 
+                : KeyFrom(from) 
+                , KeyTo(to) 
+                , Flags(flags) 
+            { 
+                Cells[0] = TCell((const char*)&KeyFrom, sizeof(T)); 
+                Cells[1] = TCell((const char*)&KeyTo, sizeof(T)); 
+            } 
+ 
+            TTableRange GetRowsRange() const { 
+                return TTableRange(TArrayRef<const TCell>(&Cells[0], 1), Flags & EIncFrom, 
+                                   TArrayRef<const TCell>(&Cells[0], 1), Flags & EIncTo); 
+            } 
+        }; 
+ 
+        TLockTester(const TTableId tableId = TTableId(ESchemeShardId, EUserTableId)) 
+            : TableId(tableId) 
+            , Locks(&DataShard) 
+        { 
             ui64 tid = tableId.PathId.LocalPathId;
             ui64 sid = tableId.PathId.OwnerId;
 
@@ -153,58 +153,58 @@ namespace NTest {
             TmpLockVec.emplace_back(TCell::Make(TmpLock.PathId));
 
             Locks.UpdateSchema(tableId.PathId, DataShard.TableInfos[tid]);
-        }
-
-        //
-
-        template <typename T>
-        void SetLock(const TPointKey<T>& key) {
-            Locks.SetLock(TableId, key.GetRow(), LockId());
-        }
-
-        template <typename T>
-        void SetLock(const TRangeKey<T>& range) {
-            Locks.SetLock(TableId, range.GetRowsRange(), LockId());
-        }
-
-        template <typename T>
-        void BreakLock(const TPointKey<T>& key) {
-            Locks.BreakLock(TableId, key.GetRow());
-        }
-
+        } 
+ 
+        // 
+ 
+        template <typename T> 
+        void SetLock(const TPointKey<T>& key) { 
+            Locks.SetLock(TableId, key.GetRow(), LockId()); 
+        } 
+ 
+        template <typename T> 
+        void SetLock(const TRangeKey<T>& range) { 
+            Locks.SetLock(TableId, range.GetRowsRange(), LockId()); 
+        } 
+ 
+        template <typename T> 
+        void BreakLock(const TPointKey<T>& key) { 
+            Locks.BreakLock(TableId, key.GetRow()); 
+        } 
+ 
         void BreakSetLocks() {
             Locks.BreakSetLocks(LockId());
         }
 
-        //
-
-        void EraseLock(ui64 lockId) {
-            Locks.EraseLock(LockAsRowKey(lockId));
-        }
-
-        // Don't use generation:counter here
-        bool CheckLock(ui64 lockId) {
-            return ! Locks.GetLock(LockAsRowKey(lockId)).IsEmpty();
-        }
-
-        //
-
+        // 
+ 
+        void EraseLock(ui64 lockId) { 
+            Locks.EraseLock(LockAsRowKey(lockId)); 
+        } 
+ 
+        // Don't use generation:counter here 
+        bool CheckLock(ui64 lockId) { 
+            return ! Locks.GetLock(LockAsRowKey(lockId)).IsEmpty(); 
+        } 
+ 
+        // 
+ 
         void StartTx(TLocksUpdate& update) {
             update.LockTxId = 0;
             Locks.SetTxUpdater(&update);
         }
 
-        void StartTx(ui64 lockTxId, TLocksUpdate& update) {
-            update.LockTxId = lockTxId;
-            Locks.SetTxUpdater(&update);
-        }
-
+        void StartTx(ui64 lockTxId, TLocksUpdate& update) { 
+            update.LockTxId = lockTxId; 
+            Locks.SetTxUpdater(&update); 
+        } 
+ 
         TVector<TSysLocks::TLock> ApplyTxLocks() {
             auto locks = Locks.ApplyLocks();
-            Locks.SetTxUpdater(nullptr);
+            Locks.SetTxUpdater(nullptr); 
             return locks;
-        }
-
+        } 
+ 
         template <typename T>
         void Select(const TVector<T>& selects, bool breakSetLocks = false) {
             for (auto& value : selects) {
@@ -241,61 +241,61 @@ namespace NTest {
             DataShard.CompleteVersion = Max(DataShard.CompleteVersion, completeVersion);
         }
 
-    private:
-        TTableId TableId;
-        NTest::TFakeDataShard DataShard;
-        TSysLocks Locks;
-        TSysTables::TLocksTable::TLock TmpLock;
+    private: 
+        TTableId TableId; 
+        NTest::TFakeDataShard DataShard; 
+        TSysLocks Locks; 
+        TSysTables::TLocksTable::TLock TmpLock; 
         TVector<TCell> TmpLockVec;
-
-        ui64 LockId() const { return Locks.CurrentLockTxId(); }
-
-        TArrayRef<const TCell> LockAsRowKey(ui64 lockId) {
+ 
+        ui64 LockId() const { return Locks.CurrentLockTxId(); } 
+ 
+        TArrayRef<const TCell> LockAsRowKey(ui64 lockId) { 
             TmpLockVec[0] = TCell::Make(TmpLock.LockId = lockId);
 
-            return TArrayRef<const TCell>(TmpLockVec.data(), TmpLockVec.size());
-        }
-
-        static TTableId LocksTableId() { return TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks); }
-    };
-
-    template <typename T>
-    static void EmulateTx(TLockTester& tester, ui64 lockTxId,
+            return TArrayRef<const TCell>(TmpLockVec.data(), TmpLockVec.size()); 
+        } 
+ 
+        static TTableId LocksTableId() { return TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks); } 
+    }; 
+ 
+    template <typename T> 
+    static void EmulateTx(TLockTester& tester, ui64 lockTxId, 
                    const TVector<T>& selects, const TVector<T>& updates,
                    const TVector<std::pair<T, T>>& rangeSelects, ui32 rangeFlags = 0) {
-        TLocksUpdate txLocks;
-        tester.StartTx(lockTxId, txLocks);
-
+        TLocksUpdate txLocks; 
+        tester.StartTx(lockTxId, txLocks); 
+ 
         tester.Select(selects);
         tester.Update(updates);
         tester.Select(rangeSelects, rangeFlags);
-
-        tester.ApplyTxLocks();
-    }
-
-    static void RemoveLock(TLockTester& tester, ui64 lockTxId) {
-        TLocksUpdate txLocks;
-        tester.StartTx(lockTxId, txLocks);
-
-        txLocks.EraseLock(lockTxId);
-
-        tester.ApplyTxLocks();
-    }
-
-    template <typename T>
+ 
+        tester.ApplyTxLocks(); 
+    } 
+ 
+    static void RemoveLock(TLockTester& tester, ui64 lockTxId) { 
+        TLocksUpdate txLocks; 
+        tester.StartTx(lockTxId, txLocks); 
+ 
+        txLocks.EraseLock(lockTxId); 
+ 
+        tester.ApplyTxLocks(); 
+    } 
+ 
+    template <typename T> 
     static void GeneratePoints(TVector<T>& points, ui32 numVals, T value, std::function<void (T&)> next) {
-        points.reserve(points.size() + numVals);
-        for (ui32 i = 0; i < numVals; ++i) {
-            points.emplace_back(value);
-            if (next)
-                next(value);
-        }
-    }
-}
-
-// TODO: correctness, times
+        points.reserve(points.size() + numVals); 
+        for (ui32 i = 0; i < numVals; ++i) { 
+            points.emplace_back(value); 
+            if (next) 
+                next(value); 
+        } 
+    } 
+} 
+ 
+// TODO: correctness, times 
 Y_UNIT_TEST_SUITE(TDataShardLocksTest) {
-
+ 
 Y_UNIT_TEST(MvccTestOooTxDoesntBreakPrecedingReadersLocks) {
     NTest::TLockTester tester;
 
@@ -472,114 +472,114 @@ Y_UNIT_TEST(MvccTestAlreadyBrokenLocks) {
 }
 
 Y_UNIT_TEST(Points_OneTx) {
-    NTest::TLockTester tester;
-
-    ui32 numVals = 100 * 1000;
-    ui64 txId = 100;
+    NTest::TLockTester tester; 
+ 
+    ui32 numVals = 100 * 1000; 
+    ui64 txId = 100; 
     TVector<ui32> selects;
     TVector<ui32> updates;
     TVector<std::pair<ui32, ui32>> ranges;
-
-    std::function<void (ui32&)> fInc = [](ui32& val) { ++val; };
-    NTest::GeneratePoints(selects, numVals, 0u, fInc);
-    NTest::EmulateTx(tester, txId, selects, updates, ranges);
-}
-
-// 100000 tx, 1 points per tx
+ 
+    std::function<void (ui32&)> fInc = [](ui32& val) { ++val; }; 
+    NTest::GeneratePoints(selects, numVals, 0u, fInc); 
+    NTest::EmulateTx(tester, txId, selects, updates, ranges); 
+} 
+ 
+// 100000 tx, 1 points per tx 
 Y_UNIT_TEST(Points_ManyTx) {
-    NTest::TLockTester tester;
-
-    ui32 numVals = 100 * 1000;
-    ui64 txId = 100;
+    NTest::TLockTester tester; 
+ 
+    ui32 numVals = 100 * 1000; 
+    ui64 txId = 100; 
     TVector<ui32> selects;
     TVector<ui32> updates;
     TVector<std::pair<ui32, ui32>> ranges;
-
-    selects.resize(1);
-    for (ui32 i = 0; i < numVals; ++i, ++txId) {
-        selects[0] = i;
-        NTest::EmulateTx(tester, txId, selects, updates, ranges);
-    }
-}
-
-// TODO: 1000 tx, 100 points per tx
-// TODO: 10000 tx, 10 points per tx
-
+ 
+    selects.resize(1); 
+    for (ui32 i = 0; i < numVals; ++i, ++txId) { 
+        selects[0] = i; 
+        NTest::EmulateTx(tester, txId, selects, updates, ranges); 
+    } 
+} 
+ 
+// TODO: 1000 tx, 100 points per tx 
+// TODO: 10000 tx, 10 points per tx 
+ 
 Y_UNIT_TEST(Points_ManyTx_BreakAll) {
-    NTest::TLockTester tester;
-
-    ui32 numVals = 100 * 1000;
-    ui64 txId = 100;
+    NTest::TLockTester tester; 
+ 
+    ui32 numVals = 100 * 1000; 
+    ui64 txId = 100; 
     TVector<ui32> selects;
     TVector<ui32> updates;
     TVector<std::pair<ui32, ui32>> ranges;
-
-    selects.resize(1);
-    for (ui32 i = 0; i < numVals; ++i, ++txId) {
-        selects[0] = i;
-        NTest::EmulateTx(tester, txId, selects, updates, ranges);
-    }
-
-    txId = 100;
-    selects.resize(0);
-    updates.resize(1);
-    for (ui32 i = 0; i < numVals; ++i, ++txId) {
-        updates[0] = i;
-        NTest::EmulateTx(tester, txId, selects, updates, ranges);
-    }
-}
-
+ 
+    selects.resize(1); 
+    for (ui32 i = 0; i < numVals; ++i, ++txId) { 
+        selects[0] = i; 
+        NTest::EmulateTx(tester, txId, selects, updates, ranges); 
+    } 
+ 
+    txId = 100; 
+    selects.resize(0); 
+    updates.resize(1); 
+    for (ui32 i = 0; i < numVals; ++i, ++txId) { 
+        updates[0] = i; 
+        NTest::EmulateTx(tester, txId, selects, updates, ranges); 
+    } 
+} 
+ 
 Y_UNIT_TEST(Points_ManyTx_RemoveAll) {
-    NTest::TLockTester tester;
-
-    ui32 numVals = 100 * 1000;
-    ui64 txId = 100;
+    NTest::TLockTester tester; 
+ 
+    ui32 numVals = 100 * 1000; 
+    ui64 txId = 100; 
     TVector<ui32> selects;
     TVector<ui32> updates;
     TVector<std::pair<ui32, ui32>> ranges;
-
-    selects.resize(1);
-    for (ui32 i = 0; i < numVals; ++i, ++txId) {
-        selects[0] = i;
-        NTest::EmulateTx(tester, txId, selects, updates, ranges);
-    }
-
-    txId = 100;
-    selects.resize(0);
-    updates.resize(1);
-    for (ui32 i = 0; i < numVals; ++i, ++txId) {
-        NTest::RemoveLock(tester, txId);
-    }
-}
-
+ 
+    selects.resize(1); 
+    for (ui32 i = 0; i < numVals; ++i, ++txId) { 
+        selects[0] = i; 
+        NTest::EmulateTx(tester, txId, selects, updates, ranges); 
+    } 
+ 
+    txId = 100; 
+    selects.resize(0); 
+    updates.resize(1); 
+    for (ui32 i = 0; i < numVals; ++i, ++txId) { 
+        NTest::RemoveLock(tester, txId); 
+    } 
+} 
+ 
 Y_UNIT_TEST(Points_ManyTx_BreakHalf_RemoveHalf) {
-    NTest::TLockTester tester;
-
-    ui32 numVals = 100 * 1000;
-    ui64 txId = 100;
+    NTest::TLockTester tester; 
+ 
+    ui32 numVals = 100 * 1000; 
+    ui64 txId = 100; 
     TVector<ui32> selects;
     TVector<ui32> updates;
     TVector<std::pair<ui32, ui32>> ranges;
-
-    selects.resize(1);
-    for (ui32 i = 0; i < numVals; ++i, ++txId) {
-        selects[0] = i;
-        NTest::EmulateTx(tester, txId, selects, updates, ranges);
-    }
-
-    txId = 100;
-    selects.resize(0);
-    updates.resize(1);
-    for (ui32 i = 0; i < numVals; ++i, ++txId) {
-        if (i%2) {
-            updates[0] = i;
-            NTest::EmulateTx(tester, txId, selects, updates, ranges);
-        } else {
-            NTest::RemoveLock(tester, txId);
-        }
-    }
-}
-
+ 
+    selects.resize(1); 
+    for (ui32 i = 0; i < numVals; ++i, ++txId) { 
+        selects[0] = i; 
+        NTest::EmulateTx(tester, txId, selects, updates, ranges); 
+    } 
+ 
+    txId = 100; 
+    selects.resize(0); 
+    updates.resize(1); 
+    for (ui32 i = 0; i < numVals; ++i, ++txId) { 
+        if (i%2) { 
+            updates[0] = i; 
+            NTest::EmulateTx(tester, txId, selects, updates, ranges); 
+        } else { 
+            NTest::RemoveLock(tester, txId); 
+        } 
+    } 
+} 
+ 
 void CheckLocksCacheUsage(bool waitForLocksStore) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
@@ -731,7 +731,7 @@ Y_UNIT_TEST(UseLocksCache) {
     CheckLocksCacheUsage(true);
     CheckLocksCacheUsage(false);
 }
-// TODO
-
-}
-}
+// TODO 
+ 
+} 
+} 

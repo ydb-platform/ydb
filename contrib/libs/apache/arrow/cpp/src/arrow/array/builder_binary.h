@@ -53,7 +53,7 @@ class BaseBinaryBuilder : public ArrayBuilder {
   explicit BaseBinaryBuilder(MemoryPool* pool = default_memory_pool())
       : ArrayBuilder(pool), offsets_builder_(pool), value_data_builder_(pool) {}
 
-  BaseBinaryBuilder(const std::shared_ptr<DataType>& /*type*/, MemoryPool* pool)
+  BaseBinaryBuilder(const std::shared_ptr<DataType>& /*type*/, MemoryPool* pool) 
       : BaseBinaryBuilder(pool) {}
 
   Status Append(const uint8_t* value, offset_type length) {

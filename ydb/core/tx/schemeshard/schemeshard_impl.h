@@ -1,6 +1,6 @@
 #pragma once
 
-#include "schemeshard.h"
+#include "schemeshard.h" 
 #include "schemeshard_export.h"
 #include "schemeshard_import.h"
 #include "schemeshard_build_index.h"
@@ -282,7 +282,7 @@ public:
     bool IsShemeShardConfigured() const;
 
     ui64 Generation() const;
-
+ 
     void SubscribeConsoleConfigs(const TActorContext& ctx);
     void ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfig, const TActorContext& ctx);
     void ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featureFlags, const TActorContext& ctx);
@@ -321,7 +321,7 @@ public:
      * Generates channels bindings for column shards based on the given storage config
      */
     bool GetOlapChannelsBindings(const TPathId domainId,
-                                 const NKikimrSchemeOp::TColumnStorageConfig& channelsConfig,
+                                 const NKikimrSchemeOp::TColumnStorageConfig& channelsConfig, 
                                  TChannelsBindings& channelsBindings,
                                  TString& errStr);
 
@@ -403,7 +403,7 @@ public:
 
     void MarkAsDroping(TPathElement::TPtr node, TTxId txId, const TActorContext& ctx);
     void MarkAsDroping(const THashSet<TPathId>& pathes, TTxId txId, const TActorContext& ctx);
-
+ 
     void UncountNode(TPathElement::TPtr node);
     void MarkAsMigrated(TPathElement::TPtr node, const TActorContext& ctx);
 
@@ -494,8 +494,8 @@ public:
 
 
     void PersistShardTx(NIceDb::TNiceDb& db, TShardIdx shardIdx, TTxId txId);
-    void PersistUpdateNextPathId(NIceDb::TNiceDb& db) const;
-    void PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const;
+    void PersistUpdateNextPathId(NIceDb::TNiceDb& db) const; 
+    void PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const; 
     void PersistParentDomain(NIceDb::TNiceDb& db, TPathId parentDomain) const;
     void PersistParentDomainEffectiveACL(NIceDb::TNiceDb& db, const TString& owner, const TString& effectiveACL, ui64 effectiveACLVersion) const;
     void PersistShardsToDelete(NIceDb::TNiceDb& db, const THashSet<TShardIdx>& shardsIdxs);
@@ -527,7 +527,7 @@ public:
     void PersistRemoveTableIndex(NIceDb::TNiceDb& db, TPathId tableId);
     void PersistRemoveTable(NIceDb::TNiceDb& db, TPathId tableId, const TActorContext& ctx);
     void PersistRevertedMirgration(NIceDb::TNiceDb& db, TPathId pathId, TTabletId abandonedSchemeShardId);
-
+ 
     // BlockStore
     void PersistBlockStorePartition(NIceDb::TNiceDb& db, TPathId pathId, ui32 partitionId, TShardIdx shardIdx, ui64 version);
     void PersistBlockStoreVolume(NIceDb::TNiceDb& db, TPathId pathId, const TBlockStoreVolumeInfo::TPtr);
@@ -610,7 +610,7 @@ public:
     struct TTxInitPopulator;
     NTabletFlatExecutor::ITransaction* CreateTxInitPopulator(TSideEffects::TPublications&& publications);
 
-    struct TTxInitSchema;
+    struct TTxInitSchema; 
     NTabletFlatExecutor::ITransaction* CreateTxInitSchema();
 
     struct TTxUpgradeSchema;
@@ -654,7 +654,7 @@ public:
     struct TTxNotifyCompletion;
     NTabletFlatExecutor::ITransaction* CreateTxNotifyTxCompletion(TEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev);
 
-    struct TTxDeleteTabletReply;
+    struct TTxDeleteTabletReply; 
     NTabletFlatExecutor::ITransaction* CreateTxDeleteTabletReply(TEvHive::TEvDeleteTabletReply::TPtr& ev);
 
     struct TTxShardStateChanged;
@@ -763,11 +763,11 @@ public:
 
     void Handle(TEvHive::TEvCreateTabletReply::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvHive::TEvAdoptTabletReply::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvHive::TEvDeleteTabletReply::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvHive::TEvDeleteTabletReply::TPtr &ev, const TActorContext &ctx); 
     void Handle(TEvPrivate::TEvSubscribeToShardDeletion::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvHive::TEvDeleteOwnerTabletsReply::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvPersQueue::TEvDropTabletReply::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvColumnShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPersQueue::TEvDropTabletReply::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvColumnShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx); 
     void Handle(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NSequenceShard::TEvSequenceShard::TEvDropSequenceResult::TPtr &ev, const TActorContext &ctx);
@@ -778,9 +778,9 @@ public:
     void Handle(NReplication::TEvController::TEvCreateReplicationResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NReplication::TEvController::TEvDropReplicationResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvSchemaChanged::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvDataShard::TEvSchemaChanged::TPtr &ev, const TActorContext &ctx); 
     void Handle(TEvDataShard::TEvStateChanged::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvPersQueue::TEvUpdateConfigResponse::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPersQueue::TEvUpdateConfigResponse::TPtr &ev, const TActorContext &ctx); 
     void Handle(TEvSubDomain::TEvConfigureStatus::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvBlockStore::TEvUpdateVolumeConfigResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvFileStore::TEvUpdateConfigResponse::TPtr& ev, const TActorContext& ctx);
@@ -1083,8 +1083,8 @@ private:
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::FLAT_SCHEMESHARD_ACTOR;
-    }
-
+    } 
+ 
     TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info);
 
     //TTabletId TabletID() const { return TTabletId(ITablet::TabletID()); }

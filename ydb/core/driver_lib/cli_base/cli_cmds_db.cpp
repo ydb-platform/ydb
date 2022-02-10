@@ -185,8 +185,8 @@ public:
     bool Details;
     bool AccessRights;
     bool AccessRightsEffective;
-    bool BackupInfo;
-    bool Protobuf;
+    bool BackupInfo; 
+    bool Protobuf; 
     bool PartitionStats;
     bool Boundaries;
 
@@ -196,8 +196,8 @@ public:
         Details = false;
         AccessRights = false;
         AccessRightsEffective = false;
-        BackupInfo = false;
-        Protobuf = false;
+        BackupInfo = false; 
+        Protobuf = false; 
         PartitionStats = false;
         Boundaries = false;
         config.SetFreeArgsNum(1);
@@ -206,8 +206,8 @@ public:
         config.Opts->AddLongOption('d', "details", "Show detailed information (like columns in a table)").NoArgument().SetFlag(&Details);
         config.Opts->AddLongOption('a', "acl", "Show owner and acl information").NoArgument().SetFlag(&AccessRights);
         config.Opts->AddLongOption('e', "effacl", "Show effective acl information").NoArgument().SetFlag(&AccessRightsEffective);
-        config.Opts->AddLongOption('b', "backup", "Show backup information").NoArgument().SetFlag(&BackupInfo);
-        config.Opts->AddLongOption('P', "protobuf", "Debug print all info as is").NoArgument().SetFlag(&Protobuf);
+        config.Opts->AddLongOption('b', "backup", "Show backup information").NoArgument().SetFlag(&BackupInfo); 
+        config.Opts->AddLongOption('P', "protobuf", "Debug print all info as is").NoArgument().SetFlag(&Protobuf); 
         config.Opts->AddLongOption('s', "stats", "Return partition stats").NoArgument().SetFlag(&PartitionStats);
         config.Opts->AddLongOption("boundaries", "Return boundaries").NoArgument().SetFlag(&Boundaries);
     }
@@ -259,11 +259,11 @@ public:
         case NKikimrSchemeOp::EPathTypeTable:
             type = "<table>";
             break;
-        case NKikimrSchemeOp::EPathTypeColumnStore:
-            type = "<column store>";
+        case NKikimrSchemeOp::EPathTypeColumnStore: 
+            type = "<column store>"; 
             break;
-        case NKikimrSchemeOp::EPathTypeColumnTable:
-            type = "<column table>";
+        case NKikimrSchemeOp::EPathTypeColumnTable: 
+            type = "<column table>"; 
             break;
         case NKikimrSchemeOp::EPathTypeSequence:
             type = "<sequence>";
@@ -352,19 +352,19 @@ public:
                 break;
             }
         }
-        if (BackupInfo) {
-            if (path.HasBackupProgress()) {
+        if (BackupInfo) { 
+            if (path.HasBackupProgress()) { 
                 NKikimrSchemeOp::TBackupProgress backup = path.GetBackupProgress();
-                ui32 total = backup.GetTotal();
-                ui32 notYet = backup.GetNotCompleteYet();
+                ui32 total = backup.GetTotal(); 
+                ui32 notYet = backup.GetNotCompleteYet(); 
                 Cout << "backup in progress: " << (total - notYet) << "/" << total;
                 if (backup.HasTxId()) {
                     Cout << " txId: " << backup.GetTxId();
                 }
                 Cout << Endl;
-            }
-            for (const auto& backupResult : path.GetLastBackupResult()) {
-                Cout << "backup done: " << backupResult.GetCompleteTimeStamp()
+            } 
+            for (const auto& backupResult : path.GetLastBackupResult()) { 
+                Cout << "backup done: " << backupResult.GetCompleteTimeStamp() 
                     << " txId: " << backupResult.GetTxId()
                     << " errors: " << backupResult.GetErrorCount();
                 if (backupResult.ErrorsSize()) {
@@ -380,13 +380,13 @@ public:
                     Cout << " }";
                 }
                 Cout << Endl;
-            }
-        }
-        if (Protobuf) {
-            TString debugProto;
-            ::google::protobuf::TextFormat::PrintToString(path, &debugProto);
-            Cout << debugProto << Endl;
-        }
+            } 
+        } 
+        if (Protobuf) { 
+            TString debugProto; 
+            ::google::protobuf::TextFormat::PrintToString(path, &debugProto); 
+            Cout << debugProto << Endl; 
+        } 
     }
 
     virtual int Run(TConfig& config) override {
@@ -431,7 +431,7 @@ public:
 class TClientCommandSchemaLs : public TClientCommand {
 public:
     TClientCommandSchemaLs()
-        : TClientCommand("ls", {}, "List schema object or path content")
+        : TClientCommand("ls", {}, "List schema object or path content") 
     {}
 
     TAutoPtr<NKikimrClient::TSchemeDescribe> Request;
@@ -474,11 +474,11 @@ public:
         case NKikimrSchemeOp::EPathTypePersQueueGroup:
             type = "<pq group>";
             break;
-        case NKikimrSchemeOp::EPathTypeColumnStore:
-            type = "<column store>";
+        case NKikimrSchemeOp::EPathTypeColumnStore: 
+            type = "<column store>"; 
             break;
-        case NKikimrSchemeOp::EPathTypeColumnTable:
-            type = "<column table>";
+        case NKikimrSchemeOp::EPathTypeColumnTable: 
+            type = "<column table>"; 
             break;
         case NKikimrSchemeOp::EPathTypeSequence:
             type = "<sequence>";
@@ -499,12 +499,12 @@ public:
         const auto& description(record.GetPathDescription());
         if (description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeDir
             || description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeSubDomain
-            || description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeColumnStore) {
-            for (const auto& entry : description.GetChildren()) {
-                PrintEntry(entry);
-            }
-        } else {
-            PrintEntry(description.GetSelf());
+            || description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeColumnStore) { 
+            for (const auto& entry : description.GetChildren()) { 
+                PrintEntry(entry); 
+            } 
+        } else { 
+            PrintEntry(description.GetSelf()); 
         }
         return 0;
     }

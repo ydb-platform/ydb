@@ -152,7 +152,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
 
     ui32 groupId = TGroupID(GroupConfigurationTypeStatic, DOMAIN_ID, 0).GetRaw();
     for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
-        SetupStateStorage(runtime, nodeIndex, stateStorageGroup);
+        SetupStateStorage(runtime, nodeIndex, stateStorageGroup); 
 
         TStringStream str;
         str << "AvailabilityDomains: " << DOMAIN_ID << Endl;
@@ -236,8 +236,8 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
             nodeWardenConfig->SectorMaps[pDiskPath1] = sectorMap1;
         }
 
-        SetupBSNodeWarden(runtime, nodeIndex, nodeWardenConfig.Release());
-        SetupTabletResolver(runtime, nodeIndex);
+        SetupBSNodeWarden(runtime, nodeIndex, nodeWardenConfig.Release()); 
+        SetupTabletResolver(runtime, nodeIndex); 
     }
 
     runtime.Initialize(app.Unwrap());

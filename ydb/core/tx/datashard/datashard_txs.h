@@ -1,7 +1,7 @@
 #pragma once
 
 #include "datashard_common_upload.h"
-#include "datashard_impl.h"
+#include "datashard_impl.h" 
 #include "execution_unit_kind.h"
 
 namespace NKikimr {
@@ -34,7 +34,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_GET_STARD_STATE; }
 private:
     TEvDataShard::TEvGetShardState::TPtr Ev;
-    THolder<TEvDataShard::TEvGetShardStateResult> Result;
+    THolder<TEvDataShard::TEvGetShardStateResult> Result; 
 };
 
 class TDataShard::TTxInit : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -42,7 +42,7 @@ public:
     TTxInit(TDataShard* ds);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext &ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_INIT; }
+    TTxType GetTxType() const override { return TXTYPE_INIT; } 
 private:
     bool CreateScheme(TTransactionContext &txc);
     bool ReadEverything(TTransactionContext &txc);
@@ -55,7 +55,7 @@ public:
     TTxPlanStep(TDataShard *self, TEvTxProcessing::TEvPlanStep::TPtr ev);
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
     void Complete(const TActorContext &ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_PLAN_STEP; }
+    TTxType GetTxType() const override { return TXTYPE_PLAN_STEP; } 
 
 private:
     TEvTxProcessing::TEvPlanStep::TPtr Ev;
@@ -69,7 +69,7 @@ public:
     explicit TTxProgressTransaction(TDataShard *self, TOperation::TPtr op = nullptr);
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
     void Complete(const TActorContext &ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_PROGRESS_START; }
+    TTxType GetTxType() const override { return TXTYPE_PROGRESS_START; } 
 
 private:
     TOperation::TPtr ActiveOp;
@@ -113,13 +113,13 @@ public:
     TTxReadSet(TDataShard *self, TEvTxProcessing::TEvReadSet::TPtr ev);
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
     void Complete(const TActorContext &ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_READSET; }
+    TTxType GetTxType() const override { return TXTYPE_READSET; } 
 
 private:
-    TEvTxProcessing::TEvReadSet::TPtr Ev;
-    THolder<IEventHandle> Ack;
-
-    THolder<IEventHandle> MakeAck(const TActorContext &ctx);
+    TEvTxProcessing::TEvReadSet::TPtr Ev; 
+    THolder<IEventHandle> Ack; 
+ 
+    THolder<IEventHandle> MakeAck(const TActorContext &ctx); 
 };
 
 class TDataShard::TTxProgressResendRS : public NTabletFlatExecutor::TTransactionBase<TDataShard> {

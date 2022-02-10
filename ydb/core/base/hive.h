@@ -22,7 +22,7 @@ namespace NKikimr {
             EvTabletMetrics = EvStopTablet + 7, // review 194375
             EvReassignTablet,
             EvInitiateBlockStorage,
-            EvDeleteTablet,
+            EvDeleteTablet, 
             EvRequestHiveInfo,
             EvLookupTablet,
             EvDrainNode,
@@ -52,7 +52,7 @@ namespace NKikimr {
             EvReconfigureTabletReply,
             EvChannelInfo,
             EvStopTabletResult,
-            EvDeleteTabletReply,
+            EvDeleteTabletReply, 
             EvTabletCreationResult,
             EvResponseHiveInfo,
             EvDrainNodeResult,
@@ -403,9 +403,9 @@ namespace NKikimr {
             }
         };
 
-        struct TEvDeleteTablet : public TEventPB<TEvDeleteTablet, NKikimrHive::TEvDeleteTablet, EvDeleteTablet> {
-            TEvDeleteTablet()
-            {}
+        struct TEvDeleteTablet : public TEventPB<TEvDeleteTablet, NKikimrHive::TEvDeleteTablet, EvDeleteTablet> { 
+            TEvDeleteTablet() 
+            {} 
 
             TEvDeleteTablet(ui64 ownerId, ui64 ownerIdx, ui64 txId) {
                 Record.SetShardOwnerId(ownerId);
@@ -419,24 +419,24 @@ namespace NKikimr {
                 Record.AddTabletID(tabletId);
                 Record.SetTxId_Deprecated(txId);
             }
-        };
-
-        struct TEvDeleteTabletReply : public TEventPB<TEvDeleteTabletReply,
-                NKikimrHive::TEvDeleteTabletReply, EvDeleteTabletReply> {
-            TEvDeleteTabletReply()
-            {}
-
+        }; 
+ 
+        struct TEvDeleteTabletReply : public TEventPB<TEvDeleteTabletReply, 
+                NKikimrHive::TEvDeleteTabletReply, EvDeleteTabletReply> { 
+            TEvDeleteTabletReply() 
+            {} 
+ 
             TEvDeleteTabletReply(NKikimrProto::EReplyStatus status, ui64 hiveID, ui64 txId, ui64 ownerId, const TVector<ui64>& localIdxs) {
-                Record.SetStatus(status);
+                Record.SetStatus(status); 
                 Record.SetOrigin(hiveID);
                 Record.SetTxId_Deprecated(txId);
                 Record.SetShardOwnerId(ownerId);
                 for (auto& idx: localIdxs) {
                     Record.AddShardLocalIdx(idx);
                 }
-            }
-        };
-
+            } 
+        }; 
+ 
         struct TEvDeleteOwnerTablets : public TEventPB<TEvDeleteOwnerTablets,
                                                        NKikimrHive::TEvDeleteOwnerTablets, EvDeleteOwnerTablets> {
             TEvDeleteOwnerTablets()

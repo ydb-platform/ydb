@@ -1,7 +1,7 @@
-#include "datashard_ut_common.h"
+#include "datashard_ut_common.h" 
 #include "datashard_ut_common_kqp.h"
-#include "datashard_active_transaction.h"
-
+#include "datashard_active_transaction.h" 
+ 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
@@ -15,399 +15,399 @@
 #include <util/system/valgrind.h>
 
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-
-namespace NKikimr {
-
-using NClient::TValue;
-using IEngineFlat = NMiniKQL::IEngineFlat;
+ 
+namespace NKikimr { 
+ 
+using NClient::TValue; 
+using IEngineFlat = NMiniKQL::IEngineFlat; 
 using namespace NKikimr::NDataShard;
 using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
 using namespace Tests;
-
-using TActiveTxPtr = std::shared_ptr<TActiveTransaction>;
-
-///
-class TDatashardTester {
-public:
-    TDatashardTester()
-        : FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry()))
-        , RandomProvider(CreateDeterministicRandomProvider(1))
-        , TimeProvider(CreateDeterministicTimeProvider(1))
-    {}
-
-    static TString MakeTxBody(const TString& miniKQL, bool immediate = false, ui64 lockId = 0) {
-        NKikimrTxDataShard::TDataTransaction tx;
-        tx.SetMiniKQL(miniKQL);
-        tx.SetImmediate(immediate);
-        if (lockId) {
-            tx.SetLockTxId(lockId);
-        }
-        return tx.SerializeAsString();
-    }
-
-    static TActiveTxPtr MakeEmptyTx(ui64 step, ui64 txId) {
+ 
+using TActiveTxPtr = std::shared_ptr<TActiveTransaction>; 
+ 
+/// 
+class TDatashardTester { 
+public: 
+    TDatashardTester() 
+        : FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())) 
+        , RandomProvider(CreateDeterministicRandomProvider(1)) 
+        , TimeProvider(CreateDeterministicTimeProvider(1)) 
+    {} 
+ 
+    static TString MakeTxBody(const TString& miniKQL, bool immediate = false, ui64 lockId = 0) { 
+        NKikimrTxDataShard::TDataTransaction tx; 
+        tx.SetMiniKQL(miniKQL); 
+        tx.SetImmediate(immediate); 
+        if (lockId) { 
+            tx.SetLockTxId(lockId); 
+        } 
+        return tx.SerializeAsString(); 
+    } 
+ 
+    static TActiveTxPtr MakeEmptyTx(ui64 step, ui64 txId) { 
         TBasicOpInfo op(txId, EOperationKind::DataTx, 0, Max<ui64>(), TInstant(), 0);
         op.SetStep(step);
-        return std::make_shared<TActiveTransaction>(op);
-    }
-#if 0
-    TActiveTransaction MakeActiveTx(ui64 step, ui64 txId, const TString& txBody) {
+        return std::make_shared<TActiveTransaction>(op); 
+    } 
+#if 0 
+    TActiveTransaction MakeActiveTx(ui64 step, ui64 txId, const TString& txBody) { 
         THolder<NMiniKQL::IEngineFlatHost> host = MakeHolder<NMiniKQL::TEngineHost>(DB);
-        THolder<NMiniKQL::IEngineFlat> engine = CreateEngineFlat(
-            NMiniKQL::TEngineFlatSettings(NMiniKQL::IEngineFlat::EProtocol::V1,
-                                          FunctionRegistry.Get(), *RandomProvider, *TimeProvider, host.Get()));
-
-        TEngineBay ebay(host.Release(), engine.Release());
-        std::shared_ptr<TValidatedDataTx> dataTx(new TValidatedDataTx(std::move(ebay), txId, 0, txBody));
-
+        THolder<NMiniKQL::IEngineFlat> engine = CreateEngineFlat( 
+            NMiniKQL::TEngineFlatSettings(NMiniKQL::IEngineFlat::EProtocol::V1, 
+                                          FunctionRegistry.Get(), *RandomProvider, *TimeProvider, host.Get())); 
+ 
+        TEngineBay ebay(host.Release(), engine.Release()); 
+        std::shared_ptr<TValidatedDataTx> dataTx(new TValidatedDataTx(std::move(ebay), txId, 0, txBody)); 
+ 
         TBasicOpInfo op(txId, NKikimrTxDataShard::ETransactionKind::TX_KIND_DATA, 0, Max<ui64>(), 0);
         op.SetStep(step);
-        TActiveTransaction tx(op);
-        tx.Activate(0, dataTx);
-        return tx;
-    }
-#endif
-private:
-    TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> FunctionRegistry;
-    TIntrusivePtr<IRandomProvider> RandomProvider;
-    TIntrusivePtr<ITimeProvider> TimeProvider;
+        TActiveTransaction tx(op); 
+        tx.Activate(0, dataTx); 
+        return tx; 
+    } 
+#endif 
+private: 
+    TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> FunctionRegistry; 
+    TIntrusivePtr<IRandomProvider> RandomProvider; 
+    TIntrusivePtr<ITimeProvider> TimeProvider; 
     NTable::TDatabase DB;
-};
-
-
-///
+}; 
+ 
+ 
+/// 
 Y_UNIT_TEST_SUITE(TxOrderInternals) {
-
+ 
 Y_UNIT_TEST(OperationOrder) {
-    using TTester = TDatashardTester;
-
-    TActiveTxPtr tx0_100 = TTester::MakeEmptyTx(0, 100);
-    TActiveTxPtr tx0_101 = TTester::MakeEmptyTx(0, 101);
-    TActiveTxPtr tx1_40 = TTester::MakeEmptyTx(1, 40);
-    TActiveTxPtr tx1_102 = TTester::MakeEmptyTx(1, 102);
-    TActiveTxPtr tx1_103 = TTester::MakeEmptyTx(1, 103);
-    TActiveTxPtr tx2_42 = TTester::MakeEmptyTx(2, 42);
-
+    using TTester = TDatashardTester; 
+ 
+    TActiveTxPtr tx0_100 = TTester::MakeEmptyTx(0, 100); 
+    TActiveTxPtr tx0_101 = TTester::MakeEmptyTx(0, 101); 
+    TActiveTxPtr tx1_40 = TTester::MakeEmptyTx(1, 40); 
+    TActiveTxPtr tx1_102 = TTester::MakeEmptyTx(1, 102); 
+    TActiveTxPtr tx1_103 = TTester::MakeEmptyTx(1, 103); 
+    TActiveTxPtr tx2_42 = TTester::MakeEmptyTx(2, 42); 
+ 
     UNIT_ASSERT_EQUAL(tx0_100->GetStepOrder().CheckOrder(tx0_101->GetStepOrder()), ETxOrder::Any);
     UNIT_ASSERT_EQUAL(tx0_101->GetStepOrder().CheckOrder(tx0_100->GetStepOrder()), ETxOrder::Any);
-
+ 
     UNIT_ASSERT_EQUAL(tx0_100->GetStepOrder().CheckOrder(tx1_102->GetStepOrder()), ETxOrder::Unknown);
     UNIT_ASSERT_EQUAL(tx1_102->GetStepOrder().CheckOrder(tx0_100->GetStepOrder()), ETxOrder::Unknown);
-
+ 
     UNIT_ASSERT_EQUAL(tx1_102->GetStepOrder().CheckOrder(tx1_103->GetStepOrder()), ETxOrder::Before);
     UNIT_ASSERT_EQUAL(tx1_103->GetStepOrder().CheckOrder(tx1_102->GetStepOrder()), ETxOrder::After);
-
+ 
     UNIT_ASSERT_EQUAL(tx1_102->GetStepOrder().CheckOrder(tx1_40->GetStepOrder()), ETxOrder::After);
     UNIT_ASSERT_EQUAL(tx1_102->GetStepOrder().CheckOrder(tx2_42->GetStepOrder()), ETxOrder::Before);
-}
-
-}
-
-static void InitCrossShard_ABC(TFakeMiniKQLProxy& proxy, TVector<ui32> uintVal) {
-    UNIT_ASSERT_EQUAL(uintVal.size(), 3);
-
-    auto programText = Sprintf(R"((
-        (let row1_ '('('key (Uint32 '0))))
-        (let row2_ '('('key (Uint32 '1000))))
-        (let row3_ '('('key (Uint32 '2000))))
-        (let upd1_ '('('value (Utf8 'A)) '('uint (Uint32 '%u))))
-        (let upd2_ '('('value (Utf8 'B)) '('uint (Uint32 '%u))))
-        (let upd3_ '('('value (Utf8 'C)) '('uint (Uint32 '%u))))
-        (let ret_ (AsList
-            (UpdateRow 'table1 row1_ upd1_)
-            (UpdateRow 'table1 row2_ upd2_)
-            (UpdateRow 'table1 row3_ upd3_)
-        ))
-        (return ret_)
-    ))", uintVal[0], uintVal[1], uintVal[2]);
-
-    UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete);
-}
-
-///
+} 
+ 
+} 
+ 
+static void InitCrossShard_ABC(TFakeMiniKQLProxy& proxy, TVector<ui32> uintVal) { 
+    UNIT_ASSERT_EQUAL(uintVal.size(), 3); 
+ 
+    auto programText = Sprintf(R"(( 
+        (let row1_ '('('key (Uint32 '0)))) 
+        (let row2_ '('('key (Uint32 '1000)))) 
+        (let row3_ '('('key (Uint32 '2000)))) 
+        (let upd1_ '('('value (Utf8 'A)) '('uint (Uint32 '%u)))) 
+        (let upd2_ '('('value (Utf8 'B)) '('uint (Uint32 '%u)))) 
+        (let upd3_ '('('value (Utf8 'C)) '('uint (Uint32 '%u)))) 
+        (let ret_ (AsList 
+            (UpdateRow 'table1 row1_ upd1_) 
+            (UpdateRow 'table1 row2_ upd2_) 
+            (UpdateRow 'table1 row3_ upd3_) 
+        )) 
+        (return ret_) 
+    ))", uintVal[0], uintVal[1], uintVal[2]); 
+ 
+    UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete); 
+} 
+ 
+/// 
 Y_UNIT_TEST_SUITE(DataShardTxOrder) {
-
-static void ZigZag(TFakeMiniKQLProxy& proxy, bool symmetric, ui32 limit = 40) {
-    InitCrossShard_ABC(proxy, {0, 0, 0});
-
-    const char * zigzag = R"((
-        (let src1_ '('('key (Uint32 '%u))))
-        (let src2_ '('('key (Uint32 '%u))))
-        (let dst1_ '('('key (Uint32 '%u))))
-        (let dst2_ '('('key (Uint32 '%u))))
-        (let val1_ (FlatMap (SelectRow 'table1 src1_ '('value)) (lambda '(x) (Member x 'value))))
-        (let val2_ (FlatMap (SelectRow 'table1 src2_ '('value)) (lambda '(x) (Member x 'value))))
-        (let upd1_ '('('value val1_)))
-        (let upd2_ '('('value val2_)))
-        (let ret_ (AsList
-            (UpdateRow 'table1 dst1_ upd2_)
-            (UpdateRow 'table1 dst2_ upd1_)
-        ))
-        (return ret_)
-    ))";
-
-    // strict ordered txs: {0->1001, 1000->1} {1->1002, 1001->2}
-    for (ui32 i = 0; i < 10; ++i) {
-        TString programText = Sprintf(zigzag, i, 1000+i, i+1, 1000+i+1);
-        UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete);
-    }
-
-    if (symmetric) {
-        // relaxed order: 20->1031, 1020->31
-        for (ui32 shift = 0; shift < limit-10; shift+=10) {
-            for (ui32 i = 0; i < 10; ++i) {
-                TString programText = Sprintf(zigzag, shift+i, 1000+shift+i, shift+i+11, 1000+shift+i+11);
-                //UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete);
-                proxy.Enqueue(programText);
-            }
-        }
-    } else {
-        // relaxed order (asymmetric): 0->1031, 1020->1031
-        for (ui32 shift = 0; shift < limit-10; shift+=10) {
-            for (ui32 i = 0; i < 10; ++i) {
-                TString programText = Sprintf(zigzag, i, 1000+shift+i, shift+i+11, 1000+shift+i+11);
-                //UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete);
-                proxy.Enqueue(programText);
-            }
-        }
-    }
-
-    proxy.ExecQueue();
-
-    {
-        TString programText = Sprintf(R"((
-            (let row1_ '('('key (Uint32 '%u))))
-            (let row2_ '('('key (Uint32 '%u))))
-            (let row3_ '('('key (Uint32 '%u))))
-            (let row4_ '('('key (Uint32 '%u))))
-            (let select_ '('value))
-            (let ret_ (AsList
-            (SetResult 'Result (AsList
-                (SelectRow 'table1 row1_ select_)
-                (SelectRow 'table1 row2_ select_)
-                (SelectRow 'table1 row3_ select_)
-                (SelectRow 'table1 row4_ select_)
-            ))
-            ))
-            (return ret_)
-        ))", limit-1, limit, 1000+limit-1, 1000+limit);
-
-        NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
-
-        TValue value = TValue::Create(res.GetValue(), res.GetType());
-        TValue rl = value["Result"];
-        TValue row1 = rl[0];
-        TValue row2 = rl[1];
-        TValue row3 = rl[2];
-        TValue row4 = rl[3];
-        UNIT_ASSERT_EQUAL(TString(row1["value"]), "B");
-        UNIT_ASSERT_EQUAL(TString(row2["value"]), "A");
-        UNIT_ASSERT_EQUAL(TString(row3["value"]), "A");
-        UNIT_ASSERT_EQUAL(TString(row4["value"]), "B");
-    }
-}
-
-static void ZigZag(const TTester::TOptions& opts, bool symmetric, ui32 limit = 40) {
-    TTester t(TTester::ESchema_MultiShardKV, opts);
-    TFakeMiniKQLProxy proxy(t);
-    ZigZag(proxy, symmetric, limit);
-}
-
+ 
+static void ZigZag(TFakeMiniKQLProxy& proxy, bool symmetric, ui32 limit = 40) { 
+    InitCrossShard_ABC(proxy, {0, 0, 0}); 
+ 
+    const char * zigzag = R"(( 
+        (let src1_ '('('key (Uint32 '%u)))) 
+        (let src2_ '('('key (Uint32 '%u)))) 
+        (let dst1_ '('('key (Uint32 '%u)))) 
+        (let dst2_ '('('key (Uint32 '%u)))) 
+        (let val1_ (FlatMap (SelectRow 'table1 src1_ '('value)) (lambda '(x) (Member x 'value)))) 
+        (let val2_ (FlatMap (SelectRow 'table1 src2_ '('value)) (lambda '(x) (Member x 'value)))) 
+        (let upd1_ '('('value val1_))) 
+        (let upd2_ '('('value val2_))) 
+        (let ret_ (AsList 
+            (UpdateRow 'table1 dst1_ upd2_) 
+            (UpdateRow 'table1 dst2_ upd1_) 
+        )) 
+        (return ret_) 
+    ))"; 
+ 
+    // strict ordered txs: {0->1001, 1000->1} {1->1002, 1001->2} 
+    for (ui32 i = 0; i < 10; ++i) { 
+        TString programText = Sprintf(zigzag, i, 1000+i, i+1, 1000+i+1); 
+        UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete); 
+    } 
+ 
+    if (symmetric) { 
+        // relaxed order: 20->1031, 1020->31 
+        for (ui32 shift = 0; shift < limit-10; shift+=10) { 
+            for (ui32 i = 0; i < 10; ++i) { 
+                TString programText = Sprintf(zigzag, shift+i, 1000+shift+i, shift+i+11, 1000+shift+i+11); 
+                //UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete); 
+                proxy.Enqueue(programText); 
+            } 
+        } 
+    } else { 
+        // relaxed order (asymmetric): 0->1031, 1020->1031 
+        for (ui32 shift = 0; shift < limit-10; shift+=10) { 
+            for (ui32 i = 0; i < 10; ++i) { 
+                TString programText = Sprintf(zigzag, i, 1000+shift+i, shift+i+11, 1000+shift+i+11); 
+                //UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete); 
+                proxy.Enqueue(programText); 
+            } 
+        } 
+    } 
+ 
+    proxy.ExecQueue(); 
+ 
+    { 
+        TString programText = Sprintf(R"(( 
+            (let row1_ '('('key (Uint32 '%u)))) 
+            (let row2_ '('('key (Uint32 '%u)))) 
+            (let row3_ '('('key (Uint32 '%u)))) 
+            (let row4_ '('('key (Uint32 '%u)))) 
+            (let select_ '('value)) 
+            (let ret_ (AsList 
+            (SetResult 'Result (AsList 
+                (SelectRow 'table1 row1_ select_) 
+                (SelectRow 'table1 row2_ select_) 
+                (SelectRow 'table1 row3_ select_) 
+                (SelectRow 'table1 row4_ select_) 
+            )) 
+            )) 
+            (return ret_) 
+        ))", limit-1, limit, 1000+limit-1, 1000+limit); 
+ 
+        NKikimrMiniKQL::TResult res; 
+        UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete); 
+ 
+        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
+        TValue rl = value["Result"]; 
+        TValue row1 = rl[0]; 
+        TValue row2 = rl[1]; 
+        TValue row3 = rl[2]; 
+        TValue row4 = rl[3]; 
+        UNIT_ASSERT_EQUAL(TString(row1["value"]), "B"); 
+        UNIT_ASSERT_EQUAL(TString(row2["value"]), "A"); 
+        UNIT_ASSERT_EQUAL(TString(row3["value"]), "A"); 
+        UNIT_ASSERT_EQUAL(TString(row4["value"]), "B"); 
+    } 
+} 
+ 
+static void ZigZag(const TTester::TOptions& opts, bool symmetric, ui32 limit = 40) { 
+    TTester t(TTester::ESchema_MultiShardKV, opts); 
+    TFakeMiniKQLProxy proxy(t); 
+    ZigZag(proxy, symmetric, limit); 
+} 
+ 
 Y_UNIT_TEST_WITH_MVCC(ZigZag) {
     TTester::TOptions opts;
     opts.EnableMvcc(WithMvcc);
     ZigZag(opts, true);
     ZigZag(opts, false);
-}
-
+} 
+ 
 Y_UNIT_TEST_WITH_MVCC(ZigZag_oo) {
     TVector<ui32> variants = {4, 8, 16};
-    for (ui32 var : variants) {
-        TTester::TOptions opts;
-        opts.EnableOutOfOrder(var);
+    for (ui32 var : variants) { 
+        TTester::TOptions opts; 
+        opts.EnableOutOfOrder(var); 
         opts.EnableMvcc(WithMvcc);
-        ZigZag(opts, true);
-        ZigZag(opts, false);
-    }
-}
-
+        ZigZag(opts, true); 
+        ZigZag(opts, false); 
+    } 
+} 
+ 
 Y_UNIT_TEST_WITH_MVCC(ZigZag_oo8_dirty) {
-    TTester::TOptions opts;
-    opts.EnableOutOfOrder(8);
-    opts.EnableSoftUpdates();
+    TTester::TOptions opts; 
+    opts.EnableOutOfOrder(8); 
+    opts.EnableSoftUpdates(); 
     opts.EnableMvcc(WithMvcc);
-    ZigZag(opts, true);
-    ZigZag(opts, false);
-}
-
-//
-
-static void ImmediateBetweenOnline(const TTester::TOptions& opts, bool forceOnline = false) {
-    TTester t(TTester::ESchema_MultiShardKV, opts);
-    TFakeMiniKQLProxy proxy(t);
-
-    InitCrossShard_ABC(proxy, {0, 0, 0});
-
-    const char * online = R"((
-        (let key1_ '('('key (Uint32 '%u))))
-        (let key2_ '('('key (Uint32 '%u))))
-        (let key3_ '('('key (Uint32 '%u))))
-        (let val1_ (FlatMap (SelectRow 'table1 key1_ '('value)) (lambda '(x) (Member x 'value))))
-        (let val2_ (FlatMap (SelectRow 'table1 key2_ '('value)) (lambda '(x) (Member x 'value))))
-        (let upd21_ '('('uint (Uint32 '%u)) '('value val2_)))
-        (let upd13_ '('('value val1_)))
-        (let ret_ (AsList
-            (UpdateRow 'table1 key1_ upd21_)
-            (UpdateRow 'table1 key3_ upd13_)
-        ))
-        (return ret_)
-    ))";
-
-    const char * immediate = R"((
-        (let key1_ '('('key (Uint32 '%u))))
-        (let key2_ '('('key (Uint32 '%u))))
-        (let val1_ (Coalesce (FlatMap (SelectRow 'table1 key1_ '('uint)) (lambda '(x) (Member x 'uint))) (Uint32 '0)))
-        (let val2_ (Coalesce (FlatMap (SelectRow 'table1 key2_ '('uint)) (lambda '(x) (Member x 'uint))) (Uint32 '0)))
-        (let ret_ (AsList
-            (SetResult 'val1 val1_)
-            (SetResult 'val2 val2_)
-        ))
-        (return ret_)
-    ))";
-
-    auto immediateCheck = [&](TFakeProxyTx& tx) -> bool {
-        NKikimrMiniKQL::TResult res = tx.GetResult();
-        TValue value = TValue::Create(res.GetValue(), res.GetType());
-        ui32 val1 = value["val1"];
-        ui32 val2 = value["val2"];
-        //Cerr << "val1 " << val1 << " val2 " << val2 << Endl;
-        if (forceOnline) {
-            UNIT_ASSERT(!tx.Immediate());
-            UNIT_ASSERT(val1 == 1 && val2 == 0);
-        } else {
-            UNIT_ASSERT(tx.Immediate());
-            UNIT_ASSERT((val1 == 0 && val2 == 0) || (val1 == 1 && val2 == 0) || (val1 == 1 && val2 == 2));
-            if (val1 == 1 && val2 == 0) {
-                Cerr << "Got it!" << Endl;
-            }
-        }
-        return true;
-    };
-
+    ZigZag(opts, true); 
+    ZigZag(opts, false); 
+} 
+ 
+// 
+ 
+static void ImmediateBetweenOnline(const TTester::TOptions& opts, bool forceOnline = false) { 
+    TTester t(TTester::ESchema_MultiShardKV, opts); 
+    TFakeMiniKQLProxy proxy(t); 
+ 
+    InitCrossShard_ABC(proxy, {0, 0, 0}); 
+ 
+    const char * online = R"(( 
+        (let key1_ '('('key (Uint32 '%u)))) 
+        (let key2_ '('('key (Uint32 '%u)))) 
+        (let key3_ '('('key (Uint32 '%u)))) 
+        (let val1_ (FlatMap (SelectRow 'table1 key1_ '('value)) (lambda '(x) (Member x 'value)))) 
+        (let val2_ (FlatMap (SelectRow 'table1 key2_ '('value)) (lambda '(x) (Member x 'value)))) 
+        (let upd21_ '('('uint (Uint32 '%u)) '('value val2_))) 
+        (let upd13_ '('('value val1_))) 
+        (let ret_ (AsList 
+            (UpdateRow 'table1 key1_ upd21_) 
+            (UpdateRow 'table1 key3_ upd13_) 
+        )) 
+        (return ret_) 
+    ))"; 
+ 
+    const char * immediate = R"(( 
+        (let key1_ '('('key (Uint32 '%u)))) 
+        (let key2_ '('('key (Uint32 '%u)))) 
+        (let val1_ (Coalesce (FlatMap (SelectRow 'table1 key1_ '('uint)) (lambda '(x) (Member x 'uint))) (Uint32 '0))) 
+        (let val2_ (Coalesce (FlatMap (SelectRow 'table1 key2_ '('uint)) (lambda '(x) (Member x 'uint))) (Uint32 '0))) 
+        (let ret_ (AsList 
+            (SetResult 'val1 val1_) 
+            (SetResult 'val2 val2_) 
+        )) 
+        (return ret_) 
+    ))"; 
+ 
+    auto immediateCheck = [&](TFakeProxyTx& tx) -> bool { 
+        NKikimrMiniKQL::TResult res = tx.GetResult(); 
+        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
+        ui32 val1 = value["val1"]; 
+        ui32 val2 = value["val2"]; 
+        //Cerr << "val1 " << val1 << " val2 " << val2 << Endl; 
+        if (forceOnline) { 
+            UNIT_ASSERT(!tx.Immediate()); 
+            UNIT_ASSERT(val1 == 1 && val2 == 0); 
+        } else { 
+            UNIT_ASSERT(tx.Immediate()); 
+            UNIT_ASSERT((val1 == 0 && val2 == 0) || (val1 == 1 && val2 == 0) || (val1 == 1 && val2 == 2)); 
+            if (val1 == 1 && val2 == 0) { 
+                Cerr << "Got it!" << Endl; 
+            } 
+        } 
+        return true; 
+    }; 
+ 
     ui32 flags = NDataShard::TTxFlags::Default;
-    if (forceOnline) {
+    if (forceOnline) { 
         flags |= NDataShard::TTxFlags::ForceOnline;
-    }
-
-    for (ui32 i = 0; i < 100; i+=2) {
-        TString prog1 = Sprintf(online, i, 1000+i, 2000+i, 1);
-        TString prog2 = Sprintf(online, i+1, 1000+i+1, 200+i, 2);
-        TString progIm = Sprintf(immediate, i, i+1);
-        proxy.Enqueue(prog1);
-        proxy.Enqueue(progIm, immediateCheck, flags);
-        proxy.Enqueue(prog2);
-    }
-
-    proxy.ExecQueue();
-}
-
+    } 
+ 
+    for (ui32 i = 0; i < 100; i+=2) { 
+        TString prog1 = Sprintf(online, i, 1000+i, 2000+i, 1); 
+        TString prog2 = Sprintf(online, i+1, 1000+i+1, 200+i, 2); 
+        TString progIm = Sprintf(immediate, i, i+1); 
+        proxy.Enqueue(prog1); 
+        proxy.Enqueue(progIm, immediateCheck, flags); 
+        proxy.Enqueue(prog2); 
+    } 
+ 
+    proxy.ExecQueue(); 
+} 
+ 
 Y_UNIT_TEST_WITH_MVCC(ImmediateBetweenOnline) {
     TTester::TOptions opts;
     opts.EnableMvcc(WithMvcc);
     ImmediateBetweenOnline(opts, false);
-}
-
+} 
+ 
 Y_UNIT_TEST_WITH_MVCC(ImmediateBetweenOnline_Init) {
     TTester::TOptions opts;
     opts.EnableMvcc(WithMvcc);
     ImmediateBetweenOnline(opts, false);
-}
-
+} 
+ 
 Y_UNIT_TEST_WITH_MVCC(ForceOnlineBetweenOnline) {
     TTester::TOptions opts;
     opts.EnableMvcc(WithMvcc);
     ImmediateBetweenOnline(opts, true);
-}
-
+} 
+ 
 Y_UNIT_TEST_WITH_MVCC(ImmediateBetweenOnline_oo8) {
-    TTester::TOptions opts;
+    TTester::TOptions opts; 
     opts.EnableMvcc(WithMvcc);
-    opts.EnableOutOfOrder(8);
-    ImmediateBetweenOnline(opts, false);
-}
-
+    opts.EnableOutOfOrder(8); 
+    ImmediateBetweenOnline(opts, false); 
+} 
+ 
 Y_UNIT_TEST_WITH_MVCC(ImmediateBetweenOnline_Init_oo8) {
-    TTester::TOptions opts(1);
+    TTester::TOptions opts(1); 
     opts.EnableMvcc(WithMvcc);
-    opts.EnableOutOfOrder(8);
-    ImmediateBetweenOnline(opts, false);
-}
-
+    opts.EnableOutOfOrder(8); 
+    ImmediateBetweenOnline(opts, false); 
+} 
+ 
 Y_UNIT_TEST_WITH_MVCC(ForceOnlineBetweenOnline_oo8) {
-    TTester::TOptions opts;
+    TTester::TOptions opts; 
     opts.EnableMvcc(WithMvcc);
-    opts.EnableOutOfOrder(8);
-    ImmediateBetweenOnline(opts, true);
-}
-
+    opts.EnableOutOfOrder(8); 
+    ImmediateBetweenOnline(opts, true); 
+} 
+ 
 Y_UNIT_TEST_WITH_MVCC(ImmediateBetweenOnline_oo8_dirty) {
-    TTester::TOptions opts;
+    TTester::TOptions opts; 
     opts.EnableMvcc(WithMvcc);
-    opts.EnableOutOfOrder(8);
-    opts.EnableSoftUpdates();
-    ImmediateBetweenOnline(opts, false);
-}
-
-//
-
-static void EvictShardCache(TFakeMiniKQLProxy& proxy, ui32 count = 500) {
-    const char * programWrite = R"((
-        (let key_ '('('key (Uint32 '%u))))
-        (return (AsList (UpdateRow 'table1 key_ '('('value (Utf8 '"%s"))))))
-    ))";
-
-    const char * text = "You will always get that you always got if you always do that you've already done";
-    for (ui32 i = 0; i < count; ++i) {
-        UNIT_ASSERT_EQUAL(proxy.Execute(Sprintf(programWrite, (3*i)%1000, text)), IEngineFlat::EStatus::Complete);
-    }
-
-    // some more txs to enlarge step
-    proxy.Enqueue(Sprintf(programWrite, 0, text));
-    proxy.Enqueue(Sprintf(programWrite, 0, text));
-    proxy.ExecQueue();
-}
-
+    opts.EnableOutOfOrder(8); 
+    opts.EnableSoftUpdates(); 
+    ImmediateBetweenOnline(opts, false); 
+} 
+ 
+// 
+ 
+static void EvictShardCache(TFakeMiniKQLProxy& proxy, ui32 count = 500) { 
+    const char * programWrite = R"(( 
+        (let key_ '('('key (Uint32 '%u)))) 
+        (return (AsList (UpdateRow 'table1 key_ '('('value (Utf8 '"%s")))))) 
+    ))"; 
+ 
+    const char * text = "You will always get that you always got if you always do that you've already done"; 
+    for (ui32 i = 0; i < count; ++i) { 
+        UNIT_ASSERT_EQUAL(proxy.Execute(Sprintf(programWrite, (3*i)%1000, text)), IEngineFlat::EStatus::Complete); 
+    } 
+ 
+    // some more txs to enlarge step 
+    proxy.Enqueue(Sprintf(programWrite, 0, text)); 
+    proxy.Enqueue(Sprintf(programWrite, 0, text)); 
+    proxy.ExecQueue(); 
+} 
+ 
 Y_UNIT_TEST_WITH_MVCC(DelayData) {
-    TTester::TOptions opts;
+    TTester::TOptions opts; 
     opts.EnableMvcc(WithMvcc);
-    opts.EnableOutOfOrder(2);
-    opts.ExecutorCacheSize = 0;
-    TTester t(TTester::ESchema_MultiShardKV, opts);
-    TFakeMiniKQLProxy proxy(t);
-
-    EvictShardCache(proxy, 500);
-
-    ui64 indepTxId = proxy.LastTxId() + 2;
+    opts.EnableOutOfOrder(2); 
+    opts.ExecutorCacheSize = 0; 
+    TTester t(TTester::ESchema_MultiShardKV, opts); 
+    TFakeMiniKQLProxy proxy(t); 
+ 
+    EvictShardCache(proxy, 500); 
+ 
+    ui64 indepTxId = proxy.LastTxId() + 2; 
     proxy.DelayData({TTestTxConfig::TxTablet0, indepTxId});
-
-    const char * programRead = R"((
-        (let key_ '('('key (Uint32 '0))))
-        (return (AsList (SetResult 'Result (SelectRow 'table1 key_ '('value)))))
-    ))";
-
-    const char * independentTx = R"((
-        (let key_ '('('key (Uint32 '999))))
-        (return (AsList (UpdateRow 'table1 key_ '('('value (Utf8 '"freedom"))))))
-    ))";
-
-    //
-    proxy.Enqueue(programRead);
-    proxy.Enqueue(independentTx);
-    proxy.ExecQueue();
-}
-
+ 
+    const char * programRead = R"(( 
+        (let key_ '('('key (Uint32 '0)))) 
+        (return (AsList (SetResult 'Result (SelectRow 'table1 key_ '('value))))) 
+    ))"; 
+ 
+    const char * independentTx = R"(( 
+        (let key_ '('('key (Uint32 '999)))) 
+        (return (AsList (UpdateRow 'table1 key_ '('('value (Utf8 '"freedom")))))) 
+    ))"; 
+ 
+    // 
+    proxy.Enqueue(programRead); 
+    proxy.Enqueue(independentTx); 
+    proxy.ExecQueue(); 
+} 
+ 
 Y_UNIT_TEST_WITH_MVCC(ReadWriteReorder) {
     TTester::TOptions opts;
     opts.EnableOutOfOrder(10);
@@ -555,236 +555,236 @@ Y_UNIT_TEST_WITH_MVCC(ReadWriteReorder) {
     }
 }
 
-//
-
-static inline bool HasFlag(ui32 flags, ui32 pos) {
-    return (flags & (1 << pos));
-}
-
+// 
+ 
+static inline bool HasFlag(ui32 flags, ui32 pos) { 
+    return (flags & (1 << pos)); 
+} 
+ 
 static TString MkRandomTx(ui64 txId, ui32 points, ui32 rw, ui32 keysCount, TVector<ui32>& expected, bool range = false)
-{
-    UNIT_ASSERT(keysCount <= 32);
-    Cout << "tx " << txId << ' ' << Bin(points) << ' ' << Bin(points & rw) << " (" << points << '/' << rw << ')' << Endl;
-
-    const char * rwPattern = R"(
-        (let $%u '('('key (Uint32 '%u))))
-        (let updates_ (Extend updates_ (AsList (UpdateRow 'table1 $%u '('('uint (Uint32 '%u)))))))
-    )";
-
-    const char * roPattern = R"(
-        (let $%u '('('key (Uint32 '%u))))
-        (let selects_ (Extend selects_ (ToList (SelectRow 'table1 $%u '('key 'uint)))))
-    )";
-
-    const char * rangePattern = R"(
-        (let $%u '('IncFrom 'IncTo '('key (Uint32 '%u) (Uint32 '%u))))
-        (let selects_ (Extend selects_ (Member (SelectRange 'table1 $%u '('key 'uint) '()) 'List)))
-    )";
-
-    TString body;
-    for (ui32 i = 0; i < keysCount; ++i) {
-        if (HasFlag(points, i)) {
-            if (HasFlag(rw, i)) {
-                body += Sprintf(rwPattern, i, i, i, txId);
-                if (!expected.empty()) {
-                    expected[i] = txId;
-                }
-            } else {
-                if (range) {
-                    body += Sprintf(rangePattern, i, i, i, i);
-                } else {
-                    body += Sprintf(roPattern, i, i, i);
-                }
-            }
-        }
-    }
-
-    ui32 remoteKey = 1001;
-    return Sprintf(R"((
-        (let remoteKey_ '('('key (Uint32 '%u))))
-        (let sel_ (SelectRow 'table1 remoteKey_ '('key 'uint)))
-        (let rVal_ (Coalesce (FlatMap sel_ (lambda '(x) (Member x 'uint))) (Uint32 '0)))
-        (let selects_ (ToList sel_))
-        (let localKey_ '('('key (Uint32 '%u))))
-        (let updates_ (AsList (UpdateRow 'table1 localKey_ '('('uint rVal_)))))
-        %s
-        (return (Extend (AsList (SetResult 'Result selects_)) updates_))
+{ 
+    UNIT_ASSERT(keysCount <= 32); 
+    Cout << "tx " << txId << ' ' << Bin(points) << ' ' << Bin(points & rw) << " (" << points << '/' << rw << ')' << Endl; 
+ 
+    const char * rwPattern = R"( 
+        (let $%u '('('key (Uint32 '%u)))) 
+        (let updates_ (Extend updates_ (AsList (UpdateRow 'table1 $%u '('('uint (Uint32 '%u))))))) 
+    )"; 
+ 
+    const char * roPattern = R"( 
+        (let $%u '('('key (Uint32 '%u)))) 
+        (let selects_ (Extend selects_ (ToList (SelectRow 'table1 $%u '('key 'uint))))) 
+    )"; 
+ 
+    const char * rangePattern = R"( 
+        (let $%u '('IncFrom 'IncTo '('key (Uint32 '%u) (Uint32 '%u)))) 
+        (let selects_ (Extend selects_ (Member (SelectRange 'table1 $%u '('key 'uint) '()) 'List))) 
+    )"; 
+ 
+    TString body; 
+    for (ui32 i = 0; i < keysCount; ++i) { 
+        if (HasFlag(points, i)) { 
+            if (HasFlag(rw, i)) { 
+                body += Sprintf(rwPattern, i, i, i, txId); 
+                if (!expected.empty()) { 
+                    expected[i] = txId; 
+                } 
+            } else { 
+                if (range) { 
+                    body += Sprintf(rangePattern, i, i, i, i); 
+                } else { 
+                    body += Sprintf(roPattern, i, i, i); 
+                } 
+            } 
+        } 
+    } 
+ 
+    ui32 remoteKey = 1001; 
+    return Sprintf(R"(( 
+        (let remoteKey_ '('('key (Uint32 '%u)))) 
+        (let sel_ (SelectRow 'table1 remoteKey_ '('key 'uint))) 
+        (let rVal_ (Coalesce (FlatMap sel_ (lambda '(x) (Member x 'uint))) (Uint32 '0))) 
+        (let selects_ (ToList sel_)) 
+        (let localKey_ '('('key (Uint32 '%u)))) 
+        (let updates_ (AsList (UpdateRow 'table1 localKey_ '('('uint rVal_))))) 
+        %s 
+        (return (Extend (AsList (SetResult 'Result selects_)) updates_)) 
     ))", remoteKey, (ui32)txId+100, body.data());
-}
-
+} 
+ 
 static void PrintRandomResults(const TVector<ui32>& result, const TString& prefix) {
-    Cerr << prefix;
-    for (ui32 val : result) {
-        if (val != Max<ui32>())
-            Cerr << val << ' ';
-        else
-            Cerr << "- ";
-    }
-    Cerr << Endl;
-}
-
-static void CalcPoints(ui32 count, ui32& points, ui32& writes, bool lessWrites = false) {
-    ui32 maxValue = (1ul << count) - 1;
-    points = RandomNumber<ui32>(maxValue);
-    writes = RandomNumber<ui32>(maxValue);
-    if (lessWrites)
-        writes &= RandomNumber<ui32>(maxValue);
-}
-
-static void CompareShots(const TVector<ui32>& finalShot, const TVector<ui32>& intermShot, std::pair<ui32, ui32> range) {
-    UNIT_ASSERT(finalShot.size() == intermShot.size());
-    UNIT_ASSERT(range.second < finalShot.size());
-
-    ui32 lastKnown = Max<ui32>();
-    ui32 leastUnknown = Max<ui32>();
-    for (ui32 dot = range.first; dot <= range.second; ++dot) {
-        ui32 intermVal = intermShot[dot];
-        if (intermVal != Max<ui32>() && (intermVal > lastKnown || lastKnown == Max<ui32>())) {
-            lastKnown = intermVal;
-        }
-        ui32 finalVal = finalShot[dot];
-        if (intermVal != finalVal && finalVal < leastUnknown) {
-            leastUnknown = finalVal;
-        }
-    }
-
-    if (lastKnown != Max<ui32>() && leastUnknown != Max<ui32>()) {
-        UNIT_ASSERT(lastKnown < leastUnknown);
-    }
-}
-
-static void RandomTxDeps(const TTester::TOptions& opts, ui32 numTxs, ui32 maxKeys, bool lessWrites,
+    Cerr << prefix; 
+    for (ui32 val : result) { 
+        if (val != Max<ui32>()) 
+            Cerr << val << ' '; 
+        else 
+            Cerr << "- "; 
+    } 
+    Cerr << Endl; 
+} 
+ 
+static void CalcPoints(ui32 count, ui32& points, ui32& writes, bool lessWrites = false) { 
+    ui32 maxValue = (1ul << count) - 1; 
+    points = RandomNumber<ui32>(maxValue); 
+    writes = RandomNumber<ui32>(maxValue); 
+    if (lessWrites) 
+        writes &= RandomNumber<ui32>(maxValue); 
+} 
+ 
+static void CompareShots(const TVector<ui32>& finalShot, const TVector<ui32>& intermShot, std::pair<ui32, ui32> range) { 
+    UNIT_ASSERT(finalShot.size() == intermShot.size()); 
+    UNIT_ASSERT(range.second < finalShot.size()); 
+ 
+    ui32 lastKnown = Max<ui32>(); 
+    ui32 leastUnknown = Max<ui32>(); 
+    for (ui32 dot = range.first; dot <= range.second; ++dot) { 
+        ui32 intermVal = intermShot[dot]; 
+        if (intermVal != Max<ui32>() && (intermVal > lastKnown || lastKnown == Max<ui32>())) { 
+            lastKnown = intermVal; 
+        } 
+        ui32 finalVal = finalShot[dot]; 
+        if (intermVal != finalVal && finalVal < leastUnknown) { 
+            leastUnknown = finalVal; 
+        } 
+    } 
+ 
+    if (lastKnown != Max<ui32>() && leastUnknown != Max<ui32>()) { 
+        UNIT_ASSERT(lastKnown < leastUnknown); 
+    } 
+} 
+ 
+static void RandomTxDeps(const TTester::TOptions& opts, ui32 numTxs, ui32 maxKeys, bool lessWrites, 
                          bool useRanges = false, TVector<ui32> counts = {}, TVector<ui32> pts = {},
                          TVector<ui32> wrs = {}) {
-    const ui32 minKeys = 2;
-    UNIT_ASSERT(maxKeys <= 32);
-    UNIT_ASSERT(maxKeys > minKeys);
-
-    TTester t(TTester::ESchema_MultiShardKV, opts);
-    TFakeMiniKQLProxy proxy(t);
-
-    ui32 indepPos = 0;
-    ui64 indepTxId = 0;
-    TString independentTx = R"((
-            (let localKey_ '('('key (Uint32 '999))))
-            (let remoteKey_ '('('key (Uint32 '1001))))
-            (let update_ (UpdateRow 'table1 localKey_ '('('value (Utf8 '"freedom")))))
-            (let select2_ (SelectRow 'table1 remoteKey_ '('uint)))
-            (return (AsList update_ (SetResult 'R2 select2_)))
-        ))";
-
-    if (opts.DelayReadSet) {
-        UNIT_ASSERT(numTxs >= 8);
-        indepPos = 7;
-        indepTxId = proxy.LastTxId() + 8;
-        ui64 delayedRS = proxy.LastTxId() + 2; // 2 cause of o-o-o disabled till first complete (LastCompleteTx)
+    const ui32 minKeys = 2; 
+    UNIT_ASSERT(maxKeys <= 32); 
+    UNIT_ASSERT(maxKeys > minKeys); 
+ 
+    TTester t(TTester::ESchema_MultiShardKV, opts); 
+    TFakeMiniKQLProxy proxy(t); 
+ 
+    ui32 indepPos = 0; 
+    ui64 indepTxId = 0; 
+    TString independentTx = R"(( 
+            (let localKey_ '('('key (Uint32 '999)))) 
+            (let remoteKey_ '('('key (Uint32 '1001)))) 
+            (let update_ (UpdateRow 'table1 localKey_ '('('value (Utf8 '"freedom"))))) 
+            (let select2_ (SelectRow 'table1 remoteKey_ '('uint))) 
+            (return (AsList update_ (SetResult 'R2 select2_))) 
+        ))"; 
+ 
+    if (opts.DelayReadSet) { 
+        UNIT_ASSERT(numTxs >= 8); 
+        indepPos = 7; 
+        indepTxId = proxy.LastTxId() + 8; 
+        ui64 delayedRS = proxy.LastTxId() + 2; // 2 cause of o-o-o disabled till first complete (LastCompleteTx) 
         proxy.DelayReadSet(TExpectedReadSet(delayedRS, {TTestTxConfig::TxTablet0, indepTxId}), opts.RebootOnDelay);
-    } else if (opts.DelayData) {
-        UNIT_ASSERT(numTxs >= 8);
-        indepPos = 7;
-        EvictShardCache(proxy, 500);
-        indepTxId = proxy.LastTxId() + 8;
+    } else if (opts.DelayData) { 
+        UNIT_ASSERT(numTxs >= 8); 
+        indepPos = 7; 
+        EvictShardCache(proxy, 500); 
+        indepTxId = proxy.LastTxId() + 8; 
         proxy.DelayData({TTestTxConfig::TxTablet0, indepTxId});
-    }
-
+    } 
+ 
     TVector<ui32> expected(32, Max<ui32>());
-    for (ui32 i = 0; i < numTxs; ++i) {
-        ui32 count = minKeys + RandomNumber<ui32>(maxKeys-minKeys);
+    for (ui32 i = 0; i < numTxs; ++i) { 
+        ui32 count = minKeys + RandomNumber<ui32>(maxKeys-minKeys); 
         if (counts.size() > i)
             count = counts[i];
-        ui32 points = 0;
-        ui32 writes = 0;
-        CalcPoints(count, points, writes, lessWrites);
+        ui32 points = 0; 
+        ui32 writes = 0; 
+        CalcPoints(count, points, writes, lessWrites); 
         if (pts.size() > i)
             points = pts[i];
         if (wrs.size() > i)
             writes = wrs[i];
-        TString prog = MkRandomTx(i, points, writes, count, expected, useRanges);
-        //Cout << prog << Endl;
-        if (indepTxId && i == indepPos)
-            proxy.Enqueue(independentTx);
-        proxy.Enqueue(prog);
-    }
-
-    ui64 pictureTxId = proxy.LastTxId() + 1;
+        TString prog = MkRandomTx(i, points, writes, count, expected, useRanges); 
+        //Cout << prog << Endl; 
+        if (indepTxId && i == indepPos) 
+            proxy.Enqueue(independentTx); 
+        proxy.Enqueue(prog); 
+    } 
+ 
+    ui64 pictureTxId = proxy.LastTxId() + 1; 
     TVector<ui32> actual(32, Max<ui32>());
     TVector<ui32> intermediate(32, Max<ui32>());
-
-    auto extractActual = [&](TFakeProxyTx& tx) -> bool {
+ 
+    auto extractActual = [&](TFakeProxyTx& tx) -> bool { 
         TVector<ui32> * out = &actual;
-        if (tx.TxId() != pictureTxId) {
-            out = &intermediate;
-        }
-
-        NKikimrMiniKQL::TResult res = tx.GetResult();
-        TValue value = TValue::Create(res.GetValue(), res.GetType());
-        TValue rStruct = value["Result"];
-        UNIT_ASSERT_EQUAL(bool(rStruct["Truncated"]), false);
-        TValue rList = rStruct["List"];
-
-        for (ui32 i = 0; i < rList.Size(); ++i) {
-            TValue row = rList[i];
-            ui32 key = row["key"];
-            TValue opt = row["uint"];
-            if (opt.HaveValue()) {
-                (*out)[key] = (ui32)opt;
-            }
-        }
-        return true;
-    };
-
-    // must be online
-    const char * picture = R"((
-        (let remoteKey_ '('('key (Uint32 '1001))))
-        (let range_ '('IncFrom 'IncTo '('key (Uint32 '0) (Uint32 '32))))
-        (let select_ (SelectRange 'table1 range_ '('key 'uint) '()))
-        (let forPlan_ (SelectRow 'table1 remoteKey_ '('uint)))
-        (return (AsList (SetResult 'Result select_) (SetResult 'Some forPlan_)))
-    ))";
-
+        if (tx.TxId() != pictureTxId) { 
+            out = &intermediate; 
+        } 
+ 
+        NKikimrMiniKQL::TResult res = tx.GetResult(); 
+        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
+        TValue rStruct = value["Result"]; 
+        UNIT_ASSERT_EQUAL(bool(rStruct["Truncated"]), false); 
+        TValue rList = rStruct["List"]; 
+ 
+        for (ui32 i = 0; i < rList.Size(); ++i) { 
+            TValue row = rList[i]; 
+            ui32 key = row["key"]; 
+            TValue opt = row["uint"]; 
+            if (opt.HaveValue()) { 
+                (*out)[key] = (ui32)opt; 
+            } 
+        } 
+        return true; 
+    }; 
+ 
+    // must be online 
+    const char * picture = R"(( 
+        (let remoteKey_ '('('key (Uint32 '1001)))) 
+        (let range_ '('IncFrom 'IncTo '('key (Uint32 '0) (Uint32 '32)))) 
+        (let select_ (SelectRange 'table1 range_ '('key 'uint) '())) 
+        (let forPlan_ (SelectRow 'table1 remoteKey_ '('uint))) 
+        (return (AsList (SetResult 'Result select_) (SetResult 'Some forPlan_))) 
+    ))"; 
+ 
     proxy.Enqueue(picture, extractActual, NDataShard::TTxFlags::Default);
-
-    const char * immPicture = R"((
-        (let range_ '('IncFrom 'IncTo '('key (Uint32 '%u) (Uint32 '%d))))
-        (let select_ (SelectRange 'table1 range_ '('key 'uint) '()))
-        (return (AsList (SetResult 'Result select_)))
-    ))";
-
-    TVector<std::pair<ui32, ui32>> shots;
-    shots.reserve(4);
-    shots.push_back({0,7});
-    shots.push_back({8,15});
-    shots.push_back({16,23});
-    shots.push_back({24,31});
-
-    bool sendImmediates = !opts.RebootOnDelay; // can lose some immediate results on restart
-    if (sendImmediates) {
-        // inconsistent print screen
-        for (const auto& s : shots) {
+ 
+    const char * immPicture = R"(( 
+        (let range_ '('IncFrom 'IncTo '('key (Uint32 '%u) (Uint32 '%d)))) 
+        (let select_ (SelectRange 'table1 range_ '('key 'uint) '())) 
+        (return (AsList (SetResult 'Result select_))) 
+    ))"; 
+ 
+    TVector<std::pair<ui32, ui32>> shots; 
+    shots.reserve(4); 
+    shots.push_back({0,7}); 
+    shots.push_back({8,15}); 
+    shots.push_back({16,23}); 
+    shots.push_back({24,31}); 
+ 
+    bool sendImmediates = !opts.RebootOnDelay; // can lose some immediate results on restart 
+    if (sendImmediates) { 
+        // inconsistent print screen 
+        for (const auto& s : shots) { 
             proxy.Enqueue(Sprintf(immPicture, s.first, s.second), extractActual, NDataShard::TTxFlags::Default);
-        }
-    }
-
-    proxy.ExecQueue();
-
-    PrintRandomResults(expected, "expect ");
-    PrintRandomResults(actual, "actual ");
-    PrintRandomResults(intermediate, "interm ");
-    for (ui32 i = 0; i < expected.size(); ++i) {
-        UNIT_ASSERT_EQUAL(expected[i], actual[i]);
-        UNIT_ASSERT(intermediate[i] <= expected[i] || intermediate[i] == Max<ui32>());
-    }
-
-    if (sendImmediates) {
-        for (const auto& s : shots)
-            CompareShots(expected, intermediate, s);
-    }
-}
-
-//
-
-static constexpr ui32 NumRun() { return 2; }
-
+        } 
+    } 
+ 
+    proxy.ExecQueue(); 
+ 
+    PrintRandomResults(expected, "expect "); 
+    PrintRandomResults(actual, "actual "); 
+    PrintRandomResults(intermediate, "interm "); 
+    for (ui32 i = 0; i < expected.size(); ++i) { 
+        UNIT_ASSERT_EQUAL(expected[i], actual[i]); 
+        UNIT_ASSERT(intermediate[i] <= expected[i] || intermediate[i] == Max<ui32>()); 
+    } 
+ 
+    if (sendImmediates) { 
+        for (const auto& s : shots) 
+            CompareShots(expected, intermediate, s); 
+    } 
+} 
+ 
+// 
+ 
+static constexpr ui32 NumRun() { return 2; } 
+ 
 Y_UNIT_TEST_WITH_MVCC(RandomPoints_ReproducerDelayData1) {
     TTester::TOptions opts;
     opts.DelayData = true;
@@ -811,351 +811,351 @@ Y_UNIT_TEST_WITH_MVCC(RandomPoints_ReproducerDelayRS1) {
 }
 
 Y_UNIT_TEST_WITH_MVCC(RandomPoints_DelayRS) {
-    TTester::TOptions opts;
-    opts.DelayReadSet = true;
-    opts.EnableOutOfOrder(8);
+    TTester::TOptions opts; 
+    opts.DelayReadSet = true; 
+    opts.EnableOutOfOrder(8); 
     opts.EnableMvcc(WithMvcc);
-
+ 
     TVector<std::pair<ui32, ui32>> variants;
-    variants.push_back({8, 8});
-    variants.push_back({8, 16});
-    variants.push_back({8, 32});
-    variants.push_back({16, 16});
-    variants.push_back({16, 32});
-    variants.push_back({32, 8});
-    variants.push_back({32, 16});
-    variants.push_back({32, 32});
-
-    for (ui32 i = 0; i < NumRun(); ++i) {
-        for (auto& v : variants) {
-            RandomTxDeps(opts, v.first, v.second, true);
-            RandomTxDeps(opts, v.first, v.second, false);
-        }
-    }
-}
-
+    variants.push_back({8, 8}); 
+    variants.push_back({8, 16}); 
+    variants.push_back({8, 32}); 
+    variants.push_back({16, 16}); 
+    variants.push_back({16, 32}); 
+    variants.push_back({32, 8}); 
+    variants.push_back({32, 16}); 
+    variants.push_back({32, 32}); 
+ 
+    for (ui32 i = 0; i < NumRun(); ++i) { 
+        for (auto& v : variants) { 
+            RandomTxDeps(opts, v.first, v.second, true); 
+            RandomTxDeps(opts, v.first, v.second, false); 
+        } 
+    } 
+} 
+ 
 Y_UNIT_TEST_WITH_MVCC(RandomDotRanges_DelayRS) {
-    TTester::TOptions opts;
-    opts.DelayReadSet = true;
-    opts.EnableOutOfOrder(8);
+    TTester::TOptions opts; 
+    opts.DelayReadSet = true; 
+    opts.EnableOutOfOrder(8); 
     opts.EnableMvcc(WithMvcc);
-
+ 
     TVector<std::pair<ui32, ui32>> variants;
-    variants.push_back({8, 8});
-    variants.push_back({8, 16});
-    variants.push_back({8, 32});
-    variants.push_back({16, 16});
-    variants.push_back({16, 32});
-    variants.push_back({32, 8});
-    variants.push_back({32, 16});
-    variants.push_back({32, 32});
-
-    for (ui32 i = 0; i < NumRun(); ++i) {
-        for (auto& v : variants) {
-            RandomTxDeps(opts, v.first, v.second, true, true);
-            RandomTxDeps(opts, v.first, v.second, false, true);
-        }
-    }
-}
-
+    variants.push_back({8, 8}); 
+    variants.push_back({8, 16}); 
+    variants.push_back({8, 32}); 
+    variants.push_back({16, 16}); 
+    variants.push_back({16, 32}); 
+    variants.push_back({32, 8}); 
+    variants.push_back({32, 16}); 
+    variants.push_back({32, 32}); 
+ 
+    for (ui32 i = 0; i < NumRun(); ++i) { 
+        for (auto& v : variants) { 
+            RandomTxDeps(opts, v.first, v.second, true, true); 
+            RandomTxDeps(opts, v.first, v.second, false, true); 
+        } 
+    } 
+} 
+ 
 Y_UNIT_TEST_WITH_MVCC(RandomPoints_DelayRS_Reboot) {
-    TTester::TOptions opts;
-    opts.DelayReadSet = true;
-    opts.RebootOnDelay = true;
-    opts.EnableOutOfOrder(8);
+    TTester::TOptions opts; 
+    opts.DelayReadSet = true; 
+    opts.RebootOnDelay = true; 
+    opts.EnableOutOfOrder(8); 
     opts.EnableMvcc(WithMvcc);
-
+ 
     TVector<std::pair<ui32, ui32>> variants;
-    variants.push_back({8, 8});
-    variants.push_back({8, 16});
-    variants.push_back({8, 32});
-    variants.push_back({16, 16});
-    variants.push_back({16, 32});
-    variants.push_back({32, 8});
-    variants.push_back({32, 16});
-    variants.push_back({32, 32});
-
-    for (ui32 i = 0; i < NumRun(); ++i) {
-        for (auto& v : variants) {
-            RandomTxDeps(opts, v.first, v.second, true);
-            RandomTxDeps(opts, v.first, v.second, false);
-        }
-    }
-}
-
+    variants.push_back({8, 8}); 
+    variants.push_back({8, 16}); 
+    variants.push_back({8, 32}); 
+    variants.push_back({16, 16}); 
+    variants.push_back({16, 32}); 
+    variants.push_back({32, 8}); 
+    variants.push_back({32, 16}); 
+    variants.push_back({32, 32}); 
+ 
+    for (ui32 i = 0; i < NumRun(); ++i) { 
+        for (auto& v : variants) { 
+            RandomTxDeps(opts, v.first, v.second, true); 
+            RandomTxDeps(opts, v.first, v.second, false); 
+        } 
+    } 
+} 
+ 
 Y_UNIT_TEST_WITH_MVCC(RandomPoints_DelayRS_Reboot_Dirty) {
-    TTester::TOptions opts;
-    opts.DelayReadSet = true;
-    opts.RebootOnDelay = true;
-    opts.EnableSoftUpdates();
-    opts.EnableOutOfOrder(8);
+    TTester::TOptions opts; 
+    opts.DelayReadSet = true; 
+    opts.RebootOnDelay = true; 
+    opts.EnableSoftUpdates(); 
+    opts.EnableOutOfOrder(8); 
     opts.EnableMvcc(WithMvcc);
-
+ 
     TVector<std::pair<ui32, ui32>> variants;
-    variants.push_back({8, 8});
-    variants.push_back({8, 16});
-    variants.push_back({8, 32});
-    variants.push_back({16, 16});
-    variants.push_back({16, 32});
-    variants.push_back({32, 8});
-    variants.push_back({32, 16});
-    variants.push_back({32, 32});
-
-    for (ui32 i = 0; i < NumRun(); ++i) {
-        for (auto& v : variants) {
-            RandomTxDeps(opts, v.first, v.second, true);
-            RandomTxDeps(opts, v.first, v.second, false);
-        }
-    }
-}
-
+    variants.push_back({8, 8}); 
+    variants.push_back({8, 16}); 
+    variants.push_back({8, 32}); 
+    variants.push_back({16, 16}); 
+    variants.push_back({16, 32}); 
+    variants.push_back({32, 8}); 
+    variants.push_back({32, 16}); 
+    variants.push_back({32, 32}); 
+ 
+    for (ui32 i = 0; i < NumRun(); ++i) { 
+        for (auto& v : variants) { 
+            RandomTxDeps(opts, v.first, v.second, true); 
+            RandomTxDeps(opts, v.first, v.second, false); 
+        } 
+    } 
+} 
+ 
 Y_UNIT_TEST_WITH_MVCC(RandomPoints_DelayData) {
-    TTester::TOptions opts;
-    opts.DelayData = true;
-    opts.ExecutorCacheSize = 0;
-    opts.EnableOutOfOrder(8);
+    TTester::TOptions opts; 
+    opts.DelayData = true; 
+    opts.ExecutorCacheSize = 0; 
+    opts.EnableOutOfOrder(8); 
     opts.EnableMvcc(WithMvcc);
-
+ 
     TVector<std::pair<ui32, ui32>> variants;
-    variants.push_back({8, 8});
-    variants.push_back({8, 16});
-    variants.push_back({8, 32});
-    variants.push_back({16, 16});
-    variants.push_back({16, 32});
-    variants.push_back({32, 8});
-    variants.push_back({32, 16});
-    variants.push_back({32, 32});
-
-    for (auto& v : variants) {
-        RandomTxDeps(opts, v.first, v.second, true);
-        RandomTxDeps(opts, v.first, v.second, false);
-    }
-}
-
-///
-class TSimpleTx {
-public:
-    struct TSimpleRange {
-        ui32 From;
-        ui32 To;
-
-        TSimpleRange(ui32 from, ui32 to)
-            : From(from)
-            , To(to)
-        {}
-    };
-
-    TSimpleTx(ui64 txId)
-        : TxId(txId)
-    {}
-
-    void Generate(ui32 numWrites, ui32 numPoints, ui32 numRanges, ui32 max = 3000, ui32 maxRange = 100) {
-        Writes.reserve(numWrites);
-        for (ui32 i = 0; i < numWrites; ++i) {
-            Writes.emplace_back(RandomNumber<ui32>(max));
-        }
-
-        Reads.reserve(numPoints);
-        for (ui32 i = 0; i < numPoints; ++i) {
-            Reads.emplace_back(RandomNumber<ui32>(max));
-        }
-
-        Ranges.reserve(numRanges);
-        for (ui32 i = 0; i < numPoints; ++i) {
-            ui32 from = RandomNumber<ui32>(max);
-            Ranges.emplace_back(TSimpleRange(from, from + 1 + RandomNumber<ui32>(maxRange-1)));
-        }
-    }
-
-    TString ToText() {
-        const char * writePattern = R"(
-            (let $%u '('('key (Uint32 '%u))))
-            (let updates_ (Append updates_ (UpdateRow 'table1 $%u '('('uint (Uint32 '%u)))))))";
-
-        const char * readPattern = R"(
-            (let $%u '('('key (Uint32 '%u))))
-            (let select$%u (SelectRow 'table1 $%u '('key 'uint)))
-            (let points_ (Extend points_ (ToList select$%u))))";
-
-        const char * rangePattern = R"(
-            (let $%u '('IncFrom 'IncTo '('key (Uint32 '%u) (Uint32 '%u))))
-            (let points_ (Extend points_ (Member (SelectRange 'table1 $%u '('key 'uint) '()) 'List))))";
-
-        ui32 key = 0;
-        TString body = ProgramTextSwap();
-        for (ui32 point : Writes) {
-            body += Sprintf(writePattern, key, point, key, TxId);
-            ++key;
-        }
-
-        for (ui32 point : Reads) {
-            body += Sprintf(readPattern, key, point, key, key, key, key);
-            ++key;
-        }
-
-        for (const auto& r : Ranges) {
-            body += Sprintf(rangePattern, key, r.From, r.To, key);
-            ++key;
-        }
-
-        return Sprintf(R"((
-            (let updates_ (List (ListType (TypeOf (UpdateRow 'table1 '('('key (Uint32 '0))) '('('uint (Uint32 '0))))))))
-            (let points_ (List (ListType (TypeOf (Unwrap (SelectRow 'table1 '('('key (Uint32 '0))) '('key 'uint)))))))
-            %s
-            (return (Extend (AsList (SetResult 'Result points_)) updates_))
+    variants.push_back({8, 8}); 
+    variants.push_back({8, 16}); 
+    variants.push_back({8, 32}); 
+    variants.push_back({16, 16}); 
+    variants.push_back({16, 32}); 
+    variants.push_back({32, 8}); 
+    variants.push_back({32, 16}); 
+    variants.push_back({32, 32}); 
+ 
+    for (auto& v : variants) { 
+        RandomTxDeps(opts, v.first, v.second, true); 
+        RandomTxDeps(opts, v.first, v.second, false); 
+    } 
+} 
+ 
+/// 
+class TSimpleTx { 
+public: 
+    struct TSimpleRange { 
+        ui32 From; 
+        ui32 To; 
+ 
+        TSimpleRange(ui32 from, ui32 to) 
+            : From(from) 
+            , To(to) 
+        {} 
+    }; 
+ 
+    TSimpleTx(ui64 txId) 
+        : TxId(txId) 
+    {} 
+ 
+    void Generate(ui32 numWrites, ui32 numPoints, ui32 numRanges, ui32 max = 3000, ui32 maxRange = 100) { 
+        Writes.reserve(numWrites); 
+        for (ui32 i = 0; i < numWrites; ++i) { 
+            Writes.emplace_back(RandomNumber<ui32>(max)); 
+        } 
+ 
+        Reads.reserve(numPoints); 
+        for (ui32 i = 0; i < numPoints; ++i) { 
+            Reads.emplace_back(RandomNumber<ui32>(max)); 
+        } 
+ 
+        Ranges.reserve(numRanges); 
+        for (ui32 i = 0; i < numPoints; ++i) { 
+            ui32 from = RandomNumber<ui32>(max); 
+            Ranges.emplace_back(TSimpleRange(from, from + 1 + RandomNumber<ui32>(maxRange-1))); 
+        } 
+    } 
+ 
+    TString ToText() { 
+        const char * writePattern = R"( 
+            (let $%u '('('key (Uint32 '%u)))) 
+            (let updates_ (Append updates_ (UpdateRow 'table1 $%u '('('uint (Uint32 '%u)))))))"; 
+ 
+        const char * readPattern = R"( 
+            (let $%u '('('key (Uint32 '%u)))) 
+            (let select$%u (SelectRow 'table1 $%u '('key 'uint))) 
+            (let points_ (Extend points_ (ToList select$%u))))"; 
+ 
+        const char * rangePattern = R"( 
+            (let $%u '('IncFrom 'IncTo '('key (Uint32 '%u) (Uint32 '%u)))) 
+            (let points_ (Extend points_ (Member (SelectRange 'table1 $%u '('key 'uint) '()) 'List))))"; 
+ 
+        ui32 key = 0; 
+        TString body = ProgramTextSwap(); 
+        for (ui32 point : Writes) { 
+            body += Sprintf(writePattern, key, point, key, TxId); 
+            ++key; 
+        } 
+ 
+        for (ui32 point : Reads) { 
+            body += Sprintf(readPattern, key, point, key, key, key, key); 
+            ++key; 
+        } 
+ 
+        for (const auto& r : Ranges) { 
+            body += Sprintf(rangePattern, key, r.From, r.To, key); 
+            ++key; 
+        } 
+ 
+        return Sprintf(R"(( 
+            (let updates_ (List (ListType (TypeOf (UpdateRow 'table1 '('('key (Uint32 '0))) '('('uint (Uint32 '0)))))))) 
+            (let points_ (List (ListType (TypeOf (Unwrap (SelectRow 'table1 '('('key (Uint32 '0))) '('key 'uint))))))) 
+            %s 
+            (return (Extend (AsList (SetResult 'Result points_)) updates_)) 
         ))", body.data());
-    }
-
-    ui64 GetTxId() const { return TxId; }
+    } 
+ 
+    ui64 GetTxId() const { return TxId; } 
     const TMap<ui32, ui32>& GetResults() const { return Results; }
-
+ 
     void SetResults(const TVector<ui32>& kv) {
         THashSet<ui32> points;
-        for (ui32 point : Reads) {
-            points.insert(point);
-        }
-
-        for (const auto& r : Ranges) {
-            for (ui32 i = r.From; i <= r.To; ++i)
-                points.insert(i);
-        }
-
-        for (ui32 point : points) {
-            ui32 value = kv[point];
-            if (value != Max<ui32>())
-                Results[point] = value;
-        }
-    }
-
+        for (ui32 point : Reads) { 
+            points.insert(point); 
+        } 
+ 
+        for (const auto& r : Ranges) { 
+            for (ui32 i = r.From; i <= r.To; ++i) 
+                points.insert(i); 
+        } 
+ 
+        for (ui32 point : points) { 
+            ui32 value = kv[point]; 
+            if (value != Max<ui32>()) 
+                Results[point] = value; 
+        } 
+    } 
+ 
     void ApplyWrites(TVector<ui32>& kv) const {
-        for (ui32 point : Writes) {
-            kv[point] = TxId;
-        }
-    }
-
-private:
-    ui64 TxId;
+        for (ui32 point : Writes) { 
+            kv[point] = TxId; 
+        } 
+    } 
+ 
+private: 
+    ui64 TxId; 
     TVector<ui32> Writes;
     TVector<ui32> Reads;
     TVector<TSimpleRange> Ranges;
     TMap<ui32, ui32> Results;
-
-    static TString ProgramTextSwap(ui32 txId = 0) {
-        ui32 point = txId % 1000;
-        return Sprintf(R"(
-            (let row1 '('('key (Uint32 '%u))))
-            (let row2 '('('key (Uint32 '%u))))
-            (let row3 '('('key (Uint32 '%u))))
-            (let val1 (FlatMap (SelectRow 'table1 row1 '('value)) (lambda '(x) (Member x 'value))))
-            (let val2 (FlatMap (SelectRow 'table1 row2 '('value)) (lambda '(x) (Member x 'value))))
-            (let val3 (FlatMap (SelectRow 'table1 row3 '('value)) (lambda '(x) (Member x 'value))))
-            (let updates_ (Extend updates_ (AsList
-                (UpdateRow 'table1 row1 '('('value val3)))
-                (UpdateRow 'table1 row2 '('('value val1)))
-                (UpdateRow 'table1 row3 '('('value val2)))
-            )))
-        )", point, 1000+point, 2000+point);
-    }
-};
-
-///
-class TSimpleTable {
-public:
-    TSimpleTable(ui32 size = 4096) {
-        Points.resize(size, Max<ui32>());
-    }
-
-    void Apply(TSimpleTx& tx) {
-        tx.SetResults(Points);
-        tx.ApplyWrites(Points);
-    }
-
-private:
+ 
+    static TString ProgramTextSwap(ui32 txId = 0) { 
+        ui32 point = txId % 1000; 
+        return Sprintf(R"( 
+            (let row1 '('('key (Uint32 '%u)))) 
+            (let row2 '('('key (Uint32 '%u)))) 
+            (let row3 '('('key (Uint32 '%u)))) 
+            (let val1 (FlatMap (SelectRow 'table1 row1 '('value)) (lambda '(x) (Member x 'value)))) 
+            (let val2 (FlatMap (SelectRow 'table1 row2 '('value)) (lambda '(x) (Member x 'value)))) 
+            (let val3 (FlatMap (SelectRow 'table1 row3 '('value)) (lambda '(x) (Member x 'value)))) 
+            (let updates_ (Extend updates_ (AsList 
+                (UpdateRow 'table1 row1 '('('value val3))) 
+                (UpdateRow 'table1 row2 '('('value val1))) 
+                (UpdateRow 'table1 row3 '('('value val2))) 
+            ))) 
+        )", point, 1000+point, 2000+point); 
+    } 
+}; 
+ 
+/// 
+class TSimpleTable { 
+public: 
+    TSimpleTable(ui32 size = 4096) { 
+        Points.resize(size, Max<ui32>()); 
+    } 
+ 
+    void Apply(TSimpleTx& tx) { 
+        tx.SetResults(Points); 
+        tx.ApplyWrites(Points); 
+    } 
+ 
+private: 
     TVector<ui32> Points;
-};
-
+}; 
+ 
 void Print(const TMap<ui32, ui32>& m) {
-    for (auto& pair : m)
-        Cerr << pair.first << ':' << pair.second << ' ';
-    Cerr << Endl;
-}
-
-void RandomPointsAndRanges(TFakeMiniKQLProxy& proxy, ui32 numTxs, ui32 maxWrites, ui32 maxReads, ui32 maxRanges) {
+    for (auto& pair : m) 
+        Cerr << pair.first << ':' << pair.second << ' '; 
+    Cerr << Endl; 
+} 
+ 
+void RandomPointsAndRanges(TFakeMiniKQLProxy& proxy, ui32 numTxs, ui32 maxWrites, ui32 maxReads, ui32 maxRanges) { 
     TVector<std::shared_ptr<TSimpleTx>> txs;
-    txs.reserve(numTxs);
-    ui32 startTxId = proxy.LastTxId()+1;
-    for (ui32 i = 0; i < numTxs; ++i) {
-        txs.push_back(std::make_shared<TSimpleTx>(startTxId + i));
-    }
-
-    auto extractActual = [&](TFakeProxyTx& tx) -> bool {
-        UNIT_ASSERT(!tx.Immediate());
-
-        auto& expected = txs[tx.TxId()-startTxId]->GetResults();
+    txs.reserve(numTxs); 
+    ui32 startTxId = proxy.LastTxId()+1; 
+    for (ui32 i = 0; i < numTxs; ++i) { 
+        txs.push_back(std::make_shared<TSimpleTx>(startTxId + i)); 
+    } 
+ 
+    auto extractActual = [&](TFakeProxyTx& tx) -> bool { 
+        UNIT_ASSERT(!tx.Immediate()); 
+ 
+        auto& expected = txs[tx.TxId()-startTxId]->GetResults(); 
         TMap<ui32, ui32> actual;
-
-        NKikimrMiniKQL::TResult res = tx.GetResult();
-        TValue value = TValue::Create(res.GetValue(), res.GetType());
-        TValue rList = value["Result"];
-        for (ui32 i = 0; i < rList.Size(); ++i) {
-            TValue row = rList[i];
-            ui32 key = row["key"];
-            TValue opt = row["uint"];
-            if (opt.HaveValue()) {
-                actual[key] = (ui32)opt;
-            }
-        }
-
-        if (expected != actual) {
-            Print(expected);
-            Print(actual);
-            UNIT_ASSERT(false);
-        }
-        return true;
-    };
-
-    TSimpleTable table;
-    for (auto tx : txs) {
-        tx->Generate(RandomNumber<ui32>(maxWrites-1)+1,
-                     RandomNumber<ui32>(maxReads-1)+1,
-                     RandomNumber<ui32>(maxRanges-1)+1);
-        table.Apply(*tx);
-        TString progText = tx->ToText();
-        //Cout << progText << Endl;
+ 
+        NKikimrMiniKQL::TResult res = tx.GetResult(); 
+        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
+        TValue rList = value["Result"]; 
+        for (ui32 i = 0; i < rList.Size(); ++i) { 
+            TValue row = rList[i]; 
+            ui32 key = row["key"]; 
+            TValue opt = row["uint"]; 
+            if (opt.HaveValue()) { 
+                actual[key] = (ui32)opt; 
+            } 
+        } 
+ 
+        if (expected != actual) { 
+            Print(expected); 
+            Print(actual); 
+            UNIT_ASSERT(false); 
+        } 
+        return true; 
+    }; 
+ 
+    TSimpleTable table; 
+    for (auto tx : txs) { 
+        tx->Generate(RandomNumber<ui32>(maxWrites-1)+1, 
+                     RandomNumber<ui32>(maxReads-1)+1, 
+                     RandomNumber<ui32>(maxRanges-1)+1); 
+        table.Apply(*tx); 
+        TString progText = tx->ToText(); 
+        //Cout << progText << Endl; 
         proxy.Enqueue(progText, extractActual, NDataShard::TTxFlags::ForceOnline);
-    }
-
-    proxy.ExecQueue();
-}
-
-static void RandomPointsAndRanges(const TTester::TOptions& opts, ui32 numTxs, ui32 maxWrites, ui32 maxReads, ui32 maxRanges) {
-    TTester t(TTester::ESchema_MultiShardKV, opts);
-    TFakeMiniKQLProxy proxy(t);
-
-    RandomPointsAndRanges(proxy, numTxs, maxWrites, maxReads, maxRanges);
-}
-
+    } 
+ 
+    proxy.ExecQueue(); 
+} 
+ 
+static void RandomPointsAndRanges(const TTester::TOptions& opts, ui32 numTxs, ui32 maxWrites, ui32 maxReads, ui32 maxRanges) { 
+    TTester t(TTester::ESchema_MultiShardKV, opts); 
+    TFakeMiniKQLProxy proxy(t); 
+ 
+    RandomPointsAndRanges(proxy, numTxs, maxWrites, maxReads, maxRanges); 
+} 
+ 
 Y_UNIT_TEST_WITH_MVCC(RandomPointsAndRanges) {
-    TTester::TOptions opts;
-    opts.ExecutorCacheSize = 0;
-    opts.EnableOutOfOrder(8);
+    TTester::TOptions opts; 
+    opts.ExecutorCacheSize = 0; 
+    opts.EnableOutOfOrder(8); 
     opts.EnableMvcc(WithMvcc);
-
+ 
     TVector<TVector<ui32>> variants;
     variants.push_back(TVector<ui32>() = {100, 20, 20, 20});
     variants.push_back(TVector<ui32>() = {100, 50, 50, 50});
     variants.push_back(TVector<ui32>() = {100, 40, 30, 20});
     variants.push_back(TVector<ui32>() = {400, 20, 20, 20});
-
-    for (auto& v : variants) {
-        RandomPointsAndRanges(opts, v[0], v[1], v[2], v[3]);
-    }
-}
-}
-
-///
+ 
+    for (auto& v : variants) { 
+        RandomPointsAndRanges(opts, v[0], v[1], v[2], v[3]); 
+    } 
+} 
+} 
+ 
+/// 
 Y_UNIT_TEST_SUITE(DataShardScan) {
-
+ 
 Y_UNIT_TEST_WITH_MVCC(ScanFollowedByUpdate) {
     TTester::TOptions opts;
     opts.ExecutorCacheSize = 0;

@@ -144,21 +144,21 @@ void TLockableItem::DebugLocksDump(IOutputStream &ss, const TString &prefix) con
 }
 
 void TNodeInfo::MigrateOldInfo(const TLockableItem &old)
-{
+{ 
     TLockableItem::MigrateOldInfo(old);
-    if (auto * oldNode = dynamic_cast<const TNodeInfo *>(&old)) {
-        if (oldNode->State == UP) {
-            PreviousTenant = oldNode->Tenant;
-        } else {
-            PreviousTenant = oldNode->PreviousTenant;
-        }
-
-        if (!HasTenantInfo || State != UP)
-            Tenant = PreviousTenant;
-        HasTenantInfo = true;
-    }
-}
-
+    if (auto * oldNode = dynamic_cast<const TNodeInfo *>(&old)) { 
+        if (oldNode->State == UP) { 
+            PreviousTenant = oldNode->Tenant; 
+        } else { 
+            PreviousTenant = oldNode->PreviousTenant; 
+        } 
+ 
+        if (!HasTenantInfo || State != UP) 
+            Tenant = PreviousTenant; 
+        HasTenantInfo = true; 
+    } 
+} 
+ 
 TString TPDiskInfo::ItemName() const
 {
     return Sprintf("PDisk %s", PDiskId.ToString().data());
@@ -370,28 +370,28 @@ void TClusterInfo::ClearNode(ui32 nodeId)
     node.State = NKikimrCms::DOWN;
 }
 
-void TClusterInfo::ApplyInitialNodeTenants(const TActorContext& ctx, const THashMap<ui32, TString>& nodeTenants)
-{
-    for (const auto& pr : nodeTenants) {
-        ui32 nodeId = pr.first;
-        TString tenant = pr.second;
-
-        if (!HasNode(nodeId)) {
-            LOG_ERROR(ctx, NKikimrServices::CMS,
-                      "Forgoten node tenant '%s' at node %" PRIu32 ". Node is unknown.",
+void TClusterInfo::ApplyInitialNodeTenants(const TActorContext& ctx, const THashMap<ui32, TString>& nodeTenants) 
+{ 
+    for (const auto& pr : nodeTenants) { 
+        ui32 nodeId = pr.first; 
+        TString tenant = pr.second; 
+ 
+        if (!HasNode(nodeId)) { 
+            LOG_ERROR(ctx, NKikimrServices::CMS, 
+                      "Forgoten node tenant '%s' at node %" PRIu32 ". Node is unknown.", 
                       tenant.data(), nodeId);
-            continue;
-        }
-
-        TNodeInfo& node = NodeRef(nodeId);
-        node.PreviousTenant = tenant;
-
-        LOG_DEBUG(ctx, NKikimrServices::CMS,
-                  "Initial node tenant '%s' at node %" PRIu32,
+            continue; 
+        } 
+ 
+        TNodeInfo& node = NodeRef(nodeId); 
+        node.PreviousTenant = tenant; 
+ 
+        LOG_DEBUG(ctx, NKikimrServices::CMS, 
+                  "Initial node tenant '%s' at node %" PRIu32, 
                   tenant.data(), nodeId);
-    }
-}
-
+    } 
+} 
+ 
 void TClusterInfo::AddTablet(ui32 nodeId, const NKikimrWhiteboard::TTabletStateInfo &info)
 {
     if (!HasNode(nodeId))
@@ -533,27 +533,27 @@ void TClusterInfo::AddBSGroup(const NKikimrBlobStorage::TBaseConfig::TGroup &inf
     BSGroups[bsgroup.GroupId] = std::move(bsgroup);
 }
 
-void TClusterInfo::AddNodeTenants(ui32 nodeId, const NKikimrTenantPool::TTenantPoolStatus &info)
-{
-    if (!HasNode(nodeId))
-        return;
-
-    auto& node = NodeRef(nodeId);
-    TString nodeTenant;
-
-    for (const auto& slot : info.GetSlots()) {
-        TString slotTenant = slot.GetAssignedTenant();
-        Y_VERIFY(slotTenant.empty() || nodeTenant.empty() || slotTenant == nodeTenant);
-        if (!slotTenant.empty())
-            nodeTenant = slotTenant;
-    }
-
-    node.Tenant = nodeTenant;
-    node.HasTenantInfo = true;
+void TClusterInfo::AddNodeTenants(ui32 nodeId, const NKikimrTenantPool::TTenantPoolStatus &info) 
+{ 
+    if (!HasNode(nodeId)) 
+        return; 
+ 
+    auto& node = NodeRef(nodeId); 
+    TString nodeTenant; 
+ 
+    for (const auto& slot : info.GetSlots()) { 
+        TString slotTenant = slot.GetAssignedTenant(); 
+        Y_VERIFY(slotTenant.empty() || nodeTenant.empty() || slotTenant == nodeTenant); 
+        if (!slotTenant.empty()) 
+            nodeTenant = slotTenant; 
+    } 
+ 
+    node.Tenant = nodeTenant; 
+    node.HasTenantInfo = true; 
 
     TenantToNodeId.emplace(nodeTenant, nodeId);
-}
-
+} 
+ 
 void TClusterInfo::AddNodeTempLock(ui32 nodeId, const NKikimrCms::TAction &action)
 {
     auto &node = NodeRef(nodeId);

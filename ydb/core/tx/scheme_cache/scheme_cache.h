@@ -176,12 +176,12 @@ struct TSchemeCacheNavigate {
 
     struct TOlapStoreInfo : public TAtomicRefCount<TOlapStoreInfo> {
         EKind Kind = KindUnknown;
-        NKikimrSchemeOp::TColumnStoreDescription Description;
+        NKikimrSchemeOp::TColumnStoreDescription Description; 
     };
 
     struct TOlapTableInfo : public TAtomicRefCount<TOlapTableInfo> {
         EKind Kind = KindUnknown;
-        NKikimrSchemeOp::TColumnTableDescription Description;
+        NKikimrSchemeOp::TColumnTableDescription Description; 
         TTableId OlapStoreId;
     };
 

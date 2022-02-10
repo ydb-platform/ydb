@@ -1,10 +1,10 @@
-#include "datashard_user_table.h"
+#include "datashard_user_table.h" 
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
-
+ 
 namespace NKikimr {
 
 using NTabletFlatExecutor::TTransactionContext;
@@ -12,23 +12,23 @@ using NTabletFlatExecutor::TTransactionContext;
 namespace NDataShard {
 
 TUserTable::TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& descr, ui32 shadowTid)
-    : LocalTid(localTid)
+    : LocalTid(localTid) 
     , ShadowTid(shadowTid)
-{
+{ 
     Y_PROTOBUF_SUPPRESS_NODISCARD descr.SerializeToString(&Schema);
-    Name = descr.GetName();
+    Name = descr.GetName(); 
     Path = descr.GetPath();
-    ParseProto(descr);
-}
-
+    ParseProto(descr); 
+} 
+ 
 TUserTable::TUserTable(const TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr)
-    : TUserTable(table)
-{
+    : TUserTable(table) 
+{ 
     Y_VERIFY_S(Name == descr.GetName(), "Name: " << Name << " descr.Name: " << descr.GetName());
-    ParseProto(descr);
-    AlterSchema();
-}
-
+    ParseProto(descr); 
+    AlterSchema(); 
+} 
+ 
 void TUserTable::SetPath(const TString &path)
 {
     auto name = ExtractBase(path);
@@ -198,13 +198,13 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         Rooms[room->GetId()] = room;
     }
 
-    for (const auto& family : descr.GetPartitionConfig().GetColumnFamilies()) {
-        auto it = Families.find(family.GetId());
-        if (it == Families.end()) {
+    for (const auto& family : descr.GetPartitionConfig().GetColumnFamilies()) { 
+        auto it = Families.find(family.GetId()); 
+        if (it == Families.end()) { 
             it = Families.emplace(std::make_pair(family.GetId(), TUserFamily(family))).first;
-        } else {
-            it->second.Update(family);
-        }
+        } else { 
+            it->second.Update(family); 
+        } 
     }
 
     for (auto& kv : Families) {
@@ -212,46 +212,46 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         if (roomIt != Rooms.end()) {
             kv.second.Update(roomIt->second);
         }
-    }
-
-    for (const auto& col : descr.GetColumns()) {
-        TUserColumn& column = Columns[col.GetId()];
+    } 
+ 
+    for (const auto& col : descr.GetColumns()) { 
+        TUserColumn& column = Columns[col.GetId()]; 
         if (column.Name.empty()) {
-            column = TUserColumn(col.GetTypeId(), col.GetName());
-        }
-        column.Family = col.GetFamily();
+            column = TUserColumn(col.GetTypeId(), col.GetName()); 
+        } 
+        column.Family = col.GetFamily(); 
         column.NotNull = col.GetNotNull();
-    }
-
-    for (const auto& col : descr.GetDropColumns()) {
-        ui32 colId = col.GetId();
-        auto it = Columns.find(colId);
-        Y_VERIFY(it != Columns.end());
-        Y_VERIFY(!it->second.IsKey);
-        Columns.erase(it);
-    }
-
-    if (descr.KeyColumnIdsSize()) {
-        Y_VERIFY(descr.KeyColumnIdsSize() >= KeyColumnIds.size());
-        for (ui32 i = 0; i < KeyColumnIds.size(); ++i) {
-            Y_VERIFY(KeyColumnIds[i] == descr.GetKeyColumnIds(i));
-        }
-
-        KeyColumnIds.clear();
-        KeyColumnIds.reserve(descr.KeyColumnIdsSize());
-        KeyColumnTypes.resize(descr.KeyColumnIdsSize());
-        for (size_t i = 0; i < descr.KeyColumnIdsSize(); ++i) {
-            ui32 keyColId = descr.GetKeyColumnIds(i);
-            KeyColumnIds.push_back(keyColId);
-
-            TUserColumn * col = Columns.FindPtr(keyColId);
-            Y_VERIFY(col);
-            col->IsKey = true;
-            KeyColumnTypes[i] = col->Type;
-        }
-
-        Y_VERIFY(KeyColumnIds.size() == KeyColumnTypes.size());
-    }
+    } 
+ 
+    for (const auto& col : descr.GetDropColumns()) { 
+        ui32 colId = col.GetId(); 
+        auto it = Columns.find(colId); 
+        Y_VERIFY(it != Columns.end()); 
+        Y_VERIFY(!it->second.IsKey); 
+        Columns.erase(it); 
+    } 
+ 
+    if (descr.KeyColumnIdsSize()) { 
+        Y_VERIFY(descr.KeyColumnIdsSize() >= KeyColumnIds.size()); 
+        for (ui32 i = 0; i < KeyColumnIds.size(); ++i) { 
+            Y_VERIFY(KeyColumnIds[i] == descr.GetKeyColumnIds(i)); 
+        } 
+ 
+        KeyColumnIds.clear(); 
+        KeyColumnIds.reserve(descr.KeyColumnIdsSize()); 
+        KeyColumnTypes.resize(descr.KeyColumnIdsSize()); 
+        for (size_t i = 0; i < descr.KeyColumnIdsSize(); ++i) { 
+            ui32 keyColId = descr.GetKeyColumnIds(i); 
+            KeyColumnIds.push_back(keyColId); 
+ 
+            TUserColumn * col = Columns.FindPtr(keyColId); 
+            Y_VERIFY(col); 
+            col->IsKey = true; 
+            KeyColumnTypes[i] = col->Type; 
+        } 
+ 
+        Y_VERIFY(KeyColumnIds.size() == KeyColumnTypes.size()); 
+    } 
 
     if (descr.HasPartitionRangeBegin()) {
         Y_VERIFY(descr.HasPartitionRangeEnd());
@@ -276,8 +276,8 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         Y_VERIFY(streamDesc.HasPathId());
         CdcStreams.emplace(TPathId(streamDesc.GetPathId().GetOwnerId(), streamDesc.GetPathId().GetLocalId()), TCdcStream(streamDesc));
     }
-}
-
+} 
+ 
 void TUserTable::CheckSpecialColumns() {
     SpecialColTablet = Max<ui32>();
     SpecialColEpoch = Max<ui32>();
@@ -299,41 +299,41 @@ void TUserTable::CheckSpecialColumns() {
     }
 }
 
-void TUserTable::AlterSchema() {
+void TUserTable::AlterSchema() { 
     NKikimrSchemeOp::TTableDescription schema;
-    GetSchema(schema);
-
-    auto& partConfig = *schema.MutablePartitionConfig();
+    GetSchema(schema); 
+ 
+    auto& partConfig = *schema.MutablePartitionConfig(); 
     partConfig.ClearStorageRooms();
     for (const auto& room : Rooms) {
         partConfig.AddStorageRooms()->CopyFrom(*room.second);
     }
 
     // FIXME: these generated column families are incorrect!
-    partConfig.ClearColumnFamilies();
-    for (const auto& f : Families) {
-        const TUserFamily& family = f.second;
-        auto columnFamily = partConfig.AddColumnFamilies();
-        columnFamily->SetId(f.first);
-        columnFamily->SetName(family.GetName());
-        columnFamily->SetStorage(family.Storage);
-        columnFamily->SetColumnCodec(family.ColumnCodec);
-        columnFamily->SetColumnCache(family.ColumnCache);
+    partConfig.ClearColumnFamilies(); 
+    for (const auto& f : Families) { 
+        const TUserFamily& family = f.second; 
+        auto columnFamily = partConfig.AddColumnFamilies(); 
+        columnFamily->SetId(f.first); 
+        columnFamily->SetName(family.GetName()); 
+        columnFamily->SetStorage(family.Storage); 
+        columnFamily->SetColumnCodec(family.ColumnCodec); 
+        columnFamily->SetColumnCache(family.ColumnCache); 
         columnFamily->SetRoom(family.GetRoomId());
-    }
-
-    schema.ClearColumns();
-    for (const auto& col : Columns) {
-        const TUserColumn& column = col.second;
-
-        auto descr = schema.AddColumns();
-        descr->SetName(column.Name);
-        descr->SetId(col.first);
-        descr->SetTypeId(column.Type);
-        descr->SetFamily(column.Family);
+    } 
+ 
+    schema.ClearColumns(); 
+    for (const auto& col : Columns) { 
+        const TUserColumn& column = col.second; 
+ 
+        auto descr = schema.AddColumns(); 
+        descr->SetName(column.Name); 
+        descr->SetId(col.first); 
+        descr->SetTypeId(column.Type); 
+        descr->SetFamily(column.Family); 
         descr->SetNotNull(column.NotNull);
-    }
-
+    } 
+ 
     schema.SetPartitionRangeBegin(Range.From.GetBuffer());
     schema.SetPartitionRangeBeginIsInclusive(Range.FromInclusive);
     schema.SetPartitionRangeEnd(Range.To.GetBuffer());
@@ -342,13 +342,13 @@ void TUserTable::AlterSchema() {
     schema.SetPath(Name);
     schema.SetPath(Path);
 
-    SetSchema(schema);
-}
-
+    SetSchema(schema); 
+} 
+ 
 void TUserTable::ApplyCreate(
         TTransactionContext& txc, const TString& tableName,
         const NKikimrSchemeOp::TPartitionConfig& partConfig) const
-{
+{ 
     DoApplyCreate(txc, tableName, false, partConfig);
 }
 
@@ -369,12 +369,12 @@ void TUserTable::DoApplyCreate(
 
     auto &alter = txc.DB.Alter();
     alter.AddTable(tableName, tid);
-
+ 
     THashSet<ui32> appliedRooms;
-    for (const auto& fam : Families) {
-        ui32 familyId = fam.first;
-        const TUserFamily& family = fam.second;
-
+    for (const auto& fam : Families) { 
+        ui32 familyId = fam.first; 
+        const TUserFamily& family = fam.second; 
+ 
         alter.AddFamily(tid, familyId, family.GetRoomId());
         alter.SetFamily(tid, familyId, family.Cache, family.Codec);
         alter.SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());
@@ -382,27 +382,27 @@ void TUserTable::DoApplyCreate(
             // Call SetRoom once per room
             alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannel(), family.OuterChannel());
         }
-    }
-
-    for (const auto& col : Columns) {
-        ui32 columnId = col.first;
-        const TUserColumn& column = col.second;
-
+    } 
+ 
+    for (const auto& col : Columns) { 
+        ui32 columnId = col.first; 
+        const TUserColumn& column = col.second; 
+ 
         alter.AddColumn(tid, column.Name, columnId, column.Type, column.NotNull);
         alter.AddColumnToFamily(tid, columnId, column.Family);
-    }
-
-    for (size_t i = 0; i < KeyColumnIds.size(); ++i) {
+    } 
+ 
+    for (size_t i = 0; i < KeyColumnIds.size(); ++i) { 
         alter.AddColumnToKey(tid, KeyColumnIds[i]);
-    }
-
-    if (partConfig.HasCompactionPolicy()) {
-        NLocalDb::TCompactionPolicyPtr policy = new NLocalDb::TCompactionPolicy(partConfig.GetCompactionPolicy());
+    } 
+ 
+    if (partConfig.HasCompactionPolicy()) { 
+        NLocalDb::TCompactionPolicyPtr policy = new NLocalDb::TCompactionPolicy(partConfig.GetCompactionPolicy()); 
         alter.SetCompactionPolicy(tid, *policy);
-    } else {
+    } else { 
         alter.SetCompactionPolicy(tid, *NLocalDb::CreateDefaultUserTablePolicy());
-    }
-
+    } 
+ 
     if (partConfig.HasEnableFilterByKey()) {
         alter.SetByKeyFilter(tid, partConfig.GetEnableFilterByKey());
     }
@@ -428,17 +428,17 @@ void TUserTable::DoApplyCreate(
             alter.SetColdBorrow(tid, true);
         }
     }
-}
-
+} 
+ 
 void TUserTable::ApplyAlter(
         TTransactionContext& txc, const TUserTable& oldTable,
         const NKikimrSchemeOp::TTableDescription& delta, TString& strError)
-{
+{ 
     const auto& configDelta = delta.GetPartitionConfig();
     NKikimrSchemeOp::TTableDescription schema;
-    GetSchema(schema);
-    auto& config = *schema.MutablePartitionConfig();
-
+    GetSchema(schema); 
+    auto& config = *schema.MutablePartitionConfig(); 
+ 
     auto &alter = txc.DB.Alter();
 
     // Check if we need to drop shadow table first
@@ -466,10 +466,10 @@ void TUserTable::ApplyAlter(
     }
 
     THashSet<ui32> appliedRooms;
-    for (const auto& f : Families) {
-        ui32 familyId = f.first;
-        const TUserFamily& family = f.second;
-
+    for (const auto& f : Families) { 
+        ui32 familyId = f.first; 
+        const TUserFamily& family = f.second; 
+ 
         for (ui32 tid : tids) {
             alter.AddFamily(tid, familyId, family.GetRoomId());
             alter.SetFamily(tid, familyId, family.Cache, family.Codec);
@@ -482,57 +482,57 @@ void TUserTable::ApplyAlter(
                 alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannel(), family.OuterChannel());
             }
         }
-    }
-
-    for (const auto& col : Columns) {
-        ui32 colId = col.first;
-        const TUserColumn& column = col.second;
-
+    } 
+ 
+    for (const auto& col : Columns) { 
+        ui32 colId = col.first; 
+        const TUserColumn& column = col.second; 
+ 
         if (!oldTable.Columns.contains(colId)) {
             for (ui32 tid : tids) {
                 alter.AddColumn(tid, column.Name, colId, column.Type, column.NotNull);
             }
-        }
+        } 
 
         for (ui32 tid : tids) {
             alter.AddColumnToFamily(tid, colId, column.Family);
         }
-    }
-
+    } 
+ 
     for (const auto& col : delta.GetDropColumns()) {
-        ui32 colId = col.GetId();
-        const TUserTable::TUserColumn * oldCol = oldTable.Columns.FindPtr(colId);
-        Y_VERIFY(oldCol);
-        Y_VERIFY(oldCol->Name == col.GetName());
+        ui32 colId = col.GetId(); 
+        const TUserTable::TUserColumn * oldCol = oldTable.Columns.FindPtr(colId); 
+        Y_VERIFY(oldCol); 
+        Y_VERIFY(oldCol->Name == col.GetName()); 
         Y_VERIFY(!Columns.contains(colId));
-
+ 
         for (ui32 tid : tids) {
             alter.DropColumn(tid, colId);
         }
-    }
-
-    for (size_t i = 0; i < KeyColumnIds.size(); ++i) {
+    } 
+ 
+    for (size_t i = 0; i < KeyColumnIds.size(); ++i) { 
         for (ui32 tid : tids) {
             alter.AddColumnToKey(tid, KeyColumnIds[i]);
         }
-    }
-
-    if (configDelta.HasCompactionPolicy()) {
-        TIntrusiveConstPtr<NLocalDb::TCompactionPolicy> oldPolicy =
-                txc.DB.GetScheme().Tables.find(LocalTid)->second.CompactionPolicy;
-        NLocalDb::TCompactionPolicy newPolicy(configDelta.GetCompactionPolicy());
-
-        if (NLocalDb::ValidateCompactionPolicyChange(*oldPolicy, newPolicy, strError)) {
+    } 
+ 
+    if (configDelta.HasCompactionPolicy()) { 
+        TIntrusiveConstPtr<NLocalDb::TCompactionPolicy> oldPolicy = 
+                txc.DB.GetScheme().Tables.find(LocalTid)->second.CompactionPolicy; 
+        NLocalDb::TCompactionPolicy newPolicy(configDelta.GetCompactionPolicy()); 
+ 
+        if (NLocalDb::ValidateCompactionPolicyChange(*oldPolicy, newPolicy, strError)) { 
             for (ui32 tid : tids) {
                 alter.SetCompactionPolicy(tid, newPolicy);
             }
-            config.ClearCompactionPolicy();
-            newPolicy.Serialize(*config.MutableCompactionPolicy());
-        } else {
-            strError = TString("cannot change compaction policy: ") + strError;
-        }
-    }
-
+            config.ClearCompactionPolicy(); 
+            newPolicy.Serialize(*config.MutableCompactionPolicy()); 
+        } else { 
+            strError = TString("cannot change compaction policy: ") + strError; 
+        } 
+    } 
+ 
     if (configDelta.HasEnableFilterByKey()) {
         config.SetEnableFilterByKey(configDelta.GetEnableFilterByKey());
         for (ui32 tid : tids) {
@@ -542,16 +542,16 @@ void TUserTable::ApplyAlter(
 
     // N.B. some settings only apply to the main table
 
-    if (configDelta.HasExecutorCacheSize()) {
-        config.SetExecutorCacheSize(configDelta.GetExecutorCacheSize());
+    if (configDelta.HasExecutorCacheSize()) { 
+        config.SetExecutorCacheSize(configDelta.GetExecutorCacheSize()); 
         alter.SetExecutorCacheSize(configDelta.GetExecutorCacheSize());
-    }
-
+    } 
+ 
     if (configDelta.HasResourceProfile() && configDelta.GetResourceProfile()) {
         config.SetResourceProfile(configDelta.GetResourceProfile());
         alter.SetExecutorResourceProfile(configDelta.GetResourceProfile());
-    }
-
+    } 
+ 
     if (configDelta.HasExecutorFastLogPolicy()) {
         config.SetExecutorFastLogPolicy(configDelta.GetExecutorFastLogPolicy());
         alter.SetExecutorFastLogPolicy(configDelta.GetExecutorFastLogPolicy());
@@ -572,9 +572,9 @@ void TUserTable::ApplyAlter(
 
     schema.SetTableSchemaVersion(delta.GetTableSchemaVersion());
 
-    SetSchema(schema);
-}
-
+    SetSchema(schema); 
+} 
+ 
 void TUserTable::ApplyDefaults(TTransactionContext& txc) const
 {
     const auto* tableInfo = txc.DB.GetScheme().GetTableInfo(LocalTid);

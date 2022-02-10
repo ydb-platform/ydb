@@ -489,7 +489,7 @@ private:
 
     void TryInitMonCounters(const TActorContext &ctx);
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) override;
-
+ 
     void OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) override;
     void OnStopGuardStarting(const TActorContext &ctx);
     void OnStopGuardComplete(const TActorContext &ctx);
@@ -503,8 +503,8 @@ private:
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_COORDINATOR_ACTOR;
-    }
-
+    } 
+ 
     TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet);
 
     // no incomming pipes is allowed in StateInit

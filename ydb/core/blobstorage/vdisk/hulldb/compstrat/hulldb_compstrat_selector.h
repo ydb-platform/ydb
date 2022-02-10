@@ -116,8 +116,8 @@ namespace NKikimr {
         public:
             static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
                 return NKikimrServices::TActivity::BS_HULLCOMP_SELECTOR;
-            }
-
+            } 
+ 
             TSelectorActor(
                     TIntrusivePtr<THullCtx> hullCtx,
                     const TSelectorParams &params,
@@ -132,7 +132,7 @@ namespace NKikimr {
                 , BarriersSnap(std::move(barriersSnap))
                 , RecipientID(recipientID)
                 , CompactionTask(std::move(compactionTask))
-            {}
+            {} 
         };
 
     } // NHullComp

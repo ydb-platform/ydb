@@ -433,8 +433,8 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_PIPE_SERVER;
-    }
-
+    } 
+ 
     TPipePeNodeCache(const TIntrusivePtr<TPipePeNodeCacheConfig> &config)
         : TActor(&TThis::StateWork)
         , Config(config)

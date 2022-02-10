@@ -13,8 +13,8 @@ namespace NTabletPipe {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::TABLET_PIPE_SERVER;
-        }
-
+        } 
+ 
         TServer(ui64 tabletId, const TActorId& clientId, const TActorId& interconnectSession, ui32 features, ui64 connectCookie)
             : TActor(&TThis::StateInactive)
             , TabletId(tabletId)

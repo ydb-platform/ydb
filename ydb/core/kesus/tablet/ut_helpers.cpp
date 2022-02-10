@@ -100,7 +100,7 @@ void TTestContext::SetupLogging() {
 }
 
 void TTestContext::SetupTabletServices() {
-    ::NKikimr::SetupTabletServices(*Runtime);
+    ::NKikimr::SetupTabletServices(*Runtime); 
 }
 
 void TTestContext::Sleep(ui64 millis) {

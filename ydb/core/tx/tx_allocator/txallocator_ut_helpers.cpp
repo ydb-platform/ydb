@@ -86,7 +86,7 @@ void TTestEnv::Setup(TTestActorRuntime &runtime) {
     app.AddDomain(domain.Release());
     //app.AddHive(0, 0);
     SetupChannelProfiles(app);
-    SetupTabletServices(runtime, &app, true);
+    SetupTabletServices(runtime, &app, true); 
 }
 
 void TTestEnv::Reboot(TTestActorRuntime &runtime) {

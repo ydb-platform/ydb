@@ -844,7 +844,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
     }
 
     SetupChannelProfiles(app);
-    SetupBasicServices(*this, app);
+    SetupBasicServices(*this, app); 
 
     if (ENABLE_DETAILED_LOG) {
         Register(NTabletMonitoringProxy::CreateTabletMonitoringProxy());

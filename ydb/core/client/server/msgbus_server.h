@@ -279,7 +279,7 @@ IActor* CreateMessageBusServerProxy(
     std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
 );
 
-//IActor* CreateMessageBusDatashardSetConfig(TBusMessageContext &msg);
+//IActor* CreateMessageBusDatashardSetConfig(TBusMessageContext &msg); 
 IActor* CreateMessageBusTabletCountersRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusLocalMKQL(TBusMessageContext &msg);
 IActor* CreateMessageBusLocalSchemeTx(TBusMessageContext &msg);

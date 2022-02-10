@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 #include "cms.h"
 #include "ut_helpers.h"
 
@@ -23,18 +23,18 @@ struct TFakeNodeInfo {
         }
     };
 
-    TMap<TTabletId, NKikimrWhiteboard::TTabletStateInfo> TabletStateInfo;
-    TMap<TString, NKikimrWhiteboard::TNodeStateInfo> NodeStateInfo;
-    TMap<ui32, NKikimrWhiteboard::TPDiskStateInfo> PDiskStateInfo;
-    TMap<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo, TVDiskIDComparator> VDiskStateInfo;
-    NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
+    TMap<TTabletId, NKikimrWhiteboard::TTabletStateInfo> TabletStateInfo; 
+    TMap<TString, NKikimrWhiteboard::TNodeStateInfo> NodeStateInfo; 
+    TMap<ui32, NKikimrWhiteboard::TPDiskStateInfo> PDiskStateInfo; 
+    TMap<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo, TVDiskIDComparator> VDiskStateInfo; 
+    NKikimrWhiteboard::TSystemStateInfo SystemStateInfo; 
     bool Connected = true;
 };
 
 class TFakeNodeWhiteboardService : public TActorBootstrapped<TFakeNodeWhiteboardService> {
 public:
-    using TEvWhiteboard = NNodeWhiteboard::TEvWhiteboard;
-
+    using TEvWhiteboard = NNodeWhiteboard::TEvWhiteboard; 
+ 
     static NKikimrBlobStorage::TEvControllerConfigResponse Config;
     static THashMap<ui32, TFakeNodeInfo> Info;
     static TMutex Mutex;
@@ -269,9 +269,9 @@ public:
 
     void CheckWalleCheckTask(const TString &id,
                              NKikimrCms::TStatus::ECode code);
-
+ 
     ui64 CountWalleTasks();
-
+ 
     void CheckWalleListTasks(size_t count);
 
     void CheckWalleRemoveTask(const TString &id,
@@ -285,8 +285,8 @@ public:
     {
         auto req = MakeNotification(user, when, actions...);
         return CheckNotification(req, code);
-    }
-
+    } 
+ 
     void CheckGetNotification(const TString &user,
                               const TString &id,
                               NKikimrCms::TStatus::ECode code);
@@ -323,7 +323,7 @@ public:
 
     void EnableBSBaseConfig();
     void DisableBSBaseConfig();
-
+ 
     NKikimrCms::TGetLogTailResponse GetLogTail(ui32 type = 0,
                                                TInstant from = TInstant::Zero(),
                                                TInstant to = TInstant::Zero(),
@@ -331,7 +331,7 @@ public:
                                                ui32 offset = 0);
 
     const ui64 CmsId;
-
+ 
 private:
     void SetupLogging();
 

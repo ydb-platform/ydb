@@ -2,7 +2,7 @@
 #include "func_common.h"
 #include "clickhouse_type_traits.h"
 
-namespace NKikimr::NArrow {
+namespace NKikimr::NArrow { 
 
 struct TModuloOrZero {
 

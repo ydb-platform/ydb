@@ -294,20 +294,20 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             return false;
         }
 
-        std::vector<std::pair<i32, ui32>> columnOrderTypes; // {keyOrder, PType}
-        columnOrderTypes.reserve(Scheme.GetColumns().size());
+        std::vector<std::pair<i32, ui32>> columnOrderTypes; // {keyOrder, PType} 
+        columnOrderTypes.reserve(Scheme.GetColumns().size()); 
 
         for (const auto& column : Scheme.GetColumns()) {
-            columnOrderTypes.emplace_back(TableInfo.KeyOrder(column.GetName()), column.GetTypeId());
-        }
+            columnOrderTypes.emplace_back(TableInfo.KeyOrder(column.GetName()), column.GetTypeId()); 
+        } 
 
-        TVector<TCell> keys;
-        TVector<TCell> values;
-        TString strError;
+        TVector<TCell> keys; 
+        TVector<TCell> values; 
+        TString strError; 
 
-        if (!NFormats::TYdbDump::ParseLine(line, columnOrderTypes, pool, keys, values, strError, WrittenBytes)) {
-            Finish(false, TStringBuilder() << strError << " on line: " << origLine);
-            return false;
+        if (!NFormats::TYdbDump::ParseLine(line, columnOrderTypes, pool, keys, values, strError, WrittenBytes)) { 
+            Finish(false, TStringBuilder() << strError << " on line: " << origLine); 
+            return false; 
         }
 
         Y_VERIFY(!keys.empty());

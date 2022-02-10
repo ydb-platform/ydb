@@ -150,17 +150,17 @@ struct TEvTxProcessing {
             Record.SetSeqno(seqno);
         }
 
-        TEvReadSetAck(const TEvReadSet& evReadSet, ui64 tabletConsumer)
-        {
-            Record.SetStep(evReadSet.Record.GetStep());
-            Record.SetTxId(evReadSet.Record.GetTxId());
-            Record.SetTabletSource(evReadSet.Record.GetTabletSource());
-            Record.SetTabletDest(evReadSet.Record.GetTabletDest());
-            Record.SetTabletConsumer(tabletConsumer);
-            Record.SetFlags(0);
-            Record.SetSeqno(evReadSet.Record.GetSeqno());
-        }
-
+        TEvReadSetAck(const TEvReadSet& evReadSet, ui64 tabletConsumer) 
+        { 
+            Record.SetStep(evReadSet.Record.GetStep()); 
+            Record.SetTxId(evReadSet.Record.GetTxId()); 
+            Record.SetTabletSource(evReadSet.Record.GetTabletSource()); 
+            Record.SetTabletDest(evReadSet.Record.GetTabletDest()); 
+            Record.SetTabletConsumer(tabletConsumer); 
+            Record.SetFlags(0); 
+            Record.SetSeqno(evReadSet.Record.GetSeqno()); 
+        } 
+ 
         TString ToString() const {
             TStringStream str;
             str << "{TEvReadSet step# " << Record.GetStep();

@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/ydb_result_set_old.pb.h>
@@ -13,27 +13,27 @@
 #include <library/cpp/messagebus/message_status.h>
 #include <library/cpp/messagebus/message.h>
 #include <library/cpp/threading/future/future.h>
-
-#include <util/generic/queue.h>
-#include <util/system/mutex.h>
-#include <util/system/condvar.h>
-#include <util/system/thread.h>
-
+ 
+#include <util/generic/queue.h> 
+#include <util/system/mutex.h> 
+#include <util/system/condvar.h> 
+#include <util/system/thread.h> 
+ 
 #include <google/protobuf/text_format.h>
-
+ 
 #include <utility>
 
-namespace NBus {
-    template<class TBufferRecord, int MType>
-    class TBusBufferMessage;
-}
-
+namespace NBus { 
+    template<class TBufferRecord, int MType> 
+    class TBusBufferMessage; 
+} 
+ 
 namespace NKikimr {
-
-namespace NMsgBusProxy {
-    class TMsgBusClient;
-}
-
+ 
+namespace NMsgBusProxy { 
+    class TMsgBusClient; 
+} 
+ 
 namespace NClient {
 
 class TResult;
@@ -274,11 +274,11 @@ public:
     };
 
     TError() = default;
-    TError(TError&&) = default;
+    TError(TError&&) = default; 
     TError(const TError&) = default;
-    TError& operator = (TError&&) = default;
+    TError& operator = (TError&&) = default; 
     TError& operator = (const TError&) = default;
-
+ 
     bool Success() const;
     bool Error() const { return !Success(); }
     bool Permanent() const;
@@ -302,7 +302,7 @@ protected:
     Ydb::StatusIds::StatusCode YdbStatus;
 };
 
-/// Owns query result data
+/// Owns query result data 
 class TResult {
     // generic polymorphic result of server request
     // supports many different run-time conversions with error checking
@@ -311,11 +311,11 @@ class TResult {
     friend class TError;
     friend class TRetryQueue;
 public:
-    TResult(TResult&&) = default;
-    TResult(const TResult&) = default;
-    TResult& operator = (TResult&&) = default;
-    TResult& operator = (const TResult&) = default;
-
+    TResult(TResult&&) = default; 
+    TResult(const TResult&) = default; 
+    TResult& operator = (TResult&&) = default; 
+    TResult& operator = (const TResult&) = default; 
+ 
     // status of the operation
     NMsgBusProxy::EResponseStatus GetStatus() const;
     // detailed error of the operation
@@ -347,22 +347,22 @@ protected:
 
     NBus::EMessageStatus TransportStatus;
     TString TransportErrorMessage;
-    TAtomicSharedPtr<NBus::TBusMessage> Reply;
+    TAtomicSharedPtr<NBus::TBusMessage> Reply; 
 };
 
 class TQueryResult : public TResult {
     friend class TKikimr;
-    friend class TTextQuery;
-    friend class TPreparedQuery;
+    friend class TTextQuery; 
+    friend class TPreparedQuery; 
 public:
-    TQueryResult(TQueryResult&&) = default;
-    TQueryResult(const TQueryResult&) = default;
-    TQueryResult& operator = (TQueryResult&&) = default;
-    TQueryResult& operator = (const TQueryResult&) = default;
-
+    TQueryResult(TQueryResult&&) = default; 
+    TQueryResult(const TQueryResult&) = default; 
+    TQueryResult& operator = (TQueryResult&&) = default; 
+    TQueryResult& operator = (const TQueryResult&) = default; 
+ 
     // two different ways are available to get content of the query result:
-    // (1) it could be converted to use with minikql_result_lib @sa NResultLib::ConvertResult
-
+    // (1) it could be converted to use with minikql_result_lib @sa NResultLib::ConvertResult 
+ 
     // (2) or used with built-in TValue class
     TValue GetValue() const;
     // (1) strict and detailed
@@ -401,13 +401,13 @@ protected:
 
 class TPrepareResult : public TResult {
     friend class TKikimr;
-    friend class TTextQuery;
+    friend class TTextQuery; 
 public:
-    TPrepareResult(TPrepareResult&&) = default;
-    TPrepareResult(const TPrepareResult&) = default;
-    TPrepareResult& operator = (TPrepareResult&&) = default;
-    TPrepareResult& operator = (const TPrepareResult&) = default;
-
+    TPrepareResult(TPrepareResult&&) = default; 
+    TPrepareResult(const TPrepareResult&) = default; 
+    TPrepareResult& operator = (TPrepareResult&&) = default; 
+    TPrepareResult& operator = (const TPrepareResult&) = default; 
+ 
     TPreparedQuery GetQuery() const;
 
 protected:
@@ -423,8 +423,8 @@ class TQuery {
     friend class TPreparedQuery;
 public:
     TQuery(TQuery&&) = default;
-    TQuery& operator = (TQuery&&) = default;
-    TQuery& operator = (const TQuery&) = delete;
+    TQuery& operator = (TQuery&&) = default; 
+    TQuery& operator = (const TQuery&) = delete; 
 
     template <typename... ParametersType> static void StoreParameters(NKikimrMiniKQL::TParams& params, const ParametersType&... parameters) {
         TStructValue<ParametersType...> structValue(parameters...);
@@ -437,7 +437,7 @@ public:
     static void ParseTextParameters(NKikimrMiniKQL::TParams& params, const TString& parameters);
 
 protected:
-    TQuery(const TQuery&) = default;
+    TQuery(const TQuery&) = default; 
     TQuery(TKikimr& kikimr);
 
     TKikimr* Kikimr;
@@ -449,9 +449,9 @@ class TTextQuery : public TQuery {
     friend class TKikimr;
 public:
     TTextQuery(TTextQuery&&) = default;
-    TTextQuery& operator = (TTextQuery&&) = default;
+    TTextQuery& operator = (TTextQuery&&) = default; 
     TTextQuery(const TTextQuery&) = delete;
-    TTextQuery& operator = (const TTextQuery&) = delete;
+    TTextQuery& operator = (const TTextQuery&) = delete; 
 
     // prepare query using round-trip to server
     TPrepareResult SyncPrepare() const;
@@ -497,9 +497,9 @@ class TUnbindedQuery {
     friend class TPreparedQuery;
 public:
     TUnbindedQuery(TUnbindedQuery&&) = default;
-    TUnbindedQuery& operator = (TUnbindedQuery&&) = default;
-    TUnbindedQuery(const TUnbindedQuery&) = delete;
-    TUnbindedQuery& operator = (const TUnbindedQuery&) = delete;
+    TUnbindedQuery& operator = (TUnbindedQuery&&) = default; 
+    TUnbindedQuery(const TUnbindedQuery&) = delete; 
+    TUnbindedQuery& operator = (const TUnbindedQuery&) = delete; 
 
 protected:
     TUnbindedQuery(const TString& program);
@@ -514,9 +514,9 @@ class TPreparedQuery : public TQuery {
     friend class TPrepareResult;
 public:
     TPreparedQuery(TPreparedQuery&&) = default;
-    TPreparedQuery& operator = (TPreparedQuery&&) = default;
-    TPreparedQuery(const TPreparedQuery&) = delete;
-    TPreparedQuery& operator = (const TPreparedQuery&) = delete;
+    TPreparedQuery& operator = (TPreparedQuery&&) = default; 
+    TPreparedQuery(const TPreparedQuery&) = delete; 
+    TPreparedQuery& operator = (const TPreparedQuery&) = delete; 
 
     // execute query on the server (also one round-trip)
     template <typename... ParametersType>
@@ -564,12 +564,12 @@ class TSchemaObject {
     friend class TKikimr;
 public:
     /// @sa NKikimrSchemeOp::EPathType
-    enum class EPathType : ui32 {
-        Unknown = 0,
-        Directory,
-        Table,
-        PersQueueGroup,
-        SubDomain,
+    enum class EPathType : ui32 { 
+        Unknown = 0, 
+        Directory, 
+        Table, 
+        PersQueueGroup, 
+        SubDomain, 
         RtmrVolume,
         BlockStoreVolume,
         Kesus,
@@ -579,13 +579,13 @@ public:
         OlapTable,
         Sequence,
         Replication,
-    };
-
-    TSchemaObject(TSchemaObject&&) = default;
-    TSchemaObject(const TSchemaObject&) = default;
-
-    void Drop();
-    void ModifySchema(const TModifyScheme& schema);
+    }; 
+ 
+    TSchemaObject(TSchemaObject&&) = default; 
+    TSchemaObject(const TSchemaObject&) = default; 
+ 
+    void Drop(); 
+    void ModifySchema(const TModifyScheme& schema); 
     TSchemaObject MakeDirectory(const TString& name);
     TSchemaObject CreateTable(const TString& name, const TVector<TColumn>& columns);
     TSchemaObject CreateTable(const TString& name, const TVector<TColumn>& columns,
@@ -597,14 +597,14 @@ public:
     TVector<TColumn> GetColumns() const;
     TSchemaObjectStats GetStats() const;
 
-    EPathType GetPathType() const { return PathType; }
-    bool IsDirectory() const { return PathType == EPathType::Directory; }
-    bool IsTable() const { return PathType == EPathType::Table; }
-    bool IsPersQueueGroup() const { return PathType == EPathType::PersQueueGroup; }
-
+    EPathType GetPathType() const { return PathType; } 
+    bool IsDirectory() const { return PathType == EPathType::Directory; } 
+    bool IsTable() const { return PathType == EPathType::Table; } 
+    bool IsPersQueueGroup() const { return PathType == EPathType::PersQueueGroup; } 
+ 
 protected:
-    TSchemaObject(TKikimr& kikimr, const TString& path, const TString& name, ui64 pathId = 0,
-                  EPathType pathType = EPathType::Unknown);
+    TSchemaObject(TKikimr& kikimr, const TString& path, const TString& name, ui64 pathId = 0, 
+                  EPathType pathType = EPathType::Unknown); 
 
     TSchemaObject DoCreateTable(const TString& name, const TVector<TColumn>& columns,
                                 const TTablePartitionConfig* partitionConfig);
@@ -612,8 +612,8 @@ protected:
     TKikimr& Kikimr;
     TString Path;
     TString Name;
-    ui64 PathId;
-    EPathType PathType;
+    ui64 PathId; 
+    EPathType PathType; 
 };
 
 class TRegistrationResult : public TResult {
@@ -754,8 +754,8 @@ public:
     TKikimr(const NMsgBusProxy::TMsgBusClientConfig& clientConfig, const TConnectionPolicy& policy = TConnectionPolicy());
     TKikimr(const NGRpcProxy::TGRpcClientConfig& clientConfig, const TConnectionPolicy& policy = TConnectionPolicy());
     TKikimr(TKikimr&& kikimr);
-    ~TKikimr();
-
+    ~TKikimr(); 
+ 
     TSchemaObject GetSchemaRoot(const TString& name = TString());
     TSchemaObject GetSchemaObject(const TString& name);
     TTextQuery Query(const TString& program);
@@ -785,7 +785,7 @@ protected:
     NThreading::TFuture<TQueryResult> ExecuteQuery(const TPreparedQuery& query, const TString& parameters);
     NThreading::TFuture<TPrepareResult> PrepareQuery(const TTextQuery& query);
     NThreading::TFuture<TResult> DescribeObject(const TSchemaObject& object);
-    NThreading::TFuture<TResult> ModifySchema(const TModifyScheme& schema);
+    NThreading::TFuture<TResult> ModifySchema(const TModifyScheme& schema); 
     NThreading::TFuture<TResult> MakeDirectory(const TSchemaObject& object, const TString& name);
     NThreading::TFuture<TResult> CreateTable(TSchemaObject& object, const TString& name, const TVector<TColumn>& columns,
                                              const TTablePartitionConfig* partitionConfig);

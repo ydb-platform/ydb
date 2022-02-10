@@ -1,4 +1,4 @@
-#include "csv.h"
+#include "csv.h" 
 
 #include <contrib/libs/double-conversion/double-conversion.h>
 
@@ -16,7 +16,7 @@
 #include <util/datetime/base.h>
 #include <util/string/cast.h>
 
-namespace NKikimr::NFormats {
+namespace NKikimr::NFormats { 
 
 namespace {
 
@@ -262,39 +262,39 @@ bool CheckCellValue(const TCell& cell, NScheme::TTypeId type) {
     }
 }
 
-bool TYdbDump::ParseLine(TStringBuf line, const std::vector<std::pair<i32, ui32>>& columnOrderTypes, TMemoryPool& pool,
-                         TVector<TCell>& keys, TVector<TCell>& values, TString& strError, ui64& numBytes)
-{
-    for (const auto& [keyOrder, pType] : columnOrderTypes) {
-        TStringBuf value = line.NextTok(',');
-        if (!value) {
-            strError = "Empty token";
-            return false;
-        }
-
-        TCell* cell = nullptr;
-
-        if (keyOrder != -1) {
-            if ((int)keys.size() < (keyOrder + 1)) {
-                keys.resize(keyOrder + 1);
-            }
-
-            cell = &keys.at(keyOrder);
-        } else {
-            cell = &values.emplace_back();
-        }
-
-        Y_VERIFY(cell);
-
-        if (!MakeCell(*cell, value, pType, pool) || !CheckCellValue(*cell, pType)) {
-            strError = TStringBuilder() << "Invalid value: '" << value << "'";
-            return false;
-        }
-
-        numBytes += cell->Size();
-    }
-
-    return true;
-}
-
-}
+bool TYdbDump::ParseLine(TStringBuf line, const std::vector<std::pair<i32, ui32>>& columnOrderTypes, TMemoryPool& pool, 
+                         TVector<TCell>& keys, TVector<TCell>& values, TString& strError, ui64& numBytes) 
+{ 
+    for (const auto& [keyOrder, pType] : columnOrderTypes) { 
+        TStringBuf value = line.NextTok(','); 
+        if (!value) { 
+            strError = "Empty token"; 
+            return false; 
+        } 
+ 
+        TCell* cell = nullptr; 
+ 
+        if (keyOrder != -1) { 
+            if ((int)keys.size() < (keyOrder + 1)) { 
+                keys.resize(keyOrder + 1); 
+            } 
+ 
+            cell = &keys.at(keyOrder); 
+        } else { 
+            cell = &values.emplace_back(); 
+        } 
+ 
+        Y_VERIFY(cell); 
+ 
+        if (!MakeCell(*cell, value, pType, pool) || !CheckCellValue(*cell, pType)) { 
+            strError = TStringBuilder() << "Invalid value: '" << value << "'"; 
+            return false; 
+        } 
+ 
+        numBytes += cell->Size(); 
+    } 
+ 
+    return true; 
+} 
+ 
+} 

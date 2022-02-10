@@ -41,39 +41,39 @@ private:
     ui32 NumberOfRetries = 10;
 };
 
-class TCommandImportFromFile : public TClientCommandTree {
-public:
-    TCommandImportFromFile();
-};
-
-class TCommandImportFromCsv : public TYdbCommand,
-                            public TCommandWithPath {
-public:
-    TCommandImportFromCsv(const TString& cmd = "csv", const TString& cmdDescription = "Import data from CSV file");
-    virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
-    virtual int Run(TConfig& config) override;
-
-protected:
-    EOutputFormat InputFormat = EOutputFormat::Csv;
-    TString FilePath;
-    TString Delimiter = ",";
-    TString NullValue;
-    ui32 SkipRows = 0;
-    bool Header = false;
-    TString BytesPerRequest;
+class TCommandImportFromFile : public TClientCommandTree { 
+public: 
+    TCommandImportFromFile(); 
+}; 
+ 
+class TCommandImportFromCsv : public TYdbCommand, 
+                            public TCommandWithPath { 
+public: 
+    TCommandImportFromCsv(const TString& cmd = "csv", const TString& cmdDescription = "Import data from CSV file"); 
+    virtual void Config(TConfig& config) override; 
+    virtual void Parse(TConfig& config) override; 
+    virtual int Run(TConfig& config) override; 
+ 
+protected: 
+    EOutputFormat InputFormat = EOutputFormat::Csv; 
+    TString FilePath; 
+    TString Delimiter = ","; 
+    TString NullValue; 
+    ui32 SkipRows = 0; 
+    bool Header = false; 
+    TString BytesPerRequest; 
     ui64 MaxInFlightRequests = 1;
-};
-
-class TCommandImportFromTsv : public TCommandImportFromCsv {
-public:
-    TCommandImportFromTsv()
-        : TCommandImportFromCsv("tsv", "Import data from TSV file")
-    {
-        InputFormat = EOutputFormat::Tsv;
-        Delimiter = "\t";
-    }
-};
-
+}; 
+ 
+class TCommandImportFromTsv : public TCommandImportFromCsv { 
+public: 
+    TCommandImportFromTsv() 
+        : TCommandImportFromCsv("tsv", "Import data from TSV file") 
+    { 
+        InputFormat = EOutputFormat::Tsv; 
+        Delimiter = "\t"; 
+    } 
+}; 
+ 
 }
 }

@@ -1,6 +1,6 @@
 #include "columnshard_impl.h"
 
-namespace NKikimr::NColumnShard {
+namespace NKikimr::NColumnShard { 
 
 class TTxNotifyTxCompletion : public TTransactionBase<TColumnShard> {
 public:
@@ -9,9 +9,9 @@ public:
         , Ev(ev)
     {}
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext&) override { 
         Y_UNUSED(txc);
-        LOG_S_DEBUG("TTxNotifyTxCompletion.Execute at tablet " << Self->TabletID());
+        LOG_S_DEBUG("TTxNotifyTxCompletion.Execute at tablet " << Self->TabletID()); 
 
         const ui64 txId = Ev->Get()->Record.GetTxId();
 
@@ -41,4 +41,4 @@ void TColumnShard::Handle(TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev, const
     Execute(new TTxNotifyTxCompletion(this, ev), ctx);
 }
 
-}
+} 

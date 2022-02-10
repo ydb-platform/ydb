@@ -426,8 +426,8 @@ public:
         : PipeClientCache(NTabletPipe::CreateUnboundedClientCache(GetPipeClientConfig()))
         , TxAllocatorClient(NKikimrServices::TX_PROXY, PipeClientCache.Get(), txAllocators)
     {
-    }
-
+    } 
+ 
     void Bootstrap(const TActorContext &ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
                     "actor# " << SelfId() <<

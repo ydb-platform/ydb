@@ -56,8 +56,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_LEVEL_INDEX_BARRIER;
-        }
-
+        } 
+ 
         TLevelIndexBarrierQuery(
                 TIntrusivePtr<THullCtx> &hullCtx,
                 const TActorId &parentId,
@@ -71,7 +71,7 @@ namespace NKikimr {
             , Ev(ev)
             , Record(Ev->Get()->Record)
             , Result(std::move(result))
-        {}
+        {} 
     };
 
     ////////////////////////////////////////////////////////////////////////////

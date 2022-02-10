@@ -1,7 +1,7 @@
 #include "columnshard_impl.h"
 #include "columnshard_schema.h"
 
-namespace NKikimr::NColumnShard {
+namespace NKikimr::NColumnShard { 
 
 class TColumnShard::TTxProposeCancel : public TTransactionBase<TColumnShard> {
 public:
@@ -12,8 +12,8 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_PROPOSE_CANCEL; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        LOG_S_DEBUG("TTxProposeCancel.Execute");
+    bool Execute(TTransactionContext& txc, const TActorContext&) override { 
+        LOG_S_DEBUG("TTxProposeCancel.Execute"); 
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -24,15 +24,15 @@ public:
             auto& txInfo = Self->BasicTxInfo[txId];
             if (txInfo.PlanStep == 0) {
                 // Not planned yet, safe to remove
-                Self->RemoveTx(txc.DB, txId);
+                Self->RemoveTx(txc.DB, txId); 
             }
         }
 
         return true;
     }
 
-    void Complete(const TActorContext&) override {
-        LOG_S_DEBUG("TTxProposeCancel.Complete");
+    void Complete(const TActorContext&) override { 
+        LOG_S_DEBUG("TTxProposeCancel.Complete"); 
     }
 
 private:
@@ -43,4 +43,4 @@ void TColumnShard::Handle(TEvColumnShard::TEvCancelTransactionProposal::TPtr& ev
     Execute(new TTxProposeCancel(this, ev), ctx);
 }
 
-}
+} 

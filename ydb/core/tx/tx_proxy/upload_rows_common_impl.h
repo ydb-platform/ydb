@@ -22,73 +22,73 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-
-#include <util/string/join.h>
-#include <util/string/vector.h>
-#include <util/generic/size_literals.h>
-
+#include <library/cpp/actors/core/actor_bootstrapped.h> 
+ 
+#include <util/string/join.h> 
+#include <util/string/vector.h> 
+#include <util/generic/size_literals.h> 
+ 
 namespace NKikimr {
 
 using namespace NActors;
 
-struct TUpsertCost {
-    static constexpr float OneRowCost(ui64 sz) {
-        constexpr ui64 unitSize = 1_KB;
-        constexpr ui64 unitSizeAdjust = unitSize - 1;
-
-        return (sz + unitSizeAdjust) / unitSize;
-    }
-
-    static constexpr float BatchCost(ui64 batchSize, ui32 rows) {
-        constexpr ui64 unitSize = 1_KB;
-
-        return Max<ui64>(rows, batchSize / unitSize);
-    }
-
-    static constexpr float CostToRu(float cost) {
-        constexpr float ruPerKB = 0.5f; // 0.5 ru for 1 KB
-
-        return cost * ruPerKB;
-    }
-};
-
-namespace {
-
-class TRowWriter : public NArrow::IRowWriter {
-public:
-    TRowWriter(TVector<std::pair<TSerializedCellVec, TString>>& rows, ui32 keySize)
-        : Rows(rows)
-        , KeySize(keySize)
-        , RowCost(0)
-    {}
-
-    void AddRow(const TConstArrayRef<TCell>& cells) override {
-        ui64 sz = 0;
-        for (const auto& cell : cells) {
-            sz += cell.Size();
-        }
-        RowCost += TUpsertCost::OneRowCost(sz);
-
-        TConstArrayRef<TCell> keyCells(&cells[0], KeySize);
-        TConstArrayRef<TCell> valueCells(&cells[KeySize], cells.size() - KeySize);
-
-        TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(keyCells));
-        Rows.emplace_back(serializedKey, TSerializedCellVec::Serialize(valueCells));
-    }
-
-    float GetRuCost() const {
-        return TUpsertCost::CostToRu(RowCost);
-    }
-
-private:
-    TVector<std::pair<TSerializedCellVec, TString>>& Rows;
-    ui32 KeySize;
-    float RowCost;
-};
-
-}
-
+struct TUpsertCost { 
+    static constexpr float OneRowCost(ui64 sz) { 
+        constexpr ui64 unitSize = 1_KB; 
+        constexpr ui64 unitSizeAdjust = unitSize - 1; 
+ 
+        return (sz + unitSizeAdjust) / unitSize; 
+    } 
+ 
+    static constexpr float BatchCost(ui64 batchSize, ui32 rows) { 
+        constexpr ui64 unitSize = 1_KB; 
+ 
+        return Max<ui64>(rows, batchSize / unitSize); 
+    } 
+ 
+    static constexpr float CostToRu(float cost) { 
+        constexpr float ruPerKB = 0.5f; // 0.5 ru for 1 KB 
+ 
+        return cost * ruPerKB; 
+    } 
+}; 
+ 
+namespace { 
+ 
+class TRowWriter : public NArrow::IRowWriter { 
+public: 
+    TRowWriter(TVector<std::pair<TSerializedCellVec, TString>>& rows, ui32 keySize) 
+        : Rows(rows) 
+        , KeySize(keySize) 
+        , RowCost(0) 
+    {} 
+ 
+    void AddRow(const TConstArrayRef<TCell>& cells) override { 
+        ui64 sz = 0; 
+        for (const auto& cell : cells) { 
+            sz += cell.Size(); 
+        } 
+        RowCost += TUpsertCost::OneRowCost(sz); 
+ 
+        TConstArrayRef<TCell> keyCells(&cells[0], KeySize); 
+        TConstArrayRef<TCell> valueCells(&cells[KeySize], cells.size() - KeySize); 
+ 
+        TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(keyCells)); 
+        Rows.emplace_back(serializedKey, TSerializedCellVec::Serialize(valueCells)); 
+    } 
+ 
+    float GetRuCost() const { 
+        return TUpsertCost::CostToRu(RowCost); 
+    } 
+ 
+private: 
+    TVector<std::pair<TSerializedCellVec, TString>>& Rows; 
+    ui32 KeySize; 
+    float RowCost; 
+}; 
+ 
+} 
+ 
 namespace NTxProxy {
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
@@ -124,12 +124,12 @@ private:
     NThreading::TFuture<Ydb::LongTx::WriteResponse> WriteBatchResult;
 
 protected:
-    enum class EUploadSource {
-        ProtoValues = 0,
-        ArrowBatch = 1,
-        CSV = 2,
-    };
-
+    enum class EUploadSource { 
+        ProtoValues = 0, 
+        ArrowBatch = 1, 
+        CSV = 2, 
+    }; 
+ 
     // Positions of key and value fields in the request proto struct
     struct TFieldDescription {
         ui32 ColId;
@@ -143,17 +143,17 @@ protected:
     TVector<TString> ValueColumnNames;
     TVector<TFieldDescription> ValueColumnPositions;
 
-    // Additional schema info (for OLAP dst or source format)
-    TVector<std::pair<TString, NScheme::TTypeId>> SrcColumns; // source columns in CSV could have any order
-    TVector<std::pair<TString, NScheme::TTypeId>> YdbSchema;
-    THashMap<ui32, size_t> Id2Position; // columnId -> its position in YdbSchema
+    // Additional schema info (for OLAP dst or source format) 
+    TVector<std::pair<TString, NScheme::TTypeId>> SrcColumns; // source columns in CSV could have any order 
+    TVector<std::pair<TString, NScheme::TTypeId>> YdbSchema; 
+    THashMap<ui32, size_t> Id2Position; // columnId -> its position in YdbSchema 
 
     bool WriteToTableShadow = false;
     bool AllowWriteToPrivateTable = false;
 
-    std::shared_ptr<arrow::RecordBatch> Batch;
-    float RuCost = 0.0;
-
+    std::shared_ptr<arrow::RecordBatch> Batch; 
+    float RuCost = 0.0; 
+ 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return DerivedActivityType;
@@ -183,7 +183,7 @@ public:
         }
         TBase::Die(ctx);
     }
-
+ 
 protected:
     const NSchemeCache::TSchemeCacheNavigate* GetResolveNameResult() const {
         return ResolveNamesResult.Get();
@@ -194,68 +194,68 @@ protected:
         return ResolvePartitionsResult->ResultSet[0].KeyDescription.Get();
     }
 
-    std::shared_ptr<arrow::RecordBatch> RowsToBatch(const TVector<std::pair<TSerializedCellVec, TString>>& rows,
-                                                    TString& errorMessage)
-    {
-        NArrow::TArrowBatchBuilder batchBuilder;
-        batchBuilder.Reserve(rows.size()); // TODO: ReserveData()
-        if (!batchBuilder.Start(YdbSchema)) {
-            errorMessage = "Cannot make Arrow batch from rows";
-            return {};
-        }
-
-        for (const auto& kv : rows) {
-            const TSerializedCellVec& key = kv.first;
-            const TSerializedCellVec value(kv.second);
-
-            batchBuilder.AddRow(key.GetCells(), value.GetCells());
-        }
-
+    std::shared_ptr<arrow::RecordBatch> RowsToBatch(const TVector<std::pair<TSerializedCellVec, TString>>& rows, 
+                                                    TString& errorMessage) 
+    { 
+        NArrow::TArrowBatchBuilder batchBuilder; 
+        batchBuilder.Reserve(rows.size()); // TODO: ReserveData() 
+        if (!batchBuilder.Start(YdbSchema)) { 
+            errorMessage = "Cannot make Arrow batch from rows"; 
+            return {}; 
+        } 
+ 
+        for (const auto& kv : rows) { 
+            const TSerializedCellVec& key = kv.first; 
+            const TSerializedCellVec value(kv.second); 
+ 
+            batchBuilder.AddRow(key.GetCells(), value.GetCells()); 
+        } 
+ 
         return batchBuilder.FlushBatch(false);
-    }
-
-    TVector<std::pair<TSerializedCellVec, TString>> BatchToRows(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                                TString& errorMessage) {
-        Y_VERIFY(batch);
-        TVector<std::pair<TSerializedCellVec, TString>> out;
-        out.reserve(batch->num_rows());
-
-        ui32 keySize = KeyColumnPositions.size(); // YdbSchema contains keys first
-        TRowWriter writer(out, keySize);
-        NArrow::TArrowToYdbConverter batchConverter(YdbSchema, writer);
-        if (!batchConverter.Process(*batch, errorMessage)) {
-            return {};
-        }
-
-        RuCost = writer.GetRuCost();
-        return out;
-    }
-
+    } 
+ 
+    TVector<std::pair<TSerializedCellVec, TString>> BatchToRows(const std::shared_ptr<arrow::RecordBatch>& batch, 
+                                                                TString& errorMessage) { 
+        Y_VERIFY(batch); 
+        TVector<std::pair<TSerializedCellVec, TString>> out; 
+        out.reserve(batch->num_rows()); 
+ 
+        ui32 keySize = KeyColumnPositions.size(); // YdbSchema contains keys first 
+        TRowWriter writer(out, keySize); 
+        NArrow::TArrowToYdbConverter batchConverter(YdbSchema, writer); 
+        if (!batchConverter.Process(*batch, errorMessage)) { 
+            return {}; 
+        } 
+ 
+        RuCost = writer.GetRuCost(); 
+        return out; 
+    } 
+ 
 private:
     virtual TString GetDatabase() = 0;
     virtual const TString& GetTable() = 0;
     virtual const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const = 0;
     virtual bool CheckAccess(TString& errorMessage) = 0;
-    virtual TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const = 0;
-    virtual bool ExtractRows(TString& errorMessage) = 0;
-    virtual bool ExtractBatch(TString& errorMessage) = 0;
+    virtual TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const = 0; 
+    virtual bool ExtractRows(TString& errorMessage) = 0; 
+    virtual bool ExtractBatch(TString& errorMessage) = 0; 
     virtual void RaiseIssue(const NYql::TIssue& issue) = 0;
     virtual void SendResult(const NActors::TActorContext& ctx, const ::Ydb::StatusIds::StatusCode& status) = 0;
-
-    virtual EUploadSource GetSourceType() const {
-        return EUploadSource::ProtoValues;
-    }
-
-    virtual const TString& GetSourceData() const {
-        static const TString none;
-        return none;
-    }
-
-    virtual const TString& GetSourceSchema() const {
-        static const TString none;
-        return none;
-    }
-
+ 
+    virtual EUploadSource GetSourceType() const { 
+        return EUploadSource::ProtoValues; 
+    } 
+ 
+    virtual const TString& GetSourceData() const { 
+        static const TString none; 
+        return none; 
+    } 
+ 
+    virtual const TString& GetSourceSchema() const { 
+        static const TString none; 
+        return none; 
+    } 
+ 
 private:
     STFUNC(StateWaitResolveTable) {
         switch (ev->GetTypeRewrite()) {
@@ -267,15 +267,15 @@ private:
         }
     }
 
-    static bool SameDstType(NScheme::TTypeId type1, NScheme::TTypeId type2, bool allowConvert) {
-        bool res = (type1 == type2);
-        if (!res && allowConvert) {
-            res = NArrow::GetArrowType(type1)->id() == NArrow::GetArrowType(type2)->id();
-        }
-        return res;
-    }
-
-    bool BuildSchema(const NActors::TActorContext& ctx, TString& errorMessage, bool makeYqbSchema) {
+    static bool SameDstType(NScheme::TTypeId type1, NScheme::TTypeId type2, bool allowConvert) { 
+        bool res = (type1 == type2); 
+        if (!res && allowConvert) { 
+            res = NArrow::GetArrowType(type1)->id() == NArrow::GetArrowType(type2)->id(); 
+        } 
+        return res; 
+    } 
+ 
+    bool BuildSchema(const NActors::TActorContext& ctx, TString& errorMessage, bool makeYqbSchema) { 
         Y_UNUSED(ctx);
 
         auto& entry = ResolveNamesResult->ResultSet.front();
@@ -299,40 +299,40 @@ private:
         THashMap<TString, ui32> columnByName;
         THashSet<TString> keyColumnsLeft;
         THashSet<TString> notNullColumnsLeft = entry.NotNullColumns;
-        SrcColumns.reserve(entry.Columns.size());
-
-        for (const auto& [_, colInfo] : entry.Columns) {
-            ui32 id = colInfo.Id;
-            auto& name = colInfo.Name;
-            auto& type = colInfo.PType;
-            SrcColumns.emplace_back(name, type); // TODO: is it in correct order ?
-
-            columnByName[name] = id;
-            i32 keyOrder = colInfo.KeyOrder;
+        SrcColumns.reserve(entry.Columns.size()); 
+ 
+        for (const auto& [_, colInfo] : entry.Columns) { 
+            ui32 id = colInfo.Id; 
+            auto& name = colInfo.Name; 
+            auto& type = colInfo.PType; 
+            SrcColumns.emplace_back(name, type); // TODO: is it in correct order ? 
+ 
+            columnByName[name] = id; 
+            i32 keyOrder = colInfo.KeyOrder; 
             if (keyOrder != -1) {
                 Y_VERIFY(keyOrder >= 0);
                 KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), keyOrder + 1));
-                KeyColumnTypes[keyOrder] = type;
+                KeyColumnTypes[keyOrder] = type; 
                 keyColumnIds.resize(Max<size_t>(keyColumnIds.size(), keyOrder + 1));
-                keyColumnIds[keyOrder] = id;
-                keyColumnsLeft.insert(name);
+                keyColumnIds[keyOrder] = id; 
+                keyColumnsLeft.insert(name); 
             }
         }
 
         KeyColumnPositions.resize(KeyColumnTypes.size());
         KeyColumnNames.resize(KeyColumnTypes.size());
 
-        auto reqColumns = GetRequestColumns(errorMessage);
-        if (!errorMessage.empty()) {
-            return false;
-        } else if (reqColumns.empty()) {
-            for (auto& [name, type] : SrcColumns) {
-                Ydb::Type ydbType;
-                ydbType.set_type_id((Ydb::Type::PrimitiveTypeId)type);
-                reqColumns.emplace_back(name, std::move(ydbType));
-            }
-        }
-
+        auto reqColumns = GetRequestColumns(errorMessage); 
+        if (!errorMessage.empty()) { 
+            return false; 
+        } else if (reqColumns.empty()) { 
+            for (auto& [name, type] : SrcColumns) { 
+                Ydb::Type ydbType; 
+                ydbType.set_type_id((Ydb::Type::PrimitiveTypeId)type); 
+                reqColumns.emplace_back(name, std::move(ydbType)); 
+            } 
+        } 
+ 
         for (size_t pos = 0; pos < reqColumns.size(); ++pos) {
             auto& name = reqColumns[pos].first;
             const auto* cp = columnByName.FindPtr(name);
@@ -347,8 +347,8 @@ private:
 
             if (typeInProto.type_id()) {
                 NScheme::TTypeId typeInRequest = typeInProto.type_id();
-                bool ok = SameDstType(typeInRequest, ci.PType, GetSourceType() != EUploadSource::ProtoValues);
-                if (!ok) {
+                bool ok = SameDstType(typeInRequest, ci.PType, GetSourceType() != EUploadSource::ProtoValues); 
+                if (!ok) { 
                     errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
                                            name.c_str(), NScheme::TypeName(ci.PType),
                                            NScheme::TypeName(typeInRequest));
@@ -376,7 +376,7 @@ private:
                 notNullColumnsLeft.erase(ci.Name);
             }
 
-            NScheme::TTypeId typeId = (NScheme::TTypeId)ci.PType;
+            NScheme::TTypeId typeId = (NScheme::TTypeId)ci.PType; 
             if (ci.KeyOrder != -1) {
                 KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, typeId, notNull};
                 keyColumnsLeft.erase(ci.Name);
@@ -388,23 +388,23 @@ private:
             }
         }
 
-        if (makeYqbSchema) {
-            Id2Position.clear();
-            YdbSchema.resize(KeyColumnTypes.size() + ValueColumnTypes.size());
-
-            for (size_t i = 0; i < KeyColumnPositions.size(); ++i) {
-                ui32 columnId = KeyColumnPositions[i].ColId;
-                Id2Position[columnId] = i;
-                YdbSchema[i] = std::make_pair(KeyColumnNames[i], KeyColumnPositions[i].Type);
-            }
-            for (size_t i = 0; i < ValueColumnPositions.size(); ++i) {
-                ui32 columnId = ValueColumnPositions[i].ColId;
-                size_t position = KeyColumnPositions.size() + i;
-                Id2Position[columnId] = position;
-                YdbSchema[position] = std::make_pair(ValueColumnNames[i], ValueColumnPositions[i].Type);
-            }
-        }
-
+        if (makeYqbSchema) { 
+            Id2Position.clear(); 
+            YdbSchema.resize(KeyColumnTypes.size() + ValueColumnTypes.size()); 
+ 
+            for (size_t i = 0; i < KeyColumnPositions.size(); ++i) { 
+                ui32 columnId = KeyColumnPositions[i].ColId; 
+                Id2Position[columnId] = i; 
+                YdbSchema[i] = std::make_pair(KeyColumnNames[i], KeyColumnPositions[i].Type); 
+            } 
+            for (size_t i = 0; i < ValueColumnPositions.size(); ++i) { 
+                ui32 columnId = ValueColumnPositions[i].ColId; 
+                size_t position = KeyColumnPositions.size() + i; 
+                Id2Position[columnId] = position; 
+                YdbSchema[position] = std::make_pair(ValueColumnNames[i], ValueColumnPositions[i].Type); 
+            } 
+        } 
+ 
         if (!keyColumnsLeft.empty()) {
             errorMessage = Sprintf("Missing key columns: %s", JoinSeq(", ", keyColumnsLeft).c_str());
             return false;
@@ -473,7 +473,7 @@ private:
         }
 
         TableKind = request.ResultSet.front().Kind;
-        bool isOlapTable = (TableKind == NSchemeCache::TSchemeCacheNavigate::KindOlapTable);
+        bool isOlapTable = (TableKind == NSchemeCache::TSchemeCacheNavigate::KindOlapTable); 
 
         if (request.ResultSet.front().TableId.IsSystemView()) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
@@ -482,55 +482,55 @@ private:
 
         ResolveNamesResult = ev->Get()->Request;
 
-        bool makeYdbSchema = isOlapTable || (GetSourceType() != EUploadSource::ProtoValues);
+        bool makeYdbSchema = isOlapTable || (GetSourceType() != EUploadSource::ProtoValues); 
         TString errorMessage;
-        if (!BuildSchema(ctx, errorMessage, makeYdbSchema)) {
-            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, errorMessage, ctx);
-        }
+        if (!BuildSchema(ctx, errorMessage, makeYdbSchema)) { 
+            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, errorMessage, ctx); 
+        } 
+ 
+        switch (GetSourceType()) { 
+            case EUploadSource::ProtoValues: 
+            { 
+                if (!ExtractRows(errorMessage)) { 
+                    return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx); 
+                } 
 
-        switch (GetSourceType()) {
-            case EUploadSource::ProtoValues:
-            {
-                if (!ExtractRows(errorMessage)) {
-                    return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
-                }
-
-                if (isOlapTable && !ExtractBatch(errorMessage)) {
-                    return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
-                } else {
-                    FindMinMaxKeys();
-                }
-                break;
-            }
-            case EUploadSource::ArrowBatch:
-            case EUploadSource::CSV:
-            {
-                if (!ExtractBatch(errorMessage)) {
-                    return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
-                }
-                if (!isOlapTable) {
-                    if (!ExtractRows(errorMessage)) {
-                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
-                    }
-                    FindMinMaxKeys();
-                }
-
-                // (re)calculate RuCost for batch variant if it's bigger then RuCost calculated in ExtractRows()
-                Y_VERIFY(Batch && Batch->num_rows() >= 0);
-                ui32 numRows = Batch->num_rows();
-                ui64 bytesSize = Max<ui64>(NArrow::GetBatchDataSize(Batch), GetSourceData().Size());
-                float batchRuCost = TUpsertCost::CostToRu(TUpsertCost::BatchCost(bytesSize, numRows));
-                if (batchRuCost > RuCost) {
-                    RuCost = batchRuCost;
-                }
-
-                break;
-            }
+                if (isOlapTable && !ExtractBatch(errorMessage)) { 
+                    return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx); 
+                } else { 
+                    FindMinMaxKeys(); 
+                } 
+                break; 
+            } 
+            case EUploadSource::ArrowBatch: 
+            case EUploadSource::CSV: 
+            { 
+                if (!ExtractBatch(errorMessage)) { 
+                    return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx); 
+                } 
+                if (!isOlapTable) { 
+                    if (!ExtractRows(errorMessage)) { 
+                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx); 
+                    } 
+                    FindMinMaxKeys(); 
+                } 
+ 
+                // (re)calculate RuCost for batch variant if it's bigger then RuCost calculated in ExtractRows() 
+                Y_VERIFY(Batch && Batch->num_rows() >= 0); 
+                ui32 numRows = Batch->num_rows(); 
+                ui64 bytesSize = Max<ui64>(NArrow::GetBatchDataSize(Batch), GetSourceData().Size()); 
+                float batchRuCost = TUpsertCost::CostToRu(TUpsertCost::BatchCost(bytesSize, numRows)); 
+                if (batchRuCost > RuCost) { 
+                    RuCost = batchRuCost; 
+                } 
+ 
+                break; 
+            } 
         }
 
         if (TableKind == NSchemeCache::TSchemeCacheNavigate::KindTable) {
             ResolveShards(ctx);
-        } else if (isOlapTable) {
+        } else if (isOlapTable) { 
             WriteToOlapTable(ctx);
         } else {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
@@ -578,55 +578,55 @@ private:
         LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Bulk upsert to table " << GetTable()
                     << " started LongTx " << LongTxId.ToString());
 
-        auto outputColumns = GetOutputColumns(ctx);
-        if (!outputColumns.empty()) {
-            std::shared_ptr<arrow::RecordBatch> batch = Batch;
-            if (!batch) {
-                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "No batch in bulk upsert data", ctx);
-            }
-#if 1 // TODO: it's been checked in BuildSchema, remove if possible
-            for (auto& columnName : outputColumns) {
-                if (!batch->GetColumnByName(columnName)) {
-                    // TODO: upsert with implicit NULLs instead?
-                    return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
-                        "No column '" + columnName + "' in bulk upsert data", ctx);
-                }
-            }
-#endif
-            // reuse source serialized batch if it's present and OK
-            bool reuseData = false;
-            {
-                if (GetSourceType() == EUploadSource::ArrowBatch) {
-                    reuseData = (outputColumns.size() == (size_t)batch->num_columns());
-                }
-
-                // TODO: reuse batchData with reordered columns
-                for (int i = 0; i < batch->num_columns() && reuseData; ++i) {
-                    if (batch->column_name(i) != outputColumns[i]) {
-                        reuseData = false;
-                    }
-                }
-            }
-
-            if (!reuseData) {
-                batch = NArrow::ExtractColumns(batch, outputColumns);
-            }
-
-            Y_VERIFY(batch);
-
-#if 1 // TODO: check we call ValidateFull() once over pipeline (upsert -> long tx -> shard insert)
-            if (!batch->ValidateFull().ok()) {
-                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "Bad batch in bulk upsert data", ctx);
-            }
-#endif
+        auto outputColumns = GetOutputColumns(ctx); 
+        if (!outputColumns.empty()) { 
+            std::shared_ptr<arrow::RecordBatch> batch = Batch; 
+            if (!batch) { 
+                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "No batch in bulk upsert data", ctx); 
+            } 
+#if 1 // TODO: it's been checked in BuildSchema, remove if possible 
+            for (auto& columnName : outputColumns) { 
+                if (!batch->GetColumnByName(columnName)) { 
+                    // TODO: upsert with implicit NULLs instead? 
+                    return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, 
+                        "No column '" + columnName + "' in bulk upsert data", ctx); 
+                } 
+            } 
+#endif 
+            // reuse source serialized batch if it's present and OK 
+            bool reuseData = false; 
+            { 
+                if (GetSourceType() == EUploadSource::ArrowBatch) { 
+                    reuseData = (outputColumns.size() == (size_t)batch->num_columns()); 
+                } 
+ 
+                // TODO: reuse batchData with reordered columns 
+                for (int i = 0; i < batch->num_columns() && reuseData; ++i) { 
+                    if (batch->column_name(i) != outputColumns[i]) { 
+                        reuseData = false; 
+                    } 
+                } 
+            } 
+ 
+            if (!reuseData) { 
+                batch = NArrow::ExtractColumns(batch, outputColumns); 
+            } 
+ 
+            Y_VERIFY(batch); 
+ 
+#if 1 // TODO: check we call ValidateFull() once over pipeline (upsert -> long tx -> shard insert) 
+            if (!batch->ValidateFull().ok()) { 
+                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "Bad batch in bulk upsert data", ctx); 
+            } 
+#endif 
 
             Batch = batch;
-        }
-
+        } 
+ 
         WriteBatchInLongTx(ctx);
     }
 
-    std::vector<TString> GetOutputColumns(const NActors::TActorContext& ctx) {
+    std::vector<TString> GetOutputColumns(const NActors::TActorContext& ctx) { 
         if (ResolveNamesResult->ErrorCount > 0) {
             ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "Failed to get table schema", ctx);
             return {};
@@ -647,29 +647,29 @@ private:
         const auto& description = entry.OlapTableInfo->Description;
         const auto& schema = description.GetSchema();
 
-#if 1 // TODO: do we need this restriction?
+#if 1 // TODO: do we need this restriction? 
         if ((size_t)schema.GetColumns().size() != KeyColumnPositions.size() + ValueColumnPositions.size()) {
             ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
                 "Column count in the request doesn't match column count in the schema", ctx);
             return {};
         }
-#endif
-        std::vector<TString> outColumns;
-        outColumns.reserve(YdbSchema.size());
+#endif 
+        std::vector<TString> outColumns; 
+        outColumns.reserve(YdbSchema.size()); 
 
         for (size_t i = 0; i < (size_t)schema.GetColumns().size(); ++i) {
-            auto columnId = schema.GetColumns(i).GetId();
-            if (!Id2Position.count(columnId)) {
-                ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
-                    "Column id in the request doesn't match column id in the schema", ctx);
-                return {};
-            }
-            size_t position = Id2Position[columnId];
-            outColumns.push_back(YdbSchema[position].first);
+            auto columnId = schema.GetColumns(i).GetId(); 
+            if (!Id2Position.count(columnId)) { 
+                ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, 
+                    "Column id in the request doesn't match column id in the schema", ctx); 
+                return {}; 
+            } 
+            size_t position = Id2Position[columnId]; 
+            outColumns.push_back(YdbSchema[position].first); 
         }
 
-        Y_VERIFY(!outColumns.empty());
-        return outColumns;
+        Y_VERIFY(!outColumns.empty()); 
+        return outColumns; 
     }
 
     void WriteBatchInLongTx(const TActorContext& ctx) {
@@ -766,8 +766,8 @@ private:
     }
 
     void ResolveShards(const NActors::TActorContext& ctx) {
-        Y_VERIFY(!GetRows().empty());
-
+        Y_VERIFY(!GetRows().empty()); 
+ 
         auto& entry = ResolveNamesResult->ResultSet.front();
 
         // We are going to set all columns

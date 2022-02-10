@@ -30,8 +30,8 @@ namespace NTabletPipe {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::TABLET_PIPE_CLIENT;
-        }
-
+        } 
+ 
         TClient(const TActorId& owner, ui64 tabletId, const TClientConfig& config)
             : Owner(owner)
             , TabletId(tabletId)
@@ -491,11 +491,11 @@ namespace NTabletPipe {
 
         void Lookup(const TActorContext& ctx) {
             BLOG_D("lookup");
-            TEvTabletResolver::TEvForward::TResolveFlags resolveFlags;
+            TEvTabletResolver::TEvForward::TResolveFlags resolveFlags; 
             resolveFlags.SetAllowFollower(Config.AllowFollower);
             resolveFlags.SetForceFollower(Config.ForceFollower);
-            resolveFlags.SetPreferLocal(Config.PreferLocal);
-            resolveFlags.SetForceLocal(Config.ForceLocal);
+            resolveFlags.SetPreferLocal(Config.PreferLocal); 
+            resolveFlags.SetForceLocal(Config.ForceLocal); 
 
             ctx.Send(MakeTabletResolverID(), new TEvTabletResolver::TEvForward(TabletId, nullptr, resolveFlags));
             Become(&TThis::StateLookup);

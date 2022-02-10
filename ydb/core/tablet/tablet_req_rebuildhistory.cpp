@@ -864,8 +864,8 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_REQ_REBUILD_GRAPH;
-    }
-
+    } 
+ 
     TTabletReqRebuildHistoryGraph(const TActorId &owner, TTabletStorageInfo *info, ui32 blockedGen, NTracing::ITrace *trace, ui64 followerCookie)
         : Owner(owner)
         , Info(info)
@@ -873,7 +873,7 @@ public:
         , RequestsLeft(0)
         , IntrospectionTrace(trace)
         , FollowerCookie(followerCookie)
-    {}
+    {} 
 
     void Bootstrap() {
         if (IntrospectionTrace) {

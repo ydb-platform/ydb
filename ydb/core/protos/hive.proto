@@ -183,22 +183,22 @@ message TEvReconfigureTabletReply {
     repeated TChannelInfo Channels = 4;
 }
 
-message TEvDeleteTablet {
+message TEvDeleteTablet { 
     optional fixed64 ShardOwnerId = 1;
     repeated uint64 ShardLocalIdx = 2;
     optional uint64 TxId_Deprecated = 3;
     repeated fixed64 TabletID = 4;
-}
-
-message TEvDeleteTabletReply {
-    optional NKikimrProto.EReplyStatus Status = 1;
+} 
+ 
+message TEvDeleteTabletReply { 
+    optional NKikimrProto.EReplyStatus Status = 1; 
     optional fixed64 Origin = 2;
     optional uint64 TxId_Deprecated = 3;
     optional uint64 ShardOwnerId = 4;
     repeated uint64 ShardLocalIdx = 5;
     optional TForwardRequest ForwardRequest = 6;
-}
-
+} 
+ 
 message TEvDeleteOwnerTablets {
     optional fixed64 Owner = 1;
     optional uint64 TxId = 2;

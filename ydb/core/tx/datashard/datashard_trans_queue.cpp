@@ -1,10 +1,10 @@
-#include "datashard_trans_queue.h"
-#include "datashard_active_transaction.h"
-#include "datashard_impl.h"
-
-namespace NKikimr {
+#include "datashard_trans_queue.h" 
+#include "datashard_active_transaction.h" 
+#include "datashard_impl.h" 
+ 
+namespace NKikimr { 
 namespace NDataShard {
-
+ 
 const TSet<TStepOrder> TTransQueue::EMPTY_PLAN;
 
 void TTransQueue::AddTxInFly(TOperation::TPtr op) {
@@ -18,9 +18,9 @@ void TTransQueue::AddTxInFly(TOperation::TPtr op) {
     if (maxStep != Max<ui64>()) {
         DeadlineQueue.emplace(std::make_pair(maxStep, txId));
     }
-    Self->SetCounter(COUNTER_TX_IN_FLY, TxsInFly.size());
-}
-
+    Self->SetCounter(COUNTER_TX_IN_FLY, TxsInFly.size()); 
+} 
+ 
 void TTransQueue::RemoveTxInFly(ui64 txId) {
     auto it = TxsInFly.find(txId);
     if (it != TxsInFly.end()) {
@@ -31,11 +31,11 @@ void TTransQueue::RemoveTxInFly(ui64 txId) {
         ProposeDelayers.erase(txId);
         Self->SetCounter(COUNTER_TX_IN_FLY, TxsInFly.size());
     }
-}
-
-bool TTransQueue::Load(NIceDb::TNiceDb& db) {
+} 
+ 
+bool TTransQueue::Load(NIceDb::TNiceDb& db) { 
     using Schema = TDataShard::Schema;
-
+ 
     // Load must be idempotent
     Y_VERIFY(TxsInFly.empty());
     Y_VERIFY(SchemaOps.empty());
@@ -47,24 +47,24 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
     TInstant now = AppData()->TimeProvider->Now();
 
     THashSet<ui64> schemaTxs;
-    {
-        auto rowset = db.Table<Schema::TxMain>().Range().Select();
-        if (!rowset.IsReady())
-            return false;
-        while (!rowset.EndOfSet()) {
-            ui64 txId = rowset.GetValue<Schema::TxMain::TxId>();
+    { 
+        auto rowset = db.Table<Schema::TxMain>().Range().Select(); 
+        if (!rowset.IsReady()) 
+            return false; 
+        while (!rowset.EndOfSet()) { 
+            ui64 txId = rowset.GetValue<Schema::TxMain::TxId>(); 
             ui64 flags;
             if (rowset.HaveValue<Schema::TxMain::Flags64>()) {
                 flags = rowset.GetValue<Schema::TxMain::Flags64>();
             } else {
                 flags = rowset.GetValue<Schema::TxMain::Flags>();
             }
-            ui64 maxStep = rowset.GetValue<Schema::TxMain::MaxStep>();
+            ui64 maxStep = rowset.GetValue<Schema::TxMain::MaxStep>(); 
             EOperationKind kind = rowset.GetValue<Schema::TxMain::Kind>();
             ui64 received = rowset.GetValueOrDefault<Schema::TxMain::ReceivedAt>(now.GetValue());
             if (kind == EOperationKind::SchemeTx)
-                schemaTxs.insert(txId);
-
+                schemaTxs.insert(txId); 
+ 
             if (flags & TTxFlags::Immediate) {
                 // Workaround for KIKIMR-8005
                 flags |= TTxFlags::ForceOnline;
@@ -83,20 +83,20 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
             }
             AddTxInFly(std::move(op));
 
-            if (!rowset.Next())
-                return false;
-        }
-    }
-
-    {
-        auto rowset = db.Table<Schema::PlanQueue>().Range().Select();
-        if (!rowset.IsReady())
-            return false;
-        while (!rowset.EndOfSet()) {
-            ui64 step = rowset.GetValue<Schema::PlanQueue::Step>();
-            ui64 txId = rowset.GetValue<Schema::PlanQueue::TxId>();
-            PlannedTxs.emplace(TStepOrder(step, txId));
-
+            if (!rowset.Next()) 
+                return false; 
+        } 
+    } 
+ 
+    { 
+        auto rowset = db.Table<Schema::PlanQueue>().Range().Select(); 
+        if (!rowset.IsReady()) 
+            return false; 
+        while (!rowset.EndOfSet()) { 
+            ui64 step = rowset.GetValue<Schema::PlanQueue::Step>(); 
+            ui64 txId = rowset.GetValue<Schema::PlanQueue::TxId>(); 
+            PlannedTxs.emplace(TStepOrder(step, txId)); 
+ 
             auto op = FindTxInFly(txId);
             if (op) {
                 if (Y_LIKELY(!op->GetStep())) {
@@ -112,49 +112,49 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
                 DeadlineQueue.erase(std::make_pair(op->GetMaxStep(), op->GetTxId()));
             }
 
-            if (!rowset.Next())
-                return false;
-        }
-    }
-
-    // SchemaOperations
-    {
-        auto rowset = db.Table<Schema::SchemaOperations>().Range().Select();
-        if (!rowset.IsReady())
-            return false;
-        while (!rowset.EndOfSet()) {
-            ui64 txId = rowset.GetValue<Schema::SchemaOperations::TxId>();
+            if (!rowset.Next()) 
+                return false; 
+        } 
+    } 
+ 
+    // SchemaOperations 
+    { 
+        auto rowset = db.Table<Schema::SchemaOperations>().Range().Select(); 
+        if (!rowset.IsReady()) 
+            return false; 
+        while (!rowset.EndOfSet()) { 
+            ui64 txId = rowset.GetValue<Schema::SchemaOperations::TxId>(); 
             TActorId source = rowset.GetValue<Schema::SchemaOperations::Source>();
-            ui64 tabletId = rowset.GetValueOrDefault<Schema::SchemaOperations::SourceTablet>(0);
-            ui32 opType = rowset.GetValue<Schema::SchemaOperations::Operation>();
-            ui64 minStep = rowset.GetValue<Schema::SchemaOperations::MinStep>();
-            ui64 maxStep = rowset.GetValue<Schema::SchemaOperations::MaxStep>();
-            ui64 planStep = rowset.GetValueOrDefault<Schema::SchemaOperations::PlanStep>(0);
+            ui64 tabletId = rowset.GetValueOrDefault<Schema::SchemaOperations::SourceTablet>(0); 
+            ui32 opType = rowset.GetValue<Schema::SchemaOperations::Operation>(); 
+            ui64 minStep = rowset.GetValue<Schema::SchemaOperations::MinStep>(); 
+            ui64 maxStep = rowset.GetValue<Schema::SchemaOperations::MaxStep>(); 
+            ui64 planStep = rowset.GetValueOrDefault<Schema::SchemaOperations::PlanStep>(0); 
             ui64 readOnly = rowset.GetValueOrDefault<Schema::SchemaOperations::ReadOnly>(false);
             bool success = rowset.GetValueOrDefault<Schema::SchemaOperations::Success>(false);
             TString error = rowset.GetValueOrDefault<Schema::SchemaOperations::Error>(TString());
             ui64 dataSize = rowset.GetValueOrDefault<Schema::SchemaOperations::DataSize>(0);
             ui64 rows = rowset.GetValueOrDefault<Schema::SchemaOperations::Rows>(0);
-
-            if (!tabletId) { // Remove legacy data from DB. New schema operations has tabletId
-                db.Table<Schema::SchemaOperations>().Key(txId).Delete();
-                continue;
-            }
-
+ 
+            if (!tabletId) { // Remove legacy data from DB. New schema operations has tabletId 
+                db.Table<Schema::SchemaOperations>().Key(txId).Delete(); 
+                continue; 
+            } 
+ 
             TSchemaOperation op(txId, TSchemaOperation::EType(opType), source,
                                tabletId, minStep, maxStep, planStep, readOnly,
                                success, error, dataSize, rows);
-            auto saved = SchemaOps.insert(std::make_pair(op.TxId, op));
+            auto saved = SchemaOps.insert(std::make_pair(op.TxId, op)); 
             TSchemaOperation * savedOp = &saved.first->second;
             if (schemaTxs.contains(txId)) { // is not done yet
-                Self->Pipeline.SetSchemaOp(savedOp);
-            } else {
-                savedOp->Done = true;
-            }
-
-            if (!rowset.Next())
-                return false;
-        }
+                Self->Pipeline.SetSchemaOp(savedOp); 
+            } else { 
+                savedOp->Done = true; 
+            } 
+ 
+            if (!rowset.Next()) 
+                return false; 
+        } 
         // Load scan state (only for scheme tx)
         {
             auto rowset = db.Table<Schema::ScanProgress>().Range().Select();
@@ -180,14 +180,14 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
                     return false;
             }
         }
-    }
-
-    return true;
-}
-
+    } 
+ 
+    return true; 
+} 
+ 
 void TTransQueue::ProposeSchemaTx(NIceDb::TNiceDb& db, const TSchemaOperation& op) {
     using Schema = TDataShard::Schema;
-
+ 
     // Auto-ack previous schema operation
     if (!SchemaOps.empty()) {
         Y_VERIFY(SchemaOps.begin()->first != op.TxId, "Duplicate Tx %" PRIu64 " wasn't properly handled", op.TxId);
@@ -197,34 +197,34 @@ void TTransQueue::ProposeSchemaTx(NIceDb::TNiceDb& db, const TSchemaOperation& o
         RemoveSchemaOperation(db, SchemaOps.begin()->second.TxId);
     }
 
-    auto saved = SchemaOps.insert(std::make_pair(op.TxId, op));
-    db.Table<Schema::SchemaOperations>().Key(op.TxId).Update(
-        NIceDb::TUpdate<Schema::SchemaOperations::TxId>(op.TxId),
-        NIceDb::TUpdate<Schema::SchemaOperations::Operation>(op.Type),
-        NIceDb::TUpdate<Schema::SchemaOperations::Source>(op.Source),
-        NIceDb::TUpdate<Schema::SchemaOperations::SourceTablet>(op.TabletId),
-        NIceDb::TUpdate<Schema::SchemaOperations::MinStep>(op.MinStep),
-        NIceDb::TUpdate<Schema::SchemaOperations::MaxStep>(op.MaxStep),
+    auto saved = SchemaOps.insert(std::make_pair(op.TxId, op)); 
+    db.Table<Schema::SchemaOperations>().Key(op.TxId).Update( 
+        NIceDb::TUpdate<Schema::SchemaOperations::TxId>(op.TxId), 
+        NIceDb::TUpdate<Schema::SchemaOperations::Operation>(op.Type), 
+        NIceDb::TUpdate<Schema::SchemaOperations::Source>(op.Source), 
+        NIceDb::TUpdate<Schema::SchemaOperations::SourceTablet>(op.TabletId), 
+        NIceDb::TUpdate<Schema::SchemaOperations::MinStep>(op.MinStep), 
+        NIceDb::TUpdate<Schema::SchemaOperations::MaxStep>(op.MaxStep), 
         NIceDb::TUpdate<Schema::SchemaOperations::PlanStep>(op.PlanStep),
         NIceDb::TUpdate<Schema::SchemaOperations::ReadOnly>(op.ReadOnly),
         NIceDb::TUpdate<Schema::SchemaOperations::Success>(op.Success),
         NIceDb::TUpdate<Schema::SchemaOperations::Error>(op.Error),
         NIceDb::TUpdate<Schema::SchemaOperations::DataSize>(op.BytesProcessed),
         NIceDb::TUpdate<Schema::SchemaOperations::Rows>(op.RowsProcessed));
-
+ 
     TSchemaOperation * savedOp = &saved.first->second;
-    Y_VERIFY(savedOp->TabletId);
-    Self->Pipeline.SetSchemaOp(savedOp);
+    Y_VERIFY(savedOp->TabletId); 
+    Self->Pipeline.SetSchemaOp(savedOp); 
 
     db.NoMoreReadsForTx();
-}
-
+} 
+ 
 void TTransQueue::ProposeTx(NIceDb::TNiceDb& db, TOperation::TPtr op, TActorId source, const TStringBuf& txBody) {
     using Schema = TDataShard::Schema;
-
+ 
     const ui64 preserveFlagsMask = TTxFlags::PublicFlagsMask | TTxFlags::PreservedPrivateFlagsMask;
 
-    AddTxInFly(op);
+    AddTxInFly(op); 
     db.Table<Schema::TxMain>().Key(op->GetTxId()).Update(
         NIceDb::TUpdate<Schema::TxMain::Kind>(op->GetKind()),
         NIceDb::TUpdate<Schema::TxMain::Flags>(op->GetFlags() & preserveFlagsMask),
@@ -233,15 +233,15 @@ void TTransQueue::ProposeTx(NIceDb::TNiceDb& db, TOperation::TPtr op, TActorId s
         NIceDb::TUpdate<Schema::TxMain::Flags64>(op->GetFlags() & preserveFlagsMask),
         NIceDb::TUpdate<Schema::TxMain::Source>(source),
         NIceDb::TUpdate<Schema::TxMain::Cookie>(op->GetCookie()));
-
+ 
     db.Table<Schema::TxDetails>().Key(op->GetTxId(), Self->TabletID()).Update(
         NIceDb::TUpdate<Schema::TxDetails::Body>(TString(txBody)),
         NIceDb::TUpdate<Schema::TxDetails::Source>(source));
-
+ 
     // NOTE: we no longer add rows to the DeadlineQueue table
     db.NoMoreReadsForTx();
-}
-
+} 
+ 
 void TTransQueue::UpdateTxFlags(NIceDb::TNiceDb& db, ui64 txId, ui64 flags) {
     using Schema = TDataShard::Schema;
 
@@ -264,11 +264,11 @@ void TTransQueue::UpdateTxBody(NIceDb::TNiceDb& db, ui64 txId, const TStringBuf&
 void TTransQueue::RemoveTx(NIceDb::TNiceDb &db,
                            const TOperation &op) {
     using Schema = TDataShard::Schema;
-
+ 
     db.Table<Schema::TxMain>().Key(op.GetTxId()).Delete();
     db.Table<Schema::TxDetails>().Key(op.GetTxId(), Self->TabletID()).Delete();
     db.Table<Schema::TxArtifacts>().Key(op.GetTxId()).Delete();
-
+ 
     db.Table<Schema::PlanQueue>().Key(op.GetStep(), op.GetTxId()).Delete();
     db.Table<Schema::DeadlineQueue>().Key(op.GetMaxStep(), op.GetTxId()).Delete();
     DeadlineQueue.erase(std::make_pair(op.GetMaxStep(), op.GetTxId()));
@@ -276,32 +276,32 @@ void TTransQueue::RemoveTx(NIceDb::TNiceDb &db,
     PlannedTxs.erase(op.GetStepOrder());
     PlannedTxsByKind[op.GetKind()].erase(op.GetStepOrder());
     db.NoMoreReadsForTx();
-}
-
-void TTransQueue::RemoveSchemaOperation(NIceDb::TNiceDb& db, ui64 txId) {
+} 
+ 
+void TTransQueue::RemoveSchemaOperation(NIceDb::TNiceDb& db, ui64 txId) { 
     using Schema = TDataShard::Schema;
-    SchemaOps.erase(txId);
-    db.Table<Schema::SchemaOperations>().Key(txId).Delete();
-}
-
+    SchemaOps.erase(txId); 
+    db.Table<Schema::SchemaOperations>().Key(txId).Delete(); 
+} 
+ 
 void TTransQueue::RemoveScanProgress(NIceDb::TNiceDb& db, ui64 txId) {
     using Schema = TDataShard::Schema;
     db.Table<Schema::ScanProgress>().Key(txId).Delete();
 }
 
-/// @arg inOutStep, inOutTxId - last (complete) tx
-/// @return inOutStep, inOutTxId - next planned Tx
+/// @arg inOutStep, inOutTxId - last (complete) tx 
+/// @return inOutStep, inOutTxId - next planned Tx 
 void TTransQueue::GetPlannedTxId(ui64& step, ui64& txId) const {
-    auto it = PlannedTxs.lower_bound(TStepOrder(step, txId));
-    if (it != PlannedTxs.end()) {
-        step = it->Step;
-        txId = it->TxId;
+    auto it = PlannedTxs.lower_bound(TStepOrder(step, txId)); 
+    if (it != PlannedTxs.end()) { 
+        step = it->Step; 
+        txId = it->TxId; 
         return;
-    }
-
-    step = txId = 0;
-}
-
+    } 
+ 
+    step = txId = 0; 
+} 
+ 
 bool TTransQueue::GetNextPlannedTxId(ui64& step, ui64& txId) const {
     auto it = PlannedTxs.upper_bound(TStepOrder(step, txId));
     if (it != PlannedTxs.end()) {
@@ -320,13 +320,13 @@ bool TTransQueue::LoadTxDetails(NIceDb::TNiceDb &db,
                                 TVector<TSysTables::TLocksTable::TLock> &locks,
                                 ui64 &artifactFlags) {
     using Schema = TDataShard::Schema;
-
+ 
     auto detailsRow = db.Table<Schema::TxDetails>().Key(txId, Self->TabletID()).Select();
     auto artifactsRow = db.Table<Schema::TxArtifacts>().Key(txId).Select();
 
     if (!detailsRow.IsReady() || !artifactsRow.IsReady())
-        return false;
-
+        return false; 
+ 
     Y_VERIFY_S(!detailsRow.EndOfSet(), "cannot find details for tx=" << txId);
 
     txBody = detailsRow.GetValue<Schema::TxDetails::Body>();
@@ -338,97 +338,97 @@ bool TTransQueue::LoadTxDetails(NIceDb::TNiceDb &db,
         locks = artifactsRow.GetValueOrDefault<Schema::TxArtifacts::Locks>({});
     }
 
-    return true;
-}
-
-// Clear TxDetails for all origins
-bool TTransQueue::ClearTxDetails(NIceDb::TNiceDb& db, ui64 txId) {
+    return true; 
+} 
+ 
+// Clear TxDetails for all origins 
+bool TTransQueue::ClearTxDetails(NIceDb::TNiceDb& db, ui64 txId) { 
     using Schema = TDataShard::Schema;
-
+ 
     auto txdRowset = db.Table<Schema::TxDetails>().Prefix(txId).Select();
-    if (!txdRowset.IsReady())
-        return false;
-    while (!txdRowset.EndOfSet()) {
+    if (!txdRowset.IsReady()) 
+        return false; 
+    while (!txdRowset.EndOfSet()) { 
         Y_VERIFY(txId == txdRowset.GetValue<Schema::TxDetails::TxId>());
-        ui64 origin = txdRowset.GetValue<Schema::TxDetails::Origin>();
-        db.Table<Schema::TxDetails>().Key(txId, origin).Delete();
-        if (!txdRowset.Next())
-            return false;
-    }
-
+        ui64 origin = txdRowset.GetValue<Schema::TxDetails::Origin>(); 
+        db.Table<Schema::TxDetails>().Key(txId, origin).Delete(); 
+        if (!txdRowset.Next()) 
+            return false; 
+    } 
+ 
     db.Table<Schema::TxArtifacts>().Key(txId).Delete();
 
-    return true;
-}
-
-bool TTransQueue::CancelPropose(NIceDb::TNiceDb& db, ui64 txId) {
+    return true; 
+} 
+ 
+bool TTransQueue::CancelPropose(NIceDb::TNiceDb& db, ui64 txId) { 
     using Schema = TDataShard::Schema;
-
-    auto it = TxsInFly.find(txId);
-    if (it == TxsInFly.end())
-        return true; // already cleaned up
-
+ 
+    auto it = TxsInFly.find(txId); 
+    if (it == TxsInFly.end()) 
+        return true; // already cleaned up 
+ 
     ui64 maxStep = it->second->GetMaxStep();
-
-    if (!ClearTxDetails(db, txId))
-        return false;
-
-    db.Table<Schema::DeadlineQueue>().Key(maxStep, txId).Delete();
-    db.Table<Schema::TxMain>().Key(txId).Delete();
-
-    DeadlineQueue.erase(std::make_pair(maxStep, txId));
-    RemoveTxInFly(txId);
-    Self->IncCounter(COUNTER_PREPARE_CANCELLED);
-    return true;
-}
-
+ 
+    if (!ClearTxDetails(db, txId)) 
+        return false; 
+ 
+    db.Table<Schema::DeadlineQueue>().Key(maxStep, txId).Delete(); 
+    db.Table<Schema::TxMain>().Key(txId).Delete(); 
+ 
+    DeadlineQueue.erase(std::make_pair(maxStep, txId)); 
+    RemoveTxInFly(txId); 
+    Self->IncCounter(COUNTER_PREPARE_CANCELLED); 
+    return true; 
+} 
+ 
 // Cleanup outdated transactions.
 // The argument outdatedStep specifies the maximum step for which we received
 // all planned transactions.
 // NOTE: DeadlineQueue no longer contains planned transactions.
 ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedStep, ui32 batchSize, TVector<ui64>& outdatedTxs) {
     using Schema = TDataShard::Schema;
-
-    outdatedTxs.reserve(batchSize);
-    TSet<std::pair<ui64, ui64>> erasedDeadlines;
-
-    for (const auto& pr : DeadlineQueue) {
-        ui64 maxStep = pr.first;
-        ui64 txId = pr.second;
+ 
+    outdatedTxs.reserve(batchSize); 
+    TSet<std::pair<ui64, ui64>> erasedDeadlines; 
+ 
+    for (const auto& pr : DeadlineQueue) { 
+        ui64 maxStep = pr.first; 
+        ui64 txId = pr.second; 
         if (maxStep > outdatedStep)
-            break;
-
+            break; 
+ 
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                 "Cleaning up tx " << txId << " with maxStep " << maxStep << " at outdatedStep " << outdatedStep);
 
-        if (!ClearTxDetails(db, txId))
+        if (!ClearTxDetails(db, txId)) 
             return ECleanupStatus::Restart;
-
-        db.Table<Schema::DeadlineQueue>().Key(maxStep, txId).Delete();
-        db.Table<Schema::TxMain>().Key(txId).Delete();
-
-        erasedDeadlines.insert(pr);
-        outdatedTxs.push_back(txId);
-        if (outdatedTxs.size() == batchSize)
-            break;
-    }
-
+ 
+        db.Table<Schema::DeadlineQueue>().Key(maxStep, txId).Delete(); 
+        db.Table<Schema::TxMain>().Key(txId).Delete(); 
+ 
+        erasedDeadlines.insert(pr); 
+        outdatedTxs.push_back(txId); 
+        if (outdatedTxs.size() == batchSize) 
+            break; 
+    } 
+ 
     if (outdatedTxs.empty())
         return ECleanupStatus::None;
 
     // Removing outdated txIds from in-memory set, so transactions must not restart after this
     db.NoMoreReadsForTx();
-    for (const auto& pr : erasedDeadlines) {
-        DeadlineQueue.erase(pr);
-    }
+    for (const auto& pr : erasedDeadlines) { 
+        DeadlineQueue.erase(pr); 
+    } 
     for (ui64 txId : outdatedTxs) {
         RemoveTxInFly(txId);
     }
 
-    Self->IncCounter(COUNTER_TX_PROGRESS_OUTDATED, outdatedTxs.size());
+    Self->IncCounter(COUNTER_TX_PROGRESS_OUTDATED, outdatedTxs.size()); 
     return ECleanupStatus::Success;
-}
-
+} 
+ 
 void TTransQueue::PlanTx(TOperation::TPtr op,
                          ui64 step,
                          NIceDb::TNiceDb &db)
@@ -448,8 +448,8 @@ void TTransQueue::PlanTx(TOperation::TPtr op,
     PlannedTxs.emplace(op->GetStepOrder());
     PlannedTxsByKind[op->GetKind()].emplace(op->GetStepOrder());
     DeadlineQueue.erase(std::make_pair(op->GetMaxStep(), op->GetTxId()));
-}
-
+} 
+ 
 void TTransQueue::ForgetPlannedTx(NIceDb::TNiceDb &db, ui64 step, ui64 txId)
 {
     using Schema = TDataShard::Schema;
@@ -459,9 +459,9 @@ void TTransQueue::ForgetPlannedTx(NIceDb::TNiceDb &db, ui64 step, ui64 txId)
         // We don't know the exact tx kind, so have to clear all of them
         kv.second.erase(TStepOrder(step, txId));
     }
-    Self->IncCounter(COUNTER_TX_PROGRESS_DUPLICATE);
-}
-
+    Self->IncCounter(COUNTER_TX_PROGRESS_DUPLICATE); 
+} 
+ 
 TString TTransQueue::TxInFlyToString() const
 {
     TStringStream ss;
@@ -470,4 +470,4 @@ TString TTransQueue::TxInFlyToString() const
     return ss.Str();
 }
 
-}}
+}} 

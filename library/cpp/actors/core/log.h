@@ -110,9 +110,9 @@
     } else {                                                                                                                           \
         LOG_TRACE(*TlsActivationContext, currentTracer, "%s, received event# %" PRIu32 ", Sender %s, Recipient %s",                                      \
                   __FUNCTION__, ev->Type, ev->Sender.ToString().data(), ev->Recipient.ToString().data());                                          \
-    }
+    } 
 #define TRACE_EVENT_TYPE(eventType) LOG_TRACE(*TlsActivationContext, currentTracer, "%s, processing event %s", __FUNCTION__, eventType)
-
+ 
 class TLog;
 class TLogBackend;
 
@@ -192,10 +192,10 @@ namespace NActors {
 
     class TLoggerActor: public TActor<TLoggerActor> {
     public:
-        static constexpr IActor::EActivityType ActorActivityType() {
-            return IActor::LOG_ACTOR;
-        }
-
+        static constexpr IActor::EActivityType ActorActivityType() { 
+            return IActor::LOG_ACTOR; 
+        } 
+ 
         TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
                      TAutoPtr<TLogBackend> logBackend,
                      TIntrusivePtr<NMonitoring::TDynamicCounters> counters);

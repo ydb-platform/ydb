@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
                     Columns { Name: "saved_at" Type: "Timestamp" }
                     Columns { Name: "request_id" Type: "Utf8" }
                     KeyColumnNames: ["timestamp", "resource_type", "resource_id", "uid"]
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES 
                 }
             }
         )";
@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
         {
             TString result = RunQuery(connection, "SELECT count(*) FROM `/Root/OlapStore/log1`;");
-            UNIT_ASSERT_VALUES_EQUAL(result, "[[322u]]"); // 2 * 7 * 23
+            UNIT_ASSERT_VALUES_EQUAL(result, "[[322u]]"); // 2 * 7 * 23 
         }
     }
 

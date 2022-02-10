@@ -102,8 +102,8 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_REQ_WRITE_LOG;
-    }
-
+    } 
+ 
     TTabletReqWriteLog(const TActorId &owner, const TLogoBlobID &logid, NKikimrTabletBase::TTabletLogEntry *entry, TVector<TEvTablet::TLogEntryReference> &refs, TEvBlobStorage::TEvPut::ETactic commitTactic, TTabletStorageInfo *info)
         : Owner(owner)
         , LogEntryID(logid)

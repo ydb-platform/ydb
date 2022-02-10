@@ -296,8 +296,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_LEVEL_SEGMENT_LOADER;
-        }
-
+        } 
+ 
         TLevelSegmentLoader(
                 const TVDiskContextPtr &vctx,
                 const TPDiskCtxPtr &pdiskCtx,
@@ -404,8 +404,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_ORD_LEVEL_SEGMENT_LOADER;
-        }
-
+        } 
+ 
         TOrderedLevelSegmentsLoader(
                 const TVDiskContextPtr vctx,
                 const TPDiskCtxPtr pdiskCtx,
@@ -418,7 +418,7 @@ namespace NKikimr {
             , Recipient(recipient)
             , Pos(0)
             , Size(Segs->Segments.size())
-        {}
+        {} 
     };
 
 
@@ -483,8 +483,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_UNORD_LEVEL_SEGMENT_LOADER;
-        }
-
+        } 
+ 
         TUnorderedLevelSegmentsLoader(
                 const TVDiskContextPtr &vctx,
                 const TPDiskCtxPtr &pdiskCtx,
@@ -496,7 +496,7 @@ namespace NKikimr {
             , Recipient(recipient)
             , Pos(Segs->Segments.begin())
             , End(Segs->Segments.end())
-        {}
+        {} 
     };
 
 
@@ -575,8 +575,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_LEVEL_INDEX_LOADER;
-        }
-
+        } 
+ 
         TLevelIndexLoader(
                 const TVDiskContextPtr vctx,
                 const TPDiskCtxPtr pdiskCtx,
@@ -588,7 +588,7 @@ namespace NKikimr {
             , LevelIndex(levelIndex)
             , Recipient(recipient)
             , It(LevelIndex->CurSlice.Get(), LevelIndex->CurSlice->Level0CurSstsNum())
-        {}
+        {} 
     };
 
 } // NKikimr

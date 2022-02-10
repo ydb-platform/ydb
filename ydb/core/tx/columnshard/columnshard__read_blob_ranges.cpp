@@ -3,7 +3,7 @@
 #include "columnshard_schema.h"
 #include "blob_manager_db.h"
 
-namespace NKikimr::NColumnShard {
+namespace NKikimr::NColumnShard { 
 
 using namespace NTabletFlatExecutor;
 
@@ -101,4 +101,4 @@ void TTxReadBlobRanges::Complete(const TActorContext& ctx) {
     LOG_S_DEBUG("TTxReadBlobRanges.Complete at tablet " << Self->TabletID());
 }
 
-}
+} 

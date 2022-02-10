@@ -421,11 +421,11 @@ class DictionaryBuilderBase<BuilderType, NullType> : public ArrayBuilder {
   DictionaryBuilderBase(
       enable_if_t<std::is_base_of<AdaptiveIntBuilderBase, B>::value, uint8_t>
           start_int_size,
-      const std::shared_ptr<DataType>& /*value_type*/,
+      const std::shared_ptr<DataType>& /*value_type*/, 
       MemoryPool* pool = default_memory_pool())
       : ArrayBuilder(pool), indices_builder_(start_int_size, pool) {}
 
-  explicit DictionaryBuilderBase(const std::shared_ptr<DataType>& /*value_type*/,
+  explicit DictionaryBuilderBase(const std::shared_ptr<DataType>& /*value_type*/, 
                                  MemoryPool* pool = default_memory_pool())
       : ArrayBuilder(pool), indices_builder_(pool) {}
 
@@ -439,7 +439,7 @@ class DictionaryBuilderBase<BuilderType, NullType> : public ArrayBuilder {
   explicit DictionaryBuilderBase(MemoryPool* pool = default_memory_pool())
       : ArrayBuilder(pool), indices_builder_(pool) {}
 
-  explicit DictionaryBuilderBase(const std::shared_ptr<Array>& /*dictionary*/,
+  explicit DictionaryBuilderBase(const std::shared_ptr<Array>& /*dictionary*/, 
                                  MemoryPool* pool = default_memory_pool())
       : ArrayBuilder(pool), indices_builder_(pool) {}
 

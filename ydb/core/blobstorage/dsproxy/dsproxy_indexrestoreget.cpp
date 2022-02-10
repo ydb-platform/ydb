@@ -244,8 +244,8 @@ class TBlobStorageGroupIndexRestoreGetRequest
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_PROXY_INDEXRESTOREGET_ACTOR;
-    }
-
+    } 
+ 
     static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
         return mon->ActiveIndexRestoreGet;
     }

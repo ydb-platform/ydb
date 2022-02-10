@@ -153,8 +153,8 @@ void THive::Handle(TEvHive::TEvStopTablet::TPtr& ev) {
 
 void THive::Handle(TEvHive::TEvDeleteTablet::TPtr& ev) {
     Execute(CreateDeleteTablet(ev));
-}
-
+} 
+ 
 void THive::Handle(TEvHive::TEvDeleteOwnerTablets::TPtr& ev) {
     Execute(CreateDeleteOwnerTablets(ev));
 }

@@ -12,7 +12,7 @@ import "ydb/core/protos/follower_group.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
 import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
-
+ 
 
 package NKikimrSchemeOp;
 option java_package = "ru.yandex.kikimr.proto";
@@ -21,43 +21,43 @@ message TMkDir {
     optional string Name = 1;
 }
 
-enum EDropWaitPolicy {
-    EDropFailOnChanges = 0;
+enum EDropWaitPolicy { 
+    EDropFailOnChanges = 0; 
     EDropAbortChanges = 1; //depricated
-    EDropWaitChanges = 2;
-}
-
-message TDrop {
-    optional string Name = 1;
-    optional EDropWaitPolicy WaitPolicy = 2;
-    optional uint64 Id = 3;
-}
-
-enum EColumnCodec {
-    ColumnCodecPlain = 0;
-    ColumnCodecLZ4 = 1; // lz4fast
-    // TODO: there're 3 variants of LZ4 in Arrow: Lz4Frame, Lz4HadoopRaw, Lz4Raw. ColumnCodecLZ4 points to Lz4Frame.
-    ColumnCodecZSTD = 2;
-}
-
-enum EColumnCache {
-    ColumnCacheNone = 0;
-    ColumnCacheOnce = 1;
-    ColumnCacheEver = 2;
-}
-
-enum EColumnStorage {
-    ColumnStorage1 = 0;
-    ColumnStorage2 = 1;
-    ColumnStorage1Ext1 = 2;
-    ColumnStorage1Ext2 = 3;
-    ColumnStorage2Ext1 = 4;
-    ColumnStorage2Ext2 = 5;
+    EDropWaitChanges = 2; 
+} 
+ 
+message TDrop { 
+    optional string Name = 1; 
+    optional EDropWaitPolicy WaitPolicy = 2; 
+    optional uint64 Id = 3; 
+} 
+ 
+enum EColumnCodec { 
+    ColumnCodecPlain = 0; 
+    ColumnCodecLZ4 = 1; // lz4fast 
+    // TODO: there're 3 variants of LZ4 in Arrow: Lz4Frame, Lz4HadoopRaw, Lz4Raw. ColumnCodecLZ4 points to Lz4Frame. 
+    ColumnCodecZSTD = 2; 
+} 
+ 
+enum EColumnCache { 
+    ColumnCacheNone = 0; 
+    ColumnCacheOnce = 1; 
+    ColumnCacheEver = 2; 
+} 
+ 
+enum EColumnStorage { 
+    ColumnStorage1 = 0; 
+    ColumnStorage2 = 1; 
+    ColumnStorage1Ext1 = 2; 
+    ColumnStorage1Ext2 = 3; 
+    ColumnStorage2Ext1 = 4; 
+    ColumnStorage2Ext2 = 5; 
     ColumnStorage1Med2Ext2 = 6;
     ColumnStorage2Med2Ext2 = 7;
     ColumnStorageTest_1_2_1k = 999;
-}
-
+} 
+ 
 enum EFreezeState {
     Unspecified = 0;
     Freeze = 1;
@@ -76,7 +76,7 @@ message TColumnDescription {
     optional uint32 TypeId = 3;
     optional uint32 Id = 4;
     optional uint32 Family = 5; // On default place column to default(0) family
-    optional string FamilyName = 6; // set Family by name (0 - "default")
+    optional string FamilyName = 6; // set Family by name (0 - "default") 
     oneof DefaultValue {
         string DefaultFromSequence = 7; // Path to sequence for default values
     }
@@ -100,11 +100,11 @@ message TStorageConfig {
 message TFamilyDescription {
     optional uint32 Id = 1;
     optional uint32 Room = 2; // Used by datashard, must not be used by users
-    optional uint32 Codec = 3; // DEPRECATED: use ColumnCodec
-    optional bool InMemory = 4; // DEPRECATED: use ColumnCache
-    optional string Name = 5;
-    optional EColumnCodec ColumnCodec = 6;
-    optional EColumnCache ColumnCache = 7;
+    optional uint32 Codec = 3; // DEPRECATED: use ColumnCodec 
+    optional bool InMemory = 4; // DEPRECATED: use ColumnCache 
+    optional string Name = 5; 
+    optional EColumnCodec ColumnCodec = 6; 
+    optional EColumnCache ColumnCache = 7; 
     optional EColumnStorage Storage = 8; // DEPRECATED: use StorageConfig
     optional TStorageConfig StorageConfig = 9;
 }
@@ -239,14 +239,14 @@ message TPartitioningPolicy {
     optional TSplitByLoadSettings SplitByLoadSettings = 5;
 }
 
-message TPipelineConfig {
-    optional uint32 NumActiveTx = 1 [default = 8];
-    optional uint32 DataTxCacheSize = 2;
-    optional bool EnableOutOfOrder = 3 [default = true];
-    optional bool DisableImmediate = 4;
-    optional bool EnableSoftUpdates = 5;
-}
-
+message TPipelineConfig { 
+    optional uint32 NumActiveTx = 1 [default = 8]; 
+    optional uint32 DataTxCacheSize = 2; 
+    optional bool EnableOutOfOrder = 3 [default = true]; 
+    optional bool DisableImmediate = 4; 
+    optional bool EnableSoftUpdates = 5; 
+} 
+ 
 message TPartitionConfig {
     optional string NamedCompactionPolicy = 1; // One of the predefined policies
     optional TCompactionPolicy CompactionPolicy = 2; // Customized policy
@@ -258,10 +258,10 @@ message TPartitionConfig {
     optional uint32 CrossDataCenterFollowerCount = 8; // deprecated -> FollowerGroups
     optional uint32 ChannelProfileId = 9;   // for configuring erasure and disk categories
     optional TPartitioningPolicy PartitioningPolicy = 10;
-    optional TPipelineConfig PipelineConfig = 11;
+    optional TPipelineConfig PipelineConfig = 11; 
     repeated TFamilyDescription ColumnFamilies = 12;
     optional string ResourceProfile = 13;
-    optional bool DisableStatisticsCalculation = 14; // KIKIMR-3861 hotfix
+    optional bool DisableStatisticsCalculation = 14; // KIKIMR-3861 hotfix 
     optional bool EnableFilterByKey = 15 [default = false]; // Build and use per-part bloom filter for fast key non-existence check
     optional bool ExecutorFastLogPolicy = 16 [default  = true]; // Commit log faster at the expense of bandwidth for cross-DC
     repeated NKikimrStorageSettings.TStorageRoom StorageRooms = 17;
@@ -329,7 +329,7 @@ message TTableDescription {
                                                     // N ranges. The first key column must be of integer type
 
     optional TPartitionConfig PartitionConfig = 7;
-    repeated TColumnDescription DropColumns = 8;
+    repeated TColumnDescription DropColumns = 8; 
     optional string Path = 9;
 
     // It shouldn't be there
@@ -356,11 +356,11 @@ message TTableDescription {
     repeated TSequenceDescription Sequences = 39;
 }
 
-message TCompressionOptions {
-    optional EColumnCodec CompressionCodec = 2; // LZ4 (in arrow LZ4_FRAME variant) if not set
-    optional int32 CompressionLevel = 3; // Use default compression level if not set (0 != not set)
-}
-
+message TCompressionOptions { 
+    optional EColumnCodec CompressionCodec = 2; // LZ4 (in arrow LZ4_FRAME variant) if not set 
+    optional int32 CompressionLevel = 3; // Use default compression level if not set (0 != not set) 
+} 
+ 
 message TOlapColumnDescription {
     // This id is auto-generated by schemeshard
     optional uint32 Id = 1;
@@ -371,8 +371,8 @@ message TOlapColumnDescription {
     optional string Type = 3;
     optional uint32 TypeId = 4; // TypeId cannot be set explicitly, use Type
 
-    // TODO: Intermediate codecs such as Delta, DubleDelta, dictionary encoding, etc.
-    //TCompressionOptions Compression = 5;
+    // TODO: Intermediate codecs such as Delta, DubleDelta, dictionary encoding, etc. 
+    //TCompressionOptions Compression = 5; 
 }
 
 message TAlterOlapColumn {
@@ -387,9 +387,9 @@ message TDropOlapColumn {
     optional string Name = 1;
 }
 
-enum EColumnTableEngine {
-    COLUMN_ENGINE_NONE = 0;
-    COLUMN_ENGINE_REPLACING_TIMESERIES = 1;
+enum EColumnTableEngine { 
+    COLUMN_ENGINE_NONE = 0; 
+    COLUMN_ENGINE_REPLACING_TIMESERIES = 1; 
 }
 
 enum EOlapProgramType {
@@ -397,128 +397,128 @@ enum EOlapProgramType {
     OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS = 2;
 }
 
-message TStorageTierConfig {
-    optional string Name = 1;
-    optional TS3Settings ObjectStorage = 2;
-    optional TCompressionOptions Compression = 3;
-}
-
-message TColumnTableSchema {
+message TStorageTierConfig { 
+    optional string Name = 1; 
+    optional TS3Settings ObjectStorage = 2; 
+    optional TCompressionOptions Compression = 3; 
+} 
+ 
+message TColumnTableSchema { 
     // A list of columns for tables with this schema
     repeated TOlapColumnDescription Columns = 1;
     repeated string KeyColumnNames = 2;
 
     // A type of engine used by the table
-    optional EColumnTableEngine Engine = 3;
+    optional EColumnTableEngine Engine = 3; 
 
     // Internal fields
     optional uint32 NextColumnId = 4;
 
     // Incremented on each schema change
     optional uint64 Version = 5 [default = 1];
-
-    //optional EColumnCodec DefaultCompressionCodec = 6; // deprecated, not used before replace
-    //optional int32 DefaultCompressionLevel = 7; // deprecated, not used before replace
-    optional TCompressionOptions DefaultCompression = 8;
-
-    // Storage tiers specification (not ordered list).
-    // You could use any combination of the tiers in TColumnDataLifeCycle.Tiering in any order.
-    // If storage tier's Compression is not set it would be derived from table's DefaultCompression.
-    repeated TStorageTierConfig StorageTiers = 9;
+ 
+    //optional EColumnCodec DefaultCompressionCodec = 6; // deprecated, not used before replace 
+    //optional int32 DefaultCompressionLevel = 7; // deprecated, not used before replace 
+    optional TCompressionOptions DefaultCompression = 8; 
+ 
+    // Storage tiers specification (not ordered list). 
+    // You could use any combination of the tiers in TColumnDataLifeCycle.Tiering in any order. 
+    // If storage tier's Compression is not set it would be derived from table's DefaultCompression. 
+    repeated TStorageTierConfig StorageTiers = 9; 
 }
 
-message TAlterColumnTableSchema {
+message TAlterColumnTableSchema { 
     repeated TOlapColumnDescription AddColumns = 1;
     repeated TAlterOlapColumn AlterColumns = 2;
     repeated TDropOlapColumn DropColumns = 3;
     repeated string AddKeyColumnNames = 4;
-    //optional TCompressionOptions DefaultCompression = 5;
+    //optional TCompressionOptions DefaultCompression = 5; 
 }
 
 // Schema presets are used to manage multiple tables with the same schema
 // Tables may be created without an explicit list of columns, linking to the
 // same schema preset. Later schema presets may be altered, effectively
 // altering all tables that have the same preset.
-message TColumnTableSchemaPreset {
+message TColumnTableSchemaPreset { 
     // This id is auto-generated by schemeshard
     optional uint32 Id = 1;
 
     // Preset name is required, preset named "default" will be used by default
     optional string Name = 2;
 
-    optional TColumnTableSchema Schema = 3;
+    optional TColumnTableSchema Schema = 3; 
 }
 
-message TAlterColumnTableSchemaPreset {
+message TAlterColumnTableSchemaPreset { 
     // Existing preset name to alter
     optional string Name = 1;
 
-    optional TAlterColumnTableSchema AlterSchema = 2;
+    optional TAlterColumnTableSchema AlterSchema = 2; 
 }
 
-message TRemoveColumnTableSchemaPreset {
+message TRemoveColumnTableSchemaPreset { 
     // Existing preset name to remove
     optional string Name = 1;
 }
 
-// TTL and external storage eviction policies
-message TColumnDataLifeCycle {
-    message TTtl {
+// TTL and external storage eviction policies 
+message TColumnDataLifeCycle { 
+    message TTtl { 
         optional string ColumnName = 1;
-        oneof Expire {
-            uint32 ExpireAfterSeconds = 2;
-            uint64 ExpireAfterBytes = 4;
-        }
+        oneof Expire { 
+            uint32 ExpireAfterSeconds = 2; 
+            uint64 ExpireAfterBytes = 4; 
+        } 
         optional TTTLSettings.EUnit ColumnUnit = 3;
     }
 
-    message TStorageTier {
-        optional string Name = 1; // name of TStorageTierConfig in TColumnTableSchema
-        optional TTtl Eviction = 2;
-    }
-
-    message TStorageTiering {
-        // An ordered list of tiers. Data moves from tier0 to tier1, from tier1 to tier2 and so on.
-        // Setting a single tier is logically equivalent to setting a TTL (but with named storage tier).
-        repeated TStorageTier Tiers = 1;
-    }
-
+    message TStorageTier { 
+        optional string Name = 1; // name of TStorageTierConfig in TColumnTableSchema 
+        optional TTtl Eviction = 2; 
+    } 
+ 
+    message TStorageTiering { 
+        // An ordered list of tiers. Data moves from tier0 to tier1, from tier1 to tier2 and so on. 
+        // Setting a single tier is logically equivalent to setting a TTL (but with named storage tier). 
+        repeated TStorageTier Tiers = 1; 
+    } 
+ 
     message TDisabled {
     }
 
     oneof Status {
-        TTtl Enabled = 1;
+        TTtl Enabled = 1; 
         TDisabled Disabled = 2;
-        TStorageTiering Tiering = 4;
+        TStorageTiering Tiering = 4; 
     }
 
     // Incremented on each settings change
     optional uint64 Version = 3 [default = 1];
 }
 
-message TColumnTableTtlSettingsPreset {
+message TColumnTableTtlSettingsPreset { 
     // This id is auto-generated by schemeshard
     optional uint32 Id = 1;
 
     // Preset name is required, preset named "default" will be used by default
     optional string Name = 2;
 
-    optional TColumnDataLifeCycle TtlSettings = 3;
+    optional TColumnDataLifeCycle TtlSettings = 3; 
 }
 
-message TAlterColumnTableTtlSettingsPreset {
+message TAlterColumnTableTtlSettingsPreset { 
     // Existing preset name to alter
     optional string Name = 1;
 
-    optional TColumnDataLifeCycle AlterTtlSettings = 2;
+    optional TColumnDataLifeCycle AlterTtlSettings = 2; 
 }
 
-message TRemoveColumnTableTtlSettingsPreset {
+message TRemoveColumnTableTtlSettingsPreset { 
     // Existing preset name to remove
     optional string Name = 1;
 }
 
-message TColumnStorageConfig {
+message TColumnStorageConfig { 
     optional TStorageSettings SysLog = 1;
     optional TStorageSettings Log = 2;
     optional TStorageSettings Data = 3;
@@ -526,37 +526,37 @@ message TColumnStorageConfig {
 }
 
 // This is used internally by schemeshard
-message TColumnStoreSharding {
+message TColumnStoreSharding { 
     repeated TShardIdx MetaShards = 1;
     repeated TShardIdx ColumnShards = 2;
 }
 
-message TColumnStoreDescription {
-    optional string Name = 1;
-    optional uint32 RESERVED_MetaShardCount = 2;
-    optional uint32 ColumnShardCount = 3;
-    repeated uint64 RESERVED_MetaShards = 4;
+message TColumnStoreDescription { 
+    optional string Name = 1; 
+    optional uint32 RESERVED_MetaShardCount = 2; 
+    optional uint32 ColumnShardCount = 3; 
+    repeated uint64 RESERVED_MetaShards = 4; 
     repeated uint64 ColumnShards = 5;
-    repeated TColumnTableSchemaPreset SchemaPresets = 6;
-    repeated TColumnTableTtlSettingsPreset RESERVED_TtlSettingsPresets = 7;
-    optional TColumnStorageConfig StorageConfig = 10;
+    repeated TColumnTableSchemaPreset SchemaPresets = 6; 
+    repeated TColumnTableTtlSettingsPreset RESERVED_TtlSettingsPresets = 7; 
+    optional TColumnStorageConfig StorageConfig = 10; 
 
     // Internal fields
     optional uint32 NextSchemaPresetId = 8;
     optional uint32 NextTtlSettingsPresetId = 9;
-}
-
-message TAlterColumnStore {
+} 
+ 
+message TAlterColumnStore { 
     optional string Name = 1;
-    repeated TColumnTableSchemaPreset AddSchemaPresets = 2;
-    repeated TAlterColumnTableSchemaPreset AlterSchemaPresets = 3;
-    repeated TRemoveColumnTableSchemaPreset RemoveSchemaPresets = 4;
-    repeated TColumnTableTtlSettingsPreset RESERVED_AddTtlSettingsPresets = 5;
-    repeated TAlterColumnTableTtlSettingsPreset RESERVED_AlterTtlSettingsPresets = 6;
-    repeated TRemoveColumnTableTtlSettingsPreset RESERVED_RemoveTtlSettingsPresets = 7;
+    repeated TColumnTableSchemaPreset AddSchemaPresets = 2; 
+    repeated TAlterColumnTableSchemaPreset AlterSchemaPresets = 3; 
+    repeated TRemoveColumnTableSchemaPreset RemoveSchemaPresets = 4; 
+    repeated TColumnTableTtlSettingsPreset RESERVED_AddTtlSettingsPresets = 5; 
+    repeated TAlterColumnTableTtlSettingsPreset RESERVED_AlterTtlSettingsPresets = 6; 
+    repeated TRemoveColumnTableTtlSettingsPreset RESERVED_RemoveTtlSettingsPresets = 7; 
 }
 
-message TColumnTableSharding {
+message TColumnTableSharding { 
     // Version is incremented each time table sharding is changed
     // This field is managed by the system.
     optional uint64 Version = 1;
@@ -589,7 +589,7 @@ message TColumnTableSharding {
         enum EHashFunction {
             // A simple hash modulo number of shards
             HASH_FUNCTION_DEFAULT = 0;
-            HASH_FUNCTION_CLOUD_LOGS = 1;
+            HASH_FUNCTION_CLOUD_LOGS = 1; 
         }
 
         // Hash function used for mapping column values to a column shard
@@ -611,44 +611,44 @@ message TColumnTableSharding {
     }
 }
 
-message TColumnTableDescription {
+message TColumnTableDescription { 
     optional string Name = 1;
 
     // When creating a table these may be omitted, then ttl preset will be
     // used instead. When describing current schema and settings are always
     // returned.
-    optional TColumnTableSchema Schema = 2;
-    optional TColumnDataLifeCycle TtlSettings = 3;
+    optional TColumnTableSchema Schema = 2; 
+    optional TColumnDataLifeCycle TtlSettings = 3; 
 
     // Table may be created using presets specific to the olap store.
     optional uint32 SchemaPresetId = 4;
-    optional uint32 RESERVED_TtlSettingsPresetId = 5;
+    optional uint32 RESERVED_TtlSettingsPresetId = 5; 
     optional string SchemaPresetName = 6;
-    optional string RESERVED_TtlSettingsPresetName = 7;
+    optional string RESERVED_TtlSettingsPresetName = 7; 
 
     // Associated olap store id, initialized by schemeshard
-    // May be missing for tables that are not part of an ColumnStore
-    optional NKikimrProto.TPathID ColumnStorePathId = 8;
+    // May be missing for tables that are not part of an ColumnStore 
+    optional NKikimrProto.TPathID ColumnStorePathId = 8; 
 
     // Specifies the desired number of ColumnShards for this table
     optional uint32 ColumnShardCount = 9;
 
     // Sharding schema used by this table, may be used for specifying sharding settings
-    optional TColumnTableSharding Sharding = 10;
+    optional TColumnTableSharding Sharding = 10; 
 
     // Internal fields that make sure versions always increase when presets are switched
     optional uint64 SchemaPresetVersionAdj = 11;
     optional uint64 TtlSettingsPresetVersionAdj = 12;
 }
 
-message TAlterColumnTable {
+message TAlterColumnTable { 
     optional string Name = 1;
 
-    optional TAlterColumnTableSchema AlterSchema = 2;
-    optional TColumnDataLifeCycle AlterTtlSettings = 3;
+    optional TAlterColumnTableSchema AlterSchema = 2; 
+    optional TColumnDataLifeCycle AlterTtlSettings = 3; 
 
     optional string AlterSchemaPresetName = 4;
-    optional string RESERVED_AlterTtlSettingsPresetName = 5;
+    optional string RESERVED_AlterTtlSettingsPresetName = 5; 
 }
 
 message TLoginCreateUser {
@@ -887,15 +887,15 @@ message TRestoreTask {
     }
 }
 
-message TPersQueueGroupDescription {
-    message TPartition {
-        optional uint32 PartitionId = 1;
-        optional uint64 TabletId = 2;
+message TPersQueueGroupDescription { 
+    message TPartition { 
+        optional uint32 PartitionId = 1; 
+        optional uint64 TabletId = 2; 
         optional NKikimrPQ.TPartitionKeyRange KeyRange = 3;
-    }
-
+    } 
+ 
     optional string Name = 1; // mandatory
-    optional uint64 PathId = 2;
+    optional uint64 PathId = 2; 
     optional uint32 TotalGroupCount = 3; // mandatory
     message TPartitionToAdd {
         optional uint32 PartitionId = 1;
@@ -907,7 +907,7 @@ message TPersQueueGroupDescription {
     optional uint32 PartitionPerTablet = 4; // default = 10
     optional NKikimrPQ.TPQTabletConfig PQTabletConfig = 5; // mandatory
     repeated TPartition Partitions = 6; // do not set
-    optional uint64 AlterVersion = 7;
+    optional uint64 AlterVersion = 7; 
     optional uint64 BalancerTabletID = 8;
 
     // Can be passed upon creation.
@@ -917,8 +917,8 @@ message TPersQueueGroupDescription {
 
     // Can be passed upon creation
     optional NKikimrPQ.TBootstrapConfig BootstrapConfig = 13;
-}
-
+} 
+ 
 message TRtmrVolumeDescription {
     message TPartition {
         optional bytes PartitionId = 1;
@@ -1069,13 +1069,13 @@ message TReplicationDescription {
 enum EOperationType {
     ESchemeOpMkDir = 1;
     ESchemeOpCreateTable = 2;
-    ESchemeOpCreatePersQueueGroup = 3;
-    ESchemeOpDropTable = 4;
-    ESchemeOpDropPersQueueGroup = 5;
-    ESchemeOpAlterTable = 6;
-    ESchemeOpAlterPersQueueGroup = 7;
+    ESchemeOpCreatePersQueueGroup = 3; 
+    ESchemeOpDropTable = 4; 
+    ESchemeOpDropPersQueueGroup = 5; 
+    ESchemeOpAlterTable = 6; 
+    ESchemeOpAlterPersQueueGroup = 7; 
     ESchemeOpModifyACL = 8;
-    ESchemeOpRmDir = 9;
+    ESchemeOpRmDir = 9; 
     ESchemeOpSplitMergeTablePartitions = 10;
     ESchemeOpBackup = 11;
     ESchemeOpCreateSubDomain = 12;
@@ -1136,13 +1136,13 @@ enum EOperationType {
     ESchemeOpDropFileStore = 53;
 
     ESchemeOpRestore = 54;
-
-    ESchemeOpCreateColumnStore = 55;
-    ESchemeOpAlterColumnStore = 56;
-    ESchemeOpDropColumnStore = 57;
-    ESchemeOpCreateColumnTable = 58;
-    ESchemeOpAlterColumnTable = 59;
-    ESchemeOpDropColumnTable = 60;
+ 
+    ESchemeOpCreateColumnStore = 55; 
+    ESchemeOpAlterColumnStore = 56; 
+    ESchemeOpDropColumnStore = 57; 
+    ESchemeOpCreateColumnTable = 58; 
+    ESchemeOpAlterColumnTable = 59; 
+    ESchemeOpDropColumnTable = 60; 
 
     ESchemeOpAlterLogin = 61;
 
@@ -1227,11 +1227,11 @@ message TModifyScheme {
 
     optional TMkDir MkDir = 3;
     optional TTableDescription CreateTable = 4;
-    optional TPersQueueGroupDescription CreatePersQueueGroup = 5;
-    optional TPersQueueGroupDescription AlterPersQueueGroup = 6;
-    optional TDrop Drop = 7;
+    optional TPersQueueGroupDescription CreatePersQueueGroup = 5; 
+    optional TPersQueueGroupDescription AlterPersQueueGroup = 6; 
+    optional TDrop Drop = 7; 
     optional TModifyACL ModifyACL = 8;
-    optional TTableDescription AlterTable = 9;
+    optional TTableDescription AlterTable = 9; 
     optional TSplitMergeTablePartitions SplitMergeTablePartitions = 10;
     optional TBackupTask Backup = 11;
     optional NKikimrSubDomains.TSubDomainSettings SubDomain = 12;
@@ -1261,10 +1261,10 @@ message TModifyScheme {
     optional TFileStoreDescription CreateFileStore = 37;
     optional TFileStoreDescription AlterFileStore = 38;
     optional TRestoreTask Restore = 39;
-    optional TColumnStoreDescription CreateColumnStore = 40;
-    optional TColumnTableDescription CreateColumnTable = 41;
-    optional TAlterColumnStore AlterColumnStore = 42;
-    optional TAlterColumnTable AlterColumnTable = 43;
+    optional TColumnStoreDescription CreateColumnStore = 40; 
+    optional TColumnTableDescription CreateColumnTable = 41; 
+    optional TAlterColumnStore AlterColumnStore = 42; 
+    optional TAlterColumnTable AlterColumnTable = 43; 
     optional TAlterLogin AlterLogin = 44;
     optional TCreateCdcStream CreateCdcStream = 45;
     optional TAlterCdcStream AlterCdcStream = 46;
@@ -1312,7 +1312,7 @@ enum EPathType {
     EPathTypeInvalid = 0;
     EPathTypeDir = 1;
     EPathTypeTable = 2;
-    EPathTypePersQueueGroup = 3;
+    EPathTypePersQueueGroup = 3; 
     EPathTypeSubDomain = 4;
     EPathTypeRtmrVolume = 5;
     EPathTypeBlockStoreVolume = 6;
@@ -1321,8 +1321,8 @@ enum EPathType {
     EPathTypeTableIndex = 9; // Used for abstract index
     EPathTypeExtSubDomain = 10;
     EPathTypeFileStore = 11;
-    EPathTypeColumnStore = 12;
-    EPathTypeColumnTable = 13;
+    EPathTypeColumnStore = 12; 
+    EPathTypeColumnTable = 13; 
     EPathTypeCdcStream = 14;
     EPathTypeSequence = 15;
     EPathTypeReplication = 16;
@@ -1335,20 +1335,20 @@ enum EPathSubType {
     EPathSubTypeStreamImpl = 3;
 }
 
-enum EPathState {
-    EPathStateNotExist = 1;
-    EPathStateNoChanges = 2;
-    EPathStateCreate = 3;
-    EPathStateAlter = 4;
-    EPathStateDrop = 5;
+enum EPathState { 
+    EPathStateNotExist = 1; 
+    EPathStateNoChanges = 2; 
+    EPathStateCreate = 3; 
+    EPathStateAlter = 4; 
+    EPathStateDrop = 5; 
     EPathStateCopying = 6;
     EPathStateBackup = 7;
     EPathStateUpgrade = 8;
     EPathStateMigrated = 9;
     EPathStateRestore = 10;
     EPathStateMoving = 11;
-}
-
+} 
+ 
 message TPathVersion {
     optional uint64 GeneralVersion = 1;
 
@@ -1366,12 +1366,12 @@ message TPathVersion {
     optional uint64 RTMRVersion = 13;
     optional uint64 SolomonVersion = 14;
     optional uint64 FileStoreVersion = 15;
-    optional uint64 ColumnStoreVersion = 16;
-    optional uint64 ColumnTableVersion = 17;
-    optional uint64 ColumnTableShardingVersion = 18;
+    optional uint64 ColumnStoreVersion = 16; 
+    optional uint64 ColumnTableVersion = 17; 
+    optional uint64 ColumnTableShardingVersion = 18; 
     optional uint64 SubDomainStateVersion = 19;
-    optional uint64 ColumnTableSchemaVersion = 20;
-    optional uint64 ColumnTableTtlSettingsVersion = 21;
+    optional uint64 ColumnTableSchemaVersion = 20; 
+    optional uint64 ColumnTableTtlSettingsVersion = 21; 
     optional uint64 CdcStreamVersion = 22;
     optional uint64 SecurityStateVersion = 23;
     optional uint64 SequenceVersion = 24;
@@ -1388,7 +1388,7 @@ message TDirEntry {
     optional uint64 CreateTxId = 6;
     optional uint64 CreateStep = 7;
     optional uint64 ParentPathId = 8; // parentPathOwnerId ?
-    optional EPathState PathState = 9;
+    optional EPathState PathState = 9; 
     optional string Owner = 10;
     optional bytes ACL = 11;
     optional bytes EffectiveACL = 12;
@@ -1439,7 +1439,7 @@ message TPathDescription {
     repeated TDirEntry Children = 2;                // for directory
     optional TTableDescription Table = 3;           // for table
     repeated TTablePartition TablePartitions = 4;   // for table
-    optional TPersQueueGroupDescription PersQueueGroup = 5; // for pq group
+    optional TPersQueueGroupDescription PersQueueGroup = 5; // for pq group 
     optional TBackupProgress BackupProgress = 6;
     repeated TLastBackupResult LastBackupResult = 7;
     optional NKikimrTableStats.TTableStats TableStats = 8;
@@ -1455,8 +1455,8 @@ message TPathDescription {
     repeated NKikimrTabletBase.TMetrics TablePartitionMetrics = 18;
     repeated uint64 AbandonedTenantsSchemeShards = 19;
     optional TFileStoreDescription FileStoreDescription = 20;
-    optional TColumnStoreDescription ColumnStoreDescription = 21;
-    optional TColumnTableDescription ColumnTableDescription = 22;
+    optional TColumnStoreDescription ColumnStoreDescription = 21; 
+    optional TColumnTableDescription ColumnTableDescription = 22; 
     optional TCdcStreamDescription CdcStreamDescription = 23;
     optional TSequenceDescription SequenceDescription = 24;
     optional TReplicationDescription ReplicationDescription = 25;

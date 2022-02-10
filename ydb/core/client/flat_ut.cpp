@@ -22,7 +22,7 @@ namespace NKikimr {
 namespace NFlatTests {
 
 using namespace Tests;
-using NClient::TValue;
+using NClient::TValue; 
 
 namespace {
     class TFailingMtpQueue: public TSimpleThreadPool {
@@ -115,22 +115,22 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
-        if (true) {
+        if (true) { 
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG); 
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG);
         }
 
         TFlatMsgBusClient annoyingClient(port);
 
         annoyingClient.InitRoot();
-        auto status = annoyingClient.MkDir("/dc-1", "Berkanavt");
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
-        status = annoyingClient.MkDir("/dc-1/Berkanavt", "tables");
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
-        status = annoyingClient.MkDir("/dc-1/Berkanavt", "tables");
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
+        auto status = annoyingClient.MkDir("/dc-1", "Berkanavt"); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK); 
+        status = annoyingClient.MkDir("/dc-1/Berkanavt", "tables"); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK); 
+        status = annoyingClient.MkDir("/dc-1/Berkanavt", "tables"); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK); 
 
         annoyingClient.CreateTable("/dc-1/Berkanavt/tables",
                                    "Name: \"Table1\""
@@ -160,8 +160,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                                    );
 
         annoyingClient.MkDir("/dc-1/Berkanavt/tables", "Table1");
-        status = annoyingClient.MkDir("/dc-1/Berkanavt/tables/Table1", "col42");
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_ERROR);
+        status = annoyingClient.MkDir("/dc-1/Berkanavt/tables/Table1", "col42"); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_ERROR); 
 
         annoyingClient.Ls("/");
         annoyingClient.Ls("/dc-100");
@@ -245,11 +245,11 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                     "(return pgmReturn)"
                     ")"
                     );
-
-        Cout << "Drop tables" << Endl;
-        annoyingClient.DeleteTable("/dc-1/Berkanavt/tables", "Table1");
-        annoyingClient.DeleteTable("/dc-1/Berkanavt/tables", "Students");
-        annoyingClient.DeleteTable("/dc-1/Berkanavt/tables", "Classes");
+ 
+        Cout << "Drop tables" << Endl; 
+        annoyingClient.DeleteTable("/dc-1/Berkanavt/tables", "Table1"); 
+        annoyingClient.DeleteTable("/dc-1/Berkanavt/tables", "Students"); 
+        annoyingClient.DeleteTable("/dc-1/Berkanavt/tables", "Classes"); 
     }
 
     Y_UNIT_TEST(SelectBigRangePerf) {
@@ -517,111 +517,111 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     }
 
     Y_UNIT_TEST(CrossRW) {
-        TPortManager pm;
-        ui16 port = pm.GetPort(2134);
+        TPortManager pm; 
+        ui16 port = pm.GetPort(2134); 
         TServer cleverServer = TServer(TServerSettings(port));
-        if (!true) {
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG);
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG);
-            //cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::PIPE_CLIENT, NActors::NLog::PRI_DEBUG);
-        }
-
-        TFlatMsgBusClient annoyingClient(port);
-
-        const char * table = R"(Name: "A"
-            Columns { Name: "key"    Type: "Uint32" }
-            Columns { Name: "value"  Type: "Uint32" }
-            KeyColumnNames: ["key"]
-            UniformPartitionsCount: 2)";
-
-        annoyingClient.InitRoot();
-        annoyingClient.MkDir("/dc-1", "Dir");
-        annoyingClient.CreateTable("/dc-1/Dir", table);
-
-        // UPDATE a SET value = 42 WHERE key IN(0, 1, Max, Max-1)
-        annoyingClient.FlatQuery("("
-            "(let row0_ '('('key (Uint32 '0))))"
-            "(let row1_ '('('key (Uint32 '1))))"
-            "(let row2_ '('('key (Uint32 '4294967294))))"
-            "(let row3_ '('('key (Uint32 '4294967295))))"
-            "(let update_ '('('value (Uint32 '42))))"
-            "(let ret_ (AsList"
-            "    (UpdateRow '/dc-1/Dir/A row0_ update_)"
-            "    (UpdateRow '/dc-1/Dir/A row1_ update_)"
-            "    (UpdateRow '/dc-1/Dir/A row2_ update_)"
-            "    (UpdateRow '/dc-1/Dir/A row3_ update_)"
-            "))"
-            "(return ret_)"
-        ")");
-
-        // UPDATE a SET value = 0 WHERE key IN(0, 1)
-        annoyingClient.FlatQuery("("
-            "(let row2_ '('('key (Uint32 '0))))"
-            "(let row3_ '('('key (Uint32 '1))))"
-            "(let update_ '('('value (Uint32 '0))))"
-            "(let ret_ (AsList"
-            "    (UpdateRow '/dc-1/Dir/A row2_ update_)"
-            "    (UpdateRow '/dc-1/Dir/A row3_ update_)"
-            "))"
-            "(return ret_)"
-        ")");
-
-        // Cross read-write. Swaps values in different DataShards (A[0] <-> A[Max])
-        annoyingClient.FlatQuery("("
-            "(let row0_ '('('key (Uint32 '0))))"
-            "(let row3_ '('('key (Uint32 '4294967295))))"
-            "(let cols_ '('value))"
-            "(let read0_ (SelectRow '/dc-1/Dir/A row0_ cols_))"
-            "(let read3_ (SelectRow '/dc-1/Dir/A row3_ cols_))"
-            "(let val0_ (Member read0_ 'value))"
-            "(let val3_ (Member read3_ 'value))"
-            "(let update0_ '('('value val3_)))"
-            "(let update3_ '('('value val0_)))"
-            "(let ret_ (AsList"
-            "    (UpdateRow '/dc-1/Dir/A row0_ update0_)"
-            "    (UpdateRow '/dc-1/Dir/A row3_ update3_)"
-            "))"
-            "(return ret_)"
-        ")");
-
-        // SELECT value FROM a WHERE key IN(0, 1, Max, Max-1)
-        NKikimrMiniKQL::TResult res;
-        annoyingClient.FlatQuery("("
-            "(let row0_ '('('key (Uint32 '0))))"
-            "(let row1_ '('('key (Uint32 '1))))"
-            "(let row2_ '('('key (Uint32 '4294967294))))"
-            "(let row3_ '('('key (Uint32 '4294967295))))"
-            "(let cols_ '('value))"
-            "(let select0_ (SelectRow '/dc-1/Dir/A row0_ cols_))"
-            "(let select1_ (SelectRow '/dc-1/Dir/A row1_ cols_))"
-            "(let select2_ (SelectRow '/dc-1/Dir/A row2_ cols_))"
-            "(let select3_ (SelectRow '/dc-1/Dir/A row3_ cols_))"
-            "(let ret_ (AsList"
-            "    (SetResult 'res0_ select0_)"
-            "    (SetResult 'res1_ select1_)"
-            "    (SetResult 'res2_ select2_)"
-            "    (SetResult 'res3_ select3_)"
-            "))"
-            "(return ret_)"
-        ")", res);
-
-        TValue value = TValue::Create(res.GetValue(), res.GetType());
-        TValue res0 = value["res0_"];
-        TValue res1 = value["res1_"];
-        TValue res2 = value["res2_"];
-        TValue res3 = value["res3_"];
-        ui32 s0 = res0[0];
-        ui32 s1 = res1[0];
-        ui32 s2 = res2[0];
-        ui32 s3 = res3[0];
-        UNIT_ASSERT_VALUES_EQUAL(s0, 42);
-        UNIT_ASSERT_VALUES_EQUAL(s1, 0);
-        UNIT_ASSERT_VALUES_EQUAL(s2, 42);
-        UNIT_ASSERT_VALUES_EQUAL(s3, 0);
-    }
-
+        if (!true) { 
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG); 
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG); 
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG); 
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG); 
+            //cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::PIPE_CLIENT, NActors::NLog::PRI_DEBUG); 
+        } 
+ 
+        TFlatMsgBusClient annoyingClient(port); 
+ 
+        const char * table = R"(Name: "A" 
+            Columns { Name: "key"    Type: "Uint32" } 
+            Columns { Name: "value"  Type: "Uint32" } 
+            KeyColumnNames: ["key"] 
+            UniformPartitionsCount: 2)"; 
+ 
+        annoyingClient.InitRoot(); 
+        annoyingClient.MkDir("/dc-1", "Dir"); 
+        annoyingClient.CreateTable("/dc-1/Dir", table); 
+ 
+        // UPDATE a SET value = 42 WHERE key IN(0, 1, Max, Max-1) 
+        annoyingClient.FlatQuery("(" 
+            "(let row0_ '('('key (Uint32 '0))))" 
+            "(let row1_ '('('key (Uint32 '1))))" 
+            "(let row2_ '('('key (Uint32 '4294967294))))" 
+            "(let row3_ '('('key (Uint32 '4294967295))))" 
+            "(let update_ '('('value (Uint32 '42))))" 
+            "(let ret_ (AsList" 
+            "    (UpdateRow '/dc-1/Dir/A row0_ update_)" 
+            "    (UpdateRow '/dc-1/Dir/A row1_ update_)" 
+            "    (UpdateRow '/dc-1/Dir/A row2_ update_)" 
+            "    (UpdateRow '/dc-1/Dir/A row3_ update_)" 
+            "))" 
+            "(return ret_)" 
+        ")"); 
+ 
+        // UPDATE a SET value = 0 WHERE key IN(0, 1) 
+        annoyingClient.FlatQuery("(" 
+            "(let row2_ '('('key (Uint32 '0))))" 
+            "(let row3_ '('('key (Uint32 '1))))" 
+            "(let update_ '('('value (Uint32 '0))))" 
+            "(let ret_ (AsList" 
+            "    (UpdateRow '/dc-1/Dir/A row2_ update_)" 
+            "    (UpdateRow '/dc-1/Dir/A row3_ update_)" 
+            "))" 
+            "(return ret_)" 
+        ")"); 
+ 
+        // Cross read-write. Swaps values in different DataShards (A[0] <-> A[Max]) 
+        annoyingClient.FlatQuery("(" 
+            "(let row0_ '('('key (Uint32 '0))))" 
+            "(let row3_ '('('key (Uint32 '4294967295))))" 
+            "(let cols_ '('value))" 
+            "(let read0_ (SelectRow '/dc-1/Dir/A row0_ cols_))" 
+            "(let read3_ (SelectRow '/dc-1/Dir/A row3_ cols_))" 
+            "(let val0_ (Member read0_ 'value))" 
+            "(let val3_ (Member read3_ 'value))" 
+            "(let update0_ '('('value val3_)))" 
+            "(let update3_ '('('value val0_)))" 
+            "(let ret_ (AsList" 
+            "    (UpdateRow '/dc-1/Dir/A row0_ update0_)" 
+            "    (UpdateRow '/dc-1/Dir/A row3_ update3_)" 
+            "))" 
+            "(return ret_)" 
+        ")"); 
+ 
+        // SELECT value FROM a WHERE key IN(0, 1, Max, Max-1) 
+        NKikimrMiniKQL::TResult res; 
+        annoyingClient.FlatQuery("(" 
+            "(let row0_ '('('key (Uint32 '0))))" 
+            "(let row1_ '('('key (Uint32 '1))))" 
+            "(let row2_ '('('key (Uint32 '4294967294))))" 
+            "(let row3_ '('('key (Uint32 '4294967295))))" 
+            "(let cols_ '('value))" 
+            "(let select0_ (SelectRow '/dc-1/Dir/A row0_ cols_))" 
+            "(let select1_ (SelectRow '/dc-1/Dir/A row1_ cols_))" 
+            "(let select2_ (SelectRow '/dc-1/Dir/A row2_ cols_))" 
+            "(let select3_ (SelectRow '/dc-1/Dir/A row3_ cols_))" 
+            "(let ret_ (AsList" 
+            "    (SetResult 'res0_ select0_)" 
+            "    (SetResult 'res1_ select1_)" 
+            "    (SetResult 'res2_ select2_)" 
+            "    (SetResult 'res3_ select3_)" 
+            "))" 
+            "(return ret_)" 
+        ")", res); 
+ 
+        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
+        TValue res0 = value["res0_"]; 
+        TValue res1 = value["res1_"]; 
+        TValue res2 = value["res2_"]; 
+        TValue res3 = value["res3_"]; 
+        ui32 s0 = res0[0]; 
+        ui32 s1 = res1[0]; 
+        ui32 s2 = res2[0]; 
+        ui32 s3 = res3[0]; 
+        UNIT_ASSERT_VALUES_EQUAL(s0, 42); 
+        UNIT_ASSERT_VALUES_EQUAL(s1, 0); 
+        UNIT_ASSERT_VALUES_EQUAL(s2, 42); 
+        UNIT_ASSERT_VALUES_EQUAL(s3, 0); 
+    } 
+ 
     Y_UNIT_TEST(ShardFreezeRejectBadProtobuf) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
@@ -894,125 +894,125 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     }
 
     Y_UNIT_TEST(Mix_DML_DDL) {
-        TPortManager pm;
-        ui16 port = pm.GetPort(2134);
+        TPortManager pm; 
+        ui16 port = pm.GetPort(2134); 
         TServer cleverServer = TServer(TServerSettings(port));
-        if (!true) {
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG);
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG);
-        }
-
-        TFlatMsgBusClient annoyingClient(port);
-
-        const char * table = R"(Name: "Table"
-            Columns { Name: "key"   Type: "Uint32" }
-            Columns { Name: "value" Type: "Uint32" }
-            KeyColumnNames: ["key"]
-            UniformPartitionsCount: 2)";
-
-        annoyingClient.InitRoot();
-        annoyingClient.CreateTable("/dc-1", table);
-
-        Cout << "SELECT value From Table WHERE key = 0" << Endl;
-        annoyingClient.FlatQuery(R"((
-            (let row_ '('('key (Uint32 '0))))
-            (let cols_ '('value))
-            (let select_ (SelectRow '/dc-1/Table row_ cols_))
-            (let ret_ (AsList (SetResult 'ret0 select_)))
-            (return ret_)
-        ))");
-
-        Cout << "ALTER TABLE Table DROP COLUMN value" << Endl;
-        annoyingClient.AlterTable("/dc-1", R"(
-            Name: "Table"
-            DropColumns { Name: "value" }
-        )");
-
-        Cout << "SELECT value FROM Table WHERE key = 0 -- fail (rejected)" << Endl;
-        annoyingClient.FlatQuery(R"((
-            (let row_ '('('key (Uint32 '0))))
-            (let cols_ '('value))
-            (let select_ (SelectRow '/dc-1/Table row_ cols_))
-            (let ret_ (AsList (SetResult 'ret0 select_)))
-            (return ret_)
-        ))", NMsgBusProxy::MSTATUS_ERROR);
-
-        Cout << "SELECT key FROM Table WHERE key = 0" << Endl;
-        annoyingClient.FlatQuery(R"((
-            (let row_ '('('key (Uint32 '0))))
-            (let cols_ '('key))
-            (let select_ (SelectRow '/dc-1/Table row_ cols_))
-            (let ret_ (AsList (SetResult 'ret0 select_)))
-            (return ret_)
-        ))");
-
-        Cout << "ALTER TABLE Table ADD COLUMN more" << Endl;
-        annoyingClient.AlterTable("/dc-1", R"(
-            Name: "Table"
-            Columns { Name: "more" Type: "Uint64" }
-        )");
-
-        Cout << "SELECT more FROM Table WHERE key = 0" << Endl;
-        annoyingClient.FlatQuery(R"((
-            (let row_ '('('key (Uint32 '0))))
-            (let cols_ '('more))
-            (let select_ (SelectRow '/dc-1/Table row_ cols_))
-            (let ret_ (AsList (SetResult 'ret0 select_)))
-            (return ret_)
-        ))");
-
-        Cout << "ALTER TABLE Table ADD COLUMN value" << Endl;
-        annoyingClient.AlterTable("/dc-1", R"(
-            Name: "Table"
-            Columns { Name: "value" Type: "Uint64" }
-        )");
-
-        Cout << "SELECT value FROM Table WHERE key = 0" << Endl;
-        annoyingClient.FlatQuery(R"((
-            (let row_ '('('key (Uint32 '0))))
-            (let cols_ '('value))
-            (let select_ (SelectRow '/dc-1/Table row_ cols_))
-            (let ret_ (AsList (SetResult 'ret0 select_)))
-            (return ret_)
-        ))");
-
-        Cout << "ALTER TABLE Table DROP PRIMARY KEY, ADD COLUMN key2 ADD PRIMARY KEY(key, key2)" << Endl;
-        annoyingClient.AlterTable("/dc-1", R"(
-            Name: "Table"
-            Columns { Name: "key2" Type: "Uint64" }
-            KeyColumnNames: ["key", "key2"]
-        )");
-
-        Cout << "SELECT value FROM Table WHERE key = 0 AND key2 = 0" << Endl;
-        annoyingClient.FlatQuery(R"((
-            (let row_ '('('key (Uint32 '0)) '('key2 (Uint64 '0))))
-            (let cols_ '('value))
-            (let select_ (SelectRow '/dc-1/Table row_ cols_))
-            (let ret_ (AsList (SetResult 'ret0 select_)))
-            (return ret_)
-        ))");
-
-        Cout << "SELECT value FROM Table WHERE key = 0 AND key2 IS NULL" << Endl;
-        annoyingClient.FlatQuery(R"((
-            (let row_ '('('key (Uint32 '0)) '('key2 (Null))))
-            (let cols_ '('value))
-            (let select_ (SelectRow '/dc-1/Table row_ cols_))
-            (let ret_ (AsList (SetResult 'ret0 select_)))
-            (return ret_)
-        ))");
-
-        Cout << "SELECT value FROM Table WHERE key = 0" << Endl;
-        annoyingClient.FlatQuery(R"((
-            (let row_ '('('key (Uint32 '0))))
-            (let cols_ '('value))
-            (let select_ (SelectRow '/dc-1/Table row_ cols_))
-            (let ret_ (AsList (SetResult 'ret0 select_)))
-            (return ret_)
-        ))", NMsgBusProxy::MSTATUS_ERROR);
-    }
-
+        if (!true) { 
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG); 
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG); 
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG); 
+            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG); 
+        } 
+ 
+        TFlatMsgBusClient annoyingClient(port); 
+ 
+        const char * table = R"(Name: "Table" 
+            Columns { Name: "key"   Type: "Uint32" } 
+            Columns { Name: "value" Type: "Uint32" } 
+            KeyColumnNames: ["key"] 
+            UniformPartitionsCount: 2)"; 
+ 
+        annoyingClient.InitRoot(); 
+        annoyingClient.CreateTable("/dc-1", table); 
+ 
+        Cout << "SELECT value From Table WHERE key = 0" << Endl; 
+        annoyingClient.FlatQuery(R"(( 
+            (let row_ '('('key (Uint32 '0)))) 
+            (let cols_ '('value)) 
+            (let select_ (SelectRow '/dc-1/Table row_ cols_)) 
+            (let ret_ (AsList (SetResult 'ret0 select_))) 
+            (return ret_) 
+        ))"); 
+ 
+        Cout << "ALTER TABLE Table DROP COLUMN value" << Endl; 
+        annoyingClient.AlterTable("/dc-1", R"( 
+            Name: "Table" 
+            DropColumns { Name: "value" } 
+        )"); 
+ 
+        Cout << "SELECT value FROM Table WHERE key = 0 -- fail (rejected)" << Endl; 
+        annoyingClient.FlatQuery(R"(( 
+            (let row_ '('('key (Uint32 '0)))) 
+            (let cols_ '('value)) 
+            (let select_ (SelectRow '/dc-1/Table row_ cols_)) 
+            (let ret_ (AsList (SetResult 'ret0 select_))) 
+            (return ret_) 
+        ))", NMsgBusProxy::MSTATUS_ERROR); 
+ 
+        Cout << "SELECT key FROM Table WHERE key = 0" << Endl; 
+        annoyingClient.FlatQuery(R"(( 
+            (let row_ '('('key (Uint32 '0)))) 
+            (let cols_ '('key)) 
+            (let select_ (SelectRow '/dc-1/Table row_ cols_)) 
+            (let ret_ (AsList (SetResult 'ret0 select_))) 
+            (return ret_) 
+        ))"); 
+ 
+        Cout << "ALTER TABLE Table ADD COLUMN more" << Endl; 
+        annoyingClient.AlterTable("/dc-1", R"( 
+            Name: "Table" 
+            Columns { Name: "more" Type: "Uint64" } 
+        )"); 
+ 
+        Cout << "SELECT more FROM Table WHERE key = 0" << Endl; 
+        annoyingClient.FlatQuery(R"(( 
+            (let row_ '('('key (Uint32 '0)))) 
+            (let cols_ '('more)) 
+            (let select_ (SelectRow '/dc-1/Table row_ cols_)) 
+            (let ret_ (AsList (SetResult 'ret0 select_))) 
+            (return ret_) 
+        ))"); 
+ 
+        Cout << "ALTER TABLE Table ADD COLUMN value" << Endl; 
+        annoyingClient.AlterTable("/dc-1", R"( 
+            Name: "Table" 
+            Columns { Name: "value" Type: "Uint64" } 
+        )"); 
+ 
+        Cout << "SELECT value FROM Table WHERE key = 0" << Endl; 
+        annoyingClient.FlatQuery(R"(( 
+            (let row_ '('('key (Uint32 '0)))) 
+            (let cols_ '('value)) 
+            (let select_ (SelectRow '/dc-1/Table row_ cols_)) 
+            (let ret_ (AsList (SetResult 'ret0 select_))) 
+            (return ret_) 
+        ))"); 
+ 
+        Cout << "ALTER TABLE Table DROP PRIMARY KEY, ADD COLUMN key2 ADD PRIMARY KEY(key, key2)" << Endl; 
+        annoyingClient.AlterTable("/dc-1", R"( 
+            Name: "Table" 
+            Columns { Name: "key2" Type: "Uint64" } 
+            KeyColumnNames: ["key", "key2"] 
+        )"); 
+ 
+        Cout << "SELECT value FROM Table WHERE key = 0 AND key2 = 0" << Endl; 
+        annoyingClient.FlatQuery(R"(( 
+            (let row_ '('('key (Uint32 '0)) '('key2 (Uint64 '0)))) 
+            (let cols_ '('value)) 
+            (let select_ (SelectRow '/dc-1/Table row_ cols_)) 
+            (let ret_ (AsList (SetResult 'ret0 select_))) 
+            (return ret_) 
+        ))"); 
+ 
+        Cout << "SELECT value FROM Table WHERE key = 0 AND key2 IS NULL" << Endl; 
+        annoyingClient.FlatQuery(R"(( 
+            (let row_ '('('key (Uint32 '0)) '('key2 (Null)))) 
+            (let cols_ '('value)) 
+            (let select_ (SelectRow '/dc-1/Table row_ cols_)) 
+            (let ret_ (AsList (SetResult 'ret0 select_))) 
+            (return ret_) 
+        ))"); 
+ 
+        Cout << "SELECT value FROM Table WHERE key = 0" << Endl; 
+        annoyingClient.FlatQuery(R"(( 
+            (let row_ '('('key (Uint32 '0)))) 
+            (let cols_ '('value)) 
+            (let select_ (SelectRow '/dc-1/Table row_ cols_)) 
+            (let ret_ (AsList (SetResult 'ret0 select_))) 
+            (return ret_) 
+        ))", NMsgBusProxy::MSTATUS_ERROR); 
+    } 
+ 
     Y_UNIT_TEST(MiniKQLRanges) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
@@ -1324,17 +1324,17 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         status = annoyingClient.MkDir("/dc-1/Berkanavt", "tables");
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
 
-        status = annoyingClient.CreateTable("/dc-1/Berkanavt",
-                                   "Name: \"Unused\""
+        status = annoyingClient.CreateTable("/dc-1/Berkanavt", 
+                                   "Name: \"Unused\"" 
                                        "Columns { Name: \"key1\"       Type: \"Uint32\"}"
                                        "Columns { Name: \"key2\"       Type: \"Utf8\"}"
                                        "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
                                        "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                                        "KeyColumnNames: [\"RowId\", \"key1\", \"key2\"]"
                                    );
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK); 
 
-        status = annoyingClient.CreateTable("/dc-1/Berkanavt/tables",
+        status = annoyingClient.CreateTable("/dc-1/Berkanavt/tables", 
                                    "Name: \"Students\""
                                         "Columns { Name: \"Id\"          Type: \"Uint32\"}"
                                         "Columns { Name: \"Name\"        Type: \"Utf8\"}"
@@ -1343,7 +1343,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                                         "KeyColumnNames: [\"Id\"]"
                                         "UniformPartitionsCount: 10"
                                    );
-        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK); 
 
         TAutoPtr<NMsgBusProxy::TBusResponse> response;
 
@@ -1357,9 +1357,9 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_ERROR);
         response = annoyingClient.Ls("/dc-1/Berkanavt/tables");
         UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
-        response = annoyingClient.Ls("/dc-1/Berkanavt/tables/Students");
+        response = annoyingClient.Ls("/dc-1/Berkanavt/tables/Students"); 
         UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
-
+ 
         ui64 studentsTableId;
         {
             TAutoPtr<NMsgBusProxy::TBusResponse> response = annoyingClient.Ls("/dc-1/Berkanavt/tables/Students");
@@ -1368,68 +1368,68 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TTableId tabletId(ChangeStateStorage(Tests::SchemeRoot, TestDomain), studentsTableId);
 
         annoyingClient.SetSecurityToken("argonaut@" BUILTIN_ACL_DOMAIN); // there is should be something like "234ba4f44ef7c"
-        annoyingClient.FlatQuery("((return (AsList (SetResult 'res1 (Int32 '2016)))))");
+        annoyingClient.FlatQuery("((return (AsList (SetResult 'res1 (Int32 '2016)))))"); 
 
-        const char * updateProgram = R"((
-            (let update_ '('('Name (Utf8 'Robert)) '('Age (Uint32 '21))))
-            (return (AsList (UpdateRow '/dc-1/Berkanavt/tables/Students '('('Id (Uint32 '42))) update_)))
-        ))";
+        const char * updateProgram = R"(( 
+            (let update_ '('('Name (Utf8 'Robert)) '('Age (Uint32 '21)))) 
+            (return (AsList (UpdateRow '/dc-1/Berkanavt/tables/Students '('('Id (Uint32 '42))) update_))) 
+        ))"; 
 
         // Update
-        annoyingClient.FlatQuery(updateProgram,
+        annoyingClient.FlatQuery(updateProgram, 
                     NMsgBusProxy::MSTATUS_ERROR,
                     TEvTxUserProxy::TResultStatus::AccessDenied); // as argonaut@
 
         annoyingClient.SetSecurityToken("berkanavt@" BUILTIN_ACL_DOMAIN); // there is should be something like "234ba4f44ef7c"
-        annoyingClient.FlatQuery(updateProgram); // as berkanavt@
+        annoyingClient.FlatQuery(updateProgram); // as berkanavt@ 
 
         NACLib::TDiffACL acl;
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericWrite, "argonaut@" BUILTIN_ACL_DOMAIN);
-
+ 
         annoyingClient.SetSecurityToken("argonaut@" BUILTIN_ACL_DOMAIN);
         annoyingClient.ModifyACL("/", "dc-1", acl.SerializeAsString()); // as argonaut@
-        annoyingClient.ResetSchemeCache(cleverServer, tabletId);
-        annoyingClient.FlatQuery(updateProgram,
-            NMsgBusProxy::MSTATUS_ERROR,
+        annoyingClient.ResetSchemeCache(cleverServer, tabletId); 
+        annoyingClient.FlatQuery(updateProgram, 
+            NMsgBusProxy::MSTATUS_ERROR, 
             TEvTxUserProxy::TResultStatus::AccessDenied); // as argonaut@
-
-        annoyingClient.SetSecurityToken("berkanavt@" BUILTIN_ACL_DOMAIN);
-        annoyingClient.ModifyACL("/", "dc-1", acl.SerializeAsString()); // as berkanavt@
-        annoyingClient.ResetSchemeCache(cleverServer, tabletId);
+ 
+        annoyingClient.SetSecurityToken("berkanavt@" BUILTIN_ACL_DOMAIN); 
+        annoyingClient.ModifyACL("/", "dc-1", acl.SerializeAsString()); // as berkanavt@ 
+        annoyingClient.ResetSchemeCache(cleverServer, tabletId); 
         annoyingClient.SetSecurityToken("argonaut@" BUILTIN_ACL_DOMAIN);
         annoyingClient.FlatQuery(updateProgram); // as argonaut@
-
-        // the same but without first '/'
-        annoyingClient.ModifyACL("", "dc-1", acl.SerializeAsString()); // as berkanavt@
-        annoyingClient.ResetSchemeCache(cleverServer, tabletId);
+ 
+        // the same but without first '/' 
+        annoyingClient.ModifyACL("", "dc-1", acl.SerializeAsString()); // as berkanavt@ 
+        annoyingClient.ResetSchemeCache(cleverServer, tabletId); 
         annoyingClient.SetSecurityToken("argonaut@" BUILTIN_ACL_DOMAIN);
         annoyingClient.FlatQuery(updateProgram); // as argonaut@
-
-        acl.ClearAccess();
+ 
+        acl.ClearAccess(); 
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "argonaut@" BUILTIN_ACL_DOMAIN);
 
         annoyingClient.ModifyACL("/dc-1", "Berkanavt", acl.SerializeAsString()); // as argonaut@
-        annoyingClient.ResetSchemeCache(cleverServer, tabletId);
+        annoyingClient.ResetSchemeCache(cleverServer, tabletId); 
         annoyingClient.SetSecurityToken("argonaut@" BUILTIN_ACL_DOMAIN);
         annoyingClient.FlatQuery(updateProgram); // as argonaut@
-#if 0
-        annoyingClient.SetSecurityToken("berkanavt@" BUILTIN_ACL_DOMAIN);
-        annoyingClient.ModifyACL("/dc-1", "Berkanavt", acl.SerializeAsString()); // as berkanavt@
-        annoyingClient.ResetSchemeCache(cleverServer, tabletId);
+#if 0 
+        annoyingClient.SetSecurityToken("berkanavt@" BUILTIN_ACL_DOMAIN); 
+        annoyingClient.ModifyACL("/dc-1", "Berkanavt", acl.SerializeAsString()); // as berkanavt@ 
+        annoyingClient.ResetSchemeCache(cleverServer, tabletId); 
         annoyingClient.SetSecurityToken("argonaut@" BUILTIN_ACL_DOMAIN);
-        annoyingClient.FlatQuery(updateProgram,
-            NMsgBusProxy::MSTATUS_ERROR,
+        annoyingClient.FlatQuery(updateProgram, 
+            NMsgBusProxy::MSTATUS_ERROR, 
             TEvTxUserProxy::TResultStatus::AccessDenied); // as argonaut@
 
-        annoyingClient.SetSecurityToken("berkanavt@" BUILTIN_ACL_DOMAIN); // as berkanavt@
+        annoyingClient.SetSecurityToken("berkanavt@" BUILTIN_ACL_DOMAIN); // as berkanavt@ 
         NACLib::TDiffACL newAcl;
         newAcl.ClearAccess();
         newAcl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericWrite, "argonaut@" BUILTIN_ACL_DOMAIN);
-        annoyingClient.ModifyACL("/dc-1", "Berkanavt", newAcl.SerializeAsString()); // as berkanavt@
+        annoyingClient.ModifyACL("/dc-1", "Berkanavt", newAcl.SerializeAsString()); // as berkanavt@ 
         annoyingClient.ResetSchemeCache(cleverServer, tabletId);
         annoyingClient.SetSecurityToken("argonaut@" BUILTIN_ACL_DOMAIN);
         annoyingClient.FlatQuery(updateProgram); // as argonaut@
-#endif
+#endif 
     }
 
     Y_UNIT_TEST(OutOfDiskSpace) {
@@ -1781,10 +1781,10 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         bool res = annoyingClient.FlatQuery(Sprintf(query.data(), key, table.data()), readRes);
         UNIT_ASSERT(res);
 
-        //Cerr << readRes << Endl;
-        TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
-        TValue row = value["row"];
-        TString strRes(row["Value"]);
+        //Cerr << readRes << Endl; 
+        TValue value = TValue::Create(readRes.GetValue(), readRes.GetType()); 
+        TValue row = value["row"]; 
+        TString strRes(row["Value"]); 
         return strRes;
     }
 
@@ -3562,9 +3562,9 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             ))", i));
 
             // Cout << res << Endl;
-            TValue value = TValue::Create(res.GetValue(), res.GetType());
-            TValue ret0 = value["ret0"];
-            ui32 val = ret0[0];
+            TValue value = TValue::Create(res.GetValue(), res.GetType()); 
+            TValue ret0 = value["ret0"]; 
+            ui32 val = ret0[0]; 
             UNIT_ASSERT_VALUES_EQUAL(val, i);
         }
 
@@ -3589,9 +3589,9 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             ))", i));
 
             // Cout << res << Endl;
-            TValue value = TValue::Create(res.GetValue(), res.GetType());
-            TValue ret0 = value["ret0"];
-            ui32 val = ret0[0];
+            TValue value = TValue::Create(res.GetValue(), res.GetType()); 
+            TValue ret0 = value["ret0"]; 
+            ui32 val = ret0[0]; 
             UNIT_ASSERT_VALUES_EQUAL(val, i);
         }
     }

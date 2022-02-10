@@ -167,8 +167,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HULL_SYNC_FULL;
-        }
-
+        } 
+ 
         THullSyncFullActor(
                 const TIntrusivePtr<TVDiskConfig> &config,
                 const TIntrusivePtr<THullCtx> &hullCtx,

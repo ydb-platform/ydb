@@ -400,10 +400,10 @@ namespace NKikimr {
 
             PDISK_TERMINATE_STATE_FUNC_DEF;
 
-        public:
+        public: 
             static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
                 return NKikimrServices::TActivity::BS_SYNCLOG_READER;
-            }
+            } 
 
             TSyncLogReaderActor(
                     const TIntrusivePtr<TSyncLogCtx> &slCtx,
@@ -431,7 +431,7 @@ namespace NKikimr {
                 , DiskReads(0)
                 , DbBirthLsn(dbBirthLsn)
                 , Now(now)
-            {}
+            {} 
         };
 
         ////////////////////////////////////////////////////////////////////////////

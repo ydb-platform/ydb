@@ -25,11 +25,11 @@ public:
         InitRootScheme();
     }
 
-    using TClient::FlatQuery;
-
+    using TClient::FlatQuery; 
+ 
     NKikimrMiniKQL::TResult FlatQuery(const TString& mkql) {
         NKikimrMiniKQL::TResult res;
-        TClient::TFlatQueryOptions opts;
+        TClient::TFlatQueryOptions opts; 
         bool success = TClient::FlatQuery(mkql, opts, res, NMsgBusProxy::MSTATUS_OK);
         UNIT_ASSERT(success);
         return res;
@@ -44,7 +44,7 @@ public:
             expectedResponse.SetProxyErrorCode(expectedProxyErrorCode);
         }
         bool success = TClient::FlatQuery(mkql, opts, res, expectedResponse);
-        UNIT_ASSERT(success == (expectedStatus == NMsgBusProxy::MSTATUS_OK));
+        UNIT_ASSERT(success == (expectedStatus == NMsgBusProxy::MSTATUS_OK)); 
         return res;
     }
 

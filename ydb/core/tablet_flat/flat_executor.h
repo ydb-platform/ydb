@@ -357,7 +357,7 @@ class TExecutor
     ui32 FollowerId = 0;
 
     using TActivationQueue = TOneOneQueueInplace<TSeat *, 64>;
-    THolder<TActivationQueue, TActivationQueue::TPtrCleanDestructor> ActivationQueue;
+    THolder<TActivationQueue, TActivationQueue::TPtrCleanDestructor> ActivationQueue; 
     THolder<TActivationQueue, TActivationQueue::TPtrCleanDestructor> PendingQueue;
 
     THashMap<ui64, TCompactionReadState> CompactionReads;
@@ -397,9 +397,9 @@ class TExecutor
     TAutoPtr<TLogicSnap> LogicSnap;
     TAutoPtr<TLogicRedo> LogicRedo;
     TAutoPtr<TLogicAlter> LogicAlter;
-    THolder<TExecutorGCLogic> GcLogic;
-    THolder<TCompactionLogic> CompactionLogic;
-    THolder<TExecutorBorrowLogic> BorrowLogic;
+    THolder<TExecutorGCLogic> GcLogic; 
+    THolder<TCompactionLogic> CompactionLogic; 
+    THolder<TExecutorBorrowLogic> BorrowLogic; 
 
     TLoadBlobQueue PendingBlobQueue;
 
@@ -428,7 +428,7 @@ class TExecutor
     TDeque<THolder<TEvTablet::TFUpdateBody>> PostponedFollowerUpdates;
     THashMap<ui32, TVector<TIntrusivePtr<TBarrier>>> InFlySnapCollectionBarriers;
 
-    THolder<TExecutorStatsImpl> Stats;
+    THolder<TExecutorStatsImpl> Stats; 
     bool HasYellowCheckInFly = false;
 
     TDeque<TPendingPartSwitch> PendingPartSwitches;
@@ -613,8 +613,8 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::FLAT_EXECUTOR;
-    }
-
+    } 
+ 
     TExecutor(NFlatExecutorSetup::ITablet *owner, const TActorId& ownerActorId);
     ~TExecutor();
 

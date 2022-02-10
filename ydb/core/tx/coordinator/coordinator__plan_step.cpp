@@ -193,8 +193,8 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
         db.Table<Schema::State>().Key(Schema::State::KeyLastPlanned).Update(NIceDb::TUpdate<Schema::State::StateValue>(PlanOnStep));
     }
 
-    TTxType GetTxType() const override { return TXTYPE_STEP; }
-
+    TTxType GetTxType() const override { return TXTYPE_STEP; } 
+ 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         PlannedCounter = 0;
         DeclinedCounter = 0;

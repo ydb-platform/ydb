@@ -266,14 +266,14 @@ public:
     { }
 
     virtual ~ITransaction() = default;
-    /// @return true if execution complete and transaction is ready for commit
-    virtual bool Execute(TTransactionContext &txc, const TActorContext &ctx) = 0;
+    /// @return true if execution complete and transaction is ready for commit 
+    virtual bool Execute(TTransactionContext &txc, const TActorContext &ctx) = 0; 
     virtual void Complete(const TActorContext &ctx) = 0;
     virtual void Terminate(ETerminationReason reason, const TActorContext &/*ctx*/) {
         Y_FAIL("Unexpected transaction termination (reason %" PRIu32 ")", (ui32)reason);
     }
     virtual void ReleaseTxData(TTxMemoryProvider &/*provider*/, const TActorContext &/*ctx*/) {}
-    virtual TTxType GetTxType() const { return UnknownTxType; }
+    virtual TTxType GetTxType() const { return UnknownTxType; } 
 
     virtual void Describe(IOutputStream &out) const noexcept
     {

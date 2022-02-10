@@ -305,8 +305,8 @@ namespace NKikimr {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HANDOFF_PROXY;
-        }
-
+        } 
+ 
 
         THandoffProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info,
                            TProxiesPtr proxiesPtr,

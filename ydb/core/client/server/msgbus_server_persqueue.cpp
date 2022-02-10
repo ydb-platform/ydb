@@ -463,11 +463,11 @@ protected:
     ui32 PartTabletsRequested;
     TString ErrorReason;
     bool NoTopicsAtStart;
-
+ 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::MSGBUS_PROXY_ACTOR;
-    }
+    } 
 
     virtual ~TMessageBusServerPersQueueImpl() {}
 

@@ -494,7 +494,7 @@ void FillColumnFamiliesImpl(TYdbProto& out,
                     r->set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
                     break;
                 case NKikimrSchemeOp::ColumnCodecZSTD:
-                    break; // FIXME: not supported
+                    break; // FIXME: not supported 
             }
         } else if (family.GetCodec() == 1) {
             // Legacy setting, see datashard

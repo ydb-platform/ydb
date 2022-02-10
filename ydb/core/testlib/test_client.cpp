@@ -137,19 +137,19 @@ namespace Tests {
         return MakeTabletID(ssUid, HiveUidFromTabletID(tabletId), UniqPartFromTabletID(tabletId));
     }
 
-    TServer::TServer(TServerSettings::TConstPtr settings, bool init)
+    TServer::TServer(TServerSettings::TConstPtr settings, bool init) 
         : Settings(settings)
         , UseStoragePools(!Settings->StoragePoolTypes.empty())
     {
         if (Settings->SupportsRedirect && IsServerRedirected())
             return;
 
-        if (init)
-            Initialize();
+        if (init) 
+            Initialize(); 
     }
 
-    TServer::TServer(const TServerSettings &settings, bool init)
-        : TServer(new TServerSettings(settings), init)
+    TServer::TServer(const TServerSettings &settings, bool init) 
+        : TServer(new TServerSettings(settings), init) 
     {
     }
 
@@ -315,7 +315,7 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcYdbClickhouseInternalService(system, counters, appData.InFlightLimiterRegistry, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbS3InternalService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NQuoter::TRateLimiterGRpcService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbLongTxService(system, counters, grpcRequestProxyId));
+        GRpcServer->AddService(new NGRpcService::TGRpcYdbLongTxService(system, counters, grpcRequestProxyId)); 
         GRpcServer->AddService(new NGRpcService::TGRpcDataStreamsService(system, counters, grpcRequestProxyId));
         if (Settings->EnableYq) {
             GRpcServer->AddService(new NGRpcService::TGRpcYandexQueryService(system, counters, grpcRequestProxyId));
@@ -505,10 +505,10 @@ namespace Tests {
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateKeyValueFlat, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.ColumnShard] =
-            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
-                &CreateColumnShard, TMailboxType::Revolving, appData.UserPoolId,
-                TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[appData.DefaultTabletTypes.ColumnShard] = 
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo( 
+                &CreateColumnShard, TMailboxType::Revolving, appData.UserPoolId, 
+                TMailboxType::Revolving, appData.SystemPoolId)); 
         localConfig.TabletClassInfo[appData.DefaultTabletTypes.PersQueue] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreatePersQueue, TMailboxType::Revolving, appData.UserPoolId,
@@ -1085,7 +1085,7 @@ namespace Tests {
             msg->Record.MutableFlatTxId()->SetPathId(pathId);
             msg->Record.MutablePollOptions()->SetTimeout(timeout.MilliSeconds());
 #ifndef NDEBUG
-            Cerr << "waiting..." << Endl;
+            Cerr << "waiting..." << Endl; 
 #endif
             status = SyncCall(msg, reply);
             if (status != NBus::MESSAGE_OK) {
@@ -1118,7 +1118,7 @@ namespace Tests {
         const NKikimrClient::TResponse* response = &flatResponse->Record;
 
         if (response->HasErrorReason()) {
-            Cerr << "reason: " << response->GetErrorReason() << Endl;
+            Cerr << "reason: " << response->GetErrorReason() << Endl; 
         }
 
         if (response->GetStatus() != NMsgBusProxy::MSTATUS_INPROGRESS) {
@@ -1438,41 +1438,41 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateOlapStore(const TString& parent, const TString& scheme) {
-        NKikimrSchemeOp::TColumnStoreDescription store;
-        bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &store);
-        UNIT_ASSERT(parseOk);
-        return CreateOlapStore(parent, store);
-    }
-
-    NMsgBusProxy::EResponseStatus TClient::CreateOlapStore(const TString& parent,
-                                                           const NKikimrSchemeOp::TColumnStoreDescription& store) {
-        auto request = std::make_unique<NMsgBusProxy::TBusSchemeOperation>();
-        auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore);
-        op->SetWorkingDir(parent);
-        op->MutableCreateColumnStore()->CopyFrom(store);
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SendAndWaitCompletion(request.release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        const NKikimrClient::TResponse& response = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get())->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
-    }
-
+    NMsgBusProxy::EResponseStatus TClient::CreateOlapStore(const TString& parent, const TString& scheme) { 
+        NKikimrSchemeOp::TColumnStoreDescription store; 
+        bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &store); 
+        UNIT_ASSERT(parseOk); 
+        return CreateOlapStore(parent, store); 
+    } 
+ 
+    NMsgBusProxy::EResponseStatus TClient::CreateOlapStore(const TString& parent, 
+                                                           const NKikimrSchemeOp::TColumnStoreDescription& store) { 
+        auto request = std::make_unique<NMsgBusProxy::TBusSchemeOperation>(); 
+        auto* op = request->Record.MutableTransaction()->MutableModifyScheme(); 
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore); 
+        op->SetWorkingDir(parent); 
+        op->MutableCreateColumnStore()->CopyFrom(store); 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.release(), reply); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
+        const NKikimrClient::TResponse& response = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get())->Record; 
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
+    } 
+ 
     NMsgBusProxy::EResponseStatus TClient::CreateOlapTable(const TString& parent, const TString& scheme) {
-        NKikimrSchemeOp::TColumnTableDescription table;
+        NKikimrSchemeOp::TColumnTableDescription table; 
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &table);
         UNIT_ASSERT(parseOk);
         return CreateOlapTable(parent, table);
     }
 
     NMsgBusProxy::EResponseStatus TClient::CreateOlapTable(const TString& parent,
-                                                           const NKikimrSchemeOp::TColumnTableDescription& table) {
+                                                           const NKikimrSchemeOp::TColumnTableDescription& table) { 
         auto request = std::make_unique<NMsgBusProxy::TBusSchemeOperation>();
         auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
-        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable); 
         op->SetWorkingDir(parent);
-        op->MutableCreateColumnTable()->CopyFrom(table);
+        op->MutableCreateColumnTable()->CopyFrom(table); 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus status = SendAndWaitCompletion(request.release(), reply);
         UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
@@ -1497,16 +1497,16 @@ namespace Tests {
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::AlterTable(const TString& parent, const NKikimrSchemeOp::TTableDescription& alter, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-        auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
+        auto *op = request->Record.MutableTransaction()->MutableModifyScheme(); 
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
-        op->SetWorkingDir(parent);
-        op->MutableAlterTable()->CopyFrom(alter);
-        TAutoPtr<NBus::TBusMessage> reply;
+        op->SetWorkingDir(parent); 
+        op->MutableAlterTable()->CopyFrom(alter); 
+        TAutoPtr<NBus::TBusMessage> reply; 
         if (userToken) {
             request->Record.SetSecurityToken(userToken);
         }
-        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
         return dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Release());
     }
 
@@ -1520,16 +1520,16 @@ namespace Tests {
     NMsgBusProxy::EResponseStatus TClient::AlterTable(const TString& parent, const NKikimrSchemeOp::TTableDescription& alter) {
         TAutoPtr<NMsgBusProxy::TBusResponse> reply = AlterTable(parent, alter, TString());
         const NKikimrClient::TResponse &response = reply->Record;
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
-    }
-
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
+    } 
+ 
     NMsgBusProxy::EResponseStatus TClient::AlterTable(const TString& parent, const TString& alter) {
         NKikimrSchemeOp::TTableDescription table;
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(alter, &table);
         UNIT_ASSERT(parseOk);
-        return AlterTable(parent, table);
-    }
-
+        return AlterTable(parent, table); 
+    } 
+ 
     NMsgBusProxy::EResponseStatus TClient::StoreTableBackup(const TString& parent, const NKikimrSchemeOp::TBackupTask& task) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
@@ -1545,17 +1545,17 @@ namespace Tests {
 
     NMsgBusProxy::EResponseStatus TClient::DeleteTable(const TString& parent, const TString& name) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-        auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
+        auto *op = request->Record.MutableTransaction()->MutableModifyScheme(); 
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
-        op->SetWorkingDir(parent);
-        op->MutableDrop()->SetName(name);
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        op->SetWorkingDir(parent); 
+        op->MutableDrop()->SetName(name); 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
-    }
-
+    } 
+ 
     NMsgBusProxy::EResponseStatus TClient::DeleteTopic(const TString& parent, const TString& name) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
@@ -1571,18 +1571,18 @@ namespace Tests {
 
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::TryDropPersQueueGroup(const TString& parent, const TString& name) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
-        auto * op = request->Record.MutableTransaction()->MutableModifyScheme();
+        auto * op = request->Record.MutableTransaction()->MutableModifyScheme(); 
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
-        op->SetWorkingDir(parent);
-        op->MutableDrop()->SetName(name);
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SyncCall(request, reply);
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        NMsgBusProxy::TBusResponse* res = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Release());
-        UNIT_ASSERT(res);
-        return res;
-    }
-
+        op->SetWorkingDir(parent); 
+        op->MutableDrop()->SetName(name); 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        NBus::EMessageStatus status = SyncCall(request, reply); 
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
+        NMsgBusProxy::TBusResponse* res = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Release()); 
+        UNIT_ASSERT(res); 
+        return res; 
+    } 
+ 
     NMsgBusProxy::EResponseStatus TClient::WaitCreateTx(TTestActorRuntime* runtime, const TString& path, TDuration timeout) {
         TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> request(new NSchemeShard::TEvSchemeShard::TEvDescribeScheme());
         request->Record.SetPath(path);
@@ -1889,39 +1889,39 @@ namespace Tests {
     }
 
     ui32 TClient::FlatQueryRaw(const TString &query, TFlatQueryOptions& opts, NKikimrClient::TResponse& response, int retryCnt) {
-        while (retryCnt--) {
-            TAutoPtr<NMsgBusProxy::TBusRequest> request = new NMsgBusProxy::TBusRequest();
-            {
-                auto* mkqlTx = request->Record.MutableTransaction()->MutableMiniKQLTransaction();
-                if (opts.IsQueryCompiled)
-                    mkqlTx->MutableProgram()->SetBin(query);
-                else
-                    mkqlTx->MutableProgram()->SetText(query);
+        while (retryCnt--) { 
+            TAutoPtr<NMsgBusProxy::TBusRequest> request = new NMsgBusProxy::TBusRequest(); 
+            { 
+                auto* mkqlTx = request->Record.MutableTransaction()->MutableMiniKQLTransaction(); 
+                if (opts.IsQueryCompiled) 
+                    mkqlTx->MutableProgram()->SetBin(query); 
+                else 
+                    mkqlTx->MutableProgram()->SetText(query); 
 
-                if (opts.Params)
-                    mkqlTx->MutableParams()->SetText(opts.Params);
-                mkqlTx->SetFlatMKQL(true);
+                if (opts.Params) 
+                    mkqlTx->MutableParams()->SetText(opts.Params); 
+                mkqlTx->SetFlatMKQL(true); 
                 if (opts.CollectStats)
                     mkqlTx->SetCollectStats(true);
-            }
+            } 
 
-            TAutoPtr<NBus::TBusMessage> reply;
-            NBus::EMessageStatus msgStatus = SyncCall(request, reply);
-            UNIT_ASSERT_EQUAL(msgStatus, NBus::MESSAGE_OK);
+            TAutoPtr<NBus::TBusMessage> reply; 
+            NBus::EMessageStatus msgStatus = SyncCall(request, reply); 
+            UNIT_ASSERT_EQUAL(msgStatus, NBus::MESSAGE_OK); 
 
-            NMsgBusProxy::TBusResponse * ret = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get());
-            ui32 responseStatus = ret->Record.GetStatus();
-            if (responseStatus == NMsgBusProxy::MSTATUS_NOTREADY ||
+            NMsgBusProxy::TBusResponse * ret = static_cast<NMsgBusProxy::TBusResponse *>(reply.Get()); 
+            ui32 responseStatus = ret->Record.GetStatus(); 
+            if (responseStatus == NMsgBusProxy::MSTATUS_NOTREADY || 
                 responseStatus == NMsgBusProxy::MSTATUS_TIMEOUT ||
-                responseStatus == NMsgBusProxy::MSTATUS_INPROGRESS)
-                continue;
-
-            response.Swap(&static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record);
-            break;
+                responseStatus == NMsgBusProxy::MSTATUS_INPROGRESS) 
+                continue; 
+ 
+            response.Swap(&static_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record); 
+            break; 
         }
 
-        UNIT_ASSERT(retryCnt > 0);
-        return response.GetStatus();
+        UNIT_ASSERT(retryCnt > 0); 
+        return response.GetStatus(); 
     }
 
     bool TClient::FlatQuery(const TString &query, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult &result, const NKikimrClient::TResponse& expectedResponse) {
@@ -1974,8 +1974,8 @@ namespace Tests {
             UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), expectedResponse.GetStatus());
         }
         if (expectedResponse.GetStatus() != NMsgBusProxy::MSTATUS_OK)
-            return false;
-
+            return false; 
+ 
         UNIT_ASSERT(response.HasTxId());
         UNIT_ASSERT(response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Complete)
             || response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Aborted));
@@ -1994,15 +1994,15 @@ namespace Tests {
     }
 
     bool TClient::FlatQueryParams(const TString& mkql, const TString& params, bool queryCompiled, NKikimrMiniKQL::TResult &result) {
-        TFlatQueryOptions opts;
-        opts.Params = params;
-        opts.IsQueryCompiled = queryCompiled;
-        return FlatQuery(mkql, opts, result);
-    }
-
+        TFlatQueryOptions opts; 
+        opts.Params = params; 
+        opts.IsQueryCompiled = queryCompiled; 
+        return FlatQuery(mkql, opts, result); 
+    } 
+ 
     bool TClient::FlatQuery(const TString& mkql, NKikimrMiniKQL::TResult& result) {
-        TFlatQueryOptions opts;
-        return FlatQuery(mkql, opts, result);
+        TFlatQueryOptions opts; 
+        return FlatQuery(mkql, opts, result); 
     }
 
     TString TClient::SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query) {

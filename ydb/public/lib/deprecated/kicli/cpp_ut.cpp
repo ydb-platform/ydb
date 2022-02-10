@@ -54,40 +54,40 @@ Tests::TServer StartupKikimr(NGRpcProxy::TGRpcClientConfig& clientConfig,
     return Server;
 }
 
-struct TTestEnvironment {
-    NMsgBusProxy::TMsgBusClientConfig ClientConfig;
-    Tests::TServer Server;
-    NClient::TKikimr Kikimr;
-    NKikimr::NClient::TSchemaObject DC;
-    NKikimr::NClient::TSchemaObject Zoo;
-    NKikimr::NClient::TSchemaObject Animals;
+struct TTestEnvironment { 
+    NMsgBusProxy::TMsgBusClientConfig ClientConfig; 
+    Tests::TServer Server; 
+    NClient::TKikimr Kikimr; 
+    NKikimr::NClient::TSchemaObject DC; 
+    NKikimr::NClient::TSchemaObject Zoo; 
+    NKikimr::NClient::TSchemaObject Animals; 
 
-    TTestEnvironment(const std::initializer_list<NKikimr::NClient::TColumn>& columns = {
-                NClient::TKeyColumn("Id", NClient::TType::Uint64),
+    TTestEnvironment(const std::initializer_list<NKikimr::NClient::TColumn>& columns = { 
+                NClient::TKeyColumn("Id", NClient::TType::Uint64), 
                 NClient::TColumn("Species", NClient::TType::Utf8),
                 NClient::TColumn("Name", NClient::TType::Utf8),
-                NClient::TColumn("Weight", NClient::TType::Int64)
-            })
-        : Server(StartupKikimr(ClientConfig))
-        , Kikimr(ClientConfig)
-        , DC(Kikimr.GetSchemaRoot("dc-1"))
-        , Zoo(DC.MakeDirectory("Zoo"))
-        , Animals(Zoo.CreateTable("Animals", columns))
-    {}
-};
-
-bool HasChild(const NKikimr::NClient::TSchemaObject& obj, const char * path) {
-    auto children = obj.GetChildren();
-    return std::find_if(children.begin(), children.end(),
-        [&](const NClient::TSchemaObject& s) -> bool {
-            return s.GetPath() == path;
-        }) != children.end();
-}
-
-} // namespace
-
+                NClient::TColumn("Weight", NClient::TType::Int64) 
+            }) 
+        : Server(StartupKikimr(ClientConfig)) 
+        , Kikimr(ClientConfig) 
+        , DC(Kikimr.GetSchemaRoot("dc-1")) 
+        , Zoo(DC.MakeDirectory("Zoo")) 
+        , Animals(Zoo.CreateTable("Animals", columns)) 
+    {} 
+}; 
+ 
+bool HasChild(const NKikimr::NClient::TSchemaObject& obj, const char * path) { 
+    auto children = obj.GetChildren(); 
+    return std::find_if(children.begin(), children.end(), 
+        [&](const NClient::TSchemaObject& s) -> bool { 
+            return s.GetPath() == path; 
+        }) != children.end(); 
+} 
+ 
+} // namespace 
+ 
 Y_UNIT_TEST_SUITE(ClientLibSchema) {
-    static void RootExists(NClient::TKikimr& kikimr) {
+    static void RootExists(NClient::TKikimr& kikimr) { 
         auto root = kikimr.GetSchemaRoot();
         auto children = root.GetChildren();
         // all root elements exists regardless of whether they have been initialized or not
@@ -99,18 +99,18 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
 
-        RootExists(kikimr);
-    }
-
+        RootExists(kikimr); 
+    } 
+ 
     Y_UNIT_TEST(RootExists_GRpc) {
-        NGRpcProxy::TGRpcClientConfig clientConfig;
-        Tests::TServer server = StartupKikimr(clientConfig);
-        NClient::TKikimr kikimr(clientConfig);
-
-        RootExists(kikimr);
-    }
-
-    static void RootDcExists(NClient::TKikimr& kikimr) {
+        NGRpcProxy::TGRpcClientConfig clientConfig; 
+        Tests::TServer server = StartupKikimr(clientConfig); 
+        NClient::TKikimr kikimr(clientConfig); 
+ 
+        RootExists(kikimr); 
+    } 
+ 
+    static void RootDcExists(NClient::TKikimr& kikimr) { 
         auto root = kikimr.GetSchemaRoot();
         auto children = root.GetChildren();
         UNIT_ASSERT(std::find_if(children.begin(), children.end(), [](const NClient::TSchemaObject& s) -> bool { return s.GetPath() == "/dc-1"; }) != children.end());
@@ -121,18 +121,18 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
 
-        RootDcExists(kikimr);
-   }
-
+        RootDcExists(kikimr); 
+   } 
+ 
     Y_UNIT_TEST(RootDcExists_GRpc) {
-        NGRpcProxy::TGRpcClientConfig clientConfig;
-        Tests::TServer server = StartupKikimr(clientConfig);
-        NClient::TKikimr kikimr(clientConfig);
-
-        RootDcExists(kikimr);
-   }
-
-    static void RootDcStartsEmpty(NClient::TKikimr& kikimr) {
+        NGRpcProxy::TGRpcClientConfig clientConfig; 
+        Tests::TServer server = StartupKikimr(clientConfig); 
+        NClient::TKikimr kikimr(clientConfig); 
+ 
+        RootDcExists(kikimr); 
+   } 
+ 
+    static void RootDcStartsEmpty(NClient::TKikimr& kikimr) { 
         auto root = kikimr.GetSchemaRoot();
         auto dc = kikimr.GetSchemaRoot("dc-1");
         UNIT_ASSERT(dc.GetPath() == "/dc-1");
@@ -146,46 +146,46 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
 
-        RootDcStartsEmpty(kikimr);
-    }
-
+        RootDcStartsEmpty(kikimr); 
+    } 
+ 
     Y_UNIT_TEST(RootDcStartsEmpty_GRpc) {
-        NGRpcProxy::TGRpcClientConfig clientConfig;
-        Tests::TServer server = StartupKikimr(clientConfig);
-        NClient::TKikimr kikimr(clientConfig);
-
-        RootDcStartsEmpty(kikimr);
-    }
-
-    static void CreateTable(NClient::TKikimr& kikimr) {
+        NGRpcProxy::TGRpcClientConfig clientConfig; 
+        Tests::TServer server = StartupKikimr(clientConfig); 
+        NClient::TKikimr kikimr(clientConfig); 
+ 
+        RootDcStartsEmpty(kikimr); 
+    } 
+ 
+    static void CreateTable(NClient::TKikimr& kikimr) { 
         auto dc = kikimr.GetSchemaRoot("dc-1");
-        auto animals = dc.CreateTable("Animals", {
-                NClient::TKeyColumn("Id", NClient::TType::Uint64),
+        auto animals = dc.CreateTable("Animals", { 
+                NClient::TKeyColumn("Id", NClient::TType::Uint64), 
                 NClient::TColumn("Species", NClient::TType::Utf8),
                 NClient::TColumn("Name", NClient::TType::Utf8),
                 NClient::TColumn("Weight", NClient::TType::Int64),
                 NClient::TColumn("MiscY", NClient::TType::Yson),
                 NClient::TColumn("MiscJ", NClient::TType::Json)
-            });
+            }); 
         auto children = dc.GetChildren();
-        UNIT_ASSERT(HasChild(dc, "/dc-1/Animals"));
-        UNIT_ASSERT(animals.IsTable());
-
-        auto object = kikimr.GetSchemaObject("/dc-1/Animals");
-        auto columns = object.GetColumns();
-        UNIT_ASSERT(std::find_if(columns.begin(), columns.end(), [](const auto& c) -> bool { return c.Name == "Id" && c.Key == true; }));
-        UNIT_ASSERT(std::find_if(columns.begin(), columns.end(), [](const auto& c) -> bool { return c.Name == "Species"; }));
-        UNIT_ASSERT(std::find_if(columns.begin(), columns.end(), [](const auto& c) -> bool { return c.Name == "Name"; }));
-        UNIT_ASSERT(std::find_if(columns.begin(), columns.end(), [](const auto& c) -> bool { return c.Name == "Weight"; }));
+        UNIT_ASSERT(HasChild(dc, "/dc-1/Animals")); 
+        UNIT_ASSERT(animals.IsTable()); 
+ 
+        auto object = kikimr.GetSchemaObject("/dc-1/Animals"); 
+        auto columns = object.GetColumns(); 
+        UNIT_ASSERT(std::find_if(columns.begin(), columns.end(), [](const auto& c) -> bool { return c.Name == "Id" && c.Key == true; })); 
+        UNIT_ASSERT(std::find_if(columns.begin(), columns.end(), [](const auto& c) -> bool { return c.Name == "Species"; })); 
+        UNIT_ASSERT(std::find_if(columns.begin(), columns.end(), [](const auto& c) -> bool { return c.Name == "Name"; })); 
+        UNIT_ASSERT(std::find_if(columns.begin(), columns.end(), [](const auto& c) -> bool { return c.Name == "Weight"; })); 
         UNIT_ASSERT(std::find_if(columns.begin(), columns.end(), [](const auto& c) -> bool { return c.Name == "MiscY"; }));
         UNIT_ASSERT(std::find_if(columns.begin(), columns.end(), [](const auto& c) -> bool { return c.Name == "MiscJ"; }));
-
+ 
         try {
             dc.CreateTable("FailedCreateTable", {
                 NClient::TKeyColumn("Id", NClient::TType::Json),
                 NClient::TColumn("Value", NClient::TType::Uint64)
             });
-            UNIT_FAIL("Unexpected CreateTable success");
+            UNIT_FAIL("Unexpected CreateTable success"); 
         } catch (const yexception& ) {
         }
 
@@ -194,16 +194,16 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
                 NClient::TKeyColumn("Id", NClient::TType::Yson),
                 NClient::TColumn("Value", NClient::TType::Uint64)
             });
-            UNIT_FAIL("Unexpected CreateTable success");
+            UNIT_FAIL("Unexpected CreateTable success"); 
         } catch (const yexception& ) {
         }
 
-#if 1 // TODO: it should be an error
-        auto sameTable = dc.CreateTable("Animals", {
-                NClient::TKeyColumn("Id", NClient::TType::Uint64),
+#if 1 // TODO: it should be an error 
+        auto sameTable = dc.CreateTable("Animals", { 
+                NClient::TKeyColumn("Id", NClient::TType::Uint64), 
                 NClient::TColumn("Species", NClient::TType::Utf8)
-            });
-#endif
+            }); 
+#endif 
     }
 
     Y_UNIT_TEST(CreateTable) {
@@ -211,46 +211,46 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
 
-        CreateTable(kikimr);
-    }
-
+        CreateTable(kikimr); 
+    } 
+ 
     Y_UNIT_TEST(CreateTable_GRpc) {
-        NGRpcProxy::TGRpcClientConfig clientConfig;
-        Tests::TServer server = StartupKikimr(clientConfig);
-        NClient::TKikimr kikimr(clientConfig);
-
-        CreateTable(kikimr);
-    }
-
-    static void MkDir(NClient::TKikimr& kikimr) {
+        NGRpcProxy::TGRpcClientConfig clientConfig; 
+        Tests::TServer server = StartupKikimr(clientConfig); 
+        NClient::TKikimr kikimr(clientConfig); 
+ 
+        CreateTable(kikimr); 
+    } 
+ 
+    static void MkDir(NClient::TKikimr& kikimr) { 
         auto dc = kikimr.GetSchemaRoot("dc-1");
         auto zoo = dc.MakeDirectory("Zoo");
-        auto animals = zoo.CreateTable("Animals", {
-            NClient::TKeyColumn("Id", NClient::TType::Uint64),
+        auto animals = zoo.CreateTable("Animals", { 
+            NClient::TKeyColumn("Id", NClient::TType::Uint64), 
             NClient::TColumn("Name", NClient::TType::Utf8)
-        });
-        UNIT_ASSERT(HasChild(dc, "/dc-1/Zoo"));
-        UNIT_ASSERT(HasChild(zoo, "/dc-1/Zoo/Animals"));
-        UNIT_ASSERT(zoo.IsDirectory());
-        UNIT_ASSERT(animals.IsTable());
-
-        zoo.MakeDirectory("Garden");
-        UNIT_ASSERT(HasChild(zoo, "/dc-1/Zoo/Garden"));
-
-        try {
-            animals.MakeDirectory("FailedMkDir");
-            UNIT_FAIL("Unexpected MakeDirectory success");
-        } catch (const yexception& ) {
-        }
-
-        try {
-            animals.CreateTable("FailedCreateTable", {
-                NClient::TKeyColumn("Id", NClient::TType::Uint64),
-                NClient::TColumn("Value", NClient::TType::Uint64)
-            });
-            UNIT_FAIL("Unexpected CreateTable success");
-        } catch (const yexception& ) {
-        }
+        }); 
+        UNIT_ASSERT(HasChild(dc, "/dc-1/Zoo")); 
+        UNIT_ASSERT(HasChild(zoo, "/dc-1/Zoo/Animals")); 
+        UNIT_ASSERT(zoo.IsDirectory()); 
+        UNIT_ASSERT(animals.IsTable()); 
+ 
+        zoo.MakeDirectory("Garden"); 
+        UNIT_ASSERT(HasChild(zoo, "/dc-1/Zoo/Garden")); 
+ 
+        try { 
+            animals.MakeDirectory("FailedMkDir"); 
+            UNIT_FAIL("Unexpected MakeDirectory success"); 
+        } catch (const yexception& ) { 
+        } 
+ 
+        try { 
+            animals.CreateTable("FailedCreateTable", { 
+                NClient::TKeyColumn("Id", NClient::TType::Uint64), 
+                NClient::TColumn("Value", NClient::TType::Uint64) 
+            }); 
+            UNIT_FAIL("Unexpected CreateTable success"); 
+        } catch (const yexception& ) { 
+        } 
     }
 
     Y_UNIT_TEST(MkDir) {
@@ -258,178 +258,178 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         Tests::TServer server = StartupKikimr(clientConfig);
         NClient::TKikimr kikimr(clientConfig);
 
-        MkDir(kikimr);
-    }
-
+        MkDir(kikimr); 
+    } 
+ 
     Y_UNIT_TEST(MkDir_GRpc) {
-        NGRpcProxy::TGRpcClientConfig clientConfig;
-        Tests::TServer server = StartupKikimr(clientConfig);
-        NClient::TKikimr kikimr(clientConfig);
-
-        MkDir(kikimr);
-    }
-
-    static void CreatePartitionedTable(NClient::TKikimr& kikimr) {
+        NGRpcProxy::TGRpcClientConfig clientConfig; 
+        Tests::TServer server = StartupKikimr(clientConfig); 
+        NClient::TKikimr kikimr(clientConfig); 
+ 
+        MkDir(kikimr); 
+    } 
+ 
+    static void CreatePartitionedTable(NClient::TKikimr& kikimr) { 
         auto dc = kikimr.GetSchemaRoot("dc-1");
         auto zoo = dc.MakeDirectory("Zoo");
         auto animals = zoo.CreateTable("Animals", {
-                            NClient::TKeyPartitioningColumn("Id", NClient::TType::Uint64, 4),
+                            NClient::TKeyPartitioningColumn("Id", NClient::TType::Uint64, 4), 
                             NClient::TColumn("Species", NClient::TType::Utf8),
                             NClient::TColumn("Name", NClient::TType::Utf8),
-                            NClient::TColumn("Weight", NClient::TType::Int64)
-                        });
-        UNIT_ASSERT(zoo.IsDirectory());
-        UNIT_ASSERT(animals.IsTable());
+                            NClient::TColumn("Weight", NClient::TType::Int64) 
+                        }); 
+        UNIT_ASSERT(zoo.IsDirectory()); 
+        UNIT_ASSERT(animals.IsTable()); 
 
-        UNIT_ASSERT_VALUES_EQUAL(zoo.GetChild("Animals").GetStats().PartitionsCount, 4);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(zoo.GetChild("Animals").GetStats().PartitionsCount, 4); 
+    } 
+ 
     Y_UNIT_TEST(CreatePartitionedTable) {
-        NMsgBusProxy::TMsgBusClientConfig clientConfig;
-        Tests::TServer server = StartupKikimr(clientConfig);
-        NClient::TKikimr kikimr(clientConfig);
-
-        CreatePartitionedTable(kikimr);
-    }
-
+        NMsgBusProxy::TMsgBusClientConfig clientConfig; 
+        Tests::TServer server = StartupKikimr(clientConfig); 
+        NClient::TKikimr kikimr(clientConfig); 
+ 
+        CreatePartitionedTable(kikimr); 
+    } 
+ 
     Y_UNIT_TEST(CreatePartitionedTable_GRpc) {
-        NGRpcProxy::TGRpcClientConfig clientConfig;
-        Tests::TServer server = StartupKikimr(clientConfig);
-        NClient::TKikimr kikimr(clientConfig);
-
-        CreatePartitionedTable(kikimr);
-    }
-
-    static void CreateVeryPartitionedTable(NClient::TKikimr& kikimr) {
+        NGRpcProxy::TGRpcClientConfig clientConfig; 
+        Tests::TServer server = StartupKikimr(clientConfig); 
+        NClient::TKikimr kikimr(clientConfig); 
+ 
+        CreatePartitionedTable(kikimr); 
+    } 
+ 
+    static void CreateVeryPartitionedTable(NClient::TKikimr& kikimr) { 
         const ui64 numParts = NValgrind::PlainOrUnderValgrind(3000, 10);
-
-        auto dc = kikimr.GetSchemaRoot("dc-1");
-        auto zoo = dc.MakeDirectory("Zoo");
-        auto animals = zoo.CreateTable("Animals", {
-                            NClient::TKeyPartitioningColumn("Id", NClient::TType::Uint64, numParts),
-                            NClient::TColumn("Species", NClient::TType::Utf8),
-                            NClient::TColumn("Name", NClient::TType::Utf8),
-                            NClient::TColumn("Weight", NClient::TType::Int64)
-                        });
-
-        UNIT_ASSERT_VALUES_EQUAL(zoo.GetChild("Animals").GetStats().PartitionsCount, numParts);
-    }
-
+ 
+        auto dc = kikimr.GetSchemaRoot("dc-1"); 
+        auto zoo = dc.MakeDirectory("Zoo"); 
+        auto animals = zoo.CreateTable("Animals", { 
+                            NClient::TKeyPartitioningColumn("Id", NClient::TType::Uint64, numParts), 
+                            NClient::TColumn("Species", NClient::TType::Utf8), 
+                            NClient::TColumn("Name", NClient::TType::Utf8), 
+                            NClient::TColumn("Weight", NClient::TType::Int64) 
+                        }); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(zoo.GetChild("Animals").GetStats().PartitionsCount, numParts); 
+    } 
+ 
     Y_UNIT_TEST(CreateVeryPartitionedTable) {
-        NMsgBusProxy::TMsgBusClientConfig clientConfig;
-        Tests::TServer server = StartupKikimr(clientConfig);
-        NClient::TKikimr kikimr(clientConfig);
-
-        CreateVeryPartitionedTable(kikimr);
-    }
-
+        NMsgBusProxy::TMsgBusClientConfig clientConfig; 
+        Tests::TServer server = StartupKikimr(clientConfig); 
+        NClient::TKikimr kikimr(clientConfig); 
+ 
+        CreateVeryPartitionedTable(kikimr); 
+    } 
+ 
     Y_UNIT_TEST(CreateVeryPartitionedTable_GRpc) {
-        NGRpcProxy::TGRpcClientConfig clientConfig;
-        Tests::TServer server = StartupKikimr(clientConfig);
-        NClient::TKikimr kikimr(clientConfig);
-
-        CreateVeryPartitionedTable(kikimr);
-    }
-
-    static void Drop(NClient::TKikimr& kikimr) {
-        using NKikimr::NClient::TSchemaObject;
-
-        TSchemaObject dc = kikimr.GetSchemaRoot("dc-1");
-        try {
-            dc.Drop();
-            UNIT_FAIL("Unexpected Drop success");
-        } catch (const yexception& ) {
-        }
-
-        TSchemaObject dir = dc.MakeDirectory("happiness");
-        UNIT_ASSERT_EQUAL(dc.GetChildren().size(), 1);
-
-        TSchemaObject table1 = dir.CreateTable("joy", {
-            NClient::TKeyColumn("id", NClient::TType::Uint64),
-            NClient::TColumn("note", NClient::TType::Utf8)
-        });
-        dir.CreateTable("fun", {
-            NClient::TKeyColumn("id", NClient::TType::Uint64),
-            NClient::TColumn("note", NClient::TType::Utf8)
-        });
-
-        try {
-            dir.Drop();
-            UNIT_FAIL("Unexpected Drop success");
-        } catch (const yexception& ) {
-        }
-
-        UNIT_ASSERT_EQUAL(dir.GetChildren().size(), 2);
-
-        table1.Drop();
-
-        auto children = dir.GetChildren();
-        UNIT_ASSERT_EQUAL(children.size(), 1);
-
-        TSchemaObject table2 = children[0];
-        UNIT_ASSERT_EQUAL(table2.GetName(), "fun");
-        table2.Drop();
-
-        UNIT_ASSERT_EQUAL(dir.GetChildren().size(), 0);
-        dir.Drop();
-
-        UNIT_ASSERT_EQUAL(dc.GetChildren().size(), 0);
-    }
-
+        NGRpcProxy::TGRpcClientConfig clientConfig; 
+        Tests::TServer server = StartupKikimr(clientConfig); 
+        NClient::TKikimr kikimr(clientConfig); 
+ 
+        CreateVeryPartitionedTable(kikimr); 
+    } 
+ 
+    static void Drop(NClient::TKikimr& kikimr) { 
+        using NKikimr::NClient::TSchemaObject; 
+ 
+        TSchemaObject dc = kikimr.GetSchemaRoot("dc-1"); 
+        try { 
+            dc.Drop(); 
+            UNIT_FAIL("Unexpected Drop success"); 
+        } catch (const yexception& ) { 
+        } 
+ 
+        TSchemaObject dir = dc.MakeDirectory("happiness"); 
+        UNIT_ASSERT_EQUAL(dc.GetChildren().size(), 1); 
+ 
+        TSchemaObject table1 = dir.CreateTable("joy", { 
+            NClient::TKeyColumn("id", NClient::TType::Uint64), 
+            NClient::TColumn("note", NClient::TType::Utf8) 
+        }); 
+        dir.CreateTable("fun", { 
+            NClient::TKeyColumn("id", NClient::TType::Uint64), 
+            NClient::TColumn("note", NClient::TType::Utf8) 
+        }); 
+ 
+        try { 
+            dir.Drop(); 
+            UNIT_FAIL("Unexpected Drop success"); 
+        } catch (const yexception& ) { 
+        } 
+ 
+        UNIT_ASSERT_EQUAL(dir.GetChildren().size(), 2); 
+ 
+        table1.Drop(); 
+ 
+        auto children = dir.GetChildren(); 
+        UNIT_ASSERT_EQUAL(children.size(), 1); 
+ 
+        TSchemaObject table2 = children[0]; 
+        UNIT_ASSERT_EQUAL(table2.GetName(), "fun"); 
+        table2.Drop(); 
+ 
+        UNIT_ASSERT_EQUAL(dir.GetChildren().size(), 0); 
+        dir.Drop(); 
+ 
+        UNIT_ASSERT_EQUAL(dc.GetChildren().size(), 0); 
+    } 
+ 
     Y_UNIT_TEST(Drop) {
-        NMsgBusProxy::TMsgBusClientConfig clientConfig;
-        Tests::TServer server = StartupKikimr(clientConfig);
-        NClient::TKikimr kikimr(clientConfig);
-
-        Drop(kikimr);
-    }
-
+        NMsgBusProxy::TMsgBusClientConfig clientConfig; 
+        Tests::TServer server = StartupKikimr(clientConfig); 
+        NClient::TKikimr kikimr(clientConfig); 
+ 
+        Drop(kikimr); 
+    } 
+ 
     Y_UNIT_TEST(Drop_GRpc) {
-        NGRpcProxy::TGRpcClientConfig clientConfig;
-        Tests::TServer server = StartupKikimr(clientConfig);
-        NClient::TKikimr kikimr(clientConfig);
-
-        Drop(kikimr);
-    }
-#if 0 // TODO: not implemented
-    static void MaxPath(NClient::TKikimr& kikimr) {
-        try {
-            const ui32 TestedMaxPath = 32;
+        NGRpcProxy::TGRpcClientConfig clientConfig; 
+        Tests::TServer server = StartupKikimr(clientConfig); 
+        NClient::TKikimr kikimr(clientConfig); 
+ 
+        Drop(kikimr); 
+    } 
+#if 0 // TODO: not implemented 
+    static void MaxPath(NClient::TKikimr& kikimr) { 
+        try { 
+            const ui32 TestedMaxPath = 32; 
             TVector<NKikimr::NClient::TSchemaObject> paths;
-            paths.reserve(TestedMaxPath+1);
-            paths.emplace_back(kikimr.GetSchemaRoot("dc-1"));
-
-            for (ui32 i = 0; i < TestedMaxPath; ++i) {
-                paths.emplace_back(paths.back().MakeDirectory("Dir"));
-            }
-            UNIT_FAIL("Unexpected MaxPath exceeded");
-        } catch (const yexception& ) {
-        }
-    }
-
+            paths.reserve(TestedMaxPath+1); 
+            paths.emplace_back(kikimr.GetSchemaRoot("dc-1")); 
+ 
+            for (ui32 i = 0; i < TestedMaxPath; ++i) { 
+                paths.emplace_back(paths.back().MakeDirectory("Dir")); 
+            } 
+            UNIT_FAIL("Unexpected MaxPath exceeded"); 
+        } catch (const yexception& ) { 
+        } 
+    } 
+ 
     Y_UNIT_TEST(MaxPath) {
-        NMsgBusProxy::TMsgBusClientConfig clientConfig;
-        Tests::TServer server = StartupKikimr(clientConfig);
-        NClient::TKikimr kikimr(clientConfig);
-
-        MaxPath(kikimr);
-    }
-
+        NMsgBusProxy::TMsgBusClientConfig clientConfig; 
+        Tests::TServer server = StartupKikimr(clientConfig); 
+        NClient::TKikimr kikimr(clientConfig); 
+ 
+        MaxPath(kikimr); 
+    } 
+ 
     Y_UNIT_TEST(MaxPath_GRpc) {
-        NGRpcProxy::TGRpcClientConfig clientConfig;
-        Tests::TServer server = StartupKikimr(clientConfig);
-        NClient::TKikimr kikimr(clientConfig);
-
-        MaxPath(kikimr);
-    }
-#endif
-}
-
+        NGRpcProxy::TGRpcClientConfig clientConfig; 
+        Tests::TServer server = StartupKikimr(clientConfig); 
+        NClient::TKikimr kikimr(clientConfig); 
+ 
+        MaxPath(kikimr); 
+    } 
+#endif 
+} 
+ 
 Y_UNIT_TEST_SUITE(ClientLib) {
     Y_UNIT_TEST(Test6) {
-        TTestEnvironment env;
-        NClient::TKikimr& kikimr = env.Kikimr;
-
+        TTestEnvironment env; 
+        NClient::TKikimr& kikimr = env.Kikimr; 
+ 
         auto query = kikimr.Query(
                     "("
                     "(let row '('('Id (Uint64 '1))))"
@@ -448,8 +448,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
     }
 
     Y_UNIT_TEST(Test7) {
-        TTestEnvironment env;
-        NClient::TKikimr& kikimr = env.Kikimr;
+        TTestEnvironment env; 
+        NClient::TKikimr& kikimr = env.Kikimr; 
 
         {
             auto query = kikimr.Query(
@@ -486,8 +486,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
     }
 
     Y_UNIT_TEST(Test8) {
-        TTestEnvironment env;
-        NClient::TKikimr& kikimr = env.Kikimr;
+        TTestEnvironment env; 
+        NClient::TKikimr& kikimr = env.Kikimr; 
 
         {
             auto query = kikimr.Query(
@@ -524,8 +524,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
     }
 
     Y_UNIT_TEST(Test9) {
-        TTestEnvironment env;
-        NClient::TKikimr& kikimr = env.Kikimr;
+        TTestEnvironment env; 
+        NClient::TKikimr& kikimr = env.Kikimr; 
 
         {
             auto result = kikimr.Query(
@@ -568,26 +568,26 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                     "(return pgmReturn)"
                     ")");
         auto result = query.SyncPrepare().GetQuery().SyncExecute();
-        auto readResult = result.GetValue();
+        auto readResult = result.GetValue(); 
 
-        UNIT_ASSERT_VALUES_EQUAL((TString)readResult["myRes"][0]["Species"], "Rat");
-        UNIT_ASSERT_VALUES_EQUAL((TString)readResult["myRes"][0]["Name"], "Dobby");
-        UNIT_ASSERT_VALUES_EQUAL((i64)readResult["myRes"][0]["Weight"], 350);
-        UNIT_ASSERT_VALUES_EQUAL((TString)readResult["myRes"][1]["Species"], "Rat");
-        UNIT_ASSERT_VALUES_EQUAL((TString)readResult["myRes"][1]["Name"], "Korzhik");
-        UNIT_ASSERT_VALUES_EQUAL((i64)readResult["myRes"][1]["Weight"], 500);
+        UNIT_ASSERT_VALUES_EQUAL((TString)readResult["myRes"][0]["Species"], "Rat"); 
+        UNIT_ASSERT_VALUES_EQUAL((TString)readResult["myRes"][0]["Name"], "Dobby"); 
+        UNIT_ASSERT_VALUES_EQUAL((i64)readResult["myRes"][0]["Weight"], 350); 
+        UNIT_ASSERT_VALUES_EQUAL((TString)readResult["myRes"][1]["Species"], "Rat"); 
+        UNIT_ASSERT_VALUES_EQUAL((TString)readResult["myRes"][1]["Name"], "Korzhik"); 
+        UNIT_ASSERT_VALUES_EQUAL((i64)readResult["myRes"][1]["Weight"], 500); 
     }
 
     Y_UNIT_TEST(Test10) {
         using namespace NClient;
-        TTestEnvironment env({
-            NClient::TKeyColumn("Id", NClient::TType::Uint64),
+        TTestEnvironment env({ 
+            NClient::TKeyColumn("Id", NClient::TType::Uint64), 
             NClient::TColumn("Species", NClient::TType::Utf8),
             NClient::TColumn("Name", NClient::TType::Utf8),
             NClient::TColumn("Description", NClient::TType::Utf8),
-            NClient::TColumn("Weight", NClient::TType::Int64)
-        });
-        NClient::TKikimr& kikimr = env.Kikimr;
+            NClient::TColumn("Weight", NClient::TType::Int64) 
+        }); 
+        NClient::TKikimr& kikimr = env.Kikimr; 
 
         auto updateQuery = kikimr.Query(
                         "("
@@ -654,8 +654,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
     Y_UNIT_TEST(Test11) {
         using namespace NClient;
-        TTestEnvironment env;
-        NClient::TKikimr& kikimr = env.Kikimr;
+        TTestEnvironment env; 
+        NClient::TKikimr& kikimr = env.Kikimr; 
 
         auto updateQuery = kikimr.Query(
                         "("
@@ -712,8 +712,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
     }
 
     Y_UNIT_TEST(Test12) {
-        TTestEnvironment env;
-        NClient::TKikimr& kikimr = env.Kikimr;
+        TTestEnvironment env; 
+        NClient::TKikimr& kikimr = env.Kikimr; 
 
         auto query = kikimr.Query(
                     "("
@@ -737,8 +737,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
     }
 
     Y_UNIT_TEST(Test13) {
-        TTestEnvironment env;
-        NClient::TKikimr& kikimr = env.Kikimr;
+        TTestEnvironment env; 
+        NClient::TKikimr& kikimr = env.Kikimr; 
 
         auto query = kikimr.Query(
                     "("
@@ -762,8 +762,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
     }
 
     Y_UNIT_TEST(Test14) {
-        TTestEnvironment env;
-        NClient::TKikimr& kikimr = env.Kikimr;
+        TTestEnvironment env; 
+        NClient::TKikimr& kikimr = env.Kikimr; 
 
         auto query = kikimr.Query(
                     "("
@@ -790,13 +790,13 @@ Y_UNIT_TEST_SUITE(ClientLib) {
     }
 
     Y_UNIT_TEST(Test15) {
-        TTestEnvironment env({
-            NClient::TKeyPartitioningColumn("Id", NClient::TType::Uint64, 4),
+        TTestEnvironment env({ 
+            NClient::TKeyPartitioningColumn("Id", NClient::TType::Uint64, 4), 
             NClient::TColumn("Species", NClient::TType::Utf8),
             NClient::TColumn("Name", NClient::TType::Utf8),
-            NClient::TColumn("Weight", NClient::TType::Int64)
-        });
-        NClient::TKikimr& kikimr = env.Kikimr;
+            NClient::TColumn("Weight", NClient::TType::Int64) 
+        }); 
+        NClient::TKikimr& kikimr = env.Kikimr; 
 
         {
             auto result = kikimr.Query(
@@ -856,13 +856,13 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
     Y_UNIT_TEST(Test16) {
         using namespace NClient;
-        TTestEnvironment env({
-            TKeyPartitioningColumn("Id", NClient::TType::Uint64, 4),
+        TTestEnvironment env({ 
+            TKeyPartitioningColumn("Id", NClient::TType::Uint64, 4), 
             TColumn("Species", NClient::TType::String),
             TColumn("Name", NClient::TType::String),
-            TColumn("Weight", NClient::TType::Int64)
-        });
-        NClient::TKikimr& kikimr = env.Kikimr;
+            TColumn("Weight", NClient::TType::Int64) 
+        }); 
+        NClient::TKikimr& kikimr = env.Kikimr; 
 
         {
             auto result = kikimr.Query(
@@ -979,13 +979,13 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
     Y_UNIT_TEST(Test17) {
         using namespace NClient;
-        TTestEnvironment env({
-            TKeyPartitioningColumn("Id", NClient::TType::Uint64, 4),
+        TTestEnvironment env({ 
+            TKeyPartitioningColumn("Id", NClient::TType::Uint64, 4), 
             TColumn("Species", NClient::TType::String),
             TColumn("Name", NClient::TType::String),
-            TColumn("Weight", NClient::TType::Int64)
-        });
-        NClient::TKikimr& kikimr = env.Kikimr;
+            TColumn("Weight", NClient::TType::Int64) 
+        }); 
+        NClient::TKikimr& kikimr = env.Kikimr; 
 
         {
             auto result = kikimr.Query(
@@ -1011,8 +1011,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
     Y_UNIT_TEST(Test18) {
         using namespace NClient;
-        TTestEnvironment env;
-        NClient::TKikimr& kikimr = env.Kikimr;
+        TTestEnvironment env; 
+        NClient::TKikimr& kikimr = env.Kikimr; 
 
         auto updateQuery = kikimr.Query(
                     "(\n"
@@ -1072,8 +1072,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
     Y_UNIT_TEST(Test19) {
         using namespace NClient;
-        TTestEnvironment env;
-        NClient::TKikimr& kikimr = env.Kikimr;
+        TTestEnvironment env; 
+        NClient::TKikimr& kikimr = env.Kikimr; 
 
         auto updateQuery = kikimr.Query(
                     "(\n"
@@ -1129,8 +1129,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
     Y_UNIT_TEST(Test20) {
         using namespace NClient;
-        TTestEnvironment env;
-        NClient::TKikimr& kikimr = env.Kikimr;
+        TTestEnvironment env; 
+        NClient::TKikimr& kikimr = env.Kikimr; 
 
         auto updateQuery = kikimr.Query(R"___(
                                         (
@@ -1213,8 +1213,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
     Y_UNIT_TEST(Test21) {
         using namespace NClient;
-        TTestEnvironment env;
-        NClient::TKikimr& kikimr = env.Kikimr;
+        TTestEnvironment env; 
+        NClient::TKikimr& kikimr = env.Kikimr; 
 
         auto updateQuery = kikimr.Query(R"___(
                                         (
@@ -1283,8 +1283,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
     Y_UNIT_TEST(Test22) {
         using namespace NClient;
-        TTestEnvironment env;
-        NClient::TKikimr& kikimr = env.Kikimr;
+        TTestEnvironment env; 
+        NClient::TKikimr& kikimr = env.Kikimr; 
 
         auto updateQuery = kikimr.Query(R"___(
                                         (
@@ -1354,8 +1354,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
     }
 
     Y_UNIT_TEST(Test24) {
-        TTestEnvironment env;
-        NClient::TKikimr& kikimr = env.Kikimr;
+        TTestEnvironment env; 
+        NClient::TKikimr& kikimr = env.Kikimr; 
 
         auto query = kikimr.Query(
                     "("
@@ -1375,8 +1375,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
     }
 
     Y_UNIT_TEST(Test25) {
-        TTestEnvironment env;
-        NClient::TKikimr& kikimr = env.Kikimr;
+        TTestEnvironment env; 
+        NClient::TKikimr& kikimr = env.Kikimr; 
 
         auto query = kikimr.Query(
                     "("

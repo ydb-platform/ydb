@@ -36,28 +36,28 @@ namespace NFake {
         TBlobStorageGroupType::EErasureSpecies erasure = BootGroupErasure, ui32 groupId = 0);
     TActorId CreateTestBootstrapper(TTestActorRuntime &runtime, TTabletStorageInfo *info,
         std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op, ui32 nodeIndex = 0);
-    NTabletPipe::TClientConfig GetPipeConfigWithRetries();
-
-    void SetupStateStorage(TTestActorRuntime& runtime, ui32 nodeIndex,
-                           ui64 stateStorageGroup = 0, bool replicasOnFirstNode = false);
-    void SetupBSNodeWarden(TTestActorRuntime& runtime, ui32 nodeIndex, TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig);
-    void SetupTabletResolver(TTestActorRuntime& runtime, ui32 nodeIndex);
+    NTabletPipe::TClientConfig GetPipeConfigWithRetries(); 
+ 
+    void SetupStateStorage(TTestActorRuntime& runtime, ui32 nodeIndex, 
+                           ui64 stateStorageGroup = 0, bool replicasOnFirstNode = false); 
+    void SetupBSNodeWarden(TTestActorRuntime& runtime, ui32 nodeIndex, TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig); 
+    void SetupTabletResolver(TTestActorRuntime& runtime, ui32 nodeIndex); 
     void SetupTabletPipePeNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex);
-    void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex);
+    void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex); 
     void SetupSharedPageCache(TTestActorRuntime& runtime, ui32 nodeIndex, NFake::TCaches caches);
-    void SetupNodeWhiteboard(TTestActorRuntime& runtime, ui32 nodeIndex);
-    void SetupMonitoringProxy(TTestActorRuntime& runtime, ui32 nodeIndex);
-    void SetupGRpcProxyStatus(TTestActorRuntime& runtime, ui32 nodeIndex);
-    void SetupNodeTabletMonitor(TTestActorRuntime& runtime, ui32 nodeIndex);
+    void SetupNodeWhiteboard(TTestActorRuntime& runtime, ui32 nodeIndex); 
+    void SetupMonitoringProxy(TTestActorRuntime& runtime, ui32 nodeIndex); 
+    void SetupGRpcProxyStatus(TTestActorRuntime& runtime, ui32 nodeIndex); 
+    void SetupNodeTabletMonitor(TTestActorRuntime& runtime, ui32 nodeIndex); 
     void SetupSchemeCache(TTestActorRuntime& runtime, ui32 nodeIndex, const TString& root);
     void SetupQuoterService(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupSysViewService(TTestActorRuntime& runtime, ui32 nodeIndex);
-
+ 
     // StateStorage, NodeWarden, TabletResolver, ResourceBroker, SharedPageCache
-    void SetupBasicServices(TTestActorRuntime &runtime, TAppPrepare &app, bool mockDisk = false,
-                            NFake::INode *factory = nullptr, NFake::TStorage storage = {}, NFake::TCaches caches = {});
+    void SetupBasicServices(TTestActorRuntime &runtime, TAppPrepare &app, bool mockDisk = false, 
+                            NFake::INode *factory = nullptr, NFake::TStorage storage = {}, NFake::TCaches caches = {}); 
 
-    ///
+    /// 
     class TStrandedPDiskServiceFactory : public IPDiskServiceFactory {
         TTestActorRuntime &Runtime;
     public:

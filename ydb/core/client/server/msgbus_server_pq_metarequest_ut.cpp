@@ -266,59 +266,59 @@ protected:
             + p.HasCmdGetOwnershipResult();
     }
 
- 
-    template<class T> 
-    bool AssertTopicResponsesImpl(const T& t, const TString& topic, NPersQueue::NErrorCode::EErrorCode code, ui32 numParts) { 
-        if (t.GetTopic() != topic) return false; 
-        UNIT_ASSERT_C(t.GetErrorCode() == code, "for topic " << topic << " code is " << (ui32) t.GetErrorCode() << " but waiting for " << (ui32) code << " resp: " << t); 
-        UNIT_ASSERT_C(t.PartitionResultSize() == numParts, "for topic " << topic << " parts size  is not " << numParts << " resp: " << t); 
-        return true; 
-    } 
- 
-    template<class T> 
-    bool AssertTopicResponsesImpl(const T& t, const TString& topic, NPersQueue::NErrorCode::EErrorCode code) { 
-        if (t.GetTopic() != topic) return false; 
-        UNIT_ASSERT_C(t.GetErrorCode() == code, "for topic " << topic << " code is " << (ui32) t.GetErrorCode() << " but waiting for " << (ui32) code << " resp: " << t); 
-        return true; 
-    } 
- 
- 
-    void AssertTopicResponses(const TString& topic, NPersQueue::NErrorCode::EErrorCode code, ui32 numParts) { 
-        const TEvPersQueue::TEvResponse* resp = GetResponse(); 
-        UNIT_ASSERT(resp != nullptr); 
-        for (auto& r : resp->Record.GetMetaResponse().GetCmdGetReadSessionsInfoResult().GetTopicResult()) { 
-            if (AssertTopicResponsesImpl(r, topic, code, numParts)) 
-                return; 
-        } 
-        for (auto& r : resp->Record.GetMetaResponse().GetCmdGetPartitionLocationsResult().GetTopicResult()) { 
-            if (r.GetTopic() != topic) continue; 
-            UNIT_ASSERT_C(r.GetErrorCode() == code, "for topic " << topic << " code is " << (ui32) r.GetErrorCode() << " but waiting for " << (ui32) code << " resp: " << r); 
-            UNIT_ASSERT_C(r.PartitionLocationSize() == numParts, "for topic " << topic << " parts size  is not " << numParts << " resp: " << r); 
-            return; 
-        } 
-        for (auto& r : resp->Record.GetMetaResponse().GetCmdGetPartitionStatusResult().GetTopicResult()) { 
-            if (AssertTopicResponsesImpl(r, topic, code, numParts)) 
-                return; 
-        } 
-        for (auto& r : resp->Record.GetMetaResponse().GetCmdGetPartitionOffsetsResult().GetTopicResult()) { 
-            if (AssertTopicResponsesImpl(r, topic, code, numParts)) 
-                return; 
-        } 
-        for (auto& r : resp->Record.GetMetaResponse().GetCmdGetTopicMetadataResult().GetTopicInfo()) { 
-            if (AssertTopicResponsesImpl(r, topic, code)) 
-                return; 
-        } 
-        UNIT_ASSERT_C(false, "topic " << topic << " not found in response " << resp->Record); 
-    } 
- 
- 
-    void AssertFailedResponse(NPersQueue::NErrorCode::EErrorCode code, const THashSet<TString>& markers = {}, EResponseStatus status = MSTATUS_ERROR) { 
+
+    template<class T>
+    bool AssertTopicResponsesImpl(const T& t, const TString& topic, NPersQueue::NErrorCode::EErrorCode code, ui32 numParts) {
+        if (t.GetTopic() != topic) return false;
+        UNIT_ASSERT_C(t.GetErrorCode() == code, "for topic " << topic << " code is " << (ui32) t.GetErrorCode() << " but waiting for " << (ui32) code << " resp: " << t);
+        UNIT_ASSERT_C(t.PartitionResultSize() == numParts, "for topic " << topic << " parts size  is not " << numParts << " resp: " << t);
+        return true;
+    }
+
+    template<class T>
+    bool AssertTopicResponsesImpl(const T& t, const TString& topic, NPersQueue::NErrorCode::EErrorCode code) {
+        if (t.GetTopic() != topic) return false;
+        UNIT_ASSERT_C(t.GetErrorCode() == code, "for topic " << topic << " code is " << (ui32) t.GetErrorCode() << " but waiting for " << (ui32) code << " resp: " << t);
+        return true;
+    }
+
+
+    void AssertTopicResponses(const TString& topic, NPersQueue::NErrorCode::EErrorCode code, ui32 numParts) {
+        const TEvPersQueue::TEvResponse* resp = GetResponse();
+        UNIT_ASSERT(resp != nullptr);
+        for (auto& r : resp->Record.GetMetaResponse().GetCmdGetReadSessionsInfoResult().GetTopicResult()) {
+            if (AssertTopicResponsesImpl(r, topic, code, numParts))
+                return;
+        }
+        for (auto& r : resp->Record.GetMetaResponse().GetCmdGetPartitionLocationsResult().GetTopicResult()) {
+            if (r.GetTopic() != topic) continue;
+            UNIT_ASSERT_C(r.GetErrorCode() == code, "for topic " << topic << " code is " << (ui32) r.GetErrorCode() << " but waiting for " << (ui32) code << " resp: " << r);
+            UNIT_ASSERT_C(r.PartitionLocationSize() == numParts, "for topic " << topic << " parts size  is not " << numParts << " resp: " << r);
+            return;
+        }
+        for (auto& r : resp->Record.GetMetaResponse().GetCmdGetPartitionStatusResult().GetTopicResult()) {
+            if (AssertTopicResponsesImpl(r, topic, code, numParts))
+                return;
+        }
+        for (auto& r : resp->Record.GetMetaResponse().GetCmdGetPartitionOffsetsResult().GetTopicResult()) {
+            if (AssertTopicResponsesImpl(r, topic, code, numParts))
+                return;
+        }
+        for (auto& r : resp->Record.GetMetaResponse().GetCmdGetTopicMetadataResult().GetTopicInfo()) {
+            if (AssertTopicResponsesImpl(r, topic, code))
+                return;
+        }
+        UNIT_ASSERT_C(false, "topic " << topic << " not found in response " << resp->Record);
+    }
+
+
+    void AssertFailedResponse(NPersQueue::NErrorCode::EErrorCode code, const THashSet<TString>& markers = {}, EResponseStatus status = MSTATUS_ERROR) {
         const TEvPersQueue::TEvResponse* resp = GetResponse();
         Cerr << "Assert failed: Check response: " << resp->Record << Endl;
         UNIT_ASSERT(resp != nullptr);
         UNIT_ASSERT_C(resp->Record.HasStatus(), "Response: " << resp->Record);
         UNIT_ASSERT_UNEQUAL_C(resp->Record.GetStatus(), 1, "Response: " << resp->Record);
-        UNIT_ASSERT_EQUAL_C(resp->Record.GetErrorCode(), code, "code: "  << (ui32)code << " Response: " << resp->Record); 
+        UNIT_ASSERT_EQUAL_C(resp->Record.GetErrorCode(), code, "code: "  << (ui32)code << " Response: " << resp->Record);
         UNIT_ASSERT_C(!resp->Record.GetErrorReason().empty(), "Response: " << resp->Record);
         UNIT_ASSERT_VALUES_EQUAL_C(resp->Record.GetStatus(), status, "Response: " << resp->Record);
         if (!markers.empty()) {
@@ -332,7 +332,7 @@ protected:
         UNIT_ASSERT_VALUES_EQUAL_C(ResponseFieldsCount(), 0, "Response: " << resp->Record);
     }
 
-    void AssertFailedResponse(NPersQueue::NErrorCode::EErrorCode code, const char* marker, EResponseStatus status = MSTATUS_ERROR) { 
+    void AssertFailedResponse(NPersQueue::NErrorCode::EErrorCode code, const char* marker, EResponseStatus status = MSTATUS_ERROR) {
         AssertFailedResponse(code, THashSet<TString>({marker}), status);
     }
 
@@ -341,7 +341,7 @@ protected:
         UNIT_ASSERT(resp != nullptr);
         UNIT_ASSERT_VALUES_EQUAL_C(resp->Record.GetStatus(), 1, "Response: " << resp->Record);
         UNIT_ASSERT_C(resp->Record.HasErrorCode(), "Response: " << resp->Record);
-        UNIT_ASSERT_EQUAL_C(resp->Record.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record); 
+        UNIT_ASSERT_EQUAL_C(resp->Record.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record);
         UNIT_ASSERT_C(resp->Record.GetErrorReason().empty(), "Response: " << resp->Record);
         UNIT_ASSERT_VALUES_EQUAL_C(ResponseFieldsCount(), 1, "Response: " << resp->Record);
     }
@@ -527,7 +527,7 @@ public:
         Runtime->UpdateCurrentTime(Runtime->GetCurrentTime() + TDuration::MilliSeconds(90000 + 1));
 
         GrabResponseEvent();
-        AssertFailedResponse(NPersQueue::NErrorCode::ERROR, {"Marker# PQ11", "Marker# PQ16"}, MSTATUS_TIMEOUT); 
+        AssertFailedResponse(NPersQueue::NErrorCode::ERROR, {"Marker# PQ11", "Marker# PQ16"}, MSTATUS_TIMEOUT);
     }
 
     void FailsOnFailedGetAllTopicsRequest() {
@@ -537,7 +537,7 @@ public:
         RegisterActor(request);
 
         GrabResponseEvent();
-        AssertFailedResponse(NPersQueue::NErrorCode::UNKNOWN_TOPIC, {"Marker# PQ15", "Marker# PQ17"}); 
+        AssertFailedResponse(NPersQueue::NErrorCode::UNKNOWN_TOPIC, {"Marker# PQ15", "Marker# PQ17"});
     }
 
     void FailsOnNotOkStatusInGetNodeRequest() {
@@ -601,7 +601,7 @@ public:
         RegisterActor(request);
 
         GrabResponseEvent();
-        AssertFailedResponse(NPersQueue::NErrorCode::UNKNOWN_TOPIC, {"Marker# PQ94", "Marker# PQ22"}); 
+        AssertFailedResponse(NPersQueue::NErrorCode::UNKNOWN_TOPIC, {"Marker# PQ94", "Marker# PQ22"});
     }
 
     void FailsOnBalancerDescribeResultFailureWhenTopicsAreGivenExplicitly() {
@@ -741,7 +741,7 @@ public:
         req.MutableMetaRequest()->MutableCmdGetTopicMetadata()->AddTopic("");
         RegisterActor(req);
         GrabResponseEvent();
-        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST); 
+        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(GetResponse()->Record.GetErrorReason(), "empty topic in GetTopicMetadata request");
     }
 
@@ -833,7 +833,7 @@ public:
         MakeEmptyTopic(*req.MutableMetaRequest()->MutableCmdGetPartitionLocations()->MutableTopicRequest());
         RegisterActor(req);
         GrabResponseEvent();
-        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST); 
+        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(GetResponse()->Record.GetErrorReason(), "TopicRequest must have Topic field");
     }
 
@@ -842,7 +842,7 @@ public:
         MakeDuplicatedTopic(*req.MutableMetaRequest()->MutableCmdGetPartitionLocations()->MutableTopicRequest());
         RegisterActor(req);
         GrabResponseEvent();
-        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST); 
+        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(GetResponse()->Record.GetErrorReason(), "multiple TopicRequest");
     }
 
@@ -851,7 +851,7 @@ public:
         MakeDuplicatedPartition(*req.MutableMetaRequest()->MutableCmdGetPartitionLocations()->MutableTopicRequest());
         RegisterActor(req);
         GrabResponseEvent();
-        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST); 
+        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(GetResponse()->Record.GetErrorReason(), "multiple partition");
     }
 
@@ -882,7 +882,7 @@ public:
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionLocationSize(), 1, "Response: " << resp->Record);
             const auto& partition1 = topic1Result.GetPartitionLocation(0);
             UNIT_ASSERT_VALUES_EQUAL_C(partition1.GetPartition(), 0, "Response: " << resp->Record);
-            UNIT_ASSERT_EQUAL_C(partition1.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record); 
+            UNIT_ASSERT_EQUAL_C(partition1.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record);
             UNIT_ASSERT_C(!partition1.HasErrorReason(), "Response: " << resp->Record);
             UNIT_ASSERT_C(!partition1.GetHost().empty(), "Response: " << resp->Record);
         }
@@ -897,11 +897,11 @@ public:
             UNIT_ASSERT_VALUES_EQUAL_C(partition1.GetPartition(), 1, "Response: " << resp->Record);
             UNIT_ASSERT_VALUES_EQUAL_C(partition2.GetPartition(), 2, "Response: " << resp->Record);
 
-            UNIT_ASSERT_UNEQUAL_C(partition1.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record); 
+            UNIT_ASSERT_UNEQUAL_C(partition1.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record);
             UNIT_ASSERT_C(partition1.HasErrorReason(), "Response: " << resp->Record);
             UNIT_ASSERT_C(partition1.GetHost().empty(), "Response: " << resp->Record); // No data
 
-            UNIT_ASSERT_EQUAL_C(partition2.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record); 
+            UNIT_ASSERT_EQUAL_C(partition2.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record);
             UNIT_ASSERT_C(!partition2.HasErrorReason(), "Response: " << resp->Record);
             UNIT_ASSERT_C(!partition2.GetHost().empty(), "Response: " << resp->Record); // Data was passed
         }
@@ -935,7 +935,7 @@ public:
                 UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionLocationSize(), 1, "Response: " << resp->Record);
                 const auto& partition1 = topic1Result.GetPartitionLocation(0);
                 UNIT_ASSERT_VALUES_EQUAL_C(partition1.GetPartition(), 0, "Response: " << resp->Record);
-                UNIT_ASSERT_EQUAL_C(partition1.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record); 
+                UNIT_ASSERT_EQUAL_C(partition1.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record);
                 UNIT_ASSERT_C(!partition1.HasErrorReason(), "Response: " << resp->Record);
                 UNIT_ASSERT_C(!partition1.GetHost().empty(), "Response: " << resp->Record);
             }
@@ -950,16 +950,16 @@ public:
                 UNIT_ASSERT_VALUES_EQUAL_C(partition1.GetPartition(), 1, "Response: " << resp->Record);
                 UNIT_ASSERT_VALUES_EQUAL_C(partition2.GetPartition(), 2, "Response: " << resp->Record);
 
-                UNIT_ASSERT_EQUAL_C(partition1.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record); 
+                UNIT_ASSERT_EQUAL_C(partition1.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record);
                 UNIT_ASSERT_C(!partition1.HasErrorReason(), "Response: " << resp->Record);
                 UNIT_ASSERT_C(!partition1.GetHost().empty(), "Response: " << resp->Record);
 
                 if (disconnectionMode == EDisconnectionMode::AnswerDoesNotArrive) {
-                    UNIT_ASSERT_UNEQUAL_C(partition2.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record); 
+                    UNIT_ASSERT_UNEQUAL_C(partition2.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record);
                     UNIT_ASSERT_C(partition2.HasErrorReason(), "Response: " << resp->Record);
                     UNIT_ASSERT_C(partition2.GetHost().empty(), "Response: " << resp->Record); // Data was passed
                 } else {
-                    UNIT_ASSERT_EQUAL_C(partition2.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record); 
+                    UNIT_ASSERT_EQUAL_C(partition2.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record);
                     UNIT_ASSERT_C(!partition2.HasErrorReason(), "Response: " << resp->Record);
                     UNIT_ASSERT_C(!partition2.GetHost().empty(), "Response: " << resp->Record); // Data was passed
                 }
@@ -996,7 +996,7 @@ public:
         MakeEmptyTopic(*req.MutableMetaRequest()->MutableCmdGetPartitionOffsets()->MutableTopicRequest());
         RegisterActor(req);
         GrabResponseEvent();
-        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST); 
+        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(GetResponse()->Record.GetErrorReason(), "TopicRequest must have Topic field");
     }
 
@@ -1005,7 +1005,7 @@ public:
         MakeDuplicatedTopic(*req.MutableMetaRequest()->MutableCmdGetPartitionOffsets()->MutableTopicRequest());
         RegisterActor(req);
         GrabResponseEvent();
-        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST); 
+        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(GetResponse()->Record.GetErrorReason(), "multiple TopicRequest");
     }
 
@@ -1014,7 +1014,7 @@ public:
         MakeDuplicatedPartition(*req.MutableMetaRequest()->MutableCmdGetPartitionOffsets()->MutableTopicRequest());
         RegisterActor(req);
         GrabResponseEvent();
-        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST); 
+        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(GetResponse()->Record.GetErrorReason(), "multiple partition");
     }
 
@@ -1044,7 +1044,7 @@ public:
             UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), "topic1");
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionResultSize(), 1, "Response: " << resp->Record);
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.GetPartitionResult(0).GetPartition(), 0, "Response: " << resp->Record);
-            UNIT_ASSERT_EQUAL_C(topic1Result.GetPartitionResult(0).GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record); 
+            UNIT_ASSERT_EQUAL_C(topic1Result.GetPartitionResult(0).GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record);
             UNIT_ASSERT_C(!topic1Result.GetPartitionResult(0).HasErrorReason(), "Response: " << resp->Record);
             UNIT_ASSERT_C(topic1Result.GetPartitionResult(0).HasStartOffset(), "Response: " << resp->Record);
         }
@@ -1059,11 +1059,11 @@ public:
             UNIT_ASSERT_VALUES_EQUAL_C(partition1.GetPartition(), 1, "Response: " << resp->Record);
             UNIT_ASSERT_VALUES_EQUAL_C(partition2.GetPartition(), 2, "Response: " << resp->Record);
 
-            UNIT_ASSERT_UNEQUAL_C(partition1.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record); 
+            UNIT_ASSERT_UNEQUAL_C(partition1.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record);
             UNIT_ASSERT_C(partition1.HasErrorReason(), "Response: " << resp->Record);
             UNIT_ASSERT_C(!partition1.HasStartOffset(), "Response: " << resp->Record); // No data
 
-            UNIT_ASSERT_EQUAL_C(partition2.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record); 
+            UNIT_ASSERT_EQUAL_C(partition2.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record);
             UNIT_ASSERT_C(!partition2.HasErrorReason(), "Response: " << resp->Record);
             UNIT_ASSERT_C(partition2.HasStartOffset(), "Response: " << resp->Record); // Data was passed
         }
@@ -1096,7 +1096,7 @@ public:
                 UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), "topic1");
                 UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionResultSize(), 1, "Response: " << resp->Record);
                 UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.GetPartitionResult(0).GetPartition(), 0, "Response: " << resp->Record);
-                UNIT_ASSERT_EQUAL_C(topic1Result.GetPartitionResult(0).GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record); 
+                UNIT_ASSERT_EQUAL_C(topic1Result.GetPartitionResult(0).GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record);
                 UNIT_ASSERT_C(!topic1Result.GetPartitionResult(0).HasErrorReason(), "Response: " << resp->Record);
                 UNIT_ASSERT_C(topic1Result.GetPartitionResult(0).HasStartOffset(), "Response: " << resp->Record);
             }
@@ -1111,16 +1111,16 @@ public:
                 UNIT_ASSERT_VALUES_EQUAL_C(partition1.GetPartition(), 1, "Response: " << resp->Record);
                 UNIT_ASSERT_VALUES_EQUAL_C(partition2.GetPartition(), 2, "Response: " << resp->Record);
 
-                UNIT_ASSERT_EQUAL_C(partition1.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record); 
+                UNIT_ASSERT_EQUAL_C(partition1.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record);
                 UNIT_ASSERT_C(!partition1.HasErrorReason(), "Response: " << resp->Record);
                 UNIT_ASSERT_C(partition1.HasStartOffset(), "Response: " << resp->Record); // Data was passed
 
                 if (disconnectionMode == EDisconnectionMode::AnswerDoesNotArrive) {
-                    UNIT_ASSERT_UNEQUAL_C(partition2.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record); 
+                    UNIT_ASSERT_UNEQUAL_C(partition2.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record);
                     UNIT_ASSERT_C(partition2.HasErrorReason(), "Response: " << resp->Record);
                     UNIT_ASSERT_C(!partition2.HasStartOffset(), "Response: " << resp->Record); // Data was passed
                 } else {
-                    UNIT_ASSERT_EQUAL_C(partition2.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record); 
+                    UNIT_ASSERT_EQUAL_C(partition2.GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record);
                     UNIT_ASSERT_C(!partition2.HasErrorReason(), "Response: " << resp->Record);
                     UNIT_ASSERT_C(partition2.HasStartOffset(), "Response: " << resp->Record); // Data was passed
                 }
@@ -1157,7 +1157,7 @@ public:
         MakeEmptyTopic(*req.MutableMetaRequest()->MutableCmdGetPartitionStatus()->MutableTopicRequest());
         RegisterActor(req);
         GrabResponseEvent();
-        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST); 
+        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(GetResponse()->Record.GetErrorReason(), "TopicRequest must have Topic field");
     }
 
@@ -1166,7 +1166,7 @@ public:
         MakeDuplicatedTopic(*req.MutableMetaRequest()->MutableCmdGetPartitionStatus()->MutableTopicRequest());
         RegisterActor(req);
         GrabResponseEvent();
-        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST); 
+        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(GetResponse()->Record.GetErrorReason(), "multiple TopicRequest");
     }
 
@@ -1175,7 +1175,7 @@ public:
         MakeDuplicatedPartition(*req.MutableMetaRequest()->MutableCmdGetPartitionStatus()->MutableTopicRequest());
         RegisterActor(req);
         GrabResponseEvent();
-        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST); 
+        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(GetResponse()->Record.GetErrorReason(), "multiple partition");
     }
 
@@ -1313,7 +1313,7 @@ public:
         req.MutableMetaRequest()->MutableCmdGetReadSessionsInfo()->AddTopic("");
         RegisterActor(req);
         GrabResponseEvent();
-        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST); 
+        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(GetResponse()->Record.GetErrorReason(), "empty topic in GetReadSessionsInfo request");
     }
 
@@ -1322,7 +1322,7 @@ public:
         req.MutableMetaRequest()->MutableCmdGetReadSessionsInfo()->ClearClientId();
         RegisterActor(req);
         GrabResponseEvent();
-        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST); 
+        AssertFailedResponse(NPersQueue::NErrorCode::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(GetResponse()->Record.GetErrorReason(), "No clientId specified in CmdGetReadSessionsInfo");
     }
 
@@ -1353,26 +1353,26 @@ public:
             UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), "topic1");
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionResultSize(), 1, "Response: " << resp->Record);
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.GetPartitionResult(0).GetPartition(), 0, "Response: " << resp->Record);
-            UNIT_ASSERT_C(topic1Result.GetPartitionResult(0).GetErrorCode() == (ui32)NPersQueue::NErrorCode::INITIALIZING, "Response: " << resp->Record); 
+            UNIT_ASSERT_C(topic1Result.GetPartitionResult(0).GetErrorCode() == (ui32)NPersQueue::NErrorCode::INITIALIZING, "Response: " << resp->Record);
         }
         {
             const auto& topic2Result = perTopicResults.Get(0).GetTopic() == "topic2" ? perTopicResults.Get(0) : perTopicResults.Get(1);
             UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), "topic2");
-            UNIT_ASSERT_VALUES_EQUAL_C(topic2Result.PartitionResultSize(), 3, "Response: " << resp->Record); 
+            UNIT_ASSERT_VALUES_EQUAL_C(topic2Result.PartitionResultSize(), 3, "Response: " << resp->Record);
 
             // Partitions (order is not specified)
-//            const auto& partition1 = topic2Result.GetPartitionResult(0).GetPartition() == 1 ? topic2Result.GetPartitionResult(0) : topic2Result.GetPartitionResult(1); 
-//            const auto& partition2 = topic2Result.GetPartitionResult(0).GetPartition() == 2 ? topic2Result.GetPartitionResult(0) : topic2Result.GetPartitionResult(1); 
-//            UNIT_ASSERT_VALUES_EQUAL_C(partition1.GetPartition(), 1, "Response: " << resp->Record); 
-//            UNIT_ASSERT_VALUES_EQUAL_C(partition2.GetPartition(), 2, "Response: " << resp->Record); 
+//            const auto& partition1 = topic2Result.GetPartitionResult(0).GetPartition() == 1 ? topic2Result.GetPartitionResult(0) : topic2Result.GetPartitionResult(1);
+//            const auto& partition2 = topic2Result.GetPartitionResult(0).GetPartition() == 2 ? topic2Result.GetPartitionResult(0) : topic2Result.GetPartitionResult(1);
+//            UNIT_ASSERT_VALUES_EQUAL_C(partition1.GetPartition(), 1, "Response: " << resp->Record);
+//            UNIT_ASSERT_VALUES_EQUAL_C(partition2.GetPartition(), 2, "Response: " << resp->Record);
 
-            UNIT_ASSERT_C(topic2Result.GetPartitionResult(0).GetErrorCode() == (ui32)NPersQueue::NErrorCode::INITIALIZING, "Response: " << resp->Record); 
-            UNIT_ASSERT_C(topic2Result.GetPartitionResult(1).GetErrorCode() == (ui32)NPersQueue::NErrorCode::INITIALIZING, "Response: " << resp->Record); 
-            UNIT_ASSERT_C(topic2Result.GetPartitionResult(2).GetErrorCode() == (ui32)NPersQueue::NErrorCode::INITIALIZING, "Response: " << resp->Record); 
- 
- 
-//            UNIT_ASSERT_C(partition1.HasStartOffset(), "Response: " << resp->Record); 
-//            UNIT_ASSERT_C(partition2.HasStartOffset(), "Response: " << resp->Record); 
+            UNIT_ASSERT_C(topic2Result.GetPartitionResult(0).GetErrorCode() == (ui32)NPersQueue::NErrorCode::INITIALIZING, "Response: " << resp->Record);
+            UNIT_ASSERT_C(topic2Result.GetPartitionResult(1).GetErrorCode() == (ui32)NPersQueue::NErrorCode::INITIALIZING, "Response: " << resp->Record);
+            UNIT_ASSERT_C(topic2Result.GetPartitionResult(2).GetErrorCode() == (ui32)NPersQueue::NErrorCode::INITIALIZING, "Response: " << resp->Record);
+
+
+//            UNIT_ASSERT_C(partition1.HasStartOffset(), "Response: " << resp->Record);
+//            UNIT_ASSERT_C(partition2.HasStartOffset(), "Response: " << resp->Record);
         }
     }
 
@@ -1404,14 +1404,14 @@ public:
                 UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionResultSize(), 1, "Response: " << resp->Record);
                 const auto& partition = topic1Result.GetPartitionResult(0);
                 UNIT_ASSERT_VALUES_EQUAL_C(partition.GetPartition(), 0, "Response: " << resp->Record);
-                UNIT_ASSERT_C(partition.GetErrorCode() == (ui32)NPersQueue::NErrorCode::INITIALIZING, "Response: " << resp->Record); 
- 
+                UNIT_ASSERT_C(partition.GetErrorCode() == (ui32)NPersQueue::NErrorCode::INITIALIZING, "Response: " << resp->Record);
+
             }
             {
                 auto& topic2Result = perTopicResults.Get(0).GetTopic() == "topic2" ? *perTopicResults.Mutable(0) : *perTopicResults.Mutable(1);
                 UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), "topic2");
-                const size_t expectedPartitionsSize = 3; 
-                //disconnectionMode == EDisconnectionMode::AnswerDoesNotArrive ? 2 : 3; 
+                const size_t expectedPartitionsSize = 3;
+                //disconnectionMode == EDisconnectionMode::AnswerDoesNotArrive ? 2 : 3;
                 UNIT_ASSERT_VALUES_EQUAL_C(topic2Result.PartitionResultSize(), expectedPartitionsSize, "Response: " << resp->Record);
 
                 // Partitions (order is not specified)
@@ -1422,16 +1422,16 @@ public:
                           });
                 const auto& partition0 = topic2Result.GetPartitionResult(0);
                 const auto& partition1 = topic2Result.GetPartitionResult(1);
-                const auto& partition2 = topic2Result.GetPartitionResult(2); 
+                const auto& partition2 = topic2Result.GetPartitionResult(2);
 
                 UNIT_ASSERT_VALUES_EQUAL_C(partition0.GetPartition(), 0, "Response: " << resp->Record);
                 UNIT_ASSERT_VALUES_EQUAL_C(partition1.GetPartition(), 1, "Response: " << resp->Record);
-                UNIT_ASSERT_VALUES_EQUAL_C(partition2.GetPartition(), 2, "Response: " << resp->Record); 
+                UNIT_ASSERT_VALUES_EQUAL_C(partition2.GetPartition(), 2, "Response: " << resp->Record);
 
-                UNIT_ASSERT_C(partition0.GetErrorCode() == (ui32)NPersQueue::NErrorCode::INITIALIZING, "Response: " << resp->Record); 
-                UNIT_ASSERT_C(partition1.GetErrorCode() == (ui32)NPersQueue::NErrorCode::INITIALIZING, "Response: " << resp->Record); 
-                UNIT_ASSERT_C(partition2.GetErrorCode() == (ui32)NPersQueue::NErrorCode::INITIALIZING, "Response: " << resp->Record); 
-                Y_UNUSED(disconnectionMode); 
+                UNIT_ASSERT_C(partition0.GetErrorCode() == (ui32)NPersQueue::NErrorCode::INITIALIZING, "Response: " << resp->Record);
+                UNIT_ASSERT_C(partition1.GetErrorCode() == (ui32)NPersQueue::NErrorCode::INITIALIZING, "Response: " << resp->Record);
+                UNIT_ASSERT_C(partition2.GetErrorCode() == (ui32)NPersQueue::NErrorCode::INITIALIZING, "Response: " << resp->Record);
+                Y_UNUSED(disconnectionMode);
             }
         };
         TMessageBusServerPersQueueRequestCommonTest::HandlesPipeDisconnectionImpl<TEvPersQueue::TEvOffsetsResponse>(disconnectionMode, validation, true);

@@ -11,7 +11,7 @@
 #include <ydb/public/api/grpc/draft/ydb_datastreams_v1.grpc.pb.h>
 
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/digest/md5/md5.h> 
+#include <library/cpp/digest/md5/md5.h>
 
 #include <random>
 
@@ -19,7 +19,7 @@
 using namespace NYdb;
 using namespace NYdb::NTable;
 using namespace NKikimr::NPersQueueTests;
-using namespace NKikimr::NDataStreams::V1; 
+using namespace NKikimr::NDataStreams::V1;
 namespace YDS_V1 = Ydb::DataStreams::V1;
 namespace NYDS_V1 = NYdb::NDataStreams::V1;
 struct WithSslAndAuth : TKikimrTestSettings {
@@ -37,23 +37,23 @@ public:
         appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
         appConfig.MutablePQConfig()->SetEnabled(true);
         appConfig.MutablePQConfig()->SetMetaCacheRefreshIntervalMilliSeconds(30000);
-        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(true); 
-        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetQuotaWaitDurationMs(300); 
-        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(true); 
+        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(true);
+        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
+        appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(true);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetFlushIntervalSec(1);
         appConfig.MutablePQConfig()->AddClientServiceType()->SetName("data-streams");
 
         MeteringFile = MakeHolder<TTempFileHandle>("meteringData.txt");
         appConfig.MutableMeteringConfig()->SetMeteringFilePath(MeteringFile->Name());
- 
+
         if (secure) {
             appConfig.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
         }
         KikimrServer = std::make_unique<TKikimr>(std::move(appConfig));
         ui16 grpc = KikimrServer->GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driverConfig = TDriverConfig().SetEndpoint(location).SetLog(CreateLogBackend("cerr", TLOG_DEBUG)); 
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetLog(CreateLogBackend("cerr", TLOG_DEBUG));
         if (secure) {
             driverConfig.UseSecureConnection(NYdbSslTestData::CaCrt);
         } else {
@@ -72,13 +72,13 @@ public:
             auto result = schemeClient.ModifyPermissions("/Root",
                 NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
             ).ExtractValueSync();
-            Cerr << result.GetIssues().ToString() << "\n"; 
-            UNIT_ASSERT(result.IsSuccess()); 
+            Cerr << result.GetIssues().ToString() << "\n";
+            UNIT_ASSERT(result.IsSuccess());
         }
- 
-        TClient client(*(KikimrServer->ServerSettings)); 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, 
-                                 client.AlterUserAttributes("/", "Root", {{"folder_id", "somefolder"},{"cloud_id", "somecloud"}, {"database_id", "root"}})); 
+
+        TClient client(*(KikimrServer->ServerSettings));
+        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+                                 client.AlterUserAttributes("/", "Root", {{"folder_id", "somefolder"},{"cloud_id", "somecloud"}, {"database_id", "root"}}));
     }
 
 public:
@@ -92,43 +92,43 @@ public:
 using TInsecureDatastreamsTestServer = TDatastreamsTestServer<TKikimrWithGrpcAndRootSchema, false>;
 using TSecureDatastreamsTestServer = TDatastreamsTestServer<TKikimrWithGrpcAndRootSchemaSecure, true>;
 
-void CheckMeteringFile(TTempFileHandle* meteringFile, const TString& streamPath) { 
-    Sleep(TDuration::Seconds(1)); 
-    meteringFile->Flush(); 
-    meteringFile->Close(); 
-    auto input = TFileInput(TFile(meteringFile->Name(), RdOnly | OpenExisting)); 
-    ui64 totalLines = 0; 
-    TString line; 
-    while(input.ReadLine(line)) { 
-        totalLines++; 
-        Cerr << "Got line from metering file data: '" << line << "'" << Endl; 
-        NJson::TJsonValue json; 
-        NJson::ReadJsonTree(line, &json, true); 
-        auto& map = json.GetMap(); 
-        UNIT_ASSERT(map.contains("cloud_id")); 
-        UNIT_ASSERT(map.contains("folder_id")); 
-        UNIT_ASSERT(map.contains("resource_id")); 
-        UNIT_ASSERT(map.find("resource_id")->second.GetString() == streamPath); 
-        UNIT_ASSERT(map.contains("labels")); 
-        UNIT_ASSERT_VALUES_EQUAL(map.find("labels")->second.GetMap().size(), 2); 
-        UNIT_ASSERT(map.contains("tags")); 
-        UNIT_ASSERT(map.contains("source_id")); 
-        UNIT_ASSERT(map.contains("source_wt")); 
-        UNIT_ASSERT(map.find("cloud_id")->second.GetString() == "somecloud"); 
-        UNIT_ASSERT(map.find("folder_id")->second.GetString() == "somefolder"); 
+void CheckMeteringFile(TTempFileHandle* meteringFile, const TString& streamPath) {
+    Sleep(TDuration::Seconds(1));
+    meteringFile->Flush();
+    meteringFile->Close();
+    auto input = TFileInput(TFile(meteringFile->Name(), RdOnly | OpenExisting));
+    ui64 totalLines = 0;
+    TString line;
+    while(input.ReadLine(line)) {
+        totalLines++;
+        Cerr << "Got line from metering file data: '" << line << "'" << Endl;
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(line, &json, true);
+        auto& map = json.GetMap();
+        UNIT_ASSERT(map.contains("cloud_id"));
+        UNIT_ASSERT(map.contains("folder_id"));
+        UNIT_ASSERT(map.contains("resource_id"));
         UNIT_ASSERT(map.find("resource_id")->second.GetString() == streamPath);
-        auto& tags = map.find("tags")->second.GetMap(); 
-        if (!tags.empty()) { 
-            UNIT_ASSERT_VALUES_EQUAL(tags.size(), 3); 
-        } 
-        UNIT_ASSERT(map.contains("usage")); 
-        auto& usage = map.find("usage")->second.GetMap(); 
-        UNIT_ASSERT(usage.find("quantity")->second.GetInteger() >= 0); 
-    } 
-    UNIT_ASSERT(totalLines >= 2); 
-} 
- 
- 
+        UNIT_ASSERT(map.contains("labels"));
+        UNIT_ASSERT_VALUES_EQUAL(map.find("labels")->second.GetMap().size(), 2);
+        UNIT_ASSERT(map.contains("tags"));
+        UNIT_ASSERT(map.contains("source_id"));
+        UNIT_ASSERT(map.contains("source_wt"));
+        UNIT_ASSERT(map.find("cloud_id")->second.GetString() == "somecloud");
+        UNIT_ASSERT(map.find("folder_id")->second.GetString() == "somefolder");
+        UNIT_ASSERT(map.find("resource_id")->second.GetString() == streamPath);
+        auto& tags = map.find("tags")->second.GetMap();
+        if (!tags.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(tags.size(), 3);
+        }
+        UNIT_ASSERT(map.contains("usage"));
+        auto& usage = map.find("usage")->second.GetMap();
+        UNIT_ASSERT(usage.find("quantity")->second.GetInteger() >= 0);
+    }
+    UNIT_ASSERT(totalLines >= 2);
+}
+
+
 #define Y_UNIT_TEST_NAME this->Name_;
 
 Y_UNIT_TEST_SUITE(DataStreams) {
@@ -147,16 +147,16 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(3)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            if (result.GetStatus() != EStatus::SUCCESS) { 
-                result.GetIssues().PrintTo(Cerr); 
-            } 
+            if (result.GetStatus() != EStatus::SUCCESS) {
+                result.GetIssues().PrintTo(Cerr);
+            }
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
         {
             auto result = testServer.DataStreamsClient->DescribeStream(streamName).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().stream_status(),
                                      YDS_V1::StreamDescription::ACTIVE);
@@ -164,21 +164,21 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().write_quota_kb_per_sec(), 1024);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().retention_period_hours(), 24);
 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards().size(), 3); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(0).sequence_number_range().starting_sequence_number(), "0"); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(0).hash_key_range().starting_hash_key(), "0"); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(0).hash_key_range().ending_hash_key(), "113427455640312821154458202477256070484"); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(1).hash_key_range().starting_hash_key(), "113427455640312821154458202477256070485"); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(1).hash_key_range().ending_hash_key(), "226854911280625642308916404954512140969"); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(2).hash_key_range().starting_hash_key(), "226854911280625642308916404954512140970"); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(2).hash_key_range().ending_hash_key(), "340282366920938463463374607431768211455"); 
-        } 
- 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(0).sequence_number_range().starting_sequence_number(), "0");
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(0).hash_key_range().starting_hash_key(), "0");
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(0).hash_key_range().ending_hash_key(), "113427455640312821154458202477256070484");
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(1).hash_key_range().starting_hash_key(), "113427455640312821154458202477256070485");
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(1).hash_key_range().ending_hash_key(), "226854911280625642308916404954512140969");
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(2).hash_key_range().starting_hash_key(), "226854911280625642308916404954512140970");
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards(2).hash_key_range().ending_hash_key(), "340282366920938463463374607431768211455");
+        }
+
         {
             auto result = testServer.DataStreamsClient->DescribeStreamSummary(streamName).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
- 
+
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description_summary().stream_status(),
                                      YDS_V1::StreamDescription::ACTIVE);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description_summary().stream_name(), streamName);
@@ -187,24 +187,24 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description_summary().open_shard_count(), 3);
         }
 
-        { 
+        {
             auto result = testServer.DataStreamsClient->CreateStream("testfolder/" + streamName).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST); 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
         }
 
-        {  // for metering purposes 
+        {  // for metering purposes
             std::vector<NYDS_V1::TDataRecord> records;
-            for (ui32 i = 1; i <= 30; ++i) { 
-                TString data = Sprintf("%04u", i); 
-                records.push_back({data, data, ""}); 
-            } 
+            for (ui32 i = 1; i <= 30; ++i) {
+                TString data = Sprintf("%04u", i);
+                records.push_back({data, data, ""});
+            }
             auto result = testServer.DataStreamsClient->PutRecords(streamName, records).ExtractValueSync();
-            Cerr << result.GetResult().DebugString() << Endl; 
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
+            Cerr << result.GetResult().DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
         {
             auto result = testServer.DataStreamsClient->ListStreams().ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -228,7 +228,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
- 
+
         // now when stream is created delete should work fine
         {
             auto result = testServer.DataStreamsClient->DeleteStream(streamName).ExtractValueSync();
@@ -271,7 +271,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             for (ui32 streamIdx = 0; streamIdx < 5; streamIdx++) {
                 TStringBuilder streamNameX = TStringBuilder() <<  folderIdx  << streamName << streamIdx;
                 auto result = testServer.DataStreamsClient->CreateStream(streamNameX, NYDS_V1::TCreateStreamSettings().ShardCount(10)).ExtractValueSync();
-                Cerr << result.GetIssues().ToString() << "\n"; 
+                Cerr << result.GetIssues().ToString() << "\n";
                 UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             }
@@ -411,11 +411,11 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->DescribeStream(streamName).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards_size(), 20); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().retention_period_hours(), 5); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().write_quota_kb_per_sec(), 128); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().owner(), "user@builtin"); 
-            UNIT_ASSERT(result.GetResult().stream_description().stream_creation_timestamp() > 0); 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards_size(), 20);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().retention_period_hours(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().write_quota_kb_per_sec(), 128);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().owner(), "user@builtin");
+            UNIT_ASSERT(result.GetResult().stream_description().stream_creation_timestamp() > 0);
         }
     }
 
@@ -476,34 +476,34 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         {
             TString exclusiveStartShardId;
             THashSet<TString> describedShards;
-            for (int i = 0; i < 8; i += 2) { 
+            for (int i = 0; i < 8; i += 2) {
                 auto result = testServer.DataStreamsClient->DescribeStream(streamName,
                                                     NYDS_V1::TDescribeStreamSettings()
-                                                        .Limit(2) 
+                                                        .Limit(2)
                                                         .ExclusiveStartShardId(exclusiveStartShardId)
                                                     ).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                auto& description = result.GetResult().stream_description(); 
-                UNIT_ASSERT_VALUES_EQUAL(description.shards().size(), 2); 
+                auto& description = result.GetResult().stream_description();
+                UNIT_ASSERT_VALUES_EQUAL(description.shards().size(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(description.has_more_shards(), true);
                 for (const auto& shard : description.shards()) {
                     describedShards.insert(shard.shard_id());
                 }
-                exclusiveStartShardId = description.shards(1).shard_id(); 
+                exclusiveStartShardId = description.shards(1).shard_id();
             }
 
             {
                 auto result = testServer.DataStreamsClient->DescribeStream(streamName,
                                                     NYDS_V1::TDescribeStreamSettings()
-                                                            .Limit(2) 
+                                                            .Limit(2)
                                                             .ExclusiveStartShardId(
                                                                     exclusiveStartShardId)
                 ).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                auto &description = result.GetResult().stream_description(); 
-                UNIT_ASSERT_VALUES_EQUAL(description.shards().size(), 1); 
+                auto &description = result.GetResult().stream_description();
+                UNIT_ASSERT_VALUES_EQUAL(description.shards().size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(description.has_more_shards(), false);
                 for (const auto& shard : description.shards()) {
                     describedShards.insert(shard.shard_id());
@@ -511,7 +511,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             }
 
             // check for total number of shards
-            UNIT_ASSERT_EQUAL(describedShards.size(), 9); 
+            UNIT_ASSERT_EQUAL(describedShards.size(), 9);
         }
 
     }
@@ -536,17 +536,17 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         }
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::EPriority::PRI_DEBUG);
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NLog::EPriority::PRI_DEBUG);
- 
+
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
- 
-        TString dataStr = "9876543210"; 
- 
+
+        TString dataStr = "9876543210";
+
         auto putRecordResult = client.PutRecord("/Root/" + streamName, {dataStr, dataStr, dataStr}).ExtractValueSync();
-        Cerr << putRecordResult.GetResult().DebugString() << Endl; 
- 
-        UNIT_ASSERT_VALUES_EQUAL(putRecordResult.IsTransportError(), false); 
-        UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetStatus(), EStatus::SUCCESS); 
- 
+        Cerr << putRecordResult.GetResult().DebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(putRecordResult.IsTransportError(), false);
+        UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetStatus(), EStatus::SUCCESS);
+
         {
             std::vector<NYDS_V1::TDataRecord> records;
             for (ui32 i = 1; i <= 30; ++i) {
@@ -561,32 +561,32 @@ Y_UNIT_TEST_SUITE(DataStreams) {
 
         NYdb::NPersQueue::TPersQueueClient pqClient(*driver);
 
-        { 
+        {
             auto result = testServer.DataStreamsClient->RegisterStreamConsumer(streamName, "user1", NYDS_V1::TRegisterStreamConsumerSettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumer().consumer_name(), "user1");
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumer().consumer_status(),
                                      YDS_V1::ConsumerDescription_ConsumerStatus_ACTIVE);
-        } 
- 
+        }
+
         auto session = pqClient.CreateReadSession(NYdb::NPersQueue::TReadSessionSettings()
-                                                          .ConsumerName("user1") 
+                                                          .ConsumerName("user1")
                                                           .DisableClusterDiscovery(true)
                                                           .AppendTopics(NYdb::NPersQueue::TTopicReadSettings().Path("/Root/" + streamName)));
         ui32 readCount = 0;
         while (readCount < 31) {
             auto event = session->GetEvent(true);
- 
+
             if (auto* dataReceivedEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
                 for (const auto& item : dataReceivedEvent->GetMessages()) {
-                    Cerr << item.DebugString(true) << Endl; 
+                    Cerr << item.DebugString(true) << Endl;
                     UNIT_ASSERT_VALUES_EQUAL(item.GetData(), item.GetPartitionKey());
-                    auto hashKey = item.GetExplicitHash().empty() ? HexBytesToDecimal(MD5::Calc(item.GetPartitionKey())) : BytesToDecimal(item.GetExplicitHash()); 
-                    UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataStreams::V1::ShardFromDecimal(hashKey, 5), item.GetPartitionStream()->GetPartitionId()); 
-                    UNIT_ASSERT(!item.GetIp().empty()); 
+                    auto hashKey = item.GetExplicitHash().empty() ? HexBytesToDecimal(MD5::Calc(item.GetPartitionKey())) : BytesToDecimal(item.GetExplicitHash());
+                    UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataStreams::V1::ShardFromDecimal(hashKey, 5), item.GetPartitionStream()->GetPartitionId());
+                    UNIT_ASSERT(!item.GetIp().empty());
                     if (item.GetData() == dataStr) {
-                        UNIT_ASSERT_VALUES_EQUAL(item.GetExplicitHash(), dataStr); 
+                        UNIT_ASSERT_VALUES_EQUAL(item.GetExplicitHash(), dataStr);
                     }
                     readCount++;
                 }
@@ -669,91 +669,91 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                     {"", shortEnoughKey, shortEnoughExplicitHash}}).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
- 
+
         result = client.PutRecords(streamName,
                                    {{"", shortEnoughKey, "0"},
                                     {"", shortEnoughKey, "0"}}).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess()); 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
- 
-        UNIT_ASSERT(result.IsSuccess()); 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
- 
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::EPriority::PRI_INFO);
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::EPriority::PRI_INFO);
- 
-        { 
+
+        {
             std::vector<NYDS_V1::TDataRecord> records;
-            TString data = TString(1024*1024, 'a'); 
-            records.push_back({data, "key", ""}); 
-            records.push_back({data, "key", ""}); 
-            records.push_back({data, "key", ""}); 
-            records.push_back({data, "key", ""}); 
- 
-            Cerr << "First put records\n"; 
+            TString data = TString(1024*1024, 'a');
+            records.push_back({data, "key", ""});
+            records.push_back({data, "key", ""});
+            records.push_back({data, "key", ""});
+            records.push_back({data, "key", ""});
+
+            Cerr << "First put records\n";
             auto result = client.PutRecords(streamPath, records).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            if (result.GetStatus() != EStatus::SUCCESS) { 
-                result.GetIssues().PrintTo(Cerr); 
-            } 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 0); 
-            Cerr << result.GetResult().DebugString() << Endl; 
-            Cerr << "Second put records\n"; 
- 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            if (result.GetStatus() != EStatus::SUCCESS) {
+                result.GetIssues().PrintTo(Cerr);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 0);
+            Cerr << result.GetResult().DebugString() << Endl;
+            Cerr << "Second put records\n";
+
             result = client.PutRecords(streamPath, records).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            if (result.GetStatus() != EStatus::SUCCESS) { 
-                result.GetIssues().PrintTo(Cerr); 
-            } 
-            Cerr << result.GetResult().DebugString() << Endl; 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 4); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records(0).error_code(), "ProvisionedThroughputExceededException"); 
- 
-            Sleep(TDuration::Seconds(4)); 
- 
-            Cerr << "Third put records\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            if (result.GetStatus() != EStatus::SUCCESS) {
+                result.GetIssues().PrintTo(Cerr);
+            }
+            Cerr << result.GetResult().DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records(0).error_code(), "ProvisionedThroughputExceededException");
+
+            Sleep(TDuration::Seconds(4));
+
+            Cerr << "Third put records\n";
             result = client.PutRecords(streamPath, records).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            if (result.GetStatus() != EStatus::SUCCESS) { 
-                result.GetIssues().PrintTo(Cerr); 
-            } 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 0); 
-            Cerr << result.GetResult().DebugString() << Endl; 
- 
-        } 
- 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            if (result.GetStatus() != EStatus::SUCCESS) {
+                result.GetIssues().PrintTo(Cerr);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 0);
+            Cerr << result.GetResult().DebugString() << Endl;
+
+        }
+
         NYdb::NPersQueue::TPersQueueClient pqClient(*driver);
- 
-        { 
-            NYdb::NPersQueue::TAddReadRuleSettings addReadRuleSettings; 
-            addReadRuleSettings.ReadRule(NYdb::NPersQueue::TReadRuleSettings().Version(1).ConsumerName("user1")); 
+
+        {
+            NYdb::NPersQueue::TAddReadRuleSettings addReadRuleSettings;
+            addReadRuleSettings.ReadRule(NYdb::NPersQueue::TReadRuleSettings().Version(1).ConsumerName("user1"));
             auto res = pqClient.AddReadRule(streamPath, addReadRuleSettings);
-            res.Wait(); 
-            UNIT_ASSERT(res.GetValue().IsSuccess()); 
-        } 
-        auto session = pqClient.CreateReadSession(NYdb::NPersQueue::TReadSessionSettings() 
-                                                          .ConsumerName("user1") 
-                                                          .DisableClusterDiscovery(true) 
-                                                          .RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetNoRetryPolicy()) 
+            res.Wait();
+            UNIT_ASSERT(res.GetValue().IsSuccess());
+        }
+        auto session = pqClient.CreateReadSession(NYdb::NPersQueue::TReadSessionSettings()
+                                                          .ConsumerName("user1")
+                                                          .DisableClusterDiscovery(true)
+                                                          .RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetNoRetryPolicy())
                                                           .AppendTopics(NYdb::NPersQueue::TTopicReadSettings().Path(streamPath)));
-        ui32 readCount = 0; 
-        while (readCount < 14) { 
-            auto event = session->GetEvent(true); 
- 
-            if (auto* dataReceivedEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&*event)) { 
-                for (const auto& item : dataReceivedEvent->GetMessages()) { 
-                    Cout << "GOT MESSAGE: " <<  item.DebugString(false) << Endl; 
-                    readCount++; 
-                } 
-            } else if (auto* createPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*event)) { 
-                createPartitionStreamEvent->Confirm(); 
-            } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*event)) { 
-                destroyPartitionStreamEvent->Confirm(); 
-            } else if (auto* closeSessionEvent = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) { 
-                break; 
-            } 
-        } 
-        UNIT_ASSERT_VALUES_EQUAL(readCount, 14); 
+        ui32 readCount = 0;
+        while (readCount < 14) {
+            auto event = session->GetEvent(true);
+
+            if (auto* dataReceivedEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                for (const auto& item : dataReceivedEvent->GetMessages()) {
+                    Cout << "GOT MESSAGE: " <<  item.DebugString(false) << Endl;
+                    readCount++;
+                }
+            } else if (auto* createPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*event)) {
+                createPartitionStreamEvent->Confirm();
+            } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*event)) {
+                destroyPartitionStreamEvent->Confirm();
+            } else if (auto* closeSessionEvent = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
+                break;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(readCount, 14);
     }
 
     Y_UNIT_TEST(TestPutRecords) {
@@ -765,7 +765,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream(streamPath,
                 NYDS_V1::TCreateStreamSettings().ShardCount(5)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
@@ -795,7 +795,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             Cerr << "PutRecordsResponse = " << result.GetResult().DebugString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records_size(), records.size()); 
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records_size(), records.size());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().encryption_type(), YDS_V1::EncryptionType::NONE);
 
             TString dataStr = "9876543210";
@@ -803,11 +803,11 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(putRecordResult.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetStatus(), EStatus::SUCCESS);
             Cerr << "PutRecord response = " << putRecordResult.GetResult().DebugString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetResult().shard_id(), "shard-000004"); 
+            UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetResult().shard_id(), "shard-000004");
             UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetResult().sequence_number(), "7");
             UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetResult().encryption_type(),
                                      YDS_V1::EncryptionType::NONE);
- 
+
         }
     }
 
@@ -815,64 +815,64 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
         SET_YDS_LOCALS;
-        { 
+        {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(5)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::EPriority::PRI_DEBUG);
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NLog::EPriority::PRI_DEBUG);
- 
+
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
- 
- 
+
+
         auto putRecordResult = client.PutRecord("/Root/" + streamName, {"", "key", ""}).ExtractValueSync();
-        Cerr << putRecordResult.GetResult().DebugString() << Endl; 
- 
-        UNIT_ASSERT_VALUES_EQUAL(putRecordResult.IsTransportError(), false); 
-        UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetStatus(), EStatus::SUCCESS); 
-        UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetResult().sequence_number(), "0"); 
- 
+        Cerr << putRecordResult.GetResult().DebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(putRecordResult.IsTransportError(), false);
+        UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetResult().sequence_number(), "0");
+
         NYdb::NPersQueue::TPersQueueClient pqClient(*driver);
- 
-        { 
+
+        {
             auto result = testServer.DataStreamsClient->RegisterStreamConsumer(streamName, "user1", NYDS_V1::TRegisterStreamConsumerSettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumer().consumer_name(), "user1");
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumer().consumer_status(),
                                      YDS_V1::ConsumerDescription_ConsumerStatus_ACTIVE);
-        } 
- 
-        auto session = pqClient.CreateReadSession(NYdb::NPersQueue::TReadSessionSettings() 
-                                                          .ConsumerName("user1") 
-                                                          .DisableClusterDiscovery(true) 
+        }
+
+        auto session = pqClient.CreateReadSession(NYdb::NPersQueue::TReadSessionSettings()
+                                                          .ConsumerName("user1")
+                                                          .DisableClusterDiscovery(true)
                                                           .AppendTopics(NYdb::NPersQueue::TTopicReadSettings().Path("/Root/" + streamName)));
-        while (true) { 
-            auto event = session->GetEvent(true); 
- 
-            if (auto* dataReceivedEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&*event)) { 
-                for (const auto& item : dataReceivedEvent->GetMessages()) { 
-                    Cerr << item.DebugString(true) << Endl; 
-                    UNIT_ASSERT_VALUES_EQUAL(item.GetData(), ""); 
-                    UNIT_ASSERT_VALUES_EQUAL(item.GetPartitionKey(), "key"); 
-                } 
-                UNIT_ASSERT_VALUES_EQUAL(dataReceivedEvent->GetMessages().size(), 1); 
-                break; 
-            } else if (auto* createPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*event)) { 
-                createPartitionStreamEvent->Confirm(); 
-            } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*event)) { 
-                destroyPartitionStreamEvent->Confirm(); 
-            } else if (auto* closeSessionEvent = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) { 
-                UNIT_ASSERT(false); 
-                break; 
-            } else { 
-                Y_FAIL("not a data!"); 
-            } 
-        } 
-    } 
- 
+        while (true) {
+            auto event = session->GetEvent(true);
+
+            if (auto* dataReceivedEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                for (const auto& item : dataReceivedEvent->GetMessages()) {
+                    Cerr << item.DebugString(true) << Endl;
+                    UNIT_ASSERT_VALUES_EQUAL(item.GetData(), "");
+                    UNIT_ASSERT_VALUES_EQUAL(item.GetPartitionKey(), "key");
+                }
+                UNIT_ASSERT_VALUES_EQUAL(dataReceivedEvent->GetMessages().size(), 1);
+                break;
+            } else if (auto* createPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*event)) {
+                createPartitionStreamEvent->Confirm();
+            } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*event)) {
+                destroyPartitionStreamEvent->Confirm();
+            } else if (auto* closeSessionEvent = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
+                UNIT_ASSERT(false);
+                break;
+            } else {
+                Y_FAIL("not a data!");
+            }
+        }
+    }
+
     Y_UNIT_TEST(TestListStreamConsumers) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
@@ -883,7 +883,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
- 
+
         // List stream consumers -> OK
         {
             auto result = testServer.DataStreamsClient->ListStreamConsumers(streamName,
@@ -892,7 +892,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumers().size(), 0);
         }
- 
+
         // List stream consumers more than allowed -> get BAD_REQUEST
         {
             auto result = testServer.DataStreamsClient->ListStreamConsumers(streamName,

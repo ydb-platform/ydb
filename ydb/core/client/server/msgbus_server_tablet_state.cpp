@@ -99,8 +99,8 @@ public:
         TAutoPtr<TBusResponse> response = new TBusResponse();
         auto& record = response->Record;
         record.SetStatus(MSTATUS_OK);
-        for (const auto& ni : NodesInfo->Nodes) { 
-            const auto& pr_node = *PerNodeTabletInfo.find(ni.NodeId); 
+        for (const auto& ni : NodesInfo->Nodes) {
+            const auto& pr_node = *PerNodeTabletInfo.find(ni.NodeId);
             if (pr_node.second.Get() != nullptr) {
                 for (const NKikimrWhiteboard::TTabletStateInfo& st_info : pr_node.second.Get()->Record.GetTabletStateInfo()) {
                     if (Record.HasAlive()) {
@@ -124,9 +124,9 @@ public:
                         if (!found)
                             continue;
                     }
-                    auto state = record.AddTabletStateInfo(); 
-                    state->CopyFrom(st_info); 
-                    state->SetHost(ni.Host); 
+                    auto state = record.AddTabletStateInfo();
+                    state->CopyFrom(st_info);
+                    state->SetHost(ni.Host);
                 }
             }
         }

@@ -153,7 +153,7 @@ void THttpRequest::WriteResponse(const TReplyParams& replyParams, const TSqsHttp
         httpResponse.SetContent(response.Body, response.ContentType);
     }
 
-    if (Parent_->Config.GetYandexCloudMode() && !IsPrivateRequest_) { 
+    if (Parent_->Config.GetYandexCloudMode() && !IsPrivateRequest_) {
         // Send request attributes to the metering actor
         auto reportRequestAttributes = MakeHolder<TSqsEvents::TEvReportProcessedRequestAttributes>();
 
@@ -571,7 +571,7 @@ bool THttpRequest::SetupRequest() {
     AppData(Parent_->ActorSystem_)->SqsAuthFactory->RegisterAuthActor(
         *Parent_->ActorSystem_,
         std::move(data));
- 
+
     return true;
 }
 

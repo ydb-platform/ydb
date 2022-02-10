@@ -57,7 +57,7 @@ void TPurgeActor::MakeGetRetentionOffsetRequest(const ui64 shardId, TShard* shar
             shard->TargetBoundary = shard->BoundaryPurged;
         }
     };
- 
+
     TExecutorBuilder(SelfId(), RequestId_)
         .User(QueuePath_.UserName)
         .Queue(QueuePath_.QueueName)

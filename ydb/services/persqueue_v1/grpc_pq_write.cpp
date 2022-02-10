@@ -12,63 +12,63 @@ using grpc::Status;
 
 namespace NKikimr {
 namespace NGRpcProxy {
-namespace V1 { 
+namespace V1 {
 
 using namespace PersQueue::V1;
- 
+
 ///////////////////////////////////////////////////////////////////////////////
 
 IActor* CreatePQWriteService(const TActorId& schemeCache, const TActorId& newSchemeCache,
-                             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions) { 
+                             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions) {
     return new TPQWriteService(schemeCache, newSchemeCache, counters, maxSessions);
-} 
+}
 
- 
+
 
 TPQWriteService::TPQWriteService(const TActorId& schemeCache, const TActorId& newSchemeCache,
-                             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions) 
-    : SchemeCache(schemeCache) 
+                             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions)
+    : SchemeCache(schemeCache)
     , NewSchemeCache(newSchemeCache)
-    , Counters(counters) 
-    , MaxSessions(maxSessions) 
-    , Enabled(false) 
-{ 
-} 
+    , Counters(counters)
+    , MaxSessions(maxSessions)
+    , Enabled(false)
+{
+}
 
 
-void TPQWriteService::Bootstrap(const TActorContext& ctx) { 
+void TPQWriteService::Bootstrap(const TActorContext& ctx) {
     HaveClusters = !AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen(); // ToDo[migration]: switch to proper option
     if (HaveClusters) {
         ctx.Send(NPQ::NClusterTracker::MakeClusterTrackerID(),
                  new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe);
     }
-    ctx.Send(NNetClassifier::MakeNetClassifierID(), new NNetClassifier::TEvNetClassifier::TEvSubscribe); 
+    ctx.Send(NNetClassifier::MakeNetClassifierID(), new NNetClassifier::TEvNetClassifier::TEvSubscribe);
     ConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
             AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen(), AppData(ctx)->PQConfig.GetRoot()
     );
-    Become(&TThis::StateFunc); 
-} 
-
-
-ui64 TPQWriteService::NextCookie() { 
-    return ++LastCookie; 
+    Become(&TThis::StateFunc);
 }
 
-void TPQWriteService::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate::TPtr& ev, const TActorContext& ctx) { 
- 
-    if (!DatacenterClassifier) { 
-        for (auto it = Sessions.begin(); it != Sessions.end(); ++it) { 
-            ctx.Send(it->second, new TEvPQProxy::TEvDieCommand("datacenter classifier initialized, restart session please", PersQueue::ErrorCode::INITIALIZING)); 
-        } 
-    } 
-    DatacenterClassifier = ev->Get()->Classifier; 
-} 
- 
- 
+
+ui64 TPQWriteService::NextCookie() {
+    return ++LastCookie;
+}
+
+void TPQWriteService::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate::TPtr& ev, const TActorContext& ctx) {
+
+    if (!DatacenterClassifier) {
+        for (auto it = Sessions.begin(); it != Sessions.end(); ++it) {
+            ctx.Send(it->second, new TEvPQProxy::TEvDieCommand("datacenter classifier initialized, restart session please", PersQueue::ErrorCode::INITIALIZING));
+        }
+    }
+    DatacenterClassifier = ev->Get()->Classifier;
+}
+
+
 void TPQWriteService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext& ctx) {
     Y_VERIFY(ev->Get()->ClustersList);
     Y_VERIFY(ev->Get()->ClustersList->Clusters.size());
- 
+
     const auto& clusters = ev->Get()->ClustersList->Clusters;
 
     LocalCluster = "";
@@ -127,9 +127,9 @@ void TPQWriteService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvCluster
                     Send(workerID, new TEvPQProxy::TEvDieCommand(closeReason, PersQueue::ErrorCode::PREFERRED_CLUSTER_MISMATCHED));
                 }
             }
-        } 
-    } 
-} 
+        }
+    }
+}
 
 void TPQWriteService::Handle(TEvPQProxy::TEvSessionSetPreferredCluster::TPtr& ev, const TActorContext& ctx) {
     const auto& cookie = ev->Get()->Cookie;
@@ -143,8 +143,8 @@ void TPQWriteService::Handle(TEvPQProxy::TEvSessionSetPreferredCluster::TPtr& ev
         RemotePreferredClusterBySessionCookie[cookie] = std::move(preferredCluster);
     }
 }
- 
-void TPQWriteService::Handle(TEvPQProxy::TEvSessionDead::TPtr& ev, const TActorContext&) { 
+
+void TPQWriteService::Handle(TEvPQProxy::TEvSessionDead::TPtr& ev, const TActorContext&) {
     const auto& cookie = ev->Get()->Cookie;
     Sessions.erase(cookie);
     if (RemotePreferredClusterBySessionCookie.contains(cookie)) {
@@ -160,26 +160,26 @@ void TPQWriteService::Handle(TEvPQProxy::TEvSessionDead::TPtr& ev, const TActorC
 
 StreamingWriteServerMessage FillWriteResponse(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode code) {
     StreamingWriteServerMessage res;
-    FillIssue(res.add_issues(), code, errorReason); 
-    res.set_status(ConvertPersQueueInternalCodeToStatus(code)); 
-    return res; 
+    FillIssue(res.add_issues(), code, errorReason);
+    res.set_status(ConvertPersQueueInternalCodeToStatus(code));
+    return res;
 }
 
-void TPQWriteService::Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPtr& ev, const TActorContext& ctx) { 
- 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection"); 
+void TPQWriteService::Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPtr& ev, const TActorContext& ctx) {
 
-    if (TooMuchSessions()) { 
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - too much sessions"); 
-        ev->Get()->GetStreamCtx()->Attach(ctx.SelfID); 
-        ev->Get()->GetStreamCtx()->WriteAndFinish(FillWriteResponse("proxy overloaded", PersQueue::ErrorCode::OVERLOAD), grpc::Status::OK); //CANCELLED 
-        return; 
-    } 
- 
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection");
+
+    if (TooMuchSessions()) {
+        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - too much sessions");
+        ev->Get()->GetStreamCtx()->Attach(ctx.SelfID);
+        ev->Get()->GetStreamCtx()->WriteAndFinish(FillWriteResponse("proxy overloaded", PersQueue::ErrorCode::OVERLOAD), grpc::Status::OK); //CANCELLED
+        return;
+    }
+
 
     TString localCluster = AvailableLocalCluster(ctx);
     if (HaveClusters && localCluster.empty()) {
-        ev->Get()->GetStreamCtx()->Attach(ctx.SelfID); 
+        ev->Get()->GetStreamCtx()->Attach(ctx.SelfID);
         if (LocalCluster) {
             LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - cluster disabled");
             ev->Get()->GetStreamCtx()->WriteAndFinish(FillWriteResponse("cluster disabled", PersQueue::ErrorCode::CLUSTER_DISABLED), grpc::Status::OK); //CANCELLED
@@ -187,47 +187,47 @@ void TPQWriteService::Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPt
             LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - initializing");
             ev->Get()->GetStreamCtx()->WriteAndFinish(FillWriteResponse("initializing", PersQueue::ErrorCode::INITIALIZING), grpc::Status::OK); //CANCELLED
         }
-        return; 
-    } else { 
+        return;
+    } else {
         TopicsHandler = std::make_unique<NPersQueue::TTopicsListController>(
                 ConverterFactory, HaveClusters, TVector<TString>{}, localCluster
         );
-        const ui64 cookie = NextCookie(); 
- 
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new session created cookie " << cookie); 
+        const ui64 cookie = NextCookie();
 
-        auto ip = ev->Get()->GetStreamCtx()->GetPeerName(); 
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new session created cookie " << cookie);
+
+        auto ip = ev->Get()->GetStreamCtx()->GetPeerName();
         TActorId worker = ctx.Register(new TWriteSessionActor(
                 ev->Release().Release(), cookie, SchemeCache, NewSchemeCache, Counters,
                 DatacenterClassifier ? DatacenterClassifier->ClassifyAddress(NAddressClassifier::ExtractAddress(ip)) : "unknown",
                 *TopicsHandler
         ));
- 
-        Sessions[cookie] = worker; 
+
+        Sessions[cookie] = worker;
     }
 }
 
-bool TPQWriteService::TooMuchSessions() { 
-    return Sessions.size() >= MaxSessions; 
-} 
- 
- 
+bool TPQWriteService::TooMuchSessions() {
+    return Sessions.size() >= MaxSessions;
+}
+
+
 TString TPQWriteService::AvailableLocalCluster(const TActorContext&) const {
     return HaveClusters && Enabled ? *LocalCluster : "";
 }
 
- 
 
 
 
-/////////////////////////////////////////////////////////////////////////////// 
- 
+
+///////////////////////////////////////////////////////////////////////////////
+
 }
-} 
-} 
+}
+}
 
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPtr& ev, const TActorContext& ctx) { 
- 
-    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQWriteServiceActorID(), ev->Release().Release()); 
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPtr& ev, const TActorContext& ctx) {
+
+    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQWriteServiceActorID(), ev->Release().Release());
 }

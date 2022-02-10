@@ -78,14 +78,14 @@ public:
         const TChecker& FailOnExist(TPathElement::EPathType expectedType, bool acceptAlreadyExist) const;
         const TChecker& IsValidLeafName(EStatus status = EStatus::StatusSchemeError) const;
         const TChecker& DepthLimit(ui64 delta = 0, EStatus status = EStatus::StatusSchemeError) const;
-        const TChecker& PathsLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const; 
-        const TChecker& DirChildrenLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const; 
-        const TChecker& ShardsLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const; 
-        const TChecker& PathShardsLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const; 
+        const TChecker& PathsLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
+        const TChecker& DirChildrenLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
+        const TChecker& ShardsLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
+        const TChecker& PathShardsLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
         const TChecker& NotChildren(EStatus status = EStatus::StatusInvalidParameter) const;
         const TChecker& IsValidACL(const TString& acl, EStatus status = EStatus::StatusInvalidParameter) const;
-        const TChecker& PQPartitionsLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const; 
-        const TChecker& PQReservedStorageLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const; 
+        const TChecker& PQPartitionsLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
+        const TChecker& PQReservedStorageLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
     };
 
 public:

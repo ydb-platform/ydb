@@ -203,8 +203,8 @@ struct TSqsEvents {
     };
 
     struct TEvClearQueueAttributesCache : public NActors::TEventLocal<TEvClearQueueAttributesCache, EvClearQueueAttributesCache> {
-    }; 
- 
+    };
+
     struct TEvExecute : public NActors::TEventLocal<TEvExecute, EvExecute> {
         /// Query sender
         TActorId Sender;

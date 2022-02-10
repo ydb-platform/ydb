@@ -1,4 +1,4 @@
-#include <ydb/library/http_proxy/authorization/auth_helpers.h> 
+#include <ydb/library/http_proxy/authorization/auth_helpers.h>
 
 #include <ydb/library/http_proxy/error/error.h>
 

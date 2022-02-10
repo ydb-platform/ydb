@@ -1,36 +1,36 @@
-LIBRARY() 
- 
-OWNER( 
+LIBRARY()
+
+OWNER(
     cthulhu
-    ddoarn 
-    fomichev 
+    ddoarn
+    fomichev
     va-kuznecov
     g:kikimr
-) 
- 
-SRCS( 
-    erasure.cpp 
-    erasure.h 
+)
+
+SRCS(
+    erasure.cpp
+    erasure.h
     erasure_rope.cpp
     erasure_rope.h
     erasure_perf_test.cpp
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/actors/util
     library/cpp/containers/stack_vector
     library/cpp/digest/crc32c
     library/cpp/digest/old_crc
     ydb/core/debug
-) 
- 
-IF (MSVC) 
+)
+
+IF (MSVC)
     CFLAGS(
         /wd4503
     )
-ENDIF() 
- 
-END() 
+ENDIF()
+
+END()
 
 RECURSE_FOR_TESTS(
     ut

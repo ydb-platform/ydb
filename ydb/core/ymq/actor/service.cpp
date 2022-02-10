@@ -330,9 +330,9 @@ void TSqsService::Bootstrap() {
         }
 
         auto factory = AppData()->SqsAuthFactory;
-        Y_VERIFY(factory); 
+        Y_VERIFY(factory);
 
-        driverConfig.SetCredentialsProviderFactory(factory->CreateCredentialsProviderFactory(Cfg())); 
+        driverConfig.SetCredentialsProviderFactory(factory->CreateCredentialsProviderFactory(Cfg()));
 
         YcSearchEventsConfig.Driver = MakeHolder<NYdb::TDriver>(driverConfig);
         MakeAndRegisterYcEventsProcessor();
@@ -1299,11 +1299,11 @@ void TSqsService::MakeAndRegisterYcEventsProcessor() {
 
     auto factory = AppData()->SqsEventsWriterFactory;
     Y_VERIFY(factory);
-    Register(new TSearchEventsProcessor( 
-            root, YcSearchEventsConfig.ReindexInterval, YcSearchEventsConfig.RescanInterval, 
-            MakeSimpleShared<NYdb::NTable::TTableClient>(*YcSearchEventsConfig.Driver), 
+    Register(new TSearchEventsProcessor(
+            root, YcSearchEventsConfig.ReindexInterval, YcSearchEventsConfig.RescanInterval,
+            MakeSimpleShared<NYdb::NTable::TTableClient>(*YcSearchEventsConfig.Driver),
             factory->CreateEventsWriter(Cfg(), GetSqsServiceCounters(AppData()->Counters, "yc_unified_agent"))
-    )); 
+    ));
 }
 //
 //IActor* CreateSqsService(const TYcSearchEventsConfig& ycSearchEventsConfig) {

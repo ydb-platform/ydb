@@ -52,14 +52,14 @@ namespace NDataShard {
     class IExportFactory;
 }
 
-namespace NSQS { 
+namespace NSQS {
     class IEventsWriterFactory;
     class IAuthFactory;
-} 
- 
-namespace NPQ { 
+}
+
+namespace NPQ {
     class IPersQueueMirrorReaderFactory;
-} 
+}
 
 class TFormatFactory;
 

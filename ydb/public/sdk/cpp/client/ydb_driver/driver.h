@@ -96,14 +96,14 @@ public:
     //! even with fast network
     //! default: disabled
     TDriverConfig& SetGRpcKeepAliveTimeout(TDuration timeout);
-    TDriverConfig& SetGRpcKeepAlivePermitWithoutCalls(bool permitWithoutCalls); 
+    TDriverConfig& SetGRpcKeepAlivePermitWithoutCalls(bool permitWithoutCalls);
     //! Set inactive socket timeout.
     //! Used to close connections, that were inactive for given time.
     //! Closes unused connections every 1/10 of timeout, so deletion time is approximate.
     //! Use TDuration::Max() to disable.
     //! default: 6 minutes
     TDriverConfig& SetSocketIdleTimeout(TDuration timeout);
- 
+
     //! Log backend.
     TDriverConfig& SetLog(THolder<TLogBackend> log);
 private:

@@ -9,7 +9,7 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 static constexpr ui64 MaxPQStorage = Max<ui64>() / 2;
- 
+
 TPath::TChecker::TChecker(const TPath &path)
     : Path(path)
     , Failed(false)
@@ -853,58 +853,58 @@ const TPath::TChecker& TPath::TChecker::ShardsLimit(ui64 delta, TPath::TChecker:
     return *this;
 }
 
-const TPath::TChecker& TPath::TChecker::PQPartitionsLimit(ui64 delta, TPath::TChecker::EStatus status) const { 
-    if (Failed) { 
-        return *this; 
-    } 
- 
-    TSubDomainInfo::TPtr domainInfo = Path.DomainInfo(); 
- 
-    if (!delta || domainInfo->GetPQPartitionsInside() + delta <= domainInfo->GetSchemeLimits().MaxPQPartitions && (!domainInfo->GetDatabaseQuotas() 
-        || !domainInfo->GetDatabaseQuotas()->data_stream_shards_quota() 
-        || domainInfo->GetPQPartitionsInside() + delta <= domainInfo->GetDatabaseQuotas()->data_stream_shards_quota())) { 
-        return *this; 
-    } 
- 
-    Failed = true; 
-    Status = status; 
-    Explain << "data stream shards count has reached maximum value in the domain" 
-            << ", data stream shards limit for domain: " << (domainInfo->GetDatabaseQuotas() ? domainInfo->GetDatabaseQuotas()->data_stream_shards_quota() : 0) << "(" << domainInfo->GetSchemeLimits().MaxPQPartitions << ")" 
-            << ", data stream shards count inside domain: " << domainInfo->GetPQPartitionsInside() 
+const TPath::TChecker& TPath::TChecker::PQPartitionsLimit(ui64 delta, TPath::TChecker::EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    TSubDomainInfo::TPtr domainInfo = Path.DomainInfo();
+
+    if (!delta || domainInfo->GetPQPartitionsInside() + delta <= domainInfo->GetSchemeLimits().MaxPQPartitions && (!domainInfo->GetDatabaseQuotas()
+        || !domainInfo->GetDatabaseQuotas()->data_stream_shards_quota()
+        || domainInfo->GetPQPartitionsInside() + delta <= domainInfo->GetDatabaseQuotas()->data_stream_shards_quota())) {
+        return *this;
+    }
+
+    Failed = true;
+    Status = status;
+    Explain << "data stream shards count has reached maximum value in the domain"
+            << ", data stream shards limit for domain: " << (domainInfo->GetDatabaseQuotas() ? domainInfo->GetDatabaseQuotas()->data_stream_shards_quota() : 0) << "(" << domainInfo->GetSchemeLimits().MaxPQPartitions << ")"
+            << ", data stream shards count inside domain: " << domainInfo->GetPQPartitionsInside()
             << ", intention to create new data stream shards: " << delta;
-    return *this; 
-} 
- 
-const TPath::TChecker& TPath::TChecker::PQReservedStorageLimit(ui64 delta, TPath::TChecker::EStatus status) const { 
-    if (Failed) { 
-        return *this; 
-    } 
- 
-    TSubDomainInfo::TPtr domainInfo = Path.DomainInfo(); 
- 
-    if (!delta || !domainInfo->GetDatabaseQuotas() 
-        || !domainInfo->GetDatabaseQuotas()->data_stream_reserved_storage_quota() 
-        || domainInfo->GetPQReservedStorage() + delta <= domainInfo->GetDatabaseQuotas()->data_stream_reserved_storage_quota()) { 
- 
-        if (domainInfo->GetPQReservedStorage() + delta <= MaxPQStorage) { 
-            return *this; 
-        } 
-    } 
- 
-    Failed = true; 
-    Status = status; 
-    Explain << "data stream reserved storage size has reached maximum value in the domain" 
-            << ", data stream reserved storage size limit for domain: " 
-            << (domainInfo->GetDatabaseQuotas() && domainInfo->GetDatabaseQuotas()->data_stream_reserved_storage_quota() 
-                             ? domainInfo->GetDatabaseQuotas()->data_stream_reserved_storage_quota() 
-                             : MaxPQStorage) << " bytes" 
-            << ", data stream reserved storage size inside domain: " << domainInfo->GetPQReservedStorage() << " bytes" 
+    return *this;
+}
+
+const TPath::TChecker& TPath::TChecker::PQReservedStorageLimit(ui64 delta, TPath::TChecker::EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    TSubDomainInfo::TPtr domainInfo = Path.DomainInfo();
+
+    if (!delta || !domainInfo->GetDatabaseQuotas()
+        || !domainInfo->GetDatabaseQuotas()->data_stream_reserved_storage_quota()
+        || domainInfo->GetPQReservedStorage() + delta <= domainInfo->GetDatabaseQuotas()->data_stream_reserved_storage_quota()) {
+
+        if (domainInfo->GetPQReservedStorage() + delta <= MaxPQStorage) {
+            return *this;
+        }
+    }
+
+    Failed = true;
+    Status = status;
+    Explain << "data stream reserved storage size has reached maximum value in the domain"
+            << ", data stream reserved storage size limit for domain: "
+            << (domainInfo->GetDatabaseQuotas() && domainInfo->GetDatabaseQuotas()->data_stream_reserved_storage_quota()
+                             ? domainInfo->GetDatabaseQuotas()->data_stream_reserved_storage_quota()
+                             : MaxPQStorage) << " bytes"
+            << ", data stream reserved storage size inside domain: " << domainInfo->GetPQReservedStorage() << " bytes"
             << ", intention to reserve more storage for : " << delta << " bytes";
-    return *this; 
-} 
- 
- 
- 
+    return *this;
+}
+
+
+
 const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, TPath::TChecker::EStatus status) const {
     if (Failed) {
         return *this;
@@ -1236,7 +1236,7 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
     TPath nullPrefix{ss};
     auto pathParts = SplitPath(path);
 
-    int headSubTxId = opId.GetSubTxId() - 1; 
+    int headSubTxId = opId.GetSubTxId() - 1;
     while (headSubTxId >= 0) {
         auto headOpId = TOperationId(opId.GetTxId(), headSubTxId);
         TTxState* txState = ss->FindTx(headOpId);

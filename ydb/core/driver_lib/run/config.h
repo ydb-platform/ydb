@@ -46,7 +46,7 @@ union TBasicKikimrServicesMask {
         bool EnableNodeIdentifier:1;
         bool EnableCms:1;
         bool EnableNodeTable:1;
-        bool EnableGRpcProxyStatus:1; 
+        bool EnableGRpcProxyStatus:1;
         bool EnablePQ:1;
         bool EnableSqs:1;
         bool EnableConfigsDispatcher:1;

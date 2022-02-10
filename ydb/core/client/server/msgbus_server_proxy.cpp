@@ -171,7 +171,7 @@ void TMessageBusServerProxy::Bootstrap(const TActorContext& ctx) {
 
     TxProxy = MakeTxProxyID();
 
-    SchemeCacheCounters = GetServiceCounters(AppData(ctx)->Counters, "pqproxy|cache"); 
+    SchemeCacheCounters = GetServiceCounters(AppData(ctx)->Counters, "pqproxy|cache");
     DbOperationsCounters = new TMessageBusDbOpsCounters(AppData(ctx)->Counters);
 
     auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(AppData(ctx), SchemeCacheCounters);

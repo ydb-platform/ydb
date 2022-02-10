@@ -48,11 +48,11 @@ enum {
     MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST = 10434,
     MTYPE_CLIENT_OLD_FLAT_DESCRIBE_REQUEST = 10435, // deprecated
     MTYPE_CLIENT_OLD_FLAT_DESCRIBE_RESPONSE = 10436, // deprecated
-    MTYPE_CLIENT_CREATE_TABLET = 10437, 
+    MTYPE_CLIENT_CREATE_TABLET = 10437,
     MTYPE_CLIENT_LOAD_REQUEST = 10438,
     MTYPE_CLIENT_LOAD_RESPONSE = 10439,
     MTYPE_CLIENT_DIRECT_REQUEST_JOB_EXECUTION_STATUS = 10440, // deprecated
-    MTYPE_CLIENT_PERSQUEUE = 10441, 
+    MTYPE_CLIENT_PERSQUEUE = 10441,
     MTYPE_CLIENT_DB_SCHEMA = 10443,
     MTYPE_CLIENT_DB_OPERATION = 10444,
     MTYPE_CLIENT_DB_RESPONSE = 10445,
@@ -76,7 +76,7 @@ enum {
     MTYPE_CLIENT_CMS_REQUEST = 10465,
     MTYPE_CLIENT_CMS_RESPONSE = 10466,
     MTYPE_CLIENT_RESOURCE_BROKER_SET_CONFIG = 10467,
-    MTYPE_CLIENT_CHOOSE_PROXY = 10468, 
+    MTYPE_CLIENT_CHOOSE_PROXY = 10468,
     MTYPE_CLIENT_SQS_REQUEST = 10469,
     MTYPE_CLIENT_SQS_RESPONSE = 10470,
     MTYPE_CLIENT_WHOAMI = 10471,
@@ -140,7 +140,7 @@ struct TBusNodeRegistrationRequest : TBusMessage<TBusNodeRegistrationRequest, NK
 struct TBusNodeRegistrationResponse : TBusMessage<TBusNodeRegistrationResponse, NKikimrClient::TNodeRegistrationResponse, MTYPE_CLIENT_NODE_REGISTRATION_RESPONSE> {};
 struct TBusCmsRequest : TBusMessage<TBusCmsRequest, NKikimrClient::TCmsRequest, MTYPE_CLIENT_CMS_REQUEST> {};
 struct TBusCmsResponse : TBusMessage<TBusCmsResponse, NKikimrClient::TCmsResponse, MTYPE_CLIENT_CMS_RESPONSE> {};
-struct TBusChooseProxy : TBusMessage<TBusChooseProxy, NKikimrClient::TChooseProxyRequest, MTYPE_CLIENT_CHOOSE_PROXY> {}; 
+struct TBusChooseProxy : TBusMessage<TBusChooseProxy, NKikimrClient::TChooseProxyRequest, MTYPE_CLIENT_CHOOSE_PROXY> {};
 struct TBusSqsRequest : TBusMessage<TBusSqsRequest, NKikimrClient::TSqsRequest, MTYPE_CLIENT_SQS_REQUEST> {};
 struct TBusSqsResponse : TBusMessage<TBusSqsResponse, NKikimrClient::TSqsResponse, MTYPE_CLIENT_SQS_RESPONSE> {};
 struct TBusWhoAmI : TBusMessage<TBusWhoAmI, NKikimrClient::TWhoAmI, MTYPE_CLIENT_WHOAMI> {};
@@ -210,7 +210,7 @@ public:
         RegisterType(new TBusKeyValue);
         RegisterType(new TBusOldKeyValue);
         RegisterType(new TBusKeyValueResponse);
-        RegisterType(new TBusPersQueue); 
+        RegisterType(new TBusPersQueue);
         RegisterType(new TBusTabletKillRequest);
         RegisterType(new TBusTabletStateRequest);
         RegisterType(new TBusTabletCountersRequest);
@@ -237,7 +237,7 @@ public:
         RegisterType(new TBusNodeRegistrationResponse);
         RegisterType(new TBusCmsRequest);
         RegisterType(new TBusCmsResponse);
-        RegisterType(new TBusChooseProxy); 
+        RegisterType(new TBusChooseProxy);
         RegisterType(new TBusWhoAmI);
         RegisterType(new TBusStreamRequest);
         RegisterType(new TBusS3ListingRequest);

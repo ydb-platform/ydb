@@ -16,7 +16,7 @@ SRCS(
     queue_attributes.cpp
     queue_id.cpp
     secure_protobuf_printer.cpp
-    events_writer_iface.h 
+    events_writer_iface.h
 )
 
 GENERATE_ENUM_SERIALIZATION(query_id.h)

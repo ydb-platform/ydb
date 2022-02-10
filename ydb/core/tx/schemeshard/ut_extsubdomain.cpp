@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         env.TestWaitNotification(runtime, {txId, txId - 1});
 
         TestAlterSubDomain(runtime, ++txId,  "/MyRoot",
-                              "Name: \"USER_0\" " 
+                              "Name: \"USER_0\" "
                               "StoragePools { "
                               "  Name: \"pool-1\" "
                               "  Kind: \"hdd\" "

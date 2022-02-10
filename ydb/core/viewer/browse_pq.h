@@ -383,8 +383,8 @@ public:
                 if (pbPathDescription.HasPersQueueGroup()) {
                     const auto& pbPersQueueGroup(pbPathDescription.GetPersQueueGroup());
                     NKikimrViewer::TMetaCommonInfo& pbCommon = *metaInfo.MutableCommon();
-                    if (pbPersQueueGroup.PartitionsSize()) { 
-                        pbCommon.SetPartitions(pbPersQueueGroup.PartitionsSize()); 
+                    if (pbPersQueueGroup.PartitionsSize()) {
+                        pbCommon.SetPartitions(pbPersQueueGroup.PartitionsSize());
                     }
                     if (pbPersQueueGroup.HasPQTabletConfig()) {
                         const auto& pbPQTabletConfig(pbPersQueueGroup.GetPQTabletConfig());

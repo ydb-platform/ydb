@@ -282,14 +282,14 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
         for (const TString &topicPath : differentTopicPathsTypes) {
             server.CreateTopicWithQuota(topicPath);
 
-            auto driver = server.Server->AnnoyingClient->GetDriver(); 
+            auto driver = server.Server->AnnoyingClient->GetDriver();
 
-            { 
-                auto writer = CreateSimpleWriter(*driver, server.TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath, "123"); 
-                writer->Write(data); 
-                bool res = writer->Close(TDuration::Seconds(10)); 
-                UNIT_ASSERT(res); 
-            } 
+            {
+                auto writer = CreateSimpleWriter(*driver, server.TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath, "123");
+                writer->Write(data);
+                bool res = writer->Close(TDuration::Seconds(10));
+                UNIT_ASSERT(res);
+            }
         }
     }
 
@@ -311,39 +311,39 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
         server.CreateTopicWithQuota(topicPath, true, 100.0);
         const TString data = TString("123") * 100; // 300 bytes // 3 seconds
 
-        auto driver = server.Server->AnnoyingClient->GetDriver(); 
- 
-        // Warm up write 
-        { 
-            auto writer = CreateSimpleWriter(*driver, server.TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath, "123"); 
- 
-            writer->Write(data); 
-            bool res = writer->Close(TDuration::Seconds(10)); 
-            UNIT_ASSERT(res); 
-        } 
- 
+        auto driver = server.Server->AnnoyingClient->GetDriver();
+
+        // Warm up write
+        {
+            auto writer = CreateSimpleWriter(*driver, server.TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath, "123");
+
+            writer->Write(data);
+            bool res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
+        }
+
         // will be removed
 
         const TInstant startWrite = TInstant::Now();
 
- 
-        { 
-            auto writer = CreateSimpleWriter(*driver, server.TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath, "123"); 
- 
-            writer->Write(data); 
-            bool res = writer->Close(TDuration::Seconds(10)); 
-            UNIT_ASSERT(res); 
-        } 
- 
-        { 
-            auto writer = CreateSimpleWriter(*driver, server.TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath, "123"); 
- 
-            writer->Write(data); 
-            bool res = writer->Close(TDuration::Seconds(10)); 
-            UNIT_ASSERT(res); 
-        } 
- 
- 
+
+        {
+            auto writer = CreateSimpleWriter(*driver, server.TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath, "123");
+
+            writer->Write(data);
+            bool res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
+        }
+
+        {
+            auto writer = CreateSimpleWriter(*driver, server.TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath, "123");
+
+            writer->Write(data);
+            bool res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
+        }
+
+
         const TInstant endWrite = TInstant::Now();
         // Check write time with quota
         const TDuration writeTime = endWrite - startWrite;
@@ -355,6 +355,6 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
         }
 
     }
-} 
+}
 
 }

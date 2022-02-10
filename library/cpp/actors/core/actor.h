@@ -62,7 +62,7 @@ namespace NActors {
          * @param ev         the event to send
          * @param cookie     cookie that will be piggybacked with event
          */
-        static void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr); 
+        static void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
 
         static TInstant Now();
         static TMonotonic Monotonic();

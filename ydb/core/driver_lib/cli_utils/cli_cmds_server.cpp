@@ -628,34 +628,34 @@ protected:
             queueConfig->SetName(ProxyBusQueueConfig.Name);
             queueConfig->SetNumWorkers(ProxyBusQueueConfig.NumWorkers);
 
-            auto sessionConfig = messageBusConfig->MutableProxyBusSessionConfig(); 
- 
-            // TODO use macro from messagebus header file 
-            sessionConfig->SetName(ProxyBusSessionConfig.Name); 
-            sessionConfig->SetNumRetries(ProxyBusSessionConfig.NumRetries); 
-            sessionConfig->SetRetryInterval(ProxyBusSessionConfig.RetryInterval); 
-            sessionConfig->SetReconnectWhenIdle(ProxyBusSessionConfig.ReconnectWhenIdle); 
-            sessionConfig->SetMaxInFlight(ProxyBusSessionConfig.MaxInFlight); 
-            sessionConfig->SetPerConnectionMaxInFlight(ProxyBusSessionConfig.PerConnectionMaxInFlight); 
-            sessionConfig->SetPerConnectionMaxInFlightBySize(ProxyBusSessionConfig.PerConnectionMaxInFlightBySize); 
-            sessionConfig->SetMaxInFlightBySize(ProxyBusSessionConfig.MaxInFlightBySize); 
-            sessionConfig->SetTotalTimeout(ProxyBusSessionConfig.TotalTimeout); 
-            sessionConfig->SetSendTimeout(ProxyBusSessionConfig.SendTimeout); 
-            sessionConfig->SetConnectTimeout(ProxyBusSessionConfig.ConnectTimeout); 
-            sessionConfig->SetDefaultBufferSize(ProxyBusSessionConfig.DefaultBufferSize); 
-            sessionConfig->SetMaxBufferSize(ProxyBusSessionConfig.MaxBufferSize); 
-            sessionConfig->SetSocketRecvBufferSize(ProxyBusSessionConfig.SocketRecvBufferSize); 
-            sessionConfig->SetSocketSendBufferSize(ProxyBusSessionConfig.SocketSendBufferSize); 
-            sessionConfig->SetSocketToS(ProxyBusSessionConfig.SocketToS); 
-            sessionConfig->SetSendThreshold(ProxyBusSessionConfig.SendThreshold); 
-            sessionConfig->SetCork(ProxyBusSessionConfig.Cork.MilliSeconds()); 
-            sessionConfig->SetMaxMessageSize(ProxyBusSessionConfig.MaxMessageSize); 
-            sessionConfig->SetTcpNoDelay(ProxyBusSessionConfig.TcpNoDelay); 
-            sessionConfig->SetTcpCork(ProxyBusSessionConfig.TcpCork); 
-            sessionConfig->SetExecuteOnMessageInWorkerPool(ProxyBusSessionConfig.ExecuteOnMessageInWorkerPool); 
-            sessionConfig->SetExecuteOnReplyInWorkerPool(ProxyBusSessionConfig.ExecuteOnReplyInWorkerPool); 
-            sessionConfig->SetListenPort(ProxyBusSessionConfig.ListenPort); 
- 
+            auto sessionConfig = messageBusConfig->MutableProxyBusSessionConfig();
+
+            // TODO use macro from messagebus header file
+            sessionConfig->SetName(ProxyBusSessionConfig.Name);
+            sessionConfig->SetNumRetries(ProxyBusSessionConfig.NumRetries);
+            sessionConfig->SetRetryInterval(ProxyBusSessionConfig.RetryInterval);
+            sessionConfig->SetReconnectWhenIdle(ProxyBusSessionConfig.ReconnectWhenIdle);
+            sessionConfig->SetMaxInFlight(ProxyBusSessionConfig.MaxInFlight);
+            sessionConfig->SetPerConnectionMaxInFlight(ProxyBusSessionConfig.PerConnectionMaxInFlight);
+            sessionConfig->SetPerConnectionMaxInFlightBySize(ProxyBusSessionConfig.PerConnectionMaxInFlightBySize);
+            sessionConfig->SetMaxInFlightBySize(ProxyBusSessionConfig.MaxInFlightBySize);
+            sessionConfig->SetTotalTimeout(ProxyBusSessionConfig.TotalTimeout);
+            sessionConfig->SetSendTimeout(ProxyBusSessionConfig.SendTimeout);
+            sessionConfig->SetConnectTimeout(ProxyBusSessionConfig.ConnectTimeout);
+            sessionConfig->SetDefaultBufferSize(ProxyBusSessionConfig.DefaultBufferSize);
+            sessionConfig->SetMaxBufferSize(ProxyBusSessionConfig.MaxBufferSize);
+            sessionConfig->SetSocketRecvBufferSize(ProxyBusSessionConfig.SocketRecvBufferSize);
+            sessionConfig->SetSocketSendBufferSize(ProxyBusSessionConfig.SocketSendBufferSize);
+            sessionConfig->SetSocketToS(ProxyBusSessionConfig.SocketToS);
+            sessionConfig->SetSendThreshold(ProxyBusSessionConfig.SendThreshold);
+            sessionConfig->SetCork(ProxyBusSessionConfig.Cork.MilliSeconds());
+            sessionConfig->SetMaxMessageSize(ProxyBusSessionConfig.MaxMessageSize);
+            sessionConfig->SetTcpNoDelay(ProxyBusSessionConfig.TcpNoDelay);
+            sessionConfig->SetTcpCork(ProxyBusSessionConfig.TcpCork);
+            sessionConfig->SetExecuteOnMessageInWorkerPool(ProxyBusSessionConfig.ExecuteOnMessageInWorkerPool);
+            sessionConfig->SetExecuteOnReplyInWorkerPool(ProxyBusSessionConfig.ExecuteOnReplyInWorkerPool);
+            sessionConfig->SetListenPort(ProxyBusSessionConfig.ListenPort);
+
             for (auto proxy : ProxyBindToProxy) {
                 messageBusConfig->AddProxyBindToProxy(proxy);
             }

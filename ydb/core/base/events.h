@@ -58,7 +58,7 @@ struct TKikimrEvents : TEvents {
         ES_FLAT_EXECUTOR,
         ES_NODE_WHITEBOARD,
         ES_FLAT_TX_SCHEMESHARD, // 4137
-        ES_PQ, 
+        ES_PQ,
         ES_YQL_KIKIMR_PROXY,
         ES_PQ_META_CACHE,
         ES_DEPRECATED_4141,
@@ -80,7 +80,7 @@ struct TKikimrEvents : TEvents {
         ES_RTMR_HOST,
         ES_RESOURCE_BROKER,
         ES_VIEWER,
-        ES_SUB_DOMAIN, 
+        ES_SUB_DOMAIN,
         ES_GRPC_PROXY_STATUS, //OLD
         ES_SQS,
         ES_BLOCKSTORE, //4162
@@ -102,7 +102,7 @@ struct TKikimrEvents : TEvents {
         ES_COORDINATED_QUOTA,
         ES_ACCESS_SERVICE,
         ES_USER_ACCOUNT_SERVICE,
-        ES_PQ_PROXY_NEW, 
+        ES_PQ_PROXY_NEW,
         ES_GRPC_STREAMING,
         ES_SCHEME_BOARD,
         ES_FLAT_TX_SCHEMESHARD_PROTECTED,

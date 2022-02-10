@@ -381,7 +381,7 @@ namespace Tests {
         NMsgBusProxy::EResponseStatus CreateOlapTable(const TString& parent, const NKikimrSchemeOp::TColumnTableDescription& table);
         NMsgBusProxy::EResponseStatus CreateSolomon(const TString& parent, const TString& name, ui32 parts = 4, ui32 channelProfile = 0);
         NMsgBusProxy::EResponseStatus StoreTableBackup(const TString& parent, const NKikimrSchemeOp::TBackupTask& task);
-        NMsgBusProxy::EResponseStatus DeleteTopic(const TString& parent, const TString& name); 
+        NMsgBusProxy::EResponseStatus DeleteTopic(const TString& parent, const TString& name);
         TAutoPtr<NMsgBusProxy::TBusResponse> TryDropPersQueueGroup(const TString& parent, const TString& name);
         TAutoPtr<NMsgBusProxy::TBusResponse> Ls(const TString& path);
         static TPathVersion ExtractPathVersion(const TAutoPtr<NMsgBusProxy::TBusResponse>& describe);
@@ -439,7 +439,7 @@ namespace Tests {
 
         THolder<NKesus::TEvKesus::TEvGetConfigResult> GetKesusConfig(TTestActorRuntime* runtime, const TString& kesusPath);
 
-    protected: 
+    protected:
         template <class TMsg>
         TString PrintResult(NBus::TBusMessage* msg, size_t maxSz = 1000) {
             auto res = dynamic_cast<TMsg*>(msg);

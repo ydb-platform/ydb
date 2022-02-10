@@ -1,20 +1,20 @@
-#pragma once 
+#pragma once
 
 #include <array>
 
 #include <ydb/core/debug/valgrind_check.h>
 #include <ydb/core/util/yverify_stream.h>
- 
-#include <util/stream/str.h> 
+
+#include <util/stream/str.h>
 #include <util/generic/string.h>
-#include <util/generic/bt_exception.h> 
+#include <util/generic/bt_exception.h>
 #include <util/string/builder.h>
- 
-#include <util/generic/list.h> 
+
+#include <util/generic/list.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
- 
-namespace NKikimr { 
- 
+
+namespace NKikimr {
+
 struct TDiff {
     TString Buffer;
     ui32 Offset = 0;
@@ -146,14 +146,14 @@ struct TPartFragment {
     }
 };
 
-struct TDataPartSet { 
+struct TDataPartSet {
     ui64 FullDataSize = 0;
     ui32 PartsMask = 0;
     TStackVec<TPartFragment, 8> Parts;
     TPartFragment FullDataFragment;
     ui64 MemoryConsumed = 0;
     bool IsFragment = false;
- 
+
     // Incremental split KIKIMR-10794
     ui64 WholeBlocks = 0; // Blocks to be split (not including tail)
     ui64 CurBlockIdx = 0; // Blocks have been already split
@@ -184,8 +184,8 @@ struct TDataPartSet {
         WholeBlocks = 0;
         CurBlockIdx = 0;
     }
-}; 
- 
+};
+
 struct TPartOffsetRange {  // [Begin, End)
     ui64 Begin = 0;
     ui64 End = 0;
@@ -223,21 +223,21 @@ struct TBlockSplitRange {
     TStackVec<TPartOffsetRange, 8> PartRanges;
 };
 
-struct TErasureParameters; 
- 
-struct TErasureType { 
- 
-    enum EErasureSpecies { 
-        ErasureNone = 0, 
-        ErasureMirror3 = 1, 
-        Erasure3Plus1Block = 2, 
-        Erasure3Plus1Stripe = 3, 
- 
-        Erasure4Plus2Block = 4, 
-        Erasure3Plus2Block = 5, 
-        Erasure4Plus2Stripe = 6, 
-        Erasure3Plus2Stripe = 7, 
- 
+struct TErasureParameters;
+
+struct TErasureType {
+
+    enum EErasureSpecies {
+        ErasureNone = 0,
+        ErasureMirror3 = 1,
+        Erasure3Plus1Block = 2,
+        Erasure3Plus1Stripe = 3,
+
+        Erasure4Plus2Block = 4,
+        Erasure3Plus2Block = 5,
+        Erasure4Plus2Stripe = 6,
+        Erasure3Plus2Stripe = 7,
+
         ErasureMirror3Plus2 = 8,
         ErasureMirror3dc = 9,
 
@@ -254,8 +254,8 @@ struct TErasureType {
         ErasureMirror3of4 = 18,
 
         ErasureSpeciesCount = 19
-    }; 
- 
+    };
+
     static const char *ErasureSpeciesToStr(EErasureSpecies es);
 
     enum EErasureFamily {
@@ -272,54 +272,54 @@ struct TErasureType {
     TErasureType(EErasureSpecies s = ErasureNone)
         : ErasureSpecies(s)
     {}
- 
+
     virtual ~TErasureType() = default;
     TErasureType(const TErasureType &) = default;
     TErasureType &operator =(const TErasureType &) = default;
- 
+
     EErasureSpecies GetErasure() const {
         return ErasureSpecies;
     }
 
     TString ToString() const {
         Y_VERIFY((ui64)ErasureSpecies < ErasureSpeciesCount);
-        return ErasureName[ErasureSpecies]; 
-    } 
- 
+        return ErasureName[ErasureSpecies];
+    }
+
     static TString ErasureSpeciesName(ui32 erasureSpecies) {
-        if (erasureSpecies < ErasureSpeciesCount) { 
-            return ErasureName[erasureSpecies]; 
-        } 
-        TStringStream str; 
-        str << "Unknown" << erasureSpecies; 
-        return str.Str(); 
-    } 
- 
+        if (erasureSpecies < ErasureSpeciesCount) {
+            return ErasureName[erasureSpecies];
+        }
+        TStringStream str;
+        str << "Unknown" << erasureSpecies;
+        return str.Str();
+    }
+
     static EErasureSpecies ErasureSpeciesByName(TString name) {
-        for (ui32 species = 0; species < TErasureType::ErasureSpeciesCount; ++species) { 
-            if (TErasureType::ErasureName[species] == name) { 
-                return TErasureType::EErasureSpecies(species); 
-            } 
-        } 
-        return TErasureType::ErasureSpeciesCount; 
-    } 
- 
+        for (ui32 species = 0; species < TErasureType::ErasureSpeciesCount; ++species) {
+            if (TErasureType::ErasureName[species] == name) {
+                return TErasureType::EErasureSpecies(species);
+            }
+        }
+        return TErasureType::ErasureSpeciesCount;
+    }
+
     TErasureType::EErasureFamily ErasureFamily() const;
-    ui32 ParityParts() const; // 4 + _2_ 
-    ui32 DataParts() const; // _4_ + 2 
-    ui32 TotalPartCount() const; // _4_+_2_ 
-    ui32 MinimalRestorablePartCount() const; // ? _4_ + 2 
-    ui32 MinimalBlockSize() const; 
+    ui32 ParityParts() const; // 4 + _2_
+    ui32 DataParts() const; // _4_ + 2
+    ui32 TotalPartCount() const; // _4_+_2_
+    ui32 MinimalRestorablePartCount() const; // ? _4_ + 2
+    ui32 MinimalBlockSize() const;
     // Size of user data contained in the part.
     ui64 PartUserSize(ui64 dataSize) const;
     // Size of the part including user data and crcs
     ui64 PartSize(ECrcMode crcMode, ui64 dataSize) const;
     ui64 SuggestDataSize(ECrcMode crcMode, ui64 partSize, bool roundDown) const;
-    ui32 Prime() const; 
- 
+    ui32 Prime() const;
+
     void SplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const;
     void IncrementalSplitData(ECrcMode crcMode, const TString& buffer, TDataPartSet& outPartSet) const;
- 
+
     void SplitDiffs(ECrcMode crcMode, ui32 dataSize, const TVector<TDiff> &diffs, TPartDiffSet& outDiffSet) const;
     void ApplyDiff(ECrcMode crcMode, ui8 *dst, const TVector<TDiff> &diffs) const;
     void MakeXorDiff(ECrcMode crcMode, ui32 dataSize, const ui8 *src, const TVector<TDiff> &inDiffs,
@@ -331,25 +331,25 @@ struct TErasureType {
             bool restoreFullData, bool restoreParityParts) const;
     void RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool restoreParts, bool restoreFullData,
             bool restoreParityParts) const;
- 
+
     bool IsSinglePartRequest(ui32 fullDataSize, ui32 shift, ui32 size, ui32 &outPartIdx) const;
     bool IsPartialDataRequestPossible() const;
-    bool IsUnknownFullDataSizePartialDataRequestPossible() const; 
-    void AlignPartialDataRequest(ui64 shift, ui64 size, ui64 fullDataSize, ui64 &outShift, ui64 &outSize) const; 
+    bool IsUnknownFullDataSizePartialDataRequestPossible() const;
+    void AlignPartialDataRequest(ui64 shift, ui64 size, ui64 fullDataSize, ui64 &outShift, ui64 &outSize) const;
     void BlockSplitRange(ECrcMode crcMode, ui64 blobSize, ui64 wholeBegin, ui64 wholeEnd,
             TBlockSplitRange *outRange) const;
     ui64 BlockSplitPartUsedSize(ui64 dataSize, ui32 partIdx) const;
-    ui32 BlockSplitPartIndex(ui64 offset, ui64 dataSize, ui64 &outPartOffset) const; 
+    ui32 BlockSplitPartIndex(ui64 offset, ui64 dataSize, ui64 &outPartOffset) const;
     ui64 BlockSplitWholeOffset(ui64 dataSize, ui64 partIdx, ui64 offset) const;
- 
+
     static const std::array<TString, ErasureSpeciesCount> ErasureName;
-protected: 
+protected:
     EErasureSpecies ErasureSpecies;
 
-    ui32 ColumnSize() const; 
-}; 
- 
+    ui32 ColumnSize() const;
+};
+
 bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TString& buf);
 
-} 
- 
+}
+

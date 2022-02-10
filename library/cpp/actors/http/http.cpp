@@ -111,65 +111,65 @@ void THttpParser<THttpRequest, TSocketBuffer>::Advance(size_t len) {
                 break;
             }
             case EParseStage::Body: {
-                if (!ContentLength.empty()) { 
-                    if (ProcessData(Content, data, FromString(ContentLength))) { 
-                        Body = Content; 
-                        Stage = EParseStage::Done; 
-                    } 
-                } else if (TransferEncoding == "chunked") { 
-                    Stage = EParseStage::ChunkLength; 
-                } else { 
-                    // Invalid body encoding 
-                    Stage = EParseStage::Error; 
+                if (!ContentLength.empty()) {
+                    if (ProcessData(Content, data, FromString(ContentLength))) {
+                        Body = Content;
+                        Stage = EParseStage::Done;
+                    }
+                } else if (TransferEncoding == "chunked") {
+                    Stage = EParseStage::ChunkLength;
+                } else {
+                    // Invalid body encoding
+                    Stage = EParseStage::Error;
                 }
                 break;
             }
-            case EParseStage::ChunkLength: { 
-                if (ProcessData(Line, data, "\r\n", MaxChunkLengthSize)) { 
-                    if (!Line.empty()) { 
-                        ChunkLength = ParseHex(Line); 
-                        if (ChunkLength <= MaxChunkSize) { 
-                            ContentSize = Content.size() + ChunkLength; 
-                            if (ContentSize <= MaxChunkContentSize) { 
-                                Stage = EParseStage::ChunkData; 
-                                Line.Clear(); 
-                            } else { 
-                                // Invalid chunk content length 
-                                Stage = EParseStage::Error; 
-                            } 
-                        } else { 
-                            // Invalid chunk length 
-                            Stage = EParseStage::Error; 
-                        } 
-                    } else { 
-                        // Invalid body encoding 
-                        Stage = EParseStage::Error; 
-                    } 
-                } 
-                break; 
-            } 
-            case EParseStage::ChunkData: { 
-                if (!IsError()) { 
-                    if (ProcessData(Content, data, ContentSize)) { 
-                        if (ProcessData(Line, data, 2)) { 
-                            if (Line == "\r\n") { 
-                                if (ChunkLength == 0) { 
-                                    Body = Content; 
-                                    Stage = EParseStage::Done; 
-                                } else { 
-                                    Stage = EParseStage::ChunkLength; 
-                                } 
-                                Line.Clear(); 
-                            } else { 
-                                // Invalid body encoding 
-                                Stage = EParseStage::Error; 
-                            } 
-                        } 
-                    } 
-                } 
-                break; 
-            } 
- 
+            case EParseStage::ChunkLength: {
+                if (ProcessData(Line, data, "\r\n", MaxChunkLengthSize)) {
+                    if (!Line.empty()) {
+                        ChunkLength = ParseHex(Line);
+                        if (ChunkLength <= MaxChunkSize) {
+                            ContentSize = Content.size() + ChunkLength;
+                            if (ContentSize <= MaxChunkContentSize) {
+                                Stage = EParseStage::ChunkData;
+                                Line.Clear();
+                            } else {
+                                // Invalid chunk content length
+                                Stage = EParseStage::Error;
+                            }
+                        } else {
+                            // Invalid chunk length
+                            Stage = EParseStage::Error;
+                        }
+                    } else {
+                        // Invalid body encoding
+                        Stage = EParseStage::Error;
+                    }
+                }
+                break;
+            }
+            case EParseStage::ChunkData: {
+                if (!IsError()) {
+                    if (ProcessData(Content, data, ContentSize)) {
+                        if (ProcessData(Line, data, 2)) {
+                            if (Line == "\r\n") {
+                                if (ChunkLength == 0) {
+                                    Body = Content;
+                                    Stage = EParseStage::Done;
+                                } else {
+                                    Stage = EParseStage::ChunkLength;
+                                }
+                                Line.Clear();
+                            } else {
+                                // Invalid body encoding
+                                Stage = EParseStage::Error;
+                            }
+                        }
+                    }
+                }
+                break;
+            }
+
             case EParseStage::Done:
             case EParseStage::Error: {
                 data.Clear();

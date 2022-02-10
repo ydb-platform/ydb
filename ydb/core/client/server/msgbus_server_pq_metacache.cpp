@@ -22,7 +22,7 @@ IActor* CreateSchemeCache(NActors::TActorSystem* ActorSystem, TIntrusivePtr<NMon
     auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(appData, cacheCounters);
     return CreateSchemeBoardSchemeCache(cacheConfig.Get());
 }
- 
+
 class TPersQueueMetaCacheActor : public TActorBootstrapped<TPersQueueMetaCacheActor> {
     using TBase = TActorBootstrapped<TPersQueueMetaCacheActor>;
 public:
@@ -44,7 +44,7 @@ public:
         : Counters(counters)
         , VersionCheckInterval(versionCheckInterval)
         , Generation(std::make_shared<TAtomicCounter>())
-    { 
+    {
     }
 
     void Bootstrap(const TActorContext& ctx) {

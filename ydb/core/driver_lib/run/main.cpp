@@ -134,10 +134,10 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
             return NDriverClient::MessageBusTrace(cmdConf, argc, argv);
         case EDM_KEYVALUE_REQUEST:
             return NDriverClient::KeyValueRequest(cmdConf, argc, argv);
-        case EDM_PERSQUEUE_REQUEST: 
-            return NDriverClient::PersQueueRequest(cmdConf, argc, argv); 
-        case EDM_PERSQUEUE_STRESS: 
-            return NDriverClient::PersQueueStress(cmdConf, argc, argv); 
+        case EDM_PERSQUEUE_REQUEST:
+            return NDriverClient::PersQueueRequest(cmdConf, argc, argv);
+        case EDM_PERSQUEUE_STRESS:
+            return NDriverClient::PersQueueStress(cmdConf, argc, argv);
         case EDM_PERSQUEUE_DISCOVER_CLUSTERS:
             return NDriverClient::PersQueueDiscoverClustersRequest(cmdConf, argc, argv);
         case EDM_LOAD_REQUEST:

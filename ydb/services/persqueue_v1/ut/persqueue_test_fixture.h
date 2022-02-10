@@ -63,9 +63,9 @@ namespace NKikimr::NPersQueueTests {
                 Server->AnnoyingClient->CreateTopicNoLegacy("/Root/PQ/acc/topic1", 1);
             } else {
                 Cerr << "=== Will create legacy-style topics\n";
-                Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--acc--topic2dc", 1); 
-                Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc2--acc--topic2dc", 1, true, false); 
-                Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--topic1", 1); 
+                Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--acc--topic2dc", 1);
+                Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc2--acc--topic2dc", 1, true, false);
+                Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--topic1", 1);
                 Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--acc--topic1", 1);
                 Server->WaitInit("topic1");
                 Sleep(TDuration::Seconds(10));
@@ -74,9 +74,9 @@ namespace NKikimr::NPersQueueTests {
             InsecureChannel = grpc::CreateChannel("localhost:" + ToString(Server->GrpcPort), grpc::InsecureChannelCredentials());
             ServiceStub = Ydb::PersQueue::V1::PersQueueService::NewStub(InsecureChannel);
             InitializeWritePQService(TenantModeEnabled() ? "Root/acc/topic1" : "topic1");
- 
-            NYdb::TDriverConfig driverCfg; 
-            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << Server->GrpcPort).SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)).SetDatabase("/Root"); 
+
+            NYdb::TDriverConfig driverCfg;
+            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << Server->GrpcPort).SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)).SetDatabase("/Root");
             YdbDriver.reset(new NYdb::TDriver(driverCfg));
             PersQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*YdbDriver);
         }
@@ -161,9 +161,9 @@ namespace NKikimr::NPersQueueTests {
         TSimpleSharedPtr<TPortManager> PortManager;
         std::shared_ptr<grpc::Channel> InsecureChannel;
         std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> ServiceStub;
- 
+
         std::shared_ptr<NYdb::TDriver> YdbDriver;
-        THolder<NYdb::NPersQueue::TPersQueueClient> PersQueueClient; 
+        THolder<NYdb::NPersQueue::TPersQueueClient> PersQueueClient;
     };
 
     class TPersQueueV1TestServer : public TPersQueueV1TestServerBase {
@@ -250,7 +250,7 @@ namespace NKikimr::NPersQueueTests {
                 }
             }
         }
-/* 
+/*
         THolder<IProducer> StartProducer(const TString& topicPath, bool compress = false) {
             TString fullPath = TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath;
             TProducerSettings producerSettings;
@@ -263,7 +263,7 @@ namespace NKikimr::NPersQueueTests {
             UNIT_ASSERT_EQUAL_C(Ydb::StatusIds::SUCCESS, startResult.GetValueSync().Response.status(), "Response: " << startResult.GetValueSync().Response);
             return producer;
         }
-*/ 
+*/
     };
 }
 

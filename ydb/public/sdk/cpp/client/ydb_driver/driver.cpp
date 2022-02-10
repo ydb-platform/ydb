@@ -42,7 +42,7 @@ public:
     bool GetDrinOnDtors() const override { return DrainOnDtors; }
     TBalancingSettings GetBalancingSettings() const override { return BalancingSettings; }
     TDuration GetGRpcKeepAliveTimeout() const override { return GRpcKeepAliveTimeout; }
-    bool GetGRpcKeepAlivePermitWithoutCalls() const override { return GRpcKeepAlivePermitWithoutCalls; } 
+    bool GetGRpcKeepAlivePermitWithoutCalls() const override { return GRpcKeepAlivePermitWithoutCalls; }
     TDuration GetSocketIdleTimeout() const override { return SocketIdleTimeout; }
     ui64 GetMemoryQuota() const override { return MemoryQuota; }
     const TLog& GetLog() const override { return Log; }
@@ -67,7 +67,7 @@ public:
     bool DrainOnDtors = true;
     TBalancingSettings BalancingSettings = TBalancingSettings{EBalancingPolicy::UsePreferableLocation, TStringType()};
     TDuration GRpcKeepAliveTimeout;
-    bool GRpcKeepAlivePermitWithoutCalls = false; 
+    bool GRpcKeepAlivePermitWithoutCalls = false;
     TDuration SocketIdleTimeout = TDuration::Minutes(6);
     ui64 MemoryQuota = 0;
     TLog Log; // Null by default.
@@ -162,11 +162,11 @@ TDriverConfig& TDriverConfig::SetGRpcKeepAliveTimeout(TDuration timeout) {
     return *this;
 }
 
-TDriverConfig& TDriverConfig::SetGRpcKeepAlivePermitWithoutCalls(bool permitWithoutCalls) { 
-    Impl_->GRpcKeepAlivePermitWithoutCalls = permitWithoutCalls; 
-    return *this; 
-} 
- 
+TDriverConfig& TDriverConfig::SetGRpcKeepAlivePermitWithoutCalls(bool permitWithoutCalls) {
+    Impl_->GRpcKeepAlivePermitWithoutCalls = permitWithoutCalls;
+    return *this;
+}
+
 TDriverConfig& TDriverConfig::SetSocketIdleTimeout(TDuration timeout) {
     Impl_->SocketIdleTimeout = timeout;
     return *this;

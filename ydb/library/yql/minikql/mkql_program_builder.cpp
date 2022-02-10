@@ -2301,11 +2301,11 @@ TRuntimeNode TProgramBuilder::BitNot(TRuntimeNode data) {
     return Invoke(__func__, data.GetStaticType(), args);
 }
 
-TRuntimeNode TProgramBuilder::CountBits(TRuntimeNode data) { 
+TRuntimeNode TProgramBuilder::CountBits(TRuntimeNode data) {
     const std::array<TRuntimeNode, 1> args = {{ data }};
     return Invoke(__func__, data.GetStaticType(), args);
-} 
- 
+}
+
 TRuntimeNode TProgramBuilder::BitAnd(TRuntimeNode data1, TRuntimeNode data2) {
     const std::array<TRuntimeNode, 2> args = {{ data1, data2 }};
     return Invoke(__func__, BuildArithmeticCommonType(data1.GetStaticType(), data2.GetStaticType()), args);

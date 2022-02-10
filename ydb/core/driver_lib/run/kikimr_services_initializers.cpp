@@ -906,10 +906,10 @@ void TLocalServiceInitializer::InitializeServices(
         new TTabletSetupInfo(&CreateDataShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.KeyValue] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&CreateKeyValueFlat, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[appData->DefaultTabletTypes.PersQueue] = TLocalConfig::TTabletClassInfo( 
+    localConfig->TabletClassInfo[appData->DefaultTabletTypes.PersQueue] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&CreatePersQueue, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[appData->DefaultTabletTypes.PersQueueReadBalancer] = TLocalConfig::TTabletClassInfo( 
-        new TTabletSetupInfo(&CreatePersQueueReadBalancer, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId)); 
+    localConfig->TabletClassInfo[appData->DefaultTabletTypes.PersQueueReadBalancer] = TLocalConfig::TTabletClassInfo(
+        new TTabletSetupInfo(&CreatePersQueueReadBalancer, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.Coordinator] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&CreateFlatTxCoordinator, TMailboxType::Revolving, importantPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.Mediator] = TLocalConfig::TTabletClassInfo(
@@ -1224,21 +1224,21 @@ void TTabletCountersAggregatorInitializer::InitializeServices(
     }
 }
 
-//TGRpcProxyStatusInitializer 
- 
-TGRpcProxyStatusInitializer::TGRpcProxyStatusInitializer(const TKikimrRunConfig& runConfig) 
-    : IKikimrServicesInitializer(runConfig) { 
-} 
- 
-void TGRpcProxyStatusInitializer::InitializeServices( 
-            NActors::TActorSystemSetup* setup, 
-            const NKikimr::TAppData* appData) { 
-    TActorSetupCmd gRpcProxyStatusSetup(CreateGRpcProxyStatus(), TMailboxType::ReadAsFilled, appData->UserPoolId); 
+//TGRpcProxyStatusInitializer
+
+TGRpcProxyStatusInitializer::TGRpcProxyStatusInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TGRpcProxyStatusInitializer::InitializeServices(
+            NActors::TActorSystemSetup* setup,
+            const NKikimr::TAppData* appData) {
+    TActorSetupCmd gRpcProxyStatusSetup(CreateGRpcProxyStatus(), TMailboxType::ReadAsFilled, appData->UserPoolId);
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeGRpcProxyStatusID(NodeId), gRpcProxyStatusSetup));
- 
-} 
- 
- 
+
+}
+
+
 // This code is shared between default kikimr bootstrapper and alternative bootstrapper
 
 static TIntrusivePtr<TTabletSetupInfo> CreateTablet(
@@ -1816,14 +1816,14 @@ void TPersQueueL2CacheInitializer::InitializeServices(NActors::TActorSystemSetup
         }
     }
 
-    if (Config.HasPQConfig() && Config.GetPQConfig().HasPersQueueNodeConfig()) { 
-        auto cfg = Config.GetPQConfig().GetPersQueueNodeConfig(); 
-        if (cfg.HasSharedCacheSizeMb()) 
-            params.MaxSizeMB = cfg.GetSharedCacheSizeMb(); 
-        if (cfg.HasCacheKeepTimeSec()) 
-            params.KeepTime = TDuration::Seconds(cfg.GetCacheKeepTimeSec()); 
-    } 
- 
+    if (Config.HasPQConfig() && Config.GetPQConfig().HasPersQueueNodeConfig()) {
+        auto cfg = Config.GetPQConfig().GetPersQueueNodeConfig();
+        if (cfg.HasSharedCacheSizeMb())
+            params.MaxSizeMB = cfg.GetSharedCacheSizeMb();
+        if (cfg.HasCacheKeepTimeSec())
+            params.KeepTime = TDuration::Seconds(cfg.GetCacheKeepTimeSec());
+    }
+
     TIntrusivePtr<NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<NMonitoring::TDynamicCounters> pqCacheGroup = tabletGroup->GetSubgroup("type", "PQ_CACHE");
 
@@ -1866,12 +1866,12 @@ TPersQueueLibSharedInstanceInitializer::TPersQueueLibSharedInstanceInitializer(c
     : IKikimrServicesInitializer(runConfig)
 {}
 
-void TPersQueueLibSharedInstanceInitializer::InitializeServices(NActors::TActorSystemSetup*, const NKikimr::TAppData* appData) { 
+void TPersQueueLibSharedInstanceInitializer::InitializeServices(NActors::TActorSystemSetup*, const NKikimr::TAppData* appData) {
     if (Config.HasPQConfig() && Config.GetPQConfig().GetEnabled()) {
         if (Config.GetPQConfig().GetMirrorConfig().GetEnabled()) {
             if (appData->PersQueueMirrorReaderFactory) {
                 appData->PersQueueMirrorReaderFactory->Initialize(Config.GetPQConfig().GetMirrorConfig().GetPQLibSettings());
-            } 
+            }
         }
     }
 }

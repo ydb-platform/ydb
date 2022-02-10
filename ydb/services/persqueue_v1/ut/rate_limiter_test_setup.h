@@ -19,7 +19,7 @@ public:
     void CreateConsumer(const TString& path);
 
     // namespace NPersQueue = Ydb::PersQueue;
-//    THolder<Ydb::PersQueue::IProducer> StartProducer(const TString& topicPath, bool compress = false); 
+//    THolder<Ydb::PersQueue::IProducer> StartProducer(const TString& topicPath, bool compress = false);
 
     // Getters
     ui16 GetGrpcPort() const {

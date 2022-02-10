@@ -76,16 +76,16 @@ private:
         return "NULL";
     }
 
-    bool IsHealthy(bool useLocalEnabled = false) const { 
-        bool isLocalEnabled = false; 
-        if (ClustersList) { 
-            for (const auto& cluster : ClustersList->Clusters) { 
-                if (cluster.IsLocal) 
-                    isLocalEnabled = cluster.IsEnabled; 
-            } 
- 
-        } 
-        return ClustersList && DatacenterClassifier && (isLocalEnabled || !useLocalEnabled); 
+    bool IsHealthy(bool useLocalEnabled = false) const {
+        bool isLocalEnabled = false;
+        if (ClustersList) {
+            for (const auto& cluster : ClustersList->Clusters) {
+                if (cluster.IsLocal)
+                    isLocalEnabled = cluster.IsEnabled;
+            }
+
+        }
+        return ClustersList && DatacenterClassifier && (isLocalEnabled || !useLocalEnabled);
     }
 
     TString MakeReport() const {
@@ -121,12 +121,12 @@ private:
 
         TStringBuilder responseContent;
         if (path.EndsWith("/health")) {
-            static const char HTTPNOTAVAIL_H[] = "HTTP/1.1 418 I'm a teapot\r\nConnection: Close\r\n\r\nDiscovery service is disabled on the node\r\n"; 
-            responseContent << (IsHealthy() ? NMonitoring::HTTPOKTEXT : HTTPNOTAVAIL_H) << "Service statuses: 200 - OK, 418 - DISABLED"; 
-        } else if (path.EndsWith("/ping")) { 
-            static const char HTTPNOTAVAIL_P[] = "HTTP/1.1 418 I'm a teapot\r\nConnection: Close\r\n\r\nDiscovery service is disabled on the node and local cluster is disabled\r\n"; 
-            responseContent << (IsHealthy(true) ? NMonitoring::HTTPOKTEXT : HTTPNOTAVAIL_P) << "Service statuses: 200 - OK, 418 - DISABLED"; 
-        } else{ 
+            static const char HTTPNOTAVAIL_H[] = "HTTP/1.1 418 I'm a teapot\r\nConnection: Close\r\n\r\nDiscovery service is disabled on the node\r\n";
+            responseContent << (IsHealthy() ? NMonitoring::HTTPOKTEXT : HTTPNOTAVAIL_H) << "Service statuses: 200 - OK, 418 - DISABLED";
+        } else if (path.EndsWith("/ping")) {
+            static const char HTTPNOTAVAIL_P[] = "HTTP/1.1 418 I'm a teapot\r\nConnection: Close\r\n\r\nDiscovery service is disabled on the node and local cluster is disabled\r\n";
+            responseContent << (IsHealthy(true) ? NMonitoring::HTTPOKTEXT : HTTPNOTAVAIL_P) << "Service statuses: 200 - OK, 418 - DISABLED";
+        } else{
             responseContent << NMonitoring::HTTPOKTEXT << MakeReport();
         }
 

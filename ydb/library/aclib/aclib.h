@@ -28,10 +28,10 @@ enum EAccessRights : ui32 { // bitmask
     GrantAccessRights = 0x00002000, // grant access rights (only own access rights)
     WriteUserAttributes = 0x00004000, // modify user attributes / KV
     ConnectDatabase = 0x00008000, // any type of request to DB
-    ReadStream = 0x00010000, // reading streams 
-    WriteStream = 0x00020000, // writing streams 
-    ReadTopic = 0x00040000, // reading topics 
-    WritTopic = 0x00080000, // writing topics 
+    ReadStream = 0x00010000, // reading streams
+    WriteStream = 0x00020000, // writing streams
+    ReadTopic = 0x00040000, // reading topics
+    WritTopic = 0x00080000, // writing topics
 
     GenericRead = SelectRow | ReadAttributes | DescribeSchema,
     GenericWrite = UpdateRow | EraseRow | WriteAttributes | CreateDirectory | CreateTable | CreateQueue | RemoveSchema | AlterSchema | WriteUserAttributes,

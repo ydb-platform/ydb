@@ -87,4 +87,4 @@ namespace NYdb::NConsoleClient {
     private:
         TString ConsumerName_;
     };
-}// namespace NYdb::NConsoleClient 
+}// namespace NYdb::NConsoleClient

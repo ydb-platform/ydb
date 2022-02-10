@@ -18,9 +18,9 @@ namespace NKikimr {
 ////////////////////////////////////////////
 TActorId MakeTabletCountersAggregatorID(ui32 node, bool follower = false);
 
- 
-static const ui32 WORKERS_COUNT = 0; 
- 
+
+static const ui32 WORKERS_COUNT = 0;
+
 ////////////////////////////////////////////
 struct TEvTabletCounters {
     //
@@ -30,9 +30,9 @@ struct TEvTabletCounters {
         EvTabletCountersForgetTablet,
         EvTabletCountersRequest,
         EvTabletCountersResponse,
-        EvTabletAddLabeledCounters, 
-        EvTabletLabeledCountersRequest, 
-        EvTabletLabeledCountersResponse, 
+        EvTabletAddLabeledCounters,
+        EvTabletLabeledCountersRequest,
+        EvTabletLabeledCountersResponse,
         EvRemoveDatabase,
         EvEnd
     };
@@ -62,20 +62,20 @@ struct TEvTabletCounters {
         {}
     };
 
-    struct TEvTabletAddLabeledCounters : public TEventLocal<TEvTabletAddLabeledCounters, EvTabletAddLabeledCounters> { 
-        // 
-        const ui64 TabletID; 
+    struct TEvTabletAddLabeledCounters : public TEventLocal<TEvTabletAddLabeledCounters, EvTabletAddLabeledCounters> {
+        //
+        const ui64 TabletID;
         const TTabletTypes::EType TabletType;
-        TAutoPtr<TTabletLabeledCountersBase> LabeledCounters; 
-        TIntrusivePtr<TInFlightCookie> InFlightCounter;     // Used to detect when previous event has been consumed by the aggregator 
+        TAutoPtr<TTabletLabeledCountersBase> LabeledCounters;
+        TIntrusivePtr<TInFlightCookie> InFlightCounter;     // Used to detect when previous event has been consumed by the aggregator
         TEvTabletAddLabeledCounters(TIntrusivePtr<TInFlightCookie> inFlightCounter, ui64 tabletID, TTabletTypes::EType tabletType, TAutoPtr<TTabletLabeledCountersBase> labeledCounters)
-            : TabletID(tabletID) 
-            , TabletType(tabletType) 
-            , LabeledCounters(labeledCounters) 
-            , InFlightCounter(inFlightCounter) 
-        {} 
-    }; 
- 
+            : TabletID(tabletID)
+            , TabletType(tabletType)
+            , LabeledCounters(labeledCounters)
+            , InFlightCounter(inFlightCounter)
+        {}
+    };
+
     //
     struct TEvTabletCountersForgetTablet : public TEventLocal<TEvTabletCountersForgetTablet, EvTabletCountersForgetTablet> {
         //
@@ -97,16 +97,16 @@ struct TEvTabletCounters {
     struct TEvTabletCountersResponse : public TEventPB<TEvTabletCountersResponse, NKikimrTabletCountersAggregator::TEvTabletCountersResponse, EvTabletCountersResponse> {
     };
 
-    // 
-    struct TEvTabletLabeledCountersRequest : public TEventPB<TEvTabletLabeledCountersRequest, NKikimrTabletCountersAggregator::TEvTabletLabeledCountersRequest, EvTabletLabeledCountersRequest> { 
-    }; 
- 
-    struct TEvTabletLabeledCountersResponse : public TEventPB<TEvTabletLabeledCountersResponse, NKikimrTabletCountersAggregator::TEvTabletLabeledCountersResponse, EvTabletLabeledCountersResponse> { 
-    }; 
- 
+    //
+    struct TEvTabletLabeledCountersRequest : public TEventPB<TEvTabletLabeledCountersRequest, NKikimrTabletCountersAggregator::TEvTabletLabeledCountersRequest, EvTabletLabeledCountersRequest> {
+    };
+
+    struct TEvTabletLabeledCountersResponse : public TEventPB<TEvTabletLabeledCountersResponse, NKikimrTabletCountersAggregator::TEvTabletLabeledCountersResponse, EvTabletLabeledCountersResponse> {
+    };
+
     struct TEvRemoveDatabase : public TEventLocal<TEvRemoveDatabase, EvRemoveDatabase> {
         const TPathId PathId;
- 
+
         explicit TEvRemoveDatabase(TPathId pathId)
             : PathId(pathId)
         {}
@@ -129,21 +129,21 @@ TIntrusivePtr<NSysView::IDbCounters> CreateTabletDbCounters(
 ////////////////////////////////////////////
 IActor* CreateTabletCountersAggregator(bool follower);
 
- 
-//////////////////////////////////////////// 
-//will create actor that aggregate LabeledCounters from all nodes and reports them as TEvTabletLabeledCountersResponse to parentActor 
+
+////////////////////////////////////////////
+//will create actor that aggregate LabeledCounters from all nodes and reports them as TEvTabletLabeledCountersResponse to parentActor
 TActorId CreateClusterLabeledCountersAggregator(
         const TActorId& parentActor,
         TTabletTypes::EType tabletType,
         const TActorContext& ctx,
         ui32 version = 1,
-        const TString& group = TString(), const ui32 TotalWorkersCount = WORKERS_COUNT); 
- 
+        const TString& group = TString(), const ui32 TotalWorkersCount = WORKERS_COUNT);
+
 IActor* CreateClusterLabeledCountersAggregatorActor(
         const TActorId& parentActor,
         TTabletTypes::EType tabletType,
         ui32 version = 1,
-        const TString& group = TString(), const ui32 TotalWorkersCount = WORKERS_COUNT); 
- 
+        const TString& group = TString(), const ui32 TotalWorkersCount = WORKERS_COUNT);
+
 } // end of the NKikimr namespace
 

@@ -8,7 +8,7 @@ OWNER(
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h)
 
 SRCS(
-    persqueue.h 
+    persqueue.h
     proto_accessor.cpp
 )
 

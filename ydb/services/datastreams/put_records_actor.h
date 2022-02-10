@@ -17,29 +17,29 @@
 
 namespace NKikimr::NDataStreams::V1 {
 
- 
+
 
     struct TPutRecordsItem {
         TString Data;
         TString Key;
         TString ExplicitHash;
-        TString Ip; 
+        TString Ip;
     };
 
-    TString GetSerializedData(const TPutRecordsItem& item) { 
-        NKikimrPQClient::TDataChunk proto; 
- 
-        proto.SetIp(item.Ip); 
-        proto.SetCodec(0); // NPersQueue::CODEC_RAW 
-        proto.SetData(item.Data); 
- 
-        TString str; 
-        bool res = proto.SerializeToString(&str); 
-        Y_VERIFY(res); 
-        return str; 
-    } 
- 
- 
+    TString GetSerializedData(const TPutRecordsItem& item) {
+        NKikimrPQClient::TDataChunk proto;
+
+        proto.SetIp(item.Ip);
+        proto.SetCodec(0); // NPersQueue::CODEC_RAW
+        proto.SetData(item.Data);
+
+        TString str;
+        bool res = proto.SerializeToString(&str);
+        Y_VERIFY(res);
+        return str;
+    }
+
+
     class TDatastreamsPartitionActor : public TActorBootstrapped<TDatastreamsPartitionActor> {
     public:
         using TBase = TActorBootstrapped<TDatastreamsPartitionActor>;
@@ -101,9 +101,9 @@ namespace NKikimr::NDataStreams::V1 {
             ui64 totalSize = 0;
             for (const auto& item : DataToWrite) {
                 auto w = request.MutablePartitionRequest()->AddCmdWrite();
-                w->SetData(GetSerializedData(item)); 
+                w->SetData(GetSerializedData(item));
                 w->SetPartitionKey(item.Key);
-                w->SetExplicitHash(item.ExplicitHash); 
+                w->SetExplicitHash(item.ExplicitHash);
                 w->SetDisableDeduplication(true);
                 w->SetCreateTimeMS(TInstant::Now().MilliSeconds());
                 w->SetUncompressedSize(item.Data.size());
@@ -158,12 +158,12 @@ namespace NKikimr::NDataStreams::V1 {
             Die(ctx);
         }
 
-        void Die(const TActorContext& ctx) override { 
-            if (PipeClient) 
-                NTabletPipe::CloseClient(ctx, PipeClient); 
-            TBase::Die(ctx); 
-        } 
- 
+        void Die(const TActorContext& ctx) override {
+            if (PipeClient)
+                NTabletPipe::CloseClient(ctx, PipeClient);
+            TBase::Die(ctx);
+        }
+
     private:
         NActors::TActorId ParentId;
         ui64 TabletId = 0;
@@ -183,9 +183,9 @@ namespace NKikimr::NDataStreams::V1 {
             if (putRecordsRequest.records_size() > 500) {
                 return TStringBuilder() << "Too many records in a single PutRecords request: " << putRecordsRequest.records_size() << " > 500";
             }
-            ui64 totalSize = 0; 
+            ui64 totalSize = 0;
             for (const auto& record : putRecordsRequest.records()) {
-                totalSize += record.partition_key().size() + record.data().size(); 
+                totalSize += record.partition_key().size() + record.data().size();
                 if (record.partition_key().empty()) {
                     return "Empty partition key";
                 }
@@ -199,10 +199,10 @@ namespace NKikimr::NDataStreams::V1 {
                     return TStringBuilder() << record.explicit_hash_key() << " is not a valid 128 bit decimal";
                 }
             }
-            if (totalSize > 5 * 1024 * 1024) { 
-                return TStringBuilder() << "Total size of PutRecords request of " << totalSize << " bytes exceed limit of " << (5*1024*1024) << " bytes"; 
- 
-            } 
+            if (totalSize > 5 * 1024 * 1024) {
+                return TStringBuilder() << "Total size of PutRecords request of " << totalSize << " bytes exceed limit of " << (5*1024*1024) << " bytes";
+
+            }
             return "";
         }
     }
@@ -232,8 +232,8 @@ namespace NKikimr::NDataStreams::V1 {
         NActors::TActorId NewSchemeCache;
         Ydb::DataStreams::V1::PutRecordsResult PutRecordsResult;
 
-        TString Ip; 
- 
+        TString Ip;
+
         void SendNavigateRequest(const TActorContext &ctx);
 
         void Handle(NDataStreams::V1::TEvDataStreams::TEvPartitionActorResult::TPtr& ev, const TActorContext& ctx);
@@ -253,7 +253,7 @@ namespace NKikimr::NDataStreams::V1 {
     TPutRecordsActorBase<TDerived, TProto>::TPutRecordsActorBase(TProto* request, NActors::TActorId newSchemeCache)
             : TBase(request, request->GetProtoRequest()->stream_name())
             , NewSchemeCache(std::move(newSchemeCache))
-            , Ip(request->GetPeerName()) 
+            , Ip(request->GetPeerName())
     {
         Y_ENSURE(request);
     }
@@ -261,9 +261,9 @@ namespace NKikimr::NDataStreams::V1 {
     template<class TDerived, class TProto>
     void TPutRecordsActorBase<TDerived, TProto>::Bootstrap(const NActors::TActorContext& ctx) {
         TString error = CheckRequestIsValid(static_cast<TDerived*>(this)->GetPutRecordsRequest());
- 
+
         if (!error.empty()) {
-            return this->ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx); 
+            return this->ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
         }
 
         if (this->Request_->GetInternalToken().empty()) {
@@ -293,7 +293,7 @@ namespace NKikimr::NDataStreams::V1 {
         if (TBase::ReplyIfNotTopic(ev, ctx)) {
             return;
         }
- 
+
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.begin();
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
@@ -315,10 +315,10 @@ namespace NKikimr::NDataStreams::V1 {
             AddRecord(items, totalShardsCount, i);
         }
 
-        for (auto& partition : pqDescription.GetPartitions()) { 
-            auto part = partition.GetPartitionId(); 
-            if (items[part].empty()) continue; 
-            PartitionToActor[part].ActorId = ctx.Register( 
+        for (auto& partition : pqDescription.GetPartitions()) {
+            auto part = partition.GetPartitionId();
+            if (items[part].empty()) continue;
+            PartitionToActor[part].ActorId = ctx.Register(
                                                           new TDatastreamsPartitionActor(ctx.SelfID, partition.GetTabletId(), part, this->GetTopicPath(ctx), std::move(items[part]))
                                                           );
         }
@@ -332,13 +332,13 @@ namespace NKikimr::NDataStreams::V1 {
         }
     }
 
-    TString GetErrorText(const NPersQueue::NErrorCode::EErrorCode errorCode) { 
-        if (errorCode == NPersQueue::NErrorCode::OVERLOAD) 
-            return "ProvisionedThroughputExceededException"; 
-        return "InternalFailure"; 
-        //TODO: other codes https://docs.aws.amazon.com/kinesis/latest/APIReference/CommonErrors.html 
-    } 
- 
+    TString GetErrorText(const NPersQueue::NErrorCode::EErrorCode errorCode) {
+        if (errorCode == NPersQueue::NErrorCode::OVERLOAD)
+            return "ProvisionedThroughputExceededException";
+        return "InternalFailure";
+        //TODO: other codes https://docs.aws.amazon.com/kinesis/latest/APIReference/CommonErrors.html
+    }
+
     template<class TDerived, class TProto>
     void TPutRecordsActorBase<TDerived, TProto>::Handle(NDataStreams::V1::TEvDataStreams::TEvPartitionActorResult::TPtr& ev, const TActorContext& ctx) {
         auto it = PartitionToActor.find(ev->Get()->PartitionId);
@@ -347,15 +347,15 @@ namespace NKikimr::NDataStreams::V1 {
             PutRecordsResult.set_failed_record_count(
                     PutRecordsResult.failed_record_count() + it->second.RecordIndexes.size());
         }
-        PutRecordsResult.set_encryption_type(Ydb::DataStreams::V1::EncryptionType::NONE); 
+        PutRecordsResult.set_encryption_type(Ydb::DataStreams::V1::EncryptionType::NONE);
         for (ui32 i = 0; i < it->second.RecordIndexes.size(); ++i) {
             ui32 index = it->second.RecordIndexes[i];
             auto& record = *PutRecordsResult.mutable_records(index);
             if (ev->Get()->ErrorText.Defined()) {
                 record.set_error_message(*ev->Get()->ErrorText);
-                record.set_error_code(GetErrorText(*(ev->Get()->ErrorCode))); //TODO: Throttling exception sometimes 
+                record.set_error_code(GetErrorText(*(ev->Get()->ErrorCode))); //TODO: Throttling exception sometimes
             } else {
-                record.set_shard_id(GetShardName(it->first)); 
+                record.set_shard_id(GetShardName(it->first));
                 record.set_sequence_number(Sprintf("%lu", ev->Get()->CurrentOffset + i));
             }
         }
@@ -369,13 +369,13 @@ namespace NKikimr::NDataStreams::V1 {
         const auto& record = static_cast<TDerived*>(this)->GetPutRecordsRequest().records(index);
         ui32 shard = 0;
         if (record.explicit_hash_key().empty()) {
-            auto hashKey = HexBytesToDecimal(MD5::Calc(record.partition_key())); 
+            auto hashKey = HexBytesToDecimal(MD5::Calc(record.partition_key()));
             shard = ShardFromDecimal(hashKey, totalShardsCount);
         } else {
-            auto hashKey = BytesToDecimal(record.explicit_hash_key()); 
-            shard = ShardFromDecimal(hashKey, totalShardsCount); 
+            auto hashKey = BytesToDecimal(record.explicit_hash_key());
+            shard = ShardFromDecimal(hashKey, totalShardsCount);
         }
-        items[shard].push_back(TPutRecordsItem{record.data(), record.partition_key(), record.explicit_hash_key(), Ip}); 
+        items[shard].push_back(TPutRecordsItem{record.data(), record.partition_key(), record.explicit_hash_key(), Ip});
         PartitionToActor[shard].RecordIndexes.push_back(index);
     }
 
@@ -432,16 +432,16 @@ namespace NKikimr::NDataStreams::V1 {
 
         if (putRecordsResult.failed_record_count() == 0) {
             result.set_sequence_number(putRecordsResult.records(0).sequence_number());
-            result.set_shard_id(putRecordsResult.records(0).shard_id()); 
-            result.set_encryption_type(Ydb::DataStreams::V1::EncryptionType::NONE); 
-            return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx); 
+            result.set_shard_id(putRecordsResult.records(0).shard_id());
+            result.set_encryption_type(Ydb::DataStreams::V1::EncryptionType::NONE);
+            return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
         } else {
-            if (putRecordsResult.records(0).error_code() == "ProvisionedThroughputExceededException") { 
-                return ReplyWithResult(Ydb::StatusIds::OVERLOADED, ctx); 
-            } 
-            //TODO: other codes - access denied and so on 
-            return ReplyWithResult(Ydb::StatusIds::INTERNAL_ERROR, ctx); 
+            if (putRecordsResult.records(0).error_code() == "ProvisionedThroughputExceededException") {
+                return ReplyWithResult(Ydb::StatusIds::OVERLOADED, ctx);
+            }
+            //TODO: other codes - access denied and so on
+            return ReplyWithResult(Ydb::StatusIds::INTERNAL_ERROR, ctx);
         }
     }
 
-} 
+}

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "actor_persqueue_client_iface.h" 
+#include "actor_persqueue_client_iface.h"
 
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
@@ -114,8 +114,8 @@ private:
         const TActorContext& ctx,
         const NKikimrClient::TPersQueuePartitionResponse& response
     );
-    void ScheduleConsumerCreation(const TActorContext& ctx); 
-    void RecreateCredentialsProvider(const TActorContext& ctx); 
+    void ScheduleConsumerCreation(const TActorContext& ctx);
+    void RecreateCredentialsProvider(const TActorContext& ctx);
     void StartInit(const TActorContext& ctx);
     void RetryWrite(const TActorContext& ctx);
 

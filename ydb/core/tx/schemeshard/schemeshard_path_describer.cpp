@@ -619,8 +619,8 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     entry->SetPathsLimit(subDomainInfo->GetSchemeLimits().MaxPaths);
     entry->SetShardsInside(subDomainInfo->GetShardsInside());
     entry->SetShardsLimit(subDomainInfo->GetSchemeLimits().MaxShards);
-    entry->SetPQPartitionsInside(subDomainInfo->GetPQPartitionsInside()); 
-    entry->SetPQPartitionsLimit(subDomainInfo->GetSchemeLimits().MaxPQPartitions); 
+    entry->SetPQPartitionsInside(subDomainInfo->GetPQPartitionsInside());
+    entry->SetPQPartitionsLimit(subDomainInfo->GetSchemeLimits().MaxPQPartitions);
 
     NKikimrSubDomains::TDomainKey *resourcesKey = entry->MutableResourcesDomainKey();
     resourcesKey->SetSchemeShard(subDomainInfo->GetResourcesDomainId().OwnerId);

@@ -669,7 +669,7 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
         HFunc(TEvDataStreamsSplitShardRequest, PreHandle);
         HFunc(TEvDataStreamsStartStreamEncryptionRequest, PreHandle);
         HFunc(TEvDataStreamsStopStreamEncryptionRequest, PreHandle);
- 
+
         HFunc(TEvProxyRuntimeEvent, PreHandle);
 
         default:

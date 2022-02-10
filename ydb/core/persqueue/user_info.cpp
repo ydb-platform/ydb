@@ -33,8 +33,8 @@ TUsersInfoStorage::TUsersInfoStorage(
     ui64 tabletId,
     const TString& topicName,
     ui32 partition,
-    const TTabletCountersBase& counters, 
-    const NKikimrPQ::TPQTabletConfig& config, 
+    const TTabletCountersBase& counters,
+    const NKikimrPQ::TPQTabletConfig& config,
     const TString& cloudId,
     const TString& dbId,
     const TString& folderId
@@ -43,7 +43,7 @@ TUsersInfoStorage::TUsersInfoStorage(
     , TabletId(tabletId)
     , TopicName(topicName)
     , Partition(partition)
-    , Config(config) 
+    , Config(config)
     , CloudId(cloudId)
     , DbId(dbId)
     , FolderId(folderId)
@@ -56,7 +56,7 @@ void TUsersInfoStorage::Init(TActorId tabletActor, TActorId partitionActor) {
     Y_VERIFY(!PartitionActor);
     TabletActor = tabletActor;
     PartitionActor = partitionActor;
- 
+
     for (auto& userInfoPair : UsersInfo) {
         auto& userInfo = userInfoPair.second;
         Y_VERIFY(!userInfo.ReadSpeedLimiter);
@@ -69,11 +69,11 @@ void TUsersInfoStorage::ParseDeprecated(const TString& key, const TString& data,
     Y_VERIFY(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkUserDeprecated);
     TString user = key.substr(TKeyPrefix::MarkedSize());
 
-    TUserInfo* userInfo = GetIfExists(user); 
-    if (userInfo && userInfo->Parsed) { 
-        return; 
-    } 
- 
+    TUserInfo* userInfo = GetIfExists(user);
+    if (userInfo && userInfo->Parsed) {
+        return;
+    }
+
     ui64 offset = 0;
     ui32 gen = 0;
     ui32 step = 0;
@@ -82,7 +82,7 @@ void TUsersInfoStorage::ParseDeprecated(const TString& key, const TString& data,
     Y_VERIFY(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
 
     if (!userInfo) {
-        Create(ctx, user, 0, false, session, gen, step, static_cast<i64>(offset), 0, TInstant::Zero()); 
+        Create(ctx, user, 0, false, session, gen, step, static_cast<i64>(offset), 0, TInstant::Zero());
     } else {
         userInfo->Session = session;
         userInfo->Generation = gen;
@@ -108,7 +108,7 @@ void TUsersInfoStorage::Parse(const TString& key, const TString& data, const TAc
     TUserInfo* userInfo = GetIfExists(user);
     if (!userInfo) {
         Create(
-            ctx, user, userData.GetReadRuleGeneration(), false, userData.GetSession(), 
+            ctx, user, userData.GetReadRuleGeneration(), false, userData.GetSession(),
             userData.GetGeneration(), userData.GetStep(), offset, userData.GetOffsetRewindSum(), TInstant::Zero()
         );
     } else {
@@ -117,25 +117,25 @@ void TUsersInfoStorage::Parse(const TString& key, const TString& data, const TAc
         userInfo->Step = userData.GetStep();
         userInfo->Offset = offset;
         userInfo->ReadOffsetRewindSum = userData.GetOffsetRewindSum();
-        userInfo->ReadRuleGeneration = userData.GetReadRuleGeneration(); 
+        userInfo->ReadRuleGeneration = userData.GetReadRuleGeneration();
     }
-    userInfo = GetIfExists(user); 
-    Y_VERIFY(userInfo); 
-    userInfo->Parsed = true; 
+    userInfo = GetIfExists(user);
+    Y_VERIFY(userInfo);
+    userInfo->Parsed = true;
 }
 
-void TUsersInfoStorage::Remove(const TString& user, const TActorContext& ctx) { 
-    auto it = UsersInfo.find(user); 
-    Y_VERIFY(it != UsersInfo.end()); 
-    it->second.Clear(ctx); 
-    UsersInfo.erase(it); 
-} 
- 
+void TUsersInfoStorage::Remove(const TString& user, const TActorContext& ctx) {
+    auto it = UsersInfo.find(user);
+    Y_VERIFY(it != UsersInfo.end());
+    it->second.Clear(ctx);
+    UsersInfo.erase(it);
+}
+
 TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorContext& ctx) {
     Y_VERIFY(!user.empty());
     auto it = UsersInfo.find(user);
     if (it == UsersInfo.end()) {
-        return Create(ctx, user, 0, false, "", 0, 0, 0, 0, TInstant::Zero()); 
+        return Create(ctx, user, 0, false, "", 0, 0, 0, 0, TInstant::Zero());
     }
     return it->second;
 }
@@ -150,20 +150,20 @@ THashMap<TString, TUserInfo>& TUsersInfoStorage::GetAll() {
 }
 
 TUserInfo& TUsersInfoStorage::Create(
-    const TActorContext& ctx, const TString& user, const ui64 readRuleGeneration, bool important, const TString& session, 
+    const TActorContext& ctx, const TString& user, const ui64 readRuleGeneration, bool important, const TString& session,
     ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum, TInstant readFromTimestamp
 ) {
- 
+
     ui64 burst = 1'000'000'000, speed = 1'000'000'000;
-    if (AppData(ctx)->PQConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota()) { 
-        burst = Config.GetPartitionConfig().GetBurstSize() * 2; 
-        speed = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() * 2; 
-    } 
+    if (AppData(ctx)->PQConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota()) {
+        burst = Config.GetPartitionConfig().GetBurstSize() * 2;
+        speed = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() * 2;
+    }
     auto result = UsersInfo.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(user),
-        std::forward_as_tuple(ctx, CreateReadSpeedLimiter(user), user, readRuleGeneration, important, TopicName, Partition, session, 
-        gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, CloudId, DbId, FolderId, burst, speed) 
+        std::forward_as_tuple(ctx, CreateReadSpeedLimiter(user), user, readRuleGeneration, important, TopicName, Partition, session,
+        gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, CloudId, DbId, FolderId, burst, speed)
     );
     Y_VERIFY(result.second);
     return result.first->second;
@@ -171,17 +171,17 @@ TUserInfo& TUsersInfoStorage::Create(
 
 void TUsersInfoStorage::Clear(const TActorContext& ctx) {
     for (auto& userInfoPair : UsersInfo) {
-        userInfoPair.second.Clear(ctx); 
+        userInfoPair.second.Clear(ctx);
     }
-    UsersInfo.clear(); 
+    UsersInfo.clear();
 }
 
-void TUserInfo::Clear(const TActorContext& ctx) { 
-    if (ReadSpeedLimiter) { 
-        ctx.Send(ReadSpeedLimiter->Actor, new TEvents::TEvPoisonPill()); 
-    } 
-} 
- 
+void TUserInfo::Clear(const TActorContext& ctx) {
+    if (ReadSpeedLimiter) {
+        ctx.Send(ReadSpeedLimiter->Actor, new TEvents::TEvPoisonPill());
+    }
+}
+
 THolder<TReadSpeedLimiterHolder> TUsersInfoStorage::CreateReadSpeedLimiter(const TString& user) const {
     const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
     if (TabletActor && quotingConfig.GetEnableQuoting() && quotingConfig.GetEnableReadQuoting()) {

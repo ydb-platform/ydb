@@ -1,4 +1,4 @@
-#include "persqueue_impl.h" 
+#include "persqueue_impl.h"
 #include "read_session.h"
 #include "common.h"
 
@@ -12,7 +12,7 @@
 #include <util/generic/utility.h>
 #include <util/generic/yexception.h>
 #include <util/stream/mem.h>
-#include <util/system/env.h> 
+#include <util/system/env.h>
 
 #include <variant>
 
@@ -20,8 +20,8 @@ namespace NYdb::NPersQueue {
 
 static const TString DRIVER_IS_STOPPING_DESCRIPTION = "Driver is stopping";
 
-static const bool RangesMode = !GetEnv("PQ_OFFSET_RANGES_MODE").empty(); 
- 
+static const bool RangesMode = !GetEnv("PQ_OFFSET_RANGES_MODE").empty();
+
 std::pair<ui64, ui64> GetMessageOffsetRange(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent, ui64 index) {
     if (dataReceivedEvent.IsCompressedMessages()) {
         const auto& msg = dataReceivedEvent.GetCompressedMessages()[index];
@@ -100,11 +100,11 @@ void TReadSession::Start() {
     }
 
     Log << TLOG_INFO << "Starting read session";
-    if (Settings.DisableClusterDiscovery_) { 
-        ProceedWithoutClusterDiscovery(); 
-    } else { 
-        StartClusterDiscovery(); 
-    } 
+    if (Settings.DisableClusterDiscovery_) {
+        ProceedWithoutClusterDiscovery();
+    } else {
+        StartClusterDiscovery();
+    }
 }
 
 bool TReadSession::ValidateSettings() {
@@ -166,61 +166,61 @@ void TReadSession::StartClusterDiscovery() {
         /*ClientTimeout_*/TDuration::Seconds(5)); // TODO: make client timeout setting
 }
 
- 
-void TReadSession::ProceedWithoutClusterDiscovery() { 
-    TDeferredActions deferred; 
-    with_lock (Lock) { 
-        if (Aborting) { 
-            return; 
-        } 
- 
-        TString normalizedName = "null"; 
-        THashMap<TString, TClusterSessionInfo>::iterator clusterSessionInfoIter; 
-        clusterSessionInfoIter = ClusterSessions.emplace(normalizedName, normalizedName).first; 
-        TClusterSessionInfo& clusterSessionInfo = clusterSessionInfoIter->second; 
-        clusterSessionInfo.ClusterEndpoint = DbDriverState->DiscoveryEndpoint; 
+
+void TReadSession::ProceedWithoutClusterDiscovery() {
+    TDeferredActions deferred;
+    with_lock (Lock) {
+        if (Aborting) {
+            return;
+        }
+
+        TString normalizedName = "null";
+        THashMap<TString, TClusterSessionInfo>::iterator clusterSessionInfoIter;
+        clusterSessionInfoIter = ClusterSessions.emplace(normalizedName, normalizedName).first;
+        TClusterSessionInfo& clusterSessionInfo = clusterSessionInfoIter->second;
+        clusterSessionInfo.ClusterEndpoint = DbDriverState->DiscoveryEndpoint;
         clusterSessionInfo.Topics = Settings.Topics_;
-        CreateClusterSessionsImpl(); 
-    } 
-    ScheduleDumpCountersToLog(); 
-} 
- 
-void TReadSession::CreateClusterSessionsImpl() { 
-    TDeferredActions deferred; 
-    // Create cluster sessions. 
-    ui64 partitionStreamIdStart = 1; 
-    const size_t clusterSessionsCount = ClusterSessions.size(); 
-    for (auto& [clusterName, clusterSessionInfo] : ClusterSessions) { 
-        TReadSessionSettings sessionSettings = Settings; 
-        sessionSettings.Topics_ = clusterSessionInfo.Topics; 
-        if (sessionSettings.MaxMemoryUsageBytes_ > clusterSessionsCount && sessionSettings.MaxMemoryUsageBytes_ != std::numeric_limits<size_t>::max()) { 
-            sessionSettings.MaxMemoryUsageBytes_ /= clusterSessionsCount; 
-        } 
-        Log << TLOG_DEBUG << "Starting session to cluster " << clusterName << " (" << clusterSessionInfo.ClusterEndpoint << ")"; 
-        auto subclient = Client->GetClientForEndpoint(clusterSessionInfo.ClusterEndpoint); 
-        auto context = subclient->CreateContext(); 
-        if (!context) { 
-            AbortImpl(EStatus::ABORTED, DRIVER_IS_STOPPING_DESCRIPTION, deferred); 
-            return; 
-        } 
-        TStringBuilder logPrefix; 
-        logPrefix << GetDatabaseLogPrefix(DbDriverState->Database) << "[" << SessionId << "] [" << clusterName << "] "; 
-        TLog log = Log; 
-        log.SetFormatter(GetPrefixLogFormatter(logPrefix)); 
-        clusterSessionInfo.Session = 
-            std::make_shared<TSingleClusterReadSessionImpl>( 
-                sessionSettings, 
-                clusterName, 
-                log, 
-                subclient->CreateReadSessionConnectionProcessorFactory(), 
-                EventsQueue, 
-                ErrorHandler, 
-                context, 
-                partitionStreamIdStart++, clusterSessionsCount); 
-        clusterSessionInfo.Session->Start(); 
-    } 
-} 
- 
+        CreateClusterSessionsImpl();
+    }
+    ScheduleDumpCountersToLog();
+}
+
+void TReadSession::CreateClusterSessionsImpl() {
+    TDeferredActions deferred;
+    // Create cluster sessions.
+    ui64 partitionStreamIdStart = 1;
+    const size_t clusterSessionsCount = ClusterSessions.size();
+    for (auto& [clusterName, clusterSessionInfo] : ClusterSessions) {
+        TReadSessionSettings sessionSettings = Settings;
+        sessionSettings.Topics_ = clusterSessionInfo.Topics;
+        if (sessionSettings.MaxMemoryUsageBytes_ > clusterSessionsCount && sessionSettings.MaxMemoryUsageBytes_ != std::numeric_limits<size_t>::max()) {
+            sessionSettings.MaxMemoryUsageBytes_ /= clusterSessionsCount;
+        }
+        Log << TLOG_DEBUG << "Starting session to cluster " << clusterName << " (" << clusterSessionInfo.ClusterEndpoint << ")";
+        auto subclient = Client->GetClientForEndpoint(clusterSessionInfo.ClusterEndpoint);
+        auto context = subclient->CreateContext();
+        if (!context) {
+            AbortImpl(EStatus::ABORTED, DRIVER_IS_STOPPING_DESCRIPTION, deferred);
+            return;
+        }
+        TStringBuilder logPrefix;
+        logPrefix << GetDatabaseLogPrefix(DbDriverState->Database) << "[" << SessionId << "] [" << clusterName << "] ";
+        TLog log = Log;
+        log.SetFormatter(GetPrefixLogFormatter(logPrefix));
+        clusterSessionInfo.Session =
+            std::make_shared<TSingleClusterReadSessionImpl>(
+                sessionSettings,
+                clusterName,
+                log,
+                subclient->CreateReadSessionConnectionProcessorFactory(),
+                EventsQueue,
+                ErrorHandler,
+                context,
+                partitionStreamIdStart++, clusterSessionsCount);
+        clusterSessionInfo.Session->Start();
+    }
+}
+
 void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult& result) {
     TDeferredActions deferred;
     with_lock (Lock) {
@@ -313,7 +313,7 @@ void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueu
             return;
         }
 
-        CreateClusterSessionsImpl(); 
+        CreateClusterSessionsImpl();
     }
     ScheduleDumpCountersToLog();
 }
@@ -340,10 +340,10 @@ void TReadSession::RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions
 
 bool TReadSession::Close(TDuration timeout) {
     Log << TLOG_INFO << "Closing read session. Close timeout: " << timeout;
-    with_lock (Lock) { 
-        Cancel(ClusterDiscoveryDelayContext); 
-        Cancel(DumpCountersContext); 
-    } 
+    with_lock (Lock) {
+        Cancel(ClusterDiscoveryDelayContext);
+        Cancel(DumpCountersContext);
+    }
     // Log final counters.
     DumpCountersToLog();
 
@@ -424,7 +424,7 @@ bool TReadSession::Close(TDuration timeout) {
 void TReadSession::AbortImpl(TSessionClosedEvent&& closeEvent, TDeferredActions& deferred) {
     if (!Aborting) {
         Aborting = true;
-        Log << TLOG_NOTICE << "Aborting read session. Description: " << closeEvent.DebugString(); 
+        Log << TLOG_NOTICE << "Aborting read session. Description: " << closeEvent.DebugString();
         Cancel(ClusterDiscoveryDelayContext);
         Cancel(DumpCountersContext);
         for (auto& [cluster, sessionInfo] : ClusterSessions) {
@@ -603,9 +603,9 @@ void TReadSession::DumpCountersToLog(size_t timeNumber) {
 }
 
 void TReadSession::ScheduleDumpCountersToLog(size_t timeNumber) {
-    with_lock(Lock) { 
-        DumpCountersContext = Connections->CreateContext(); 
-    } 
+    with_lock(Lock) {
+        DumpCountersContext = Connections->CreateContext();
+    }
     if (DumpCountersContext) {
         auto callback = [self = weak_from_this(), timeNumber](bool ok) {
             if (ok) {
@@ -630,23 +630,23 @@ TLog TPartitionStreamImpl::GetLog() const {
 }
 
 void TPartitionStreamImpl::Commit(ui64 startOffset, ui64 endOffset) {
-    std::vector<std::pair<ui64, ui64>> toCommit; 
+    std::vector<std::pair<ui64, ui64>> toCommit;
     if (auto sessionShared = Session.lock()) {
-        Y_VERIFY(endOffset > startOffset); 
-        with_lock(sessionShared->Lock) { 
-            if (!AddToCommitRanges(startOffset, endOffset, true)) // Add range for real commit always. 
-                return; 
- 
-            Y_VERIFY(!Commits.Empty()); 
-            for (auto c : Commits) { 
-                if (c.first >= endOffset) break; // Commit only gaps before client range. 
-                toCommit.emplace_back(c); 
-            } 
-            Commits.EraseInterval(0, endOffset); // Drop only committed ranges; 
-        } 
-        for (auto range: toCommit) { 
-            sessionShared->Commit(this, range.first, range.second); 
-        } 
+        Y_VERIFY(endOffset > startOffset);
+        with_lock(sessionShared->Lock) {
+            if (!AddToCommitRanges(startOffset, endOffset, true)) // Add range for real commit always.
+                return;
+
+            Y_VERIFY(!Commits.Empty());
+            for (auto c : Commits) {
+                if (c.first >= endOffset) break; // Commit only gaps before client range.
+                toCommit.emplace_back(c);
+            }
+            Commits.EraseInterval(0, endOffset); // Drop only committed ranges;
+        }
+        for (auto range: toCommit) {
+            sessionShared->Commit(this, range.first, range.second);
+        }
     }
 }
 
@@ -678,8 +678,8 @@ void TPartitionStreamImpl::ResumeReading() {
 
 void TPartitionStreamImpl::SignalReadyEvents(TReadSessionEventsQueue* queue, TDeferredActions& deferred) {
     for (auto& event : EventsQueue) {
-        event.Signal(this, queue, deferred); 
- 
+        event.Signal(this, queue, deferred);
+
         if (!event.IsReady()) {
             break;
         }
@@ -864,7 +864,7 @@ void TSingleClusterReadSessionImpl::InitImpl(TDeferredActions& deferred) { // As
     Log << TLOG_DEBUG << "Successfully connected. Initializing session";
     Ydb::PersQueue::V1::MigrationStreamingReadClientMessage req;
     auto& init = *req.mutable_init_request();
-    init.set_ranges_mode(RangesMode); 
+    init.set_ranges_mode(RangesMode);
     for (const TTopicReadSettings& topic : Settings.Topics_) {
         auto* topicSettings = init.add_topics_read_settings();
         topicSettings->set_topic(topic.Path_);
@@ -907,7 +907,7 @@ void TSingleClusterReadSessionImpl::ContinueReadingDataImpl() { // Assumes that 
 }
 
 bool TSingleClusterReadSessionImpl::IsActualPartitionStreamImpl(const TPartitionStreamImpl* partitionStream) { // Assumes that we're under lock.
-    auto actualPartitionStreamIt = PartitionStreams.find(partitionStream->GetAssignId()); 
+    auto actualPartitionStreamIt = PartitionStreams.find(partitionStream->GetAssignId());
     return actualPartitionStreamIt != PartitionStreams.end()
         && actualPartitionStreamIt->second->GetPartitionStreamId() == partitionStream->GetPartitionStreamId();
 }
@@ -958,7 +958,7 @@ void TSingleClusterReadSessionImpl::ConfirmPartitionStreamDestroy(TPartitionStre
         }
 
         CookieMapping.RemoveMapping(partitionStream->GetPartitionStreamId());
-        PartitionStreams.erase(partitionStream->GetAssignId()); 
+        PartitionStreams.erase(partitionStream->GetAssignId());
         EventsQueue->PushEvent({partitionStream, weak_from_this(), TReadSessionEvent::TPartitionStreamClosedEvent(partitionStream, TReadSessionEvent::TPartitionStreamClosedEvent::EReason::DestroyConfirmedByUser)}, deferred);
 
         Ydb::PersQueue::V1::MigrationStreamingReadClientMessage req;
@@ -980,21 +980,21 @@ void TSingleClusterReadSessionImpl::Commit(const TPartitionStreamImpl* partition
         }
         Ydb::PersQueue::V1::MigrationStreamingReadClientMessage req;
         bool hasSomethingToCommit = false;
-        if (RangesMode) { 
-            hasSomethingToCommit = true; 
-            auto* range = req.mutable_commit()->add_offset_ranges(); 
-            range->set_assign_id(partitionStream->GetAssignId()); 
-            range->set_start_offset(startOffset); 
-            range->set_end_offset(endOffset); 
-        } else { 
-            for (ui64 offset = startOffset; offset < endOffset; ++offset) { 
-                TPartitionCookieMapping::TCookie::TPtr cookie = CookieMapping.CommitOffset(partitionStream->GetPartitionStreamId(), offset); 
-                if (cookie) { 
-                    hasSomethingToCommit = true; 
-                    auto* cookieInfo = req.mutable_commit()->add_cookies(); 
-                    cookieInfo->set_assign_id(partitionStream->GetAssignId()); 
-                    cookieInfo->set_partition_cookie(cookie->Cookie); 
-                } 
+        if (RangesMode) {
+            hasSomethingToCommit = true;
+            auto* range = req.mutable_commit()->add_offset_ranges();
+            range->set_assign_id(partitionStream->GetAssignId());
+            range->set_start_offset(startOffset);
+            range->set_end_offset(endOffset);
+        } else {
+            for (ui64 offset = startOffset; offset < endOffset; ++offset) {
+                TPartitionCookieMapping::TCookie::TPtr cookie = CookieMapping.CommitOffset(partitionStream->GetPartitionStreamId(), offset);
+                if (cookie) {
+                    hasSomethingToCommit = true;
+                    auto* cookieInfo = req.mutable_commit()->add_cookies();
+                    cookieInfo->set_assign_id(partitionStream->GetAssignId());
+                    cookieInfo->set_partition_cookie(cookie->Cookie);
+                }
             }
         }
         if (hasSomethingToCommit) {
@@ -1026,7 +1026,7 @@ void TSingleClusterReadSessionImpl::OnUserRetrievedEvent(const TReadSessionEvent
     const i64 bytesCount = static_cast<i64>(CalcDataSize(event));
     Y_ASSERT(bytesCount >= 0);
 
-    if (!std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event)) { // Event is not data event. 
+    if (!std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event)) { // Event is not data event.
         return;
     }
 
@@ -1050,16 +1050,16 @@ void TSingleClusterReadSessionImpl::WriteToProcessorImpl(Ydb::PersQueue::V1::Mig
     }
 }
 
-bool TSingleClusterReadSessionImpl::HasCommitsInflightImpl() const { 
-    for (const auto& [id, partitionStream] : PartitionStreams) { 
-        if (partitionStream->HasCommitsInflight()) 
-            return true; 
-    } 
-    return false; 
-} 
- 
+bool TSingleClusterReadSessionImpl::HasCommitsInflightImpl() const {
+    for (const auto& [id, partitionStream] : PartitionStreams) {
+        if (partitionStream->HasCommitsInflight())
+            return true;
+    }
+    return false;
+}
+
 void TSingleClusterReadSessionImpl::ReadFromProcessorImpl(TDeferredActions& deferred) { // Assumes that we're under lock.
-    if (Closing && !HasCommitsInflightImpl()) { 
+    if (Closing && !HasCommitsInflightImpl()) {
         Processor->Cancel();
         CallCloseCallbackImpl();
         return;
@@ -1154,13 +1154,13 @@ void TSingleClusterReadSessionImpl::OnReadDoneImpl(Ydb::PersQueue::V1::Migration
     }
     UpdateMemoryUsageStatisticsImpl();
     for (Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::PartitionData& partitionData : *msg.mutable_partition_data()) {
-        auto partitionStreamIt = PartitionStreams.find(partitionData.cookie().assign_id()); 
+        auto partitionStreamIt = PartitionStreams.find(partitionData.cookie().assign_id());
         if (partitionStreamIt == PartitionStreams.end()) {
             ++*Settings.Counters_->Errors;
             BreakConnectionAndReconnectImpl(EStatus::INTERNAL_ERROR,
                                             TStringBuilder() << "Got unexpected partition stream data message. Topic: "
                                                 << partitionData.topic()
-                                                << ". Partition: " << partitionData.partition() << " AssignId: " << partitionData.cookie().assign_id(), 
+                                                << ". Partition: " << partitionData.partition() << " AssignId: " << partitionData.cookie().assign_id(),
                                             deferred);
             return;
         }
@@ -1170,21 +1170,21 @@ void TSingleClusterReadSessionImpl::OnReadDoneImpl(Ydb::PersQueue::V1::Migration
 
         ui64 firstOffset = std::numeric_limits<ui64>::max();
         ui64 currentOffset = std::numeric_limits<ui64>::max();
-        ui64 desiredOffset = partitionStream->GetFirstNotReadOffset(); 
+        ui64 desiredOffset = partitionStream->GetFirstNotReadOffset();
         for (const Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch& batch : partitionData.batches()) {
             // Validate messages.
             for (const Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::MessageData& messageData : batch.message_data()) {
                 // Check offsets continuity.
-                if (messageData.offset() != desiredOffset) { 
-                    bool res = partitionStream->AddToCommitRanges(desiredOffset, messageData.offset(), RangesMode); 
-                    Y_VERIFY(res); 
-                } 
- 
-                if (firstOffset == std::numeric_limits<ui64>::max()) { 
+                if (messageData.offset() != desiredOffset) {
+                    bool res = partitionStream->AddToCommitRanges(desiredOffset, messageData.offset(), RangesMode);
+                    Y_VERIFY(res);
+                }
+
+                if (firstOffset == std::numeric_limits<ui64>::max()) {
                     firstOffset = messageData.offset();
                 }
                 currentOffset = messageData.offset();
-                desiredOffset = currentOffset + 1; 
+                desiredOffset = currentOffset + 1;
                 partitionStream->UpdateMaxReadOffset(currentOffset);
                 const i64 messageSize = static_cast<i64>(messageData.data().size());
                 CompressedDataSize += messageSize;
@@ -1193,17 +1193,17 @@ void TSingleClusterReadSessionImpl::OnReadDoneImpl(Ydb::PersQueue::V1::Migration
                 ++*Settings.Counters_->MessagesInflight;
             }
         }
-        if (firstOffset == std::numeric_limits<ui64>::max()) { 
-            BreakConnectionAndReconnectImpl(EStatus::INTERNAL_ERROR, 
-                                            TStringBuilder() << "Got empty data message. Topic: " 
-                                                << partitionData.topic() 
-                                                << ". Partition: " << partitionData.partition() 
-                                                << " message: " << msg, 
-                                            deferred); 
-            return; 
-        } 
-        cookie->SetOffsetRange(std::make_pair(firstOffset, desiredOffset)); 
-        partitionStream->SetFirstNotReadOffset(desiredOffset); 
+        if (firstOffset == std::numeric_limits<ui64>::max()) {
+            BreakConnectionAndReconnectImpl(EStatus::INTERNAL_ERROR,
+                                            TStringBuilder() << "Got empty data message. Topic: "
+                                                << partitionData.topic()
+                                                << ". Partition: " << partitionData.partition()
+                                                << " message: " << msg,
+                                            deferred);
+            return;
+        }
+        cookie->SetOffsetRange(std::make_pair(firstOffset, desiredOffset));
+        partitionStream->SetFirstNotReadOffset(desiredOffset);
         if (!CookieMapping.AddMapping(cookie)) {
             BreakConnectionAndReconnectImpl(EStatus::INTERNAL_ERROR,
                                             TStringBuilder() << "Got unexpected data message. Topic: "
@@ -1229,16 +1229,16 @@ void TSingleClusterReadSessionImpl::OnReadDoneImpl(Ydb::PersQueue::V1::Migration
     auto partitionStream = MakeIntrusive<TPartitionStreamImpl>(NextPartitionStreamId,
                                                                msg.topic().path(),
                                                                msg.cluster(),
-                                                               msg.partition() + 1, // Group. 
+                                                               msg.partition() + 1, // Group.
                                                                msg.partition(), // Partition.
                                                                msg.assign_id(),
-                                                               msg.read_offset(), 
+                                                               msg.read_offset(),
                                                                weak_from_this(),
                                                                ErrorHandler);
     NextPartitionStreamId += PartitionStreamIdStep;
 
     // Renew partition stream.
-    TIntrusivePtr<TPartitionStreamImpl>& currentPartitionStream = PartitionStreams[partitionStream->GetAssignId()]; 
+    TIntrusivePtr<TPartitionStreamImpl>& currentPartitionStream = PartitionStreams[partitionStream->GetAssignId()];
     if (currentPartitionStream) {
         CookieMapping.RemoveMapping(currentPartitionStream->GetPartitionStreamId());
         EventsQueue->PushEvent({currentPartitionStream, weak_from_this(), TReadSessionEvent::TPartitionStreamClosedEvent(currentPartitionStream, TReadSessionEvent::TPartitionStreamClosedEvent::EReason::Lost)}, deferred);
@@ -1250,13 +1250,13 @@ void TSingleClusterReadSessionImpl::OnReadDoneImpl(Ydb::PersQueue::V1::Migration
 }
 
 void TSingleClusterReadSessionImpl::OnReadDoneImpl(Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::Release&& msg, TDeferredActions& deferred) { // Assumes that we're under lock.
-    auto partitionStreamIt = PartitionStreams.find(msg.assign_id()); 
-    if (partitionStreamIt == PartitionStreams.end()) { 
+    auto partitionStreamIt = PartitionStreams.find(msg.assign_id());
+    if (partitionStreamIt == PartitionStreams.end()) {
         return;
     }
     TIntrusivePtr<TPartitionStreamImpl> partitionStream = partitionStreamIt->second;
     if (msg.forceful_release()) {
-        PartitionStreams.erase(msg.assign_id()); 
+        PartitionStreams.erase(msg.assign_id());
         CookieMapping.RemoveMapping(partitionStream->GetPartitionStreamId());
         EventsQueue->PushEvent({partitionStream, weak_from_this(), TReadSessionEvent::TPartitionStreamClosedEvent(partitionStream, TReadSessionEvent::TPartitionStreamClosedEvent::EReason::Lost)}, deferred);
     } else {
@@ -1265,35 +1265,35 @@ void TSingleClusterReadSessionImpl::OnReadDoneImpl(Ydb::PersQueue::V1::Migration
 }
 
 void TSingleClusterReadSessionImpl::OnReadDoneImpl(Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::Committed&& msg, TDeferredActions& deferred) { // Assumes that we're under lock.
- 
-    Log << TLOG_DEBUG << "Committed response: " << msg; 
- 
-    TMap<ui64, TIntrusivePtr<TPartitionStreamImpl>> partitionStreams; 
+
+    Log << TLOG_DEBUG << "Committed response: " << msg;
+
+    TMap<ui64, TIntrusivePtr<TPartitionStreamImpl>> partitionStreams;
     for (const Ydb::PersQueue::V1::CommitCookie& cookieProto : msg.cookies()) {
         TPartitionCookieMapping::TCookie::TPtr cookie = CookieMapping.RetrieveCommittedCookie(cookieProto);
         if (cookie) {
-            cookie->PartitionStream->UpdateMaxCommittedOffset(cookie->OffsetRange.second); 
-            partitionStreams[cookie->PartitionStream->GetPartitionStreamId()] = cookie->PartitionStream; 
+            cookie->PartitionStream->UpdateMaxCommittedOffset(cookie->OffsetRange.second);
+            partitionStreams[cookie->PartitionStream->GetPartitionStreamId()] = cookie->PartitionStream;
         }
     }
-    for (auto& [id, partitionStream] : partitionStreams) { 
-        EventsQueue->PushEvent({partitionStream, weak_from_this(), TReadSessionEvent::TCommitAcknowledgementEvent(partitionStream, partitionStream->GetMaxCommittedOffset())}, deferred); 
-    } 
- 
-    for (const auto& rangeProto : msg.offset_ranges()) { 
-        auto partitionStreamIt = PartitionStreams.find(rangeProto.assign_id()); 
-        if (partitionStreamIt != PartitionStreams.end()) { 
-            auto partitionStream = partitionStreamIt->second; 
-            partitionStream->UpdateMaxCommittedOffset(rangeProto.end_offset()); 
-            EventsQueue->PushEvent({partitionStream, weak_from_this(), TReadSessionEvent::TCommitAcknowledgementEvent(partitionStream, rangeProto.end_offset())}, deferred); 
-        } 
-    } 
- 
+    for (auto& [id, partitionStream] : partitionStreams) {
+        EventsQueue->PushEvent({partitionStream, weak_from_this(), TReadSessionEvent::TCommitAcknowledgementEvent(partitionStream, partitionStream->GetMaxCommittedOffset())}, deferred);
+    }
+
+    for (const auto& rangeProto : msg.offset_ranges()) {
+        auto partitionStreamIt = PartitionStreams.find(rangeProto.assign_id());
+        if (partitionStreamIt != PartitionStreams.end()) {
+            auto partitionStream = partitionStreamIt->second;
+            partitionStream->UpdateMaxCommittedOffset(rangeProto.end_offset());
+            EventsQueue->PushEvent({partitionStream, weak_from_this(), TReadSessionEvent::TCommitAcknowledgementEvent(partitionStream, rangeProto.end_offset())}, deferred);
+        }
+    }
+
 }
 
 void TSingleClusterReadSessionImpl::OnReadDoneImpl(Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::PartitionStatus&& msg, TDeferredActions& deferred) { // Assumes that we're under lock.
-    auto partitionStreamIt = PartitionStreams.find(msg.assign_id()); 
-    if (partitionStreamIt == PartitionStreams.end()) { 
+    auto partitionStreamIt = PartitionStreams.find(msg.assign_id());
+    if (partitionStreamIt == PartitionStreams.end()) {
         return;
     }
     EventsQueue->PushEvent(
@@ -1358,9 +1358,9 @@ void TSingleClusterReadSessionImpl::OnDataDecompressed(i64 sourceSize, i64 estim
         DecompressedDataSize += decompressedSize - estimatedDecompressedSize;
         constexpr double weight = 0.6;
         AverageCompressionRatio = weight * static_cast<double>(decompressedSize) / static_cast<double>(sourceSize) + (1 - weight) * AverageCompressionRatio;
-        if (Aborting) { 
-            return; 
-        } 
+        if (Aborting) {
+            return;
+        }
         ContinueReadingDataImpl();
         StartDecompressionTasksImpl(deferred);
     }
@@ -1404,7 +1404,7 @@ void TSingleClusterReadSessionImpl::Close(std::function<void()> callback) {
             if (!Processor) {
                 CallCloseCallbackImpl();
             } else {
-                if (!HasCommitsInflightImpl()) { 
+                if (!HasCommitsInflightImpl()) {
                     Processor->Cancel();
                     CallCloseCallbackImpl();
                 }
@@ -1548,9 +1548,9 @@ bool TSingleClusterReadSessionImpl::TPartitionCookieMapping::HasUnacknowledgedCo
     return CommitInflight != 0;
 }
 
-TReadSessionEvent::TCreatePartitionStreamEvent::TCreatePartitionStreamEvent(TPartitionStream::TPtr partitionStream, ui64 committedOffset, ui64 endOffset) 
+TReadSessionEvent::TCreatePartitionStreamEvent::TCreatePartitionStreamEvent(TPartitionStream::TPtr partitionStream, ui64 committedOffset, ui64 endOffset)
     : PartitionStream(std::move(partitionStream))
-    , CommittedOffset(committedOffset) 
+    , CommittedOffset(committedOffset)
     , EndOffset(endOffset)
 {
 }
@@ -1598,7 +1598,7 @@ TReadSessionEvent::TDataReceivedEvent::TDataReceivedEvent(TVector<TMessage> mess
 
 void TReadSessionEvent::TDataReceivedEvent::Commit() {
     for (auto [from, to] : OffsetRanges) {
-        static_cast<TPartitionStreamImpl*>(PartitionStream.Get())->Commit(from, to); 
+        static_cast<TPartitionStreamImpl*>(PartitionStream.Get())->Commit(from, to);
     }
 }
 
@@ -1638,7 +1638,7 @@ TString TReadSessionEvent::TCommitAcknowledgementEvent::DebugString() const {
 TString TReadSessionEvent::TCreatePartitionStreamEvent::DebugString() const {
     return TStringBuilder() << "CreatePartitionStream { PartitionStreamId: " << GetPartitionStream()->GetPartitionStreamId()
                             << " PartitionId: " << GetPartitionStream()->GetPartitionId()
-                            << " CommittedOffset: " << GetCommittedOffset() 
+                            << " CommittedOffset: " << GetCommittedOffset()
                             << " EndOffset: " << GetEndOffset()
                             << " }";
 }
@@ -1778,9 +1778,9 @@ void TReadSessionEventsQueue::PushEvent(TReadSessionEventInfo eventInfo, TDeferr
     }
 
     with_lock (Mutex) {
-        auto partitionStream = eventInfo.PartitionStream; 
+        auto partitionStream = eventInfo.PartitionStream;
         eventInfo.MoveToPartitionStream();
-        SignalReadyEventsImpl(partitionStream.Get(), deferred); 
+        SignalReadyEventsImpl(partitionStream.Get(), deferred);
     }
 }
 
@@ -1807,22 +1807,22 @@ TMaybe<TReadSessionEventsQueue::TEventInfo> TReadSessionEventsQueue::GetDataEven
     TVector<TReadSessionEvent::TDataReceivedEvent::TMessage> messages;
     TVector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> compressedMessages;
     TIntrusivePtr<TPartitionStreamImpl> partitionStream = srcDataEventInfo.PartitionStream;
-    bool messageExtracted = false; 
+    bool messageExtracted = false;
     while (srcDataEventInfo.HasReadyUnreadData() && *maxByteSize > 0) {
         const bool hasMoreUnpackedData = srcDataEventInfo.TakeData(&messages, &compressedMessages, maxByteSize);
         if (!hasMoreUnpackedData) {
             const bool messageIsFullyRead = !srcDataEventInfo.HasMoreData();
             if (messageIsFullyRead) {
                 partitionStream->PopEvent();
-                messageExtracted = true; 
+                messageExtracted = true;
                 break;
             }
         }
     }
-    if (!messageExtracted) { 
-        partitionStream->TopEvent().Signalled = false; 
-    } 
- 
+    if (!messageExtracted) {
+        partitionStream->TopEvent().Signalled = false;
+    }
+
     if (messages.empty() && compressedMessages.empty()) {
         return Nothing();
     }
@@ -2026,7 +2026,7 @@ i64 TDataDecompressionInfo::StartDecompressionTasks(const IExecutor::TPtr& execu
             task = TDecompressionTask(this, partitionStream, &ReadyThresholds.back());
         }
     }
-    if (task.AddedMessagesCount() > 0) { 
+    if (task.AddedMessagesCount() > 0) {
         session->OnCreateNewDecompressionTask();
         deferred.DeferStartExecutorTask(executor, std::move(task));
     } else {
@@ -2130,11 +2130,11 @@ TDataDecompressionInfo::TDecompressionTask::TDecompressionTask(TDataDecompressio
 {
 }
 
-// Forward delcaration 
-namespace NCompressionDetails { 
-    extern TString Decompress(const Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::MessageData& data); 
-} 
- 
+// Forward delcaration
+namespace NCompressionDetails {
+    extern TString Decompress(const Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::MessageData& data);
+}
+
 void TDataDecompressionInfo::TDecompressionTask::operator()() {
     ui64 minOffset = Max<ui64>();
     ui64 maxOffset = 0;
@@ -2175,18 +2175,18 @@ void TDataDecompressionInfo::TDecompressionTask::operator()() {
         }
     }
     if (auto session = Parent->Session.lock()) {
-        session->GetLog() << TLOG_DEBUG << "Decompression task done. Partition: " << partition << " (" << minOffset << "-" << maxOffset << ")"; 
+        session->GetLog() << TLOG_DEBUG << "Decompression task done. Partition: " << partition << " (" << minOffset << "-" << maxOffset << ")";
     }
     Y_ASSERT(dataProcessed == SourceDataSize);
     std::shared_ptr<TSingleClusterReadSessionImpl> session = Parent->Session.lock();
- 
-    if (session) { 
-        session->OnDataDecompressed(SourceDataSize, EstimatedDecompressedSize, DecompressedSize, messagesProcessed); 
-    } 
- 
-    Parent->SourceDataNotProcessed -= dataProcessed; 
+
+    if (session) {
+        session->OnDataDecompressed(SourceDataSize, EstimatedDecompressedSize, DecompressedSize, messagesProcessed);
+    }
+
+    Parent->SourceDataNotProcessed -= dataProcessed;
     Ready->Ready = true;
- 
+
     if (session) {
         session->GetEventsQueue()->SignalReadyEvents(PartitionStream.Get());
     }
@@ -2194,7 +2194,7 @@ void TDataDecompressionInfo::TDecompressionTask::operator()() {
 
 void TRawPartitionStreamEvent::Signal(TPartitionStreamImpl* partitionStream, TReadSessionEventsQueue* queue, TDeferredActions& deferred) {
     if (!Signalled) {
-        Signalled = true; 
+        Signalled = true;
         queue->SignalEventImpl(partitionStream, deferred);
     }
 }
@@ -2240,8 +2240,8 @@ void TDeferredActions::DeferReconnection(std::shared_ptr<TSingleClusterReadSessi
     ReconnectionStatus = std::move(status);
 }
 
-void TDeferredActions::DeferSignalWaiter(TWaiter&& waiter) { 
-    Waiters.emplace_back(std::move(waiter)); 
+void TDeferredActions::DeferSignalWaiter(TWaiter&& waiter) {
+    Waiters.emplace_back(std::move(waiter));
 }
 
 void TDeferredActions::DoActions() {
@@ -2249,7 +2249,7 @@ void TDeferredActions::DoActions() {
     StartExecutorTasks();
     AbortSession();
     Reconnect();
-    SignalWaiters(); 
+    SignalWaiters();
 }
 
 void TDeferredActions::Read() {
@@ -2282,9 +2282,9 @@ void TDeferredActions::Reconnect() {
     }
 }
 
-void TDeferredActions::SignalWaiters() { 
-    for (auto& w : Waiters) { 
-        w.Signal(); 
+void TDeferredActions::SignalWaiters() {
+    for (auto& w : Waiters) {
+        w.Signal();
     }
 }
 
@@ -2312,7 +2312,7 @@ public:
             // It will be removed from set by specifying proper right border.
             auto firstMessageOffsets = GetMessageOffsetRange(event, 0);
             auto lastMessageOffsets = GetMessageOffsetRange(event, event.GetMessagesCount() - 1);
- 
+
             offsetSet.InsertInterval(firstMessageOffsets.first, lastMessageOffsets.second);
 
             if (CommitAfterProcessing) {
@@ -2426,10 +2426,10 @@ TReadSessionSettings::TEventHandlers& TReadSessionSettings::TEventHandlers::Simp
 
 class TDeferredCommit::TImpl {
 public:
- 
+
     void Add(const TPartitionStream::TPtr& partitionStream, ui64 startOffset, ui64 endOffset);
     void Add(const TPartitionStream::TPtr& partitionStream, ui64 offset);
- 
+
     void Add(const TReadSessionEvent::TDataReceivedEvent::TMessage& message);
     void Add(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent);
 
@@ -2466,8 +2466,8 @@ void TDeferredCommit::Add(const TPartitionStream::TPtr& partitionStream, ui64 of
     GET_IMPL()->Add(partitionStream, offset);
 }
 
-void TDeferredCommit::Add(const TReadSessionEvent::TDataReceivedEvent::TMessage& message) { 
-    GET_IMPL()->Add(message); 
+void TDeferredCommit::Add(const TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
+    GET_IMPL()->Add(message);
 }
 
 void TDeferredCommit::Add(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent) {
@@ -2482,9 +2482,9 @@ void TDeferredCommit::Commit() {
     }
 }
 
-void TDeferredCommit::TImpl::Add(const TReadSessionEvent::TDataReceivedEvent::TMessage& message) { 
-    Y_ASSERT(message.GetPartitionStream()); 
-    Add(message.GetPartitionStream(), message.GetOffset()); 
+void TDeferredCommit::TImpl::Add(const TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
+    Y_ASSERT(message.GetPartitionStream());
+    Add(message.GetPartitionStream(), message.GetOffset());
 }
 
 void TDeferredCommit::TImpl::Add(const TPartitionStream::TPtr& partitionStream, TDisjointIntervalTree<ui64>& offsetSet, ui64 startOffset, ui64 endOffset) {
@@ -2534,7 +2534,7 @@ void TDeferredCommit::TImpl::Add(const TReadSessionEvent::TDataReceivedEvent& da
 void TDeferredCommit::TImpl::Commit() {
     for (auto&& [partitionStream, offsetRanges] : Offsets) {
         for (auto&& [startOffset, endOffset] : offsetRanges) {
-            static_cast<TPartitionStreamImpl*>(partitionStream.Get())->Commit(startOffset, endOffset); 
+            static_cast<TPartitionStreamImpl*>(partitionStream.Get())->Commit(startOffset, endOffset);
         }
     }
     Offsets.clear();

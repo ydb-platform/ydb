@@ -9,14 +9,14 @@
 #include <util/generic/list.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
- 
+
 namespace NKikimr {
 
 static constexpr ui32 BlobProtobufHeaderMaxSize = 80;
 
-struct TBloblStorageErasureParameters; 
+struct TBloblStorageErasureParameters;
 
-struct TBlobStorageGroupType : public TErasureType { 
+struct TBlobStorageGroupType : public TErasureType {
 
     TBlobStorageGroupType(TErasureType::EErasureSpecies s = TErasureType::ErasureNone)
         : TErasureType(s)

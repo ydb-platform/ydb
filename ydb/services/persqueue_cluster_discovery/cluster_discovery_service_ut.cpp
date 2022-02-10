@@ -475,7 +475,7 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
 
             ClusterInfo c1Info;
             c1Info.set_name("dc1");
-            c1Info.set_endpoint("localhost"); 
+            c1Info.set_endpoint("localhost");
             c1Info.set_available(true);
 
             ClusterInfo c2Info;

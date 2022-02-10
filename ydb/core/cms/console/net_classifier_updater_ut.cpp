@@ -86,33 +86,33 @@ static TString ConvertToTsv(const NKikimrNetClassifier::TNetData& netData) {
     return builder;
 }
 
- 
-static TString ConvertToJson(const NKikimrNetClassifier::TNetData& netData) { 
- 
-    TString res; 
-    TStringOutput ss(res); 
- 
-    NJson::TJsonWriter writer(&ss, true); 
- 
-    writer.OpenMap(); 
-    writer.Write("count", netData.SubnetsSize()); 
-    writer.OpenArray("results"); 
-    for (size_t i = 0; i < netData.SubnetsSize(); ++i) { 
-        const auto& subnet = netData.GetSubnets(i); 
-        writer.OpenMap(); 
-        writer.Write("prefix",  subnet.GetMask()); 
-        writer.OpenArray("tags"); 
-        writer.Write(subnet.GetLabel()); 
-        writer.CloseArray(); 
-        writer.CloseMap(); 
-    } 
-    writer.CloseArray(); 
-    writer.CloseMap(); 
-    writer.Flush(); 
-    ss.Flush(); 
-    return res; 
-} 
- 
+
+static TString ConvertToJson(const NKikimrNetClassifier::TNetData& netData) {
+
+    TString res;
+    TStringOutput ss(res);
+
+    NJson::TJsonWriter writer(&ss, true);
+
+    writer.OpenMap();
+    writer.Write("count", netData.SubnetsSize());
+    writer.OpenArray("results");
+    for (size_t i = 0; i < netData.SubnetsSize(); ++i) {
+        const auto& subnet = netData.GetSubnets(i);
+        writer.OpenMap();
+        writer.Write("prefix",  subnet.GetMask());
+        writer.OpenArray("tags");
+        writer.Write(subnet.GetLabel());
+        writer.CloseArray();
+        writer.CloseMap();
+    }
+    writer.CloseArray();
+    writer.CloseMap();
+    writer.Flush();
+    ss.Flush();
+    return res;
+}
+
 NKikimrNetClassifier::TNetClassifierUpdaterConfig CreateUpdaterConfig(
     ui16 netDataSourcePort,
     TNetClassifierUpdaterConfig::EFormat format,
@@ -125,7 +125,7 @@ NKikimrNetClassifier::TNetClassifierUpdaterConfig CreateUpdaterConfig(
     *updaterConfig.MutableNetBoxTags() = {netBoxTags.begin(), netBoxTags.end()};
     return updaterConfig;
 }
- 
+
 Y_UNIT_TEST_SUITE(TNetClassifierUpdaterTest) {
     void TestGetUpdatesFromHttpServer(
         const TString& sourceResponce,
@@ -182,13 +182,13 @@ Y_UNIT_TEST_SUITE(TNetClassifierUpdaterTest) {
             Sleep(TDuration::Seconds(1));
         }
     }
- 
-    Y_UNIT_TEST(TestGetUpdatesFromHttpServer) { 
+
+    Y_UNIT_TEST(TestGetUpdatesFromHttpServer) {
         auto netData = FormNetData();
         TestGetUpdatesFromHttpServer(ConvertToTsv(netData), netData);
         TestGetUpdatesFromHttpServer(ConvertToJson(netData), netData, TNetClassifierUpdaterConfig::NETBOX);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestFiltrationByNetboxTags) {
     const TString netboxResponce = "{   \
         \"count\": 5,                   \

@@ -49,11 +49,11 @@ struct TModuleFactories {
     NKikimr::TYdbCredentialsProviderFactory YdbCredentialProviderFactory;
     // Factory for grpc services
     TGrpcServiceFactory GrpcServiceFactory;
- 
+
     std::shared_ptr<NPQ::IPersQueueMirrorReaderFactory> PersQueueMirrorReaderFactory;
     /// Factory for pdisk's aio engines
     std::shared_ptr<NPDisk::IIoContextFactory> IoContextFactory;
- 
+
     std::function<NActors::TMon* (NActors::TMon::TConfig)> MonitoringFactory;
     std::shared_ptr<NSQS::IAuthFactory> SqsAuthFactory;
 

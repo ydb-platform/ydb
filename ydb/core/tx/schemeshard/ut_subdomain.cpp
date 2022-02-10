@@ -1910,8 +1910,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TSchemeLimits lowLimits;
         lowLimits.MaxPaths = 3;
         lowLimits.MaxShards = 3;
-        lowLimits.MaxPQPartitions = 300; 
- 
+        lowLimits.MaxPQPartitions = 300;
+
         SetSchemeshardSchemaLimits(runtime, lowLimits);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
@@ -1923,26 +1923,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "Coordinators: 1 "
                             "Mediators: 1 "
                             "TimeCastBucketsPerMediator: 2 "
-                            "Name: \"USER_0\"" 
-                            " DatabaseQuotas {" 
-                            "    data_stream_shards_quota: 3" 
-                            "}"); 
+                            "Name: \"USER_0\""
+                            " DatabaseQuotas {"
+                            "    data_stream_shards_quota: 3"
+                            "}");
         env.TestWaitNotification(runtime, 100);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist
                             , NLs::PathVersionEqual(3)
-                            , NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards, lowLimits.MaxPQPartitions) 
+                            , NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards, lowLimits.MaxPQPartitions)
                             , NLs::PathsInsideDomain(0)
-                            , NLs::ShardsInsideDomain(2) 
-                            , NLs::DatabaseQuotas(3)}); 
+                            , NLs::ShardsInsideDomain(2)
+                            , NLs::DatabaseQuotas(3)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist
-                            , NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards, lowLimits.MaxPQPartitions) 
+                            , NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards, lowLimits.MaxPQPartitions)
                             , NLs::PathsInsideDomain(1)
-                            , NLs::ShardsInsideDomain(0) 
-                            , NLs::DatabaseQuotas(0)}); 
+                            , NLs::ShardsInsideDomain(0)
+                            , NLs::DatabaseQuotas(0)});
     }
 
     Y_UNIT_TEST(SchemeLimitsRejects) {
@@ -1960,14 +1960,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         lowLimits.MaxTableKeyColumns = 1;
         lowLimits.MaxShards = 6;
         lowLimits.MaxShardsInPath = 4;
-        lowLimits.MaxPQPartitions = 20; 
- 
- 
+        lowLimits.MaxPQPartitions = 20;
+
+
         //lowLimits.ExtraPathSymbolsAllowed = "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~";
         SetSchemeshardSchemaLimits(runtime, lowLimits);
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist,
-                            NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards, lowLimits.MaxPQPartitions)}); 
+                            NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards, lowLimits.MaxPQPartitions)});
 
         //create subdomain
         {
@@ -1976,20 +1976,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                 "Coordinators: 1 "
                                 "Mediators: 1 "
                                 "TimeCastBucketsPerMediator: 2 "
-                                "Name: \"USER_0\"" 
-                                " DatabaseQuotas {" 
-                                "    data_stream_shards_quota: 2" 
-                                "    data_stream_reserved_storage_quota: 200000" 
-                                "}"); 
- 
+                                "Name: \"USER_0\""
+                                " DatabaseQuotas {"
+                                "    data_stream_shards_quota: 2"
+                                "    data_stream_reserved_storage_quota: 200000"
+                                "}");
+
             env.TestWaitNotification(runtime, txId - 1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
                                 NLs::PathVersionEqual(3),
-                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards, lowLimits.MaxPQPartitions), 
+                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards, lowLimits.MaxPQPartitions),
                                 NLs::PathsInsideDomain(0),
-                                NLs::ShardsInsideDomain(2), 
-                                NLs::DatabaseQuotas(2)}); 
+                                NLs::ShardsInsideDomain(2),
+                                NLs::DatabaseQuotas(2)});
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                {NLs::PathExist,
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
@@ -2017,10 +2017,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
                                 NLs::PathVersionEqual(5),
-                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards, lowLimits.MaxPQPartitions), 
+                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards, lowLimits.MaxPQPartitions),
                                 NLs::PathsInsideDomain(3),
-                                NLs::ShardsInsideDomain(2), 
-                                NLs::DatabaseQuotas(2)}); 
+                                NLs::ShardsInsideDomain(2),
+                                NLs::DatabaseQuotas(2)});
         }
 
         //clean
@@ -2069,20 +2069,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                 )",  {NKikimrScheme::StatusResourceExhausted});
         }
 
-        //clean 
+        //clean
         {
             auto dirVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/1"));
             TestForceDropUnsafe(runtime, txId++, dirVer.PathId.LocalPathId);
             env.TestWaitNotification(runtime, txId - 1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(10), 
+                                NLs::PathVersionEqual(10),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
-                                NLs::ShardsInsideDomain(2)}); 
+                                NLs::ShardsInsideDomain(2)});
         }
 
- 
+
         //create tables, paths shards limit
         {
             TestMkDir(runtime, txId++, "/MyRoot/USER_0", "1");
@@ -2178,7 +2178,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             env.TestWaitNotification(runtime, txId - 1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(14), 
+                                NLs::PathVersionEqual(14),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
@@ -2224,7 +2224,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             env.TestWaitNotification(runtime, txId - 1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(18), 
+                                NLs::PathVersionEqual(18),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
@@ -2254,7 +2254,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             env.TestWaitNotification(runtime, txId - 1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(24), 
+                                NLs::PathVersionEqual(24),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
@@ -2301,104 +2301,104 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             env.TestWaitNotification(runtime, txId - 1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
-                                NLs::PathVersionEqual(28), 
+                                NLs::PathVersionEqual(28),
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
                                 NLs::PathsInsideDomain(0),
                                 NLs::ShardsInsideDomain(2)});
         }
 
- 
-        //databaseQuotas limits 
-        { 
-            // Stream shards(partitions) limit is 2. Trying to create 3. 
-            TestCreatePQGroup(runtime, txId++, "/MyRoot/USER_0/", R"( 
-                            Name: "Isolda" 
-                            TotalGroupCount: 3 
-                            PartitionPerTablet: 2 
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10  WriteSpeedInBytesPerSecond : 1000}} 
+
+        //databaseQuotas limits
+        {
+            // Stream shards(partitions) limit is 2. Trying to create 3.
+            TestCreatePQGroup(runtime, txId++, "/MyRoot/USER_0/", R"(
+                            Name: "Isolda"
+                            TotalGroupCount: 3
+                            PartitionPerTablet: 2
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10  WriteSpeedInBytesPerSecond : 1000}}
                 )",  {NKikimrScheme::StatusResourceExhausted});
- 
-            env.TestWaitNotification(runtime, txId - 1); 
- 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
-                               {NLs::PathExist, 
-                                NLs::PathVersionEqual(28), 
-                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards), 
-                                NLs::PathsInsideDomain(0), 
-                                NLs::ShardsInsideDomain(2)}); 
- 
-            // Stream reserved storage limit is 200000. Trying to reserve 200001. 
-            TestCreatePQGroup(runtime, txId++, "/MyRoot/USER_0/", R"( 
-                            Name: "Isolda" 
-                            TotalGroupCount: 1 
-                            PartitionPerTablet: 2 
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 200001}} 
-                )",  {NKikimrScheme::StatusResourceExhausted}); 
- 
-            env.TestWaitNotification(runtime, txId - 1); 
- 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
-                               {NLs::PathExist, 
-                                NLs::PathVersionEqual(28), 
-                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards), 
-                                NLs::PathsInsideDomain(0), 
-                                NLs::ShardsInsideDomain(2)}); 
- 
-            // Stream reserved storage limit is 200000. Trying to reserve 100000 - fit in it! 
- 
-            TestCreatePQGroup(runtime, txId++, "/MyRoot/USER_0/", R"( 
-                            Name: "Isolda" 
-                            TotalGroupCount: 1 
-                            PartitionPerTablet: 1 
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100000}} 
-                )"); 
- 
-            env.TestWaitNotification(runtime, txId - 1); 
- 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
-                               {NLs::PathExist, 
-                                NLs::PathVersionEqual(30), 
-                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards), 
-                                NLs::PathsInsideDomain(1), 
-                                NLs::ShardsInsideDomain(4)}); 
- 
-            // Stream reserved storage limit is 200000. Trying to reserve 200000 - fit in it! 
-            TestAlterPQGroup(runtime, txId++, "/MyRoot/USER_0/", R"( 
-                            Name: "Isolda" 
-                            TotalGroupCount: 2 
-                            PartitionPerTablet: 1 
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100000}} 
-                )"); 
- 
-            env.TestWaitNotification(runtime, txId - 1); 
- 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
-                               {NLs::PathExist, 
-                                NLs::PathVersionEqual(30), 
-                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards), 
-                                NLs::PathsInsideDomain(1), 
-                                NLs::ShardsInsideDomain(5)}); 
- 
-            // Stream reserved storage limit is 200000. Trying to reserve 20002 - do not fit in it! 
-            TestAlterPQGroup(runtime, txId++, "/MyRoot/USER_0/", R"( 
-                            Name: "Isolda" 
-                            TotalGroupCount: 2 
-                            PartitionPerTablet: 1 
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100001}} 
-                )",  {NKikimrScheme::StatusResourceExhausted}); 
- 
-            env.TestWaitNotification(runtime, txId - 1); 
- 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
-                               {NLs::PathExist, 
-                                NLs::PathVersionEqual(30), 
-                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards), 
-                                NLs::PathsInsideDomain(1), 
-                                NLs::ShardsInsideDomain(5)}); 
- 
- 
-        } 
- 
+
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                               {NLs::PathExist,
+                                NLs::PathVersionEqual(28),
+                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
+                                NLs::PathsInsideDomain(0),
+                                NLs::ShardsInsideDomain(2)});
+
+            // Stream reserved storage limit is 200000. Trying to reserve 200001.
+            TestCreatePQGroup(runtime, txId++, "/MyRoot/USER_0/", R"(
+                            Name: "Isolda"
+                            TotalGroupCount: 1
+                            PartitionPerTablet: 2
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 200001}}
+                )",  {NKikimrScheme::StatusResourceExhausted});
+
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                               {NLs::PathExist,
+                                NLs::PathVersionEqual(28),
+                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
+                                NLs::PathsInsideDomain(0),
+                                NLs::ShardsInsideDomain(2)});
+
+            // Stream reserved storage limit is 200000. Trying to reserve 100000 - fit in it!
+
+            TestCreatePQGroup(runtime, txId++, "/MyRoot/USER_0/", R"(
+                            Name: "Isolda"
+                            TotalGroupCount: 1
+                            PartitionPerTablet: 1
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100000}}
+                )");
+
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                               {NLs::PathExist,
+                                NLs::PathVersionEqual(30),
+                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
+                                NLs::PathsInsideDomain(1),
+                                NLs::ShardsInsideDomain(4)});
+
+            // Stream reserved storage limit is 200000. Trying to reserve 200000 - fit in it!
+            TestAlterPQGroup(runtime, txId++, "/MyRoot/USER_0/", R"(
+                            Name: "Isolda"
+                            TotalGroupCount: 2
+                            PartitionPerTablet: 1
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100000}}
+                )");
+
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                               {NLs::PathExist,
+                                NLs::PathVersionEqual(30),
+                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
+                                NLs::PathsInsideDomain(1),
+                                NLs::ShardsInsideDomain(5)});
+
+            // Stream reserved storage limit is 200000. Trying to reserve 20002 - do not fit in it!
+            TestAlterPQGroup(runtime, txId++, "/MyRoot/USER_0/", R"(
+                            Name: "Isolda"
+                            TotalGroupCount: 2
+                            PartitionPerTablet: 1
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100001}}
+                )",  {NKikimrScheme::StatusResourceExhausted});
+
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                               {NLs::PathExist,
+                                NLs::PathVersionEqual(30),
+                                NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
+                                NLs::PathsInsideDomain(1),
+                                NLs::ShardsInsideDomain(5)});
+
+
+        }
+
         //clear subdomain
         {
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
@@ -2977,134 +2977,134 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                            {LsCheckDiskQuotaExceeded(false)});
     }
 
-    Y_UNIT_TEST(SchemeDatabaseQuotaRejects) { 
-        TTestBasicRuntime runtime; 
-        TTestEnv env(runtime); 
-        ui64 txId = 100; 
- 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot"), 
-                           {NLs::PathExist}); 
- 
-        // Create subdomain. 
-        { 
-            TestCreateSubDomain(runtime, txId++,  "/MyRoot", 
-                                "PlanResolution: 50 " 
-                                "Coordinators: 1 " 
-                                "Mediators: 1 " 
-                                "TimeCastBucketsPerMediator: 2 " 
-                                "Name: \"USER_0\"" 
-                                " DatabaseQuotas {" 
-                                "    data_stream_shards_quota: 2" 
-                                "    data_stream_reserved_storage_quota: 200000" 
-                                "}"); 
- 
-            env.TestWaitNotification(runtime, txId - 1); 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
-                               {NLs::PathExist, 
-                                NLs::PathVersionEqual(3), 
-                                NLs::PathsInsideDomain(0), 
-                                NLs::ShardsInsideDomain(2), 
-                                NLs::DatabaseQuotas(2)}); 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot"), 
-                               {NLs::PathExist, 
-                                NLs::PathsInsideDomain(1), 
-                                NLs::ShardsInsideDomain(0)}); 
-        } 
- 
- 
-        { 
-            // Stream shards(partitions) limit is 2. Trying to create 3. 
-            TestCreatePQGroup(runtime, txId++, "/MyRoot/USER_0/", R"( 
-                            Name: "Isolda" 
-                            TotalGroupCount: 3 
-                            PartitionPerTablet: 2 
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10  WriteSpeedInBytesPerSecond : 1000}} 
-                )",  {NKikimrScheme::StatusResourceExhausted}); 
- 
-            env.TestWaitNotification(runtime, txId - 1); 
- 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
-                               {NLs::PathExist, 
-                                NLs::PathsInsideDomain(0), 
-                                NLs::ShardsInsideDomain(2)}); 
- 
-            // Stream reserved storage limit is 200000. Trying to reserve 200001. 
-            TestCreatePQGroup(runtime, txId++, "/MyRoot/USER_0/", R"( 
-                            Name: "Isolda" 
-                            TotalGroupCount: 1 
-                            PartitionPerTablet: 2 
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 200001}} 
-                )",  {NKikimrScheme::StatusResourceExhausted}); 
- 
-            env.TestWaitNotification(runtime, txId - 1); 
- 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
-                               {NLs::PathExist, 
-                                NLs::PathsInsideDomain(0), 
-                                NLs::ShardsInsideDomain(2)}); 
- 
-            // Stream reserved storage limit is 200000. Trying to reserve 100000 - fit in it! 
- 
-            TestCreatePQGroup(runtime, txId++, "/MyRoot/USER_0/", R"( 
-                            Name: "Isolda" 
-                            TotalGroupCount: 1 
-                            PartitionPerTablet: 1 
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100000}} 
-                )"); 
- 
-            env.TestWaitNotification(runtime, txId - 1); 
- 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
-                               {NLs::PathExist, 
-                                NLs::PathsInsideDomain(1), 
-                                NLs::ShardsInsideDomain(4)}); 
- 
-            // Stream reserved storage limit is 200000. Trying to reserve 200000 - fit in it! 
-            TestAlterPQGroup(runtime, txId++, "/MyRoot/USER_0/", R"( 
-                            Name: "Isolda" 
-                            TotalGroupCount: 2 
-                            PartitionPerTablet: 1 
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100000}} 
-                )"); 
- 
-            env.TestWaitNotification(runtime, txId - 1); 
- 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
-                               {NLs::PathExist, 
-                                NLs::PathsInsideDomain(1), 
-                                NLs::ShardsInsideDomain(5)}); 
- 
-            // Stream reserved storage limit is 200000. Trying to reserve 20002 - do not fit in it! 
-            TestAlterPQGroup(runtime, txId++, "/MyRoot/USER_0/", R"( 
-                            Name: "Isolda" 
-                            TotalGroupCount: 2 
-                            PartitionPerTablet: 1 
-                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100001}} 
-                )",  {NKikimrScheme::StatusResourceExhausted}); 
- 
-            env.TestWaitNotification(runtime, txId - 1); 
- 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
-                               {NLs::PathExist, 
-                                NLs::PathsInsideDomain(1), 
-                                NLs::ShardsInsideDomain(5)}); 
- 
- 
-        } 
- 
-        //clear subdomain 
-        { 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot"), 
-                               {NLs::PathExist, 
-                                NLs::PathsInsideDomain(1), 
-                                NLs::ShardsInsideDomain(0)}); 
-            TestForceDropSubDomain(runtime, txId++, "/MyRoot", "USER_0"); 
-            env.TestWaitNotification(runtime, txId - 1); 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot"), 
-                               {NLs::PathExist, 
-                                NLs::PathsInsideDomain(0), 
-                                NLs::ShardsInsideDomain(0)}); 
-        } 
-    } 
+    Y_UNIT_TEST(SchemeDatabaseQuotaRejects) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PathExist});
+
+        // Create subdomain.
+        {
+            TestCreateSubDomain(runtime, txId++,  "/MyRoot",
+                                "PlanResolution: 50 "
+                                "Coordinators: 1 "
+                                "Mediators: 1 "
+                                "TimeCastBucketsPerMediator: 2 "
+                                "Name: \"USER_0\""
+                                " DatabaseQuotas {"
+                                "    data_stream_shards_quota: 2"
+                                "    data_stream_reserved_storage_quota: 200000"
+                                "}");
+
+            env.TestWaitNotification(runtime, txId - 1);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                               {NLs::PathExist,
+                                NLs::PathVersionEqual(3),
+                                NLs::PathsInsideDomain(0),
+                                NLs::ShardsInsideDomain(2),
+                                NLs::DatabaseQuotas(2)});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                               {NLs::PathExist,
+                                NLs::PathsInsideDomain(1),
+                                NLs::ShardsInsideDomain(0)});
+        }
+
+
+        {
+            // Stream shards(partitions) limit is 2. Trying to create 3.
+            TestCreatePQGroup(runtime, txId++, "/MyRoot/USER_0/", R"(
+                            Name: "Isolda"
+                            TotalGroupCount: 3
+                            PartitionPerTablet: 2
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10  WriteSpeedInBytesPerSecond : 1000}}
+                )",  {NKikimrScheme::StatusResourceExhausted});
+
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                               {NLs::PathExist,
+                                NLs::PathsInsideDomain(0),
+                                NLs::ShardsInsideDomain(2)});
+
+            // Stream reserved storage limit is 200000. Trying to reserve 200001.
+            TestCreatePQGroup(runtime, txId++, "/MyRoot/USER_0/", R"(
+                            Name: "Isolda"
+                            TotalGroupCount: 1
+                            PartitionPerTablet: 2
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 200001}}
+                )",  {NKikimrScheme::StatusResourceExhausted});
+
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                               {NLs::PathExist,
+                                NLs::PathsInsideDomain(0),
+                                NLs::ShardsInsideDomain(2)});
+
+            // Stream reserved storage limit is 200000. Trying to reserve 100000 - fit in it!
+
+            TestCreatePQGroup(runtime, txId++, "/MyRoot/USER_0/", R"(
+                            Name: "Isolda"
+                            TotalGroupCount: 1
+                            PartitionPerTablet: 1
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100000}}
+                )");
+
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                               {NLs::PathExist,
+                                NLs::PathsInsideDomain(1),
+                                NLs::ShardsInsideDomain(4)});
+
+            // Stream reserved storage limit is 200000. Trying to reserve 200000 - fit in it!
+            TestAlterPQGroup(runtime, txId++, "/MyRoot/USER_0/", R"(
+                            Name: "Isolda"
+                            TotalGroupCount: 2
+                            PartitionPerTablet: 1
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100000}}
+                )");
+
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                               {NLs::PathExist,
+                                NLs::PathsInsideDomain(1),
+                                NLs::ShardsInsideDomain(5)});
+
+            // Stream reserved storage limit is 200000. Trying to reserve 20002 - do not fit in it!
+            TestAlterPQGroup(runtime, txId++, "/MyRoot/USER_0/", R"(
+                            Name: "Isolda"
+                            TotalGroupCount: 2
+                            PartitionPerTablet: 1
+                            PQTabletConfig: {PartitionConfig { LifetimeSeconds : 1 WriteSpeedInBytesPerSecond : 100001}}
+                )",  {NKikimrScheme::StatusResourceExhausted});
+
+            env.TestWaitNotification(runtime, txId - 1);
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                               {NLs::PathExist,
+                                NLs::PathsInsideDomain(1),
+                                NLs::ShardsInsideDomain(5)});
+
+
+        }
+
+        //clear subdomain
+        {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                               {NLs::PathExist,
+                                NLs::PathsInsideDomain(1),
+                                NLs::ShardsInsideDomain(0)});
+            TestForceDropSubDomain(runtime, txId++, "/MyRoot", "USER_0");
+            env.TestWaitNotification(runtime, txId - 1);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                               {NLs::PathExist,
+                                NLs::PathsInsideDomain(0),
+                                NLs::ShardsInsideDomain(0)});
+        }
+    }
 }
- 
+

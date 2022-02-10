@@ -1,19 +1,19 @@
-#include "topic_parser.h" 
- 
+#include "topic_parser.h"
+
 #include <ydb/core/base/appdata.h>
 
 #include <util/folder/path.h>
 
-namespace NPersQueue { 
- 
+namespace NPersQueue {
+
 namespace {
     TString FullPath(const TMaybe<TString> &database, const TString &path) {
-        if (database.Defined() && !path.StartsWith(*database) && !path.Contains('\0')) { 
-            try { 
-                return (TFsPath(*database) / path).GetPath(); 
-            } catch(...) { 
-                return path; 
-            } 
+        if (database.Defined() && !path.StartsWith(*database) && !path.Contains('\0')) {
+            try {
+                return (TFsPath(*database) / path).GetPath();
+            } catch(...) {
+                return path;
+            }
         } else {
             return path;
         }
@@ -67,7 +67,7 @@ TString NormalizeFullPath(const TString& fullPath) {
         return fullPath;
     }
 }
- 
+
 TTopicsListController::TTopicsListController(
         const std::shared_ptr<TTopicNamesConverterFactory>& converterFactory,
         bool haveClusters, const TVector<TString>& clusters, const TString& localCluster
@@ -118,5 +118,5 @@ TConverterFactoryPtr TTopicsListController::GetConverterFactory() const {
     return ConverterFactory;
 };
 
-} // namespace NPersQueue 
+} // namespace NPersQueue
 

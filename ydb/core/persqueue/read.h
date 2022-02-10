@@ -1,43 +1,43 @@
-#pragma once 
+#pragma once
 
-#include "partition.h" 
+#include "partition.h"
 #include "pq_l2_service.h"
 #include "cache_eviction.h"
- 
+
 #include <ydb/core/keyvalue/keyvalue_flat_impl.h>
 #include <ydb/core/persqueue/events/internal.h>
 
-namespace NKikimr { 
-namespace NPQ { 
- 
+namespace NKikimr {
+namespace NPQ {
+
     inline TString ToStringLocalTimeUpToSeconds(const TInstant &time) {
         return time.GetValue() ? time.ToStringLocalUpToSeconds() : "0";
     }
 
     /// Intablet cache proxy: Partition <-> CacheProxy <-> KV
     class TPQCacheProxy : public TActorBootstrapped<TPQCacheProxy> {
-    public: 
+    public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::PERSQUEUE_CACHE_ACTOR;
         }
 
         TPQCacheProxy(const TActorId& tablet, TString topicName, ui32 size)
-        : Tablet(tablet) 
+        : Tablet(tablet)
         , TopicName(topicName)
-        , Cookie(0) 
+        , Cookie(0)
         , Cache(topicName, size)
         , CountersUpdateTime(TAppData::TimeProvider->Now())
         {
             Y_VERIFY(topicName.size(), "CacheProxy with empty topic name");
         }
- 
+
         void Bootstrap(const TActorContext& ctx)
-        { 
+        {
             Y_UNUSED(ctx);
-            Become(&TThis::StateFunc); 
-        } 
- 
-    private: 
+            Become(&TThis::StateFunc);
+        }
+
+    private:
         ui64 SaveKvRequest(TKvRequest&& kvRequest)
         {
             ui64 cookie = Cookie++;
@@ -45,11 +45,11 @@ namespace NPQ {
             Y_VERIFY(savedRequest.second);
             return cookie;
         }
- 
+
         void SaveInProgress(const TKvRequest& kvRequest)
         {
             for (const TRequestedBlob& reqBlob : kvRequest.Blobs) {
-                TBlobId blob(kvRequest.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount); 
+                TBlobId blob(kvRequest.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
                 ReadsInProgress.insert(blob);
             }
         }
@@ -57,7 +57,7 @@ namespace NPQ {
         bool CheckInProgress(const TActorContext& ctx, TKvRequest& kvRequest)
         {
             for (const TRequestedBlob& reqBlob : kvRequest.Blobs) {
-                TBlobId blob(kvRequest.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount); 
+                TBlobId blob(kvRequest.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
                 auto it = ReadsInProgress.find(blob);
                 if (it != ReadsInProgress.end()) {
                     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Read request is blocked. Partition "
@@ -74,7 +74,7 @@ namespace NPQ {
         {
             TVector<TKvRequest> unblocked;
             for (const TRequestedBlob& reqBlob : blocker.Blobs) {
-                TBlobId blob(blocker.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount); 
+                TBlobId blob(blocker.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
                 ReadsInProgress.erase(blob);
 
                 auto it = BlockedReads.find(blob);
@@ -90,19 +90,19 @@ namespace NPQ {
         }
 
         void Handle(TEvPQ::TEvChangeCacheConfig::TPtr& ev, const TActorContext& ctx)
-        { 
+        {
             Y_UNUSED(ev);
             Cache.Touch(ctx);
-        } 
- 
+        }
+
         void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx)
-        { 
-            Y_VERIFY(ev->Sender == Tablet); 
-            Die(ctx); 
-        } 
- 
-        void Handle(TEvPQ::TEvBlobRequest::TPtr& ev, const TActorContext& ctx) 
-        { 
+        {
+            Y_VERIFY(ev->Sender == Tablet);
+            Die(ctx);
+        }
+
+        void Handle(TEvPQ::TEvBlobRequest::TPtr& ev, const TActorContext& ctx)
+        {
             ui32 partition = ev->Get()->Partition;
             Cache.SetUserOffset(ctx, ev->Get()->User, partition, ev->Get()->ReadOffset);
 
@@ -119,13 +119,13 @@ namespace NPQ {
             if (fromCache == kvReq.Blobs.size()) { // all from cache
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Reading cookie " << kvReq.CookiePQ
                     << ". All " << fromCache << " blobs are from cache.");
- 
+
                 THolder<TEvPQ::TEvBlobResponse> response = kvReq.MakePQResponse(ctx);
-                response->Check(); 
- 
+                response->Check();
+
                 ctx.Send(kvReq.Sender, response.Release()); // -> Partition
-                return; 
-            } 
+                return;
+            }
 
             if (CheckInProgress(ctx, kvReq)) {
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Reading cookie " << kvReq.CookiePQ
@@ -139,14 +139,14 @@ namespace NPQ {
             SaveInProgress(kvReq);
             THolder<TEvKeyValue::TEvRequest> request = kvReq.MakeKvRequest(); // before save
             ui64 cookie = SaveKvRequest(std::move(kvReq));
-            request->Record.SetCookie(cookie); 
+            request->Record.SetCookie(cookie);
             ctx.Send(Tablet, request.Release()); // -> KV
-        } 
- 
-        void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) 
-        { 
-            auto resp = ev->Get()->Record; 
-            Y_VERIFY(resp.HasCookie()); 
+        }
+
+        void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx)
+        {
+            auto resp = ev->Get()->Record;
+            Y_VERIFY(resp.HasCookie());
             auto it = KvRequests.find(resp.GetCookie());
             Y_VERIFY(it != KvRequests.end());
 
@@ -165,61 +165,61 @@ namespace NPQ {
             auto resp = ev->Get()->Record;
             TVector<TRequestedBlob>& outBlobs = kvReq.Blobs;
 
-            ui32 cachedCount = std::accumulate(outBlobs.begin(), outBlobs.end(), 0u, [](ui32 sum, const TRequestedBlob& blob) { 
-                                                                                    return sum + (blob.Value.empty() ? 0 : 1); 
-                                                                                }); 
+            ui32 cachedCount = std::accumulate(outBlobs.begin(), outBlobs.end(), 0u, [](ui32 sum, const TRequestedBlob& blob) {
+                                                                                    return sum + (blob.Value.empty() ? 0 : 1);
+                                                                                });
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Got results. "
                 << resp.ReadResultSize() << " of " << outBlobs.size() << " from KV. Status " << resp.GetStatus());
- 
+
             TErrorInfo error;
-            if (resp.GetStatus() != NMsgBusProxy::MSTATUS_OK) { 
+            if (resp.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
                 LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Got Error response for whole request status "
                     << resp.GetStatus() << " cookie " << kvReq.CookiePQ);
-                error = TErrorInfo(NPersQueue::NErrorCode::ERROR, Sprintf("Got bad response: %s", resp.DebugString().c_str())); 
-            } else { 
+                error = TErrorInfo(NPersQueue::NErrorCode::ERROR, Sprintf("Got bad response: %s", resp.DebugString().c_str()));
+            } else {
 
                 Y_VERIFY(resp.ReadResultSize() && resp.ReadResultSize() + cachedCount == outBlobs.size(),
                     "Unexpected KV read result size %" PRIu64 " for cached %" PRIu32 "/%" PRIu64 " blobs, proto %s",
                     resp.ReadResultSize(), cachedCount, outBlobs.size(), ev->Get()->ToString().data());
 
                 TVector<bool> kvBlobs(outBlobs.size(), false);
-                ui32 pos = 0; 
-                for (ui32 i = 0; i < resp.ReadResultSize(); ++i, ++pos) { 
-                    auto r = resp.MutableReadResult(i); 
-                    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Got results. result " << i << " from KV. Status " << r->GetStatus()); 
-                    if (r->GetStatus() == NKikimrProto::OVERRUN) { //this blob and next are not readed at all. Return as answer only previous blobs 
-                        Y_VERIFY(i > 0, "OVERRUN in first read request"); 
-                        break; 
-                    } else if (r->GetStatus() == NKikimrProto::OK) { 
-                        Y_VERIFY(r->HasValue() && r->GetValue().size()); 
- 
-                        // skip cached blobs, find position for the next value 
-                        while (pos < outBlobs.size() && outBlobs[pos].Value) { 
-                            ++pos; 
-                        } 
- 
-                        Y_VERIFY(pos < outBlobs.size(), "Got resulting blob with no place for it"); 
+                ui32 pos = 0;
+                for (ui32 i = 0; i < resp.ReadResultSize(); ++i, ++pos) {
+                    auto r = resp.MutableReadResult(i);
+                    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Got results. result " << i << " from KV. Status " << r->GetStatus());
+                    if (r->GetStatus() == NKikimrProto::OVERRUN) { //this blob and next are not readed at all. Return as answer only previous blobs
+                        Y_VERIFY(i > 0, "OVERRUN in first read request");
+                        break;
+                    } else if (r->GetStatus() == NKikimrProto::OK) {
+                        Y_VERIFY(r->HasValue() && r->GetValue().size());
+
+                        // skip cached blobs, find position for the next value
+                        while (pos < outBlobs.size() && outBlobs[pos].Value) {
+                            ++pos;
+                        }
+
+                        Y_VERIFY(pos < outBlobs.size(), "Got resulting blob with no place for it");
                         kvBlobs[pos] = true;
- 
-                        Y_VERIFY(outBlobs[pos].Value.empty()); 
-                        outBlobs[pos].Value = r->GetValue(); 
-                    } else { 
-                        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Got Error response " << r->GetStatus() 
-                                        << " for " << i << "'s blob from " << resp.ReadResultSize() << " blobs"); 
-                        error = TErrorInfo(r->GetStatus() == NKikimrProto::NODATA ? NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET 
-                                                                              : NPersQueue::NErrorCode::ERROR, 
-                                              Sprintf("Got bad response: %s", r->DebugString().c_str())); 
-                        break; 
-                    } 
-                } 
+
+                        Y_VERIFY(outBlobs[pos].Value.empty());
+                        outBlobs[pos].Value = r->GetValue();
+                    } else {
+                        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Got Error response " << r->GetStatus()
+                                        << " for " << i << "'s blob from " << resp.ReadResultSize() << " blobs");
+                        error = TErrorInfo(r->GetStatus() == NKikimrProto::NODATA ? NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET
+                                                                              : NPersQueue::NErrorCode::ERROR,
+                                              Sprintf("Got bad response: %s", r->DebugString().c_str()));
+                        break;
+                    }
+                }
 
                 Cache.SavePrefetchBlobs(ctx, kvReq, kvBlobs);
-            } 
- 
+            }
+
             TVector<TKvRequest> unblockedReads = RemoveFromProgress(ctx, kvReq); // before kvReq.MakePQResponse()
 
             THolder<TEvPQ::TEvBlobResponse> response = kvReq.MakePQResponse(ctx, error);
-            response->Check(); 
+            response->Check();
             ctx.Send(kvReq.Sender, response.Release()); // -> Partition
 
             // Retry previously blocked reads. Should be called after saving blobs in cache
@@ -227,8 +227,8 @@ namespace NPQ {
                 ReadBlobs(ctx, std::move(ubr));
 
             UpdateCounters(ctx);
-        } 
- 
+        }
+
         void OnKvWriteResult(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx, TKvRequest& kvReq)
         {
             auto resp = ev->Get()->Record;
@@ -248,8 +248,8 @@ namespace NPQ {
             THolder<TEvKeyValue::TEvResponse> response = MakeHolder<TEvKeyValue::TEvResponse>();
             response->Record = std::move(ev->Get()->Record);
 
-            response->Record.ClearCookie(); //cookie must not leak to Partition - it uses cookie for SetOffset requests 
- 
+            response->Record.ClearCookie(); //cookie must not leak to Partition - it uses cookie for SetOffset requests
+
             ctx.Send(kvReq.Sender, response.Release()); // -> Partition
 
             UpdateCounters(ctx);
@@ -275,11 +275,11 @@ namespace NPQ {
                     Y_VERIFY(strKey.size() == TKey::KeySize(), "Unexpected key size: %" PRIu64, strKey.size());
                     TString value = cmd.GetValue();
                     kvReq.Partition = key.GetPartition();
-                    TRequestedBlob blob(key.GetOffset(), key.GetPartNo(), key.GetCount(), key.GetInternalPartsCount(), value.size(), value); 
+                    TRequestedBlob blob(key.GetOffset(), key.GetPartNo(), key.GetCount(), key.GetInternalPartsCount(), value.size(), value);
                     kvReq.Blobs.push_back(blob);
 
                     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "CacheProxy. Passthrough blob. Partition "
-                        << kvReq.Partition << " offset " << blob.Offset << " partNo " << blob.PartNo << " count " << blob.Count << " size " << value.size()); 
+                        << kvReq.Partition << " offset " << blob.Offset << " partNo " << blob.PartNo << " count " << blob.Count << " size " << value.size());
                 } else {
                     kvReq.MetadataWritesCount++;
                 }
@@ -309,11 +309,11 @@ namespace NPQ {
             UpdateCounters(ctx);
         }
 
-        void HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx) 
-        { 
-            TStringStream out; 
+        void HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx)
+        {
+            TStringStream out;
             HTML(out)
-            { 
+            {
                 DIV_CLASS_ID("tab-pane fade", "cache") {
                     TABLE_SORTABLE_CLASS("table") {
                         TABLEHEAD() {
@@ -337,15 +337,15 @@ namespace NPQ {
                                     TABLED() {out << data->GetValue().size();}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(data->GetAccessTime());}
                                 }
-                            } 
- 
+                            }
+
                         }
                     }
                 }
             }
             ctx.Send(ev->Sender, new TEvPQ::TEvMonResponse(Max<ui32>(), TVector<TString>(), out.Str()));
-        } 
- 
+        }
+
         void UpdateCounters(const TActorContext& ctx)
         {
             static const ui32 UPDATE_TIMEOUT_S = 5;
@@ -364,30 +364,30 @@ namespace NPQ {
             CountersUpdateTime = now;
         }
 
-        STFUNC(StateFunc) { 
-            switch (ev->GetTypeRewrite()) { 
+        STFUNC(StateFunc) {
+            switch (ev->GetTypeRewrite()) {
                 HFunc(TEvPQ::TEvBlobRequest, Handle);       // read requests
                 HFunc(TEvents::TEvPoisonPill, Handle);
-                HFunc(TEvPQ::TEvMonRequest, HandleMonitoring); 
+                HFunc(TEvPQ::TEvMonRequest, HandleMonitoring);
                 HFunc(TEvKeyValue::TEvRequest, Handle);     // write requests
                 HFunc(TEvKeyValue::TEvResponse, Handle);    // read & write responses
-                HFunc(TEvPQ::TEvChangeCacheConfig, Handle); 
+                HFunc(TEvPQ::TEvChangeCacheConfig, Handle);
                 HFunc(TEvPqCache::TEvCacheL2Response, Handle);
-            default: 
-                break; 
-            }; 
-        } 
- 
+            default:
+                break;
+            };
+        }
+
         TActorId Tablet;
         TString TopicName;
-        ui64 Cookie; 
+        ui64 Cookie;
         // any TKvRequest would be placed into KvRequests or into BlockedReads depending on ReadsInProgress content
         THashMap<ui64, TKvRequest> KvRequests;
         THashMap<TBlobId, TVector<TKvRequest>> BlockedReads;
         THashSet<TBlobId> ReadsInProgress;
         TIntabletCache Cache;
         TInstant CountersUpdateTime;
-    }; 
- 
-} //NPQ 
-} //NKikimr 
+    };
+
+} //NPQ
+} //NKikimr

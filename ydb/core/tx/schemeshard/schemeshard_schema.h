@@ -714,7 +714,7 @@ struct Schema : NIceDb::Schema {
         struct ResourcesDomainLocalPathId : Column<19, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; static constexpr Type Default = InvalidLocalPathId; };
         struct SharedHiveId : Column<20, NScheme::NTypeIds::Uint64> { using Type = TTabletId; static constexpr Type Default = InvalidTabletId; };
         struct DeclaredSchemeQuotas : Column<21, NScheme::NTypeIds::String> {};
-        struct PQPartitionsLimit : Column<22, NScheme::NTypeIds::Uint64> {}; 
+        struct PQPartitionsLimit : Column<22, NScheme::NTypeIds::Uint64> {};
         struct DatabaseQuotas : Column<23, NScheme::NTypeIds::String> {};
         struct StateVersion : Column<24, NScheme::NTypeIds::Uint64> {};
         struct DiskQuotaExceeded : Column<25, NScheme::NTypeIds::Bool> {};
@@ -742,7 +742,7 @@ struct Schema : NIceDb::Schema {
             ResourcesDomainOwnerPathId,
             ResourcesDomainLocalPathId,
             SharedHiveId,
-            DeclaredSchemeQuotas, 
+            DeclaredSchemeQuotas,
             PQPartitionsLimit,
             DatabaseQuotas,
             StateVersion,

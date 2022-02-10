@@ -232,10 +232,10 @@ public:
         }
     };
 
-    ui32 GetGeneration() const { 
-        return StoredState.UserGeneration; 
-    } 
- 
+    ui32 GetGeneration() const {
+        return StoredState.UserGeneration;
+    }
+
 protected:
     TKeyValueStoredStateData StoredState;
     ui32 NextLogoBlobStep;
@@ -285,8 +285,8 @@ protected:
 
 public:
     TKeyValueState();
-    void Clear(); 
-    void SetupTabletCounters(TAutoPtr<TTabletCountersBase> counters); 
+    void Clear();
+    void SetupTabletCounters(TAutoPtr<TTabletCountersBase> counters);
     void ClearTabletCounters();
     TAutoPtr<TTabletCountersBase> TakeTabletCounters();
     TTabletCountersBase& GetTabletCounters();

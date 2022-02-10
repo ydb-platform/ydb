@@ -85,7 +85,7 @@ private:
             hFunc(TEvClusterTracker::TEvSubscribe, HandleWhileWorking);
             hFunc(TEvents::TEvWakeup, HandleWhileWorking);
             hFunc(NKqp::TEvKqp::TEvQueryResponse, HandleWhileWorking);
-            hFunc(NKqp::TEvKqp::TEvProcessResponse, HandleWhileWorking); 
+            hFunc(NKqp::TEvKqp::TEvProcessResponse, HandleWhileWorking);
         }
     }
 
@@ -150,15 +150,15 @@ private:
         }
     }
 
-    void HandleWhileWorking(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev) { 
-        const auto& record = ev->Get()->Record; 
-        LOG_ERROR_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "failed to list clusters: " << record); 
- 
+    void HandleWhileWorking(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        LOG_ERROR_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "failed to list clusters: " << record);
+
         ClustersList = nullptr;
 
         Schedule(TDuration::Seconds(Cfg().GetClustersUpdateTimeoutOnErrorSec()), new TEvents::TEvWakeup);
-    } 
- 
+    }
+
     template<typename TProtoRecord>
     void UpdateClustersList(const TProtoRecord& record) {
         auto clustersList = MakeIntrusive<TClustersList>();

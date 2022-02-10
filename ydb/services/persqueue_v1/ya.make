@@ -1,31 +1,31 @@
-LIBRARY() 
- 
-OWNER( 
-    alexnick 
+LIBRARY()
+
+OWNER(
+    alexnick
     g:kikimr
     g:logbroker
-) 
- 
-SRCS( 
-    grpc_pq_actor.h 
+)
+
+SRCS(
+    grpc_pq_actor.h
     grpc_pq_codecs.cpp
-    grpc_pq_read_actor.cpp 
-    grpc_pq_read.cpp 
-    grpc_pq_read.h 
-    grpc_pq_schema.cpp 
-    grpc_pq_schema.h 
-    grpc_pq_write_actor.cpp 
-    grpc_pq_write.cpp 
-    grpc_pq_write.h 
-    persqueue.cpp 
-    persqueue.h 
+    grpc_pq_read_actor.cpp
+    grpc_pq_read.cpp
+    grpc_pq_read.h
+    grpc_pq_schema.cpp
+    grpc_pq_schema.h
+    grpc_pq_write_actor.cpp
+    grpc_pq_write.cpp
+    grpc_pq_write.h
+    persqueue.cpp
+    persqueue.h
     persqueue_utils.cpp
     persqueue_utils.h
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/actors/core
-    library/cpp/containers/disjoint_interval_tree 
+    library/cpp/containers/disjoint_interval_tree
     library/cpp/grpc/server
     ydb/core/base
     ydb/core/grpc_services
@@ -43,9 +43,9 @@ PEERDIR(
     ydb/public/api/protos
     ydb/services/lib/actors
     ydb/services/lib/sharding
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE_FOR_TESTS(
     ut

@@ -343,7 +343,7 @@ message TBootstrap {
     optional uint64 ProxySchemeCacheNodes = 2;
     optional uint64 ProxySchemeCacheDistNodes = 3;
     optional NKikimrTablet.TCompactionBroker CompactionBroker = 4;
-    optional NKikimrNodeLimits.TNodeLimitsConfig NodeLimits = 5; 
+    optional NKikimrNodeLimits.TNodeLimitsConfig NodeLimits = 5;
     optional NKikimrResourceBroker.TResourceBrokerConfig ResourceBroker = 6;
     optional NKikimrSharedCache.TSharedCacheConfig SharedCacheConfig = 7;
     repeated NKikimrSchemeOp.TResourceProfile ResourceProfiles = 8;

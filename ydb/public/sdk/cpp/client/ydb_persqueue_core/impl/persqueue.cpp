@@ -89,10 +89,10 @@ TDescribeTopicResult::TTopicSettings::TTopicSettings(const Ydb::PersQueue::V1::T
     MaxPartitionWriteSpeed_ = settings.max_partition_write_speed();
     MaxPartitionWriteBurst_ = settings.max_partition_write_burst();
     ClientWriteDisabled_ = settings.client_write_disabled();
-    AllowUnauthenticatedRead_ = AllowUnauthenticatedWrite_ = false; 
-    AbcId_ = 0; 
-    AbcSlug_ = ""; 
- 
+    AllowUnauthenticatedRead_ = AllowUnauthenticatedWrite_ = false;
+    AbcId_ = 0;
+    AbcSlug_ = "";
+
     for (auto& pair : settings.attributes()) {
         if (pair.first == "_partitions_per_tablet") {
             PartitionsPerTablet_ = FromString<ui32>(pair.second);
@@ -100,10 +100,10 @@ TDescribeTopicResult::TTopicSettings::TTopicSettings(const Ydb::PersQueue::V1::T
             AllowUnauthenticatedRead_ = FromString<bool>(pair.second);
         } else if (pair.first == "_allow_unauthenticated_write") {
             AllowUnauthenticatedWrite_ = FromString<bool>(pair.second);
-        } else if (pair.first == "_abc_id") { 
-            AbcId_ = FromString<ui32>(pair.second); 
-        } else if (pair.first == "_abc_slug") { 
-            AbcSlug_ = pair.second; 
+        } else if (pair.first == "_abc_id") {
+            AbcId_ = FromString<ui32>(pair.second);
+        } else if (pair.first == "_abc_slug") {
+            AbcSlug_ = pair.second;
         }
     }
     for (const auto& readRule : settings.read_rules()) {

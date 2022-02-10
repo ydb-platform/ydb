@@ -69,7 +69,7 @@ TKeyValueState::TKeyValueState() {
     Clear();
 }
 
-void TKeyValueState::Clear() { 
+void TKeyValueState::Clear() {
     IsStatePresent = false;
     IsEmptyDbStart = true;
     IsDamaged = false;
@@ -111,8 +111,8 @@ void TKeyValueState::Clear() {
 //
 // Tablet Counters
 //
-void TKeyValueState::SetupTabletCounters(TAutoPtr<TTabletCountersBase> counters) { 
-    TabletCountersPtr = counters; 
+void TKeyValueState::SetupTabletCounters(TAutoPtr<TTabletCountersBase> counters) {
+    TabletCountersPtr = counters;
     TabletCounters = TabletCountersPtr.Get();
 }
 
@@ -137,7 +137,7 @@ void TKeyValueState::SetupResourceMetrics(NMetrics::TResourceMetrics* resourceMe
 void TKeyValueState::CountRequestComplete(NMsgBusProxy::EResponseStatus status,
         const TRequestStat &stat, const TActorContext &ctx)
 {
-    ui64 fullLatencyMs = (TAppData::TimeProvider->Now() - stat.IntermediateCreatedAt).MilliSeconds(); 
+    ui64 fullLatencyMs = (TAppData::TimeProvider->Now() - stat.IntermediateCreatedAt).MilliSeconds();
     if (stat.RequestType == TRequestType::WriteOnly) {
         TabletCounters->Percentile()[COUNTER_LATENCY_FULL_WO].IncrementFor(fullLatencyMs);
         TabletCounters->Simple()[COUNTER_REQ_WO_IN_FLY].Add((ui64)-1);
@@ -205,7 +205,7 @@ void TKeyValueState::CountRequestComplete(NMsgBusProxy::EResponseStatus status,
     for (const auto& pr : stat.GroupWrittenIops) {
         ResourceMetrics->WriteIops[pr.first].Increment(pr.second, now);
     }
- 
+
     if (status == NMsgBusProxy::MSTATUS_OK) {
         TabletCounters->Cumulative()[COUNTER_CMD_READ_BYTES_OK].Increment(stat.ReadBytes);
         TabletCounters->Cumulative()[COUNTER_CMD_READ_OK].Increment(stat.Reads);
@@ -323,17 +323,17 @@ void TKeyValueState::CountOverrun() {
 }
 
 void TKeyValueState::CountLatencyBsOps(const TRequestStat &stat) {
-    ui64 bsDuration = (TAppData::TimeProvider->Now() - stat.KeyvalueStorageRequestSentAt).MilliSeconds(); 
+    ui64 bsDuration = (TAppData::TimeProvider->Now() - stat.KeyvalueStorageRequestSentAt).MilliSeconds();
     TabletCounters->Percentile()[COUNTER_LATENCY_BS_OPS].IncrementFor(bsDuration);
 }
 
 void TKeyValueState::CountLatencyBsCollect() {
-    ui64 collectDurationMs = (TAppData::TimeProvider->Now() - LastCollectStartedAt).MilliSeconds(); 
+    ui64 collectDurationMs = (TAppData::TimeProvider->Now() - LastCollectStartedAt).MilliSeconds();
     TabletCounters->Percentile()[COUNTER_LATENCY_BS_COLLECT].IncrementFor(collectDurationMs);
 }
 
 void TKeyValueState::CountLatencyQueue(const TRequestStat &stat) {
-    ui64 enqueuedMs = (TAppData::TimeProvider->Now() - stat.IntermediateCreatedAt).MilliSeconds(); 
+    ui64 enqueuedMs = (TAppData::TimeProvider->Now() - stat.IntermediateCreatedAt).MilliSeconds();
     if (stat.RequestType == TRequestType::WriteOnly) {
         TabletCounters->Percentile()[COUNTER_LATENCY_QUEUE_WO].IncrementFor(enqueuedMs);
     } else {
@@ -1227,7 +1227,7 @@ void TKeyValueState::CmdDelete(THolder<TIntermediate> &intermediate, ISimpleDb &
 }
 
 void TKeyValueState::CmdWrite(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) {
-    ui64 unixTime = TAppData::TimeProvider->Now().Seconds(); 
+    ui64 unixTime = TAppData::TimeProvider->Now().Seconds();
     for (ui32 i = 0; i < intermediate->Writes.size(); ++i) {
         auto& request = intermediate->Writes[i];
         auto *response = intermediate->Response.AddWriteResult();
@@ -1278,7 +1278,7 @@ void TKeyValueState::CmdCopyRange(THolder<TIntermediate>& intermediate, ISimpleD
 }
 
 void TKeyValueState::CmdConcat(THolder<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx) {
-    ui64 unixTime = TAppData::TimeProvider->Now().Seconds(); 
+    ui64 unixTime = TAppData::TimeProvider->Now().Seconds();
     for (const auto& request : intermediate->Concats) {
         auto *response = intermediate->Response.AddConcatResult();
         ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, unixTime);
@@ -2544,17 +2544,17 @@ void TKeyValueState::ReplyError(const TActorContext &ctx, TString errorDescripti
     }
     response->Record.SetErrorReason(errorDescription);
     response->Record.SetStatus(status);
- 
+
     ResourceMetrics->Network.Increment(response->Record.ByteSize());
- 
+
     intermediate->IsReplied = true;
     ctx.Send(intermediate->RespondTo, response.Release());
     if (info) {
         intermediate->UpdateStat();
         OnRequestComplete(intermediate->RequestUid, intermediate->CreatedAtGeneration, intermediate->CreatedAtStep,
                 ctx, info, status, intermediate->Stat);
-    } else { //metrics change report in OnRequestComplete is not done 
-        ResourceMetrics->TryUpdate(ctx); 
+    } else { //metrics change report in OnRequestComplete is not done
+        ResourceMetrics->TryUpdate(ctx);
         RequestInputTime.erase(intermediate->RequestUid);
     }
 }
@@ -2979,7 +2979,7 @@ void TKeyValueState::OnEvObtainLock(TEvKeyValue::TEvObtainLock::TPtr &ev, const 
 void TKeyValueState::OnEvIntermediate(TIntermediate &intermediate, const TActorContext &ctx) {
     Y_UNUSED(ctx);
     CountLatencyBsOps(intermediate.Stat);
-    intermediate.Stat.LocalBaseTxCreatedAt = TAppData::TimeProvider->Now(); 
+    intermediate.Stat.LocalBaseTxCreatedAt = TAppData::TimeProvider->Now();
 }
 
 void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActorContext &ctx,
@@ -2989,7 +2989,7 @@ void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActor
 
     ResourceMetrics->Network.Increment(request.ByteSize());
     ResourceMetrics->TryUpdate(ctx);
- 
+
     bool hasWrites = request.CmdWriteSize() || request.CmdDeleteRangeSize() || request.CmdRenameSize()
                   || request.CmdCopyRangeSize() || request.CmdConcatSize() || request.HasCmdSetExecutorFastLogPolicy();
 

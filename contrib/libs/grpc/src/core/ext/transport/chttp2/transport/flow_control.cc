@@ -236,17 +236,17 @@ grpc_error* StreamFlowControl::RecvData(int64_t incoming_frame_size) {
   int64_t acked_stream_window = announced_window_delta_ + acked_init_window;
   int64_t sent_stream_window = announced_window_delta_ + sent_init_window;
   if (incoming_frame_size > acked_stream_window) {
-    //hotfix - do not check incoming_frame_size <= sent_stream_window - with old grpc version this is not true 
-    gpr_log(GPR_ERROR, 
-          "Incoming frame of size %" PRId64 
-          " exceeds local window size of %" PRId64 
-          ".\n" 
-          "The (un-acked, future) window size would be %" PRId64 
-          " which is not exceeded.\n" 
-          "This would usually cause a disconnection, but allowing it due to" 
-          "broken HTTP2 implementations in the wild.\n" 
-          "See (for example) https://github.com/netty/netty/issues/6520.", 
-          incoming_frame_size, acked_stream_window, sent_stream_window); 
+    //hotfix - do not check incoming_frame_size <= sent_stream_window - with old grpc version this is not true
+    gpr_log(GPR_ERROR,
+          "Incoming frame of size %" PRId64
+          " exceeds local window size of %" PRId64
+          ".\n"
+          "The (un-acked, future) window size would be %" PRId64
+          " which is not exceeded.\n"
+          "This would usually cause a disconnection, but allowing it due to"
+          "broken HTTP2 implementations in the wild.\n"
+          "See (for example) https://github.com/netty/netty/issues/6520.",
+          incoming_frame_size, acked_stream_window, sent_stream_window);
   }
 
   UpdateAnnouncedWindowDelta(tfc_, -incoming_frame_size);

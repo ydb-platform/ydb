@@ -179,7 +179,7 @@ private:
             LOG_DEBUG_S(ctx, NKikimrServices::LABELS_MAINTAINER,
                         "Removing database labels from " << service << " counters");
 
-            ReplaceSubgroup(root, service); 
+            ReplaceSubgroup(root, service);
         }
     }
 
@@ -199,7 +199,7 @@ private:
             LOG_DEBUG_S(ctx, NKikimrServices::LABELS_MAINTAINER,
                         "Removing database attribute labels from " << service << " counters");
 
-            ReplaceSubgroup(root, service); 
+            ReplaceSubgroup(root, service);
         }
     }
 
@@ -240,10 +240,10 @@ private:
                 LOG_DEBUG_S(ctx, NKikimrServices::LABELS_MAINTAINER,
                             "Add labels to service " << service << " counters"
                             << " labels=" << PrintLabels(labels));
-                const auto &[svc, subSvc] = ExtractSubServiceName(service); 
-                auto oldGroup = root->GetSubgroup("counters", svc); 
-                if (!subSvc.empty()) 
-                    oldGroup = oldGroup->GetSubgroup("subsystem", subSvc); 
+                const auto &[svc, subSvc] = ExtractSubServiceName(service);
+                auto oldGroup = root->GetSubgroup("counters", svc);
+                if (!subSvc.empty())
+                    oldGroup = oldGroup->GetSubgroup("subsystem", subSvc);
                 TIntrusivePtr<NMonitoring::TDynamicCounters> serviceGroup = new NMonitoring::TDynamicCounters;
                 TIntrusivePtr<NMonitoring::TDynamicCounters> curGroup = serviceGroup;
 
@@ -266,8 +266,8 @@ private:
                 }
                 curGroup->RegisterSubgroup(actualLabels->back().first, actualLabels->back().second, oldGroup);
 
-                auto rt = GetServiceCountersRoot(root, service); 
-                rt->ReplaceSubgroup(subSvc.empty() ? "counters" : "subsystem", subSvc.empty() ? svc : subSvc, serviceGroup); 
+                auto rt = GetServiceCountersRoot(root, service);
+                rt->ReplaceSubgroup(subSvc.empty() ? "counters" : "subsystem", subSvc.empty() ? svc : subSvc, serviceGroup);
             }
         }
     }

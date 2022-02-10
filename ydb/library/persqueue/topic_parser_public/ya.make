@@ -1,14 +1,14 @@
-OWNER( 
-    galaxycrab 
-    g:kikimr 
-    g:logbroker 
-) 
- 
-LIBRARY() 
- 
-SRCS( 
-    topic_parser.h 
-    topic_parser.cpp 
-) 
+OWNER(
+    galaxycrab
+    g:kikimr
+    g:logbroker
+)
 
-END() 
+LIBRARY()
+
+SRCS(
+    topic_parser.h
+    topic_parser.cpp
+)
+
+END()

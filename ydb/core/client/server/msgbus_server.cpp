@@ -121,7 +121,7 @@ public:
             MTYPE(TBusBlobStorageConfigRequest)
             MTYPE(TBusNodeRegistrationRequest)
             MTYPE(TBusCmsRequest)
-            MTYPE(TBusChooseProxy) 
+            MTYPE(TBusChooseProxy)
             MTYPE(TBusSqsRequest)
             MTYPE(TBusWhoAmI)
             MTYPE(TBusStreamRequest)
@@ -478,7 +478,7 @@ void TMessageBusServer::OnMessage(NBus::TOnMessageContext &msg) {
 
 void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
     const ui32 msgType = msg.GetMessage()->GetHeader()->Type;
- 
+
     switch (msgType) {
     case MTYPE_CLIENT_REQUEST:
         return ClientProxyRequest<TEvBusProxy::TEvRequest>(msg);
@@ -499,10 +499,10 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
     case MTYPE_CLIENT_KEYVALUE:
     case MTYPE_CLIENT_OLD_KEYVALUE:
         return ClientActorRequest(CreateMessageBusKeyValue, msg);
-    case MTYPE_CLIENT_PERSQUEUE: 
+    case MTYPE_CLIENT_PERSQUEUE:
         return ClientProxyRequest<TEvBusProxy::TEvPersQueue>(msg);
-    case MTYPE_CLIENT_CHOOSE_PROXY: 
-        return ClientActorRequest(CreateMessageBusChooseProxy, msg); 
+    case MTYPE_CLIENT_CHOOSE_PROXY:
+        return ClientActorRequest(CreateMessageBusChooseProxy, msg);
     case MTYPE_CLIENT_TABLET_STATE_REQUEST:
         return ClientActorRequest(CreateMessageBusTabletStateRequest, msg);
     case MTYPE_CLIENT_TABLET_COUNTERS_REQUEST:

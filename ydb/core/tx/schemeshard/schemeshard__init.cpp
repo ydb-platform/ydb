@@ -1480,7 +1480,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     rootLimits.MaxConsistentCopyTargets = row.GetValueOrDefault<Schema::SubDomains::ConsistentCopyingTargetsLimit>(rootLimits.MaxConsistentCopyTargets);
                     rootLimits.MaxPathElementLength = row.GetValueOrDefault<Schema::SubDomains::PathElementLength>(rootLimits.MaxPathElementLength);
                     rootLimits.ExtraPathSymbolsAllowed = row.GetValueOrDefault<Schema::SubDomains::ExtraPathSymbolsAllowed>(rootLimits.ExtraPathSymbolsAllowed);
-                    rootLimits.MaxPQPartitions = row.GetValueOrDefault<Schema::SubDomains::PQPartitionsLimit>(rootLimits.MaxPQPartitions); 
+                    rootLimits.MaxPQPartitions = row.GetValueOrDefault<Schema::SubDomains::PQPartitionsLimit>(rootLimits.MaxPQPartitions);
                 }
 
                 TSubDomainInfo::TPtr rootDomainInfo = new TSubDomainInfo(version, Self->RootPathId());
@@ -1538,8 +1538,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     limits.MaxConsistentCopyTargets = rowset.GetValueOrDefault<Schema::SubDomains::ConsistentCopyingTargetsLimit>(limits.MaxConsistentCopyTargets);
                     limits.MaxPathElementLength = rowset.GetValueOrDefault<Schema::SubDomains::PathElementLength>(limits.MaxPathElementLength);
                     limits.ExtraPathSymbolsAllowed = rowset.GetValueOrDefault<Schema::SubDomains::ExtraPathSymbolsAllowed>(limits.ExtraPathSymbolsAllowed);
-                    limits.MaxPQPartitions = rowset.GetValueOrDefault<Schema::SubDomains::PQPartitionsLimit>(limits.MaxPQPartitions); 
- 
+                    limits.MaxPQPartitions = rowset.GetValueOrDefault<Schema::SubDomains::PQPartitionsLimit>(limits.MaxPQPartitions);
+
                     domainInfo->SetSchemeLimits(limits);
 
                     if (rowset.HaveValue<Schema::SubDomains::DeclaredSchemeQuotas>()) {
@@ -2230,9 +2230,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 pqGroup->TabletConfig = rowset.GetValue<Schema::PersQueueGroups::TabletConfig>();
                 pqGroup->MaxPartsPerTablet = rowset.GetValue<Schema::PersQueueGroups::MaxPQPerShard>();
                 pqGroup->AlterVersion = rowset.GetValue<Schema::PersQueueGroups::AlterVersion>();
-                pqGroup->NextPartitionId = rowset.GetValueOrDefault<Schema::PersQueueGroups::NextPartitionId>(0); 
-                pqGroup->TotalGroupCount = rowset.GetValueOrDefault<Schema::PersQueueGroups::TotalGroupCount>(0); 
- 
+                pqGroup->NextPartitionId = rowset.GetValueOrDefault<Schema::PersQueueGroups::NextPartitionId>(0);
+                pqGroup->TotalGroupCount = rowset.GetValueOrDefault<Schema::PersQueueGroups::TotalGroupCount>(0);
+
                 const bool ok = pqGroup->FillKeySchema(pqGroup->TabletConfig);
                 Y_VERIFY(ok);
 
@@ -2263,7 +2263,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TLocalPathId localPathId = rowset.GetValue<Schema::PersQueues::PathId>();
                 TPathId pathId(selfId, localPathId);
                 pqInfo.PqId = rowset.GetValue<Schema::PersQueues::PqId>();
-                pqInfo.GroupId = rowset.GetValueOrDefault<Schema::PersQueues::GroupId>(pqInfo.PqId + 1); 
+                pqInfo.GroupId = rowset.GetValueOrDefault<Schema::PersQueues::GroupId>(pqInfo.PqId + 1);
                 TLocalShardIdx localShardIdx = rowset.GetValue<Schema::PersQueues::ShardIdx>();
                 TShardIdx shardIdx = Self->MakeLocalId(localShardIdx);
                 pqInfo.AlterVersion = rowset.GetValue<Schema::PersQueues::AlterVersion>();
@@ -2284,16 +2284,16 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     pqInfo.KeyRange->ToBound = rowset.GetValue<Schema::PersQueues::RangeEnd>();
                 }
 
-                auto it = Self->PersQueueGroups.find(pathId); 
+                auto it = Self->PersQueueGroups.find(pathId);
                 Y_VERIFY(it != Self->PersQueueGroups.end());
                 Y_VERIFY(it->second);
                 TPersQueueGroupInfo::TPtr pqGroup = it->second;
                 if (pqInfo.AlterVersion <= pqGroup->AlterVersion)
                     ++pqGroup->TotalPartitionCount;
-                if (pqInfo.PqId >= pqGroup->NextPartitionId) { 
-                    pqGroup->NextPartitionId = pqInfo.PqId + 1; 
-                    pqGroup->TotalGroupCount = pqInfo.PqId + 1; 
-                } 
+                if (pqInfo.PqId >= pqGroup->NextPartitionId) {
+                    pqGroup->NextPartitionId = pqInfo.PqId + 1;
+                    pqGroup->TotalGroupCount = pqInfo.PqId + 1;
+                }
 
                 TPQShardInfo::TPtr& pqShard = pqGroup->Shards[shardIdx];
                 if (!pqShard) {
@@ -2306,40 +2306,40 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-        // Read PersQueue groups' alters 
-        { 
-            auto rowset = db.Table<Schema::PersQueueGroupAlters>().Range().Select(); 
-            if (!rowset.IsReady()) 
-                return false; 
-            while (!rowset.EndOfSet()) { 
+        // Read PersQueue groups' alters
+        {
+            auto rowset = db.Table<Schema::PersQueueGroupAlters>().Range().Select();
+            if (!rowset.IsReady())
+                return false;
+            while (!rowset.EndOfSet()) {
                 TLocalPathId localPathId = rowset.GetValue<Schema::PersQueueGroupAlters::PathId>();
                 TPathId pathId(selfId, localPathId);
- 
-                TPersQueueGroupInfo::TPtr alterData = new TPersQueueGroupInfo(); 
-                alterData->TabletConfig = rowset.GetValue<Schema::PersQueueGroupAlters::TabletConfig>(); 
-                alterData->MaxPartsPerTablet = rowset.GetValue<Schema::PersQueueGroupAlters::MaxPQPerShard>(); 
-                alterData->AlterVersion = rowset.GetValue<Schema::PersQueueGroupAlters::AlterVersion>(); 
-                alterData->TotalGroupCount = rowset.GetValue<Schema::PersQueueGroupAlters::TotalGroupCount>(); 
-                alterData->NextPartitionId = rowset.GetValueOrDefault<Schema::PersQueueGroupAlters::NextPartitionId>(alterData->TotalGroupCount); 
+
+                TPersQueueGroupInfo::TPtr alterData = new TPersQueueGroupInfo();
+                alterData->TabletConfig = rowset.GetValue<Schema::PersQueueGroupAlters::TabletConfig>();
+                alterData->MaxPartsPerTablet = rowset.GetValue<Schema::PersQueueGroupAlters::MaxPQPerShard>();
+                alterData->AlterVersion = rowset.GetValue<Schema::PersQueueGroupAlters::AlterVersion>();
+                alterData->TotalGroupCount = rowset.GetValue<Schema::PersQueueGroupAlters::TotalGroupCount>();
+                alterData->NextPartitionId = rowset.GetValueOrDefault<Schema::PersQueueGroupAlters::NextPartitionId>(alterData->TotalGroupCount);
                 alterData->BootstrapConfig = rowset.GetValue<Schema::PersQueueGroupAlters::BootstrapConfig>();
- 
+
                 const bool ok = alterData->FillKeySchema(alterData->TabletConfig);
                 Y_VERIFY(ok);
 
-                auto it = Self->PersQueueGroups.find(pathId); 
-                Y_VERIFY(it != Self->PersQueueGroups.end()); 
- 
-                alterData->TotalPartitionCount = it->second->GetTotalPartitionCountWithAlter(); 
-                alterData->BalancerTabletID = it->second->BalancerTabletID; 
-                alterData->BalancerShardIdx = it->second->BalancerShardIdx; 
-                it->second->AlterData = alterData; 
- 
-                if (!rowset.Next()) 
-                    return false; 
-            } 
-        } 
- 
- 
+                auto it = Self->PersQueueGroups.find(pathId);
+                Y_VERIFY(it != Self->PersQueueGroups.end());
+
+                alterData->TotalPartitionCount = it->second->GetTotalPartitionCountWithAlter();
+                alterData->BalancerTabletID = it->second->BalancerTabletID;
+                alterData->BalancerShardIdx = it->second->BalancerShardIdx;
+                it->second->AlterData = alterData;
+
+                if (!rowset.Next())
+                    return false;
+            }
+        }
+
+
         // Read RTMR volumes
         {
             auto rowset = db.Table<Schema::RtmrVolumes>().Range().Select();
@@ -3675,8 +3675,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Self->TabletCounters->Simple()[COUNTER_PQ_SHARD_COUNT].Add(1);
                 break;
             case ETabletType::PersQueueReadBalancer:
-                Self->TabletCounters->Simple()[COUNTER_PQ_RB_SHARD_COUNT].Add(1); 
-                break; 
+                Self->TabletCounters->Simple()[COUNTER_PQ_RB_SHARD_COUNT].Add(1);
+                break;
             case ETabletType::BlockStoreVolume:
                 Self->TabletCounters->Simple()[COUNTER_BLOCKSTORE_VOLUME_SHARD_COUNT].Add(1);
                 break;
@@ -3759,22 +3759,22 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             if (path->IsPQGroup()) {
                 auto pqGroup = Self->PersQueueGroups.at(path->PathId);
                 auto delta = pqGroup->AlterData ? pqGroup->AlterData->TotalGroupCount : pqGroup->TotalGroupCount;
-                auto tabletConfig = pqGroup->AlterData ? (pqGroup->AlterData->TabletConfig.empty() ? pqGroup->TabletConfig : pqGroup->AlterData->TabletConfig) 
-                                                       : pqGroup->TabletConfig; 
-                NKikimrPQ::TPQTabletConfig config; 
-                Y_VERIFY(!tabletConfig.empty()); 
-                bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig); 
-                Y_VERIFY(parseOk); 
- 
-                ui64 throughput = ((ui64)delta) * config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(); 
-                ui64 storage = throughput * config.GetPartitionConfig().GetLifetimeSeconds(); 
- 
+                auto tabletConfig = pqGroup->AlterData ? (pqGroup->AlterData->TabletConfig.empty() ? pqGroup->TabletConfig : pqGroup->AlterData->TabletConfig)
+                                                       : pqGroup->TabletConfig;
+                NKikimrPQ::TPQTabletConfig config;
+                Y_VERIFY(!tabletConfig.empty());
+                bool parseOk = ParseFromStringNoSizeLimit(config, tabletConfig);
+                Y_VERIFY(parseOk);
+
+                ui64 throughput = ((ui64)delta) * config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
+                ui64 storage = throughput * config.GetPartitionConfig().GetLifetimeSeconds();
+
                 inclusivedomainInfo->IncPQPartitionsInside(delta);
-                inclusivedomainInfo->IncPQReservedStorage(storage); 
- 
+                inclusivedomainInfo->IncPQReservedStorage(storage);
+
                 Self->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(delta);
-                Self->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(throughput); 
-                Self->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(storage); 
+                Self->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(throughput);
+                Self->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(storage);
             }
 
             if (path->PlannedToDrop()) {

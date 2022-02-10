@@ -1644,9 +1644,9 @@ void TSchemeShard::PersistSchemeLimit(NIceDb::TNiceDb &db, const TPathId &pathId
         NIceDb::TUpdate<Schema::SubDomains::AclByteSizeLimit>     (subDomain.GetSchemeLimits().MaxAclBytesSize),
         NIceDb::TUpdate<Schema::SubDomains::ConsistentCopyingTargetsLimit> (subDomain.GetSchemeLimits().MaxConsistentCopyTargets),
         NIceDb::TUpdate<Schema::SubDomains::PathElementLength>             (subDomain.GetSchemeLimits().MaxPathElementLength),
-        NIceDb::TUpdate<Schema::SubDomains::ExtraPathSymbolsAllowed>       (subDomain.GetSchemeLimits().ExtraPathSymbolsAllowed), 
-        NIceDb::TUpdate<Schema::SubDomains::PQPartitionsLimit>             (subDomain.GetSchemeLimits().MaxPQPartitions) 
-    ); 
+        NIceDb::TUpdate<Schema::SubDomains::ExtraPathSymbolsAllowed>       (subDomain.GetSchemeLimits().ExtraPathSymbolsAllowed),
+        NIceDb::TUpdate<Schema::SubDomains::PQPartitionsLimit>             (subDomain.GetSchemeLimits().MaxPQPartitions)
+    );
 }
 
 void TSchemeShard::PersistStoragePools(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain) {
@@ -2282,9 +2282,9 @@ void TSchemeShard::PersistPersQueueGroup(NIceDb::TNiceDb& db, TPathId pathId, co
     db.Table<Schema::PersQueueGroups>().Key(pathId.LocalPathId).Update(
         NIceDb::TUpdate<Schema::PersQueueGroups::TabletConfig>(pqGroup->TabletConfig),
         NIceDb::TUpdate<Schema::PersQueueGroups::MaxPQPerShard>(pqGroup->MaxPartsPerTablet),
-        NIceDb::TUpdate<Schema::PersQueueGroups::AlterVersion>(pqGroup->AlterVersion), 
-        NIceDb::TUpdate<Schema::PersQueueGroups::TotalGroupCount>(pqGroup->TotalGroupCount), 
-        NIceDb::TUpdate<Schema::PersQueueGroups::NextPartitionId>(pqGroup->NextPartitionId)); 
+        NIceDb::TUpdate<Schema::PersQueueGroups::AlterVersion>(pqGroup->AlterVersion),
+        NIceDb::TUpdate<Schema::PersQueueGroups::TotalGroupCount>(pqGroup->TotalGroupCount),
+        NIceDb::TUpdate<Schema::PersQueueGroups::NextPartitionId>(pqGroup->NextPartitionId));
 }
 
 void TSchemeShard::PersistRemovePersQueueGroup(NIceDb::TNiceDb& db, TPathId pathId) {
@@ -2318,7 +2318,7 @@ void TSchemeShard::PersistAddPersQueueGroupAlter(NIceDb::TNiceDb& db, TPathId pa
         NIceDb::TUpdate<Schema::PersQueueGroupAlters::TabletConfig>(alterData->TabletConfig),
         NIceDb::TUpdate<Schema::PersQueueGroupAlters::MaxPQPerShard>(alterData->MaxPartsPerTablet),
         NIceDb::TUpdate<Schema::PersQueueGroupAlters::AlterVersion>(alterData->AlterVersion),
-        NIceDb::TUpdate<Schema::PersQueueGroupAlters::TotalGroupCount>(alterData->TotalGroupCount), 
+        NIceDb::TUpdate<Schema::PersQueueGroupAlters::TotalGroupCount>(alterData->TotalGroupCount),
         NIceDb::TUpdate<Schema::PersQueueGroupAlters::NextPartitionId>(alterData->NextPartitionId),
         NIceDb::TUpdate<Schema::PersQueueGroupAlters::BootstrapConfig>(alterData->BootstrapConfig));
 }
@@ -6046,21 +6046,21 @@ void TSchemeShard::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TP
 }
 
 void TSchemeShard::ChangeStreamShardsCount(i64 delta) {
-    TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(delta); 
-} 
- 
+    TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(delta);
+}
+
 void TSchemeShard::ChangeStreamShardsQuota(i64 delta) {
-    TabletCounters->Simple()[COUNTER_STREAM_SHARDS_QUOTA].Add(delta); 
-} 
- 
-void TSchemeShard::ChangeStreamReservedStorageCount(i64 delta) { 
-    TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(delta); 
-} 
- 
-void TSchemeShard::ChangeStreamReservedStorageQuota(i64 delta) { 
-    TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE_QUOTA].Add(delta); 
-} 
- 
+    TabletCounters->Simple()[COUNTER_STREAM_SHARDS_QUOTA].Add(delta);
+}
+
+void TSchemeShard::ChangeStreamReservedStorageCount(i64 delta) {
+    TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(delta);
+}
+
+void TSchemeShard::ChangeStreamReservedStorageQuota(i64 delta) {
+    TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE_QUOTA].Add(delta);
+}
+
 void TSchemeShard::ChangeDiskSpaceTablesDataBytes(i64 delta) {
     TabletCounters->Simple()[COUNTER_DISK_SPACE_TABLES_DATA_BYTES].Add(delta);
 }

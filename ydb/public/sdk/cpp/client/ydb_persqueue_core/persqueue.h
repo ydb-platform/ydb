@@ -121,9 +121,9 @@ struct TDescribeTopicResult : public TStatus {
         GETTER(bool, AllowUnauthenticatedWrite);
         GETTER(bool, AllowUnauthenticatedRead);
         GETTER(ui32, PartitionsPerTablet);
-        GETTER(ui32, AbcId); 
-        GETTER(TString, AbcSlug); 
- 
+        GETTER(ui32, AbcId);
+        GETTER(TString, AbcSlug);
+
         const TVector<TReadRule>& ReadRules() const {
             return ReadRules_;
         }
@@ -144,8 +144,8 @@ struct TDescribeTopicResult : public TStatus {
         bool AllowUnauthenticatedRead_;
         bool AllowUnauthenticatedWrite_;
         ui32 PartitionsPerTablet_;
-        ui32 AbcId_; 
-        TString AbcSlug_; 
+        ui32 AbcId_;
+        TString AbcSlug_;
         TVector<TReadRule> ReadRules_;
         TMaybe<TRemoteMirrorRule> RemoteMirrorRule_;
     };
@@ -241,9 +241,9 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
 
     FLUENT_SETTING_DEFAULT(ui32, PartitionsPerTablet, 2);
 
-    FLUENT_SETTING_OPTIONAL(ui32, AbcId); 
-    FLUENT_SETTING_OPTIONAL(TString, AbcSlug); 
- 
+    FLUENT_SETTING_OPTIONAL(ui32, AbcId);
+    FLUENT_SETTING_OPTIONAL(TString, AbcSlug);
+
     FLUENT_SETTING_DEFAULT(TVector<TReadRuleSettings>, ReadRules, {});
     FLUENT_SETTING_OPTIONAL(TRemoteMirrorRuleSettings, RemoteMirrorRule);
 
@@ -261,8 +261,8 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
         MaxPartitionWriteBurst_ = settings.MaxPartitionWriteBurst();
         ClientWriteDisabled_ = settings.ClientWriteDisabled();
         PartitionsPerTablet_ = settings.PartitionsPerTablet();
-        if (settings.AbcId()) AbcId_ = settings.AbcId(); 
-        if (!settings.AbcSlug().empty()) AbcSlug_ = settings.AbcSlug(); 
+        if (settings.AbcId()) AbcId_ = settings.AbcId();
+        if (!settings.AbcSlug().empty()) AbcSlug_ = settings.AbcSlug();
         AllowUnauthenticatedRead_ = settings.AllowUnauthenticatedRead();
         AllowUnauthenticatedWrite_ = settings.AllowUnauthenticatedWrite();
 
@@ -336,12 +336,12 @@ struct TWriteStat : public TThrRefBase {
 //};
 
 
-enum class EClusterDiscoveryMode { 
-    Auto = 0, // enables cluster discovery only for hostname "logbroker.yandex.net" and "logbroker-prestable.yandex.net" 
-    On, 
-    Off 
-}; 
- 
+enum class EClusterDiscoveryMode {
+    Auto = 0, // enables cluster discovery only for hostname "logbroker.yandex.net" and "logbroker-prestable.yandex.net"
+    On,
+    Off
+};
+
 class TContinuationToken : public TMoveOnly {
     friend class TWriteSession;
 private:
@@ -418,7 +418,7 @@ struct TPartitionStream : public TThrRefBase {
     using TPtr = TIntrusivePtr<TPartitionStream>;
 
 
-public: 
+public:
 
     //! Temporary stop receiving data from this partition stream.
     // virtual void StopReading() = 0; // Not implemented yet.
@@ -468,7 +468,7 @@ protected:
     ui64 PartitionId;
 };
 
- 
+
 //! Events for read session.
 struct TReadSessionEvent {
 
@@ -694,8 +694,8 @@ struct TReadSessionEvent {
         //! Committed offset.
         //! This means that from now the first available
         //! message offset in current partition
-        //! for current consumer is this offset. 
-        //! All messages before are committed and futher never be available. 
+        //! for current consumer is this offset.
+        //! All messages before are committed and futher never be available.
         ui64 GetCommittedOffset() const {
             return CommittedOffset;
         }
@@ -711,15 +711,15 @@ struct TReadSessionEvent {
 
     //! Server request for creating partition stream.
     struct TCreatePartitionStreamEvent {
-        explicit TCreatePartitionStreamEvent(TPartitionStream::TPtr, ui64 committedOffset, ui64 endOffset); 
+        explicit TCreatePartitionStreamEvent(TPartitionStream::TPtr, ui64 committedOffset, ui64 endOffset);
 
         const TPartitionStream::TPtr& GetPartitionStream() const {
             return PartitionStream;
         }
 
-        //! Current committed offset in partition stream. 
-        ui64 GetCommittedOffset() const { 
-            return CommittedOffset; 
+        //! Current committed offset in partition stream.
+        ui64 GetCommittedOffset() const {
+            return CommittedOffset;
         }
 
         //! Offset of first not existing message in partition stream.
@@ -736,7 +736,7 @@ struct TReadSessionEvent {
 
     private:
         TPartitionStream::TPtr PartitionStream;
-        ui64 CommittedOffset; 
+        ui64 CommittedOffset;
         ui64 EndOffset;
     };
 
@@ -878,7 +878,7 @@ private:
 //! Event debug string.
 TString DebugString(const TReadSessionEvent::TEvent& event);
 
- 
+
 //! Retry policy.
 //! Calculates delay before next retry.
 //! Has several default implementations:
@@ -1001,7 +1001,7 @@ struct TWriteSessionEvent {
         TMaybe<TWrittenMessageDetails> Details;
         //! Write stats from server. See TWriteStat. nullptr for DISCARDED event.
         TWriteStat::TPtr Stat;
- 
+
     };
 
     struct TAcksEvent {
@@ -1009,26 +1009,26 @@ struct TWriteSessionEvent {
         //! Acks for messages from one WriteBatch request could be emitted as several TAcksEvents -
         //! they are provided to client as soon as possible.
         TVector<TWriteAck> Acks;
- 
-        TString DebugString() const; 
- 
+
+        TString DebugString() const;
+
     };
 
     //! Indicates that a writer is ready to accept new message(s).
     //! Continuation token should be kept and then used in write methods.
     struct TReadyToAcceptEvent {
         TContinuationToken ContinuationToken;
- 
-        TString DebugString() const; 
- 
+
+        TString DebugString() const;
+
     };
 
     using TEvent = std::variant<TAcksEvent, TReadyToAcceptEvent, TSessionClosedEvent>;
 };
 
-//! Event debug string. 
-TString DebugString(const TWriteSessionEvent::TEvent& event); 
- 
+//! Event debug string.
+TString DebugString(const TWriteSessionEvent::TEvent& event);
+
 using TSessionClosedHandler = std::function<void(const TSessionClosedEvent&)>;
 
 //! Settings for write session.
@@ -1081,11 +1081,11 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     FLUENT_SETTING(IRetryPolicy::TPtr, RetryPolicy);
 
     //! User metadata that may be attached to write session.
-    TWriteSessionSettings& AppendSessionMeta(const TString& key, const TString& value) { 
-        Meta_.Fields[key] = value; 
-        return *this; 
-    }; 
- 
+    TWriteSessionSettings& AppendSessionMeta(const TString& key, const TString& value) {
+        Meta_.Fields[key] = value;
+        return *this;
+    };
+
     NYdb::NPersQueue::TWriteSessionMeta Meta_;
 
     //! Writer will accumulate messages until reaching up to BatchFlushSize bytes
@@ -1097,7 +1097,7 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     FLUENT_SETTING_OPTIONAL(TDuration, BatchFlushInterval);
     FLUENT_SETTING_OPTIONAL(ui64, BatchFlushSizeBytes);
 
-    FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30)); 
+    FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
 
     FLUENT_SETTING_OPTIONAL(TWriterCounters::TPtr, Counters);
 
@@ -1138,13 +1138,13 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
 
     //! Event handlers.
     FLUENT_SETTING(TEventHandlers, EventHandlers);
- 
-    //! Enables validation of SeqNo. If enabled, then writer will check writing with seqNo and without it and throws exception. 
-    FLUENT_SETTING_DEFAULT(bool, ValidateSeqNo, true); 
- 
-    //! Manages cluster discovery mode. 
-    FLUENT_SETTING_OPTIONAL(EClusterDiscoveryMode, ClusterDiscoveryMode); 
- 
+
+    //! Enables validation of SeqNo. If enabled, then writer will check writing with seqNo and without it and throws exception.
+    FLUENT_SETTING_DEFAULT(bool, ValidateSeqNo, true);
+
+    //! Manages cluster discovery mode.
+    FLUENT_SETTING_OPTIONAL(EClusterDiscoveryMode, ClusterDiscoveryMode);
+
 };
 
 //! Read settings for single topic.
@@ -1276,9 +1276,9 @@ struct TReadSessionSettings : public TRequestSettings<TReadSessionSettings> {
     }
 
     //! Disable Clusters discovery. ReadMirrored/ReadOriginal/ReadAll will not have any effect
-    //! if this option is true. 
-    FLUENT_SETTING_DEFAULT(bool, DisableClusterDiscovery, false); 
- 
+    //! if this option is true.
+    FLUENT_SETTING_DEFAULT(bool, DisableClusterDiscovery, false);
+
     //! Maximum memory usage for read session.
     FLUENT_SETTING_DEFAULT(size_t, MaxMemoryUsageBytes, 100 * 1024 * 1024);
 
@@ -1324,8 +1324,8 @@ struct TReadSessionSettings : public TRequestSettings<TReadSessionSettings> {
     //! 3. If ReadOnlyOriginal is false and one cluster is specified read will be done from all topic instances (mirrored and original) in one cluster.
     //! Use ReadMirrored() function for this variant.
     FLUENT_SETTING_VECTOR(TString, Clusters);
- 
-    FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30)); 
+
+    FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
 };
 
 //! Simple write session. Does not need event handlers. Does not provide Events, ContinuationTokens, write Acks.
@@ -1377,12 +1377,12 @@ public:
     //! continuationToken - a token earlier provided to client with ReadyToAccept event.
     virtual void Write(TContinuationToken&& continuationToken, TStringBuf data, TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) = 0;
 
-    //! Write single message that is already coded by codec. Codec from settings does not apply to this message. 
-    //! continuationToken - a token earlier provided to client with ReadyToAccept event. 
-    //! originalSize - size of unpacked message 
-    virtual void WriteEncoded(TContinuationToken&& continuationToken, TStringBuf data, ECodec codec, ui32 originalSize, TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) = 0; 
- 
- 
+    //! Write single message that is already coded by codec. Codec from settings does not apply to this message.
+    //! continuationToken - a token earlier provided to client with ReadyToAccept event.
+    //! originalSize - size of unpacked message
+    virtual void WriteEncoded(TContinuationToken&& continuationToken, TStringBuf data, ECodec codec, ui32 originalSize, TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) = 0;
+
+
     //! Wait for all writes to complete (no more that closeTimeout()), than close. Empty maybe - means infinite timeout.
     //! return - true if all writes were completed and acked. false if timeout was reached and some writes were aborted.
     virtual bool Close(TDuration closeTimeout = TDuration::Max()) = 0;
@@ -1452,16 +1452,16 @@ public:
 };
 
 struct TPersQueueClientSettings : public TCommonClientSettingsBase<TPersQueueClientSettings> {
-    using TSelf = TPersQueueClientSettings; 
- 
+    using TSelf = TPersQueueClientSettings;
+
     //! Default executor for compression tasks.
     FLUENT_SETTING_DEFAULT(IExecutor::TPtr, DefaultCompressionExecutor, CreateThreadPoolExecutor(2));
 
     //! Default executor for callbacks.
     FLUENT_SETTING_DEFAULT(IExecutor::TPtr, DefaultHandlersExecutor, CreateThreadPoolExecutor(1));
- 
-    //! Manages cluster discovery mode. 
-    FLUENT_SETTING_DEFAULT(EClusterDiscoveryMode, ClusterDiscoveryMode, EClusterDiscoveryMode::On); 
+
+    //! Manages cluster discovery mode.
+    FLUENT_SETTING_DEFAULT(EClusterDiscoveryMode, ClusterDiscoveryMode, EClusterDiscoveryMode::On);
 };
 
 // PersQueue client.

@@ -24,8 +24,8 @@ extend google.protobuf.FieldOptions {
 
 enum EncryptionType {
     ENCRYPTION_UNDEFINED = 0;
-    NONE = 1; 
-    KMS = 2; 
+    NONE = 1;
+    KMS = 2;
 }
 
 message EnhancedMetrics {
@@ -122,7 +122,7 @@ message Shard {
     // Id of the shard's parent
     string parent_shard_id = 3 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
     // The range of possible sequence numbers for the shard
-    SequenceNumberRange sequence_number_range = 4; 
+    SequenceNumberRange sequence_number_range = 4;
     // Unique id of the shard within stream
     string shard_id = 5;
 }
@@ -149,15 +149,15 @@ message ConsumerDescription {
 enum ShardIteratorType {
     SHARD_ITERATOR_UNDEFINED = 0;
     // Start reading exactly from the position denoted by a sequence number
-    AT_SEQUENCE_NUMBER = 1; 
+    AT_SEQUENCE_NUMBER = 1;
     // Start reading right after the specified position
-    AFTER_SEQUENCE_NUMBER = 2; 
+    AFTER_SEQUENCE_NUMBER = 2;
     // Start reading from the position denoted by a specific timestamp
-    AT_TIMESTAMP = 3; 
+    AT_TIMESTAMP = 3;
     // Start reading from the oldest record
-    TRIM_HORIZON = 4; 
+    TRIM_HORIZON = 4;
     // Start reading latest records
-    LATEST = 5; 
+    LATEST = 5;
 }
 
 // Parameters used to filter out the response of ListShards
@@ -182,7 +182,7 @@ message ShardFilter {
     string shard_id = 1;
     // Can only be used if AT_TIMESTAMP or FROM_TIMESTAMP are specified.
     int64 timestamp = 2 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
-    ShardFilterType type = 3; 
+    ShardFilterType type = 3;
 }
 
 // Represents starting position in the stream from which to start reading
@@ -295,8 +295,8 @@ message ListStreamsRequest {
     string exclusive_start_stream_name = 2;
     // Max number of entries to return
     int32 limit = 3;
-    // Will make recurse listing if set to true. Otherwise will return only streams from root directory. 
-    bool recurse = 4; 
+    // Will make recurse listing if set to true. Otherwise will return only streams from root directory.
+    bool recurse = 4;
 }
 
 message ListStreamsResponse {
@@ -412,7 +412,7 @@ message DescribeStreamResponse {
 }
 
 message DescribeStreamResult {
-    StreamDescription stream_description = 1; 
+    StreamDescription stream_description = 1;
 }
 
 message RegisterStreamConsumerRequest {
@@ -478,7 +478,7 @@ message PutRecordsResultEntry {
     string error_message = 2 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
     string error_code = 3 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
     string sequence_number = 4;
-    string shard_id = 5; 
+    string shard_id = 5;
 }
 
 message GetRecordsRequest {
@@ -529,7 +529,7 @@ message PutRecordResult {
     // Unique id of the record within shard
     string sequence_number = 2;
     // Id of the shard were the data was inserted
-    string shard_id = 3; 
+    string shard_id = 3;
 }
 
 message PutRecordsRequest {

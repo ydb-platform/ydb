@@ -34,18 +34,18 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup_2"),
                                    {NLs::Finished,
-                                    NLs::PathVersionEqual(2), 
-                                    NLs::PQPartitionsInsideDomain(10)}); 
+                                    NLs::PathVersionEqual(2),
+                                    NLs::PQPartitionsInsideDomain(10)});
             }
- 
-            TestCreatePQGroup(runtime, ++t.TxId, "/MyRoot/DirA/NotExistingDir", 
-                            "Name: \"PQGroup_2\"" 
-                            "TotalGroupCount: 10 " 
-                            "PartitionPerTablet: 10 " 
-                            "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}", 
-                            {ESts::StatusPathDoesNotExist} 
-                            ); 
- 
+
+            TestCreatePQGroup(runtime, ++t.TxId, "/MyRoot/DirA/NotExistingDir",
+                            "Name: \"PQGroup_2\""
+                            "TotalGroupCount: 10 "
+                            "PartitionPerTablet: 10 "
+                            "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}",
+                            {ESts::StatusPathDoesNotExist}
+                            );
+
         });
     }
 
@@ -64,8 +64,8 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup_2"),
                                    {NLs::Finished,
-                                    NLs::PathVersionEqual(2), 
-                                    NLs::PQPartitionsInsideDomain(2)}); 
+                                    NLs::PathVersionEqual(2),
+                                    NLs::PQPartitionsInsideDomain(2)});
             }
         });
     }
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
         pqVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup", true),
                                    {NLs::Finished,
                                     NLs::CheckPartCount("PQGroup", 10, 10, 1, 10),
-                                    NLs::PQPartitionsInsideDomain(10), 
+                                    NLs::PQPartitionsInsideDomain(10),
                                     NLs::PathVersionEqual(2)});
 
         auto numChannels = runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.size();
@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
         pqVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup", true),
                                    {NLs::Finished,
                                     NLs::CheckPartCount("PQGroup", 10, 10, 1, 10),
-                                    NLs::PQPartitionsInsideDomain(10), 
+                                    NLs::PQPartitionsInsideDomain(10),
                                     NLs::PathVersionEqual(3)});
 
         {
@@ -168,7 +168,7 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
                 pqVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup", true),
                                            {NLs::Finished,
                                             NLs::CheckPartCount("PQGroup", 10, 10, 1, 10),
-                                            NLs::PQPartitionsInsideDomain(10), 
+                                            NLs::PQPartitionsInsideDomain(10),
                                             NLs::PathVersionEqual(2)});
             }
 
@@ -193,8 +193,8 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup", true),
                                    {NLs::Finished,
                                     NLs::CheckPartCount("PQGroup", 11, 11, 1, 11),
-                                    NLs::PathVersionEqual(3), 
-                                    NLs::PQPartitionsInsideDomain(11)}); 
+                                    NLs::PathVersionEqual(3),
+                                    NLs::PQPartitionsInsideDomain(11)});
             }
         });
     }
@@ -215,8 +215,8 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup_2"),
                                {NLs::Finished,
-                                NLs::PathVersionEqual(2), 
-                                NLs::PQPartitionsInsideDomain(2)}); 
+                                NLs::PathVersionEqual(2),
+                                NLs::PQPartitionsInsideDomain(2)});
 
             AsyncAlterPQGroup(runtime, t.TxId++, "/MyRoot/DirA",
                             "Name: \"PQGroup_2\""
@@ -228,8 +228,8 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup_2"),
                                {NLs::Finished,
-                                NLs::PathVersionEqual(3), 
-                                NLs::PQPartitionsInsideDomain(8)}); 
+                                NLs::PathVersionEqual(3),
+                                NLs::PQPartitionsInsideDomain(8)});
 
             AsyncAlterPQGroup(runtime, t.TxId++, "/MyRoot/DirA",
                             "Name: \"PQGroup_2\""
@@ -241,8 +241,8 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup_2"),
                                {NLs::Finished,
-                                NLs::PathVersionEqual(4), 
-                                NLs::PQPartitionsInsideDomain(20)}); 
+                                NLs::PathVersionEqual(4),
+                                NLs::PQPartitionsInsideDomain(20)});
 
             activeZone = false;
         });
@@ -277,8 +277,8 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
                                 NLs::PathVersionEqual(7),
                                 NLs::ChildrenCount(0),
                                 NLs::PathsInsideDomain(1),
-                                NLs::ShardsInsideDomainOneOf({0, 1, 2, 3}), 
-                                NLs::PQPartitionsInsideDomain(0)}); 
+                                NLs::ShardsInsideDomainOneOf({0, 1, 2, 3}),
+                                NLs::PQPartitionsInsideDomain(0)});
         });
     }
 
@@ -299,8 +299,8 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
                                {NLs::PathExist,
                                 NLs::ChildrenCount(1),
                                 NLs::PathsInsideDomain(1),
-                                NLs::ShardsInsideDomainOneOf({0, 1, 2, 3}), 
-                                }); 
+                                NLs::ShardsInsideDomainOneOf({0, 1, 2, 3}),
+                                });
         });
     }
 
@@ -362,16 +362,16 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Isolda"),
                                {NLs::PathExist,
                                 NLs::Finished,
-                                NLs::PathVersionEqual(2), 
-                                NLs::PQPartitionsInsideDomain(4)}); 
+                                NLs::PathVersionEqual(2),
+                                NLs::PQPartitionsInsideDomain(4)});
 
             TestAlterPQGroup(runtime, txId++, "/MyRoot", pqGroupAlter);
             t.TestEnv->TestWaitNotification(runtime, txId-1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Isolda"),
                                {NLs::PathExist,
                                 NLs::Finished,
-                                NLs::PathVersionEqual(3), 
-                                NLs::PQPartitionsInsideDomain(5)}); 
+                                NLs::PathVersionEqual(3),
+                                NLs::PQPartitionsInsideDomain(5)});
 
             TestAlterPQGroup(runtime, txId++, "/MyRoot", pqGroupAlter2);
             t.TestEnv->TestWaitNotification(runtime, txId-1);
@@ -379,18 +379,18 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
                                {NLs::PathExist,
                                 NLs::Finished,
                                 NLs::PathVersionEqual(4),
-                                NLs::CheckPartCount("Isolda", 8, 2, 4, 8), 
-                                NLs::PQPartitionsInsideDomain(8)}); 
+                                NLs::CheckPartCount("Isolda", 8, 2, 4, 8),
+                                NLs::PQPartitionsInsideDomain(8)});
 
             TestDropPQGroup(runtime, txId++, "/MyRoot", "Isolda", {ESts::StatusAccepted});
             t.TestEnv->TestWaitNotification(runtime, txId-1);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Isolda"),
                                {NLs::PathNotExist});
- 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot", true), 
-                               {NLs::PathExist, 
-                                NLs::PQPartitionsInsideDomain(0)}); 
- 
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot", true),
+                               {NLs::PathExist,
+                                NLs::PQPartitionsInsideDomain(0)});
+
         }, true);
     }
 

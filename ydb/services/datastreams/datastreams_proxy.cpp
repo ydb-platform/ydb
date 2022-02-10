@@ -102,9 +102,9 @@ namespace NKikimr::NDataStreams::V1 {
     class TCreateStreamActor : public TPQGrpcSchemaBase<TCreateStreamActor, NKikimr::NGRpcService::TEvDataStreamsCreateStreamRequest> {
         using TBase = TPQGrpcSchemaBase<TCreateStreamActor, TEvDataStreamsCreateStreamRequest>;
 
-        TActorId NewSchemeCache; 
+        TActorId NewSchemeCache;
     public:
-        TCreateStreamActor(NKikimr::NGRpcService::TEvDataStreamsCreateStreamRequest* request, TActorId newSchemeCache); 
+        TCreateStreamActor(NKikimr::NGRpcService::TEvDataStreamsCreateStreamRequest* request, TActorId newSchemeCache);
         ~TCreateStreamActor() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx);
@@ -115,17 +115,17 @@ namespace NKikimr::NDataStreams::V1 {
         void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
     };
 
- 
-    TCreateStreamActor::TCreateStreamActor(NKikimr::NGRpcService::TEvDataStreamsCreateStreamRequest* request, TActorId newSchemeCache) 
+
+    TCreateStreamActor::TCreateStreamActor(NKikimr::NGRpcService::TEvDataStreamsCreateStreamRequest* request, TActorId newSchemeCache)
         : TBase(request, request->GetProtoRequest()->stream_name())
-        , NewSchemeCache(newSchemeCache) 
+        , NewSchemeCache(newSchemeCache)
     {
-        Y_UNUSED(NewSchemeCache); 
+        Y_UNUSED(NewSchemeCache);
     }
 
     void TCreateStreamActor::Bootstrap(const NActors::TActorContext& ctx) {
         TBase::Bootstrap(ctx);
-        SendProposeRequest(ctx); 
+        SendProposeRequest(ctx);
         Become(&TCreateStreamActor::StateWork);
     }
 
@@ -133,7 +133,7 @@ namespace NKikimr::NDataStreams::V1 {
         Y_UNUSED(ev);
         Y_UNUSED(ctx);
     }
- 
+
 
     void TCreateStreamActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal,
             const TActorContext& ctx, const TString& workingDir, const TString& name)
@@ -144,13 +144,13 @@ namespace NKikimr::NDataStreams::V1 {
         topicSettings.set_partitions_count(GetProtoRequest()->shard_count());
         topicSettings.set_retention_period_ms(RetentionPeriod(GetProtoRequest()->retention_period_hours()).MilliSeconds());
         topicSettings.set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
-        topicSettings.add_supported_codecs(Ydb::PersQueue::V1::CODEC_RAW); 
+        topicSettings.add_supported_codecs(Ydb::PersQueue::V1::CODEC_RAW);
         topicSettings.set_max_partition_write_speed(PartitionWriteSpeedInBytesPerSec(GetProtoRequest()->write_quota_kb_per_sec()));
-        topicSettings.set_max_partition_write_burst(PartitionWriteSpeedInBytesPerSec(GetProtoRequest()->write_quota_kb_per_sec())); 
+        topicSettings.set_max_partition_write_burst(PartitionWriteSpeedInBytesPerSec(GetProtoRequest()->write_quota_kb_per_sec()));
 
-        if (workingDir != proposal.Record.GetDatabaseName() && !proposal.Record.GetDatabaseName().empty()) { 
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, "streams can be created only at database root", ctx); 
-        } 
+        if (workingDir != proposal.Record.GetDatabaseName() && !proposal.Record.GetDatabaseName().empty()) {
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, "streams can be created only at database root", ctx);
+        }
         TString error;
         auto status = NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(name, topicSettings, modifyScheme, ctx, false, error);
         modifyScheme.SetWorkingDir(workingDir);
@@ -377,7 +377,7 @@ namespace NKikimr::NDataStreams::V1 {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
         }
         groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(GetProtoRequest()->write_quota_kb_per_sec() * 1024LL);
-        groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetBurstSize(GetProtoRequest()->write_quota_kb_per_sec() * 1024LL); 
+        groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetBurstSize(GetProtoRequest()->write_quota_kb_per_sec() * 1024LL);
     }
 
     //-----------------------------------------------------------------------------------------------------------
@@ -432,44 +432,44 @@ namespace NKikimr::NDataStreams::V1 {
 
         void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
- 
-        void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) { 
-            if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) { 
-                ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, Ydb::PersQueue::ErrorCode::ERROR, 
-                                          TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx); 
-            } 
-        } 
- 
-        void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) { 
-            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, Ydb::PersQueue::ErrorCode::ERROR, 
-                                          TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx); 
-        } 
- 
-        void Handle(TEvPersQueue::TEvOffsetsResponse::TPtr& ev, const TActorContext& ctx) { 
-            for (auto& part : ev->Get()->Record.GetPartResult()) { 
-                StartEndOffsetsPerPartition[part.GetPartition()] = std::make_pair<ui64, ui64>(part.GetStartOffset(), part.GetEndOffset()); 
-            } 
-            if (--RequestsInfly == 0) { 
-                ReplyAndDie(ctx); 
-            } 
-        } 
- 
+
+        void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+            if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
+                ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, Ydb::PersQueue::ErrorCode::ERROR,
+                                          TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
+            }
+        }
+
+        void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
+            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, Ydb::PersQueue::ErrorCode::ERROR,
+                                          TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
+        }
+
+        void Handle(TEvPersQueue::TEvOffsetsResponse::TPtr& ev, const TActorContext& ctx) {
+            for (auto& part : ev->Get()->Record.GetPartResult()) {
+                StartEndOffsetsPerPartition[part.GetPartition()] = std::make_pair<ui64, ui64>(part.GetStartOffset(), part.GetEndOffset());
+            }
+            if (--RequestsInfly == 0) {
+                ReplyAndDie(ctx);
+            }
+        }
+
         void Die(const TActorContext& ctx) override {
-            //close all pipes 
-            for (auto& pipe : Pipes) { 
-                NTabletPipe::CloseClient(ctx, pipe); 
-            } 
-            TBase::Die(ctx); 
-        } 
- 
-    private: 
-        void ReplyAndDie(const TActorContext& ctx); 
- 
+            //close all pipes
+            for (auto& pipe : Pipes) {
+                NTabletPipe::CloseClient(ctx, pipe);
+            }
+            TBase::Die(ctx);
+        }
+
+    private:
+        void ReplyAndDie(const TActorContext& ctx);
+
         NKikimrSchemeOp::TDirEntry SelfInfo;
         NKikimrSchemeOp::TPersQueueGroupDescription PQGroup;
-        std::vector<TActorId> Pipes; 
-        ui32 RequestsInfly = 0; 
-        std::map<ui64, std::pair<ui64, ui64>> StartEndOffsetsPerPartition; 
+        std::vector<TActorId> Pipes;
+        ui32 RequestsInfly = 0;
+        std::map<ui64, std::pair<ui64, ui64>> StartEndOffsetsPerPartition;
     };
 
     TDescribeStreamActor::TDescribeStreamActor(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamRequest* request)
@@ -485,9 +485,9 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TDescribeStreamActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvOffsetsResponse, Handle); 
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle); 
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle); 
+            HFunc(TEvPersQueue::TEvOffsetsResponse, Handle);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             default: TBase::StateWork(ev, ctx);
         }
     }
@@ -497,11 +497,11 @@ namespace NKikimr::NDataStreams::V1 {
         Y_VERIFY(result->ResultSet.size() == 1); // describe only one topic
         const auto& response = result->ResultSet.front();
         const TString path = JoinSeq("/", response.Path);
- 
+
         if (ReplyIfNotTopic(ev, ctx)) {
             return;
         }
- 
+
         Y_VERIFY(response.PQGroupInfo);
 
         PQGroup = response.PQGroupInfo->Description;
@@ -532,61 +532,61 @@ namespace NKikimr::NDataStreams::V1 {
         }
     }
 
-    void TDescribeStreamActor::ReplyAndDie(const TActorContext& ctx) { 
-        Ydb::DataStreams::V1::DescribeStreamResult result; 
- 
+    void TDescribeStreamActor::ReplyAndDie(const TActorContext& ctx) {
+        Ydb::DataStreams::V1::DescribeStreamResult result;
+
         auto& pqConfig = PQGroup.GetPQTabletConfig();
-        ui32 writeSpeed = pqConfig.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() / 1024; 
-        auto& description = *result.mutable_stream_description(); 
-        description.set_stream_name(GetProtoRequest()->stream_name()); 
-        ui32 retentionPeriodHours = TInstant::Seconds(pqConfig.GetPartitionConfig().GetLifetimeSeconds()).Hours(); 
-        description.set_retention_period_hours(retentionPeriodHours); 
-        description.set_write_quota_kb_per_sec(writeSpeed); 
+        ui32 writeSpeed = pqConfig.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() / 1024;
+        auto& description = *result.mutable_stream_description();
+        description.set_stream_name(GetProtoRequest()->stream_name());
+        ui32 retentionPeriodHours = TInstant::Seconds(pqConfig.GetPartitionConfig().GetLifetimeSeconds()).Hours();
+        description.set_retention_period_hours(retentionPeriodHours);
+        description.set_write_quota_kb_per_sec(writeSpeed);
         if (SelfInfo.GetCreateFinished()) {
             description.set_stream_status(Ydb::DataStreams::V1::StreamDescription::ACTIVE);
         } else {
             description.set_stream_status(Ydb::DataStreams::V1::StreamDescription::CREATING);
-        } 
- 
-        bool startShardFound = GetProtoRequest()->exclusive_start_shard_id().empty(); 
-        description.set_has_more_shards(false); 
- 
+        }
+
+        bool startShardFound = GetProtoRequest()->exclusive_start_shard_id().empty();
+        description.set_has_more_shards(false);
+
         description.set_owner(SelfInfo.GetOwner());
         description.set_stream_creation_timestamp(TInstant::MilliSeconds(SelfInfo.GetCreateStep()).Seconds());
- 
-        int limit = GetProtoRequest()->limit() == 0 ? 100 : GetProtoRequest()->limit(); 
- 
+
+        int limit = GetProtoRequest()->limit() == 0 ? 100 : GetProtoRequest()->limit();
+
         for (uint32_t i = 0; i < (uint32_t)PQGroup.GetPartitions().size(); ++i) {
             ui32 partitionId = PQGroup.GetPartitions(i).GetPartitionId();
-            TString shardName = GetShardName(partitionId); 
-            if (shardName == GetProtoRequest()->exclusive_start_shard_id()) { 
-                startShardFound = true; 
-            } else if (startShardFound) { 
-                if (description.shards_size() >= limit) { 
-                    description.set_has_more_shards(true); 
-                    break; 
-                } else { 
-                    auto* shard = description.add_shards(); 
-                    shard->set_shard_id(shardName); 
-                    auto* rangeProto = shard->mutable_hash_key_range(); 
+            TString shardName = GetShardName(partitionId);
+            if (shardName == GetProtoRequest()->exclusive_start_shard_id()) {
+                startShardFound = true;
+            } else if (startShardFound) {
+                if (description.shards_size() >= limit) {
+                    description.set_has_more_shards(true);
+                    break;
+                } else {
+                    auto* shard = description.add_shards();
+                    shard->set_shard_id(shardName);
+                    auto* rangeProto = shard->mutable_hash_key_range();
                     auto range = RangeFromShardNumber(partitionId, PQGroup.GetPartitions().size());
-                    rangeProto->set_starting_hash_key(Uint128ToDecimalString(range.Start)); 
-                    rangeProto->set_ending_hash_key(Uint128ToDecimalString(range.End)); 
-                    auto it = StartEndOffsetsPerPartition.find(partitionId); 
-                    if (it != StartEndOffsetsPerPartition.end()) { 
-                        auto* rangeProto = shard->mutable_sequence_number_range(); 
-                        rangeProto->set_starting_sequence_number(TStringBuilder() << it->second.first); 
-                    } 
-                } 
-            } 
-        } 
-        if (!startShardFound) { 
-            return ReplyWithResult(Ydb::StatusIds::BAD_REQUEST, ctx); 
-        } 
-        return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx); 
-    } 
- 
- 
+                    rangeProto->set_starting_hash_key(Uint128ToDecimalString(range.Start));
+                    rangeProto->set_ending_hash_key(Uint128ToDecimalString(range.End));
+                    auto it = StartEndOffsetsPerPartition.find(partitionId);
+                    if (it != StartEndOffsetsPerPartition.end()) {
+                        auto* rangeProto = shard->mutable_sequence_number_range();
+                        rangeProto->set_starting_sequence_number(TStringBuilder() << it->second.first);
+                    }
+                }
+            }
+        }
+        if (!startShardFound) {
+            return ReplyWithResult(Ydb::StatusIds::BAD_REQUEST, ctx);
+        }
+        return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+    }
+
+
     //-----------------------------------------------------------------------------------
 
     class TListStreamsActor : public TRpcSchemeRequestActor<TListStreamsActor, NKikimr::NGRpcService::TEvDataStreamsListStreamsRequest> {
@@ -606,13 +606,13 @@ namespace NKikimr::NDataStreams::V1 {
         void SendPendingRequests(const TActorContext& ctx);
         void SendResponse(const TActorContext& ctx);
 
-        void ReplyWithError(Ydb::StatusIds::StatusCode status, Ydb::PersQueue::ErrorCode::ErrorCode pqStatus, 
-                                 const TString& messageText, const NActors::TActorContext& ctx) { 
-            this->Request_->RaiseIssue(FillIssue(messageText, pqStatus)); 
-            this->Request_->ReplyWithYdbStatus(status); 
-            this->Die(ctx); 
-        } 
- 
+        void ReplyWithError(Ydb::StatusIds::StatusCode status, Ydb::PersQueue::ErrorCode::ErrorCode pqStatus,
+                                 const TString& messageText, const NActors::TActorContext& ctx) {
+            this->Request_->RaiseIssue(FillIssue(messageText, pqStatus));
+            this->Request_->ReplyWithYdbStatus(status);
+            this->Die(ctx);
+        }
+
     private:
         static constexpr ui32 MAX_IN_FLIGHT = 5;
 
@@ -631,17 +631,17 @@ namespace NKikimr::NDataStreams::V1 {
     void TListStreamsActor::Bootstrap(const NActors::TActorContext& ctx) {
         TBase::Bootstrap(ctx);
         if (!Request_->GetDatabaseName()) {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST,Ydb::PersQueue::ErrorCode::BAD_REQUEST, 
-                                          "Request without dabase is forbiden", ctx); 
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST,Ydb::PersQueue::ErrorCode::BAD_REQUEST,
+                                          "Request without dabase is forbiden", ctx);
         }
- 
-        if (this->Request_->GetInternalToken().empty()) { 
-            if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) { 
-                return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Ydb::PersQueue::ErrorCode::ACCESS_DENIED, 
-                                          "Unauthenticated access is forbidden, please provide credentials", ctx); 
-            } 
-        } 
- 
+
+        if (this->Request_->GetInternalToken().empty()) {
+            if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+                return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
+                                          "Unauthenticated access is forbidden, please provide credentials", ctx);
+            }
+        }
+
         SendNavigateRequest(ctx, *Request_->GetDatabaseName());
         Become(&TListStreamsActor::StateWork);
     }
@@ -693,10 +693,10 @@ namespace NKikimr::NDataStreams::V1 {
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.Path = NKikimr::SplitPath(path);
 
-        if (!this->Request_->GetInternalToken().empty()) { 
-            schemeCacheRequest->UserToken = new NACLib::TUserToken(this->Request_->GetInternalToken()); 
-        } 
- 
+        if (!this->Request_->GetInternalToken().empty()) {
+            schemeCacheRequest->UserToken = new NACLib::TUserToken(this->Request_->GetInternalToken());
+        }
+
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
         schemeCacheRequest->ResultSet.emplace_back(entry);
         WaitingList.push_back(std::make_unique<TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
@@ -721,9 +721,9 @@ namespace NKikimr::NDataStreams::V1 {
                     TString childFullPath = JoinPath({JoinPath(entry.Path), child.Name});
                     switch (child.Kind) {
                         case NSchemeCache::TSchemeCacheNavigate::EKind::KindPath:
-                            if (GetProtoRequest()->recurse()) { 
-                                SendNavigateRequest(ctx, childFullPath); 
-                            } 
+                            if (GetProtoRequest()->recurse()) {
+                                SendNavigateRequest(ctx, childFullPath);
+                            }
                             break;
                         case NSchemeCache::TSchemeCacheNavigate::EKind::KindTopic:
                             Topics.push_back(childFullPath);
@@ -823,7 +823,7 @@ namespace NKikimr::NDataStreams::V1 {
         const auto& streamReadRulesNames = pqGroupDescription.GetPQTabletConfig().GetReadRules();
         const auto& streamReadRulesReadFromTimestamps = pqGroupDescription.GetPQTabletConfig().GetReadFromTimestampsMs();
         const auto alreadyRead = NextToken.GetAlreadyRead();
- 
+
         if (alreadyRead > (ui32)streamReadRulesNames.size()) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::ERROR,
                                   TStringBuilder() << "Provided next_token is malformed - " <<
@@ -912,16 +912,16 @@ namespace NKikimr::NDataStreams::V1 {
         if (readRule.version() == 0) {
             readRule.set_version(selfInfo.GetVersion().GetPQVersion());
         }
-        auto serviceTypes = GetSupportedClientServiceTypes(ctx); 
-        TString error = AddReadRuleToConfig(pqConfig, readRule, serviceTypes, ctx); 
-        bool hasDuplicates = false; 
+        auto serviceTypes = GetSupportedClientServiceTypes(ctx);
+        TString error = AddReadRuleToConfig(pqConfig, readRule, serviceTypes, ctx);
+        bool hasDuplicates = false;
         if (error.Empty()) {
-            hasDuplicates = CheckReadRulesConfig(*pqConfig, serviceTypes, error); 
+            hasDuplicates = CheckReadRulesConfig(*pqConfig, serviceTypes, error);
         }
 
         if (!error.Empty()) {
             return ReplyWithError(hasDuplicates ? Ydb::StatusIds::ALREADY_EXISTS : Ydb::StatusIds::BAD_REQUEST,
-                                  hasDuplicates ? Ydb::PersQueue::ErrorCode::OK : Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx); 
+                                  hasDuplicates ? Ydb::PersQueue::ErrorCode::OK : Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
         }
     }
 
@@ -1693,7 +1693,7 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsCreateStreamRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TCreateStreamActor(ev->Release().Release(), NewSchemeCache)); 
+        ctx.Register(new TCreateStreamActor(ev->Release().Release(), NewSchemeCache));
     }
 
     void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDeleteStreamRequest::TPtr& ev, const TActorContext& ctx) {

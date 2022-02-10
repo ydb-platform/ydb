@@ -172,7 +172,7 @@ public:
     }
 
     TAutoPtr<IChunkIterator> MakeIterator() const override {
-        return new TChunkIterator(Data, Mask.Size()); 
+        return new TChunkIterator(Data, Mask.Size());
     }
 
     TDataRef GetValue(size_t index) const override {
@@ -186,27 +186,27 @@ public:
 private:
     class TChunkIterator : public IChunkIterator {
     public:
-        TChunkIterator(const TDataRef& data, const size_t maskSize) 
+        TChunkIterator(const TDataRef& data, const size_t maskSize)
             : Current(data.Data() + sizeof(TCodecSig))
-            , End(data.End() - maskSize) 
+            , End(data.End() - maskSize)
             , MaskIter(data)
         { }
 
         TDataRef Next() override {
             const char* data = Current;
             Current += Size;
-            Y_VERIFY(Current <= End); 
+            Y_VERIFY(Current <= End);
             return MaskIter.Next() ? TDataRef(data, Size) : TDataRef();
         }
 
         TDataRef Peek() const override {
-            Y_VERIFY(Current + Size <= End); 
+            Y_VERIFY(Current + Size <= End);
             return MaskIter.IsNotNull() ? TDataRef(Current, Size) : TDataRef();
         }
 
     private:
         const char* Current;
-        const char* End; 
+        const char* End;
         TDecoderMaskIterator<IsNullable> MaskIter;
     };
 
@@ -234,7 +234,7 @@ public:
     }
 
     TAutoPtr<IChunkIterator> MakeIterator() const override {
-        return new TChunkIterator(Data, Sizes, Data.End() - Mask.Size()); 
+        return new TChunkIterator(Data, Sizes, Data.End() - Mask.Size());
     }
 
     TDataRef GetValue(size_t index) const override {
@@ -249,9 +249,9 @@ public:
 private:
     class TChunkIterator : public IChunkIterator {
     public:
-        TChunkIterator(const TDataRef& data, const ui32* sizes, const char* end) 
+        TChunkIterator(const TDataRef& data, const ui32* sizes, const char* end)
             : Current(data.Data() + sizeof(TCodecSig))
-            , End(end) 
+            , End(end)
             , LastOffset(0)
             , CurrentOffset(sizes)
             , MaskIter(data)
@@ -266,7 +266,7 @@ private:
 
                 const char* data = Current;
                 Current += size;
-                Y_VERIFY(data + size <= End); 
+                Y_VERIFY(data + size <= End);
                 return TDataRef(data, size);
             }
             ++CurrentOffset;
@@ -274,16 +274,16 @@ private:
         }
 
         TDataRef Peek() const override {
-            if (MaskIter.IsNotNull()) { 
+            if (MaskIter.IsNotNull()) {
                 Y_VERIFY(Current + ReadUnaligned<ui32>(CurrentOffset) - LastOffset <= End);
                 return TDataRef(Current, ReadUnaligned<ui32>(CurrentOffset) - LastOffset);
-            } 
+            }
             return TDataRef();
         }
 
     private:
         const char* Current;
-        const char* End; 
+        const char* End;
         ui32 LastOffset;
         const ui32* CurrentOffset;
         TDecoderMaskIterator<IsNullable> MaskIter;
@@ -302,17 +302,17 @@ class TVarIntValueDecoder {
 public:
     using TType = TIntType;
 
-    inline TType Peek(const char* data, const char* end) const { 
+    inline TType Peek(const char* data, const char* end) const {
         i64 value;
-        auto bytes = in_long(value, data); 
-        Y_VERIFY(data + bytes <= end); 
+        auto bytes = in_long(value, data);
+        Y_VERIFY(data + bytes <= end);
         return value;
     }
 
-    inline size_t Load(const char* data, const char* end, TType& value) const { 
+    inline size_t Load(const char* data, const char* end, TType& value) const {
         i64 loaded = 0;
         auto bytes = in_long(loaded, data);
-        Y_VERIFY(data + bytes <= end); 
+        Y_VERIFY(data + bytes <= end);
         value = loaded;
         return bytes;
     }
@@ -324,17 +324,17 @@ public:
     using TType = TIntType;
     using TUnsigned = std::make_unsigned_t<TType>;
 
-    inline TType Peek(const char* data, const char* end) const { 
+    inline TType Peek(const char* data, const char* end) const {
         i64 value;
-        auto bytes = in_long(value, data); 
-        Y_VERIFY(data + bytes <= end); 
+        auto bytes = in_long(value, data);
+        Y_VERIFY(data + bytes <= end);
         return ZigZagDecode(static_cast<TUnsigned>(value));
     }
 
-    inline size_t Load(const char* data, const char* end, TType& value) const { 
+    inline size_t Load(const char* data, const char* end, TType& value) const {
         i64 loaded = 0;
         auto bytes = in_long(loaded, data);
-        Y_VERIFY(data + bytes <= end); 
+        Y_VERIFY(data + bytes <= end);
         value = ZigZagDecode(static_cast<TUnsigned>(loaded));
         return bytes;
     }
@@ -345,14 +345,14 @@ class TDeltaValueDecoder : public TValueDecoder {
 public:
     using TType = typename TValueDecoder::TType;
 
-    inline TType Peek(const char* data, const char* end) const { 
+    inline TType Peek(const char* data, const char* end) const {
         TType value;
-        TValueDecoder::Load(data, end, value); 
+        TValueDecoder::Load(data, end, value);
         return Rev ? Last - value : Last + value;
     }
 
-    inline size_t Load(const char* data, const char* end, TType& value) { 
-        auto bytes = TValueDecoder::Load(data, end, value); 
+    inline size_t Load(const char* data, const char* end, TType& value) {
+        auto bytes = TValueDecoder::Load(data, end, value);
         if (Rev)
             Last -= value;
         else
@@ -380,7 +380,7 @@ public:
     }
 
     TAutoPtr<IChunkIterator> MakeIterator() const override {
-        return new TChunkIterator(Data, Mask.Size()); 
+        return new TChunkIterator(Data, Mask.Size());
     }
 
     TDataRef GetValue(size_t index) const override {
@@ -398,7 +398,7 @@ private:
         TType value;
         for (size_t count = index + 1 - Cache.size(); count; --count)
             if (MaskIter.Next()) {
-                Fetched += ValueDecoder.Load(Fetched, Data.End() - Mask.Size(), value); 
+                Fetched += ValueDecoder.Load(Fetched, Data.End() - Mask.Size(), value);
                 Cache.push_back(value);
             } else {
                 Cache.push_back(0);
@@ -413,16 +413,16 @@ private:
 private:
     class TChunkIterator : public IChunkIterator {
     public:
-        TChunkIterator(const TDataRef& data, const size_t maskSize) 
+        TChunkIterator(const TDataRef& data, const size_t maskSize)
             : Current(data.Data() + sizeof(TCodecSig))
-            , End(data.End() - maskSize) 
+            , End(data.End() - maskSize)
             , MaskIter(data)
         { }
 
         TDataRef Next() override {
             if (MaskIter.Next()) {
                 TType value;
-                Current += ValueDecoder.Load(Current, End, value); 
+                Current += ValueDecoder.Load(Current, End, value);
                 return TDataRef((const char*)&value, sizeof(value), true);
             }
             return TDataRef();
@@ -430,7 +430,7 @@ private:
 
         TDataRef Peek() const override {
             if (MaskIter.IsNotNull()) {
-                const TType value = ValueDecoder.Peek(Current, End); 
+                const TType value = ValueDecoder.Peek(Current, End);
                 return TDataRef((const char*)&value, sizeof(value), true);
             }
             return TDataRef();
@@ -438,7 +438,7 @@ private:
 
     private:
         const char* Current;
-        const char* End; 
+        const char* End;
         TDecoderMaskIterator<IsNullable> MaskIter;
         TValueDecoder ValueDecoder;
     };

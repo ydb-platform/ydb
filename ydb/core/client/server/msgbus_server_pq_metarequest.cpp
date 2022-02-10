@@ -15,13 +15,13 @@ void SetErrorCode(
         code = NPersQueue::NErrorCode::UNKNOWN_TOPIC;
     }
     topicResult->SetErrorCode(code);
-    if (code == NPersQueue::NErrorCode::UNKNOWN_TOPIC) { 
-        topicResult->SetErrorReason("topic not found"); 
-    } else if (code == NPersQueue::NErrorCode::INITIALIZING) { 
-        topicResult->SetErrorReason("could not describe topic"); 
-    } else if (code != NPersQueue::NErrorCode::OK) { 
-        topicResult->SetErrorReason("internal error"); 
-    } 
+    if (code == NPersQueue::NErrorCode::UNKNOWN_TOPIC) {
+        topicResult->SetErrorReason("topic not found");
+    } else if (code == NPersQueue::NErrorCode::INITIALIZING) {
+        topicResult->SetErrorReason("could not describe topic");
+    } else if (code != NPersQueue::NErrorCode::OK) {
+        topicResult->SetErrorReason("internal error");
+    }
 }
 
 //
@@ -52,20 +52,20 @@ TPersQueueGetTopicMetadataTopicWorker::TPersQueueGetTopicMetadataTopicWorker(
     SetActivityType(NKikimrServices::TActivity::PQ_META_REQUEST_PROCESSOR);
 }
 
- 
+
 void TPersQueueGetTopicMetadataTopicWorker::BootstrapImpl(const TActorContext& ctx) {
     auto processingResult = ProcessMetaCacheSingleTopicsResponse(SchemeEntry);
     Answer(ctx, processingResult.Status, processingResult.ErrorCode, processingResult.Reason);
-} 
- 
-void TPersQueueGetTopicMetadataTopicWorker::Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) { 
+}
+
+void TPersQueueGetTopicMetadataTopicWorker::Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) {
     NKikimrClient::TResponse response;
-    response.SetStatus(status); 
-    response.SetErrorCode(code); 
-    if (!errorReason.empty()) 
-        response.SetErrorReason(errorReason); 
-    if (code == NPersQueue::NErrorCode::OK) { 
-        auto* topicInfo = response.MutableMetaResponse()->MutableCmdGetTopicMetadataResult()->AddTopicInfo(); 
+    response.SetStatus(status);
+    response.SetErrorCode(code);
+    if (!errorReason.empty())
+        response.SetErrorReason(errorReason);
+    if (code == NPersQueue::NErrorCode::OK) {
+        auto* topicInfo = response.MutableMetaResponse()->MutableCmdGetTopicMetadataResult()->AddTopicInfo();
         SetErrorCode(topicInfo, SchemeEntry);
         if (SchemeEntry.PQGroupInfo != nullptr) {
             const auto& desc = SchemeEntry.PQGroupInfo->Description;
@@ -113,7 +113,7 @@ TPersQueueGetPartitionOffsetsTopicWorker::TPersQueueGetPartitionOffsetsTopicWork
 
 void TPersQueueGetPartitionOffsetsTopicWorker::BootstrapImpl(const TActorContext &ctx) {
     size_t partitionsAsked = 0;
-    THashSet<ui64> parts; 
+    THashSet<ui64> parts;
     if (SchemeEntry.PQGroupInfo) {
         const auto& pqDescr = SchemeEntry.PQGroupInfo->Description;
         for (const auto& partition : pqDescr.GetPartitions()) {
@@ -122,7 +122,7 @@ void TPersQueueGetPartitionOffsetsTopicWorker::BootstrapImpl(const TActorContext
             if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty() && !PartitionsToRequest->contains(partIndex)) {
                 continue;
             }
-            parts.insert(partIndex); 
+            parts.insert(partIndex);
             ++partitionsAsked;
             if (HasTabletPipe(tabletId)) { // Take all partitions for tablet from one TEvOffsetsResponse event
                 continue;
@@ -136,14 +136,14 @@ void TPersQueueGetPartitionOffsetsTopicWorker::BootstrapImpl(const TActorContext
         }
     }
     if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty() && PartitionsToRequest->size() != partitionsAsked) {
-        SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC, 
+        SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC,
                              TStringBuilder() << "no one of requested partitions in topic '" << Name << "', Marker# PQ96");
         return;
     }
     if (!PartitionsToRequest.get() || PartitionsToRequest->empty()) {
         PartitionsToRequest.reset(new THashSet<ui64>());
-        PartitionsToRequest->swap(parts); 
-    } 
+        PartitionsToRequest->swap(parts);
+    }
     if(WaitAllPipeEvents(ctx)) {
         return;
     }
@@ -153,40 +153,40 @@ bool TPersQueueGetPartitionOffsetsTopicWorker::OnPipeEventsAreReady(const TActor
     auto processResult = ProcessMetaCacheSingleTopicsResponse(SchemeEntry);
     Answer(ctx, processResult.Status, processResult.ErrorCode, processResult.Reason);
 
-    return true; 
-} 
- 
-void TPersQueueGetPartitionOffsetsTopicWorker::Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) { 
+    return true;
+}
+
+void TPersQueueGetPartitionOffsetsTopicWorker::Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) {
     NKikimrClient::TResponse response;
-    response.SetStatus(status); 
-    response.SetErrorCode(code); 
-    if (!errorReason.empty()) 
-        response.SetErrorReason(errorReason); 
-    if (code == NPersQueue::NErrorCode::OK) { 
-        auto& topicResult = *response.MutableMetaResponse()->MutableCmdGetPartitionOffsetsResult()->AddTopicResult(); 
+    response.SetStatus(status);
+    response.SetErrorCode(code);
+    if (!errorReason.empty())
+        response.SetErrorReason(errorReason);
+    if (code == NPersQueue::NErrorCode::OK) {
+        auto& topicResult = *response.MutableMetaResponse()->MutableCmdGetPartitionOffsetsResult()->AddTopicResult();
         topicResult.SetTopic(Name);
         SetErrorCode(&topicResult, SchemeEntry);
-        THashSet<ui64> partitionsInserted; 
-        for (auto& ans : PipeAnswers) { 
-            if (ans.second.Get() != nullptr) { 
-                for (auto& partResult : *ans.second->Get()->Record.MutablePartResult()) { 
-                    const ui64 partitionIndex = partResult.GetPartition(); 
+        THashSet<ui64> partitionsInserted;
+        for (auto& ans : PipeAnswers) {
+            if (ans.second.Get() != nullptr) {
+                for (auto& partResult : *ans.second->Get()->Record.MutablePartResult()) {
+                    const ui64 partitionIndex = partResult.GetPartition();
                     if (PartitionsToRequest.get() == nullptr || PartitionsToRequest->empty() || PartitionsToRequest->contains(partitionIndex)) {
-                        topicResult.AddPartitionResult()->Swap(&partResult); 
+                        topicResult.AddPartitionResult()->Swap(&partResult);
                         partitionsInserted.insert(partitionIndex);
                     }
                 }
             }
         }
         if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty() && PartitionsToRequest->size() != partitionsInserted.size() && topicResult.GetErrorCode() == (ui32)NPersQueue::NErrorCode::OK) {
-            const TString reason = "partition is not ready yet"; 
-            for (ui64 partitionIndex : *PartitionsToRequest) { 
-                if (!IsIn(partitionsInserted, partitionIndex)) { 
-                    auto res = topicResult.AddPartitionResult(); 
-                    res->SetPartition(partitionIndex); 
-                    res->SetErrorCode(NPersQueue::NErrorCode::INITIALIZING); 
-                    res->SetErrorReason(reason); 
-                } 
+            const TString reason = "partition is not ready yet";
+            for (ui64 partitionIndex : *PartitionsToRequest) {
+                if (!IsIn(partitionsInserted, partitionIndex)) {
+                    auto res = topicResult.AddPartitionResult();
+                    res->SetPartition(partitionIndex);
+                    res->SetErrorCode(NPersQueue::NErrorCode::INITIALIZING);
+                    res->SetErrorReason(reason);
+                }
             }
         }
     }
@@ -226,7 +226,7 @@ TPersQueueGetPartitionStatusTopicWorker::TPersQueueGetPartitionStatusTopicWorker
 
 void TPersQueueGetPartitionStatusTopicWorker::BootstrapImpl(const TActorContext &ctx) {
     size_t partitionsAsked = 0;
-    THashSet<ui64> parts; 
+    THashSet<ui64> parts;
     if (!ProcessingResult.IsFatal) {
         const auto& pqDescr = SchemeEntry.PQGroupInfo->Description;
         for (const auto& partition : pqDescr.GetPartitions()) {
@@ -235,14 +235,14 @@ void TPersQueueGetPartitionStatusTopicWorker::BootstrapImpl(const TActorContext 
             if (PartitionsToRequest != nullptr && !PartitionsToRequest->empty() && !PartitionsToRequest->contains(partIndex)) {
                 continue;
             }
-            parts.insert(partIndex); 
+            parts.insert(partIndex);
             ++partitionsAsked;
             if (HasTabletPipe(tabletId)) { // Take all partitions for tablet from one TEvStatusResponse event
                 continue;
             }
             THolder<TEvPersQueue::TEvStatus> ev(new TEvPersQueue::TEvStatus());
-            if (RequestProto->GetMetaRequest().GetCmdGetPartitionStatus().HasClientId()) 
-                ev->Record.SetClientId(RequestProto->GetMetaRequest().GetCmdGetPartitionStatus().GetClientId()); 
+            if (RequestProto->GetMetaRequest().GetCmdGetPartitionStatus().HasClientId())
+                ev->Record.SetClientId(RequestProto->GetMetaRequest().GetCmdGetPartitionStatus().GetClientId());
             CreatePipeAndSend(tabletId, ctx, std::move(ev));
         }
     } else {
@@ -250,15 +250,15 @@ void TPersQueueGetPartitionStatusTopicWorker::BootstrapImpl(const TActorContext 
         return;
     }
     if (PartitionsToRequest != nullptr && !PartitionsToRequest->empty() && PartitionsToRequest->size() != partitionsAsked) {
-        SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC, 
+        SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC,
                              TStringBuilder() << "no one of requested partitions in topic '" << Name << "', Marker# PQ97");
         return;
     }
     if (!PartitionsToRequest.get() || PartitionsToRequest->empty()) {
         PartitionsToRequest.reset(new THashSet<ui64>());
-        PartitionsToRequest->swap(parts); 
-    } 
- 
+        PartitionsToRequest->swap(parts);
+    }
+
     if (WaitAllPipeEvents(ctx))
         return;
 }
@@ -266,44 +266,44 @@ void TPersQueueGetPartitionStatusTopicWorker::BootstrapImpl(const TActorContext 
 bool TPersQueueGetPartitionStatusTopicWorker::OnPipeEventsAreReady(const TActorContext& ctx) {
     auto processResult = ProcessMetaCacheSingleTopicsResponse(SchemeEntry);
     Answer(ctx, processResult.Status, processResult.ErrorCode, processResult.Reason);
-    return true; 
-} 
- 
+    return true;
+}
+
 void TPersQueueGetPartitionStatusTopicWorker::Answer(
         const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code,
         const TString& errorReason
 ) {
     NKikimrClient::TResponse response;
-    response.SetStatus(status); 
-    response.SetErrorCode(code); 
-    if (!errorReason.empty()) 
-        response.SetErrorReason(errorReason); 
-    if (code == NPersQueue::NErrorCode::OK) { 
-        auto& topicResult = *response.MutableMetaResponse()->MutableCmdGetPartitionStatusResult()->AddTopicResult(); 
+    response.SetStatus(status);
+    response.SetErrorCode(code);
+    if (!errorReason.empty())
+        response.SetErrorReason(errorReason);
+    if (code == NPersQueue::NErrorCode::OK) {
+        auto& topicResult = *response.MutableMetaResponse()->MutableCmdGetPartitionStatusResult()->AddTopicResult();
         topicResult.SetTopic(Name);
         SetErrorCode(&topicResult, SchemeEntry);
-        THashSet<ui64> partitionsInserted; 
-        for (auto& ans : PipeAnswers) { 
-            if (ans.second.Get() != nullptr) { 
-                for (auto& partResult : *ans.second->Get()->Record.MutablePartResult()) { 
-                    const ui64 partitionIndex = partResult.GetPartition(); 
+        THashSet<ui64> partitionsInserted;
+        for (auto& ans : PipeAnswers) {
+            if (ans.second.Get() != nullptr) {
+                for (auto& partResult : *ans.second->Get()->Record.MutablePartResult()) {
+                    const ui64 partitionIndex = partResult.GetPartition();
                     if (PartitionsToRequest.get() == nullptr || PartitionsToRequest->empty() || PartitionsToRequest->contains(partitionIndex)) {
-                        topicResult.AddPartitionResult()->Swap(&partResult); 
+                        topicResult.AddPartitionResult()->Swap(&partResult);
                         if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty()) {
-                            partitionsInserted.insert(partitionIndex); 
-                        } 
+                            partitionsInserted.insert(partitionIndex);
+                        }
                     }
                 }
             }
         }
         if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty() && PartitionsToRequest->size() != partitionsInserted.size() && topicResult.GetErrorCode() == (ui32)NPersQueue::NErrorCode::OK) {
-            const TString reason = "partition is not ready yet"; 
-            for (ui64 partitionIndex : *PartitionsToRequest) { 
-                if (!IsIn(partitionsInserted, partitionIndex)) { 
-                    auto res = topicResult.AddPartitionResult(); 
-                    res->SetPartition(partitionIndex); 
-                    res->SetStatus(NKikimrPQ::TStatusResponse::STATUS_UNKNOWN); 
-                } 
+            const TString reason = "partition is not ready yet";
+            for (ui64 partitionIndex : *PartitionsToRequest) {
+                if (!IsIn(partitionsInserted, partitionIndex)) {
+                    auto res = topicResult.AddPartitionResult();
+                    res->SetPartition(partitionIndex);
+                    res->SetStatus(NKikimrPQ::TStatusResponse::STATUS_UNKNOWN);
+                }
             }
         }
     }
@@ -350,7 +350,7 @@ TPersQueueGetPartitionLocationsTopicWorker::TPersQueueGetPartitionLocationsTopic
 
 void TPersQueueGetPartitionLocationsTopicWorker::BootstrapImpl(const TActorContext& ctx) {
     size_t partitionsAsked = 0;
-    THashSet<ui64> parts; 
+    THashSet<ui64> parts;
     if (SchemeEntry.PQGroupInfo) {
         const auto& pqDescr = SchemeEntry.PQGroupInfo->Description;
         for (const auto& partition : pqDescr.GetPartitions()) {
@@ -361,7 +361,7 @@ void TPersQueueGetPartitionLocationsTopicWorker::BootstrapImpl(const TActorConte
             }
             PartitionToTablet[partIndex] = tabletId;
             ++partitionsAsked;
-            parts.insert(partIndex); 
+            parts.insert(partIndex);
             if (HasTabletPipe(tabletId)) { // Take all partitions for tablet from one TEvStatusResponse event
                 continue;
             }
@@ -369,15 +369,15 @@ void TPersQueueGetPartitionLocationsTopicWorker::BootstrapImpl(const TActorConte
         }
     }
     if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty() && PartitionsToRequest->size() != partitionsAsked) {
-        SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC, 
+        SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC,
                              TStringBuilder() << "no one of requested partitions in topic '" << Name << "', Marker# PQ98");
         return;
     }
     if (!PartitionsToRequest.get() || PartitionsToRequest->empty()) {
         PartitionsToRequest.reset(new THashSet<ui64>());
-        PartitionsToRequest->swap(parts); 
-    } 
- 
+        PartitionsToRequest->swap(parts);
+    }
+
     if(WaitAllConnections(ctx))
         return;
 }
@@ -385,49 +385,49 @@ void TPersQueueGetPartitionLocationsTopicWorker::BootstrapImpl(const TActorConte
 bool TPersQueueGetPartitionLocationsTopicWorker::OnPipeEventsAreReady(const TActorContext& ctx) {
     auto processResult = ProcessMetaCacheSingleTopicsResponse(SchemeEntry);
     Answer(ctx, processResult.Status, processResult.ErrorCode, processResult.Reason);
-    return true; 
-} 
- 
+    return true;
+}
+
 void TPersQueueGetPartitionLocationsTopicWorker::Answer(
         const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code,
         const TString& errorReason
 ) {
     NKikimrClient::TResponse response;
-    response.SetStatus(status); 
-    response.SetErrorCode(code); 
-    if (!errorReason.empty()) 
-        response.SetErrorReason(errorReason); 
-    if (code == NPersQueue::NErrorCode::OK) { 
+    response.SetStatus(status);
+    response.SetErrorCode(code);
+    if (!errorReason.empty())
+        response.SetErrorReason(errorReason);
+    if (code == NPersQueue::NErrorCode::OK) {
 
-        auto& topicResult = *response.MutableMetaResponse()->MutableCmdGetPartitionLocationsResult()->AddTopicResult(); 
+        auto& topicResult = *response.MutableMetaResponse()->MutableCmdGetPartitionLocationsResult()->AddTopicResult();
         topicResult.SetTopic(Name);
         SetErrorCode(&topicResult, SchemeEntry);
-        for (const auto& partitionToTablet : PartitionToTablet) { 
-            const ui32 partition = partitionToTablet.first; 
-            const ui64 tabletId = partitionToTablet.second; 
-            auto& location = *topicResult.AddPartitionLocation(); 
-            location.SetPartition(partition); 
- 
-            const auto ansIt = PipeAnswers.find(tabletId); 
-            Y_VERIFY(ansIt != PipeAnswers.end()); 
-            bool statusInitializing = false; 
-            if (ansIt->second.Get() != nullptr && ansIt->second->Get()->Status == NKikimrProto::OK) { 
-                const ui32 nodeId = ansIt->second->Get()->ServerId.NodeId(); 
-                const auto hostName = NodesInfo->HostNames.find(nodeId); 
-                if (hostName != NodesInfo->HostNames.end()) { 
-                    location.SetHost(hostName->second); 
-                    location.SetHostId(nodeId); 
-                    location.SetErrorCode(NPersQueue::NErrorCode::OK); 
-                } else { 
-                    statusInitializing = true; 
-                } 
+        for (const auto& partitionToTablet : PartitionToTablet) {
+            const ui32 partition = partitionToTablet.first;
+            const ui64 tabletId = partitionToTablet.second;
+            auto& location = *topicResult.AddPartitionLocation();
+            location.SetPartition(partition);
+
+            const auto ansIt = PipeAnswers.find(tabletId);
+            Y_VERIFY(ansIt != PipeAnswers.end());
+            bool statusInitializing = false;
+            if (ansIt->second.Get() != nullptr && ansIt->second->Get()->Status == NKikimrProto::OK) {
+                const ui32 nodeId = ansIt->second->Get()->ServerId.NodeId();
+                const auto hostName = NodesInfo->HostNames.find(nodeId);
+                if (hostName != NodesInfo->HostNames.end()) {
+                    location.SetHost(hostName->second);
+                    location.SetHostId(nodeId);
+                    location.SetErrorCode(NPersQueue::NErrorCode::OK);
+                } else {
+                    statusInitializing = true;
+                }
             } else {
                 statusInitializing = true;
             }
-            if (statusInitializing) { 
-                location.SetErrorCode(NPersQueue::NErrorCode::INITIALIZING); 
-                location.SetErrorReason("Tablet for that partition is not running"); 
-            } 
+            if (statusInitializing) {
+                location.SetErrorCode(NPersQueue::NErrorCode::INITIALIZING);
+                location.SetErrorReason("Tablet for that partition is not running");
+            }
         }
     }
     SendReplyAndDie(std::move(response), ctx);
@@ -536,13 +536,13 @@ THolder<IActor> TPersQueueGetReadSessionsInfoProcessor::CreateSessionsSubactor(
 ) {
     if (PQReadSessionsInfoWorkerFactory) {
         return PQReadSessionsInfoWorkerFactory->Create(SelfId(), std::move(readSessions), NodesInfo);
-    } 
+    }
     return MakeHolder<TPersQueueGetReadSessionsInfoWorker>(SelfId(), std::move(readSessions), NodesInfo);
-} 
- 
-STFUNC(TPersQueueGetReadSessionsInfoTopicWorker::WaitAllPipeEventsStateFunc) { 
-    switch (ev->GetTypeRewrite()) { 
-        HFunc(TEvPersQueue::TEvReadSessionsInfoResponse, Handle); 
+}
+
+STFUNC(TPersQueueGetReadSessionsInfoTopicWorker::WaitAllPipeEventsStateFunc) {
+    switch (ev->GetTypeRewrite()) {
+        HFunc(TEvPersQueue::TEvReadSessionsInfoResponse, Handle);
     case TEvTabletPipe::TEvClientDestroyed::EventType:
         if (!HandleDestroy(ev->Get<TEvTabletPipe::TEvClientDestroyed>(), ctx)) {
             TPipesWaiterActor::WaitAllPipeEventsStateFunc(ev, ctx);
@@ -586,14 +586,14 @@ bool TPersQueueGetReadSessionsInfoTopicWorker::HandleDestroy(TEvTabletPipe::TEvC
 
 void TPersQueueGetReadSessionsInfoTopicWorker::Handle(TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) {
     BalancerReplied = true;
-    BalancerResponse = ev; 
+    BalancerResponse = ev;
     if (ReadyToAnswer()) {
-        Answer(ctx, MSTATUS_OK, NPersQueue::NErrorCode::OK, ""); 
+        Answer(ctx, MSTATUS_OK, NPersQueue::NErrorCode::OK, "");
     }
 }
 
- 
- 
+
+
 bool TPersQueueGetReadSessionsInfoTopicWorker::OnPipeEventsAreReady(const TActorContext& ctx) {
     PipeEventsAreReady = true;
     if (ReadyToAnswer()) {
@@ -604,92 +604,92 @@ bool TPersQueueGetReadSessionsInfoTopicWorker::OnPipeEventsAreReady(const TActor
 }
 
 bool TPersQueueGetReadSessionsInfoTopicWorker::ReadyToAnswer() const {
-    return PipeEventsAreReady && BalancerReplied; 
+    return PipeEventsAreReady && BalancerReplied;
 }
 
- 
+
 TString TPersQueueGetReadSessionsInfoTopicWorker::GetHostName(ui32 hostId) const {
     const auto host = NodesInfo->HostNames.find(hostId);
     return host != NodesInfo->HostNames.end() ? host->second : TString();
 }
 
-void TPersQueueGetReadSessionsInfoTopicWorker::Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) { 
+void TPersQueueGetReadSessionsInfoTopicWorker::Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) {
     NKikimrClient::TResponse response;
-    response.SetStatus(status); 
-    response.SetErrorCode(code); 
-    if (!errorReason.empty()) 
-        response.SetErrorReason(errorReason); 
-    if (code == NPersQueue::NErrorCode::OK) { 
- 
-        auto stat = response.MutableMetaResponse()->MutableCmdGetReadSessionsInfoResult(); 
-        auto topicRes = stat->AddTopicResult(); 
+    response.SetStatus(status);
+    response.SetErrorCode(code);
+    if (!errorReason.empty())
+        response.SetErrorReason(errorReason);
+    if (code == NPersQueue::NErrorCode::OK) {
+
+        auto stat = response.MutableMetaResponse()->MutableCmdGetReadSessionsInfoResult();
+        auto topicRes = stat->AddTopicResult();
         topicRes->SetTopic(Name);
         SetErrorCode(topicRes, SchemeEntry);
-        THashMap<ui32, ui32> partitionToResp; 
-        ui32 index = 0; 
-        if (BalancerResponse.Get() != nullptr) { 
-            for (const auto& resp : BalancerResponse->Get()->Record.GetPartitionInfo()) { 
-                partitionToResp[resp.GetPartition()] = index++; 
-                auto res = topicRes->AddPartitionResult(); 
-                res->SetPartition(resp.GetPartition()); 
-                res->SetSession(resp.GetSession()); 
-                res->SetClientNode(resp.GetClientNode()); 
-                res->SetTimestamp(resp.GetTimestamp() > 0 ? TInstant::Seconds(resp.GetTimestamp()).ToString() : ""); 
-                res->SetProxyNode(GetHostName(resp.GetProxyNodeId())); 
- 
-                res->SetErrorCode(NPersQueue::NErrorCode::INITIALIZING); 
-                res->SetErrorReason("Getting of session info failed"); 
-            } 
+        THashMap<ui32, ui32> partitionToResp;
+        ui32 index = 0;
+        if (BalancerResponse.Get() != nullptr) {
+            for (const auto& resp : BalancerResponse->Get()->Record.GetPartitionInfo()) {
+                partitionToResp[resp.GetPartition()] = index++;
+                auto res = topicRes->AddPartitionResult();
+                res->SetPartition(resp.GetPartition());
+                res->SetSession(resp.GetSession());
+                res->SetClientNode(resp.GetClientNode());
+                res->SetTimestamp(resp.GetTimestamp() > 0 ? TInstant::Seconds(resp.GetTimestamp()).ToString() : "");
+                res->SetProxyNode(GetHostName(resp.GetProxyNodeId()));
+
+                res->SetErrorCode(NPersQueue::NErrorCode::INITIALIZING);
+                res->SetErrorReason("Getting of session info failed");
+            }
             THolder<TEvPersQueue::TEvReadSessionsInfoResponse> request = MakeHolder<TEvPersQueue::TEvReadSessionsInfoResponse>();
-            request->Record.Swap(&(BalancerResponse->Get()->Record)); 
-            request->Record.ClearPartitionInfo(); 
- 
-            ctx.Send(Parent, request.Release()); 
-        } else if (topicRes->GetErrorCode() == (ui32)NPersQueue::NErrorCode::OK) { 
+            request->Record.Swap(&(BalancerResponse->Get()->Record));
+            request->Record.ClearPartitionInfo();
+
+            ctx.Send(Parent, request.Release());
+        } else if (topicRes->GetErrorCode() == (ui32)NPersQueue::NErrorCode::OK) {
             for (const auto& partition : SchemeEntry.PQGroupInfo->Description.GetPartitions()) {
                 const ui32 partitionIndex = partition.GetPartitionId();
-                partitionToResp[partitionIndex] = index++; 
-                auto res = topicRes->AddPartitionResult(); 
-                res->SetPartition(partitionIndex); 
-                res->SetErrorCode(NPersQueue::NErrorCode::INITIALIZING); 
-                res->SetErrorReason("balancer tablet for partition is not running"); 
-            } 
-            SendReplyAndDie(std::move(response), ctx); 
-            return; 
+                partitionToResp[partitionIndex] = index++;
+                auto res = topicRes->AddPartitionResult();
+                res->SetPartition(partitionIndex);
+                res->SetErrorCode(NPersQueue::NErrorCode::INITIALIZING);
+                res->SetErrorReason("balancer tablet for partition is not running");
+            }
+            SendReplyAndDie(std::move(response), ctx);
+            return;
         }
-        for (const auto& pipeAnswer : PipeAnswers) { 
-            if (!pipeAnswer.second) { 
+        for (const auto& pipeAnswer : PipeAnswers) {
+            if (!pipeAnswer.second) {
                 continue;
             }
-            const auto& offsetResp = pipeAnswer.second->Get()->Record; 
-            const ui64 tabletId = pipeAnswer.first; 
-            for (const auto& partResult : offsetResp.GetPartResult()) { 
-                const ui32 partitionIndex = partResult.GetPartition(); 
-                if (PartitionToTablet.find(partitionIndex) == PartitionToTablet.end()) { 
-                    continue; 
-                } 
-                const auto responseIndex = partitionToResp.find(partitionIndex); 
-                auto res = responseIndex != partitionToResp.end() ? topicRes->MutablePartitionResult(responseIndex->second) : topicRes->AddPartitionResult(); 
-                res->SetPartition(partitionIndex); 
-                res->SetClientOffset(partResult.GetClientOffset()); // 0 if there is no offset 
-                res->SetStartOffset(partResult.GetStartOffset()); 
-                res->SetEndOffset(partResult.GetEndOffset()); 
-                const ui64 nowMS = TAppData::TimeProvider->Now().MilliSeconds(); 
-                res->SetTimeLag(partResult.HasWriteTimestampMS() ? Max<i64>(nowMS - partResult.GetWriteTimestampMS(), 0) : 0); 
-                res->SetReadTimeLag(partResult.HasReadWriteTimestampMS() ? Max<i64>(nowMS - partResult.GetReadWriteTimestampMS(), 0) : 0); 
-                res->SetClientReadOffset(partResult.GetClientReadOffset()); 
-                res->SetErrorCode(NPersQueue::NErrorCode::OK); 
-                res->ClearErrorReason(); 
- 
-                auto itTabletNode = TabletNodes.find(tabletId); 
-                if (itTabletNode != TabletNodes.end()) { 
-                    res->SetTabletNode(GetHostName(itTabletNode->second)); 
-                    res->SetTabletNodeId(itTabletNode->second); 
-                } 
-                if (res->GetTabletNode().empty()) { 
-                    res->SetErrorCode(NPersQueue::NErrorCode::INITIALIZING); 
-                    res->SetErrorReason("Tablet for partition is not running"); 
-                } 
+            const auto& offsetResp = pipeAnswer.second->Get()->Record;
+            const ui64 tabletId = pipeAnswer.first;
+            for (const auto& partResult : offsetResp.GetPartResult()) {
+                const ui32 partitionIndex = partResult.GetPartition();
+                if (PartitionToTablet.find(partitionIndex) == PartitionToTablet.end()) {
+                    continue;
+                }
+                const auto responseIndex = partitionToResp.find(partitionIndex);
+                auto res = responseIndex != partitionToResp.end() ? topicRes->MutablePartitionResult(responseIndex->second) : topicRes->AddPartitionResult();
+                res->SetPartition(partitionIndex);
+                res->SetClientOffset(partResult.GetClientOffset()); // 0 if there is no offset
+                res->SetStartOffset(partResult.GetStartOffset());
+                res->SetEndOffset(partResult.GetEndOffset());
+                const ui64 nowMS = TAppData::TimeProvider->Now().MilliSeconds();
+                res->SetTimeLag(partResult.HasWriteTimestampMS() ? Max<i64>(nowMS - partResult.GetWriteTimestampMS(), 0) : 0);
+                res->SetReadTimeLag(partResult.HasReadWriteTimestampMS() ? Max<i64>(nowMS - partResult.GetReadWriteTimestampMS(), 0) : 0);
+                res->SetClientReadOffset(partResult.GetClientReadOffset());
+                res->SetErrorCode(NPersQueue::NErrorCode::OK);
+                res->ClearErrorReason();
+
+                auto itTabletNode = TabletNodes.find(tabletId);
+                if (itTabletNode != TabletNodes.end()) {
+                    res->SetTabletNode(GetHostName(itTabletNode->second));
+                    res->SetTabletNodeId(itTabletNode->second);
+                }
+                if (res->GetTabletNode().empty()) {
+                    res->SetErrorCode(NPersQueue::NErrorCode::INITIALIZING);
+                    res->SetErrorReason("Tablet for partition is not running");
+                }
             }
         }
     }

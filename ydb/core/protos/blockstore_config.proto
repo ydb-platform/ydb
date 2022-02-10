@@ -35,17 +35,17 @@ message TVolumeConfig {
     optional uint32 Version = 6;
 
     // Volume private data
-    optional string DiskId = 7;
-    optional string ProjectId = 8;
-    optional string FolderId = 9;
-    optional string CloudId = 10;
+    optional string DiskId = 7; 
+    optional string ProjectId = 8; 
+    optional string FolderId = 9; 
+    optional string CloudId = 10; 
     optional uint32 TabletVersion = 11;
 
     // Binary data for private use by BlockStore implementation (legacy, unused)
     optional bytes Opaque = 12;
-
-    // Volume disk type
-    optional uint32 StorageMediaKind = 13;
+ 
+    // Volume disk type 
+    optional uint32 StorageMediaKind = 13; 
 
     // Performance profile fields, used for correct bs group allocation and iops/bandwidth throttling
     optional uint32 PerformanceProfileMaxReadBandwidth = 14;
@@ -81,9 +81,9 @@ message TVolumeConfig {
     // Placement group id.
     optional string PlacementGroupId = 34;
 
-    // Tags. Use TagsStr, because we need capability to pass empty set of tags.
-    optional string TagsStr = 35;   // ,-delimited string
-    repeated string Tags = 36;      // array of strings, do not use
+    // Tags. Use TagsStr, because we need capability to pass empty set of tags. 
+    optional string TagsStr = 35;   // ,-delimited string 
+    repeated string Tags = 36;      // array of strings, do not use 
 
     // Block count per stripe. Affects multipartition volumes.
     optional uint32 BlocksPerStripe = 37;
@@ -96,9 +96,9 @@ message TVolumeConfig {
 
     // Indicates that volume does not belong to user directly, but used for system needs
     optional bool IsSystem = 40;
-
-    // Channel descriptions for volume tablets
-    repeated TChannelProfile VolumeExplicitChannelProfiles = 41;
+ 
+    // Channel descriptions for volume tablets 
+    repeated TChannelProfile VolumeExplicitChannelProfiles = 41; 
 }
 
 message TUpdateVolumeConfig {

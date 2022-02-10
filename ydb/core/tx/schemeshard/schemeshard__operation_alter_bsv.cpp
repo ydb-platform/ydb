@@ -78,7 +78,7 @@ public:
             TOperationId operationId, TPathElement::TPtr item,
             TBlockStoreVolumeInfo::TPtr volume,
             const TChannelsBindings& partitionChannels,
-            const TChannelsBindings& volumeChannels,
+            const TChannelsBindings& volumeChannels, 
             ui64 shardsToCreate,
             TOperationContext& context)
     {
@@ -98,15 +98,15 @@ public:
                     << " ExplicitChannelProfiles#" << volume->ExplicitChannelProfileCount
                     << "->" << volume->AlterData->ExplicitChannelProfileCount);
 
-        bool needMoreShards = ApplySharding(
-            operationId.GetTxId(),
-            item->PathId,
-            volume,
-            txState,
-            partitionChannels,
-            volumeChannels,
-            context);
-
+        bool needMoreShards = ApplySharding( 
+            operationId.GetTxId(), 
+            item->PathId, 
+            volume, 
+            txState, 
+            partitionChannels, 
+            volumeChannels, 
+            context); 
+ 
         if (needMoreShards) {
             context.SS->PersistUpdateNextShardIdx(db);
         }
@@ -153,7 +153,7 @@ public:
             TBlockStoreVolumeInfo::TPtr volume,
             TTxState& txState,
             const TChannelsBindings& partitionChannels,
-            const TChannelsBindings& volumeChannels,
+            const TChannelsBindings& volumeChannels, 
             TOperationContext& context)
     {
         Y_VERIFY(volume->AlterData->DefaultPartitionCount
@@ -181,11 +181,11 @@ public:
                 }
             }
 
-            if (volume->VolumeConfig.GetTabletVersion() == 2) {
+            if (volume->VolumeConfig.GetTabletVersion() == 2) { 
                 txState.Shards.emplace_back(shardIdx, ETabletType::BlockStorePartition2, partitionOp);
-            } else {
+            } else { 
                 txState.Shards.emplace_back(shardIdx, ETabletType::BlockStorePartition, partitionOp);
-            }
+            } 
         }
 
         // create new shards
@@ -193,11 +193,11 @@ public:
             TShardIdx shardIdx;
             if (volume->VolumeConfig.GetTabletVersion() == 2) {
                 shardIdx = context.SS->RegisterShardInfo(TShardInfo::BlockStorePartition2Info(txId, pathId));
-                context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION2_SHARD_COUNT].Add(1);
-            } else {
+                context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION2_SHARD_COUNT].Add(1); 
+            } else { 
                 shardIdx = context.SS->RegisterShardInfo(TShardInfo::BlockStorePartitionInfo(txId, pathId));
-                context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION_SHARD_COUNT].Add(1);
-            }
+                context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION_SHARD_COUNT].Add(1); 
+            } 
             auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
             shardInfo.BindedChannels = partitionChannels;
             txState.Shards.emplace_back(shardIdx, shardInfo.TabletType, TTxState::CreateParts);
@@ -208,20 +208,20 @@ public:
             volume->Shards[shardIdx] = std::move(part);
         }
 
-        // update the volume shard if needed
-        auto volumeOp = TTxState::ConfigureParts;
-        auto shardIdx = volume->VolumeShardIdx;
-        auto& shardInfo = context.SS->ShardInfos[shardIdx];
-        for (ui32 i = 0; i < volumeChannels.size(); ++i) {
-            if (i >= shardInfo.BindedChannels.size()) {
-                shardInfo.BindedChannels.push_back(volumeChannels[i]);
-                volumeOp = TTxState::CreateParts;
-            } else if (!Compare(volumeChannels[i], shardInfo.BindedChannels[i])) {
-                shardInfo.BindedChannels[i] = volumeChannels[i];
-                volumeOp = TTxState::CreateParts;
-            }
+        // update the volume shard if needed 
+        auto volumeOp = TTxState::ConfigureParts; 
+        auto shardIdx = volume->VolumeShardIdx; 
+        auto& shardInfo = context.SS->ShardInfos[shardIdx]; 
+        for (ui32 i = 0; i < volumeChannels.size(); ++i) { 
+            if (i >= shardInfo.BindedChannels.size()) { 
+                shardInfo.BindedChannels.push_back(volumeChannels[i]); 
+                volumeOp = TTxState::CreateParts; 
+            } else if (!Compare(volumeChannels[i], shardInfo.BindedChannels[i])) { 
+                shardInfo.BindedChannels[i] = volumeChannels[i]; 
+                volumeOp = TTxState::CreateParts; 
+            } 
         }
-        txState.Shards.emplace_back(shardIdx, ETabletType::BlockStoreVolume, volumeOp);
+        txState.Shards.emplace_back(shardIdx, ETabletType::BlockStoreVolume, volumeOp); 
 
         return shardsToCreate > 0;
     }
@@ -272,60 +272,60 @@ public:
         return &volumeConfig;
     }
 
-    bool ProcessVolumeChannelProfiles(
-        const TPath& path,
-        const NKikimrBlockStore::TVolumeConfig& volumeConfig,
-        const NKikimrBlockStore::TVolumeConfig& alterVolumeConfig,
-        TOperationContext& context,
-        TProposeResponse& result,
-        TChannelsBindings* volumeChannelsBinding)
-    {
-        const auto& alterVolumeEcps = alterVolumeConfig.GetVolumeExplicitChannelProfiles();
-
-        if (alterVolumeEcps.size() &&
-            (ui32)alterVolumeEcps.size() != TBlockStoreVolumeInfo::NumVolumeTabletChannels)
-        {
-            auto errStr = Sprintf("Wrong number of channels %u , should be %lu",
-                                alterVolumeEcps.size(),
-                                TBlockStoreVolumeInfo::NumVolumeTabletChannels);
+    bool ProcessVolumeChannelProfiles( 
+        const TPath& path, 
+        const NKikimrBlockStore::TVolumeConfig& volumeConfig, 
+        const NKikimrBlockStore::TVolumeConfig& alterVolumeConfig, 
+        TOperationContext& context, 
+        TProposeResponse& result, 
+        TChannelsBindings* volumeChannelsBinding) 
+    { 
+        const auto& alterVolumeEcps = alterVolumeConfig.GetVolumeExplicitChannelProfiles(); 
+ 
+        if (alterVolumeEcps.size() && 
+            (ui32)alterVolumeEcps.size() != TBlockStoreVolumeInfo::NumVolumeTabletChannels) 
+        { 
+            auto errStr = Sprintf("Wrong number of channels %u , should be %lu", 
+                                alterVolumeEcps.size(), 
+                                TBlockStoreVolumeInfo::NumVolumeTabletChannels); 
             result.SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-            return false;
-        }
-
-        if (alterVolumeEcps.size() || volumeConfig.VolumeExplicitChannelProfilesSize()) {
-            const auto& ecps = alterVolumeEcps.empty()
-                ? volumeConfig.GetVolumeExplicitChannelProfiles()
-                : alterVolumeEcps;
-
-            TVector<TStringBuf> poolKinds;
-            poolKinds.reserve(ecps.size());
-            for (const auto& ecp : ecps) {
-                poolKinds.push_back(ecp.GetPoolKind());
-            }
-
-            const auto volumeChannelsResolved = context.SS->ResolveChannelsByPoolKinds(
-                poolKinds,
-                path.DomainId(),
-                *volumeChannelsBinding);
-
-            if (!volumeChannelsResolved) {
+            return false; 
+        } 
+ 
+        if (alterVolumeEcps.size() || volumeConfig.VolumeExplicitChannelProfilesSize()) { 
+            const auto& ecps = alterVolumeEcps.empty() 
+                ? volumeConfig.GetVolumeExplicitChannelProfiles() 
+                : alterVolumeEcps; 
+ 
+            TVector<TStringBuf> poolKinds; 
+            poolKinds.reserve(ecps.size()); 
+            for (const auto& ecp : ecps) { 
+                poolKinds.push_back(ecp.GetPoolKind()); 
+            } 
+ 
+            const auto volumeChannelsResolved = context.SS->ResolveChannelsByPoolKinds( 
+                poolKinds, 
+                path.DomainId(), 
+                *volumeChannelsBinding); 
+ 
+            if (!volumeChannelsResolved) { 
                 result.SetError(NKikimrScheme::StatusInvalidParameter,
-                                "Unable to construct channel binding for volume with the storage pool");
-                return false;
-            }
-            context.SS->SetNbsChannelsParams(ecps, *volumeChannelsBinding);
-        } else {
-            const ui32 volumeProfileId = 0;
-            if (!context.SS->ResolveTabletChannels(volumeProfileId, path.DomainId(), *volumeChannelsBinding)) {
+                                "Unable to construct channel binding for volume with the storage pool"); 
+                return false; 
+            } 
+            context.SS->SetNbsChannelsParams(ecps, *volumeChannelsBinding); 
+        } else { 
+            const ui32 volumeProfileId = 0; 
+            if (!context.SS->ResolveTabletChannels(volumeProfileId, path.DomainId(), *volumeChannelsBinding)) { 
                 result.SetError(NKikimrScheme::StatusInvalidParameter,
-                                "Unable to construct channel binding for volume with the profile");
-                return false;
-            }
-        }
-
-        return true;
-    }
-
+                                "Unable to construct channel binding for volume with the profile"); 
+                return false; 
+            } 
+        } 
+ 
+        return true; 
+    } 
+ 
     bool ProcessChannelProfiles(
         const TPath& path,
         const NKikimrBlockStore::TVolumeConfig& volumeConfig,
@@ -500,19 +500,19 @@ public:
             }
         }
 
-        TChannelsBindings volumeChannelsBinding;
-        const auto channelProfilesProcessed = ProcessVolumeChannelProfiles(
-                path,
-                volume->VolumeConfig,
-                *alterVolumeConfig,
-                context,
-                *result,
-                &volumeChannelsBinding);
-
-        if (!channelProfilesProcessed) {
-            return result;
-        }
-
+        TChannelsBindings volumeChannelsBinding; 
+        const auto channelProfilesProcessed = ProcessVolumeChannelProfiles( 
+                path, 
+                volume->VolumeConfig, 
+                *alterVolumeConfig, 
+                context, 
+                *result, 
+                &volumeChannelsBinding); 
+ 
+        if (!channelProfilesProcessed) { 
+            return result; 
+        } 
+ 
         if (alterVolumeConfig->PartitionsSize()) {
             // Cannot delete individual partitions
             // Do we need to verify whether geometry changes make sense?
@@ -550,15 +550,15 @@ public:
             }
         }
 
-        if (alterVolumeConfig->HasVersion() &&
-            alterVolumeConfig->GetVersion() != volume->AlterVersion)
-        {
-            result->SetError(
+        if (alterVolumeConfig->HasVersion() && 
+            alterVolumeConfig->GetVersion() != volume->AlterVersion) 
+        { 
+            result->SetError( 
                 NKikimrScheme::StatusPreconditionFailed,
-                "Wrong version in VolumeConfig");
-            return result;
-        }
-
+                "Wrong version in VolumeConfig"); 
+            return result; 
+        } 
+ 
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
@@ -595,10 +595,10 @@ public:
             // MergeFrom will append explicit channel profiles, we want a replace operation instead
             alterData->VolumeConfig.ClearExplicitChannelProfiles();
         }
-        if (alterVolumeConfig->VolumeExplicitChannelProfilesSize() > 0) {
-            // MergeFrom will append explicit channel profiles, we want a replace operation instead
-            alterData->VolumeConfig.ClearVolumeExplicitChannelProfiles();
-        }
+        if (alterVolumeConfig->VolumeExplicitChannelProfilesSize() > 0) { 
+            // MergeFrom will append explicit channel profiles, we want a replace operation instead 
+            alterData->VolumeConfig.ClearVolumeExplicitChannelProfiles(); 
+        } 
         if (alterVolumeConfig->TagsSize() > 0) {
             // MergeFrom will append tags, we want a replace operation instead
             alterData->VolumeConfig.ClearTags();
@@ -626,14 +626,14 @@ public:
         // Increase in occupied space is applied immediately
         domainDir->ChangeVolumeSpaceBegin(newVolumeSpace, oldVolumeSpace);
 
-        const TTxState& txState = PrepareChanges(
-            OperationId,
-            path.Base(),
-            volume,
-            partitionChannelsBinding,
-            volumeChannelsBinding,
-            shardsToCreate,
-            context);
+        const TTxState& txState = PrepareChanges( 
+            OperationId, 
+            path.Base(), 
+            volume, 
+            partitionChannelsBinding, 
+            volumeChannelsBinding, 
+            shardsToCreate, 
+            context); 
 
         context.SS->ClearDescribePathCaches(path.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);

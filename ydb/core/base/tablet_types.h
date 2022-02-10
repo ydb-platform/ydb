@@ -31,7 +31,7 @@ public:
     static constexpr EType RTMR_PARTITION = RTMRPartition;
     static constexpr EType BLOCKSTORE_VOLUME = BlockStoreVolume;
     static constexpr EType BLOCKSTORE_PARTITION = BlockStorePartition;
-    static constexpr EType BLOCKSTORE_PARTITION2 = BlockStorePartition2;
+    static constexpr EType BLOCKSTORE_PARTITION2 = BlockStorePartition2; 
     static constexpr EType BLOCKSTORE_DISK_REGISTRY = BlockStoreDiskRegistry;
     static constexpr EType TENANT_SLOT_BROKER = TenantSlotBroker;
     static constexpr EType CONSOLE = Console;

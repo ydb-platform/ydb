@@ -945,7 +945,7 @@ message TBlockStoreVolumeDescription {
     optional uint64 VolumeTabletId = 5; // do not set
     optional uint64 AlterVersion = 6; // do not set
     optional string MountToken = 7; // do not set
-    optional uint64 TokenVersion = 8; // do not set
+    optional uint64 TokenVersion = 8; // do not set 
 }
 
 message TFileStoreDescription {
@@ -1005,7 +1005,7 @@ message TAlterSolomonVolume {
 message TBlockStoreAssignOp {
     optional string Name = 1; // mandatory
     optional string NewMountToken = 2; // unset to unassign
-    optional uint64 TokenVersion = 3;
+    optional uint64 TokenVersion = 3; 
 }
 
 message TModifyACL {

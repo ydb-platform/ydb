@@ -61,8 +61,8 @@ namespace NLWTrace {
             signature.SerializeParamsFunc = &TUsrSign::SerializeParams;
             signature.CloneParamsFunc = &TUsrSign::CloneParams;
             signature.DestroyParamsFunc = &TUsrSign::DestroyParams;
-            signature.SerializeToPbFunc = &TUsrSign::SerializeToPb;
-            signature.DeserializeFromPbFunc = &TUsrSign::DeserializeFromPb;
+            signature.SerializeToPbFunc = &TUsrSign::SerializeToPb; 
+            signature.DeserializeFromPbFunc = &TUsrSign::DeserializeFromPb; 
 
             // register probe in global registry
             Register(*Singleton<NLWTrace::TProbeRegistry>());

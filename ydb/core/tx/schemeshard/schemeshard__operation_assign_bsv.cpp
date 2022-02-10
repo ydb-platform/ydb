@@ -71,16 +71,16 @@ public:
             return result;
         }
 
-
-        if (version &&
-            version != volume->TokenVersion)
-        {
-            result->SetError(
+ 
+        if (version && 
+            version != volume->TokenVersion) 
+        { 
+            result->SetError( 
                 NKikimrScheme::StatusPreconditionFailed,
-                "Wrong version in Assign Volume");
-            return result;
+                "Wrong version in Assign Volume"); 
+            return result; 
         }
-
+ 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
@@ -90,7 +90,7 @@ public:
         NIceDb::TNiceDb db(context.Txc.DB);
 
         volume->MountToken = mountToken;
-        ++volume->TokenVersion;
+        ++volume->TokenVersion; 
         context.SS->PersistBlockStoreVolumeMountToken(db, path.Base()->PathId, volume);
 
         context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);

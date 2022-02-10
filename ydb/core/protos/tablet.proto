@@ -37,7 +37,7 @@ message TTabletTypes {
         TenantSlotBroker = 27;
         Console = 28;
         Kesus = 29;
-        BlockStorePartition2 = 30;
+        BlockStorePartition2 = 30; 
         BlockStoreDiskRegistry = 31;
         SysViewProcessor = 32;
         FileStore = 33;

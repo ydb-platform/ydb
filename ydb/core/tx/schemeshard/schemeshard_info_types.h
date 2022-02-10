@@ -917,10 +917,10 @@ struct TShardInfo {
         return TShardInfo(txId, pathId, ETabletType::BlockStorePartition);
     }
 
-    static TShardInfo BlockStorePartition2Info(TTxId txId, TPathId pathId) {
-        return TShardInfo(txId, pathId, ETabletType::BlockStorePartition2);
-    }
-
+    static TShardInfo BlockStorePartition2Info(TTxId txId, TPathId pathId) { 
+        return TShardInfo(txId, pathId, ETabletType::BlockStorePartition2); 
+    } 
+ 
     static TShardInfo FileStoreInfo(TTxId txId, TPathId pathId) {
         return TShardInfo(txId, pathId, ETabletType::FileStore);
     }
@@ -1843,7 +1843,7 @@ struct TBlockStoreVolumeInfo : public TSimpleRefCount<TBlockStoreVolumeInfo> {
     };
 
     static constexpr size_t NumVolumeTabletChannels = 3;
-
+ 
     ui32 DefaultPartitionCount = 0;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
     ui64 AlterVersion = 0;

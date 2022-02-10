@@ -38,7 +38,7 @@ TBlockStoreVolumeInfo::TPtr CreateBlockStoreVolumeInfo(const NKikimrSchemeOp::TB
     }
 
     volume->AlterVersion = 1;
-    volume->TokenVersion = 0;
+    volume->TokenVersion = 0; 
     volume->DefaultPartitionCount =
         TBlockStoreVolumeInfo::CalculateDefaultPartitionCount(op.GetVolumeConfig());
     volume->VolumeConfig.CopyFrom(op.GetVolumeConfig());
@@ -49,25 +49,25 @@ TBlockStoreVolumeInfo::TPtr CreateBlockStoreVolumeInfo(const NKikimrSchemeOp::TB
 void ApplySharding(TTxId txId, TPathId pathId, TBlockStoreVolumeInfo::TPtr volume, TTxState& txState,
                    const TChannelsBindings& partitionChannels, const TChannelsBindings& volumeChannels,
                    TOperationContext& context) {
-    Y_VERIFY(volume->VolumeConfig.GetTabletVersion() <= 2);
+    Y_VERIFY(volume->VolumeConfig.GetTabletVersion() <= 2); 
     ui64 count = volume->DefaultPartitionCount;
     txState.Shards.reserve(count + 1);
 
     for (ui64 i = 0; i < count; ++i) {
         TShardIdx shardIdx;
-        if (volume->VolumeConfig.GetTabletVersion() == 2) {
+        if (volume->VolumeConfig.GetTabletVersion() == 2) { 
             shardIdx = context.SS->RegisterShardInfo(
                 TShardInfo::BlockStorePartition2Info(txId, pathId)
                     .WithBindedChannels(partitionChannels));
             context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION2_SHARD_COUNT].Add(1);
-            txState.Shards.emplace_back(shardIdx, ETabletType::BlockStorePartition2, TTxState::CreateParts);
-        } else {
+            txState.Shards.emplace_back(shardIdx, ETabletType::BlockStorePartition2, TTxState::CreateParts); 
+        } else { 
             shardIdx = context.SS->RegisterShardInfo(
                 TShardInfo::BlockStorePartitionInfo(txId, pathId)
                     .WithBindedChannels(partitionChannels));
             context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION_SHARD_COUNT].Add(1);
-            txState.Shards.emplace_back(shardIdx, ETabletType::BlockStorePartition, TTxState::CreateParts);
-        }
+            txState.Shards.emplace_back(shardIdx, ETabletType::BlockStorePartition, TTxState::CreateParts); 
+        } 
 
         TBlockStorePartitionInfo::TPtr part = new TBlockStorePartitionInfo();
         part->PartitionId = i;
@@ -305,19 +305,19 @@ public:
             return result;
         }
 
-        auto resolveChannels = [&] (const auto& ecps, TChannelsBindings& binding)
-        {
-            TVector<TStringBuf> poolKinds;
-            poolKinds.reserve(ecps.size());
-            for (const auto& ecp : ecps) {
-                poolKinds.push_back(ecp.GetPoolKind());
-            }
-            return context.SS->ResolveChannelsByPoolKinds(
-                poolKinds,
-                dstPath.DomainId(),
-                binding);
-        };
-
+        auto resolveChannels = [&] (const auto& ecps, TChannelsBindings& binding) 
+        { 
+            TVector<TStringBuf> poolKinds; 
+            poolKinds.reserve(ecps.size()); 
+            for (const auto& ecp : ecps) { 
+                poolKinds.push_back(ecp.GetPoolKind()); 
+            } 
+            return context.SS->ResolveChannelsByPoolKinds( 
+                poolKinds, 
+                dstPath.DomainId(), 
+                binding); 
+        }; 
+ 
         TChannelsBindings partitionChannelsBinding;
         if (defaultPartitionCount) {
             const auto& ecps = operation.GetVolumeConfig().GetExplicitChannelProfiles();
@@ -330,7 +330,7 @@ public:
                 return result;
             }
 
-            if (!resolveChannels(ecps, partitionChannelsBinding)) {
+            if (!resolveChannels(ecps, partitionChannelsBinding)) { 
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
                                 "Unable to construct channel binding for partition with the storage pool");
                 return result;
@@ -340,29 +340,29 @@ public:
         }
 
         TChannelsBindings volumeChannelsBinding;
-        const auto& ecps = operation.GetVolumeConfig().GetVolumeExplicitChannelProfiles();
-        if (ecps.size()) {
-            if ((ui32)ecps.size() != TBlockStoreVolumeInfo::NumVolumeTabletChannels) {
-                auto errStr = Sprintf("Wrong number of channels %u , should be %lu",
-                    ecps.size(),
-                    TBlockStoreVolumeInfo::NumVolumeTabletChannels);
+        const auto& ecps = operation.GetVolumeConfig().GetVolumeExplicitChannelProfiles(); 
+        if (ecps.size()) { 
+            if ((ui32)ecps.size() != TBlockStoreVolumeInfo::NumVolumeTabletChannels) { 
+                auto errStr = Sprintf("Wrong number of channels %u , should be %lu", 
+                    ecps.size(), 
+                    TBlockStoreVolumeInfo::NumVolumeTabletChannels); 
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-                return result;
-            }
-
-            if (!resolveChannels(ecps, volumeChannelsBinding)) {
+                return result; 
+            } 
+ 
+            if (!resolveChannels(ecps, volumeChannelsBinding)) { 
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
-                                "Unable to construct channel binding for volume with the storage pool");
-                return result;
-            }
-            context.SS->SetNbsChannelsParams(ecps, volumeChannelsBinding);
-        } else {
-            const ui32 volumeProfileId = 0;
-            if (!context.SS->ResolveTabletChannels(volumeProfileId, dstPath.DomainId(), volumeChannelsBinding)) {
+                                "Unable to construct channel binding for volume with the storage pool"); 
+                return result; 
+            } 
+            context.SS->SetNbsChannelsParams(ecps, volumeChannelsBinding); 
+        } else { 
+            const ui32 volumeProfileId = 0; 
+            if (!context.SS->ResolveTabletChannels(volumeProfileId, dstPath.DomainId(), volumeChannelsBinding)) { 
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
-                                "Unable to construct channel binding for volume with the profile");
-                return result;
-            }
+                                "Unable to construct channel binding for volume with the profile"); 
+                return result; 
+            } 
         }
 
         auto domainDir = context.SS->PathsById.at(dstPath.DomainId());

@@ -22,19 +22,19 @@ namespace {
         return s;
     }
 
-    TIntrusivePtr<TSettings> DroppingSettings(ui64 timeThresholdMs) {
-        auto loggerId = TActorId{0, "Logger"};
-        auto s = MakeIntrusive<TSettings>(
-            loggerId,
-            0,
-            EPriority::PRI_TRACE,
-            EPriority::PRI_DEBUG,
-            (ui32)0,
-            timeThresholdMs);
-        s->Append(0, 1, ServiceToString);
-        return s;
-    }
-
+    TIntrusivePtr<TSettings> DroppingSettings(ui64 timeThresholdMs) { 
+        auto loggerId = TActorId{0, "Logger"}; 
+        auto s = MakeIntrusive<TSettings>( 
+            loggerId, 
+            0, 
+            EPriority::PRI_TRACE, 
+            EPriority::PRI_DEBUG, 
+            (ui32)0, 
+            timeThresholdMs); 
+        s->Append(0, 1, ServiceToString); 
+        return s; 
+    } 
+ 
     class TMockBackend: public TLogBackend {
     public:
         using TWriteImpl = std::function<void(const TLogRecord&)>;
@@ -68,30 +68,30 @@ namespace {
     };
 
     struct TFixture {
-        TFixture(
-            TIntrusivePtr<TSettings> settings,
-            TMockBackend::TWriteImpl writeImpl = ThrowAlways)
-        {
+        TFixture( 
+            TIntrusivePtr<TSettings> settings, 
+            TMockBackend::TWriteImpl writeImpl = ThrowAlways) 
+        { 
             Runtime.Initialize();
             LogBackend.reset(new TMockBackend{writeImpl});
-            LoggerActor = Runtime.Register(new TLoggerActor{settings, LogBackend, Counters});
+            LoggerActor = Runtime.Register(new TLoggerActor{settings, LogBackend, Counters}); 
             Runtime.SetScheduledEventFilter([] (auto&&, auto&&, auto&&, auto) {
                 return false;
             });
         }
 
-        TFixture(TMockBackend::TWriteImpl writeImpl = ThrowAlways)
-            : TFixture(DefaultSettings(), writeImpl)
-        {}
-
+        TFixture(TMockBackend::TWriteImpl writeImpl = ThrowAlways) 
+            : TFixture(DefaultSettings(), writeImpl) 
+        {} 
+ 
         void WriteLog() {
             Runtime.Send(new IEventHandle{LoggerActor, {}, new TEvLog(TInstant::Zero(), TLevel{EPrio::Emerg}, 0, "foo")});
         }
 
-        void WriteLog(TInstant ts) {
-            Runtime.Send(new IEventHandle{LoggerActor, {}, new TEvLog(ts, TLevel{EPrio::Emerg}, 0, "foo")});
-        }
-
+        void WriteLog(TInstant ts) { 
+            Runtime.Send(new IEventHandle{LoggerActor, {}, new TEvLog(ts, TLevel{EPrio::Emerg}, 0, "foo")}); 
+        } 
+ 
         void Wakeup() {
             Runtime.Send(new IEventHandle{LoggerActor, {}, new TEvents::TEvWakeup});
         }
@@ -152,34 +152,34 @@ Y_UNIT_TEST_SUITE(TLoggerActorTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), COUNT);
     }
-
-    Y_UNIT_TEST(ShouldObeyTimeThresholdMsWhenOverloaded) {
-        TFixture test{DroppingSettings(5000)};
-
-        TVector<TString> messages;
-        auto acceptWrites = [&] (const TLogRecord& r) {
-            messages.emplace_back(r.Data, r.Len);
-        };
-
-        test.LogBackend->SetWriteImpl(acceptWrites);
-        test.Wakeup();
-
-        const auto COUNT = 11;
-        for (auto i = 0; i < COUNT; ++i) {
-            test.WriteLog();
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), COUNT);
-
-        test.Runtime.AdvanceCurrentTime(TDuration::Seconds(20));
-        auto now = test.Runtime.GetCurrentTime();
-
-        test.WriteLog(now - TDuration::Seconds(5));
-
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), COUNT + 1);
-
-        test.WriteLog(now - TDuration::Seconds(6));
-
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), COUNT + 1);
-    }
+ 
+    Y_UNIT_TEST(ShouldObeyTimeThresholdMsWhenOverloaded) { 
+        TFixture test{DroppingSettings(5000)}; 
+ 
+        TVector<TString> messages; 
+        auto acceptWrites = [&] (const TLogRecord& r) { 
+            messages.emplace_back(r.Data, r.Len); 
+        }; 
+ 
+        test.LogBackend->SetWriteImpl(acceptWrites); 
+        test.Wakeup(); 
+ 
+        const auto COUNT = 11; 
+        for (auto i = 0; i < COUNT; ++i) { 
+            test.WriteLog(); 
+        } 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), COUNT); 
+ 
+        test.Runtime.AdvanceCurrentTime(TDuration::Seconds(20)); 
+        auto now = test.Runtime.GetCurrentTime(); 
+ 
+        test.WriteLog(now - TDuration::Seconds(5)); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), COUNT + 1); 
+ 
+        test.WriteLog(now - TDuration::Seconds(6)); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), COUNT + 1); 
+    } 
 }

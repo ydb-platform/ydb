@@ -1,35 +1,35 @@
 /*
  * This file defines language for trace queries and serialization format for trace logs
  */
-syntax = "proto3";
-
+syntax = "proto3"; 
+ 
 package NLWTrace;
 
-option go_package = "a.yandex-team.ru/library/cpp/lwtrace/protos";
-
+option go_package = "a.yandex-team.ru/library/cpp/lwtrace/protos"; 
+ 
 message TProbeDesc {
-    string Name = 1; // Use either name+provider
-    string Provider = 3;
-    string Group = 2; // or group
+    string Name = 1; // Use either name+provider 
+    string Provider = 3; 
+    string Group = 2; // or group 
 }
 
 enum EOperatorType {
-    OT_EQ = 0;
-    OT_NE = 1;
-    OT_LT = 2;
-    OT_LE = 3;
-    OT_GT = 4;
-    OT_GE = 5;
+    OT_EQ = 0; 
+    OT_NE = 1; 
+    OT_LT = 2; 
+    OT_LE = 3; 
+    OT_GT = 4; 
+    OT_GE = 5; 
 }
 
 message TArgument {
-    string Param = 1;
+    string Param = 1; 
     bytes Value = 2;
-    string Variable = 3;
+    string Variable = 3; 
 }
 
 message TOperator {
-    EOperatorType Type = 1;
+    EOperatorType Type = 1; 
     repeated TArgument Argument = 8;
 }
 
@@ -39,9 +39,9 @@ message TPredicate {
 }
 
 message TLogAction {
-    bool DoNotLogParams = 2;
-    bool LogTimestamp = 3;
-    uint32 MaxRecords = 4; // Do not write more than MaxRecords records to the log (count from the trace beginning, not start)
+    bool DoNotLogParams = 2; 
+    bool LogTimestamp = 3; 
+    uint32 MaxRecords = 4; // Do not write more than MaxRecords records to the log (count from the trace beginning, not start) 
 }
 
 message TPrintToStderrAction {
@@ -51,72 +51,72 @@ message TKillAction {
 }
 
 message TSleepAction {
-    uint64 NanoSeconds = 1;
+    uint64 NanoSeconds = 1; 
 }
 
 message TCustomAction {
-    string Name = 1;
+    string Name = 1; 
     repeated string Opts = 2;
 }
 
 enum EStatementType {
-    ST_MOV = 0;
-    ST_ADD = 1;
-    ST_SUB = 2;
-    ST_MUL = 3;
-    ST_DIV = 4;
-    ST_MOD = 5;
-    ST_ADD_EQ = 6;
-    ST_SUB_EQ = 7;
-    ST_INC = 8;
-    ST_DEC = 9;
+    ST_MOV = 0; 
+    ST_ADD = 1; 
+    ST_SUB = 2; 
+    ST_MUL = 3; 
+    ST_DIV = 4; 
+    ST_MOD = 5; 
+    ST_ADD_EQ = 6; 
+    ST_SUB_EQ = 7; 
+    ST_INC = 8; 
+    ST_DEC = 9; 
 }
 
 message TStatementAction {
-    EStatementType Type = 1;
+    EStatementType Type = 1; 
     repeated TArgument Argument = 2;
 }
 
 message TRunLogShuttleAction {
-    bool Ignore = 1;
-    uint64 ShuttlesCount = 2;
-    uint64 MaxTrackLength = 3;
+    bool Ignore = 1; 
+    uint64 ShuttlesCount = 2; 
+    uint64 MaxTrackLength = 3; 
 }
 
 message TEditLogShuttleAction {
-    bool Ignore = 1;
+    bool Ignore = 1; 
 }
 
 message TDropLogShuttleAction {
 }
 
 message TAction {
-    TLogAction LogAction = 2;
-    TPrintToStderrAction PrintToStderrAction = 3;
-    TCustomAction CustomAction = 4;
-    TKillAction KillAction = 6;
-    TSleepAction SleepAction = 7;
-    TStatementAction StatementAction = 8;
+    TLogAction LogAction = 2; 
+    TPrintToStderrAction PrintToStderrAction = 3; 
+    TCustomAction CustomAction = 4; 
+    TKillAction KillAction = 6; 
+    TSleepAction SleepAction = 7; 
+    TStatementAction StatementAction = 8; 
 
-    TRunLogShuttleAction RunLogShuttleAction = 100;
-    TEditLogShuttleAction EditLogShuttleAction = 101;
-    TDropLogShuttleAction DropLogShuttleAction = 102;
+    TRunLogShuttleAction RunLogShuttleAction = 100; 
+    TEditLogShuttleAction EditLogShuttleAction = 101; 
+    TDropLogShuttleAction DropLogShuttleAction = 102; 
 }
 
 message TBlock {
-    TProbeDesc ProbeDesc = 1;
-    TPredicate Predicate = 2;
+    TProbeDesc ProbeDesc = 1; 
+    TPredicate Predicate = 2; 
     repeated TAction Action = 3;
 }
 
 message TQuery {
     // Number of events to hold for every thread in cyclic buffer
     // (Won't be used if LogDurationUs is set to non-zero value)
-    uint32 PerThreadLogSize = 1;
+    uint32 PerThreadLogSize = 1; 
 
     // Hold events for last Duration microseconds
     // (If zero, than per-thread cyclic buffer will be used to store events)
-    uint64 LogDurationUs = 2;
+    uint64 LogDurationUs = 2; 
 
     repeated TBlock Blocks = 3;
 }
@@ -153,114 +153,114 @@ enum EParamTypePb {
 }
 
 message TEventPb {
-    string Name = 1;
+    string Name = 1; 
     repeated string Groups = 2; // First group is provider
     repeated EParamTypePb ParamTypes = 3;
     repeated string ParamNames = 4;
 }
 
 message TLogItemPb {
-    uint64 Thread = 1;
-    string Name = 2;
-    string Provider = 3;
+    uint64 Thread = 1; 
+    string Name = 2; 
+    string Provider = 3; 
     repeated bytes Params = 4;
-    uint64 Timestamp = 5; // microseconds since epoch
-    uint64 TimestampCycles = 6; // cycles since machine boot
+    uint64 Timestamp = 5; // microseconds since epoch 
+    uint64 TimestampCycles = 6; // cycles since machine boot 
 }
 
 message TThreadLogPb {
-    uint64 ThreadId = 1;
+    uint64 ThreadId = 1; 
     repeated TLogItemPb LogItems = 2;
 }
 
 message TLogPb {
     // Trace info
-    string Name = 1;
-    string Description = 2;
-    uint64 EventsCount = 3;
-    uint64 CrtTime = 4; // Log creation time (seconds since epoch)
+    string Name = 1; 
+    string Description = 2; 
+    uint64 EventsCount = 3; 
+    uint64 CrtTime = 4; // Log creation time (seconds since epoch) 
 
     // Traced host info
-    string Hostname = 101;
+    string Hostname = 101; 
 
     // Traced process info
-    string ProcessName = 201;
+    string ProcessName = 201; 
     bytes CommandLine = 202;
-    uint64 ProcessStartTime = 203;
-    uint64 Pid = 204;
-    string VersionInfo = 205; // Svn info
+    uint64 ProcessStartTime = 203; 
+    uint64 Pid = 204; 
+    string VersionInfo = 205; // Svn info 
 
     // Trace query and results
-    TQuery Query = 301;
+    TQuery Query = 301; 
     repeated TEventPb Events = 302;
     repeated TThreadLogPb ThreadLogs = 303;
 }
 
 message TShuttlePb {
     repeated TLogPb Parts = 1;
-    TQuery Query = 2;
+    TQuery Query = 2; 
 }
 
 message TOrbitPb {
     repeated TShuttlePb Shuttles = 1;
 }
-
-////////////////////////////////////////////////////////////////////////////////
-// Trace parameter.
-
-message TTraceParam
-{
-    // Value.
-    oneof Value
-    {
-        int64  IntValue = 2;
-        uint64 UintValue = 3;
-        double DoubleValue = 4;
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+// Trace parameter. 
+ 
+message TTraceParam 
+{ 
+    // Value. 
+    oneof Value 
+    { 
+        int64  IntValue = 2; 
+        uint64 UintValue = 3; 
+        double DoubleValue = 4; 
         bytes StrValue = 5;
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Trace Event .
-
-message TTraceEvent
-{
-    // Probe name.
-    string Name = 1;
-
-    // Provider name.
-    string Provider = 2;
-
-    // Probe parameters.
-    repeated TTraceParam Params = 3;
-
-    // Event timestamp in nanosec since epoch.
-    uint64 TimestampNanosec = 4;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Shuttle trace .
-
-message TShuttleTrace
-{
-    // Request events.
-    repeated TTraceEvent Events = 1;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Trace request.
-
-message TTraceRequest
-{
-    // trace id of remote trace session
-    bool IsTraced = 1;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Trace response.
-
-message TTraceResponse
-{
-    // traced events
-    TShuttleTrace Trace = 1;
-}
+    } 
+} 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+// Trace Event . 
+ 
+message TTraceEvent 
+{ 
+    // Probe name. 
+    string Name = 1; 
+ 
+    // Provider name. 
+    string Provider = 2; 
+ 
+    // Probe parameters. 
+    repeated TTraceParam Params = 3; 
+ 
+    // Event timestamp in nanosec since epoch. 
+    uint64 TimestampNanosec = 4; 
+} 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+// Shuttle trace . 
+ 
+message TShuttleTrace 
+{ 
+    // Request events. 
+    repeated TTraceEvent Events = 1; 
+} 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+// Trace request. 
+ 
+message TTraceRequest 
+{ 
+    // trace id of remote trace session 
+    bool IsTraced = 1; 
+} 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+// Trace response. 
+ 
+message TTraceResponse 
+{ 
+    // traced events 
+    TShuttleTrace Trace = 1; 
+} 

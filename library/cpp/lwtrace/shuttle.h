@@ -65,9 +65,9 @@ namespace NLWTrace {
                     AtomicSub(Status, 2);
                     return result;
                 }
-            }
-        }
-
+            } 
+        } 
+ 
         template <class F>
         void UnlessDead(F func) {
             while (true) {
@@ -91,7 +91,7 @@ namespace NLWTrace {
         }
 
         // Returns false iff shuttle should be destroyed
-        bool AddProbe(TProbe* probe, const TParams& params, ui64 timestamp = 0) {
+        bool AddProbe(TProbe* probe, const TParams& params, ui64 timestamp = 0) { 
             return UnlessDead([&] {
                 return DoAddProbe(probe, params, timestamp);
             }, false);
@@ -161,10 +161,10 @@ namespace NLWTrace {
         }
 
     protected:
-        virtual bool DoAddProbe(TProbe* probe, const TParams& params, ui64 timestamp) = 0;
+        virtual bool DoAddProbe(TProbe* probe, const TParams& params, ui64 timestamp) = 0; 
         virtual void DoEndOfTrack() = 0;
         virtual void DoDrop() = 0;
-        virtual void DoSerialize(TShuttleTrace& msg) = 0;
+        virtual void DoSerialize(TShuttleTrace& msg) = 0; 
         virtual bool DoFork(TShuttlePtr& child) = 0;
         virtual bool DoJoin(const TShuttlePtr& child) = 0;
     };
@@ -227,7 +227,7 @@ namespace NLWTrace {
             });
         }
 
-        void AddProbe(TProbe* probe, const TParams& params, ui64 timestamp = 0) {
+        void AddProbe(TProbe* probe, const TParams& params, ui64 timestamp = 0) { 
             NotConcurrent([&] (TShuttlePtr& head) {
                 TShuttlePtr* ref = &head;
                 while (IShuttle* s = ref->Get()) {
@@ -253,14 +253,14 @@ namespace NLWTrace {
                 }
             });
         }
-
+ 
         void Serialize(ui64 traceIdx, TShuttleTrace& msg) {
             ForEachShuttle(traceIdx, [&] (NLWTrace::IShuttle* shuttle) {
-                shuttle->Serialize(msg);
-                return false;
-            });
-        }
-
+                shuttle->Serialize(msg); 
+                return false; 
+            }); 
+        } 
+ 
         bool HasShuttle(ui64 traceIdx) {
             return NotConcurrent([=] (TShuttlePtr& head) {
                 TShuttlePtr ref = head;
@@ -270,10 +270,10 @@ namespace NLWTrace {
                     } else {
                         ref = s->GetNext();
                     }
-                }
+                } 
                 return false;
             });
-        }
+        } 
 
         bool Fork(TOrbit& child) {
             return NotConcurrent([&] (TShuttlePtr& head) {

@@ -322,31 +322,31 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             AsyncCreateBlockStoreVolume(runtime, txId, root, vdescr.DebugString());
         });
     }
-
-
-    Y_UNIT_TEST(CreateAssignWithVersion) {
-        TTestWithReboots t;
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            Y_UNUSED(activeZone);
-
-            t.RestoreLogging();
-
+ 
+ 
+    Y_UNIT_TEST(CreateAssignWithVersion) { 
+        TTestWithReboots t; 
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) { 
+            Y_UNUSED(activeZone); 
+ 
+            t.RestoreLogging(); 
+ 
             NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-            InitCreateVolumeConfig("BSVolume_4", vdescr);
-            TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
+            InitCreateVolumeConfig("BSVolume_4", vdescr); 
+            TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString()); 
+ 
+            t.TestEnv->TestWaitNotification(runtime, t.TxId-1); 
+            TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::Finished); 
+ 
+            TestAssignBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", "BSVolume_4", "Owner123", 0); 
+            t.TestEnv->TestWaitNotification(runtime, t.TxId-1); 
+            TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::CheckMountToken("BSVolume_4", "Owner123")); 
+ 
+ 
+           TestAssignBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", "BSVolume_4", "Owner124", 1); 
+            t.TestEnv->TestWaitNotification(runtime, t.TxId-1); 
+            TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::CheckMountToken("BSVolume_4", "Owner124")); 
 
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
-            TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::Finished);
-
-            TestAssignBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", "BSVolume_4", "Owner123", 0);
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
-            TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::CheckMountToken("BSVolume_4", "Owner123"));
-
-
-           TestAssignBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", "BSVolume_4", "Owner124", 1);
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
-            TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::CheckMountToken("BSVolume_4", "Owner124"));
-
-        });
+        }); 
     }
 }

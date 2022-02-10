@@ -63,7 +63,7 @@ enum ESimpleCounters {
     COUNTER_USER_ATTRIBUTES_COUNT = 50                    [(CounterOpts) = {Name: "UserAttributes"}];
     COUNTER_IN_FLIGHT_OPS_TxCreateTableIndex = 51         [(CounterOpts) = {Name: "InFlightOps/CreateTableIndex"}];
     COUNTER_TABLE_INDEXES_COUNT = 52                      [(CounterOpts) = {Name: "TableIndexes"}];
-    COUNTER_BLOCKSTORE_PARTITION2_SHARD_COUNT = 53        [(CounterOpts) = {Name: "BlockStorePartition2Shards"}];
+    COUNTER_BLOCKSTORE_PARTITION2_SHARD_COUNT = 53        [(CounterOpts) = {Name: "BlockStorePartition2Shards"}]; 
     COUNTER_IN_FLIGHT_OPS_TxDropTableIndex = 54           [(CounterOpts) = {Name: "InFlightOps/DropTableIndex"}];
 
     COUNTER_EXTSUB_DOMAIN_COUNT = 55                      [(CounterOpts) = {Name: "ExernalSubDomains"}];

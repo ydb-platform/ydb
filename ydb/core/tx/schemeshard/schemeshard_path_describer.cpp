@@ -674,7 +674,7 @@ void TPathDescriber::DescribeBlockStoreVolume(TPathId pathId, TPathElement::TPtr
     entry->SetVolumeTabletId(ui64(volume->VolumeTabletId));
     entry->SetAlterVersion(volume->AlterVersion);
     entry->SetMountToken(volume->MountToken);
-    entry->SetTokenVersion(volume->TokenVersion);
+    entry->SetTokenVersion(volume->TokenVersion); 
 
     const auto& tablets = volume->GetTablets(Self->ShardInfos);
     for (ui32 idx = 0; idx < tablets.size(); ++idx) {

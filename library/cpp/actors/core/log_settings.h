@@ -100,12 +100,12 @@ namespace NActors {
             // YOURTYPE_Name for you.
             TSettings(const TActorId& loggerActorId, const EComponent loggerComponent,
                       EComponent minVal, EComponent maxVal, EComponentToStringFunc func,
-                      EPriority defPriority, EPriority defSamplingPriority = PRI_DEBUG,
-                      ui32 defSamplingRate = 0, ui64 timeThresholdMs = 1000);
+                      EPriority defPriority, EPriority defSamplingPriority = PRI_DEBUG, 
+                      ui32 defSamplingRate = 0, ui64 timeThresholdMs = 1000); 
 
             TSettings(const TActorId& loggerActorId, const EComponent loggerComponent,
-                      EPriority defPriority, EPriority defSamplingPriority = PRI_DEBUG,
-                      ui32 defSamplingRate = 0, ui64 timeThresholdMs = 1000);
+                      EPriority defPriority, EPriority defSamplingPriority = PRI_DEBUG, 
+                      ui32 defSamplingRate = 0, ui64 timeThresholdMs = 1000); 
 
             void Append(EComponent minVal, EComponent maxVal, EComponentToStringFunc func);
 

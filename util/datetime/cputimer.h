@@ -23,7 +23,7 @@ public:
     TSimpleTimer() {
         Reset();
     }
-    TDuration Get() const { 
+    TDuration Get() const {
         return TInstant::Now() - T;
     }
     void Reset() {
@@ -38,7 +38,7 @@ public:
     TProfileTimer() {
         Reset();
     }
-    TDuration Get() const { 
+    TDuration Get() const {
         return TRusage::Get().Utime - T;
     }
     TDuration Step() {

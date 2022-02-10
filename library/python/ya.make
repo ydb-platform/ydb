@@ -171,7 +171,7 @@ RECURSE(
     stubmaker
     solomon
     spack
-    spyt
+    spyt 
     ssh_client
     ssh_sign
     startrek_python_client

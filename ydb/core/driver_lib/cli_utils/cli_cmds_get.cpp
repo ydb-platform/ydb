@@ -50,7 +50,7 @@ public:
             LogoBlobIDFromLogoBlobID(*ExtremeQuery, record.MutableExtreme());
         }
 
-        auto callback = [](const TResponse& response) -> int { 
+        auto callback = [](const TResponse& response) -> int {
             if (response.Record.HasErrorDescription()) {
                 Cerr << "error: " << response.Record.GetErrorDescription() << Endl;
                 return 1;

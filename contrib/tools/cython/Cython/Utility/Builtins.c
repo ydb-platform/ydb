@@ -109,7 +109,7 @@ static PyObject* __Pyx_PyExec3(PyObject* o, PyObject* globals, PyObject* locals)
         locals = globals;
     }
 
-    if (__Pyx_PyDict_GetItemStr(globals, PYIDENT("__builtins__")) == NULL) { 
+    if (__Pyx_PyDict_GetItemStr(globals, PYIDENT("__builtins__")) == NULL) {
         if (PyDict_SetItem(globals, PYIDENT("__builtins__"), PyEval_GetBuiltins()) < 0)
             goto bad;
     }
@@ -171,46 +171,46 @@ static CYTHON_INLINE PyObject *__Pyx_GetAttr3(PyObject *, PyObject *, PyObject *
 
 //////////////////// GetAttr3 ////////////////////
 //@requires: ObjectHandling.c::GetAttr
-//@requires: Exceptions.c::PyThreadStateGet 
-//@requires: Exceptions.c::PyErrFetchRestore 
-//@requires: Exceptions.c::PyErrExceptionMatches 
+//@requires: Exceptions.c::PyThreadStateGet
+//@requires: Exceptions.c::PyErrFetchRestore
+//@requires: Exceptions.c::PyErrExceptionMatches
 
-static PyObject *__Pyx_GetAttr3Default(PyObject *d) { 
-    __Pyx_PyThreadState_declare 
-    __Pyx_PyThreadState_assign 
-    if (unlikely(!__Pyx_PyErr_ExceptionMatches(PyExc_AttributeError))) 
-        return NULL; 
-    __Pyx_PyErr_Clear(); 
-    Py_INCREF(d); 
-    return d; 
-} 
- 
+static PyObject *__Pyx_GetAttr3Default(PyObject *d) {
+    __Pyx_PyThreadState_declare
+    __Pyx_PyThreadState_assign
+    if (unlikely(!__Pyx_PyErr_ExceptionMatches(PyExc_AttributeError)))
+        return NULL;
+    __Pyx_PyErr_Clear();
+    Py_INCREF(d);
+    return d;
+}
+
 static CYTHON_INLINE PyObject *__Pyx_GetAttr3(PyObject *o, PyObject *n, PyObject *d) {
     PyObject *r = __Pyx_GetAttr(o, n);
-    return (likely(r)) ? r : __Pyx_GetAttr3Default(d); 
-} 
- 
-//////////////////// HasAttr.proto //////////////////// 
- 
-static CYTHON_INLINE int __Pyx_HasAttr(PyObject *, PyObject *); /*proto*/ 
- 
-//////////////////// HasAttr //////////////////// 
-//@requires: ObjectHandling.c::GetAttr 
- 
-static CYTHON_INLINE int __Pyx_HasAttr(PyObject *o, PyObject *n) { 
-    PyObject *r; 
-    if (unlikely(!__Pyx_PyBaseString_Check(n))) { 
-        PyErr_SetString(PyExc_TypeError, 
-                        "hasattr(): attribute name must be string"); 
-        return -1; 
-    } 
-    r = __Pyx_GetAttr(o, n); 
+    return (likely(r)) ? r : __Pyx_GetAttr3Default(d);
+}
+
+//////////////////// HasAttr.proto ////////////////////
+
+static CYTHON_INLINE int __Pyx_HasAttr(PyObject *, PyObject *); /*proto*/
+
+//////////////////// HasAttr ////////////////////
+//@requires: ObjectHandling.c::GetAttr
+
+static CYTHON_INLINE int __Pyx_HasAttr(PyObject *o, PyObject *n) {
+    PyObject *r;
+    if (unlikely(!__Pyx_PyBaseString_Check(n))) {
+        PyErr_SetString(PyExc_TypeError,
+                        "hasattr(): attribute name must be string");
+        return -1;
+    }
+    r = __Pyx_GetAttr(o, n);
     if (unlikely(!r)) {
         PyErr_Clear();
-        return 0; 
-    } else { 
-        Py_DECREF(r); 
-        return 1; 
+        return 0;
+    } else {
+        Py_DECREF(r);
+        return 1;
     }
 }
 
@@ -236,22 +236,22 @@ static PyObject* __Pyx_Intern(PyObject* s) {
 
 //////////////////// abs_longlong.proto ////////////////////
 
-static CYTHON_INLINE PY_LONG_LONG __Pyx_abs_longlong(PY_LONG_LONG x) { 
+static CYTHON_INLINE PY_LONG_LONG __Pyx_abs_longlong(PY_LONG_LONG x) {
 #if defined (__cplusplus) && __cplusplus >= 201103L
-    return std::abs(x); 
+    return std::abs(x);
 #elif defined (__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
-    return llabs(x); 
-#elif defined (_MSC_VER) 
+    return llabs(x);
+#elif defined (_MSC_VER)
     // abs() is defined for long, but 64-bits type on MSVC is long long.
-    // Use MS-specific _abs64() instead, which returns the original (negative) value for abs(-MAX-1) 
-    return _abs64(x); 
+    // Use MS-specific _abs64() instead, which returns the original (negative) value for abs(-MAX-1)
+    return _abs64(x);
 #elif defined (__GNUC__)
     // gcc or clang on 64 bit windows.
-    return __builtin_llabs(x); 
+    return __builtin_llabs(x);
 #else
     if (sizeof(PY_LONG_LONG) <= sizeof(Py_ssize_t))
         return __Pyx_sst_abs(x);
-    return (x<0) ? -x : x; 
+    return (x<0) ? -x : x;
 #endif
 }
 
@@ -468,12 +468,12 @@ static CYTHON_INLINE PyObject* __Pyx_PyDict_ViewItems(PyObject* d) {
         return CALL_UNBOUND_METHOD(PyDict_Type, "viewitems", d);
 }
 
- 
+
 //////////////////// pyfrozenset_new.proto ////////////////////
- 
-static CYTHON_INLINE PyObject* __Pyx_PyFrozenSet_New(PyObject* it); 
- 
-//////////////////// pyfrozenset_new //////////////////// 
+
+static CYTHON_INLINE PyObject* __Pyx_PyFrozenSet_New(PyObject* it);
+
+//////////////////// pyfrozenset_new ////////////////////
 //@substitute: naming
 
 static CYTHON_INLINE PyObject* __Pyx_PyFrozenSet_New(PyObject* it) {

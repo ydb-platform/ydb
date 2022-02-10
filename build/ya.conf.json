@@ -323,10 +323,10 @@
         "dlv": {
             "description": "Debugger for the Go programming language"
         },
-        "node-search": { 
-            "description": "Autocheck data inspector tool", 
-            "visible": false 
-        }, 
+        "node-search": {
+            "description": "Autocheck data inspector tool",
+            "visible": false
+        },
         "releaser": {
             "description": "Release tool"
         },
@@ -426,10 +426,10 @@
         "rdtset": {
             "description": "Task CPU affinity and Intel(R) Resource Director Technology control tool"
         },
-        "optrace": { 
-            "description": "optrace records output files written by each process", 
-            "visible": false 
-        }, 
+        "optrace": {
+            "description": "optrace records output files written by each process",
+            "visible": false
+        },
         "yoimports": {
             "description": "Go imports formatting tool"
         },
@@ -3809,44 +3809,44 @@
                 }
             ]
         },
-        "optrace": { 
-            "tools": { 
-                "optrace": { 
-                    "bottle": "optrace", 
-                    "executable": "optrace" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
-        "node-search": { 
-            "tools": { 
-                "node-search": { 
-                    "bottle": "node-search", 
-                    "executable": "node-search" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
-                        "os": "DARWIN" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
+        "optrace": {
+            "tools": {
+                "optrace": {
+                    "bottle": "optrace",
+                    "executable": "optrace"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                }
+            ]
+        },
+        "node-search": {
+            "tools": {
+                "node-search": {
+                    "bottle": "node-search",
+                    "executable": "node-search"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                }
+            ]
+        },
         "gpt": {
             "tools": {
                 "gpt_perf": {
@@ -6923,32 +6923,32 @@
                 ]
             }
         },
-        "optrace": { 
-            "formula": { 
-                "sandbox_id": [ 
-                    894130496 
-                ], 
-                "match": "optrace" 
-            }, 
-            "executable": { 
-                "optrace": [ 
-                    "optrace" 
-                ] 
-            } 
-        }, 
-        "node-search": { 
-            "formula": { 
-                "sandbox_id": [ 
-                    1157378401 
-                ], 
-                "match": "node_search" 
-            }, 
-            "executable": { 
-                "node-search": [ 
-                    "node_search" 
-                ] 
-            } 
-        }, 
+        "optrace": {
+            "formula": {
+                "sandbox_id": [
+                    894130496
+                ],
+                "match": "optrace"
+            },
+            "executable": {
+                "optrace": [
+                    "optrace"
+                ]
+            }
+        },
+        "node-search": {
+            "formula": {
+                "sandbox_id": [
+                    1157378401
+                ],
+                "match": "node_search"
+            },
+            "executable": {
+                "node-search": [
+                    "node_search"
+                ]
+            }
+        },
         "rsync": {
             "formula": {
                 "sandbox_id": [

@@ -7,12 +7,12 @@ cdef extern from *:
     cdef cppclass string "{{type}}":
         string()
         string(char* c_str, size_t size)
-    cdef const char* __Pyx_PyObject_AsStringAndSize(object, Py_ssize_t*) except NULL 
+    cdef const char* __Pyx_PyObject_AsStringAndSize(object, Py_ssize_t*) except NULL
 
 @cname("{{cname}}")
 cdef string {{cname}}(object o) except *:
     cdef Py_ssize_t length = 0
-    cdef const char* data = __Pyx_PyObject_AsStringAndSize(o, &length) 
+    cdef const char* data = __Pyx_PyObject_AsStringAndSize(o, &length)
     return string(data, length)
 
 
@@ -27,7 +27,7 @@ cdef extern from *:
 
 {{for py_type in ['PyObject', 'PyUnicode', 'PyStr', 'PyBytes', 'PyByteArray']}}
 cdef extern from *:
-    cdef object __Pyx_{{py_type}}_FromStringAndSize(const char*, size_t) 
+    cdef object __Pyx_{{py_type}}_FromStringAndSize(const char*, size_t)
 
 @cname("{{cname.replace("PyObject", py_type, 1)}}")
 cdef inline object {{cname.replace("PyObject", py_type, 1)}}(const string& s):
@@ -45,7 +45,7 @@ cdef extern from *:
 cdef vector[X] {{cname}}(object o) except *:
     cdef vector[X] v
     for item in o:
-        v.push_back(<X>item) 
+        v.push_back(<X>item)
     return v
 
 
@@ -58,7 +58,7 @@ cdef extern from *:
 
 @cname("{{cname}}")
 cdef object {{cname}}(vector[X]& v):
-    return [v[i] for i in range(v.size())] 
+    return [v[i] for i in range(v.size())]
 
 
 #################### list.from_py ####################
@@ -71,7 +71,7 @@ cdef extern from *:
 cdef cpp_list[X] {{cname}}(object o) except *:
     cdef cpp_list[X] l
     for item in o:
-        l.push_back(<X>item) 
+        l.push_back(<X>item)
     return l
 
 
@@ -93,7 +93,7 @@ cdef object {{cname}}(const cpp_list[X]& v):
     o = []
     cdef cpp_list[X].const_iterator iter = v.begin()
     while iter != v.end():
-        o.append(cython.operator.dereference(iter)) 
+        o.append(cython.operator.dereference(iter))
         cython.operator.preincrement(iter)
     return o
 
@@ -108,7 +108,7 @@ cdef extern from *:
 cdef set[X] {{cname}}(object o) except *:
     cdef set[X] s
     for item in o:
-        s.insert(<X>item) 
+        s.insert(<X>item)
     return s
 
 
@@ -130,7 +130,7 @@ cdef object {{cname}}(const cpp_set[X]& s):
     o = set()
     cdef cpp_set[X].const_iterator iter = s.begin()
     while iter != s.end():
-        o.add(cython.operator.dereference(iter)) 
+        o.add(cython.operator.dereference(iter))
         cython.operator.preincrement(iter)
     return o
 
@@ -144,7 +144,7 @@ cdef extern from *:
 @cname("{{cname}}")
 cdef pair[X,Y] {{cname}}(object o) except *:
     x, y = o
-    return pair[X,Y](<X>x, <Y>y) 
+    return pair[X,Y](<X>x, <Y>y)
 
 
 #################### pair.to_py ####################
@@ -156,7 +156,7 @@ cdef extern from *:
 
 @cname("{{cname}}")
 cdef object {{cname}}(const pair[X,Y]& p):
-    return p.first, p.second 
+    return p.first, p.second
 
 
 #################### map.from_py ####################
@@ -175,7 +175,7 @@ cdef map[X,Y] {{cname}}(object o) except *:
     cdef dict d = o
     cdef map[X,Y] m
     for key, value in d.iteritems():
-        m.insert(pair[X,Y](<X>key, <Y>value)) 
+        m.insert(pair[X,Y](<X>key, <Y>value))
     return m
 
 
@@ -204,7 +204,7 @@ cdef object {{cname}}(const map[X,Y]& s):
     cdef map[X,Y].const_iterator iter = s.begin()
     while iter != s.end():
         key_value = &cython.operator.dereference(iter)
-        o[key_value.first] = key_value.second 
+        o[key_value.first] = key_value.second
         cython.operator.preincrement(iter)
     return o
 
@@ -249,7 +249,7 @@ cdef extern from *:
 cdef TMaybe[X] {{cname}}(object o) except *:
     cdef TMaybe[X] result
     if o is not None:
-        result = <X>o 
+        result = <X>o
     return result
 
 #################### arcadia_TMaybe.to_py ####################
@@ -262,7 +262,7 @@ cdef extern from *:
 @cname("{{cname}}")
 cdef object {{cname}}(const TMaybe[X]& s):
     if s.Defined():
-        return s.GetRef() 
+        return s.GetRef()
     return None
 
 
@@ -276,7 +276,7 @@ cdef extern from *:
 cdef TVector[X] {{cname}}(object o) except *:
     cdef TVector[X] v
     for item in o:
-        v.push_back(<X>item) 
+        v.push_back(<X>item)
     return v
 
 
@@ -289,7 +289,7 @@ cdef extern from *:
 
 @cname("{{cname}}")
 cdef object {{cname}}(const TVector[X]& v):
-    return [v[i] for i in range(v.size())] 
+    return [v[i] for i in range(v.size())]
 
 
 #################### arcadia_THashMap.from_py ####################
@@ -306,7 +306,7 @@ cdef THashMap[X,Y] {{cname}}(object o) except *:
     cdef dict d = o
     cdef THashMap[X,Y] m
     for key, value in d.iteritems():
-        m.insert(pair[X,Y](<X>key, <Y>value)) 
+        m.insert(pair[X,Y](<X>key, <Y>value))
     return m
 
 
@@ -333,7 +333,7 @@ cdef dict {{cname}}(const THashMap[X,Y]& s):
     cdef THashMap[X,Y].const_iterator iter = s.begin()
     while iter != s.end():
         key_value = &cython.operator.dereference(iter)
-        result[key_value.first] = key_value.second 
+        result[key_value.first] = key_value.second
         cython.operator.preincrement(iter)
     return result
 

@@ -8,12 +8,12 @@ TEST_SRCS(
     build_java_codenav_index.py
     build_java_with_error_prone.py
     build_java_with_error_prone2.py
-    build_mn.py 
-    build_pln_header.py 
+    build_mn.py
+    build_pln_header.py
     cat.py
-    cgo1_wrapper.py 
+    cgo1_wrapper.py
     check_config_h.py
-    collect_java_srcs.py 
+    collect_java_srcs.py
     compile_cuda.py
     compile_java.py
     compile_jsrc.py
@@ -29,7 +29,7 @@ TEST_SRCS(
     extract_jacoco_report.py
     f2c.py
     fail_module_cmd.py
-    fetch_from.py 
+    fetch_from.py
     fetch_from_external.py
     fetch_from_mds.py
     fetch_from_npm.py
@@ -40,10 +40,10 @@ TEST_SRCS(
     fix_msvc_output.py
     fs_tools.py
     gen_aar_gradle_script.py
-    gen_java_codenav_entry.py 
+    gen_java_codenav_entry.py
     gen_java_codenav_protobuf.py
     gen_mx_table.py
-    gen_py3_reg.py 
+    gen_py3_reg.py
     gen_py_reg.py
     gen_test_apk_gradle_script.py
     gen_ub.py
@@ -51,7 +51,7 @@ TEST_SRCS(
     go_proto_wrapper.py
     go_tool.py
     ios_wrapper.py
-    java_pack_to_file.py 
+    java_pack_to_file.py
     link_asrc.py
     link_dyn_lib.py
     link_exe.py
@@ -71,14 +71,14 @@ TEST_SRCS(
     py_compile.py
     run_ios_simulator.py
     run_javac.py
-    run_junit.py 
+    run_junit.py
     run_llvm_dsymutil.py
     run_msvc_wine.py
     run_tool.py
     sky.py
     stdout2stderr.py
     symlink.py
-    tar_directory.py 
+    tar_directory.py
     tar_sources.py
     tared_protoc.py
     touch.py
@@ -87,7 +87,7 @@ TEST_SRCS(
     with_coverage.py
     with_crash_on_timeout.py
     with_pathsep_resolve.py
-    wrap_groovyc.py 
+    wrap_groovyc.py
     wrapper.py
     writer.py
     xargs.py

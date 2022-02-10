@@ -164,30 +164,30 @@ cdef extern from "<string>" namespace "std" nogil:
         string substr(size_t pos) except +
         string substr()
 
-        #string& operator= (const string&) 
-        #string& operator= (const char*) 
+        #string& operator= (const string&)
+        #string& operator= (const char*)
         #string& operator= (char)
 
         string operator+ (const string&) except +
         string operator+ (const char*) except +
 
-        bint operator==(const string&) 
-        bint operator==(const char*) 
+        bint operator==(const string&)
+        bint operator==(const char*)
 
         bint operator!= (const string&)
         bint operator!= (const char*)
 
-        bint operator< (const string&) 
-        bint operator< (const char*) 
+        bint operator< (const string&)
+        bint operator< (const char*)
 
-        bint operator> (const string&) 
-        bint operator> (const char*) 
+        bint operator> (const string&)
+        bint operator> (const char*)
 
-        bint operator<= (const string&) 
-        bint operator<= (const char*) 
+        bint operator<= (const string&)
+        bint operator<= (const char*)
 
-        bint operator>= (const string&) 
-        bint operator>= (const char*) 
+        bint operator>= (const string&)
+        bint operator>= (const char*)
 
 
     string to_string(int val) except +

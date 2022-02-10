@@ -26,4 +26,4 @@ def iter_binaries():
 
 
 for p in iter_binaries():
-    globals()['test_' + os.path.basename(p).replace('-', '_')] = functools.partial(yc.process.check_glibc_version, p) 
+    globals()['test_' + os.path.basename(p).replace('-', '_')] = functools.partial(yc.process.check_glibc_version, p)

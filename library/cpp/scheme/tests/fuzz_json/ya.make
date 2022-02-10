@@ -7,8 +7,8 @@ OWNER(
     velavokr
 )
 
-SIZE(MEDIUM) 
- 
+SIZE(MEDIUM)
+
 SRCS(
     fuzz_json.cpp
 )

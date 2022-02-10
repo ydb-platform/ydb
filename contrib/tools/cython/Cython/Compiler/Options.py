@@ -9,10 +9,10 @@ class ShouldBeFromDirective(object):
 
     known_directives = []
 
-    def __init__(self, options_name, directive_name=None, disallow=False): 
+    def __init__(self, options_name, directive_name=None, disallow=False):
         self.options_name = options_name
         self.directive_name = directive_name or options_name
-        self.disallow = disallow 
+        self.disallow = disallow
         self.known_directives.append(self)
 
     def __nonzero__(self):
@@ -150,10 +150,10 @@ buffer_max_dims = 8
 #: Number of function closure instances to keep in a freelist (0: no freelists)
 closure_freelist_size = 8
 
-# Arcadia specific 
-source_root = None 
+# Arcadia specific
+source_root = None
 
- 
+
 def get_directive_defaults():
     # To add an item to this list, all accesses should be changed to use the new
     # directive, and the global option itself should be set to an instance of
@@ -178,7 +178,7 @@ _directive_defaults = {
     'initializedcheck' : True,
     'embedsignature' : False,
     'auto_cpdef': False,
-    'auto_pickle': None, 
+    'auto_pickle': None,
     'cdivision': False,  # was True before 0.12
     'cdivision_warnings': False,
     'c_api_binop_methods': True,
@@ -202,15 +202,15 @@ _directive_defaults = {
     'language_level': None,
     'fast_getattr': False,  # Undocumented until we come up with a better way to handle this everywhere.
     'py2_import': False,  # For backward compatibility of Cython's source code in Py3 source mode
-    'preliminary_late_includes_cy28': False,  # Temporary directive in 0.28, to be removed in a later version (see GH#2079). 
-    'iterable_coroutine': False,  # Make async coroutines backwards compatible with the old asyncio yield-from syntax. 
+    'preliminary_late_includes_cy28': False,  # Temporary directive in 0.28, to be removed in a later version (see GH#2079).
+    'iterable_coroutine': False,  # Make async coroutines backwards compatible with the old asyncio yield-from syntax.
     'c_string_type': 'bytes',
     'c_string_encoding': '',
     'type_version_tag': True,  # enables Py_TPFLAGS_HAVE_VERSION_TAG on extension types
-    'unraisable_tracebacks': True, 
+    'unraisable_tracebacks': True,
     'old_style_globals': False,
-    'np_pythran': False, 
-    'fast_gil': False, 
+    'np_pythran': False,
+    'fast_gil': False,
 
     # set __file__ and/or __path__ to known source/target path at import time (instead of not having them available)
     'set_initial_path' : None,  # SOURCEFILE or "/full/path/to/module"
@@ -301,7 +301,7 @@ def normalise_encoding_name(option_name, encoding):
 # Override types possibilities above, if needed
 directive_types = {
     'language_level': str,  # values can be None/2/3/'3str', where None == 2+warning
-    'auto_pickle': bool, 
+    'auto_pickle': bool,
     'locals': dict,
     'final' : bool,  # final cdef classes and methods
     'nogil' : bool,
@@ -329,15 +329,15 @@ for key, val in _directive_defaults.items():
 
 directive_scopes = {  # defaults to available everywhere
     # 'module', 'function', 'class', 'with statement'
-    'auto_pickle': ('module', 'cclass'), 
+    'auto_pickle': ('module', 'cclass'),
     'final' : ('cclass', 'function'),
     'nogil' : ('function', 'with statement'),
     'inline' : ('function',),
     'cfunc' : ('function', 'with statement'),
     'ccall' : ('function', 'with statement'),
-    'returns' : ('function',), 
-    'exceptval' : ('function',), 
-    'locals' : ('function',), 
+    'returns' : ('function',),
+    'exceptval' : ('function',),
+    'locals' : ('function',),
     'staticmethod' : ('function',),  # FIXME: analysis currently lacks more specific function scope
     'no_gc_clear' : ('cclass',),
     'no_gc' : ('cclass',),
@@ -360,9 +360,9 @@ directive_scopes = {  # defaults to available everywhere
     # globals() could conceivably be controlled at a finer granularity,
     # but that would complicate the implementation
     'old_style_globals': ('module',),
-    'np_pythran': ('module',), 
-    'fast_gil': ('module',), 
-    'iterable_coroutine': ('module', 'function'), 
+    'np_pythran': ('module',),
+    'fast_gil': ('module',),
+    'iterable_coroutine': ('module', 'function'),
 }
 
 

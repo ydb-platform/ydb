@@ -1,4 +1,4 @@
-OWNER(g:yatest) 
+OWNER(g:yatest)
 
 PY23_LIBRARY()
 
@@ -15,12 +15,12 @@ PEERDIR(
     contrib/python/six
 )
 
-IF(PYTHON2) 
-    PEERDIR( 
-        contrib/python/enum34 
-    ) 
-ENDIF() 
- 
+IF(PYTHON2)
+    PEERDIR(
+        contrib/python/enum34
+    )
+ENDIF()
+
 END()
 
 RECURSE_FOR_TESTS(tests)

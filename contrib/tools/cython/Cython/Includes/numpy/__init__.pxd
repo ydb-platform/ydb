@@ -18,7 +18,7 @@ DEF _buffer_format_string_len = 255
 
 cimport cpython.buffer as pybuf
 from cpython.ref cimport Py_INCREF
-from cpython.mem cimport PyObject_Malloc, PyObject_Free 
+from cpython.mem cimport PyObject_Malloc, PyObject_Free
 from cpython.object cimport PyObject, PyTypeObject
 from cpython.type cimport type
 cimport libc.stdio as stdio
@@ -52,8 +52,8 @@ cdef extern from "numpy/arrayobject.h":
         NPY_STRING
         NPY_UNICODE
         NPY_VOID
-        NPY_DATETIME 
-        NPY_TIMEDELTA 
+        NPY_DATETIME
+        NPY_TIMEDELTA
         NPY_NTYPES
         NPY_NOTYPE
 
@@ -90,7 +90,7 @@ cdef extern from "numpy/arrayobject.h":
         NPY_ANYORDER
         NPY_CORDER
         NPY_FORTRANORDER
-        NPY_KEEPORDER 
+        NPY_KEEPORDER
 
     ctypedef enum NPY_CASTING:
         NPY_NO_CASTING
@@ -194,12 +194,12 @@ cdef extern from "numpy/arrayobject.h":
 
     ctypedef void (*PyArray_VectorUnaryFunc)(void *, void *, npy_intp, void *,  void *)
 
-    ctypedef struct PyArray_ArrayDescr: 
-        # shape is a tuple, but Cython doesn't support "tuple shape" 
-        # inside a non-PyObject declaration, so we have to declare it 
-        # as just a PyObject*. 
-        PyObject* shape 
- 
+    ctypedef struct PyArray_ArrayDescr:
+        # shape is a tuple, but Cython doesn't support "tuple shape"
+        # inside a non-PyObject declaration, so we have to declare it
+        # as just a PyObject*.
+        PyObject* shape
+
     ctypedef struct PyArray_Descr:
         pass
 
@@ -209,11 +209,11 @@ cdef extern from "numpy/arrayobject.h":
         cdef PyTypeObject* typeobj
         cdef char kind
         cdef char type
-        # Numpy sometimes mutates this without warning (e.g. it'll 
-        # sometimes change "|" to "<" in shared dtype objects on 
-        # little-endian machines). If this matters to you, use 
-        # PyArray_IsNativeByteOrder(dtype.byteorder) instead of 
-        # directly accessing this field. 
+        # Numpy sometimes mutates this without warning (e.g. it'll
+        # sometimes change "|" to "<" in shared dtype objects on
+        # little-endian machines). If this matters to you, use
+        # PyArray_IsNativeByteOrder(dtype.byteorder) instead of
+        # directly accessing this field.
         cdef char byteorder
         cdef char flags
         cdef int type_num
@@ -221,10 +221,10 @@ cdef extern from "numpy/arrayobject.h":
         cdef int alignment
         cdef dict fields
         cdef tuple names
-        # Use PyDataType_HASSUBARRAY to test whether this field is 
-        # valid (the pointer can be NULL). Most users should access 
-        # this field via the inline helper method PyDataType_SHAPE. 
-        cdef PyArray_ArrayDescr* subarray 
+        # Use PyDataType_HASSUBARRAY to test whether this field is
+        # valid (the pointer can be NULL). Most users should access
+        # this field via the inline helper method PyDataType_SHAPE.
+        cdef PyArray_ArrayDescr* subarray
 
     ctypedef class numpy.flatiter [object PyArrayIterObject, check_size ignore]:
         # Use through macros
@@ -257,11 +257,11 @@ cdef extern from "numpy/arrayobject.h":
         # -- the details of this may change.
         def __getbuffer__(ndarray self, Py_buffer* info, int flags):
             # This implementation of getbuffer is geared towards Cython
-            # requirements, and does not yet fulfill the PEP. 
+            # requirements, and does not yet fulfill the PEP.
             # In particular strided access is always provided regardless
             # of flags
 
-            cdef int i, ndim 
+            cdef int i, ndim
             cdef int endian_detector = 1
             cdef bint little_endian = ((<char*>&endian_detector)[0] != 0)
 
@@ -277,10 +277,10 @@ cdef extern from "numpy/arrayobject.h":
 
             info.buf = PyArray_DATA(self)
             info.ndim = ndim
-            if sizeof(npy_intp) != sizeof(Py_ssize_t): 
+            if sizeof(npy_intp) != sizeof(Py_ssize_t):
                 # Allocate new buffer for strides and shape info.
                 # This is allocated as one block, strides first.
-                info.strides = <Py_ssize_t*>PyObject_Malloc(sizeof(Py_ssize_t) * 2 * <size_t>ndim) 
+                info.strides = <Py_ssize_t*>PyObject_Malloc(sizeof(Py_ssize_t) * 2 * <size_t>ndim)
                 info.shape = info.strides + ndim
                 for i in range(ndim):
                     info.strides[i] = PyArray_STRIDES(self)[i]
@@ -297,9 +297,9 @@ cdef extern from "numpy/arrayobject.h":
             cdef dtype descr = <dtype>PyArray_DESCR(self)
             cdef int offset
 
-            info.obj = self 
+            info.obj = self
 
-            if not PyDataType_HASFIELDS(descr): 
+            if not PyDataType_HASFIELDS(descr):
                 t = descr.type_num
                 if ((descr.byteorder == c'>' and little_endian) or
                     (descr.byteorder == c'<' and not little_endian)):
@@ -326,7 +326,7 @@ cdef extern from "numpy/arrayobject.h":
                 info.format = f
                 return
             else:
-                info.format = <char*>PyObject_Malloc(_buffer_format_string_len) 
+                info.format = <char*>PyObject_Malloc(_buffer_format_string_len)
                 info.format[0] = c'^' # Native data types, manual alignment
                 offset = 0
                 f = _util_dtypestring(descr, info.format + 1,
@@ -336,9 +336,9 @@ cdef extern from "numpy/arrayobject.h":
 
         def __releasebuffer__(ndarray self, Py_buffer* info):
             if PyArray_HASFIELDS(self):
-                PyObject_Free(info.format) 
+                PyObject_Free(info.format)
             if sizeof(npy_intp) != sizeof(Py_ssize_t):
-                PyObject_Free(info.strides) 
+                PyObject_Free(info.strides)
                 # info.shape was stored after info.strides in the same block
 
     ctypedef unsigned char      npy_bool
@@ -388,28 +388,28 @@ cdef extern from "numpy/arrayobject.h":
         double imag
 
     ctypedef struct npy_clongdouble:
-        long double real 
-        long double imag 
+        long double real
+        long double imag
 
     ctypedef struct npy_complex64:
-        float real 
-        float imag 
+        float real
+        float imag
 
     ctypedef struct npy_complex128:
         double real
         double imag
 
     ctypedef struct npy_complex160:
-        long double real 
-        long double imag 
+        long double real
+        long double imag
 
     ctypedef struct npy_complex192:
-        long double real 
-        long double imag 
+        long double real
+        long double imag
 
     ctypedef struct npy_complex256:
-        long double real 
-        long double imag 
+        long double real
+        long double imag
 
     ctypedef struct PyArray_Dims:
         npy_intp *ptr
@@ -476,7 +476,7 @@ cdef extern from "numpy/arrayobject.h":
     bint PyDataType_ISEXTENDED(dtype)
     bint PyDataType_ISOBJECT(dtype)
     bint PyDataType_HASFIELDS(dtype)
-    bint PyDataType_HASSUBARRAY(dtype) 
+    bint PyDataType_HASSUBARRAY(dtype)
 
     bint PyArray_ISBOOL(ndarray)
     bint PyArray_ISUNSIGNED(ndarray)
@@ -832,12 +832,12 @@ cdef inline object PyArray_MultiIterNew4(a, b, c, d):
 cdef inline object PyArray_MultiIterNew5(a, b, c, d, e):
     return PyArray_MultiIterNew(5, <void*>a, <void*>b, <void*>c, <void*> d, <void*> e)
 
-cdef inline tuple PyDataType_SHAPE(dtype d): 
-    if PyDataType_HASSUBARRAY(d): 
-        return <tuple>d.subarray.shape 
-    else: 
-        return () 
- 
+cdef inline tuple PyDataType_SHAPE(dtype d):
+    if PyDataType_HASSUBARRAY(d):
+        return <tuple>d.subarray.shape
+    else:
+        return ()
+
 cdef inline char* _util_dtypestring(dtype descr, char* f, char* end, int* offset) except NULL:
     # Recursive utility function used in __getbuffer__ to get format
     # string. The new location in the format string is returned.

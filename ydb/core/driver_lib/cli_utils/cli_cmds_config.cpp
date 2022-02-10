@@ -35,7 +35,7 @@ public:
         auto *cmd = request.MutableRequest()->AddCommand();
         cmd->MutableProposeStoragePools();
 
-        auto callback = [](const NMsgBusProxy::TBusResponse& response) { 
+        auto callback = [](const NMsgBusProxy::TBusResponse& response) {
             const auto& record = response.Record;
             if (!record.HasBlobStorageConfigResponse()) {
                 return 1;
@@ -217,7 +217,7 @@ public:
             request.MutableRequest()->SetRollback(true);
         }
 
-        auto callback = [](const NMsgBusProxy::TBusResponse& response) { 
+        auto callback = [](const NMsgBusProxy::TBusResponse& response) {
             const auto& record = response.Record;
             if (record.HasBlobStorageConfigResponse()) {
                 TString data;

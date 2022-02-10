@@ -153,8 +153,8 @@ def parse_command_line(args):
                 options.module_name = pop_arg()
             elif option == '--init-suffix':
                 options.init_suffix = pop_arg()
-            elif option == '--source-root': 
-                Options.source_root = pop_arg() 
+            elif option == '--source-root':
+                Options.source_root = pop_arg()
             elif option == '-2':
                 options.language_level = 2
             elif option == '-3':
@@ -165,8 +165,8 @@ def parse_command_line(args):
                 options.capi_reexport_cincludes = True
             elif option == "--fast-fail":
                 Options.fast_fail = True
-            elif option == "--cimport-from-pyx": 
-                Options.cimport_from_pyx = True 
+            elif option == "--cimport-from-pyx":
+                Options.cimport_from_pyx = True
             elif option in ('-Werror', '--warning-errors'):
                 Options.warning_errors = True
             elif option in ('-Wextra', '--warning-extra'):

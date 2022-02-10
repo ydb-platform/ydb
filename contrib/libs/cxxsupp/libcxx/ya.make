@@ -183,11 +183,11 @@ NO_RUNTIME()
 
 NO_COMPILER_WARNINGS()
 
-IF (FUZZING) 
-    NO_SANITIZE() 
-    NO_SANITIZE_COVERAGE() 
-ENDIF() 
- 
+IF (FUZZING)
+    NO_SANITIZE()
+    NO_SANITIZE_COVERAGE()
+ENDIF()
+
 SRCS(
     src/algorithm.cpp
     src/any.cpp

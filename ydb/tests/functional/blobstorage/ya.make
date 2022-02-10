@@ -16,7 +16,7 @@ IF (SANITIZER_TYPE)
         ram:16
     )
     TIMEOUT(1800)
-    SIZE(LARGE) 
+    SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
     REQUIREMENTS(

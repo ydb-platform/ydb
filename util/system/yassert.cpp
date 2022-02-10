@@ -17,8 +17,8 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-#ifdef CLANG_COVERAGE 
-extern "C" { 
+#ifdef CLANG_COVERAGE
+extern "C" {
     // __llvm_profile_write_file may not be provided if the executable target uses NO_CLANG_COVERAGE() macro and
     // arrives as test's dependency via DEPENDS() macro.
     // That's why we provide a weak no-op implementation for __llvm_profile_write_file,
@@ -26,10 +26,10 @@ extern "C" {
     Y_WEAK int __llvm_profile_write_file(void) {
         return 0;
     }
-} 
- 
-#endif 
- 
+}
+
+#endif
+
 namespace {
     struct TPanicLockHolder: public TAdaptiveLock {
     };
@@ -82,11 +82,11 @@ namespace NPrivate {
 #ifndef WITH_VALGRIND
         PrintBackTrace();
 #endif
-#ifdef CLANG_COVERAGE 
-        if (__llvm_profile_write_file()) { 
-            Cerr << "Failed to dump clang coverage" << Endl; 
-        } 
-#endif 
+#ifdef CLANG_COVERAGE
+        if (__llvm_profile_write_file()) {
+            Cerr << "Failed to dump clang coverage" << Endl;
+        }
+#endif
         abort();
     } catch (...) {
         abort();

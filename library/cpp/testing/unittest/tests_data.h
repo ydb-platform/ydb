@@ -2,8 +2,8 @@
 
 #include <library/cpp/testing/common/env.h>
 
-#include <util/generic/noncopyable.h> 
-#include <util/generic/ptr.h> 
+#include <util/generic/noncopyable.h>
+#include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/network/sock.h>
 
@@ -28,12 +28,12 @@ void SetReuseAddressAndPort(const TSocketType& sock) {
 }
 
 class TPortManager: public TNonCopyable {
-public: 
+public:
     TPortManager(bool reservePortsForCurrentTest = true);
-    ~TPortManager(); 
+    ~TPortManager();
 
     // Gets free TCP port
-    ui16 GetPort(ui16 port = 0); 
+    ui16 GetPort(ui16 port = 0);
 
     // Gets free TCP port
     ui16 GetTcpPort(ui16 port = 0);
@@ -44,11 +44,11 @@ public:
     // Gets one free port for use in both TCP and UDP protocols
     ui16 GetTcpAndUdpPort(ui16 port = 0);
 
-    ui16 GetPortsRange(const ui16 startPort, const ui16 range); 
- 
-private: 
-    class TPortManagerImpl; 
-    THolder<TPortManagerImpl> Impl_; 
+    ui16 GetPortsRange(const ui16 startPort, const ui16 range);
+
+private:
+    class TPortManagerImpl;
+    THolder<TPortManagerImpl> Impl_;
 };
 
 ui16 GetRandomPort();

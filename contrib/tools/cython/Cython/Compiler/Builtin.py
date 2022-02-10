@@ -21,7 +21,7 @@ pyexec_globals_utility_code = UtilityCode.load("PyExecGlobals", "Builtins.c")
 globals_utility_code = UtilityCode.load("Globals", "Builtins.c")
 
 builtin_utility_code = {
-    'StopAsyncIteration': UtilityCode.load_cached("StopAsyncIteration", "Coroutine.c"), 
+    'StopAsyncIteration': UtilityCode.load_cached("StopAsyncIteration", "Coroutine.c"),
 }
 
 
@@ -95,35 +95,35 @@ builtin_function_table = [
                     is_strict_signature = True),
     BuiltinFunction('abs',        "f",    "f",     "fabsf",
                     is_strict_signature = True),
-    BuiltinFunction('abs',        "i",    "i",     "abs", 
-                    is_strict_signature = True), 
-    BuiltinFunction('abs',        "l",    "l",     "labs", 
-                    is_strict_signature = True), 
-    BuiltinFunction('abs',        None,    None,   "__Pyx_abs_longlong", 
-                utility_code = UtilityCode.load("abs_longlong", "Builtins.c"), 
-                func_type = PyrexTypes.CFuncType( 
-                    PyrexTypes.c_longlong_type, [ 
-                        PyrexTypes.CFuncTypeArg("arg", PyrexTypes.c_longlong_type, None) 
-                        ], 
-                    is_strict_signature = True, nogil=True)), 
-    ] + list( 
-        BuiltinFunction('abs',        None,    None,   "/*abs_{0}*/".format(t.specialization_name()), 
+    BuiltinFunction('abs',        "i",    "i",     "abs",
+                    is_strict_signature = True),
+    BuiltinFunction('abs',        "l",    "l",     "labs",
+                    is_strict_signature = True),
+    BuiltinFunction('abs',        None,    None,   "__Pyx_abs_longlong",
+                utility_code = UtilityCode.load("abs_longlong", "Builtins.c"),
+                func_type = PyrexTypes.CFuncType(
+                    PyrexTypes.c_longlong_type, [
+                        PyrexTypes.CFuncTypeArg("arg", PyrexTypes.c_longlong_type, None)
+                        ],
+                    is_strict_signature = True, nogil=True)),
+    ] + list(
+        BuiltinFunction('abs',        None,    None,   "/*abs_{0}*/".format(t.specialization_name()),
                     func_type = PyrexTypes.CFuncType(
-                        t, 
-                        [PyrexTypes.CFuncTypeArg("arg", t, None)], 
-                        is_strict_signature = True, nogil=True)) 
-                            for t in (PyrexTypes.c_uint_type, PyrexTypes.c_ulong_type, PyrexTypes.c_ulonglong_type) 
-             ) + list( 
-        BuiltinFunction('abs',        None,    None,   "__Pyx_c_abs{0}".format(t.funcsuffix), 
+                        t,
+                        [PyrexTypes.CFuncTypeArg("arg", t, None)],
+                        is_strict_signature = True, nogil=True))
+                            for t in (PyrexTypes.c_uint_type, PyrexTypes.c_ulong_type, PyrexTypes.c_ulonglong_type)
+             ) + list(
+        BuiltinFunction('abs',        None,    None,   "__Pyx_c_abs{0}".format(t.funcsuffix),
                     func_type = PyrexTypes.CFuncType(
-                        t.real_type, [ 
-                            PyrexTypes.CFuncTypeArg("arg", t, None) 
+                        t.real_type, [
+                            PyrexTypes.CFuncTypeArg("arg", t, None)
                             ],
-                            is_strict_signature = True, nogil=True)) 
-                        for t in (PyrexTypes.c_float_complex_type, 
-                                  PyrexTypes.c_double_complex_type, 
-                                  PyrexTypes.c_longdouble_complex_type) 
-                        ) + [ 
+                            is_strict_signature = True, nogil=True))
+                        for t in (PyrexTypes.c_float_complex_type,
+                                  PyrexTypes.c_double_complex_type,
+                                  PyrexTypes.c_longdouble_complex_type)
+                        ) + [
     BuiltinFunction('abs',        "O",    "O",     "__Pyx_PyNumber_Absolute",
                     utility_code=UtilityCode.load("py_abs", "Builtins.c")),
     #('all',       "",     "",      ""),
@@ -153,8 +153,8 @@ builtin_function_table = [
                     utility_code=getattr3_utility_code),
     BuiltinFunction('getattr',    "OO",   "O",     "__Pyx_GetAttr",
                     utility_code=getattr_utility_code),
-    BuiltinFunction('hasattr',    "OO",   "b",     "__Pyx_HasAttr", 
-                    utility_code = UtilityCode.load("HasAttr", "Builtins.c")), 
+    BuiltinFunction('hasattr',    "OO",   "b",     "__Pyx_HasAttr",
+                    utility_code = UtilityCode.load("HasAttr", "Builtins.c")),
     BuiltinFunction('hash',       "O",    "h",     "PyObject_Hash"),
     #('hex',       "",     "",      ""),
     #('id',        "",     "",      ""),
@@ -329,18 +329,18 @@ builtin_types_table = [
     ("set",       "PySet_Type",    [BuiltinMethod("__contains__",  "TO",   "b", "PySequence_Contains"),
                                     BuiltinMethod("clear",   "T",  "r", "PySet_Clear"),
                                     # discard() and remove() have a special treatment for unhashable values
-                                    BuiltinMethod("discard", "TO", "r", "__Pyx_PySet_Discard", 
-                                                  utility_code=UtilityCode.load("py_set_discard", "Optimize.c")), 
-                                    BuiltinMethod("remove",  "TO", "r", "__Pyx_PySet_Remove", 
-                                                  utility_code=UtilityCode.load("py_set_remove", "Optimize.c")), 
-                                    # update is actually variadic (see Github issue #1645) 
-#                                    BuiltinMethod("update",     "TO", "r", "__Pyx_PySet_Update", 
-#                                                  utility_code=UtilityCode.load_cached("PySet_Update", "Builtins.c")), 
+                                    BuiltinMethod("discard", "TO", "r", "__Pyx_PySet_Discard",
+                                                  utility_code=UtilityCode.load("py_set_discard", "Optimize.c")),
+                                    BuiltinMethod("remove",  "TO", "r", "__Pyx_PySet_Remove",
+                                                  utility_code=UtilityCode.load("py_set_remove", "Optimize.c")),
+                                    # update is actually variadic (see Github issue #1645)
+#                                    BuiltinMethod("update",     "TO", "r", "__Pyx_PySet_Update",
+#                                                  utility_code=UtilityCode.load_cached("PySet_Update", "Builtins.c")),
                                     BuiltinMethod("add",     "TO", "r", "PySet_Add"),
                                     BuiltinMethod("pop",     "T",  "O", "PySet_Pop")]),
     ("frozenset", "PyFrozenSet_Type", []),
     ("Exception", "((PyTypeObject*)PyExc_Exception)[0]", []),
-    ("StopAsyncIteration", "((PyTypeObject*)__Pyx_PyExc_StopAsyncIteration)[0]", []), 
+    ("StopAsyncIteration", "((PyTypeObject*)__Pyx_PyExc_StopAsyncIteration)[0]", []),
 ]
 
 
@@ -392,14 +392,14 @@ def init_builtin_types():
         utility = builtin_utility_code.get(name)
         if name == 'frozenset':
             objstruct_cname = 'PySetObject'
-        elif name == 'bytearray': 
-            objstruct_cname = 'PyByteArrayObject' 
+        elif name == 'bytearray':
+            objstruct_cname = 'PyByteArrayObject'
         elif name == 'bool':
             objstruct_cname = None
         elif name == 'Exception':
             objstruct_cname = "PyBaseExceptionObject"
-        elif name == 'StopAsyncIteration': 
-            objstruct_cname = "PyBaseExceptionObject" 
+        elif name == 'StopAsyncIteration':
+            objstruct_cname = "PyBaseExceptionObject"
         else:
             objstruct_cname = 'Py%sObject' % name.capitalize()
         the_type = builtin_scope.declare_builtin_type(name, cname, utility, objstruct_cname)

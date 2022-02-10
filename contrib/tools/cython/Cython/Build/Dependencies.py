@@ -6,16 +6,16 @@ from .. import __version__
 import collections
 import contextlib
 import hashlib
-import os 
-import shutil 
-import subprocess 
-import re, sys, time 
+import os
+import shutil
+import subprocess
+import re, sys, time
 import warnings
 from glob import iglob
-from io import open as io_open 
-from os.path import relpath as _relpath 
-from distutils.extension import Extension 
-from distutils.util import strtobool 
+from io import open as io_open
+from os.path import relpath as _relpath
+from distutils.extension import Extension
+from distutils.util import strtobool
 import zipfile
 
 try:
@@ -38,8 +38,8 @@ except ImportError:
     zipfile_compression_mode = zipfile.ZIP_STORED
 
 try:
-    import pythran 
-except: 
+    import pythran
+except:
     pythran = None
 
 from .. import Utils
@@ -66,15 +66,15 @@ else:
     basestring = str
 
 
-def _make_relative(file_paths, base=None): 
-    if not base: 
-        base = os.getcwd() 
-    if base[-1] != os.path.sep: 
-        base += os.path.sep 
-    return [_relpath(path, base) if path.startswith(base) else path 
-            for path in file_paths] 
- 
- 
+def _make_relative(file_paths, base=None):
+    if not base:
+        base = os.getcwd()
+    if base[-1] != os.path.sep:
+        base += os.path.sep
+    return [_relpath(path, base) if path.startswith(base) else path
+            for path in file_paths]
+
+
 def extended_iglob(pattern):
     if '{' in pattern:
         m = re.match('(.*){([^}]+)}(.*)', pattern)
@@ -118,7 +118,7 @@ def nonempty(it, error_msg="expected non-empty iterator"):
 def file_hash(filename):
     path = os.path.normpath(filename)
     prefix = ('%d:%s' % (len(path), path)).encode("UTF-8")
-    m = hashlib.md5(prefix) 
+    m = hashlib.md5(prefix)
     with open(path, 'rb') as f:
         data = f.read(65000)
         while data:
@@ -184,7 +184,7 @@ def parse_list(s):
 
 transitive_str = object()
 transitive_list = object()
-bool_or = object() 
+bool_or = object()
 
 distutils_settings = {
     'name':                 str,
@@ -201,7 +201,7 @@ distutils_settings = {
     'export_symbols':       list,
     'depends':              transitive_list,
     'language':             transitive_str,
-    'np_pythran':           bool_or 
+    'np_pythran':           bool_or
 }
 
 
@@ -233,23 +233,23 @@ class DistutilsInfo(object):
                 if line[0] != '#':
                     break
                 line = line[1:].lstrip()
-                kind = next((k for k in ("distutils:","cython:") if line.startswith(k)), None) 
+                kind = next((k for k in ("distutils:","cython:") if line.startswith(k)), None)
                 if kind is not None:
-                    key, _, value = [s.strip() for s in line[len(kind):].partition('=')] 
-                    type = distutils_settings.get(key, None) 
-                    if line.startswith("cython:") and type is None: continue 
+                    key, _, value = [s.strip() for s in line[len(kind):].partition('=')]
+                    type = distutils_settings.get(key, None)
+                    if line.startswith("cython:") and type is None: continue
                     if type in (list, transitive_list):
                         value = parse_list(value)
                         if key == 'define_macros':
                             value = [tuple(macro.split('=', 1))
                                      if '=' in macro else (macro, None)
                                      for macro in value]
-                    if type is bool_or: 
-                        value = strtobool(value) 
+                    if type is bool_or:
+                        value = strtobool(value)
                     self.values[key] = value
         elif exn is not None:
             for key in distutils_settings:
-                if key in ('name', 'sources','np_pythran'): 
+                if key in ('name', 'sources','np_pythran'):
                     continue
                 value = getattr(exn, key, None)
                 if value:
@@ -271,8 +271,8 @@ class DistutilsInfo(object):
                             all.append(v)
                     value = all
                 self.values[key] = value
-            elif type is bool_or: 
-                self.values[key] = self.values.get(key, False) | value 
+            elif type is bool_or:
+                self.values[key] = self.values.get(key, False) | value
         return self
 
     def subs(self, aliases):
@@ -415,30 +415,30 @@ def normalize_existing(base_path, rel_paths):
 
 @cached_function
 def normalize_existing0(base_dir, rel_paths):
-    """ 
-    Given some base directory ``base_dir`` and a list of path names 
-    ``rel_paths``, normalize each relative path name ``rel`` by 
-    replacing it by ``os.path.join(base, rel)`` if that file exists. 
- 
-    Return a couple ``(normalized, needed_base)`` where ``normalized`` 
-    if the list of normalized file names and ``needed_base`` is 
-    ``base_dir`` if we actually needed ``base_dir``. If no paths were 
-    changed (for example, if all paths were already absolute), then 
-    ``needed_base`` is ``None``. 
-    """ 
+    """
+    Given some base directory ``base_dir`` and a list of path names
+    ``rel_paths``, normalize each relative path name ``rel`` by
+    replacing it by ``os.path.join(base, rel)`` if that file exists.
+
+    Return a couple ``(normalized, needed_base)`` where ``normalized``
+    if the list of normalized file names and ``needed_base`` is
+    ``base_dir`` if we actually needed ``base_dir``. If no paths were
+    changed (for example, if all paths were already absolute), then
+    ``needed_base`` is ``None``.
+    """
     normalized = []
-    needed_base = None 
+    needed_base = None
     for rel in rel_paths:
-        if os.path.isabs(rel): 
-            normalized.append(rel) 
-            continue 
+        if os.path.isabs(rel):
+            normalized.append(rel)
+            continue
         path = join_path(base_dir, rel)
         if path_exists(path):
             normalized.append(os.path.normpath(path))
-            needed_base = base_dir 
+            needed_base = base_dir
         else:
             normalized.append(rel)
-    return (normalized, needed_base) 
+    return (normalized, needed_base)
 
 
 def resolve_depends(depends, include_dirs):
@@ -543,25 +543,25 @@ class DependencyTree(object):
         return all
 
     @cached_method
-    def cimports_externs_incdirs(self, filename): 
+    def cimports_externs_incdirs(self, filename):
         # This is really ugly. Nested cimports are resolved with respect to the
         # includer, but includes are resolved with respect to the includee.
         cimports, includes, externs = self.parse_dependencies(filename)[:3]
         cimports = set(cimports)
         externs = set(externs)
-        incdirs = set() 
+        incdirs = set()
         for include in self.included_files(filename):
-            included_cimports, included_externs, included_incdirs = self.cimports_externs_incdirs(include) 
+            included_cimports, included_externs, included_incdirs = self.cimports_externs_incdirs(include)
             cimports.update(included_cimports)
             externs.update(included_externs)
-            incdirs.update(included_incdirs) 
-        externs, incdir = normalize_existing(filename, externs) 
-        if incdir: 
-            incdirs.add(incdir) 
-        return tuple(cimports), externs, incdirs 
+            incdirs.update(included_incdirs)
+        externs, incdir = normalize_existing(filename, externs)
+        if incdir:
+            incdirs.add(incdir)
+        return tuple(cimports), externs, incdirs
 
     def cimports(self, filename):
-        return self.cimports_externs_incdirs(filename)[0] 
+        return self.cimports_externs_incdirs(filename)[0]
 
     def package(self, filename):
         return package(filename)
@@ -638,11 +638,11 @@ class DependencyTree(object):
         incorporate everything that has an influence on the generated code.
         """
         try:
-            m = hashlib.md5(__version__.encode('UTF-8')) 
-            m.update(file_hash(filename).encode('UTF-8')) 
+            m = hashlib.md5(__version__.encode('UTF-8'))
+            m.update(file_hash(filename).encode('UTF-8'))
             for x in sorted(self.all_dependencies(filename)):
                 if os.path.splitext(x)[1] not in ('.c', '.cpp', '.h'):
-                    m.update(file_hash(x).encode('UTF-8')) 
+                    m.update(file_hash(x).encode('UTF-8'))
             # Include the module attributes that change the compilation result
             # in the fingerprint. We do not iterate over module.__dict__ and
             # include almost everything here as users might extend Extension
@@ -661,24 +661,24 @@ class DependencyTree(object):
 
     def distutils_info0(self, filename):
         info = self.parse_dependencies(filename)[3]
-        kwds = info.values 
-        cimports, externs, incdirs = self.cimports_externs_incdirs(filename) 
-        basedir = os.getcwd() 
-        # Add dependencies on "cdef extern from ..." files 
+        kwds = info.values
+        cimports, externs, incdirs = self.cimports_externs_incdirs(filename)
+        basedir = os.getcwd()
+        # Add dependencies on "cdef extern from ..." files
         if externs:
-            externs = _make_relative(externs, basedir) 
-            if 'depends' in kwds: 
-                kwds['depends'] = list(set(kwds['depends']).union(externs)) 
+            externs = _make_relative(externs, basedir)
+            if 'depends' in kwds:
+                kwds['depends'] = list(set(kwds['depends']).union(externs))
             else:
-                kwds['depends'] = list(externs) 
-        # Add include_dirs to ensure that the C compiler will find the 
-        # "cdef extern from ..." files 
-        if incdirs: 
-            include_dirs = list(kwds.get('include_dirs', [])) 
-            for inc in _make_relative(incdirs, basedir): 
-                if inc not in include_dirs: 
-                    include_dirs.append(inc) 
-            kwds['include_dirs'] = include_dirs 
+                kwds['depends'] = list(externs)
+        # Add include_dirs to ensure that the C compiler will find the
+        # "cdef extern from ..." files
+        if incdirs:
+            include_dirs = list(kwds.get('include_dirs', []))
+            for inc in _make_relative(incdirs, basedir):
+                if inc not in include_dirs:
+                    include_dirs.append(inc)
+            kwds['include_dirs'] = include_dirs
         return info
 
     def distutils_info(self, filename, aliases=None, base=None):
@@ -731,20 +731,20 @@ def create_dependency_tree(ctx=None, quiet=False):
     return _dep_tree
 
 
-# If this changes, change also docs/src/reference/compilation.rst 
-# which mentions this function 
-def default_create_extension(template, kwds): 
-    if 'depends' in kwds: 
-        include_dirs = kwds.get('include_dirs', []) + ["."] 
-        depends = resolve_depends(kwds['depends'], include_dirs) 
-        kwds['depends'] = sorted(set(depends + template.depends)) 
- 
-    t = template.__class__ 
-    ext = t(**kwds) 
-    metadata = dict(distutils=kwds, module_name=kwds['name']) 
-    return (ext, metadata) 
- 
- 
+# If this changes, change also docs/src/reference/compilation.rst
+# which mentions this function
+def default_create_extension(template, kwds):
+    if 'depends' in kwds:
+        include_dirs = kwds.get('include_dirs', []) + ["."]
+        depends = resolve_depends(kwds['depends'], include_dirs)
+        kwds['depends'] = sorted(set(depends + template.depends))
+
+    t = template.__class__
+    ext = t(**kwds)
+    metadata = dict(distutils=kwds, module_name=kwds['name'])
+    return (ext, metadata)
+
+
 # This may be useful for advanced users?
 def create_extension_list(patterns, exclude=None, ctx=None, aliases=None, quiet=False, language=None,
                           exclude_failures=False):
@@ -778,14 +778,14 @@ def create_extension_list(patterns, exclude=None, ctx=None, aliases=None, quiet=
         Extension_distutils = Extension
         class Extension_setuptools(Extension): pass
 
-    # if no create_extension() function is defined, use a simple 
-    # default function. 
-    create_extension = ctx.options.create_extension or default_create_extension 
- 
+    # if no create_extension() function is defined, use a simple
+    # default function.
+    create_extension = ctx.options.create_extension or default_create_extension
+
     for pattern in patterns:
         if isinstance(pattern, str):
             filepattern = pattern
-            template = Extension(pattern, [])  # Fake Extension without sources 
+            template = Extension(pattern, [])  # Fake Extension without sources
             name = '*'
             base = None
             ext_language = language
@@ -793,11 +793,11 @@ def create_extension_list(patterns, exclude=None, ctx=None, aliases=None, quiet=
             cython_sources = [s for s in pattern.sources
                               if os.path.splitext(s)[1] in ('.py', '.pyx')]
             if cython_sources:
-                filepattern = cython_sources[0] 
-                if len(cython_sources) > 1: 
-                    print("Warning: Multiple cython sources found for extension '%s': %s\n" 
-                          "See http://cython.readthedocs.io/en/latest/src/userguide/sharing_declarations.html " 
-                          "for sharing declarations among Cython files." % (pattern.name, cython_sources)) 
+                filepattern = cython_sources[0]
+                if len(cython_sources) > 1:
+                    print("Warning: Multiple cython sources found for extension '%s': %s\n"
+                          "See http://cython.readthedocs.io/en/latest/src/userguide/sharing_declarations.html "
+                          "for sharing declarations among Cython files." % (pattern.name, cython_sources))
             else:
                 # ignore non-cython modules
                 module_list.append(pattern)
@@ -820,11 +820,11 @@ def create_extension_list(patterns, exclude=None, ctx=None, aliases=None, quiet=
             if '*' in name:
                 if module_name in explicit_modules:
                     continue
-            elif name: 
+            elif name:
                 module_name = name
 
             Utils.raise_error_if_module_name_forbidden(module_name)
- 
+
             if module_name not in seen:
                 try:
                     kwds = deps.distutils_info(file, aliases, base).values
@@ -837,41 +837,41 @@ def create_extension_list(patterns, exclude=None, ctx=None, aliases=None, quiet=
                         if key not in kwds:
                             kwds[key] = value
 
-                kwds['name'] = module_name 
- 
-                sources = [file] + [m for m in template.sources if m != filepattern] 
+                kwds['name'] = module_name
+
+                sources = [file] + [m for m in template.sources if m != filepattern]
                 if 'sources' in kwds:
                     # allow users to add .c files etc.
                     for source in kwds['sources']:
                         source = encode_filename_in_py2(source)
                         if source not in sources:
                             sources.append(source)
-                kwds['sources'] = sources 
+                kwds['sources'] = sources
 
                 if ext_language and 'language' not in kwds:
                     kwds['language'] = ext_language
 
-                np_pythran = kwds.pop('np_pythran', False) 
- 
-                # Create the new extension 
-                m, metadata = create_extension(template, kwds) 
-                m.np_pythran = np_pythran or getattr(m, 'np_pythran', False) 
-                if m.np_pythran: 
-                    update_pythran_extension(m) 
-                module_list.append(m) 
- 
-                # Store metadata (this will be written as JSON in the 
-                # generated C file but otherwise has no purpose) 
-                module_metadata[module_name] = metadata 
- 
+                np_pythran = kwds.pop('np_pythran', False)
+
+                # Create the new extension
+                m, metadata = create_extension(template, kwds)
+                m.np_pythran = np_pythran or getattr(m, 'np_pythran', False)
+                if m.np_pythran:
+                    update_pythran_extension(m)
+                module_list.append(m)
+
+                # Store metadata (this will be written as JSON in the
+                # generated C file but otherwise has no purpose)
+                module_metadata[module_name] = metadata
+
                 if file not in m.sources:
-                    # Old setuptools unconditionally replaces .pyx with .c/.cpp 
-                    target_file = os.path.splitext(file)[0] + ('.cpp' if m.language == 'c++' else '.c') 
-                    try: 
-                        m.sources.remove(target_file) 
-                    except ValueError: 
-                        # never seen this in the wild, but probably better to warn about this unexpected case 
-                        print("Warning: Cython source file not found in sources list, adding %s" % file) 
+                    # Old setuptools unconditionally replaces .pyx with .c/.cpp
+                    target_file = os.path.splitext(file)[0] + ('.cpp' if m.language == 'c++' else '.c')
+                    try:
+                        m.sources.remove(target_file)
+                    except ValueError:
+                        # never seen this in the wild, but probably better to warn about this unexpected case
+                        print("Warning: Cython source file not found in sources list, adding %s" % file)
                     m.sources.insert(0, file)
                 seen.add(name)
     return module_list, module_metadata
@@ -953,16 +953,16 @@ def cythonize(module_list, exclude=None, nthreads=0, aliases=None, quiet=False, 
         options['include_path'] = ['.']
     if 'common_utility_include_dir' in options:
         safe_makedirs(options['common_utility_include_dir'])
- 
+
     depfile = options.pop('depfile', None)
 
     if pythran is None:
         pythran_options = None
     else:
-        pythran_options = CompilationOptions(**options) 
-        pythran_options.cplus = True 
-        pythran_options.np_pythran = True 
- 
+        pythran_options = CompilationOptions(**options)
+        pythran_options.cplus = True
+        pythran_options.np_pythran = True
+
     c_options = CompilationOptions(**options)
     cpp_options = CompilationOptions(**options); cpp_options.cplus = True
     ctx = c_options.create_context()
@@ -978,42 +978,42 @@ def cythonize(module_list, exclude=None, nthreads=0, aliases=None, quiet=False, 
     deps = create_dependency_tree(ctx, quiet=quiet)
     build_dir = getattr(options, 'build_dir', None)
 
-    def copy_to_build_dir(filepath, root=os.getcwd()): 
-        filepath_abs = os.path.abspath(filepath) 
-        if os.path.isabs(filepath): 
-            filepath = filepath_abs 
-        if filepath_abs.startswith(root): 
-            # distutil extension depends are relative to cwd 
-            mod_dir = join_path(build_dir, 
-                                os.path.dirname(_relpath(filepath, root))) 
-            copy_once_if_newer(filepath_abs, mod_dir) 
- 
-    modules_by_cfile = collections.defaultdict(list) 
+    def copy_to_build_dir(filepath, root=os.getcwd()):
+        filepath_abs = os.path.abspath(filepath)
+        if os.path.isabs(filepath):
+            filepath = filepath_abs
+        if filepath_abs.startswith(root):
+            # distutil extension depends are relative to cwd
+            mod_dir = join_path(build_dir,
+                                os.path.dirname(_relpath(filepath, root)))
+            copy_once_if_newer(filepath_abs, mod_dir)
+
+    modules_by_cfile = collections.defaultdict(list)
     to_compile = []
     for m in module_list:
         if build_dir:
             for dep in m.depends:
                 copy_to_build_dir(dep)
 
-        cy_sources = [ 
-            source for source in m.sources 
-            if os.path.splitext(source)[1] in ('.pyx', '.py')] 
-        if len(cy_sources) == 1: 
-            # normal "special" case: believe the Extension module name to allow user overrides 
-            full_module_name = m.name 
-        else: 
-            # infer FQMN from source files 
-            full_module_name = None 
- 
+        cy_sources = [
+            source for source in m.sources
+            if os.path.splitext(source)[1] in ('.pyx', '.py')]
+        if len(cy_sources) == 1:
+            # normal "special" case: believe the Extension module name to allow user overrides
+            full_module_name = m.name
+        else:
+            # infer FQMN from source files
+            full_module_name = None
+
         new_sources = []
         for source in m.sources:
             base, ext = os.path.splitext(source)
             if ext in ('.pyx', '.py'):
-                if m.np_pythran: 
+                if m.np_pythran:
                     c_file = base + '.cpp'
-                    options = pythran_options 
-                elif m.language == 'c++': 
-                    c_file = base + '.cpp' 
+                    options = pythran_options
+                elif m.language == 'c++':
+                    c_file = base + '.cpp'
                     options = cpp_options
                 else:
                     c_file = base + '.c'
@@ -1061,7 +1061,7 @@ def cythonize(module_list, exclude=None, nthreads=0, aliases=None, quiet=False, 
                     dep_timestamp, dep = deps.newest_dependency(source)
                     priority = 2 - (dep in deps.immediate_dependencies(source))
                 if force or c_timestamp < dep_timestamp:
-                    if not quiet and not force: 
+                    if not quiet and not force:
                         if source == dep:
                             print("Compiling %s because it changed." % source)
                         else:
@@ -1070,12 +1070,12 @@ def cythonize(module_list, exclude=None, nthreads=0, aliases=None, quiet=False, 
                         fingerprint = deps.transitive_fingerprint(source, m, options)
                     else:
                         fingerprint = None
-                    to_compile.append(( 
-                        priority, source, c_file, fingerprint, quiet, 
-                        options, not exclude_failures, module_metadata.get(m.name), 
-                        full_module_name)) 
+                    to_compile.append((
+                        priority, source, c_file, fingerprint, quiet,
+                        options, not exclude_failures, module_metadata.get(m.name),
+                        full_module_name))
                 new_sources.append(c_file)
-                modules_by_cfile[c_file].append(m) 
+                modules_by_cfile[c_file].append(m)
             else:
                 new_sources.append(source)
                 if build_dir:
@@ -1191,15 +1191,15 @@ else:
 
 # TODO: Share context? Issue: pyx processing leaks into pxd module
 @record_results
-def cythonize_one(pyx_file, c_file, fingerprint, quiet, options=None, 
-                  raise_on_failure=True, embedded_metadata=None, full_module_name=None, 
-                  progress=""): 
-    from ..Compiler.Main import compile_single, default_options 
+def cythonize_one(pyx_file, c_file, fingerprint, quiet, options=None,
+                  raise_on_failure=True, embedded_metadata=None, full_module_name=None,
+                  progress=""):
+    from ..Compiler.Main import compile_single, default_options
     from ..Compiler.Errors import CompileError, PyrexError
 
     if fingerprint:
         if not os.path.exists(options.cache):
-            safe_makedirs(options.cache) 
+            safe_makedirs(options.cache)
         # Cython-generated c files are highly compressible.
         # (E.g. a compression ratio of about 10 for Sage).
         fingerprint_file_base = join_path(
@@ -1230,7 +1230,7 @@ def cythonize_one(pyx_file, c_file, fingerprint, quiet, options=None,
 
     any_failures = 0
     try:
-        result = compile_single(pyx_file, options, full_module_name=full_module_name) 
+        result = compile_single(pyx_file, options, full_module_name=full_module_name)
         if result.num_errors > 0:
             any_failures = 1
     except (EnvironmentError, PyrexError) as e:

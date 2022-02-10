@@ -29,14 +29,14 @@ RECURSE(
     bucket_quoter
     build_info
     cache
-    case_insensitive_string 
+    case_insensitive_string
     cgiparam
     cgiparam/fuzz
     cgiparam/ut
     charset
     charset/ut
     chromium_trace
-    clang_tidy 
+    clang_tidy
     clickhouse
     clustered_hnsw
     clustered_hnsw/ut
@@ -60,8 +60,8 @@ RECURSE(
     config
     config/extra
     config/ut
-    consistent_hash_ring 
-    consistent_hash_ring/ut 
+    consistent_hash_ring
+    consistent_hash_ring/ut
     consistent_hashing
     consistent_hashing/ut
     containers
@@ -142,7 +142,7 @@ RECURSE(
     getopt/last_getopt_demo
     getopt/small
     getopt/ut
-    getoptpb 
+    getoptpb
     gettimeofday
     gradient_optimize
     gradient_optimize/ut
@@ -290,7 +290,7 @@ RECURSE(
     proto_config/plugin
     proto_config/protos
     proto_config/ut
-    protobuf 
+    protobuf
     pybind
     pybind/example
     pybind/example/dynamic
@@ -342,7 +342,7 @@ RECURSE(
     sqlite3/ut
     sse
     ssh
-    ssh/ut 
+    ssh/ut
     ssh_sign
     ssh_sign/ut
     stat-handle
@@ -372,9 +372,9 @@ RECURSE(
     token/serialization
     token/serialization/ut
     token/ut
-    tokenclassifiers 
-    tokenizer 
-    tokenizer/ut 
+    tokenclassifiers
+    tokenizer
+    tokenizer/ut
     trace_usage
     trace_usage/benchmark
     trace_usage/ut

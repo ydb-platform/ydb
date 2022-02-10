@@ -1,14 +1,14 @@
-PROGRAM() 
- 
-OWNER(g:util) 
+PROGRAM()
+
+OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
- 
-SRCS( 
-    main.cpp 
-) 
- 
-NO_UTIL() 
- 
-BUILD_ONLY_IF(OS_WINDOWS) 
- 
-END() 
+
+SRCS(
+    main.cpp
+)
+
+NO_UTIL()
+
+BUILD_ONLY_IF(OS_WINDOWS)
+
+END()

@@ -6,7 +6,7 @@ RECURSE(
     benchmark/main
     boost_test
     boost_test_main
-    dump_clang_coverage 
+    dump_clang_coverage
     gbenchmark_main
     gmock
     gmock_in_unittest

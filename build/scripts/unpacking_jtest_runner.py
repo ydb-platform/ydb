@@ -1,10 +1,10 @@
-import io 
-import json 
-import optparse 
-import os 
+import io
+import json
+import optparse
+import os
 import sys
 import subprocess
-import time 
+import time
 import zipfile
 import platform
 
@@ -15,7 +15,7 @@ import platform
 def parse_args():
     parser = optparse.OptionParser()
     parser.disable_interspersed_args()
-    parser.add_option('--trace-file') 
+    parser.add_option('--trace-file')
     parser.add_option('--jar-binary')
     parser.add_option('--tests-jar-path')
     parser.add_option('--classpath-option-type', choices=('manifest', 'command_file', 'list'), default='manifest')
@@ -49,27 +49,27 @@ def fix_cmd(cmd):
     return cmd
 
 
-def dump_event(etype, data, filename): 
-    event = { 
-        'timestamp': time.time(), 
-        'value': data, 
-        'name': etype, 
-    } 
- 
-    with io.open(filename, 'a', encoding='utf8') as afile: 
-        afile.write(unicode(json.dumps(event) + '\n')) 
- 
- 
-def dump_chunk_event(data, filename): 
-    return dump_event('chunk-event', data, filename) 
- 
- 
-def extract_jars(dest, archive): 
-    os.makedirs(dest) 
-    with zipfile.ZipFile(archive) as zf: 
-        zf.extractall(dest) 
- 
- 
+def dump_event(etype, data, filename):
+    event = {
+        'timestamp': time.time(),
+        'value': data,
+        'name': etype,
+    }
+
+    with io.open(filename, 'a', encoding='utf8') as afile:
+        afile.write(unicode(json.dumps(event) + '\n'))
+
+
+def dump_chunk_event(data, filename):
+    return dump_event('chunk-event', data, filename)
+
+
+def extract_jars(dest, archive):
+    os.makedirs(dest)
+    with zipfile.ZipFile(archive) as zf:
+        zf.extractall(dest)
+
+
 def make_bfg_from_cp(class_path, out):
     class_path = ' '.join(
         map(lambda path: ('file:/' + path.lstrip('/')) if os.path.isabs(path) else path, class_path)
@@ -89,7 +89,7 @@ def make_command_file_from_cp(class_path, out):
 
 
 def main():
-    s = time.time() 
+    s = time.time()
     opts, args = parse_args()
 
     # unpack tests jar
@@ -100,13 +100,13 @@ def main():
         build_root = ''
         dest = os.path.abspath('test-classes')
 
-    extract_jars(dest, opts.tests_jar_path) 
- 
-    metrics = { 
-        'suite_jtest_extract_jars_(seconds)': time.time() - s, 
-    } 
- 
-    s = time.time() 
+    extract_jars(dest, opts.tests_jar_path)
+
+    metrics = {
+        'suite_jtest_extract_jars_(seconds)': time.time() - s,
+    }
+
+    s = time.time()
     # fix java classpath
     cp_idx = args.index('-classpath')
     if args[cp_idx + 1].startswith('@'):
@@ -131,12 +131,12 @@ def main():
     else:
         args[cp_idx + 1] = args[cp_idx + 1].replace(opts.tests_jar_path, dest)
         args = fix_cmd(args[:cp_idx]) + args[cp_idx:]
- 
-    metrics['suite_jtest_fix_classpath_(seconds)'] = time.time() - s 
- 
-    if opts.trace_file: 
-        dump_chunk_event({'metrics': metrics}, opts.trace_file) 
- 
+
+    metrics['suite_jtest_fix_classpath_(seconds)'] = time.time() - s
+
+    if opts.trace_file:
+        dump_chunk_event({'metrics': metrics}, opts.trace_file)
+
     # run java cmd
     if platform.system() == 'Windows':
         sys.exit(subprocess.Popen(args).wait())

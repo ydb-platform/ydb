@@ -68,7 +68,7 @@ def canonical_execute(
 ):
     """
     Shortcut to execute a binary and canonize its stdout
-    :param binary: absolute path to the binary 
+    :param binary: absolute path to the binary
     :param args: binary arguments
     :param check_exit_code: will raise ExecutionError if the command exits with non zero code
     :param shell: use shell to run the command
@@ -78,7 +78,7 @@ def canonical_execute(
     :param stdin: command stdin
     :param stderr: command stderr
     :param creationflags: command creation flags
-    :param file_name: output file name. if not specified program name will be used 
+    :param file_name: output file name. if not specified program name will be used
     :param diff_tool: path to custome diff tool
     :param diff_file_name: custom diff file name to create when diff is found
     :param diff_tool_timeout: timeout for running diff tool
@@ -94,7 +94,7 @@ def canonical_execute(
     execute_args = locals()
     del execute_args["binary"]
     del execute_args["args"]
-    del execute_args["file_name"] 
+    del execute_args["file_name"]
     del execute_args["save_locally"]
     del execute_args["diff_tool"]
     del execute_args["diff_file_name"]
@@ -123,7 +123,7 @@ def canonical_py_execute(
     :param stdin: command stdin
     :param stderr: command stderr
     :param creationflags: command creation flags
-    :param file_name: output file name. if not specified program name will be used 
+    :param file_name: output file name. if not specified program name will be used
     :param diff_tool: path to custome diff tool
     :param diff_file_name: custom diff file name to create when diff is found
     :param diff_tool_timeout: timeout for running diff tool
@@ -135,7 +135,7 @@ def canonical_py_execute(
     execute_args = locals()
     del execute_args["script_path"]
     del execute_args["args"]
-    del execute_args["file_name"] 
+    del execute_args["file_name"]
     del execute_args["save_locally"]
     del execute_args["diff_tool"]
     del execute_args["diff_file_name"]

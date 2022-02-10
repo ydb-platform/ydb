@@ -1,4 +1,4 @@
-OWNER( 
-    g:cpp-committee 
-    g:yatest 
-) 
+OWNER(
+    g:cpp-committee
+    g:yatest
+)

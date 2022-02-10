@@ -66,7 +66,7 @@ cdef extern from *:
         PyBUF_INDIRECT
         PyBUF_ND
         PyBUF_RECORDS
-        PyBUF_RECORDS_RO 
+        PyBUF_RECORDS_RO
 
     ctypedef struct __Pyx_TypeInfo:
         pass
@@ -227,8 +227,8 @@ cdef class array:
         flags =  PyBUF_ANY_CONTIGUOUS|PyBUF_FORMAT|PyBUF_WRITABLE
         return  memoryview(self, flags, self.dtype_is_object)
 
-    def __len__(self): 
-        return self._shape[0] 
+    def __len__(self):
+        return self._shape[0]
 
     def __getattr__(self, attr):
         return getattr(self.memview, attr)
@@ -414,9 +414,9 @@ cdef class memoryview(object):
             return self.convert_item_to_object(itemp)
 
     def __setitem__(memoryview self, object index, object value):
-        if self.view.readonly: 
-            raise TypeError("Cannot assign to read-only memoryview") 
- 
+        if self.view.readonly:
+            raise TypeError("Cannot assign to read-only memoryview")
+
         have_slices, index = _unellipsify(index, self.view.ndim)
 
         if have_slices:
@@ -516,9 +516,9 @@ cdef class memoryview(object):
 
     @cname('getbuffer')
     def __getbuffer__(self, Py_buffer *info, int flags):
-        if flags & PyBUF_WRITABLE and self.view.readonly: 
-            raise ValueError("Cannot create writable memory view from read-only memoryview") 
- 
+        if flags & PyBUF_WRITABLE and self.view.readonly:
+            raise ValueError("Cannot create writable memory view from read-only memoryview")
+
         if flags & PyBUF_ND:
             info.shape = self.view.shape
         else:
@@ -543,12 +543,12 @@ cdef class memoryview(object):
         info.ndim = self.view.ndim
         info.itemsize = self.view.itemsize
         info.len = self.view.len
-        info.readonly = self.view.readonly 
+        info.readonly = self.view.readonly
         info.obj = self
 
     __pyx_getbuffer = capsule(<void *> &__pyx_memoryview_getbuffer, "getbuffer(obj, view, flags)")
 
-    # Some properties that have the same semantics as in NumPy 
+    # Some properties that have the same semantics as in NumPy
     @property
     def T(self):
         cdef _memoryviewslice result = memoryview_copy(self)
@@ -1024,10 +1024,10 @@ cdef memoryview_fromslice({{memviewslice_name}} memviewslice,
     (<__pyx_buffer *> &result.view).obj = Py_None
     Py_INCREF(Py_None)
 
-    if (<memoryview>memviewslice.memview).flags & PyBUF_WRITABLE: 
-        result.flags = PyBUF_RECORDS 
-    else: 
-        result.flags = PyBUF_RECORDS_RO 
+    if (<memoryview>memviewslice.memview).flags & PyBUF_WRITABLE:
+        result.flags = PyBUF_RECORDS
+    else:
+        result.flags = PyBUF_RECORDS_RO
 
     result.view.shape = <Py_ssize_t *> result.from_slice.shape
     result.view.strides = <Py_ssize_t *> result.from_slice.strides
@@ -1354,7 +1354,7 @@ cdef void broadcast_leading({{memviewslice_name}} *mslice,
         mslice.suboffsets[i] = -1
 
 #
-### Take care of refcounting the objects in slices. Do this separately from any copying, 
+### Take care of refcounting the objects in slices. Do this separately from any copying,
 ### to minimize acquiring the GIL
 #
 

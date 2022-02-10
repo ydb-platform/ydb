@@ -1,12 +1,12 @@
 RESOURCES_LIBRARY()
 
-OWNER( 
-    g:contrib 
-    g:yatool 
-) 
+OWNER(
+    g:contrib
+    g:yatool
+)
 
-INCLUDE(resources.inc) 
- 
+INCLUDE(resources.inc)
+
 IF (USE_SYSTEM_PYTHON)
     IF (OS_LINUX)
         IF (ARCH_ARM64 OR ARCH_AARCH64)
@@ -130,7 +130,7 @@ ELSEIF (NOT USE_ARCADIA_PYTHON)
 ENDIF()
 
 END()
- 
-RECURSE_FOR_TESTS( 
-    tests 
-) 
+
+RECURSE_FOR_TESTS(
+    tests
+)

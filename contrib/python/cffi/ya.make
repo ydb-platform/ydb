@@ -18,8 +18,8 @@ ADDINCL(
 NO_COMPILER_WARNINGS()
 NO_LINT()
 
-SUPPRESSIONS(lsan.supp) 
- 
+SUPPRESSIONS(lsan.supp)
+
 SRCS(
     c/_cffi_backend.c
 )

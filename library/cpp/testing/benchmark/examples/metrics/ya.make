@@ -5,12 +5,12 @@ OWNER(
 
 PY2TEST()
 
-SIZE(LARGE) 
+SIZE(LARGE)
 
 TAG(
     ya:force_sandbox
     sb:intel_e5_2660v1
-    ya:fat 
+    ya:fat
 )
 
 TEST_SRCS(main.py)

@@ -1,8 +1,8 @@
 RESOURCES_LIBRARY()
-OWNER( 
-    g:yatest 
-    heretic 
-) 
+OWNER(
+    g:yatest
+    heretic
+)
 
 IF (TEST_TOOL_HOST_LOCAL)
     MESSAGE(WARNING Host test tool $TEST_TOOL_HOST_LOCAL will be used)

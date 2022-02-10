@@ -84,8 +84,8 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
 
     Y_UNIT_TEST(TestHttpInput) {
         TString res = "I'm a teapot";
-        TPortManager pm; 
-        const ui16 port = pm.GetPort(); 
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
 
         TTestHttpServer serverImpl(res);
         THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).EnableCompression(true));
@@ -238,8 +238,8 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
 
     Y_UNIT_TEST(TestMinRequest) {
         TString res = "qqqqqq";
-        TPortManager pm; 
-        const ui16 port = pm.GetPort(); 
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
 
         TTestHttpServer serverImpl(res);
         THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).EnableCompression(true));
@@ -264,8 +264,8 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
 
     Y_UNIT_TEST(TestResponseWithBlanks) {
         TString res = "qqqqqq\r\n\r\nsdasdsad\r\n";
-        TPortManager pm; 
-        const ui16 port = pm.GetPort(); 
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
 
         TTestHttpServer serverImpl(res);
         THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).EnableCompression(true));

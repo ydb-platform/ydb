@@ -42,7 +42,7 @@ RECURSE(
     cookiemy
     coredump_filter
     cores
-    coverage 
+    coverage
     cpp_test
     cppdemangle
     cqueue

@@ -2,7 +2,7 @@
 (C) Ronny Pfannschmidt, Holger Krekel -- MIT licensed
 """
 import io
- 
+
 __all__ = ['IniConfig', 'ParseError']
 
 COMMENTCHARS = "#;"
@@ -51,14 +51,14 @@ class IniConfig(object):
     def __init__(self, path, data=None):
         self.path = str(path)  # convenience
         if data is None:
-            if self.path.startswith('pkg:'): 
-                import pkgutil 
- 
-                _, package, resource = self.path.split(':') 
-                content = pkgutil.get_data(package, resource) 
+            if self.path.startswith('pkg:'):
+                import pkgutil
+
+                _, package, resource = self.path.split(':')
+                content = pkgutil.get_data(package, resource)
                 f = io.StringIO(content.decode('utf-8'))
-            else: 
-                f = open(self.path) 
+            else:
+                f = open(self.path)
             try:
                 tokens = self._parse(iter(f))
             finally:

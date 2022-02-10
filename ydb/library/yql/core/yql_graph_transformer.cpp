@@ -380,7 +380,7 @@ void AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExpr
                     std::function<void(const IGraphTransformer::TStatus&)> asyncCallback) {
     NThreading::TFuture<IGraphTransformer::TStatus> status = AsyncTransform(transformer, root, ctx, applyAsyncChanges);
     status.Subscribe(
-       [asyncCallback](const NThreading::TFuture<IGraphTransformer::TStatus>& status) mutable -> void { 
+       [asyncCallback](const NThreading::TFuture<IGraphTransformer::TStatus>& status) mutable -> void {
            YQL_ENSURE(!status.HasException());
            asyncCallback(status.GetValue());
        });

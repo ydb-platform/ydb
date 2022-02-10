@@ -109,14 +109,14 @@ class AnnotationCCodeWriter(CCodeWriter):
         .cython.code .c_call  { color: #0000FF; }
     """)
 
-    # on-click toggle function to show/hide C source code 
-    _onclick_attr = ' onclick="{0}"'.format(( 
-        "(function(s){" 
-        "    s.display =  s.display === 'block' ? 'none' : 'block'" 
-        "})(this.nextElementSibling.style)" 
-        ).replace(' ', '')  # poor dev's JS minification 
-    ) 
- 
+    # on-click toggle function to show/hide C source code
+    _onclick_attr = ' onclick="{0}"'.format((
+        "(function(s){"
+        "    s.display =  s.display === 'block' ? 'none' : 'block'"
+        "})(this.nextElementSibling.style)"
+        ).replace(' ', '')  # poor dev's JS minification
+    )
+
     def save_annotation(self, source_filename, target_filename, coverage_xml=None):
         with Utils.open_source_file(source_filename) as f:
             code = f.read()
@@ -151,7 +151,7 @@ class AnnotationCCodeWriter(CCodeWriter):
                 <span style="background-color: #FFFF00">Yellow lines</span> hint at Python interaction.<br />
                 Click on a line that starts with a "<code>+</code>" to see the C code that Cython generated for it.
             </p>
-            ''').format(css=self._css(), watermark=Version.watermark, 
+            ''').format(css=self._css(), watermark=Version.watermark,
                         filename=os.path.basename(source_filename) if source_filename else '',
                         more_info=coverage_info)
         ]
@@ -253,7 +253,7 @@ class AnnotationCCodeWriter(CCodeWriter):
                      calls['py_macro_api'] + calls['pyx_macro_api'])
 
             if c_code:
-                onclick = self._onclick_attr 
+                onclick = self._onclick_attr
                 expandsymbol = '+'
             else:
                 onclick = ''
@@ -294,7 +294,7 @@ _parse_code = re.compile((
     br'(?P<py_macro_api>Py[A-Z][a-z]+_[A-Z][A-Z_]+)|'
     br'(?P<py_c_api>Py[A-Z][a-z]+_[A-Z][a-z][A-Za-z_]*)'
     br')(?=\()|'       # look-ahead to exclude subsequent '(' from replacement
-    br'(?P<error_goto>(?:(?<=;) *if [^;]* +)?__PYX_ERR\([^)]+\))' 
+    br'(?P<error_goto>(?:(?<=;) *if [^;]* +)?__PYX_ERR\([^)]+\))'
 ).decode('ascii')).sub
 
 

@@ -1,10 +1,10 @@
 """Cython.Distutils.old_build_ext
 
 Implements a version of the Distutils 'build_ext' command, for
-building Cython extension modules. 
+building Cython extension modules.
 
-Note that this module is deprecated.  Use cythonize() instead. 
-""" 
+Note that this module is deprecated.  Use cythonize() instead.
+"""
 
 __revision__ = "$Id:$"
 

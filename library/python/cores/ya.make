@@ -1,6 +1,6 @@
 OWNER(
     prettyboy
-    g:yatest 
+    g:yatest
 )
 
 PY23_LIBRARY()

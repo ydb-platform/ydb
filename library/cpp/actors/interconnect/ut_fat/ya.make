@@ -7,7 +7,7 @@ OWNER(
 
 SIZE(LARGE)
 
-TAG(ya:fat) 
+TAG(ya:fat)
 
 SRCS(
     main.cpp

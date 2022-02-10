@@ -13,52 +13,52 @@ cdef extern from "<signal.h>" nogil:
     sighandler_t signal        (int signum, sighandler_t action)
     int          raise_"raise" (int signum)
 
-    # Signals 
-    enum: 
-        # Program Error 
-        SIGFPE 
-        SIGILL 
-        SIGSEGV 
-        SIGBUS 
-        SIGABRT 
-        SIGIOT 
-        SIGTRAP 
-        SIGEMT 
-        SIGSYS 
-        SIGSTKFLT 
-        # Termination 
-        SIGTERM 
-        SIGINT 
-        SIGQUIT 
-        SIGKILL 
-        SIGHUP 
-        # Alarm 
-        SIGALRM 
-        SIGVTALRM 
-        SIGPROF 
-        # Asynchronous I/O 
-        SIGIO 
-        SIGURG 
-        SIGPOLL 
-        # Job Control 
-        SIGCHLD 
-        SIGCLD 
-        SIGCONT 
-        SIGSTOP 
-        SIGTSTP 
-        SIGTTIN 
-        SIGTTOU 
-        # Operation Error 
-        SIGPIPE 
-        SIGLOST 
-        SIGXCPU 
-        SIGXFSZ 
-        SIGPWR 
-        # Miscellaneous 
-        SIGUSR1 
-        SIGUSR2 
-        SIGWINCH 
-        SIGINFO 
-        # Real-time signals 
-        SIGRTMIN 
-        SIGRTMAX 
+    # Signals
+    enum:
+        # Program Error
+        SIGFPE
+        SIGILL
+        SIGSEGV
+        SIGBUS
+        SIGABRT
+        SIGIOT
+        SIGTRAP
+        SIGEMT
+        SIGSYS
+        SIGSTKFLT
+        # Termination
+        SIGTERM
+        SIGINT
+        SIGQUIT
+        SIGKILL
+        SIGHUP
+        # Alarm
+        SIGALRM
+        SIGVTALRM
+        SIGPROF
+        # Asynchronous I/O
+        SIGIO
+        SIGURG
+        SIGPOLL
+        # Job Control
+        SIGCHLD
+        SIGCLD
+        SIGCONT
+        SIGSTOP
+        SIGTSTP
+        SIGTTIN
+        SIGTTOU
+        # Operation Error
+        SIGPIPE
+        SIGLOST
+        SIGXCPU
+        SIGXFSZ
+        SIGPWR
+        # Miscellaneous
+        SIGUSR1
+        SIGUSR2
+        SIGWINCH
+        SIGINFO
+        # Real-time signals
+        SIGRTMIN
+        SIGRTMAX

@@ -1,8 +1,8 @@
-OWNER(g:yatest) 
+OWNER(g:yatest)
 
 RECURSE(
     behave
-    deprecated 
+    deprecated
     fake_ya_package
     filter
     gtest
@@ -15,8 +15,8 @@ RECURSE(
     recipe
     system_info
     types_test
-    yapackage 
-    yapackage/test 
+    yapackage
+    yapackage/test
     yatest_common
     yatest_lib
 )

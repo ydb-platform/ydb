@@ -1665,44 +1665,44 @@ class GnuCompiler(Compiler):
         append('EXTRA_OUTPUT')
 
         style = ['${requirements;hide:CC_REQUIREMENTS} ${hide;kv:"p CC"} ${hide;kv:"pc green"}']
-        cxx_args = [ 
+        cxx_args = [
             '$CLANG_TIDY_ARGS',
-            '$YNDEXER_ARGS', 
-            '$CXX_COMPILER', 
-            '$C_FLAGS_PLATFORM', 
-            '$GCC_COMPILE_FLAGS', 
-            '$CXXFLAGS', 
-            '$CL_MACRO_INFO', 
-            '$CL_MACRO_INFO_DISABLE_CACHE__NO_UID__', 
+            '$YNDEXER_ARGS',
+            '$CXX_COMPILER',
+            '$C_FLAGS_PLATFORM',
+            '$GCC_COMPILE_FLAGS',
+            '$CXXFLAGS',
+            '$CL_MACRO_INFO',
+            '$CL_MACRO_INFO_DISABLE_CACHE__NO_UID__',
             '$COMPILER_TIME_TRACE_FLAGS',
-            '$EXTRA_OUTPUT', 
-            '$SRCFLAGS', 
+            '$EXTRA_OUTPUT',
+            '$SRCFLAGS',
             '$_LANG_CFLAGS_VALUE',
             '${input:SRC}',
-            '$TOOLCHAIN_ENV', 
+            '$TOOLCHAIN_ENV',
             '$YNDEXER_OUTPUT',
             '&& $COMPILER_TIME_TRACE_POSTPROCESS',
-        ] + style 
+        ] + style
 
-        c_args = [ 
+        c_args = [
             '$CLANG_TIDY_ARGS',
-            '$YNDEXER_ARGS', 
-            '$C_COMPILER', 
-            '$C_FLAGS_PLATFORM', 
-            '$GCC_COMPILE_FLAGS', 
-            '$CFLAGS', 
-            '$CL_MACRO_INFO', 
-            '$CL_MACRO_INFO_DISABLE_CACHE__NO_UID__', 
-            '$CONLYFLAGS', 
+            '$YNDEXER_ARGS',
+            '$C_COMPILER',
+            '$C_FLAGS_PLATFORM',
+            '$GCC_COMPILE_FLAGS',
+            '$CFLAGS',
+            '$CL_MACRO_INFO',
+            '$CL_MACRO_INFO_DISABLE_CACHE__NO_UID__',
+            '$CONLYFLAGS',
             '$COMPILER_TIME_TRACE_FLAGS',
-            '$EXTRA_OUTPUT', 
-            '$SRCFLAGS', 
+            '$EXTRA_OUTPUT',
+            '$SRCFLAGS',
             '${input:SRC}',
-            '$TOOLCHAIN_ENV', 
+            '$TOOLCHAIN_ENV',
             '$YNDEXER_OUTPUT',
             '&& $COMPILER_TIME_TRACE_POSTPROCESS',
-        ] + style 
- 
+        ] + style
+
         ignore_c_args_no_deps = [
             '${input:SRC}',
             '$SRCFLAGS',
@@ -2269,11 +2269,11 @@ class MSVCToolchainOptions(ToolchainOptions):
             def prefix(_type, _path):
                 if not self.under_wine:
                     return _path
-                return '{wine} {type} $WINE_ENV ${{ARCADIA_ROOT}} ${{ARCADIA_BUILD_ROOT}} {path}'.format( 
-                    wine='${YMAKE_PYTHON} ${input:\"build/scripts/run_msvc_wine.py\"} $(WINE_TOOL-sbr:1093314933)/bin/wine64 -v140', 
-                    type=_type, 
-                    path=_path 
-                ) 
+                return '{wine} {type} $WINE_ENV ${{ARCADIA_ROOT}} ${{ARCADIA_BUILD_ROOT}} {path}'.format(
+                    wine='${YMAKE_PYTHON} ${input:\"build/scripts/run_msvc_wine.py\"} $(WINE_TOOL-sbr:1093314933)/bin/wine64 -v140',
+                    type=_type,
+                    path=_path
+                )
 
             self.masm_compiler = prefix('masm', os.path.join(bindir, tools_name, asm_name))
             self.link = prefix('link', os.path.join(bindir, tools_name, 'link.exe'))

@@ -6,7 +6,7 @@
 
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/writer/json_value.h>
-#include <library/cpp/testing/common/env.h> 
+#include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/hook/hook.h>
 
 #include <util/datetime/base.h>
@@ -19,9 +19,9 @@
 
 #include <util/network/init.h>
 
-#include <util/stream/file.h> 
+#include <util/stream/file.h>
 #include <util/stream/output.h>
-#include <util/string/join.h> 
+#include <util/string/join.h>
 #include <util/string/util.h>
 
 #include <util/system/defaults.h>
@@ -46,8 +46,8 @@
 #define NOTE_IN_VALGRIND(test)
 #endif
 
-const size_t MAX_COMMENT_MESSAGE_LENGTH = 1024 * 1024; // 1 MB 
- 
+const size_t MAX_COMMENT_MESSAGE_LENGTH = 1024 * 1024; // 1 MB
+
 using namespace NUnitTest;
 
 class TNullTraceWriterProcessor: public ITestSuiteProcessor {
@@ -56,8 +56,8 @@ class TNullTraceWriterProcessor: public ITestSuiteProcessor {
 class TTraceWriterProcessor: public ITestSuiteProcessor {
 public:
     inline TTraceWriterProcessor(const char* traceFilePath, EOpenMode mode)
-        : PrevTime(TInstant::Now()) 
-    { 
+        : PrevTime(TInstant::Now())
+    {
         TraceFile = new TUnbufferedFileOutput(TFile(traceFilePath, mode | WrOnly | Seq));
     }
 
@@ -68,17 +68,17 @@ private:
     TVector<TString> ErrorMessages;
 
     inline void Trace(const TString eventName, const NJson::TJsonValue eventValue) {
-        NJsonWriter::TBuf json(NJsonWriter::HEM_UNSAFE); 
-        json.BeginObject(); 
- 
-        json.WriteKey("name").WriteString(eventName); 
-        json.WriteKey("value").WriteJsonValue(&eventValue); 
-        json.WriteKey("timestamp").WriteDouble(TInstant::Now().SecondsFloat(), PREC_NDIGITS, 14); 
- 
-        json.EndObject(); 
- 
-        json.FlushTo(TraceFile.Get()); 
-        *TraceFile << "\n"; 
+        NJsonWriter::TBuf json(NJsonWriter::HEM_UNSAFE);
+        json.BeginObject();
+
+        json.WriteKey("name").WriteString(eventName);
+        json.WriteKey("value").WriteJsonValue(&eventValue);
+        json.WriteKey("timestamp").WriteDouble(TInstant::Now().SecondsFloat(), PREC_NDIGITS, 14);
+
+        json.EndObject();
+
+        json.FlushTo(TraceFile.Get());
+        *TraceFile << "\n";
     }
 
     inline void TraceSubtestFinished(const char* className, const char* subtestName, const char* status, const TString comment, const TTestContext* context) {
@@ -88,43 +88,43 @@ private:
         event.InsertValue("subtest", subtestName);
         event.InsertValue("status", status);
         event.InsertValue("comment", comment.data());
-        event.InsertValue("time", (now - PrevTime).SecondsFloat()); 
+        event.InsertValue("time", (now - PrevTime).SecondsFloat());
         if (context) {
             for (const auto& metric : context->Metrics) {
                 event["metrics"].InsertValue(metric.first, metric.second);
             }
         }
         Trace("subtest-finished", event);
- 
+
         PrevTime = now;
         TString marker = Join("", "\n###subtest-finished:", className, "::", subtestName, "\n");
-        Cout << marker; 
-        Cout.Flush(); 
-        Cerr << comment; 
-        Cerr << marker; 
-        Cerr.Flush(); 
+        Cout << marker;
+        Cout.Flush();
+        Cerr << comment;
+        Cerr << marker;
+        Cerr.Flush();
     }
 
     virtual TString BuildComment(const char* message, const char* backTrace) {
-        return NUnitTest::GetFormatTag("bad") + 
+        return NUnitTest::GetFormatTag("bad") +
                TString(message).substr(0, MAX_COMMENT_MESSAGE_LENGTH) +
                NUnitTest::GetResetTag() +
                TString("\n") +
                NUnitTest::GetFormatTag("alt1") +
                TString(backTrace).substr(0, MAX_COMMENT_MESSAGE_LENGTH) +
                NUnitTest::GetResetTag();
-    } 
- 
+    }
+
     void OnBeforeTest(const TTest* test) override {
         NJson::TJsonValue event;
         event.InsertValue("class", test->unit->name);
         event.InsertValue("subtest", test->name);
         Trace("subtest-started", event);
         TString marker = Join("", "\n###subtest-started:", test->unit->name, "::", test->name, "\n");
-        Cout << marker; 
-        Cout.Flush(); 
-        Cerr << marker; 
-        Cerr.Flush(); 
+        Cout << marker;
+        Cout.Flush();
+        Cerr << marker;
+        Cerr.Flush();
     }
 
     void OnUnitStart(const TUnit* unit) override {
@@ -552,13 +552,13 @@ public:
         if (Verbose_) {
             return true;
         } else {
-            Stream_ << name << "\n"; 
+            Stream_ << name << "\n";
             return false;
         }
     }
 
     bool CheckAccessTest(TString suite, const char* name) override {
-        Stream_ << suite << "::" << name << "\n"; 
+        Stream_ << suite << "::" << name << "\n";
         return false;
     }
 
@@ -601,7 +601,7 @@ static const TWinEnvironment Instance;
 #endif // _win_
 
 static int DoList(bool verbose, IOutputStream& stream) {
-    TEnumeratingProcessor eproc(verbose, stream); 
+    TEnumeratingProcessor eproc(verbose, stream);
     TTestFactory::Instance().SetProcessor(&eproc);
     TTestFactory::Instance().Execute();
     return 0;
@@ -625,28 +625,28 @@ static int DoUsage(const char* progname) {
     return 0;
 }
 
-#if defined(_linux_) && defined(CLANG_COVERAGE) 
-extern "C" int __llvm_profile_write_file(void); 
- 
-static void GracefulShutdownHandler(int) { 
-    try { 
-        __llvm_profile_write_file(); 
-    } catch (...) { 
-    } 
-    abort(); 
-} 
-#endif 
- 
+#if defined(_linux_) && defined(CLANG_COVERAGE)
+extern "C" int __llvm_profile_write_file(void);
+
+static void GracefulShutdownHandler(int) {
+    try {
+        __llvm_profile_write_file();
+    } catch (...) {
+    }
+    abort();
+}
+#endif
+
 int NUnitTest::RunMain(int argc, char** argv) {
-#if defined(_linux_) && defined(CLANG_COVERAGE) 
-    { 
-        struct sigaction sa; 
-        memset(&sa, 0, sizeof(sa)); 
-        sa.sa_handler = GracefulShutdownHandler; 
-        sa.sa_flags = SA_SIGINFO | SA_RESTART; 
-        Y_VERIFY(!sigaction(SIGUSR2, &sa, nullptr)); 
-    } 
-#endif 
+#if defined(_linux_) && defined(CLANG_COVERAGE)
+    {
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = GracefulShutdownHandler;
+        sa.sa_flags = SA_SIGINFO | SA_RESTART;
+        Y_VERIFY(!sigaction(SIGUSR2, &sa, nullptr));
+    }
+#endif
     NTesting::THook::CallBeforeInit();
     InitNetworkSubSystem();
 
@@ -668,13 +668,13 @@ int NUnitTest::RunMain(int argc, char** argv) {
         IOutputStream* listStream = &Cout;
         THolder<IOutputStream> listFile;
 
-        enum EListType { 
-            DONT_LIST, 
-            LIST, 
-            LIST_VERBOSE 
-        }; 
-        EListType listTests = DONT_LIST; 
- 
+        enum EListType {
+            DONT_LIST,
+            LIST,
+            LIST_VERBOSE
+        };
+        EListType listTests = DONT_LIST;
+
         for (size_t i = 1; i < (size_t)argc; ++i) {
             const char* name = argv[i];
 
@@ -682,9 +682,9 @@ int NUnitTest::RunMain(int argc, char** argv) {
                 if (strcmp(name, "--help") == 0 || strcmp(name, "-h") == 0) {
                     return DoUsage(argv[0]);
                 } else if (strcmp(name, "--list") == 0 || strcmp(name, "-l") == 0) {
-                    listTests = LIST; 
+                    listTests = LIST;
                 } else if (strcmp(name, "--list-verbose") == 0 || strcmp(name, "-A") == 0) {
-                    listTests = LIST_VERBOSE; 
+                    listTests = LIST_VERBOSE;
                 } else if (strcmp(name, "--print-before-suite=false") == 0) {
                     processor.SetPrintBeforeSuite(false);
                 } else if (strcmp(name, "--print-before-test=false") == 0) {
@@ -718,20 +718,20 @@ int NUnitTest::RunMain(int argc, char** argv) {
                     processor.BeQuiet();
                     NUnitTest::ShouldColorizeDiff = false;
                     processor.SetTraceProcessor(new TTraceWriterProcessor(argv[i], CreateAlways));
-                } else if (strcmp(name, "--trace-path-append") == 0) { 
+                } else if (strcmp(name, "--trace-path-append") == 0) {
                     ++i;
                     processor.BeQuiet();
                     NUnitTest::ShouldColorizeDiff = false;
-                    processor.SetTraceProcessor(new TTraceWriterProcessor(argv[i], OpenAlways | ForAppend)); 
-                } else if (strcmp(name, "--list-path") == 0) { 
-                    ++i; 
+                    processor.SetTraceProcessor(new TTraceWriterProcessor(argv[i], OpenAlways | ForAppend));
+                } else if (strcmp(name, "--list-path") == 0) {
+                    ++i;
                     listFile = MakeHolder<TFixedBufferFileOutput>(argv[i]);
-                    listStream = listFile.Get(); 
+                    listStream = listFile.Get();
                 } else if (strcmp(name, "--test-param") == 0) {
                     ++i;
                     TString param(argv[i]);
                     size_t assign = param.find('=');
-                    Singleton<::NPrivate::TTestEnv>()->AddTestParam(param.substr(0, assign), param.substr(assign + 1)); 
+                    Singleton<::NPrivate::TTestEnv>()->AddTestParam(param.substr(0, assign), param.substr(assign + 1));
                 } else if (TString(name).StartsWith("--")) {
                     return DoUsage(argv[0]), 1;
                 } else if (*name == '-') {
@@ -743,9 +743,9 @@ int NUnitTest::RunMain(int argc, char** argv) {
                 }
             }
         }
-        if (listTests != DONT_LIST) { 
-            return DoList(listTests == LIST_VERBOSE, *listStream); 
-        } 
+        if (listTests != DONT_LIST) {
+            return DoList(listTests == LIST_VERBOSE, *listStream);
+        }
 
         TTestFactory::Instance().SetProcessor(&processor);
 

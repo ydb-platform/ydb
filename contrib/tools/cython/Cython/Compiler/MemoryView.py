@@ -28,12 +28,12 @@ def concat_flags(*flags):
 
 format_flag = "PyBUF_FORMAT"
 
-memview_c_contiguous = "(PyBUF_C_CONTIGUOUS | PyBUF_FORMAT)" 
-memview_f_contiguous = "(PyBUF_F_CONTIGUOUS | PyBUF_FORMAT)" 
-memview_any_contiguous = "(PyBUF_ANY_CONTIGUOUS | PyBUF_FORMAT)" 
-memview_full_access = "PyBUF_FULL_RO" 
-#memview_strided_access = "PyBUF_STRIDED_RO" 
-memview_strided_access = "PyBUF_RECORDS_RO" 
+memview_c_contiguous = "(PyBUF_C_CONTIGUOUS | PyBUF_FORMAT)"
+memview_f_contiguous = "(PyBUF_F_CONTIGUOUS | PyBUF_FORMAT)"
+memview_any_contiguous = "(PyBUF_ANY_CONTIGUOUS | PyBUF_FORMAT)"
+memview_full_access = "PyBUF_FULL_RO"
+#memview_strided_access = "PyBUF_STRIDED_RO"
+memview_strided_access = "PyBUF_RECORDS_RO"
 
 MEMVIEW_DIRECT = '__Pyx_MEMVIEW_DIRECT'
 MEMVIEW_PTR    = '__Pyx_MEMVIEW_PTR'
@@ -392,15 +392,15 @@ def get_memoryview_flag(access, packing):
         return 'contiguous'
 
 
-def get_is_contig_func_name(contig_type, ndim): 
-    assert contig_type in ('C', 'F') 
-    return "__pyx_memviewslice_is_contig_%s%d" % (contig_type, ndim) 
+def get_is_contig_func_name(contig_type, ndim):
+    assert contig_type in ('C', 'F')
+    return "__pyx_memviewslice_is_contig_%s%d" % (contig_type, ndim)
 
 
-def get_is_contig_utility(contig_type, ndim): 
-    assert contig_type in ('C', 'F') 
-    C = dict(context, ndim=ndim, contig_type=contig_type) 
-    utility = load_memview_c_utility("MemviewSliceCheckContig", C, requires=[is_contig_utility]) 
+def get_is_contig_utility(contig_type, ndim):
+    assert contig_type in ('C', 'F')
+    C = dict(context, ndim=ndim, contig_type=contig_type)
+    utility = load_memview_c_utility("MemviewSliceCheckContig", C, requires=[is_contig_utility])
     return utility
 
 
@@ -816,7 +816,7 @@ memviewslice_declare_code = load_memview_c_utility(
         context=context,
         requires=[])
 
-atomic_utility = load_memview_c_utility("Atomics", context) 
+atomic_utility = load_memview_c_utility("Atomics", context)
 
 memviewslice_init_code = load_memview_c_utility(
     "MemviewSliceInit",
@@ -843,7 +843,7 @@ view_utility_code = load_memview_cy_utility(
         context=context,
         requires=[Buffer.GetAndReleaseBufferUtilityCode(),
                   Buffer.buffer_struct_declare_code,
-                  Buffer.buffer_formats_declare_code, 
+                  Buffer.buffer_formats_declare_code,
                   memviewslice_init_code,
                   is_contig_utility,
                   overlapping_utility,

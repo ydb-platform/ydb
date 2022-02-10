@@ -43,33 +43,33 @@ cdef class ExpandInplaceOperators(EnvTransform):
 
 cdef class AlignFunctionDefinitions(CythonTransform):
     cdef dict directives
-    cdef set imported_names 
-    cdef object scope 
+    cdef set imported_names
+    cdef object scope
 
-@cython.final 
+@cython.final
 cdef class YieldNodeCollector(TreeVisitor):
     cdef public list yields
     cdef public list returns
-    cdef public list finallys 
-    cdef public list excepts 
+    cdef public list finallys
+    cdef public list excepts
     cdef public bint has_return_value
-    cdef public bint has_yield 
-    cdef public bint has_await 
+    cdef public bint has_yield
+    cdef public bint has_await
 
-@cython.final 
+@cython.final
 cdef class MarkClosureVisitor(CythonTransform):
     cdef bint needs_closure
 
-@cython.final 
+@cython.final
 cdef class CreateClosureClasses(CythonTransform):
     cdef list path
     cdef bint in_lambda
     cdef module_scope
     cdef generator_class
 
-    cdef create_class_from_scope(self, node, target_module_scope, inner_node=*) 
-    cdef find_entries_used_in_closures(self, node) 
- 
+    cdef create_class_from_scope(self, node, target_module_scope, inner_node=*)
+    cdef find_entries_used_in_closures(self, node)
+
 #cdef class InjectGilHandling(VisitorTransform, SkipDeclarations):
 #    cdef bint nogil
 

@@ -9,8 +9,8 @@ PEERDIR(
     library/cpp/http/io
 )
 
-SIZE(MEDIUM) 
- 
+SIZE(MEDIUM)
+
 SRCS(
     main.cpp
 )

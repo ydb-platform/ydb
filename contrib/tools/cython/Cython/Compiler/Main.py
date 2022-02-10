@@ -9,8 +9,8 @@ import re
 import sys
 import io
 
-if sys.version_info[:2] < (2, 6) or (3, 0) <= sys.version_info[:2] < (3, 3): 
-    sys.stderr.write("Sorry, Cython requires Python 2.6+ or 3.3+, found %d.%d\n" % tuple(sys.version_info[:2])) 
+if sys.version_info[:2] < (2, 6) or (3, 0) <= sys.version_info[:2] < (3, 3):
+    sys.stderr.write("Sorry, Cython requires Python 2.6+ or 3.3+, found %d.%d\n" % tuple(sys.version_info[:2]))
     sys.exit(1)
 
 try:
@@ -23,7 +23,7 @@ except ImportError:
 # conditional metaclass. These options are processed by CmdLine called from
 # main() in this file.
 # import Parsing
-from . import Errors 
+from . import Errors
 from .StringEncoding import EncodedString
 from .Scanning import PyrexScanner, FileSourceDescriptor
 from .Errors import PyrexError, CompileError, error, warning
@@ -40,7 +40,7 @@ verbose = 0
 
 standard_include_path = os.path.abspath(os.path.join(os.path.dirname(__file__),
                                         os.path.pardir, 'Includes'))
- 
+
 class CompilationData(object):
     #  Bundles the information that is passed from transform to transform.
     #  (For now, this is only)
@@ -55,7 +55,7 @@ class CompilationData(object):
     #  result                CompilationResult
     pass
 
- 
+
 class Context(object):
     #  This class encapsulates the context needed for compiling
     #  one or more Cython implementation files along with their
@@ -226,8 +226,8 @@ class Context(object):
                     rel_path = module_name.replace('.', os.sep) + os.path.splitext(pxd_pathname)[1]
                     if not pxd_pathname.endswith(rel_path):
                         rel_path = pxd_pathname  # safety measure to prevent printing incorrect paths
-                    if Options.source_root: 
-                        rel_path = os.path.relpath(pxd_pathname, Options.source_root) 
+                    if Options.source_root:
+                        rel_path = os.path.relpath(pxd_pathname, Options.source_root)
                     source_desc = FileSourceDescriptor(pxd_pathname, rel_path)
                     err, result = self.process_pxd(source_desc, scope, qualified_name)
                     if err:
@@ -250,7 +250,7 @@ class Context(object):
         pxd = self.search_include_directories(qualified_name, ".pxd", pos, sys_path=sys_path)
         if pxd is None: # XXX Keep this until Includes/Deprecated is removed
             if (qualified_name.startswith('python') or
-                    qualified_name in ('stdlib', 'stdio', 'stl')): 
+                    qualified_name in ('stdlib', 'stdio', 'stl')):
                 standard_include_path = os.path.abspath(os.path.normpath(
                         os.path.join(os.path.dirname(__file__), os.path.pardir, 'Includes')))
                 deprecated_include_path = os.path.join(standard_include_path, 'Deprecated')
@@ -372,7 +372,7 @@ class Context(object):
                         from ..Parser import ConcreteSyntaxTree
                     except ImportError:
                         raise RuntimeError(
-                            "Formal grammar can only be used with compiled Cython with an available pgen.") 
+                            "Formal grammar can only be used with compiled Cython with an available pgen.")
                     ConcreteSyntaxTree.p_module(source_filename)
         except UnicodeDecodeError as e:
             #import traceback
@@ -442,7 +442,7 @@ class Context(object):
                 pass
             result.c_file = None
 
- 
+
 def get_output_filename(source_filename, cwd, options):
     if options.cplus:
         c_suffix = ".cpp"
@@ -458,7 +458,7 @@ def get_output_filename(source_filename, cwd, options):
     else:
         return suggested_file_name
 
- 
+
 def create_default_resultobj(compilation_source, options):
     result = CompilationResult()
     result.main_source_file = compilation_source.source_desc.filename
@@ -469,7 +469,7 @@ def create_default_resultobj(compilation_source, options):
     result.embedded_metadata = options.embedded_metadata
     return result
 
- 
+
 def run_pipeline(source, options, full_module_name=None, context=None):
     from . import Pipeline
 
@@ -491,8 +491,8 @@ def run_pipeline(source, options, full_module_name=None, context=None):
             rel_path = source # safety measure to prevent printing incorrect paths
     else:
         rel_path = abs_path
-    if Options.source_root: 
-        rel_path = os.path.relpath(abs_path, Options.source_root) 
+    if Options.source_root:
+        rel_path = os.path.relpath(abs_path, Options.source_root)
     source_desc = FileSourceDescriptor(abs_path, rel_path)
     source = CompilationSource(source_desc, full_module_name, cwd)
 
@@ -519,15 +519,15 @@ def run_pipeline(source, options, full_module_name=None, context=None):
     return result
 
 
-# ------------------------------------------------------------------------ 
+# ------------------------------------------------------------------------
 #
 #  Main Python entry points
 #
-# ------------------------------------------------------------------------ 
+# ------------------------------------------------------------------------
 
 class CompilationSource(object):
     """
-    Contains the data necessary to start up a compilation pipeline for 
+    Contains the data necessary to start up a compilation pipeline for
     a single compilation unit.
     """
     def __init__(self, source_desc, full_module_name, cwd):
@@ -535,7 +535,7 @@ class CompilationSource(object):
         self.full_module_name = full_module_name
         self.cwd = cwd
 
- 
+
 class CompilationOptions(object):
     r"""
     See default_options at the end of this module for a list of all possible
@@ -562,22 +562,22 @@ class CompilationOptions(object):
             message = "got unknown compilation option%s, please remove: %s" % (
                 's' if len(unknown_options) > 1 else '',
                 ', '.join(unknown_options))
-            raise ValueError(message) 
+            raise ValueError(message)
 
         directive_defaults = Options.get_directive_defaults()
         directives = dict(options['compiler_directives'])  # copy mutable field
-        # check for invalid directives 
+        # check for invalid directives
         unknown_directives = set(directives) - set(directive_defaults)
-        if unknown_directives: 
-            message = "got unknown compiler directive%s: %s" % ( 
-                's' if len(unknown_directives) > 1 else '', 
-                ', '.join(unknown_directives)) 
-            raise ValueError(message) 
+        if unknown_directives:
+            message = "got unknown compiler directive%s: %s" % (
+                's' if len(unknown_directives) > 1 else '',
+                ', '.join(unknown_directives))
+            raise ValueError(message)
         options['compiler_directives'] = directives
-        if directives.get('np_pythran', False) and not options['cplus']: 
-            import warnings 
-            warnings.warn("C++ mode forced when in Pythran mode!") 
-            options['cplus'] = True 
+        if directives.get('np_pythran', False) and not options['cplus']:
+            import warnings
+            warnings.warn("C++ mode forced when in Pythran mode!")
+            options['cplus'] = True
         if 'language_level' in directives and 'language_level' not in kw:
             options['language_level'] = directives['language_level']
         elif not options.get('language_level'):
@@ -764,14 +764,14 @@ def compile_multiple(sources, options):
             processed.add(source)
     return results
 
- 
+
 def compile(source, options = None, full_module_name = None, **kwds):
     """
     compile(source [, options], [, <option> = <value>]...)
 
     Compile one or more Pyrex implementation files, with optional timestamp
-    checking and recursing on dependencies.  The source argument may be a string 
-    or a sequence of strings.  If it is a string and no recursion or timestamp 
+    checking and recursing on dependencies.  The source argument may be a string
+    or a sequence of strings.  If it is a string and no recursion or timestamp
     checking is requested, a CompilationResult is returned, otherwise a
     CompilationResultSet is returned.
     """
@@ -781,7 +781,7 @@ def compile(source, options = None, full_module_name = None, **kwds):
     else:
         return compile_multiple(source, options)
 
- 
+
 @Utils.cached_function
 def search_include_directories(dirs, qualified_name, suffix, pos, include=False):
     """
@@ -847,16 +847,16 @@ def search_include_directories(dirs, qualified_name, suffix, pos, include=False)
     return None
 
 
-# ------------------------------------------------------------------------ 
+# ------------------------------------------------------------------------
 #
 #  Main command-line entry point
 #
-# ------------------------------------------------------------------------ 
- 
+# ------------------------------------------------------------------------
+
 def setuptools_main():
     return main(command_line = 1)
 
- 
+
 def main(command_line = 0):
     args = sys.argv[1:]
     any_failures = 0
@@ -882,11 +882,11 @@ def main(command_line = 0):
         sys.exit(1)
 
 
-# ------------------------------------------------------------------------ 
+# ------------------------------------------------------------------------
 #
 #  Set the default options depending on the platform
 #
-# ------------------------------------------------------------------------ 
+# ------------------------------------------------------------------------
 
 default_options = dict(
     show_version = 0,
@@ -918,6 +918,6 @@ default_options = dict(
     output_dir=None,
     build_dir=None,
     cache=None,
-    create_extension=None, 
-    np_pythran=False 
+    create_extension=None,
+    np_pythran=False
 )

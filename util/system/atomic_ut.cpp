@@ -212,16 +212,16 @@ using TAltAtomic = volatile TChooser<TAtomicBase, long, long long>::TdType;
     #endif
 
 class TTTest: public TAtomicTest<TAltAtomic> {
-public: 
+public:
     TString Name() const noexcept override {
-        return "TAtomicTest<TAltAtomic>"; 
-    } 
+        return "TAtomicTest<TAltAtomic>";
+    }
 
     static TString StaticName() noexcept {
-        return "TAtomicTest<TAltAtomic>"; 
-    } 
-}; 
- 
-UNIT_TEST_SUITE_REGISTRATION(TTTest); 
- 
+        return "TAtomicTest<TAltAtomic>";
+    }
+};
+
+UNIT_TEST_SUITE_REGISTRATION(TTTest);
+
 #endif

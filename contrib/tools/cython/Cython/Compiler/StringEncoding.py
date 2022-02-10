@@ -87,7 +87,7 @@ class BytesLiteralBuilder(object):
     def getstrings(self):
         return (self.getstring(), None)
 
- 
+
 class StrLiteralBuilder(object):
     """Assemble both a bytes and a unicode representation of a string.
     """
@@ -219,14 +219,14 @@ def bytes_literal(s, encoding):
     return s
 
 
-def encoded_string(s, encoding): 
-    assert isinstance(s, (_unicode, bytes)) 
-    s = EncodedString(s) 
-    if encoding is not None: 
-        s.encoding = encoding 
-    return s 
- 
- 
+def encoded_string(s, encoding):
+    assert isinstance(s, (_unicode, bytes))
+    s = EncodedString(s)
+    if encoding is not None:
+        s.encoding = encoding
+    return s
+
+
 char_from_escape_sequence = {
     r'\a' : u'\a',
     r'\b' : u'\b',

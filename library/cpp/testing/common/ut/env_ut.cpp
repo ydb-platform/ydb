@@ -1,12 +1,12 @@
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/common/scope.h>
-#include <library/cpp/testing/gtest/gtest.h> 
+#include <library/cpp/testing/gtest/gtest.h>
 
 #include <util/folder/dirut.h>
-#include <util/stream/file.h> 
+#include <util/stream/file.h>
 #include <util/system/env.h>
 #include <util/system/execpath.h>
-#include <util/system/fs.h> 
+#include <util/system/fs.h>
 
 
 TEST(Runtime, ArcadiaSourceRoot) {
@@ -99,64 +99,64 @@ TEST(Runtime, GetOutputRamDrivePath) {
     Singleton<NPrivate::TTestEnv>()->ReInitialize();
     EXPECT_EQ(tmpDir, GetOutputRamDrivePath());
 }
- 
-#ifdef _linux_ 
-TEST(Runtime, GdbPath) { 
-    Singleton<NPrivate::TTestEnv>()->ReInitialize(); 
-    EXPECT_TRUE(NFs::Exists(::GdbPath())); 
-} 
-#endif 
- 
-TString ReInitializeContext(TStringBuf data) { 
-    auto tmpDir = ::GetSystemTempDir(); 
-    auto filename = tmpDir + "/context.json"; 
-    TOFStream stream(filename); 
-    stream.Write(data.data(), data.size()); 
-    stream.Finish(); 
- 
-    NTesting::TScopedEnvironment contextGuard("YA_TEST_CONTEXT_FILE", filename); 
-    Singleton<NPrivate::TTestEnv>()->ReInitialize(); 
- 
-    return filename; 
-} 
- 
-TEST(Runtime, GetTestParam) { 
-    TString context = R"json({ 
-        "runtime": { 
-            "test_params": { 
-                "a": "b", 
-                "c": "d" 
-            } 
-        } 
-    })json"; 
-    auto filename = ReInitializeContext(context); 
- 
-    EXPECT_EQ("b", GetTestParam("a")); 
-    EXPECT_EQ("d", GetTestParam("c")); 
-    EXPECT_EQ("", GetTestParam("e")); 
-    EXPECT_EQ("w", GetTestParam("e", "w")); 
- 
-    Singleton<NPrivate::TTestEnv>()->AddTestParam("e", "e"); 
-    EXPECT_EQ("e", GetTestParam("e")); 
-} 
- 
-TEST(Runtime, WatchProcessCore) { 
-    TString context = R"json({ 
-        "internal": { 
-            "core_search_file": "watch_core.txt" 
-        } 
-    })json"; 
-    auto filename = ReInitializeContext(context); 
- 
-    WatchProcessCore(1, "bin1", "pwd"); 
-    WatchProcessCore(2, "bin1"); 
-    StopProcessCoreWatching(2); 
- 
-    TIFStream file("watch_core.txt"); 
-    auto data = file.ReadAll(); 
-    TString expected = R"json({"cmd":"add","pid":1,"binary_path":"bin1","cwd":"pwd"} 
-{"cmd":"add","pid":2,"binary_path":"bin1"} 
-{"cmd":"drop","pid":2} 
-)json"; 
-    EXPECT_EQ(expected, data); 
-} 
+
+#ifdef _linux_
+TEST(Runtime, GdbPath) {
+    Singleton<NPrivate::TTestEnv>()->ReInitialize();
+    EXPECT_TRUE(NFs::Exists(::GdbPath()));
+}
+#endif
+
+TString ReInitializeContext(TStringBuf data) {
+    auto tmpDir = ::GetSystemTempDir();
+    auto filename = tmpDir + "/context.json";
+    TOFStream stream(filename);
+    stream.Write(data.data(), data.size());
+    stream.Finish();
+
+    NTesting::TScopedEnvironment contextGuard("YA_TEST_CONTEXT_FILE", filename);
+    Singleton<NPrivate::TTestEnv>()->ReInitialize();
+
+    return filename;
+}
+
+TEST(Runtime, GetTestParam) {
+    TString context = R"json({
+        "runtime": {
+            "test_params": {
+                "a": "b",
+                "c": "d"
+            }
+        }
+    })json";
+    auto filename = ReInitializeContext(context);
+
+    EXPECT_EQ("b", GetTestParam("a"));
+    EXPECT_EQ("d", GetTestParam("c"));
+    EXPECT_EQ("", GetTestParam("e"));
+    EXPECT_EQ("w", GetTestParam("e", "w"));
+
+    Singleton<NPrivate::TTestEnv>()->AddTestParam("e", "e");
+    EXPECT_EQ("e", GetTestParam("e"));
+}
+
+TEST(Runtime, WatchProcessCore) {
+    TString context = R"json({
+        "internal": {
+            "core_search_file": "watch_core.txt"
+        }
+    })json";
+    auto filename = ReInitializeContext(context);
+
+    WatchProcessCore(1, "bin1", "pwd");
+    WatchProcessCore(2, "bin1");
+    StopProcessCoreWatching(2);
+
+    TIFStream file("watch_core.txt");
+    auto data = file.ReadAll();
+    TString expected = R"json({"cmd":"add","pid":1,"binary_path":"bin1","cwd":"pwd"}
+{"cmd":"add","pid":2,"binary_path":"bin1"}
+{"cmd":"drop","pid":2}
+)json";
+    EXPECT_EQ(expected, data);
+}

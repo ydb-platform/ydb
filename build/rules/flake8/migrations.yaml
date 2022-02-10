@@ -3662,5 +3662,5 @@ migrations:
     - ads/libs/py_lmcompute/ft
     - ads/libs/py_autobudget/mt/test_attribution_preprocessor
     - ads/bigkv/tensor_transport/tests
-    - scarab/api/python3 
-    - mssngr/botplatform/src/bots/core/migrations 
+    - scarab/api/python3
+    - mssngr/botplatform/src/bots/core/migrations

@@ -106,13 +106,13 @@ def _urlopen(url, data=None, headers=None):
         time.sleep(retry_after)
 
 
-def _query(url): 
-    return json.loads(_urlopen(url)) 
- 
- 
+def _query(url):
+    return json.loads(_urlopen(url))
+
+
 _SANDBOX_BASE_URL = 'https://sandbox.yandex-team.ru/api/v1.0'
- 
- 
+
+
 def get_resource_info(resource_id, touch=False, no_links=False):
     url = ''.join((_SANDBOX_BASE_URL, '/resource/', str(resource_id)))
     headers = {}
@@ -136,10 +136,10 @@ def fetch(resource_id, custom_fetcher):
     try:
         resource_info = get_resource_info(resource_id, touch=True, no_links=True)
     except Exception as e:
-        sys.stderr.write( 
-            "Failed to fetch resource {}: {}\n".format(resource_id, str(e)) 
+        sys.stderr.write(
+            "Failed to fetch resource {}: {}\n".format(resource_id, str(e))
         )
-        raise 
+        raise
 
     if resource_info.get('state', 'DELETED') != 'READY':
         raise ResourceInfoError("Resource {} is not READY".format(resource_id))
@@ -264,6 +264,6 @@ if __name__ == '__main__':
         logging.exception(e)
         print >>sys.stderr, open(args.abs_log_path).read()
         sys.stderr.flush()
- 
-        import error 
-        sys.exit(error.ExitCodes.INFRASTRUCTURE_ERROR if fetch_from.is_temporary(e) else 1) 
+
+        import error
+        sys.exit(error.ExitCodes.INFRASTRUCTURE_ERROR if fetch_from.is_temporary(e) else 1)

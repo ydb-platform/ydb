@@ -1,6 +1,6 @@
 OWNER(
     exprmntr
-    g:yatest 
+    g:yatest
 )
 
 PY23_LIBRARY()
@@ -10,10 +10,10 @@ PY_SRCS(
     ports.py
 )
 
-PEERDIR( 
-    contrib/python/ipdb 
+PEERDIR(
+    contrib/python/ipdb
     library/python/testing/yatest_common
     library/python/testing/yatest_lib
-) 
- 
+)
+
 END()

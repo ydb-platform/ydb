@@ -1,34 +1,34 @@
-# coding: utf-8 
+# coding: utf-8
 import re
 import sys
 
- 
-RESTART_TEST_INDICATOR = '##restart-test##' 
-INFRASTRUCTURE_ERROR_INDICATOR = '##infrastructure-error##' 
- 
-RESTART_TEST_INDICATORS = [ 
-    RESTART_TEST_INDICATOR, 
-    "network error", 
-] 
- 
-# testing 
-BIN_DIRECTORY = 'bin' 
-CANONIZATION_RESULT_FILE_NAME = "canonization_res.json" 
-CONSOLE_SNIPPET_LIMIT = 5000 
-LIST_NODE_LOG_FILE = "test_list.log" 
-LIST_NODE_RESULT_FILE = "test_list.json" 
-LIST_RESULT_NODE_LOG_FILE = "list_result.log" 
-MAX_FILE_SIZE = 1024 * 1024 * 2  # 2 MB 
-MAX_TEST_RESTART_COUNT = 3 
-REPORT_SNIPPET_LIMIT = 10000 
-SANITIZER_ERROR_RC = 100 
-TEST_SUBTEST_SEPARATOR = '::' 
-TESTING_OUT_DIR_NAME = "testing_out_stuff" 
+
+RESTART_TEST_INDICATOR = '##restart-test##'
+INFRASTRUCTURE_ERROR_INDICATOR = '##infrastructure-error##'
+
+RESTART_TEST_INDICATORS = [
+    RESTART_TEST_INDICATOR,
+    "network error",
+]
+
+# testing
+BIN_DIRECTORY = 'bin'
+CANONIZATION_RESULT_FILE_NAME = "canonization_res.json"
+CONSOLE_SNIPPET_LIMIT = 5000
+LIST_NODE_LOG_FILE = "test_list.log"
+LIST_NODE_RESULT_FILE = "test_list.json"
+LIST_RESULT_NODE_LOG_FILE = "list_result.log"
+MAX_FILE_SIZE = 1024 * 1024 * 2  # 2 MB
+MAX_TEST_RESTART_COUNT = 3
+REPORT_SNIPPET_LIMIT = 10000
+SANITIZER_ERROR_RC = 100
+TEST_SUBTEST_SEPARATOR = '::'
+TESTING_OUT_DIR_NAME = "testing_out_stuff"
 TESTING_OUT_TAR_NAME = TESTING_OUT_DIR_NAME + ".tar"
-TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S.%f" 
-TRACE_FILE_NAME = "ytest.report.trace" 
-TRUNCATING_IGNORE_FILE_LIST = {TRACE_FILE_NAME, "run_test.log"} 
- 
+TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
+TRACE_FILE_NAME = "ytest.report.trace"
+TRUNCATING_IGNORE_FILE_LIST = {TRACE_FILE_NAME, "run_test.log"}
+
 # kvm
 DEFAULT_RAM_REQUIREMENTS_FOR_KVM = 4
 MAX_RAM_REQUIREMENTS_FOR_KVM = 16
@@ -37,29 +37,29 @@ MAX_RAM_REQUIREMENTS_FOR_KVM = 16
 TEST_NODE_FINISHING_TIME = 5 * 60
 DEFAULT_TEST_NODE_TIMEOUT = 15 * 60
 
-# coverage 
+# coverage
 COVERAGE_TESTS_TIMEOUT_FACTOR = 1.5
 COVERAGE_RESOLVED_FILE_NAME_PATTERN = "coverage_resolved.{}.json"
 CPP_COVERAGE_RESOLVED_FILE_NAME = COVERAGE_RESOLVED_FILE_NAME_PATTERN.format("cpp")
 JAVA_COVERAGE_RESOLVED_FILE_NAME = COVERAGE_RESOLVED_FILE_NAME_PATTERN.format("java")
 PYTHON_COVERAGE_RESOLVED_FILE_NAME = COVERAGE_RESOLVED_FILE_NAME_PATTERN.format("python")
 CLANG_COVERAGE_TEST_TYPES = ("unittest", "coverage_extractor", "pytest", "py3test", "gtest", "boost_test", "exectest")
-COVERAGE_TABLE_CHUNKS = 20 
-COVERAGE_YT_PROXY = "hahn.yt.yandex.net" 
-COVERAGE_YT_ROOT_PATH = "//home/codecoverage" 
-COVERAGE_YT_TABLE_PREFIX = "datatable" 
- 
-# fuzzing 
-CORPUS_DATA_FILE_NAME = 'corpus.json' 
-CORPUS_DATA_ROOT_DIR = 'fuzzing' 
-CORPUS_DIR_NAME = 'corpus' 
-FUZZING_COMPRESSION_COEF = 1.1 
-FUZZING_DEFAULT_TIMEOUT = 3600 
+COVERAGE_TABLE_CHUNKS = 20
+COVERAGE_YT_PROXY = "hahn.yt.yandex.net"
+COVERAGE_YT_ROOT_PATH = "//home/codecoverage"
+COVERAGE_YT_TABLE_PREFIX = "datatable"
+
+# fuzzing
+CORPUS_DATA_FILE_NAME = 'corpus.json'
+CORPUS_DATA_ROOT_DIR = 'fuzzing'
+CORPUS_DIR_NAME = 'corpus'
+FUZZING_COMPRESSION_COEF = 1.1
+FUZZING_DEFAULT_TIMEOUT = 3600
 FUZZING_FINISHING_TIME = 600
-FUZZING_TIMEOUT_RE = re.compile(r'(^|\s)-max_total_time=(?P<max_time>\d+)') 
-GENERATED_CORPUS_DIR_NAME = 'mined_corpus' 
-MAX_CORPUS_RESOURCES_ALLOWED = 5 
- 
+FUZZING_TIMEOUT_RE = re.compile(r'(^|\s)-max_total_time=(?P<max_time>\d+)')
+GENERATED_CORPUS_DIR_NAME = 'mined_corpus'
+MAX_CORPUS_RESOURCES_ALLOWED = 5
+
 TEST_TOOL_HOST = 'TEST_TOOL_HOST_RESOURCE_GLOBAL'
 TEST_TOOL_TARGET = 'TEST_TOOL_TARGET_RESOURCE_GLOBAL'
 TEST_TOOL_HOST_LOCAL = 'TEST_TOOL_HOST_LOCAL'
@@ -73,15 +73,15 @@ FLAKES_PY2_RESOURCE = 'FLAKES_PY2_RESOURCE_GLOBAL'
 FLAKES_PY3_RESOURCE = 'FLAKES_PY3_RESOURCE_GLOBAL'
 FLAKE8_PY2_RESOURCE = 'FLAKE8_PY2_RESOURCE_GLOBAL'
 FLAKE8_PY3_RESOURCE = 'FLAKE8_PY3_RESOURCE_GLOBAL'
- 
 
-class Enum(object): 
- 
-    @classmethod 
-    def enumerate(cls): 
-        return [v for k, v in cls.__dict__.items() if not k.startswith("_")] 
- 
- 
+
+class Enum(object):
+
+    @classmethod
+    def enumerate(cls):
+        return [v for k, v in cls.__dict__.items() if not k.startswith("_")]
+
+
 class TestRequirements(Enum):
     Container = 'container'
     Cpu = 'cpu'
@@ -119,7 +119,7 @@ class TestRequirementsConstants(Enum):
         return cls.AllRamDiskValue if cls.is_all_ram_disk(value) else value
 
 
-class TestSize(Enum): 
+class TestSize(Enum):
     Small = 'small'
     Medium = 'medium'
     Large = 'large'
@@ -172,7 +172,7 @@ class TestSize(Enum):
             TestRequirements.RamDisk: 4,
         },
         Large: {
-            TestRequirements.Cpu: 4, 
+            TestRequirements.Cpu: 4,
             TestRequirements.Ram: 32,
             TestRequirements.RamDisk: 4,
         },
@@ -207,14 +207,14 @@ class TestSize(Enum):
         raise Exception("Unknown test size '{}'".format(size))
 
 
-class TestRunExitCode(Enum): 
+class TestRunExitCode(Enum):
     Skipped = 2
     Failed = 3
     TimeOut = 10
-    InfrastructureError = 12 
+    InfrastructureError = 12
 
 
-class YaTestTags(Enum): 
+class YaTestTags(Enum):
     Manual = "ya:manual"
     Notags = "ya:notags"
     Norestart = "ya:norestart"
@@ -228,100 +228,100 @@ class YaTestTags(Enum):
 
 
 class Status(object):
-    GOOD, XFAIL, FAIL, XPASS, MISSING, CRASHED, TIMEOUT = range(1, 8) 
+    GOOD, XFAIL, FAIL, XPASS, MISSING, CRASHED, TIMEOUT = range(1, 8)
     SKIPPED = -100
     NOT_LAUNCHED = -200
     CANON_DIFF = -300
     DESELECTED = -400
     INTERNAL = -sys.maxint
-    FLAKY = -50 
+    FLAKY = -50
     BY_NAME = {'good': GOOD, 'fail': FAIL, 'xfail': XFAIL, 'xpass': XPASS, 'missing': MISSING, 'crashed': CRASHED,
                'skipped': SKIPPED, 'flaky': FLAKY, 'not_launched': NOT_LAUNCHED, 'timeout': TIMEOUT, 'diff': CANON_DIFF,
                'internal': INTERNAL, 'deselected': DESELECTED}
     TO_STR = {GOOD: 'good', FAIL: 'fail', XFAIL: 'xfail', XPASS: 'xpass', MISSING: 'missing', CRASHED: 'crashed',
               SKIPPED: 'skipped', FLAKY: 'flaky', NOT_LAUNCHED: 'not_launched', TIMEOUT: 'timeout', CANON_DIFF: 'diff',
               INTERNAL: 'internal', DESELECTED: 'deselected'}
- 
- 
-class _Colors(object): 
- 
-    _NAMES = [ 
-        "blue", 
-        "cyan", 
-        "default", 
-        "green", 
-        "grey", 
-        "magenta", 
-        "red", 
-        "white", 
-        "yellow", 
-    ] 
+
+
+class _Colors(object):
+
+    _NAMES = [
+        "blue",
+        "cyan",
+        "default",
+        "green",
+        "grey",
+        "magenta",
+        "red",
+        "white",
+        "yellow",
+    ]
     _PREFIXES = ["", "light", "dark"]
- 
-    def __init__(self): 
-        self._table = {} 
-        for prefix in self._PREFIXES: 
-            for value in self._NAMES: 
-                name = value 
-                if prefix: 
-                    name = "{}_{}".format(prefix, value) 
-                    value = "{}-{}".format(prefix, value) 
-                self.__add_color(name.upper(), value) 
- 
-    def __add_color(self, name, value): 
-        self._table[name] = value 
-        self.__setattr__(name, value) 
- 
- 
-Colors = _Colors() 
- 
- 
-class _Highlight(object): 
- 
-    _MARKERS = { 
-        # special 
-        "RESET": "rst", 
- 
-        "IMPORTANT": "imp", 
-        "UNIMPORTANT": "unimp", 
-        "BAD": "bad", 
-        "WARNING": "warn", 
-        "GOOD": "good", 
-        "PATH": "path", 
-        "ALTERNATIVE1": "alt1", 
-        "ALTERNATIVE2": "alt2", 
-        "ALTERNATIVE3": "alt3", 
-    } 
- 
-    def __init__(self): 
-        # setting attributes because __getattr__ is much slower 
-        for attr, value in self._MARKERS.items(): 
-            self.__setattr__(attr, value) 
- 
- 
-Highlight = _Highlight() 
- 
- 
-class _StatusColorMap(object): 
- 
-    _MAP = { 
-        'good': Highlight.GOOD, 
-        'fail': Highlight.BAD, 
-        'missing': Highlight.ALTERNATIVE1, 
-        'crashed': Highlight.WARNING, 
-        'skipped': Highlight.UNIMPORTANT, 
-        'not_launched': Highlight.BAD, 
-        'timeout': Highlight.BAD, 
-        'flaky': Highlight.ALTERNATIVE3, 
-        'xfail': Highlight.WARNING, 
+
+    def __init__(self):
+        self._table = {}
+        for prefix in self._PREFIXES:
+            for value in self._NAMES:
+                name = value
+                if prefix:
+                    name = "{}_{}".format(prefix, value)
+                    value = "{}-{}".format(prefix, value)
+                self.__add_color(name.upper(), value)
+
+    def __add_color(self, name, value):
+        self._table[name] = value
+        self.__setattr__(name, value)
+
+
+Colors = _Colors()
+
+
+class _Highlight(object):
+
+    _MARKERS = {
+        # special
+        "RESET": "rst",
+
+        "IMPORTANT": "imp",
+        "UNIMPORTANT": "unimp",
+        "BAD": "bad",
+        "WARNING": "warn",
+        "GOOD": "good",
+        "PATH": "path",
+        "ALTERNATIVE1": "alt1",
+        "ALTERNATIVE2": "alt2",
+        "ALTERNATIVE3": "alt3",
+    }
+
+    def __init__(self):
+        # setting attributes because __getattr__ is much slower
+        for attr, value in self._MARKERS.items():
+            self.__setattr__(attr, value)
+
+
+Highlight = _Highlight()
+
+
+class _StatusColorMap(object):
+
+    _MAP = {
+        'good': Highlight.GOOD,
+        'fail': Highlight.BAD,
+        'missing': Highlight.ALTERNATIVE1,
+        'crashed': Highlight.WARNING,
+        'skipped': Highlight.UNIMPORTANT,
+        'not_launched': Highlight.BAD,
+        'timeout': Highlight.BAD,
+        'flaky': Highlight.ALTERNATIVE3,
+        'xfail': Highlight.WARNING,
         'xpass': Highlight.WARNING,
-        'diff': Highlight.BAD, 
-        'internal': Highlight.BAD, 
-        'deselected': Highlight.UNIMPORTANT, 
-    } 
- 
-    def __getitem__(self, item): 
-        return self._MAP[item] 
- 
- 
-StatusColorMap = _StatusColorMap() 
+        'diff': Highlight.BAD,
+        'internal': Highlight.BAD,
+        'deselected': Highlight.UNIMPORTANT,
+    }
+
+    def __getitem__(self, item):
+        return self._MAP[item]
+
+
+StatusColorMap = _StatusColorMap()

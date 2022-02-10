@@ -34,7 +34,7 @@ def hardlink_or_copy(src, dst):
             if e.errno == errno.EEXIST:
                 return
             elif e.errno == errno.EXDEV:
-                sys.stderr.write("Can't make cross-device hardlink - fallback to copy: {} -> {}\n".format(src, dst)) 
+                sys.stderr.write("Can't make cross-device hardlink - fallback to copy: {} -> {}\n".format(src, dst))
                 shutil.copy(src, dst)
             else:
                 raise

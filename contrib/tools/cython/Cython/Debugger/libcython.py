@@ -18,13 +18,13 @@ import collections
 
 import gdb
 
-try:  # python 2 
-    UNICODE = unicode 
-    BYTES = str 
-except NameError:  # python 3 
-    UNICODE = str 
-    BYTES = bytes 
- 
+try:  # python 2
+    UNICODE = unicode
+    BYTES = str
+except NameError:  # python 3
+    UNICODE = str
+    BYTES = bytes
+
 try:
     from lxml import etree
     have_lxml = True
@@ -488,7 +488,7 @@ class SourceFileDescriptor(object):
 
 class CyGDBError(gdb.GdbError):
     """
-    Base class for Cython-command related errors 
+    Base class for Cython-command related errors
     """
 
     def __init__(self, *args):
@@ -696,8 +696,8 @@ class CyImport(CythonCommand):
     completer_class = gdb.COMPLETE_FILENAME
 
     def invoke(self, args, from_tty):
-        if isinstance(args, BYTES): 
-            args = args.decode(_filesystemencoding) 
+        if isinstance(args, BYTES):
+            args = args.decode(_filesystemencoding)
         for arg in string_to_argv(args):
             try:
                 f = open(arg)
@@ -842,9 +842,9 @@ class CyBreak(CythonCommand):
                 gdb.execute('break %s' % func.pf_cname)
 
     def invoke(self, function_names, from_tty):
-        if isinstance(function_names, BYTES): 
-            function_names = function_names.decode(_filesystemencoding) 
-        argv = string_to_argv(function_names) 
+        if isinstance(function_names, BYTES):
+            function_names = function_names.decode(_filesystemencoding)
+        argv = string_to_argv(function_names)
         if function_names.startswith('-p'):
             argv = argv[1:]
             python_breakpoints = True
@@ -900,7 +900,7 @@ class CythonInfo(CythonBase, libpython.PythonInfo):
 
     def lineno(self, frame):
         # Take care of the Python and Cython levels. We need to care for both
-        # as we can't simply dispatch to 'py-step', since that would work for 
+        # as we can't simply dispatch to 'py-step', since that would work for
         # stepping through Python code, but it would not step back into Cython-
         # related code. The C level should be dispatched to the 'step' command.
         if self.is_cython_function(frame):

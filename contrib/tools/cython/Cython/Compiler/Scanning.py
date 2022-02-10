@@ -1,4 +1,4 @@
-# cython: infer_types=True, language_level=3, py2_import=True, auto_pickle=False 
+# cython: infer_types=True, language_level=3, py2_import=True, auto_pickle=False
 #
 #   Cython Scanner
 #
@@ -63,13 +63,13 @@ class Method(object):
         # self.kwargs is almost always unused => avoid call overhead
         return method(text, **self.kwargs) if self.kwargs is not None else method(text)
 
-    def __copy__(self): 
-        return self  # immutable, no need to copy 
+    def __copy__(self):
+        return self  # immutable, no need to copy
 
-    def __deepcopy__(self, memo): 
-        return self  # immutable, no need to copy 
- 
- 
+    def __deepcopy__(self, memo):
+        return self  # immutable, no need to copy
+
+
 #------------------------------------------------------------------
 
 class CompileTimeScope(object):
@@ -170,7 +170,7 @@ class SourceDescriptor(object):
         if self._escaped_description is None:
             esc_desc = \
                 self.get_description().encode('ASCII', 'replace').decode("ASCII")
-            # Use forward slashes on Windows since these paths 
+            # Use forward slashes on Windows since these paths
             # will be used in the #line directives in the C/C++ files.
             self._escaped_description = esc_desc.replace('\\', '/')
         return self._escaped_description
@@ -196,13 +196,13 @@ class SourceDescriptor(object):
         except AttributeError:
             return False
 
-    def __copy__(self): 
-        return self  # immutable, no need to copy 
+    def __copy__(self):
+        return self  # immutable, no need to copy
 
-    def __deepcopy__(self, memo): 
-        return self  # immutable, no need to copy 
- 
- 
+    def __deepcopy__(self, memo):
+        return self  # immutable, no need to copy
+
+
 class FileSourceDescriptor(SourceDescriptor):
     """
     Represents a code source. A code source is a more generic abstraction
@@ -215,9 +215,9 @@ class FileSourceDescriptor(SourceDescriptor):
         filename = Utils.decode_filename(filename)
         self.path_description = path_description or filename
         self.filename = filename
-        # Prefer relative paths to current directory (which is most likely the project root) over absolute paths. 
-        workdir = os.path.abspath('.') + os.sep 
-        self.file_path = filename[len(workdir):] if filename.startswith(workdir) else filename 
+        # Prefer relative paths to current directory (which is most likely the project root) over absolute paths.
+        workdir = os.path.abspath('.') + os.sep
+        self.file_path = filename[len(workdir):] if filename.startswith(workdir) else filename
         self.set_file_type_from_name(filename)
         self._cmp_name = filename
         self._lines = {}
@@ -245,8 +245,8 @@ class FileSourceDescriptor(SourceDescriptor):
         return lines
 
     def get_description(self):
-        # Dump path_description, it's already arcadia root relative (required for proper file matching in coverage) 
-        return self.path_description 
+        # Dump path_description, it's already arcadia root relative (required for proper file matching in coverage)
+        return self.path_description
         try:
             return os.path.relpath(self.path_description)
         except ValueError:
@@ -261,7 +261,7 @@ class FileSourceDescriptor(SourceDescriptor):
         return path
 
     def get_filenametable_entry(self):
-        return self.file_path 
+        return self.file_path
 
     def __eq__(self, other):
         return isinstance(other, FileSourceDescriptor) and self.filename == other.filename

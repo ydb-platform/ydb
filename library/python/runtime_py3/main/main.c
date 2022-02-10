@@ -160,21 +160,21 @@ static int pymain(int argc, char** argv) {
     Py_InitArgcArgv(argc, argv_copy);
     PySys_SetArgv(argc, argv_copy);
 
-    { 
-        PyObject* module = PyImport_ImportModule("library.python.runtime_py3.entry_points"); 
-        if (module == NULL) { 
-            PyErr_Print(); 
-        } else { 
-            PyObject* res = PyObject_CallMethod(module, "run_constructors", NULL); 
-            if (res == NULL) { 
-                PyErr_Print(); 
-            } else { 
-                Py_DECREF(res); 
-            } 
-            Py_DECREF(module); 
-        } 
-    } 
- 
+    {
+        PyObject* module = PyImport_ImportModule("library.python.runtime_py3.entry_points");
+        if (module == NULL) {
+            PyErr_Print();
+        } else {
+            PyObject* res = PyObject_CallMethod(module, "run_constructors", NULL);
+            if (res == NULL) {
+                PyErr_Print();
+            } else {
+                Py_DECREF(res);
+            }
+            Py_DECREF(module);
+        }
+    }
+
     const char* module_name = entry_point_copy;
     const char* func_name = NULL;
 

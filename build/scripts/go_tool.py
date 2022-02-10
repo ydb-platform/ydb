@@ -781,7 +781,7 @@ def do_link_test(args):
 
 if __name__ == '__main__':
     args = pcf.get_args(sys.argv[1:])
- 
+
     parser = argparse.ArgumentParser(prefix_chars='+')
     parser.add_argument('++mode', choices=['dll', 'exe', 'lib', 'test'], required=True)
     parser.add_argument('++srcs', nargs='*', required=True)

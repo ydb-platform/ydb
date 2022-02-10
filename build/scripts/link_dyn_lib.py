@@ -148,8 +148,8 @@ def fix_cmd(arch, musl, c):
             return list(f(list(parse_export_file(fname))))
 
         if p.endswith('.supp'):
-            return [] 
- 
+            return []
+
         if p.endswith('.pkg.fake'):
             return []
 

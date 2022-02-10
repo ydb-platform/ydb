@@ -56,28 +56,28 @@ class TestPrettyPrinters(test_libcython_in_gdb.DebugTestCase):
         else:
             funcname = 'PyBytes_FromStringAndSize'
 
-        assert b'"' not in string 
+        assert b'"' not in string
 
         # ensure double quotes
-        code = '(PyObject *) %s("%s", %d)' % (funcname, string.decode('iso8859-1'), len(string)) 
+        code = '(PyObject *) %s("%s", %d)' % (funcname, string.decode('iso8859-1'), len(string))
         return self.pyobject_fromcode(code, gdbvar=gdbvar)
 
     def alloc_unicodestring(self, string, gdbvar=None):
         postfix = libpython.get_inferior_unicode_postfix()
-        funcname = 'PyUnicode%s_DecodeUnicodeEscape' % (postfix,) 
+        funcname = 'PyUnicode%s_DecodeUnicodeEscape' % (postfix,)
 
-        data = string.encode("unicode_escape").decode('iso8859-1') 
+        data = string.encode("unicode_escape").decode('iso8859-1')
         return self.pyobject_fromcode(
-            '(PyObject *) %s("%s", %d, "strict")' % ( 
-                funcname, data.replace('"', r'\"').replace('\\', r'\\'), len(data)), 
+            '(PyObject *) %s("%s", %d, "strict")' % (
+                funcname, data.replace('"', r'\"').replace('\\', r'\\'), len(data)),
             gdbvar=gdbvar)
 
     def test_bytestring(self):
-        bytestring = self.alloc_bytestring(b"spam") 
+        bytestring = self.alloc_bytestring(b"spam")
 
         if inferior_python_version < (3, 0):
             bytestring_class = libpython.PyStringObjectPtr
-            expected = repr(b"spam") 
+            expected = repr(b"spam")
         else:
             bytestring_class = libpython.PyBytesObjectPtr
             expected = "b'spam'"
@@ -88,7 +88,7 @@ class TestPrettyPrinters(test_libcython_in_gdb.DebugTestCase):
     def test_unicode(self):
         unicode_string = self.alloc_unicodestring(u"spam ἄλφα")
 
-        expected = u"'spam ἄλφα'" 
+        expected = u"'spam ἄλφα'"
         if inferior_python_version < (3, 0):
             expected = 'u' + expected
 

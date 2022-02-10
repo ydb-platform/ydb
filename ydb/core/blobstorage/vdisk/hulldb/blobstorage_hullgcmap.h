@@ -127,7 +127,7 @@ namespace NKikimr {
             // subsMerger must return circaLsn
             // dbMerger must return max circaLsn for the record with _data_
             // we must switch to a special kind of TIndexRecordMerger
-            auto newItem = [] (const TIterator &subsIt, const TIndexRecordMerger &subsMerger) { 
+            auto newItem = [] (const TIterator &subsIt, const TIndexRecordMerger &subsMerger) {
                 Y_UNUSED(subsIt);
                 Y_UNUSED(subsMerger);
             };

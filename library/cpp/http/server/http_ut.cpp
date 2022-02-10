@@ -322,8 +322,8 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
 
     Y_UNIT_TEST(TestEchoServer) {
         TString res = TestData();
-        TPortManager pm; 
-        const ui16 port = pm.GetPort(); 
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
         const bool trueFalse[] = {true, false};
 
         TEchoServer serverImpl(res);
@@ -428,8 +428,8 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
          * Data should be large enough not to fit into socket buffer
          **/
         TString res = TestData(10 * 1024 * 1024);
-        TPortManager portManager; 
-        const ui16 port = portManager.GetPort(); 
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
         TEchoServer serverImpl(res);
         THttpServer::TOptions options(port);
         options.EnableKeepAlive(true);

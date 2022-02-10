@@ -14,12 +14,12 @@ else:
 class new_build_ext(_build_ext, object):
     def finalize_options(self):
         if self.distribution.ext_modules:
-            nthreads = getattr(self, 'parallel', None)  # -j option in Py3.5+ 
-            nthreads = int(nthreads) if nthreads else None 
+            nthreads = getattr(self, 'parallel', None)  # -j option in Py3.5+
+            nthreads = int(nthreads) if nthreads else None
             from Cython.Build.Dependencies import cythonize
             self.distribution.ext_modules[:] = cythonize(
-                self.distribution.ext_modules, nthreads=nthreads, force=self.force) 
-        super(new_build_ext, self).finalize_options() 
+                self.distribution.ext_modules, nthreads=nthreads, force=self.force)
+        super(new_build_ext, self).finalize_options()
 
 # This will become new_build_ext in the future.
 from .old_build_ext import old_build_ext as build_ext

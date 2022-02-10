@@ -5,25 +5,25 @@ cimport cython
 from ..StringIOTree cimport StringIOTree
 
 
-cdef class UtilityCodeBase(object): 
-    cpdef format_code(self, code_string, replace_empty_lines=*) 
- 
- 
-cdef class UtilityCode(UtilityCodeBase): 
-    cdef public object name 
-    cdef public object proto 
-    cdef public object impl 
-    cdef public object init 
-    cdef public object cleanup 
-    cdef public object proto_block 
-    cdef public object requires 
-    cdef public dict _cache 
-    cdef public list specialize_list 
-    cdef public object file 
- 
-    cpdef none_or_sub(self, s, context) 
- 
- 
+cdef class UtilityCodeBase(object):
+    cpdef format_code(self, code_string, replace_empty_lines=*)
+
+
+cdef class UtilityCode(UtilityCodeBase):
+    cdef public object name
+    cdef public object proto
+    cdef public object impl
+    cdef public object init
+    cdef public object cleanup
+    cdef public object proto_block
+    cdef public object requires
+    cdef public dict _cache
+    cdef public list specialize_list
+    cdef public object file
+
+    cpdef none_or_sub(self, s, context)
+
+
 cdef class FunctionState:
     cdef public set names_taken
     cdef public object owner
@@ -40,7 +40,7 @@ cdef class FunctionState:
     cdef public object return_from_error_cleanup_label # not used in __init__ ?
 
     cdef public object exc_vars
-    cdef public object current_except 
+    cdef public object current_except
     cdef public bint in_try_finally
     cdef public bint can_trace
     cdef public bint gil_owned

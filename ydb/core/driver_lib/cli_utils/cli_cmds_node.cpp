@@ -64,7 +64,7 @@ public:
             request->Record.SetHost(node);
         }
         MessageBusCall<NMsgBusProxy::TBusResolveNode, NMsgBusProxy::TBusResponse>(config, request,
-            [this](const NMsgBusProxy::TBusResponse& response) -> int { 
+            [this](const NMsgBusProxy::TBusResponse& response) -> int {
                 BusResponse = response.Record;
                 return 0;
         });

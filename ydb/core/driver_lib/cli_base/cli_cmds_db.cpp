@@ -398,7 +398,7 @@ public:
 
         for(;;) {
             MessageBusCall<NMsgBusProxy::TBusSchemeDescribe, NMsgBusProxy::TBusResponse>(config, request,
-                [&entries](const NMsgBusProxy::TBusResponse& response) -> int { 
+                [&entries](const NMsgBusProxy::TBusResponse& response) -> int {
                     entries.push_front(response.Record.GetPathDescription());
                     return 0;
             });
@@ -712,7 +712,7 @@ public:
         }
         modifyAcl.SetDiffACL(diffAcl.SerializeAsString());
         int result = MessageBusCall<NMsgBusProxy::TBusSchemeOperation, NMsgBusProxy::TBusResponse>(config, request,
-            [](const NMsgBusProxy::TBusResponse& response) -> int { 
+            [](const NMsgBusProxy::TBusResponse& response) -> int {
                 if (response.Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
                     Cerr << ToCString(static_cast<NMsgBusProxy::EResponseStatus>(response.Record.GetStatus())) << " " << response.Record.GetErrorReason() << Endl;
                     return 1;
@@ -780,7 +780,7 @@ public:
         }
         modifyAcl.SetDiffACL(diffAcl.SerializeAsString());
         int result = MessageBusCall<NMsgBusProxy::TBusSchemeOperation, NMsgBusProxy::TBusResponse>(config, request,
-            [](const NMsgBusProxy::TBusResponse& response) -> int { 
+            [](const NMsgBusProxy::TBusResponse& response) -> int {
                 if (response.Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
                     Cerr << ToCString(static_cast<NMsgBusProxy::EResponseStatus>(response.Record.GetStatus())) << " " << response.Record.GetErrorReason() << Endl;
                     return 1;

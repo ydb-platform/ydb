@@ -30,8 +30,8 @@ def iteritems(prefix='', strip_prefix=False):
         if strip_prefix:
             key = key[len(prefix):]
         yield key, value
- 
- 
+
+
 def resfs_file_exists(path):
     return resfs_src(path, resfs_file=True) is not None
 
@@ -41,9 +41,9 @@ def resfs_files(prefix=''):
     if isinstance(prefix, six.text_type):
         decode = lambda s: s.decode('utf-8')
     return [decode(s) for s in __resfs_files(prefix=prefix)]
- 
- 
-def find(path): 
-    if isinstance(path, six.text_type): 
-        path = path.encode('utf-8') 
-    return __find(path) 
+
+
+def find(path):
+    if isinstance(path, six.text_type):
+        path = path.encode('utf-8')
+    return __find(path)

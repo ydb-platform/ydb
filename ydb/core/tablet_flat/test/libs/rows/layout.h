@@ -36,7 +36,7 @@ namespace NTest{
             TPos keyOrder = 0;
 
             for (auto tag: keys) {
-                auto pred = [tag](const TColumn &col) { 
+                auto pred = [tag](const TColumn &col) {
                     return tag == col.Id;
                 };
 

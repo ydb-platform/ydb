@@ -1,5 +1,5 @@
-# TODO prettyboy remove after ya-bin release 
- 
+# TODO prettyboy remove after ya-bin release
+
 import os
 import sys
 import subprocess

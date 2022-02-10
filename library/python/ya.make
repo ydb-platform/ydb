@@ -32,7 +32,7 @@ RECURSE(
     charts_notes/example
     cityhash
     cityhash/test
-    clickhouse_client
+    clickhouse_client 
     cmain
     codecs
     codecs/gen_corpus

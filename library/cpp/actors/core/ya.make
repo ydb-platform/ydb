@@ -28,8 +28,8 @@ SRCS(
     actorid.h
     actorsystem.cpp
     actorsystem.h
-    ask.cpp 
-    ask.h 
+    ask.cpp
+    ask.h
     balancer.h
     balancer.cpp
     buffer.cpp

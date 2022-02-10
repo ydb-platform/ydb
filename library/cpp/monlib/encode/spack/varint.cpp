@@ -22,17 +22,17 @@ namespace NMonitoring {
     }
 
     ui32 ReadVarUInt32(IInputStream* input) {
-        ui32 value = 0; 
-        switch (TryReadVarUInt32(input, &value)) { 
-            case EReadResult::OK: 
-                return value; 
-            case EReadResult::ERR_OVERFLOW: 
+        ui32 value = 0;
+        switch (TryReadVarUInt32(input, &value)) {
+            case EReadResult::OK:
+                return value;
+            case EReadResult::ERR_OVERFLOW:
                 ythrow yexception() << "the data is too long to read ui32";
-            case EReadResult::ERR_UNEXPECTED_EOF: 
+            case EReadResult::ERR_UNEXPECTED_EOF:
                 ythrow yexception() << "the data unexpectedly ended";
-            default: 
-                ythrow yexception() << "unknown error while reading varint"; 
-        } 
+            default:
+                ythrow yexception() << "unknown error while reading varint";
+        }
     }
 
     size_t ReadVarUInt32(const ui8* buf, size_t len, ui32* result) {
@@ -56,24 +56,24 @@ namespace NMonitoring {
         return count;
     }
 
-EReadResult TryReadVarUInt32(IInputStream* input, ui32* value) { 
+EReadResult TryReadVarUInt32(IInputStream* input, ui32* value) {
         size_t count = 0;
         ui32 result = 0;
 
         ui8 byte = 0;
         do {
             if (7 * count > 8 * sizeof(ui32)) {
-                return EReadResult::ERR_OVERFLOW; 
+                return EReadResult::ERR_OVERFLOW;
             }
             if (input->Read(&byte, 1) != 1) {
-                return EReadResult::ERR_UNEXPECTED_EOF; 
+                return EReadResult::ERR_UNEXPECTED_EOF;
             }
             result |= (static_cast<ui32>(byte & 0x7F)) << (7 * count);
             ++count;
         } while (byte & 0x80);
 
         *value = result;
-        return EReadResult::OK; 
+        return EReadResult::OK;
     }
 
 }

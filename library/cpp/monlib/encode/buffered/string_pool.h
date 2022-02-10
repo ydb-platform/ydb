@@ -78,10 +78,10 @@ namespace NMonitoring {
             return Index_.at(i);
         }
 
-        size_t Size() const { 
-            return Index_.size(); 
-        } 
- 
+        size_t Size() const {
+            return Index_.size();
+        }
+
     private:
         void InitIndex(const char* data, ui32 size);
 

@@ -1,10 +1,10 @@
 LIBRARY()
 OWNER(
-    amatanhead 
+    amatanhead
     bulatman
     dancingqueue
-    prettyboy 
-    thegeorg 
+    prettyboy
+    thegeorg
     g:cpp-contrib
 )
 
@@ -14,10 +14,10 @@ PEERDIR(
 )
 
 SRCS(
-    assertions.cpp 
-    gtest_extensions.cpp 
-    matchers.cpp 
-    pretty_printers.cpp 
+    assertions.cpp
+    gtest_extensions.cpp
+    matchers.cpp
+    pretty_printers.cpp
     probe.cpp
 )
 

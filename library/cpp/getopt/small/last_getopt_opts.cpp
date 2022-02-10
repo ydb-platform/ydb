@@ -1,12 +1,12 @@
-#include "completer_command.h" 
+#include "completer_command.h"
 #include "last_getopt_opts.h"
-#include "wrap.h" 
-#include "last_getopt_parser.h" 
+#include "wrap.h"
+#include "last_getopt_parser.h"
 
 #include <library/cpp/colorizer/colors.h>
 
 #include <util/stream/format.h>
-#include <util/charset/utf8.h> 
+#include <util/charset/utf8.h>
 
 #include <stdlib.h>
 
@@ -70,7 +70,7 @@ namespace NLastGetopt {
         , AllowUnknownCharOptions_(false)
         , AllowUnknownLongOptions_(false)
         , FreeArgsMin_(0)
-        , FreeArgsMax_(UNLIMITED_ARGS) 
+        , FreeArgsMax_(UNLIMITED_ARGS)
     {
         if (!optstring.empty()) {
             AddCharOptions(optstring);
@@ -225,33 +225,33 @@ namespace NLastGetopt {
         return *Opts_.back();
     }
 
-    TOpt& TOpts::AddCompletionOption(TString command, TString longName) { 
-        if (TOpt* o = FindLongOption(longName)) { 
-            return *o; 
-        } 
- 
-        return AddOption(MakeCompletionOpt(this, std::move(command), std::move(longName))); 
-    } 
- 
-    namespace { 
-        auto MutuallyExclusiveHandler(const TOpt* cur, const TOpt* other) { 
-            return [cur, other](const TOptsParser* p) { 
-                if (p->Seen(other)) { 
-                    throw TUsageException() 
-                        << "option " << cur->ToShortString() 
-                        << " can't appear together with option " << other->ToShortString(); 
-                } 
-            }; 
-        } 
-    } 
- 
-    void TOpts::MutuallyExclusiveOpt(TOpt& opt1, TOpt& opt2) { 
-        opt1.Handler1(MutuallyExclusiveHandler(&opt1, &opt2)) 
-            .IfPresentDisableCompletionFor(opt2); 
-        opt2.Handler1(MutuallyExclusiveHandler(&opt2, &opt1)) 
-            .IfPresentDisableCompletionFor(opt1); 
-    } 
- 
+    TOpt& TOpts::AddCompletionOption(TString command, TString longName) {
+        if (TOpt* o = FindLongOption(longName)) {
+            return *o;
+        }
+
+        return AddOption(MakeCompletionOpt(this, std::move(command), std::move(longName)));
+    }
+
+    namespace {
+        auto MutuallyExclusiveHandler(const TOpt* cur, const TOpt* other) {
+            return [cur, other](const TOptsParser* p) {
+                if (p->Seen(other)) {
+                    throw TUsageException()
+                        << "option " << cur->ToShortString()
+                        << " can't appear together with option " << other->ToShortString();
+                }
+            };
+        }
+    }
+
+    void TOpts::MutuallyExclusiveOpt(TOpt& opt1, TOpt& opt2) {
+        opt1.Handler1(MutuallyExclusiveHandler(&opt1, &opt2))
+            .IfPresentDisableCompletionFor(opt2);
+        opt2.Handler1(MutuallyExclusiveHandler(&opt2, &opt1))
+            .IfPresentDisableCompletionFor(opt1);
+    }
+
     size_t TOpts::IndexOf(const TOpt* opt) const {
         TOptsVector::const_iterator it = std::find(Opts_.begin(), Opts_.end(), opt);
         if (it == Opts_.end())
@@ -259,19 +259,19 @@ namespace NLastGetopt {
         return it - Opts_.begin();
     }
 
-    TStringBuf TOpts::GetFreeArgTitle(size_t pos) const { 
+    TStringBuf TOpts::GetFreeArgTitle(size_t pos) const {
         if (FreeArgSpecs_.contains(pos)) {
-            return FreeArgSpecs_.at(pos).GetTitle(DefaultFreeArgTitle_); 
+            return FreeArgSpecs_.at(pos).GetTitle(DefaultFreeArgTitle_);
         }
-        return DefaultFreeArgTitle_; 
+        return DefaultFreeArgTitle_;
     }
 
-    void TOpts::SetFreeArgTitle(size_t pos, const TString& title, const TString& help, bool optional) { 
-        FreeArgSpecs_[pos] = TFreeArgSpec(title, help, optional); 
+    void TOpts::SetFreeArgTitle(size_t pos, const TString& title, const TString& help, bool optional) {
+        FreeArgSpecs_[pos] = TFreeArgSpec(title, help, optional);
     }
 
-    TFreeArgSpec& TOpts::GetFreeArgSpec(size_t pos) { 
-        return FreeArgSpecs_[pos]; 
+    TFreeArgSpec& TOpts::GetFreeArgSpec(size_t pos) {
+        return FreeArgSpecs_[pos];
     }
 
     static TString FormatOption(const TOpt* option, const NColorizer::TColors& colors) {
@@ -325,29 +325,29 @@ namespace NLastGetopt {
         }
         os << "[OPTIONS]";
 
-        ui32 numDescribedFlags = FreeArgSpecs_.empty() ? 0 : FreeArgSpecs_.rbegin()->first + 1; 
-        ui32 numArgsToShow = Max(FreeArgsMin_, FreeArgsMax_ == UNLIMITED_ARGS ? numDescribedFlags : FreeArgsMax_); 
+        ui32 numDescribedFlags = FreeArgSpecs_.empty() ? 0 : FreeArgSpecs_.rbegin()->first + 1;
+        ui32 numArgsToShow = Max(FreeArgsMin_, FreeArgsMax_ == UNLIMITED_ARGS ? numDescribedFlags : FreeArgsMax_);
 
-        for (ui32 i = 0, nonOptionalFlagsPrinted = 0; i < numArgsToShow; ++i) { 
-            bool isOptional = nonOptionalFlagsPrinted >= FreeArgsMin_ || FreeArgSpecs_.Value(i, TFreeArgSpec()).Optional_; 
- 
-            nonOptionalFlagsPrinted += !isOptional; 
- 
-            os << " "; 
- 
-            if (isOptional) 
-                os << "["; 
- 
-            os << GetFreeArgTitle(i); 
- 
-            if (isOptional) 
-                os << "]"; 
+        for (ui32 i = 0, nonOptionalFlagsPrinted = 0; i < numArgsToShow; ++i) {
+            bool isOptional = nonOptionalFlagsPrinted >= FreeArgsMin_ || FreeArgSpecs_.Value(i, TFreeArgSpec()).Optional_;
+
+            nonOptionalFlagsPrinted += !isOptional;
+
+            os << " ";
+
+            if (isOptional)
+                os << "[";
+
+            os << GetFreeArgTitle(i);
+
+            if (isOptional)
+                os << "]";
         }
 
-        if (FreeArgsMax_ == UNLIMITED_ARGS) { 
-            os << " [" << TrailingArgSpec_.GetTitle(DefaultFreeArgTitle_) << "]..."; 
-        } 
- 
+        if (FreeArgsMax_ == UNLIMITED_ARGS) {
+            os << " [" << TrailingArgSpec_.GetTitle(DefaultFreeArgTitle_) << "]...";
+        }
+
         os << Endl;
     }
 
@@ -361,7 +361,7 @@ namespace NLastGetopt {
 
         TVector<TString> leftColumn(Opts_.size());
         TVector<size_t> leftColumnSizes(leftColumn.size());
-        const size_t kMaxLeftWidth = 25; 
+        const size_t kMaxLeftWidth = 25;
         size_t leftWidth = 0;
         size_t requiredOptionsCount = 0;
         NColorizer::TColors disabledColors(false);
@@ -371,14 +371,14 @@ namespace NLastGetopt {
             if (opt->IsHidden())
                 continue;
             leftColumn[i] = FormatOption(opt, colors);
-            size_t leftColumnSize = leftColumn[i].size(); 
-            if (colors.IsTTY()) { 
-                leftColumnSize -= NColorizer::TotalAnsiEscapeCodeLen(leftColumn[i]); 
-            } 
+            size_t leftColumnSize = leftColumn[i].size();
+            if (colors.IsTTY()) {
+                leftColumnSize -= NColorizer::TotalAnsiEscapeCodeLen(leftColumn[i]);
+            }
             leftColumnSizes[i] = leftColumnSize;
-            if (leftColumnSize <= kMaxLeftWidth) { 
-                leftWidth = Max(leftWidth, leftColumnSize); 
-            } 
+            if (leftColumnSize <= kMaxLeftWidth) {
+                leftWidth = Max(leftWidth, leftColumnSize);
+            }
             if (opt->IsRequired())
                 requiredOptionsCount++;
         }
@@ -410,59 +410,59 @@ namespace NLastGetopt {
                     continue;
 
                 if (leftColumnSizes[i] > leftWidth && !opt->GetHelp().empty()) {
-                    os << SPad << leftColumn[i] << Endl << SPad << leftPadding << ' '; 
+                    os << SPad << leftColumn[i] << Endl << SPad << leftPadding << ' ';
                 } else {
                     os << SPad << leftColumn[i] << ' ';
                     if (leftColumnSizes[i] < leftWidth)
                         os << TStringBuf(leftPadding.data(), leftWidth - leftColumnSizes[i]);
                 }
 
-                TStringBuf help = opt->GetHelp(); 
-                while (help && isspace(help.back())) { 
-                    help.Chop(1); 
+                TStringBuf help = opt->GetHelp();
+                while (help && isspace(help.back())) {
+                    help.Chop(1);
                 }
-                size_t lastLineLength = 0; 
-                bool helpHasParagraphs = false; 
-                if (help) { 
-                    os << Wrap(Wrap_, help, SPad + leftPadding + " ", &lastLineLength, &helpHasParagraphs); 
-                } 
+                size_t lastLineLength = 0;
+                bool helpHasParagraphs = false;
+                if (help) {
+                    os << Wrap(Wrap_, help, SPad + leftPadding + " ", &lastLineLength, &helpHasParagraphs);
+                }
 
                 if (opt->HasDefaultValue()) {
-                    auto quotedDef = QuoteForHelp(opt->GetDefaultValue()); 
-                    if (helpHasParagraphs) { 
-                        os << Endl << Endl << SPad << leftPadding << " "; 
-                        os << "Default: " << colors.CyanColor() << quotedDef << colors.OldColor() << "."; 
-                    } else if (help.EndsWith('.')) { 
-                        os << Endl << SPad << leftPadding << " "; 
-                        os << "Default: " << colors.CyanColor() << quotedDef << colors.OldColor() << "."; 
-                    } else if (help) { 
-                        if (SPad.size() + leftWidth + 1 + lastLineLength + 12 + quotedDef.size() > Wrap_) { 
-                            os << Endl << SPad << leftPadding << " "; 
-                        } else { 
-                            os << " "; 
-                        } 
-                        os << "(default: " << colors.CyanColor() << quotedDef << colors.OldColor() << ")"; 
-                    } else { 
-                        os << "default: " << colors.CyanColor() << quotedDef << colors.OldColor(); 
-                    } 
+                    auto quotedDef = QuoteForHelp(opt->GetDefaultValue());
+                    if (helpHasParagraphs) {
+                        os << Endl << Endl << SPad << leftPadding << " ";
+                        os << "Default: " << colors.CyanColor() << quotedDef << colors.OldColor() << ".";
+                    } else if (help.EndsWith('.')) {
+                        os << Endl << SPad << leftPadding << " ";
+                        os << "Default: " << colors.CyanColor() << quotedDef << colors.OldColor() << ".";
+                    } else if (help) {
+                        if (SPad.size() + leftWidth + 1 + lastLineLength + 12 + quotedDef.size() > Wrap_) {
+                            os << Endl << SPad << leftPadding << " ";
+                        } else {
+                            os << " ";
+                        }
+                        os << "(default: " << colors.CyanColor() << quotedDef << colors.OldColor() << ")";
+                    } else {
+                        os << "default: " << colors.CyanColor() << quotedDef << colors.OldColor();
+                    }
                 }
 
                 os << Endl;
- 
-                if (helpHasParagraphs) { 
-                    os << Endl; 
-                } 
+
+                if (helpHasParagraphs) {
+                    os << Endl;
+                }
             }
         }
- 
+
         PrintFreeArgsDesc(os, colors);
- 
-        for (auto& [heading, text] : Sections) { 
-            os << Endl << colors.BoldColor() << heading << colors.OldColor() << ":" << Endl; 
- 
-            os << SPad << Wrap(Wrap_, text, SPad) << Endl; 
-        } 
- 
+
+        for (auto& [heading, text] : Sections) {
+            os << Endl << colors.BoldColor() << heading << colors.OldColor() << ":" << Endl;
+
+            os << SPad << Wrap(Wrap_, text, SPad) << Endl;
+        }
+
         osIn << os.Str();
     }
 
@@ -479,8 +479,8 @@ namespace NLastGetopt {
             leftFreeWidth = Max(leftFreeWidth, GetFreeArgTitle(i).size());
         }
 
-        if (!TrailingArgSpec_.IsDefault()) { 
-            leftFreeWidth = Max(leftFreeWidth, TrailingArgSpec_.GetTitle(DefaultFreeArgTitle_).size()); 
+        if (!TrailingArgSpec_.IsDefault()) {
+            leftFreeWidth = Max(leftFreeWidth, TrailingArgSpec_.GetTitle(DefaultFreeArgTitle_).size());
         }
 
         leftFreeWidth = Min(leftFreeWidth, size_t(30));
@@ -488,32 +488,32 @@ namespace NLastGetopt {
 
         os << " min: " << colors.GreenColor() << FreeArgsMin_ << colors.OldColor() << ",";
         os << " max: " << colors.GreenColor();
-        if (FreeArgsMax_ != UNLIMITED_ARGS) { 
+        if (FreeArgsMax_ != UNLIMITED_ARGS) {
             os << FreeArgsMax_;
         } else {
             os << "unlimited";
         }
-        os << colors.OldColor() << Endl; 
+        os << colors.OldColor() << Endl;
 
         const size_t limit = FreeArgSpecs_.empty() ? 0 : FreeArgSpecs_.rbegin()->first;
         for (size_t i = 0; i <= limit; ++i) {
-            if (!FreeArgSpecs_.contains(i)) { 
-                continue; 
-            } 
+            if (!FreeArgSpecs_.contains(i)) {
+                continue;
+            }
 
-            if (auto help = FreeArgSpecs_.at(i).GetHelp()) { 
-                auto title = GetFreeArgTitle(i); 
-                os << SPad << colors.GreenColor() << RightPad(title, leftFreeWidth, ' ') << colors.OldColor() 
-                   << SPad << help << Endl; 
-            } 
+            if (auto help = FreeArgSpecs_.at(i).GetHelp()) {
+                auto title = GetFreeArgTitle(i);
+                os << SPad << colors.GreenColor() << RightPad(title, leftFreeWidth, ' ') << colors.OldColor()
+                   << SPad << help << Endl;
+            }
         }
 
-        if (FreeArgsMax_ == UNLIMITED_ARGS) { 
-            auto title = TrailingArgSpec_.GetTitle(DefaultFreeArgTitle_); 
-            if (auto help = TrailingArgSpec_.GetHelp()) { 
-                os << SPad << colors.GreenColor() << RightPad(title, leftFreeWidth, ' ') << colors.OldColor() 
-                   << SPad << help << Endl; 
-            } 
+        if (FreeArgsMax_ == UNLIMITED_ARGS) {
+            auto title = TrailingArgSpec_.GetTitle(DefaultFreeArgTitle_);
+            if (auto help = TrailingArgSpec_.GetHelp()) {
+                os << SPad << colors.GreenColor() << RightPad(title, leftFreeWidth, ' ') << colors.OldColor()
+                   << SPad << help << Endl;
+            }
         }
     }
 }

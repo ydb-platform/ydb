@@ -261,7 +261,7 @@ namespace NActors {
         bool Send(TAutoPtr<IEventHandle> ev) const;
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0) const;
 
-        /** 
+        /**
          * Schedule one-shot event that will be send at given time point in the future.
          *
          * @param deadline   the wallclock time point in future when event must be send
@@ -289,38 +289,38 @@ namespace NActors {
         void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr) const;
 
         /**
-         * A way to interact with actors from non-actor context. 
-         * 
-         * This method will send the `event` to the `recipient` and then will wait for a response. When response arrives, 
-         * it will be passed to the future. If response is not of type `T`, the future will resolve into an exception. 
-         * 
-         * @tparam T            expected response type. Must be derived from `TEventBase`, 
-         *                      or use `IEventBase` to catch any response. 
-         * @param actorSystem   actor system that will be used to register an actor that'll wait for response. 
-         * @param recipient     who will get a request. 
-         * @param event         a request message. 
-         * @return              future that will be resolved when a message from `recipient` arrives. 
-         */ 
-        template <typename T> 
-        [[nodiscard]] 
+         * A way to interact with actors from non-actor context.
+         *
+         * This method will send the `event` to the `recipient` and then will wait for a response. When response arrives,
+         * it will be passed to the future. If response is not of type `T`, the future will resolve into an exception.
+         *
+         * @tparam T            expected response type. Must be derived from `TEventBase`,
+         *                      or use `IEventBase` to catch any response.
+         * @param actorSystem   actor system that will be used to register an actor that'll wait for response.
+         * @param recipient     who will get a request.
+         * @param event         a request message.
+         * @return              future that will be resolved when a message from `recipient` arrives.
+         */
+        template <typename T>
+        [[nodiscard]]
         NThreading::TFuture<THolder<T>> Ask(TActorId recipient, THolder<IEventBase> event, TDuration timeout = TDuration::Max()) {
-            if constexpr (std::is_same_v<T, IEventBase>) { 
-                return AskGeneric(Nothing(), recipient, std::move(event), timeout); 
-            } else { 
-                return AskGeneric(T::EventType, recipient, std::move(event), timeout) 
-                    .Apply([](const NThreading::TFuture<THolder<IEventBase>>& ev) { 
-                        return THolder<T>(static_cast<T*>(const_cast<THolder<IEventBase>&>(ev.GetValueSync()).Release()));  // =( 
-                    }); 
-            } 
-        } 
- 
-        [[nodiscard]] 
-        NThreading::TFuture<THolder<IEventBase>> AskGeneric( 
-            TMaybe<ui32> expectedEventType, 
+            if constexpr (std::is_same_v<T, IEventBase>) {
+                return AskGeneric(Nothing(), recipient, std::move(event), timeout);
+            } else {
+                return AskGeneric(T::EventType, recipient, std::move(event), timeout)
+                    .Apply([](const NThreading::TFuture<THolder<IEventBase>>& ev) {
+                        return THolder<T>(static_cast<T*>(const_cast<THolder<IEventBase>&>(ev.GetValueSync()).Release()));  // =(
+                    });
+            }
+        }
+
+        [[nodiscard]]
+        NThreading::TFuture<THolder<IEventBase>> AskGeneric(
+            TMaybe<ui32> expectedEventType,
             TActorId recipient,
-            THolder<IEventBase> event, 
-            TDuration timeout); 
- 
+            THolder<IEventBase> event,
+            TDuration timeout);
+
         ui64 AllocateIDSpace(ui64 count);
 
         TActorId InterconnectProxy(ui32 destinationNode) const;

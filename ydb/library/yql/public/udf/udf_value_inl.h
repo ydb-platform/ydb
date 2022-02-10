@@ -373,7 +373,7 @@ Y_FORCE_INLINE TUnboxedValue& TUnboxedValue::operator=(const TUnboxedValue& valu
     return *this;
 }
 
-Y_FORCE_INLINE TUnboxedValue& TUnboxedValue::operator=(TUnboxedValue&& value) noexcept 
+Y_FORCE_INLINE TUnboxedValue& TUnboxedValue::operator=(TUnboxedValue&& value) noexcept
 {
     if (this != &value) {
         UnRef();
@@ -388,14 +388,14 @@ Y_FORCE_INLINE TUnboxedValuePod TUnboxedValue::Release() noexcept {
     Raw = TRaw();
     value.ReleaseRef();
     return value;
-} 
- 
+}
+
 Y_FORCE_INLINE void TUnboxedValue::Clear() noexcept
 {
     UnRef();
     Raw = TRaw();
-} 
- 
+}
+
 Y_FORCE_INLINE TUnboxedValue::~TUnboxedValue() noexcept
 {
     UnRef();

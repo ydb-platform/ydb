@@ -176,7 +176,7 @@ namespace NKikimr {
             };
 
         private:
-            std::shared_ptr<grpc::ChannelInterface> Channel; 
+            std::shared_ptr<grpc::ChannelInterface> Channel;
             TStub Stub;
             grpc::CompletionQueue CQ;
             TMaybe<TDuration> Timeout;
@@ -188,8 +188,8 @@ namespace NKikimr {
 
         public:
             TImpl(const TGRpcClientConfig& config)
-                : Channel(NGrpc::CreateChannelInterface(config)) 
-                , Stub(Channel) 
+                : Channel(NGrpc::CreateChannelInterface(config))
+                , Stub(Channel)
                 , MaxInFlight(config.MaxInFlight)
             {
                 if (config.Timeout != TDuration::Max()) {
@@ -203,8 +203,8 @@ namespace NKikimr {
                 Join();
             }
 
-            grpc_connectivity_state GetNetworkStatus() const { 
-                return Channel->GetState(false); 
+            grpc_connectivity_state GetNetworkStatus() const {
+                return Channel->GetState(false);
             }
 
             template<typename TRequest, typename TResponse>
@@ -307,10 +307,10 @@ namespace NKikimr {
             return Config;
         }
 
-        grpc_connectivity_state TGRpcClient::GetNetworkStatus() const { 
-            return Impl->GetNetworkStatus(); 
-        } 
- 
+        grpc_connectivity_state TGRpcClient::GetNetworkStatus() const {
+            return Impl->GetNetworkStatus();
+        }
+
 #define IMPL_REQUEST(NAME, REQUEST, RESPONSE) \
         void TGRpcClient::NAME(const NKikimrClient::REQUEST& request, TCallback<NKikimrClient::RESPONSE> callback) { \
             Impl->Issue(request, std::move(callback), &TImpl::TStub::Async ## NAME); \

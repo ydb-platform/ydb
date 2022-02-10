@@ -20,10 +20,10 @@ template <typename T>
 T* AsType(TType* type, const TSourceLocation& location);
 
 template <typename T>
-const T* AsType(const TType* type, const TSourceLocation& location); 
- 
- 
-template <typename T> 
+const T* AsType(const TType* type, const TSourceLocation& location);
+
+
+template <typename T>
 T* AsType(TRuntimeNode node, const TSourceLocation& location) {
     return AsType<T>(node.GetStaticType(), location);
 }

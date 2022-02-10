@@ -16,13 +16,13 @@ namespace NLastGetopt {
     class TException: public yexception {
     };
 
-    /// TOpts configuration is incorrect 
+    /// TOpts configuration is incorrect
     class TConfException: public TException {
     };
 
-    /// User passed incorrect arguments, parsing failed 
-    /// Note: use `throw TUsageException()` instead of `ythrow TUsageException()` to prevent appearence of stacktrace 
-    /// and location of the `ythrow` statment in error messages. 
+    /// User passed incorrect arguments, parsing failed
+    /// Note: use `throw TUsageException()` instead of `ythrow TUsageException()` to prevent appearence of stacktrace
+    /// and location of the `ythrow` statment in error messages.
     class TUsageException: public TException {
     };
 
@@ -166,7 +166,7 @@ namespace NLastGetopt {
             try {
                 return OptFromStringImpl<T>(value);
             } catch (...) {
-                throw TUsageException() << "failed to parse opt " << OptToString(opt) << " value " << TString(value).Quote() << ": " << CurrentExceptionMessage(); 
+                throw TUsageException() << "failed to parse opt " << OptToString(opt) << " value " << TString(value).Quote() << ": " << CurrentExceptionMessage();
             }
         }
 

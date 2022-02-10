@@ -813,7 +813,7 @@ public:
     inline ~TUnboxedValuePod() noexcept = default;
 
     inline TUnboxedValuePod(const TUnboxedValuePod& value) noexcept = default;
-    inline TUnboxedValuePod(TUnboxedValuePod&& value) noexcept = default; 
+    inline TUnboxedValuePod(TUnboxedValuePod&& value) noexcept = default;
 
     inline TUnboxedValuePod& operator=(const TUnboxedValuePod& value) noexcept = default;
     inline TUnboxedValuePod& operator=(TUnboxedValuePod&& value) noexcept = default;
@@ -1036,10 +1036,10 @@ public:
     inline TUnboxedValue(TUnboxedValuePod&& value) noexcept;
 
     inline TUnboxedValue(const TUnboxedValue& value) noexcept;
-    inline TUnboxedValue(TUnboxedValue&& value) noexcept; 
+    inline TUnboxedValue(TUnboxedValue&& value) noexcept;
 
     inline TUnboxedValue& operator=(const TUnboxedValue& value) noexcept;
-    inline TUnboxedValue& operator=(TUnboxedValue&& value) noexcept; 
+    inline TUnboxedValue& operator=(TUnboxedValue&& value) noexcept;
 
     inline TUnboxedValuePod Release() noexcept;
 

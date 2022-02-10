@@ -22,16 +22,16 @@
                    "Expected type of T" #name "Type"                     \
                    " but got " << type->GetKindAsStr());                 \
         return static_cast<T##name##Type*>(type);                        \
-    }                                                                    \ 
-    template <>                                                          \ 
-    const T##name##Type*                                                 \ 
-    AsType(const TType* type, const TSourceLocation& location) {         \ 
-        MKQL_ENSURE_WITH_LOC(                                            \ 
-                location,                                                \ 
-                type->Is##name(),                                        \ 
-                   "Expected type of T" #name "Type"                     \ 
-                   " but got " << type->GetKindAsStr());                 \ 
-        return static_cast<const T##name##Type*>(type);                  \ 
+    }                                                                    \
+    template <>                                                          \
+    const T##name##Type*                                                 \
+    AsType(const TType* type, const TSourceLocation& location) {         \
+        MKQL_ENSURE_WITH_LOC(                                            \
+                location,                                                \
+                type->Is##name(),                                        \
+                   "Expected type of T" #name "Type"                     \
+                   " but got " << type->GetKindAsStr());                 \
+        return static_cast<const T##name##Type*>(type);                  \
     }
 
 namespace NKikimr {

@@ -76,12 +76,12 @@ namespace NThreading {
     public:
         using value_type = T;
 
-        TFuture() noexcept = default; 
-        TFuture(const TFuture<T>& other) noexcept = default; 
+        TFuture() noexcept = default;
+        TFuture(const TFuture<T>& other) noexcept = default;
         TFuture(TFuture<T>&& other) noexcept = default;
-        TFuture(const TIntrusivePtr<TFutureState>& state) noexcept; 
+        TFuture(const TIntrusivePtr<TFutureState>& state) noexcept;
 
-        TFuture<T>& operator=(const TFuture<T>& other) noexcept = default; 
+        TFuture<T>& operator=(const TFuture<T>& other) noexcept = default;
         TFuture<T>& operator=(TFuture<T>&& other) noexcept = default;
         void Swap(TFuture<T>& other);
 
@@ -128,17 +128,17 @@ namespace NThreading {
         using TFutureState = NImpl::TFutureState<void>;
 
     private:
-        TIntrusivePtr<TFutureState> State = nullptr; 
+        TIntrusivePtr<TFutureState> State = nullptr;
 
     public:
         using value_type = void;
 
-        TFuture() noexcept = default; 
-        TFuture(const TFuture<void>& other) noexcept = default; 
+        TFuture() noexcept = default;
+        TFuture(const TFuture<void>& other) noexcept = default;
         TFuture(TFuture<void>&& other) noexcept = default;
-        TFuture(const TIntrusivePtr<TFutureState>& state) noexcept; 
+        TFuture(const TIntrusivePtr<TFutureState>& state) noexcept;
 
-        TFuture<void>& operator=(const TFuture<void>& other) noexcept = default; 
+        TFuture<void>& operator=(const TFuture<void>& other) noexcept = default;
         TFuture<void>& operator=(TFuture<void>&& other) noexcept = default;
         void Swap(TFuture<void>& other);
 
@@ -188,15 +188,15 @@ namespace NThreading {
         using TFutureState = NImpl::TFutureState<T>;
 
     private:
-        TIntrusivePtr<TFutureState> State = nullptr; 
+        TIntrusivePtr<TFutureState> State = nullptr;
 
     public:
-        TPromise() noexcept = default; 
-        TPromise(const TPromise<T>& other) noexcept = default; 
+        TPromise() noexcept = default;
+        TPromise(const TPromise<T>& other) noexcept = default;
         TPromise(TPromise<T>&& other) noexcept = default;
-        TPromise(const TIntrusivePtr<TFutureState>& state) noexcept; 
+        TPromise(const TIntrusivePtr<TFutureState>& state) noexcept;
 
-        TPromise<T>& operator=(const TPromise<T>& other) noexcept = default; 
+        TPromise<T>& operator=(const TPromise<T>& other) noexcept = default;
         TPromise<T>& operator=(TPromise<T>&& other) noexcept = default;
         void Swap(TPromise<T>& other);
 
@@ -235,12 +235,12 @@ namespace NThreading {
         TIntrusivePtr<TFutureState> State;
 
     public:
-        TPromise() noexcept = default; 
-        TPromise(const TPromise<void>& other) noexcept = default; 
+        TPromise() noexcept = default;
+        TPromise(const TPromise<void>& other) noexcept = default;
         TPromise(TPromise<void>&& other) noexcept = default;
-        TPromise(const TIntrusivePtr<TFutureState>& state) noexcept; 
+        TPromise(const TIntrusivePtr<TFutureState>& state) noexcept;
 
-        TPromise<void>& operator=(const TPromise<void>& other) noexcept = default; 
+        TPromise<void>& operator=(const TPromise<void>& other) noexcept = default;
         TPromise<void>& operator=(TPromise<void>&& other) noexcept = default;
         void Swap(TPromise<void>& other);
 

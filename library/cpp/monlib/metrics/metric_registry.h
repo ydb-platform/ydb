@@ -57,11 +57,11 @@ namespace NMonitoring {
 
         explicit TMetricRegistry(const TLabels& commonLabels);
 
-        /** 
-         * Get a global metrics registry instance. 
-         */ 
-        static TMetricRegistry* Instance(); 
- 
+        /**
+         * Get a global metrics registry instance.
+         */
+        static TMetricRegistry* Instance();
+
         TGauge* Gauge(TLabels labels);
         TLazyGauge* LazyGauge(TLabels labels, std::function<double()> supplier);
         TIntGauge* IntGauge(TLabels labels);

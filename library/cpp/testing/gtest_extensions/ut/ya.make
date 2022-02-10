@@ -1,20 +1,20 @@
 GTEST()
 OWNER(
-    amatanhead 
+    amatanhead
     bulatman
     dancingqueue
-    prettyboy 
-    thegeorg 
+    prettyboy
+    thegeorg
     g:cpp-contrib
 )
 
 SRCS(
-    gtest_extensions_ut.cpp 
+    gtest_extensions_ut.cpp
     probe_ut.cpp
 )
 
 PEERDIR(
-    library/cpp/testing/gtest_extensions 
+    library/cpp/testing/gtest_extensions
 )
 
 END()

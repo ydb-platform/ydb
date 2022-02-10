@@ -1,7 +1,7 @@
 #pragma once
 
-#include "last_getopt_opts.h" 
- 
+#include "last_getopt_opts.h"
+
 #include <util/generic/map.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -60,12 +60,12 @@ public:
     //! Set default mode (if not specified explicitly)
     void SetDefaultMode(const TString& mode);
 
-    void AddAlias(const TString& alias, const TString& mode); 
- 
+    void AddAlias(const TString& alias, const TString& mode);
+
     //! Set main program description.
     void SetDescription(const TString& descr);
 
-    //! Set modes help option name (-? is by default) 
+    //! Set modes help option name (-? is by default)
     void SetModesHelpOption(const TString& helpOption);
 
     //! Specify handler for '--version' parameter
@@ -83,7 +83,7 @@ public:
     void DisableSvnRevisionOption();
 
     void AddCompletions(TString progName, const TString& name = "completion", bool hidden = false, bool noCompletion = false);
- 
+
     /*! Run appropriate mode.
      *
      * In this method following things happen:
@@ -104,11 +104,11 @@ public:
 
     struct TMode {
         TString Name;
-        TMainClass* Main; 
+        TMainClass* Main;
         TString Description;
         bool Hidden;
         bool NoCompletion;
-        TVector<TString> Aliases; 
+        TVector<TString> Aliases;
 
         TMode()
             : Main(nullptr)
@@ -116,24 +116,24 @@ public:
         }
 
         TMode(const TString& name, TMainClass* main, const TString& descr, bool hidden, bool noCompletion);
- 
-        // Full name includes primary name and aliases. Also, will add ANSI colors. 
-        size_t CalculateFullNameLen() const; 
-        TString FormatFullName(size_t pad) const; 
+
+        // Full name includes primary name and aliases. Also, will add ANSI colors.
+        size_t CalculateFullNameLen() const;
+        TString FormatFullName(size_t pad) const;
     };
 
-    TVector<const TMode*> GetUnsortedModes() const { 
-        auto ret = TVector<const TMode*>(Reserve(UnsortedModes.size())); 
-        for (auto& mode : UnsortedModes) { 
-            ret.push_back(mode.Get()); 
-        } 
-        return ret; 
-    } 
+    TVector<const TMode*> GetUnsortedModes() const {
+        auto ret = TVector<const TMode*>(Reserve(UnsortedModes.size()));
+        for (auto& mode : UnsortedModes) {
+            ret.push_back(mode.Get());
+        }
+        return ret;
+    }
 
-    TVersionHandlerPtr GetVersionHandler() const; 
- 
-    bool IsSvnRevisionOptionDisabled() const; 
- 
+    TVersionHandlerPtr GetVersionHandler() const;
+
+    bool IsSvnRevisionOptionDisabled() const;
+
 private:
     //! Main program description.
     TString Description;
@@ -142,10 +142,10 @@ private:
     TString ModesHelpOption;
 
     //! Wrappers around all modes.
-    TVector<THolder<TMainClass>> Wrappers; 
+    TVector<THolder<TMainClass>> Wrappers;
 
     //! Modes
-    TMap<TString, TMode*> Modes; 
+    TMap<TString, TMode*> Modes;
 
     TString DefaultMode;
 
@@ -165,51 +165,51 @@ private:
     TString SeparationString;
 
     //! Unsorted list of options
-    TVector<THolder<TMode>> UnsortedModes; 
- 
-    //! Mode that generates completions 
-    THolder<TMainClass> CompletionsGenerator; 
+    TVector<THolder<TMode>> UnsortedModes;
+
+    //! Mode that generates completions
+    THolder<TMainClass> CompletionsGenerator;
 };
- 
-//! Mode class that allows introspecting its console arguments. 
-class TMainClassArgs: public TMainClass { 
-public: 
+
+//! Mode class that allows introspecting its console arguments.
+class TMainClassArgs: public TMainClass {
+public:
     int operator()(int argc, const char** argv) final;
- 
-public: 
-    //! Run this mode. 
-    int Run(int argc, const char** argv); 
- 
-    //! Get console arguments for this mode. 
-    const NLastGetopt::TOpts& GetOptions(); 
- 
-protected: 
-    //! Fill given empty `TOpts` with options. 
-    virtual void RegisterOptions(NLastGetopt::TOpts& opts); 
- 
-    //! Actual mode logic. Takes parsed options and returns exit code. 
-    virtual int DoRun(NLastGetopt::TOptsParseResult&& parsedOptions) = 0; 
- 
-private: 
-    TMaybe<NLastGetopt::TOpts> Opts_; 
-}; 
- 
-//! Mode class that uses sub-modes to dispatch commands further. 
-class TMainClassModes: public TMainClass { 
-public: 
+
+public:
+    //! Run this mode.
+    int Run(int argc, const char** argv);
+
+    //! Get console arguments for this mode.
+    const NLastGetopt::TOpts& GetOptions();
+
+protected:
+    //! Fill given empty `TOpts` with options.
+    virtual void RegisterOptions(NLastGetopt::TOpts& opts);
+
+    //! Actual mode logic. Takes parsed options and returns exit code.
+    virtual int DoRun(NLastGetopt::TOptsParseResult&& parsedOptions) = 0;
+
+private:
+    TMaybe<NLastGetopt::TOpts> Opts_;
+};
+
+//! Mode class that uses sub-modes to dispatch commands further.
+class TMainClassModes: public TMainClass {
+public:
     int operator()(int argc, const char** argv) final;
- 
-public: 
-    //! Run this mode. 
-    int Run(int argc, const char** argv); 
- 
-    //! Get sub-modes for this mode. 
-    const TModChooser& GetSubModes(); 
- 
-protected: 
-    //! Fill given modchooser with sub-modes. 
-    virtual void RegisterModes(TModChooser& modes); 
- 
-private: 
-    TMaybe<TModChooser> Modes_; 
-}; 
+
+public:
+    //! Run this mode.
+    int Run(int argc, const char** argv);
+
+    //! Get sub-modes for this mode.
+    const TModChooser& GetSubModes();
+
+protected:
+    //! Fill given modchooser with sub-modes.
+    virtual void RegisterModes(TModChooser& modes);
+
+private:
+    TMaybe<TModChooser> Modes_;
+};

@@ -24,9 +24,9 @@ namespace NMonitoring {
 
     EMetricType DecodeMetricType(ui8 byte);
 
-    [[nodiscard]] 
-    bool TryDecodeMetricType(ui8 byte, EMetricType* result); 
- 
+    [[nodiscard]]
+    bool TryDecodeMetricType(ui8 byte, EMetricType* result);
+
     ///////////////////////////////////////////////////////////////////////////////
     // EValueType
     ///////////////////////////////////////////////////////////////////////////////
@@ -43,9 +43,9 @@ namespace NMonitoring {
 
     EValueType DecodeValueType(ui8 byte);
 
-    [[nodiscard]] 
-    bool TryDecodeValueType(ui8 byte, EValueType* result); 
- 
+    [[nodiscard]]
+    bool TryDecodeValueType(ui8 byte, EValueType* result);
+
     ///////////////////////////////////////////////////////////////////////////////
     // ETimePrecision
     ///////////////////////////////////////////////////////////////////////////////
@@ -60,9 +60,9 @@ namespace NMonitoring {
 
     ETimePrecision DecodeTimePrecision(ui8 byte);
 
-    [[nodiscard]] 
-    bool TryDecodeTimePrecision(ui8 byte, ETimePrecision* result); 
- 
+    [[nodiscard]]
+    bool TryDecodeTimePrecision(ui8 byte, ETimePrecision* result);
+
     ///////////////////////////////////////////////////////////////////////////////
     // ECompression
     ///////////////////////////////////////////////////////////////////////////////
@@ -70,9 +70,9 @@ namespace NMonitoring {
 
     ECompression DecodeCompression(ui8 byte);
 
-    [[nodiscard]] 
-    bool TryDecodeCompression(ui8 byte, ECompression* result); 
- 
+    [[nodiscard]]
+    bool TryDecodeCompression(ui8 byte, ECompression* result);
+
     ///////////////////////////////////////////////////////////////////////////////
     // TSpackHeader
     ///////////////////////////////////////////////////////////////////////////////

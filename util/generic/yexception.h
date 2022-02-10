@@ -129,8 +129,8 @@ class TFileError: public TIoSystemError {
  * TBadArgumentException.
  */
 struct TBadArgumentException: public virtual yexception {
-};
-
+}; 
+ 
 /**
  * TBadCastException should be thrown to indicate the failure of some type casting procedure
  * (e.g. reading an integer parameter from string).

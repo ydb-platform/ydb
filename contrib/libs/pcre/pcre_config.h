@@ -89,10 +89,10 @@ sure both macros are undefined; an emulation function will then be used. */
 #define HAVE_MEMORY_H 1
 
 /* Define if you have POSIX threads libraries and header files. */
-#define HAVE_PTHREAD 1
+#define HAVE_PTHREAD 1 
 
 /* Have PTHREAD_PRIO_INHERIT. */
-#define HAVE_PTHREAD_PRIO_INHERIT 1
+#define HAVE_PTHREAD_PRIO_INHERIT 1 
 
 /* Define to 1 if you have the <readline/history.h> header file. */
 /* #undef HAVE_READLINE_HISTORY_H */
@@ -293,10 +293,10 @@ sure both macros are undefined; an emulation function will then be used. */
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
 
-#ifdef ARCADIA_PCRE_ENABLE_JIT
+#ifdef ARCADIA_PCRE_ENABLE_JIT 
 /* Define to any value to enable support for Just-In-Time compiling. */
-#define SUPPORT_JIT /**/
-#endif
+#define SUPPORT_JIT /**/ 
+#endif 
 
 /* Define to any value to allow pcregrep to be linked with libbz2, so that it
    is able to handle .bz2 files. */
@@ -313,18 +313,18 @@ sure both macros are undefined; an emulation function will then be used. */
 /* #undef SUPPORT_LIBZ */
 
 /* Define to any value to enable the 16 bit PCRE library. */
-#define SUPPORT_PCRE16 /**/
+#define SUPPORT_PCRE16 /**/ 
 
 /* Define to any value to enable the 32 bit PCRE library. */
-#define SUPPORT_PCRE32 /**/
+#define SUPPORT_PCRE32 /**/ 
 
 /* Define to any value to enable the 8 bit PCRE library. */
 #define SUPPORT_PCRE8 /**/
 
-#ifdef ARCADIA_PCRE_ENABLE_JIT
+#ifdef ARCADIA_PCRE_ENABLE_JIT 
 /* Define to any value to enable JIT support in pcregrep. */
-#define SUPPORT_PCREGREP_JIT /**/
-#endif
+#define SUPPORT_PCREGREP_JIT /**/ 
+#endif 
 
 /* Define to any value to enable support for Unicode properties. */
 #define SUPPORT_UCP /**/

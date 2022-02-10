@@ -4,7 +4,7 @@
 
 #include <util/charset/wide.h>
 #include <util/system/defaults.h>
-
+ 
 #include <limits>
 
 // positive test (return true or no exception)
@@ -319,7 +319,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
     Y_UNIT_TEST(TestLiteral) {
         UNIT_ASSERT_VALUES_EQUAL(ToString("abc"), TString("abc"));
     }
-
+ 
     Y_UNIT_TEST(TestFromStringStringBuf) {
         TString a = "xyz";
         TStringBuf b = FromString<TStringBuf>(a);

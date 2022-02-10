@@ -153,7 +153,7 @@ RECURSE(
     grpc
     histogram
     hnsw
-    html
+    html 
     html/dehtml/ut
     http
     hyperloglog

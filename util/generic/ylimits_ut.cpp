@@ -1,4 +1,4 @@
-#include "cast.h"
+#include "cast.h" 
 #include "ylimits.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -42,11 +42,11 @@ static inline bool TestIntegralLimits(const T&, bool unknownSign = true, bool is
     CHECK_COND((unknownSign && ((lim::is_signed && (lim::min() != 0)) || (!lim::is_signed && (lim::min() == 0)))) ||
                (!unknownSign && ((lim::is_signed && isSigned) || (!lim::is_signed && !isSigned))));
 
-    T min = Min();
-    UNIT_ASSERT_EQUAL(lim::min(), min);
-    T max = Max();
-    UNIT_ASSERT_EQUAL(lim::max(), max);
-
+    T min = Min(); 
+    UNIT_ASSERT_EQUAL(lim::min(), min); 
+    T max = Max(); 
+    UNIT_ASSERT_EQUAL(lim::max(), max); 
+ 
     if (unknownSign) {
         CHECK_COND(ValidSignInfo(lim::is_signed, T()));
     }

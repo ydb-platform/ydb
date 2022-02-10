@@ -35,7 +35,7 @@ public:
     inline TArrayRef<const TStringBuf> GetBestCodecs() const {
         return BestCodecs_;
     }
-
+ 
 private:
     void Add(TStringBuf name, TDecoderConstructor d, TEncoderConstructor e);
 

@@ -76,7 +76,7 @@ public:
     /// Если заголовки содержат Content-Length, возвращает true и
     /// записывает значение из заголовка в value
     bool GetContentLength(ui64& value) const noexcept;
-
+ 
     /// Признак запакованности данных, - если выставлен, то Content-Length, при наличии в заголовках,
     /// показывает объём запакованных данных, а из THttpInput мы будем вычитывать уже распакованные.
     bool ContentEncoded() const noexcept;

@@ -80,7 +80,7 @@ namespace NTL {
         using TSignedInts = typename TConcat<TTypeList<T>, TS>::type;
         using TUnsignedInts = TU;
     };
-
+ 
     template <class T, class TS, class TU>
     struct TTypeSelectorBase<false, T, TS, TU> {
         using TSignedInts = TS;

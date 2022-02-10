@@ -227,13 +227,13 @@ size_t NSystemInfo::TotalMemorySize() {
     return 0;
 #endif
 }
-
-size_t NSystemInfo::MaxOpenFiles() {
-#if defined(ANDROID) || defined(__ANDROID__)
-    return sysconf(_SC_OPEN_MAX);
-#elif defined(_win_)
-    return _getmaxstdio();
-#else
-    return getdtablesize();
-#endif
-}
+ 
+size_t NSystemInfo::MaxOpenFiles() { 
+#if defined(ANDROID) || defined(__ANDROID__) 
+    return sysconf(_SC_OPEN_MAX); 
+#elif defined(_win_) 
+    return _getmaxstdio(); 
+#else 
+    return getdtablesize(); 
+#endif 
+} 

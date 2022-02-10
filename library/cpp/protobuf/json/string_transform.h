@@ -82,7 +82,7 @@ namespace NProtobufJson {
     private:
         TString Unescape(const TString& str) const;
     };
-
+ 
     class TBase64EncodeBytesTransform: public NProtobufJson::IStringTransform {
     public:
         int GetType() const override {

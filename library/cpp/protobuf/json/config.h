@@ -86,8 +86,8 @@ namespace NProtobufJson {
         /// Custom enum values generator.
         TEnumValueGenerator EnumValueGenerator = {};
 
-        bool WriteNanAsString = false;
-
+        bool WriteNanAsString = false; 
+ 
         TSelf& SetFormatOutput(bool format) {
             FormatOutput = format;
             return *this;
@@ -154,11 +154,11 @@ namespace NProtobufJson {
             EnumValueGenerator = callback;
             return *this;
         }
-
-        TSelf& SetWriteNanAsString(bool value) {
-            WriteNanAsString = value;
-            return *this;
-        }
+ 
+        TSelf& SetWriteNanAsString(bool value) { 
+            WriteNanAsString = value; 
+            return *this; 
+        } 
     };
 
 }

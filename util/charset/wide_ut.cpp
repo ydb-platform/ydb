@@ -177,7 +177,7 @@ private:
     UNIT_TEST(TestSubstrUTF8);
     UNIT_TEST(TestUnicodeCase);
     UNIT_TEST(TestUnicodeDetails);
-    UNIT_TEST(TestHexConversion);
+    UNIT_TEST(TestHexConversion); 
     UNIT_TEST_SUITE_END();
 
 public:
@@ -196,34 +196,34 @@ public:
     void TestSubstrUTF8();
     void TestUnicodeCase();
     void TestUnicodeDetails();
-    void TestHexConversion();
+    void TestHexConversion(); 
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TConversionTest);
 
-void TConversionTest::TestHexConversion() {
-    for (char ch = '0'; ch <= '9'; ++ch) {
-        UNIT_ASSERT(isxdigit(ch));
-        UNIT_ASSERT(IsHexdigit(ch));
-    }
-
-    for (char ch = 'a'; ch <= 'f'; ++ch) {
-        UNIT_ASSERT(isxdigit(ch));
-        UNIT_ASSERT(IsHexdigit(ch));
-    }
-
-    for (char ch = 'A'; ch <= 'F'; ++ch) {
-        UNIT_ASSERT(isxdigit(ch));
-        UNIT_ASSERT(IsHexdigit(ch));
-    }
-
-    for (wchar16 i = std::numeric_limits<wchar16>::min(); i < std::numeric_limits<wchar16>::max(); ++i) {
-        if (IsHexdigit(i)) {
-            UNIT_ASSERT(isxdigit(char(i)));
-        }
-    }
-}
-
+void TConversionTest::TestHexConversion() { 
+    for (char ch = '0'; ch <= '9'; ++ch) { 
+        UNIT_ASSERT(isxdigit(ch)); 
+        UNIT_ASSERT(IsHexdigit(ch)); 
+    } 
+ 
+    for (char ch = 'a'; ch <= 'f'; ++ch) { 
+        UNIT_ASSERT(isxdigit(ch)); 
+        UNIT_ASSERT(IsHexdigit(ch)); 
+    } 
+ 
+    for (char ch = 'A'; ch <= 'F'; ++ch) { 
+        UNIT_ASSERT(isxdigit(ch)); 
+        UNIT_ASSERT(IsHexdigit(ch)); 
+    } 
+ 
+    for (wchar16 i = std::numeric_limits<wchar16>::min(); i < std::numeric_limits<wchar16>::max(); ++i) { 
+        if (IsHexdigit(i)) { 
+            UNIT_ASSERT(isxdigit(char(i))); 
+        } 
+    } 
+} 
+ 
 void TConversionTest::TestReadUTF8Char() {
     wchar32 e; // expected unicode char
     wchar32 c;

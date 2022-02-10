@@ -88,8 +88,8 @@ namespace {
         void Wait(TEvents& events, TInstant deadLine) {
             const size_t ret = P_.WaitD(~E_, +E_, deadLine);
 
-            events.reserve(ret); 
- 
+            events.reserve(ret);
+
             for (size_t i = 0; i < ret; ++i) {
                 const TInternalEvent* ie = ~E_ + i;
 
@@ -199,12 +199,12 @@ namespace {
             ret |= POLLOUT;
         }
 
-#if defined(_linux_) 
-        if (flags & CONT_POLL_RDHUP) { 
-            ret |= POLLRDHUP; 
-        } 
-#endif 
- 
+#if defined(_linux_)
+        if (flags & CONT_POLL_RDHUP) {
+            ret |= POLLRDHUP;
+        }
+#endif
+
         return ret;
     }
 
@@ -248,12 +248,12 @@ namespace {
 
             const ssize_t ret = PollD(T_.data(), (nfds_t) T_.size(), deadLine);
 
-            if (ret <= 0) { 
+            if (ret <= 0) {
                 return;
             }
 
             events.reserve(T_.size());
- 
+
             for (size_t i = 0; i < T_.size(); ++i) {
                 const pollfd& pfd = T_[i];
                 const short ev = pfd.revents;
@@ -274,12 +274,12 @@ namespace {
                     filter |= CONT_POLL_WRITE;
                 }
 
-#if defined(_linux_) 
-                if (ev & POLLRDHUP) { 
-                    filter |= CONT_POLL_RDHUP; 
-                } 
-#endif 
- 
+#if defined(_linux_)
+                if (ev & POLLRDHUP) {
+                    filter |= CONT_POLL_RDHUP;
+                }
+#endif
+
                 if (ev & POLLERR) {
                     status = EIO;
                 } else if (ev & POLLHUP && pfd.events & POLLOUT) {
@@ -290,7 +290,7 @@ namespace {
                 }
 
                 if (status) {
-                    filter = CONT_POLL_READ | CONT_POLL_WRITE | CONT_POLL_RDHUP; 
+                    filter = CONT_POLL_READ | CONT_POLL_WRITE | CONT_POLL_RDHUP;
                 }
 
                 const TEvent res = {

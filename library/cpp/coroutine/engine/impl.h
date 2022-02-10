@@ -1,6 +1,6 @@
 #pragma once
 
-#include "callbacks.h" 
+#include "callbacks.h"
 #include "cont_poller.h"
 #include "iostatus.h"
 #include "poller.h"
@@ -154,7 +154,7 @@ public:
         uint32_t defaultStackSize,
         THolder<IPollerFace> poller = IPollerFace::Default(),
         NCoro::IScheduleCallback* = nullptr,
-        NCoro::IEnterPollerCallback* = nullptr, 
+        NCoro::IEnterPollerCallback* = nullptr,
         NCoro::NStack::EGuard stackGuard = NCoro::NStack::EGuard::Canary,
         TMaybe<NCoro::NStack::TPoolAllocatorSettings> poolSettings = Nothing(),
         NCoro::ITime* time = nullptr
@@ -273,7 +273,7 @@ private:
 
     void Exit(TCont* cont) noexcept;
 
-    void RunScheduler() noexcept; 
+    void RunScheduler() noexcept;
 
     void ScheduleToDelete(TCont* cont) noexcept;
 
@@ -288,8 +288,8 @@ private:
     void Poll(TInstant deadline);
 
 private:
-    NCoro::IScheduleCallback* const ScheduleCallback_ = nullptr; 
-    NCoro::IEnterPollerCallback* const EnterPollerCallback_ = nullptr; 
+    NCoro::IScheduleCallback* const ScheduleCallback_ = nullptr;
+    NCoro::IEnterPollerCallback* const EnterPollerCallback_ = nullptr;
     const uint32_t DefaultStackSize_;
     THolder<NCoro::NStack::IAllocator> StackAllocator_;
 

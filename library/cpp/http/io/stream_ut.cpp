@@ -14,7 +14,7 @@
 #include <util/stream/zlib.h>
 #include <util/stream/null.h>
 
-Y_UNIT_TEST_SUITE(THttpStreamTest) { 
+Y_UNIT_TEST_SUITE(THttpStreamTest) {
     class TTestHttpServer: public THttpServer::ICallBack {
         class TRequest: public THttpClientRequestEx {
         public:
@@ -443,7 +443,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
 
     Y_UNIT_TEST(CodecsPriority) {
         TMemoryInput request("GET / HTTP/1.1\r\nAccept-Encoding: gzip, br\r\n\r\n");
-        TVector<TStringBuf> codecs = {"br", "gzip"}; 
+        TVector<TStringBuf> codecs = {"br", "gzip"};
 
         THttpInput i(&request);
         TString result;
@@ -451,7 +451,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         THttpOutput httpOut(&out, &i);
 
         httpOut.EnableKeepAlive(true);
-        httpOut.EnableCompression(codecs); 
+        httpOut.EnableCompression(codecs);
         httpOut << "HTTP/1.1 200 OK\r\n";
         char answer[] = "Mary had a little lamb.";
         httpOut << "Content-Length: " << strlen(answer) << "\r\n"
@@ -466,7 +466,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
 
     Y_UNIT_TEST(CodecsPriority2) {
         TMemoryInput request("GET / HTTP/1.1\r\nAccept-Encoding: gzip, br\r\n\r\n");
-        TVector<TStringBuf> codecs = {"gzip", "br"}; 
+        TVector<TStringBuf> codecs = {"gzip", "br"};
 
         THttpInput i(&request);
         TString result;
@@ -474,7 +474,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         THttpOutput httpOut(&out, &i);
 
         httpOut.EnableKeepAlive(true);
-        httpOut.EnableCompression(codecs); 
+        httpOut.EnableCompression(codecs);
         httpOut << "HTTP/1.1 200 OK\r\n";
         char answer[] = "Mary had a little lamb.";
         httpOut << "Content-Length: " << strlen(answer) << "\r\n"
@@ -665,27 +665,27 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         UNIT_ASSERT(!result.Contains(TStringBuf("0\r\n")));
     }
 
-    Y_UNIT_TEST(TestHttpOutputDisableCompressionHeader) { 
-        TMemoryInput request("GET / HTTP/1.1\r\nAccept-Encoding: gzip\r\n\r\n"); 
-        const TString data = "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"; 
- 
-        THttpInput httpInput(&request); 
-        TString result; 
- 
-        { 
-            TStringOutput output(result); 
-            THttpOutput httpOutput(&output, &httpInput); 
-            httpOutput.EnableCompressionHeader(false); 
-            httpOutput << "HTTP/1.1 200 OK\r\n" 
-                   "content-encoding: gzip\r\n" 
-                   "\r\n" + data; 
-            httpOutput.Finish(); 
-        } 
- 
-        UNIT_ASSERT(result.Contains("content-encoding: gzip")); 
-        UNIT_ASSERT(result.Contains(data)); 
-    } 
- 
+    Y_UNIT_TEST(TestHttpOutputDisableCompressionHeader) {
+        TMemoryInput request("GET / HTTP/1.1\r\nAccept-Encoding: gzip\r\n\r\n");
+        const TString data = "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
+
+        THttpInput httpInput(&request);
+        TString result;
+
+        {
+            TStringOutput output(result);
+            THttpOutput httpOutput(&output, &httpInput);
+            httpOutput.EnableCompressionHeader(false);
+            httpOutput << "HTTP/1.1 200 OK\r\n"
+                   "content-encoding: gzip\r\n"
+                   "\r\n" + data;
+            httpOutput.Finish();
+        }
+
+        UNIT_ASSERT(result.Contains("content-encoding: gzip"));
+        UNIT_ASSERT(result.Contains(data));
+    }
+
     size_t DoTestHttpOutputSize(const TString& res, bool enableCompession) {
         TTestHttpServer serverImpl(res);
         TPortManager pm;
@@ -729,4 +729,4 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         UNIT_ASSERT_VALUES_EQUAL(res.size(), DoTestHttpOutputSize(res, false));
         UNIT_ASSERT_VALUES_UNEQUAL(res.size(), DoTestHttpOutputSize(res, true));
     }
-} // THttpStreamTest suite 
+} // THttpStreamTest suite

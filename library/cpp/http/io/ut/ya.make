@@ -8,8 +8,8 @@ PEERDIR(
 
 SRCS(
     chunk_ut.cpp
-    compression_ut.cpp 
-    headers_ut.cpp 
+    compression_ut.cpp
+    headers_ut.cpp
     stream_ut.cpp
 )
 

@@ -472,7 +472,7 @@ namespace NSc {
     TValue::operator const ::NSc::TArray&() const {
         return GetArray();
     }
-
+ 
     TValue::operator const ::NSc::TDict&() const {
         return GetDict();
     }

@@ -164,7 +164,7 @@ RECURSE(
     infected_masks/ut
     int128
     int128/ut
-    introspection 
+    introspection
     ipmath
     ipreg
     ipreg/ut

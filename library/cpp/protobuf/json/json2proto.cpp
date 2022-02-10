@@ -292,11 +292,11 @@ Json2RepeatedFieldValue(const NJson::TJsonValue& jsonValue,
             Y_ASSERT(!!innerProto);
             if (key.Defined()) {
                 const FieldDescriptor* keyField = innerProto->GetDescriptor()->FindFieldByName("key");
-                Y_ENSURE(keyField, "Map entry key field not found: " << field.name()); 
+                Y_ENSURE(keyField, "Map entry key field not found: " << field.name());
                 SetKey(*innerProto, *keyField, *key);
 
                 const FieldDescriptor* valueField = innerProto->GetDescriptor()->FindFieldByName("value");
-                Y_ENSURE(valueField, "Map entry value field not found."); 
+                Y_ENSURE(valueField, "Map entry value field not found.");
                 Json2SingleField(jsonValue, *innerProto, *valueField, config, /*isMapValue=*/true);
             } else {
                 NProtobufJson::MergeJson2Proto(jsonValue, *innerProto, config);
@@ -327,12 +327,12 @@ Json2RepeatedField(const NJson::TJsonValue& json,
         return;
 
     bool isMap = fieldJson.GetType() == NJson::JSON_MAP;
-    if (isMap) { 
-        if (!config.MapAsObject) { 
-            ythrow yexception() << "Map as object representation is not allowed, field: " << field.name(); 
-        } else if (!field.is_map() && !fieldJson.GetMap().empty()) { 
-            ythrow yexception() << "Field " << field.name() << " is not a map."; 
-        } 
+    if (isMap) {
+        if (!config.MapAsObject) {
+            ythrow yexception() << "Map as object representation is not allowed, field: " << field.name();
+        } else if (!field.is_map() && !fieldJson.GetMap().empty()) {
+            ythrow yexception() << "Field " << field.name() << " is not a map.";
+        }
     }
 
     if (fieldJson.GetType() != NJson::JSON_ARRAY && !config.MapAsObject && !config.VectorizeScalars && !config.ValueVectorizer) {

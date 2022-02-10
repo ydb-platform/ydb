@@ -36,19 +36,19 @@ namespace NPrivate {
         {
         }
 
-        bool Insert(const Key& key, const TPtr& value) { 
-            if (!Contains(key)) { 
-                TWriteGuard w(Mutex); 
-                return Cache.Insert(key, value); 
-            } 
-            return false; 
-        } 
- 
-        void Update(const Key& key, const TPtr& value) { 
-            TWriteGuard w(Mutex); 
-            Cache.Update(key, value); 
-        } 
- 
+        bool Insert(const Key& key, const TPtr& value) {
+            if (!Contains(key)) {
+                TWriteGuard w(Mutex);
+                return Cache.Insert(key, value);
+            }
+            return false;
+        }
+
+        void Update(const Key& key, const TPtr& value) {
+            TWriteGuard w(Mutex);
+            Cache.Update(key, value);
+        }
+
         const TPtr Get(TArgs... args) const {
             return GetValue<true>(args...);
         }
@@ -64,8 +64,8 @@ namespace NPrivate {
 
         void Erase(TArgs... args) {
             Key key = Callbacks.GetKey(args...);
-            if (!Contains(key)) { 
-                return; 
+            if (!Contains(key)) {
+                return;
             }
             TWriteGuard w(Mutex);
             typename TInternalCache::TIterator i = Cache.Find(key);
@@ -75,12 +75,12 @@ namespace NPrivate {
             Cache.Erase(i);
         }
 
-        bool Contains(const Key& key) const { 
-            TReadGuard r(Mutex); 
-            auto iter = Cache.FindWithoutPromote(key); 
-            return iter != Cache.End(); 
-        } 
- 
+        bool Contains(const Key& key) const {
+            TReadGuard r(Mutex);
+            auto iter = Cache.FindWithoutPromote(key);
+            return iter != Cache.End();
+        }
+
         template <class TCallbacks>
         static const TPtr Get(TArgs... args) {
             return TThreadSafeCacheSingleton<TCallbacks>::Get(args...);

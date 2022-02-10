@@ -129,19 +129,19 @@ Y_UNIT_TEST_SUITE(YtNodeTest) {
     }
 
     Y_UNIT_TEST(TestInsertingMethodsFromTemporaryObjects) {
-        // check that .Add(...) doesn't return lvalue reference to temporary object 
-        { 
-            const TNode& nodeList = TNode().Add(0).Add("pass").Add(0); 
-            UNIT_ASSERT_EQUAL(nodeList[1], TNode("pass")); 
-        } 
- 
-        // check that .operator()(...) doesn't return lvalue reference to temporary object 
-        { 
-            const TNode& nodeMap = TNode()("1", 0)("2", "pass")("3", 0); 
-            UNIT_ASSERT_EQUAL(nodeMap["2"], TNode("pass")); 
-        } 
-    } 
- 
+        // check that .Add(...) doesn't return lvalue reference to temporary object
+        {
+            const TNode& nodeList = TNode().Add(0).Add("pass").Add(0);
+            UNIT_ASSERT_EQUAL(nodeList[1], TNode("pass"));
+        }
+
+        // check that .operator()(...) doesn't return lvalue reference to temporary object
+        {
+            const TNode& nodeMap = TNode()("1", 0)("2", "pass")("3", 0);
+            UNIT_ASSERT_EQUAL(nodeMap["2"], TNode("pass"));
+        }
+    }
+
     Y_UNIT_TEST(TestAttributes) {
         TNode node = TNode()("lee", 42)("faa", 54);
         UNIT_ASSERT(!node.HasAttributes());

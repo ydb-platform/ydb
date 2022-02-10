@@ -456,71 +456,71 @@ TNode& TNode::At(size_t index) {
     return list[index];
 }
 
-TNode& TNode::Add() & 
+TNode& TNode::Add() &
 {
     AssureList();
     return std::get<TListType>(Value_).emplace_back();
 }
 
-TNode TNode::Add() && 
+TNode TNode::Add() &&
 {
-    return std::move(Add()); 
-} 
- 
-TNode& TNode::Add(const TNode& node) & 
-{ 
+    return std::move(Add());
+}
+
+TNode& TNode::Add(const TNode& node) &
+{
     AssureList();
     std::get<TListType>(Value_).emplace_back(node);
     return *this;
 }
 
-TNode TNode::Add(const TNode& node) && 
+TNode TNode::Add(const TNode& node) &&
 {
-    return std::move(Add(node)); 
-} 
- 
-TNode& TNode::Add(TNode&& node) & 
-{ 
+    return std::move(Add(node));
+}
+
+TNode& TNode::Add(TNode&& node) &
+{
     AssureList();
     std::get<TListType>(Value_).emplace_back(std::move(node));
     return *this;
 }
 
-TNode TNode::Add(TNode&& node) && 
-{ 
-    return std::move(Add(std::move(node))); 
-} 
- 
+TNode TNode::Add(TNode&& node) &&
+{
+    return std::move(Add(std::move(node)));
+}
+
 bool TNode::HasKey(const TStringBuf key) const
 {
     CheckType(Map);
     return std::get<TMapType>(Value_).contains(key);
 }
 
-TNode& TNode::operator()(const TString& key, const TNode& value) & 
+TNode& TNode::operator()(const TString& key, const TNode& value) &
 {
     AssureMap();
     std::get<TMapType>(Value_)[key] = value;
     return *this;
 }
 
-TNode TNode::operator()(const TString& key, const TNode& value) && 
+TNode TNode::operator()(const TString& key, const TNode& value) &&
 {
-    return std::move(operator()(key, value)); 
-} 
- 
-TNode& TNode::operator()(const TString& key, TNode&& value) & 
-{ 
+    return std::move(operator()(key, value));
+}
+
+TNode& TNode::operator()(const TString& key, TNode&& value) &
+{
     AssureMap();
     std::get<TMapType>(Value_)[key] = std::move(value);
     return *this;
 }
 
-TNode TNode::operator()(const TString& key, TNode&& value) && 
-{ 
-    return std::move(operator()(key, std::move(value))); 
-} 
- 
+TNode TNode::operator()(const TString& key, TNode&& value) &&
+{
+    return std::move(operator()(key, std::move(value)));
+}
+
 const TNode& TNode::operator[](const TStringBuf key) const
 {
     CheckType(Map);

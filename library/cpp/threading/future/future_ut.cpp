@@ -479,7 +479,7 @@ namespace {
             UNIT_ASSERT_EQUAL(promise.ExtractValue(), 123);
             UNIT_CHECK_GENERATED_EXCEPTION(promise.ExtractValue(), TFutureException);
         }
- 
+
         Y_UNIT_TEST(ShouldNotExtractFromSharedDefault) {
             UNIT_CHECK_GENERATED_EXCEPTION(MakeFuture<int>().ExtractValue(), TFutureException);
 
@@ -495,17 +495,17 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(MakeFuture<TStorage>().GetValue().String, TString(100, 'a'));
         }
 
-        Y_UNIT_TEST(HandlingRepetitiveSet) { 
-            TPromise<int> promise = NewPromise<int>(); 
-            promise.SetValue(42); 
-            UNIT_CHECK_GENERATED_EXCEPTION(promise.SetValue(42), TFutureException); 
-        } 
- 
-        Y_UNIT_TEST(HandlingRepetitiveTrySet) { 
-            TPromise<int> promise = NewPromise<int>(); 
-            UNIT_ASSERT(promise.TrySetValue(42)); 
-            UNIT_ASSERT(!promise.TrySetValue(42)); 
-        } 
+        Y_UNIT_TEST(HandlingRepetitiveSet) {
+            TPromise<int> promise = NewPromise<int>();
+            promise.SetValue(42);
+            UNIT_CHECK_GENERATED_EXCEPTION(promise.SetValue(42), TFutureException);
+        }
+
+        Y_UNIT_TEST(HandlingRepetitiveTrySet) {
+            TPromise<int> promise = NewPromise<int>();
+            UNIT_ASSERT(promise.TrySetValue(42));
+            UNIT_ASSERT(!promise.TrySetValue(42));
+        }
 
         Y_UNIT_TEST(HandlingRepetitiveSetException) {
             TPromise<int> promise = NewPromise<int>();

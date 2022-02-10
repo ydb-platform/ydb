@@ -148,7 +148,7 @@ namespace NPrivate {
 
             constexpr TIterator(T value, const TSteppedXRange& parent) noexcept
                 : Value_(value)
-                , Parent_(&parent) 
+                , Parent_(&parent)
             {
             }
 
@@ -165,7 +165,7 @@ namespace NPrivate {
             }
 
             TIterator& operator++() noexcept {
-                Value_ += Parent_->Step_; 
+                Value_ += Parent_->Step_;
                 return *this;
             }
 
@@ -202,7 +202,7 @@ namespace NPrivate {
 
         private:
             T Value_;
-            const TSteppedXRange* Parent_; 
+            const TSteppedXRange* Parent_;
         };
 
         using value_type = T;

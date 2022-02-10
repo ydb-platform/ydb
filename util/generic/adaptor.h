@@ -1,6 +1,6 @@
 #pragma once
 
-#include "store_policy.h" 
+#include "store_policy.h"
 #include "typetraits.h"
 
 namespace NPrivate {
@@ -42,23 +42,23 @@ namespace NPrivate {
         using TBase::Base;
         using TBase::TBase;
 
-        auto begin() const { 
+        auto begin() const {
             return Base().rbegin();
         }
 
-        auto end() const { 
+        auto end() const {
             return Base().rend();
-        } 
- 
-        auto begin() { 
+        }
+
+        auto begin() {
             return Base().rbegin();
-        } 
- 
-        auto end() { 
+        }
+
+        auto end() {
             return Base().rend();
-        } 
-    }; 
- 
+        }
+    };
+
     template <class Range>
     class TReverseRangeBase<Range, false>: public TReverseRangeStorage<Range> {
         using TBase = TReverseRangeStorage<Range>;
@@ -68,26 +68,26 @@ namespace NPrivate {
         using TBase::TBase;
 
         auto begin() const {
-            using std::end; 
+            using std::end;
             return std::make_reverse_iterator(end(Base()));
         }
 
         auto end() const {
-            using std::begin; 
+            using std::begin;
             return std::make_reverse_iterator(begin(Base()));
         }
 
         auto begin() {
-            using std::end; 
+            using std::end;
             return std::make_reverse_iterator(end(Base()));
         }
 
         auto end() {
-            using std::begin; 
+            using std::begin;
             return std::make_reverse_iterator(begin(Base()));
         }
     };
- 
+
     template <class Range>
     class TReverseRange: public TReverseRangeBase<Range> {
         using TBase = TReverseRangeBase<Range>;
@@ -95,30 +95,30 @@ namespace NPrivate {
     public:
         using TBase::Base;
         using TBase::TBase;
- 
+
         TReverseRange(TReverseRange&&) = default;
         TReverseRange(const TReverseRange&) = default;
- 
-        auto rbegin() const { 
-            using std::begin; 
+
+        auto rbegin() const {
+            using std::begin;
             return begin(Base());
-        } 
- 
-        auto rend() const { 
-            using std::end; 
+        }
+
+        auto rend() const {
+            using std::end;
             return end(Base());
-        } 
- 
-        auto rbegin() { 
-            using std::begin; 
+        }
+
+        auto rbegin() {
+            using std::begin;
             return begin(Base());
-        } 
- 
-        auto rend() { 
-            using std::end; 
+        }
+
+        auto rend() {
+            using std::end;
             return end(Base());
-        } 
-    }; 
+        }
+    };
 }
 
 /**
